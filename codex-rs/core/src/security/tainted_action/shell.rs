@@ -2,23 +2,27 @@
 //!
 //! This over-approximates the shell on purpose: quotes are removed rather
 //! than honoured, so the text inside `sh -c '...'` or `python -c "..."` is
-//! split into commands too, and command boundaries are kept so wrappers and
-//! pipelines can be followed.
+//! split into commands too. Command boundaries, pipes and substitutions are
+//! kept so wrappers, pipelines and code fed to an interpreter can be followed.
 
 /// Shells whose `-c` argument is its own command line.
 pub(super) const SHELLS: &[&str] = &["sh", "bash", "zsh", "dash", "ksh", "fish"];
+/// Words one brace expression may expand to before it is left as written.
+const MAX_BRACE_EXPANSION: usize = 64;
+/// Placeholder for the output of a substitution the classifier cannot see.
+pub(super) const UNSEEN_OUTPUT: &str = "$__substitution__";
 
 #[derive(Debug, Default)]
 pub(super) struct SimpleCommand {
     /// Words with quotes and backslashes removed, original case.
     pub(super) words: Vec<String>,
-    /// Its stdin is the previous command's output (`a | b`).
-    pub(super) piped: bool,
-    /// It runs inside `$(...)`, `<(...)` or backticks; its output feeds the
-    /// command before it.
+    /// The command whose output is this command's stdin (`a | b`).
+    pub(super) pipe_from: Option<usize>,
+    /// It runs inside `$(...)`, `<(...)` or backticks.
     pub(super) substituted: bool,
-    /// Its text contains a command or process substitution.
-    pub(super) takes_substitution: bool,
+    /// Commands inside this command's substitutions; their output is part of
+    /// its words.
+    pub(super) fed_by: Vec<usize>,
 }
 
 pub(super) fn basename(word: &str) -> &str {
@@ -28,14 +32,10 @@ pub(super) fn basename(word: &str) -> &str {
         .unwrap_or(word)
 }
 
-/// Simple commands of the argv and of any script inside it (`bash -lc "..."`).
+/// Simple commands of the argv and of any script inside it (`bash -lc "..."`),
+/// in the order they finish: a substitution comes before the command using it.
 pub(super) fn simple_commands(command: &[String]) -> Vec<SimpleCommand> {
-    let mut lexer = Lexer {
-        done: Vec::new(),
-        current: SimpleCommand::default(),
-        word: String::new(),
-        in_backtick: false,
-    };
+    let mut lexer = Lexer::default();
     let mut previous: Option<&str> = None;
     for arg in command {
         // The script after a shell's `-c`/`-lc` is its own command line.
@@ -52,15 +52,61 @@ pub(super) fn simple_commands(command: &[String]) -> Vec<SimpleCommand> {
             lexer.start(Start::Plain);
         }
         previous = Some(arg.as_str());
-        lexer.arg(arg);
-        lexer.flush();
+        for expanded in expand_braces(&replace_ifs(arg)) {
+            lexer.arg(&expanded);
+            lexer.flush();
+        }
     }
-    lexer
-        .done
-        .into_iter()
-        .chain(std::iter::once(lexer.current))
-        .filter(|command| !command.words.is_empty() || command.takes_substitution)
-        .collect()
+    lexer.finish()
+}
+
+/// `$IFS` and `${IFS}` separate words.
+fn replace_ifs(arg: &str) -> String {
+    let arg = arg.replace("${IFS}", " ");
+    super::paths::replace_variable(&arg, "IFS", " ")
+}
+
+/// Bounded brace expansion: `~/.{x,a}ws` names `~/.xws` and `~/.aws`. Each
+/// alternative becomes its own argument; too many are left as written.
+fn expand_braces(arg: &str) -> Vec<String> {
+    let mut words = vec![arg.to_string()];
+    loop {
+        let mut next = Vec::new();
+        let mut expanded = false;
+        for word in &words {
+            match brace_alternatives(word) {
+                Some(alternatives) => {
+                    expanded = true;
+                    next.extend(alternatives);
+                }
+                None => next.push(word.clone()),
+            }
+            if next.len() > MAX_BRACE_EXPANSION {
+                return vec![arg.to_string()];
+            }
+        }
+        words = next;
+        if !expanded {
+            return words;
+        }
+    }
+}
+
+/// The alternatives of the first innermost `{a,b}` group, if any.
+fn brace_alternatives(word: &str) -> Option<Vec<String>> {
+    let close = word.find('}')?;
+    let open = word[..close].rfind('{')?;
+    let inner = &word[open + 1..close];
+    if !inner.contains(',') || inner.contains(char::is_whitespace) {
+        return None;
+    }
+    let (prefix, suffix) = (&word[..open], &word[close + 1..]);
+    Some(
+        inner
+            .split(',')
+            .map(|alternative| format!("{prefix}{alternative}{suffix}"))
+            .collect(),
+    )
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -69,12 +115,22 @@ enum Start {
     Piped,
 }
 
+/// An open substitution: the command it interrupts and where its own
+/// commands start.
+struct Open {
+    outer: SimpleCommand,
+    outer_word: String,
+    first: usize,
+    backtick: bool,
+}
+
+#[derive(Default)]
 struct Lexer {
     /// Finished commands, in order.
     done: Vec<SimpleCommand>,
     current: SimpleCommand,
     word: String,
-    in_backtick: bool,
+    open: Vec<Open>,
 }
 
 impl Lexer {
@@ -85,25 +141,79 @@ impl Lexer {
         }
     }
 
-    /// End the current command. An empty one is reused unless it already
-    /// carries a substitution of its own.
-    fn start(&mut self, start: Start) {
+    fn finish_current(&mut self) -> Option<usize> {
         self.flush();
-        if !self.current.words.is_empty() || self.current.takes_substitution {
-            self.done.push(std::mem::take(&mut self.current));
+        if self.current.words.is_empty() && self.current.fed_by.is_empty() {
+            let substituted = self.current.substituted;
+            self.current = SimpleCommand {
+                substituted,
+                ..SimpleCommand::default()
+            };
+            return None;
         }
-        self.current.piped |= start == Start::Piped;
+        let substituted = self.current.substituted;
+        let finished = std::mem::replace(
+            &mut self.current,
+            SimpleCommand {
+                substituted,
+                ..SimpleCommand::default()
+            },
+        );
+        self.done.push(finished);
+        Some(self.done.len() - 1)
     }
 
-    fn open_substitution(&mut self) {
-        self.flush();
-        self.current.takes_substitution = true;
-        let substitution = SimpleCommand {
-            substituted: true,
-            ..SimpleCommand::default()
+    /// End the current command; a piped one reads the previous one's output.
+    fn start(&mut self, start: Start) {
+        let finished = self.finish_current();
+        if start == Start::Piped {
+            self.current.pipe_from = finished.or(self.done.len().checked_sub(1));
+        }
+    }
+
+    fn open_substitution(&mut self, backtick: bool) {
+        let outer = std::mem::replace(
+            &mut self.current,
+            SimpleCommand {
+                substituted: true,
+                ..SimpleCommand::default()
+            },
+        );
+        let outer_word = std::mem::take(&mut self.word);
+        self.open.push(Open {
+            outer,
+            outer_word,
+            first: self.done.len(),
+            backtick,
+        });
+    }
+
+    /// Close the innermost substitution and continue the command it
+    /// interrupted. `echo`/`printf` output is spliced into the word; any
+    /// other output is a placeholder the classifier cannot see through.
+    fn close_substitution(&mut self) {
+        self.finish_current();
+        let Some(open) = self.open.pop() else {
+            return;
         };
+        let inner: Vec<usize> = (open.first..self.done.len()).collect();
+        let spliced = match inner.as_slice() {
+            [only] => literal_output(&self.done[*only].words),
+            _ => None,
+        };
+        self.current = open.outer;
+        self.current.fed_by.extend(inner);
+        self.word = open.outer_word;
+        self.word
+            .push_str(spliced.as_deref().unwrap_or(UNSEEN_OUTPUT));
+    }
+
+    fn finish(mut self) -> Vec<SimpleCommand> {
+        while !self.open.is_empty() {
+            self.close_substitution();
+        }
+        self.finish_current();
         self.done
-            .push(std::mem::replace(&mut self.current, substitution));
     }
 
     fn arg(&mut self, arg: &str) {
@@ -118,17 +228,21 @@ impl Lexer {
                     continue;
                 }
                 '$' | '<' if next == Some('(') => {
-                    self.open_substitution();
+                    self.open_substitution(/*backtick*/ false);
                     index += 2;
                     continue;
                 }
+                // A line continuation joins the two lines.
+                '\\' if next == Some('\n') => index += 1,
                 '`' => {
-                    if self.in_backtick {
-                        self.start(Start::Plain);
+                    if self.open.last().is_some_and(|open| open.backtick) {
+                        self.close_substitution();
                     } else {
-                        self.open_substitution();
+                        self.open_substitution(/*backtick*/ true);
                     }
-                    self.in_backtick = !self.in_backtick;
+                }
+                ')' if self.open.last().is_some_and(|open| !open.backtick) => {
+                    self.close_substitution();
                 }
                 '\'' | '"' | '\\' | '{' | '}' => {}
                 '|' => {
@@ -198,4 +312,18 @@ impl Lexer {
         }
         index
     }
+}
+
+/// What `echo`/`printf` with these words prints, if that is all they are.
+pub(super) fn literal_output(words: &[String]) -> Option<String> {
+    let (first, rest) = words.split_first()?;
+    if !matches!(basename(&first.to_lowercase()), "echo" | "printf") {
+        return None;
+    }
+    let printed: Vec<&str> = rest
+        .iter()
+        .map(String::as_str)
+        .skip_while(|word| word.starts_with('-'))
+        .collect();
+    Some(printed.join(" "))
 }

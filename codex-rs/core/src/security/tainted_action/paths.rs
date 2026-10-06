@@ -1,9 +1,12 @@
 //! Path resolution and protected-path classification for the post-taint
-//! classifier. Lexical first; a bounded number of filesystem lookups then
-//! follow symlinks and other non-canonical spellings of a home.
+//! classifier. Lexical first; bounded, cached filesystem lookups then follow
+//! symlinks and other non-canonical spellings of a home. Lookups never touch
+//! locations that could reach the network or raise an OS privacy prompt.
 
 use super::ProtectedActionKind;
 use std::cell::Cell;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -24,8 +27,23 @@ const CREDENTIAL_FILES: &[&str] = &[
 ];
 /// Corbanu home folder names (besides the configured `CODEX_HOME`).
 const HOME_SEGMENTS: &[&str] = &[".corbanu", ".codex", ".pfterminal"];
-/// Filesystem lookups one classification may make before it stays lexical.
-const FS_LOOKUP_BUDGET: usize = 256;
+/// Uncached filesystem lookups one classification may make. Past it the
+/// classification fails closed.
+const FS_LOOKUP_BUDGET: usize = 2048;
+/// Never looked up: automounts and network or removable volumes (a lookup can
+/// send traffic or block), unless inside an allowed root. On macOS `/home`
+/// is an automount too.
+const NO_LOOKUP_PREFIXES: &[&str] = &["/net", "/network", "/volumes", "/mnt", "/media"];
+/// User folders behind macOS privacy prompts.
+const PRIVACY_FOLDERS: &[&str] = &[
+    "desktop",
+    "documents",
+    "downloads",
+    "library",
+    "movies",
+    "music",
+    "pictures",
+];
 
 pub(super) struct Homes {
     /// Original spellings, used to expand `$CODEX_HOME`, `$HOME` and `~`.
@@ -34,21 +52,42 @@ pub(super) struct Homes {
     /// Lowercase spellings to match against: as configured and canonical.
     codex_homes: Vec<String>,
     user_homes: Vec<String>,
+    /// Lowercase folders where lookups are always allowed (the action's
+    /// working folder, the homes, temp folders).
+    lookup_roots: RefCell<Vec<String>>,
+    cache: RefCell<HashMap<String, Option<String>>>,
     lookups: Cell<usize>,
+    exhausted: Cell<bool>,
 }
 
 impl Homes {
     pub(super) fn new(codex_home: &Path, user_home: Option<&Path>) -> Self {
+        let raw = |path: &Path| path.to_string_lossy().trim_end_matches('/').to_string();
+        let codex_home_raw = raw(codex_home);
+        let user_home_raw = user_home.map(raw);
+        let mut lookup_roots = vec![
+            "/tmp".to_string(),
+            "/private/tmp".to_string(),
+            "/var/folders".to_string(),
+            "/private/var/folders".to_string(),
+        ];
+        lookup_roots.extend(
+            std::env::temp_dir()
+                .to_str()
+                .map(|temp| normalize_path(&temp.to_lowercase())),
+        );
+        if !codex_home_raw.is_empty() {
+            lookup_roots.push(normalize_path(&codex_home_raw.to_lowercase()));
+        }
         let homes = Self {
-            codex_home_raw: codex_home
-                .to_string_lossy()
-                .trim_end_matches('/')
-                .to_string(),
-            user_home_raw: user_home
-                .map(|home| home.to_string_lossy().trim_end_matches('/').to_string()),
+            codex_home_raw,
+            user_home_raw,
             codex_homes: Vec::new(),
             user_homes: Vec::new(),
+            lookup_roots: RefCell::new(lookup_roots),
+            cache: RefCell::new(HashMap::new()),
             lookups: Cell::new(0),
+            exhausted: Cell::new(false),
         };
         let spellings = |raw: &str| {
             let mut spellings = vec![normalize_path(&raw.to_lowercase())];
@@ -69,11 +108,37 @@ impl Homes {
             .as_deref()
             .map(spellings)
             .unwrap_or_default();
+        homes
+            .lookup_roots
+            .borrow_mut()
+            .extend(codex_homes.iter().cloned());
         Self {
             codex_homes,
             user_homes,
             ..homes
         }
+    }
+
+    /// Lookups are allowed under `folder` (the action's working folder).
+    pub(super) fn allow_lookups_under(&self, folder: &str) {
+        let folder = normalize_path(&folder.to_lowercase());
+        let mut roots = self.lookup_roots.borrow_mut();
+        if !roots.contains(&folder) {
+            roots.push(folder);
+        }
+    }
+
+    /// A lookup budget ran out, so some path was not followed.
+    pub(super) fn exhausted(&self) -> bool {
+        self.exhausted.get()
+    }
+
+    pub(super) fn codex_home(&self) -> &str {
+        &self.codex_home_raw
+    }
+
+    pub(super) fn user_home(&self) -> Option<&str> {
+        self.user_home_raw.as_deref()
     }
 
     /// Expand `~`, `~user`, `$HOME` and `$CODEX_HOME` spellings and make a
@@ -115,8 +180,8 @@ impl Homes {
         })
     }
 
-    /// Whether `path` is the user's home, or a folder holding it or the
-    /// Corbanu home: copying or archiving it recursively takes credentials.
+    /// Whether `path` (globs allowed) is the user's home, or a folder holding
+    /// it or the Corbanu home: copying or archiving it takes credentials.
     pub(super) fn holds_a_home(&self, path: &str) -> bool {
         let lexical = normalize_path(&path.to_lowercase());
         let canonical = self.canonical(path);
@@ -124,26 +189,68 @@ impl Homes {
             .into_iter()
             .flatten()
             .any(|path| {
+                let pattern = segments(&path);
                 let holds = |home: &String| {
-                    path == "/" || *home == path || home.starts_with(&format!("{path}/"))
+                    let home = segments(home);
+                    pattern.len() <= home.len()
+                        && pattern
+                            .iter()
+                            .zip(&home)
+                            .all(|(pattern, segment)| glob_any(pattern, segment))
                 };
                 self.user_homes.iter().any(holds) || self.codex_homes.iter().any(holds)
             })
     }
 
+    /// Whether filesystem lookups may touch `path`.
+    pub(super) fn lookups_allowed(&self, path: &str) -> bool {
+        let lower = normalize_path(&path.to_lowercase());
+        let under = |root: &str| lower == root || lower.starts_with(&format!("{root}/"));
+        if self.lookup_roots.borrow().iter().any(|root| under(root)) {
+            return true;
+        }
+        if NO_LOOKUP_PREFIXES.iter().any(|prefix| under(prefix))
+            || (cfg!(target_os = "macos") && under("/home"))
+        {
+            return false;
+        }
+        !self.user_homes.iter().any(|home| {
+            PRIVACY_FOLDERS
+                .iter()
+                .any(|folder| under(&format!("{home}/{folder}")))
+        })
+    }
+
     /// Canonical lowercase spelling of `path`, following symlinks. A path
     /// that does not exist yet keeps its missing tail on top of its nearest
-    /// existing folder. `None` once the lookup budget is spent.
+    /// existing folder. `None` where lookups are not allowed or the budget
+    /// is spent (which marks the classification as incomplete).
     pub(super) fn canonical(&self, path: &str) -> Option<String> {
-        let mut existing = PathBuf::from(normalize_path(path));
+        let path = normalize_path(path);
+        if !self.lookups_allowed(&path) {
+            return None;
+        }
+        let mut existing = PathBuf::from(&path);
         let mut tail: Vec<String> = Vec::new();
         loop {
-            if self.lookups.get() >= FS_LOOKUP_BUDGET {
-                return None;
-            }
-            self.lookups.set(self.lookups.get() + 1);
-            if let Ok(canonical) = std::fs::canonicalize(&existing) {
-                let mut canonical = canonical.to_string_lossy().into_owned();
+            let key = existing.to_string_lossy().into_owned();
+            let cached = self.cache.borrow().get(&key).cloned();
+            let found = match cached {
+                Some(found) => found,
+                None => {
+                    if self.lookups.get() >= FS_LOOKUP_BUDGET {
+                        self.exhausted.set(true);
+                        return None;
+                    }
+                    self.lookups.set(self.lookups.get() + 1);
+                    let found = std::fs::canonicalize(&existing)
+                        .ok()
+                        .map(|canonical| canonical.to_string_lossy().into_owned());
+                    self.cache.borrow_mut().insert(key, found.clone());
+                    found
+                }
+            };
+            if let Some(mut canonical) = found {
                 for segment in tail.iter().rev() {
                     canonical = format!("{}/{segment}", canonical.trim_end_matches('/'));
                 }
@@ -161,35 +268,24 @@ impl Homes {
     /// protected folder they could match.
     pub(super) fn classify_path(&self, path: &str) -> Option<ProtectedActionKind> {
         let path = normalize_path(&path.to_lowercase());
-        let segments: Vec<&str> = path
-            .split('/')
-            .filter(|segment| !segment.is_empty())
-            .collect();
+        let segments = segments(&path);
         let name = segments.last().copied().unwrap_or_default();
-        // Credential folders in the user's home, matched segment by segment
-        // so a glob such as `~/.dock*` still counts.
-        let under_user_home = |folder: &str| {
-            self.user_homes.iter().any(|home| {
-                path.strip_prefix(home.as_str())
-                    .filter(|rest| rest.starts_with('/'))
-                    .is_some_and(|rest| {
-                        let mut actual = rest.split('/').filter(|segment| !segment.is_empty());
-                        folder.split('/').all(|expected| {
-                            actual.next().is_some_and(|got| {
+        if segments
+            .iter()
+            .any(|segment| matches_any(segment, CREDENTIAL_SEGMENTS))
+            || USER_CREDENTIAL_SEGMENTS.iter().any(|folder| {
+                self.user_homes.iter().any(|home| {
+                    below(&segments, home).is_some_and(|rest| {
+                        let expected: Vec<&str> = folder.split('/').collect();
+                        rest.len() >= expected.len()
+                            && expected.iter().zip(rest).all(|(expected, got)| {
                                 glob_matches(got, expected)
                                     // `*` matches non-dot folder names.
                                     || (!expected.starts_with('.') && glob_any(got, expected))
                             })
-                        })
                     })
+                })
             })
-        };
-        if segments
-            .iter()
-            .any(|segment| matches_any(segment, CREDENTIAL_SEGMENTS))
-            || USER_CREDENTIAL_SEGMENTS
-                .iter()
-                .any(|folder| under_user_home(folder))
             || CREDENTIAL_FILES.iter().any(|file| glob_matches(name, file))
             || (glob_matches(name, "hosts.yml")
                 && segments.iter().any(|segment| glob_any(segment, "gh")))
@@ -198,11 +294,8 @@ impl Homes {
         {
             return Some(ProtectedActionKind::Credentials);
         }
-        let below_home = self.below_home(&path, &segments)?;
-        let first = below_home
-            .split('/')
-            .find(|segment| !segment.is_empty())
-            .unwrap_or("");
+        let below_home = self.below_home(&segments)?;
+        let first = below_home.first().copied().unwrap_or("");
         // Agent worktrees kept under the home are ordinary workspaces.
         if first == "worktrees" {
             return None;
@@ -216,31 +309,50 @@ impl Homes {
         Some(ProtectedActionKind::SecurityPolicy)
     }
 
-    /// The part of `path` below a Corbanu home, if it is inside one: the
-    /// configured home as a whole-segment run anywhere in the path, or a
-    /// default home folder name (or a glob that could match one) as a segment.
-    fn below_home<'a>(&self, path: &'a str, segments: &[&str]) -> Option<&'a str> {
+    /// The segments below a Corbanu home, if the path is inside one: the
+    /// configured home as a run of segments anywhere in the path (globs in
+    /// the path count), or a default home folder name as a segment.
+    fn below_home<'a>(&self, segments: &[&'a str]) -> Option<Vec<&'a str>> {
         for home in &self.codex_homes {
-            let found = path.match_indices(home.as_str()).find_map(|(index, _)| {
-                let rest = &path[index + home.len()..];
-                (rest.is_empty() || rest.starts_with('/')).then_some(rest)
+            let home = self::segments(home);
+            if home.is_empty() || home.len() > segments.len() {
+                continue;
+            }
+            let found = (0..=segments.len() - home.len()).find(|start| {
+                segments[*start..start + home.len()]
+                    .iter()
+                    .zip(&home)
+                    .all(|(pattern, segment)| glob_any(pattern, segment))
             });
-            if found.is_some() {
-                return found;
+            if let Some(start) = found {
+                return Some(segments[start + home.len()..].to_vec());
             }
         }
         let index = segments
             .iter()
             .position(|segment| matches_any(segment, HOME_SEGMENTS))?;
-        let marker = format!("/{}", segments[index]);
-        path.match_indices(&marker)
-            .map(|(at, _)| &path[at + marker.len()..])
-            .find(|rest| rest.is_empty() || rest.starts_with('/'))
+        Some(segments[index + 1..].to_vec())
     }
 }
 
-/// Replace `$NAME` (and `${NAME}`, whose braces the lexer already removed)
-/// when `NAME` is not followed by more identifier characters.
+fn segments(path: &str) -> Vec<&str> {
+    path.split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect()
+}
+
+/// The segments of `path` below `home` (path segments may be globs).
+fn below<'a, 'b>(path: &'b [&'a str], home: &str) -> Option<&'b [&'a str]> {
+    let home = segments(home);
+    (path.len() > home.len()
+        && path
+            .iter()
+            .zip(&home)
+            .all(|(pattern, segment)| glob_any(pattern, segment)))
+    .then(|| &path[home.len()..])
+}
+
+/// Replace `$NAME` when `NAME` is not followed by more identifier characters.
 pub(super) fn replace_variable(word: &str, name: &str, value: &str) -> String {
     let marker = format!("${name}");
     let mut out = String::new();
@@ -294,21 +406,43 @@ fn glob_matches(pattern: &str, name: &str) -> bool {
     glob_any(pattern, name)
 }
 
-/// The glob match itself, leading wildcards included.
-fn glob_any(pattern: &str, name: &str) -> bool {
-    fn matches(pattern: &[char], name: &[char]) -> bool {
-        match pattern.first() {
-            None => name.is_empty(),
-            Some('*') => (0..=name.len()).any(|skip| matches(&pattern[1..], &name[skip..])),
-            Some('?') => !name.is_empty() && matches(&pattern[1..], &name[1..]),
-            Some('[') => match pattern.iter().position(|ch| *ch == ']') {
-                Some(close) => !name.is_empty() && matches(&pattern[close + 1..], &name[1..]),
-                None => name.first() == Some(&'[') && matches(&pattern[1..], &name[1..]),
-            },
-            Some(ch) => name.first() == Some(ch) && matches(&pattern[1..], &name[1..]),
-        }
-    }
+/// The glob match itself, leading wildcards included. Iterative with one
+/// backtrack point, so it is linear-times-linear whatever the pattern.
+pub(super) fn glob_any(pattern: &str, name: &str) -> bool {
     let pattern: Vec<char> = pattern.chars().collect();
     let name: Vec<char> = name.chars().collect();
-    matches(&pattern, &name)
+    // Length of the single-character token at `at` (`?`, `[...]` or literal).
+    let token = |at: usize| match pattern[at] {
+        '[' => pattern[at..]
+            .iter()
+            .position(|ch| *ch == ']')
+            .map_or(1, |close| close + 1),
+        _ => 1,
+    };
+    let matches_one = |at: usize, ch: char| match pattern[at] {
+        '?' => true,
+        '[' => token(at) > 1 || ch == '[',
+        literal => literal == ch,
+    };
+    let (mut p, mut n) = (0, 0);
+    let mut star: Option<(usize, usize)> = None;
+    while n < name.len() {
+        if p < pattern.len() && pattern[p] == '*' {
+            star = Some((p, n));
+            p += 1;
+        } else if p < pattern.len() && matches_one(p, name[n]) {
+            p += token(p);
+            n += 1;
+        } else if let Some((star_p, star_n)) = star {
+            p = star_p + 1;
+            n = star_n + 1;
+            star = Some((star_p, star_n + 1));
+        } else {
+            return false;
+        }
+    }
+    while p < pattern.len() && pattern[p] == '*' {
+        p += 1;
+    }
+    p == pattern.len()
 }

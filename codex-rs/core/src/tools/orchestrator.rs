@@ -166,7 +166,7 @@ impl ToolOrchestrator {
         });
         // PF-30-S03: a protected action after untrusted content needs fresh,
         // exact human approval, whatever the requirement above would allow.
-        let post_taint = post_taint_action(tool, req, tool_ctx, &requirement);
+        let post_taint = post_taint_action(tool, req, tool_ctx, &requirement).await;
         if let Some(action) = &post_taint {
             if let Some(refusal) = action.refused_up_front() {
                 post_taint_outcome(action, tool_ctx, "refused_kill_switch", None);
@@ -595,9 +595,12 @@ fn sandbox_outcome_from_tool_error(err: &ToolError) -> Option<&'static str> {
     }
 }
 
+/// PF-30-S03: how long classifying one post-taint action may take.
+const POST_TAINT_CLASSIFY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+
 /// PF-30-S03: the protected action this request performs, when post-taint
 /// checks apply and the session already holds content without standing.
-fn post_taint_action<Rq, Out, T>(
+async fn post_taint_action<Rq, Out, T>(
     tool: &T,
     req: &Rq,
     tool_ctx: &ToolCtx,
@@ -626,10 +629,24 @@ where
     // An action the host cannot describe cannot be shown to be ordinary.
     let started = Instant::now();
     let kind = match tool.approval_action(req, &ctx) {
-        Ok(action) => crate::security::tainted_action::classify(
-            &action,
-            tool_ctx.turn.config.codex_home.as_path(),
-        )?,
+        Ok(action) => {
+            // Classification may look at the filesystem: keep it off the
+            // async workers and bounded in time; a stall fails closed.
+            let codex_home = tool_ctx.turn.config.codex_home.to_path_buf();
+            let classified = tokio::time::timeout(
+                POST_TAINT_CLASSIFY_TIMEOUT,
+                tokio::task::spawn_blocking(move || {
+                    crate::security::tainted_action::classify(&action, &codex_home)
+                }),
+            )
+            .await;
+            match classified {
+                Ok(Ok(kind)) => kind?,
+                Ok(Err(_)) | Err(_) => {
+                    crate::security::tainted_action::ProtectedActionKind::SecurityPolicy
+                }
+            }
+        }
         Err(_) => crate::security::tainted_action::ProtectedActionKind::SecurityPolicy,
     };
     tracing::info!(

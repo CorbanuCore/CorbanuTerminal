@@ -28,10 +28,8 @@ pub(super) const INTERPRETERS: &[&str] = &[
 ];
 /// Flags after which an interpreter's next argument is inline code.
 const INLINE_CODE_FLAGS: &[&str] = &["-c", "-e", "-E", "--eval", "-r", "-p", "--print"];
-/// Commands that only print their visible arguments.
-const LITERAL_SOURCES: &[&str] = &["echo", "printf"];
 /// Bytes of one script file the classifier reads.
-pub(super) const SCRIPT_READ_LIMIT: u64 = 64 * 1024;
+pub(super) const SCRIPT_READ_LIMIT: u64 = 256 * 1024;
 
 /// Text built from adjacent string literals: `'~/.co' + 'dex'`,
 /// `join('~', '.codex')` and `' '.join(['corb' + 'anu', 'vault'])` all name
@@ -40,9 +38,9 @@ pub(super) const SCRIPT_READ_LIMIT: u64 = 64 * 1024;
 /// texts: arguments joined as a path (`a/b`) and as words (`a b`).
 pub(super) fn joined_literals(text: &str) -> Vec<String> {
     let chars: Vec<char> = text.chars().collect();
-    // Each run: (as a path, as words, literal count).
-    let mut runs: Vec<(String, String, usize)> = Vec::new();
-    let mut run: (String, String, usize) = Default::default();
+    // Each run: (as a path, as words, plain, literal count).
+    let mut runs: Vec<(String, String, String, usize)> = Vec::new();
+    let mut run: (String, String, String, usize) = Default::default();
     // Literals nested in a literal (`"... '~' + '/.co' ..."`).
     let mut nested: Vec<String> = Vec::new();
     let mut index = 0;
@@ -82,7 +80,7 @@ pub(super) fn joined_literals(text: &str) -> Vec<String> {
         if !joins {
             runs.push(std::mem::take(&mut run));
         }
-        let (path, words, count) = &mut run;
+        let (path, words, plain, count) = &mut run;
         if *count > 0 {
             if gap.contains(',') || gap.contains('/') {
                 path.push('/');
@@ -94,12 +92,13 @@ pub(super) fn joined_literals(text: &str) -> Vec<String> {
         gap.clear();
         path.push_str(&literal);
         words.push_str(&literal);
+        plain.push_str(&literal);
         *count += 1;
     }
     runs.push(run);
     runs.into_iter()
-        .filter(|(_, _, count)| *count > 1)
-        .flat_map(|(path, words, _)| [path, words])
+        .filter(|(_, _, _, count)| *count > 1)
+        .flat_map(|(path, words, plain, _)| [path, words, plain])
         .chain(nested)
         .collect()
 }
@@ -198,21 +197,29 @@ pub(super) fn command_word(words: &[String]) -> Option<(usize, String)> {
     None
 }
 
-/// The file a shell or interpreter command runs, if it names one: the first
-/// non-flag argument of `bash x.sh`, `python3 x.py`, `source x`, or the
-/// command word itself when it is a path (`./run.sh`).
-pub(super) fn script_file(words: &[String]) -> Option<&str> {
+/// What a shell or interpreter command runs from a file.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum ScriptSource<'a> {
+    /// A file argument (`bash x.sh`, `python3 x.py`, `source x`) or the
+    /// command word itself when it is a path (`./run.sh`).
+    File(&'a str),
+    /// Code it cannot see: stdin (`-`, `-s`), or a module (`python -m`).
+    Unseen,
+}
+
+/// The script a command runs, if it runs one from outside its own words.
+pub(super) fn script_source(words: &[String]) -> Option<ScriptSource<'_>> {
     let (index, name) = command_word(words)?;
     let word = words[index].as_str();
     if word.contains('/')
         && !SHELLS.contains(&name.as_str())
         && !INTERPRETERS.contains(&name.as_str())
     {
-        return Some(word);
+        return Some(ScriptSource::File(word));
     }
-    let runs_files = SHELLS.contains(&name.as_str())
-        || INTERPRETERS.contains(&name.as_str())
-        || matches!(name.as_str(), "source" | ".");
+    let shell = SHELLS.contains(&name.as_str());
+    let runs_files =
+        shell || INTERPRETERS.contains(&name.as_str()) || matches!(name.as_str(), "source" | ".");
     if !runs_files {
         return None;
     }
@@ -223,9 +230,16 @@ pub(super) fn script_file(words: &[String]) -> Option<&str> {
     {
         return None;
     }
+    if args.iter().any(|arg| arg == "-" || (shell && arg == "-s")) {
+        return Some(ScriptSource::Unseen);
+    }
+    if args.iter().any(|arg| arg == "-m") {
+        // `python -m pytest`: a module. Ordinary, and not a file we can read.
+        return None;
+    }
     args.iter()
         .find(|arg| !arg.starts_with('-'))
-        .map(String::as_str)
+        .map(|arg| ScriptSource::File(arg.as_str()))
 }
 
 fn is_shell_c_flag(arg: &str) -> bool {
@@ -233,32 +247,37 @@ fn is_shell_c_flag(arg: &str) -> bool {
 }
 
 /// Whether the command runs code it reads from stdin or a substitution:
-/// `eval`, `source`/`.`, a shell or interpreter with no file or inline code,
-/// or a bare substitution used as a command (`$(curl ...)`).
+/// `eval`, `source`/`.`, a shell or interpreter with no file or inline code
+/// (or reading `-`/`-s`), inline code given by a substitution, a trailing
+/// `-c` whose code comes from elsewhere (`xargs sh -c`), or a substitution
+/// used as the command itself (`$(curl ...)`).
 fn executes_input(command: &SimpleCommand) -> bool {
     let Some((index, name)) = command_word(&command.words) else {
-        return command.takes_substitution;
+        return !command.fed_by.is_empty();
     };
-    if matches!(name.as_str(), "eval" | "source" | ".") {
+    if name.starts_with('$') || matches!(name.as_str(), "eval" | "source" | ".") {
         return true;
     }
-    let runs_code = SHELLS.contains(&name.as_str()) || INTERPRETERS.contains(&name.as_str());
+    let shell = SHELLS.contains(&name.as_str());
+    if !shell && !INTERPRETERS.contains(&name.as_str()) {
+        return false;
+    }
     let args = &command.words[index + 1..];
-    let inline = args
-        .iter()
-        .any(|arg| INLINE_CODE_FLAGS.contains(&arg.as_str()));
-    // Stdin (no file, no inline code), or inline code that is a substitution.
-    runs_code
-        && if inline {
-            command.takes_substitution
-        } else {
-            args.iter().all(|arg| arg.starts_with('-'))
-        }
+    let inline =
+        |arg: &String| INLINE_CODE_FLAGS.contains(&arg.as_str()) || (shell && is_shell_c_flag(arg));
+    if args.last().is_some_and(inline) {
+        return true;
+    }
+    if args.iter().any(inline) {
+        return !command.fed_by.is_empty();
+    }
+    args.iter().all(|arg| arg.starts_with('-'))
+        || args.iter().any(|arg| arg == "-" || (shell && arg == "-s"))
 }
 
 /// Whether a stage only prints text the classifier already sees.
 fn literal_stage(command: &SimpleCommand) -> bool {
-    command_word(&command.words).is_some_and(|(_, name)| LITERAL_SOURCES.contains(&name.as_str()))
+    super::shell::literal_output(&command.words).is_some() && command.fed_by.is_empty()
 }
 
 /// Opaque execution: code fed to an executor through a pipe or a
@@ -266,53 +285,33 @@ fn literal_stage(command: &SimpleCommand) -> bool {
 /// text (a decoder, a download, `cat` of a file, a transform). The host
 /// cannot describe what will run, so it counts as protected.
 pub(super) fn opaque_execution(commands: &[SimpleCommand]) -> bool {
-    commands.iter().enumerate().any(|(index, command)| {
+    commands.iter().any(|command| {
         if !executes_input(command) {
             return false;
         }
-        let piped_from = command.piped.then(|| {
-            commands[..index]
-                .iter()
-                .rev()
-                .scan(true, |more, stage| {
-                    let take = *more;
-                    *more = stage.piped;
-                    take.then_some(stage)
-                })
-                .collect::<Vec<_>>()
-        });
-        let substituted = command.takes_substitution.then(|| {
-            commands[index + 1..]
-                .iter()
-                .take_while(|stage| stage.substituted || stage.piped)
-                .collect::<Vec<_>>()
-        });
-        piped_from
-            .into_iter()
-            .chain(substituted)
-            .flatten()
-            .any(|stage| !literal_stage(stage))
+        // Every command whose output reaches this one, transitively.
+        let mut feeders: Vec<usize> = command.fed_by.clone();
+        feeders.extend(command.pipe_from);
+        let mut seen = std::collections::HashSet::new();
+        while let Some(index) = feeders.pop() {
+            if !seen.insert(index) {
+                continue;
+            }
+            let Some(stage) = commands.get(index) else {
+                continue;
+            };
+            if !literal_stage(stage) {
+                return true;
+            }
+            feeders.extend(stage.fed_by.iter().copied());
+            feeders.extend(stage.pipe_from);
+        }
+        false
     })
 }
 
-/// Files in an `apply_patch` body whose added lines are run later (scripts,
-/// task files, git hooks, shell start-up files), with those lines.
-pub(super) fn runnable_patch_additions(patch: &str) -> Vec<(String, String)> {
-    const SCRIPT_EXTENSIONS: &[&str] = &[
-        "sh", "bash", "zsh", "fish", "ksh", "command", "py", "js", "mjs", "cjs", "ts", "rb", "pl",
-        "php", "lua", "ps1", "bat", "cmd",
-    ];
-    const RUNNABLE_NAMES: &[&str] = &[
-        "makefile",
-        "justfile",
-        "package.json",
-        ".envrc",
-        ".bashrc",
-        ".zshrc",
-        ".profile",
-        ".bash_profile",
-        ".zprofile",
-    ];
+/// The added lines of each file in an `apply_patch` body.
+pub(super) fn patch_additions(patch: &str) -> Vec<(String, String)> {
     let mut files: Vec<(String, String)> = Vec::new();
     for line in patch.lines() {
         let header = ["*** Add File: ", "*** Update File: ", "*** Move to: "]
@@ -328,16 +327,44 @@ pub(super) fn runnable_patch_additions(patch: &str) -> Vec<(String, String)> {
         }
     }
     files
-        .into_iter()
-        .filter(|(path, body)| {
-            let lower = path.to_lowercase();
-            let name = basename(&lower);
-            let extension = name.rsplit_once('.').map(|(_, extension)| extension);
-            body.starts_with("#!")
-                || lower.contains(".git/hooks/")
-                || lower.contains("/bin/")
-                || RUNNABLE_NAMES.contains(&name)
-                || extension.is_some_and(|extension| SCRIPT_EXTENSIONS.contains(&extension))
-        })
-        .collect()
+}
+
+/// Whether a file (lowercase path) with these added lines is run later:
+/// scripts, task files, hooks, shell start-up files, or anything starting
+/// with a shebang.
+pub(super) fn is_runnable_file(lower: &str, body: &str) -> bool {
+    const SCRIPT_EXTENSIONS: &[&str] = &[
+        "sh", "bash", "zsh", "fish", "ksh", "command", "py", "js", "mjs", "cjs", "ts", "rb", "pl",
+        "php", "lua", "ps1", "bat", "cmd",
+    ];
+    const RUNNABLE_NAMES: &[&str] = &[
+        "makefile",
+        "justfile",
+        "package.json",
+        ".envrc",
+        ".bashrc",
+        ".zshrc",
+        ".zshenv",
+        ".profile",
+        ".bash_profile",
+        ".bash_login",
+        ".zprofile",
+    ];
+    let name = basename(lower);
+    let extension = name.rsplit_once('.').map(|(_, extension)| extension);
+    body.starts_with("#!")
+        || is_runnable_path(lower)
+        || RUNNABLE_NAMES.contains(&name)
+        || extension.is_some_and(|extension| SCRIPT_EXTENSIONS.contains(&extension))
+}
+
+/// Paths whose files run later whatever their name: git hooks and config
+/// (`core.fsmonitor`, `core.hooksPath`), husky hooks, and extension-less
+/// files in a `bin` folder.
+fn is_runnable_path(lower: &str) -> bool {
+    let name = basename(lower);
+    lower.contains(".git/hooks/")
+        || lower.ends_with(".git/config")
+        || lower.contains(".husky/")
+        || ((lower.starts_with("bin/") || lower.contains("/bin/")) && !name.contains('.'))
 }

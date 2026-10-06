@@ -193,17 +193,31 @@ const RECURSIVE_READERS: &[(&str, &[&str])] = &[
     ("7za", &[]),
     ("rsync", &[]),
     ("scp", &[]),
+    ("ditto", &[]),
+    ("cpio", &[]),
+    ("pax", &[]),
     ("cp", &["-r", "-R", "-a", "--recursive", "--archive"]),
     ("grep", &["-r", "-R", "--recursive"]),
-    ("rg", &["--hidden", "-u", "-uu", "-uuu", "-."]),
+    ("rg", &["--hidden", "-u", "-.", "--no-ignore"]),
     ("find", &["-exec", "-execdir", "-ok"]),
 ];
 /// Flags whose value is the folder later relative words resolve against.
-const FOLDER_FLAGS: &[&str] = &["-C", "--directory", "--cwd", "--cd"];
-/// Nesting limit for scripts, payloads and literals classified inside an action.
-const MAX_DEPTH: usize = 3;
-/// Script files one classification reads.
-const MAX_SCRIPT_FILES: usize = 8;
+const FOLDER_FLAGS: &[&str] = &["-C", "--directory", "--cwd", "--cd", "--chdir"];
+/// Nesting limit for scripts, payloads and literals classified inside an
+/// action. Deeper nesting fails closed.
+const MAX_DEPTH: usize = 4;
+/// Script files one classification reads; more fail closed.
+const MAX_SCRIPT_FILES: usize = 16;
+/// Magic numbers of executables, which are not read as scripts.
+const BINARY_MAGIC: &[&[u8]] = &[
+    b"\x7fELF",
+    b"\xfe\xed\xfa\xce",
+    b"\xfe\xed\xfa\xcf",
+    b"\xce\xfa\xed\xfe",
+    b"\xcf\xfa\xed\xfe",
+    b"\xca\xfe\xba\xbe",
+    b"MZ",
+];
 
 /// Classify the exact action the host is about to run. `codex_home` is the
 /// session's Corbanu home; the user's home resolves `~` and `$HOME`.
@@ -225,21 +239,36 @@ pub(super) fn classify_with(
         ApprovalAction::Shell { command, cwd, .. }
         | ApprovalAction::ExecCommand { command, cwd, .. } => {
             let cwd = path_text(cwd);
+            classifier.homes.allow_lookups_under(&cwd);
             classifier.path(&cwd);
             classifier.command(command, &cwd, /*depth*/ 0);
         }
         ApprovalAction::ApplyPatch {
             files, patch, cwd, ..
         } => {
+            let cwd = path_text(cwd);
+            classifier.homes.allow_lookups_under(&cwd);
             for file in files {
                 classifier.path(&path_text(file));
             }
-            // Commands written into a file that is run later are judged now.
-            let cwd = path_text(cwd);
-            for (_, body) in indirect::runnable_patch_additions(patch) {
-                classifier.script(&body, &cwd, /*depth*/ 1);
+            // Commands written into a file that is run later are judged now,
+            // whether the file looks runnable by name or by where it leads.
+            for (file, body) in indirect::patch_additions(patch) {
+                let resolved = classifier.homes.resolve(&file, &cwd);
+                let canonical = classifier.homes.canonical(&resolved);
+                let runnable = [Some(resolved.to_lowercase()), canonical]
+                    .into_iter()
+                    .flatten()
+                    .any(|path| indirect::is_runnable_file(&path, &body));
+                if runnable {
+                    classifier.script(&body, &cwd, /*depth*/ 1);
+                }
             }
         }
+    }
+    // A lookup budget ran out: something was not followed.
+    if classifier.homes.exhausted() {
+        classifier.note(ProtectedActionKind::SecurityPolicy);
     }
     classifier.found
 }
@@ -289,6 +318,28 @@ fn subcommand(args: &[String]) -> Option<&str> {
     None
 }
 
+/// Whether `word` sets `flag`: exactly for long flags, and inside a group of
+/// short flags (`-rn` sets `-r`).
+fn has_flag(word: &str, flag: &str) -> bool {
+    if word == flag {
+        return true;
+    }
+    match flag.strip_prefix('-') {
+        Some(letter) if letter.len() == 1 && !letter.starts_with('-') => {
+            word.starts_with('-') && !word.starts_with("--") && word[1..].contains(letter)
+        }
+        _ => false,
+    }
+}
+
+/// Where the shell is while it runs a script: the folder, the previous one
+/// (`cd -`) and the `pushd` stack.
+struct Folders {
+    cwd: String,
+    previous: String,
+    stack: Vec<String>,
+}
+
 struct Classifier {
     homes: Homes,
     found: Option<ProtectedActionKind>,
@@ -316,25 +367,41 @@ impl Classifier {
 
     fn command(&mut self, command: &[String], cwd: &str, depth: usize) {
         if depth > MAX_DEPTH {
+            // Too deeply nested to follow: fail closed.
+            self.note(ProtectedActionKind::SecurityPolicy);
             return;
         }
         let commands = shell::simple_commands(command);
         if indirect::opaque_execution(&commands) {
             self.note(ProtectedActionKind::SecurityPolicy);
         }
-        let mut cwd = cwd.to_string();
+        let mut folders = Folders {
+            cwd: cwd.to_string(),
+            previous: cwd.to_string(),
+            stack: Vec::new(),
+        };
         let mut variables: HashMap<String, String> = HashMap::new();
-        for simple in &commands {
-            let words = substitute(simple, &variables);
-            self.simple_command(&words, &mut cwd, &mut variables, depth);
+        for (name, value) in [
+            ("PWD", Some(cwd)),
+            ("HOME", self.homes.user_home()),
+            ("CODEX_HOME", Some(self.homes.codex_home())),
+        ] {
+            if let Some(value) = value {
+                variables.insert(name.to_string(), value.to_string());
+            }
         }
-        self.path(&cwd);
+        for (index, simple) in commands.iter().enumerate() {
+            let words = substitute(simple, &variables);
+            let feeds_pipe = commands.iter().any(|later| later.pipe_from == Some(index));
+            self.simple_command(&words, feeds_pipe, &mut folders, &mut variables, depth);
+        }
+        self.path(&folders.cwd);
         // Strings assembled from literals by inline code (`'~/.co' + 'dex'`).
         for arg in command {
             for joined in indirect::joined_literals(arg) {
-                let resolved = self.homes.resolve(&joined, &cwd);
+                let resolved = self.homes.resolve(&joined, &folders.cwd);
                 self.path(&resolved);
-                self.script(&joined, &cwd, depth + 1);
+                self.script(&joined, &folders.cwd, depth + 1);
             }
         }
     }
@@ -342,13 +409,15 @@ impl Classifier {
     fn simple_command(
         &mut self,
         words: &[String],
-        cwd: &mut String,
+        feeds_pipe: bool,
+        folders: &mut Folders,
         variables: &mut HashMap<String, String>,
         depth: usize,
     ) {
         let lower: Vec<String> = words.iter().map(|word| word.to_lowercase()).collect();
         let command = indirect::command_word(words);
-        // Assignments (`A=x`, `export A=x`) feed later `$A` words.
+        // Assignments (`A=x`, `export A=x`) feed later `$A` words. A value
+        // the classifier cannot see makes the variable unknown.
         let assigns = command.as_ref().is_none_or(|(_, name)| {
             matches!(
                 name.as_str(),
@@ -363,32 +432,36 @@ impl Classifier {
                         .chars()
                         .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
                 {
-                    variables.insert(name.to_string(), value.to_string());
+                    if value.contains('$') {
+                        variables.remove(name);
+                    } else {
+                        variables.insert(name.to_string(), value.to_string());
+                    }
                 }
             }
         }
-        // `cd`, `pushd` (also behind `builtin`/`command`) move later words.
-        if let Some((index, name)) = &command
-            && matches!(name.as_str(), "cd" | "pushd")
-            && let Some(target) = words[index + 1..]
-                .iter()
-                .find(|word| !word.starts_with('-'))
-        {
-            *cwd = self.homes.resolve(target, cwd);
-        }
-        if let Some((_, name)) = &command
-            && name == "eval"
-            && words.iter().skip(1).any(|word| word.contains('$'))
-        {
-            // `eval "$x"` runs text the host cannot see.
-            self.note(ProtectedActionKind::SecurityPolicy);
+        if let Some((index, name)) = &command {
+            let args = &words[index + 1..];
+            // Code named by a variable or a substitution the classifier
+            // cannot see (`$X`, `bash -c "$X"`, `python3 -c "$X"`).
+            let inline_unseen = args.windows(2).any(|pair| {
+                matches!(pair[0].as_str(), "-c" | "-e" | "--eval") && pair[1].starts_with('$')
+            });
+            if name.starts_with('$')
+                || inline_unseen
+                || (name == "eval" && args.iter().any(|arg| arg.contains('$')))
+            {
+                self.note(ProtectedActionKind::SecurityPolicy);
+            }
+            self.change_folder(name, args, folders);
         }
         // Not only at command position: wrappers (`nice -n 5`, `sudo -u x`,
         // `timeout 9`, `eval`, `npx`, nested `sh -c`) put the real command later.
         for (index, word) in lower.iter().enumerate() {
             let name = basename(word);
             let args = &lower[index + 1..];
-            if CLI_NAMES.contains(&name) {
+            let imported = index > 0 && matches!(lower[index - 1].as_str(), "from" | "import");
+            if CLI_NAMES.contains(&name) && !imported {
                 self.cli(args);
             }
             for (credential_command, verbs) in CREDENTIAL_COMMANDS {
@@ -399,14 +472,19 @@ impl Classifier {
                 }
             }
         }
-        // Words resolve against the folder of a `-C`/`--directory` flag
-        // (`tar -C ~ ...`, `git -C ~/.codex ...`) once one has been given.
         let recursive = command.as_ref().is_some_and(|(_, name)| {
             RECURSIVE_READERS.iter().any(|(reader, flags)| {
                 *reader == name.as_str()
-                    && (flags.is_empty() || lower.iter().any(|word| flags.contains(&word.as_str())))
+                    && (flags.is_empty()
+                        || (name == "find" && feeds_pipe)
+                        || lower
+                            .iter()
+                            .any(|word| flags.iter().any(|flag| has_flag(word, flag))))
             })
         });
+        let cwd = folders.cwd.clone();
+        // Words resolve against the folder of a `-C`/`--directory` flag
+        // (`tar -C ~ ...`, `git -C ~/.codex ...`) once one has been given.
         let mut folder = cwd.clone();
         let mut previous: Option<&str> = None;
         for word in words {
@@ -415,12 +493,12 @@ impl Classifier {
             if let Some(flag) = previous
                 && FOLDER_FLAGS.contains(&flag)
             {
-                folder = self.homes.resolve(word, cwd);
+                folder = self.homes.resolve(word, &cwd);
                 folder_value = true;
             } else if let Some((flag, value)) = word.split_once('=')
                 && FOLDER_FLAGS.contains(&flag)
             {
-                folder = self.homes.resolve(value, cwd);
+                folder = self.homes.resolve(value, &cwd);
                 folder_value = true;
             }
             previous = Some(word.as_str());
@@ -436,7 +514,7 @@ impl Classifier {
                 };
                 // `-C` means something else to some commands (`grep -C 3`):
                 // resolve against both folders.
-                let bases = if folder == *cwd {
+                let bases = if folder == cwd {
                     vec![folder.clone()]
                 } else {
                     vec![folder.clone(), cwd.clone()]
@@ -450,12 +528,36 @@ impl Classifier {
                 }
             }
             if let Some(payload) = indirect::decoded_payload(word) {
-                self.script(&payload, cwd, depth + 1);
+                self.script(&payload, &cwd, depth + 1);
             }
         }
-        if let Some(file) = indirect::script_file(words) {
-            let file = self.homes.resolve(file, cwd);
-            self.script_file(&file, cwd, depth);
+        match indirect::script_source(words) {
+            Some(indirect::ScriptSource::File(file)) => {
+                let file = self.homes.resolve(file, &cwd);
+                self.script_file(&file, &cwd, depth);
+            }
+            Some(indirect::ScriptSource::Unseen) => self.note(ProtectedActionKind::SecurityPolicy),
+            None => {}
+        }
+    }
+
+    /// Follow `cd`, `pushd` and `popd` (also behind `builtin`/`command`).
+    fn change_folder(&self, name: &str, args: &[String], folders: &mut Folders) {
+        let target = args
+            .iter()
+            .find(|word| !word.starts_with('-') || *word == "-");
+        let next = match (name, target) {
+            ("cd", None) => self.homes.user_home().map(str::to_string),
+            ("cd", Some(target)) if target == "-" => Some(folders.previous.clone()),
+            ("cd" | "pushd", Some(target)) => Some(self.homes.resolve(target, &folders.cwd)),
+            ("popd", _) => folders.stack.pop(),
+            _ => None,
+        };
+        if let Some(next) = next {
+            if name == "pushd" {
+                folders.stack.push(folders.cwd.clone());
+            }
+            folders.previous = std::mem::replace(&mut folders.cwd, next);
         }
     }
 
@@ -481,17 +583,25 @@ impl Classifier {
     }
 
     /// A script run from a file is judged by its text (a patched script run
-    /// later, `bash x.sh`, `./run`), bounded in size and count; binaries are
-    /// skipped.
+    /// later, `bash x.sh`, `./run`). A script the classifier cannot read in
+    /// full (missing, written by the same command, not a regular file, too
+    /// large, past the file limit, or where lookups are not allowed) fails
+    /// closed; executables are skipped by their magic number.
     fn script_file(&mut self, file: &str, cwd: &str, depth: usize) {
         use std::io::Read;
-        if self.scripts_read >= MAX_SCRIPT_FILES {
-            return;
-        }
+        let unreadable = |classifier: &mut Self| {
+            classifier.note(ProtectedActionKind::SecurityPolicy);
+        };
         self.scripts_read += 1;
+        if self.scripts_read > MAX_SCRIPT_FILES || !self.homes.lookups_allowed(file) {
+            return unreadable(self);
+        }
         // Check before opening: opening a FIFO or device would block.
-        if !std::fs::metadata(file).is_ok_and(|metadata| metadata.is_file()) {
-            return;
+        let Ok(metadata) = std::fs::metadata(file) else {
+            return unreadable(self);
+        };
+        if !metadata.is_file() || metadata.len() > indirect::SCRIPT_READ_LIMIT {
+            return unreadable(self);
         }
         let mut options = std::fs::OpenOptions::new();
         options.read(true);
@@ -502,20 +612,23 @@ impl Classifier {
             options.custom_flags(libc::O_NONBLOCK);
         }
         let Ok(handle) = options.open(file) else {
-            return;
+            return unreadable(self);
         };
-        if !handle.metadata().is_ok_and(|metadata| metadata.is_file()) {
-            return;
-        }
         let mut bytes = Vec::new();
-        if handle
-            .take(indirect::SCRIPT_READ_LIMIT)
-            .read_to_end(&mut bytes)
-            .is_err()
-            || bytes.contains(&0)
+        if !handle.metadata().is_ok_and(|metadata| metadata.is_file())
+            || handle
+                .take(indirect::SCRIPT_READ_LIMIT + 1)
+                .read_to_end(&mut bytes)
+                .is_err()
+            || bytes.len() as u64 > indirect::SCRIPT_READ_LIMIT
         {
+            return unreadable(self);
+        }
+        if BINARY_MAGIC.iter().any(|magic| bytes.starts_with(magic)) {
             return;
         }
+        // The shell skips NUL bytes; so does the scan.
+        bytes.retain(|byte| *byte != 0);
         let text = String::from_utf8_lossy(&bytes);
         self.script(&text, cwd, depth + 1);
     }
