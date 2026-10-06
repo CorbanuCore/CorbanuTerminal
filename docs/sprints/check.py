@@ -42,7 +42,10 @@ REQUIRED_SECTIONS = (
     "Exit evidence",
 )
 MAX_CURRENT_LINES = 100
-PARALLEL_LIMIT = 3
+# Travis, 2026-10-06: a plan may reserve up to three sprints, one per declared
+# lane. Global cap: three security lanes plus one sprint for each other plan.
+MAX_PLAN_PARALLEL = 3
+PARALLEL_LIMIT = 5
 RESERVED_STATUSES = {"in_progress", "blocked"}
 
 
@@ -61,6 +64,14 @@ def concrete(value):
         and "<" not in value
         and ">" not in value
     )
+
+
+def lane_names(value):
+    return [
+        lane.strip().casefold()
+        for lane in value.split(",")
+        if concrete(lane.strip())
+    ]
 
 
 def write_paths(value):
@@ -88,21 +99,38 @@ def check_parallel(records, plans):
     ]
     limits = {}
     for path, values in plans.items():
-        value = values.get("parallel_sprint_limit", "1")
-        if value != "1":
-            errors.append(f"{path}: sequential initiative requires parallel_sprint_limit: 1")
-            limits[path] = 1
-        else:
-            limits[path] = 1
-        count = sum(r["plan_file"] == path for r in active)
-        if (limits[path] > 1 or (count and len(active) > 1)) and not concrete(
+        value = values.get("parallel_sprint_limit", "1").strip()
+        limit = int(value) if value.isdigit() else 0
+        if not 1 <= limit <= MAX_PLAN_PARALLEL or value != str(limit):
+            errors.append(
+                f"{path}: parallel_sprint_limit must be 1-{MAX_PLAN_PARALLEL}"
+            )
+            limit = 1
+        limits[path] = limit
+        lanes = lane_names(values.get("parallel_lanes", ""))
+        if limit > 1 and (len(lanes) < limit or len(set(lanes)) != len(lanes)):
+            errors.append(
+                f"{path}: parallel_sprint_limit {limit} requires parallel_lanes "
+                f"naming at least {limit} distinct lanes"
+            )
+        reserved = [r for r in active if r["plan_file"] == path]
+        count = len(reserved)
+        if (limit > 1 or (count and len(active) > 1)) and not concrete(
             values.get("integration_owner", "")
         ):
             errors.append(f"{path}: parallel plan requires a named integration_owner")
-        if count > limits[path]:
+        if count > limit:
             errors.append(
-                f"{path}: reserved sprint count {count} exceeds plan limit {limits[path]}"
+                f"{path}: reserved sprint count {count} exceeds plan limit {limit}"
             )
+        if limit > 1 and lanes:
+            for record in reserved:
+                lane = record.get("parallel_lane", "").strip().casefold()
+                if lane not in lanes:
+                    errors.append(
+                        f"{record['path']}: parallel_lane {lane!r} is not a declared "
+                        f"lane of {path}"
+                    )
     if len(active) > PARALLEL_LIMIT:
         errors.append(
             f"global reserved sprint count {len(active)} exceeds {PARALLEL_LIMIT}"

@@ -307,7 +307,23 @@ class SprintCheckerTests(unittest.TestCase):
                 path.write_text(value)
             result = checker.check_sprints(root, repo)
             self.assertFalse(result["ok"])
-            self.assertTrue(any("plan limit 1" in e for e in result["errors"]))
+            self.assertTrue(any("requires parallel_lanes" in e for e in result["errors"]))
+            plan.write_text(
+                plan.read_text().replace(
+                    "parallel_sprint_limit: 3\n",
+                    'parallel_sprint_limit: 3\nparallel_lanes: "lane-1, lane-2, lane-3"\n',
+                )
+            )
+            result = checker.check_sprints(root, repo)
+            self.assertTrue(result["ok"], result["errors"])
+            first.write_text(first.read_text().replace('"lane-1"', '"lane-9"'))
+            self.assertTrue(
+                any(
+                    "not a declared lane" in e
+                    for e in checker.check_sprints(root, repo)["errors"]
+                )
+            )
+            first.write_text(first.read_text().replace('"lane-9"', '"lane-1"'))
             second.write_text(
                 second.read_text().replace("src/module2/", "src/module1/child.rs")
             )
@@ -414,51 +430,85 @@ class ParallelAllocationTests(unittest.TestCase):
         self.assertEqual(self.check(self.records()), [])
 
     def test_global_and_per_plan_limits(self):
+        self.assertEqual(self.check(self.records(5)), [])
         self.assertTrue(
-            any("global reserved" in e for e in self.check(self.records(4)))
-        )
-        self.assertTrue(
-            any(
-                "sequential initiative" in e
-                for e in self.check(self.records(), parallel_sprint_limit="2")
-            )
+            any("global reserved" in e for e in self.check(self.records(6)))
         )
         records = self.records(2)
         records[1]["plan_file"] = records[0]["plan_file"]
+        self.assertTrue(any("plan limit 1" in e for e in self.check(records)))
+
+    def test_three_lane_plan(self):
+        records = self.records(3)
+        for record in records:
+            record["plan_file"] = "security.md"
+        plans = {
+            "security.md": {
+                "parallel_sprint_limit": "3",
+                "parallel_lanes": "lane-0, lane-1, lane-2",
+                "integration_owner": "Alex",
+            }
+        }
+        self.assertEqual(checker.check_parallel(records, plans), [])
+        records[2]["parallel_lane"] = "lane-9"
+        self.assertTrue(
+            any("not a declared lane" in e for e in checker.check_parallel(records, plans))
+        )
+        records = self.records(4)
+        for record in records:
+            record["plan_file"] = "security.md"
+        plans["security.md"]["parallel_lanes"] = "lane-0, lane-1, lane-2, lane-3"
         self.assertTrue(
             any(
-                "plan limit 1" in e
-                for e in self.check(records)
+                "must be 1-3" in e or "plan limit" in e
+                for e in checker.check_parallel(records, plans)
             )
         )
 
     def test_global_limit_applies_across_plans(self):
-        records = self.records(4)
-        for record in records[2:]:
-            record["plan_file"] = "other.md"
+        records = self.records(6)
+        for index, record in enumerate(records):
+            record["plan_file"] = f"plan-{index % 3}.md"
         plans = {
-            name: {"parallel_sprint_limit": "2", "integration_owner": "Alex"}
-            for name in ("plan.md", "other.md")
+            f"plan-{index}.md": {
+                "parallel_sprint_limit": "2",
+                "parallel_lanes": "lane-a, lane-b",
+                "integration_owner": "Alex",
+            }
+            for index in range(3)
         }
-        self.assertTrue(
-            any("global reserved" in e for e in checker.check_parallel(records, plans))
-        )
+        errors = checker.check_parallel(records, plans)
+        self.assertTrue(any("global reserved" in e for e in errors))
 
     def test_blocked_keeps_reservation_ready_does_not(self):
-        records = self.records(4)
+        records = self.records(6)
         records[-1]["status"] = "blocked"
         self.assertTrue(any("global reserved" in e for e in self.check(records)))
         records[-1]["status"] = "ready"
         self.assertEqual(self.check(records), [])
 
     def test_invalid_limits_and_missing_integration_owner(self):
-        for value in ("0", "2", "3", "4", "three", "", "1.5"):
+        for value in ("0", "4", "three", "", "1.5", "-1"):
             with self.subTest(value=value):
                 self.assertTrue(
                     any(
-                        "sequential initiative" in e
+                        "must be 1-3" in e
                         for e in self.check([], parallel_sprint_limit=value)
                     )
+                )
+        for value in ("2", "3"):
+            with self.subTest(value=value):
+                self.assertTrue(
+                    any(
+                        "requires parallel_lanes" in e
+                        for e in self.check([], parallel_sprint_limit=value)
+                    )
+                )
+                self.assertEqual(
+                    self.check(
+                        [], parallel_sprint_limit=value, parallel_lanes="a, b, c"
+                    ),
+                    [],
                 )
         self.assertTrue(
             any(
