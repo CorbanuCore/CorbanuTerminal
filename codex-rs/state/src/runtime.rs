@@ -49,6 +49,7 @@ mod external_agent_config_imports;
 mod goals;
 mod gpu_rentals;
 mod gpu_runtime_providers;
+mod log_scrub;
 mod logs;
 mod memories;
 mod provider_requests;
@@ -180,6 +181,8 @@ impl StateRuntime {
                 return Err(err);
             }
         };
+        // A new logs database has nothing an older build wrote.
+        let logs_db_is_new = !crate::sqlite::database_has_content(&logs_path);
         let logs_pool = match sqlite
             .open_logs_db(&logs_migrator, telemetry_override)
             .await
@@ -283,6 +286,7 @@ impl StateRuntime {
                 logs_path.display(),
             );
         }
+        log_scrub::start(&runtime.logs_pool, &logs_path, logs_db_is_new).await;
         Ok(runtime)
     }
 
