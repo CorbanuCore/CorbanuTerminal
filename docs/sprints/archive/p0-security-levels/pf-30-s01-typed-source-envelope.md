@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-30-S01"
 title: "Typed source envelope and trusted ingress"
-status: draft
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-30"
 execution_order: 37
@@ -66,9 +66,10 @@ updated: 2026-10-06
   Evidence: [labelled-ingress-gate.md](../../../../qa/security-levels/sprints/PF-30-S01-typed-source-envelope/labelled-ingress-gate.md),
   videos: [qa/demos/index/PF-30-S01.md](../../../../qa/demos/index/PF-30-S01.md).
 
+- [x] Merged as PR #178 (merge commit `b96b23344b`); record archived 2026-10-06.
+
 ## Remaining
 
-- [ ] After merge: plan worker archives this record and updates navigation.
 - Moved out: persisted per-message origins and lineage (PF-30-S02); classifier producer (PF-35, P1).
 - Known gaps (QA file): images, audio and encrypted agent content unwrapped; MCP tool-search descriptions;
   realtime and memory summarisation still fail closed; parent→child messages labelled `child_agent`.
@@ -79,9 +80,9 @@ updated: 2026-10-06
 - [x] Focused: `just test -p codex-core pf_30_s01` (39 ran); `just test -p codex-protocol -p codex-features -p codex-content-security`.
 - [x] Integration: `just test -p codex-core` (baseline failures recorded). No manifest changes.
 - [x] Real TUI: three GLM 5.2 tmux demos at `61b75ec43a`.
-- [ ] Milestone qualification when Moderate ships: full isolated code-blind VM run and human sign-off.
+- Milestone (not this sprint): the full isolated code-blind VM run and human sign-off happen when Moderate ships.
 
 ## Exit evidence
 
-- [ ] PR merged to main behind `source_envelopes`; record the merge commit in the QA file.
-- [ ] Plan worker archives this record (status `completed`) and updates plan navigation.
+- [x] PR #178 merged to main behind `source_envelopes`; merge commit `b96b23344b` recorded in the QA file.
+- [x] Archived with status `completed`; plan and index links point here.

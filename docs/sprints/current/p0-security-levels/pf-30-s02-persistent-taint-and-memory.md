@@ -1,17 +1,20 @@
 ---
 sprint_id: "PF-30-S02"
 title: "Persistent taint across summaries and memory"
-status: draft
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-30"
 execution_order: 38
-owner: "Jim Ricketts"
-worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
-branch: "feat/p0-security-levels"
-base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
+owner: "untrusted-content lane"
+parallel_lane: "untrusted-content"
+write_scope: "codex-rs/protocol/src/provenance.rs, codex-rs/protocol/src/protocol.rs, codex-rs/core/src/security/ingress/, codex-rs/core/src/client.rs, codex-rs/core/src/compact.rs, codex-rs/core/src/session/mod.rs, codex-rs/core/src/session/rollout_reconstruction.rs, codex-rs/core/src/session/tests.rs, codex-rs/core/src/agent/control/spawn.rs, codex-rs/core/src/agent/control_tests.rs, codex-rs/core/src/client_tests.rs, codex-rs/core/src/thread_rollout_truncation.rs, codex-rs/core/tests/suite/provenance.rs, codex-rs/rollout/src/, codex-rs/state/src/extract.rs, codex-rs/state/src/runtime/threads.rs, codex-rs/thread-store/src/thread_metadata_sync.rs, codex-rs/app-server-protocol/src/protocol/thread_history.rs, codex-rs/app-server-protocol/src/protocol/thread_history_projection.rs, codex-rs/app-server-protocol/schema/, codex-rs/memories/write/src/phase1.rs, codex-rs/ext/extension-api/src/contributors/prompt.rs, codex-rs/ext/memories/src/extension.rs, codex-rs/ext/memories/src/tests.rs, qa/security-levels/sprints/PF-30-S02/, qa/demos/specs/, qa/demos/index/PF-30-S02.md, docs/sprints/current/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md"
+integration_gate: "Per-sprint gate of 2026-10-06: focused tests, GLM 5.2 tmux demos, one independent Opus 5.5 High review; merge behind source_envelopes."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf30-s02-20261006"
+branch: "feat/pf-30-s02-persistent-taint"
+base_commit: "b96b23344ba68e8a484b5e68834b6a62e392e007"
 depends_on: "PF-30-S01"
 created: 2026-08-28
-updated: 2026-09-04
+updated: 2026-10-06
 ---
 
 # PF-30-S02 — Persistent taint across summaries and memory
@@ -31,50 +34,46 @@ updated: 2026-09-04
 
 ## Code boundaries
 
-- OpenClaw adoption reference: [OC-5](../../../plans/openclaw-source-review-2026-08-28.md#oc-5), [OC-11](../../../plans/openclaw-source-review-2026-08-28.md#oc-11) at `13adff02ca3897768d80d2bca18f5acf08c55d91`; see the review for named functions, callers, tests and limits. Reference tests are not candidate evidence.
-
-- Existing/foundation: codex-rs/core/src/context_manager/{history,normalize,updates}.rs; codex-rs/memories/{read,write}/src; codex-rs/state/src/runtime/memories.rs.
-- Import/export adapters: `codex-rs/external-agent-migration/src/{memory_import.rs,sessions/export.rs}`; child propagation in `codex-rs/core/src/agent/{control,registry}.rs`.
-- Planned: codex-rs/core/src/security/taint.rs; codex-rs/state/src/runtime/provenance.rs.
-- Tests: planned colocated Rust test modules prefixed `pf_30_s02`; fixtures use synthetic secrets and fake services only.
+- OpenClaw adoption reference: [OC-5](../../../plans/openclaw-source-review-2026-08-28.md#oc-5), [OC-11](../../../plans/openclaw-source-review-2026-08-28.md#oc-11) at `13adff02ca3897768d80d2bca18f5acf08c55d91`; reference tests are not candidate evidence.
+- This slice: origin records in the rollout (`protocol/src/provenance.rs`, `RolloutItem`), restore on
+  resume/fork (`core/src/security/ingress/`, `session/mod.rs`), compaction (`compact.rs`) and the memory
+  read path (`ext/memories`, `ext/extension-api`). Every exhaustive `RolloutItem` match is in `write_scope`.
+- Tests: colocated `pf_30_s02` modules; fixtures use synthetic content and fake providers only.
 
 ## Preconditions
 
-- [ ] Active plan; PF-30-S01 completed and archived.
-- [ ] Read root and nearest implementation-path AGENTS.md; verify exact plan/worktree coordinates.
-- [ ] Confirm source pins, declared crate/module paths, and backend/API availability; unresolved security prerequisites block readiness.
+- [x] Active plan; PF-30-S01 completed and archived (PR #178, `b96b23344b`). Read root and `codex-rs`
+  AGENTS.md; worktree registered in the plan front matter. Decisions of 2026-10-06 apply (flagged merge).
 
 ## Done
 
-- [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
+- [x] Allocated 2026-10-06 to the untrusted-content lane after PF-30-S01 closed.
+- [x] Origins persist in the rollout (`source_origin`, version 1, digests only) and are restored on resume and
+  fork, and restated at compaction checkpoints. Missing, old, unknown-version or malformed records stay untrusted;
+  a record never upgrades a live registration.
+- [x] Compaction: retained human messages keep human standing; the summary is host only when every input had
+  standing. Memory context reaches protected requests as `source=memory`. Window-reset context registered as host.
+- [x] Flag-off Moderate names the disabled feature (separate commit `836ec41e04`).
+- [x] Gate at `01a3a88330`: [persistent-origins-gate.md](../../../../qa/security-levels/sprints/PF-30-S02/persistent-origins-gate.md);
+  videos in [qa/demos/index/PF-30-S02.md](../../../../qa/demos/index/PF-30-S02.md).
 
 ## Remaining
 
-- [ ] Resolve the accepted round-five stage-one memory policy-binding gap using the [scoped follow-up](../../../../qa/security-levels/sprints/PF-30-S01-typed-source-envelope/memory-stage-one-follow-up.md). Decide the host-owned inherited/live binding contract before allocating worker/Core public API edits; a config-only floor is insufficient. This draft handoff grants no implementation authority or protected-memory readiness.
-
-- [ ] Test provenance-store capacity rejection before wrapped file commit, filename/path aliases including memory/dreaming, and out-of-band changed content against read-time digests. Do not encode the outside review's disproven OpenClaw capacity exploit as an observed fact.
-
-- [ ] Reuse the persistent writer/store/index chain, not only turn-taint-state: test canonical workspace aliases, sticky least-trusted origin, reservation-owned rollback, capacity rejection and content identity on read. Missing records, user-turn boundaries and dreaming/memory filenames must not clear protected ancestry.
-
-- [ ] Propagate the conservative union of source authority and taint through compaction, summaries, memory write/read, retrieval, cache, export/import and transcript replay.
-- [ ] Carry lineage through agent spawn, mailbox replies, task artifacts, delegation and resume; no laundering by a more privileged summarizer or a new turn.
-- [ ] Version persistent envelopes and integrity digests; old/missing/corrupt provenance is untrusted or quarantined, never silently trusted.
-- [ ] Keep source taint sticky across exact-action approvals. An explicitly clean context must exclude or quarantine contaminated ancestry, not relabel it; approval authorizes only the specific action and never erases source taint.
-- [ ] Add multi-turn, restart, old-store migration, nested-agent and poisoned-memory tests, including a benign summary that hides its hostile source.
-- [ ] Add named `pf_30_s02` regression tests; update affected Cargo/Bazel/lock/schema edges together without broadening this feature.
+- [ ] Later slices: agent spawn/mailbox lineage, export/import, memory stage-one policy binding
+  ([follow-up](../../../../qa/security-levels/sprints/PF-30-S01-typed-source-envelope/memory-stage-one-follow-up.md)),
+  provenance-store capacity and read-time digest tests, sticky taint across exact-action approvals,
+  a real paginated/referenced-fork resume test, and the token-budget MCP thread hint (still host context).
 
 ## Verification
 
-- [ ] Run `cd codex-rs && just fix -p <affected-crate>` for each listed crate, then `just fmt`; inspect the final diff.
-- [ ] Focused: `cd codex-rs && just test -p codex-core pf_30_s02 && just test -p codex-state pf_30_s02`; confirm tests actually ran.
-- [ ] Memory/import regression suites: `cd codex-rs && just test -p codex-memories-read && just test -p codex-memories-write`; run the affected external-agent-migration suite too.
-- [ ] Integration: full affected crate suites via `just test -p <affected-crate>`; update Bazel locks when manifests change.
-- [ ] TUI applicability: none; integration flows are re-run by PF-26-S02
-- [ ] Record candidate/commit, commands, expected/actual outcomes and safe artifact digests; no production credentials or funds.
+- [x] `just fmt`; `just fix -p` for each changed crate.
+- [x] Focused: `just test -p codex-core pf_30_s0` (62 pass), plus the protocol, rollout, state and memories suites.
+- [x] Integration: nine affected crates, 5,052/5,056; the four failures are recorded as baseline or flake.
+- [x] Real TUI: GLM 5.2 tmux run and four demos (resume, memory, compaction, flag-off message).
+- [x] One independent Opus 5.5 High review: round 1 changes requested, round 2 APPROVE.
+- [ ] Remaining slices get the same gate; milestone VM run and sign-off when Moderate ships.
 
 ## Exit evidence
 
-- [ ] Implementation commit and final-tree outputs under `qa/security-levels/sprints/PF-30-S02/`.
-- [ ] Acceptance and source-mapping assertions proven; applicable true-TUI keys/checkpoints captured after formatting.
-- [ ] PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
-- [ ] Done/Remaining reflect reality; completed record moved to the archive and plan/navigation updated.
+- [x] Gate record under `qa/security-levels/sprints/PF-30-S02/`; videos in `qa/demos/index/PF-30-S02.md`.
+- [ ] This slice merged to main behind `source_envelopes`; later slices merged and the record archived.

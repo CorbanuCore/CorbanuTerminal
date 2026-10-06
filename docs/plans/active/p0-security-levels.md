@@ -27,6 +27,9 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf27-s04-broker-20261006"
     branch: "feat/pf27-s04-broker-20261006"
     base_commit: "cb78550a31b1d6e5cab33ad27ef28a5ae4fa21b1"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf30-s02-20261006"
+    branch: "feat/pf-30-s02-persistent-taint"
+    base_commit: "b96b23344ba68e8a484b5e68834b6a62e392e007"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-round5-provenance"
     branch: "feat/security-round5-provenance"
     base_commit: "07791288b6feeccfaee5a57c12452359cc666957"
@@ -127,7 +130,7 @@ worker slot; a sprint still waits for its dependencies in any lane.
 | Lane | Sprints in order |
 | --- | --- |
 | broker | [PF-27-S04](../../sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md) → [PF-27-S02](../../sprints/current/p0-security-levels/pf-27-s02-secretless-agent-launch.md) → [PF-28-S01](../../sprints/current/p0-security-levels/pf-28-s01-central-secret-output-gate.md) → [PF-28-S02](../../sprints/current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md) |
-| untrusted content | [PF-30-S01](../../sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md) → [PF-30-S02](../../sprints/current/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md) → [PF-30-S03](../../sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md) → [PF-23-S01](../../sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md) → [PF-23-S02](../../sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md) → [PF-23-S03](../../sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) |
+| untrusted content | [PF-30-S01](../../sprints/archive/p0-security-levels/pf-30-s01-typed-source-envelope.md) (done, PR #178) → [PF-30-S02](../../sprints/current/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md) → [PF-30-S03](../../sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md) → [PF-23-S01](../../sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md) → [PF-23-S02](../../sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md) → [PF-23-S03](../../sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) |
 | tui | [PF-24-S03 flagged picker](../../sprints/current/p0-security-levels/pf-24-s03-flagged-security-picker.md) → [PF-24-S02](../../sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) → [PF-25-S01](../../sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md) → [PF-25-S02](../../sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md) |
 | first free lane | [PF-33-S01](../../sprints/current/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md) → [PF-33-S02](../../sprints/current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md) (after PF-27-S02); [PF-29-S01](../../sprints/current/p0-security-levels/pf-29-s01-protected-mode-inventory.md) → [PF-29-S02](../../sprints/current/p0-security-levels/pf-29-s02-human-secret-migration.md) (after PF-28-S02) |
 | convergence | [PF-41-S01](../../sprints/current/p0-security-levels/pf-41-s01-effective-security-inspector.md) (after PF-23-S03, PF-24-S02, PF-29-S02), then [PF-13-S07](../../sprints/current/p0-security-levels/pf-13-s07-integrated-credential-boundary-qualification.md) |

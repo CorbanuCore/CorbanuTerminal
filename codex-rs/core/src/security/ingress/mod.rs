@@ -295,6 +295,12 @@ pub(crate) enum IngressError {
     NativeAdmissionUnavailable,
     #[error("source admission registry is full or poisoned")]
     RegistryUnavailable,
+    #[error(
+        "protected source admission is unavailable: Moderate and Aggressive need the \
+         `source_envelopes` feature, which is off, so the request was stopped before \
+         anything was sent"
+    )]
+    SourceEnvelopesOff,
 }
 
 mod native;

@@ -3,17 +3,20 @@
 //! Deserializing an envelope does not authenticate its producer. Core must bind
 //! it to the exact source and bytes at trusted ingress before model admission.
 
+use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 use thiserror::Error;
+use ts_rs::TS;
 use uuid::Uuid;
 
 pub const SOURCE_ENVELOPE_VERSION: u32 = 1;
 pub const MAX_SOURCE_LINEAGE: usize = 32;
 pub const MAX_SOURCE_TRANSFORMATIONS: usize = 16;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(rename_all = "snake_case")]
 pub enum SourceKind {
     Web,
     Search,
@@ -27,7 +30,59 @@ pub enum SourceKind {
     Plugin,
     Hook,
     ChildAgent,
+    /// Text derived from stored memories (summaries of earlier sessions).
+    Memory,
     Unknown,
+}
+
+/// Version of [`SourceOriginRecord`]. Readers ignore any other version, which
+/// leaves the described content unattributed (untrusted).
+pub const SOURCE_ORIGIN_RECORD_VERSION: u32 = 1;
+
+/// Host-recorded origins of conversation content, persisted in the rollout
+/// next to the items they describe so a resumed session keeps the standing
+/// each item had when it was recorded.
+///
+/// A record holds only digests, never content. It is written by Core record
+/// seams, not by tools or models. A missing, unknown-version or malformed
+/// record leaves its content unattributed, and unattributed content reaches a
+/// protected provider only as labelled untrusted data.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+pub struct SourceOriginRecord {
+    pub version: u32,
+    pub entries: Vec<SourceOriginEntry>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+pub struct SourceOriginEntry {
+    pub scope: SourceOriginScope,
+    /// Lowercase hex SHA-256 of the host-defined key for `scope`.
+    pub key: String,
+    pub origin: RecordedOrigin,
+}
+
+/// What `SourceOriginEntry::key` identifies.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(rename_all = "snake_case")]
+pub enum SourceOriginScope {
+    /// A conversation message: its role plus exact text parts.
+    Message,
+    /// An exact model-structure item (call, reasoning) from the provider stream.
+    ModelItem,
+    /// A host-dispatched tool call id.
+    Call,
+}
+
+/// Where the host saw content enter the conversation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[ts(tag = "type", rename_all = "snake_case")]
+pub enum RecordedOrigin {
+    Human,
+    Host,
+    Model,
+    External { kind: SourceKind },
 }
 
 /// Intentionally has no human/system/approved variant. Neither a classifier

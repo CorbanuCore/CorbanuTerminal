@@ -88,7 +88,7 @@ Sources: A1 durable provenance; T 00:42:33, 00:43:03, 00:48:08; OC-4/5/11.
 
 Immutable ingress-assigned envelopes and sticky lineage across summaries, compaction, memory, imports, child messages and resume. Human exact approval authorizes one action; it does not erase taint.
 
-Current owners: [PF-30-S01](../sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md), [PF-30-S02](../sprints/current/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md), [PF-30-S03](../sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md).
+Current owners: [PF-30-S01](../sprints/archive/p0-security-levels/pf-30-s01-typed-source-envelope.md), [PF-30-S02](../sprints/current/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md), [PF-30-S03](../sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md).
 
 <a id="pf-31"></a>
 

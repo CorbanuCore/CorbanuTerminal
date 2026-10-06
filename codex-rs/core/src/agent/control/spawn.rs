@@ -56,7 +56,11 @@ fn keep_forked_rollout_item(item: &RolloutItem, preserve_reference_context_item:
         // from the parent's durable baseline. Truncated forks drop part of that prompt,
         // so they must rebuild context on their first child turn.
         RolloutItem::TurnContext(_) | RolloutItem::WorldState(_) => preserve_reference_context_item,
-        RolloutItem::Compacted(_) | RolloutItem::EventMsg(_) | RolloutItem::SessionMeta(_) => true,
+        // Origin records are content-keyed: a dropped item's record matches nothing.
+        RolloutItem::Compacted(_)
+        | RolloutItem::EventMsg(_)
+        | RolloutItem::SessionMeta(_)
+        | RolloutItem::SourceOrigin(_) => true,
     }
 }
 
@@ -949,7 +953,8 @@ impl AgentControl {
                 | RolloutItem::TurnContext(_)
                 | RolloutItem::InterAgentCommunication(_)
                 | RolloutItem::InterAgentCommunicationMetadata { .. }
-                | RolloutItem::WorldState(_) => true,
+                | RolloutItem::WorldState(_)
+                | RolloutItem::SourceOrigin(_) => true,
             }
         });
         // Full forks reuse the parent's reference context instead of rebuilding it. If that

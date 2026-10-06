@@ -69,3 +69,8 @@ Index: [qa/demos/index/PF-30-S01.md](../../../demos/index/PF-30-S01.md).
   old 2,048-byte bound; the message is misleading but the path still fails closed (pre-existing).
 - Product finding from the demo SOP scan: with `RUST_LOG=trace` the TUI log and logs SQLite WAL contained the
   provider credential (redacted by the tool). Not in this sprint's scope; reported to the lane owner.
+
+## Merge
+
+Merged to main on 2026-10-06 as PR #178, merge commit `b96b23344b`, behind `source_envelopes`.
+All 32 CI checks passed. The sprint record is archived as completed.
