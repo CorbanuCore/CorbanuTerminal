@@ -30,7 +30,12 @@ fn snapshot(view: &SecurityView, width: u16) -> String {
 #[test]
 fn security_view_profiles_never_claim_healthy_protection() {
     for level in PROFILES {
-        let view = SecurityView::new(Some(level), current, || None, RuntimeKeymap::defaults().list);
+        let view = SecurityView::new(
+            Some(level),
+            current,
+            || None,
+            RuntimeKeymap::defaults().list,
+        );
         insta::assert_snapshot!(
             format!("security_view_{}", profile_name(level).to_lowercase()),
             snapshot(&view, /*width*/ 80)

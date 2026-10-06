@@ -376,9 +376,11 @@ impl Detector {
 fn has_url_password(text: &str) -> bool {
     text.split("://").skip(1).any(|rest| {
         let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
-        authority
-            .rsplit_once('@')
-            .is_some_and(|(userinfo, _)| userinfo.split_once(':').is_some_and(|(_, pw)| !pw.is_empty()))
+        authority.rsplit_once('@').is_some_and(|(userinfo, _)| {
+            userinfo
+                .split_once(':')
+                .is_some_and(|(_, pw)| !pw.is_empty())
+        })
     })
 }
 
@@ -529,7 +531,9 @@ impl<'a> Collector<'a> {
         };
         let (digest, status) = match (&probe.error, spec.unsupported, probe.is_dir) {
             (Some(error), _, _) => (None, EntryStatus::Unreadable(error.clone())),
-            (None, Some(reason), true) => (self.dir_digest(spec.path), EntryStatus::Unsupported(reason)),
+            (None, Some(reason), true) => {
+                (self.dir_digest(spec.path), EntryStatus::Unsupported(reason))
+            }
             (None, None, true) => (
                 self.dir_digest(spec.path),
                 EntryStatus::Unsupported("directory"),
@@ -578,18 +582,90 @@ impl<'a> Collector<'a> {
 
     fn corbanu_home(&mut self) {
         let home = self.sources.codex_home.clone();
-        let entries: [(&str, FindingKind, SecretClass, Disposition, Option<&'static str>); 11] = [
-            ("secrets", FindingKind::VaultStore, SecretClass::ManagedSecret, Disposition::Denied, Some("the vault itself")),
-            ("auth.json", FindingKind::SignInFile, SecretClass::ManagedSecret, Disposition::Denied, Some("Corbanu sign-in")),
-            (".credentials.json", FindingKind::SignInFile, SecretClass::ManagedSecret, Disposition::Isolate, Some("Corbanu sign-in")),
-            ("provider_auth.json", FindingKind::SignInFile, SecretClass::ManagedSecret, Disposition::Isolate, Some("Corbanu sign-in")),
-            (".env", FindingKind::EnvFile, SecretClass::UnmanagedSecret, Disposition::Isolate, None),
-            ("wallet", FindingKind::Wallet, SecretClass::CustodyKey, Disposition::Isolate, Some("custody keys are never migrated")),
-            ("sessions", FindingKind::Transcript, SecretClass::HistoricContent, Disposition::Isolate, Some("historic content")),
-            ("archived_sessions", FindingKind::Transcript, SecretClass::HistoricContent, Disposition::Isolate, Some("historic content")),
-            ("history.jsonl", FindingKind::Transcript, SecretClass::HistoricContent, Disposition::Isolate, Some("historic content")),
-            ("shell_snapshots", FindingKind::Transcript, SecretClass::HistoricContent, Disposition::Isolate, Some("historic content")),
-            ("log", FindingKind::Transcript, SecretClass::HistoricContent, Disposition::Isolate, Some("historic content")),
+        let entries: [(
+            &str,
+            FindingKind,
+            SecretClass,
+            Disposition,
+            Option<&'static str>,
+        ); 11] = [
+            (
+                "secrets",
+                FindingKind::VaultStore,
+                SecretClass::ManagedSecret,
+                Disposition::Denied,
+                Some("the vault itself"),
+            ),
+            (
+                "auth.json",
+                FindingKind::SignInFile,
+                SecretClass::ManagedSecret,
+                Disposition::Denied,
+                Some("Corbanu sign-in"),
+            ),
+            (
+                ".credentials.json",
+                FindingKind::SignInFile,
+                SecretClass::ManagedSecret,
+                Disposition::Isolate,
+                Some("Corbanu sign-in"),
+            ),
+            (
+                "provider_auth.json",
+                FindingKind::SignInFile,
+                SecretClass::ManagedSecret,
+                Disposition::Isolate,
+                Some("Corbanu sign-in"),
+            ),
+            (
+                ".env",
+                FindingKind::EnvFile,
+                SecretClass::UnmanagedSecret,
+                Disposition::Isolate,
+                None,
+            ),
+            (
+                "wallet",
+                FindingKind::Wallet,
+                SecretClass::CustodyKey,
+                Disposition::Isolate,
+                Some("custody keys are never migrated"),
+            ),
+            (
+                "sessions",
+                FindingKind::Transcript,
+                SecretClass::HistoricContent,
+                Disposition::Isolate,
+                Some("historic content"),
+            ),
+            (
+                "archived_sessions",
+                FindingKind::Transcript,
+                SecretClass::HistoricContent,
+                Disposition::Isolate,
+                Some("historic content"),
+            ),
+            (
+                "history.jsonl",
+                FindingKind::Transcript,
+                SecretClass::HistoricContent,
+                Disposition::Isolate,
+                Some("historic content"),
+            ),
+            (
+                "shell_snapshots",
+                FindingKind::Transcript,
+                SecretClass::HistoricContent,
+                Disposition::Isolate,
+                Some("historic content"),
+            ),
+            (
+                "log",
+                FindingKind::Transcript,
+                SecretClass::HistoricContent,
+                Disposition::Isolate,
+                Some("historic content"),
+            ),
         ];
         // Config files are reported per secret key by `config_layer`.
         for (name, kind, class, disposition, unsupported) in entries {
@@ -794,7 +870,8 @@ impl<'a> Collector<'a> {
             }
             let looks_private = name.starts_with("id_")
                 || read_bounded(&path).is_ok_and(|bytes| {
-                    String::from_utf8_lossy(&bytes[..bytes.len().min(256)]).contains("PRIVATE KEY-----")
+                    String::from_utf8_lossy(&bytes[..bytes.len().min(256)])
+                        .contains("PRIVATE KEY-----")
                 });
             if looks_private {
                 self.path_finding(PathFinding {
@@ -848,10 +925,10 @@ impl<'a> Collector<'a> {
                 if value.is_empty() {
                     continue;
                 }
-                let detail = Some(format!(":{} {name}", index + 1));
+                let detail = format!(":{} {name}", index + 1);
                 if is_reference(value) {
                     if is_secret_name(name) {
-                        let location = format!("{}{}", self.display(&path), detail.unwrap_or_default());
+                        let location = format!("{}{detail}", self.display(&path));
                         self.push(
                             FindingKind::Reference,
                             SecretClass::PermittedDerived,
@@ -869,7 +946,7 @@ impl<'a> Collector<'a> {
                         disposition: Disposition::Migrate,
                         scope: Scope::Home,
                         path: &path,
-                        detail,
+                        detail: Some(detail),
                         unsupported: None,
                     });
                 }
@@ -882,7 +959,13 @@ impl<'a> Collector<'a> {
         if cwd.as_os_str().is_empty() {
             return;
         }
-        for name in [".env", ".env.local", ".env.development", ".env.production", ".envrc"] {
+        for name in [
+            ".env",
+            ".env.local",
+            ".env.development",
+            ".env.production",
+            ".envrc",
+        ] {
             self.path_finding(PathFinding {
                 kind: FindingKind::EnvFile,
                 class: SecretClass::UnmanagedSecret,
@@ -949,7 +1032,12 @@ impl<'a> Collector<'a> {
                     }
                     if last == "model_providers" {
                         for (provider, entry) in table {
-                            self.model_provider(layer, &format!("{key}.{provider}"), provider, entry);
+                            self.model_provider(
+                                layer,
+                                &format!("{key}.{provider}"),
+                                provider,
+                                entry,
+                            );
                         }
                         continue;
                     }
@@ -1021,7 +1109,10 @@ impl<'a> Collector<'a> {
         if let Some(env) = table.get("env").and_then(toml::Value::as_table) {
             for (name, value) in env {
                 if self.literal(value)
-                    && (is_secret_name(name) || value.as_str().is_some_and(|text| self.detector.secret(text)))
+                    && (is_secret_name(name)
+                        || value
+                            .as_str()
+                            .is_some_and(|text| self.detector.secret(text)))
                 {
                     literals.push(format!(".env.{name}"));
                 }
@@ -1034,7 +1125,10 @@ impl<'a> Collector<'a> {
                 }
             }
         }
-        if table.get("bearer_token").is_some_and(|value| self.literal(value)) {
+        if table
+            .get("bearer_token")
+            .is_some_and(|value| self.literal(value))
+        {
             literals.push(".bearer_token".to_string());
         }
         for suffix in literals {
@@ -1140,7 +1234,12 @@ impl<'a> Collector<'a> {
             .filter(|finding| finding.disposition == Disposition::Isolate)
             .flat_map(|finding| finding.paths.clone())
             .collect::<Vec<_>>();
-        for root in value.as_array().into_iter().flatten().filter_map(toml::Value::as_str) {
+        for root in value
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(toml::Value::as_str)
+        {
             let root = PathBuf::from(root);
             if credential_paths.iter().any(|path| path.starts_with(&root)) {
                 self.push(
@@ -1195,7 +1294,9 @@ fn parse_assignment(line: &str) -> Option<(&str, &str)> {
         return None;
     }
     if let Some(rest) = line.strip_prefix("set ") {
-        let mut parts = rest.split_whitespace().filter(|part| !part.starts_with('-'));
+        let mut parts = rest
+            .split_whitespace()
+            .filter(|part| !part.starts_with('-'));
         let name = parts.next()?;
         let start = rest.find(name)? + name.len();
         return Some((name, rest[start..].trim()));
@@ -1218,7 +1319,11 @@ fn unquote(value: &str) -> &str {
     value
         .strip_prefix('"')
         .and_then(|rest| rest.strip_suffix('"'))
-        .or_else(|| value.strip_prefix('\'').and_then(|rest| rest.strip_suffix('\'')))
+        .or_else(|| {
+            value
+                .strip_prefix('\'')
+                .and_then(|rest| rest.strip_suffix('\''))
+        })
         .unwrap_or(value)
 }
 

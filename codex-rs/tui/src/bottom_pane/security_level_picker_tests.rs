@@ -260,9 +260,9 @@ fn tall_review_scrolls_to_its_last_line() {
 
 mod pf_29_s01 {
     use super::*;
-    use pretty_assertions::assert_eq;
     use crate::legacy_core::protected_preflight::InventorySources;
     use crate::legacy_core::protected_preflight::ReadinessFlags;
+    use pretty_assertions::assert_eq;
 
     struct Machine {
         root: tempfile::TempDir,
@@ -302,7 +302,12 @@ mod pf_29_s01 {
             };
             let mut context = context(&self.corbanu(), active);
             context.preflight_enabled = true;
-            SecurityLevelPicker::new(&context, current(), Some(input), RuntimeKeymap::defaults().list)
+            SecurityLevelPicker::new(
+                &context,
+                current(),
+                Some(input),
+                RuntimeKeymap::defaults().list,
+            )
         }
     }
 
@@ -343,7 +348,9 @@ mod pf_29_s01 {
         review_aggressive(&mut picker);
         let review = text(&picker);
         assert!(review.contains("Preflight passed"), "{review}");
-        assert!(review.contains("Credential files denied to agent commands after restart: ~/.netrc"));
+        assert!(
+            review.contains("Credential files denied to agent commands after restart: ~/.netrc")
+        );
         assert!(!review.contains("fake"));
 
         picker.handle_key_event(key(KeyCode::Enter));
@@ -352,7 +359,9 @@ mod pf_29_s01 {
             level::load(&machine.corbanu()),
             StoredLevel::Chosen(ChosenLevel::Aggressive)
         );
-        let receipt = preflight::load_receipt(&machine.corbanu()).unwrap().unwrap();
+        let receipt = preflight::load_receipt(&machine.corbanu())
+            .unwrap()
+            .unwrap();
         assert_eq!(receipt.findings.len(), 1);
         assert!(
             !std::fs::read_to_string(preflight::receipt_path(&machine.corbanu()))

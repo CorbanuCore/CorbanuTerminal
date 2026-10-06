@@ -1,14 +1,15 @@
 # PF-29-S01. Record with
 #   PF29_CANDIDATE=<corbanu> --bin qa/security-levels/sprints/PF-29-S01/demos/restart-once.sh
-id = "pf29s01-flag-off"
-feature = "Preflight flag off: Aggressive behaves exactly as before"
-expected = "With protected_mode_preflight off the review has no preflight, nothing extra is denied, and after restart the probe can still read ~/.ssh/id_ed25519 (the PF-27-S02 limit PF-29 closes)."
+id = "pf29s01-isolated-after-restart"
+feature = "Preflight passes and Aggressive isolates the SSH private key after restart"
+expected = "The review shows a passed preflight that will deny ~/.ssh/id_ed25519; after a real restart /status claims the checked boundary and the agent's probe reads the public key but is denied the private key."
 model = "glm-5.2"
 provider = "zai"
 config = """
 suppress_unstable_features_warning = true
 [features]
 security_levels = true
+protected_mode_preflight = true
 secretless_agent_launch = true
 isolated_credential_broker = true
 secret_output_gate = true
@@ -63,7 +64,10 @@ key = "Down"
 repeat = 20
 
 [[steps]]
-wait = "config\\.toml is\\s+not modified"
+wait = "Credential files denied to agent commands after restart: ~/.ssh/id_ed25519"
+
+[[steps]]
+wait = "Preflight passed"
 
 [[steps]]
 pause = 4.0
@@ -92,6 +96,18 @@ timeout = 60
 
 [[steps]]
 pause = 1.0
+
+[[steps]]
+type = "/status"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "protected boundary checked at launch"
+
+[[steps]]
+pause = 3.0
 
 [[steps]]
 type = "Run sh probe.sh once and show me its raw output, then stop."

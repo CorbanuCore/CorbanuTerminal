@@ -70,7 +70,7 @@ impl Fixture {
     }
 }
 
-fn find<'a>(preflight: &'a Preflight, kind: FindingKind) -> Vec<&'a Finding> {
+fn find(preflight: &Preflight, kind: FindingKind) -> Vec<&Finding> {
     preflight
         .inventory
         .findings
@@ -112,9 +112,15 @@ fn pf_29_s01_empty_machine_is_clean_only_when_controls_are_ready() {
 fn pf_29_s01_credential_files_and_ssh_keys_are_isolated_not_blocking() {
     let fixture = Fixture::new();
     let home = fixture.home();
-    fixture.write(&home.join(".ssh/id_ed25519"), b"-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n");
+    fixture.write(
+        &home.join(".ssh/id_ed25519"),
+        b"-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n",
+    );
     fixture.write(&home.join(".ssh/id_ed25519.pub"), b"ssh-ed25519 AAAA fake");
-    fixture.write(&home.join(".ssh/deploy"), b"-----BEGIN RSA PRIVATE KEY-----\nfake\n");
+    fixture.write(
+        &home.join(".ssh/deploy"),
+        b"-----BEGIN RSA PRIVATE KEY-----\nfake\n",
+    );
     fixture.write(&home.join(".ssh/config"), b"Host *\n");
     fixture.write(&home.join(".kube/config"), b"token: fake");
     fixture.write(&home.join(".netrc"), b"machine x login y password fake");
@@ -157,7 +163,11 @@ fn pf_29_s01_shell_profile_exports_block_and_never_expose_values() {
             "~/.config/fish/config.fish:1 ANTHROPIC_API_KEY".to_string(),
         ]
     );
-    assert!(exports.iter().all(|finding| finding.disposition == Disposition::Migrate));
+    assert!(
+        exports
+            .iter()
+            .all(|finding| finding.disposition == Disposition::Migrate)
+    );
     let references = find(&preflight, FindingKind::Reference);
     assert_eq!(references.len(), 1);
     assert_eq!(references[0].class, SecretClass::PermittedDerived);
@@ -175,7 +185,10 @@ fn pf_29_s01_environment_is_classified_without_values() {
     sources.env = vec![
         ("OPENAI_API_KEY".to_string(), FAKE_KEY.to_string()),
         ("MY_SERVICE_TOKEN".to_string(), FAKE_CORE_VALUE.to_string()),
-        ("DATABASE_URL".to_string(), "postgres://app:hunter22@db/x".to_string()),
+        (
+            "DATABASE_URL".to_string(),
+            "postgres://app:hunter22@db/x".to_string(),
+        ),
         ("INNOCENT".to_string(), FAKE_KEY.to_string()),
         ("PATH".to_string(), "/usr/bin".to_string()),
         ("EMPTY_TOKEN".to_string(), String::new()),
@@ -183,13 +196,7 @@ fn pf_29_s01_environment_is_classified_without_values() {
     let preflight = fixture.run(&sources);
     let env = find(&preflight, FindingKind::EnvironmentVariable)
         .into_iter()
-        .map(|finding| {
-            (
-                finding.location.clone(),
-                finding.class,
-                finding.disposition,
-            )
-        })
+        .map(|finding| (finding.location.clone(), finding.class, finding.disposition))
         .collect::<Vec<_>>();
     assert_eq!(
         env,
@@ -257,7 +264,11 @@ auth = {{ command = "print-token" }}
 command = "docs-mcp"
 "#,
     );
-    let flags = layer("launch flags", None, r#"permissions.p.filesystem."/x/secrets" = "deny""#);
+    let flags = layer(
+        "launch flags",
+        None,
+        r#"permissions.p.filesystem."/x/secrets" = "deny""#,
+    );
     let mut sources = fixture.sources();
     sources.config_layers = vec![flags, project, user];
     let preflight = fixture.run(&sources);
@@ -281,7 +292,10 @@ command = "docs-mcp"
     );
     let set = find(&preflight, FindingKind::ConfigLiteral);
     assert_eq!(set.len(), 1);
-    assert_eq!(set[0].location, "user config shell_environment_policy.set.DEPLOY_TOKEN");
+    assert_eq!(
+        set[0].location,
+        "user config shell_environment_policy.set.DEPLOY_TOKEN"
+    );
     assert_eq!(set[0].disposition, Disposition::Isolate);
     assert_eq!(set[0].paths, vec![user_path]);
     let routes = locations(FindingKind::Integration);
@@ -292,7 +306,10 @@ command = "docs-mcp"
         "project config mcp_servers.docs",
         "user config mcp_servers.remote",
     ] {
-        assert!(routes.contains(&route.to_string()), "{route} not in {routes:?}");
+        assert!(
+            routes.contains(&route.to_string()),
+            "{route} not in {routes:?}"
+        );
     }
     assert!(
         find(&preflight, FindingKind::Integration)
@@ -322,7 +339,13 @@ fn pf_29_s01_old_memory_content_blocks_until_removed() {
 
     let memory = find(&preflight, FindingKind::Memory);
     assert_eq!(memory.len(), 1);
-    assert_eq!(memory[0].location, memories.join("rollout_summaries/old.md").display().to_string());
+    assert_eq!(
+        memory[0].location,
+        memories
+            .join("rollout_summaries/old.md")
+            .display()
+            .to_string()
+    );
     assert_eq!(memory[0].disposition, Disposition::RemoveFromContext);
     assert!(!preflight.is_clean());
 }
@@ -420,9 +443,10 @@ fn pf_29_s01_locked_or_damaged_vault_is_incomplete_readiness() {
     assert!(fixture.run(&fixture.sources()).is_clean());
 
     let vault_incomplete = |preflight: &Preflight| {
-        preflight.readiness.iter().any(|item| {
-            item.id == "vault" && matches!(item.state, ReadinessState::Incomplete(_))
-        })
+        preflight
+            .readiness
+            .iter()
+            .any(|item| item.id == "vault" && matches!(item.state, ReadinessState::Incomplete(_)))
     };
     fixture.write(&store, b"not an age file");
     let damaged = fixture.run(&fixture.sources());
@@ -455,7 +479,10 @@ fn pf_29_s01_locked_or_damaged_vault_is_incomplete_readiness() {
 fn pf_29_s01_corrupt_snapshots_and_histories_are_isolated() {
     let fixture = Fixture::new();
     let home = fixture.corbanu();
-    fixture.write(&home.join("shell_snapshots/s.sh"), &[0x00, 0xff, 0x13, 0x37]);
+    fixture.write(
+        &home.join("shell_snapshots/s.sh"),
+        &[0x00, 0xff, 0x13, 0x37],
+    );
     fixture.write(&home.join("sessions/2026/x.jsonl"), b"{not json");
     fixture.write(&home.join("history.jsonl"), b"\xff\xfe");
     fixture.write(&home.join("state_5.sqlite"), b"garbage");
@@ -463,7 +490,13 @@ fn pf_29_s01_corrupt_snapshots_and_histories_are_isolated() {
     fixture.write(&home.join("wallet/keystore"), b"fake");
     let preflight = fixture.run(&fixture.sources());
     let isolated = preflight.inventory.isolation_paths();
-    for name in ["shell_snapshots", "sessions", "history.jsonl", "state_5.sqlite", "wallet"] {
+    for name in [
+        "shell_snapshots",
+        "sessions",
+        "history.jsonl",
+        "state_5.sqlite",
+        "wallet",
+    ] {
         assert!(isolated.contains(&home.join(name)), "{name} not isolated");
     }
     assert!(isolated.contains(&home.join("state_5.sqlite-wal")));
@@ -474,7 +507,10 @@ fn pf_29_s01_corrupt_snapshots_and_histories_are_isolated() {
             .count(),
         1
     );
-    assert_eq!(find(&preflight, FindingKind::Wallet)[0].class, SecretClass::CustodyKey);
+    assert_eq!(
+        find(&preflight, FindingKind::Wallet)[0].class,
+        SecretClass::CustodyKey
+    );
     assert!(preflight.is_clean(), "{:?}", preflight.blockers());
 }
 
@@ -490,7 +526,10 @@ fn pf_29_s01_drift_between_preflight_and_activation() {
     assert!(unchanged.is_empty(), "{unchanged:?}");
 
     fixture.write(&netrc, b"two");
-    fixture.write(&fixture.home().join(".zshenv"), format!("export X_TOKEN={FAKE_KEY}\n").as_bytes());
+    fixture.write(
+        &fixture.home().join(".zshenv"),
+        format!("export X_TOKEN={FAKE_KEY}\n").as_bytes(),
+    );
     let (second, drift) = first.recheck(&sources, ALL_ON);
     let netrc_id = find(&first, FindingKind::CredentialFile)[0].id.clone();
     assert_eq!(drift.changed, vec![netrc_id]);
@@ -509,7 +548,10 @@ fn pf_29_s01_ids_are_stable_and_digests_are_keyed() {
     let one = Preflight::run_with_key(&sources, ALL_ON, [1; 32]);
     let two = Preflight::run_with_key(&sources, ALL_ON, [2; 32]);
     assert_eq!(one.inventory.finding_ids(), two.inventory.finding_ids());
-    assert_ne!(one.inventory.manifest.digest(), two.inventory.manifest.digest());
+    assert_ne!(
+        one.inventory.manifest.digest(),
+        two.inventory.manifest.digest()
+    );
 }
 
 #[test]

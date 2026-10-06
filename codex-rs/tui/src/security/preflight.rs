@@ -47,8 +47,12 @@ pub(crate) struct Receipt {
 pub(crate) enum Boundary {
     /// Preflight clean at this launch; conversations from before
     /// `activated_at` (Unix seconds) are contaminated.
-    Clean { activated_at: i64 },
-    NotClean { blockers: Vec<String> },
+    Clean {
+        activated_at: i64,
+    },
+    NotClean {
+        blockers: Vec<String>,
+    },
     /// No usable receipt; nothing is claimed and no resume is allowed.
     Unverified(String),
 }
@@ -142,7 +146,9 @@ fn write_receipt(codex_home: &Path, receipt: &Receipt) -> io::Result<()> {
 fn now() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |elapsed| i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX))
+        .map_or(0, |elapsed| {
+            i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX)
+        })
 }
 
 /// Credential paths agent commands must not read while Aggressive is stored
@@ -155,9 +161,12 @@ pub(crate) fn isolation_paths(
     if !receipt_path(codex_home).exists() {
         return Vec::new();
     }
-    Preflight::run(&file_sources(codex_home, home, cwd), ReadinessFlags::default())
-        .inventory
-        .isolation_paths()
+    Preflight::run(
+        &file_sources(codex_home, home, cwd),
+        ReadinessFlags::default(),
+    )
+    .inventory
+    .isolation_paths()
 }
 
 /// Every isolated path must be unreadable to agent commands.
@@ -167,7 +176,12 @@ pub(crate) fn verify_isolation(config: &Config, paths: &[PathBuf]) -> Vec<String
     paths
         .iter()
         .filter(|path| policy.can_read_path_with_cwd(path, cwd))
-        .map(|path| format!("Isolation: agent commands can still read {}", path.display()))
+        .map(|path| {
+            format!(
+                "Isolation: agent commands can still read {}",
+                path.display()
+            )
+        })
         .collect()
 }
 
@@ -177,7 +191,8 @@ pub(crate) fn audit_at_launch(codex_home: &Path, config: &Config) -> Boundary {
         Ok(Some(receipt)) => receipt,
         Ok(None) => {
             return Boundary::Unverified(
-                "Aggressive was saved without a preflight; choose it again in /security".to_string(),
+                "Aggressive was saved without a preflight; choose it again in /security"
+                    .to_string(),
             );
         }
         Err(reason) => return Boundary::Unverified(reason),

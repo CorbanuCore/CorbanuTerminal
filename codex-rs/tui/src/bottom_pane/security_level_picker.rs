@@ -14,6 +14,9 @@ use ratatui::text::Line;
 use crate::key_hint;
 use crate::key_hint::KeyBindingListExt;
 use crate::keymap::ListKeymap;
+use crate::legacy_core::protected_preflight::Disposition;
+use crate::legacy_core::protected_preflight::LIMITS;
+use crate::legacy_core::protected_preflight::Preflight;
 use crate::security::aggressive;
 use crate::security::current::CurrentValues;
 use crate::security::level;
@@ -22,9 +25,6 @@ use crate::security::level::LevelContext;
 use crate::security::level::StoredLevel;
 use crate::security::preflight;
 use crate::security::preflight::PreflightInput;
-use crate::legacy_core::protected_preflight::Disposition;
-use crate::legacy_core::protected_preflight::LIMITS;
-use crate::legacy_core::protected_preflight::Preflight;
 use crate::wrapping::RtOptions;
 use crate::wrapping::word_wrap_lines;
 
@@ -177,7 +177,11 @@ impl SecurityLevelPicker {
             Some(format!(
                 "Not saved: {count} item{} changed since you reviewed this{}. Review it again.",
                 if count == 1 { "" } else { "s" },
-                if drift.readiness_changed { ", and readiness changed" } else { "" }
+                if drift.readiness_changed {
+                    ", and readiness changed"
+                } else {
+                    ""
+                }
             ))
         } else if !next.is_clean() {
             Some("Not saved: resolve the blockers above first. Nothing changed.".to_string())
@@ -222,7 +226,12 @@ impl SecurityLevelPicker {
             "Controls ready: {ready} of {}",
             preflight.readiness.len()
         ));
-        lines.extend(preflight.blockers().into_iter().map(|line| format!("✗ {line}")));
+        lines.extend(
+            preflight
+                .blockers()
+                .into_iter()
+                .map(|line| format!("✗ {line}")),
+        );
         // Credential files by location; Corbanu's own history and state by name.
         let (own, credentials): (Vec<_>, Vec<_>) = preflight
             .inventory
@@ -483,7 +492,10 @@ impl SecurityLevelPicker {
                 label(&self.keymap.move_down),
             ),
             Screen::Review(ChosenLevel::Aggressive)
-                if self.preflight.as_ref().is_some_and(|preflight| !preflight.is_clean()) =>
+                if self
+                    .preflight
+                    .as_ref()
+                    .is_some_and(|preflight| !preflight.is_clean()) =>
             {
                 format!(
                     "{}/{} scroll · esc back, nothing changes",
