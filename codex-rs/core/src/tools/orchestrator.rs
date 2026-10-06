@@ -191,7 +191,11 @@ impl ToolOrchestrator {
             .await?;
             // Recompute at execution: taint that arrived while the prompt was
             // open was not in front of the human when they decided.
-            if tool_ctx.session.services.model_client().post_taint_generation()
+            if tool_ctx
+                .session
+                .services
+                .model_client()
+                .post_taint_generation()
                 != Some(action.taint_generation)
             {
                 return Err(ToolError::Rejected(action.stale_rejection()));

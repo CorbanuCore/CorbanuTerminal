@@ -154,27 +154,33 @@ impl Approvable<ShellRequest> for ShellRuntime {
         let call_id = ctx.call_id.to_string();
         Box::pin(async move {
             let fresh = ctx.fresh_human_authority;
-            with_cached_approval(&session.services, "shell", keys, fresh, move || async move {
-                let available_decisions = None;
-                session
-                    .request_command_approval(
-                        turn,
-                        call_id,
-                        /*approval_id*/ None,
-                        environment_id,
-                        command,
-                        cwd,
-                        reason,
-                        ctx.network_approval_context.clone(),
-                        req.exec_approval_requirement
-                            .proposed_execpolicy_amendment()
-                            .cloned(),
-                        req.additional_permissions.clone(),
-                        available_decisions,
-                        /*plugin_attribution_override*/ None,
-                    )
-                    .await
-            })
+            with_cached_approval(
+                &session.services,
+                "shell",
+                keys,
+                fresh,
+                move || async move {
+                    let available_decisions = None;
+                    session
+                        .request_command_approval(
+                            turn,
+                            call_id,
+                            /*approval_id*/ None,
+                            environment_id,
+                            command,
+                            cwd,
+                            reason,
+                            ctx.network_approval_context.clone(),
+                            req.exec_approval_requirement
+                                .proposed_execpolicy_amendment()
+                                .cloned(),
+                            req.additional_permissions.clone(),
+                            available_decisions,
+                            /*plugin_attribution_override*/ None,
+                        )
+                        .await
+                },
+            )
             .await
         })
     }

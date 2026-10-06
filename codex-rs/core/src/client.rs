@@ -1028,11 +1028,13 @@ impl ModelClient {
     /// (`source_envelopes` on and a protected level in force), else `None`.
     /// An unavailable policy counts as protected; a poisoned registry as tainted.
     pub(crate) fn post_taint_generation(&self) -> Option<u64> {
-        let protected = self
-            .source_admission_level()
-            .map_or(true, |level| level != codex_security_policy::SecurityLevel::Permissive);
+        let protected = self.source_admission_level().map_or(true, |level| {
+            level != codex_security_policy::SecurityLevel::Permissive
+        });
         match self.ingress_items.lock() {
-            Ok(ingress) => (ingress.labelled_mode() && protected).then(|| ingress.taint_generation()),
+            Ok(ingress) => {
+                (ingress.labelled_mode() && protected).then(|| ingress.taint_generation())
+            }
             Err(_) => protected.then_some(u64::MAX),
         }
     }

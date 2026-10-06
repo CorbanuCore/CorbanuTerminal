@@ -631,7 +631,10 @@ async fn pf_30_s03_vault_command_after_untrusted_content_needs_the_human() -> an
             Some(PF_30_S03_VAULT)
         );
         let reason = approval.reason.clone().unwrap_or_default();
-        assert!(reason.contains("vault access after untrusted content"), "{reason}");
+        assert!(
+            reason.contains("vault access after untrusted content"),
+            "{reason}"
+        );
         test.codex
             .submit(Op::ExecApproval {
                 id: approval.effective_approval_id(),
@@ -669,8 +672,16 @@ async fn pf_30_s03_untainted_permissive_and_ordinary_calls_are_unchanged() -> an
     for (level, first, second) in [
         // The vault call comes first, before any tool output.
         (SecurityLevel::Moderate, PF_30_S03_VAULT, "printf ok"),
-        (SecurityLevel::Permissive, PF_30_S03_INJECTED, PF_30_S03_VAULT),
-        (SecurityLevel::Moderate, PF_30_S03_INJECTED, "printf ordinary"),
+        (
+            SecurityLevel::Permissive,
+            PF_30_S03_INJECTED,
+            PF_30_S03_VAULT,
+        ),
+        (
+            SecurityLevel::Moderate,
+            PF_30_S03_INJECTED,
+            "printf ordinary",
+        ),
     ] {
         let (test, captured) =
             pf_30_s03_two_call_turn(level, AskForApproval::Never, first, second).await?;
@@ -678,8 +689,13 @@ async fn pf_30_s03_untainted_permissive_and_ordinary_calls_are_unchanged() -> an
         let requests = captured.requests();
         assert_eq!(requests.len(), 3);
         for (request, call_id) in [(&requests[1], "call-first"), (&requests[2], "call-second")] {
-            let output = request.function_call_output_text(call_id).unwrap_or_default();
-            assert!(!output.contains("approvals are off"), "{level:?} {call_id}: {output}");
+            let output = request
+                .function_call_output_text(call_id)
+                .unwrap_or_default();
+            assert!(
+                !output.contains("approvals are off"),
+                "{level:?} {call_id}: {output}"
+            );
         }
     }
     Ok(())
@@ -717,7 +733,10 @@ async fn pf_30_s03_session_approval_does_not_cover_a_tainted_repeat() -> anyhow:
         assert_eq!(second.is_some(), asks_again, "{level:?}");
         if let Some(second) = second {
             let reason = second.reason.clone().unwrap_or_default();
-            assert!(reason.contains("a cached or automatic approval does not count"), "{reason}");
+            assert!(
+                reason.contains("a cached or automatic approval does not count"),
+                "{reason}"
+            );
             test.codex
                 .submit(Op::ExecApproval {
                     id: second.effective_approval_id(),

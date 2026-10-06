@@ -136,7 +136,8 @@ fn words(command: &[String]) -> Vec<String> {
         .iter()
         .flat_map(|arg| {
             arg.split(|ch: char| {
-                ch.is_whitespace() || matches!(ch, ';' | '|' | '&' | '(' | ')' | '<' | '>' | '`')
+                ch.is_whitespace()
+                    || matches!(ch, ';' | '|' | '&' | '(' | ')' | '<' | '>' | '`')
                     || matches!(ch, '$' | '"' | '\'' | '=' | ',' | '{' | '}')
             })
             .filter(|word| !word.is_empty())
@@ -173,7 +174,10 @@ fn classify_command(command: &[String], home: &str) -> Option<ProtectedActionKin
                 note(ProtectedActionKind::SecurityPolicy);
             }
         }
-        if name == "security" && later.iter().any(|word| KEYCHAIN_VERBS.contains(&word.as_str()))
+        if name == "security"
+            && later
+                .iter()
+                .any(|word| KEYCHAIN_VERBS.contains(&word.as_str()))
         {
             note(ProtectedActionKind::Credentials);
         }
@@ -194,10 +198,7 @@ fn classify_path(path: &str, home: &str) -> Option<ProtectedActionKind> {
         return Some(ProtectedActionKind::Vault);
     }
     let corbanu_dir = path.contains(".corbanu/") || path.contains(".codex/");
-    if under_home
-        || name.ends_with(".rules")
-        || (POLICY_FILES.contains(&name) && corbanu_dir)
-    {
+    if under_home || name.ends_with(".rules") || (POLICY_FILES.contains(&name) && corbanu_dir) {
         return Some(ProtectedActionKind::SecurityPolicy);
     }
     None
