@@ -90,7 +90,7 @@ Follow-ups (not this sprint's scope) are listed in `qa/security-levels/sprints/P
 - [x] `just fmt`, `just fix -p codex-tui -p codex-features`; `just test -p codex-tui -- security` 31/31, `just test -p codex-features` 33/33; full `codex-tui` log kept (host-only `SUN_LEN` failures).
 - [x] tmux functional run on GLM 5.2: flag off, select/cancel, select Aggressive, probes denied, restart, back to Permissive (`qa/.../tmux-run/`).
 - [x] Independent Opus 5.5 High review: request changes, 12 findings dispositioned (`qa/.../review/`).
-- [x] Videos with the demo SOP script (PR #177 branch): 9 at `72735863b6` (`qa/.../demos/index.md`).
+- [x] Videos with the demo SOP script (PR #177 branch): 9 at `7f6c88912c` (`qa/.../demos/index.md`).
 - [ ] PR checks green on the final head before merge.
 
 ## Exit evidence

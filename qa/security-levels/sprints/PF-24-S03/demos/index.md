@@ -1,7 +1,22 @@
 # PF-24-S03 demo videos
 
-Recorded with `scripts/demo_video.py`; SOP: `qa/demos/README.md` (PR #177, branch `codex/demo-video-sop-20261006`).
+Recorded with `scripts/demo_video.py`; SOP: `qa/demos/README.md`.
 Videos are assets on the [`demos` prerelease](https://github.com/CorbanuCore/CorbanuTerminal/releases/tag/demos).
+
+| Date | Demo | Feature | Commit | Model | Length | Video |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-06 | `pf24-aggressive-sandbox-network` | Aggressive: approved command stays sandboxed | `7f6c88912c14` | glm-5.2 | 24s | [mp4](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-24-s03-pf24-aggressive-sandbox-network-7f6c88912c14-2026-10-06.mp4) · [cast](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-24-s03-pf24-aggressive-sandbox-network-7f6c88912c14-2026-10-06.cast) |
+| 2026-10-06 | `pf24-aggressive-vault-env-state` | Aggressive: vault, secrets and level file | `7f6c88912c14` | glm-5.2 | 37s | [mp4](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-24-s03-pf24-aggressive-vault-env-state-7f6c88912c14-2026-10-06.mp4) · [cast](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-24-s03-pf24-aggressive-vault-env-state-7f6c88912c14-2026-10-06.cast) |
+| 2026-10-06 | `pf24-child-inherits` | Aggressive: child agents inherit it | `7f6c88912c14` | glm-5.2 | 30s | [mp4](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-24-s03-pf24-child-inherits-7f6c88912c14-2026-10-06.mp4) · [cast](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-24-s03-pf24-child-inherits-7f6c88912c14-2026-10-06.cast) |
+| 2026-10-06 | `pf24-flag-off` | Flag off: /security unchanged | `7f6c88912c14` | glm-5.2 | 16s | [mp4](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-24-s03-pf24-flag-off-7f6c88912c14-2026-10-06.mp4) · [cast](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-24-s03-pf24-flag-off-7f6c88912c14-2026-10-06.cast) |
+| 2026-10-06 | `pf24-permissions-blocked` | Aggressive: /permissions cannot undo it | `7f6c88912c14` | glm-5.2 | 18s | [mp4](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-24-s03-pf24-permissions-blocked-7f6c88912c14-2026-10-06.mp4) · [cast](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-24-s03-pf24-permissions-blocked-7f6c88912c14-2026-10-06.cast) |
+| 2026-10-06 | `pf24-picker-cancel` | Review Aggressive, then cancel | `7f6c88912c14` | glm-5.2 | 27s | [mp4](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-24-s03-pf24-picker-cancel-7f6c88912c14-2026-10-06.mp4) · [cast](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-24-s03-pf24-picker-cancel-7f6c88912c14-2026-10-06.cast) |
+| 2026-10-06 | `pf24-return-to-permissive` | Return to Permissive | `7f6c88912c14` | glm-5.2 | 30s | [mp4](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-24-s03-pf24-return-to-permissive-7f6c88912c14-2026-10-06.mp4) · [cast](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-24-s03-pf24-return-to-permissive-7f6c88912c14-2026-10-06.cast) |
+| 2026-10-06 | `pf24-select-aggressive-restart` | Select Aggressive and restart | `7f6c88912c14` | glm-5.2 | 22s | [mp4](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-24-s03-pf24-select-aggressive-restart-7f6c88912c14-2026-10-06.mp4) · [cast](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-24-s03-pf24-select-aggressive-restart-7f6c88912c14-2026-10-06.cast) |
+| 2026-10-06 | `pf24-unknown-value` | Unknown stored level fails closed | `7f6c88912c14` | glm-5.2 | 17s | [mp4](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-24-s03-pf24-unknown-value-7f6c88912c14-2026-10-06.mp4) · [cast](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-24-s03-pf24-unknown-value-7f6c88912c14-2026-10-06.cast) |
+
+Final candidate above (`7f6c88912c`, after merging `origin/main` with #187: approvals use Enter).
+Earlier set at `72735863b6`, before that merge:
 
 | Date | Demo | Feature | Commit | Model | Length | Video |
 | --- | --- | --- | --- | --- | --- | --- |

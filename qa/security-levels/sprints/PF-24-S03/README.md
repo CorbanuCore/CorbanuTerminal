@@ -2,7 +2,7 @@
 
 Product heading: **P0 `/security` levels** — “Existing approval, sandbox, vault,
 wallet, tool, network, and agent policies are unchanged.” Candidate commit
-`72735863b6` on `codex/pf-24-s03-security-picker` (base `24242c1b0e`).
+`7f6c88912c` on `codex/pf-24-s03-security-picker` (base `24242c1b0e`).
 
 ## What shipped
 
@@ -48,7 +48,7 @@ description still says “read only” when the flag is on.
 | Full `codex-tui` | 4207 pass, 21 fail: host-only `SUN_LEN` socket paths and a command-popup snapshot on unchanged strings, none in touched code | `tests/summary.md` |
 | tmux functional run (GLM 5.2) | pass: flag off, review/cancel, select, restart, probes denied after approval (outside, `/tmp`, network, vault, vault store, env, level file), `/permissions` blocked, child inherits, back to Permissive (config.toml hash unchanged), unknown value, launch flags ignored, resume both ways | `tmux-run/` |
 | Independent review (Opus 5.5 High) | request changes → 12 findings dispositioned, fixes in `72735863b6` | `review/` |
-| Videos (demo SOP) | 9 videos, all at `72735863b6` | `demos/index.md`, specs and wrappers in `demos/` |
+| Videos (demo SOP) | 9 videos at the final candidate `7f6c88912c` (and an earlier set at `72735863b6`) | `demos/index.md`, specs and wrappers in `demos/` |
 | Code-blind design | 49 cases frozen before any result was shared; designer made no tool calls | `code-blind-design/` (`FROZEN.sha256`) |
 
 Pre-existing product finding (not this sprint): with `RUST_LOG=trace` the
@@ -56,5 +56,5 @@ provider key appears in the private TUI log and log database; the demo tool
 redacted it in place (`PRODUCT FINDING` in every run).
 
 The tmux run (`tmux-run/`) used commit `b8e5f59f7a`; the videos re-prove the
-core flows on `72735863b6`. Later commits only merge `origin/main` and add an
-argument comment required by the Windows lint (`e82b6dd98b`).
+core flows on the final candidate `7f6c88912c` (after merging `origin/main`, which
+includes #187, so approvals use Enter).

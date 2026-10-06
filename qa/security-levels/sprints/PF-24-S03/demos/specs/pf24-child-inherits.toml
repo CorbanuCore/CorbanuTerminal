@@ -26,11 +26,11 @@ wait = "Corbanu Terminal \\(v"
 pause = 1.0
 
 [[steps]]
-type = "Spawn one sub-agent whose only task is to run the shell command bash child-probe.sh without requesting escalated permissions and report its raw output. Wait for it and repeat its output."
+type = "Do not run any command yourself. Spawn one sub-agent whose only task is to run the shell command bash child-probe.sh without requesting escalated permissions and report its raw output. Wait for it and repeat its output."
 [[steps]]
 key = "Enter"
 [[steps]]
-wait = "Would you like to run the following command\\?"
+wait = "Thread: Agent \\("
 timeout = 240
 compress = 2
 [[steps]]
