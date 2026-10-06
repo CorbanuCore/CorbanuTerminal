@@ -1,0 +1,1308 @@
+{
+ "schema_version": 2,
+ "design_sha256": "2a3ab1611fdbbec5cb76ae36593609a38c880b1cf7057489dbeb50d5bbe9859d",
+ "implementer": "Astra High permission-confirmation worker (PF-83-S01 owner)",
+ "candidate": {
+  "version": "0.1.42",
+  "source": "commit b4513f6cc699773a7ca922d08b67683f47586a96 tree d6a3d723e0591cdd65f5a13e41fc8b9f92ff2c49 (package attested in increment-27; archive 7296e9b7bf45413465e3df1dc17ea6f87720e52dcaa862f05d9aa94d43c73995)",
+  "platform": "macOS arm64 (guest macOS 26.2)",
+  "binary_sha256": "e552180a2dfc5457a93881cc4822054e18a4a90e8bf86f67008238e461e758f6",
+  "package_manifest": {
+   "path": "candidate-manifest.json",
+   "sha256": "510a7286ada3d1cbc200f67018dcef04cbb64c46436286ce05381332ca024958"
+  }
+ },
+ "cases": [
+  {
+   "id": "F01",
+   "disposition": "passed",
+   "summary": "Restricted probe gated; Full Access applied for next turn via confirmation; next-turn probe ran without approval; fixture shows both markers.",
+   "candidate_sha256": "e552180a2dfc5457a93881cc4822054e18a4a90e8bf86f67008238e461e758f6",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a10eac-1439-7902-9c1b-da14b7b63bc8",
+    "run_id": "cb35-F01-pf83x1-20261006T004413Z",
+    "model": "glm-5.2 via provider zai (campaign mediator), corbanu exec default reasoning effort",
+    "machine": "UTM VM 'macOS 3' 4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6, IOPlatformUUID F9AABE1C-BA2C-55D7-9859-A6ED560D3218, macOS 26.2 (25C56) arm64, 192.168.64.3",
+    "profile": "fresh per-run product CORBANU_HOME and executor-home under /Users/pf83x1/runs/cb35-F01-pf83x1-20261006T004413Z; account pf83x1 uid 602; lane wiped before and after",
+    "launcher": "agent -> sudo -n -u pf83x1 -H /opt/pf83/bin/pf83-launch executor cb35-F01-pf83x1-20261006T004413Z F01 -> /opt/pf83/pkg/corbanu exec; product via pf83-tui -> /opt/pf83/bin/pf83-product -> /opt/pf83/pkg/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "packet/prompts/F01.md",
+     "sha256": "48a1f7350f3872d9253705d1ea342c704c738707aa5e0c20247ed4feb0dd3a72"
+    },
+    "access_record": {
+     "path": "runs/F01/executor-events.jsonl",
+     "sha256": "d0e9a8e3d6224811af9af472bf7cf18c5859b36a120b438ad3a1c9d8750a7154"
+    },
+    "actions": {
+     "path": "runs/F01/collected/evidence/actions.jsonl",
+     "sha256": "c7d6bbf3332286af814c567d9ecdd89df24cbf7ab9ba960029249df549cb1a52"
+    },
+    "isolation_record": {
+     "path": "runs/F01/isolation.json",
+     "sha256": "95c28c38048cedaf2a0b4ab3b0ea4c20631523ea0da676199796385b22602216"
+    }
+   },
+   "evidence": [
+    {
+     "path": "runs/F01/collected/evidence/result.md",
+     "sha256": "6a138a66b923fa6b81c9890c41f35ccfec4676e1483505b4b7142ee9059df1be"
+    },
+    {
+     "path": "runs/F01/collected/evidence/actions.jsonl",
+     "sha256": "c7d6bbf3332286af814c567d9ecdd89df24cbf7ab9ba960029249df549cb1a52"
+    },
+    {
+     "path": "runs/F01/collected/evidence/fixture.jsonl",
+     "sha256": "73ae07199fe7fc190e8858bcf3324b5aa47aeb59f28b0258df4aa69a1b4cbfaf"
+    },
+    {
+     "path": "runs/F01/collected/evidence/preflight-executor.json",
+     "sha256": "1f7e8f8050a67c7d19810633b3bc8db55016ab08126542eb365dcdb067de4950"
+    },
+    {
+     "path": "runs/F01/collected/evidence/preflight-launcher.json",
+     "sha256": "eebe6b92b6028571582d52e4b9e63065b213ceb0a8c213908dc7cd5cc920df42"
+    },
+    {
+     "path": "runs/F01/collected/evidence/preflight-pty-control.txt",
+     "sha256": "e2e961970dac2b966f51b7741e171fc5f665ac75ab4f06424beb2170437a6555"
+    },
+    {
+     "path": "runs/F01/collected/evidence/preflight-summary.json",
+     "sha256": "3f0b4f2b5e12beb5726ddc5f69bed1102d13bf9399e36974bfcb16fe70993b11"
+    },
+    {
+     "path": "runs/F01/collected/evidence/preflight-tmux-child.json",
+     "sha256": "493642f75eaf331aecc7b61e39b5cedf8c4f08bf9d72b7d146837a9371a26587"
+    },
+    {
+     "path": "runs/F01/collected/evidence/pty.raw",
+     "sha256": "d31d247519ee6521b2da1afa100fe18ca80b02c38f10ae41062f95abe9dbaaed"
+    },
+    {
+     "path": "runs/F01/collected/evidence/screens.jsonl",
+     "sha256": "f4477f398005b02428f9c8ad422006b7fc2f89beb8863b338da8999bf0bf265d"
+    },
+    {
+     "path": "runs/F01/collected/product-home/sessions/2026/10/05/rollout-2026-10-05T17-46-58-01a10ead-9263-7ec1-b137-6578906f9107.jsonl",
+     "sha256": "b0b83552e7289163530e9ef8462002326e18f68742d53ebd77b3dca3087b09fd"
+    },
+    {
+     "path": "runs/F01/mediator-window.jsonl",
+     "sha256": "ce3d34b51a46f6f9e3e592c200ca2c10a8b337e0a8b358e67684c9b9e4b9d26d"
+    },
+    {
+     "path": "runs/F01/executor.stderr",
+     "sha256": "c25ae3c8f3b08b8a809853bb564dae4d4bf6f5aa7cb60dfb1623be7c25aa2ba0"
+    }
+   ],
+   "disposition_record": {
+    "path": "dispositions.md",
+    "sha256": "ee8c34ac62e267d9821e225ae9e9afc199daa36914fe594ae71ab27357529c99"
+   }
+  },
+  {
+   "id": "F02",
+   "disposition": "passed",
+   "summary": "Restriction applied for next turn; the pending interval was idle, so its probe was the first turn after the boundary; that probe and the one after application were both gated, declined, markers absent.",
+   "candidate_sha256": "e552180a2dfc5457a93881cc4822054e18a4a90e8bf86f67008238e461e758f6",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a10eac-4eef-7b50-9b7c-3ee280eddbbf",
+    "run_id": "cb35-F02-pf83x2-20261006T004428Z",
+    "model": "glm-5.2 via provider zai (campaign mediator), corbanu exec default reasoning effort",
+    "machine": "UTM VM 'macOS 3' 4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6, IOPlatformUUID F9AABE1C-BA2C-55D7-9859-A6ED560D3218, macOS 26.2 (25C56) arm64, 192.168.64.3",
+    "profile": "fresh per-run product CORBANU_HOME and executor-home under /Users/pf83x2/runs/cb35-F02-pf83x2-20261006T004428Z; account pf83x2 uid 603; lane wiped before and after",
+    "launcher": "agent -> sudo -n -u pf83x2 -H /opt/pf83/bin/pf83-launch executor cb35-F02-pf83x2-20261006T004428Z F02 -> /opt/pf83/pkg/corbanu exec; product via pf83-tui -> /opt/pf83/bin/pf83-product -> /opt/pf83/pkg/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "packet/prompts/F02.md",
+     "sha256": "65362c863ada03b22baabc0cca756e03585979eac4f77cbcee02df7a3ecc3028"
+    },
+    "access_record": {
+     "path": "runs/F02/executor-events.jsonl",
+     "sha256": "39e616f97f0bf933e7ad39551345b9af5172d8f7c340920b35922416204d265d"
+    },
+    "actions": {
+     "path": "runs/F02/collected/evidence/actions.jsonl",
+     "sha256": "adae1170519e0ae9f66d5ed4442fb28126875c5070367fd77fb666a3f1743a17"
+    },
+    "isolation_record": {
+     "path": "runs/F02/isolation.json",
+     "sha256": "c7d0559983e407fa5fc204117fc74f6dff1d25faf1b38a00c005509c7eb5bb12"
+    }
+   },
+   "evidence": [
+    {
+     "path": "runs/F02/collected/evidence/result.md",
+     "sha256": "e864e4995954b0b578d91f8e1a690c7218debc8c5c8458873e487e2c63a80491"
+    },
+    {
+     "path": "runs/F02/collected/evidence/actions.jsonl",
+     "sha256": "adae1170519e0ae9f66d5ed4442fb28126875c5070367fd77fb666a3f1743a17"
+    },
+    {
+     "path": "runs/F02/collected/evidence/fixture.jsonl",
+     "sha256": "01f04348f8fad6855402ca41f3ad9eaa8732191b4f3577b89ea020ed83b4d6a8"
+    },
+    {
+     "path": "runs/F02/collected/evidence/preflight-executor.json",
+     "sha256": "d00b3d7f0a1615d8d61e508dcf5f8afec705818f48c5674ce771378817ac0e3b"
+    },
+    {
+     "path": "runs/F02/collected/evidence/preflight-launcher.json",
+     "sha256": "7e4f43cc6fae1fe0b266122d2f66a734813242f0e43b8418334917e1345aef6d"
+    },
+    {
+     "path": "runs/F02/collected/evidence/preflight-pty-control.txt",
+     "sha256": "e2e961970dac2b966f51b7741e171fc5f665ac75ab4f06424beb2170437a6555"
+    },
+    {
+     "path": "runs/F02/collected/evidence/preflight-summary.json",
+     "sha256": "3f0b4f2b5e12beb5726ddc5f69bed1102d13bf9399e36974bfcb16fe70993b11"
+    },
+    {
+     "path": "runs/F02/collected/evidence/preflight-tmux-child.json",
+     "sha256": "51a5eca8fb7cca45d947a7732cea71b52f19c25f05468862d25fad6858b8dfdc"
+    },
+    {
+     "path": "runs/F02/collected/evidence/pty.raw",
+     "sha256": "e6513e513da325cdb097e392c1132dfa3cda5cf31d27c6d56653d6264f27a84e"
+    },
+    {
+     "path": "runs/F02/collected/evidence/screens.jsonl",
+     "sha256": "af647b2c70e948fbd5f7ec863c483a5a023a7677d9fdb79f7c7a00ddfe0ad680"
+    },
+    {
+     "path": "runs/F02/collected/product-home/sessions/2026/10/05/rollout-2026-10-05T17-46-47-01a10ead-6568-7cd1-ac9f-fbbd5072441b.jsonl",
+     "sha256": "4f5074b5d5616f01fffec5e289e6fec65569ad5e29712c679651e346983a19a9"
+    },
+    {
+     "path": "runs/F02/mediator-window.jsonl",
+     "sha256": "97f0d2ebcb4b15a11fbac076f0b4a4997abfd183e5ad5c109dcf09e5414640b2"
+    },
+    {
+     "path": "runs/F02/executor.stderr",
+     "sha256": "6a3bdda397f6bd31b993bbef8a94ba59fac2b0f7629642e7f08dd4aa43845d41"
+    }
+   ],
+   "disposition_record": {
+    "path": "dispositions.md",
+    "sha256": "ee8c34ac62e267d9821e225ae9e9afc199daa36914fe594ae71ab27357529c99"
+   }
+  },
+  {
+   "id": "F03",
+   "disposition": "blocked",
+   "summary": "Core outcome not demonstrated: attempt 1 selected while idle and the product model refused the out-of-workspace probe; attempt 2 pressed Enter on the default Cancel each time, so Full Access never applied (its 'failed' is a misread).",
+   "candidate_sha256": "e552180a2dfc5457a93881cc4822054e18a4a90e8bf86f67008238e461e758f6",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a10ed4-52db-7102-ac2d-e575793997f3",
+    "run_id": "cb35-F03-pf83x3-20261006T012811Z",
+    "model": "glm-5.2 via provider zai (campaign mediator), corbanu exec default reasoning effort",
+    "machine": "UTM VM 'macOS 3' 4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6, IOPlatformUUID F9AABE1C-BA2C-55D7-9859-A6ED560D3218, macOS 26.2 (25C56) arm64, 192.168.64.3",
+    "profile": "fresh per-run product CORBANU_HOME and executor-home under /Users/pf83x3/runs/cb35-F03-pf83x3-20261006T012811Z; account pf83x3 uid 604; lane wiped before and after",
+    "launcher": "agent -> sudo -n -u pf83x3 -H /opt/pf83/bin/pf83-launch executor cb35-F03-pf83x3-20261006T012811Z F03 -> /opt/pf83/pkg/corbanu exec; product via pf83-tui -> /opt/pf83/bin/pf83-product -> /opt/pf83/pkg/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "packet/prompts/F03.md",
+     "sha256": "32596e3d28004ca12306cda5c5125d3dad31f71adc082c592c2d6d87dec13dd6"
+    },
+    "access_record": {
+     "path": "runs/F03-attempt2/executor-events.jsonl",
+     "sha256": "77384fd9d70a2e0a88654e95108ca511f5daed2089c99939942725dc8770a377"
+    },
+    "actions": {
+     "path": "runs/F03-attempt2/collected/evidence/actions.jsonl",
+     "sha256": "e1317474ca5134cdee048b70f75239d534c877050da5f3b111d27ed676fd9ac3"
+    },
+    "isolation_record": {
+     "path": "runs/F03-attempt2/isolation.json",
+     "sha256": "8935e8facf821667ddaedf833f646b540e46b35df4ac731ab5296e5fad479acc"
+    }
+   },
+   "evidence": [
+    {
+     "path": "runs/F03-attempt2/collected/evidence/result.md",
+     "sha256": "7d4a378e7c51c69bcf0e95ad9b67a638bf19d71f39f65d55937f31bf75d77a00"
+    },
+    {
+     "path": "runs/F03-attempt2/collected/evidence/actions.jsonl",
+     "sha256": "e1317474ca5134cdee048b70f75239d534c877050da5f3b111d27ed676fd9ac3"
+    },
+    {
+     "path": "runs/F03-attempt2/collected/evidence/fixture.jsonl",
+     "sha256": "c1cf731b96689d5e3cb871eff16e42b740a98f8eabc8f167d03539f98b1c5019"
+    },
+    {
+     "path": "runs/F03-attempt2/collected/evidence/preflight-executor.json",
+     "sha256": "0d97eb52fd4c3017e88ba83271de8c8b7380410e8efab9dc193ed0ec394ec99f"
+    },
+    {
+     "path": "runs/F03-attempt2/collected/evidence/preflight-launcher.json",
+     "sha256": "d7f220c0d554a543f06e8519444555dc67c914c286fdc4cdc37a4b127b437945"
+    },
+    {
+     "path": "runs/F03-attempt2/collected/evidence/preflight-pty-control.txt",
+     "sha256": "e2e961970dac2b966f51b7741e171fc5f665ac75ab4f06424beb2170437a6555"
+    },
+    {
+     "path": "runs/F03-attempt2/collected/evidence/preflight-summary.json",
+     "sha256": "3f0b4f2b5e12beb5726ddc5f69bed1102d13bf9399e36974bfcb16fe70993b11"
+    },
+    {
+     "path": "runs/F03-attempt2/collected/evidence/preflight-tmux-child.json",
+     "sha256": "fb864a7bcb2170608269b7294fbdc8cc4cdd1386237df4d88bc7a5e7986a1603"
+    },
+    {
+     "path": "runs/F03-attempt2/collected/evidence/pty.raw",
+     "sha256": "2fe8d3312c0916bac16f364e74fadd1a10004449d41bde798ee48707193c27fd"
+    },
+    {
+     "path": "runs/F03-attempt2/collected/evidence/screens.jsonl",
+     "sha256": "34127b39d1a618fbc137c9066e46d3c92ad5c208404ebf86296426c1c94df30e"
+    },
+    {
+     "path": "runs/F03-attempt2/collected/product-home/sessions/2026/10/05/rollout-2026-10-05T18-30-28-01a10ed5-654b-7503-b2b9-30e5cf3a92ac.jsonl",
+     "sha256": "5b1b448447f13265c8fd5cf2db2c11e55ef5015d02a07196c57adeb1f1295778"
+    },
+    {
+     "path": "runs/F03-attempt2/mediator-window.jsonl",
+     "sha256": "56007ec22d16656f875f72eedd6c178a897ac8a25ecd3bfdff65f25d39528288"
+    },
+    {
+     "path": "runs/F03-attempt2/executor.stderr",
+     "sha256": "25c8275a2018046bed0aab568a4bf42c1173d7411510d219417f27618e6f62ca"
+    }
+   ],
+   "disposition_record": {
+    "path": "dispositions.md",
+    "sha256": "ee8c34ac62e267d9821e225ae9e9afc199daa36914fe594ae71ab27357529c99"
+   },
+   "other_attempts": [
+    {
+     "attempt": "F03",
+     "isolation_record": {
+      "path": "runs/F03/isolation.json",
+      "sha256": "43cfb822907a945e8b9c7e401cc12fd959a49707bdd848d1b4c82ca78a5a98f4"
+     },
+     "access_record": {
+      "path": "runs/F03/executor-events.jsonl",
+      "sha256": "a9497cb3028a378969a3b4a4c47f1b3eef419d74ab5df9eb2179f678b6722029"
+     },
+     "evidence": [
+      {
+       "path": "runs/F03/collected/work/evidence/result.md",
+       "sha256": "125eb57ebe976776422fefa77d4ed70a62999ff10c8b602377143633371e5647"
+      },
+      {
+       "path": "runs/F03/collected/evidence/actions.jsonl",
+       "sha256": "a8ecb3130a55e7a1e1ab639cee283796d6c93b8094a050a77c5361ad2ecc1924"
+      },
+      {
+       "path": "runs/F03/collected/evidence/fixture.jsonl",
+       "sha256": "f2126657bc98e74fcae8c1ca25437e80dfaaf22e90ae5a450004cf923e371491"
+      },
+      {
+       "path": "runs/F03/collected/evidence/preflight-executor.json",
+       "sha256": "e0e867d8eb12a562ed8f8c2dcd733dae0c849f012fe582c97e3d18891d46640e"
+      },
+      {
+       "path": "runs/F03/collected/evidence/preflight-launcher.json",
+       "sha256": "cbdc41119f4f0bcd730efb676382c35802b0eeae7fd11dea9b0d08e34ac8e900"
+      },
+      {
+       "path": "runs/F03/collected/evidence/preflight-pty-control.txt",
+       "sha256": "e2e961970dac2b966f51b7741e171fc5f665ac75ab4f06424beb2170437a6555"
+      },
+      {
+       "path": "runs/F03/collected/evidence/preflight-summary.json",
+       "sha256": "3f0b4f2b5e12beb5726ddc5f69bed1102d13bf9399e36974bfcb16fe70993b11"
+      },
+      {
+       "path": "runs/F03/collected/evidence/preflight-tmux-child.json",
+       "sha256": "2974e041f50a70260964f93f28e587da0805d38ac046ebd9e75a27edd207ab3a"
+      },
+      {
+       "path": "runs/F03/collected/evidence/pty.raw",
+       "sha256": "fa4b08b6fac06f2191725e450dd7842e6c06391be27af09cd522e04aa949146d"
+      },
+      {
+       "path": "runs/F03/collected/evidence/screens.jsonl",
+       "sha256": "38feb0d439c796d2003ce0a6f5ac9de411bcba582c0fece5ead9ef6185557b48"
+      },
+      {
+       "path": "runs/F03/collected/product-home/sessions/2026/10/05/rollout-2026-10-05T17-47-09-01a10ead-bc2b-7ff1-8a22-397e118312db.jsonl",
+       "sha256": "7d33fdd0e111800d915bf288fc8afb101b20a280c2521e6152d417ae8d06deac"
+      },
+      {
+       "path": "runs/F03/mediator-window.jsonl",
+       "sha256": "fb98e1cec9f6fe8985c4b7deff787f2f9a620d715a93bae4af28fc05443b8d14"
+      },
+      {
+       "path": "runs/F03/executor.stderr",
+       "sha256": "18db31f947b7c0e55234d8c6adafbe48621d7cd93117c422c8ca9756e74da97e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "F04",
+   "disposition": "blocked",
+   "summary": "Post-effective gating passed twice; the active-turn admission window was exercised only with a non-discriminating workspace probe, which the product steered into the running Full Access turn; attempt 2's turn ended before selection.",
+   "candidate_sha256": "e552180a2dfc5457a93881cc4822054e18a4a90e8bf86f67008238e461e758f6",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a10ed4-2c0f-7463-9588-3cfff51d4864",
+    "run_id": "cb35-F04-pf83x2-20261006T012801Z",
+    "model": "glm-5.2 via provider zai (campaign mediator), corbanu exec default reasoning effort",
+    "machine": "UTM VM 'macOS 3' 4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6, IOPlatformUUID F9AABE1C-BA2C-55D7-9859-A6ED560D3218, macOS 26.2 (25C56) arm64, 192.168.64.3",
+    "profile": "fresh per-run product CORBANU_HOME and executor-home under /Users/pf83x2/runs/cb35-F04-pf83x2-20261006T012801Z; account pf83x2 uid 603; lane wiped before and after",
+    "launcher": "agent -> sudo -n -u pf83x2 -H /opt/pf83/bin/pf83-launch executor cb35-F04-pf83x2-20261006T012801Z F04 -> /opt/pf83/pkg/corbanu exec; product via pf83-tui -> /opt/pf83/bin/pf83-product -> /opt/pf83/pkg/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "packet/prompts/F04.md",
+     "sha256": "b1ff4d3c8ac10cdcd9fff45da67bff53b51d7bb61f5d893d33b78a32bb7e9e06"
+    },
+    "access_record": {
+     "path": "runs/F04-attempt2/executor-events.jsonl",
+     "sha256": "5dc87eb63748ea9f13d49ad002c17feac0adc24717b784ecc290d85a165a4455"
+    },
+    "actions": {
+     "path": "runs/F04-attempt2/collected/evidence/actions.jsonl",
+     "sha256": "f54b0fac0acac9eb62037c386ec955a20777bff03ecf43578bb3c320766801dc"
+    },
+    "isolation_record": {
+     "path": "runs/F04-attempt2/isolation.json",
+     "sha256": "a3a35017ae9f1528fe041ba9c5bd2251bdd2724a939f5081200f27c355fb9896"
+    }
+   },
+   "evidence": [
+    {
+     "path": "runs/F04-attempt2/collected/evidence/result.md",
+     "sha256": "ba70115b86296a07529cff37864260f14112231e99822a7a53e5696f02cfdb04"
+    },
+    {
+     "path": "runs/F04-attempt2/collected/evidence/actions.jsonl",
+     "sha256": "f54b0fac0acac9eb62037c386ec955a20777bff03ecf43578bb3c320766801dc"
+    },
+    {
+     "path": "runs/F04-attempt2/collected/evidence/fixture.jsonl",
+     "sha256": "ed3ed00438a9c893a2347e3ad2d22a6568b836a018d5bd5a9fc308ac6349714f"
+    },
+    {
+     "path": "runs/F04-attempt2/collected/evidence/preflight-executor.json",
+     "sha256": "3790ab8089bf2d73a7b07e423d4d2cfd5db288be00ed07d71c19e2adc5b39e54"
+    },
+    {
+     "path": "runs/F04-attempt2/collected/evidence/preflight-launcher.json",
+     "sha256": "ae1929530b9d3ca0a8c51f3289a1fda7dbb1011214a8533f299e38df9b06ffa5"
+    },
+    {
+     "path": "runs/F04-attempt2/collected/evidence/preflight-pty-control.txt",
+     "sha256": "e2e961970dac2b966f51b7741e171fc5f665ac75ab4f06424beb2170437a6555"
+    },
+    {
+     "path": "runs/F04-attempt2/collected/evidence/preflight-summary.json",
+     "sha256": "3f0b4f2b5e12beb5726ddc5f69bed1102d13bf9399e36974bfcb16fe70993b11"
+    },
+    {
+     "path": "runs/F04-attempt2/collected/evidence/preflight-tmux-child.json",
+     "sha256": "5c53b0cb233ccbe4a425a347c48ef5577371e61d0967c6aab46a0c84434ac10c"
+    },
+    {
+     "path": "runs/F04-attempt2/collected/evidence/pty.raw",
+     "sha256": "66575a2166bf73e9bd4bae67bc58c9f84a98b1fac7fb8addb610127d4f998342"
+    },
+    {
+     "path": "runs/F04-attempt2/collected/evidence/screens.jsonl",
+     "sha256": "f82662cef346510aff036ec6b2078a77bedf0b4ba997ade3759edcb5d9fc6f2e"
+    },
+    {
+     "path": "runs/F04-attempt2/collected/product-home/sessions/2026/10/05/rollout-2026-10-05T18-30-26-01a10ed5-5eb1-7ab0-8ad8-31c921220fdf.jsonl",
+     "sha256": "525d83271c1ce012a7701c3a07d80703b7c2aaa035f4bd0f4bedc3461092a67f"
+    },
+    {
+     "path": "runs/F04-attempt2/mediator-window.jsonl",
+     "sha256": "6a6207fb28b73aec12bcaaa16ef685f4f9e64460a1d464a0bebb3dfa58b54b28"
+    },
+    {
+     "path": "runs/F04-attempt2/executor.stderr",
+     "sha256": "fc18ab7ce6c2c5f84151db459e7e2bda219c11e407d68ba4c3e16f04831f08b4"
+    }
+   ],
+   "disposition_record": {
+    "path": "dispositions.md",
+    "sha256": "ee8c34ac62e267d9821e225ae9e9afc199daa36914fe594ae71ab27357529c99"
+   },
+   "other_attempts": [
+    {
+     "attempt": "F04",
+     "isolation_record": {
+      "path": "runs/F04/isolation.json",
+      "sha256": "7a8b040a70b6da5acec07228a16336906588e37b6943f63b30b5243c13c4cd63"
+     },
+     "access_record": {
+      "path": "runs/F04/executor-events.jsonl",
+      "sha256": "d673074a9b6b05b462ff997b5ca946cfba2b821fe19fa2ff4597e9ce62c9ae47"
+     },
+     "evidence": [
+      {
+       "path": "runs/F04/collected/evidence/result.md",
+       "sha256": "e630ebff1148c8ab0f1132a2e9badda96e312c8da83932da7f1710837d3f7eac"
+      },
+      {
+       "path": "runs/F04/collected/evidence/actions.jsonl",
+       "sha256": "746a1499df68c0d98f0f59ae969f1b6efeee69f42216f7fa500acfbbdd78f779"
+      },
+      {
+       "path": "runs/F04/collected/evidence/fixture.jsonl",
+       "sha256": "1742a5ca44f0802a3704ee94d4606343cfdc32a70b5c23d336b506b0ba84b534"
+      },
+      {
+       "path": "runs/F04/collected/evidence/preflight-executor.json",
+       "sha256": "515b8023158e7a7627477d66ba5d6aad69e8b81316ab37a3733c36b0fa30ec4c"
+      },
+      {
+       "path": "runs/F04/collected/evidence/preflight-launcher.json",
+       "sha256": "491fa8d8b28c443ffb4cb7ae51837d102016010ec1e7122bc46a9cbb52053a7a"
+      },
+      {
+       "path": "runs/F04/collected/evidence/preflight-pty-control.txt",
+       "sha256": "e2e961970dac2b966f51b7741e171fc5f665ac75ab4f06424beb2170437a6555"
+      },
+      {
+       "path": "runs/F04/collected/evidence/preflight-summary.json",
+       "sha256": "3f0b4f2b5e12beb5726ddc5f69bed1102d13bf9399e36974bfcb16fe70993b11"
+      },
+      {
+       "path": "runs/F04/collected/evidence/preflight-tmux-child.json",
+       "sha256": "8313aeba39cfd43fb5bcbc74151ce7a12f5f2515291667cdcb4d2304bfdce531"
+      },
+      {
+       "path": "runs/F04/collected/evidence/pty.raw",
+       "sha256": "9c79c8996dd50ef0cfa291c589a5e3620c8be425de4a39c94ed1a291a17c72a1"
+      },
+      {
+       "path": "runs/F04/collected/evidence/screens.jsonl",
+       "sha256": "206a668789e084e58980464be93a52bf72f30fffd5762f6fe2718ddee3079580"
+      },
+      {
+       "path": "runs/F04/collected/product-home/sessions/2026/10/05/rollout-2026-10-05T17-54-33-01a10eb4-84c8-79a3-a878-2de7a49d9767.jsonl",
+       "sha256": "7f8023d11fa0e23c8dc71594df858f52e56b37d4a19da9c36e5d38fdb3091818"
+      },
+      {
+       "path": "runs/F04/mediator-window.jsonl",
+       "sha256": "cc9d98214dfd893b9ea3df9d3b3f75a1a7c6cb65aa704349504f3b664efe0c47"
+      },
+      {
+       "path": "runs/F04/executor.stderr",
+       "sha256": "61bda434acd6e861101219ed9604955d19341c30fd0046bdd6887213e5777886"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "F05",
+   "disposition": "failed",
+   "summary": "Declined request rendered as both 'You canceled' and 'Ran \u2026 (no output)', contradicting an understandable disposition; core 'select Full Access while approval pending' not performed; typing into the approval modal approved with persistent scope.",
+   "candidate_sha256": "e552180a2dfc5457a93881cc4822054e18a4a90e8bf86f67008238e461e758f6",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a10eb2-55a1-7b42-849e-b1a00c86f6d8",
+    "run_id": "cb35-F05-pf83x2-20261006T005103Z",
+    "model": "glm-5.2 via provider zai (campaign mediator), corbanu exec default reasoning effort",
+    "machine": "UTM VM 'macOS 3' 4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6, IOPlatformUUID F9AABE1C-BA2C-55D7-9859-A6ED560D3218, macOS 26.2 (25C56) arm64, 192.168.64.3",
+    "profile": "fresh per-run product CORBANU_HOME and executor-home under /Users/pf83x2/runs/cb35-F05-pf83x2-20261006T005103Z; account pf83x2 uid 603; lane wiped before and after",
+    "launcher": "agent -> sudo -n -u pf83x2 -H /opt/pf83/bin/pf83-launch executor cb35-F05-pf83x2-20261006T005103Z F05 -> /opt/pf83/pkg/corbanu exec; product via pf83-tui -> /opt/pf83/bin/pf83-product -> /opt/pf83/pkg/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "packet/prompts/F05.md",
+     "sha256": "e6e2d078e47215d5cc03df0834e38d083cd0cf3a57997c279c7724f38c75d58c"
+    },
+    "access_record": {
+     "path": "runs/F05/executor-events.jsonl",
+     "sha256": "b3274499407f931fe02eff24ccd89bc6ae80a5ec1c6a354de13c3ca9857b8759"
+    },
+    "actions": {
+     "path": "runs/F05/collected/evidence/actions.jsonl",
+     "sha256": "d21d6bea777af2b61ebbc142409185f553746d8083ca4b9fdd3c21d8599adfc4"
+    },
+    "isolation_record": {
+     "path": "runs/F05/isolation.json",
+     "sha256": "cb068ddff88bdc7c267131734e13c589c9a38d157a84fe6e13a4c41a01a14c16"
+    }
+   },
+   "evidence": [
+    {
+     "path": "runs/F05/collected/evidence/result.md",
+     "sha256": "3005d55c98874f76cff3d22b5cc112eaae6bac3beb1c059811c265ba9a821321"
+    },
+    {
+     "path": "runs/F05/collected/evidence/actions.jsonl",
+     "sha256": "d21d6bea777af2b61ebbc142409185f553746d8083ca4b9fdd3c21d8599adfc4"
+    },
+    {
+     "path": "runs/F05/collected/evidence/fixture.jsonl",
+     "sha256": "0850cc1c1e78ee361c2d9eb2f9ecc9f492edadd804275d0eefa64ae45e972540"
+    },
+    {
+     "path": "runs/F05/collected/evidence/preflight-executor.json",
+     "sha256": "f967a1f8781172fcc56396e52470660ae6b1d1a03a3721d1e7ca97e472bfc806"
+    },
+    {
+     "path": "runs/F05/collected/evidence/preflight-launcher.json",
+     "sha256": "199085796c17fccd759174ef9734e79c8efc9eb82f44c80c16b1cc687399f19a"
+    },
+    {
+     "path": "runs/F05/collected/evidence/preflight-pty-control.txt",
+     "sha256": "e2e961970dac2b966f51b7741e171fc5f665ac75ab4f06424beb2170437a6555"
+    },
+    {
+     "path": "runs/F05/collected/evidence/preflight-summary.json",
+     "sha256": "3f0b4f2b5e12beb5726ddc5f69bed1102d13bf9399e36974bfcb16fe70993b11"
+    },
+    {
+     "path": "runs/F05/collected/evidence/preflight-tmux-child.json",
+     "sha256": "2fddec210f2d888ae91b28ad576e365bfbcc270e3033286fe3f41eea2db3f9ad"
+    },
+    {
+     "path": "runs/F05/collected/evidence/pty.raw",
+     "sha256": "60b08f1c46387897f0c35e0287713dedd7f8c92336edd93bffbabc380312aa28"
+    },
+    {
+     "path": "runs/F05/collected/evidence/screens.jsonl",
+     "sha256": "b1d1912d3b9836492ceae7f815ee4162d2af6b67c3518c89e0b35a1af89f20b1"
+    },
+    {
+     "path": "runs/F05/collected/product-home/sessions/2026/10/05/rollout-2026-10-05T17-54-24-01a10eb4-603c-7ed0-9483-d5ffb0f47d99.jsonl",
+     "sha256": "496a6ce4f39efdd4956a5dea50879f75e11f31862b056fbb5c9388c05e9a75b0"
+    },
+    {
+     "path": "runs/F05/mediator-window.jsonl",
+     "sha256": "3a5bde355a1755cf26db413dc67fc6b8cf84c968bbdf9e4032bd911a0817f119"
+    },
+    {
+     "path": "runs/F05/executor.stderr",
+     "sha256": "705602fff08ab20d74788ea2c59cbdb0528d289719f37d6f66e6f88bab5ff1dc"
+    }
+   ],
+   "disposition_record": {
+    "path": "dispositions.md",
+    "sha256": "ee8c34ac62e267d9821e225ae9e9afc199daa36914fe594ae71ab27357529c99"
+   }
+  },
+  {
+   "id": "F06",
+   "disposition": "passed",
+   "summary": "Both directions: in-flight slow op completed with both markers; change disclosed as next-turn; post-boundary probe followed the new level.",
+   "candidate_sha256": "e552180a2dfc5457a93881cc4822054e18a4a90e8bf86f67008238e461e758f6",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a10eb6-6012-7ee3-a243-e8dd5c98dd0e",
+    "run_id": "cb35-F06-pf83x3-20261006T005528Z",
+    "model": "glm-5.2 via provider zai (campaign mediator), corbanu exec default reasoning effort",
+    "machine": "UTM VM 'macOS 3' 4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6, IOPlatformUUID F9AABE1C-BA2C-55D7-9859-A6ED560D3218, macOS 26.2 (25C56) arm64, 192.168.64.3",
+    "profile": "fresh per-run product CORBANU_HOME and executor-home under /Users/pf83x3/runs/cb35-F06-pf83x3-20261006T005528Z; account pf83x3 uid 604; lane wiped before and after",
+    "launcher": "agent -> sudo -n -u pf83x3 -H /opt/pf83/bin/pf83-launch executor cb35-F06-pf83x3-20261006T005528Z F06 -> /opt/pf83/pkg/corbanu exec; product via pf83-tui -> /opt/pf83/bin/pf83-product -> /opt/pf83/pkg/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "packet/prompts/F06.md",
+     "sha256": "dca76b2d4637cd2668403cf8ef42d136eed2abc503c94c787e6b3e0975af9e74"
+    },
+    "access_record": {
+     "path": "runs/F06/executor-events.jsonl",
+     "sha256": "eaca15dd90cc403cedfb6e12e515a39e57c739c2c47342c17eaf1d6cda68ebcc"
+    },
+    "actions": {
+     "path": "runs/F06/collected/evidence/actions.jsonl",
+     "sha256": "6e2b9049ed372abd4948a43fee2efb9c0a5d54443fbb47d03bb756a7ac90ec1d"
+    },
+    "isolation_record": {
+     "path": "runs/F06/isolation.json",
+     "sha256": "3f4df131c8f6176edc80a37ef8bd6d49fb18e65f112b78315e03a0d38ab22fae"
+    }
+   },
+   "evidence": [
+    {
+     "path": "runs/F06/collected/work/evidence/result.md",
+     "sha256": "fb882612b58e835ed2eebceed5f7400ba4dab87108b67d940c9bcd105fa52aa5"
+    },
+    {
+     "path": "runs/F06/collected/evidence/actions.jsonl",
+     "sha256": "6e2b9049ed372abd4948a43fee2efb9c0a5d54443fbb47d03bb756a7ac90ec1d"
+    },
+    {
+     "path": "runs/F06/collected/evidence/fixture.jsonl",
+     "sha256": "94808475b86297bfea6c17adba3596c5971cd048f26bcdd449781cc88d449ec6"
+    },
+    {
+     "path": "runs/F06/collected/evidence/preflight-executor.err",
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+     "path": "runs/F06/collected/evidence/preflight-executor.json",
+     "sha256": "8870ec0818874c67d1ae8a445797022308170ef75581d15cee26e117216b1d78"
+    },
+    {
+     "path": "runs/F06/collected/evidence/preflight-launcher.json",
+     "sha256": "d89818d47bae1cca42fffdafaa3bb597f7ea7130b6b3409fc41697e5726e424c"
+    },
+    {
+     "path": "runs/F06/collected/evidence/preflight-pty-control.txt",
+     "sha256": "e2e961970dac2b966f51b7741e171fc5f665ac75ab4f06424beb2170437a6555"
+    },
+    {
+     "path": "runs/F06/collected/evidence/preflight-summary.json",
+     "sha256": "3f0b4f2b5e12beb5726ddc5f69bed1102d13bf9399e36974bfcb16fe70993b11"
+    },
+    {
+     "path": "runs/F06/collected/evidence/preflight-tmux-child.json",
+     "sha256": "2fa9304b10286d3ecf47dc108170b2bcf230560d41d252eb29337eaceb44b61c"
+    },
+    {
+     "path": "runs/F06/collected/evidence/pty.raw",
+     "sha256": "1a51975c72d463aef60b877a4229016a7f57121aa3268cbd90c7096d660c0a7f"
+    },
+    {
+     "path": "runs/F06/collected/evidence/screens.jsonl",
+     "sha256": "fb07ecc2330b714f192ce87c1af61a3d896981972d971c9344154ff17f7534ba"
+    },
+    {
+     "path": "runs/F06/collected/product-home/sessions/2026/10/05/rollout-2026-10-05T17-59-31-01a10eb9-0f39-7ce2-8621-477c027e34b6.jsonl",
+     "sha256": "8cd667bc294c06c4dff50d7975c1a5efc3ccec482dd73796405aeb8c6a35e505"
+    },
+    {
+     "path": "runs/F06/mediator-window.jsonl",
+     "sha256": "416cfe3230fc5644aa7f2c547d5b58e568eae0651734a326dfc0ed2aa4c0f8cb"
+    },
+    {
+     "path": "runs/F06/executor.stderr",
+     "sha256": "ebd869e7e3d7a57bbeca3210ef0ca79cd03586541df0b9b225b1eaad1e4c717c"
+    }
+   ],
+   "disposition_record": {
+    "path": "dispositions.md",
+    "sha256": "ee8c34ac62e267d9821e225ae9e9afc199daa36914fe594ae71ab27357529c99"
+   }
+  },
+  {
+   "id": "F07",
+   "disposition": "blocked",
+   "summary": "Starting state (active harmless turn) never established; all selections idle; conflicting selection was typed text into a modal.",
+   "candidate_sha256": "e552180a2dfc5457a93881cc4822054e18a4a90e8bf86f67008238e461e758f6",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a10ebc-34c2-71f0-ae8e-960653848bca",
+    "run_id": "cb35-F07-pf83x1-20261006T010150Z",
+    "model": "glm-5.2 via provider zai (campaign mediator), corbanu exec default reasoning effort",
+    "machine": "UTM VM 'macOS 3' 4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6, IOPlatformUUID F9AABE1C-BA2C-55D7-9859-A6ED560D3218, macOS 26.2 (25C56) arm64, 192.168.64.3",
+    "profile": "fresh per-run product CORBANU_HOME and executor-home under /Users/pf83x1/runs/cb35-F07-pf83x1-20261006T010150Z; account pf83x1 uid 602; lane wiped before and after",
+    "launcher": "agent -> sudo -n -u pf83x1 -H /opt/pf83/bin/pf83-launch executor cb35-F07-pf83x1-20261006T010150Z F07 -> /opt/pf83/pkg/corbanu exec; product via pf83-tui -> /opt/pf83/bin/pf83-product -> /opt/pf83/pkg/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "packet/prompts/F07.md",
+     "sha256": "0418db83e2f096a38b0e6336ba59b591df96c28329ba3ea979c62b71b1d20c56"
+    },
+    "access_record": {
+     "path": "runs/F07/executor-events.jsonl",
+     "sha256": "9d08ec38b59bedf95e9f4c1670438d3cf24d3226b9dedb64280c8ea652ef4a81"
+    },
+    "actions": {
+     "path": "runs/F07/collected/evidence/actions.jsonl",
+     "sha256": "a3b1b449e992b704f98348ef14834c2df18ae5078de7347a344f6b5769778b8b"
+    },
+    "isolation_record": {
+     "path": "runs/F07/isolation.json",
+     "sha256": "952e6393da049add9a8cd58225b4c98396fd385112ec0a6f177f592ad1733181"
+    }
+   },
+   "evidence": [
+    {
+     "path": "runs/F07/collected/evidence/result.md",
+     "sha256": "d1f282b3d12978d17dee6852370f087672dcf7f14f6343c4d375dd966887bd52"
+    },
+    {
+     "path": "runs/F07/collected/evidence/actions.jsonl",
+     "sha256": "a3b1b449e992b704f98348ef14834c2df18ae5078de7347a344f6b5769778b8b"
+    },
+    {
+     "path": "runs/F07/collected/evidence/fixture.jsonl",
+     "sha256": "32c448fb3f1b3a78fb52089d8e309c3249e32b61d18828fc92cad57c499af29f"
+    },
+    {
+     "path": "runs/F07/collected/evidence/preflight-executor.json",
+     "sha256": "82de9941516ffaf1e021b39c54d7276c6faa9619d2abba1f7238d147e7680c7d"
+    },
+    {
+     "path": "runs/F07/collected/evidence/preflight-launcher.json",
+     "sha256": "80f03608c13b5c859bca2fe30082d41de37d481f07dc115f241b4d5dd9cfbc2a"
+    },
+    {
+     "path": "runs/F07/collected/evidence/preflight-pty-control.txt",
+     "sha256": "e2e961970dac2b966f51b7741e171fc5f665ac75ab4f06424beb2170437a6555"
+    },
+    {
+     "path": "runs/F07/collected/evidence/preflight-summary.json",
+     "sha256": "3f0b4f2b5e12beb5726ddc5f69bed1102d13bf9399e36974bfcb16fe70993b11"
+    },
+    {
+     "path": "runs/F07/collected/evidence/preflight-tmux-child.json",
+     "sha256": "2d280d5f99c53b18eaeb86e25d26abc3ca01a7496936dc9c701ec601fdf338b9"
+    },
+    {
+     "path": "runs/F07/collected/evidence/pty.raw",
+     "sha256": "d83ea5e6f72b052a41feb5d40683629e8620bd501fae68d22a6968510c615d28"
+    },
+    {
+     "path": "runs/F07/collected/evidence/screens.jsonl",
+     "sha256": "1dcd7047688f9f8d8c61a958873f8f20c1a4d561d5ff653209ddcf8aecdb6045"
+    },
+    {
+     "path": "runs/F07/collected/product-home/sessions/2026/10/05/rollout-2026-10-05T18-04-46-01a10ebd-dc73-7352-ac74-5577f6d96d02.jsonl",
+     "sha256": "43bd8fb14fd9041706fb86dc5f5f248a7ec86f853d649441ef957256f34b35b1"
+    },
+    {
+     "path": "runs/F07/mediator-window.jsonl",
+     "sha256": "ae388ad96d626cc7c6c856dbac6b9b3fc8fb1913796a81d77d12e186f21a7b2c"
+    },
+    {
+     "path": "runs/F07/executor.stderr",
+     "sha256": "2c7111353ce7e43a682c8fee5bd1884e21bd458b0fd2defe9179ecb0cce79432"
+    }
+   ],
+   "disposition_record": {
+    "path": "dispositions.md",
+    "sha256": "ee8c34ac62e267d9821e225ae9e9afc199daa36914fe594ae71ab27357529c99"
+   }
+  },
+  {
+   "id": "F08",
+   "disposition": "blocked",
+   "summary": "Cancellation exercised and accurate from restricted only (next probe gated); cancellation from Full Access not exercised; failure branch substituted with a command denial.",
+   "candidate_sha256": "e552180a2dfc5457a93881cc4822054e18a4a90e8bf86f67008238e461e758f6",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a10eba-2ab5-7aa2-88dd-ce695ff6dee7",
+    "run_id": "cb35-F08-pf83x2-20261006T005937Z",
+    "model": "glm-5.2 via provider zai (campaign mediator), corbanu exec default reasoning effort",
+    "machine": "UTM VM 'macOS 3' 4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6, IOPlatformUUID F9AABE1C-BA2C-55D7-9859-A6ED560D3218, macOS 26.2 (25C56) arm64, 192.168.64.3",
+    "profile": "fresh per-run product CORBANU_HOME and executor-home under /Users/pf83x2/runs/cb35-F08-pf83x2-20261006T005937Z; account pf83x2 uid 603; lane wiped before and after",
+    "launcher": "agent -> sudo -n -u pf83x2 -H /opt/pf83/bin/pf83-launch executor cb35-F08-pf83x2-20261006T005937Z F08 -> /opt/pf83/pkg/corbanu exec; product via pf83-tui -> /opt/pf83/bin/pf83-product -> /opt/pf83/pkg/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "packet/prompts/F08.md",
+     "sha256": "fe5435277e0f02a7beca866c43344ce809c61b1e827cda223699e331e6040fac"
+    },
+    "access_record": {
+     "path": "runs/F08/executor-events.jsonl",
+     "sha256": "6e3c581de9081142ffffb8a33f1fdca5f6c449e1fa199502635473e6f3d4a99d"
+    },
+    "actions": {
+     "path": "runs/F08/collected/evidence/actions.jsonl",
+     "sha256": "97131ce74ae3c556a09f182abbb25b891e8f43abd4548e6a9f85b07add990dfa"
+    },
+    "isolation_record": {
+     "path": "runs/F08/isolation.json",
+     "sha256": "4aab0021b6f8321aa3ad4707c89483122e46548a9b1ed2187e20320252954fe0"
+    }
+   },
+   "evidence": [
+    {
+     "path": "runs/F08/collected/evidence/result.md",
+     "sha256": "d34f1a21b3fe104a6287b17d42b881dfe0e50827f88f3931e8a98a64238a16b6"
+    },
+    {
+     "path": "runs/F08/collected/evidence/actions.jsonl",
+     "sha256": "97131ce74ae3c556a09f182abbb25b891e8f43abd4548e6a9f85b07add990dfa"
+    },
+    {
+     "path": "runs/F08/collected/evidence/fixture.jsonl",
+     "sha256": "552a50b94e912d2c4b15535d258216f63ff0830a2688f1545e76a0b8aeda9ca4"
+    },
+    {
+     "path": "runs/F08/collected/evidence/preflight-executor.json",
+     "sha256": "fec3c9ebaca8c36d76803e84f1a6b4c7f7b93b3edcc5f9aa03477959709e5fd8"
+    },
+    {
+     "path": "runs/F08/collected/evidence/preflight-launcher.json",
+     "sha256": "4a2bd5427a7ce6e710f11d59cfa90d3d82ae1bf2189e697ab0d292687a1f698d"
+    },
+    {
+     "path": "runs/F08/collected/evidence/preflight-pty-control.txt",
+     "sha256": "e2e961970dac2b966f51b7741e171fc5f665ac75ab4f06424beb2170437a6555"
+    },
+    {
+     "path": "runs/F08/collected/evidence/preflight-summary.json",
+     "sha256": "3f0b4f2b5e12beb5726ddc5f69bed1102d13bf9399e36974bfcb16fe70993b11"
+    },
+    {
+     "path": "runs/F08/collected/evidence/preflight-tmux-child.json",
+     "sha256": "e03a7c9e93bc670dc82791c3717ebc795c5085b34037d8f1e2dc0590249384b5"
+    },
+    {
+     "path": "runs/F08/collected/evidence/pty.raw",
+     "sha256": "cd574d7ab334e5a9116568d204da487d8270108fb39b36e0a75f569890cfc959"
+    },
+    {
+     "path": "runs/F08/collected/evidence/screens.jsonl",
+     "sha256": "fb3242183899aeefc4545bcaa0724fad6ed22506bf10b5dcd83fee23c50426a0"
+    },
+    {
+     "path": "runs/F08/collected/product-home/sessions/2026/10/05/rollout-2026-10-05T18-02-16-01a10ebb-933d-7970-ab65-f25e6557bb66.jsonl",
+     "sha256": "97eba83b0fcfbfe4603eac8b63cdfaf9da23f2305d4df96911717e65a1e23c47"
+    },
+    {
+     "path": "runs/F08/mediator-window.jsonl",
+     "sha256": "ef17d6acec95601b6ae6007e1bf6140e43fc5cd9928305df238225a5e83b3773"
+    },
+    {
+     "path": "runs/F08/executor.stderr",
+     "sha256": "30fd262aaa7121aaea7d4988c76eb697a4f1adb8a6a2ac6768aa10d9911cc8cf"
+    }
+   ],
+   "disposition_record": {
+    "path": "dispositions.md",
+    "sha256": "ee8c34ac62e267d9821e225ae9e9afc199daa36914fe594ae71ab27357529c99"
+   }
+  },
+  {
+   "id": "F09",
+   "disposition": "blocked",
+   "summary": "All selections idle; continuation through the application path not exercised.",
+   "candidate_sha256": "e552180a2dfc5457a93881cc4822054e18a4a90e8bf86f67008238e461e758f6",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a10ebf-3e80-7f32-847b-e2ddd87859c4",
+    "run_id": "cb35-F09-pf83x3-20261006T010509Z",
+    "model": "glm-5.2 via provider zai (campaign mediator), corbanu exec default reasoning effort",
+    "machine": "UTM VM 'macOS 3' 4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6, IOPlatformUUID F9AABE1C-BA2C-55D7-9859-A6ED560D3218, macOS 26.2 (25C56) arm64, 192.168.64.3",
+    "profile": "fresh per-run product CORBANU_HOME and executor-home under /Users/pf83x3/runs/cb35-F09-pf83x3-20261006T010509Z; account pf83x3 uid 604; lane wiped before and after",
+    "launcher": "agent -> sudo -n -u pf83x3 -H /opt/pf83/bin/pf83-launch executor cb35-F09-pf83x3-20261006T010509Z F09 -> /opt/pf83/pkg/corbanu exec; product via pf83-tui -> /opt/pf83/bin/pf83-product -> /opt/pf83/pkg/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "packet/prompts/F09.md",
+     "sha256": "697ddde27a379a9d732546869e56c7b6118e90d7d852081b17f87c962f7f3af3"
+    },
+    "access_record": {
+     "path": "runs/F09/executor-events.jsonl",
+     "sha256": "4a796431abae1b58249f8eee0b1ced9b3e9081ab90c7d5eb583ec75a44931931"
+    },
+    "actions": {
+     "path": "runs/F09/collected/evidence/actions.jsonl",
+     "sha256": "2591186033a2f60c73b7106a55f593d31eccd730fdb511608794492dce594013"
+    },
+    "isolation_record": {
+     "path": "runs/F09/isolation.json",
+     "sha256": "a0f57ced79b9558155b9f5f378b96be29d55faff4a075be6e77edfc4d726975d"
+    }
+   },
+   "evidence": [
+    {
+     "path": "runs/F09/collected/evidence/result.md",
+     "sha256": "7658c70bba2e51d267c714510cd9f21c5d7e329106c1487362ec42637559668c"
+    },
+    {
+     "path": "runs/F09/collected/evidence/actions.jsonl",
+     "sha256": "2591186033a2f60c73b7106a55f593d31eccd730fdb511608794492dce594013"
+    },
+    {
+     "path": "runs/F09/collected/evidence/fixture.jsonl",
+     "sha256": "798b2e3d13169eecc9dcf9a4cb8b9d82c81f0a5280268aeafbbfe1b3688c6427"
+    },
+    {
+     "path": "runs/F09/collected/evidence/preflight-executor.json",
+     "sha256": "30b0198e12255a60e168fbe6b9b4c98773a914823d31dd02109400053142f83d"
+    },
+    {
+     "path": "runs/F09/collected/evidence/preflight-launcher.json",
+     "sha256": "ad03a3fd13f6502a07080d3b82de89da295d6804adb08b57ba1844e94b99d4de"
+    },
+    {
+     "path": "runs/F09/collected/evidence/preflight-pty-control.txt",
+     "sha256": "e2e961970dac2b966f51b7741e171fc5f665ac75ab4f06424beb2170437a6555"
+    },
+    {
+     "path": "runs/F09/collected/evidence/preflight-summary.json",
+     "sha256": "3f0b4f2b5e12beb5726ddc5f69bed1102d13bf9399e36974bfcb16fe70993b11"
+    },
+    {
+     "path": "runs/F09/collected/evidence/preflight-tmux-child.json",
+     "sha256": "7e595c64bbb883767a7d42d976cfb370958efcd8b81d90331d4f3a71d1cf6e31"
+    },
+    {
+     "path": "runs/F09/collected/evidence/pty.raw",
+     "sha256": "3a1bc8916b4a85d3be326fbd87f31549d61d5cbd689c9e51b9a960ca2e4c1cec"
+    },
+    {
+     "path": "runs/F09/collected/evidence/screens.jsonl",
+     "sha256": "2f1799968e0ac9b278bd8421846f950a0bb398a4b1f03486c17427cbc31c107c"
+    },
+    {
+     "path": "runs/F09/collected/product-home/sessions/2026/10/05/rollout-2026-10-05T18-07-34-01a10ec0-6cef-7830-a111-ba441d6dda1c.jsonl",
+     "sha256": "2b661dbd219bf4e4cf32d8b78745e23013f93559743b34900e5138c194888691"
+    },
+    {
+     "path": "runs/F09/collected/product-home/sessions/2026/10/05/rollout-2026-10-05T18-07-48-01a10ec0-a3cf-7d43-a784-7bedba47bd3f.jsonl",
+     "sha256": "996d4437b1ad5f22c2140103139a1d7c1234b2d6867bac692c80541939a1c869"
+    },
+    {
+     "path": "runs/F09/mediator-window.jsonl",
+     "sha256": "657d008e158fa90e6c6ca535b32ebf91678610a2145c7a0ee742fe17310a1cec"
+    },
+    {
+     "path": "runs/F09/executor.stderr",
+     "sha256": "8e74231d763a506b5895e20ac7a46b5689baf557f353c422dfe45a334d5ef656"
+    }
+   ],
+   "disposition_record": {
+    "path": "dispositions.md",
+    "sha256": "ee8c34ac62e267d9821e225ae9e9afc199daa36914fe594ae71ab27357529c99"
+   }
+  },
+  {
+   "id": "F10",
+   "disposition": "blocked",
+   "summary": "Attempt 2 met every observed outcome (resume after restart for variants a-d; levels persisted/resolved truthfully; pending approval restored as interrupted, never accepted; post-restart probes matched). Blocked because required actions deviate without product-authority acceptance: variants chained in one session, restart by tmux kill not in-app quit, the offered Esc recovery route for pending states not exercised, (c) pre-stop header claim unscreened. Attempt 1 (no resume) does not qualify.",
+   "candidate_sha256": "e552180a2dfc5457a93881cc4822054e18a4a90e8bf86f67008238e461e758f6",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a10ed4-0499-70c2-8d33-3a6142a5f727",
+    "run_id": "cb35-F10-pf83x1-20261006T012751Z",
+    "model": "glm-5.2 via provider zai (campaign mediator), corbanu exec default reasoning effort",
+    "machine": "UTM VM 'macOS 3' 4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6, IOPlatformUUID F9AABE1C-BA2C-55D7-9859-A6ED560D3218, macOS 26.2 (25C56) arm64, 192.168.64.3",
+    "profile": "fresh per-run product CORBANU_HOME and executor-home under /Users/pf83x1/runs/cb35-F10-pf83x1-20261006T012751Z; account pf83x1 uid 602; lane wiped before and after",
+    "launcher": "agent -> sudo -n -u pf83x1 -H /opt/pf83/bin/pf83-launch executor cb35-F10-pf83x1-20261006T012751Z F10 -> /opt/pf83/pkg/corbanu exec; product via pf83-tui -> /opt/pf83/bin/pf83-product -> /opt/pf83/pkg/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "packet/prompts/F10.md",
+     "sha256": "809c56df9965e6f88c693ff66187c1a20708d226a73ad6d0b4f186a82175f442"
+    },
+    "access_record": {
+     "path": "runs/F10-attempt2/executor-events.jsonl",
+     "sha256": "f3e88ebb38cfe46982fa4f2c122408f4bc1210f89f9c4d02a944993949abecd3"
+    },
+    "actions": {
+     "path": "runs/F10-attempt2/collected/evidence/actions.jsonl",
+     "sha256": "4115768270f0968e9bfdbe1c9c829d6b15f49f6eb0eb2ab1a1a8c4a6d3927688"
+    },
+    "isolation_record": {
+     "path": "runs/F10-attempt2/isolation.json",
+     "sha256": "a7b41895ef183d7d6dc9313ad7ae86dce305223b54d0f5c3c6d114410a77a87b"
+    }
+   },
+   "evidence": [
+    {
+     "path": "runs/F10-attempt2/collected/evidence/result.md",
+     "sha256": "eebecbc260032da270ab47d315ebb7b1123f9a0f8e3eb19039a0073c7743cff3"
+    },
+    {
+     "path": "runs/F10-attempt2/collected/evidence/actions.jsonl",
+     "sha256": "4115768270f0968e9bfdbe1c9c829d6b15f49f6eb0eb2ab1a1a8c4a6d3927688"
+    },
+    {
+     "path": "runs/F10-attempt2/collected/evidence/fixture.jsonl",
+     "sha256": "43cd39212aaef0e2f07d7010a81eb587e6f7dd1776180ab04be1fc113dcb4dd1"
+    },
+    {
+     "path": "runs/F10-attempt2/collected/evidence/preflight-executor.json",
+     "sha256": "5a928663a40d9bb14cd49bd734e2c2a86e9e69e8ba026d00bf0bd2b4e6c4fbf7"
+    },
+    {
+     "path": "runs/F10-attempt2/collected/evidence/preflight-launcher.json",
+     "sha256": "a191d7028dd3ea9568dc3c4d746f03895fcf064f1f3730ea3928a74c55797ffd"
+    },
+    {
+     "path": "runs/F10-attempt2/collected/evidence/preflight-pty-control.txt",
+     "sha256": "e2e961970dac2b966f51b7741e171fc5f665ac75ab4f06424beb2170437a6555"
+    },
+    {
+     "path": "runs/F10-attempt2/collected/evidence/preflight-summary.json",
+     "sha256": "3f0b4f2b5e12beb5726ddc5f69bed1102d13bf9399e36974bfcb16fe70993b11"
+    },
+    {
+     "path": "runs/F10-attempt2/collected/evidence/preflight-tmux-child.json",
+     "sha256": "ff1adae580496e3dc2d07ae448e9677717fcbccedae3500ac837748607bdef12"
+    },
+    {
+     "path": "runs/F10-attempt2/collected/evidence/pty.raw",
+     "sha256": "78ef8b1c9ea54b07391cbdf5253a81d878c2235f1755c22b084079d28e9b5ad2"
+    },
+    {
+     "path": "runs/F10-attempt2/collected/evidence/screens.jsonl",
+     "sha256": "28ac1412d03277e74c39a66e637f14c3c0a53004cc9a994ea611422769f994f8"
+    },
+    {
+     "path": "runs/F10-attempt2/collected/product-home/sessions/2026/10/05/rollout-2026-10-05T18-30-06-01a10ed5-0fc6-73d2-b754-a6820c2f6051.jsonl",
+     "sha256": "d437aa79cf817f2721db6f74dfdf6427ff371f0b3f27f4a9c6d170b06c20c9fd"
+    },
+    {
+     "path": "runs/F10-attempt2/mediator-window.jsonl",
+     "sha256": "3899f621c3eb4cdcd30affe63eb42940401e5d9f0f07486ffcd492b168bc8f0a"
+    },
+    {
+     "path": "runs/F10-attempt2/executor.stderr",
+     "sha256": "32f38f52cb72f8b67718cf1531244660889744435d80a934da3b70e88390d6e3"
+    }
+   ],
+   "disposition_record": {
+    "path": "dispositions.md",
+    "sha256": "ee8c34ac62e267d9821e225ae9e9afc199daa36914fe594ae71ab27357529c99"
+   },
+   "other_attempts": [
+    {
+     "attempt": "F10",
+     "isolation_record": {
+      "path": "runs/F10/isolation.json",
+      "sha256": "d05c0a4e1f20e059ca74aff9ff2e01ddf4a51e8a241926655fbe0767c32b0354"
+     },
+     "access_record": {
+      "path": "runs/F10/executor-events.jsonl",
+      "sha256": "c507783f73141ea8258c51d308a74381e32b5748b7adf8a273341d14238381e8"
+     },
+     "evidence": [
+      {
+       "path": "runs/F10/collected/evidence/result.md",
+       "sha256": "ec167b281bf8d9b97502c505a8ad40643406683bd9adfb2056544b804e41f137"
+      },
+      {
+       "path": "runs/F10/collected/evidence/actions.jsonl",
+       "sha256": "1e9f63e60f312aab51d705317de58622547935619a20cf24487402f59732a2e8"
+      },
+      {
+       "path": "runs/F10/collected/evidence/fixture.jsonl",
+       "sha256": "d1b95fc33a623dc7b7bada3cd41e51c8486bddf171bbe10034bea049ef210eab"
+      },
+      {
+       "path": "runs/F10/collected/evidence/preflight-executor.json",
+       "sha256": "9203652d6adcb8121c860684e06fcc8dbee8ed59807774100ceaecc0708372ce"
+      },
+      {
+       "path": "runs/F10/collected/evidence/preflight-launcher.json",
+       "sha256": "9bd2e5152838d5da59146bb202a8ad49b90fd19899ee423aac04f96a0841d06b"
+      },
+      {
+       "path": "runs/F10/collected/evidence/preflight-pty-control.txt",
+       "sha256": "e2e961970dac2b966f51b7741e171fc5f665ac75ab4f06424beb2170437a6555"
+      },
+      {
+       "path": "runs/F10/collected/evidence/preflight-summary.json",
+       "sha256": "3f0b4f2b5e12beb5726ddc5f69bed1102d13bf9399e36974bfcb16fe70993b11"
+      },
+      {
+       "path": "runs/F10/collected/evidence/preflight-tmux-child.json",
+       "sha256": "29341ce6f965c6fa32b78b039913f5ced683d745f55b5a1b22c91df1da153776"
+      },
+      {
+       "path": "runs/F10/collected/evidence/pty.raw",
+       "sha256": "8cbac2647e7682a925fcad366fb64b50482db29ee2cd6191a1130f5591b867b7"
+      },
+      {
+       "path": "runs/F10/collected/evidence/screens.jsonl",
+       "sha256": "037648a4ea6a67fad36875e4448882535ff147dfc6064ca0b94d86c1e55a2c31"
+      },
+      {
+       "path": "runs/F10/collected/product-home/sessions/2026/10/05/rollout-2026-10-05T18-14-31-01a10ec6-cbdc-77a2-9422-717d01e36191.jsonl",
+       "sha256": "1091d005dc62777cc1547dfc27dc261ae086081066b7c84284fceef0c77457fe"
+      },
+      {
+       "path": "runs/F10/collected/product-home/sessions/2026/10/05/rollout-2026-10-05T18-16-20-01a10ec8-75cc-7883-8a40-c31664241546.jsonl",
+       "sha256": "9c4da27b7835f2cd6608f3e99cbd4a32d847ebc400d42c5def330726ac8a49ca"
+      },
+      {
+       "path": "runs/F10/collected/product-home/sessions/2026/10/05/rollout-2026-10-05T18-17-00-01a10ec9-0f40-7421-baf4-1c3eced019dc.jsonl",
+       "sha256": "369a1c839c9d2ee907ce4448b02dc28442efb99a742df1959f1ef597cfd640a0"
+      },
+      {
+       "path": "runs/F10/collected/product-home/sessions/2026/10/05/rollout-2026-10-05T18-18-41-01a10eca-9a9f-7d72-b4db-9588222a8200.jsonl",
+       "sha256": "af5ba4c693a26166d5e3c17d0871bebe6b93993df980613921cc6cb7c167f899"
+      },
+      {
+       "path": "runs/F10/collected/product-home/sessions/2026/10/05/rollout-2026-10-05T18-20-10-01a10ecb-f806-7262-b8cf-eafd560c63fa.jsonl",
+       "sha256": "2f44b61eacb734c8302e11be64c4d9f056c713ab86740185e1dacc541a12ef51"
+      },
+      {
+       "path": "runs/F10/collected/product-home/sessions/2026/10/05/rollout-2026-10-05T18-21-56-01a10ecd-96cf-7d92-b5cc-f0adc6a18286.jsonl",
+       "sha256": "16f1a61c4751758722dc5598827171327ebc2192d738e3b34b476b7e373cf682"
+      },
+      {
+       "path": "runs/F10/collected/product-home/sessions/2026/10/05/rollout-2026-10-05T18-23-18-01a10ece-d3d8-7ae1-b500-ef5e5ffb6266.jsonl",
+       "sha256": "7dba96e384b0ec3c2b74b10227897451bc1cc6e3c22435f4af933e3cb12e994b"
+      },
+      {
+       "path": "runs/F10/mediator-window.jsonl",
+       "sha256": "b71ad37c44cb9574c37fe27cc5b2e15b834db95438f30808edba993274c22010"
+      },
+      {
+       "path": "runs/F10/executor.stderr",
+       "sha256": "bf5ce956fa9ad82ba5c2ee972b8b11cc889422183a05d7ef0607f8c67a5e5d3d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "F11",
+   "disposition": "blocked",
+   "summary": "zai-anthropic route errors before any request (coverage limit); zai repeats inherit F03-F05 gaps; route switch happened after Full Access was already effective.",
+   "candidate_sha256": "e552180a2dfc5457a93881cc4822054e18a4a90e8bf86f67008238e461e758f6",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a10ec3-378c-7d31-8c04-5407dce6ed12",
+    "run_id": "cb35-F11-pf83x2-20261006T010930Z",
+    "model": "glm-5.2 via provider zai (campaign mediator), corbanu exec default reasoning effort",
+    "machine": "UTM VM 'macOS 3' 4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6, IOPlatformUUID F9AABE1C-BA2C-55D7-9859-A6ED560D3218, macOS 26.2 (25C56) arm64, 192.168.64.3",
+    "profile": "fresh per-run product CORBANU_HOME and executor-home under /Users/pf83x2/runs/cb35-F11-pf83x2-20261006T010930Z; account pf83x2 uid 603; lane wiped before and after",
+    "launcher": "agent -> sudo -n -u pf83x2 -H /opt/pf83/bin/pf83-launch executor cb35-F11-pf83x2-20261006T010930Z F11 -> /opt/pf83/pkg/corbanu exec; product via pf83-tui -> /opt/pf83/bin/pf83-product -> /opt/pf83/pkg/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "packet/prompts/F11.md",
+     "sha256": "2708b05bd98b8180efdba8ebcd7a2a069902ac7fff70aabca42e46dbb7ec8c39"
+    },
+    "access_record": {
+     "path": "runs/F11/executor-events.jsonl",
+     "sha256": "36ee4d1e420f75a4de5d62a7847b453e9c0fa6e3ce5753e2f6a10fb192918e9e"
+    },
+    "actions": {
+     "path": "runs/F11/collected/evidence/actions.jsonl",
+     "sha256": "f9f2ac7186cb5b4beef0754fbf64140cb037cc9d96baac95164dbf347f26f389"
+    },
+    "isolation_record": {
+     "path": "runs/F11/isolation.json",
+     "sha256": "0da98391c5d3f6788901220ca810b432f27dfda0d52e79c73c917376eae2b960"
+    }
+   },
+   "evidence": [
+    {
+     "path": "runs/F11/collected/evidence/result.md",
+     "sha256": "ef866690602d8bebea1dede79dd4e5907229e0de1f21575bb4994ab1badf136b"
+    },
+    {
+     "path": "runs/F11/collected/evidence/actions.jsonl",
+     "sha256": "f9f2ac7186cb5b4beef0754fbf64140cb037cc9d96baac95164dbf347f26f389"
+    },
+    {
+     "path": "runs/F11/collected/evidence/fixture.jsonl",
+     "sha256": "eab69eb469e66ffb6b2d1f32992f07097bcdbb89acd8282ecc831e610ee18445"
+    },
+    {
+     "path": "runs/F11/collected/evidence/preflight-executor.json",
+     "sha256": "8292286fa79f7ffe60716223988b719a413d4e61ce8e5ddc4478e8eb449b803a"
+    },
+    {
+     "path": "runs/F11/collected/evidence/preflight-launcher.json",
+     "sha256": "77d8703bc716ab6a0b80e74a8a2e11cec5caee06e840d442c8636f83e010c9c9"
+    },
+    {
+     "path": "runs/F11/collected/evidence/preflight-pty-control.txt",
+     "sha256": "e2e961970dac2b966f51b7741e171fc5f665ac75ab4f06424beb2170437a6555"
+    },
+    {
+     "path": "runs/F11/collected/evidence/preflight-summary.json",
+     "sha256": "3f0b4f2b5e12beb5726ddc5f69bed1102d13bf9399e36974bfcb16fe70993b11"
+    },
+    {
+     "path": "runs/F11/collected/evidence/preflight-tmux-child.json",
+     "sha256": "8b1e2b5440132adb5d1c8ebfce161d295b3e4f7e98fd8ce84fdfa874f9874123"
+    },
+    {
+     "path": "runs/F11/collected/evidence/pty.raw",
+     "sha256": "733472e098e2f5b64352635c796d723433acca6ba28d9c42bf406fb9a4719b92"
+    },
+    {
+     "path": "runs/F11/collected/evidence/screens.jsonl",
+     "sha256": "35697a3231e7a34304d845a8977049d09973ba8af10e12b96cc3e3ccf66a5cd0"
+    },
+    {
+     "path": "runs/F11/collected/product-home/sessions/2026/10/05/rollout-2026-10-05T18-12-03-01a10ec4-88be-7ee3-b289-0fdfdfdb0797.jsonl",
+     "sha256": "28d693da1894f953c111736819d0cd61eb23691646fe5819853d5f1c63b59e8c"
+    },
+    {
+     "path": "runs/F11/collected/product-home/sessions/2026/10/05/rollout-2026-10-05T18-16-48-01a10ec8-e332-7811-8a3a-4515fa5dd1dd.jsonl",
+     "sha256": "a7b1c6ebb5db03f15e71e14f5574f22f73ed79ba70d46d8d10e198495365c3a6"
+    },
+    {
+     "path": "runs/F11/mediator-window.jsonl",
+     "sha256": "c1b660e5668c75ad9a70855fea99069a075fe498cf10b287e3dd8f5c10949417"
+    },
+    {
+     "path": "runs/F11/executor.stderr",
+     "sha256": "79be95ee7a62d33f10737ff46b51c7d6dfa113583052de8a79e517eed5479862"
+    }
+   ],
+   "disposition_record": {
+    "path": "dispositions.md",
+    "sha256": "ee8c34ac62e267d9821e225ae9e9afc199daa36914fe594ae71ab27357529c99"
+   }
+  }
+ ],
+ "aborted_attempts": [
+  {
+   "path": "runs-aborted/cb35-F01-pf83x1-20261006T003635Z/ABORTED.txt",
+   "sha256": "2162d40eefd4229108ce394fff12f6905c768713c435f6f7c3312497cee54033"
+  },
+  {
+   "path": "runs-aborted/cb35-F02-pf83x2-20261006T004217Z/ABORTED.txt",
+   "sha256": "2162d40eefd4229108ce394fff12f6905c768713c435f6f7c3312497cee54033"
+  },
+  {
+   "path": "runs-aborted/cb35-F03-pf83x3-20261006T004237Z/ABORTED.txt",
+   "sha256": "2162d40eefd4229108ce394fff12f6905c768713c435f6f7c3312497cee54033"
+  },
+  {
+   "path": "runs-aborted/cb35-F04-pf83x1-20261006T004237Z/ABORTED.txt",
+   "sha256": "2162d40eefd4229108ce394fff12f6905c768713c435f6f7c3312497cee54033"
+  }
+ ],
+ "review_budget": {
+  "used": 7,
+  "limit": 5,
+  "ledger": {
+   "path": "review-ledger.md",
+   "sha256": "95703c7f0cade54036c7869612be20452cddc8b0474ca3d45d24329ad0de1d2c"
+  },
+  "extension": {
+   "by": "PF-83 integrator-side worker under the September 12 root delegation (manager to confirm)",
+   "reason": "Evidence checks r1 and r2 failed on fixable evidence/representation defects; corrective re-checks r2 and r3.",
+   "artifact": {
+    "path": "review-ledger.md",
+    "sha256": "95703c7f0cade54036c7869612be20452cddc8b0474ca3d45d24329ad0de1d2c"
+   }
+  }
+ },
+ "evidence_check": {
+  "agent": "01a10ef8-b3f1-7042-842a-74ff7d3e9190",
+  "verdict": "pass",
+  "artifact": {
+   "path": "review/evidence-check-r3.md",
+   "sha256": "07fc492282277cd77f7a4925795a9e5a6beb3afd4ad770cff3d1196b2c7ebe23"
+  }
+ }
+}

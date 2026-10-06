@@ -1,0 +1,2 @@
+{"time_ns": 1791247758260830000, "utc": "2026-10-06T00:49:18Z", "label": "after-probe-1", "files": {"events.txt": "probe-1 started\nprobe-1 finished\n", "input.txt": "permission-test\n"}}
+{"time_ns": 1791247870268853000, "utc": "2026-10-06T00:51:10Z", "label": "after-probe-2", "files": {"events.txt": "probe-1 started\nprobe-1 finished\nprobe-2 started\nprobe-2 finished\n", "input.txt": "permission-test\n"}}

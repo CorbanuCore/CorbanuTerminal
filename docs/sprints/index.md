@@ -37,11 +37,16 @@ contract. A sprint turns one feature into an exact code-and-evidence checklist.
 
 ## Bounded parallel implementation
 
-Each of at most three active initiatives has `parallel_sprint_limit: 1` and a
-named `integration_owner`. Across all plans, at most **three** sprints may be
-`in_progress` or `blocked`; blocked work keeps its reservation until explicitly
-returned to draft with a recorded handoff. This is Travis's September 10/11
-operating-model decision, not additional within-plan parallelism.
+Each of at most three active initiatives names an `integration_owner` and
+declares `parallel_sprint_limit` from 1 to 3. A limit above 1 requires
+`parallel_lanes` naming at least that many lanes; each reserved sprint's
+`parallel_lane` must be one of them, and concurrent `write_scope`s must not
+overlap. Travis's 2026-10-06 decision replaced the single executable security
+sprint with three security lanes (broker, untrusted content, TUI); the other
+plans keep a limit of 1. Across all plans at most **five** sprints may be
+`in_progress` or `blocked` (three security lanes plus one per other plan);
+blocked work keeps its reservation until explicitly returned to draft with a
+recorded handoff.
 
 Before a parallel allocation starts:
 
@@ -154,7 +159,8 @@ separate authority. Current assignments/evidence are in the
 
 | Plan | Plan status | Current sprints | Execution authority |
 | --- | --- | ---: | --- |
-| [PF-13 / security — workstream 1](../plans/active/p0-security-levels.md) | Active | [52 current sprints](current/p0-security-levels/index.md), 32 completed archives | Accepted main d870c92da and owner allocation ca9774262 reconciled; PF-35 external, PF-27-S04 in progress in its fresh owner worktree |
+| [PF-13 / security — workstream 1](../plans/active/p0-security-levels.md) | Active | [22 current sprints](current/p0-security-levels/index.md) (20-sprint core + 2 hosted), 33 archives | 2026-10-06 rewrite: PF-83-S01 closed and archived; three lanes, none reserved yet; picker PF-24-S03 first in the TUI lane |
+| [P1 security hardening](../plans/proposed/p1-security-hardening.md) | Proposed | [31 draft sprints](current/p1-security-hardening/index.md) | None until plan activation; moved from P0 on 2026-10-06 |
 | [Accounting — workstream 2](../plans/active/portfolio-agent-cost-accounting.md) | Active | 3 current PF-60 sprints; S01 archived | S02 isolated native-state journal allocated after S01 review and defaults approval; no live collection |
 | [Task Node — workstream 3](../plans/active/initiative-delivery-control.md) | Active | PF-80-S01, two PF-79 beta drafts, PF-81-S01 visual QA draft | Offline native increments integrated locally; latest validity worker returned for manager review; beta/harness dependencies unchanged |
 | [Unified provider onboarding and management](../plans/proposed/unified-provider-auth.md) | Deferred | [1 current sprint](current/unified-provider-auth/index.md) | PF-58 human accepted for integration; residual automated/native qualification retained separately |

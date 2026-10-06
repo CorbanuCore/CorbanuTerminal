@@ -4,1596 +4,251 @@ status: active
 change_class: product-initiative
 priority: P0
 owner: "Jim Ricketts"
-parallel_sprint_limit: 1
+parallel_sprint_limit: 3
+parallel_lanes: "broker, untrusted-content, tui"
 integration_owner: "Codex /root security round-five coordinator"
 activation_authority: "Product authority defined in the product specification"
-activation_basis: "P0 sequencing plus Travis Good’s 2026-08-28 decision to reconcile the complete security program into this active plan."
+activation_basis: "P0 sequencing plus Travis Good’s 2026-08-28 decision to reconcile the complete security program into this active plan; scope cut and lanes per Travis's 2026-10-06 decisions."
 target_release: "TBD — candidate qualified by 2026-10-08"
 deadline: 2026-10-08
 created: 2026-08-23
-updated: 2026-09-14
+updated: 2026-10-06
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "P0 /security levels"
   requirement_excerpt: "Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged."
 implementation_worktrees:
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/live-permission-transition-20260913"
-    branch: "fix/live-permission-transition-20260913"
-    base_commit: "005cc644f59b1e762e5497b329e106c67925d4ed"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-broker-resume-20260911"
-    branch: "feat/security-broker-resume-20260911"
-    base_commit: "d870c92dab2bf3fbb602dc3b8447fe9f3534aecb"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-local-anchor"
-    branch: "feat/security-local-anchor"
-    base_commit: "601602fa7e53fcb5b41753a0b3607addd45d4415"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-memory-dispatch"
-    branch: "feat/security-memory-dispatch"
-    base_commit: "526926934fa650b8eb6c4e6887d1f7461c26f38f"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-round5-broker"
-    branch: "feat/security-round5-broker"
-    base_commit: "07791288b6feeccfaee5a57c12452359cc666957"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-round5-provenance"
-    branch: "feat/security-round5-provenance"
-    base_commit: "07791288b6feeccfaee5a57c12452359cc666957"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-round5-ui"
-    branch: "feat/security-round5-ui"
-    base_commit: "07791288b6feeccfaee5a57c12452359cc666957"
-  - path: "/mnt/HC_Volume_101713660/pfrpc/scratch/corbanu-wallet-launch-hotfix"
-    branch: "fix/tasknode-team-context"
-    base_commit: "7ae35557657b2f2d1c51a8f4af4e4bb1180fe5eb"
-  - path: "/home/pfrpc/repos/worktrees/corbanu-release-0.1.39"
-    branch: "fix/tasknode-agent-profile-scope"
-    base_commit: "7e99c5a06bdb7b0f01f655cb4d84739b4f70bb86"
-  - path: "/home/pfrpc/repos/worktrees/corbanu-release-0.1.39"
-    branch: "fix/tasknode-agent-profile-scope"
-    base_commit: "9b71d86d7fc57b25e3b020a813a6b75dd898836a"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-protected-runtime"
-    branch: "feat/p0-security-protected-runtime"
-    base_commit: "43d2d86488d5c1b2eb5cbc401ee8371dbdb76bf4"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-isolated-broker"
-    branch: "feat/p0-security-isolated-broker"
-    base_commit: "43d2d86488d5c1b2eb5cbc401ee8371dbdb76bf4"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-classifier-corpus"
-    branch: "feat/p0-security-classifier-corpus"
-    base_commit: "9d08b15fa94676c1383ee1605b77e7cc7218dcc4"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-credential-reservations"
-    branch: "feat/p0-security-credential-reservations"
-    base_commit: "9d08b15fa94676c1383ee1605b77e7cc7218dcc4"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-durable-events"
-    branch: "feat/p0-security-durable-events"
-    base_commit: "9d08b15fa94676c1383ee1605b77e7cc7218dcc4"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-browser-retrieval"
-    branch: "feat/p0-security-browser-retrieval-pf33"
-    base_commit: "80a2469e401066ebaf04d95ba603ab68cb341854"
-  - path: "/Users/travisgood/Documents/ChatGPT/corbanu-pf13-s02"
-    branch: "feat/pf-13-s02-scoped-vault-resolver"
-    base_commit: "1bdc515bff48a4d9048dae7d06c6214e884265bc"
   - path: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
     branch: "feat/p0-security-levels"
     base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-foundation-platform"
-    branch: "feat/p0-security-foundation-platform"
-    base_commit: "1907d99aed9714f05a5f54fca1703658017d616c"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-ingress-classifier"
-    branch: "feat/p0-security-ingress-classifier"
-    base_commit: "6a35712cd5731b191d875e8c6468f1abe23eb66e"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-revocation-fence"
-    branch: "feat/p0-security-revocation-fence"
-    base_commit: "5521b681fff0ecb50b17c10bc1dd1356cbecc1b6"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-authoritative-state"
-    branch: "feat/p0-security-authoritative-state"
-    base_commit: "5521b681fff0ecb50b17c10bc1dd1356cbecc1b6"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-compatibility-drift"
-    branch: "feat/p0-security-compatibility-drift"
-    base_commit: "5521b681fff0ecb50b17c10bc1dd1356cbecc1b6"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-broker-resume-20260911"
+    branch: "feat/security-broker-resume-20260911"
+    base_commit: "d870c92dab2bf3fbb602dc3b8447fe9f3534aecb"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-round5-provenance"
+    branch: "feat/security-round5-provenance"
+    base_commit: "07791288b6feeccfaee5a57c12452359cc666957"
 ---
 
 # P0 `/security` levels
 
-## Current permission-confirmation allocation — September 14
-
-Travis's explicit "yes, scope is expanded" authorizes the app-server/TUI
-confirmation repair with next-turn command permission semantics. This narrow
-PF-83 amendment is distinct from the rejected global-quiescence/PF-22-S03
-proposal and does not change the protected `/security` contracts below.
-The security owner explicitly handed back PF-27-S04's reservation to the repair
-coordinator; PF27 returns to draft with its paused work/evidence intact. This
-supersedes historical PF27 execution-status prose, not its remaining scope.
-There remain three active plans and only one executable security sprint.
-
-Product citation: **Permission selection confirmation — TO BUILD**:
-"A submitted selection is not a confirmed change." Existing live capability
-citation: **Live MVP versus the P0 security controls**, "approvals, and general
-workspace sandboxing." Current user approval permits only confirmation API
-semantics and associated UI/compatibility tests; the no-Permissive-policy-change
-and no-replacement-of-`/permissions` exclusions continue to hold.
-
-| Feature | Contract | Sprint | Owner / receiving gate |
-| --- | --- | --- | --- |
-| PF-83 | Request-correlated permission application outcome and truthful next-turn UI | [PF-83-S01](../../sprints/current/p0-security-levels/pf-83-s01-permission-confirmation.md) | Astra High permission-confirmation worker; this repair coordinator receives and verifies, then coordinates any integration with the existing Fable writer |
-
-PF83 owns the exact worktree/branch/base above and only the literal sprint scope.
-The previous PF27 owner remains paused, no broker work is dispatched, and
-accounting/Task Node scopes do not overlap the selected app-server/TUI files.
-No canonical integration worktree, running app/profile/shortcut, service or
-credential is modified by the allocation. Raw estimate: one bounded engineering
-increment plus review and isolated qualification; reserve at least35% for
-integration/testing, no calendar completion guarantee. Local pinned Rust1.95
-builds use the repair's private cache, not historical RTX-only round-five tooling.
-
-### PF-83 outcome and evidence contract
-
-Success/no-op returns a request-specific applied outcome; invalid updates return
-their correlated failure. Unknown effects on timeout/disconnect stay uncertain
-without blind retry. Register correlation before submission and bind it to
-connection/thread/listener generation; clean pending state on terminal paths.
-TUI selection/cache must not claim backend confirmation before that outcome.
-Active-turn command authority stays unchanged; the next turn picks up the
-confirmed selection in either direction. Already-pending command approvals,
-background process lifetime, MCP policy refresh, persistence and provider wire
-are unchanged. Old servers with no applied acknowledgement remain visibly
-unconfirmed; old clients' acceptance behavior is preserved through a narrow
-opt-in confirmation path where required. No new dependency or Core authorization
-change is allocated.
-
-Upstream touch: canonical `https://github.com/openai/codex` ancestor
-`413492cd6c3a4d4f8dff6f406247ccda5a9d88aa`, verified by canonical commit API
-and local ancestry; fork base `005cc644f59b1e762e5497b329e106c67925d4ed`.
-This is not an upstream update: no merge/rebase candidate or upgrade pass.
-App-server pending outcome module and thin native processor/listener adapters
-own correlation, TUI adapters own presentation, generated v2 fixtures own wire
-parity. Detailed source proof and receipt live in
-[the repair evidence](../../../qa/reliability/live-permission-transition-20260913/manager-checkpoint.md).
-
-Required acceptance: success/no-op/failure, rapid stale responses, disconnect and
-restart, old/new server combinations, both permission directions, next-turn
-continuation and pending approvals. Freeze originals F01-F11; attach the user's
-next-turn scope as an explicit amendment, not rewritten cases. Exact-package
-independent enforced code-blind execution and independent evidence check remain
-mandatory. Both TensorCash and Isometric Game disposable workflows apply;
-resolve bases before execution. Human acceptance is pending. API documentation
-must describe actual semantics; finished user docs wait for qualified evidence.
-No release/install is authorized; benchmark/release assessment remains a later
-candidate gate. Plan/sprint checks and affected app-server, protocol, TUI plus
-unchanged relevant Core regressions must pass; commands are in the sprint.
-
-Policy: repository-root `AGENTS.md`
-
-Plan lifecycle: `docs/plans/index.md`
+Policy: repository-root `AGENTS.md`. Plan lifecycle: `docs/plans/index.md`.
+Everything written before 2026-10-06 (allocations, review ledgers, round notes,
+expanded contracts) is in the [history file](../history/p0-security-levels-2026-10-06.md).
+Deferred features are in the [P1 security hardening plan](../proposed/p1-security-hardening.md).
 
 ## Activation record
 
 | Field | Value |
 | --- | --- |
-| Status | **Active** |
-| Active-plan slot | **1 of 3**; September 11 sequential-workstream allocation |
-| Product authority | Defined once in the product specification |
+| Status | **Active**, slot 1 of 3 |
 | Authoritative decision | “Accountable sequencing,” item 1: `/security` is P0 and begins immediately |
-| Delivery owner | Jim Ricketts |
-| Deadline | **2026-10-08** |
-
-## Reconciled planning decision — 2026-08-28
-
-Travis Good requested the full security program, selectively reusing the cancelled
-firewall decomposition and using the working-session overview/transcript and
-OpenClaw implementation as primary grounding. This **planning update**, not a
-product-code or release change, merges those contracts into this one active plan.
-
-[Source reconciliation and all 72 archive dispositions](../security-source-reconciliation.md)
-records the source hashes, transcript timestamps, pinned OpenClaw code, differences
-from that reference and new owners. The earlier proposed firewall plan remains
-historical input, not competing implementation authority.
-
-The [OpenClaw source review](../openclaw-source-review-2026-08-28.md) pins the
-2026-08-28 download at `13adff02ca3897768d80d2bca18f5acf08c55d91` and maps
-implementations, callers, defaults and tests to OC-1–11. It is targeted reference
-research, not OpenClaw-wide or Corbanu release qualification. Reuse persistent
-memory provenance as well as turn taint; explicitly test open-channel revocation,
-complete reflected-secret removal, missing-lineage handling, proxy/DNS bypasses
-and migration ownership. Upstream's trusted-host defaults are not Moderate or
-Aggressive guarantees.
-
-Local source-reference input: `/Volumes/CorbanuDrive/Corbanu/.codex-work/references/openclaw-13adff02`.
-It is a clean detached checkout of `https://github.com/openclaw/openclaw.git` at
-the exact review pin above, with Git hooks disabled; all 42 files in the recorded
-source manifest matched their SHA-256 values on 2026-08-30. Agents should use it
-for local source reads without fetching, switching revisions, installing or
-running OpenClaw. A pin change requires an explicit review update first.
-
-For each adaptation, record the pinned upstream function/test, Corbanu owner and
-small Codex integration hook, license notice, deliberate differences and final-tree
-regression evidence. Keep the source checkout/reference outside the Corbanu runtime
-dependency graph. PF-26 must track unexecuted reference cases separately from
-passing candidate evidence; no source citation alone closes an acceptance item.
-
-- **Permissive retains compatibility.** No mandatory broker, environment purge,
-  ingestion classifier or migration is silently added to its shipping path.
-  Existing stricter low-level restrictions remain intact.
-- **Every level above Permissive requires the broker.** Moderate and Aggressive
-  use separately constrained credential/financial execution, secretless agent
-  launch and deterministic ingress/disclosure policy. Unsupported adapters or
-  isolation fail visibly; they never fall back to raw credentials.
-- **All source requirements have owners.** Earlier 68/73-record snapshots are
-  historical. Sprint 13, PF-34-S04, PF-27-S03, round-two integration, and the
-  completed PF-13-S06/PF-41-S03 round-three foundations preserve 24 completed
-  archives and leave **52 current units**. All 72
-  cancelled firewall records and seven unrelated Autoreview drafts are unchanged.
-- **No evidence is retroactively accepted.** Upstream's PF-15–22 and PF-13-S01
-  completions remain accepted for their original scope. The stronger review
-  requirements have separate follow-ups; PF-13-S05 is completed and archived and
-  PF-13-S07 owns final composed credential qualification.
-- The existing October 8 deadline is unchanged, but this larger program has not
-  been effort-estimated or scheduled. The owner must assess capacity and surface
-  any conflict; no scope or release gate is silently waived.
-
-## Accepted architecture refinement — 2026-08-28
-
-Travis Good authorized the assessed recommendations after the Opus 5 / Extra
-review. The [architecture appendix](../security-architecture-refinements-2026-08-28.md)
-records accepted/rejected claims, platform/state and upstream-seam contracts,
-action/profile usability, durable events and required regression detail.
-
-Five draft preparation/foundation sprints make independent work explicit:
-PF-27-S03 platform containment, PF-31-S04 retriever artifacts/engine fixtures,
-PF-33-S03 pure destination policy, PF-34-S04 segment/verdict fixtures and
-PF-41-S03 durable audit/recovery. PF-35 corpus/CPU work now follows the completed
-segment contract, while real screening still depends on sanitizer and policy
-integration. Browser login gains its missing screening dependency.
-
-The plan opts into the [bounded parallel process](../../sprints/index.md#bounded-parallel-implementation)
-with the exact integration owner recorded in front matter. No extra execution owner or worktree has
-been allocated and no sprint is activated by this amendment. Keep PF-13-S05 and
-PF-26 final qualification, full Moderate/Aggressive guarantees, independent
-Permissive evidence and the existing deadline pending measured capacity review.
-
-## Execution capacity and handoff decision — 2026-08-29
-
-Product authority confirmed maximal LLM execution capacity, supplied platform
-access for Mac, Windows and Linux, and confirmed that LLM reviewers are always
-available. Sprint reviews use Computer Use to operate the logged-in Claude UI
-with **Claude Opus 5.0** visibly selected and effort visibly set to **Max**. Each
-review still requires immutable packet/model/effort/result evidence, verified
-finding disposition and reruns. Reviewer availability does not replace the named
-human final-acceptance gate.
-
-The initial coordination packet at
-`qa/security-levels/planning/parallel-handoffs-2026-08-29/README.md` historically
-divided the first round into foundation/platform, browser/retrieval and
-ingress/classifier legs. It is evidence, not current dispatch authority. The
-round-two packet at
-`qa/security-levels/planning/parallel-handoffs-2026-08-30-round-2/README.md`
-owns new dispatches after PF-27-S03 integration.
-PF-13-S05, PF-31-S04, PF-33-S03, and PF-27-S03 are completed and archived.
-PF-27-S03 occupied the foundation/platform slot at dispatch base
-`1907d99aed9714f05a5f54fca1703658017d616c`; one sprint may run at a time in
-each lane. A handoff document is coordination, not execution authority: before a
-draft becomes `ready`, this plan and its sprint record must name the exact owner,
-CorbanuDrive worktree and branch, 40-character post-handoff `main` base, parallel
-lane, literal disjoint `write_scope` and `integration_gate`, and both governance
-checkers must pass.
-
-PF-13-S05 transferred from its historical Travis worktree to the
-`foundation-platform` worktree at `6a35712cd5731b191d875e8c6468f1abe23eb66e`
-on 2026-08-29. Historical candidate, executable and platform evidence remains
-bound to the commits and paths recorded in that evidence; the transfer does not
-relabel it. The transferred sprint owns only the explicitly amended Core repair
-files and final qualification artifacts recorded in its sprint record. Jim
-Ricketts remains the integration owner.
-
-Until midpoint sprint estimates exist, reserve **35% of total delivery capacity**
-for integration, rebases, reviewer-finding remediation, reruns and evidence.
-After estimates exist, each sprint reserves `max(0.5 day, 0.20 * midpoint)` plus
-0.5 day for each applicable serialized shared surface, consumed cross-lane
-contract, and all-OS/true-TUI/live-repository evidence requirement. Add one day
-per cross-lane convergence gate and two days for final PF-26 convergence;
-reforecast after every gate. Reviewer availability itself is not charged, but
-finding remediation is. No calendar feasibility claim is made until raw sprint
-estimates, retriever pins, corpus/licensing and the weakest-supported CPU exist.
-
-The browser/retrieval worktree was reallocated on 2026-08-30 at
-`1a5562738cb3d53bd4d0b6668761cfe76bd4b93e` for bounded remediation of the
-post-archive tmux/Corbanu Terminal/Claude Opus 5 Max findings. PF-31-S04 and
-PF-33-S03 rotate through that one lane sequentially; no protected route is
-activated by this follow-up.
-[PF-31-S04 remediation](../../sprints/archive/p0-security-levels/pf-31-s04-retriever-artifact-preparation.md)
-completed at `c2168575695dfb2ad015bf45ef24d9e4b173b571`.
-[PF-33-S03 remediation](../../sprints/archive/p0-security-levels/pf-33-s03-destination-policy-contract.md)
-then completed sequentially at `80a2469e401066ebaf04d95ba603ab68cb341854`;
-the browser/retrieval lane is returned after re-archive.
-
-Credentials and machine login details remain only in the local gitignored
-`AgentCredentials.md` chain and must never enter a branch, evidence bundle,
-review packet or transcript. Supplied access proves reachability, not platform
-containment or release qualification. Tooling, builds, caches, temporary files
-and review exports for these lanes remain on CorbanuDrive.
-
-## Upstream reconciliation — 2026-08-28
-
-This review branch incorporates upstream `1bdc515bff48a4d9048dae7d06c6214e884265bc`.
-Its runtime code, completed sprint records and qualification artifacts are retained;
-this merge adds no runtime implementation or new release qualification.
-[Reconciliation evidence](../security-upstream-reconciliation-2026-08-28.md)
-records the two parent revisions, preservation checks and planning validation.
-
-| Accepted foundation | New requirement owner | Integration dependency |
-| --- | --- | --- |
-| PF-13-S01 opaque capability/store | PF-13-S06 usage reservations and trusted metering | PF-13-S03 before live transport |
-| PF-19-S01 generation/revocation types | PF-19-S02 dispatch fence and emergency restriction | PF-41-S03 / PF-22-S02, then transports and financial recovery |
-| PF-20-S01 versioned config persistence | PF-20-S02 protected authoritative state | After PF-27-S03; before runtime and migration |
-| PF-21-S01 frozen independent baseline | PF-21-S02 expanded surfaces and upstream drift | Before PF-22-S02 and final PF-26 |
-| PF-22-S01 policy and child inheritance | PF-22-S02 protected runtime and upstream seams | After new state/fence/event/compatibility contracts |
-
-PF-15–18 need no duplicate implementation sprint. Preserve all nine archives and
-their original evidence byte-for-byte. New cases cannot be checked off from those
-historical passes. The historical PF-22-S01 workspace run was **not green**:
-15,788 ran, 15,617 passed, 169 failed, two timed out and 28 were skipped.
-The owning repair work and final-candidate qualification remain required.
-
-The allocated Mac worktree/base follow upstream's record; the independent
-pre-feature Permissive baseline remains `3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb`.
-Neither updating allocation nor merging upstream rewrites that oracle.
+| Binding scope decisions | Travis, 2026-10-06: PF-83 closes; flagged picker ships early; 20-sprint core; 3 lanes; tiered gate |
+| Delivery owner / integration owner | Jim Ricketts / Codex /root security coordinator |
+| Deadline | 2026-10-08 (unchanged; not re-estimated) |
 
 ## User pain
 
-### Sprint 13 implementation integration — 2026-08-28
-
-The published `feat/pf-13-s02-scoped-vault-resolver` branch through
-`c25e2825a2fe3fe63c8e1d58cc1e3aa82b0d1d04` is integrated into this plan.
-PF-13-S02–S05 and the early PF-26-S01 harness are completed and archived;
-PF-13-S05 closed after clean integrated Core, Windows component, and independent
-review evidence. PF-13-S07 now owns final composed qualification after
-PF-13-S06 and downstream isolation/output/migration/connection controls.
-
-The branch's earlier PF-27 shared-contract work remains completed as PF-27-S01.
-The refactored isolated broker is PF-27-S04. Earlier overlapping PF-28–30 planning
-records are superseded by the canonical PF-27–41 decomposition; their code and QA
-artifacts remain integrated inputs, not duplicate completed dependencies.
-
-Canonical record links: [PF-13-S02](../../sprints/archive/p0-security-levels/pf-13-s02-scoped-vault-resolver.md),
-[PF-13-S03](../../sprints/archive/p0-security-levels/pf-13-s03-openai-exact-host-proxy-substitution.md),
-[PF-13-S04](../../sprints/archive/p0-security-levels/pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md),
-[PF-13-S05](../../sprints/archive/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md),
-[PF-13-S07](../../sprints/current/p0-security-levels/pf-13-s07-integrated-credential-boundary-qualification.md),
-[PF-26-S01](../../sprints/archive/p0-security-levels/pf-26-s01-security-harnesses-and-standards-crosswalk.md),
-[PF-26-S04](../../sprints/current/p0-security-levels/pf-26-s04-final-automated-qualification.md),
-[PF-27-S01](../../sprints/archive/p0-security-levels/pf-27-s01-shared-security-contracts.md), and
-[PF-27-S04](../../sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md).
-
-Corbanu already has approvals, sandboxing, a vault, scoped wallet actions, and
-tool permissions. Those controls are spread across the product. A user cannot
-answer one simple question: “How locked down is my agent right now?”
-
-Security settings should be understandable without learning internal policy
-types. They should also be optional: introducing the feature must not silently
-change the behavior of an existing Corbanu installation.
+Corbanu has approvals, sandboxing, a vault, wallet scopes and tool permissions,
+but they are spread across the product. A user cannot answer “How locked down
+is my agent right now?”, and turning protection on must not silently change an
+existing installation.
 
 ## Product intent and ideal flow
 
-The user types `/security` and sees one focused tab with three choices:
+The user types `/security` and picks one of three levels. The current level is
+obvious, a change shows its differences before confirmation, `Esc` changes
+nothing, and only a human can change or downgrade the level.
 
-| Level | User promise |
-| --- | --- |
-| **Permissive** | Corbanu behaves exactly as it does today. Existing policies are not changed. |
-| **Moderate** | Corbanu adds strong protection around untrusted content, secrets, sensitive data, credentials, and protected actions while preserving normal agent workflows. |
-| **Aggressive** | Sensitive access is denied by default. The user opens narrow, expiring permissions explicitly, and every sign or broadcast requires exact human approval. |
-
-The current level is obvious. Moving to another level shows the policy
-difference before confirmation. `Esc` cancels without changing anything.
-
-A confirmed change takes effect immediately for the current session and child
-agents, persists across restart, invalidates incompatible pending approvals,
-and creates a secret-free audit event. Only the human can change or downgrade
-the level.
+| Level | User promise | How it ships |
+| --- | --- | --- |
+| **Permissive** | Exactly today's behaviour. No policy is added, removed or rewritten. | Default; the flag-off path |
+| **Aggressive** | Sensitive access denied by default; narrow, expiring human grants. | First built only from existing controls (PF-24-S03), then deepened by PF-23-S02 and PF-25 |
+| **Moderate** | Strong protection around untrusted content, secrets and protected actions while normal work continues. | Added to the picker only as its protections land (broker and untrusted-content lanes, PF-23-S01) |
 
 ## Product linkage
 
 | Field | Value |
 | --- | --- |
-| Exact product-spec heading | **P0 `/security` levels** |
-| Plan requirement excerpt | “Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged.” |
-| Credential trust-boundary heading | **Required trust boundaries** |
-| Credential requirement excerpt | “Credentials are referenced by label and resolved only inside a trusted execution boundary.” |
-| Product outcome advanced | One understandable control for agent security posture |
-| North-star criterion advanced | External content cannot silently gain sensitive access or change security policy |
+| Product-spec heading | **P0 `/security` levels** — “Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged.” |
+| Credential heading | **Required trust boundaries** — “Credentials are referenced by label and resolved only inside a trusted execution boundary.” |
+| Permission confirmation | **Permission selection confirmation — TO BUILD** — “A submitted selection is not a confirmed change.” (PF-83, closed) |
 
 ## Scope
 
-### In
+In: the `/security` picker behind the `security_levels` feature flag; Aggressive
+from existing controls; the broker, output gate, migration and destination
+controls (PF-27, PF-28, PF-29, PF-33); durable provenance (PF-30); Moderate and
+Aggressive enforcement (PF-23); confirm/downgrade, grants and kill switch TUI
+(PF-24, PF-25); the inspector (PF-41-S01); final credential qualification (PF-13-S07).
 
-- Add `/security` as a first-class slash command and TUI tab.
-- Define a standards-derived authorization contract for protected actions,
-  grants, delegation, revocation, and adversarial coverage.
-- Define one persisted `SecurityLevel` value: Permissive, Moderate, or
-  Aggressive.
-- Default existing and upgraded installations to Permissive.
-- Prove Permissive uses the current policy resolution paths without adding,
-  removing, or rewriting a policy.
-- Make Moderate enforce the product-spec controls for untrusted content,
-  model-visible secrets and protected data, trusted credential resolution,
-  protected-action previews and approval binding, redacted audit events,
-  revocation, and kill switch.
-- Make Aggressive include Moderate and then default sensitive tools, account
-  access, credential use, protected-data disclosure, financial actions,
-  arbitrary egress, and clipboard/export paths to denied.
-- In Aggressive, allow only narrow human grants with visible scope and expiry;
-  require exact human approval for every sign or broadcast.
-- Make active and newly spawned agents inherit the selected level and prevent
-  agents, tools, project content, hooks, plugins, connectors, and MCP servers
-  from weakening it.
-- Show the current level and a concise protection summary in the tab and
-  session status.
-- Require explicit human confirmation for a downgrade; cancel or restart must
-  not apply an unconfirmed change.
-- Add compatibility, policy, adversarial, snapshot, and true-TUI evidence.
-- Implement the complete PF-27–41 contracts below: process/environment containment,
-  reflected-output gates, migration, durable provenance, isolated retrieval,
-  screened search adapters, SSRF controls, sanitization/quarantine, local and
-  optional hosted detection, browser login, financial execution/derived views,
-  outbound disclosure, Agent Sweep, and runtime inspection/audit.
-
-### Out
-
-- Implementing external protocol servers, new trading venues, or unrelated
-  integrations. Security-specific existing-search/Exa/Brave/SearXNG adapters,
-  one reviewed login origin plus fixtures and the optional detector interface are in scope;
-  this is not authorization for paid accounts, live trades or commercial contracts.
-- Claiming conformance to AP2, OAuth, OpenID, or SPIFFE; this plan adopts
-  relevant control semantics inside Corbanu.
-- Adding unrelated product capabilities or downstream integrations.
-- Changing the existing behavior of Permissive.
-- Replacing the existing `/permissions` surface; `/security` composes the
-  relevant existing controls into a user-facing posture.
-- Allowing a model or model-based reviewer to choose, change, or downgrade the
-  security level.
-- Publishing a finished-feature page before the accepted candidate passes the
-  required evidence.
+Out: everything moved to the [P1 hardening plan](../proposed/p1-security-hardening.md)
+(PF-26 final program qualification, PF-31, PF-32, PF-34, PF-35, PF-36, PF-37,
+PF-38, PF-39, PF-40, PF-41-S02); replacing `/permissions`; changing Permissive;
+letting a model choose or downgrade a level; conformance claims to external standards.
 
 ## Invariants
 
-- **Permissive is current behavior.** Its policy snapshot and representative
-  workflows must match the pre-feature baseline.
-- **Only a human changes the level.** There is no agent tool, prompt command,
-  config instruction, or project-file mechanism that can do so.
-- **Moderate and Aggressive are deterministic.** Model judgment can warn but
-  cannot grant authority.
-- **Unknown state fails visibly.** A corrupt or unknown stored level cannot
-  silently become Permissive.
-- **Downgrades are explicit.** They show what protection is being removed and
-  invalidate incompatible pending authority.
-- **Inheritance never weakens.** Child agents receive the same or a stricter
-  effective level.
-- **Protected modes keep managed secrets outside agent-readable paths.**
-  Raw operational credentials and custody material never enter model, generic
-  tools, shell environment/argv, logs, transcripts, summaries or artifacts.
-  Permissive retains its baseline and makes no added secretless guarantee.
-- **Independent defenses compose.** Isolation, tool policy, broker authority,
-  egress checks, screening and output gates are separate controls; no classifier
-  score or source wrapper grants authority.
-- **Taint is durable.** Compaction, memory, a new turn or another agent cannot
-  promote untrusted material. Exact human action approval does not erase taint.
-- **Failures are observable.** Missing backend, broker, required local classifier,
-  safe migration or audit prerequisites block affected protected work; no silent
-  native-search/host-browser/raw-auth fallback.
-- **Bound the claim.** The protected boundary covers managed credentials and
-  classified/configured protected resources. Inventory/redaction heuristics do
-  not guarantee discovery of every unknown secret in arbitrary user text, nor
-  defend against a fully compromised trusted host. Unknown routes/data deny or
-  quarantine; known historical exposure requires clean-context recovery.
-- **Aggressive grants are narrow and expire.**
-- **Kill switch and revocation override pending work and survive restart.**
-
-## Standards-derived control profile
-
-This profile borrows mature control shapes without turning `/security` into a
-standards-integration project. The implementation remains local and
-provider-independent. A standard is a design source only where the plan names
-the exact behavior adopted.
-
-| Source | Behavior adopted by `/security` | Boundary |
-| --- | --- | --- |
-| [OpenID AuthZEN Authorization API 1.0](https://openid.net/specs/authorization-api-1_0-final.html) | Separate the policy enforcement point from the deterministic policy decision point; represent each check as subject, resource, action, context, and an allow/deny decision | Adopt the decision shape; do not require a networked AuthZEN service or claim conformance |
-| [OAuth Rich Authorization Requests, RFC 9396](https://www.rfc-editor.org/rfc/rfc9396.html) and [OAuth Token Exchange, RFC 8693](https://www.rfc-editor.org/rfc/rfc8693.html) | Give every temporary grant explicit action, resource, destination, limits, actor chain, and expiry; delegation must narrow authority and preserve the acting agent | Adopt authorization and delegation semantics; do not build an OAuth server |
-| [OpenID Shared Signals and CAEP](https://openid.net/three-shared-signals-final-specifications-approved/) | Model downgrade, revocation, kill switch, and risk changes as durable events that invalidate cached decisions, grants, and pending approvals | Adopt invalidation semantics locally; cross-system signal exchange is out of scope |
-| [Agent Payments Protocol 0.2](https://ap2-protocol.org/ap2/specification/) | Keep approval on a non-agentic trusted surface; bind human approval to the exact canonical action preview; return a secret-free receipt; reject mutation, replay, or mismatch | Adopt the mandate pattern for protected actions; payment and commerce support is out of scope |
-| [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) | Make every applicable agentic risk category traceable to at least one prevention control and one adversarial test | Use as the release threat-coverage baseline, not as a certification claim |
-
-The release evidence must include a versioned crosswalk from each adopted
-behavior to its code boundary, automated test, adversarial case, and true-TUI
-flow. Standards drift after the 2026-08-23 review date requires an explicit plan
-update; it cannot silently change Permissive or an accepted security level.
+- Permissive is current behaviour; flag off is byte-for-byte today's product.
+- Only a human changes the level; no agent tool, prompt, config or project file can.
+- Moderate and Aggressive are deterministic; model judgment can warn, never grant.
+- Unknown or corrupt stored state fails visibly; it never becomes Permissive.
+- Downgrades are explicit and invalidate incompatible pending authority.
+- Child agents inherit the same or a stricter level.
+- Protected levels keep managed secrets out of model, env, argv, logs and artifacts.
+- The UI never shows a protection as active when it is not; unbuilt controls read “not available”.
 
 ## Ownership and implementation worktrees
 
-| Owner | Worktree | Branch | Base commit | Scope |
-| --- | --- | --- | --- | --- |
-| Jim Ricketts | `/Users/travisgood/Documents/ChatGPT/corbanu-security-levels` | `feat/p0-security-levels` | `7cc15ae0762664d6d01765de407329887da9f876` | Complete reconciled security program, policy/broker/ingress/financial adapters, TUI and evidence |
-| Codex foundation/platform lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-foundation-platform` | `feat/p0-security-foundation-platform` | `1907d99aed9714f05a5f54fca1703658017d616c` | PF-27-S03 platform contract, probes, three-platform evidence, and user-authorized serialized G1 crate/workspace/Bazel/lock/CI integration |
-| Codex ingress/classifier lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-ingress-classifier` | `feat/p0-security-ingress-classifier` | `6a35712cd5731b191d875e8c6468f1abe23eb66e` | PF-34-S04 screening contract, immutable fixtures and user-authorized serialized G1/G2 crate/workspace/Bazel/lock/CI integration |
-| Codex revocation/fence lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-revocation-fence` | `feat/p0-security-revocation-fence` | `5521b681fff0ecb50b17c10bc1dd1356cbecc1b6` | Completed PF-19-S02 candidate `cc48f367999346bbae0c31b23f9105f229638f0d`; merged at `bff3fe02f` with exports at `1f03913ea` |
-| Codex authoritative-state lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-authoritative-state` | `feat/p0-security-authoritative-state` | `5521b681fff0ecb50b17c10bc1dd1356cbecc1b6` | Completed PF-20-S02 candidate `cba62fbc9`; merged at `628c63b3c`, activation still blocked |
-| Codex compatibility/drift lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-compatibility-drift` | `feat/p0-security-compatibility-drift` | `5521b681fff0ecb50b17c10bc1dd1356cbecc1b6` | Completed PF-21-S02 candidate `2555147527c47bd08a2ac9b8e98d706de7432a76`; merged at `c02568c71` and qualified 36/36 |
-| Codex source-envelope lane — historical lost allocation | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-source-envelope` | `feat/p0-security-source-envelope` | `b457249aa29c912cb2d5404f0939e8b2386f4e5e` | PF-30-S01 allocation was lost with the failed drive and returned to draft on 2026-09-02 before implementation; these coordinates are historical and grant no execution authority. |
-
-The PF-34-S04 creation coordinate remains the immutable base recorded above.
-After allocation, the lane rebased onto `main` at
-`1a5562738cb3d53bd4d0b6668761cfe76bd4b93e` to include the corrected TMUX and
-provider behavior before independent review. The final lane-owned remediation
-candidate is `a75efecc0a37d5544e123ad19d57867cac360a68`. On 2026-08-30 the user
-transferred Jim Ricketts's unavailable G1/G2 integration responsibility to the
-Codex ingress/classifier lane. The reviewed commits remain immutable. The lane
-combined `main` first at `1907d99aed9714f05a5f54fca1703658017d616c`,
-registered the crate at `de99c7af1774cb964f9fcf0cbbfaf2a07c1a059d`,
-removed the unused dependency alias at
-`279ce48a9e8d3b28ab518ff184aae770d7462d2f`, and reconciled the subsequently
-advanced `main` at `3232f5e65bae60bc86122a5495ebb4c280f7c8fb` in merge
-`158b9b0ebe4b06a81c98be6a58a0d1c7919a0d08` before final qualification.
-
-Literal PF-34-S04 write scope: `codex-rs/content-security/`,
-`codex-rs/Cargo.toml`, `codex-rs/Cargo.lock`, root `BUILD.bazel`, root
-`MODULE.bazel.lock`, `.github/workflows/security-ingress-contract.yml`,
-`qa/security-levels/ingress-contract/`, `qa/security-levels/sprints/PF-34-S04/`,
-the current and archive PF-34-S04 sprint-record paths, the current security sprint
-index, the global sprint index, `mkdocs.yml`, and this active-plan allocation.
-Its `parallel_lane` is `ingress-classifier`. Shared registration is now serialized
-inside this one lane; no concurrent sprint owns any listed path.
-
-## Round-two parallel allocation — 2026-08-30
-
-Round two is completed and archived. PF-19-S02 merged first, PF-20-S02 second,
-and PF-21-S02 third; the integration owner then updated all compatibility CLI
-callers, rebuilt the merged Corbanu binary, reran the policy/config/Core suites,
-passed the 36/36 compatibility matrix, and completed a true-TMUX smoke. Protected
-activation remains unavailable.
-
-That next frontier was subsequently allocated as round three below. PF-41-S03
-and PF-13-S06 completed their disjoint foundation work. Product authority also
-resolved PF-35-S01's preparation decisions, but the real corpus campaign,
-private blind-custodian aggregate, signed production artifact and N100
-measurements remain evidence gates rather than inferred passes. The 35%
-integration allowance was recalculated for round three.
-
-After PF-34-S04 was archived, the user's 2026-08-30 integration instruction kept
-the Codex ingress/classifier lane as integration owner and assigned PF-27-S03's
-serialized G1 registration. That lane merged current `main`, audited the literal
-scope, and registered the standalone contract crate; the foundation/platform
-lane remained the candidate owner. Integration authority was not returned to
-Jim Ricketts by the merge.
-
-Literal PF-27-S03 write scope: `codex-rs/secret-broker/`,
-`codex-rs/Cargo.toml`, `codex-rs/Cargo.lock`, root `BUILD.bazel`, root
-`MODULE.bazel.lock`, `.github/workflows/security-platform-contract.yml`, the
-three `scripts/security_platform_probe` command/implementation/test paths,
-`qa/security-levels/platform/`, `qa/security-levels/sprints/PF-27-S03/`, the
-current and archive PF-27-S03 sprint-record paths, both sprint indexes,
-`mkdocs.yml`, and this active plan. Its `parallel_lane` is
-`foundation-platform`. Shared registration is serialized at G1; no concurrent
-sprint owns any listed path.
-
-Implementation does not occur in the documentation checkout. Update this plan
-before changing the implementation worktree, base, owner, or scope.
-
-Parallel preparation lanes and integration gates are in the architecture appendix.
-Before a second worker starts, assign distinct named execution owners and exact
-worktrees/branches/base commits, fill each sprint's literal write_scope and
-integration_gate, and record a dated capacity estimate. The existing shared
-coordinates are not permission for concurrent workers in the same checkout.
-
-## Round-three parallel allocation — 2026-08-30
-
-Product authority resolved PF-35-S01's corpus, custody, hardware, model/runtime,
-signing and distribution decisions and asked the integration owner to run the
-next three dependency-complete lanes through merge and push. The immutable
-dispatch base is `9d08b15fa94676c1383ee1605b77e7cc7218dcc4`.
-
-| Lane | Sprint | Owner | Worktree | Branch |
-| --- | --- | --- | --- | --- |
-| Classifier corpus | PF-35-S01 | Raman | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-classifier-corpus` | `feat/p0-security-classifier-corpus` |
-| Credential reservations | PF-13-S06 | Pauli | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-credential-reservations` | `feat/p0-security-credential-reservations` |
-| Durable events | PF-41-S03 | Huygens | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-durable-events` | `feat/p0-security-durable-events` |
-
-The scopes are disjoint. PF-35 owns only `content-security` evaluation,
-classifier manifests/tooling and its evidence; PF-13 owns the credential-usage
-contract in `security-policy` and the existing Core capability seam; PF-41 owns
-the new `security-audit` crate and its evidence. The integration owner alone
-edits workspace/build registrations, shared navigation, this plan,
-`humanTest.html` and `securityProgress.html`, merges each handback, and runs the
-combined-tree suites and TMUX evidence.
-
-Raw midpoint estimates are five days for PF-35-S01, three for PF-13-S06 and four
-for PF-41-S03. Their formula reserves are 2.5, 1.6 and 1.8 days respectively,
-including consumed contracts, serialized shared surfaces and required hardware
-or fault-injection evidence. Add one day for each merge convergence gate and
-reforecast after every handback. This retains at least the provisional 35%
-integration posture; it does not claim calendar completion.
-
-The checked handoff packet is
-[`parallel-handoffs-2026-08-30-round-3`](../../../qa/security-levels/planning/parallel-handoffs-2026-08-30-round-3/README.md).
-All three lanes require a real TMUX/Corbanu smoke and a read-only Claude Opus 5
-Max review despite having no feature-level TUI contract. Those smokes are
-supporting evidence and do not replace PF-26 true-TUI or human acceptance.
-
-Round-three integration completed the PF-13-S06 credential reservation contract
-and PF-41-S03 durable security-event foundation, including remediation from
-independent Opus reviews, combined-tree reruns, shared export/workspace/build
-registration and archival. PF-35-S01 delivered a deterministic, fail-closed
-manifest/evaluator foundation and recurring CI coverage, but remains
-`in_progress`: no private blind result, production signature, complete synthetic
-corpus campaign or weakest-supported N100 performance result is claimed.
-
-PF-22-S02 protected runtime integration is completed and archived after clean
-combined-tree gates. PF-27-S04 isolated credential broker is ready for its
-serialized integration. The released slot was allocated to PF-30-S01 from
-post-archive base `b457249aa29c912cb2d5404f0939e8b2386f4e5e`, but product
-authority returned that sprint to draft on 2026-09-02 after the drive failure;
-no surviving implementation commit or handoff artifact exists. PF-35-S01's
-external qualification remains independent. PF-35-S02 stays gated until S01 is
-honestly completed and archived.
-
-## Round-four rolling allocation — 2026-08-31
-
-The user directed the integration owner to treat PF-35's externally operated
-dataset/qualification campaign as independent of day-to-day engineering
-capacity while preserving its honest `in_progress` evidence state. The formal
-three-sprint limit remains. PF-35-S01 and PF-27-S04 occupy two recorded slots.
-PF-30-S01 briefly occupied the slot released by PF-22-S02, but its CorbanuDrive
-worktree was lost before implementation. Product authority returned PF-30-S01
-to unallocated draft on 2026-09-02 and released that reservation.
-
-The immutable dispatch base is
-`43d2d86488d5c1b2eb5cbc401ee8371dbdb76bf4`.
-
-| Lane | Sprint | Owner | Worktree | Branch | Raw midpoint | Integration reserve |
-| --- | --- | --- | --- | --- | ---: | ---: |
-| Protected runtime — completed | PF-22-S02 | `/root/pf22_protected_runtime` | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-protected-runtime` | `feat/p0-security-protected-runtime` | 5.0 days | 5.0 days |
-| Isolated broker | PF-27-S04 | `/root/pf27_isolated_broker` | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-isolated-broker` | `feat/p0-security-isolated-broker` | 12.0 days | 4.9 days |
-| Source envelope — lost allocation | PF-30-S01 | unallocated | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-source-envelope` (absent) | unallocated | 7.0 days | 4.4 days |
-
-PF-22 consumes four cross-lane contracts and owns the first Core/manifest
-convergence. PF-27 consumes the platform/event/capability contracts and requires
-all-OS evidence. PF-30's forecast is provisional until the integrated PF-22
-contract freezes its ingress seam. The reserve values apply the plan formula
-and include one convergence day per implementation handback; reforecast after
-PF-22 and PF-27 scope audits.
-
-PF-22 exclusively owns its recorded effective-policy, protected-runtime, Core
-module/manifest and lock surfaces. PF-27 owns the secret-broker, credential-
-broker, Vault capability, new broker-client/config leaves and its evidence; it
-does not edit `core/src/security/mod.rs`, Core/root manifests or shared locks.
-The integration owner merged and archived PF-22 first. PF-27 is next rebased
-and receives its serialized Core/Vault/network-proxy registrations before the
-combined-tree rerun. PF-30 is draft and owns no write scope after its lost
-allocation; a future allocation must re-establish disjoint scope and serialized
-module, manifest, lock, navigation, and archive ownership.
-
-PF-27 construction uses the PF-27-S03 platform candidates without claiming
-protected eligibility: Linux dedicated UID/service, macOS launchd/XPC helper,
-and Windows service SID/AppContainer with authenticated named pipe. Final
-platform acceptance remains fail closed and requires measured macOS, Linux and
-Windows evidence. The user will switch tailnets when local final-tree tests and
-Opus remediation are stable; no lane attempts remote qualification earlier.
-
-The checked dispatch packet is
-[`parallel-handoffs-2026-08-31-round-4`](../../../qa/security-levels/planning/parallel-handoffs-2026-08-31-round-4/README.md).
-Every implementation handback requires formatting, affected tests, a supporting
-real TMUX smoke and read-only Claude Opus 5 Max review through Corbanu Terminal.
-PF-26 final true-TUI, live-repository and human acceptance remain separate.
+Each lane worker creates its own worktree under `/Volumes/CorbanuDrive/Corbanu/worktrees/`
+off `origin/main` and records it in front matter before its sprint becomes
+`ready`. The coordinates above are the existing draft-record and paused PF-27-S04
+/ PF-30-S01 worktrees. The integration owner serializes shared Cargo/Bazel/lock,
+protocol and schema edits.
 
 ## Useful code references
 
-## Current security allocation — 2026-09-11
-
-Travis completed PF13 human testing and authorized its main merge and resumption.
-Verified main `d870c92dab2bf3fbb602dc3b8447fe9f3534aecb` includes both the accepted
-provider/security work and the actual 0.1.42 release branch. This amendment
-supersedes historical multi-lane reservations below: **one** security sprint,
-PF-27-S04, is in progress under `/root`, in the new exact worktree above.
-Accounting and Task Node retain the other two plan slots; PF35 remains external
-and draft, with no engineering slot or bypassed downstream dependency.
-
-Resume only the existing broker service substage from pushed `cd7457da7`:
-reconcile construction/EINTR and its synthetic subprocess tests onto main,
-preserve default-denial, and verify the combined stage on RTX. Root serializes
-the declared Cargo/Bazel/lock, broker, plan and evidence surfaces and coordinates
-any overlapping requests with the other integration owners. No new TUI surface
-is added, so no new blind UX design is applicable; retain existing UI proof and
-exercise synthetic service lifecycle via TMUX.
-
-Five broker reviews were already spent. Travis explicitly approved **one sixth
-Fable 5.1 High review through Corbanu/TMUX**, not an additional PF58 review or
-privileged setup. Freeze this reconciled stage, inspect any finding, and retain
-the existing review ledger. Service installation, principals, ACL/ownership
-changes and real Vault migration remain unapproved. Native containment,
-production data-plane/streaming and all-OS gates still prevent sprint completion
-or protected activation. See the [resume handoff](../../../qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/RESUME-20260911.md).
-
-Service-stage closeout: review six found no runtime/security issue and one
-test-helper Clippy finding. The latter was reproduced and fixed without changing
-production code; strict lint, affected suites and supporting TMUX all pass.
-Six reviews are now spent. [Final evidence and disposition](../../../qa/security-levels/sprints/PF-27-S04/resume-20260911/README.md)
-retain the original nonzero review result. PF-27-S04 remains in progress; the
-next implementation consumes PF20's trusted-child/native-root contract, with
-new independent review and actual privileged setup requiring their respective
-explicit allowances. No production bootstrap or platform completion is inferred.
-
-Subsequent September 11 budget amendment: Travis grants five additional PF27
-review slots, replenishing to five every six hours, with history retained in the
-[review ledger](../../../qa/security-levels/sprints/PF-27-S04/review-budget.md).
-Proceed within the same allocation with the bounded
-[trusted-child admission/lifetime stage](../../../qa/security-levels/sprints/PF-27-S04/bootstrap-next-20260911.md):
-service-owned child handles, role/generation routing, bounded admission and
-failure/shutdown fencing, with unprivileged subprocess/TMUX evidence. Literal
-runtime scope is `codex-rs/secret-broker-service/`; existing shared build scope
-remains serialized. No PF20 API widening, Core policy factory, Vault hookup,
-identity dropping or native installation is included. Default exit78 remains.
-This supersedes the earlier service-only execution instruction and budget hold,
-not any deployment, containment, data-plane or sprint-completion gate.
-
-This bounded child-admission/lifetime source stage is now qualified at
-`bd70f0e6b`: final default3/synthetic13/affected338, strict lint/parity and
-TMUX13+exit78 pass. Astra7/Fable8 findings were repaired; Fable9 is clean.
-[Closeout evidence](../../../qa/security-levels/sprints/PF-27-S04/child-admission-20260912/README.md)
-retains failed/retried runs and review dispositions. Three new slots used;
-the six-hour ledger governs later work. PF27-S04 remains in progress, with
-actual PF20 root wiring, native setup/containment and provider data-plane still
-open. No new principal, service or protected activation was installed.
-
-Next bounded source allocation is the [existing-root composition adapter](../../../qa/security-levels/sprints/PF-27-S04/root-composition-next-20260912.md):
-`secret-broker-service/src/root.rs`, separate `root_tests.rs`, library exports,
-one Linux dependency on existing `codex-protected-state`, and serialized lock
-parity within PF27's existing scope. Connect owned `TrustedChildRun` roles to
-unchanged PF20 existing-only factories and `serve_child`; preserve default exit78.
-The linked launch/argv/FD target is a subsequent synthetic probe contract, not
-implemented syntax or native deployment authority. No PF20/Core/Vault changes,
-identity dropping, listener creation or enrollment in this adapter step.
-Coordinate shared registrations with the other integration owners before edits.
-
-Existing-root adapter source `794080a4f` is construction-qualified: default3,
-synthetic17, affected356 (two existing subprocess-helper skips), scoped strict
-Clippy, parity and TMUX17+exit78 pass. Astra10 clean; Fable11 found no runtime
-issue and one publication finding resolved by tracking the logs. Full transitive
-Clippy fails on inherited codex-api telemetry debt, retained for manager triage.
-[Exact proof and limits](../../../qa/security-levels/sprints/PF-27-S04/root-composition-20260912/README.md).
-Five review slots used this window. Actual launcher, native qualification and
-provider data plane remain open; the adapter is not called by normal startup.
-
-Next source allocation: [synthetic post-exec probe preparation](../../../qa/security-levels/sprints/PF-27-S04/probe-next-20260912.md),
-service `src/probe/`, separate test modules and `tests/probe_lifecycle.rs`, optional
-binary registration and existing rustix thread feature/lock parity. Inspection
-changes only its own non-root process's hardening state and always reports native
-eligibility false. All native-launch modes deny; no root socket, identity change,
-enrollment, Core/PF20/Vault edit or installation. Source/tests can be prepared
-within the existing allocation; independent review must respect the six-hour
-budget. Later actual launcher/group/FD contract remains separately bounded.
-
-Post-exec probe source now passes final RTX default3/fixture23/affected356
-(two inherited helper skips), scoped lint/parity/build and private TMUX proof.
-[Checkpoint](../../../qa/security-levels/sprints/PF-27-S04/probe-20260912/CURRENT.md)
-is construction-accepted after Astra12 exit0 and Fable13 exit1 (patch correct,
-sole P3 fixture Python-path portability explicitly deferred by integration owner).
-Manager granted +2 scoped reviews without resetting history and cleared a main
-window. Source remains unchanged; qualification is RTX-only, not all-Linux/Bazel
-or native eligibility. No additional unchanged-source review is required.
-
-Implemented allocation: [launcher recipe and post-exec identity preparation](../../../qa/security-levels/sprints/PF-27-S04/launcher-next-20260912.md).
-Same PF27-S04 owner/worktree; distinct principals and exact supplementary groups
-are preserved using a single-threaded trusted child bootstrap with safe nix
-setgroups/setresgid/setresuid calls after exec, not unsafe pre-exec hooks.
-Root manifest/pinned execution, actual supervisor/listener/client wiring and
-privileged installation remain separate. Source `f0b1209e0` passes RTX default3,
-synthetic29, affected356 (2 existing skips), scoped lint/parity/build/TMUX;
-Astra14 and Fable15 both exit0 with no findings. Two of manager's +3 extension
-used, one unused. [Exact evidence and native limits](../../../qa/security-levels/sprints/PF-27-S04/launcher-20260912/README.md).
-
-Next allocation accepted by the receiving owner for bounded implementation:
-[root manifest and executable inspection](../../../qa/security-levels/sprints/PF-27-S04/manifest-next-20260912.md).
-Same PF27-S04 owner and coordinates; strict bounded fixed-path schema, checked
-opened ancestry/files and streaming image digest, with private test seams.
-September12 manager acceptance is recorded in the packet. No spawn, privileged installation,
-loader/exec-binding proof, listener, native client or protected activation is
-included. Preserve the unused review contingency; reserve any new stage passes
-under the existing ledger only after acceptance. Accepted launcher checkpoint
-is on main at `cc931adf6333e8348e03ee5fc801c77548aec138`; no repeat review needed.
-Manifest inspection source `099fa6f6d` is now construction-qualified: RTX
-default3/synthetic35/affected356 (2 existing skips), scoped lint/parity/build/TMUX
-pass; Astra16/Fable17 exit0, no findings. [Checkpoint and retained initial fixture
-failures](../../../qa/security-levels/sprints/PF-27-S04/manifest-20260912/README.md).
-Two new review passes used, prior contingency retained. Main window still
-required; no root-positive, exec-binding, loader-trust or native-eligibility claim.
-
-Manifest checkpoint subsequently landed on main at `2c7c4e6c0`; window released.
-The accepted [sealed-image preparation](../../../qa/security-levels/sprints/PF-27-S04/sealed-image-next-20260912.md)
-is construction-qualified in source `ee1ac023c`: bounded Linux memfd copy, verified
-seals and destination hash, with no public descriptor or execution surface.
-RTX default3/synthetic39/affected356 (2 existing skips), scoped lint/parity/build
-and actual-key TMUX passed; Astra18/Fable19 exit0/no findings. See
-[exact evidence](../../../qa/security-levels/sprints/PF-27-S04/sealed-20260912/README.md).
-Dynamic loader trust, exec binding, spawn supervision and installation authority
-remain separate gates. Sealed checkpoint `140e094ad` landed and its window was
-released. The receiving owner accepted [static-probe build-only feasibility](../../../qa/security-levels/sprints/PF-27-S04/static-probe-next-20260912.md),
-not a release strategy change: isolated RTX prerequisites and QA only, no source,
-dependency or service changes, no artifact invocation. One existing contingency
-is allocated to its evidence check; history1–19 remains intact. Initial build101
-is retained; owner accepted one unchanged-graph retry with private pinned static
-OpenSSL3.5.8, target-scoped settings and no artifact invocation. Its prerequisite
-build stopped2 before Cargo on missing linux/mman.h; a second explicit amendment
-allows private authenticated userspace UAPI headers and same-prerequisite retry,
-not graph changes or weakened checks. That build passed but linkage rejected the
-musl-gcc injected interpreter. Pinned rust-lld corrected final linkage while
-preserving PIE: dev artifact f6ca8e3368dc passes size, noPT_INTERP/noDT_NEEDED and
-GNU negative-control checks through actual-key TMUX; source/locks unchanged.
-Fable20 exit1/patch correct identified one P3 rejected-artifact receipt gap,
-resolved by exact RTX hash/size capture without another review. All failures
-remain preserved. [Final proof and limits](../../../qa/security-levels/sprints/PF-27-S04/static-probe-20260912/CURRENT.md).
-This is build feasibility, not a release/static-runtime strategy decision or
-execution authority. No main window is granted.
-
-## Round-five execution amendment — 2026-09-04
-
-The user authorized these three parallel agents and assigned integration to
-Codex /root. This amendment supersedes earlier dispatch and reviewer instructions
-for this round. The immutable source base is `07791288b6feeccfaee5a57c12452359cc666957`,
-including the reconciled provider UX. The separate committed allocation packet
-is applied before implementation; base is not a claim of qualification.
-
-PF-35-S01's engineering reservation is returned to draft with an external handoff,
-as permitted by the sprint process. Its independently operated corpus campaign
-remains pending/in progress externally, not cancelled or completed. Do not change
-that external checkout or relax PF-35-S02/S03 or protected-mode qualification gates.
-It is not a dependency of the three engineering lanes below.
-
-| Lane | Sprint | Owner | Worktree suffix / branch suffix |
-| --- | --- | --- | --- |
-| Broker | PF-27-S04 | /root/broker | security-round5-broker |
-| Provenance | PF-30-S01 | /root/provenance | security-round5-provenance |
-| Security view | PF-24-S01 | /root/security_ui | security-round5-ui |
-
-Exact coordinates are in front matter and literal scopes in each sprint.
-The coordinator owns shared module exports, Cargo/Bazel/lock registration,
-plan/navigation, humanTest.html, securityProgress.html and the review ledger.
-Worker-owned crate manifests are proposed by the worker; shared edges are
-serialized by the coordinator. No two agents edit the same checkout.
-
-PF-27 starts by recovering reviewed leaves, then implements the digest-bound
-PF-41 adapter and real Linux IPC evidence. Raw paths must not be added to the
-minimized shared audit schema. Native service/data-plane and all-OS qualification
-remain required; intermediate commits do not complete or activate the broker.
-PF-30 starts with immutable envelopes and trusted admission, then native ingress
-and provider seams; contract-only tests do not complete its existing checklist.
-Provenance also owns `codex-rs/core/src/session/session.rs` for the narrow client
-admission-policy builder hook and `codex-rs/core/src/client_tests.rs` for actual
-provider wire tests; no other lane owns these paths. Keep ResponseItem and
-provider-owned passthrough schemas unchanged. Missing protected admission or
-screening fails closed; configured intent does not establish effective readiness.
-PF-30 review remediation additionally owns `core/src/realtime_conversation.rs`
-and `core/src/realtime_conversation_tests.rs` under codex-rs. Guard the direct
-realtime websocket path as well as WebRTC using the same effective-policy
-admission rule; prove no network admission in protected/unavailable states.
-Keep Permissive unchanged and inspect live policy changes on an existing stream.
-This closes a provider-route omission; it does not activate protected realtime.
-PF-24 delivers observation-only requested/effective-state UX. No activation,
-grants or downgrade mutations are introduced; unavailable protection is explicit.
-
-Builds and compilation run only on the authorized RTX host. Mac storage stays on
-CorbanuDrive. Use actual-key TMUX tests for interactive changes and supporting
-TMUX smokes for the other lanes. Review engines are Astra High for autoreview
-and Fable 5.1 High through Corbanu Terminal's TMUX harness externally.
-Each lane has a maximum of five review invocations unless critical findings
-continue; normally one of each engine, with warranted remediation follow-ups.
-The coordinator allocates numbered reviews and retains immutable results.
-
-Reserve at least 35% of delivery capacity for integration and qualification.
-Existing broker/provenance midpoint estimates (12/7 days) remain uncertain
-historical inputs, not new completion promises. Reforecast from observed work
-and platform gaps at each handback; do not suppress outstanding evidence to fit
-a schedule. The coordinator monitors agent progress every 15 minutes.
-
-Dispatch/evidence ledger:
-`qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/README.md`.
-
-### Code reference table
-
-### Rolling pipeline allocation — 2026-09-04
-
-The user authorized keeping freed agent slots occupied until a substantial
-human-testable checkpoint. PF-24-S01 is archived. Continue PF-27-S04 service
-composition and PF-30-S01 ingress completion, and allocate PF-30-S04 to the
-freed agent as a separate **denial-only stage-one memory dispatch boundary**.
-Its prerequisite is completed PF-22-S02, not an unfinished screening interface:
-all protected raw-rollout requests deny independently of PF-30-S01 admission.
-PF-30-S02 still owns full persisted lineage and retains its existing dependencies.
-No dependency is waived and PF-35 stays external.
-
-PF-30-S04 uses the exact new memory-dispatch coordinates in front matter.
-It exclusively owns core/src/client.rs and core/src/session/mod.rs under
-codex-rs, removed from PF-30-S01 before dispatch. Core lib/codex_thread factory
-exports and test registries are serialized by the coordinator. Other scopes
-remain disjoint. Adopt the host-owned opaque factory/typed denial design in
-qa/security-levels/sprints/PF-30-S04, including dispatch-time retries, identity,
-live policy and finite worker retry behavior; no public policy setter.
-
-PF-27-S04 additionally owns codex-rs/secret-broker-service/ for composition of
-broker/Vault/audit without a cycle. Trusted bootstrap handles and synthetic
-subprocess evidence are allowed. Creating principals, installing services,
-changing ownership/ACLs or transferring existing Vault material still requires
-separate explicit setup authority. Streaming/output qualification remains open.
-
-PF-30-S01 continues complete-input/unknown-source/mixed-source/provider envelope
-work only within its remaining scope. New shared hooks are proposed to root,
-not patched concurrently with PF-30-S04. Producer fixtures cannot manufacture
-production screening readiness.
-
-Current reservation owners: broker /root/broker, provenance /root/provenance,
-memory-dispatch /root/security_ui. The previous UI allocation is historical.
-New memory track review budget is five maximum; prior broker/provenance review
-ledgers remain visible and are not reset. Consolidate source and tests before
-requesting the coordinator's next numbered review.
-
-| Path or symbol | Why it matters |
+| Path | Why |
 | --- | --- |
-| `codex-rs/tui/src/slash_command.rs::SlashCommand` | Adds `/security` to the command surface |
-| `codex-rs/tui/src/chatwidget/slash_dispatch.rs` | Routes `/security` to its TUI |
-| `codex-rs/tui/src/chatwidget/permission_popups.rs` | Existing permission UX patterns; security levels must remain distinct and understandable |
-| `codex-rs/tui/src/app/config_persistence.rs` | Persists a confirmed level and updates active state |
-| `codex-rs/config/src/config_toml.rs::ConfigToml` | Typed configuration and schema boundary |
-| `codex-rs/protocol/src/models.rs::PermissionProfile` | Existing low-level permission policy that `/security` composes without redefining |
-| `codex-rs/tui/src/bottom_pane/approval_overlay.rs` | Existing approval UI used for protected-action confirmation |
-| `codex-rs/security-policy/src/lib.rs` | Existing feature-worktree crate exporting levels, actor chains, authorization requests, bounded grants, mandates, receipts, and revocation state |
-| `codex-rs/core/src/agent/{control,registry}.rs` | Human/agent/session/task identity and child inheritance supplied by the Core policy adapter |
-| `codex-rs/vault/src/lib.rs::reveal_for_programmatic_use` | Existing raw-secret helper boundary that PF-13-S04 must gate in Moderate and Aggressive |
-| `codex-rs/cli/src/main.rs::run_vault_auth_helper` | Existing supported CLI escape path preserved only for Permissive |
-| `codex-rs/network-proxy/src/credential_broker.rs::CredentialBroker` | Existing broker stores `real_value: String`; PF-13-S03 replaces that state on the capability route |
-| `codex-rs/network-proxy/src/credential_broker/providers/openai.rs` | First exact provider fixture: HTTPS `api.openai.com:443`, `POST /v1/*`, bearer authorization |
-| `codex-rs/network-proxy/src/policy.rs` | Existing egress control composed by Aggressive without overriding an existing denial |
-| `codex-rs/{Cargo.toml,Cargo.lock}`, repository-root `MODULE.bazel.lock`, and crate `BUILD.bazel` files | Dependency and Cargo/Bazel parity required in the sprint that changes each crate edge |
+| `codex-rs/tui/src/security/`, `tui/src/bottom_pane/security_view.rs` | Existing `/security` view (PF-24-S01) |
+| `codex-rs/tui/src/chatwidget/permission_popups.rs`, `tui/src/app/permission_confirmation.rs` | Existing permission picker and PF-83 confirmation path |
+| `codex-rs/features/src/lib.rs` | Feature flags; add `security_levels` |
+| `codex-rs/core/src/security/` | Effective policy, transition, taint, protected surface |
+| `codex-rs/secret-broker-service/`, `codex-rs/network-proxy/` | Broker (PF-27) and egress/destination policy (PF-33) |
+| `codex-rs/execpolicy/` | Forbidden-command rules used by Aggressive vault denial |
 
 ## Sprint execution map
 
-This map currently covers **52 current and 32 completed archived sprints**.
-The [ordered execution index](../../sprints/current/p0-security-levels/index.md)
-is dependency-correct; feature IDs are not execution order. Archive orders 1–9
-stay unchanged and current orders start at 10. Existing allocation coordinates
-follow upstream; the five preparation/foundation drafts and five new follow-ups
-remain `UNALLOCATED` until assigned. PF-27-S03 and PF-34-S04 are completed and
-archived; PF-19-S02, PF-20-S02, PF-21-S02, PF-13-S06, and PF-41-S03 are also
-completed and archived. PF-35-S01 remains external and `draft`; PF-27-S04 is
-the sole security `in_progress` allocation. Other current records are `draft`, with completed
-prerequisites and checked allocation required before execution. Archived links
-document original scope, not new passes.
+Twenty current sprints: the 19 named in decision 3 plus the picker. A lane is a
+worker slot; a sprint still waits for its dependencies in any lane.
 
-| Feature ID | Plan feature | Sprint records (completed links are archived) | State |
-| --- | --- | --- | --- |
-| `PF-15` | Typed security-level domain | [PF-15-S01](../../sprints/archive/p0-security-levels/pf-15-s01-security-level-domain-foundation.md) | S01 completed and archived |
-| `PF-16` | Deterministic authorization request/decision | [PF-16-S01](../../sprints/archive/p0-security-levels/pf-16-s01-authorization-decision-contract.md) | S01 completed and archived |
-| `PF-17` | Bounded grants and delegation | [PF-17-S01](../../sprints/archive/p0-security-levels/pf-17-s01-bounded-delegation-grants.md) | S01 completed and archived |
-| `PF-18` | Human mandates and secret-free receipts | [PF-18-S01](../../sprints/archive/p0-security-levels/pf-18-s01-human-mandates-and-receipts.md) | S01 completed and archived |
-| `PF-19` | Revocation and invalidation contract | [PF-19-S01](../../sprints/archive/p0-security-levels/pf-19-s01-revocation-contract.md), [PF-19-S02](../../sprints/archive/p0-security-levels/pf-19-s02-dispatch-revocation-fence.md) | S01/S02 completed and archived |
-| `PF-20` | Versioned security persistence | [PF-20-S01](../../sprints/archive/p0-security-levels/pf-20-s01-versioned-security-persistence.md), [PF-20-S02](../../sprints/archive/p0-security-levels/pf-20-s02-protected-authoritative-state.md), [PF-20-S03](../../sprints/archive/p0-security-levels/pf-20-s03-local-controller-integrity-root.md) | S01/S02/S03 archived; combined native dependency qualified at b12e32db3; protected activation blocked |
-| `PF-21` | Frozen Permissive compatibility | [PF-21-S01](../../sprints/archive/p0-security-levels/pf-21-s01-permissive-compatibility-baseline.md), [PF-21-S02](../../sprints/archive/p0-security-levels/pf-21-s02-expanded-compatibility-and-upstream-drift.md) | S01/S02 completed and archived |
-| `PF-22` | Effective runtime policy and agent inheritance | [PF-22-S01](../../sprints/archive/p0-security-levels/pf-22-s01-runtime-policy-and-agent-inheritance.md), [PF-22-S02](../../sprints/archive/p0-security-levels/pf-22-s02-protected-runtime-and-upstream-seams.md) | S01/S02 completed and archived; PF-23/PF-24 retain authenticated adapter provenance |
-| `PF-13` | Vault-backed exact-host credential boundary | [S01](../../sprints/archive/p0-security-levels/pf-13-s01-vault-backed-exact-host-credential-substitution.md), [S02](../../sprints/archive/p0-security-levels/pf-13-s02-scoped-vault-resolver.md), [S03](../../sprints/archive/p0-security-levels/pf-13-s03-openai-exact-host-proxy-substitution.md), [S04](../../sprints/archive/p0-security-levels/pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md), [S05](../../sprints/archive/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md), [S06](../../sprints/archive/p0-security-levels/pf-13-s06-credential-usage-reservations.md), [S07](../../sprints/current/p0-security-levels/pf-13-s07-integrated-credential-boundary-qualification.md) | S01–S06 completed; S07 draft |
-| `PF-23` | Moderate/Aggressive protected-surface enforcement | [S01](../../sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md), [S02](../../sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md), [S03](../../sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) | draft |
-| `PF-24` | `/security` profile selection and transition TUI | [S01 completion](../../../qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/combined-qualification.md), [S02](../../sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) | S01 completed and archived after final combined RTX/TMUX qualification; S02 draft |
-| `PF-25` | Human grants, revocation, and kill-switch TUI | [S01](../../sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md), [S02](../../sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md) | draft |
-| `PF-26` | Harnesses, true-TUI/live-repository qualification, human acceptance, and finished docs | [S01](../../sprints/archive/p0-security-levels/pf-26-s01-security-harnesses-and-standards-crosswalk.md), [S04](../../sprints/current/p0-security-levels/pf-26-s04-final-automated-qualification.md), [S02](../../sprints/current/p0-security-levels/pf-26-s02-true-tui-and-live-repository-qualification.md), [S03](../../sprints/current/p0-security-levels/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md) | S01 completed; S04/S02/S03 draft |
-| `PF-27` | Shared contracts, isolated credential broker and secretless launch | [S01](../../sprints/archive/p0-security-levels/pf-27-s01-shared-security-contracts.md), [S02](../../sprints/current/p0-security-levels/pf-27-s02-secretless-agent-launch.md), [S03](../../sprints/archive/p0-security-levels/pf-27-s03-platform-containment-contract.md), [S04](../../sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md) | S01/S03 completed; S04 staged runtime tested, production service/streaming/platform evidence pending; S02 draft |
-| `PF-28` | Central output and reflected-secret protection | [S01](../../sprints/current/p0-security-levels/pf-28-s01-central-secret-output-gate.md), [S02](../../sprints/current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md) | draft |
-| `PF-29` | Protected-mode inventory and human migration | [S01](../../sprints/current/p0-security-levels/pf-29-s01-protected-mode-inventory.md), [S02](../../sprints/current/p0-security-levels/pf-29-s02-human-secret-migration.md) | draft |
-| `PF-30` | Durable provenance and post-taint authority | [S01](../../sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md), [S02](../../sprints/current/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md), [S03](../../sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md) | S01 rebuilt in round five; production screening/coverage pending. S02 retains accepted stage-one memory policy-binding gap; S02/S03 draft |
-| `PF-31` | Isolated retrieval and download promotion | [S01](../../sprints/current/p0-security-levels/pf-31-s01-pinned-retriever-isolation.md), [S02](../../sprints/current/p0-security-levels/pf-31-s02-bounded-fetch-no-fallback.md), [S03](../../sprints/current/p0-security-levels/pf-31-s03-download-quarantine-promotion.md), [S04 completed](../../sprints/archive/p0-security-levels/pf-31-s04-retriever-artifact-preparation.md) | draft |
-| `PF-32` | Screened web facade and search providers | [S01](../../sprints/current/p0-security-levels/pf-32-s01-web-facade-and-registry.md), [S02](../../sprints/current/p0-security-levels/pf-32-s02-existing-search-and-native-bypass.md), [S03](../../sprints/current/p0-security-levels/pf-32-s03-exa-search-adapter.md), [S04](../../sprints/current/p0-security-levels/pf-32-s04-brave-search-adapter.md), [S05](../../sprints/current/p0-security-levels/pf-32-s05-searxng-search-adapter.md), [S06](../../sprints/current/p0-security-levels/pf-32-s06-privacy-routing-and-failover.md) | draft |
-| `PF-33` | Destination validation and connection enforcement | [S01](../../sprints/current/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md), [S02](../../sprints/current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md), [S03 completed](../../sprints/archive/p0-security-levels/pf-33-s03-destination-policy-contract.md) | S03 completed; S01/S02 draft |
-| `PF-34` | Sanitization quarantine and safe review | [S01](../../sprints/current/p0-security-levels/pf-34-s01-render-aware-sanitization.md), [S02](../../sprints/current/p0-security-levels/pf-34-s02-quarantine-state-and-store.md), [S03](../../sprints/current/p0-security-levels/pf-34-s03-safe-quarantine-review.md), [S04 completed](../../sprints/archive/p0-security-levels/pf-34-s04-screening-contract-and-fixtures.md) | S04 completed; S01-S03 draft |
-| `PF-35` | Local classifier and blind qualification | [S01](../../sprints/current/p0-security-levels/pf-35-s01-classifier-corpus-and-evaluation.md), [S02](../../sprints/current/p0-security-levels/pf-35-s02-local-cpu-detector-artifact.md), [S03](../../sprints/current/p0-security-levels/pf-35-s03-calibration-and-ingress-gate.md) | S01 draft/external campaign pending: DeepSeek API through Corbanu Terminal; foundation merged. S02/S03 draft; RTX PRO 6000 fine-tuning, offline CPU inference unchanged |
-| `PF-36` | Optional hosted detector and safe fallback | [S01](../../sprints/current/p0-security-levels/pf-36-s01-hosted-detector-consent-contract.md), [S02](../../sprints/current/p0-security-levels/pf-36-s02-hosted-bakeoff-and-local-fallback.md) | draft |
-| `PF-37` | Origin-bound browser login and human handoff | [S01](../../sprints/current/p0-security-levels/pf-37-s01-origin-bound-browser-login.md), [S02](../../sprints/current/p0-security-levels/pf-37-s02-human-auth-handoff-lifecycle.md) | draft |
-| `PF-38` | Typed financial execution and exact effects | [S01](../../sprints/current/p0-security-levels/pf-38-s01-typed-financial-executor.md), [S02](../../sprints/current/p0-security-levels/pf-38-s02-full-effect-preview-and-mandate.md), [S03](../../sprints/current/p0-security-levels/pf-38-s03-sign-broadcast-and-receipts.md) | draft |
-| `PF-39` | Derived financial views and disclosure control | [S01](../../sprints/current/p0-security-levels/pf-39-s01-protected-financial-derived-views.md), [S02](../../sprints/current/p0-security-levels/pf-39-s02-outbound-disclosure-controls.md) | draft |
-| `PF-40` | Agent Sweep and safe recovery | [S01](../../sprints/current/p0-security-levels/pf-40-s01-sweep-events-and-rules.md), [S02](../../sprints/current/p0-security-levels/pf-40-s02-isolated-sweep-reviewer.md), [S03](../../sprints/current/p0-security-levels/pf-40-s03-sweep-alerts-and-recovery.md) | draft |
-| `PF-41` | Effective security inspector and audit | [S01](../../sprints/current/p0-security-levels/pf-41-s01-effective-security-inspector.md), [S02](../../sprints/current/p0-security-levels/pf-41-s02-tamper-evident-security-audit.md), [S03](../../sprints/archive/p0-security-levels/pf-41-s03-durable-security-event-foundation.md) | S03 completed; S01/S02 draft |
-
-### Rolling local-root allocation — 2026-09-04
-
-Product authority selected data-rollback protection, excluding whole-machine
-snapshot rollback; see the product specification's **Data-rollback scope
-decision — 2026-09-04**. Implement the Linux local-controller root proposed in
-[the design](../../../qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/protected-audit-root-design.md)
-under [PF-20-S03](../../sprints/archive/p0-security-levels/pf-20-s03-local-controller-integrity-root.md).
-This is a genuine missing PF20 native dependency, not an unfinished PF27 bypass.
-Prerequisites PF20S02, PF41S03 and PF27S03 are archived; PF27S04 will consume
-the adapter at its separate protected bootstrap/containment gate.
-
-The provenance agent transfers to the exact security-local-anchor coordinates
-in front matter. PF30S01 returns to draft, preserving source 2a4fb5857, final
-evidence e890ae4a9, integrated 0266c2db9 and its exhausted 5/5 review ledger.
-Remaining producer/screening coverage is not completed and no downstream
-dependency unlocks. The three current reservations are PF27S04, PF30S04 and
-PF20S03. Root owns shared Core exports and workspace Cargo/Bazel/locks; the new
-leaf crate, narrow Core anchor adapters and QA are allocated only to PF20S03.
-PF27 retains broker/platform access controls and privileged deployment.
-No TPM/off-host implementation is needed. No elevated installation or real
-Vault migration is authorized by the scope choice; missing protected state
-continues to fail closed.
-
-PF20S03 is now completed and archived following combined RTX source `b12e32db3`:
-controller18, Core127, audit46, config229, memory44+3, UI235, actual-key TMUX4
-and restart passed. No source/formatter/lock delta or additional review.
-[Combined evidence](../../../qa/security-levels/sprints/PF-20-S03/combined-b12e32d/README.md).
-PF30S04 was already archived; only PF27S04 retains an implementation reservation.
-Native principal isolation, privileged deployment and protected activation remain
-separate gates. Routine human-memory fixture work continues outside sprint capacity.
-
-### PF-13 integration contract
-
-PF-13 uses existing security primitives instead of defining a parallel
-capability system. `codex-security-policy` owns secret-free request, actor,
-grant, revocation, and receipt types. Core owns human/agent/session/task identity,
-policy composition, and the bounded capability lifecycle. Vault resolves an
-approved label only inside a zeroizing callback. The network proxy validates the
-transport and injects the credential only for `POST https://api.openai.com/v1/*`
-using the existing OpenAI bearer header; redirects and adjacent hosts fail.
-
-Permissive retains the shipping `vault auth-helper` and broker behavior.
-PF-13-S04 makes that raw-secret helper unavailable to agent execution under
-Moderate and Aggressive. PF-27 then moves raw resolution to a separately
-constrained process; PF-28 adds reflected-response/output gating, PF-29 adds
-safe migration and PF-33 binds actual network connections. PF-13-S05 depends
-on those completed boundaries before collecting canary/independent-review proof.
-The original in-process slice alone is not the final protected-mode guarantee. PF-26-S03 updates finished vault/authentication guidance
-only after candidate acceptance.
-
-## Expanded feature contracts
-
-These are unfinished contracts authorized for planning/execution through their
-individual sprints, not claims of shipped behavior. New crate/module paths in
-sprints are explicitly planned; validate actual foundation paths in the recorded
-implementation worktree before readiness. Add Cargo/Bazel parity in the owning
-sprint. [Source decisions](../security-source-reconciliation.md) are authoritative
-for design provenance; product scope remains in the specification.
-
-### PF-27
-
-Private system preflight qualified at source19f6624938c53e0c9709e1b25ada4a44fd13267e/
-Rust09f72396304d80a82cf466e220378f763ea8313b. [Literal proof](../../../qa/security-levels/sprints/PF-27-S04/system-preflight-20260913/README.md):
-all30 command exits plus suite0 in105s, five preflight cases, retained suites,
-strict lint/parity and source/module/fixture invariance on non-root RTX/TMUX.
-Astra39/Fable40 exit0/findings[]; no source repair or extra opinion. Private
-uncalled all-or-nothing preparation only; no transfer, native activation or
-identity-guard relaxation. Manager receiving next; later policy1.7 gates remain.
-
-Manager accepted combined session c1d866fd4/Rustec50d0378:29 command exits+
-suite0,139s actual RTX/TMUX, strict/parity/source/modules/input invariance.
-Next [private system-preflight allocation](../../../qa/security-levels/sprints/PF-27-S04/system-preflight-allocation-20260913.md)
-uses same sole owner/worktree/plan base; sourcebaseae2a4c940, seven paths550/700,
-reviews39/40 retain1–38. All-or-nothing input preparation only, no spawn/bind,
-native activation or identity-guard relaxation. Later policy1.7 gates unchanged.
-
-Private root-session pump qualified at source74263bbbc5bf2163f571947c6828fbf108866c3f/
-Rustb7275b0c0433f081d6423463993abc658141a6a7. [Literal evidence](../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-session-20260912/README.md):
-29 command exits+suite0 on exact non-root RTX/TMUX (105s), seven actual session
-cases plus full retained proof, strict lint/parity/source/lock invariance.
-Astra37/Fable38 exit0/findings[]; no runtime corrections. Fixed two-listener
-private pump only; manager receiving is next. Policy1.7 internal-only N/A does
-not waive later protected-user/PF26 isolated functional/native/human gates.
-
-Private descriptor-pair root dispatch now qualified at source
-c7d48e4822293ec0899311be63fbd08848516ba0/Rustbd56b597e348d2924da21706c594c20a868bace4.
-[Literal evidence](../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-dispatch-20260912/README.md):
-28 command exits+suite0 on exact non-root RTX/TMUX (104s), six actual two-child
-PF20 protocol/lifecycle cases, preserved prior suites, strict scoped lint and
-source/lock invariance. Astra35/Fable36 exit0/findings[]; original failures kept.
-Fixed production factories/public Child composition/default builds unchanged;
-this private increment does not enable the live service. Manager receiving
-combined-tree proof is next; policy1.7 N/A only here, later protected-user/PF26
-isolated functional execution, native/live-repository/human gates remain open.
-
-22:45UTC: manager accepted exact combined compatibility37f23b991/Rust99265431b6,
-all25 command exits+suite0 and actual RTX/TMUX/locks proof. Next sole-owner
-[fifteen-path private root dispatch](../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-dispatch-allocation-20260912.md)
-is allocated from clean12e0bc2d8,740target/800hard. Fresh synthetic root/client
-bridge explicitly approved, no production factory widening; reviews35/36 preserve
-1–34. Earlier compatibility assignments below are historical. No human decision.
-
-Descriptor identity compatibility is qualified for manager receiving, source
-d776e938d8a0c07cc9b50b1d6a818d9f6feb0c11/Rustb48e9c4f9cb89e814b8bdabd6069be86cc47badd.
-[Exact proof](../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-compat-20260912/README.md):
-all25 commands+suite0 on non-root RTX/TMUX, both transport entries/five rejection
-scenarios, retained identity2, affected suites/strict lint/locks/source pass;
-Astra33/Fable34 exit0/findings[]. Original failed attempts retained. This is
-synthetic/default-OFF internal compatibility only; receiving combined proof,
-root dispatch composition and later protected-user/PF26/native gates remain open.
-
-Manager accepted receiving Stage B e1cc38a70/Rust2588dfe0: all17 commands+suite0,
-actual RTX/TMUX/provenance and unchanged locks verified. Next sole-owner
-[descriptor identity compatibility allocation](../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-compat-allocation-20260912.md)
-starts at clean6b393f134 with eleven exact paths/hard800, including narrow PF20
-dependency surfaces now serialized to this owner. Reviews33/34 authorized without
-resetting1–32. No native/default activation or whole-sprint acceptance.
-
-Combined Stage A63cbce998/Rust205e89cd remains accepted; all15 scoped exits0.
-[Stage A receiving proof](../../../qa/initiative-control/status-display/pf27-stage-a-receiving-20260912.md).
-
-StageB private descriptor admission is qualified for manager receiving at
-source7839f9f653a3471bb9bbed19ebc7bed43308bbe3/Rust5a4ee88b5fe4c9b946842a4709f9b88f85c54c79,
-892changed lines/same7paths within amended900. [Literal proof](../../../qa/security-levels/sprints/PF-27-S04/descriptor-admission-20260912/README.md):
-all18 repairedexits0, admission8/tenactualpeer scenarios, fullservice59 with11
-exclusions explicitly covered, preservedA/adapter suites, strict scopedlint,
-read-onlyparity/source/locks and actual-key RTX TMUX pass. Astra30 P2 bufferedEOF
-reproduced/repaired; Fable31 missingreceipt fixed; Fable32 patchcorrect/exit1
-soleP3 tablecount fixed without runtime change or extra review. Originals
-preserved, no sourcepush/native/protected/product acceptance. Manager owns
-receiving/combinedproof and next allocation, now accepted above; policy1.7 N/A only this increment.
-
-StageB now allocated by manager67273f7e19f3d515086147c7f8408245e986369d after
-accepted combinedA63cbce998 proof. [Literal admission allocation](../../../qa/security-levels/sprints/PF-27-S04/descriptor-admission-allocation-20260912.md):
-seven exact paths, hard900 additions/deletions against qualified6d770938c;
-manager3e76ee4ec amended at measured791 for tests/runner only; manager251074ef7
-permits only review30 buffered-EOF repair to runtime254 plus regression/review32;
-same sole owner/worktree/branch/original base, no rebase. Preserve A lifecycle,
-add private bounded socket admission and hashed static connector, all actual
-socket/UID/death/delivery/race cases. Reviews30/31 are +2, not reset. No source
-push/native/activation/dependencies/locks/Core/Vault/PF20 edits. Record launch
-checkpoint before source edits; policy1.7 N/A only this internal increment.
-
-September12 manager accepted combined receiving c5e606fa2/Rust18cf961a proof.
-The initial pair/admission draft reached758 lines before complete test coverage;
-unqualified WIPdb971e9b8 is preserved with hashes locally and onRTX, not accepted.
-Manager narrowed execution to [StageA stable identity and two-child lifecycle](../../../qa/security-levels/sprints/PF-27-S04/descriptor-pair-a-allocation-20260912.md):
-ten exact source/test/fixture paths, hard800 changed lines against62956038e;
-same sole owner/worktree/branch/original base, narrowing launchdb971e9b8.
-Only PairImages and launch_pair(images,deadline) returning existing LaunchHandle;
-no admission/UID/generation/socket surface, shared lock, PF20 or native activation.
-Reviews28AstraHigh/29Fable5.1High now cover A, retaining all historical usage.
-StageA sourcee0eb9eac4/Rustf64820d0 is qualified at614 changed lines: adapter4
-normal/8 supported-OS, default3, pair5/real pair1, owner8/real owner3, profiles1+1,
-full service57 pass; five service ignored cases executed separately. Strict
-scoped two-crate Clippy, read-only Cargo/Bazel parity and actual-key RTX TMUX
-pass; both reviews28/29 exit0/findings[], no repairs. [Original evidence](../../../qa/security-levels/sprints/PF-27-S04/descriptor-pair-20260912/README.md).
-Manager receiving integration remains required. Accepted policy1.7's independent
-isolated execution gate has reasoned N/A only for this private increment, not
-later protected-user flows/PF26 or the whole sprint. No product readiness claim.
-StageB admission/connector/missing cases remain deferred until accepted A and
-a fresh literal manager allocation. No omitted test is waived or called Done.
-
-September12 receiving owner accepted adapterfb7523f4b for branch continuation
-and allocated the [single-child asynchronous owner](../../../qa/security-levels/sprints/PF-27-S04/descriptor-owner-next-20260912.md).
-Exact private reservation/launch/status API and QA lifecycle script were frozen
-there before implementation; same owner/worktree/branch/base. Literal service
-manifest spawn/sealed/mod seams and synthetic dependency/lock parity only.
-No adapter semantic, children.rs/PF20/Core/Vault/native/dashboard/main changes.
-Permit-before-image, worker-before-spawn, sticky cancellation, no-block caller
-Drop, late-child cleanup and unrecoverable-quarantine proof now pass at
-source4d830cbb3/Rust7e488200: default3/focused8/real3/profile2/service52;
-four standard ignored cases separately covered; actual-key RTX TMUX and strict
-Clippy/Cargo-Bazel parity pass. Astra25 clean, Fable26 lint finding reproduced
-and repaired, Fable27 clean; historical results preserved, five current-window
-slots spent. [Frozen proof](../../../qa/security-levels/sprints/PF-27-S04/descriptor-owner-20260912/README.md).
-PF27 remains in_progress. Two-child/native admission, trusted credential wiring,
-all-OS containment and product/release acceptance remain separate unfinished
-scope; no privileged, main or protected-activation action claimed.
-
-September12 17:29UTC: Travis explicitly approved the isolated Linux launch
-adapter; manager relayed execution authority. The [accepted adapter-only
-allocation](../../../qa/security-levels/sprints/PF-27-S04/descriptor-launch-next-20260912.md)
-adds `codex-rs/linux-pidfd-spawn/`, workspace Cargo/Bazel registration and
-non-root synthetic RTX/second-Linux proof to the existing sole PF27 lane.
-Service forbid(unsafe_code) remains intact; no service wiring or privileged
-installation/credential execution/main push/release is included. Stage one
-precedes separately bounded asynchronous ownership integration. Replenished
-review allowance covers two necessary independent security/evidence closeouts.
-
-Adapter implementation now qualified at source30b471a47/Rust2d270c5c:
-focused3/OS7/service44/static-profile2/TMUX7 pass, second-host GNU2.39 explicit
-unsupported1 pass; service's one artifact exclusion remains disclosed.
-Cargo/Bazel parity passes; Astra23/Fable24 exit0/findings[]. Receiving-owner
-integration disposition and [next single-child owner allocation](../../../qa/security-levels/sprints/PF-27-S04/descriptor-owner-next-20260912.md)
-remain separate from [this internal proof](../../../qa/security-levels/sprints/PF-27-S04/descriptor-launch-20260912/README.md).
-September12 receiving owner accepted [sealed-byte ELF profile inspection](../../../qa/security-levels/sprints/PF-27-S04/runtime-elf-next-20260912.md)
-on clean8d1a4f49/incremental97d, original d870 allocation unchanged. Literal service
-`src/launch/manifest/{elf.rs,elf_tests.rs,mod.rs,sealed.rs,sealed_tests.rs}` only,
-QA/runtime-elf-20260912 and existing ledgers. Two scoped closeout reviews granted;
-no invocation/install/main window or runtime qualification. Frozen bounds/tag
-vocabulary, original matrix and exact coordinates remain in that accepted record.
-Implemented635655c34: default3/synthetic44/explicit artifact1/affected356 and
-actual-key TMUX pass after the test-only Fable22 correction; Astra21 clean,
-Fable22 original exit1 retained. [Proof](../../../qa/security-levels/sprints/PF-27-S04/runtime-elf-20260912/README.md)
-awaits manager disposition/integration, not execution authority.
-
-**Isolated credential broker and secretless launch.** One trusted broker owns raw credential resolution and a bounded authenticated IPC surface. All model/exec/child/MCP/plugin/hook/provider-pane launch paths use a secretless allowlist and OS restrictions; unsupported platform containment prevents protected activation.
-
-### PF-28
-
-**Central output and reflected-secret protection.** One broker-side output registry/gate covers managed values and supported encodings, short secrets, chunks, active rotations, reflected responses and every persistence/export sink. Resource pressure or unsupported response decoding denies; it never evicts protection for live credentials.
-
-### PF-29
-
-**Protected-mode inventory and human migration.** Inventory only scoped supported sources without leaking their values. Human preview binds migration to exact file identities; use encrypted vault/recovery storage, atomic journal, re-audit and clean-context handling for contaminated histories. Cancel is inert; failure cannot claim activation.
-
-### PF-30
-
-**Durable provenance and post-taint authority.** Trusted ingress assigns immutable source/authority/lineage envelopes. Propagate conservative taint through every provider serialization, summary, memory, cache/import/export, child/mailbox and resume path. Re-evaluate protected actions at use; neither a detector nor a summarizer creates authority.
-
-Completed independent denial contract: [PF-30-S04 combined qualification](../../../qa/security-levels/sprints/PF-30-S04/combined-qualification.md).
-Merged source 6a6bb029d passed Core110, memory44+3, UI235 and four actual-key
-TMUX tests on RTX after clean fix/format. The sprint is archived; full persistent
-provenance and positive protected inference remain incomplete under S01/S02.
-Its completed runtime-policy prerequisite does not authorize positive protected
-memory; S01/S02/S03 keep their original source and persistence qualification gates.
-
-### PF-31
-
-**Isolated retrieval and download promotion.** Pin a Scrapling-class public retrieval artifact and isolate it from workspace/vault/wallet/browser profiles/IPC with bounded resources and egress. Fetch/open/click/find cannot fall back to the host browser. Downloads are sealed until exact human digest/destination promotion, which preserves taint and does not execute.
-
-### PF-32
-
-**Screened web facade and search providers.** Keep web.run semantics in Permissive; protected modes use one normalized screened facade. Implement the existing SearchClient adapter plus Exa, Brave and SearXNG with minimal queries, stable references, explicit capabilities, cost limits and already-authorized same-role failover. Native search that cannot be screened before model access is disabled.
-
-### PF-33
-
-**Destination validation and connection enforcement.** Enforce scheme/host/port/method/path and all resolved addresses at redirects, retries and actual connections; prevent rebinding, private-network/metadata access and direct socket/proxy/QUIC escape. A human-configured exact self-hosted search service is a narrow adapter exception, not arbitrary private fetch.
-
-### PF-34
-
-**Sanitization quarantine and safe review.** Render-aware cleaning strips hidden/non-body and unsafe control content, preserving raw/sanitized digests and immutable provenance. Encrypted bounded quarantine enforces allow/rescan/quarantine/reject before model visibility, with safe human review and restart recovery. Cleaned or released content remains untrusted.
-
-### PF-35
-
-**Local classifier and blind qualification.** Ship a licensed, reproducible, offline CPU detector with leakage-free evaluator-owned holdouts and profile-calibrated thresholds. Screen complete bounded inputs before exposure. Missing artifacts/timeouts pause ingestion in Moderate and Aggressive; forced false negatives still cannot authorize secrets or financial actions.
-
-Travis Good's September 11, 2026 decision supersedes the August 30 local
-Qwen/vLLM generation route: generate the synthetic-first, commercial-safe English
-dataset using the **DeepSeek API through Corbanu Terminal**. Fine-tuning remains
-on the **RTX PRO 6000**; production detector inference remains offline on CPU.
-API generation does not require local generator weights, a vLLM server, or
-stopping ComfyUI. No automatic local-generator or alternate-provider fallback.
-
-Before the campaign, record the actual Corbanu build/provider route, DeepSeek
-model ID and any exposed revision, prompt/config hashes, supported sampling
-settings, request identities and output hashes. Do not invent immutable hosted
-weights, seed support or deterministic replay; preserve accepted outputs and
-record provider model drift. Verify endpoint, output-use/data terms and approved
-pilot/full-campaign spend and concurrency bounds before paid requests. Use the
-existing protected credential path, never keys in prompts or logs. Only synthetic
-or licensed public inputs may leave for generation; no secrets, customer/protected
-financial data, existing blind records or labels. Independently generated blind
-material remains exclusively in the custodian's lane. Replace the preparation
-manifest's local-generator placeholder under a separately allocated implementation
-scope before accepting campaign evidence; this amendment changes no schema and
-claims no API run.
-
-A separately custodied encrypted blind corpus and Intel N100/16 GiB/x86-64 Linux
-remain the qualification boundaries. DeBERTa-v3-xsmall exported to signed INT8
-ONNX Runtime is the primary detector path, with a custom lightweight classifier
-only if the primary cannot meet quality and resource gates. One calibrated
-score maps through two signed thresholds to allow/suspicious/hostile;
-unavailable is deterministic runtime state. The offline Ed25519 root authorizes
-a rotating release key, and immutable GitHub Release assets install atomically
-with local verification and rollback. The initial accepted-corpus target is
-approximately 250,000 training, 25,000 development/calibration and 150,000
-evaluator-owned blind records. Unsupported languages fail closed. Risk-triggered
-adjudication starts with complete disagreement/uncertainty review plus
-stratified 1% human and separate 1% Opus audits; reassess scalability after the
-first 10,000 accepted records without weakening the blind qualification gates.
-
-### PF-36
-
-**Optional hosted detector and safe fallback.** Build the optional hosted interface/consent and evaluation path without selecting or purchasing a vendor. Enable only a qualified named service with approved data terms and cost cap; otherwise record disabled-no-qualified-vendor. Outages use an already-qualified local detector or pause. This optional disposition cannot waive required local qualification.
-
-### PF-37
-
-**Origin-bound browser login and human handoff.** Use a separate origin-bound credentialed browser session, not the public retrieval worker or host profile. Broker fills only an adapter-reviewed login form; raw passwords/cookies never reach the model. Qualify a deterministic fixture and one human-selected permitted HTTPS origin with a non-production test account; record the exact origin/form contract before sprint readiness. MFA/passkeys/CAPTCHA remain human-only, sensitive keystrokes unrecorded, and cancellation/revocation destroys pending session authority. Additional origins remain denied until reviewed.
-
-### PF-38
-
-**Typed financial execution and exact effects.** Adapt existing wallet operations and a fake venue, not a new trading integration. Typed canonical requests and atomic limits precede complete-effect simulation/preview. Reuse PF-16–19 mandates; sign and broadcast are separate, exact-human-approved operations in Aggressive. Durable idempotency/status recovery prevents blind replay after uncertain submission.
-
-### PF-39
-
-**Derived financial views and disclosure control.** Account reads stay trusted; model-visible outputs are purpose/precision/expiry-limited derived values with reconstruction budgets. Apply typed disclosure checks to provider payloads, search, tools, social/email, artifacts, clipboard/export and child messages; operational credentials/custody material cannot be disclosed above Permissive.
-
-### PF-40
-
-**Agent Sweep and safe recovery.** Use secret-free tamper-evident behavior events and deterministic anomaly rules to pause/revoke/kill. An optional isolated reviewer receives only sanitized events and cannot grant authority. Human recovery requires fresh scoped authority and preserves taint, audit and irreversible-action status across restart.
-
-### PF-41
-
-**Effective security inspector and audit.** First provide shared versioned event IDs, durable commit/failure and recovery contracts in PF-41-S03; inspector/export integration stays later. Display requested versus actual level/backend/isolation/egress, broker/classifier readiness, leases/grants/expiry, taint, denials, retention and audit integrity. Degradation must be visible. Human support exports are minimized and disclosure-gated; an integrity gap cannot be hidden behind a healthy badge.
-
-### Profile and failure contract
-
-| Surface | Permissive | Moderate | Aggressive |
-| --- | --- | --- | --- |
-| Existing approvals/sandbox/tool rules | Frozen baseline | Compose existing denials with new policy | Same, never weaken |
-| Credentials/agent environment | Existing supported behavior | Broker only; no raw managed secrets in agent env/context | Same plus narrow expiring credential-use grants |
-| Protected financial data | Existing policy | Only scoped derived values | Derived views denied until explicit narrow grant |
-| Public retrieval/search | Existing route/history/native behavior | Isolated fetch and screened authorized search | Same plus explicit provider/destination grants |
-| Ingestion/provenance | Existing behavior | Sanitize, screen, durable taint | Stricter threshold; missing provenance rejects |
-| Local classifier unavailable | No new control | Pause external ingestion | Pause external ingestion |
-| Optional hosted detector/reviewer | No automatic activation | Explicit data/cost consent and qualification | Same plus narrow disclosure/egress grants |
-| Login/challenges/downloads | Existing workflows | Exact-origin broker login; human challenges/promotion | Same plus explicit narrow access |
-| Financial operations | Existing policy | Typed limits, complete effect and required mandate | Default deny; exact human approval for each sign and broadcast |
-| Clipboard/export/egress | Existing policy | Typed disclosure gate; raw secrets denied | Denied until exact eligible derived-data grant |
-| Broker/backend/migration failure | Existing behavior | Block activation or affected protected work | Same; never downgrade automatically |
-| Revocation/restart | Existing policy | Durable stop, fresh revalidation | Same; no stale grant/session restoration |
-
-The implementation must version the resolved profile bundle and record effective
-sandbox, network, browser, protected-data, lease, ingress, inheritance, retention
-and audit settings. Atomic transition previews use that effective bundle, not
-only the three-level name. A partially implemented draft is not eligible to
-advertise a working protected mode.
-
-### Local classifier qualification targets
-
-Retain the researched targets from the historical proposal as this feature's
-qualification baseline, not a new repository-wide policy or a detector guarantee.
-PF-35-S01 records the exact weakest supported CPU and evaluation manifests before
-training; threshold/resource changes require product review before acceptance.
-
-| Measure | Target |
+| Lane | Sprints in order |
 | --- | --- |
-| Benign false positives | ≤0.1% on ≥100,000 held-out benign segments, with confidence interval |
-| Known-family detection | ≥80% at that low-FPR operating point |
-| Unseen-source/evasion detection | ≥65% at the same threshold; every miss remains policy-contained |
-| Benign position/trigger perturbations | ≤2 percentage-point rejection increase |
-| CPU envelope | p95 ≤50 ms per 2,048-token segment; peak RSS ≤512 MiB; model ≤300 MiB |
-| Privacy | No real customer secrets/protected financial records in corpus, hosted payloads, metrics or artifacts |
-| Deterministic safety | All critical unauthorized-disclosure/action cases deny, including forced detector misses |
+| broker | [PF-27-S04](../../sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md) → [PF-27-S02](../../sprints/current/p0-security-levels/pf-27-s02-secretless-agent-launch.md) → [PF-28-S01](../../sprints/current/p0-security-levels/pf-28-s01-central-secret-output-gate.md) → [PF-28-S02](../../sprints/current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md) |
+| untrusted content | [PF-30-S01](../../sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md) → [PF-30-S02](../../sprints/current/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md) → [PF-30-S03](../../sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md) → [PF-23-S01](../../sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md) → [PF-23-S02](../../sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md) → [PF-23-S03](../../sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) |
+| tui | [PF-24-S03 flagged picker](../../sprints/current/p0-security-levels/pf-24-s03-flagged-security-picker.md) → [PF-24-S02](../../sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) → [PF-25-S01](../../sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md) → [PF-25-S02](../../sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md) |
+| first free lane | [PF-33-S01](../../sprints/current/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md) → [PF-33-S02](../../sprints/current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md) (after PF-27-S02); [PF-29-S01](../../sprints/current/p0-security-levels/pf-29-s01-protected-mode-inventory.md) → [PF-29-S02](../../sprints/current/p0-security-levels/pf-29-s02-human-secret-migration.md) (after PF-28-S02) |
+| convergence | [PF-41-S01](../../sprints/current/p0-security-levels/pf-41-s01-effective-security-inspector.md) (after PF-23-S03, PF-24-S02, PF-29-S02), then [PF-13-S07](../../sprints/current/p0-security-levels/pf-13-s07-integrated-credential-boundary-qualification.md) |
 
-Long inputs must be bounded and screened across segment boundaries. Measure
-end-to-end latency as well as per-segment speed; the model cannot receive a
-streamed prefix while screening is pending. A failed required target remains
-incomplete; do not substitute a wrapper heuristic or optional hosted service.
+Cross-lane waits: PF-24-S02 needs PF-23-S03 and PF-29-S02; PF-25 needs PF-23-S02/S03;
+PF-23-S01 needs PF-30-S03. The [sprint index](../../sprints/current/p0-security-levels/index.md)
+lists exact dependencies. PF-41-S01 no longer waits on PF-32-S06, PF-37-S02 or
+PF-40-S03; it shows those controls as “not available”.
+
+### TUI lane bugs from PF-83
+
+Handed to the TUI lane on 2026-10-06 by decision 1. Each is a bounded fix against
+**Permission selection confirmation — TO BUILD** and runs under the per-sprint gate.
+
+| Bug | Found in | State |
+| --- | --- | --- |
+| Typed text in an open approval prompt can approve it with “don't ask again” (`/permissions` hit the `p` shortcut) | Campaign 35, F05 | open; fix before Aggressive ships |
+| “Enable full access?” defaults to Cancel and gives no message when cancelled | Campaign 35, F03 | open |
+| A declined request renders both “You canceled…” and “Ran … (no output)” | Campaign 35, F05; PF83-DEF-015 | source fix pf83-unran-18 is on main; verify on the next candidate |
+| `zai-anthropic` route: `glm-5.2` has no catalogued max-output limit, so every turn fails | Campaign 35, F11 | open (`core/src/client.rs` catalog) |
+
+### Hosted non-security records
+
+[PF-76-S01](../../sprints/current/p0-security-levels/pf-76-s01-provider-profile-persistence.md)
+(provider profile persistence) and [PF-77-S01](../../sprints/current/p0-security-levels/pf-77-s01-tasknode-reliability.md)
+(Task Node reliability) are drafts hosted here for history, outside the security
+core and lanes. Completed hosted records PF-77-S02, PF-78-S01/S02 and PF-82-S01 are archived.
 
 ## Acceptance flows
 
-| Flow | Starting state | User action | Expected visible result | Pass criterion |
-| --- | --- | --- | --- | --- |
-| Existing-user compatibility | Pre-feature config and representative workflows | Upgrade and continue without opening `/security` | Level is Permissive; behavior is unchanged | Policy snapshots, approval decisions, and workflow outcomes match the baseline |
-| Open and cancel | Any level | Open `/security`, highlight another level, press `Esc` | Tab closes and current level remains | No config, session, child-agent, or audit state changes |
-| Select Moderate | Permissive | Select Moderate; pass preflight/migration, inspect differences, confirm | Effective Moderate appears only when all required components are ready | Active/future agents enforce the complete profile; unsupported routes fail visibly and one redacted change event is recorded |
-| Moderate hostile input | Moderate; untrusted page, file, or tool output contains instructions | Ask the agent to process it | Normal analysis may continue; secret, protected-data, policy-change, and protected-action requests are blocked | No protected value or unauthorized action reaches model-visible output or execution |
-| Select Aggressive | Moderate | Select Aggressive and confirm | Sensitive surfaces show denied-by-default state and grant affordances | All listed sensitive paths deny until a human grants narrow access |
-| Aggressive temporary grant | Aggressive | Grant one sensitive action with scope and expiry | Only that action becomes available; scope and expiry remain visible | Adjacent tool, account, destination, child agent, and post-expiry attempts fail |
-| Downgrade | Aggressive with a pending grant or approval | Select Permissive and confirm the protection-removal summary | Downgrade applies and incompatible pending authority is invalidated | No old grant or approval can be replayed |
-| Restart/resume | Moderate or Aggressive with kill switch or revocation active | Restart Corbanu and resume the session | Level and restrictive state are restored | No transient fallback to Permissive and no stale approval restoration |
-| Agent tries policy change | Any level | Prompt or tool output asks Corbanu to weaken security | Request is treated as untrusted content | No policy mutation path is available to the agent |
-| Secret migration | Permissive with synthetic legacy auth/history | Dry-run, cancel, confirm, inject failure, recover | Values never shown; protected activation waits for clean state | No plaintext rollback and no contaminated resume |
-| Allowed-host reflection | Protected broker with fake provider | Send a credentialed request that reflects the credential | Redacted response or bounded denial | Canary absent from model/tool/log/stream/artifact sinks |
-| Poisoned memory | Protected mode | Read hostile text, summarize, store, spawn child and resume | Original untrusted lineage persists | Forced benign detector result still cannot grant authority |
-| Screened web failure | Protected web.run | Search/fetch, fail provider/worker/classifier | Safe permitted same-role retry or visible pause | No native-search or host-browser bypass |
-| Quarantine/download | Suspicious page or file | Inspect, cancel, rescan or approve exact promotion | Esc is inert; content remains tainted | No active raw rendering, uncontrolled write or auto-execution |
-| Brokered login | Fake exact-origin credentialed session | Approve login, handle human challenge, revoke | No password/cookie in model or recorded input | Wrong origin and stale session deny across restart |
-| Financial effect | Fake wallet/venue | Preview, sign, separately approve broadcast; simulate timeout | Complete expected effect and honest uncertain status | No mutation, duplicate transfer or blind resubmission |
-| Derived-data disclosure | Synthetic protected portfolio | Request view/export, cancel, grant exact permitted view | Only authorized derived data leaves trusted boundary | Reconstruction, raw portfolio and secret export deny |
-| Sweep/inspector | Active protected task | Trigger anomaly; inspect runtime; recover and restart | Actual degradation, stop and fresh-authority requirements visible | Old grants remain revoked and audit is secret-free |
-
-## Standards-derived acceptance contract
-
-| Contract | Required evidence |
+| Flow | Pass criterion |
 | --- | --- |
-| Deterministic decision | Every protected operation produces a typed subject/resource/action/context request and allow/deny result outside the model; malformed or incomplete requests deny visibly |
-| Narrow delegation | A child agent receives no more authority than its parent; the record preserves both the human principal and acting-agent chain |
-| Bounded grant | A temporary grant names its action, resource, destination, quantitative limits, and expiry; changing any bound field or using it for an adjacent operation fails |
-| Exact human intent | The trusted TUI presents a canonical action preview and binds approval to it; mutation, replay, duplicate submission, and stale approval fail and produce secret-free receipts |
-| Immediate invalidation | Downgrade, revocation, kill switch, and risk events invalidate cached decisions, active grants, and pending approvals before another protected operation can start and remain effective after restart |
-| Threat coverage | A versioned OWASP crosswalk maps every applicable agentic risk to a prevention control, automated or adversarial case, true-TUI flow where interactive, result, and artifact |
+| Flag off | Product behaves and renders exactly as before; `/security` unchanged |
+| Open and cancel | `Esc` closes the picker; no config, session, child or audit change |
+| Select Aggressive | Differences shown first; after confirmation every listed control is enforced on the next turn, for children too, and survives restart |
+| Return to Permissive | Prior settings restored exactly; incompatible pending approvals invalidated |
+| Agent attempts a change | No agent-reachable path changes the level |
+| Select Moderate (later) | Offered only when its protections are complete; unsupported routes fail visibly |
+| Hostile content (Moderate) | No protected value or unauthorized action reaches model output or execution |
+| Grants, revocation, kill switch | Narrow expiring grants; revocation and kill switch hold across restart |
 
 ## Implementation sequence
 
-Use the [52-record current index](../../sprints/current/p0-security-levels/index.md)
-for exact dependencies. Bounded parallel allocations follow the sprint process;
-reading order is not a serial lock. Including 24 completed archives, the graph
-has 76 nodes; exact merged-tree ordering is maintained by the checked current
-index rather than inherited historical snapshot arithmetic.
+1. Picker (PF-24-S03) and the PF-83 TUI bugs → milestone **Aggressive ships**.
+2. Broker and untrusted-content lanes in parallel; PF-33 and PF-29 take the first free lane.
+3. PF-23-S01..S03, then PF-24-S02 and PF-25 → milestone **Moderate ships**.
+4. PF-41-S01 and PF-13-S07 → milestone **flag removal**.
 
-1. **Prepare independent boundaries and reconcile foundations.** Allocate up to
-   three checked workers: platform/foundation, browser artifact/destination policy,
-   and segment/classifier preparation. Complete the new contract sprints before
-   consumers; do not enable any protected path from fixtures alone.
-   **Build only the remaining foundation guarantees.** Preserve PF-15–22/PF-13-S01
-   completions; PF-13-S06 and PF-19/20/21/22-S02 carry the newly accepted requirements.
-2. **Complete the first credential boundary.** PF-13-S02–S04 and S06 extend accepted capabilities,
-   resolver and OpenAI substitution. PF-27/28/33 add process, output and connection
-   guarantees. PF-24-S01 provides the initial honest profile view; PF-29 adds
-   preflight/migration. PF-13-S05 then independently qualifies that complete boundary.
-   PF-41-S03 supplies durable event/commit/recovery contracts before runtime,
-   broker, quarantine, financial and Sweep consumers, without waiting for audit UI.
-3. **Make authority durable and usable.** PF-30 adds provenance/memory/post-taint
-   checks; PF-23 composes profiles, PF-24-S02 confirms safe transitions and PF-25
-   provides grants/stop/recovery. Missing future adapters remain denied.
-4. **Build protected research.** PF-31 isolation, PF-34 cleaning, PF-35 local
-   qualification, then PF-34 quarantine/review and PF-32 screened provider adapters.
-5. **Qualify optional detection.** PF-36 adds consent, a fake-service contract and
-   measured hosted disposition; no commercial vendor is assumed.
-6. **Complete protected workflows.** PF-37 login/human handoff, PF-38 existing-wallet
-   execution and PF-39 derived-data/outbound checks reuse the same authority types.
-7. **Close operator visibility.** PF-40 Sweep and PF-41 actual-state/audit inspection
-   complete stop/recovery/degradation coverage.
-8. **Requalify the entire final tree.** PF-26-S01 checks every source requirement,
-   old-to-new mapping, standards/threat class and forced-miss regression.
-   PF-26-S02 repeats all applicable true-TUI workflows in both live repositories.
-9. **Accept and document.** PF-26-S03 requires named human/independent review,
-   finished-only guidance and release/benchmark evidence. Planning completeness
-   is not implementation, release readiness or a promised ship date.
+### Delivery gate
 
-## Independent functional execution — September 12
+**Per sprint** (merge behind the flag when all pass):
 
-The next applicable user-facing handoff follows the mandatory
-[isolated execution gate](../../../qa/code-blind-functional/isolated-execution.md).
-The named integrator owns packet/isolation provisioning and separate executor
-and reviewer assignments; implementation owners do not execute acceptance cases.
-Record increment-specific internal-only N/A with later functional gate, not a
-plan-wide exemption. Missing isolation is manager work, not unanswered approval.
-Existing evidence stays historical; dependencies, feature flags and live authority
-are unchanged. See the linked rollout table for this lane's next acceptance.
+- focused tests via `just test` on the final tree, after `just fmt` and `just fix -p <crate>`;
+- a tmux functional test with real keys, product on GLM 5.2 (`-m glm-5.2 -c model_provider="zai"`);
+- one independent review by an Opus 5.5 High subagent;
+- short videos showing every core feature of the sprint end to end, recorded with
+  `qa/demos/README.md` once it lands; until then an asciinema recording of the tmux
+  session, keeping the `.cast` under `qa/security-levels/sprints/<sprint>/`.
+
+**Milestones** (Aggressive ships, Moderate ships, flag removal): the full isolated
+code-blind VM run under the root `AGENTS.md` rules, plus named human sign-off.
+Up to three security sprints may be reserved at once, one per lane, with
+disjoint `write_scope` (enforced by `docs/sprints/check.py`).
 
 ## Automated evidence
 
-Run fix and formatting tools before the final affected tests.
-
-| Check | Final-tree command | Result | Artifact |
-| --- | --- | --- | --- |
-| Plan and sprint lifecycle | `python3 docs/plans/check.py && python3 docs/sprints/check.py` | pending | governance-check output |
-| Rust fix | `cd codex-rs && just fix -p <affected-project>` for every affected crate | pending; run before formatting/final tests | `qa/release/<version>/security/fix.txt` |
-| Permissive compatibility | `python3 scripts/security-level-compat --baseline <commit> --upstream <upstream-commit> --candidate <binary> --output <dir>` | pending final candidate; existing PF-21-S01 harness is extended by PF-21-S02/PF-26 | `qa/release/<version>/security/compatibility/` |
-| Security policy | `cd codex-rs && just test -p codex-security-policy` | pending | `qa/release/<version>/security/policy-tests.txt` |
-| Config and core integration | `cd codex-rs && just test -p codex-config && just test -p codex-core` | pending | `qa/release/<version>/security/integration-tests.txt` |
-| Vault and network boundaries | `cd codex-rs && just test -p codex-vault && just test -p codex-network-proxy` | pending | `qa/release/<version>/security/boundary-tests.txt` |
-| Expanded broker/ingress/retriever suites | `cd codex-rs && just test -p codex-secret-broker && just test -p codex-content-security && just test -p codex-web-retriever && just test -p codex-web-search-extension` | broker and ingress contracts registered; retriever and search-extension crates remain planned | `qa/release/<version>/security/expanded-boundaries/` |
-| Classifier corpus/artifact/quality | `python3 scripts/security-classifier-eval --manifest <frozen-manifest> --artifact <pinned-artifact> --output <dir>` | pending; evaluator is PF-35 work | `qa/release/<version>/security/classifier/` |
-| TUI and snapshots | `cd codex-rs && just test -p codex-tui` | pending | `qa/release/<version>/security/tui-tests.txt` |
-| Adversarial matrix | `python3 scripts/security-level-adversarial --candidate <binary> --output <dir>` | pending; harness is part of stage 5 | `qa/release/<version>/security/adversarial/` |
-| Standards crosswalk | `python3 scripts/security-level-standards-check --manifest qa/release/<version>/security/standards-crosswalk.yaml` | pending; checker and manifest are part of stage 5 | `qa/release/<version>/security/standards-crosswalk.yaml` |
-| Formatting | `cd codex-rs && just fmt`, then inspect the diff | pending; precedes final affected tests | `qa/release/<version>/security/fmt.txt` |
-| Final affected tests | `cd codex-rs && just test -p <affected-project>` for each changed project; never direct `cargo test` | pending | `qa/release/<version>/security/final-tests.txt` |
+| Check | Command | Result |
+| --- | --- | --- |
+| Governance | `python3 docs/plans/check.py && python3 docs/sprints/check.py` | per PR |
+| Per sprint | `cd codex-rs && just test -p <affected-crate>` after `just fmt` / `just fix` | per sprint record |
+| Permissive compatibility | PF-21 harness against the frozen baseline `3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb` | pending, each milestone |
 
 ## True-TUI evidence
 
-Use the existing Rust `TmuxServer` harness and `test-tui` skill, `RUST_LOG=trace`,
-and an isolated `log_dir`; do not replace the typed driver with shell automation.
-PF-26-S01 supplies the local capture proxy/scanner; PF-26-S02 retains the required
-Ubuntu lane, named credential-boundary test, zero-retry canary checks and cleanup.
-Send
-prompt text and Enter separately. `corbanu exec` is not acceptable proof.
-
-| Flow | Test repository | Keys/actions | Visible checkpoints | Result | Artifact |
-| --- | --- | --- | --- | --- | --- |
-| Permissive compatibility | TensorCash disposable worktree | Run the frozen baseline workflow; open `/security`; verify Permissive; repeat | Same approvals, tools, output, and persistence before and after | pending | `qa/release/<version>/security/tui/permissive/` |
-| Moderate | TensorCash disposable worktree | Select Moderate; confirm; process hostile fixture; attempt protected action; cancel and retry | Level visible; normal work continues; prohibited request blocked; approval state exact | pending | `qa/release/<version>/security/tui/moderate/` |
-| Aggressive | Isometric Game disposable worktree | Select Aggressive; confirm; attempt sensitive tool; grant one scoped action; spawn child; wait for expiry | Default denial; one narrow grant; child cannot weaken; expiry removes access | pending | `qa/release/<version>/security/tui/aggressive/` |
-| Downgrade/recovery | Isometric Game disposable worktree | Activate kill switch; request downgrade; inspect warning; cancel once, then confirm; restart and resume | Cancel preserves level; confirmation invalidates pending authority; persisted state is coherent | pending | `qa/release/<version>/security/tui/recovery/` |
-
-Additional PF-26-S02 cases use the same final candidate and both applicable live
-repositories: migration/corrupt recovery; broker reflection/failure; multi-turn
-memory taint; screened web failover/blocked classifier; quarantine and download
-promotion; exact-origin login/human challenge; full-effect fake sign/broadcast
-with uncertain recovery; derived-data export; Sweep and inspector/audit
-degradation. Each has success, cancel/deny, failure, recovery and resume
-checkpoints and safe evidence. No real funds or credentials are used.
+Per sprint: tmux run on GLM 5.2 plus `.cast` videos, recorded in the sprint record.
+Per milestone: isolated code-blind execution with schema-2 receipts and a separate
+evidence check ([workflow](../../../qa/code-blind-functional/README.md)).
 
 ## Live-repository applicability
 
-| Repository | Applicable? | Qualification record |
+| Repository | Applicable | Use |
 | --- | --- | --- |
 | TensorCash | yes | Permissive compatibility and Moderate protected-action workflow |
-| Isometric Game | yes | Aggressive TUI, inheritance, expiry, downgrade, and recovery workflow |
-
-Resolve exact disposable worktree paths and base commits in the release evidence
-before qualification.
+| Isometric Game | yes | Aggressive, inheritance, downgrade and recovery workflow |
 
 ## Human acceptance
 
-| Tester | Date | Candidate version/commit | Flow | Result | Evidence |
-| --- | --- | --- | --- | --- | --- |
-| Named by release owner | pending | pending | Understand levels without explanation; preserve Permissive; use Moderate and Aggressive; cancel and downgrade safely | pending | `qa/release/<version>/security/human-acceptance.md` |
+| Milestone | Tester | Result |
+| --- | --- | --- |
+| Aggressive ships | named by release owner | pending |
+| Moderate ships | named by release owner | pending |
+| Flag removal | named by release owner | pending |
 
 ## Documentation
 
-| Finished-feature doc | Product-spec citation present | Verified candidate |
-| --- | --- | --- |
-| `docs/features/security.md`, created only after acceptance | Must cite “P0 `/security` levels” and the Permissive requirement | pending |
-| `docs/features/vault.md` and `docs/authentication.md`, updated only after acceptance | Must distinguish Permissive helper behavior from Moderate/Aggressive broker-only resolution and cite “Required trust boundaries” | pending |
-| `docs/features/index.md` and `docs/slash_commands.md` | Must expose only candidate-verified `/security` behavior | pending |
+`docs/features/security.md`, `docs/slash_commands.md` and the vault/auth pages
+describe only behaviour verified at a milestone, citing **P0 `/security` levels**.
 
 ## Dependencies, decisions, and blockers
 
-| Item | Owner | Needed by | State |
-| --- | --- | --- | --- |
-| Permissive golden baseline | Jim Ricketts | PF-21-S02 / PF-26 | S01 oracle preserved byte-for-byte; S02 independent baseline/upstream/candidate plus protected-boundary controls accepted 36/36; PF-26 live qualification remains pending |
-| Existing foundations | Jim Ricketts | Current consumers | PF-15–22 and PF-13-S01 completed/archived upstream; five follow-ups remain draft for added review guarantees |
-| Moderate and Aggressive control matrix | Product authority | PF-23 review | Defined in the product specification; any change requires a product decision |
-| Persistence and downgrade invalidation | Jim Ricketts | PF-20-S02 / PF-23 | S02 protected authoritative-state and external-anchor contracts accepted; activation remains blocked pending a qualified protected provider and PF-23 runtime transitions |
-| LLM security review route | Jim Ricketts | Every sprint candidate and final qualification | Reviewer capacity supplied; use Computer Use with visibly selected Claude Opus 5.0 and Max effort, preserve immutable evidence, verify findings and repeat after accepted fixes |
-| Human tester | Release owner | Final qualification | Must be named before acceptance |
-| Expanded program capacity and integration allowance | Jim Ricketts / product authority | Execution scheduling | Maximal LLM capacity supplied; provisional 35% integration reserve and per-sprint/gate formula recorded above; three-active-sprint limit remains; October 8 feasibility pending measured estimates, no scope silently removed |
-| Platform access and isolation capability matrix | Jim Ricketts | PF-27-S03 completion and PF-27/PF-31 integration readiness | PF-27-S03 three-platform probes are accepted; all measured platforms remain ineligible, and unsupported protected paths block visibly pending real mechanism qualification |
-| Moderate workflow usability targets | Product authority / Jim Ricketts | PF-26-S02 readiness | Numeric task-completion, approval-count and latency targets with fixed workflows pending; no relaxation of protection |
-| Local detector hardware/corpus/license pins | Jim Ricketts / evaluator | PF-35-S01 | Travis's September 11 decision: DeepSeek API generation through Corbanu Terminal replaces local Qwen/vLLM; fine-tuning stays RTX PRO 6000. Synthetic/open commercial-safe sources, independent custody, N100 floor, DeBERTa/ONNX, signing and distribution unchanged. Actual API model/route, data terms, budget, manifest adaptation and measured evidence remain campaign prerequisites; no API execution claimed |
-| Retriever/API/model dependency pins | Jim Ricketts | Owning adapter sprint readiness | Verify then pin current supported artifacts and APIs; historical sources are not fresh release security evidence |
-| Optional hosted vendor and data terms | Product authority | PF-36-S02 real-service activation | No vendor selected; interface/fixtures and explicit disabled disposition are in scope |
-| First real login origin/test account | Human owner / security reviewer | PF-37-S01 readiness | Record one permitted exact HTTPS origin, reviewed form and non-production account; missing access blocks qualification |
-| Additional login/financial adapters | Product authority / security reviewer | Any expansion beyond first reviewed origin/existing wallet | Denied until separately reviewed; no new commercial venue scope |
+| Item | State |
+| --- | --- |
+| PF-83 open items (designer packet, review count 7/5, process isolation) | Recorded in the archived [PF-83-S01](../../sprints/archive/p0-security-levels/pf-83-s01-permission-confirmation.md); not blocking the core |
+| Aggressive vault denial from existing controls | PF-24-S03 must prove it; if impossible, stop and escalate |
+| Global reservation cap | 3 security lanes + 1 accounting + 1 Task Node = 5 (`docs/sprints/index.md`) |
+| October 8 deadline | Unchanged and not re-estimated against the 20-sprint core |
 
 ## Release linkage
 
-- Release record: `qa/release/<version>/` — pending target version.
-- Benchmark tracker: repository-root `benchmarks/README.md`, when due for the
-  target release.
-- Remaining blockers: implementation, unresolved historical full-suite failures,
-  final compatibility and adversarial
-  evidence, independent security review, true-TUI qualification, and named
-  human acceptance.
+Each milestone links its `qa/release/<version>/` record. Remaining blockers: the
+20 core sprints, milestone code-blind runs and human sign-off.
 
 ## Completion
 
-- [ ] Accepted architecture refinements and upstream-seam register have final-tree evidence.
-- [ ] Parallel allocations, scope audits and combined-tree integration evidence are complete.
+- [x] PF-83-S01 closed with per-case results; defects handed to the TUI lane (2026-10-06).
+- [x] Deferred scope moved to the P1 hardening plan with dependencies intact (2026-10-06).
+- [ ] Milestone: Aggressive ships.
+- [ ] Milestone: Moderate ships.
+- [ ] Milestone: flag removal; Permissive compatibility proven; no critical finding open.
 
-- [x] Original reconciliation snapshot mapped source scope to 52 current and 24 completed single-feature sprints; all 72 cancelled records have explicit dispositions. The current index tracks subsequent completions and additions.
-- [ ] Every PF-27–41 contract and protected-mode readiness condition passes final-candidate evidence.
-- [ ] Optional hosted/reviewer lanes are explicitly qualified-enabled or disabled with an auditable reason.
-- [ ] Permissive compatibility is proven against the frozen pre-feature baseline.
-- [ ] Moderate and Aggressive match the product-spec control matrix.
-- [ ] Every adopted standards behavior is mapped to passing code, test, and TUI
-  evidence without an unsupported conformance claim.
-- [ ] Required final-tree automated and adversarial evidence passes.
-- [ ] True-TUI and both live-repository workflows pass.
-- [ ] No critical security finding remains open.
-- [ ] Named human acceptance passes.
-- [ ] Finished documentation matches the accepted candidate.
-- [ ] Release and due benchmark records are linked.
+## History
 
-## Profile, Task Node and Campaign Tracker feature reconciliation
-
-These are existing contracts, not new product authorizations. The
-[September 10 identity map](../../sprints/identity-reconciliation-2026-09-10.md)
-resolves collisions with Claude-auth PF-42–45 and preserves recorded outcomes,
-dependencies, evidence and allocations. Historical IDs are qualified by their
-owning plan and record path; they are not global aliases.
-
-| Feature | Contract / acceptance boundary | Sprint | Current disposition |
-| --- | --- | --- | --- |
-| PF-76 | Durable named-profile provider selection and authorization, restart recovery and profile isolation | [PF-76-S01](../../sprints/current/p0-security-levels/pf-76-s01-provider-profile-persistence.md) | Draft, unallocated; reconcile against unified-provider shipped evidence before any implementation |
-| PF-77 | Profile/server-bound durable Task Node requests, original receipts, stale-response fencing and recovery without account mixing | [PF-77-S01](../../sprints/current/p0-security-levels/pf-77-s01-tasknode-reliability.md) | Draft; implementation/PTY evidence recorded, natural nonempty production observation still unchecked |
-| PF-77 | Multiple-account relink recovery under the same identity boundary | [PF-77-S02](../../sprints/archive/p0-security-levels/pf-77-s02-relink-recovery.md) | Completed bounded repair; does not complete S01's pending observation |
-| PF-78 | Attributable campaign capture, permissioned replay and bounded summaries | [PF-78-S01](../../sprints/archive/p0-security-levels/pf-78-s01-campaign-tracker.md) | Completed for recorded local scope; deployment/restore/advanced UI/pilot caveats retained |
-| PF-78 | Propagate the active profile to agent Task Node helpers, fail closed on missing/conflicting scope | [PF-78-S02](../../sprints/archive/p0-security-levels/pf-78-s02-agent-profile-scope.md) | Completed repair; historical records are not transferred |
-
-PF-76 cites **Shipping MVP — LIVE**, **Named profiles**: “durably owned by that
-profile, restored after restart, and unavailable to other named profiles.”
-PF-77 cites the same heading, **Task Node and identity**: “Tasks, evidence,
-verification, rewards, balances, chat, context, linked identity”. Its existing
-reliability contract is durable account-owned recovery, not a new Task Node
-management service. The archived relink repair was performed serially while
-S01's observation was returned to draft; it is not retroactively made dependent
-on that observation. PF-78's product citation and release limits follow below.
-No draft is activated or marked complete by this reconciliation.
-
-## PF-77-S02 — Multiple-account relink recovery
-
-The September 8 user report authorizes repairing multiple Task Node accounts on
-one machine. Product heading **Shipping MVP — LIVE**, row **Task Node and
-identity**: "Tasks, evidence, verification, rewards, balances, chat, context,
-linked identity". The selected profile must retain its own account, a rejected
-old token must not shadow a completed relink, and active guidance must name
-Corbanu. [PF-77-S02](../../sprints/archive/p0-security-levels/pf-77-s02-relink-recovery.md)
-owns the shared resolver, focused two-account tests and real TUI recovery proof.
-This extends the existing profile isolation contract, without transferring
-historical records or choosing GitHub identities for the user.
-
-## PF-78-S02 agent identity repair — completed
-
-User-reported post-release account mismatch authorizes repairing agent helper profile propagation. [Sprint PF-78-S02](../../sprints/archive/p0-security-levels/pf-78-s02-agent-profile-scope.md) is implemented and locally qualified in `/home/pfrpc/repos/worktrees/corbanu-release-0.1.39`, branch `fix/tasknode-agent-profile-scope`, base `9b71d86d7f`. Its scope is runtime profile inheritance, fail-closed helper resolution and regression/PTY proof; historical records are not transferred.
-
-## PF-78 Campaign Tracker release integration
-
-The user authorized Campaign Tracker implementation on September 6 and production deployment and release on September 7. Product contract: **Campaign Tracker — LOCAL PILOT CANDIDATE**, “preserve attributable user prompts and compact GLM 5.3 Flash summaries in a bounded database”. [PF-78-S01](../../sprints/archive/p0-security-levels/pf-78-s01-campaign-tracker.md) records completed implementation. [0.1.39 publication](../../../qa/release/0.1.39/PUBLICATION.md) records integration with the shipped 0.1.38 baseline and qualification limits. No additional product initiative is introduced by packaging this completed feature.
-
-## PF-82 — Team Context terminal parity
-
-The operator explicitly authorized this extension on 2026-09-11: make the Team Context already visible in Task Node available through Corbanu Terminal and `corbanu-debug --yolo`. Product heading **Shipping MVP — LIVE**, **Task Node and identity**: “Tasks, evidence, verification, rewards, balances, chat, context, linked identity”. This extends the existing Task Node integration with an authenticated read surface; existing task-history grants remain authoritative.
-
-[Sprint PF-82-S01](../../sprints/archive/p0-security-levels/pf-82-s01-team-context.md) owns the CLI, TUI, bridge route and focused acceptance. No dependency on unfinished security features. Worktree coordinates are declared above; the companion server is `/home/pfrpc/repos/tasknode` with its existing unrelated work preserved. Upstream touch: CLI/TUI adapter and event registration only, based on the release candidate `7ae35557657b2f2d1c51a8f4af4e4bb1180fe5eb`; no Core, protocol, dependency, wallet or inference change.
-
-Acceptance: the CLI returns the same permission-filtered report as the web app, the TUI shows summaries/counts/freshness and refresh, unauthorized or revoked relationships expose no work, account switching and stale responses retain existing safeguards, and unavailable reports remain explicit. Verify route grants/auth, CLI JSON, TUI snapshots and real keyboard success/failure/recovery/cancel/restart on the final binary in both recorded disposable default repositories. Target is the local debug candidate; the already-running 0.1.42 release remains pinned to its existing source. Human acceptance and wider benchmarks are recorded separately. Codex owns integration and serializes the combined checks.
-
-PF-82 local debug acceptance completed on 2026-09-11: Terminal `721d6f974d`, Task Node `39e051c` / web release 737. [Verification](../../../qa/reliability/team-context-2026-09-11/README.md) records automated tests, both true-PTY repository workflows and the installed debug launcher. Public release integration is separate.
+| Record | What it holds |
+| --- | --- |
+| [Plan history through 2026-10-06](../history/p0-security-levels-2026-10-06.md) | All earlier prose: allocations, PF-27 stage log, expanded contracts PF-27–41, standards profile, profile/failure matrix |
+| [Source reconciliation](../security-source-reconciliation.md), [architecture refinements](../security-architecture-refinements-2026-08-28.md), [upstream reconciliation](../security-upstream-reconciliation-2026-08-28.md), [OpenClaw review](../openclaw-source-review-2026-08-28.md) | August 28 design inputs |
+| [Completed archive](../../sprints/archive/p0-security-levels/) | PF-13-S01–S06, foundations PF-15, PF-16, PF-17, PF-18, PF-19, PF-20, PF-21, PF-22, PF-24-S01, PF-26-S01, PF-27-S01/S03, PF-30-S04, PF-31-S04, PF-33-S03, PF-34-S04, PF-41-S03, PF-83-S01, plus hosted PF-77/78/82 |

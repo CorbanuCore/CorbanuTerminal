@@ -52,7 +52,9 @@ human must accept the final affected experience. No automated check is bulletpro
 
 ## Sequential ownership
 
-Each of up to three active initiatives has one reserved sprint and one named
-integration owner. Builders may not self-approve their own changes. Independent
+Each of up to three active initiatives has one named integration owner and one
+reserved sprint, except a plan that declares lanes: since 2026-10-06 the P0
+security plan may reserve up to three, one per lane (see
+[sprint concurrency](../sprints/index.md#bounded-parallel-implementation)). Builders may not self-approve their own changes. Independent
 review/testing supports the same sprint; shared-file writes are serialized.
 Blocked work retains a slot until the manager records a safe handoff.

@@ -7,7 +7,7 @@ plan_feature: "PF-31"
 execution_order: 17
 owner: "Codex browser/retrieval lane"
 parallel_lane: "browser-retrieval"
-write_scope: "scripts/security-retriever-artifact-check, qa/security-levels/retriever/, qa/security-levels/sprints/PF-31-S04/, docs/sprints/current/p0-security-levels/pf-31-s04-retriever-artifact-preparation.md"
+write_scope: "scripts/security-retriever-artifact-check, qa/security-levels/retriever/, qa/security-levels/sprints/PF-31-S04/, docs/sprints/current/p1-security-hardening/pf-31-s04-retriever-artifact-preparation.md"
 integration_gate: "Jim Ricketts receives the PF-31-S04 candidate at G2, audits the literal scope, reruns manifest/fake-engine/governance checks on the combined tree, then archives the sprint before PF-33-S03 allocation."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-browser-retrieval"
 branch: "feat/p0-security-browser-retrieval-pf33"
