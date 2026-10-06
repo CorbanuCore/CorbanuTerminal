@@ -397,7 +397,7 @@ def scan_files(
     """
     needles = [os.environ[n].encode() for n in env_names if os.environ.get(n)]
     hits = {
-        "credentials_checked": len(needles),
+        "values_checked": len(needles),
         "published_literal": 0,
         "published_pattern": 0,
         "redacted_private_files": [],
@@ -418,7 +418,7 @@ def scan_files(
     return hits
 
 
-def secret_scan(creds: str, published: list[Path], private: list[Path]) -> dict:
+def check_leaks(creds: str, published: list[Path], private: list[Path]) -> dict:
     names = re.findall(r"([A-Z_][A-Z0-9_]*)=\"\$\(", creds)
     cmd = " ".join(
         [creds, shlex.quote(sys.executable), shlex.quote(__file__), "_scan"]
@@ -429,7 +429,7 @@ def secret_scan(creds: str, published: list[Path], private: list[Path]) -> dict:
         ["bash", "-c", cmd], input=listing, capture_output=True, text=True
     )
     if proc.returncode:
-        raise DemoError(f"secret scan failed to run: {proc.stderr.strip()[-300:]}")
+        raise DemoError(f"leak check failed to run: {proc.stderr.strip()[-300:]}")
     return json.loads(proc.stdout)
 
 
@@ -632,10 +632,10 @@ def record(args: argparse.Namespace) -> Path:
             tmux.run("capture-pane", "-p", "-t", "demo", check=False)
         )
         stop_recording(tmux, recorder)
-        secret_scan(creds, [], private_files(places))  # redact private logs, then fail
+        check_leaks(creds, [], private_files(places))  # redact private logs, then fail
         raise
     stop_recording(tmux, recorder)
-    scan = secret_scan(creds, [raw_cast], private_files(places))
+    scan = check_leaks(creds, [raw_cast], private_files(places))
     manifest = {
         "id": spec.id,
         "sprint": args.sprint,
@@ -647,7 +647,7 @@ def record(args: argparse.Namespace) -> Path:
         "model": spec.model or "configured default",
         "provider": spec.provider,
         "spec": os.path.relpath(Path(args.spec).resolve(), REPO_ROOT),
-        "secret_scan": scan,
+        "leak_check": scan,
         "run_dir": str(run),
     }
     if scan["redacted_private_files"]:
@@ -655,10 +655,10 @@ def record(args: argparse.Namespace) -> Path:
             f"PRODUCT FINDING: credential value found and redacted in {scan['redacted_private_files']}"
         )
     if scan["published_literal"] or scan["published_pattern"]:
-        manifest["blocked"] = "secret scan matched; not rendered"
+        manifest["blocked"] = "leak check matched; not rendered"
         (run / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
         raise DemoError(
-            f"secret scan matched {scan}; recording kept private in {run} and NOT rendered"
+            f"leak check matched {scan}; recording kept private in {run} and NOT rendered"
         )
 
     header, events = read_cast(raw_cast)
