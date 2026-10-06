@@ -30,6 +30,8 @@ use std::fmt;
 use std::num::NonZeroU64;
 use std::time::Duration;
 
+mod provider_debug;
+
 const DEFAULT_ANTHROPIC_REQUEST_BODY_MAX_BYTES: usize = 30_000_000;
 const DEFAULT_ANTHROPIC_RETRY_BODY_MAX_BYTES: usize = 15_000_000;
 
@@ -860,7 +862,10 @@ pub enum ModelProviderCredentialSource<'a> {
 }
 
 /// Serializable representation of a provider definition.
-#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, JsonSchema)]
+///
+/// `Debug` (in `provider_debug.rs`) redacts credentials: provider definitions
+/// are logged, for example when a session is configured.
+#[derive(Clone, Default, Deserialize, Serialize, PartialEq, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct ModelProviderInfo {
     /// Friendly display name.
@@ -1047,7 +1052,12 @@ impl ModelProviderInfo {
         let mut headers = HeaderMap::with_capacity(capacity);
         if let Some(extra) = &self.http_headers {
             for (k, v) in extra {
-                if let (Ok(name), Ok(value)) = (HeaderName::try_from(k), HeaderValue::try_from(v)) {
+                if let (Ok(name), Ok(mut value)) =
+                    (HeaderName::try_from(k), HeaderValue::try_from(v))
+                {
+                    // Provider headers can carry credentials; keep them out of
+                    // `HeaderMap` Debug output.
+                    value.set_sensitive(true);
                     headers.insert(name, value);
                 }
             }
@@ -1057,9 +1067,10 @@ impl ModelProviderInfo {
             for (header, env_var) in env_headers {
                 if let Ok(val) = std::env::var(env_var)
                     && !val.trim().is_empty()
-                    && let (Ok(name), Ok(value)) =
+                    && let (Ok(name), Ok(mut value)) =
                         (HeaderName::try_from(header), HeaderValue::try_from(val))
                 {
+                    value.set_sensitive(true);
                     headers.insert(name, value);
                 }
             }

@@ -1,0 +1,65 @@
+# PF-27-S02: the launch contract denies the vault store, sign-in file, broker runtime
+# directory and Core's own environment to agent commands, and keeps CODEX_HOME read-only.
+id = "pf27s02-protected-paths"
+feature = "Secretless agent launch: vault, sign-in file, shell snapshots and Core's environment are out of reach"
+expected = "Each probe prints denied: reading auth.json, secrets/ and shell_snapshots/, writing config.toml, and reading Core's environment with ps."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[sandbox_workspace_write]
+network_access = true
+
+[features]
+isolated_credential_broker = true
+secretless_agent_launch = true
+
+[features.network_proxy]
+enabled = true
+allow_local_binding = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"probe.sh" = '''
+probe() { if eval "$2" >/dev/null 2>&1; then echo "$1: ALLOWED"; else echo "$1: denied"; fi; }
+probe "read auth.json" 'cat "$CODEX_HOME/auth.json"'
+probe "read secrets/" 'cat "$CODEX_HOME"/secrets/*'
+probe "read shell snapshots" 'ls "$CODEX_HOME/shell_snapshots/"'
+probe "write config.toml" 'printf "\n" >> "$CODEX_HOME/config.toml"'
+probe "read Core environment (pid $PPID)" 'ps eww -o command= -p "$PPID" | grep -q ZAI_API_KEY='
+echo probes done
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+type = "!mkdir -p {home}/secrets {home}/shell_snapshots && echo synthetic-vault > {home}/secrets/local.age && echo '{{}}' > {home}/auth.json && echo seeded"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "seeded"
+
+[[steps]]
+type = "Run sh probe.sh once and show me its raw output, then stop."
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "probes done"
+timeout = 180
+compress = 3
+
+[[steps]]
+pause = 4.0

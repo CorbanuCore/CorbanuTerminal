@@ -287,3 +287,142 @@ fn exec_server_env_keeps_command_native_and_carries_sandbox_context() {
     assert!(!request.exec_server_enforce_managed_network);
     assert_eq!(request.exec_server_managed_network, Some(managed_network));
 }
+
+/// PF-27-S02: drives `env_for` / `env_for_exec_server` with an explicit armed
+/// contract (the process-wide one is never armed in unit tests).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn pf_27_s02_env_for_applies_the_launch_contract() {
+    use crate::security::launch_contract::LaunchContract;
+    use std::ffi::OsString;
+
+    const RAW: &str = "ghp_pf27s02EnvForCanary000000000000000000000";
+    let codex_home_dir = tempfile::tempdir().expect("codex home");
+    let workspace_dir = tempfile::tempdir().expect("workspace");
+    let codex_home =
+        AbsolutePathBuf::from_absolute_path(codex_home_dir.path()).expect("absolute home");
+    let cwd = AbsolutePathBuf::from_absolute_path(workspace_dir.path()).expect("absolute cwd");
+    let contract = LaunchContract::capture(
+        &codex_home,
+        [(OsString::from("GITHUB_TOKEN"), OsString::from(RAW))],
+        /*hardened*/ true,
+    );
+    let cwd_uri = PathUri::from_abs_path(&cwd);
+    let exec_server_permissions = codex_protocol::models::PermissionProfile::workspace_write();
+    let permissions = exec_server_permissions
+        .clone()
+        .materialize_project_roots_with_workspace_roots(std::slice::from_ref(&cwd));
+    let manager = SandboxManager::new();
+    let sandbox = if cfg!(target_os = "macos") {
+        SandboxType::MacosSeatbelt
+    } else {
+        SandboxType::LinuxSeccomp
+    };
+    let linux_sandbox_exe = std::path::PathBuf::from("/bin/true");
+    let mut attempt = SandboxAttempt {
+        sandbox,
+        sandbox_requested: true,
+        permissions: &permissions,
+        exec_server_permissions: &exec_server_permissions,
+        enforce_managed_network: false,
+        manager: &manager,
+        sandbox_cwd: &cwd_uri,
+        workspace_roots: std::slice::from_ref(&cwd_uri),
+        codex_linux_sandbox_exe: Some(&linux_sandbox_exe),
+        use_legacy_landlock: false,
+        windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel::Disabled,
+        windows_sandbox_private_desktop: false,
+        network_denial_cancellation_token: None,
+        network_proxy: None,
+    };
+    let command = |args: &[&str], env: &[(&str, &str)]| SandboxCommand {
+        program: "/bin/sh".into(),
+        args: args.iter().map(ToString::to_string).collect(),
+        cwd: cwd_uri.clone(),
+        env: env
+            .iter()
+            .map(|(name, value)| (name.to_string(), value.to_string()))
+            .collect(),
+        managed_network: None,
+        additional_permissions: None,
+    };
+    let options = || crate::sandboxing::ExecOptions {
+        expiration: crate::exec::ExecExpiration::DefaultTimeout,
+        capture_policy: crate::exec::ExecCapturePolicy::ShellTool,
+    };
+    let refusal = |result: Result<crate::sandboxing::ExecRequest, CodexErr>| match result {
+        Err(err) => err.to_string(),
+        Ok(_) => "accepted".to_string(),
+    };
+
+    // Accepted: the protected profile denies the vault store; raw values are scrubbed.
+    let request = attempt
+        .env_for_with_contract(
+            Some(&contract),
+            command(&["-c", "true"], &[("LEAK", RAW), ("PATH", "/usr/bin")]),
+            options(),
+            None,
+            None,
+        )
+        .expect("protected launch");
+    assert!(request.env.values().all(|value| value != RAW));
+    assert!(
+        !request
+            .permission_profile
+            .file_system_sandbox_policy()
+            .can_read_path_with_cwd(codex_home.join("secrets").as_path(), cwd.as_path())
+    );
+
+    // Refused: login shell, raw argv, unsandboxed attempt, remote environment.
+    assert!(
+        refusal(attempt.env_for_with_contract(
+            Some(&contract),
+            command(&["-lc", "true"], &[]),
+            options(),
+            None,
+            None,
+        ))
+        .contains("Protected launch refused: login shells")
+    );
+    assert!(
+        refusal(attempt.env_for_with_contract(
+            Some(&contract),
+            command(&["-c", &format!("echo {RAW}")], &[]),
+            options(),
+            None,
+            None,
+        ))
+        .contains("command line contains a managed secret")
+    );
+    assert!(
+        refusal(attempt.env_for_exec_server_with_contract(
+            Some(&contract),
+            command(&["-c", "true"], &[]),
+            options(),
+        ))
+        .contains("remote environment")
+    );
+    attempt.sandbox = SandboxType::None;
+    attempt.sandbox_requested = false;
+    assert!(
+        refusal(attempt.env_for_with_contract(
+            Some(&contract),
+            command(&["-c", "true"], &[]),
+            options(),
+            None,
+            None,
+        ))
+        .contains("outside the OS sandbox")
+    );
+    // Without a contract the same unsandboxed launch is unchanged.
+    assert_eq!(
+        refusal(attempt.env_for_with_contract(
+            None,
+            command(&["-c", "true"], &[]),
+            options(),
+            None,
+            None,
+        )),
+        "accepted"
+    );
+}

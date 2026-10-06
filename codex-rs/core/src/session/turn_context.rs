@@ -623,10 +623,18 @@ impl TurnContext {
         additional_permissions: Option<AdditionalPermissionProfile>,
         environment: &TurnEnvironment,
     ) -> FileSystemSandboxContext {
-        let permissions = effective_permission_profile(
+        let mut permissions = effective_permission_profile(
             self.config.permissions.permission_profile(),
             additional_permissions.as_ref(),
         );
+        // PF-27-S02: in-process file tools get the protected profile, or no
+        // file access when the turn's permissions cannot be protected.
+        if let Some(contract) = crate::security::launch_contract::active() {
+            let cwd = environment.cwd().to_abs_path().ok();
+            let sandboxed = cwd.is_some() && cfg!(any(target_os = "macos", target_os = "linux"));
+            let cwd = cwd.map(|cwd| cwd.to_path_buf()).unwrap_or_default();
+            permissions = contract.file_tool_permissions(&permissions, sandboxed, &cwd);
+        }
         FileSystemSandboxContext {
             permissions: permissions.into(),
             cwd: Some(environment.cwd().clone()),

@@ -694,6 +694,9 @@
             "secret_auth_storage": {
               "type": "boolean"
             },
+            "secretless_agent_launch": {
+              "type": "boolean"
+            },
             "security_levels": {
               "type": "boolean"
             },
@@ -5392,6 +5395,9 @@
           "type": "boolean"
         },
         "secret_auth_storage": {
+          "type": "boolean"
+        },
+        "secretless_agent_launch": {
           "type": "boolean"
         },
         "security_levels": {

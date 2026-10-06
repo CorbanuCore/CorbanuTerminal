@@ -123,7 +123,9 @@ impl App {
             format!("Failed to rebuild config for cwd {cwd_display}"),
         )
         .await?;
-        crate::security::launch::verify_reloaded(&config).map_err(color_eyre::eyre::Report::msg)?;
+        crate::security::launch::verify_reloaded(&config)
+            .await
+            .map_err(color_eyre::eyre::Report::msg)?;
         Ok(config)
     }
 

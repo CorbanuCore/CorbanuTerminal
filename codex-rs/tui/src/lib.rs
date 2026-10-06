@@ -1232,7 +1232,7 @@ pub async fn run_main(
         strict_config,
     )
     .await;
-    if let Err(message) = security_launch.finish(&mut config) {
+    if let Err(message) = security_launch.finish(&mut config).await {
         exit_with_security_error(&message);
     }
 
@@ -2081,7 +2081,7 @@ async fn load_config_or_exit_with_fallback_cwd(
         .await
     {
         Ok(config) => {
-            if let Err(message) = security::launch::verify_reloaded(&config) {
+            if let Err(message) = security::launch::verify_reloaded(&config).await {
                 exit_with_security_error(&message);
             }
             config

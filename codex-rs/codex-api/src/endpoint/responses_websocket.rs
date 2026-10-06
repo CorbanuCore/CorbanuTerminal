@@ -584,7 +584,8 @@ async fn connect_websocket(
     http_client_factory: &HttpClientFactory,
     turn_state: Option<Arc<OnceLock<String>>>,
 ) -> Result<(WsStream, StatusCode, bool, Option<String>, Option<String>), ApiError> {
-    info!("connecting to websocket: {url}");
+    let log_url = codex_http_client::redact_url(url.as_str());
+    info!("connecting to websocket: {log_url}");
 
     let mut request = url
         .as_str()
@@ -599,13 +600,13 @@ async fn connect_websocket(
     let (stream, response) = match response {
         Ok((stream, response)) => {
             info!(
-                "successfully connected to websocket: {url}, headers: {:?}",
+                "successfully connected to websocket: {log_url}, headers: {:?}",
                 response.headers()
             );
             (stream, response)
         }
         Err(err) => {
-            error!("failed to connect to websocket: {err}, url: {url}");
+            error!("failed to connect to websocket: {err}, url: {log_url}");
             return Err(map_ws_error(err, &url));
         }
     };

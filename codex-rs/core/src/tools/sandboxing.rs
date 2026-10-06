@@ -445,6 +445,32 @@ impl<'a> SandboxAttempt<'a> {
         fallback.map(|fallback| self.network_proxy.unwrap_or(fallback))
     }
 
+    /// PF-27-S02: when the secretless launch contract is armed, refuses
+    /// launches it cannot contain, scrubs the command's environment and
+    /// returns `permissions` with the protected paths denied.
+    fn protect_launch(
+        &self,
+        contract: Option<&crate::security::launch_contract::LaunchContract>,
+        command: &mut SandboxCommand,
+        exec_server: bool,
+    ) -> Result<Option<codex_protocol::models::PermissionProfile>, CodexErr> {
+        let Some(contract) = contract else {
+            return Ok(None);
+        };
+        let cwd = self.sandbox_cwd.to_abs_path()?;
+        let protected = contract
+            .protect_launch(
+                self.sandbox,
+                self.sandbox_requested,
+                exec_server,
+                command,
+                self.permissions,
+                cwd.as_path(),
+            )
+            .map_err(|denied| CodexErr::UnsupportedOperation(denied.to_string()))?;
+        Ok(Some(protected))
+    }
+
     pub fn env_for(
         &self,
         command: SandboxCommand,
@@ -452,12 +478,31 @@ impl<'a> SandboxAttempt<'a> {
         network: Option<&NetworkProxy>,
         environment_id: Option<&str>,
     ) -> Result<crate::sandboxing::ExecRequest, CodexErr> {
+        self.env_for_with_contract(
+            crate::security::launch_contract::active(),
+            command,
+            options,
+            network,
+            environment_id,
+        )
+    }
+
+    /// [`Self::env_for`] with an explicit PF-27-S02 launch contract.
+    pub(crate) fn env_for_with_contract(
+        &self,
+        contract: Option<&crate::security::launch_contract::LaunchContract>,
+        mut command: SandboxCommand,
+        options: ExecOptions,
+        network: Option<&NetworkProxy>,
+        environment_id: Option<&str>,
+    ) -> Result<crate::sandboxing::ExecRequest, CodexErr> {
         let network = self.network_proxy(network);
+        let protected = self.protect_launch(contract, &mut command, /*exec_server*/ false)?;
         let request = self
             .manager
             .transform(SandboxTransformRequest {
                 command,
-                permissions: self.permissions,
+                permissions: protected.as_ref().unwrap_or(self.permissions),
                 sandbox: self.sandbox,
                 enforce_managed_network: self.enforce_managed_network,
                 environment_id,
@@ -488,7 +533,24 @@ impl<'a> SandboxAttempt<'a> {
         command: SandboxCommand,
         options: ExecOptions,
     ) -> Result<crate::sandboxing::ExecRequest, CodexErr> {
+        self.env_for_exec_server_with_contract(
+            crate::security::launch_contract::active(),
+            command,
+            options,
+        )
+    }
+
+    /// [`Self::env_for_exec_server`] with an explicit launch contract. A
+    /// remote environment rebuilds the child environment on its own host, so
+    /// an armed contract refuses it (PF-27-S02).
+    pub(crate) fn env_for_exec_server_with_contract(
+        &self,
+        contract: Option<&crate::security::launch_contract::LaunchContract>,
+        mut command: SandboxCommand,
+        options: ExecOptions,
+    ) -> Result<crate::sandboxing::ExecRequest, CodexErr> {
         let managed_network = command.managed_network.clone();
+        self.protect_launch(contract, &mut command, /*exec_server*/ true)?;
         let exec_server_permissions = effective_permission_profile(
             self.exec_server_permissions,
             command.additional_permissions.as_ref(),

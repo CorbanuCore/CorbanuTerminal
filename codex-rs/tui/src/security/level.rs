@@ -23,7 +23,7 @@ const STATE_VERSION: u32 = 1;
 /// Exec-policy rules written only while Aggressive is stored.
 pub(crate) const RULES_FILE: &str = "corbanu-security-aggressive.rules";
 const RULES_DIR: &str = "rules";
-const VAULT_PROGRAMS: [&str; 5] = [
+pub(crate) const VAULT_PROGRAMS: [&str; 5] = [
     "corbanu",
     "codex",
     "pfterminal",

@@ -7,11 +7,21 @@ pub const CODEX_THREAD_ID_ENV_VAR: &str = "CODEX_THREAD_ID";
 
 /// Construct a shell environment from the supplied process environment and
 /// shell-environment policy.
+///
+/// Once a secretless launch contract is armed (PF-27-S02), the result is also
+/// reduced to the launch allowlist; names the policy sets explicitly and the
+/// thread id are kept.
 pub fn create_env(
     policy: &ShellEnvironmentPolicy,
     thread_id: Option<&str>,
 ) -> HashMap<String, String> {
-    create_env_from_vars(std::env::vars(), policy, thread_id)
+    let mut env = create_env_from_vars(std::env::vars(), policy, thread_id);
+    if crate::secretless_launch::is_armed() {
+        crate::secretless_launch::retain_launch_env(&mut env, |name| {
+            name == CODEX_THREAD_ID_ENV_VAR || policy.r#set.contains_key(name)
+        });
+    }
+    env
 }
 
 pub fn create_env_from_vars<I>(
