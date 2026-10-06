@@ -7,7 +7,7 @@ expression: rendered
 • Child agents now: spawned agents get this session's values
   Aggressive: spawned agents get the same values; custom roles that would change
     them are refused at start; Claude panes are refused because Claude Code runs
-    outside the sandbox
+    outside the sandbox (Claude Code sign-in still runs)
 Unchanged: model and provider, MCP servers, apps and hooks (they run outside the
 sandbox), wallet scopes, and commands you have already allowed permanently (they
 skip the prompt but stay sandboxed). `corbanu exec` and IDE sessions are not

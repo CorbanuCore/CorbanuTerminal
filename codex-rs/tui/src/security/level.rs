@@ -247,26 +247,45 @@ pub(crate) fn permission_change_block_reason() -> Option<String> {
 /// restart that activates it.
 pub(crate) fn external_agent_block_reason() -> Option<String> {
     #[cfg(test)]
-    if let Some(level) = ACTIVE_FOR_TEST.get() {
-        return external_agent_block_reason_in(level, ChosenLevel::Permissive);
+    if let Some((active, stored)) = test_levels::LEVELS.get() {
+        return external_agent_block_reason_in(active, stored);
     }
     let context = context()?;
     external_agent_block_reason_in(context.active, load(&context.codex_home).enforced())
 }
 
-#[cfg(test)]
-thread_local! {
-    /// Stands in for the launch-verified level on this thread in tests.
-    pub(crate) static ACTIVE_FOR_TEST: std::cell::Cell<Option<ChosenLevel>> =
-        const { std::cell::Cell::new(None) };
+/// For entry points that may have no launch context (`corbanu
+/// claude-pane-smoke`): `codex_home`'s saved level, and the active level when
+/// there is one.
+pub(crate) fn external_agent_block_reason_for_home(codex_home: &Path) -> Option<String> {
+    let active = context().map_or(ChosenLevel::Permissive, |context| context.active);
+    external_agent_block_reason_in(active, load(codex_home).enforced())
 }
 
-/// For entry points without a launch context (`corbanu claude-pane-smoke`).
-pub(crate) fn external_agent_block_reason_for_home(codex_home: &Path) -> Option<String> {
-    match context() {
-        Some(_) => external_agent_block_reason(),
-        None => {
-            external_agent_block_reason_in(ChosenLevel::Permissive, load(codex_home).enforced())
+/// Stand-in active and saved levels for the Claude pane gate tests, on the
+/// current thread only.
+#[cfg(test)]
+pub(crate) mod test_levels {
+    use std::cell::Cell;
+
+    use super::ChosenLevel;
+
+    thread_local! {
+        pub(super) static LEVELS: Cell<Option<(ChosenLevel, ChosenLevel)>> =
+            const { Cell::new(None) };
+    }
+
+    /// Sets the levels until dropped.
+    pub(crate) struct Guard;
+
+    pub(crate) fn set(active: ChosenLevel, stored: ChosenLevel) -> Guard {
+        LEVELS.set(Some((active, stored)));
+        Guard
+    }
+
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            LEVELS.set(None);
         }
     }
 }

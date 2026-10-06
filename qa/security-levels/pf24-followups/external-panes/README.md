@@ -1,5 +1,9 @@
 # Claude panes under Aggressive
 
+Travis's decision 2 (2026-10-06) for the TUI lane, after PF-27-S02: bring
+external provider panes under the secretless launch and sandbox contract,
+or block them under protected levels and file an issue.
+
 Claude panes are outside PF-27-S02's secretless launch and sandbox contract.
 Each turn starts `claude -p … --permission-mode bypassPermissions` directly:
 - it inherits Corbanu's whole environment, minus a few Claude credential
@@ -38,6 +42,10 @@ rewrite the level file before the restart. Claude Code sign-in and status
 checks still run; they take no prompt and run no agent. Permissive is
 unchanged.
 
+**Remaining risk:** a Claude turn already running when Aggressive is saved,
+and any background process an earlier turn left behind, keeps full access
+until it ends. Saving does not interrupt it (#218).
+
 ## Gate evidence
 
 - **Tests:** `just test -p codex-tui security claude_panes orchestrate spawn`
@@ -53,7 +61,19 @@ unchanged.
     environment; `A-*`).
   - Aggressive after a restart: `+ Claude Pane` shows the message above
     (`B-aggressive-new-pane.txt`).
-- **Review (Opus 5.5 High):** approve with fixes. Findings 1-7 are fixed
-  (saved level counts, whips refused before firing, smoke commands, any
-  protected level, earlier refusal in the spawn picker and task path, comment,
-  gate tests); 8 is this README and the PR.
+  - Final build, Aggressive saved but not yet active: refused as well
+    (`C-saved-aggressive-not-restarted.txt`).
+  - Restored panes, spawned workers and whips or assignments aimed at a
+    Claude pane are covered by the gate tests and the review's trace, not by
+    a tmux run.
+- **Reviews (Opus 5.5 High):**
+  - first: approve with fixes. Findings 1-7 are fixed: the saved level
+    counts, whips are refused before firing, the smoke commands are checked,
+    any protected level refuses, the spawn picker and task path refuse
+    earlier, the comment is corrected, and the gates are tested. Finding 8 is
+    this README and the PR.
+  - second: approve with fixes. Fixed: the test override now sets both levels
+    and lives in `level.rs`; the smoke check always reads the given home;
+    the review row mentions Claude Code sign-in. Recorded rather than fixed:
+    running turns are not interrupted (above), and the deferred-vault test
+    nit (the check is the function's first statement).

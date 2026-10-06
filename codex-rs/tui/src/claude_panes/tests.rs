@@ -4575,28 +4575,15 @@ this line is not json and makes the transcript unparsable"#;
     assert!(output.direct_turn_record().is_none());
 }
 
-/// Sets the stand-in active level for this thread; cleared on drop.
-struct ActiveLevelForTest;
-
-impl ActiveLevelForTest {
-    fn aggressive() -> Self {
-        crate::security::level::ACTIVE_FOR_TEST
-            .set(Some(crate::security::level::ChosenLevel::Aggressive));
-        Self
-    }
-}
-
-impl Drop for ActiveLevelForTest {
-    fn drop(&mut self) {
-        crate::security::level::ACTIVE_FOR_TEST.set(None);
-    }
-}
-
 #[test]
 fn aggressive_refuses_new_claude_panes_before_any_artifact() {
     let codex_home = tempfile::tempdir().expect("codex home");
     let mut registry = ClaudePaneRegistry::new();
-    let _aggressive = ActiveLevelForTest::aggressive();
+    // Saved, not yet active: a pane could rewrite the level before restart.
+    let _levels = crate::security::level::test_levels::set(
+        crate::security::level::ChosenLevel::Permissive,
+        crate::security::level::ChosenLevel::Aggressive,
+    );
     for role in [None, Some(SpawnRole::Orc)] {
         let error = registry
             .create_pane_with_role(
@@ -4627,7 +4614,10 @@ fn aggressive_refuses_turns_in_existing_panes_without_side_effects() {
             codex_home.path(),
         )
         .expect("create pane");
-    let _aggressive = ActiveLevelForTest::aggressive();
+    let _levels = crate::security::level::test_levels::set(
+        crate::security::level::ChosenLevel::Aggressive,
+        crate::security::level::ChosenLevel::Aggressive,
+    );
     let Err(error) = registry.prepare_turn(&pane_id, "hi".to_string(), codex_home.path()) else {
         panic!("Aggressive refuses Claude turns");
     };
@@ -4656,7 +4646,10 @@ async fn aggressive_refuses_to_start_a_claude_process() {
         format!("touch {}", marker.display()),
         "bridge-secret-for-gate-test",
     );
-    let _aggressive = ActiveLevelForTest::aggressive();
+    let _levels = crate::security::level::test_levels::set(
+        crate::security::level::ChosenLevel::Aggressive,
+        crate::security::level::ChosenLevel::Aggressive,
+    );
     let error = run_claude_command_plan(plan, CancellationToken::new(), /*progress_tx*/ None)
         .await
         .expect_err("Aggressive refuses Claude processes");
