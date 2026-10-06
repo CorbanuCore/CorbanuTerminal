@@ -152,8 +152,13 @@ impl NativeIngress {
         if !self.labelled_mode {
             return None;
         }
+        // Identical inputs: hand out the most restrictive mark first.
         if let Some(origins) = self.agent_inputs.get_mut(key)
-            && let Some(origin) = origins.pop()
+            && let Some(origin) = origins
+                .iter()
+                .position(|origin| matches!(origin, MessageOrigin::External(_)))
+                .map(|index| origins.remove(index))
+                .or_else(|| origins.pop())
         {
             if origins.is_empty() {
                 self.agent_inputs.remove(key);

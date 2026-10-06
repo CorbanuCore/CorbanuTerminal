@@ -1047,6 +1047,9 @@ impl ModelClient {
         input: &[codex_protocol::user_input::UserInput],
         origin: crate::security::ingress::MessageOrigin,
     ) {
+        if !self.source_envelopes_enabled() {
+            return;
+        }
         if let Ok(bytes) = serde_json::to_vec(input)
             && let Ok(mut ingress) = self.ingress_items.lock()
         {
@@ -1059,6 +1062,9 @@ impl ModelClient {
         &self,
         input: &[codex_protocol::user_input::UserInput],
     ) -> Option<crate::security::ingress::MessageOrigin> {
+        if !self.source_envelopes_enabled() {
+            return None;
+        }
         let bytes = serde_json::to_vec(input).ok()?;
         self.ingress_items
             .lock()
