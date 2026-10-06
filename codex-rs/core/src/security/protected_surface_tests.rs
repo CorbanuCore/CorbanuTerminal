@@ -249,6 +249,13 @@ fn pf_23_s01_typed_input_is_judged_as_the_command_it_amounts_to() {
         Some(ValueTransfer)
     );
     assert_eq!(typed("python3 -i", "print(1 != 2)\n"), None);
+    assert_eq!(
+        typed(
+            "python3 -c'import pty;pty.spawn(\"/bin/sh\")'",
+            "corbanu vault list\n"
+        ),
+        Some(Vault)
+    );
     assert_eq!(typed("bash", "fc -s\n"), Some(UnseenCode));
     assert_eq!(typed("zsh", "r\n"), Some(UnseenCode));
     assert!(is_interrupt("\u{3}"));
@@ -270,25 +277,34 @@ fn pf_23_s01_typed_window_joins_split_input_until_a_human_approves() {
     let thread = codex_protocol::ThreadId::new();
     let live = [7, 8, 9];
     let first = TypedWindow::open(thread, 7, "corban", &live);
-    assert_eq!(first.text, "corban");
+    assert_eq!(first.text(), "corban");
     first.keep();
     let second = TypedWindow::open(thread, 7, "u vault list\n", &live);
-    assert_eq!(second.text, "corbanu vault list\n");
+    assert_eq!(second.text(), "corbanu vault list\n");
     // Another process of the same thread starts empty.
-    assert_eq!(TypedWindow::open(thread, 8, "ls\n", &live).text, "ls\n");
+    assert_eq!(TypedWindow::open(thread, 8, "ls\n", &live).text(), "ls\n");
     second.clear();
-    assert_eq!(TypedWindow::open(thread, 7, "ls\n", &live).text, "ls\n");
+    assert_eq!(TypedWindow::open(thread, 7, "ls\n", &live).text(), "ls\n");
     let big = "x".repeat(typed::MAX_TYPED_BYTES + 1);
     assert!(TypedWindow::open(thread, 9, &big, &live).unreadable());
-    // After an interrupt the next text is also judged on its own.
+    // After an interrupt the text from it on is judged too, until approval,
+    // however the rest is split.
     TypedWindow::open(thread, 9, "echo ", &live).keep();
     note_interrupt(thread, 9);
-    let after = TypedWindow::open(thread, 9, "solana transfer x 1\n", &live);
-    assert_eq!(after.text, "echo solana transfer x 1\n");
-    assert_eq!(after.alone.as_deref(), Some("solana transfer x 1\n"));
+    let after = TypedWindow::open(thread, 9, "solana", &live);
+    assert_eq!(after.texts(), vec!["echo solana", "solana"]);
     after.keep();
-    assert_eq!(TypedWindow::open(thread, 9, "ls\n", &live).alone, None);
+    let rest = TypedWindow::open(thread, 9, " transfer x 1\n", &live);
+    assert_eq!(
+        rest.texts(),
+        vec!["echo solana transfer x 1\n", "solana transfer x 1\n"]
+    );
+    rest.clear();
+    assert_eq!(
+        TypedWindow::open(thread, 9, "ls\n", &live).texts(),
+        vec!["ls\n"]
+    );
     // An exited process's text is dropped when the thread next types.
     TypedWindow::open(thread, 8, "corban", &live).keep();
-    assert_eq!(TypedWindow::open(thread, 8, "x", &[7]).text, "x");
+    assert_eq!(TypedWindow::open(thread, 8, "x", &[7]).text(), "x");
 }

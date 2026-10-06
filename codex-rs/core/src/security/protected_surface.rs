@@ -302,18 +302,17 @@ pub(crate) fn classify_typed_input(
         rest.first()
             .is_some_and(|word| interpreter_of(word).is_some())
             && rest[1..].iter().all(|arg| {
-                arg.starts_with('-')
-                    && !matches!(
-                        arg.as_str(),
-                        "-c" | "-e"
-                            | "-m"
-                            | "-p"
-                            | "-r"
-                            | "-x"
-                            | "--eval"
-                            | "--print"
-                            | "--require"
-                    )
+                // Options only, none that runs code (`-c`, `-c'...'`, `--eval=`).
+                let code_flag = match arg.strip_prefix("--") {
+                    Some(long) => ["eval", "print", "require", "command"]
+                        .iter()
+                        .any(|flag| long.starts_with(flag)),
+                    None => arg
+                        .chars()
+                        .nth(1)
+                        .is_some_and(|letter| "cemprx".contains(letter)),
+                };
+                arg.starts_with('-') && !code_flag
             })
             && !program_is(process_command, "ipython")
     };
