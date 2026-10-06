@@ -651,3 +651,23 @@ fn pf_33_s01_blocked_response_names_only_the_reason() {
         Some(BLOCKED_HEADER)
     );
 }
+
+#[tokio::test]
+async fn pf_33_s02_authorized_request_pins_exactly_the_checked_answers() {
+    let ledger = RedirectLedger::default();
+    let request = start(&ledger, "https://Public.Example./path", "GET")
+        .await
+        .expect("public request");
+
+    assert_eq!(
+        request.pinned_peers(),
+        PinnedPeers::new(
+            "public.example",
+            443,
+            [
+                PUBLIC_V4.parse().expect("v4"),
+                PUBLIC_V6.parse().expect("v6"),
+            ],
+        )
+    );
+}

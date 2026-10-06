@@ -300,6 +300,65 @@ pub(crate) fn permission_change_block_reason() -> Option<String> {
     })
 }
 
+/// Claude panes run Claude Code outside Corbanu's sandbox, with this
+/// process's environment, network and Claude's own permission bypass, so no
+/// protected level can contain them. Refused while a protected level is
+/// active or saved: a pane could otherwise rewrite the saved level before the
+/// restart that activates it.
+pub(crate) fn external_agent_block_reason() -> Option<String> {
+    #[cfg(test)]
+    if let Some((active, stored)) = test_levels::LEVELS.get() {
+        return external_agent_block_reason_in(active, stored);
+    }
+    let context = context()?;
+    external_agent_block_reason_in(context.active, load(&context.codex_home).enforced())
+}
+
+/// For entry points that may have no launch context (`corbanu
+/// claude-pane-smoke`): `codex_home`'s saved level, and the active level when
+/// there is one.
+pub(crate) fn external_agent_block_reason_for_home(codex_home: &Path) -> Option<String> {
+    let active = context().map_or(ChosenLevel::Permissive, |context| context.active);
+    external_agent_block_reason_in(active, load(codex_home).enforced())
+}
+
+/// Stand-in active and saved levels for the Claude pane gate tests, on the
+/// current thread only.
+#[cfg(test)]
+pub(crate) mod test_levels {
+    use std::cell::Cell;
+
+    use super::ChosenLevel;
+
+    thread_local! {
+        pub(super) static LEVELS: Cell<Option<(ChosenLevel, ChosenLevel)>> =
+            const { Cell::new(None) };
+    }
+
+    /// Sets the levels until dropped.
+    pub(crate) struct Guard;
+
+    pub(crate) fn set(active: ChosenLevel, stored: ChosenLevel) -> Guard {
+        LEVELS.set(Some((active, stored)));
+        Guard
+    }
+
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            LEVELS.set(None);
+        }
+    }
+}
+
+fn external_agent_block_reason_in(active: ChosenLevel, stored: ChosenLevel) -> Option<String> {
+    (active != ChosenLevel::Permissive || stored != ChosenLevel::Permissive).then(|| {
+        format!(
+            "Claude panes are off under security level {}: Claude Code would run outside Corbanu's sandbox with your environment and network. Choose Permissive in /security and restart to use them; /panes switches back to Main.",
+            if active != ChosenLevel::Permissive { active } else { stored }.name()
+        )
+    })
+}
+
 #[cfg(test)]
 #[path = "level_tests.rs"]
 mod tests;

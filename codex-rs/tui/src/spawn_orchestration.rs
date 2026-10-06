@@ -1170,6 +1170,10 @@ impl App {
         role: SpawnRole,
         parent_node_id: Option<String>,
     ) {
+        if let Some(reason) = crate::security::level::external_agent_block_reason() {
+            self.chat_widget.add_error_message(reason);
+            return;
+        }
         let mut items = Vec::new();
         for profile in ClaudeProviderProfileKind::creation_options() {
             let profile_config = profile.profile();

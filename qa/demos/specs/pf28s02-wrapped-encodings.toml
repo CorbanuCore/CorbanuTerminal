@@ -1,0 +1,49 @@
+# PF-28-S02: wrapped and nested encodings. Pass the synthetic canary with
+# --credential PF28_CANARY_API_KEY=file:<canary file> (see qa/security-levels/sprints/PF-28-S02/README.md).
+id = "pf28s02-wrapped-encodings"
+feature = "Secret output gate: a secret wrapped across lines or encoded twice is still removed"
+expected = "A credentials file printed with base64 at 76 columns, xxd -p at 60 columns, and base64 of its hex: each block shows [REDACTED:env:PF28_CANARY_API_KEY] on screen and to the model."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[features]
+secret_output_gate = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"wrap.sh" = '''
+printf 'user=ci\nregion=us-east-1\nnote=rotated weekly by the platform team\ntoken=%s\n' "$PF28_CANARY_API_KEY" > creds.txt
+echo "== base64 -b 76"; base64 -b 76 -i creds.txt
+echo "== xxd -p"; xxd -p creds.txt
+echo "== base64 of hex"; xxd -p creds.txt | tr -d '\n' | base64
+echo "== done"
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run sh wrap.sh. Reply with its output exactly as you received it, then stop."
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "== done[\\s\\S]*== done"
+timeout = 240
+compress = 3
+
+[[steps]]
+pause = 4.0

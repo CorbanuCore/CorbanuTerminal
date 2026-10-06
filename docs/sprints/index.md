@@ -32,7 +32,9 @@ contract. A sprint turns one feature into an exact code-and-evidence checklist.
 - A `ready` or `in_progress` sprint requires an active plan plus an exact
   worktree, branch, and 40-character base commit matching that plan.
 - Parallel implementation must satisfy the allocation rules below; executable
-  dependencies must already be completed and archived.
+  dependencies must already be completed and archived, or (coordinator,
+  2026-10-06) be merged to main behind a default-off flag with the record's
+  `merged_behind_flag` set and its `gate_evidence` file present.
 - A sprint never grants authority beyond its active plan.
 
 ## Bounded parallel implementation

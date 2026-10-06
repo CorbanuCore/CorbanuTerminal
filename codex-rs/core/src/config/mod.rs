@@ -3994,6 +3994,10 @@ impl Config {
             if features.enabled(Feature::UrlDestinationPolicy) {
                 configured_network_proxy_config.set_url_destination_policy(/*enabled*/ true);
             }
+            // PF-28-S02: bind injected credentials and scrub them from responses.
+            if features.enabled(Feature::SecretOutputGate) {
+                configured_network_proxy_config.set_credential_response_gate(/*enabled*/ true);
+            }
             if features.enabled(Feature::IsolatedCredentialBroker) {
                 configured_network_proxy_config
                     .set_isolated_credential_broker_enabled(/*enabled*/ true);
@@ -5037,6 +5041,10 @@ impl Config {
                     );
                 }
                 configured_network_proxy_config.enabled = true;
+                if self.features.enabled(Feature::SecretOutputGate) {
+                    configured_network_proxy_config
+                        .set_credential_response_gate(/*enabled*/ true);
+                }
                 if self.features.enabled(Feature::IsolatedCredentialBroker) {
                     configured_network_proxy_config
                         .set_isolated_credential_broker_enabled(/*enabled*/ true);

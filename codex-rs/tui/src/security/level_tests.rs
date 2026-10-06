@@ -169,3 +169,32 @@ fn nested_agents_setting_round_trips_and_fails_closed() {
         (ChosenLevel::Aggressive, NestedAgents::Refuse)
     );
 }
+
+#[test]
+fn claude_panes_are_refused_while_a_protected_level_is_active_or_saved() {
+    use ChosenLevel::Aggressive;
+    use ChosenLevel::Permissive;
+    assert_eq!(external_agent_block_reason_in(Permissive, Permissive), None);
+    for (active, stored) in [
+        (Aggressive, Aggressive),
+        (Aggressive, Permissive),
+        (Permissive, Aggressive),
+    ] {
+        let reason = external_agent_block_reason_in(active, stored)
+            .expect("a protected level refuses Claude panes");
+        assert!(
+            reason.starts_with("Claude panes are off under security level Aggressive")
+                && reason.contains("outside Corbanu's sandbox")
+                && reason.contains("/security"),
+            "{reason}"
+        );
+    }
+}
+
+#[test]
+fn smoke_runs_without_a_launch_context_read_the_stored_level() {
+    let home = tempfile::tempdir().unwrap();
+    assert_eq!(external_agent_block_reason_for_home(home.path()), None);
+    save(home.path(), ChosenLevel::Aggressive, NestedAgents::Refuse).unwrap();
+    assert!(external_agent_block_reason_for_home(home.path()).is_some());
+}

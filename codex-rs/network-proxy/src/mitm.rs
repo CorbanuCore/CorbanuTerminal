@@ -1,8 +1,10 @@
 use crate::certs::ManagedMitmCa;
 use crate::config::NetworkMode;
 use crate::credential_broker::CredentialRouting;
+use crate::credential_broker::response_scrub;
 use crate::destination;
 use crate::destination::DenialSite;
+use crate::destination::DestinationDenial;
 use crate::destination::DestinationGuard;
 use crate::destination::HostPatterns;
 use crate::destination::RedirectLedger;
@@ -327,6 +329,20 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
                 .map(|info| info.peer_addr().ip().to_string())
                 .unwrap_or_default()
         );
+        // PF-33-S02: an upstream proxy would resolve and connect on its own,
+        // so the checked answers could not be pinned.
+        if request_ctx.upstream.has_upstream_proxy() {
+            let site = DenialSite {
+                host: &target_host,
+                port: target_port,
+                method: Some(&method),
+                protocol: "https",
+                client,
+                fail_command: false,
+            };
+            let denial = DestinationDenial::UpstreamProxy;
+            return Ok(destination::blocked(app_state, &denial, site).await);
+        }
         match DestinationGuard::protected()
             .authorize_request(
                 &url,
@@ -358,6 +374,8 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
     let has_body = request_has_body(&parts.headers);
     if let Some((authorized, _)) = destination.as_ref() {
         authorized.strip_cross_origin_credentials(&mut parts.headers);
+        // PF-33-S02: the connector dials only these checked answers.
+        parts.extensions.insert(authorized.pinned_peers());
     }
     if request_ctx
         .policy
@@ -390,6 +408,27 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
         return Ok(blocked_text_response(REASON_POLICY_DENIED));
     }
     apply_mitm_hook_actions(&mut parts.headers, hook_actions.as_ref());
+    // PF-28-S02: values injected here (credential or hook) are scrubbed from
+    // the response the agent receives; the isolated broker scrubs its own.
+    let reflection = if app_state.credential_response_gate() {
+        let injected = match &routing {
+            CredentialRouting::Direct(gate) => gate.clone(),
+            #[cfg(unix)]
+            CredentialRouting::Brokered(_) => None,
+        };
+        match response_scrub::with_hook_values(injected, hook_actions.as_ref()) {
+            Ok(reflection) => reflection,
+            Err(error) => {
+                warn!("credentialed request denied: response gate unavailable: {error}");
+                return Ok(blocked_text_response(REASON_POLICY_DENIED));
+            }
+        }
+    } else {
+        None
+    };
+    if reflection.is_some() {
+        response_scrub::request_identity_body(&mut parts.headers);
+    }
     parts.uri = build_https_uri(&authority, &path)?;
     parts
         .headers
@@ -413,7 +452,7 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
 
     let upstream_req = Request::from_parts(parts, body);
     let mut upstream_resp = match routing {
-        CredentialRouting::Direct => request_ctx.upstream.serve(upstream_req).await?,
+        CredentialRouting::Direct(_) => request_ctx.upstream.serve(upstream_req).await?,
         #[cfg(unix)]
         CredentialRouting::Brokered(route) => match route.forward(upstream_req).await {
             Ok(response) => response,
@@ -460,6 +499,9 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
             };
             return Ok(destination::blocked(app_state, &denial, site).await);
         }
+    }
+    if let Some(gate) = &reflection {
+        upstream_resp = response_scrub::scrub_response(gate, upstream_resp);
     }
     respond_with_inspection(
         upstream_resp,
@@ -516,13 +558,29 @@ async fn evaluate_mitm_policy(
 
     // CONNECT already handled allowlist/denylist + decider policy. Re-check local/private
     // resolution here to defend against DNS rebinding between CONNECT and inner HTTPS requests.
-    if matches!(
-        policy
-            .app_state
-            .host_blocked(&policy.target_host, policy.target_port)
-            .await?,
-        HostBlockDecision::Blocked(HostBlockReason::NotAllowedLocal)
-    ) {
+    let host_decision = policy
+        .app_state
+        .host_blocked(&policy.target_host, policy.target_port)
+        .await?;
+    // PF-33-S02: under the destination guard, a host denied after its tunnel
+    // opened is refused on the open tunnel too, not only on the next CONNECT.
+    if host_decision == HostBlockDecision::Blocked(HostBlockReason::Denied)
+        && destination::guard_enabled(&policy.app_state).await?
+    {
+        let site = DenialSite {
+            host: &policy.target_host,
+            port: policy.target_port,
+            method: Some(&method),
+            protocol: "https",
+            client,
+            fail_command: false,
+        };
+        let denial = DestinationDenial::HostDeniedAfterConnect;
+        return Ok(MitmPolicyDecision::Block(
+            destination::blocked(&policy.app_state, &denial, site).await,
+        ));
+    }
+    if host_decision == HostBlockDecision::Blocked(HostBlockReason::NotAllowedLocal) {
         let reason = HostBlockReason::NotAllowedLocal.as_str();
         let _ = policy
             .app_state

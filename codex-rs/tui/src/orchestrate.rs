@@ -3513,6 +3513,10 @@ impl App {
                 .iter()
                 .any(|pane| pane.id == pane_id)
             {
+                // Refused before the fire is counted or reported as started.
+                if let Some(reason) = crate::security::level::external_agent_block_reason() {
+                    return Err(reason);
+                }
                 return Ok(FireDestination::ClaudePane(pane_id.to_string()));
             }
         }
