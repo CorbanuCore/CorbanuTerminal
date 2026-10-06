@@ -26,6 +26,8 @@ use tracing::info;
 
 /// Bound on one dial to one pinned address before the next one is tried.
 const PINNED_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+/// Bound on all pinned dials of one request (up to 16 checked answers).
+const PINNED_DIAL_BUDGET: Duration = Duration::from_secs(30);
 const PINNING_REFUSED: &str = "network target rejected by connection pinning";
 
 /// PF-33-S02: the answers the destination guard checked for one request. Under
@@ -167,6 +169,21 @@ async fn guard_enabled(state: &NetworkProxyState) -> Result<bool, BoxError> {
 /// Connect to the pinned addresses in order, without any DNS lookup. Each
 /// address still passes the peer check of `connector`.
 async fn dial_pinned<Input>(
+    input: Input,
+    pin: &PinnedPeers,
+    connector: &TargetCheckedStreamConnector,
+) -> Result<EstablishedClientConnection<TcpStream, Input>, BoxError> {
+    tokio::time::timeout(
+        PINNED_DIAL_BUDGET,
+        dial_pinned_in_order(input, pin, connector),
+    )
+    .await
+    .unwrap_or_else(|_| {
+        Err(io::Error::new(io::ErrorKind::TimedOut, "pinned dials timed out").into())
+    })
+}
+
+async fn dial_pinned_in_order<Input>(
     input: Input,
     pin: &PinnedPeers,
     connector: &TargetCheckedStreamConnector,
@@ -596,6 +613,16 @@ mod tests {
         let pin = PinnedPeers::new("Example.COM.", 443, []);
         assert!(pin.covers(&HostWithPort::new(
             Host::Name("example.com".parse().expect("name")),
+            443
+        )));
+        // The guard pins the A-label form; clients send the same form.
+        let idn = PinnedPeers::new("xn--bcher-kva.example", 443, []);
+        assert!(idn.covers(&HostWithPort::new(
+            Host::Name("XN--BCHER-KVA.example".parse().expect("name")),
+            443
+        )));
+        assert!(!idn.covers(&HostWithPort::new(
+            Host::Name("bcher.example".parse().expect("name")),
             443
         )));
         let v6 = PinnedPeers::new("[2606:2800:220:1:248:1893:25c8:1946]", 443, []);
