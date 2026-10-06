@@ -333,7 +333,7 @@ pub fn built_in_slash_commands() -> Vec<(&'static str, SlashCommand)> {
 /// (or a non-Permissive level is stored); otherwise it is the read-only view.
 fn security_description(context: Option<&crate::security::level::LevelContext>) -> &'static str {
     if context.is_some_and(|context| context.picker_enabled) {
-        "choose a security level; takes effect at the next start"
+        "choose a security level; takes effect when you restart"
     } else {
         "explore security profiles and protection readiness (read only)"
     }
@@ -345,6 +345,9 @@ mod tests {
     use std::str::FromStr;
 
     use super::SlashCommand;
+    use super::security_description;
+    use crate::security::level::ChosenLevel;
+    use crate::security::level::LevelContext;
 
     #[test]
     fn stop_command_is_canonical_name() {
@@ -390,9 +393,6 @@ mod tests {
     /// launch context enables it, otherwise the read-only view.
     #[test]
     fn security_description_matches_what_the_command_opens() {
-        use crate::security::level::ChosenLevel;
-        use crate::security::level::LevelContext;
-
         let context = |picker_enabled| LevelContext {
             codex_home: std::path::PathBuf::from("/home"),
             picker_enabled,
@@ -401,12 +401,12 @@ mod tests {
         let read_only = "explore security profiles and protection readiness (read only)";
         assert_eq!(
             [
-                super::security_description(Some(&context(true))),
-                super::security_description(Some(&context(false))),
-                super::security_description(/*context*/ None),
+                security_description(Some(&context(true))),
+                security_description(Some(&context(false))),
+                security_description(/*context*/ None),
             ],
             [
-                "choose a security level; takes effect at the next start",
+                "choose a security level; takes effect when you restart",
                 read_only,
                 read_only,
             ]

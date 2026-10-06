@@ -3,7 +3,7 @@
 # does. (Flag off keeps the read-only description; covered by a unit test.)
 id = "pf24-security-description"
 feature = "/security description matches the picker"
-expected = "With the flag on, the command popup describes /security as choosing a security level that takes effect at the next start, and the command opens the level picker."
+expected = "With the flag on, the command popup describes /security as choosing a security level that takes effect when you restart, and the command opens the level picker."
 model = "glm-5.2"
 provider = "zai"
 config = """
@@ -23,7 +23,7 @@ pause = 1.0
 [[steps]]
 type = "/secur"
 [[steps]]
-wait = "choose a security level; takes effect at the next start"
+wait = "choose a security level; takes effect when you restart"
 [[steps]]
 pause = 3.0
 [[steps]]
