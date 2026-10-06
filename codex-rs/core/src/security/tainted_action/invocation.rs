@@ -75,7 +75,7 @@ pub(super) fn parse<'a>(name: &str, args: &'a [String]) -> Option<Invocation<'a>
                         preloads,
                     });
                 }
-                (Family::Deno, false, _) => {
+                (Family::Deno, false, word) if !word.contains(['.', '/']) => {
                     return Some(Invocation {
                         code: Code::Tool,
                         preloads,
@@ -119,9 +119,21 @@ pub(super) fn parse<'a>(name: &str, args: &'a [String]) -> Option<Invocation<'a>
                     preloads,
                 });
             }
+            Opt::FileAttached(file) => {
+                return Some(Invocation {
+                    code: Code::File(file),
+                    preloads,
+                });
+            }
             Opt::Module => {
                 return Some(Invocation {
                     code: next.map_or(Code::Stdin, Code::Module),
+                    preloads,
+                });
+            }
+            Opt::ModuleAttached(module) => {
+                return Some(Invocation {
+                    code: Code::Module(module),
                     preloads,
                 });
             }
@@ -159,13 +171,17 @@ enum Family {
     Lua,
     Osascript,
     Pwsh,
+    /// Tcl, expect, swift, R: `-c`/`-e` code, `-f` file, else a file or stdin.
+    Generic,
 }
 
 enum Opt<'a> {
     Inline,
     InlineAttached(&'a str),
     File,
+    FileAttached(&'a str),
     Module,
+    ModuleAttached(&'a str),
     Preload,
     PreloadAttached(&'a str),
     Value,
@@ -178,102 +194,94 @@ impl Family {
         if SHELLS.contains(&name) {
             return Some(Self::Shell);
         }
-        Some(match name {
-            "python" | "python2" | "python3" => Self::Python,
+        // `python3.12`, `perl5.34`, `node18`: the version does not matter.
+        let base = name.trim_end_matches(|ch: char| ch.is_ascii_digit() || ch == '.');
+        Some(match base {
+            "python" | "pypy" => Self::Python,
             "node" | "nodejs" | "ts-node" => Self::Node,
             "deno" => Self::Deno,
             "bun" => Self::Bun,
             "tsx" => Self::Tsx,
             "perl" | "ruby" => Self::PerlRuby,
             "php" => Self::Php,
-            "lua" => Self::Lua,
+            "lua" | "luajit" => Self::Lua,
             "osascript" => Self::Osascript,
-            "pwsh" => Self::Pwsh,
+            "pwsh" | "powershell" => Self::Pwsh,
+            "tclsh" | "wish" | "expect" | "swift" | "rscript" => Self::Generic,
             _ => return None,
         })
     }
 
-    /// How this family reads one option word.
+    /// How this family reads one option word: long options by name, short
+    /// groups one letter at a time, with attached values (`-c$X`, `-Ilib`).
     fn option<'a>(self, arg: &'a str) -> Opt<'a> {
-        let long = arg.starts_with("--");
-        let group = arg.trim_start_matches(['-', '+']);
-        let (key, attached) = match arg.split_once('=') {
-            Some((key, value)) => (key, Some(value)),
-            None => (arg, None),
-        };
-        match self {
-            Self::Shell => match key {
-                "--command" => Opt::Inline,
-                "--rcfile" | "--init-file" => Opt::Value,
-                _ if long => Opt::Flag,
-                _ if group.contains('c') => Opt::Inline,
-                _ if group.contains('s') => Opt::Stdin,
-                _ if group.ends_with(['o', 'O']) => Opt::Value,
-                _ => Opt::Flag,
-            },
-            Self::Python => match key {
-                "--check-hash-based-pycs" => Opt::Value,
-                _ if long => Opt::Flag,
-                _ if group.ends_with('c') => Opt::Inline,
-                _ if group.ends_with('m') => Opt::Module,
-                _ if group.ends_with(['W', 'X']) => Opt::Value,
-                _ => Opt::Flag,
-            },
-            Self::Node | Self::Deno | Self::Bun | Self::Tsx => match key {
-                "-e" | "--eval" | "-p" | "--print" => match attached {
-                    Some(code) => Opt::InlineAttached(code),
-                    None => Opt::Inline,
-                },
-                "-r"
-                | "--require"
-                | "--import"
-                | "--loader"
-                | "--experimental-loader"
-                | "--preload" => match attached {
-                    Some(file) => Opt::PreloadAttached(file),
-                    None => Opt::Preload,
-                },
-                "--env-file" | "--inspect-port" | "--title" | "--cwd" => {
-                    if attached.is_some() {
-                        Opt::Flag
-                    } else {
-                        Opt::Value
-                    }
-                }
-                _ => Opt::Flag,
-            },
-            Self::PerlRuby => match arg {
-                _ if long => Opt::Flag,
-                "-r" => Opt::Preload,
-                "-I" | "-C" | "-x" => Opt::Value,
-                // Attached values: `-Ilib`, `-MJSON`, `-rjson`.
-                _ if group.starts_with(['I', 'M', 'm']) && group.len() > 1 => Opt::Flag,
-                _ if group.starts_with('r') && group.len() > 1 => Opt::PreloadAttached(&group[1..]),
-                // `-e`, `-pe`, `-lne`: the next word is code.
-                _ if group.ends_with(['e', 'E']) => Opt::Inline,
-                _ => Opt::Flag,
-            },
-            Self::Php => match arg {
-                "-r" => Opt::Inline,
-                "-f" => Opt::File,
-                "-d" | "-c" | "-z" => Opt::Value,
-                _ => Opt::Flag,
-            },
-            Self::Lua => match arg {
-                "-e" => Opt::Inline,
-                "-l" => Opt::Value,
-                _ => Opt::Flag,
-            },
-            Self::Osascript => match arg {
-                "-e" => Opt::Inline,
-                "-l" | "-s" => Opt::Value,
-                _ => Opt::Flag,
-            },
-            Self::Pwsh => match arg.to_lowercase().as_str() {
+        if self == Self::Pwsh {
+            return match arg.to_lowercase().as_str() {
                 "-c" | "-command" => Opt::Inline,
                 "-f" | "-file" => Opt::File,
                 _ => Opt::Flag,
-            },
+            };
         }
+        let scripted = matches!(self, Self::Node | Self::Deno | Self::Bun | Self::Tsx);
+        if let Some(long) = arg.strip_prefix("--") {
+            let (key, attached) = match long.split_once('=') {
+                Some((key, value)) => (key, Some(value)),
+                None => (long, None),
+            };
+            return match key {
+                "command" if self == Self::Shell => Opt::Inline,
+                "rcfile" | "init-file" if self == Self::Shell => {
+                    attached.map_or(Opt::Value, |_| Opt::Flag)
+                }
+                "check-hash-based-pycs" if self == Self::Python => {
+                    attached.map_or(Opt::Value, |_| Opt::Flag)
+                }
+                "eval" | "print" if scripted => attached.map_or(Opt::Inline, Opt::InlineAttached),
+                "require" | "import" | "loader" | "experimental-loader" | "preload" if scripted => {
+                    attached.map_or(Opt::Preload, Opt::PreloadAttached)
+                }
+                "env-file" | "inspect-port" | "title" | "cwd" if scripted => {
+                    attached.map_or(Opt::Value, |_| Opt::Flag)
+                }
+                _ => Opt::Flag,
+            };
+        }
+        let group = arg.trim_start_matches(['-', '+']);
+        for (at, letter) in group.char_indices() {
+            let rest = &group[at + letter.len_utf8()..];
+            let attached = (!rest.is_empty()).then_some(rest);
+            let inline = attached.map_or(Opt::Inline, Opt::InlineAttached);
+            let value = attached.map_or(Opt::Value, |_| Opt::Flag);
+            let preload = attached.map_or(Opt::Preload, Opt::PreloadAttached);
+            let file = attached.map_or(Opt::File, Opt::FileAttached);
+            return match (self, letter) {
+                (Self::Shell, 'c') => Opt::Inline,
+                (Self::Shell, 's') => Opt::Stdin,
+                (Self::Shell, 'o' | 'O') => value,
+                (Self::Python, 'c') => inline,
+                (Self::Python, 'm') => attached.map_or(Opt::Module, Opt::ModuleAttached),
+                (Self::Python, 'W' | 'X') => value,
+                (_, 'e' | 'p') if scripted => inline,
+                (_, 'r') if scripted => preload,
+                (Self::PerlRuby, 'e' | 'E') => inline,
+                (Self::PerlRuby, 'r') => preload,
+                (Self::PerlRuby, 'I') => value,
+                // Letters whose value can only be attached.
+                (Self::PerlRuby, 'M' | 'm' | 'x' | 'C' | 'l' | 'i' | 'F' | '0' | 'd' | 'D') => {
+                    Opt::Flag
+                }
+                (Self::Php, 'r') => inline,
+                (Self::Php, 'f') => file,
+                (Self::Php, 'd' | 'c' | 'z') => value,
+                (Self::Lua, 'e') => inline,
+                (Self::Lua, 'l') => value,
+                (Self::Osascript, 'e') => inline,
+                (Self::Osascript, 'l' | 's') => value,
+                (Self::Generic, 'c' | 'e') => inline,
+                (Self::Generic, 'f') => file,
+                _ => continue,
+            };
+        }
+        Opt::Flag
     }
 }

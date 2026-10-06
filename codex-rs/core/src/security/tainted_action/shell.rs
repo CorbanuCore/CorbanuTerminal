@@ -6,11 +6,14 @@
 //! kept so wrappers, pipelines and code fed to an interpreter can be followed.
 
 /// Shells whose `-c` argument is its own command line.
-pub(super) const SHELLS: &[&str] = &["sh", "bash", "zsh", "dash", "ksh", "fish"];
+pub(super) const SHELLS: &[&str] = &[
+    "sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh", "ash", "mksh", "yash",
+];
 /// Words one brace expression may expand to before it is left as written.
 const MAX_BRACE_EXPANSION: usize = 64;
 /// Placeholder for the output of a substitution the classifier cannot see.
-pub(super) const UNSEEN_OUTPUT: &str = "$__substitution__";
+/// Holds a control character, so no variable or word can spell it.
+pub(super) const UNSEEN_OUTPUT: &str = "\u{1}unseen-output\u{1}";
 
 #[derive(Debug, Default)]
 pub(super) struct SimpleCommand {
@@ -25,6 +28,10 @@ pub(super) struct SimpleCommand {
     pub(super) fed_by: Vec<usize>,
     /// It runs inside `>(...)`: its stdin is the outer command's output.
     pub(super) reads_outer_output: bool,
+    /// Index of the word its stdin is redirected from (`< file`).
+    pub(super) stdin_from: Option<usize>,
+    /// Index of its here-string word (`<<< word`).
+    pub(super) here_string: Option<usize>,
 }
 
 /// Lexed simple commands, in the order they finish (a substitution comes
@@ -94,6 +101,11 @@ fn expand_braces(text: &str) -> (String, bool) {
         if word.is_empty() {
             return;
         }
+        // The shell does not expand braces inside quotes (JSON bodies, code).
+        if word.contains(['\'', '"', ':']) {
+            out.push_str(&std::mem::take(word));
+            return;
+        }
         let mut words = vec![std::mem::take(word)];
         while let Some(position) = words
             .iter()
@@ -156,6 +168,22 @@ struct Open {
     process: bool,
 }
 
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum Redirect {
+    #[default]
+    None,
+    Stdin,
+    HereString,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Group {
+    /// `( ... )` or `{ ... }`.
+    Bracket,
+    /// `if`/`while`/`until`/`for`/`case`/`select` ... `fi`/`done`/`esac`.
+    Keyword,
+}
+
 #[derive(Default)]
 struct Lexer {
     /// Finished commands, in order.
@@ -163,13 +191,37 @@ struct Lexer {
     current: SimpleCommand,
     word: String,
     open: Vec<Open>,
+    /// Open groups and the pipe that feeds every command inside them.
+    groups: Vec<(Group, Option<usize>)>,
+    redirect: Redirect,
 }
 
 impl Lexer {
     fn flush(&mut self) {
         if !self.word.is_empty() {
+            let index = Some(self.current.words.len());
+            match std::mem::take(&mut self.redirect) {
+                Redirect::Stdin => self.current.stdin_from = index,
+                Redirect::HereString => self.current.here_string = index,
+                Redirect::None => {}
+            }
             let word = std::mem::take(&mut self.word);
             self.current.words.push(word);
+        }
+    }
+
+    /// The pipe feeding the innermost group that has one.
+    fn group_pipe(&self) -> Option<usize> {
+        self.groups.iter().rev().find_map(|(_, pipe)| *pipe)
+    }
+
+    fn open_group(&mut self, group: Group, pipe: Option<usize>) {
+        self.groups.push((group, pipe));
+    }
+
+    fn close_group(&mut self, group: Group) {
+        if self.groups.last().is_some_and(|(open, _)| *open == group) {
+            self.groups.pop();
         }
     }
 
@@ -186,16 +238,50 @@ impl Lexer {
             ..SimpleCommand::default()
         };
         let finished = std::mem::replace(&mut self.current, next);
+        // A compound command fed by a pipe feeds every command inside it.
+        let first = finished.words.first().map(|word| word.to_lowercase());
+        match first.as_deref() {
+            Some("if" | "while" | "until" | "for" | "case" | "select") => {
+                self.open_group(Group::Keyword, finished.pipe_from.or(self.group_pipe()));
+            }
+            Some("fi" | "done" | "esac") => self.close_group(Group::Keyword),
+            _ => {}
+        }
         self.done.push(finished);
         Some(self.done.len() - 1)
     }
 
-    /// End the current command; a piped one reads the previous one's output.
+    /// End the current command; a piped one reads the previous one's output,
+    /// and one inside a piped group reads the group's input.
     fn start(&mut self, start: Start) {
         let finished = self.finish_current();
         if start == Start::Piped {
             self.current.pipe_from = finished.or(self.done.len().checked_sub(1));
+        } else if self.current.pipe_from.is_none() {
+            self.current.pipe_from = self.group_pipe();
         }
+    }
+
+    /// `(` or `{`: a group; when it directly follows a pipe, the pipe feeds
+    /// every command in it.
+    fn open_bracket(&mut self) {
+        self.flush();
+        let piped = if self.current.words.is_empty() {
+            self.current.pipe_from
+        } else {
+            None
+        };
+        self.start(Start::Plain);
+        self.open_group(Group::Bracket, piped);
+        if self.current.pipe_from.is_none() {
+            self.current.pipe_from = self.group_pipe();
+        }
+    }
+
+    fn close_bracket(&mut self) {
+        self.start(Start::Plain);
+        self.close_group(Group::Bracket);
+        self.current.pipe_from = self.group_pipe();
     }
 
     fn open_substitution(&mut self, backtick: bool, output: bool, process: bool) {
@@ -227,8 +313,29 @@ impl Lexer {
             return;
         };
         let inner: Vec<usize> = (open.first..self.done.len()).collect();
-        let spliced = match inner.as_slice() {
-            [only] if !open.output && !open.process => substitution_output(&self.done[*only].words),
+        // The commands at this level (not inside a nested substitution).
+        let top: Vec<usize> = inner
+            .iter()
+            .copied()
+            .filter(|index| {
+                !inner
+                    .iter()
+                    .any(|other| self.done[*other].fed_by.contains(index))
+            })
+            .collect();
+        let spliced = match top.as_slice() {
+            _ if open.output || open.process => None,
+            [only] => substitution_output(&self.done[*only].words),
+            // `$(cd X && pwd)` prints X.
+            [cd, pwd]
+                if self.done[*pwd].words == ["pwd"]
+                    && self.done[*cd]
+                        .words
+                        .first()
+                        .is_some_and(|word| word == "cd") =>
+            {
+                self.done[*cd].words.get(1).cloned()
+            }
             _ => None,
         };
         self.current = open.outer;
@@ -284,12 +391,34 @@ impl Lexer {
                 ')' if self.open.last().is_some_and(|open| !open.backtick) => {
                     self.close_substitution();
                 }
+                '{' if self.word.is_empty() && next.is_none_or(char::is_whitespace) => {
+                    self.open_bracket();
+                }
+                '}' if self.word.is_empty() => self.close_bracket(),
                 '\'' | '"' | '\\' | '{' | '}' => {}
+                '<' if next == Some('<') && chars.get(index + 2) == Some(&'<') => {
+                    self.flush();
+                    self.redirect = Redirect::HereString;
+                    index += 3;
+                    continue;
+                }
+                '<' if next == Some('<') => {
+                    // A here-document: its text follows in the script.
+                    self.flush();
+                    index += 2;
+                    continue;
+                }
+                '<' => {
+                    self.flush();
+                    self.redirect = Redirect::Stdin;
+                }
+                '(' => self.open_bracket(),
+                ')' => self.close_bracket(),
                 '|' => {
                     let pipe = next != Some('|') && (index == 0 || chars[index - 1] != '|');
                     self.start(if pipe { Start::Piped } else { Start::Plain });
                 }
-                ';' | '&' | '(' | ')' | '\n' => self.start(Start::Plain),
+                ';' | '&' | '\n' => self.start(Start::Plain),
                 ch if ch.is_whitespace() || matches!(ch, '<' | '>' | ',') => self.flush(),
                 ch => self.word.push(ch),
             }
@@ -357,7 +486,7 @@ impl Lexer {
 /// What a substitution prints when the classifier can tell: `echo`/`printf`
 /// text, the name a lookup command was given (`which corbanu` stands for
 /// `corbanu`), or a neutral value for commands that print facts, not code.
-fn substitution_output(words: &[String]) -> Option<String> {
+pub(super) fn substitution_output(words: &[String]) -> Option<String> {
     if let Some(printed) = literal_output(words) {
         return Some(printed);
     }
@@ -370,7 +499,15 @@ fn substitution_output(words: &[String]) -> Option<String> {
         "date" | "uname" | "whoami" | "hostname" | "id" | "nproc" | "getconf" => {
             Some("value".to_string())
         }
-        "git" if rest.first().is_some_and(|word| word == "rev-parse") => Some("value".to_string()),
+        // The repository root is at or above the working folder.
+        "git" if rest.first().is_some_and(|word| word == "rev-parse") => Some(
+            if rest.iter().any(|word| word == "--show-toplevel") {
+                "$PWD"
+            } else {
+                "value"
+            }
+            .to_string(),
+        ),
         _ => None,
     }
 }

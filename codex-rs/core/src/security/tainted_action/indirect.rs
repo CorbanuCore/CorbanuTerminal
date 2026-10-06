@@ -158,38 +158,64 @@ fn hex_bytes(word: &str) -> Option<Vec<u8>> {
 /// arguments), with the index of that word.
 pub(super) fn command_word(words: &[String]) -> Option<(usize, String)> {
     const KEYWORDS: &[&str] = &["!", "if", "then", "elif", "else", "do", "while", "until"];
-    const WRAPPERS: &[&str] = &[
-        "sudo",
-        "doas",
-        "env",
-        "nice",
-        "nohup",
-        "time",
-        "timeout",
-        "exec",
-        "command",
-        "builtin",
-        "xargs",
-        "stdbuf",
-        "setsid",
-        "caffeinate",
-        "arch",
-        "unbuffer",
-        "ionice",
-        "chrt",
-        "taskset",
-        "flock",
-        "runuser",
-        "sg",
-        "nsenter",
-        "unshare",
-        "firejail",
-        "systemd-run",
+    /// Wrappers: options that take a value, and operands before the command.
+    const WRAPPERS: &[(&str, &[&str], usize)] = &[
+        (
+            "sudo",
+            &["-u", "-g", "-h", "-p", "-C", "-D", "-r", "-t", "-U", "-T"],
+            0,
+        ),
+        ("doas", &["-u", "-C"], 0),
+        ("env", &["-u", "-C", "--unset", "--chdir"], 0),
+        ("nice", &["-n", "--adjustment"], 0),
+        ("nohup", &[], 0),
+        ("time", &["-f", "-o", "--format", "--output"], 0),
+        ("timeout", &["-s", "--signal", "-k", "--kill-after"], 1),
+        ("exec", &["-a"], 0),
+        ("command", &[], 0),
+        ("builtin", &[], 0),
+        (
+            "xargs",
+            &[
+                "-I",
+                "-L",
+                "-n",
+                "-P",
+                "-s",
+                "-d",
+                "-E",
+                "-a",
+                "--max-args",
+                "--max-procs",
+                "--delimiter",
+                "--arg-file",
+                "--replace",
+            ],
+            0,
+        ),
+        ("stdbuf", &["-i", "-o", "-e"], 0),
+        ("setsid", &[], 0),
+        ("caffeinate", &["-t", "-w"], 0),
+        ("arch", &[], 0),
+        ("unbuffer", &[], 0),
+        ("ionice", &["-c", "-n", "-p", "-P", "-u"], 0),
+        ("chrt", &[], 1),
+        ("taskset", &["-c", "--cpu-list"], 1),
+        (
+            "flock",
+            &["-w", "-E", "--timeout", "--conflict-exit-code"],
+            1,
+        ),
+        ("runuser", &["-u", "-g", "-G"], 0),
+        ("sg", &[], 1),
+        ("nsenter", &["-t", "--target"], 0),
+        ("unshare", &[], 0),
+        ("firejail", &[], 0),
+        ("systemd-run", &["-p", "--property", "-u", "--unit"], 0),
+        ("busybox", &[], 0),
+        ("toybox", &[], 0),
+        ("watch", &["-n", "--interval"], 0),
     ];
-    /// Wrappers that take one operand before the command.
-    const WRAPPERS_WITH_OPERAND: &[&str] = &["timeout", "chrt", "taskset", "flock", "sg"];
-    /// Wrapper options that take a value.
-    const VALUE_OPTIONS: &[&str] = &["-u", "-g", "-n", "-c", "-C", "-p", "-s", "-k", "-E"];
     let mut index = 0;
     while let Some(word) = words.get(index) {
         let name = basename(word).to_lowercase();
@@ -203,22 +229,27 @@ pub(super) fn command_word(words: &[String]) -> Option<(usize, String)> {
         if word.starts_with('#') {
             return None;
         }
-        if !WRAPPERS.contains(&name.as_str()) {
+        let Some((_, value_options, operands)) =
+            WRAPPERS.iter().find(|(wrapper, _, _)| *wrapper == name)
+        else {
             return Some((index, name));
-        }
+        };
         index += 1;
+        let mut operands = *operands;
         while let Some(option) = words.get(index) {
             if option.starts_with('-') {
-                index += 1 + usize::from(VALUE_OPTIONS.contains(&option.as_str()));
-            } else if option.contains('=') && !option.starts_with('-') {
+                // `taskset -c 0 cmd` names the CPUs in the option instead.
+                if name == "taskset" && matches!(option.as_str(), "-c" | "--cpu-list") {
+                    operands = 0;
+                }
+                index += 1 + usize::from(value_options.contains(&option.as_str()));
+            } else if option.contains('=') {
                 index += 1;
             } else {
                 break;
             }
         }
-        if WRAPPERS_WITH_OPERAND.contains(&name.as_str()) {
-            index += 1;
-        }
+        index += operands;
     }
     None
 }
@@ -237,14 +268,19 @@ fn executes_input(command: &SimpleCommand) -> bool {
     let Some((index, name)) = command_word(&command.words) else {
         return command.words.is_empty() && !command.fed_by.is_empty();
     };
-    if name.starts_with('$') || name == "eval" {
+    if name.starts_with('$') || name.contains(super::shell::UNSEEN_OUTPUT) || name == "eval" {
         return true;
     }
     if name == "parallel" {
         return command.words.len() == index + 1;
     }
+    // `xargs sh -c %` and `parallel sh -c {}` put their input into the code.
+    let fed_args = command.words[..index]
+        .iter()
+        .any(|word| matches!(basename(word), "xargs" | "parallel"));
     match invocation::parse(&name, &command.words[index + 1..]).map(|invocation| invocation.code) {
         Some(Code::Stdin | Code::Inline(None)) => true,
+        Some(Code::Inline(Some(_))) if fed_args => true,
         Some(Code::Inline(Some(_))) => !command.fed_by.is_empty(),
         // `source <(curl ...)`, `bash <(curl ...)`: the script is a substitution.
         Some(Code::File(file)) if file.contains(super::shell::UNSEEN_OUTPUT) => {
@@ -256,7 +292,7 @@ fn executes_input(command: &SimpleCommand) -> bool {
 
 /// Whether a stage only prints text the classifier already sees.
 fn literal_stage(command: &SimpleCommand) -> bool {
-    super::shell::literal_output(&command.words).is_some() && command.fed_by.is_empty()
+    super::shell::substitution_output(&command.words).is_some() && command.fed_by.is_empty()
 }
 
 /// Opaque execution: code fed to an executor through a pipe, a substitution

@@ -241,6 +241,7 @@ pub(super) fn classify_with(
         found: None,
         scripts_read: 0,
         rebuilt: 0,
+        not_shell: 0,
     };
     match action {
         ApprovalAction::Shell { command, cwd, .. }
@@ -355,6 +356,9 @@ struct Classifier {
     /// Inside text rebuilt from joined literals: it names things but is not
     /// itself run, so its variables are not judged as unseen code.
     rebuilt: usize,
+    /// Inside a file that is not a shell script (Python, JavaScript, ...):
+    /// shell brace expansion does not apply to it.
+    not_shell: usize,
 }
 
 /// Whether a script the command runs must be read in full (it is what runs)
@@ -402,7 +406,8 @@ impl Classifier {
             return;
         }
         let lexed = shell::simple_commands(command);
-        if lexed.incomplete || indirect::opaque_execution(&lexed.commands) {
+        if (lexed.incomplete && self.not_shell == 0) || indirect::opaque_execution(&lexed.commands)
+        {
             self.note(ProtectedActionKind::UnseenCode);
         }
         let mut folders = Folders {
@@ -427,6 +432,7 @@ impl Classifier {
                 .iter()
                 .any(|later| later.pipe_from == Some(index));
             self.simple_command(
+                simple,
                 &words,
                 &unseen,
                 feeds_pipe,
@@ -451,6 +457,7 @@ impl Classifier {
     #[allow(clippy::too_many_arguments)]
     fn simple_command(
         &mut self,
+        simple: &SimpleCommand,
         words: &[String],
         unseen: &[bool],
         feeds_pipe: bool,
@@ -461,12 +468,14 @@ impl Classifier {
         let lower: Vec<String> = words.iter().map(|word| word.to_lowercase()).collect();
         let command = indirect::command_word(words);
         // Assignments (`A=x`, `export A=x`) feed later `$A` words.
-        let assigns = command.as_ref().is_none_or(|(_, name)| {
-            matches!(
-                name.as_str(),
-                "export" | "local" | "declare" | "readonly" | "typeset"
-            )
-        });
+        let comment = words.first().is_some_and(|word| word.starts_with('#'));
+        let assigns = !comment
+            && command.as_ref().is_none_or(|(_, name)| {
+                matches!(
+                    name.as_str(),
+                    "export" | "local" | "declare" | "readonly" | "typeset"
+                )
+            });
         if assigns {
             for word in words {
                 if let Some((name, value)) = word.split_once('=')
@@ -478,7 +487,13 @@ impl Classifier {
                     // Output the classifier cannot see keeps the variable
                     // unseen; an environment reference (`$JAVA_HOME/bin/java`)
                     // is kept as written.
-                    let value = if value.contains(shell::UNSEEN_OUTPUT) {
+                    // Once unseen, a variable stays unseen for the action
+                    // (a later assignment may not run).
+                    let value = if value.contains(shell::UNSEEN_OUTPUT)
+                        || variables
+                            .get(name)
+                            .is_some_and(|old| old.contains(shell::UNSEEN_OUTPUT))
+                    {
                         shell::UNSEEN_OUTPUT.to_string()
                     } else {
                         value.to_string()
@@ -492,15 +507,20 @@ impl Classifier {
             // Code named by a variable or substitution the classifier cannot
             // see: the command word (`$X`, `bash -c "$X"`), an interpreter's
             // inline code (`python3 -c "$X"`) or `eval "$x"`.
+            // Inline code, or an argument after it (`sh -c 'eval "$1"' _ "$X"`).
             let inline_unseen = indirect::invocation(words).is_some_and(|invocation| {
                 matches!(invocation.code, Code::Inline(Some(code))
-                    if words.iter().zip(unseen).any(|(word, unseen)| *unseen && word == code))
+                    if words
+                        .iter()
+                        // Attached code (`-c$X`) ends its option word.
+                        .position(|word| word.ends_with(code))
+                        .is_some_and(|at| unseen[at..].iter().any(|unseen| *unseen)))
             });
             let eval_unseen = name == "eval" && unseen[index + 1..].iter().any(|unseen| *unseen);
             if self.rebuilt == 0 && (unseen[*index] || inline_unseen || eval_unseen) {
                 self.note(ProtectedActionKind::UnseenCode);
             }
-            self.change_folder(name, args, folders);
+            self.change_folder(name, args, folders, variables);
         }
         // Not only at command position: wrappers (`nice -n 5`, `sudo -u x`,
         // `timeout 9`, `eval`, `npx`, nested `sh -c`) put the real command later.
@@ -578,60 +598,100 @@ impl Classifier {
                 self.script(&payload, &cwd, depth + 1);
             }
         }
-        self.scripts_of(words, command.as_ref(), &cwd, depth);
+        self.scripts_of(simple, words, unseen, command.as_ref(), &cwd, depth);
     }
 
     /// Read what the command runs from files: its script, a local Python
-    /// module, preloaded files, or the command itself when it is a path.
+    /// module, preloaded files, a redirected stdin, or the command itself when
+    /// it is a path. A required path the classifier cannot resolve (it holds
+    /// a variable) fails closed.
     fn scripts_of(
         &mut self,
+        simple: &SimpleCommand,
         words: &[String],
+        unseen: &[bool],
         command: Option<&(usize, String)>,
         cwd: &str,
         depth: usize,
     ) {
-        let Some((index, _)) = command else {
+        let Some((index, name)) = command else {
             return;
         };
-        let path_like = |word: &str| word.contains('/') || word.starts_with('.');
-        match indirect::invocation(words) {
-            Some(invocation) => {
-                match invocation.code {
-                    // A path through an environment variable cannot be read.
-                    Code::File(file) if file.contains('$') => {}
-                    Code::File(file) => {
-                        let file = self.homes.resolve(file, cwd);
-                        self.script_file(&file, cwd, depth, Script::Required);
-                    }
-                    Code::Module(module) => {
-                        let module = module.replace('.', "/");
-                        for candidate in [format!("{module}.py"), format!("{module}/__main__.py")] {
-                            let file = self.homes.resolve(&candidate, cwd);
-                            self.script_file(&file, cwd, depth, Script::IfPresent);
-                        }
-                    }
-                    Code::Inline(_) | Code::Stdin | Code::Tool => {}
-                }
-                for preload in invocation.preloads {
-                    let need = if path_like(preload) {
-                        Script::Required
-                    } else {
-                        Script::IfPresent
-                    };
-                    let file = self.homes.resolve(preload, cwd);
-                    self.script_file(&file, cwd, depth, need);
+        let local = |word: &str| word.starts_with(['.', '/', '~']);
+        let Some(invocation) = indirect::invocation(words) else {
+            let word = &words[*index];
+            if word.contains('/') {
+                // A binary through an environment path (`$JAVA_HOME/bin/java`)
+                // is not a script; an unseen one was already judged.
+                if !word.contains('$') {
+                    let file = self.homes.resolve(word, cwd);
+                    self.script_file(&file, cwd, depth, Script::Required);
                 }
             }
-            None if words[*index].contains('/') && !words[*index].contains('$') => {
-                let file = self.homes.resolve(&words[*index], cwd);
-                self.script_file(&file, cwd, depth, Script::Required);
+            return;
+        };
+        let shell =
+            shell::SHELLS.contains(&name.as_str()) || matches!(name.as_str(), "source" | ".");
+        match invocation.code {
+            Code::File(file) => self.required_script(file, cwd, depth, shell),
+            Code::Module(module) if module.contains('$') => {
+                self.note(ProtectedActionKind::UnseenCode);
             }
-            None => {}
+            Code::Module(module) => {
+                let module = module.replace('.', "/");
+                for candidate in [format!("{module}.py"), format!("{module}/__main__.py")] {
+                    let file = self.homes.resolve(&candidate, cwd);
+                    self.not_shell += 1;
+                    self.script_file(&file, cwd, depth, Script::IfPresent);
+                    self.not_shell -= 1;
+                }
+            }
+            Code::Stdin => {
+                if let Some(at) = simple.stdin_from {
+                    self.required_script(&words[at], cwd, depth, shell);
+                }
+                if simple.here_string.is_some_and(|at| unseen[at]) {
+                    self.note(ProtectedActionKind::UnseenCode);
+                }
+            }
+            Code::Inline(_) | Code::Tool => {}
+        }
+        for preload in invocation.preloads {
+            if local(preload) {
+                self.required_script(preload, cwd, depth, /*shell*/ false);
+            } else {
+                let file = self.homes.resolve(preload, cwd);
+                self.not_shell += 1;
+                self.script_file(&file, cwd, depth, Script::IfPresent);
+                self.not_shell -= 1;
+            }
+        }
+    }
+
+    /// A script the command certainly runs: read in full or fail closed.
+    fn required_script(&mut self, file: &str, cwd: &str, depth: usize, shell: bool) {
+        if file.contains('$') || file.contains(shell::UNSEEN_OUTPUT) {
+            self.note(ProtectedActionKind::UnseenCode);
+            return;
+        }
+        let file = self.homes.resolve(file, cwd);
+        if !shell {
+            self.not_shell += 1;
+        }
+        self.script_file(&file, cwd, depth, Script::Required);
+        if !shell {
+            self.not_shell -= 1;
         }
     }
 
     /// Follow `cd`, `pushd` and `popd` (also behind `builtin`/`command`).
-    fn change_folder(&self, name: &str, args: &[String], folders: &mut Folders) {
+    fn change_folder(
+        &self,
+        name: &str,
+        args: &[String],
+        folders: &mut Folders,
+        variables: &mut HashMap<String, String>,
+    ) {
         let target = args
             .iter()
             .find(|word| !word.starts_with('-') || *word == "-");
@@ -647,6 +707,8 @@ impl Classifier {
                 folders.stack.push(folders.cwd.clone());
             }
             folders.previous = std::mem::replace(&mut folders.cwd, next);
+            variables.insert("PWD".to_string(), folders.cwd.clone());
+            variables.insert("OLDPWD".to_string(), folders.previous.clone());
         }
     }
 
@@ -751,7 +813,7 @@ fn substitute(
         .iter()
         .map(|word| {
             let mut out = String::new();
-            let mut unseen = false;
+            let mut unseen = word.contains(shell::UNSEEN_OUTPUT);
             let mut rest = word.as_str();
             while let Some(at) = rest.find('$') {
                 out.push_str(&rest[..at]);
