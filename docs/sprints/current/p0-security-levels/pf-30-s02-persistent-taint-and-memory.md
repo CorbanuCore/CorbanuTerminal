@@ -56,6 +56,7 @@ updated: 2026-10-06
 - [x] Flag-off Moderate names the disabled feature (separate commit `836ec41e04`).
 - [x] Gate at `01a3a88330`: [persistent-origins-gate.md](../../../../qa/security-levels/sprints/PF-30-S02/persistent-origins-gate.md);
   videos in [qa/demos/index/PF-30-S02.md](../../../../qa/demos/index/PF-30-S02.md).
+- [x] Slice 1 merged as PR #190 (merge commit `7b2a04ea41`), all CI checks green.
 
 ## Remaining
 
