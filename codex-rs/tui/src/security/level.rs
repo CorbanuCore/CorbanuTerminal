@@ -240,6 +240,20 @@ pub(crate) fn permission_change_block_reason() -> Option<String> {
     })
 }
 
+/// Claude panes run Claude Code outside Corbanu's sandbox, with this
+/// process's environment, network and Claude's own permission bypass, so no
+/// protected level can contain them. Refused while Aggressive is active.
+pub(crate) fn external_agent_block_reason() -> Option<String> {
+    external_agent_block_reason_in(context())
+}
+
+fn external_agent_block_reason_in(context: Option<&LevelContext>) -> Option<String> {
+    let context = context?;
+    (context.active == ChosenLevel::Aggressive).then(|| {
+        "Claude panes are off under security level Aggressive: Claude Code would run outside Corbanu's sandbox with your environment and network. Choose Permissive in /security and restart to use them.".to_string()
+    })
+}
+
 #[cfg(test)]
 #[path = "level_tests.rs"]
 mod tests;

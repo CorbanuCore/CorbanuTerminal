@@ -132,3 +132,23 @@ fn deleted_state_file_next_to_the_rule_file_is_invalid() {
     assert_eq!(load(home.path()).enforced(), ChosenLevel::Aggressive);
     assert!(matches!(load(home.path()), StoredLevel::Invalid(_)));
 }
+
+#[test]
+fn claude_panes_are_refused_only_while_aggressive_is_active() {
+    let context = |active| LevelContext {
+        codex_home: PathBuf::from("/home"),
+        picker_enabled: true,
+        active,
+    };
+    assert_eq!(external_agent_block_reason_in(None), None);
+    assert_eq!(
+        external_agent_block_reason_in(Some(&context(ChosenLevel::Permissive))),
+        None
+    );
+    let reason = external_agent_block_reason_in(Some(&context(ChosenLevel::Aggressive)))
+        .expect("Aggressive refuses Claude panes");
+    assert!(
+        reason.contains("outside Corbanu's sandbox") && reason.contains("/security"),
+        "{reason}"
+    );
+}

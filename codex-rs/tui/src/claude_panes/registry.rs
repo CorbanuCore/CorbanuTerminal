@@ -294,6 +294,9 @@ impl ClaudePaneRegistry {
         spawn_role: Option<SpawnRole>,
         spawn_nickname: Option<String>,
     ) -> Result<String> {
+        if let Some(reason) = crate::security::level::external_agent_block_reason() {
+            return Err(anyhow!(reason));
+        }
         self.push_pane(profile, cwd, codex_home, spawn_role, spawn_nickname)
     }
 
@@ -370,6 +373,9 @@ impl ClaudePaneRegistry {
         prompt: String,
         codex_home: &Path,
     ) -> Result<PreparedClaudePaneTurn> {
+        if let Some(reason) = crate::security::level::external_agent_block_reason() {
+            return Err(anyhow!(reason));
+        }
         let pane = self
             .panes
             .iter_mut()

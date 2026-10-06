@@ -339,6 +339,10 @@ impl App {
     }
 
     pub(crate) fn open_claude_pane_profile_picker(&mut self) {
+        if let Some(reason) = crate::security::level::external_agent_block_reason() {
+            self.chat_widget.add_error_message(reason);
+            return;
+        }
         let mut items = Vec::new();
         for profile in ClaudeProviderProfileKind::creation_options() {
             let profile_config = profile.profile();
