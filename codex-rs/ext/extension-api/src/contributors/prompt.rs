@@ -29,7 +29,8 @@ impl PromptFragment {
 
     /// Marks text derived from stored content the host did not write, such as
     /// memories summarised from earlier sessions. With `source_envelopes`, a
-    /// protected request receives it as labelled untrusted data, not policy.
+    /// protected request receives it as labelled untrusted data, not policy:
+    /// Core then sends the fragment as its own developer message whatever its slot.
     pub fn with_stored_data(mut self) -> Self {
         self.stored_data = true;
         self

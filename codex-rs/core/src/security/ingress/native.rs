@@ -161,12 +161,40 @@ impl NativeIngress {
     }
 
     fn journal(&mut self, scope: SourceOriginScope, key: ContentDigest, origin: MessageOrigin) {
-        if self.labelled_mode && self.pending_origins.len() < MAX_PENDING_ORIGIN_ENTRIES {
-            self.pending_origins.push(SourceOriginEntry {
-                scope,
-                key: key.to_hex(),
-                origin: recorded(origin),
-            });
+        if !self.labelled_mode {
+            return;
+        }
+        if self.pending_origins.len() >= MAX_PENDING_ORIGIN_ENTRIES {
+            tracing::warn!("source origin journal is full; later content resumes as labelled data");
+            return;
+        }
+        self.pending_origins.push(SourceOriginEntry {
+            scope,
+            key: key.to_hex(),
+            origin: recorded(origin),
+        });
+    }
+
+    /// Journal the current origin of every attributed item again, so a resume
+    /// that starts at a history checkpoint (compaction) restores it without
+    /// reading records written before the checkpoint. Never changes an origin.
+    pub(crate) fn journal_current(&mut self, items: &[ResponseItem]) {
+        for item in items {
+            if let Some(origin) = self.message_origin(item)
+                && let Some(key) = message_key(item)
+            {
+                self.journal(SourceOriginScope::Message, key, origin);
+            } else if let Some(key) = item_key(item)
+                && self.model_items.contains(&key)
+            {
+                self.journal(SourceOriginScope::ModelItem, key, MessageOrigin::Model);
+            }
+            if let Some(call_id) = super::structural::call_id_of(item) {
+                let key = ContentDigest::of(call_id.as_bytes());
+                if let Some(kind) = self.calls.get(&key).copied() {
+                    self.journal(SourceOriginScope::Call, key, MessageOrigin::External(kind));
+                }
+            }
         }
     }
 

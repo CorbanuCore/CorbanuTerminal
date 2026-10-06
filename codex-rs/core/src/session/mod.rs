@@ -3650,6 +3650,9 @@ impl Session {
         metadata: CompactedHistoryMetadata,
     ) {
         let items = Self::assign_missing_response_item_ids(Cow::Owned(items)).into_owned();
+        // Resumes that start at this checkpoint (paginated threads, referenced
+        // forks) never read earlier records, so restate the current origins.
+        self.services.model_client().journal_current_origins(&items);
         let compacted_item = CompactedItem {
             message: metadata.message,
             replacement_history: Some(items.clone()),
@@ -4124,6 +4127,11 @@ impl Session {
         let context_items = self
             .build_initial_context_with_world_state(turn_context, world_state.as_ref())
             .await;
+        // Host-built context; stored-data messages were registered first.
+        self.services.model_client().register_message_origin(
+            &context_items,
+            crate::security::ingress::MessageOrigin::Host,
+        );
         let turn_context_item = turn_context.to_turn_context_item();
         self.replace_compacted_history(
             context_items,

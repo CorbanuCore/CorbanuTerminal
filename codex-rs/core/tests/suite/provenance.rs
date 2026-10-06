@@ -89,6 +89,12 @@ async fn pf_30_s01_native_permissive_turn_retains_original_text() -> anyhow::Res
             .iter()
             .any(|value| value == &text)
     );
+    // PF-30-S02: flag off writes no origin records.
+    let rollout = test.codex.rollout_path().expect("rollout path");
+    test.thread_manager
+        .shutdown_all_threads_bounded(std::time::Duration::from_secs(3))
+        .await;
+    assert!(!std::fs::read_to_string(rollout)?.contains("source_origin"));
     Ok(())
 }
 
@@ -307,6 +313,10 @@ async fn pf_30_s02_compaction_summary_inherits_the_taint_of_its_inputs() -> anyh
                         ev_completed("summary"),
                     ]),
                     sse(vec![ev_response_created("after"), ev_completed("after")]),
+                    sse(vec![
+                        ev_response_created("resumed"),
+                        ev_completed("resumed"),
+                    ]),
                 ])
                 .collect(),
         )
@@ -317,16 +327,17 @@ async fn pf_30_s02_compaction_summary_inherits_the_taint_of_its_inputs() -> anyh
         provider.name = "OpenAI (test)".into();
         provider.base_url = Some(format!("{}/v1", server.uri()));
         provider.supports_websockets = false;
+        let configure = move |config: &mut codex_core::config::Config| {
+            // A non-OpenAI provider name forces local compaction.
+            config.model_provider = provider.clone();
+            config.security_level = SecurityLevel::Moderate;
+            config
+                .features
+                .enable(Feature::SourceEnvelopes)
+                .expect("enable source envelopes");
+        };
         let test = test_codex()
-            .with_config(move |config| {
-                // A non-OpenAI provider name forces local compaction.
-                config.model_provider = provider;
-                config.security_level = SecurityLevel::Moderate;
-                config
-                    .features
-                    .enable(Feature::SourceEnvelopes)
-                    .expect("enable source envelopes");
-            })
+            .with_config(configure.clone())
             .build_with_auto_env(&server)
             .await?;
         test.submit_turn(human).await?;
@@ -355,7 +366,34 @@ async fn pf_30_s02_compaction_summary_inherits_the_taint_of_its_inputs() -> anyh
                 "{summary_text}"
             );
         }
+        let home = test.home.clone();
+        let rollout = test.codex.rollout_path().expect("rollout path");
         test.thread_manager
+            .shutdown_all_threads_bounded(std::time::Duration::from_secs(3))
+            .await;
+        drop(test);
+
+        // The standing decided at compaction survives a resume.
+        let resumed = test_codex()
+            .with_config(configure.clone())
+            .resume(&server, home, rollout)
+            .await?;
+        resumed.submit_turn("resume").await?;
+        let requests = captured.requests();
+        let request = requests.last().expect("resumed request");
+        let users = request.message_input_texts("user");
+        assert!(users.iter().any(|text| text == human), "{users:?}");
+        let summary_text = users
+            .iter()
+            .find(|text| text.contains(summary))
+            .expect("summary sent after resume");
+        assert_eq!(
+            summary_text.contains("corbanu_untrusted_data"),
+            with_tool_output,
+            "{summary_text}"
+        );
+        resumed
+            .thread_manager
             .shutdown_all_threads_bounded(std::time::Duration::from_secs(3))
             .await;
     }

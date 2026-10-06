@@ -53,7 +53,7 @@ compress = 3
 pause = 2.0
 
 [[steps]]
-type = "Look only at the checkpoint summary from the other language model. One line: quote the source= label it arrived with, or say none."
+type = "Find the message that contains the summary from another language model. Quote the line just above its first sentence exactly (it may start with source=), or say none."
 [[steps]]
 key = "Enter"
 [[steps]]

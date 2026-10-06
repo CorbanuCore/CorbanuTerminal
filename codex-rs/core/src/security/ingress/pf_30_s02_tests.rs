@@ -278,3 +278,36 @@ fn pf_30_s02_memory_context_stays_memory_data_after_a_host_registration() {
     let text = first_text(&resumed.project_labelled(std::slice::from_ref(&memory))[0]);
     assert!(text.contains("source=memory "), "{text}");
 }
+
+#[test]
+fn pf_30_s02_checkpoint_restates_current_origins_without_upgrading() {
+    let (items, _) = recorded_session();
+    let mut live = labelled();
+    // Rebuild the live registrations, then drop the pre-checkpoint records as
+    // a resume that starts at a compaction checkpoint would.
+    let (_, record) = recorded_session();
+    live.note_restored_history(&items, [&record]);
+    let unattributed = message("user", "injected without a record");
+    let mut checkpoint = items.clone();
+    checkpoint.push(unattributed);
+    live.journal_current(&checkpoint);
+    let restated = persisted(live.take_origin_record().expect("checkpoint record"));
+    assert!(
+        restated
+            .entries
+            .iter()
+            .all(|entry| entry.origin != RecordedOrigin::Human
+                || entry.key == message_key(&items[1]).unwrap().to_hex())
+    );
+
+    let mut resumed = labelled();
+    resumed.note_restored_history(&checkpoint, [&restated]);
+    let projected = resumed.project_labelled(&checkpoint);
+    assert_eq!(projected[0], items[0], "host context");
+    assert_eq!(projected[1], items[1], "human prompt");
+    assert_eq!(projected[2], items[2], "model call");
+    assert!(first_text(&projected[3]).contains("source=mcp "));
+    assert_eq!(projected[4], items[4], "model answer");
+    assert!(first_text(&projected[5]).contains("source=hook "));
+    assert!(first_text(&projected[6]).contains("source=unknown "));
+}

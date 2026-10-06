@@ -919,11 +919,17 @@ impl ModelClient {
             return Ok(input);
         }
         // Without `source_envelopes` no producer admits external context, so
-        // every protected request fails closed here; say why, not how.
-        ingress.project(&prompt.input).map_err(|_| {
-            CodexErr::InvalidRequest(
-                crate::security::ingress::IngressError::SourceEnvelopesOff.to_string(),
-            )
+        // protected requests fail closed here. Missing admissions (including the
+        // registry's size bound) mean the flag is off; keep any other cause.
+        use crate::security::ingress::IngressError;
+        ingress.project(&prompt.input).map_err(|error| {
+            let off = IngressError::SourceEnvelopesOff;
+            CodexErr::InvalidRequest(match error {
+                IngressError::NativeAdmissionUnavailable
+                | IngressError::RegistryUnavailable
+                | IngressError::TooLarge => off.to_string(),
+                other => format!("{off} ({other})"),
+            })
         })
     }
 
@@ -946,6 +952,13 @@ impl ModelClient {
     ) {
         if let Ok(mut ingress) = self.ingress_items.lock() {
             ingress.note_restored_history(items, records);
+        }
+    }
+
+    /// Restate the current origins of `items` for a history checkpoint.
+    pub(crate) fn journal_current_origins(&self, items: &[ResponseItem]) {
+        if let Ok(mut ingress) = self.ingress_items.lock() {
+            ingress.journal_current(items);
         }
     }
 
