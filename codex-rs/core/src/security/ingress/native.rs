@@ -167,6 +167,26 @@ impl NativeIngress {
             .then_some(MessageOrigin::External(SourceKind::ChildAgent))
     }
 
+    /// Drop one mark for an input that will never be recorded (a blocked
+    /// prompt). It drops the least restrictive mark, so an identical input
+    /// that is recorded keeps the most restrictive one.
+    pub(crate) fn discard_agent_input(&mut self, key: &ContentDigest) {
+        let Some(origins) = self.agent_inputs.get_mut(key) else {
+            return;
+        };
+        let index = origins
+            .iter()
+            .position(|origin| !matches!(origin, MessageOrigin::External(_)))
+            .unwrap_or(origins.len().saturating_sub(1));
+        if index < origins.len() {
+            origins.remove(index);
+            self.agent_inputs_pending -= 1;
+        }
+        if origins.is_empty() {
+            self.agent_inputs.remove(key);
+        }
+    }
+
     pub(crate) fn has_origin_key(&self) -> bool {
         self.origin_key.is_some()
     }

@@ -5606,6 +5606,13 @@ async fn pf_30_s02_agent_input_marks_are_consumed_once() {
     client.mark_agent_input(&task, agent_data);
     assert_eq!(client.take_agent_input_origin(&task), Some(agent_data));
     assert_eq!(client.take_agent_input_origin(&task), Some(MessageOrigin::Host));
+    // A blocked copy drops the least restrictive mark; the recorded copy keeps
+    // the most restrictive one.
+    client.mark_agent_input(&task, agent_data);
+    client.mark_agent_input(&task, MessageOrigin::Host);
+    client.discard_agent_input(&task);
+    assert_eq!(client.take_agent_input_origin(&task), Some(agent_data));
+    assert_eq!(client.take_agent_input_origin(&task), None);
     for index in 0..1_100 {
         client.mark_agent_input(&text_input(&format!("pending {index}")), agent_data);
     }

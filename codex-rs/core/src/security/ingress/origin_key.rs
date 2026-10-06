@@ -68,11 +68,14 @@ impl OriginKey {
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => read_key(&path),
             // Filesystems without hard links: create the key in place.
             Err(_) => match options.open(&path) {
-                Ok(mut file) => {
-                    file.write_all(&bytes)?;
-                    file.sync_all()?;
-                    Ok(Self(bytes))
-                }
+                Ok(mut file) => match file.write_all(&bytes).and_then(|()| file.sync_all()) {
+                    Ok(()) => Ok(Self(bytes)),
+                    Err(error) => {
+                        // Never leave a short key behind for later sessions.
+                        let _ = std::fs::remove_file(&path);
+                        Err(error)
+                    }
+                },
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                     read_key(&path)
                 }
