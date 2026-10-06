@@ -67,13 +67,13 @@ to free the TUI lane: the remaining items belong to the broker lane, a future Se
   Linux proxy-routed mode (netns, seccomp AF_UNIX deny) unchanged. Matrix in the evidence README.
 - [x] Real transport fixtures: loopback TCP/TLS with unresolvable `.invalid` names prove the pinned peer is used;
   fallback stays inside the checked answers; TLS mismatch fails; aborting one request leaves its sibling working.
+- [x] Brokered credential routes are pinned too: placed in PF-28-S02 (broker lane) and done there (PR #225); the
+  checked answers travel in the signed broker frame and the broker dials only those.
 - [x] 15 `pf_33_s02` network-proxy tests, 1 sandboxing (Seatbelt), 1 core (Windows provisioning). No Cargo or
   lockfile change.
 
 ## Remaining
 
-- [ ] Brokered credential routes (isolated broker) dial without the pin; the broker re-resolves with its own peer
-  check. Carry `PinnedPeers` through the broker protocol (broker lane; coordinator to place).
 - [ ] SearXNG: no adapter exists in the tree; route it through an exact private-service grant when one is added.
 - [ ] Runtime-approved (decider) hosts are not revoked on an open tunnel (PF-25-S02). No live rebinding-resolver
   fixture; rebinding is covered by pinning tests.
