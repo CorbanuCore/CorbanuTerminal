@@ -132,7 +132,7 @@
       "additional_speed_tiers": [],
       "supports_reasoning_summaries": false,
       "supports_search_tool": false,
-      "max_output_tokens": 450000
+      "max_output_tokens": 128000
     },
     {
       "support_verbosity": false,
@@ -425,7 +425,8 @@
       "service_tiers": [],
       "additional_speed_tiers": [],
       "supports_reasoning_summaries": false,
-      "supports_search_tool": false
+      "supports_search_tool": false,
+      "max_output_tokens": 128000
     },
     {
       "support_verbosity": false,
@@ -886,7 +887,8 @@
       "service_tiers": [],
       "additional_speed_tiers": [],
       "supports_reasoning_summaries": false,
-      "supports_search_tool": false
+      "supports_search_tool": false,
+      "max_output_tokens": 128000
     },
     {
       "support_verbosity": false,
@@ -1168,7 +1170,8 @@
       "service_tiers": [],
       "additional_speed_tiers": [],
       "supports_reasoning_summaries": false,
-      "supports_search_tool": false
+      "supports_search_tool": false,
+      "max_output_tokens": 128000
     },
     {
       "support_verbosity": false,
@@ -1317,7 +1320,8 @@
       "service_tiers": [],
       "additional_speed_tiers": [],
       "supports_reasoning_summaries": false,
-      "supports_search_tool": false
+      "supports_search_tool": false,
+      "max_output_tokens": 131072
     },
     {
       "support_verbosity": false,
@@ -1360,7 +1364,8 @@
       "service_tiers": [],
       "additional_speed_tiers": [],
       "supports_reasoning_summaries": false,
-      "supports_search_tool": false
+      "supports_search_tool": false,
+      "max_output_tokens": 262144
     },
     {
       "support_verbosity": false,
@@ -1426,7 +1431,8 @@
       "service_tiers": [],
       "additional_speed_tiers": [],
       "supports_reasoning_summaries": false,
-      "supports_search_tool": false
+      "supports_search_tool": false,
+      "max_output_tokens": 65536
     },
     {
       "support_verbosity": false,
@@ -1483,7 +1489,8 @@
       "service_tiers": [],
       "additional_speed_tiers": [],
       "supports_reasoning_summaries": false,
-      "supports_search_tool": false
+      "supports_search_tool": false,
+      "max_output_tokens": 128000
     },
     {
       "support_verbosity": false,
@@ -1721,7 +1728,8 @@
       "service_tiers": [],
       "additional_speed_tiers": [],
       "supports_reasoning_summaries": false,
-      "supports_search_tool": false
+      "supports_search_tool": false,
+      "max_output_tokens": 384000
     },
     {
       "support_verbosity": false,
@@ -1834,7 +1842,8 @@
       "service_tiers": [],
       "additional_speed_tiers": [],
       "supports_reasoning_summaries": false,
-      "supports_search_tool": false
+      "supports_search_tool": false,
+      "max_output_tokens": 384000
     },
     {
       "support_verbosity": false,
@@ -1894,7 +1903,8 @@
       "service_tiers": [],
       "additional_speed_tiers": [],
       "supports_reasoning_summaries": false,
-      "supports_search_tool": false
+      "supports_search_tool": false,
+      "max_output_tokens": 128000
     },
     {
       "support_verbosity": false,
@@ -1959,7 +1969,8 @@
       "service_tiers": [],
       "additional_speed_tiers": [],
       "supports_reasoning_summaries": false,
-      "supports_search_tool": false
+      "supports_search_tool": false,
+      "max_output_tokens": 128000
     },
     {
       "support_verbosity": false,

@@ -9,8 +9,8 @@ parallel_lanes: "broker, untrusted-content, tui"
 integration_owner: "Codex /root security round-five coordinator"
 activation_authority: "Product authority defined in the product specification"
 activation_basis: "P0 sequencing plus Travis Good’s 2026-08-28 decision to reconcile the complete security program into this active plan; scope cut and lanes per Travis's 2026-10-06 decisions."
-target_release: "TBD — candidate qualified by 2026-10-08"
-deadline: 2026-10-08
+target_release: "TBD — candidate qualified by 2026-10-09"
+deadline: 2026-10-09
 created: 2026-08-23
 updated: 2026-10-06
 product_spec:
@@ -30,9 +30,15 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf27-s02-secretless-20261006"
     branch: "feat/pf27-s02-secretless-20261006"
     base_commit: "13cf4a2d0c07046312dc6d32c757dce90e0b14fc"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf30-s02-20261006"
+    branch: "feat/pf-30-s02-persistent-taint"
+    base_commit: "b96b23344ba68e8a484b5e68834b6a62e392e007"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-round5-provenance"
     branch: "feat/security-round5-provenance"
     base_commit: "07791288b6feeccfaee5a57c12452359cc666957"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-24-s03-security-picker"
+    branch: "codex/pf-24-s03-security-picker"
+    base_commit: "24242c1b0ee5388cbfbfe1b0d8f63459945b588d"
 ---
 
 # P0 `/security` levels
@@ -50,7 +56,7 @@ Deferred features are in the [P1 security hardening plan](../proposed/p1-securit
 | Authoritative decision | “Accountable sequencing,” item 1: `/security` is P0 and begins immediately |
 | Binding scope decisions | Travis, 2026-10-06: PF-83 closes; flagged picker ships early; 20-sprint core; 3 lanes; tiered gate |
 | Delivery owner / integration owner | Jim Ricketts / Codex /root security coordinator |
-| Deadline | 2026-10-08 (unchanged; not re-estimated) |
+| Deadline | 2026-10-09 (Travis, 2026-10-06) |
 
 ## User pain
 
@@ -130,7 +136,7 @@ worker slot; a sprint still waits for its dependencies in any lane.
 | Lane | Sprints in order |
 | --- | --- |
 | broker | PF-27-S04 (completed 2026-10-06, [archived](../../sprints/archive/p0-security-levels/pf-27-s04-isolated-credential-broker.md)) → [PF-27-S02](../../sprints/current/p0-security-levels/pf-27-s02-secretless-agent-launch.md) → [PF-27-S05](../../sprints/current/p0-security-levels/pf-27-s05-model-client-auth-broker.md) (model-client auth, added 2026-10-06) → [PF-28-S01](../../sprints/current/p0-security-levels/pf-28-s01-central-secret-output-gate.md) → [PF-28-S02](../../sprints/current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md); Windows follow-up [PF-27-S06](../../sprints/current/p0-security-levels/pf-27-s06-windows-broker-and-launch.md) |
-| untrusted content | [PF-30-S01](../../sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md) → [PF-30-S02](../../sprints/current/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md) → [PF-30-S03](../../sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md) → [PF-23-S01](../../sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md) → [PF-23-S02](../../sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md) → [PF-23-S03](../../sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) |
+| untrusted content | [PF-30-S01](../../sprints/archive/p0-security-levels/pf-30-s01-typed-source-envelope.md) (done, PR #178) → [PF-30-S02](../../sprints/current/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md) → [PF-30-S03](../../sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md) → [PF-23-S01](../../sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md) → [PF-23-S02](../../sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md) → [PF-23-S03](../../sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) |
 | tui | [PF-24-S03 flagged picker](../../sprints/current/p0-security-levels/pf-24-s03-flagged-security-picker.md) → [PF-24-S02](../../sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) → [PF-25-S01](../../sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md) → [PF-25-S02](../../sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md) |
 | first free lane | [PF-33-S01](../../sprints/current/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md) → [PF-33-S02](../../sprints/current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md) (after PF-27-S02); [PF-29-S01](../../sprints/current/p0-security-levels/pf-29-s01-protected-mode-inventory.md) → [PF-29-S02](../../sprints/current/p0-security-levels/pf-29-s02-human-secret-migration.md) (after PF-28-S02) |
 | convergence | [PF-41-S01](../../sprints/current/p0-security-levels/pf-41-s01-effective-security-inspector.md) (after PF-23-S03, PF-24-S02, PF-29-S02), then [PF-13-S07](../../sprints/current/p0-security-levels/pf-13-s07-integrated-credential-boundary-qualification.md) |
@@ -235,7 +241,7 @@ describe only behaviour verified at a milestone, citing **P0 `/security` levels*
 | --- | --- |
 | PF-83 open items (designer packet, review count 7/5, process isolation) | Recorded in the archived [PF-83-S01](../../sprints/archive/p0-security-levels/pf-83-s01-permission-confirmation.md); not blocking the core |
 | Aggressive vault denial from existing controls | PF-24-S03 must prove it; if impossible, stop and escalate |
-| Global reservation cap | 3 security lanes + 1 accounting + 1 Task Node = 5 (`docs/sprints/index.md`) |
+| Global reservation cap | 3 security lanes + 1 accounting + 1 Task Node = 5 (`docs/sprints/index.md`); confirmed by Travis 2026-10-06 |
 | October 8 deadline | Unchanged and not re-estimated against the 20-sprint core |
 
 ## Release linkage

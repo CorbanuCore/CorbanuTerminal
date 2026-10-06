@@ -3,7 +3,7 @@ source: tui/src/bottom_pane/approval_overlay.rs
 expression: "format!(\"{buf:?}\")"
 ---
 Buffer {
-    area: Rect { x: 0, y: 0, width: 100, height: 12 },
+    area: Rect { x: 0, y: 0, width: 100, height: 13 },
     content: [
         "                                                                                                    ",
         "  Do you want to approve network access to "example.com"?                                           ",
@@ -12,10 +12,11 @@ Buffer {
         "                                                                                                    ",
         "                                                                                                    ",
         "› 1. Yes, just this once (y)                                                                        ",
-        "  2. Yes, and allow this host for this conversation (a)                                             ",
-        "  3. Yes, and allow this host in the future (p)                                                     ",
+        "  2. Yes, and allow this host for this conversation                                                 ",
+        "  3. Yes, and allow this host in the future                                                         ",
         "  4. No, and tell Corbanu Terminal what to do differently (esc)                                     ",
         "                                                                                                    ",
+        "  Options that last beyond this request: choose with ↑/↓, then enter.                               ",
         "  Press enter to confirm or esc to cancel                                                           ",
     ],
     styles: [
@@ -26,12 +27,10 @@ Buffer {
         x: 33, y: 3, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
         x: 0, y: 6, fg: Cyan, bg: Reset, underline: Reset, modifier: BOLD,
         x: 28, y: 6, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
-        x: 53, y: 7, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
-        x: 54, y: 7, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
-        x: 45, y: 8, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
-        x: 46, y: 8, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
         x: 59, y: 9, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
         x: 62, y: 9, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
         x: 2, y: 11, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
+        x: 0, y: 12, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
+        x: 2, y: 12, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
     ]
 }

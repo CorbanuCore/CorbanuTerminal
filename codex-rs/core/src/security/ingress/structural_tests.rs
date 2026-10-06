@@ -305,7 +305,7 @@ fn pf_30_s01_labelled_producer_result_is_bound_to_exact_source() {
 fn pf_30_s01_labelled_restored_history_stays_labelled_and_reinjects_host_context() {
     let mut ingress = NativeIngress::default();
     // Flag off: nothing changes.
-    ingress.note_restored_history(&[]);
+    ingress.note_restored_history(&[], std::iter::empty());
     assert!(!ingress.take_host_context_reinjection());
     ingress.set_labelled_mode(true);
     let restored = vec![
@@ -326,7 +326,7 @@ fn pf_30_s01_labelled_restored_history_stays_labelled_and_reinjects_host_context
         },
         tool_output("call-old", "old output"),
     ];
-    ingress.note_restored_history(&restored);
+    ingress.note_restored_history(&restored, std::iter::empty());
     assert!(ingress.take_host_context_reinjection());
     assert!(!ingress.take_host_context_reinjection());
     let projected = ingress.project_labelled(&restored);

@@ -16,4 +16,4 @@ expression: "render_snapshot(&overlay, Rect::new(0, 0, 120, 16))"
                                                                                                                         
                                                                                                                         
                                                                                                                         
-  enter to submit | esc to cancel
+  enter to submit | ↑/↓ then enter for options that last beyond this request | esc to cancel

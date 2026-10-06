@@ -9,9 +9,10 @@ expression: "render_overlay_lines(&view, 80)"
 
 › 1. Yes, proceed (y)
   2. Yes, and don't ask again for commands that start with `touch /outside/
-     marker` (p)
+     marker`
   3. No, and tell Corbanu Terminal what to do differently (esc)
 
+  Options that last beyond this request: choose with ↑/↓, then enter.
   Press enter to confirm or esc to cancel
 
   This is a new request. Choose an option with ↑/↓ or its key, then enter;

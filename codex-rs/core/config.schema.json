@@ -697,6 +697,9 @@
             "secretless_agent_launch": {
               "type": "boolean"
             },
+            "security_levels": {
+              "type": "boolean"
+            },
             "shell_snapshot": {
               "type": "boolean"
             },
@@ -3636,7 +3639,7 @@
               "$ref": "#/definitions/KeybindingsSpec"
             }
           ],
-          "description": "Approve with exec-policy prefix when that option exists."
+          "description": "Approve with exec-policy prefix or allow a host in the future. Options that last beyond one request are chosen only with the arrow keys and Enter, so pressing it explains how."
         },
         "approve_for_session": {
           "allOf": [
@@ -3644,7 +3647,7 @@
               "$ref": "#/definitions/KeybindingsSpec"
             }
           ],
-          "description": "Approve for session when that option exists."
+          "description": "Approve for session. Options that last beyond one request are chosen only with the arrow keys and Enter, so pressing it explains how."
         },
         "cancel": {
           "allOf": [
@@ -5395,6 +5398,9 @@
           "type": "boolean"
         },
         "secretless_agent_launch": {
+          "type": "boolean"
+        },
+        "security_levels": {
           "type": "boolean"
         },
         "shell_snapshot": {

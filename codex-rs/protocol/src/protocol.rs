@@ -3153,6 +3153,7 @@ fn multi_agent_version_from_items(
             | RolloutItem::InterAgentCommunicationMetadata { .. }
             | RolloutItem::Compacted(_)
             | RolloutItem::WorldState(_)
+            | RolloutItem::SourceOrigin(_)
             | RolloutItem::EventMsg(_) => None,
         })
     })
@@ -3337,6 +3338,8 @@ pub enum RolloutItem {
     TurnContext(TurnContextItem),
     WorldState(WorldStateItem),
     EventMsg(EventMsg),
+    /// Host-recorded origins for preceding items (`source_envelopes`).
+    SourceOrigin(crate::provenance::SourceOriginRecord),
 }
 
 /// Persisted comparison state used to resume model-visible world-state diffing.

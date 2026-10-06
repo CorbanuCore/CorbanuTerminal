@@ -313,7 +313,7 @@ impl NativeIngress {
     }
 }
 
-fn call_id_of(item: &ResponseItem) -> Option<String> {
+pub(super) fn call_id_of(item: &ResponseItem) -> Option<String> {
     match item {
         ResponseItem::FunctionCall { call_id, .. }
         | ResponseItem::CustomToolCall { call_id, .. } => Some(call_id.clone()),

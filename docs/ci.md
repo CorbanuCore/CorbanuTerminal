@@ -26,6 +26,11 @@ hosted-runner maximum:
   `rust-ci-full.yml` does not repeat it).
 - The Bazel-built SDK job (`sdk / sdks`; the Python SDK test still runs on PRs).
 
+CodeQL (`codeql.yml`) also runs only on pushes to `main`, daily at 08:41 UTC
+and on manual dispatch, not on pull requests: its Rust analysis takes over an
+hour. Alerts appear on `main`. GitHub's default code-scanning setup must stay
+disabled, because it conflicts with this workflow.
+
 Check the latest nightly run before cutting a release. To run these jobs on
 every PR again, pass `cold_bazel: true` to the `bazel`, `rust-ci` and `sdk` calls in
 `blocking-ci.yml` (and add a `BUILDBUDDY_API_KEY` secret so they finish in time).

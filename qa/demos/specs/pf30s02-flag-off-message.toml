@@ -1,0 +1,35 @@
+# PF-30-S02: with source_envelopes off, Moderate still fails closed and now says why.
+id = "pf30s02-flag-off-message"
+feature = "Flag off: Moderate fails closed and names the disabled feature"
+expected = "With source_envelopes off, a Moderate turn stops before anything is sent, and the error says Moderate and Aggressive need the source_envelopes feature, which is off."
+model = "glm-5.2"
+provider = "zai"
+config = """
+approval_policy = "never"
+
+[security]
+version = 1
+level = "moderate"
+
+[features]
+source_envelopes = false
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Say hello in one line."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "which is off"
+timeout = 120
+compress = 2
+[[steps]]
+pause = 4.0

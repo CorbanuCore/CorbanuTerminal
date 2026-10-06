@@ -313,7 +313,9 @@ async fn network_exec_approval_history_describes_session_host_allowance() {
     );
 
     handle_exec_approval_request(&mut chat, "sub-network", request);
-    press_approval_shortcut(&mut chat, 'a');
+    // A session-scoped allowance is chosen with the arrow keys, not `a`.
+    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     let decision = drain_insert_history(&mut rx)
         .pop()

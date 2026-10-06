@@ -1677,6 +1677,89 @@ fn bundled_zai_anthropic_models_have_output_limits() {
     assert_eq!(missing, Vec::<&str>::new());
 }
 
+/// The Anthropic Messages wire requires `max_tokens`, so every model a built-in
+/// Anthropic-wire provider can run must resolve to an output limit (#181).
+#[test]
+fn bundled_anthropic_wire_provider_models_have_output_limits() {
+    use codex_model_provider_info::CORBANU_API_CLAUDE_FABLE_5_MODEL;
+    use codex_model_provider_info::CORBANU_API_KIMI_K3_MODEL;
+    use codex_model_provider_info::WireApi;
+    use codex_model_provider_info::built_in_model_providers;
+    use codex_model_provider_info::canonical_catalog_provider;
+    use codex_model_provider_info::corrected_catalog_provider;
+    use codex_model_provider_info::default_model_max_output_tokens_for_provider;
+    use codex_model_provider_info::resolve_model_for_provider;
+
+    const UNLISTED_MODEL: &str = "unlisted-vendor/unlisted-model";
+
+    let response = crate::bundled_models_response()
+        .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
+    let mut providers = built_in_model_providers(/*openai_base_url*/ None)
+        .into_iter()
+        .filter(|(_, provider)| provider.wire_api == WireApi::Anthropic)
+        .map(|(provider_id, _)| provider_id)
+        .collect::<Vec<_>>();
+    providers.sort();
+    assert!(
+        providers.contains(&"openrouter-anthropic".to_string())
+            && providers.contains(&"baseten-anthropic".to_string()),
+        "expected the Anthropic-wire gateways in {providers:?}"
+    );
+
+    let mut missing = Vec::new();
+    for provider_id in &providers {
+        // Pass-through gateways (OpenRouter) accept any slug. Walk the slugs
+        // catalogued for that gateway; allow-list providers resolve only to
+        // the slugs they accept.
+        let passes_through =
+            resolve_model_for_provider(Some(UNLISTED_MODEL.to_string()), provider_id).as_deref()
+                == Some(UNLISTED_MODEL);
+        let family = provider_id
+            .strip_suffix("-anthropic")
+            .unwrap_or(provider_id);
+        // Catalogue slugs, plus public slugs that providers accept but that
+        // borrow another row's metadata (Corbanu API identities).
+        let requested = std::iter::once(None)
+            .chain(response.models.iter().map(|model| Some(model.slug.clone())))
+            .chain(
+                [CORBANU_API_KIMI_K3_MODEL, CORBANU_API_CLAUDE_FABLE_5_MODEL]
+                    .map(|model| Some(model.to_string())),
+            );
+        for request in requested {
+            let explicit = request.is_some();
+            let Some(model) = resolve_model_for_provider(request, provider_id) else {
+                continue;
+            };
+            // Impossible pairs are moved to another provider before a turn.
+            if corrected_catalog_provider(&model, provider_id).is_some() {
+                continue;
+            }
+            if passes_through
+                && explicit
+                && !canonical_catalog_provider(&model)
+                    .is_some_and(|owner| owner == provider_id.as_str() || owner == family)
+            {
+                continue;
+            }
+            let config = ModelsManagerConfig {
+                model_max_output_tokens: default_model_max_output_tokens_for_provider(
+                    provider_id,
+                    &model,
+                ),
+                ..Default::default()
+            };
+            let info = construct_model_info_from_candidates(&model, &response.models, &config);
+            if info.used_fallback_model_metadata || info.max_output_tokens.is_none() {
+                missing.push(format!("{provider_id}: {model}"));
+            }
+        }
+    }
+    missing.sort();
+    missing.dedup();
+
+    assert_eq!(missing, Vec::<String>::new());
+}
+
 #[test]
 fn bundled_models_json_roundtrips() {
     let response = crate::bundled_models_response()
