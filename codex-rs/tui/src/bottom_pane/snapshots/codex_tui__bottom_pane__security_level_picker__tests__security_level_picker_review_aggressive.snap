@@ -1,6 +1,6 @@
 ---
 source: tui/src/bottom_pane/security_level_picker_tests.rs
-assertion_line: 78
+assertion_line: 81
 expression: "render(&picker, 80)"
 ---
 Switch to Aggressive?
@@ -12,7 +12,7 @@ or $TMPDIR; approved commands stay inside it too
 • Network: off for agent commands; web search off
 • Vault: agent commands running `corbanu vault …` are refused; the vault store
 is unreadable; secret-like environment variables (KEY, SECRET, TOKEN, VAULT,
-PASSWORD, PASSPHRASE, CREDENTIAL) are removed
+PASSWORD, PASSPHRASE, CREDENTIAL) are removed and shell profiles are not loaded
 • Child agents: spawned agents get the same values
 Unchanged: model and provider, MCP servers and apps, wallet scopes, and commands
 you have already allowed permanently.

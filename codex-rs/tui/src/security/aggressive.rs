@@ -13,6 +13,7 @@
 use std::path::Path;
 
 use codex_config::types::ShellEnvironmentPolicyToml;
+use codex_features::Feature;
 use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::config_types::WebSearchMode;
 use codex_protocol::protocol::AskForApproval;
@@ -41,7 +42,7 @@ pub(crate) const ROWS: [(&str, &str); 5] = [
     ("Network", "off for agent commands; web search off"),
     (
         "Vault",
-        "agent commands running `corbanu vault …` are refused; the vault store is unreadable; secret-like environment variables (KEY, SECRET, TOKEN, VAULT, PASSWORD, PASSPHRASE, CREDENTIAL) are removed",
+        "agent commands running `corbanu vault …` are refused; the vault store is unreadable; secret-like environment variables (KEY, SECRET, TOKEN, VAULT, PASSWORD, PASSPHRASE, CREDENTIAL) are removed and shell profiles are not loaded",
     ),
     ("Child agents", "spawned agents get the same values"),
 ];
@@ -80,6 +81,13 @@ pub(crate) fn base_overrides(codex_home: &Path) -> Vec<(String, toml::Value)> {
         (format!("permissions.{PROFILE_ID}"), profile),
         ("default_permissions".to_string(), string(PROFILE_ID)),
         ("web_search".to_string(), string("disabled")),
+        // The shell snapshot and login-shell profiles re-export variables the
+        // environment policy removed; agent commands must not load either.
+        (
+            "features.shell_snapshot".to_string(),
+            toml::Value::Boolean(false),
+        ),
+        ("allow_login_shell".to_string(), toml::Value::Boolean(false)),
         (
             "shell_environment_policy.ignore_default_excludes".to_string(),
             toml::Value::Boolean(false),
@@ -231,6 +239,9 @@ pub(crate) fn verify(config: &Config, rules_present: bool) -> Vec<String> {
         .collect::<Vec<_>>();
     if !leaked.is_empty() {
         failures.push(format!("Vault: environment keeps {}", leaked.join(", ")));
+    }
+    if config.features.enabled(Feature::ShellSnapshot) || config.permissions.allow_login_shell {
+        failures.push("Vault: shell snapshots or login profiles can re-add variables".to_string());
     }
     let explicit = config
         .permissions
