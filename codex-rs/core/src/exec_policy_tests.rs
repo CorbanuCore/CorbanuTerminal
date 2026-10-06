@@ -401,7 +401,9 @@ async fn strict_rules_make_parse_errors_fatal() -> anyhow::Result<()> {
     let Err(err) = ExecPolicyManager::load(&config_stack, /*strict_rules*/ true).await else {
         panic!("strict rules must reject a file that does not parse");
     };
-    assert!(matches!(err, ExecPolicyError::ParsePolicy { ref path, .. } if path.ends_with("broken.rules")));
+    assert!(
+        matches!(err, ExecPolicyError::ParsePolicy { ref path, .. } if path.ends_with("broken.rules"))
+    );
     Ok(())
 }
 
