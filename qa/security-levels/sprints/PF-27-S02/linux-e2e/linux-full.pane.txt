@@ -1,0 +1,22 @@
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:       loading   /model to change                │
+│ directory:   ~/corbanu-rtx/pf27s02-e2e/work/linux-full │
+│ permissions: YOLO mode                                 │
+╰────────────────────────────────────────────────────────╯
+› Implement {feature}
+  Z.AI GLM 5.2 via zai standard · ~/corbanu-rtx/pf27s02-e2e/work/linux-full · Corbanu Terminal · TPS: -- tok/s
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:       glm-5.2   /model to change                │
+│ directory:   ~/corbanu-rtx/pf27s02-e2e/work/linux-full │
+│ permissions: YOLO mode                                 │
+╰────────────────────────────────────────────────────────╯
+› Run: echo hello. Show me the exact result or error text verbatim, then stop.
+• Verbatim error text:
+  exec_command failed for `/bin/bash -c 'echo hello'`: ProtectedLaunch { message: "Protected launch refused: this command would run outside
+  the OS sandbox, which protected launch does not allow." }
+› Implement {feature}
+  Z.AI GLM 5.2 via zai standard · ~/corbanu-rtx/pf27s02-e2e/work/linux-full · Corbanu Terminal · TPS: 14.6 tok/s

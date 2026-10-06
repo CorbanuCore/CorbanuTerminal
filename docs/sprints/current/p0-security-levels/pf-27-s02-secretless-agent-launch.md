@@ -58,18 +58,18 @@ Windows refuses protected launches with a reason; the port is [PF-27-S06](pf-27-
 - [x] Core hardening when armed: Linux non-dumpable (hides `/proc/<pid>/environ` and `mem`), macOS `PT_DENY_ATTACH`; a failed call refuses launches.
 - [x] Broker hand-over items: (1) containment — Seatbelt on macOS, seccomp (+ Landlock where the kernel has it) on Linux; no exec, fork, ptrace or cross-process reads, writes only under its runtime dir; a broker that cannot confine itself is refused when armed; (2) macOS setup-pipe window — secrets never cross a Core-created pipe: stdout carries only the control-socket path, the broker accepts its parent pid only and Core checks the socket peer is its child; (3) sockets in `CODEX_HOME/run` (owner-only, agent-unreadable), else the per-user cache/runtime dir outside the sandbox's writable roots; (4) the strip/dummy conflict above.
 - [x] Probes: macOS GLM 5.2 runs flag off/on (reads allowed vs denied, Core environment unreadable, refusal text); Linux `pf_27` tests in Docker (seccomp layer). Named `pf_27_s02` tests drive `env_for`/`env_for_exec_server` and the contract; Cargo lock updated.
+- [x] Linux end-to-end GLM 5.2 TUI run on a Landlock host (Ubuntu, kernel 7.0, merge commit `699bd4a82f`, October 6): flag on, the agent sees only a dummy GitHub token and the server still authorizes; every protected-path probe is denied; Core's `/proc/<pid>/environ` is root-owned (unreadable even by the same user, readable with the flag off); the broker reports `landlock+seccomp` in an owner-only `CODEX_HOME/run` directory; full access is refused with the reason; the `pf_27` containment tests pass on the Landlock path. [Evidence](../../../../qa/security-levels/sprints/PF-27-S02/README.md#linux-end-to-end-landlock-host).
 - [x] Behaviour note for `isolated_credential_broker` alone (PF-27-S04): the control handshake (protocol 2) and broker self-containment apply whenever the isolated broker runs; socket placement and value sourcing change only with `secretless_agent_launch`.
 
 ## Remaining
 
-- [ ] Claude panes and external provider harnesses (`tui/src/claude_panes/`) are not under the contract; decide deny vs contract (TUI lane).
-- [ ] Product decision: MCP servers, hooks, the `!` user shell and app-server `command/exec` get the environment allowlist but run outside the OS sandbox. Refuse them in protected levels, or accept them as user-configured/user-initiated and show “not contained” in PF-41.
-- [ ] Linux end-to-end agent run on a Landlock-capable host (Docker Desktop's kernel has no Landlock and the VM ran out of disk building Core; unit and containment tests pass there).
+- [ ] Decision (Travis): Claude panes and external provider harnesses (`tui/src/claude_panes/`) are not under the contract. Options: block them in protected levels, or bring them under the contract. Recommendation: hand to the TUI lane, which owns the panes, to choose; until then the PF-41 inspector lists them as "not covered".
+- [ ] Decision (Travis): MCP servers, hooks, the `!` user shell and app-server `command/exec` get the environment allowlist but run outside the OS sandbox. Options: refuse them in protected levels, or accept them as user-configured/user-initiated and show "not contained" in PF-41. Recommendation: accept and show "not contained" (refusing breaks every configured MCP server and hook; the user started them).
 - [ ] Windows broker and contract: [PF-27-S06](pf-27-s06-windows-broker-and-launch.md).
 
 ## Verification
 
-- [ ] Linux and Bazel CI on the PR (pending at the time of writing; local Docker run passed).
+- [x] Linux and Bazel CI on the PR: all checks green at merge (PR #191).
 - [x] `just fix -p` on every touched crate and `just fmt`; final diff inspected.
 - [x] Focused: `just test -p codex-core pf_27_s02` (12) and the `pf_27` tests in protocol, network-proxy and process-hardening, all passing.
 - [x] Integration: affected crate suites (722 passed; core subset 853 passed; one unrelated rmcp keyring-fixture failure recorded).
