@@ -1,0 +1,42 @@
+# Default permissions: a write outside the workspace stops at an approval prompt.
+id = "approval-outside-write"
+feature = "Approval prompt for a write outside the workspace"
+expected = "In the default Ask for approval mode, GLM's write to ../outside/note.txt shows an approval prompt. After approving with y the command runs and the file contains hello."
+model = "glm-5.2"
+provider = "zai"
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Use one shell command to write hello to ../outside/note.txt, requesting approval if needed, then reply with exactly: done"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Would you like to (run the following command|make the following edits)\\?"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 4.0
+[[steps]]
+key = "y"
+[[steps]]
+wait = "(?m)^• [Dd]one\\.?\\s*$"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 1.5
+
+[[steps]]
+type = "!cat ../outside/note.txt"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "└ hello"
+[[steps]]
+pause = 3.0
