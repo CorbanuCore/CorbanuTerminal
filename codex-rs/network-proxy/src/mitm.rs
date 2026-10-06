@@ -1,6 +1,7 @@
 use crate::certs::ManagedMitmCa;
 use crate::config::NetworkMode;
 use crate::credential_broker::CredentialRouting;
+use crate::credential_broker::response_scrub;
 use crate::destination;
 use crate::destination::DenialSite;
 use crate::destination::DestinationDenial;
@@ -407,6 +408,27 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
         return Ok(blocked_text_response(REASON_POLICY_DENIED));
     }
     apply_mitm_hook_actions(&mut parts.headers, hook_actions.as_ref());
+    // PF-28-S02: values injected here (credential or hook) are scrubbed from
+    // the response the agent receives; the isolated broker scrubs its own.
+    let reflection = if app_state.credential_response_gate() {
+        let injected = match &routing {
+            CredentialRouting::Direct(gate) => gate.clone(),
+            #[cfg(unix)]
+            CredentialRouting::Brokered(_) => None,
+        };
+        match response_scrub::with_hook_values(injected, hook_actions.as_ref()) {
+            Ok(reflection) => reflection,
+            Err(error) => {
+                warn!("credentialed request denied: response gate unavailable: {error}");
+                return Ok(blocked_text_response(REASON_POLICY_DENIED));
+            }
+        }
+    } else {
+        None
+    };
+    if reflection.is_some() {
+        response_scrub::request_identity_body(&mut parts.headers);
+    }
     parts.uri = build_https_uri(&authority, &path)?;
     parts
         .headers
@@ -430,7 +452,7 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
 
     let upstream_req = Request::from_parts(parts, body);
     let mut upstream_resp = match routing {
-        CredentialRouting::Direct => request_ctx.upstream.serve(upstream_req).await?,
+        CredentialRouting::Direct(_) => request_ctx.upstream.serve(upstream_req).await?,
         #[cfg(unix)]
         CredentialRouting::Brokered(route) => match route.forward(upstream_req).await {
             Ok(response) => response,
@@ -477,6 +499,9 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
             };
             return Ok(destination::blocked(app_state, &denial, site).await);
         }
+    }
+    if let Some(gate) = &reflection {
+        upstream_resp = response_scrub::scrub_response(gate, upstream_resp);
     }
     respond_with_inspection(
         upstream_resp,

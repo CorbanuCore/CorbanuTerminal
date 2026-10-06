@@ -2,6 +2,7 @@
 pub(crate) mod isolated;
 mod providers;
 mod resolver;
+pub(crate) mod response_scrub;
 
 #[cfg(unix)]
 pub use isolated::CODEX_CREDENTIAL_BROKER_ARG1;
@@ -22,6 +23,7 @@ pub use resolver::ScopedCredentialRouteError;
 pub use resolver::ScopedCredentialUse;
 
 use crate::policy::normalize_host;
+use codex_secret_broker::response_gate::ResponseGate;
 use rama_http::HeaderMap;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -50,6 +52,7 @@ pub(crate) struct IsolatedBrokerOptions {
     pub(crate) allow_upstream_proxy: bool,
     pub(crate) runtime_dir: Option<std::path::PathBuf>,
     pub(crate) require_containment: bool,
+    pub(crate) scrub_responses: bool,
 }
 
 pub const CREDENTIAL_BROKER_ACTIVE_ENV_KEY: &str = "CODEX_NETWORK_PROXY_CREDENTIAL_BROKER_ACTIVE";
@@ -62,6 +65,9 @@ pub(crate) struct CredentialBroker {
     /// PF-27-S02: agent environments arrive without provider tokens, so raw
     /// values are read from Core's own process environment instead.
     process_env_source: Option<ProcessEnvSource>,
+    /// PF-28-S02: bind credentials to HTTPS, method and path, and scrub
+    /// injected values from responses (feature `secret_output_gate`).
+    response_gate: bool,
 }
 
 /// Which variables may be read from Core's environment, and how.
@@ -103,7 +109,8 @@ struct IsolatedMode {
 /// Routing decision for one outbound request after credential policy.
 pub(crate) enum CredentialRouting {
     /// Send upstream from the proxy (any legacy injection already applied).
-    Direct,
+    /// PF-28-S02: the gate for the value injected here, if armed.
+    Direct(Option<ResponseGate>),
     /// Send through the broker, which substitutes the credential itself.
     #[cfg(unix)]
     Brokered(BrokeredCredentialRoute),
@@ -230,7 +237,19 @@ impl CredentialBroker {
             })),
             isolation,
             process_env_source: None,
+            response_gate: false,
         }
+    }
+
+    /// PF-28-S02: bind injected credentials to HTTPS, method and path and
+    /// scrub them from responses.
+    pub(crate) fn with_response_gate(mut self, enabled: bool) -> Self {
+        self.response_gate = enabled;
+        self
+    }
+
+    pub(crate) fn response_gate_enabled(&self) -> bool {
+        self.response_gate
     }
 
     /// PF-27-S02: source brokered values from Core's environment rather than
@@ -429,15 +448,23 @@ impl CredentialBroker {
         let normalized_host = normalize_host(host);
         let mut state = self.write_state();
         if !state.enabled {
-            return Ok(CredentialRouting::Direct);
+            return Ok(CredentialRouting::Direct(None));
         }
 
         if let Some(scoped) = state.scoped_openai.as_mut() {
             let carries_reference = scoped.matches_reference(headers);
             if normalized_host == resolver::OPENAI_API_HOST || carries_reference {
                 return scoped
-                    .inject(scheme, &normalized_host, port, method, path, headers)
-                    .map(|()| CredentialRouting::Direct);
+                    .inject(
+                        scheme,
+                        &normalized_host,
+                        port,
+                        method,
+                        path,
+                        headers,
+                        self.response_gate,
+                    )
+                    .map(CredentialRouting::Direct);
             }
         }
         if let Some(isolated) = state.isolated_openai.as_ref() {
@@ -453,10 +480,23 @@ impl CredentialBroker {
             .filter(|credential| credential.matches_host(&normalized_host))
             .collect::<Vec<_>>();
         let Some(credential) = select_credential(headers, &matching_credentials) else {
-            return Ok(CredentialRouting::Direct);
+            return Ok(CredentialRouting::Direct(None));
         };
+        if self.response_gate {
+            credential
+                .provider
+                .allows_request(scheme, &normalized_host, port, method, path)?;
+        }
         match &credential.secret {
             RecordSecret::Raw(real_value) => {
+                let gate = self
+                    .response_gate
+                    .then(|| {
+                        let label = format!("broker:{}", credential.env_var);
+                        ResponseGate::new([(label.as_str(), real_value.as_str())])
+                    })
+                    .transpose()
+                    .map_err(|_| ScopedCredentialInjectionError::ResolutionFailed)?;
                 if let Some(header_value) = credential
                     .provider
                     .request_header_value(real_value.as_str())
@@ -465,7 +505,7 @@ impl CredentialBroker {
                         .provider
                         .insert_request_header(headers, header_value);
                 }
-                Ok(CredentialRouting::Direct)
+                Ok(CredentialRouting::Direct(gate))
             }
             #[cfg(unix)]
             RecordSecret::Brokered {
@@ -513,7 +553,12 @@ impl CredentialBroker {
         isolated.dispatch(scheme, &normalized_host, port, method, path)
     }
 
+    /// Plain-HTTP injection. PF-28-S02: never while credentials are bound to
+    /// HTTPS.
     pub(crate) fn inject_request_headers(&self, host: &str, headers: &mut HeaderMap) {
+        if self.response_gate {
+            return;
+        }
         let _ = self.inject_request_headers_for_request(
             "https",
             host,
@@ -841,7 +886,8 @@ impl ScopedCredentialRecord {
         method: &str,
         path: &str,
         headers: &mut HeaderMap,
-    ) -> Result<(), ScopedCredentialInjectionError> {
+        response_gate: bool,
+    ) -> Result<Option<ResponseGate>, ScopedCredentialInjectionError> {
         if scheme != "https" {
             return Err(ScopedCredentialInjectionError::SchemeDenied);
         }
@@ -882,10 +928,17 @@ impl ScopedCredentialRecord {
             authority: self.route.authority(),
         };
         let mut inserted = false;
+        let mut gate = None;
         let mut callback = |secret: &str| {
             let Some(header_value) = providers::scoped_openai_header_value(secret) else {
                 return Err(ScopedCredentialCallbackError::Failed);
             };
+            if response_gate {
+                gate = Some(
+                    ResponseGate::new([("broker:OPENAI_API_KEY", secret)])
+                        .map_err(|_| ScopedCredentialCallbackError::Failed)?,
+                );
+            }
             providers::openai_provider().insert_request_header(headers, header_value);
             inserted = true;
             Ok(())
@@ -898,7 +951,7 @@ impl ScopedCredentialRecord {
             return Err(ScopedCredentialInjectionError::ResolutionFailed);
         }
         self.used = true;
-        Ok(())
+        Ok(gate)
     }
 }
 

@@ -470,6 +470,11 @@ impl NetworkProxyState {
         self.credential_broker.inject_request_headers(host, headers);
     }
 
+    /// PF-28-S02: whether injected values are scrubbed from responses.
+    pub(crate) fn credential_response_gate(&self) -> bool {
+        self.credential_broker.response_gate_enabled()
+    }
+
     /// Revokes every reference held by the isolated credential broker and
     /// closes its in-flight channels. Returns false when isolation is inactive.
     pub fn revoke_brokered_credentials(&self) -> bool {
@@ -1118,12 +1123,15 @@ fn credential_broker_for_config(config: &crate::config::NetworkProxyConfig) -> C
                 allow_upstream_proxy: config.allow_upstream_proxy,
                 runtime_dir: config.credential_broker_runtime_dir.clone(),
                 require_containment: config.secretless_agent_launch.is_some(),
+                scrub_responses: config.credential_response_gate,
             },
         )
     } else {
         CredentialBroker::new(config.credential_broker)
     };
-    broker.with_process_env_source(config.secretless_agent_launch.as_deref())
+    broker
+        .with_process_env_source(config.secretless_agent_launch.as_deref())
+        .with_response_gate(config.credential_response_gate)
 }
 
 fn unix_timestamp() -> i64 {

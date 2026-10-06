@@ -22,7 +22,7 @@ Earlier allocation notes are in the [plan history](../../../plans/history/p0-sec
 
 | Order | Sprint | Outcome | Lane | Depends on |
 | ---: | --- | --- | --- | --- |
-| 31 | [PF-28-S02](pf-28-s02-reflected-secret-response-scrubbing.md) | Reflected-secret response scrubbing | broker | PF-28-S01 (archived) |
+| 31 | [PF-28-S02](pf-28-s02-reflected-secret-response-scrubbing.md) | Reflected-secret response scrubbing (merged behind `secret_output_gate`; two carried items open) | broker | PF-28-S01 (archived) |
 | 33 | [PF-33-S02](pf-33-s02-connection-pinning-and-bypass.md) | Connection pinning and alternate-egress denial (merged behind `url_destination_policy`, #215; open items recorded) | first free | PF-33-S01 (archived) |
 | 35 | [PF-29-S01](pf-29-s01-protected-mode-inventory.md) | Protected-mode inventory and activation preflight | first free | PF-28-S02, PF-20-S02 |
 | 36 | [PF-29-S02](pf-29-s02-human-secret-migration.md) | Human-reviewed credential migration and recovery | first free | PF-29-S01, PF-24-S01 |
