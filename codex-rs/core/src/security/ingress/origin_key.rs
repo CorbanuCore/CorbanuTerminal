@@ -32,7 +32,9 @@ impl OriginKey {
         Self(bytes)
     }
 
-    /// Read this home's key, creating it (owner-only) on first use.
+    /// Read this home's key, creating it (owner-only) on first use. The key
+    /// is written in full to a private temporary file and then linked into
+    /// place, so no reader ever sees a partial key and the first writer wins.
     pub(crate) fn load_or_create(codex_home: &Path) -> std::io::Result<Self> {
         let path = codex_home.join(KEY_FILE);
         match read_key(&path) {
@@ -45,16 +47,23 @@ impl OriginKey {
         rand::rngs::OsRng
             .try_fill_bytes(&mut bytes)
             .map_err(|_| std::io::Error::other("no entropy for the origin key"))?;
+        let mut suffix = [0_u8; 8];
+        rand::rngs::OsRng
+            .try_fill_bytes(&mut suffix)
+            .map_err(|_| std::io::Error::other("no entropy for the origin key"))?;
+        let temporary = codex_home.join(format!("{KEY_FILE}.{}.tmp", hex(&suffix)));
         let mut options = std::fs::OpenOptions::new();
         options.write(true).create_new(true);
         #[cfg(unix)]
         std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-        match options.open(&path) {
-            Ok(mut file) => {
-                file.write_all(&bytes)?;
-                file.sync_all()?;
-                Ok(Self(bytes))
-            }
+        let written = options.open(&temporary).and_then(|mut file| {
+            file.write_all(&bytes)?;
+            file.sync_all()
+        });
+        let linked = written.and_then(|()| std::fs::hard_link(&temporary, &path));
+        let _ = std::fs::remove_file(&temporary);
+        match linked {
+            Ok(()) => Ok(Self(bytes)),
             // Another session created it first: use theirs.
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => read_key(&path),
             Err(error) => Err(error),
@@ -97,11 +106,26 @@ impl OriginKey {
     }
 }
 
+/// Read the key without following a symlink; a key others can read or write
+/// is refused rather than trusted.
 fn read_key(path: &Path) -> std::io::Result<OriginKey> {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::custom_flags(&mut options, libc::O_NOFOLLOW);
+    let file = options.open(path)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if file.metadata()?.permissions().mode() & 0o077 != 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "origin key is readable by others",
+            ));
+        }
+    }
     let mut bytes = Vec::with_capacity(KEY_BYTES + 1);
-    std::fs::File::open(path)?
-        .take(KEY_BYTES as u64 + 1)
-        .read_to_end(&mut bytes)?;
+    file.take(KEY_BYTES as u64 + 1).read_to_end(&mut bytes)?;
     let bytes: [u8; KEY_BYTES] = bytes
         .try_into()
         .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "bad origin key"))?;

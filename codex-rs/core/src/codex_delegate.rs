@@ -219,6 +219,9 @@ pub(crate) async fn run_codex_thread_one_shot(
     // requiring the caller to cancel the parent token.
     let child_cancel = cancel_token.child_token();
     let parent_turn_id = parent_ctx.sub_id.clone();
+    // The delegate's prompt is built from parent content: it carries the
+    // parent's standing, never human standing (PF-30-S02).
+    let handoff_origin = parent_session.agent_handoff_origin().await;
     let (session, io) = Box::pin(run_codex_thread_interactive(
         config,
         auth_manager,
@@ -233,6 +236,10 @@ pub(crate) async fn run_codex_thread_one_shot(
     ))
     .await?;
 
+    session
+        .services
+        .model_client()
+        .mark_agent_input(&input, handoff_origin);
     // Send the initial input to kick off the one-shot turn.
     io.submit_with_trace(
         Op::UserInput {

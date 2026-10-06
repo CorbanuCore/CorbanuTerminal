@@ -4454,10 +4454,16 @@ impl Session {
         // UI-only `text_elements` are preserved. `ResponseItem::Message` does not carry
         // those spans, and `record_response_item_and_emit_turn_item` would drop them.
         let response_item = self.response_item_from_user_input(input.to_vec());
+        // Input another agent submitted keeps that agent's standing (PF-30-S02).
+        let origin = self
+            .services
+            .model_client()
+            .take_agent_input_origin(input)
+            .unwrap_or(crate::security::ingress::MessageOrigin::Human);
         self.record_conversation_items_from(
             turn_context,
             std::slice::from_ref(&response_item),
-            Some(crate::security::ingress::MessageOrigin::Human),
+            Some(origin),
         )
         .await;
         let mut user_message_item = UserMessageItem::new(input);

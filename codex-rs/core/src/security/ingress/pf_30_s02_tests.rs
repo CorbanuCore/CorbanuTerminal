@@ -464,3 +464,27 @@ fn pf_30_s02_journal_overflow_only_drops_later_records() {
     );
     assert!(first_text(&projected[MAX_PENDING_ORIGIN_ENTRIES]).contains("source=unknown "));
 }
+
+/// The per-home key is created owner-only, reused, and refused when others
+/// can read it or when it is a symlink.
+#[cfg(unix)]
+#[test]
+fn pf_30_s02_origin_key_is_private_stable_and_refused_when_exposed() {
+    use std::os::unix::fs::PermissionsExt;
+    let home = tempfile::tempdir().expect("tempdir");
+    let first = super::super::OriginKey::load_or_create(home.path()).expect("create");
+    let path = home.path().join("source-origin.key");
+    let mode = std::fs::metadata(&path).expect("key").permissions().mode();
+    assert_eq!(mode & 0o777, 0o600);
+    let second = super::super::OriginKey::load_or_create(home.path()).expect("reuse");
+    assert_eq!(first.tag(b"entries"), second.tag(b"entries"));
+    // No temporary files are left behind.
+    assert_eq!(std::fs::read_dir(home.path()).expect("dir").count(), 1);
+
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).expect("chmod");
+    assert!(super::super::OriginKey::load_or_create(home.path()).is_err());
+
+    let other = tempfile::tempdir().expect("tempdir");
+    std::os::unix::fs::symlink(&path, other.path().join("source-origin.key")).expect("link");
+    assert!(super::super::OriginKey::load_or_create(other.path()).is_err());
+}

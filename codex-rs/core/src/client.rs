@@ -1016,6 +1016,33 @@ impl ModelClient {
             .is_ok_and(|ingress| ingress.labelled_mode() && ingress.all_have_standing(items))
     }
 
+    /// Mark `input` as submitted to this session by another agent (see
+    /// `NativeIngress::mark_agent_input`). Keyed on the exact input, before
+    /// any media preparation, so the prompt seam sees the same key.
+    pub(crate) fn mark_agent_input(
+        &self,
+        input: &[codex_protocol::user_input::UserInput],
+        origin: crate::security::ingress::MessageOrigin,
+    ) {
+        if let Ok(bytes) = serde_json::to_vec(input)
+            && let Ok(mut ingress) = self.ingress_items.lock()
+        {
+            ingress.mark_agent_input(codex_content_security::ContentDigest::of(&bytes), origin);
+        }
+    }
+
+    /// The origin to record for a prompt: another agent's mark, if any.
+    pub(crate) fn take_agent_input_origin(
+        &self,
+        input: &[codex_protocol::user_input::UserInput],
+    ) -> Option<crate::security::ingress::MessageOrigin> {
+        let bytes = serde_json::to_vec(input).ok()?;
+        self.ingress_items
+            .lock()
+            .ok()?
+            .take_agent_input(&codex_content_security::ContentDigest::of(&bytes))
+    }
+
     /// Standing of text this session's model hands to another agent (a
     /// spawn task or `send_input`): host only while every item in `history`
     /// had standing, otherwise agent data. Mirrors the compaction-summary rule,
