@@ -1,0 +1,73 @@
+# Aggressive's `corbanu vault` rule also refuses wrapped forms: `env`,
+# `nohup`, `sh -c`, other paths or case, options before the subcommand.
+# Before, `env corbanu vault list` went to the normal approval prompt.
+# Record with
+#   PF24_CANDIDATE=<corbanu> --bin qa/security-levels/sprints/PF-24-S03/demos/wrappers/restart-once.sh
+id = "aggressive-vault-wrapped"
+feature = "Aggressive refuses wrapped `corbanu vault` commands"
+expected = "With Aggressive active, the agent's `sh -c 'env FOO=1 corbanu vault list'` is refused by the vault rule, with no approval prompt."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Switch to Aggressive\\?"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "Enter"
+[[steps]]
+type = "/exit"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "restarting Corbanu Terminal.*model: +glm-5\\.2"
+timeout = 60
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Aggressive active"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run exactly this shell command once, without changing it: sh -c 'env FOO=1 corbanu vault list' 2>&1 . Then tell me in one sentence what happened."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?i)(rejected|forbidden|not permitted|refused|blocked)"
+timeout = 120
+compress = 3
+[[steps]]
+pause = 4.0
