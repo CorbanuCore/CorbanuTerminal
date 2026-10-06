@@ -75,6 +75,7 @@ updated: 2026-10-06
 - [x] Integration: core, login, vault and otel subsets (network proxy, credentials, PF-27/28/33, schema, disclosure, redaction): 146 passed.
 - [x] TUI applicability: four GLM 5.2 runs recorded as SOP videos ([index](../../../../qa/demos/index/PF-28-S02.md)).
 - [x] Candidate, commands and outcomes recorded; synthetic canaries only.
+- [x] PR #216 checks green; merged to main as `b9f215ec50` behind `secret_output_gate`.
 - [ ] Milestone qualification (isolated code-blind VM run, human sign-off) when Moderate ships.
 
 ## Exit evidence

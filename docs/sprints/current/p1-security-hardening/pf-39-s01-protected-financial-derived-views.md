@@ -51,6 +51,8 @@ updated: 2026-10-06
 
 - [ ] Keep source/protected lineage on derived financial views, including missing/corrupt memory metadata; masking recognizable token strings does not establish declassification of financial data.
 
+- [ ] Register derived financial views with the PF-28-S01 output gate (from [PF-28-S01](../../archive/p0-security-levels/pf-28-s01-central-secret-output-gate.md), 2026-10-06).
+
 - [ ] Classify balances, positions, PNL, account identifiers and financial records as protected; keep raw account reads outside model/tool context.
 - [ ] Define bounded purpose-specific derived schemas such as affordability boolean or authorized aggregate; attach units, freshness, source and disclosure authority without leaking raw rows.
 - [ ] Require exact human-approved resource/purpose/precision/expiry in Aggressive; Moderate permits only deterministic authorized derived views, never general portfolio dump.

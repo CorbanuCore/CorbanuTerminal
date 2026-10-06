@@ -12,7 +12,7 @@ use codex_config::LoaderOverrides;
 
 async fn load(home: &Path, cwd: &Path, user_config: &str) -> Config {
     std::fs::write(home.join("config.toml"), user_config).unwrap();
-    let mut cli = base_overrides(home);
+    let mut cli = base_overrides(home, home);
     cli.extend(env_overrides(&ShellEnvironmentPolicyToml::default()));
     let mut harness = ConfigOverrides {
         cwd: Some(cwd.to_path_buf()),
@@ -148,13 +148,17 @@ set = { MY_API_KEY = "abc" }
             .build()
     };
     let plain = build(Vec::new(), ConfigOverrides::default()).await.unwrap();
-    let rows = verify(&plain, /*rules_present*/ false)
-        .iter()
-        .filter_map(|failure| failure.split(':').next().map(str::to_string))
-        .collect::<std::collections::BTreeSet<_>>();
+    let rows = verify(
+        &plain,
+        /*rules_present*/ false,
+        plain.codex_home.as_path(),
+    )
+    .iter()
+    .filter_map(|failure| failure.split(':').next().map(str::to_string))
+    .collect::<std::collections::BTreeSet<_>>();
     assert_eq!(
         rows,
-        ["Approvals", "Network", "Sandbox", "Vault"]
+        ["Approvals", "Child agents", "Network", "Sandbox", "Vault"]
             .map(str::to_string)
             .into()
     );
@@ -166,17 +170,25 @@ set = { MY_API_KEY = "abc" }
         )])),
         ..Default::default()
     };
-    let mut cli = base_overrides(home.path());
+    let mut cli = base_overrides(home.path(), home.path());
     cli.extend(env_overrides(&user_env));
     let mut harness = ConfigOverrides::default();
     apply_launch_overrides(&mut harness);
     let config = build(cli, harness).await.unwrap();
     assert_eq!(
-        verify(&config, /*rules_present*/ true),
+        verify(
+            &config,
+            /*rules_present*/ true,
+            config.codex_home.as_path()
+        ),
         Vec::<String>::new()
     );
     assert_eq!(
-        verify(&config, /*rules_present*/ false),
+        verify(
+            &config,
+            /*rules_present*/ false,
+            config.codex_home.as_path()
+        ),
         vec!["Vault: the exec-policy rule file is missing".to_string()]
     );
 }
@@ -189,7 +201,11 @@ async fn codex_home_inside_the_workspace_stays_read_only() {
     std::fs::create_dir_all(&home).unwrap();
     let config = load(&home, cwd.path(), "").await;
     assert_eq!(
-        verify(&config, /*rules_present*/ true),
+        verify(
+            &config,
+            /*rules_present*/ true,
+            config.codex_home.as_path()
+        ),
         Vec::<String>::new()
     );
 }
@@ -205,7 +221,11 @@ async fn another_layer_defining_the_profile_fails_verification() {
         "[permissions.corbanu-aggressive.network]\nenabled = true\n",
     )
     .await;
-    let failures = verify(&config, /*rules_present*/ true);
+    let failures = verify(
+        &config,
+        /*rules_present*/ true,
+        config.codex_home.as_path(),
+    );
     assert!(
         failures
             .iter()
@@ -237,7 +257,11 @@ async fn role_that_changes_child_values_fails_verification() {
     )
     .await;
     assert_eq!(
-        verify(&config, /*rules_present*/ true),
+        verify(
+            &config,
+            /*rules_present*/ true,
+            config.codex_home.as_path()
+        ),
         vec!["Child agents: role `loose` sets web_search, features.shell_snapshot".to_string()]
     );
 }
@@ -260,7 +284,11 @@ async fn role_that_relaxes_strict_rules_fails_verification() {
     )
     .await;
     assert_eq!(
-        verify(&config, /*rules_present*/ true),
+        verify(
+            &config,
+            /*rules_present*/ true,
+            config.codex_home.as_path()
+        ),
         vec!["Child agents: role `lenient` sets strict_rules".to_string()]
     );
 }
@@ -324,11 +352,15 @@ async fn strict_rules_is_forced_and_verified() {
     let config = load(home.path(), cwd.path(), "strict_rules = false\n").await;
     assert!(config.strict_rules);
     assert_eq!(
-        verify(&config, /*rules_present*/ true),
+        verify(
+            &config,
+            /*rules_present*/ true,
+            config.codex_home.as_path()
+        ),
         Vec::<String>::new()
     );
 
-    let cli = base_overrides(home.path())
+    let cli = base_overrides(home.path(), home.path())
         .into_iter()
         .filter(|(key, _)| key != "strict_rules")
         .collect::<Vec<_>>();
@@ -346,7 +378,12 @@ async fn strict_rules_is_forced_and_verified() {
         .await
         .unwrap();
     assert!(
-        verify(&lenient, /*rules_present*/ true).contains(
+        verify(
+            &lenient,
+            /*rules_present*/ true,
+            lenient.codex_home.as_path()
+        )
+        .contains(
             &"Vault: a rules file that breaks later would let new threads drop the vault rule"
                 .to_string()
         )
@@ -386,5 +423,55 @@ async fn project_rules_count_only_when_the_project_is_trusted() {
     assert!(
         failures[0].contains("does not parse") && failures[0].contains("broken.rules"),
         "{failures:?}"
+    );
+}
+
+/// A nested `corbanu exec` with nested agents set to pass, on a home other
+/// than the origin: every row holds, and its commands can read neither vault
+/// store, write outside the folder or reach the network.
+#[tokio::test]
+async fn nested_child_on_another_home_protects_both_homes() {
+    let origin = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let cwd = root.path().join("workspace");
+    std::fs::create_dir_all(&cwd).unwrap();
+    let mut cli = base_overrides(home.path(), origin.path());
+    cli.extend(env_overrides(&ShellEnvironmentPolicyToml::default()));
+    let mut harness = ConfigOverrides {
+        cwd: Some(cwd.clone()),
+        sandbox_mode: Some(SandboxMode::DangerFullAccess),
+        bypass_hook_trust: Some(true),
+        ..Default::default()
+    };
+    assert_eq!(
+        apply_launch_overrides(&mut harness),
+        vec!["--sandbox", "--dangerously-bypass-hook-trust"]
+    );
+    let config = ConfigBuilder::default()
+        .codex_home(home.path().to_path_buf())
+        .cli_overrides(cli)
+        .harness_overrides(harness)
+        .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
+        .build()
+        .await
+        .unwrap();
+    assert_eq!(
+        verify(&config, /*rules_present*/ true, origin.path()),
+        Vec::<String>::new()
+    );
+    let file_system = config.permissions.file_system_sandbox_policy();
+    for vault in [origin.path(), home.path()] {
+        assert!(!file_system.can_read_path_with_cwd(&vault.join("secrets"), &cwd));
+        assert!(!file_system.can_write_path_with_cwd(&vault.join("security_level.toml"), &cwd));
+    }
+    assert!(!file_system.can_write_path_with_cwd(&root.path().join("outside.txt"), &cwd));
+    assert!(!config.permissions.network_sandbox_policy().is_enabled());
+    assert!(!config.bypass_hook_trust);
+    // A different marker fails verification.
+    assert!(
+        verify(&config, /*rules_present*/ true, home.path())
+            .iter()
+            .any(|failure| failure.starts_with("Child agents:"))
     );
 }

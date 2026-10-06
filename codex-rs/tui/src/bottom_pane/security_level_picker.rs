@@ -22,6 +22,7 @@ use crate::security::current::CurrentValues;
 use crate::security::level;
 use crate::security::level::ChosenLevel;
 use crate::security::level::LevelContext;
+use crate::security::level::NestedAgents;
 use crate::security::level::StoredLevel;
 use crate::security::preflight;
 use crate::security::preflight::PreflightInput;
@@ -67,6 +68,10 @@ pub(crate) struct SecurityLevelPicker {
     active: ChosenLevel,
     current: CurrentValues,
     stored: StoredLevel,
+    /// Stored nested-launch setting.
+    nested: NestedAgents,
+    /// The nested-launch setting the Aggressive review will save.
+    nested_choice: NestedAgents,
     selected: usize,
     screen: Screen,
     keymap: ListKeymap,
@@ -88,7 +93,7 @@ impl SecurityLevelPicker {
         preflight_input: Option<PreflightInput>,
         keymap: ListKeymap,
     ) -> Self {
-        let stored = level::load(&context.codex_home);
+        let (stored, nested) = level::load_state(&context.codex_home);
         let selected = match stored.enforced() {
             ChosenLevel::Permissive => 0,
             ChosenLevel::Aggressive => 2,
@@ -98,6 +103,8 @@ impl SecurityLevelPicker {
             active: context.active,
             current,
             stored,
+            nested,
+            nested_choice: nested,
             selected,
             screen: Screen::List { note: None },
             keymap,
@@ -126,10 +133,15 @@ impl SecurityLevelPicker {
                     self.screen = Screen::List { note: None };
                 } else if accept {
                     self.screen = self.choose(ROWS[self.selected]);
+                    self.nested_choice = self.nested;
                     self.scroll = 0;
                     self.preflight_note = None;
+                    // Only a move to Aggressive is a transition; a saved
+                    // Aggressive reopens its review for the nested setting.
                     self.preflight = match (&self.screen, &self.preflight_input) {
-                        (Screen::Review(ChosenLevel::Aggressive), Some(input)) => {
+                        (Screen::Review(ChosenLevel::Aggressive), Some(input))
+                            if self.stored != StoredLevel::Chosen(ChosenLevel::Aggressive) =>
+                        {
                             Some(Preflight::run(&input.sources, input.flags))
                         }
                         _ => None,
@@ -145,12 +157,26 @@ impl SecurityLevelPicker {
                     self.screen = Screen::List {
                         note: Some("Cancelled. Nothing changed.".to_string()),
                     };
+                } else if target == ChosenLevel::Aggressive
+                    && key_hint::plain(KeyCode::Char('n')).is_press(key)
+                {
+                    self.nested_choice = self.nested_choice.toggled();
+                } else if accept
+                    && self.stored == StoredLevel::Chosen(target)
+                    && self.nested_choice == self.nested
+                {
+                    self.screen = Screen::List {
+                        note: Some(format!(
+                            "{} is already saved. Nothing changed.",
+                            target.name()
+                        )),
+                    };
                 } else if accept {
                     if !self.preflight_allows_save(target) {
                         return;
                     }
                     let result = self.save(target);
-                    self.stored = level::load(&self.codex_home);
+                    (self.stored, self.nested) = level::load_state(&self.codex_home);
                     self.screen = Screen::Saved(result);
                 }
             }
@@ -168,8 +194,10 @@ impl SecurityLevelPicker {
         let (Some(input), ChosenLevel::Aggressive) = (&self.preflight_input, target) else {
             return true;
         };
+        // No preflight: Aggressive is already saved and only the nested
+        // setting changes, which is not a transition.
         let Some(reviewed) = &self.preflight else {
-            return false;
+            return self.stored == StoredLevel::Chosen(ChosenLevel::Aggressive);
         };
         let (next, drift) = reviewed.recheck(&input.sources, input.flags);
         let note = if !drift.is_empty() {
@@ -205,11 +233,11 @@ impl SecurityLevelPicker {
                 preflight::remove_receipt(&self.codex_home).map_err(|err| err.to_string())?;
             }
         }
-        level::save(&self.codex_home, target)
+        level::save(&self.codex_home, target, self.nested_choice)
             .map(|()| target)
             .map_err(|err| {
                 // Never leave a receipt for a level that was not saved.
-                if target == ChosenLevel::Aggressive {
+                if target == ChosenLevel::Aggressive && self.preflight.is_some() {
                     let _ = preflight::remove_receipt(&self.codex_home);
                 }
                 err.to_string()
@@ -307,19 +335,18 @@ impl SecurityLevelPicker {
             None => Screen::List {
                 note: Some("Moderate is not available yet.".to_string()),
             },
-            Some(target) if self.stored == StoredLevel::Chosen(target) => Screen::List {
-                note: Some(format!(
-                    "{} is already saved. Nothing changed.",
-                    target.name()
-                )),
-            },
-            Some(target)
-                if target == ChosenLevel::Permissive && self.stored == StoredLevel::Absent =>
+            // A saved Aggressive opens its review again so the nested-agent
+            // setting can be changed.
+            Some(ChosenLevel::Permissive)
+                if self.stored == StoredLevel::Chosen(ChosenLevel::Permissive) =>
             {
                 Screen::List {
-                    note: Some("Permissive is already in effect. Nothing changed.".to_string()),
+                    note: Some("Permissive is already saved. Nothing changed.".to_string()),
                 }
             }
+            Some(ChosenLevel::Permissive) if self.stored == StoredLevel::Absent => Screen::List {
+                note: Some("Permissive is already in effect. Nothing changed.".to_string()),
+            },
             Some(target) => Screen::Review(target),
         }
     }
@@ -418,6 +445,18 @@ impl SecurityLevelPicker {
                             .subsequent_indent(hanging.into()),
                     ));
                 }
+                lines.extend(word_wrap_lines(
+                    [Line::from(vec![
+                        "• ".bold(),
+                        aggressive::nested_row(self.nested_choice).into(),
+                    ])],
+                    RtOptions::new(width).subsequent_indent(hanging.into()),
+                ));
+                lines.extend(
+                    wrap("Press n to switch between refuse and pass. Nested launches read this when they start.")
+                        .into_iter()
+                        .map(Stylize::dim),
+                );
                 if let Some(preflight) = &self.preflight {
                     for line in self.preflight_lines(preflight) {
                         lines.extend(wrap(&line));
@@ -445,7 +484,13 @@ impl SecurityLevelPicker {
                 }));
             }
             Screen::Saved(Ok(level)) => {
-                lines.push(format!("Saved: {}", level.name()).bold().into());
+                let saved = match level {
+                    ChosenLevel::Aggressive => {
+                        format!("Saved: Aggressive (nested agents: {})", self.nested.name())
+                    }
+                    ChosenLevel::Permissive => format!("Saved: {}", level.name()),
+                };
+                lines.push(saved.bold().into());
                 let message = if *level == self.active {
                     format!("{} is active in this session.", level.name())
                 } else {
@@ -497,24 +542,32 @@ impl SecurityLevelPicker {
                 label(&self.keymap.move_up),
                 label(&self.keymap.move_down),
             ),
-            Screen::Review(ChosenLevel::Aggressive)
-                if self
-                    .preflight
-                    .as_ref()
-                    .is_some_and(|preflight| !preflight.is_clean()) =>
-            {
-                format!(
-                    "{}/{} scroll · esc back, nothing changes",
-                    label(&self.keymap.move_up),
-                    label(&self.keymap.move_down),
-                )
+            Screen::Review(target) => {
+                let scroll = if self.max_scroll.get() > 0 {
+                    format!(
+                        "{}/{} scroll · ",
+                        label(&self.keymap.move_up),
+                        label(&self.keymap.move_down),
+                    )
+                } else {
+                    String::new()
+                };
+                let nested = if target == ChosenLevel::Aggressive {
+                    "n refuse/pass · "
+                } else {
+                    ""
+                };
+                if target == ChosenLevel::Aggressive
+                    && self
+                        .preflight
+                        .as_ref()
+                        .is_some_and(|preflight| !preflight.is_clean())
+                {
+                    format!("{scroll}esc back, nothing changes")
+                } else {
+                    format!("{scroll}{nested}{accept} confirm and save · esc back, nothing changes")
+                }
             }
-            Screen::Review(_) if self.max_scroll.get() > 0 => format!(
-                "{}/{} scroll · {accept} confirm and save · esc back, nothing changes",
-                label(&self.keymap.move_up),
-                label(&self.keymap.move_down),
-            ),
-            Screen::Review(_) => format!("{accept} confirm and save · esc back, nothing changes"),
             Screen::Saved(_) => format!("{accept} or esc close"),
         }
     }

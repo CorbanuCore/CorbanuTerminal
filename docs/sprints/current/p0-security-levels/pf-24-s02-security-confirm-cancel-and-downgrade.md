@@ -44,6 +44,7 @@ updated: 2026-10-06
 ## Done
 
 - [x] Sprint record is linked only to PF-24.
+- [x] Claude panes (`tui/src/claude_panes/`), outside the PF-27-S02 launch contract, handed to the TUI lane (Travis, 2026-10-06): refused at every entry point while Aggressive is active or saved (PR #220, [evidence](../../../../qa/security-levels/pf24-followups/external-panes/README.md)); bringing them under the contract is issue #218.
 
 ## Remaining
 
@@ -54,6 +55,7 @@ updated: 2026-10-06
 - [ ] On Enter, call the Core transition API and show success or actionable failure; on Esc, restore the prior state.
 - [ ] Keep the view open/recoverable after persistence failure and reflect the effective level only after commit.
 - [ ] Add confirm, cancel, downgrade, write-failure, restart, unknown-state, and agent-attempt regressions with snapshots.
+- [ ] Aggressive follow-up (Travis, 2026-10-06): a nested `corbanu exec` under Aggressive is configurable between refusing and passing Aggressive down, default refuse (TUI worker implementing).
 
 ## Verification
 

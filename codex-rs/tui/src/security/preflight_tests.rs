@@ -68,7 +68,7 @@ fn pf_29_s01_isolation_only_after_a_preflight_and_lands_in_the_profile() {
     let paths = isolation_paths(&corbanu, Some(&home), /*cwd*/ None);
     assert_eq!(paths, vec![home.join(".ssh"), home.join(".ssh/id_rsa")]);
 
-    let mut overrides = aggressive::base_overrides(&corbanu);
+    let mut overrides = aggressive::base_overrides(&corbanu, &corbanu);
     aggressive::deny_reads(&mut overrides, &paths);
     let profile = overrides
         .iter()

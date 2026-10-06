@@ -144,7 +144,7 @@ fn escape_and_typed_text_change_nothing() {
 #[test]
 fn return_to_permissive_while_aggressive_is_active() {
     let home = tempfile::tempdir().unwrap();
-    level::save(home.path(), ChosenLevel::Aggressive).unwrap();
+    level::save(home.path(), ChosenLevel::Aggressive, NestedAgents::Refuse).unwrap();
     let mut picker = SecurityLevelPicker::new(
         &context(home.path(), ChosenLevel::Aggressive),
         current(),
@@ -255,6 +255,49 @@ fn tall_review_scrolls_to_its_last_line() {
     assert_eq!(
         (picker.scroll_for(line_count, body_height), &picker.screen),
         (max - 1, &Screen::Review(ChosenLevel::Aggressive))
+    );
+}
+
+/// A saved Aggressive reopens its review so only a person in `/security` can
+/// switch nested agent launches between refuse and pass.
+#[test]
+fn nested_agents_switch_from_the_aggressive_review() {
+    let home = tempfile::tempdir().unwrap();
+    level::save(home.path(), ChosenLevel::Aggressive, NestedAgents::Refuse).unwrap();
+    let mut picker = SecurityLevelPicker::new(
+        &context(home.path(), ChosenLevel::Aggressive),
+        current(),
+        /*preflight_input*/ None,
+        RuntimeKeymap::defaults().list,
+    );
+    picker.handle_key_event(key(KeyCode::Enter));
+    assert_eq!(picker.screen, Screen::Review(ChosenLevel::Aggressive));
+    picker.handle_key_event(key(KeyCode::Enter));
+    assert_eq!(
+        picker.screen,
+        Screen::List {
+            note: Some("Aggressive is already saved. Nothing changed.".to_string())
+        }
+    );
+
+    picker.handle_key_event(key(KeyCode::Enter));
+    picker.handle_key_event(key(KeyCode::Char('n')));
+    let review = render(&picker, 80);
+    assert!(
+        review.contains("Nested agents: pass.") && review.contains("n refuse/pass"),
+        "{review}"
+    );
+    picker.handle_key_event(key(KeyCode::Enter));
+    insta::assert_snapshot!(
+        "security_level_picker_saved_nested_pass",
+        render(&picker, 80)
+    );
+    assert_eq!(
+        level::load_state(home.path()),
+        (
+            StoredLevel::Chosen(ChosenLevel::Aggressive),
+            NestedAgents::Pass
+        )
     );
 }
 
