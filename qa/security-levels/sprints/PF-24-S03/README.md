@@ -37,14 +37,15 @@ Follow-ups outside this sprint: verify the loaded exec policy (needs
 `codex-execpolicy` as a TUI dependency); reapply env and web-search fields for
 role-spawned children in core; cover `corbanu exec` and IDE sessions; state-file
 tamper evidence and “restart now” (PF-24-S02); show the user's current value
-beside each row (code-blind ambiguity B-06).
+beside each row (code-blind ambiguity B-06); the static `/security` command
+description still says “read only” when the flag is on.
 
 ## Gate
 
 | Item | Result | Evidence |
 | --- | --- | --- |
-| Focused tests | `just test -p codex-tui -- security`: 31/31 pass; `just test -p codex-features`: 33/33 pass | `tests/` |
-| Full `codex-tui` | see `tests/just-test.log`; failures are host-only `SUN_LEN` socket paths and a stale command-popup snapshot, none in touched code | `tests/` |
+| Focused tests | `just test -p codex-tui -- security`: 31/31 pass; `just test -p codex-features`: 33/33 pass | `tests/summary.md` |
+| Full `codex-tui` | 4207 pass, 21 fail: host-only `SUN_LEN` socket paths and a command-popup snapshot on unchanged strings, none in touched code | `tests/summary.md` |
 | tmux functional run (GLM 5.2) | pass: flag off, review/cancel, select, restart, probes denied after approval (outside, `/tmp`, network, vault, vault store, env, level file), `/permissions` blocked, child inherits, back to Permissive (config.toml hash unchanged), unknown value, launch flags ignored, resume both ways | `tmux-run/` |
 | Independent review (Opus 5.5 High) | request changes → 12 findings dispositioned, fixes in `72735863b6` | `review/` |
 | Videos (demo SOP) | 9 videos, all at `72735863b6` | `demos/index.md`, specs and wrappers in `demos/` |
