@@ -1074,6 +1074,8 @@ impl SessionTelemetry {
     }
 
     pub fn log_tool_failed(&self, tool_name: &str, error: &str) {
+        let gated_error = trace_gated(error);
+        let error = gated_error.as_deref().unwrap_or(error);
         log_event!(
             self,
             event.name = "codex.tool_result",
@@ -1109,6 +1111,11 @@ impl SessionTelemetry {
         extra_tags: &[(&str, &str)],
         extra_trace_fields: &[(&str, &str)],
     ) {
+        // PF-28-S01: tool output and arguments are exported; gate them.
+        let gated_arguments = trace_gated(arguments);
+        let arguments = gated_arguments.as_deref().unwrap_or(arguments);
+        let gated_output = trace_gated(output);
+        let output = gated_output.as_deref().unwrap_or(output);
         let success_str = if success { "true" } else { "false" };
         let mut tags = Vec::with_capacity(2 + extra_tags.len());
         tags.push(("tool", tool_name));
@@ -1265,4 +1272,12 @@ fn f64_ms_value(value: Option<&serde_json::Value>) -> Option<f64> {
         return None;
     }
     Some(ms.min(u64::MAX as f64))
+}
+
+/// Gates exported text through the PF-28-S01 secret output gate when armed.
+fn trace_gated(text: &str) -> Option<String> {
+    codex_secret_broker::output_gate::scrub_if_armed(
+        codex_secret_broker::output_gate::OutputSink::Trace,
+        text,
+    )
 }

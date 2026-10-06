@@ -200,6 +200,9 @@ struct Entry {
     /// Indices of `reps` that are base64 cores.
     base64: std::ops::Range<usize>,
     whole_word: bool,
+    /// Registrations holding this value (the same value admitted under
+    /// several labels or owners shares one entry); retired at zero.
+    owners: usize,
     leases: usize,
     retired: bool,
 }
@@ -404,12 +407,17 @@ impl OutputGate {
         })
     }
 
-    /// Stops protecting a value once no lease holds it.
+    /// Drops one registration of a value; it stops being protected once no
+    /// other registration and no lease holds it.
     pub fn retire(&self, handle: SecretHandle) {
         let mut state = self.state();
         let Some(entry) = state.entries.iter_mut().find(|entry| entry.id == handle.0) else {
             return;
         };
+        entry.owners = entry.owners.saturating_sub(1);
+        if entry.owners > 0 {
+            return;
+        }
         entry.retired = true;
         if entry.leases == 0 {
             state.entries.retain(|entry| entry.id != handle.0);
@@ -564,6 +572,11 @@ impl StreamScrubber {
         self.carry.len()
     }
 
+    /// True once a withheld-class value was seen: the rest is withheld.
+    pub fn is_withheld(&self) -> bool {
+        self.withheld
+    }
+
     /// Adds a chunk; returns the bytes safe to emit now. `utf8` keeps the cut
     /// on a character boundary for text streams.
     pub fn push(
@@ -583,19 +596,51 @@ impl StreamScrubber {
         buffer.extend_from_slice(&self.carry);
         buffer.extend_from_slice(chunk);
         let snapshot = gate.snapshot();
-        // Extra bytes so a whole-word boundary and base64 partial characters
-        // and padding after a value are known before the cut.
-        let hold = snapshot.max_len + BASE64_SLACK + 2;
-        let mut cut = buffer.len().saturating_sub(hold);
+        // Hold back only the longest tail that could still grow into a value,
+        // plus the byte before it (a base64 partial character or a whole-word
+        // boundary). A value found near the end is held with its boundary
+        // byte so trailing base64 partial characters and padding go with it.
+        let len = buffer.len();
+        let mut cut = match longest_partial_suffix(&snapshot, &buffer) {
+            0 => len,
+            partial => len - partial.saturating_add(1).min(len),
+        };
+        // Never cut through a value, nor emit one whose trailing partial
+        // characters or padding may still arrive; moving the cut back only
+        // ever holds more.
         let found = find_all(&snapshot, &buffer);
-        for m in &found {
-            if m.start < cut && m.end > cut {
-                cut = m.end;
+        loop {
+            let mut moved = false;
+            for m in &found {
+                let near_end = m.end + BASE64_SLACK + 1 >= len;
+                let to = m.start.saturating_sub(1);
+                if m.start < cut && (m.end > cut || near_end) && to < cut {
+                    cut = to;
+                    moved = true;
+                }
+            }
+            if !moved {
+                break;
             }
         }
         if utf8 {
             while cut > 0 && cut < buffer.len() && (buffer[cut] & 0xC0) == 0x80 {
                 cut -= 1;
+            }
+            // A character still incomplete at the cut waits for its rest.
+            if let Some(lead) = (cut.saturating_sub(3)..cut)
+                .rev()
+                .find(|&at| (buffer[at] & 0xC0) != 0x80)
+            {
+                let width = match buffer[lead] {
+                    0xF0.. => 4,
+                    0xE0.. => 3,
+                    0xC0.. => 2,
+                    _ => 1,
+                };
+                if cut - lead < width {
+                    cut = lead;
+                }
             }
         }
         let (ready, rest) = buffer.split_at(cut);
@@ -645,7 +690,12 @@ fn admit(
         .find(|entry| entry.reps.first().map(|rep| rep.as_slice()) == Some(value.as_bytes()))
     {
         // Same value, possibly a stricter class: keep the strictest.
-        entry.retired = false;
+        if entry.retired {
+            entry.retired = false;
+            entry.owners = 1;
+        } else {
+            entry.owners += 1;
+        }
         let upgraded = class > entry.class;
         if upgraded {
             entry.class = class;
@@ -676,6 +726,7 @@ fn admit(
         reps,
         base64,
         whole_word: value.len() < MIN_SUBSTRING_BYTES,
+        owners: 1,
         leases: 0,
         retired: false,
     });
@@ -740,6 +791,30 @@ fn find_all(snapshot: &Snapshot, input: &[u8]) -> Vec<Match> {
     }
     found.sort_by_key(|m| (m.start, m.end));
     found
+}
+
+/// Length of the longest suffix of `buffer` that is a proper prefix of some
+/// representation (0 when no tail could grow into a value). `reps` is sorted,
+/// so the first representation not below a suffix is the only candidate that
+/// can start with it.
+fn longest_partial_suffix(snapshot: &Snapshot, buffer: &[u8]) -> usize {
+    let longest = snapshot.max_len.saturating_sub(1).min(buffer.len());
+    for start in buffer.len() - longest..buffer.len() {
+        let suffix = &buffer[start..];
+        let index = snapshot
+            .reps
+            .partition_point(|rep| rep.bytes.as_slice() <= suffix);
+        // Every representation that starts with `suffix` and is longer sorts
+        // right after `suffix` itself.
+        if snapshot
+            .reps
+            .get(index)
+            .is_some_and(|rep| rep.bytes.starts_with(suffix))
+        {
+            return suffix.len();
+        }
+    }
+    0
 }
 
 fn lookup<'a>(snapshot: &'a Snapshot, bytes: &[u8]) -> Option<&'a Rep> {

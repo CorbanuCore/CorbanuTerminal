@@ -3666,10 +3666,11 @@ impl Config {
             if features.enabled(Feature::ShellSnapshot)
                 && features.disable(Feature::ShellSnapshot).is_err()
             {
-                startup_warnings.push(
-                    "secret_output_gate: shell_snapshot is required by policy; snapshots can hold managed secrets"
-                        .to_string(),
-                );
+                // Snapshots persist the environment: fail closed.
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "secret_output_gate: shell_snapshot is required by policy, but snapshots can hold managed secrets",
+                ));
             }
         }
         let non_prefixed_mcp_tool_servers = if features.enabled(Feature::NonPrefixedMcpToolNames) {

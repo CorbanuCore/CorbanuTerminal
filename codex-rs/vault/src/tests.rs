@@ -634,4 +634,28 @@ fn pf_28_s01_revealed_values_are_registered_with_the_output_gate() {
         scrub("pf28 legal winner thank year wave sausage worth useful legal winner thank yellow")
             .expect("withheld");
     assert!(withheld.starts_with("[WITHHELD: output contained a protected seed phrase"));
+    // Part of the phrase is withheld too.
+    assert!(
+        scrub("first words: wave sausage worth").is_some_and(|text| text.starts_with("[WITHHELD:"))
+    );
+
+    // A hex key matches with or without `0x`, in either case.
+    let key = "0xA1B2C3D4E5F60718293A4B5C6D7E8F90A1B2C3D4E5F60718293A4B5C6D7E8F90";
+    add("pf28-key", CredentialType::CryptoPrivateKey, key);
+    vault.reveal("pf28-key").expect("key reveal");
+    let bare = key[2..].to_ascii_lowercase();
+    assert!(scrub(&format!("k={bare}")).is_some_and(|text| text.starts_with("[WITHHELD:")));
+
+    // Keystore scaffolding lines are not key material.
+    add(
+        "pf28-keystore",
+        CredentialType::KeystoreJson,
+        "{\n  \"version\": 3,\n  \"kdf\": \"scrypt\",\n  \"ciphertext\": \"pf28c1phert3xtAAAABBBBCCCCDDDD\"\n}",
+    );
+    vault.reveal("pf28-keystore").expect("keystore reveal");
+    assert_eq!(scrub("  \"kdf\": \"scrypt\","), None);
+    assert!(
+        scrub("  \"ciphertext\": \"pf28c1phert3xtAAAABBBBCCCCDDDD\"")
+            .is_some_and(|text| text.starts_with("[WITHHELD:"))
+    );
 }

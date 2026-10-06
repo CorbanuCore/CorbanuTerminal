@@ -1140,7 +1140,7 @@ async fn read_output<R: AsyncRead + Unpin + Send + 'static>(
                 chunk,
             });
             // PF-28-S01: hold back bytes that could end in part of a secret.
-            for msg in crate::security::disclosure_gate::gate_event(msg) {
+            for msg in crate::security::disclosure_gate::gate_event(&stream.sub_id, msg) {
                 let event = Event {
                     id: stream.sub_id.clone(),
                     msg,

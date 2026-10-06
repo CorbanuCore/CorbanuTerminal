@@ -877,12 +877,18 @@ impl SessionIo {
     }
 
     pub(crate) async fn next_event(&self) -> CodexResult<Event> {
-        let event = self
-            .rx_event
-            .recv()
-            .await
-            .map_err(|_| CodexErr::InternalAgentDied)?;
-        Ok(event)
+        loop {
+            let event = self
+                .rx_event
+                .recv()
+                .await
+                .map_err(|_| CodexErr::InternalAgentDied)?;
+            // PF-28-S01: one choke point for every producer, including those
+            // holding a cloned sender (MCP startup, elicitation).
+            if let Some(msg) = crate::security::disclosure_gate::gate_delivered(event.msg) {
+                return Ok(Event { id: event.id, msg });
+            }
+        }
     }
 
     pub(crate) async fn agent_status(&self) -> AgentStatus {
@@ -2080,7 +2086,7 @@ impl Session {
     /// Persist the event to rollout and send it to clients.
     pub(crate) async fn send_event(&self, turn_context: &TurnContext, msg: EventMsg) {
         // PF-28-S01: gate before traces, rollout, realtime mirroring and clients.
-        for msg in crate::security::disclosure_gate::gate_event(msg) {
+        for msg in crate::security::disclosure_gate::gate_event(&turn_context.sub_id, msg) {
             self.send_gated_event(turn_context, msg).await;
         }
     }

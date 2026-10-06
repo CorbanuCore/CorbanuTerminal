@@ -5,6 +5,8 @@ use codex_protocol::protocol::AgentMessageContentDeltaEvent;
 use codex_protocol::protocol::ErrorEvent;
 use codex_protocol::protocol::ExecCommandOutputDeltaEvent;
 use codex_protocol::protocol::ExecOutputStream;
+use codex_protocol::protocol::TurnAbortReason;
+use codex_protocol::protocol::TurnAbortedEvent;
 use pretty_assertions::assert_eq;
 use std::ffi::OsString;
 
@@ -48,6 +50,47 @@ fn pf_28_s01_env_values_are_credentials_not_session_plumbing() {
         ]
     );
     assert_eq!(values[2].1.as_str(), "pf28-db-password");
+}
+
+#[test]
+fn pf_28_s01_ordinary_settings_are_not_seeded() {
+    let vars = [
+        ("GIT_AUTHOR_NAME", "Pat Example"),
+        ("GIT_AUTHOR_EMAIL", "pat@example.com"),
+        ("VAULT_ADDR", "https://vault.example.com:8200"),
+        ("SSH_KEY_PATH", "/home/pat/.ssh/id_ed25519"),
+        ("DATABASE_URL", "postgres://postgres:postgres@localhost/app"),
+        ("REDIS_URL", "redis://default:dev@localhost:6379"),
+        ("MY_SERVICE_TOKEN", "development"),
+    ]
+    .map(|(name, value)| (OsString::from(name), OsString::from(value)));
+    assert!(labels(&env_values(vars)).is_empty());
+}
+
+#[test]
+fn pf_28_s01_delivered_events_are_gated_once_more() {
+    let gate = codex_secret_broker::output_gate::global();
+    gate.register("env:PF28_CANARY_API_KEY", SecretClass::Operational, CANARY)
+        .expect("register");
+    gate.arm().expect("arm");
+    // An event sent on a cloned sender (MCP startup, elicitation) never
+    // passed `send_event`; delivery still gates it.
+    let error = EventMsg::Error(ErrorEvent {
+        message: format!("mcp server failed: --token {CANARY}"),
+        codex_error_info: None,
+    });
+    let delivered = gate_delivered(error).expect("delivered");
+    let serialized = serde_json::to_string(&delivered).expect("json");
+    assert!(!serialized.contains(CANARY), "{serialized}");
+    let delta = EventMsg::ExecCommandOutputDelta(ExecCommandOutputDeltaEvent {
+        call_id: "call-pf28-delivered".to_string(),
+        stream: ExecOutputStream::Stdout,
+        chunk: format!("v={CANARY}\n").into_bytes(),
+    });
+    let Some(EventMsg::ExecCommandOutputDelta(delta)) = gate_delivered(delta) else {
+        panic!("delta dropped");
+    };
+    assert_eq!(delta.chunk, b"v=[REDACTED:env:PF28_CANARY_API_KEY]\n");
 }
 
 #[test]
@@ -116,7 +159,7 @@ fn pf_28_s01_tool_result_and_error_are_gated() {
         message: format!("request failed: Authorization: Bearer {CANARY}"),
         codex_error_info: None,
     });
-    let events = gate_event_with(&gate, error);
+    let events = gate_event_with(&gate, "turn-pf28", error);
     let serialized = serde_json::to_string(&events).expect("json");
     assert_eq!(events.len(), 1);
     assert!(!serialized.contains(CANARY), "{serialized}");
@@ -132,6 +175,7 @@ fn pf_28_s01_split_exec_output_is_held_back_and_released_at_end() {
     for chunk in [first, second] {
         let events = gate_event_with(
             &gate,
+            "turn-pf28-exec",
             EventMsg::ExecCommandOutputDelta(ExecCommandOutputDeltaEvent {
                 call_id: call_id.to_string(),
                 stream: ExecOutputStream::Stdout,
@@ -146,7 +190,7 @@ fn pf_28_s01_split_exec_output_is_held_back_and_released_at_end() {
         }
     }
     // Releasing happens on the command's end event.
-    let tail = finish_streams(&gate, call_id);
+    let tail = finish_streams(&gate, |_, stream| stream.item_id == call_id);
     for event in tail {
         let EventMsg::ExecCommandOutputDelta(event) = event else {
             panic!("unexpected event");
@@ -168,6 +212,7 @@ fn pf_28_s01_split_agent_message_never_shows_a_fragment() {
     for piece in [&text[..15], &text[15..20], &text[20..]] {
         for event in gate_event_with(
             &gate,
+            "turn-pf28-split",
             EventMsg::AgentMessageContentDelta(AgentMessageContentDeltaEvent {
                 thread_id: "thread-pf28".to_string(),
                 turn_id: "turn-pf28".to_string(),
@@ -182,7 +227,21 @@ fn pf_28_s01_split_agent_message_never_shows_a_fragment() {
             delivered.push_str(&event.delta);
         }
     }
-    for event in finish_streams(&gate, item_id) {
+    // The turn is aborted before the item completes: the tail is still
+    // released (gated), ahead of the abort event itself.
+    let aborted = gate_event_with(
+        &gate,
+        "turn-pf28-split",
+        EventMsg::TurnAborted(TurnAbortedEvent {
+            turn_id: Some("turn-pf28-split".to_string()),
+            reason: TurnAbortReason::Interrupted,
+            started_at: None,
+            completed_at: None,
+            duration_ms: None,
+        }),
+    );
+    assert!(matches!(aborted.last(), Some(EventMsg::TurnAborted(_))));
+    for event in &aborted[..aborted.len() - 1] {
         let EventMsg::AgentMessageContentDelta(event) = event else {
             panic!("unexpected event");
         };

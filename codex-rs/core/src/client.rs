@@ -1286,6 +1286,9 @@ impl ModelClient {
         if prompt.input.is_empty() {
             return Ok(Vec::new());
         }
+        // PF-28-S01: compaction sends the whole history to the model.
+        let gated_prompt = crate::security::disclosure_gate::gate_prompt(prompt);
+        let prompt = gated_prompt.as_ref().unwrap_or(prompt);
         let client_setup = self.current_client_setup().await?;
         // The legacy compaction endpoint is a model request the operator paid
         // for. It answers with one JSON body rather than a stream, so it never
@@ -1515,6 +1518,15 @@ impl ModelClient {
     ) -> Result<Vec<ApiMemorySummarizeOutput>> {
         if raw_memories.is_empty() {
             return Ok(Vec::new());
+        }
+        // PF-28-S01: raw memories cannot be rebuilt after gating; refuse.
+        if crate::security::disclosure_gate::would_disclose(
+            codex_secret_broker::output_gate::OutputSink::ModelRequest,
+            &raw_memories,
+        ) {
+            return Err(CodexErr::UnsupportedOperation(
+                "memory summaries would send a managed secret to the model".to_string(),
+            ));
         }
 
         self.check_source_admission(&Prompt::default())?;

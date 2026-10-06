@@ -265,6 +265,50 @@ fn pf_28_s01_stream_holds_back_at_most_the_longest_value() {
 }
 
 #[test]
+fn pf_28_s01_stream_holds_back_only_a_possible_value_start() {
+    let gate = gate_with(CANARY);
+    let mut scrubber = StreamScrubber::new();
+    // Ordinary text streams through with nothing held back.
+    let out = scrubber.push(
+        &gate,
+        OutputSink::ToolResult,
+        b"ordinary output, no value here ",
+        true,
+    );
+    assert_eq!(out, b"ordinary output, no value here ");
+    assert_eq!(scrubber.pending(), 0);
+    // A tail that could start the value is held with one boundary byte.
+    let start = &CANARY.as_bytes()[..5];
+    let mut chunk = b"next ".to_vec();
+    chunk.extend_from_slice(start);
+    let out = scrubber.push(&gate, OutputSink::ToolResult, &chunk, true);
+    assert_eq!(out, b"next");
+    assert_eq!(scrubber.pending(), start.len() + 1);
+}
+
+#[test]
+fn pf_28_s01_retire_keeps_a_value_another_owner_registered() {
+    let gate = OutputGate::new();
+    let first = gate
+        .register("first", SecretClass::Operational, "pf28-shared-value-1")
+        .expect("first");
+    let second = gate
+        .register("second", SecretClass::Operational, "pf28-shared-value-1")
+        .expect("second");
+    assert_eq!(first, second);
+    gate.retire(first);
+    assert!(
+        gate.scrub(OutputSink::ToolResult, "pf28-shared-value-1")
+            .is_some()
+    );
+    gate.retire(second);
+    assert_eq!(
+        gate.scrub(OutputSink::ToolResult, "pf28-shared-value-1"),
+        None
+    );
+}
+
+#[test]
 fn pf_28_s01_multibyte_text_is_cut_on_char_boundaries() {
     let gate = gate_with("geheim-schlüssel-ä9");
     let input = "ä ö ü geheim-schlüssel-ä9 ß";

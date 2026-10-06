@@ -3606,6 +3606,7 @@ dependencies = [
  "codex-model-provider-info",
  "codex-otel",
  "codex-protocol",
+ "codex-secret-broker",
  "codex-secrets",
  "codex-terminal-detection",
  "codex-utils-template",
@@ -3633,6 +3634,7 @@ dependencies = [
  "urlencoding",
  "webbrowser",
  "wiremock",
+ "zeroize",
 ]
 
 [[package]]
@@ -3948,6 +3950,7 @@ dependencies = [
  "chrono",
  "codex-api",
  "codex-protocol",
+ "codex-secret-broker",
  "codex-utils-absolute-path",
  "codex-utils-string",
  "eventsource-stream",

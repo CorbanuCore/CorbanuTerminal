@@ -729,7 +729,6 @@ fn index_secret_entry(index: &VaultIndex) -> Result<(SecretScope, SecretName, St
     Ok((VAULT_SCOPE.clone(), name, serialized))
 }
 
-/// Format a Unix-seconds timestamp as an ISO-8601 string for display.
 /// PF-28-S01: once the output gate is armed, every value this process reveals
 /// is registered before it is returned, so no model, tool, transcript or log
 /// sink can carry it. Seed phrases and private keys are withheld whole. If the
@@ -755,7 +754,27 @@ fn protect_revealed(
         let words: Vec<&str> = secret.split_whitespace().collect();
         parts.push(Zeroizing::new(words.join(" ")));
         parts.push(Zeroizing::new(words.join("\n")));
+        parts.extend(
+            words
+                .windows(SEED_WINDOW_WORDS)
+                .map(|window| Zeroizing::new(window.join(" "))),
+        );
     } else {
+        // A hex key is printed with or without `0x`, in either case.
+        let trimmed = secret.trim();
+        let hex = trimmed
+            .strip_prefix("0x")
+            .or_else(|| trimmed.strip_prefix("0X"))
+            .unwrap_or(trimmed);
+        if credential_type == CredentialType::CryptoPrivateKey
+            && hex.len() >= 32
+            && hex.bytes().all(|byte| byte.is_ascii_hexdigit())
+        {
+            for form in [hex.to_ascii_lowercase(), hex.to_ascii_uppercase()] {
+                parts.push(Zeroizing::new(format!("0x{form}")));
+                parts.push(Zeroizing::new(form));
+            }
+        }
         if credential_type == CredentialType::BasicAuth
             && let Some((_, password)) = secret.split_once(':')
         {
@@ -766,7 +785,7 @@ fn protect_revealed(
             secret
                 .lines()
                 .map(str::trim)
-                .filter(|line| line.len() >= 8 && *line != secret.trim())
+                .filter(|line| has_key_material(line) && *line != secret.trim())
                 .map(|line| Zeroizing::new(line.to_string())),
         );
     }
@@ -782,6 +801,30 @@ fn protect_revealed(
         ))
     })
 }
+
+/// Any run of three consecutive words of a seed phrase, so part of a phrase
+/// is withheld as well as the whole.
+const SEED_WINDOW_WORDS: usize = 3;
+/// Shortest run of key characters for a line of a multi-line value to count
+/// as key material rather than scaffolding (PEM headers, JSON fields).
+const KEY_MATERIAL_RUN: usize = 16;
+
+fn has_key_material(line: &str) -> bool {
+    let mut run = 0;
+    for byte in line.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/' | b'=') {
+            run += 1;
+            if run >= KEY_MATERIAL_RUN {
+                return true;
+            }
+        } else {
+            run = 0;
+        }
+    }
+    false
+}
+
+/// Format a Unix-seconds timestamp as an ISO-8601 string for display.
 
 pub fn format_timestamp(seconds: i64) -> String {
     DateTime::<Utc>::from_timestamp(seconds, 0)
