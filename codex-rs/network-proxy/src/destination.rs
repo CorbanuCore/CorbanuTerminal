@@ -83,6 +83,8 @@ pub(crate) enum DestinationDenial {
     UpstreamProxy,
     /// PF-33-S02: the host was denied after its tunnel was opened.
     HostDeniedAfterConnect,
+    /// PF-33-S02: the proxy's `x-unix-socket` route to local daemons.
+    UnixSocket,
 }
 
 impl DestinationDenial {
@@ -104,6 +106,7 @@ impl DestinationDenial {
             Self::UdpRelay => "udp_relay",
             Self::UpstreamProxy => "upstream_proxy",
             Self::HostDeniedAfterConnect => "host_denied",
+            Self::UnixSocket => "unix_socket",
         }
     }
 }

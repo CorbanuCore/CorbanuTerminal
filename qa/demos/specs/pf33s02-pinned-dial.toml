@@ -57,7 +57,7 @@ timeout = 240
 compress = 1
 
 [[steps]]
-type = '!grep -ho "pinned dial established (host=[^)]*)" {logs}/*.log | sort | uniq -c'
+type = '!grep -ho "pinned dial established (h[o]st=[^)]*)" {logs}/*.log | sort | uniq -c'
 [[steps]]
 key = "Enter"
 [[steps]]

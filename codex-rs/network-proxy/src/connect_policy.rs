@@ -351,8 +351,14 @@ mod tests {
         let connector =
             TargetCheckedTcpConnector::new(Arc::new(network_proxy_state_for_policy(config)));
 
-        let request: rama_tcp::client::Request =
+        let mut request: rama_tcp::client::Request =
             rama_tcp::client::Request::new(HostWithPort::from(target));
+        // PF-33-S02: carry a pin so the dial reaches the peer check.
+        request.extensions_mut().insert(PinnedPeers::new(
+            &target.ip().to_string(),
+            target.port(),
+            [target.ip()],
+        ));
         let err = Service::serve(&connector, request)
             .await
             .expect_err("guarded local peer should be rejected");

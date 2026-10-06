@@ -55,11 +55,11 @@ timeout = 240
 compress = 1
 
 [[steps]]
-type = '!grep -c "CONNECT httpbin.org" /tmp/pf33s02-fixtures/upstream.log; grep -ho "denied https (host=[^)]*)" {logs}/*.log | sort -u'
+type = '!grep -c "CONNECT httpbin.org" /tmp/pf33s02-fixtures/upstream.log; grep -ho "denied http[s] (host=[^)]*)" {logs}/*.log | sort -u'
 [[steps]]
 key = "Enter"
 [[steps]]
-wait = '(?m)^\s*[0-9]+\s*$'
+wait = '└ [0-9]+'
 timeout = 30
 
 [[steps]]
