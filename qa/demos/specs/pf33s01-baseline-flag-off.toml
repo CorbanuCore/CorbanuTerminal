@@ -1,0 +1,66 @@
+# PF-33-S01 control: today's behaviour with the flag off (no redirect is followed, so no private endpoint is contacted).
+id = "pf33s01-baseline-flag-off"
+feature = "Control: with url_destination_policy off, the proxy relays redirects to http:// and private targets"
+expected = "Flag off: all four redirects come back as HTTP 302 pointing at the downgrade, the metadata IP and loopback (curl does not follow them)."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[sandbox_workspace_write]
+network_access = true
+
+[features]
+url_destination_policy = false
+
+[features.network_proxy]
+enabled = true
+allow_local_binding = true
+
+[features.network_proxy.domains]
+"httpbin.org" = "allow"
+"postman-echo.com" = "allow"
+"localtest.me" = "allow"
+"*.nip.io" = "allow"
+"169.254.169.254" = "allow"
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"redirects.sh" = '''H=https://httpbin.org/redirect-to
+echo "1) 302 to https://httpbin.org/get"
+curl -sS -o /dev/null -w '   HTTP %{http_code} -> %{redirect_url}\n' "$H?url=https://httpbin.org/get"
+echo "2) 302 to http://httpbin.org/get (downgrade)"
+curl -sS -w '\n   HTTP %{http_code} -> %{redirect_url}\n' "$H?url=http://httpbin.org/get"
+echo "3) 302 to https://169.254.169.254/latest/ (metadata IP)"
+curl -sS -w '\n   HTTP %{http_code} -> %{redirect_url}\n' "$H?url=https://169.254.169.254/latest/"
+echo "4) 302 to https://localtest.me/ (public name, loopback answer)"
+curl -sS -w '\n   HTTP %{http_code} -> %{redirect_url}\n' "$H?url=https://localtest.me/"
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run sh redirects.sh with your shell tool and show me its full output verbatim in a code block. Do not run anything else."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = 'HTTP 302 -> https://localtest.me/'
+timeout = 300
+compress = 3
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+
+[[steps]]
+pause = 4.0
