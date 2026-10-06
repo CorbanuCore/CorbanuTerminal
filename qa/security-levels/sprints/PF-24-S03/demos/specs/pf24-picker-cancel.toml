@@ -1,0 +1,54 @@
+# Flag on: review the Aggressive differences, then Esc changes nothing.
+id = "pf24-picker-cancel"
+feature = "Review Aggressive, then cancel"
+expected = "The picker lists Permissive (active), Moderate (not available yet) and Aggressive. Enter shows every difference; Esc returns with 'Cancelled. Nothing changed.' and no level file exists."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Up"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Switch to Aggressive\\?"
+[[steps]]
+pause = 6.0
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "Cancelled. Nothing changed."
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Escape"
+[[steps]]
+type = "!ls ../home | grep -c security_level || true"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "└ 0"
+[[steps]]
+pause = 3.0

@@ -1,0 +1,16 @@
+---
+source: tui/src/bottom_pane/security_level_picker_tests.rs
+assertion_line: 75
+expression: "render(&picker, 80)"
+---
+Security level
+Active in this session: Permissive
+
+  Permissive  (active)
+> Moderate  not available yet
+  Aggressive
+
+Protection around untrusted content and secrets while normal work continues. Not
+available yet.
+Moderate is not available yet.
+↑/↓ move · enter choose · esc close

@@ -118,11 +118,13 @@ impl App {
             .harness_overrides(overrides)
             .loader_overrides(self.loader_overrides.clone())
             .cloud_config_bundle(self.cloud_config_bundle.clone());
-        build_config_on_runtime_worker(
+        let config = build_config_on_runtime_worker(
             builder,
             format!("Failed to rebuild config for cwd {cwd_display}"),
         )
-        .await
+        .await?;
+        crate::security::launch::verify_reloaded(&config).map_err(color_eyre::eyre::Report::msg)?;
+        Ok(config)
     }
 
     pub(super) async fn rebuild_config_for_permission_profile(
@@ -175,6 +177,10 @@ impl App {
         app_server: &mut AppServerSession,
         selection: PermissionProfileSelection,
     ) -> bool {
+        if let Some(reason) = crate::security::level::permission_change_block_reason() {
+            self.chat_widget.add_error_message(reason);
+            return false;
+        }
         let PermissionProfileSelection {
             profile_id,
             approval_policy,
@@ -449,6 +455,15 @@ impl App {
         updates: Vec<(Feature, bool)>,
     ) {
         if updates.is_empty() {
+            return;
+        }
+        // Auto-review rewrites approval and sandbox settings.
+        if updates
+            .iter()
+            .any(|(feature, _)| *feature == Feature::GuardianApproval)
+            && let Some(reason) = crate::security::level::permission_change_block_reason()
+        {
+            self.chat_widget.add_error_message(reason);
             return;
         }
 

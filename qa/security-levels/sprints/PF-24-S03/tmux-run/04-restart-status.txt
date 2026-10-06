@@ -1,0 +1,61 @@
+
+╭────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                      │
+│                                                    │
+│ model:     loading   /model to change              │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/run2/ws │
+╰────────────────────────────────────────────────────╯
+
+
+› Summarize recent commits
+
+  Z.AI GLM 5.2 via zai standard · <run>/ws · Corbanu Terminal · TPS: -- t…
+
+╭────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                      │
+│                                                    │
+│ model:     glm-5.2   /model to change              │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/run2/ws │
+╰────────────────────────────────────────────────────╯
+To continue this session, run corbanu resume 01a10f72-86fc-7172-973e-a690a47b4d97
+=== corbanu exited 0 ; Enter relaunches ===
+
+╭────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                      │
+│                                                    │
+│ model:     glm-5.2   /model to change              │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/run2/ws │
+╰────────────────────────────────────────────────────╯
+To continue this session, run corbanu resume 01a10f72-ec16-78e1-9f8f-d6c8af3e36ae
+=== corbanu exited 0 ; Enter relaunches ===
+
+╭────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                      │
+│                                                    │
+│ model:     glm-5.2   /model to change              │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/run2/ws │
+╰────────────────────────────────────────────────────╯
+
+/status
+
+╭───────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                            │
+│                                                                                           │
+│  Model:                Z.AI GLM 5.2                                                       │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4                                │
+│  Directory:            <run>/ws │
+│  Permissions:          Next turn: Profile corbanu-aggressive (workspace, untrusted)       │
+│  Security:             Aggressive active (/security)                                      │
+│  Agents.md:            <none>                                                             │
+│  Account:              Z.AI API key configured                                            │
+│  Collaboration mode:   Default                                                            │
+│  Session:              01a10f73-69ff-7bd3-856c-eeb726b24081                               │
+│                                                                                           │
+│  Token usage:          0 total  (0 input + 0 output)                                      │
+│  Limits:               data not available yet                                             │
+╰───────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Implement {feature}
+
+  Z.AI GLM 5.2 via zai standard · <run>/ws · Corbanu Terminal · TPS: -- t…

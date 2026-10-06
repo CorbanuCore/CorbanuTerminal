@@ -33,6 +33,9 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-round5-provenance"
     branch: "feat/security-round5-provenance"
     base_commit: "07791288b6feeccfaee5a57c12452359cc666957"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-24-s03-security-picker"
+    branch: "codex/pf-24-s03-security-picker"
+    base_commit: "24242c1b0ee5388cbfbfe1b0d8f63459945b588d"
 ---
 
 # P0 `/security` levels

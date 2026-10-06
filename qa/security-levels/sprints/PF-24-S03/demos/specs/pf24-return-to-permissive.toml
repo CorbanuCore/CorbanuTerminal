@@ -1,0 +1,80 @@
+# Aggressive active (stored before launch by wrappers/seed-aggressive.sh, run
+# through wrappers/restart-once.sh via PF24_CANDIDATE). Return to Permissive,
+# restart, and the user's own settings are back.
+id = "pf24-return-to-permissive"
+feature = "Return to Permissive"
+expected = "Before restart /status says Aggressive stays active with Permissive saved; after a real restart /status shows the default Workspace (Ask for approval) permissions and 'Permissive active', and the vault rule file is gone."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Aggressive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Return to Permissive\\?"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Permissive"
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Enter"
+[[steps]]
+type = "/status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Permissive saved for next start"
+[[steps]]
+pause = 3.0
+[[steps]]
+type = "/exit"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "restarting Corbanu Terminal"
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Permissive active"
+[[steps]]
+pause = 2.0
+[[steps]]
+type = "!ls ../home/rules 2>&1 | grep -c aggressive || true"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "└ 0"
+[[steps]]
+pause = 3.0
