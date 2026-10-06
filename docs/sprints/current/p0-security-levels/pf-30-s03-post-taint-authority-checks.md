@@ -1,17 +1,20 @@
 ---
 sprint_id: "PF-30-S03"
 title: "Post-taint authority checks"
-status: draft
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-30"
 execution_order: 39
-owner: "Jim Ricketts"
-worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
-branch: "feat/p0-security-levels"
-base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
+owner: "untrusted-content lane"
+parallel_lane: "untrusted-content"
+write_scope: "codex-rs/core/src/security/tainted_action.rs, codex-rs/core/src/security/tainted_action_tests.rs, codex-rs/core/src/security/mod.rs, codex-rs/core/src/security/ingress/native.rs, codex-rs/core/src/security/ingress/pf_30_s02_tests.rs, codex-rs/core/src/client.rs, codex-rs/core/src/session/mod.rs, codex-rs/core/src/tools/orchestrator.rs, codex-rs/core/src/tools/approvals.rs, codex-rs/core/src/tools/sandboxing.rs, codex-rs/core/src/tools/runtimes/shell.rs, codex-rs/core/src/tools/runtimes/unified_exec.rs, codex-rs/core/src/tools/runtimes/apply_patch.rs, codex-rs/core/tests/suite/provenance.rs, qa/security-levels/sprints/PF-30-S03/, qa/demos/specs/, qa/demos/index/PF-30-S03.md, docs/sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md"
+integration_gate: "Per-sprint gate of 2026-10-06: focused tests, GLM 5.2 tmux demos, one independent Opus 5.5 High review; merge behind source_envelopes."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf30-s03-20261006"
+branch: "feat/pf-30-s03-post-taint"
+base_commit: "BASE_COMMIT_PLACEHOLDER"
 depends_on: "PF-30-S02, PF-13-S05"
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-10-06
 ---
 
 # PF-30-S03 — Post-taint authority checks
@@ -31,47 +34,54 @@ updated: 2026-08-28
 
 ## Code boundaries
 
-- OpenClaw adoption reference: [OC-4](../../../plans/openclaw-source-review-2026-08-28.md#oc-4), [OC-5](../../../plans/openclaw-source-review-2026-08-28.md#oc-5), [OC-11](../../../plans/openclaw-source-review-2026-08-28.md#oc-11) at `13adff02ca3897768d80d2bca18f5acf08c55d91`; see the review for named functions, callers, tests and limits. Reference tests are not candidate evidence.
-
-- Existing/foundation: codex-rs/core/src/tools/router.rs; PF-16 authorization; PF-27 broker client.
-- Planned: codex-rs/core/src/security/tainted_action.rs.
-- Tests: planned colocated Rust test modules prefixed `pf_30_s03`; fixtures use synthetic secrets and fake services only.
+- OpenClaw adoption reference: [OC-4](../../../plans/openclaw-source-review-2026-08-28.md#oc-4), [OC-5](../../../plans/openclaw-source-review-2026-08-28.md#oc-5), [OC-11](../../../plans/openclaw-source-review-2026-08-28.md#oc-11) at `13adff02ca3897768d80d2bca18f5acf08c55d91`; reference tests are not candidate evidence.
+- Slice 1: taint generation (`security/ingress/native.rs`, `client.rs`, `session/mod.rs`), action
+  classification (`security/tainted_action.rs`), and the gate at the shared approval seam
+  (`tools/orchestrator.rs`, `tools/approvals.rs`, `tools/sandboxing.rs`, shell/unified-exec/apply-patch runtimes).
+- Tests: `pf_30_s03` unit and suite tests; fixtures use synthetic content and fake providers only.
 
 ## Preconditions
 
-- [ ] Active plan; PF-30-S02, PF-13-S05 completed and archived.
-- [ ] Read root and nearest implementation-path AGENTS.md; verify exact plan/worktree coordinates.
-- [ ] Confirm source pins, declared crate/module paths, and backend/API availability; unresolved security prerequisites block readiness.
+- [x] Active plan; PF-30-S02 and PF-13-S05 completed and archived. Decisions of 2026-10-06 apply (flagged merge).
 
 ## Done
 
-- [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
+- [x] Allocated 2026-10-06 to the untrusted-content lane after PF-30-S02 closed.
+- [x] Taint generation: each recorded batch with content lacking standing (tool, MCP, agent, memory,
+  unattributed, restored without a record) raises a per-session counter that never goes down.
+- [x] With `source_envelopes` and Moderate/Aggressive, once the session is tainted, a shell, exec or patch
+  action that reaches the vault, credential stores or security policy (Corbanu config, rules, hooks,
+  login state, anything under `CODEX_HOME`) needs a fresh human approval of that exact action. A cached
+  session approval, a permission hook's allow, the automatic reviewer and preapproved patch scope cannot
+  stand in; a "for this session" answer counts once. With `approval_policy = never` it is refused, not run.
+- [x] The prompt says why; the decision is re-checked after the prompt: taint that arrived while it was
+  open refuses the action. Each check logs its kind and taint generation.
+- [x] Classification resolves `~`/`$HOME`/`$CODEX_HOME`, `.`/`..`, `cd`, quotes and globs, finds CLI and
+  credential commands behind wrappers, and treats agent worktrees and ordinary project files as ordinary.
+- [x] Tests: classification (positive, negative, evasion, custom home), taint counting, approval required
+  (no "don't ask again" rule), approvals off, untainted/Permissive/ordinary unchanged, session approval not
+  reused, automatic reviewer bypassed.
 
 ## Remaining
 
-- [ ] Implement the action/profile matrix using data plus control-flow ancestry; unchanged narrow grants authorize only unchanged scope. Human-origin argument labels do not declassify model-selected actions; require trusted reconstruction or exact bounded human mandate.
-- [ ] Record realistic research-workflow approval counts and latency for later PF-26 validation; product-owned usability targets cannot relax deterministic denial or erase taint.
-
-- [ ] Exercise tainted transcript to maintenance flush to memory recall to protected action, with a new user message and exact human approval interposed; preserve ancestry and authorize only the approved effect. A wrapper/classifier result cannot reset taint.
-
-- [ ] Attach current source lineage and security-policy generation to every protected action and outbound disclosure request.
-- [ ] Deny external-origin instructions that request policy changes, vault enumeration, credential extraction or unapproved actions even when a detector returns benign.
-- [ ] Require fresh exact human authority for sensitive tainted follow-on actions; narrow existing grants may satisfy only their unchanged scope, never taint-driven expansion.
-- [ ] Invalidate stale decisions on new taint, resume, grant change or revocation; recompute at execution rather than only at prompt ingestion.
-- [ ] Test forced classifier allow, quoted malicious trades, memory-triggered exfiltration, stale approvals and child confused-deputy attempts against deterministic fake actions.
-- [ ] Add named `pf_30_s03` regression tests; update affected Cargo/Bazel/lock/schema edges together without broadening this feature.
+- [ ] MCP tool calls, `write_stdin` into running processes, code-mode and other dispatch routes that do not
+  pass the shared approval seam; typed protected resources replace the lexical net in PF-23-S01.
+- [ ] Bind the policy epoch and lineage to approvals (stale on grant change or revocation), not only the
+  taint generation; outbound disclosure requests.
+- [ ] Memory-recall → protected-action and child confused-deputy end-to-end tests; quoted malicious trades.
+- [ ] Record research-workflow approval counts and latency for PF-26.
+- [ ] Slice 1 gaps from review: tests for taint arriving while a prompt is open, a hook's allow, apply-patch
+  preapproval and the escalation retry; folder tracking beyond a leading `cd`; ANSI-C quoting.
 
 ## Verification
 
-- [ ] Run `cd codex-rs && just fix -p <affected-crate>` for each listed crate, then `just fmt`; inspect the final diff.
-- [ ] Focused: `cd codex-rs && just test -p codex-core pf_30_s03 && just test -p codex-secret-broker pf_30_s03`; confirm tests actually ran.
-- [ ] Integration: full affected crate suites via `just test -p <affected-crate>`; update Bazel locks when manifests change.
-- [ ] TUI applicability: none; integration flows are re-run by PF-26-S02
-- [ ] Record candidate/commit, commands, expected/actual outcomes and safe artifact digests; no production credentials or funds.
+- [x] `just fmt`; `just fix -p codex-core`.
+- [x] Focused: `just test -p codex-core pf_30_s0` (84 pass, 9 `pf_30_s03`).
+- [x] Slice 1: GLM 5.2 tmux demos; independent Opus 5.5 High review, four rounds, final APPROVE.
+- [ ] Later slices get the same gate; milestone VM run and sign-off when Moderate ships.
 
 ## Exit evidence
 
-- [ ] Implementation commit and final-tree outputs under `qa/security-levels/sprints/PF-30-S03/`.
-- [ ] Acceptance and source-mapping assertions proven; applicable true-TUI keys/checkpoints captured after formatting.
-- [ ] PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
-- [ ] Done/Remaining reflect reality; completed record moved to the archive and plan/navigation updated.
+- [x] Slice 1 gate: [post-taint-gate.md](../../../../qa/security-levels/sprints/PF-30-S03/post-taint-gate.md);
+  videos in [qa/demos/index/PF-30-S03.md](../../../../qa/demos/index/PF-30-S03.md).
+- [ ] Slices merged to main behind `source_envelopes`; record archived.
