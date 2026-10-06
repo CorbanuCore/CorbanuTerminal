@@ -56,4 +56,5 @@ provider key appears in the private TUI log and log database; the demo tool
 redacted it in place (`PRODUCT FINDING` in every run).
 
 The tmux run (`tmux-run/`) used commit `b8e5f59f7a`; the videos re-prove the
-core flows on the final commit.
+core flows on `72735863b6`. Later commits only merge `origin/main` and add an
+argument comment required by the Windows lint (`e82b6dd98b`).
