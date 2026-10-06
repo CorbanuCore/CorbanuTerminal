@@ -876,7 +876,10 @@ pub(crate) async fn run_hooks_and_record_inputs(
             blocked_input = true;
             // A blocked prompt is never recorded: drop any agent mark for it.
             if let TurnInput::UserInput { content, .. } = input_item {
-                let _ = sess.services.model_client().take_agent_input_origin(content);
+                let _ = sess
+                    .services
+                    .model_client()
+                    .take_agent_input_origin(content);
             }
             record_additional_contexts(sess, turn_context, hook_outcome.additional_contexts).await;
         } else {

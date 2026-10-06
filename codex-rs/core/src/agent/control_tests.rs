@@ -5605,7 +5605,10 @@ async fn pf_30_s02_agent_input_marks_are_consumed_once() {
     client.mark_agent_input(&task, MessageOrigin::Host);
     client.mark_agent_input(&task, agent_data);
     assert_eq!(client.take_agent_input_origin(&task), Some(agent_data));
-    assert_eq!(client.take_agent_input_origin(&task), Some(MessageOrigin::Host));
+    assert_eq!(
+        client.take_agent_input_origin(&task),
+        Some(MessageOrigin::Host)
+    );
     for index in 0..1_100 {
         client.mark_agent_input(&text_input(&format!("pending {index}")), agent_data);
     }

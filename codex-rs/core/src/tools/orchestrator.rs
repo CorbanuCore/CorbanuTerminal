@@ -442,7 +442,9 @@ impl ToolOrchestrator {
 
                 // Strict auto-review approval covers the sandboxed attempt only;
                 // retrying without the sandbox requires a fresh guardian review.
+                // A post-taint approval covered the sandboxed attempt only.
                 let bypass_retry_approval = !strict_auto_review
+                    && post_taint.is_none()
                     && (tool.should_bypass_approval(approval_policy, already_approved)
                         || allow_on_request_sandbox_startup_retry(
                             approval_policy,

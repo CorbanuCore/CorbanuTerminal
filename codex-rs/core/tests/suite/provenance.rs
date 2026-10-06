@@ -635,6 +635,8 @@ async fn pf_30_s03_vault_command_after_untrusted_content_needs_the_human() -> an
             reason.contains("vault access after untrusted content"),
             "{reason}"
         );
+        // No "don't ask again" rule is offered for a post-taint action.
+        assert_eq!(approval.proposed_execpolicy_amendment, None);
         test.codex
             .submit(Op::ExecApproval {
                 id: approval.effective_approval_id(),

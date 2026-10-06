@@ -171,8 +171,11 @@ impl Approvable<ShellRequest> for ShellRuntime {
                             cwd,
                             reason,
                             ctx.network_approval_context.clone(),
+                            // A post-taint approval covers this action only:
+                            // no "don't ask again" rule (PF-30-S03).
                             req.exec_approval_requirement
                                 .proposed_execpolicy_amendment()
+                                .filter(|_| !fresh)
                                 .cloned(),
                             req.additional_permissions.clone(),
                             available_decisions,
