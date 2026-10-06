@@ -827,7 +827,10 @@ mod pf_27_s02_tests {
 
     #[test]
     fn pf_27_s02_long_runtime_dirs_fall_back_to_the_user_runtime_dir() {
-        let short = tempfile::tempdir().expect("short dir");
+        let short = tempfile::Builder::new()
+            .prefix("pf27s02-")
+            .tempdir_in("/tmp")
+            .expect("short dir");
         let configured = short.path().join("run");
         assert_eq!(
             prepare_runtime_dir(Some(&configured)),

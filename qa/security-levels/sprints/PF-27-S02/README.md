@@ -43,13 +43,15 @@ Branch `feat/pf27-s02-secretless-20261006`, macOS arm64 debug build, Rust 1.95.0
 
 ## Tests
 
+Final tree (`03c9dfd971` plus a test-path fix), after `just fix` and `just fmt`:
+
 | Command | Result |
 | --- | --- |
-| `just test -p codex-core pf_27_s02` | 12 passed (contract, `env_for`/`env_for_exec_server` with an explicit contract, file tools) |
-| `cargo nextest run -p codex-network-proxy -p codex-process-hardening -p codex-protocol` | 560 passed before the review fixes; `pf_27` 19 passed after |
-| `just test -p codex-protocol -p codex-process-hardening -p codex-network-proxy -p codex-hooks -p codex-rmcp-client -p codex-features` | 922 of 923; the failure is `streamable_http_oauth_store_pinning` (native keyring unavailable in the isolated fixture; unrelated to this diff) |
-| `just test -p codex-core -E '<sandboxing, unified_exec, config, network_proxy, credential, escalation, schema, pf_27>'` | 744 passed |
-| Linux (Docker, `rust:1.95-bookworm`, kernel 6.12 linuxkit) `cargo test -p codex-process-hardening -p codex-network-proxy -p codex-protocol pf_27` | all passed; the broker reports `seccomp` (this kernel has no Landlock) |
+| `just test -p codex-core pf_27_s02` | 12 passed (contract, `env_for`/`env_for_exec_server` with an explicit contract, file tools, permitted broker keys) |
+| `just test -p codex-protocol -p codex-process-hardening -p codex-network-proxy -p codex-hooks -p codex-features` | 722 passed |
+| `just test -p codex-core -E 'test(pf_27) \| test(launch_contract) \| test(network_proxy) \| test(credential) \| test(sandboxing) \| test(unified_exec) \| test(apply_patch) \| test(exec_env) \| test(config::) \| test(escalation) \| test(schema) \| test(turn_context)'` | 853 passed |
+| `just test -p codex-rmcp-client` | 203 of 204; `streamable_http_oauth_store_pinning` fails because the native keyring is unavailable in the isolated test fixture (unrelated to this diff; the changed code runs only when armed) |
+| Linux (Docker, `rust:1.95-bookworm`, kernel 6.12 linuxkit): `cargo test -p codex-process-hardening -p codex-network-proxy -p codex-protocol pf_27` | all passed on the first candidate; the broker reports `seccomp` (no Landlock on this kernel) |
 
 The contained-broker test re-executes the test binary, confines it and checks that it cannot exec or write outside
 its directory: macOS `seatbelt exec=denied inside=ok outside=denied`; Linux Docker `seccomp exec=denied`.

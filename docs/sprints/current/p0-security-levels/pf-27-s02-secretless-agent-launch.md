@@ -69,14 +69,15 @@ Windows refuses protected launches with a reason; the port is [PF-27-S06](pf-27-
 
 ## Verification
 
-- [ ] `just fix -p` on every touched crate and `just fmt`; final diff inspected.
-- [ ] Focused: `just test -p codex-protocol pf_27_s02`, `-p codex-core pf_27_s02`, `-p codex-network-proxy pf_27`, `-p codex-process-hardening pf_27_s02`.
-- [ ] Integration: affected crate suites; Bazel lock check.
-- [ ] TUI applicability: agent-visible behaviour covered by the GLM 5.2 tmux run and SOP videos.
-- [ ] Candidate, commands and outcomes recorded; synthetic credentials only.
+- [ ] Linux and Bazel CI on the PR (pending at the time of writing; local Docker run passed).
+- [x] `just fix -p` on every touched crate and `just fmt`; final diff inspected.
+- [x] Focused: `just test -p codex-core pf_27_s02` (12) and the `pf_27` tests in protocol, network-proxy and process-hardening, all passing.
+- [x] Integration: affected crate suites (722 passed; core subset 853 passed; one unrelated rmcp keyring-fixture failure recorded).
+- [x] TUI applicability: GLM 5.2 TUI runs and five SOP videos ([index](../../../../qa/demos/index/PF-27-S02.md)).
+- [x] Candidate, commands and outcomes recorded; synthetic credentials only.
 
 ## Exit evidence
 
-- [ ] Implementation commit and outputs under `qa/security-levels/sprints/PF-27-S02/`.
-- [ ] One Opus 5.5 High review dispositioned; SOP videos indexed in `qa/demos/index/PF-27-S02.md`.
+- [x] Implementation commits and outputs under `qa/security-levels/sprints/PF-27-S02/`.
+- [x] One Opus 5.5 High review (changes required, then approve with nits after fixes) dispositioned.
 - [ ] Done/Remaining reflect reality; record archived when Remaining is empty or moved.
