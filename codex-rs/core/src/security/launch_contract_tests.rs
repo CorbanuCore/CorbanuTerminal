@@ -74,10 +74,10 @@ fn pf_27_s02_unsandboxed_and_unhardened_launches_are_refused() {
             contract.check_sandbox(SandboxType::None, /*sandbox_requested*/ true, false),
             Err(LaunchDenied::Unsandboxed)
         );
-        // Exec-server launches carry the sandbox to the server; the policy decides.
+        // Remote environments build the child environment on their own host.
         assert_eq!(
             contract.check_sandbox(SandboxType::None, /*sandbox_requested*/ true, true),
-            Ok(())
+            Err(LaunchDenied::RemoteEnvironment)
         );
         let unhardened = LaunchContract::capture(
             &fixture.codex_home,
@@ -117,6 +117,9 @@ fn pf_27_s02_protected_profile_denies_vault_auth_and_policy_store() {
     for entry in [
         "secrets",
         "auth.json",
+        ".env",
+        "provider_auth.json",
+        "config.toml",
         "wallet",
         "run",
         "shell_snapshots",
@@ -134,7 +137,7 @@ fn pf_27_s02_protected_profile_denies_vault_auth_and_policy_store() {
     );
     assert!(!file_system.can_write_path_with_cwd(fixture.codex_home.as_path(), cwd));
     assert!(file_system.can_write_path_with_cwd(&fixture.workspace.join("src.rs"), cwd));
-    assert!(file_system.can_read_path_with_cwd(&fixture.codex_home.join("config.toml"), cwd));
+    assert!(file_system.can_read_path_with_cwd(&fixture.codex_home.join("skills"), cwd));
     assert_eq!(fixture.contract.verify_permissions(&protected, cwd), Ok(()));
 }
 
@@ -244,4 +247,46 @@ fn pf_27_s02_refusals_explain_themselves() {
         LaunchDenied::Unsandboxed.to_string(),
         "Protected launch refused: this command would run outside the OS sandbox, which protected launch does not allow."
     );
+}
+
+#[test]
+fn pf_27_s02_writable_roots_inside_codex_home_are_refused() {
+    let fixture = fixture();
+    let plugins = fixture.codex_home.join("plugins");
+    let profile = PermissionProfile::workspace_write_with(
+        std::slice::from_ref(&plugins),
+        NetworkSandboxPolicy::Enabled,
+        /*exclude_tmpdir_env_var*/ true,
+        /*exclude_slash_tmp*/ true,
+    )
+    .materialize_project_roots_with_workspace_roots(std::slice::from_ref(&fixture.workspace));
+    assert_eq!(
+        fixture
+            .contract
+            .protect_permissions(&profile, fixture.workspace.as_path()),
+        Err(LaunchDenied::PolicyStoreWritable)
+    );
+}
+
+#[test]
+fn pf_27_s02_file_tools_fail_closed_when_unprotectable() {
+    let fixture = fixture();
+    let cwd = fixture.workspace.as_path();
+    let denied = fixture.contract.file_tool_permissions(
+        &PermissionProfile::Disabled,
+        /*sandboxed*/ true,
+        cwd,
+    );
+    let file_system = denied.file_system_sandbox_policy();
+    assert!(!file_system.can_read_path_with_cwd(&fixture.workspace.join("a.txt"), cwd));
+    assert!(!file_system.can_write_path_with_cwd(&fixture.workspace.join("a.txt"), cwd));
+
+    let protected = fixture.contract.file_tool_permissions(
+        &workspace_profile(&fixture.workspace),
+        /*sandboxed*/ true,
+        cwd,
+    );
+    let file_system = protected.file_system_sandbox_policy();
+    assert!(file_system.can_write_path_with_cwd(&fixture.workspace.join("a.txt"), cwd));
+    assert!(!file_system.can_read_path_with_cwd(&fixture.codex_home.join("auth.json"), cwd));
 }

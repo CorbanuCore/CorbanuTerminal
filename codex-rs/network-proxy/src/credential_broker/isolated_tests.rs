@@ -121,6 +121,7 @@ fn options() -> IsolatedBrokerOptions {
         allow_local_binding: true,
         allow_upstream_proxy: false,
         runtime_dir: None,
+        require_containment: true,
     }
 }
 

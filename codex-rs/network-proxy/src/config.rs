@@ -141,9 +141,11 @@ pub struct NetworkProxyConfig {
     #[serde(default)]
     pub isolated_credential_broker: bool,
     /// PF-27-S02: agent environments are built without provider tokens, so
-    /// brokered values come from Core's own environment. Set by Core only.
+    /// brokered values come from Core's own environment, limited to the
+    /// variables listed here (those the user's environment policy would have
+    /// passed). `None` when secretless launch is off. Set by Core only.
     #[serde(skip)]
-    pub secretless_agent_launch: bool,
+    pub secretless_agent_launch: Option<Vec<String>>,
     /// PF-27-S02: parent directory for the isolated broker's private socket
     /// directory (Core passes `CODEX_HOME/run`). Set by Core only.
     #[serde(skip)]
@@ -172,7 +174,7 @@ impl Default for NetworkProxyConfig {
             mitm: false,
             credential_broker: false,
             isolated_credential_broker: false,
-            secretless_agent_launch: false,
+            secretless_agent_launch: None,
             credential_broker_runtime_dir: None,
             dangerously_allow_plaintext_credential_injection: false,
             mitm_hooks: Vec::new(),
@@ -195,9 +197,10 @@ impl NetworkProxyConfig {
         }
     }
 
-    /// PF-27-S02: source brokered credential values from Core's environment.
-    pub fn set_secretless_agent_launch(&mut self, enabled: bool) {
-        self.secretless_agent_launch = enabled;
+    /// PF-27-S02: source the listed brokered credential variables from Core's
+    /// environment (`None` turns secretless launch off).
+    pub fn set_secretless_agent_launch(&mut self, brokered_env_keys: Option<Vec<String>>) {
+        self.secretless_agent_launch = brokered_env_keys;
     }
 
     /// PF-27-S02: where the isolated broker creates its private directory.
@@ -653,7 +656,7 @@ mod tests {
                 mitm: false,
                 credential_broker: false,
                 isolated_credential_broker: false,
-                secretless_agent_launch: false,
+                secretless_agent_launch: None,
                 credential_broker_runtime_dir: None,
                 dangerously_allow_plaintext_credential_injection: false,
                 mitm_hooks: Vec::new(),

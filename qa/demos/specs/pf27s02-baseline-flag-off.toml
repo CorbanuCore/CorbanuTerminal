@@ -1,8 +1,9 @@
-# PF-27-S02: the launch contract denies the vault store, sign-in file, broker runtime
-# directory and Core's own environment to agent commands, and keeps CODEX_HOME read-only.
-id = "pf27s02-protected-paths"
-feature = "Secretless agent launch: vault, sign-in file, shell snapshots and Core's environment are out of reach"
-expected = "Each probe prints denied: reading auth.json, secrets/ and shell_snapshots/, writing config.toml, and reading Core's environment with ps."
+# PF-27-S02 control run: the same probes with secretless_agent_launch OFF (today's behaviour).
+# The last step shows that the human's own unsandboxed shell can read Core's environment
+# (count only), which proves the probe targets the right pid.
+id = "pf27s02-baseline-flag-off"
+feature = "Control: with secretless_agent_launch off, agent commands can read the vault store and sign-in file"
+expected = "Flag off: reading auth.json, secrets/ and shell_snapshots/ is ALLOWED (writes to config.toml and Core's environment stay denied by the existing sandbox). The human's shell reads Core's environment (count 1)."
 model = "glm-5.2"
 provider = "zai"
 cols = 120
@@ -17,7 +18,6 @@ network_access = true
 
 [features]
 isolated_credential_broker = true
-secretless_agent_launch = true
 
 [features.network_proxy]
 enabled = true
@@ -60,6 +60,15 @@ key = "Enter"
 wait = "probes done"
 timeout = 180
 compress = 3
+
+[[steps]]
+type = "!ps eww -o command= -p $PPID | grep -c ZAI_API_KEY="
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "└ 1"
 
 [[steps]]
 pause = 4.0

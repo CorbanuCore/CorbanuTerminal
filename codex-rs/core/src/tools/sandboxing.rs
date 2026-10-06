@@ -437,11 +437,11 @@ impl<'a> SandboxAttempt<'a> {
     /// returns `permissions` with the protected paths denied.
     fn protect_launch(
         &self,
+        contract: Option<&crate::security::launch_contract::LaunchContract>,
         command: &mut SandboxCommand,
-        permissions: &codex_protocol::models::PermissionProfile,
         exec_server: bool,
     ) -> Result<Option<codex_protocol::models::PermissionProfile>, CodexErr> {
-        let Some(contract) = crate::security::launch_contract::active() else {
+        let Some(contract) = contract else {
             return Ok(None);
         };
         let cwd = self.sandbox_cwd.to_abs_path()?;
@@ -451,7 +451,7 @@ impl<'a> SandboxAttempt<'a> {
                 self.sandbox_requested,
                 exec_server,
                 command,
-                permissions,
+                self.permissions,
                 cwd.as_path(),
             )
             .map_err(|denied| CodexErr::UnsupportedOperation(denied.to_string()))?;
@@ -460,14 +460,31 @@ impl<'a> SandboxAttempt<'a> {
 
     pub fn env_for(
         &self,
+        command: SandboxCommand,
+        options: ExecOptions,
+        network: Option<&NetworkProxy>,
+        environment_id: Option<&str>,
+    ) -> Result<crate::sandboxing::ExecRequest, CodexErr> {
+        self.env_for_with_contract(
+            crate::security::launch_contract::active(),
+            command,
+            options,
+            network,
+            environment_id,
+        )
+    }
+
+    /// [`Self::env_for`] with an explicit PF-27-S02 launch contract.
+    pub(crate) fn env_for_with_contract(
+        &self,
+        contract: Option<&crate::security::launch_contract::LaunchContract>,
         mut command: SandboxCommand,
         options: ExecOptions,
         network: Option<&NetworkProxy>,
         environment_id: Option<&str>,
     ) -> Result<crate::sandboxing::ExecRequest, CodexErr> {
         let network = self.network_proxy(network);
-        let protected =
-            self.protect_launch(&mut command, self.permissions, /*exec_server*/ false)?;
+        let protected = self.protect_launch(contract, &mut command, /*exec_server*/ false)?;
         let request = self
             .manager
             .transform(SandboxTransformRequest {
@@ -500,31 +517,36 @@ impl<'a> SandboxAttempt<'a> {
 
     pub fn env_for_exec_server(
         &self,
+        command: SandboxCommand,
+        options: ExecOptions,
+    ) -> Result<crate::sandboxing::ExecRequest, CodexErr> {
+        self.env_for_exec_server_with_contract(
+            crate::security::launch_contract::active(),
+            command,
+            options,
+        )
+    }
+
+    /// [`Self::env_for_exec_server`] with an explicit launch contract. A
+    /// remote environment rebuilds the child environment on its own host, so
+    /// an armed contract refuses it (PF-27-S02).
+    pub(crate) fn env_for_exec_server_with_contract(
+        &self,
+        contract: Option<&crate::security::launch_contract::LaunchContract>,
         mut command: SandboxCommand,
         options: ExecOptions,
     ) -> Result<crate::sandboxing::ExecRequest, CodexErr> {
         let managed_network = command.managed_network.clone();
-        let protected =
-            self.protect_launch(&mut command, self.permissions, /*exec_server*/ true)?;
-        let protected_exec_server = match protected {
-            Some(_) => self.protect_launch(
-                &mut command,
-                self.exec_server_permissions,
-                /*exec_server*/ true,
-            )?,
-            None => None,
-        };
+        self.protect_launch(contract, &mut command, /*exec_server*/ true)?;
         let exec_server_permissions = effective_permission_profile(
-            protected_exec_server
-                .as_ref()
-                .unwrap_or(self.exec_server_permissions),
+            self.exec_server_permissions,
             command.additional_permissions.as_ref(),
         );
         let request = self
             .manager
             .transform(SandboxTransformRequest {
                 command,
-                permissions: protected.as_ref().unwrap_or(self.permissions),
+                permissions: self.permissions,
                 // The exec-server must receive the native command, not this host's wrapper.
                 sandbox: SandboxType::None,
                 enforce_managed_network: self.enforce_managed_network,

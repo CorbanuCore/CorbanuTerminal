@@ -19,6 +19,8 @@ use codex_protocol::permissions::FileSystemAccessMode;
 use codex_protocol::permissions::FileSystemPath;
 use codex_protocol::permissions::FileSystemSandboxEntry;
 use codex_protocol::permissions::FileSystemSandboxKind;
+use codex_protocol::permissions::FileSystemSandboxPolicy;
+use codex_protocol::permissions::NetworkSandboxPolicy;
 use codex_protocol::secretless_launch;
 use codex_sandboxing::SandboxCommand;
 use codex_sandboxing::SandboxType;
@@ -39,6 +41,10 @@ const PROTECTED_CODEX_HOME_ENTRIES: &[&str] = &[
     "secrets",
     "auth.json",
     ".credentials.json",
+    ".env",
+    "provider_auth.json",
+    "config.toml",
+    "managed_config.toml",
     "wallet",
     "run",
     "shell_snapshots",
@@ -46,6 +52,18 @@ const PROTECTED_CODEX_HOME_ENTRIES: &[&str] = &[
     "sessions",
     "archived_sessions",
     "history.jsonl",
+];
+
+/// Credential files under `$HOME` that tools read for the user: CLI tokens
+/// for GitHub, AWS, Docker, npm and git, `.netrc`, and Claude's sign-in.
+const PROTECTED_HOME_ENTRIES: &[&str] = &[
+    ".netrc",
+    ".git-credentials",
+    ".config/gh/hosts.yml",
+    ".aws/credentials",
+    ".docker/config.json",
+    ".npmrc",
+    ".claude/.credentials.json",
 ];
 
 /// Glob (relative to `CODEX_HOME`) for Core's state and log databases.
@@ -63,6 +81,7 @@ pub(crate) enum LaunchDenied {
     UnsupportedPlatform,
     ProcessHardening,
     Unsandboxed,
+    RemoteEnvironment,
     UnprotectableFileSystem,
     ProtectedPathReadable(String),
     PolicyStoreWritable,
@@ -82,6 +101,10 @@ impl std::fmt::Display for LaunchDenied {
             }
             Self::Unsandboxed => {
                 "this command would run outside the OS sandbox, which protected launch does not allow"
+                    .to_string()
+            }
+            Self::RemoteEnvironment => {
+                "commands in a remote environment build their environment on the remote host, which this contract cannot check yet"
                     .to_string()
             }
             Self::UnprotectableFileSystem => {
@@ -142,6 +165,28 @@ pub(crate) fn arm(codex_home: &AbsolutePathBuf) {
     });
 }
 
+/// Brokered variables (for example `GITHUB_TOKEN`) that the user's shell
+/// environment policy would pass to agent commands, before the launch
+/// allowlist runs and without the provider keys Core strips for the shell
+/// tool. Only these may be sourced from Core's environment as dummies.
+pub(crate) fn policy_permitted_brokered_env_keys(
+    policy: &codex_protocol::config_types::ShellEnvironmentPolicy,
+) -> Vec<String> {
+    let mut env = codex_protocol::shell_environment::create_env_from_vars(
+        std::env::vars_os().filter_map(|(name, value)| {
+            Some((name.into_string().ok()?, value.into_string().ok()?))
+        }),
+        policy,
+        /*thread_id*/ None,
+    );
+    crate::exec_env::remove_provider_auth_env_vars(&mut env, std::iter::empty());
+    codex_network_proxy::credential_broker_env_var_names()
+        .into_iter()
+        .filter(|name| env.contains_key(*name))
+        .map(str::to_string)
+        .collect()
+}
+
 /// The armed contract, if any.
 pub(crate) fn active() -> Option<&'static LaunchContract> {
     ACTIVE.get()
@@ -169,11 +214,24 @@ impl LaunchContract {
             .iter()
             .map(|entry| codex_home.join(entry))
             .collect::<Vec<_>>();
-        if cfg!(target_os = "macos")
-            && let Some(home) = std::env::var_os("HOME")
+        if let Some(home) = std::env::var_os("HOME")
             && let Ok(home) = AbsolutePathBuf::from_absolute_path(home)
         {
-            protected_read_paths.push(home.join("Library/Keychains"));
+            protected_read_paths
+                .extend(PROTECTED_HOME_ENTRIES.iter().map(|entry| home.join(entry)));
+            if cfg!(target_os = "macos") {
+                protected_read_paths.push(home.join("Library/Keychains"));
+            }
+        }
+        if let Some(dir) = std::env::var_os("CLAUDE_CONFIG_DIR")
+            && let Ok(dir) = AbsolutePathBuf::from_absolute_path(dir)
+        {
+            protected_read_paths.push(dir.join(".credentials.json"));
+        }
+        if let Some(dir) = codex_network_proxy::credential_broker_user_runtime_dir()
+            && let Ok(dir) = AbsolutePathBuf::from_absolute_path(dir)
+        {
+            protected_read_paths.push(dir);
         }
         Self {
             codex_home: codex_home.clone(),
@@ -222,7 +280,10 @@ impl LaunchContract {
         if !self.hardened {
             return Err(LaunchDenied::ProcessHardening);
         }
-        if !sandbox_requested || (!exec_server && sandbox == SandboxType::None) {
+        if exec_server {
+            return Err(LaunchDenied::RemoteEnvironment);
+        }
+        if !sandbox_requested || sandbox == SandboxType::None {
             return Err(LaunchDenied::Unsandboxed);
         }
         Ok(())
@@ -304,12 +365,37 @@ impl LaunchContract {
                 ));
             }
         }
-        if file_system.can_write_path_with_cwd(self.codex_home.as_path(), cwd)
+        let writable_inside_home = file_system
+            .get_writable_roots_with_cwd(cwd)
+            .iter()
+            .any(|root| root.root.as_path().starts_with(self.codex_home.as_path()));
+        if writable_inside_home
+            || file_system.can_write_path_with_cwd(self.codex_home.as_path(), cwd)
             || file_system.can_write_path_with_cwd(&self.codex_home.join("config.toml"), cwd)
         {
             return Err(LaunchDenied::PolicyStoreWritable);
         }
         Ok(())
+    }
+
+    /// Permissions for in-process file tools (apply_patch, structured edits,
+    /// image viewing): the protected profile, or a deny-everything profile
+    /// when the launch could not be protected, so these tools fail closed.
+    pub(crate) fn file_tool_permissions(
+        &self,
+        profile: &PermissionProfile,
+        sandboxed: bool,
+        cwd: &Path,
+    ) -> PermissionProfile {
+        let protected = sandboxed
+            .then(|| self.protect_permissions(profile, cwd).ok())
+            .flatten();
+        protected.unwrap_or_else(|| {
+            PermissionProfile::from_runtime_permissions(
+                &FileSystemSandboxPolicy::restricted(Vec::new()),
+                NetworkSandboxPolicy::Restricted,
+            )
+        })
     }
 
     /// Refuses login shells and managed secrets in argv, then removes any

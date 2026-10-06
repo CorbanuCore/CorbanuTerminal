@@ -713,8 +713,9 @@ fn pf27_s02_core_env(key: &str) -> Option<String> {
 
 #[test]
 fn pf_27_s02_stripped_child_env_still_gets_a_brokered_dummy() {
+    let permitted = ["GITHUB_TOKEN".to_string()];
     let broker = CredentialBroker::new(/*enabled*/ true)
-        .with_process_env_lookup(Some(pf27_s02_core_env as ProcessEnvLookup));
+        .with_process_env_lookup(Some(&permitted), pf27_s02_core_env);
     // The launch allowlist removed GITHUB_TOKEN before the proxy saw the env.
     let mut env = env_map([("PATH", "/usr/bin")]);
     broker.virtualize_child_env(&mut env);
@@ -739,6 +740,17 @@ fn pf_27_s02_stripped_child_env_still_gets_a_brokered_dummy() {
 #[test]
 fn pf_27_s02_without_secretless_launch_the_child_env_is_the_only_source() {
     let broker = CredentialBroker::new(/*enabled*/ true);
+    let mut env = env_map([("PATH", "/usr/bin")]);
+    broker.virtualize_child_env(&mut env);
+    assert_eq!(env.get("GITHUB_TOKEN"), None);
+}
+
+#[test]
+fn pf_27_s02_core_values_the_user_policy_excluded_are_not_brokered() {
+    // The user's shell environment policy dropped GITHUB_TOKEN, so it is not
+    // in the permitted list and the agent must not gain brokered access.
+    let broker = CredentialBroker::new(/*enabled*/ true)
+        .with_process_env_lookup(Some(&[]), pf27_s02_core_env);
     let mut env = env_map([("PATH", "/usr/bin")]);
     broker.virtualize_child_env(&mut env);
     assert_eq!(env.get("GITHUB_TOKEN"), None);

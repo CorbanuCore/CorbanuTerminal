@@ -49,6 +49,7 @@ pub(crate) struct IsolatedBrokerOptions {
     pub(crate) allow_local_binding: bool,
     pub(crate) allow_upstream_proxy: bool,
     pub(crate) runtime_dir: Option<std::path::PathBuf>,
+    pub(crate) require_containment: bool,
 }
 
 pub const CREDENTIAL_BROKER_ACTIVE_ENV_KEY: &str = "CODEX_NETWORK_PROXY_CREDENTIAL_BROKER_ACTIVE";
@@ -60,7 +61,16 @@ pub(crate) struct CredentialBroker {
     isolation: Isolation,
     /// PF-27-S02: agent environments arrive without provider tokens, so raw
     /// values are read from Core's own process environment instead.
-    process_env_source: Option<ProcessEnvLookup>,
+    process_env_source: Option<ProcessEnvSource>,
+}
+
+/// Which variables may be read from Core's environment, and how.
+#[derive(Clone)]
+struct ProcessEnvSource {
+    lookup: ProcessEnvLookup,
+    /// Only the brokered variables the user's shell environment policy would
+    /// have passed to agent commands before the launch allowlist ran.
+    keys: Arc<[String]>,
 }
 
 /// Reads one variable from Core's environment (replaceable in tests).
@@ -225,12 +235,19 @@ impl CredentialBroker {
 
     /// PF-27-S02: source brokered values from Core's environment rather than
     /// the (stripped) child environment.
-    pub(crate) fn with_process_env_source(self, enabled: bool) -> Self {
-        self.with_process_env_lookup(enabled.then_some(core_process_env as ProcessEnvLookup))
+    pub(crate) fn with_process_env_source(self, keys: Option<&[String]>) -> Self {
+        self.with_process_env_lookup(keys, core_process_env)
     }
 
-    pub(crate) fn with_process_env_lookup(mut self, lookup: Option<ProcessEnvLookup>) -> Self {
-        self.process_env_source = lookup;
+    pub(crate) fn with_process_env_lookup(
+        mut self,
+        keys: Option<&[String]>,
+        lookup: ProcessEnvLookup,
+    ) -> Self {
+        self.process_env_source = keys.map(|keys| ProcessEnvSource {
+            lookup,
+            keys: keys.into(),
+        });
         self
     }
 
@@ -276,7 +293,8 @@ impl CredentialBroker {
         // environment, letting any value already in the child win.
         let source_env = self
             .process_env_source
-            .map(|lookup| process_credential_env(env, lookup));
+            .as_ref()
+            .map(|source| process_credential_env(env, source));
         let source_env = source_env.as_ref().unwrap_or(env).clone();
         for provider in providers::credential_providers() {
             if (state.scoped_openai.is_some() || state.isolated_openai.is_some())
@@ -523,15 +541,20 @@ impl CredentialBroker {
 /// value the child environment already carries (for example a dummy).
 fn process_credential_env(
     child_env: &HashMap<String, String>,
-    lookup: ProcessEnvLookup,
+    source: &ProcessEnvSource,
 ) -> HashMap<String, String> {
-    let mut source = HashMap::new();
+    let mut values = HashMap::new();
     for key in providers::credential_broker_env_keys() {
-        if let Some(value) = child_env.get(key).cloned().or_else(|| lookup(key)) {
-            source.insert(key.to_string(), value);
+        let permitted = source.keys.iter().any(|permitted| permitted == key);
+        let value = child_env
+            .get(key)
+            .cloned()
+            .or_else(|| permitted.then(|| (source.lookup)(key)).flatten());
+        if let Some(value) = value {
+            values.insert(key.to_string(), value);
         }
     }
-    source
+    values
 }
 
 fn virtualize_env_var(
@@ -937,6 +960,25 @@ pub fn brokered_credential_dummy_env_keys(env: &HashMap<String, String>) -> Vec<
             .then_some(key)
         })
         .collect()
+}
+
+/// Every environment variable the credential broker manages (tokens and host
+/// context), for callers that decide which ones a launch may source.
+pub fn credential_broker_env_var_names() -> Vec<&'static str> {
+    providers::credential_broker_env_keys().collect()
+}
+
+/// PF-27-S02: the per-user directory the isolated broker falls back to when
+/// `CODEX_HOME/run` is too long for a socket path.
+pub fn credential_broker_user_runtime_dir() -> Option<std::path::PathBuf> {
+    #[cfg(unix)]
+    {
+        isolated::user_runtime_dir()
+    }
+    #[cfg(not(unix))]
+    {
+        None
+    }
 }
 
 /// Returns supported credential keys only for an environment with an active broker.

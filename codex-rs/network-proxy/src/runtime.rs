@@ -1110,12 +1110,13 @@ fn credential_broker_for_config(config: &crate::config::NetworkProxyConfig) -> C
                 allow_local_binding: config.allow_local_binding,
                 allow_upstream_proxy: config.allow_upstream_proxy,
                 runtime_dir: config.credential_broker_runtime_dir.clone(),
+                require_containment: config.secretless_agent_launch.is_some(),
             },
         )
     } else {
         CredentialBroker::new(config.credential_broker)
     };
-    broker.with_process_env_source(config.secretless_agent_launch)
+    broker.with_process_env_source(config.secretless_agent_launch.as_deref())
 }
 
 fn unix_timestamp() -> i64 {

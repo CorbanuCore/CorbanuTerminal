@@ -34,6 +34,7 @@ use codex_sandboxing::policy_transforms::effective_permission_profile;
 use codex_sandboxing::record_filesystem_sandbox_violation;
 use codex_utils_path_uri::PathUri;
 use futures::future::BoxFuture;
+use std::path::Path;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -88,14 +89,28 @@ impl ApplyPatchRuntime {
         req: &ApplyPatchRequest,
         attempt: &SandboxAttempt<'_>,
     ) -> Option<FileSystemSandboxContext> {
-        if attempt.sandbox == SandboxType::None {
+        let contract = crate::security::launch_contract::active();
+        if attempt.sandbox == SandboxType::None && contract.is_none() {
             return None;
         }
 
-        let permissions = effective_permission_profile(
+        let mut permissions = effective_permission_profile(
             attempt.exec_server_permissions,
             req.additional_permissions.as_ref(),
         );
+        // PF-27-S02: patches get the protected profile; an unsandboxed or
+        // unprotectable attempt gets no file access at all.
+        if let Some(contract) = contract {
+            let cwd = attempt.sandbox_cwd.to_abs_path().ok();
+            permissions = match cwd {
+                Some(cwd) => contract.file_tool_permissions(
+                    &permissions,
+                    attempt.sandbox != SandboxType::None,
+                    cwd.as_path(),
+                ),
+                None => contract.file_tool_permissions(&permissions, false, Path::new("/")),
+            };
+        }
         Some(FileSystemSandboxContext {
             permissions: permissions.into(),
             cwd: Some(attempt.sandbox_cwd.clone()),

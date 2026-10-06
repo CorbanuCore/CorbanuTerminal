@@ -66,6 +66,9 @@ pub(crate) struct IsolatedBrokerOptions {
     /// PF-27-S02: parent of the broker's private socket directory. Core
     /// passes `CODEX_HOME/run`, which agent commands cannot write.
     pub(crate) runtime_dir: Option<PathBuf>,
+    /// PF-27-S02: refuse a broker that could not confine itself (Seatbelt on
+    /// macOS, at least seccomp on Linux) instead of running it unconfined.
+    pub(crate) require_containment: bool,
 }
 
 /// How Core starts the broker. Production re-executes the current binary.
@@ -243,8 +246,20 @@ impl IsolatedBrokerClient {
             kill_and_reap(child);
             return Err(IsolatedBrokerError::Spawn);
         };
-        tracing::info!(%containment, "isolated credential broker started");
+        if options.require_containment && !containment_sufficient(&containment) {
+            tracing::warn!(
+                %containment,
+                "isolated credential broker refused: it could not confine itself on this platform"
+            );
+            kill_and_reap_with_cleanup(child, Some(PathBuf::from(socket_path)));
+            return Err(IsolatedBrokerError::Spawn);
+        }
         let socket_path = PathBuf::from(socket_path);
+        tracing::info!(
+            %containment,
+            broker_dir = %socket_path.parent().unwrap_or(&socket_path).display(),
+            "isolated credential broker started"
+        );
         if protocol_version != CONTROL_PROTOCOL_VERSION
             || !valid_id(&broker_instance)
             || !socket_path.is_absolute()
@@ -572,12 +587,34 @@ fn spawn_line_reader<R: std::io::Read + Send + 'static>(
     Ok(lines)
 }
 
-/// Creates the runtime parent directory (owner-only) when the socket path
-/// fits; `None` falls back to the broker's temporary directory.
-fn prepare_runtime_dir(dir: Option<&Path>) -> Option<PathBuf> {
-    // `<dir>/cbk-XXXXXX/c.sock` must fit in a Unix socket address.
+/// Seatbelt on macOS; seccomp (Landlock when the kernel has it) on Linux.
+fn containment_sufficient(containment: &str) -> bool {
+    if cfg!(target_os = "macos") {
+        containment == "seatbelt"
+    } else if cfg!(target_os = "linux") {
+        containment
+            .split('+')
+            .any(|mechanism| mechanism == "seccomp")
+    } else {
+        false
+    }
+}
+
+/// Picks the broker's runtime parent directory: the configured one
+/// (`CODEX_HOME/run`) when its socket paths fit, otherwise a per-user runtime
+/// directory outside the sandbox's writable roots (the Darwin user cache
+/// directory, or `$XDG_RUNTIME_DIR` on Linux). `None` falls back to the
+/// broker's temporary directory, where an agent could delete the socket.
+fn prepare_runtime_dir(configured: Option<&Path>) -> Option<PathBuf> {
+    let configured = configured?;
+    create_runtime_dir(configured)
+        .or_else(|| user_runtime_dir().and_then(|dir| create_runtime_dir(&dir)))
+}
+
+/// Creates `dir` (owner-only) when `<dir>/cbk-XXXXXX/c.sock` fits in a Unix
+/// socket address.
+fn create_runtime_dir(dir: &Path) -> Option<PathBuf> {
     const MAX_RUNTIME_DIR_BYTES: usize = 100 - "/cbk-XXXXXX/c.sock".len();
-    let dir = dir?;
     if !dir.is_absolute() || dir.as_os_str().len() > MAX_RUNTIME_DIR_BYTES {
         return None;
     }
@@ -587,6 +624,35 @@ fn prepare_runtime_dir(dir: Option<&Path>) -> Option<PathBuf> {
         .ok()
         .filter(std::fs::Metadata::is_dir)
         .map(|_| dir.to_path_buf())
+}
+
+pub(crate) fn user_runtime_dir() -> Option<PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        let mut buffer = [0 as libc::c_char; 1024];
+        // SAFETY: the buffer and its length are valid; confstr NUL-terminates.
+        let len = unsafe {
+            libc::confstr(
+                libc::_CS_DARWIN_USER_CACHE_DIR,
+                buffer.as_mut_ptr(),
+                buffer.len(),
+            )
+        };
+        if len == 0 || len > buffer.len() {
+            return None;
+        }
+        // SAFETY: confstr wrote a NUL-terminated string into `buffer`.
+        let dir = unsafe { std::ffi::CStr::from_ptr(buffer.as_ptr()) };
+        let dir = PathBuf::from(dir.to_str().ok()?);
+        Some(dir.join("corbanu-run"))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .filter(|dir| dir.is_absolute())
+            .map(|dir| dir.join("corbanu-run"))
+    }
 }
 
 /// Connects to the control socket named in the bootstrap line, but only if

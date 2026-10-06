@@ -1,8 +1,10 @@
 # PF-27-S02: the isolated broker confines itself (Seatbelt on macOS) and keeps its sockets
-# in CODEX_HOME/run; the control socket is gone once Core is connected.
+# in CODEX_HOME/run (or, when that path is too long for a socket, the per-user cache
+# directory outside the sandbox's writable roots); the control socket is gone once Core is
+# connected.
 id = "pf27s02-broker-contained"
-feature = "Secretless agent launch: the credential broker runs contained, with its socket under CODEX_HOME/run"
-expected = "The log shows the broker started with containment=seatbelt; CODEX_HOME/run holds one cbk- directory with only b.sock (no control socket left)."
+feature = "Secretless agent launch: the credential broker runs contained, in a private socket directory"
+expected = "The log shows the broker started with containment=seatbelt. Its private cbk- directory is owner-only (drwx------) and holds only b.sock: the control socket is gone."
 model = "glm-5.2"
 provider = "zai"
 cols = 120
@@ -34,7 +36,7 @@ wait = "Corbanu Terminal \\(v"
 pause = 1.0
 
 [[steps]]
-type = "!grep -ho 'isolated credential broker started.*' {logs}/*.log | head -n 1"
+type = "!grep -ho 'containment=[a-z+]* broker_dir=[^ ]*' {logs}/*.log | head -n 1"
 
 [[steps]]
 key = "Enter"
@@ -43,7 +45,7 @@ key = "Enter"
 wait = "containment=seatbelt"
 
 [[steps]]
-type = "!ls -la {home}/run/cbk-*"
+type = "!ls -la \"$(grep -ho 'broker_dir=[^ ]*' {logs}/*.log | head -n 1 | cut -d= -f2)\""
 
 [[steps]]
 key = "Enter"

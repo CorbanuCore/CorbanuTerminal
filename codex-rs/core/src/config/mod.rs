@@ -3276,15 +3276,24 @@ fn current_time_reminder_toml_config(
 }
 
 /// PF-27-S02: agent environments no longer carry provider tokens, so the
-/// proxy sources brokered values from Core's own environment; the isolated
+/// proxy sources brokered values from Core's own environment, limited to the
+/// variables the user's environment policy would have passed. The isolated
 /// broker keeps its sockets under `CODEX_HOME/run`, which agent commands can
 /// neither read nor write under the launch contract.
 fn apply_secretless_launch_network_config(
     config: &mut NetworkProxyConfig,
     secretless_agent_launch: bool,
+    shell_environment_policy: &ShellEnvironmentPolicy,
     codex_home: &AbsolutePathBuf,
 ) {
-    config.set_secretless_agent_launch(secretless_agent_launch);
+    if !secretless_agent_launch {
+        return;
+    }
+    config.set_secretless_agent_launch(Some(
+        crate::security::launch_contract::policy_permitted_brokered_env_keys(
+            shell_environment_policy,
+        ),
+    ));
     if config.isolated_credential_broker {
         config.set_credential_broker_runtime_dir(Some(codex_home.join("run").to_path_buf()));
     }
@@ -3961,6 +3970,7 @@ impl Config {
             apply_secretless_launch_network_config(
                 &mut configured_network_proxy_config,
                 secretless_agent_launch,
+                &cfg.shell_environment_policy.clone().into(),
                 &codex_home,
             );
         }
@@ -4998,6 +5008,7 @@ impl Config {
                 apply_secretless_launch_network_config(
                     &mut configured_network_proxy_config,
                     self.features.enabled(Feature::SecretlessAgentLaunch),
+                    &self.permissions.shell_environment_policy,
                     &self.codex_home,
                 );
             }
