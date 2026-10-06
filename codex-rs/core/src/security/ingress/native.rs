@@ -96,6 +96,7 @@ pub(crate) struct NativeIngress {
     host_context_reinjection: bool,
     /// Registrations waiting to be persisted next to their rollout items.
     pending_origins: Vec<SourceOriginEntry>,
+    journal_overflow_reported: bool,
 }
 
 impl std::fmt::Debug for NativeIngress {
@@ -165,7 +166,11 @@ impl NativeIngress {
             return;
         }
         if self.pending_origins.len() >= MAX_PENDING_ORIGIN_ENTRIES {
-            tracing::warn!("source origin journal is full; later content resumes as labelled data");
+            if !std::mem::replace(&mut self.journal_overflow_reported, true) {
+                tracing::warn!(
+                    "source origin journal is full; later content resumes as labelled data"
+                );
+            }
             return;
         }
         self.pending_origins.push(SourceOriginEntry {
