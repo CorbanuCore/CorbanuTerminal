@@ -115,6 +115,7 @@ mod override_updates;
 mod pending_input;
 mod permissions_messages;
 mod personality;
+mod pf_23_s01;
 mod plugins;
 mod prompt_cache_key;
 mod prompt_caching;
