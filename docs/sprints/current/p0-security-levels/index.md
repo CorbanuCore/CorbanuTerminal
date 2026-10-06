@@ -22,7 +22,7 @@ Earlier allocation notes are in the [plan history](../../../plans/history/p0-sec
 | 31 | [PF-28-S02](pf-28-s02-reflected-secret-response-scrubbing.md) | Reflected-secret response scrubbing (merged behind `secret_output_gate`; two carried items open) | broker | PF-28-S01 |
 | 32 | [PF-33-S01](pf-33-s01-url-dns-and-redirect-policy.md) | URL DNS and redirect policy (merged behind `url_destination_policy`) | first free | PF-27-S02, PF-33-S03 |
 | 33 | [PF-33-S02](pf-33-s02-connection-pinning-and-bypass.md) | Connection pinning and alternate-egress denial (merged behind `url_destination_policy`, #215; open items recorded) | first free | PF-33-S01 (merged behind flag) |
-| 35 | [PF-29-S01](pf-29-s01-protected-mode-inventory.md) | Protected-mode inventory and activation preflight | first free | PF-28-S02, PF-20-S02 |
+| 35 | [PF-29-S01](pf-29-s01-protected-mode-inventory.md) | Protected-mode inventory and activation preflight (in progress behind `protected_mode_preflight`) | first free | PF-28-S02 (merged behind flag), PF-20-S02 (archived) |
 | 36 | [PF-29-S02](pf-29-s02-human-secret-migration.md) | Human-reviewed credential migration and recovery | first free | PF-29-S01, PF-24-S01 |
 | 40 | [PF-23-S01](pf-23-s01-moderate-ingress-and-disclosure-enforcement.md) | Moderate ingress and disclosure enforcement (next in the lane; takes PF-30-S03's moved items) | untrusted content | PF-13-S05, PF-22-S02, PF-30-S03 (archived) |
 | 41 | [PF-23-S02](pf-23-s02-aggressive-deny-and-grant-enforcement.md) | Aggressive deny and grant enforcement | untrusted content | PF-17-S01, PF-23-S01 |

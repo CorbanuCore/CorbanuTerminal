@@ -48,6 +48,9 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-33-s02-20261006"
     branch: "pf-33-s02-20261006"
     base_commit: "39c1f06213da3f15ec41cdd673a09a98cbc7d027"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-29-s01-20261006"
+    branch: "pf-29-s01-20261006"
+    base_commit: "4b42012daa8e532d7ae2f9a62b6829f55b044b0b"
 ---
 
 # P0 `/security` levels
