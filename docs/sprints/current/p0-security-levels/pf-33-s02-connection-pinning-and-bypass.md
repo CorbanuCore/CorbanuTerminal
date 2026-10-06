@@ -52,30 +52,41 @@ updated: 2026-10-06
 
 ## Done
 
-- [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
+- [x] New single-feature record reconciled with current ownership and archived design input.
+- [x] Pinning (`connect_policy.rs`, `destination.rs`, `mitm.rs`): each guarded request carries the checked answers;
+  the connector dials only those, for that exact host/port, never re-resolving; no pin or another authority is
+  refused; each address still passes the peer check; TLS identity still verified; every request dials fresh.
+- [x] Alternate egress: inherited upstream proxies refused (`upstream_proxy`); the proxy's `x-unix-socket` route
+  refused (`unix_socket`); a host denied after CONNECT is refused on the open tunnel (`host_denied`).
+- [x] OS backend: the guard drops `allow_local_binding` and Unix-socket grants (`proxy.rs`, Windows provisioning in
+  `network_proxy_spec.rs`), so Seatbelt allows only the proxy ports (no loopback services, raw DNS, Unix sockets).
+  Linux proxy-routed mode (netns, seccomp AF_UNIX deny) unchanged. Matrix in the evidence README.
+- [x] Real transport fixtures: loopback TCP/TLS with unresolvable `.invalid` names prove the pinned peer is used;
+  fallback stays inside the checked answers; TLS mismatch fails; aborting one request leaves its sibling working.
+- [x] 15 `pf_33_s02` network-proxy tests, 1 sandboxing (Seatbelt), 1 core (Windows provisioning). No Cargo or
+  lockfile change.
 
 ## Remaining
 
-- [ ] Use real transport fixtures to prove the checked DNS peer is used: mocks may skip DNS. Attack trusted-env/explicit/managed proxies, pinDns=false equivalents, NO_PROXY and stale pooled connections; abort/release one request without breaking an authorized sibling.
-
-- [ ] Pin approved resolution to the actual connection; reject DNS rebinding, mismatched peer/TLS identity and reused pooled connections under changed authority.
-- [ ] Enforce outbound-only broker/retriever routes using the OS backend; deny direct sockets, UDP/QUIC bypass, alternate proxies, Unix/domain sockets, host networking and metadata APIs.
-- [ ] Distinguish authenticated local broker IPC from forbidden local network destinations; a caller cannot turn the loopback exemption into general SSRF.
-- [ ] Route self-hosted SearXNG only through a separately human-configured exact service endpoint and narrow adapter; never widen public-fetch private-IP policy.
-- [ ] Test NO_PROXY/env changes, malicious proxy config, CONNECT/blind tunnel, pinned-TLS failure, stale grants and platform backend failure; record supported-platform capability matrix.
-- [ ] Add named `pf_33_s02` regression tests; update affected Cargo/Bazel/lock/schema edges together without broadening this feature.
+- [ ] Brokered credential routes (isolated broker) dial without the pin; the broker re-resolves with its own peer
+  check. Carry `PinnedPeers` through the broker protocol (broker lane; coordinator to place).
+- [ ] SearXNG: no adapter exists in the tree; route it through an exact private-service grant when one is added.
+- [ ] Runtime-approved (decider) hosts are not revoked on an open tunnel (PF-25-S02). No live rebinding-resolver
+  fixture; rebinding is covered by pinning tests.
 
 ## Verification
 
-- [ ] Run `cd codex-rs && just fix -p <affected-crate>` for each listed crate, then `just fmt`; inspect the final diff.
-- [ ] Focused: `cd codex-rs && just test -p codex-network-proxy pf_33_s02 && just test -p codex-secret-broker pf_33_s02 && just test -p codex-sandboxing pf_33_s02`; confirm tests actually ran.
-- [ ] Integration: full affected crate suites via `just test -p <affected-crate>`; update Bazel locks when manifests change.
-- [ ] TUI applicability: none; integration flows are re-run by PF-26-S02
-- [ ] Record candidate/commit, commands, expected/actual outcomes and safe artifact digests; no production credentials or funds.
+- [x] `just fix -p codex-network-proxy`, `-p codex-sandboxing`, `-p codex-core`; `just fmt`; final diff inspected.
+- [x] Focused: `cargo test -p codex-network-proxy pf_33_s02` (15), `-p codex-sandboxing pf_33_s02` (1),
+  `-p codex-core --lib pf_33_s02` (1). `codex-secret-broker` is broker scope: no test there.
+- [x] Integration: `just test -p codex-network-proxy` (296 passed); `just test -p codex-sandboxing` (79 passed, 2
+  failing identically on the base commit: temp-dir writable roots, unrelated); core `windows_sandbox`/`network_proxy`.
+- [x] GLM 5.2 tmux runs as five SOP videos ([index](../../../../qa/demos/index/PF-33-S02.md)); Opus 5.5 High review
+  APPROVE WITH NITS, dispositions in the [evidence README](../../../../qa/security-levels/sprints/PF-33-S02/README.md).
+- [ ] PR CI green and merged behind `url_destination_policy`; PF-26 final-candidate requalification (milestone).
 
 ## Exit evidence
 
-- [ ] Implementation commit and final-tree outputs under `qa/security-levels/sprints/PF-33-S02/`.
-- [ ] Acceptance and source-mapping assertions proven; applicable true-TUI keys/checkpoints captured after formatting.
+- [x] Commits, commands, outcomes and review record under `qa/security-levels/sprints/PF-33-S02/`.
 - [ ] PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
-- [ ] Done/Remaining reflect reality; completed record moved to the archive and plan/navigation updated.
+- [ ] Remaining items placed; completed record archived and plan/navigation updated.
