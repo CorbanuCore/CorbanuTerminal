@@ -125,6 +125,7 @@ fn acceptor_data_for_pem(cert_pem: &str, key_pem: &str) -> Result<TlsAcceptorDat
 /// upstreams, matching simple origin servers.
 #[cfg(all(test, unix))]
 pub(crate) fn test_ca_and_host_acceptor(host: &str) -> Result<(String, TlsAcceptorData)> {
+    codex_utils_rustls_provider::ensure_rustls_crypto_provider();
     let (ca_pem, ca_key) = generate_ca()?;
     let issuer =
         Issuer::from_ca_cert_pem(&ca_pem, ca_key).context("failed to parse test CA certificate")?;
