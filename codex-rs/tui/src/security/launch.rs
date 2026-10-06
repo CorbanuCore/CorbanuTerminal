@@ -87,13 +87,13 @@ impl LaunchPlan {
     }
 
     /// Verify the loaded config, record warnings and publish what is active.
-    pub(crate) fn finish(self, config: &mut Config) -> Result<(), String> {
+    pub(crate) async fn finish(self, config: &mut Config) -> Result<(), String> {
         let launch_warning = match &self.stored {
             StoredLevel::Invalid(reason) => Some(reason.clone()),
             StoredLevel::Absent | StoredLevel::Chosen(_) => None,
         };
         if self.aggressive() {
-            verify_aggressive(&self.codex_home, config)?;
+            verify_aggressive(&self.codex_home, config).await?;
             if let Some(home) = std::env::var_os("HOME")
                 && config.cwd.as_path() == Path::new(&home)
             {
@@ -126,10 +126,11 @@ impl LaunchPlan {
     }
 }
 
-fn verify_aggressive(codex_home: &Path, config: &Config) -> Result<(), String> {
+async fn verify_aggressive(codex_home: &Path, config: &Config) -> Result<(), String> {
     let rules_present = std::fs::read_to_string(level::rules_path(codex_home))
         .is_ok_and(|contents| contents == level::rules_contents());
-    let failures = aggressive::verify(config, rules_present);
+    let mut failures = aggressive::verify(config, rules_present);
+    failures.extend(aggressive::verify_exec_policy(config).await);
     if failures.is_empty() {
         return Ok(());
     }
@@ -142,10 +143,10 @@ fn verify_aggressive(codex_home: &Path, config: &Config) -> Result<(), String> {
 
 /// Every later config build (onboarding reload, resume/fork, new cwd) must
 /// pass the same checks while this process enforces Aggressive.
-pub(crate) fn verify_reloaded(config: &Config) -> Result<(), String> {
+pub(crate) async fn verify_reloaded(config: &Config) -> Result<(), String> {
     match level::context() {
         Some(context) if context.active == ChosenLevel::Aggressive => {
-            verify_aggressive(&context.codex_home, config)
+            verify_aggressive(&context.codex_home, config).await
         }
         Some(_) | None => Ok(()),
     }

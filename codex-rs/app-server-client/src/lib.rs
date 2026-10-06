@@ -80,6 +80,11 @@ pub use crate::remote::RemoteAppServerEndpoint;
 /// module exists so clients can remove a direct `codex-core` dependency
 /// while legacy startup/config paths are migrated to RPCs.
 pub mod legacy_core {
+    // TODO: replace the exec-policy items with an app-server RPC (for example
+    // rules-load status on `config/read`) when `/security` moves to RPCs.
+    pub use codex_core::ExecPolicyError;
+    pub use codex_core::format_exec_policy_error_with_source;
+    pub use codex_core::load_exec_policy;
     pub use codex_core::resolve_installation_id;
 
     pub mod config {
