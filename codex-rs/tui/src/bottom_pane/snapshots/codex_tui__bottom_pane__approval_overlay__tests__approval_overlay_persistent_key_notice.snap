@@ -15,5 +15,5 @@ expression: "render_overlay_lines(&view, 80)"
   Options that last beyond this request: choose with ↑/↓, then enter.
   Press enter to confirm or esc to cancel
 
-  This is a new request. Choose an option with ↑/↓ or its key, then enter;
-  esc cancels.
+  That option lasts beyond this request, so its key does not choose it.
+  Highlight it with ↑/↓, then press enter; esc cancels.

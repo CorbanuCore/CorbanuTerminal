@@ -377,9 +377,12 @@ pub struct TuiApprovalKeymap {
     pub open_thread: Option<KeybindingsSpec>,
     /// Approve the primary option.
     pub approve: Option<KeybindingsSpec>,
-    /// Approve for session when that option exists.
+    /// Approve for session. Options that last beyond one request are chosen
+    /// only with the arrow keys and Enter, so this key only shows how.
     pub approve_for_session: Option<KeybindingsSpec>,
-    /// Approve with exec-policy prefix when that option exists.
+    /// Approve with exec-policy prefix. Options that last beyond one request
+    /// are chosen only with the arrow keys and Enter, so this key only shows
+    /// how.
     pub approve_for_prefix: Option<KeybindingsSpec>,
     /// Deny without providing follow-up guidance.
     pub deny: Option<KeybindingsSpec>,

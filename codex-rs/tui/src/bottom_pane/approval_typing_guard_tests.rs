@@ -100,3 +100,32 @@ fn character_after_a_command_key_is_typed_text() {
     assert_eq!(guard.on_text_key(Some(1)), None);
     assert_eq!(guard.on_confirm(), Confirm::Blocked);
 }
+
+#[test]
+fn persistent_option_key_chooses_nothing_and_blocks_enter() {
+    let mut guard = TypingGuard::default();
+
+    guard.on_persistent_key();
+
+    assert_eq!(guard.notice(), Some(Notice::PersistentNeedsArrows));
+    assert_eq!(guard.on_confirm(), Confirm::Blocked);
+    assert!(!guard.accepts_commands());
+    // Navigation is the way to choose it.
+    guard.reset();
+    assert_eq!(guard.on_confirm(), Confirm::Highlighted);
+}
+
+#[test]
+fn persistent_option_key_inside_a_word_is_typed_text() {
+    let mut guard = TypingGuard::default();
+
+    guard.on_text_key(Some(0));
+    guard.on_persistent_key();
+    assert_eq!(guard.notice(), Some(Notice::TypedText));
+
+    let mut guard = TypingGuard::default();
+    guard.on_persistent_key();
+    assert_eq!(guard.on_text_key(Some(0)), None);
+    assert_eq!(guard.notice(), Some(Notice::TypedText));
+    assert_eq!(guard.on_confirm(), Confirm::Blocked);
+}
