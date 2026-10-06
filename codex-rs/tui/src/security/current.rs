@@ -18,6 +18,7 @@ use codex_features::Feature;
 use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::config_types::ShellEnvironmentPolicy;
 use codex_protocol::permissions::FileSystemSandboxKind;
+use codex_protocol::protocol::AskForApproval;
 use codex_protocol::shell_environment::create_env_from_vars;
 
 use super::aggressive::ROWS;
@@ -70,8 +71,10 @@ pub(crate) fn current_values(config: &Config) -> CurrentValues {
             "commands can write anywhere".to_string()
         }
         FileSystemSandboxKind::Restricted => {
-            let roots = file_system
-                .get_writable_roots_with_cwd(cwd)
+            let mut roots = file_system.get_writable_roots_with_cwd(cwd);
+            // The current folder first; the rest in policy order.
+            roots.sort_by_key(|root| root.root.as_path() != cwd);
+            let roots = roots
                 .into_iter()
                 .map(|root| {
                     if root.root.as_path() == cwd {
@@ -98,6 +101,11 @@ pub(crate) fn current_values(config: &Config) -> CurrentValues {
     }
     let request_tools = config.features.enabled(Feature::RequestPermissionsTool)
         || config.features.enabled(Feature::ExecPermissionApprovals);
+    // An approved permission request can add network or reads inside the
+    // sandbox, even when denied reads keep commands from leaving it.
+    let widenable = restricted
+        && request_tools
+        && config.permissions.approval_policy.value() != AskForApproval::Never;
     sandbox.push_str(if request_tools {
         "; permission-request tools are on"
     } else {
@@ -117,6 +125,8 @@ pub(crate) fn current_values(config: &Config) -> CurrentValues {
         "on for agent commands"
     } else if escapes {
         "off inside the sandbox, on for commands that run outside it"
+    } else if widenable {
+        "off unless an approved permission request turns it on"
     } else {
         "off for agent commands"
     };
@@ -143,6 +153,8 @@ pub(crate) fn current_values(config: &Config) -> CurrentValues {
         "the vault store and sign-in file are {} to agent commands; {}; {}",
         if store_readable {
             "readable"
+        } else if widenable {
+            "unreadable (unless an approved permission request grants access)"
         } else {
             "unreadable"
         },

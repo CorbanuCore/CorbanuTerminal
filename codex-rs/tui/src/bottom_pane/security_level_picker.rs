@@ -114,7 +114,7 @@ impl SecurityLevelPicker {
             }
             Screen::Review(target) => {
                 if self.keymap.move_up.is_pressed(key) {
-                    self.scroll = self.scroll.saturating_sub(1);
+                    self.scroll = self.scroll.min(self.max_scroll.get()).saturating_sub(1);
                 } else if self.keymap.move_down.is_pressed(key) {
                     self.scroll = (self.scroll + 1).min(self.max_scroll.get());
                 } else if cancel {
@@ -229,6 +229,11 @@ impl SecurityLevelPicker {
                 lines.extend(wrap(
                     "These settings replace yours in Corbanu Terminal sessions and their child agents:",
                 ));
+                lines.extend(
+                    wrap("\"now\" shows this session; web search, environment, shell and roles are as loaded at launch.")
+                        .into_iter()
+                        .map(Stylize::dim),
+                );
                 // Indents only when there is room for text after them.
                 let (indent, hanging) = if width < 20 { ("", "") } else { ("  ", "    ") };
                 for ((control, value), current) in aggressive::ROWS.iter().zip(&self.current) {

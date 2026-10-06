@@ -6,6 +6,8 @@ expression: "render(&picker, 80)"
 Switch to Aggressive?
 These settings replace yours in Corbanu Terminal sessions and their child
 agents:
+"now" shows this session; web search, environment, shell and roles are as loaded
+at launch.
 • Sandbox now: commands can write to the current folder, /tmp, /var/folders/
     tmp, /tmp/extra; approved or allow-listed commands can run outside the
     sandbox; permission-request tools are off

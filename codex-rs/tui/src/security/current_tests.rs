@@ -71,19 +71,14 @@ async fn workspace_write_rows_name_the_escape_route() {
     .await;
     let [sandbox, approvals, network, vault, _] = current_values(&open);
     assert_eq!(
-        [
-            sandbox,
-            approvals,
-            network,
-            vault.split("; ").next().unwrap().to_string()
-        ],
+        [sandbox, approvals, network, vault],
         [
             format!(
                 "commands can write to the current folder, {extra_path}; approved or allow-listed commands can run outside the sandbox; permission-request tools are off"
             ),
             "on-request (reviewer: you)".to_string(),
             "on for agent commands; web search live".to_string(),
-            "the vault store and sign-in file are readable to agent commands".to_string(),
+            "the vault store and sign-in file are readable to agent commands; secret-like environment variables are passed through (KEY, SECRET, TOKEN, VAULT, PASSWORD, PASSPHRASE, CREDENTIAL); login profiles or shell snapshots are used".to_string(),
         ]
     );
 
@@ -196,5 +191,55 @@ fn roles_that_set_permission_keys_change_children() {
             role_changes_values(&dir.path().join("missing.toml")),
         ],
         [false, true, true, true]
+    );
+}
+
+/// Denied reads keep commands inside the sandbox, but an approved permission
+/// request can still add network or reads, so those rows say so.
+#[tokio::test]
+async fn permission_requests_qualify_network_and_vault_rows() {
+    let home = tempfile::tempdir().unwrap();
+    let cwd = tempfile::tempdir().unwrap();
+    let secrets = home.path().join("secrets").display().to_string();
+    let auth = home.path().join("auth.json").display().to_string();
+    let user_config = |request_tools: bool| {
+        format!(
+            r#"approval_policy = "on-request"
+default_permissions = "locked"
+
+[permissions.locked]
+extends = ":workspace"
+
+[permissions.locked.filesystem]
+":tmpdir" = "read"
+":slash_tmp" = "read"
+{secrets:?} = "deny"
+{auth:?} = "deny"
+
+[permissions.locked.network]
+enabled = false
+
+[features]
+request_permissions_tool = {request_tools}
+"#
+        )
+    };
+    let [_, _, network, vault, _] =
+        current_values(&build(home.path(), cwd.path(), &user_config(true), false).await);
+    assert_eq!(
+        [network, vault.split("; ").next().unwrap().to_string()],
+        [
+            "off unless an approved permission request turns it on; web search cached".to_string(),
+            "the vault store and sign-in file are unreadable (unless an approved permission request grants access) to agent commands".to_string(),
+        ]
+    );
+    let [sandbox, _, network, _, _] =
+        current_values(&build(home.path(), cwd.path(), &user_config(false), false).await);
+    assert_eq!(
+        [sandbox, network],
+        [
+            "profile locked: commands can write to the current folder; permission-request tools are off".to_string(),
+            "off for agent commands; web search cached".to_string(),
+        ]
     );
 }
