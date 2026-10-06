@@ -84,7 +84,12 @@ impl Handler {
             .await;
         let agent_control = session.services.agent_control.clone();
         let result = agent_control
-            .send_input(receiver_thread_id, input_items, Some(turn.sub_id.clone()))
+            .send_input(
+                receiver_thread_id,
+                Some(session.thread_id),
+                input_items,
+                Some(turn.sub_id.clone()),
+            )
             .await
             .map_err(|err| collab_agent_error(receiver_thread_id, err));
         let status = session

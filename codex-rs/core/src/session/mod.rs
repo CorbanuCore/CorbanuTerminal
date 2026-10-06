@@ -940,6 +940,15 @@ pub(crate) fn completed_session_loop_termination() -> SessionLoopTermination {
     futures::future::ready(()).boxed().shared()
 }
 
+/// `source_envelopes`: an MCP-supplied token-budget hint moves out of the host
+/// developer message into its own data message. Returns (inline, separate).
+pub(crate) fn token_budget_hint_placement(
+    separate: bool,
+    hint: Option<String>,
+) -> (Option<String>, Option<String>) {
+    if separate { (None, hint) } else { (hint, None) }
+}
+
 pub(crate) fn session_loop_termination_from_handle(
     handle: JoinHandle<()>,
 ) -> SessionLoopTermination {
@@ -1792,6 +1801,7 @@ impl Session {
         )
         .with_native_ingress_from(&self.services.model_client())
         .with_source_envelopes(config.features.enabled(Feature::SourceEnvelopes))
+        .with_source_origin_key(config.codex_home.as_path())
         .with_prompt_cache_key_override(
             crate::guardian::prompt_cache_key_override_for_review_session(
                 &configuration.session_source,
@@ -3745,19 +3755,23 @@ impl Session {
     }
 
     /// `source_envelopes`: one developer message per stored-data fragment
-    /// (memories), registered as external data before any caller records the
-    /// surrounding context as host. The first registration wins, so it is never
-    /// upgraded and reaches a protected request labelled `source=memory`.
-    fn push_stored_data_messages(&self, items: &mut Vec<ResponseItem>, sections: Vec<String>) {
+    /// (memories, MCP-supplied hints), registered as external data before any
+    /// caller records the surrounding context as host. The first registration
+    /// wins, so it is never upgraded and reaches a protected request labelled
+    /// with its real source (`source=memory`, `source=mcp`).
+    fn push_stored_data_messages(
+        &self,
+        items: &mut Vec<ResponseItem>,
+        sections: Vec<String>,
+        kind: codex_protocol::provenance::SourceKind,
+    ) {
         for section in sections {
             if let Some(message) =
                 crate::context_manager::updates::build_developer_update_item(vec![section])
             {
                 self.services.model_client().register_message_origin(
                     std::slice::from_ref(&message),
-                    crate::security::ingress::MessageOrigin::External(
-                        codex_protocol::provenance::SourceKind::Memory,
-                    ),
+                    crate::security::ingress::MessageOrigin::External(kind),
                 );
                 items.push(message);
             }
@@ -3814,7 +3828,11 @@ impl Session {
                 items.push(developer_message);
             }
         }
-        self.push_stored_data_messages(&mut items, stored_data_sections);
+        self.push_stored_data_messages(
+            &mut items,
+            stored_data_sections,
+            codex_protocol::provenance::SourceKind::Memory,
+        );
         if let Some(contextual_user_message) =
             crate::context_manager::updates::build_contextual_user_message(contextual_user_sections)
         {
@@ -3919,6 +3937,7 @@ impl Session {
         // message so they can be labelled without labelling host policy.
         let separate_stored_data = self.services.model_client().source_envelopes_enabled();
         let mut stored_data_sections = Vec::<String>::new();
+        let mut mcp_hint_sections = Vec::<String>::new();
         for contributor in &context_contributors {
             for fragment in contributor
                 .contribute_thread_context(
@@ -3992,6 +4011,11 @@ impl Session {
                         .join("\n");
                     (!text.is_empty()).then_some(text)
                 });
+            // `source_envelopes`: the MCP server's hint is external text, not
+            // host policy; send it as its own `source=mcp` data message.
+            let (mcp_result, data_hint) =
+                token_budget_hint_placement(separate_stored_data, mcp_result);
+            mcp_hint_sections.extend(data_hint);
             developer_sections.push(
                 crate::context::TokenBudgetContext::new(
                     self.thread_id(),
@@ -4041,7 +4065,16 @@ impl Session {
                 items.push(developer_message);
             }
         }
-        self.push_stored_data_messages(&mut items, stored_data_sections);
+        self.push_stored_data_messages(
+            &mut items,
+            stored_data_sections,
+            codex_protocol::provenance::SourceKind::Memory,
+        );
+        self.push_stored_data_messages(
+            &mut items,
+            mcp_hint_sections,
+            codex_protocol::provenance::SourceKind::Mcp,
+        );
         if let Some(usage_hint_text) = multi_agent_v2_usage_hint_text
             && let Some(usage_hint_message) =
                 crate::context_manager::updates::build_developer_update_item(vec![
@@ -4084,6 +4117,15 @@ impl Session {
         {
             error!("failed to record rollout items: {e:#}");
         }
+    }
+
+    /// See `ModelClient::agent_handoff_origin`: the standing of text this
+    /// session's model hands to another agent, from its current history.
+    pub(crate) async fn agent_handoff_origin(&self) -> crate::security::ingress::MessageOrigin {
+        let state = self.state.lock().await;
+        self.services
+            .model_client()
+            .agent_handoff_origin(state.history.raw_items())
     }
 
     pub(crate) async fn clone_history(&self) -> ContextManager {
@@ -4412,10 +4454,16 @@ impl Session {
         // UI-only `text_elements` are preserved. `ResponseItem::Message` does not carry
         // those spans, and `record_response_item_and_emit_turn_item` would drop them.
         let response_item = self.response_item_from_user_input(input.to_vec());
+        // Input another agent submitted keeps that agent's standing (PF-30-S02).
+        let origin = self
+            .services
+            .model_client()
+            .take_agent_input_origin(input)
+            .unwrap_or(crate::security::ingress::MessageOrigin::Human);
         self.record_conversation_items_from(
             turn_context,
             std::slice::from_ref(&response_item),
-            Some(crate::security::ingress::MessageOrigin::Human),
+            Some(origin),
         )
         .await;
         let mut user_message_item = UserMessageItem::new(input);

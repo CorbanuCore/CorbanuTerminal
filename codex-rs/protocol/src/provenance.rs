@@ -36,21 +36,26 @@ pub enum SourceKind {
 }
 
 /// Version of [`SourceOriginRecord`]. Readers ignore any other version, which
-/// leaves the described content unattributed (untrusted).
-pub const SOURCE_ORIGIN_RECORD_VERSION: u32 = 1;
+/// leaves the described content unattributed (untrusted). Version 2 added the
+/// per-home `mac`; version 1 records are unauthenticated and ignored.
+pub const SOURCE_ORIGIN_RECORD_VERSION: u32 = 2;
 
 /// Host-recorded origins of conversation content, persisted in the rollout
 /// next to the items they describe so a resumed session keeps the standing
 /// each item had when it was recorded.
 ///
 /// A record holds only digests, never content. It is written by Core record
-/// seams, not by tools or models. A missing, unknown-version or malformed
-/// record leaves its content unattributed, and unattributed content reaches a
-/// protected provider only as labelled untrusted data.
+/// seams, not by tools or models. A missing, unknown-version, malformed or
+/// unauthenticated record leaves its content unattributed, and unattributed
+/// content reaches a protected provider only as labelled untrusted data.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 pub struct SourceOriginRecord {
     pub version: u32,
     pub entries: Vec<SourceOriginEntry>,
+    /// Lowercase hex HMAC-SHA256 of `entries` under a key held by the
+    /// recording home, so records copied from another home do not verify.
+    #[serde(default)]
+    pub mac: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]

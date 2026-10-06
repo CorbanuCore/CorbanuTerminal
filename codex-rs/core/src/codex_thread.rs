@@ -629,7 +629,29 @@ impl CodexThread {
     }
 
     /// Records a user-role session-prefix message without creating a new user turn boundary.
+    #[cfg(test)]
     pub(crate) async fn inject_user_message_without_turn(&self, message: String) {
+        self.inject_message_without_turn(message, /*origin*/ None)
+            .await;
+    }
+
+    /// A sub-agent's result notification: agent data, never human or host text
+    /// (`source_envelopes`; first registration wins).
+    pub(crate) async fn inject_agent_result_without_turn(&self, message: String) {
+        self.inject_message_without_turn(
+            message,
+            Some(crate::security::ingress::MessageOrigin::External(
+                codex_protocol::provenance::SourceKind::ChildAgent,
+            )),
+        )
+        .await;
+    }
+
+    async fn inject_message_without_turn(
+        &self,
+        message: String,
+        origin: Option<crate::security::ingress::MessageOrigin>,
+    ) {
         let item = ResponseItem::Message {
             id: None,
             role: "user".to_string(),
@@ -637,6 +659,12 @@ impl CodexThread {
             phase: None,
             internal_chat_message_metadata_passthrough: None,
         };
+        if let Some(origin) = origin {
+            self.session
+                .services
+                .model_client()
+                .register_message_origin(std::slice::from_ref(&item), origin);
+        }
         self.session
             .inject_no_new_turn(vec![item], /*current_turn_context*/ None)
             .await;

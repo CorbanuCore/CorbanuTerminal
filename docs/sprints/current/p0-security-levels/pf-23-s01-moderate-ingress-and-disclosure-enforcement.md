@@ -50,6 +50,9 @@ updated: 2026-08-28
 - [ ] Implement the plan's action/profile usability matrix with conservative data and control-flow ancestry; a model selecting clean-looking human values after hostile content is not trusted reconstruction. No runtime Moderate activation until all required subsystems qualify.
 
 - [ ] Integrate PF-30 durable provenance and post-taint checks; detector output never supplies authority, and a new turn or summary never clears taint.
+- [ ] Moved from PF-30-S02 (2026-10-06): positive protected memory extraction. Stage one still denies under
+  Moderate/Aggressive (PF-30-S04); allowing it needs labelled, lineage-bound rollout input and the
+  [stage-one handoff](../../../../qa/security-levels/sprints/PF-30-S01-typed-source-envelope/memory-stage-one-follow-up.md) matrix.
 - [ ] Register required protected-mode subsystems and deny unsupported/unready routes; final activation requires the full plan readiness matrix, not this dispatch slice alone.
 
 - [ ] Classify protected surfaces by typed resource/action at the shared Core dispatch boundary.

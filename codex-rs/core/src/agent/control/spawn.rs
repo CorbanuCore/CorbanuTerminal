@@ -705,8 +705,19 @@ impl AgentControl {
 
         match initial_input {
             SpawnInitialInput::UserInput(input) => {
+                // The spawning agent wrote this task; it carries that agent's standing.
+                let sender = options
+                    .parent_thread_id
+                    .or(match notification_source.as_ref() {
+                        Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                            parent_thread_id,
+                            ..
+                        })) => Some(*parent_thread_id),
+                        _ => None,
+                    });
                 self.send_input_after_capacity_check(
                     new_thread.thread_id,
+                    sender,
                     &state,
                     input,
                     options.parent_turn_id,

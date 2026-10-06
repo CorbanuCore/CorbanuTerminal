@@ -39,6 +39,26 @@ async fn pf_30_s04_live_protected_floor_denies_without_a_request() {
     }
 }
 
+/// PF-30-S02: labelled data (`source_envelopes`) does not make raw rollout
+/// text admissible to the stage-one memory model; protected levels still deny
+/// before any request, so memory summarisation stays bound to the session level.
+#[tokio::test]
+async fn pf_30_s02_source_envelopes_do_not_open_protected_stage_one_memory() {
+    for level in [SecurityLevel::Moderate, SecurityLevel::Aggressive] {
+        let owner = owner(level).await;
+        let _ = (*owner.services.model_client())
+            .clone()
+            .with_source_envelopes(true);
+        assert!(owner.services.model_client().source_envelopes_enabled());
+        assert!(matches!(
+            client(&owner).await,
+            Err(StageOneMemoryError::Denied(
+                StageOneMemoryDenial::ProtectedInputUnavailable
+            ))
+        ));
+    }
+}
+
 #[tokio::test]
 async fn pf_30_s04_binding_is_owner_specific_and_missing_policy_denies() {
     let owner = owner(SecurityLevel::Permissive).await;
