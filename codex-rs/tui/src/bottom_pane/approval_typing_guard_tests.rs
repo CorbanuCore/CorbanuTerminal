@@ -80,6 +80,25 @@ fn next_request_needs_a_fresh_choice() {
 }
 
 #[test]
+fn character_before_a_request_change_does_not_let_the_next_one_arm() {
+    // "py" split across a request swap: `y` must not arm "yes" on the new one.
+    for first in [Some(1), None] {
+        let mut guard = TypingGuard::default();
+        match first {
+            Some(idx) => {
+                guard.on_text_key(Some(idx));
+            }
+            None => guard.on_persistent_key(),
+        }
+
+        guard.on_request_changed();
+
+        assert_eq!(guard.on_text_key(Some(0)), None, "{first:?}");
+        assert_eq!(guard.on_confirm(), Confirm::Blocked, "{first:?}");
+    }
+}
+
+#[test]
 fn request_change_keeps_typed_text() {
     let mut guard = TypingGuard::default();
     guard.on_typed_input();

@@ -781,10 +781,14 @@ impl BottomPaneView for ApprovalOverlay {
             match self.typing_guard.on_confirm() {
                 Confirm::Option(idx) => self.apply_selection(idx),
                 Confirm::Highlighted => {
-                    if let Some(idx) = BottomPaneView::selected_index(&self.list)
-                        && (self.navigated || self.options.get(idx).is_some_and(|o| !o.persistent))
-                    {
+                    let Some(idx) = BottomPaneView::selected_index(&self.list) else {
+                        return;
+                    };
+                    if self.navigated || self.options.get(idx).is_some_and(|o| !o.persistent) {
                         self.apply_selection(idx);
+                    } else {
+                        // Only reachable when every option is persistent.
+                        self.typing_guard.on_persistent_key();
                     }
                 }
                 Confirm::Blocked => {}
@@ -2443,7 +2447,9 @@ mod tests {
     }
 
     /// Travis's decision on #187 follow-up 2: a letter or digit never
-    /// chooses an option that lasts beyond the request.
+    /// chooses an option that lasts beyond the request. A terminal without
+    /// bracketed paste delivers a pasted `p` and newline as these same key
+    /// presses: the key, then Enter.
     #[test]
     fn persistent_option_key_chooses_nothing() {
         for PersistentPrompt {
@@ -2477,11 +2483,10 @@ mod tests {
         }
     }
 
-    /// A terminal without bracketed paste delivers a pasted `p` and newline
-    /// as key presses; a bracketed paste arrives as one event. Neither may
-    /// choose a persistent option.
+    /// A bracketed paste of a persistent option's key and a newline arrives
+    /// as one event, then Enter.
     #[test]
-    fn pasted_persistent_key_and_newline_cannot_choose_it() {
+    fn bracketed_paste_of_persistent_key_and_newline_chooses_nothing() {
         for PersistentPrompt {
             name,
             request,
@@ -2490,16 +2495,6 @@ mod tests {
         } in persistent_prompts()
         {
             for key in keys {
-                let (tx, mut rx) = unbounded_channel::<AppEvent>();
-                let mut view = make_overlay(
-                    request.clone(),
-                    AppEventSender::new(tx),
-                    Features::with_defaults(),
-                );
-                press(&mut view, KeyCode::Char(key), KeyModifiers::NONE);
-                press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
-                assert_eq!(submitted_ops(&mut rx), Vec::<String>::new(), "{name} {key}");
-
                 let (tx, mut rx) = unbounded_channel::<AppEvent>();
                 let mut view = make_overlay(
                     request.clone(),
@@ -2560,6 +2555,113 @@ mod tests {
         press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
 
         assert_eq!(exec_decisions(&mut rx), Vec::<String>::new());
+    }
+
+    #[test]
+    fn held_chord_bound_to_persistent_option_chooses_nothing() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut keymap = crate::keymap::RuntimeKeymap::defaults();
+        keymap.approval.approve_for_prefix = vec![key_hint::ctrl(KeyCode::Char('p'))];
+        let mut view = make_overlay_with_keymap(
+            make_prefix_exec_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+            keymap.approval,
+            keymap.list,
+        );
+
+        press(&mut view, KeyCode::Char('p'), KeyModifiers::CONTROL);
+        for _ in 0..3 {
+            view.handle_key_event(KeyEvent::new_with_kind(
+                KeyCode::Char('p'),
+                KeyModifiers::CONTROL,
+                KeyEventKind::Repeat,
+            ));
+        }
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+
+        assert_eq!(exec_decisions(&mut rx), Vec::<String>::new());
+    }
+
+    fn second_prefix_request() -> ApprovalRequest {
+        let ApprovalRequest::Exec(mut second) = make_prefix_exec_request() else {
+            unreachable!("exec request");
+        };
+        second.id = "second".to_string();
+        ApprovalRequest::Exec(second)
+    }
+
+    #[test]
+    fn persistent_key_on_the_next_queued_request_chooses_nothing() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = make_overlay(
+            make_prefix_exec_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+        view.enqueue_request(second_prefix_request());
+        press_and_confirm(&mut view, KeyCode::Char('y'));
+        assert_eq!(exec_decisions(&mut rx), vec!["Accept".to_string()]);
+
+        press_and_confirm(&mut view, KeyCode::Char('p'));
+        press_and_confirm(&mut view, KeyCode::Char('2'));
+
+        assert_eq!(exec_decisions(&mut rx), Vec::<String>::new());
+        assert!(render_overlay_lines(&view, /*width*/ 80).contains("› 1. Yes"));
+    }
+
+    #[test]
+    fn persistent_key_then_request_dismissed_does_not_carry_over() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = make_overlay(
+            make_prefix_exec_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+        view.enqueue_request(second_prefix_request());
+
+        press(&mut view, KeyCode::Char('p'), KeyModifiers::NONE);
+        // Another client answers the first request; the user keeps typing "py".
+        assert!(
+            view.dismiss_resolved_request(&ResolvedAppServerRequest::ExecApproval {
+                id: "test".to_string(),
+            })
+        );
+        press_and_confirm(&mut view, KeyCode::Char('y'));
+        assert_eq!(exec_decisions(&mut rx), Vec::<String>::new());
+
+        // Navigation then Enter answers the request now shown.
+        press(&mut view, KeyCode::Down, KeyModifiers::NONE);
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+        let decisions = exec_decisions(&mut rx);
+        assert_eq!(decisions.len(), 1, "{decisions:?}");
+        assert!(
+            decisions[0].starts_with("AcceptWithExecpolicyAmendment"),
+            "{decisions:?}"
+        );
+    }
+
+    /// Enter on an untouched prompt whose only options are persistent
+    /// refuses and explains; navigation then Enter chooses.
+    #[test]
+    fn enter_refuses_an_untouched_persistent_only_prompt() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = make_overlay(
+            exec_request_with(vec![CommandExecutionApprovalDecision::AcceptForSession]),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+        assert_eq!(exec_decisions(&mut rx), Vec::<String>::new());
+        assert!(render_overlay_lines(&view, /*width*/ 80).contains("lasts beyond this request"));
+
+        press(&mut view, KeyCode::Down, KeyModifiers::NONE);
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+        assert_eq!(
+            exec_decisions(&mut rx),
+            vec!["AcceptForSession".to_string()]
+        );
     }
 
     #[test]

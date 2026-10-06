@@ -192,7 +192,7 @@ pub(super) const KEYMAP_ACTIONS: &[KeymapActionDescriptor] = &[
     action("approval", "Approval", "open_thread", "Open the approval source thread when available."),
     action("approval", "Approval", "approve", "Approve the primary option."),
     action("approval", "Approval", "approve_for_session", "Explain that session approval is chosen with the arrow keys."),
-    action("approval", "Approval", "approve_for_prefix", "Explain that prefix approval is chosen with the arrow keys."),
+    action("approval", "Approval", "approve_for_prefix", "Explain that lasting command-prefix or host approval is chosen with the arrow keys."),
     action("approval", "Approval", "deny", "Choose the explicit deny option when available."),
     action("approval", "Approval", "decline", "Decline and provide corrective guidance."),
     action("approval", "Approval", "cancel", "Cancel an elicitation request."),

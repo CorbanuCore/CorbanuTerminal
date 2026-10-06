@@ -5,8 +5,8 @@
 //! `/permissions` approved with "don't ask again" through `p`. Characters
 //! therefore never answer on their own. A decision key only highlights its
 //! option and Enter confirms it, so the prompt is answered by exactly one
-//! decision key then Enter, by navigation then Enter, by a chord shortcut, or
-//! cancelled with Esc. Any other input (a second character, an unbound
+//! decision key then Enter, by navigation then Enter, by a chord shortcut for
+//! an option that answers only this request, or cancelled with Esc. Any other input (a second character, an unbound
 //! character, a paste, editing keys) is typed text: Enter is ignored and the
 //! prompt explains how to answer until the user navigates with the arrow,
 //! Page, Home or End keys. No timing is involved.
@@ -149,14 +149,20 @@ impl TypingGuard {
     }
 
     /// The prompt now shows another request. It needs a fresh choice before
-    /// Enter confirms; typed text stays typed text.
+    /// Enter confirms; typed text stays typed text, and after a character
+    /// the next one may continue a word, so it does not arm an option.
     pub(super) fn on_request_changed(&mut self) {
-        if self.state != State::Typed {
-            self.state = State::Fresh {
+        self.state = match self.state {
+            State::Typed => State::Typed,
+            State::Armed(_) | State::PersistentKey => State::Fresh {
+                told: false,
+                keys_arm: false,
+            },
+            State::Idle | State::Fresh { .. } => State::Fresh {
                 told: false,
                 keys_arm: true,
-            };
-        }
+            },
+        };
     }
 
     /// A character command key (such as open thread) acted. Enter waits for

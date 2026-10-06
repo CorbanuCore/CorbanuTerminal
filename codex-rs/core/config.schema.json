@@ -3633,7 +3633,7 @@
               "$ref": "#/definitions/KeybindingsSpec"
             }
           ],
-          "description": "Approve with exec-policy prefix. Options that last beyond one request are chosen only with the arrow keys and Enter, so this key only shows how."
+          "description": "Approve with exec-policy prefix or allow a host in the future. Options that last beyond one request are chosen only with the arrow keys and Enter, so pressing it explains how."
         },
         "approve_for_session": {
           "allOf": [
@@ -3641,7 +3641,7 @@
               "$ref": "#/definitions/KeybindingsSpec"
             }
           ],
-          "description": "Approve for session. Options that last beyond one request are chosen only with the arrow keys and Enter, so this key only shows how."
+          "description": "Approve for session. Options that last beyond one request are chosen only with the arrow keys and Enter, so pressing it explains how."
         },
         "cancel": {
           "allOf": [
