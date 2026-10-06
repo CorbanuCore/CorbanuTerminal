@@ -1,6 +1,10 @@
 use crate::attribution::BindConnectionAttribution;
 use crate::config::NetworkMode;
 use crate::connect_policy::TargetCheckedTcpConnector;
+use crate::destination;
+use crate::destination::DenialSite;
+use crate::destination::DestinationGuard;
+use crate::destination::SystemResolver;
 use crate::mitm;
 use crate::network_policy::BlockDecisionAuditEventArgs;
 use crate::network_policy::NetworkDecision;
@@ -354,6 +358,35 @@ async fn handle_socks5_tcp(
         }
     }
 
+    // PF-33-S01: SOCKS exposes only the authority; it must still pass the
+    // destination policy against current DNS answers.
+    let destination_guard = destination::guard_enabled(&app_state)
+        .await
+        .map_err(|err| {
+            error!("failed to read destination policy: {err}");
+            io::Error::other("proxy error")
+        })?;
+    if destination_guard
+        && let Err(denial) = DestinationGuard::protected()
+            .authorize_tunnel(&host, port, &SystemResolver)
+            .await
+    {
+        let site = DenialSite {
+            host: &host,
+            port,
+            method: None,
+            protocol: "socks5",
+            client: client.clone(),
+            fail_command: true,
+        };
+        destination::record_denial(&app_state, &denial, site).await;
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!("destination policy denied the request ({})", denial.code()),
+        )
+        .into());
+    }
+
     let host_mitm_requirement = match app_state.host_mitm_requirement(&host).await {
         Ok(requirement) => requirement,
         Err(err) => {
@@ -372,6 +405,9 @@ async fn handle_socks5_tcp(
         SocksMitmMode::Enabled
     } else {
         match host_mitm_requirement {
+            HostMitmRequirement::None if destination_guard && mitm_state.is_some() => {
+                SocksMitmMode::DetectTls
+            }
             HostMitmRequirement::None => SocksMitmMode::Disabled,
             HostMitmRequirement::Tls => SocksMitmMode::DetectTls,
             HostMitmRequirement::Always => SocksMitmMode::Enabled,

@@ -1,0 +1,71 @@
+# PF-33-S01: scheme and port are authorized, not only the host.
+id = "pf33s01-https-only"
+feature = "URL destination policy: public retrieval is HTTPS on port 443 only"
+expected = "Flag on: plain http:// and https on port 8443 are refused with 403 (reason scheme_port_or_method); https://httpbin.org/get returns 200."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[sandbox_workspace_write]
+network_access = true
+
+[features]
+url_destination_policy = true
+
+[features.network_proxy]
+enabled = true
+allow_local_binding = true
+
+[features.network_proxy.domains]
+"httpbin.org" = "allow"
+"postman-echo.com" = "allow"
+"localtest.me" = "allow"
+"*.nip.io" = "allow"
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"check.sh" = '''case "$1" in
+  1) u=http://httpbin.org/get ;;
+  2) u=https://httpbin.org:8443/get ;;
+  *) u=https://httpbin.org/get ;;
+esac
+echo "$u"
+curl -sS --max-time 8 -o /dev/null -w 'HTTP %{http_code}\n' "$u"
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Make three separate shell calls, one at a time: sh check.sh 1, then sh check.sh 2, then sh check.sh 3. Then list each result verbatim."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = 'httpbin.org/get[\s\S]*HTTP 200'
+timeout = 300
+compress = 3
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+
+[[steps]]
+type = '!grep -ho "policy denied [a-z-]* (host=[^)]*)" {logs}/*.log | sort -u'
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "reason="
+timeout = 30
+
+[[steps]]
+pause = 4.0

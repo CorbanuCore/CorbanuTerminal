@@ -1,0 +1,73 @@
+# PF-33-S01: redirects are checked hop by hop (scheme downgrade, private IP, DNS answer of the target).
+id = "pf33s01-redirect-reauthorized"
+feature = "URL destination policy: every redirect is re-authorized before the proxy relays it"
+expected = "Flag on: the HTTPS redirect still passes (302); the downgrade, metadata-IP and loopback-answer redirects come back 403 with reasons redirect_downgrade and private_destination."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[sandbox_workspace_write]
+network_access = true
+
+[features]
+url_destination_policy = true
+
+[features.network_proxy]
+enabled = true
+allow_local_binding = true
+
+[features.network_proxy.domains]
+"httpbin.org" = "allow"
+"postman-echo.com" = "allow"
+"localtest.me" = "allow"
+"*.nip.io" = "allow"
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"redirects.sh" = '''H=https://httpbin.org/redirect-to
+echo "1) 302 to https://httpbin.org/get"
+curl -sS -o /dev/null -w '   HTTP %{http_code} -> %{redirect_url}\n' "$H?url=https://httpbin.org/get"
+echo "2) 302 to http://httpbin.org/get (downgrade)"
+curl -sS -w '\n   HTTP %{http_code} -> %{redirect_url}\n' "$H?url=http://httpbin.org/get"
+echo "3) 302 to https://169.254.169.254/latest/ (metadata IP)"
+curl -sS -w '\n   HTTP %{http_code} -> %{redirect_url}\n' "$H?url=https://169.254.169.254/latest/"
+echo "4) 302 to https://localtest.me/ (public name, loopback answer)"
+curl -sS -w '\n   HTTP %{http_code} -> %{redirect_url}\n' "$H?url=https://localtest.me/"
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run sh redirects.sh with your shell tool and show me its full output verbatim in a code block. Do not run anything else."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "redirect_downgrade"
+timeout = 300
+compress = 3
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+
+[[steps]]
+type = '!grep -ho "policy denied [a-z-]* (host=[^)]*)" {logs}/*.log | sort -u'
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "reason="
+timeout = 30
+
+[[steps]]
+pause = 4.0

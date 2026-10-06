@@ -811,7 +811,9 @@ fn is_public_ipv6(address: Ipv6Addr) -> bool {
         && !(segments[0] == 0x3fff && segments[1] & 0xf000 == 0)
 }
 
-fn is_intrinsically_private_name(host: &str) -> bool {
+/// Names that are private by construction (single label or a reserved/local
+/// suffix). Consumers may refuse them before any resolver sees the name.
+pub fn is_intrinsically_private_name(host: &str) -> bool {
     if !host.contains('.') {
         return true;
     }

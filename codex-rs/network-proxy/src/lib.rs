@@ -7,6 +7,9 @@ mod certs;
 mod config;
 mod connect_policy;
 mod credential_broker;
+mod destination;
+// PF-33-S03 contract; also compiled standalone by tests/destination_contract.rs.
+pub mod destination_contract;
 mod http_proxy;
 mod mitm;
 mod mitm_hook;

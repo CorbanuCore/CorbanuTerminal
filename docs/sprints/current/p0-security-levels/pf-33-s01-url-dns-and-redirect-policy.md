@@ -5,13 +5,16 @@ status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-33"
 execution_order: 32
-owner: "Jim Ricketts"
-worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
-branch: "feat/p0-security-levels"
-base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
+owner: "first-free lane worker (codex, 2026-10-06)"
+parallel_lane: "tui"
+write_scope: "codex-rs/network-proxy/src/destination.rs, codex-rs/network-proxy/src/destination_contract.rs, codex-rs/network-proxy/src/destination_tests.rs, codex-rs/network-proxy/src/http_proxy.rs, codex-rs/network-proxy/src/mitm.rs, codex-rs/network-proxy/src/socks5.rs, codex-rs/network-proxy/src/connect_policy.rs, codex-rs/core/src/network_policy_decision.rs, codex-rs/core/src/network_policy_decision_tests.rs, qa/security-levels/sprints/PF-33-S01/, qa/demos/index/PF-33-S01.md, docs/sprints/current/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md"
+integration_gate: "PR to main under the per-sprint gate (sec-common decision 5): focused tests, GLM 5.2 tmux run, one Opus 5.5 High review, SOP videos; merged behind url_destination_policy (default off). Shared files serialized by the integration owner, not reserved here: one module line in codex-rs/network-proxy/src/lib.rs and one Core-only field in codex-rs/network-proxy/src/config.rs (both listed by merged PF-27-S02), the flag registration in codex-rs/features/src/lib.rs and codex-rs/core/config.schema.json, one hunk in codex-rs/core/src/config/mod.rs, and new demo specs qa/demos/specs/pf33s01-*.toml under the directory PF-30-S03 reserves (new files only)."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-33-s01-20261006"
+branch: "feat/pf-33-s01-url-dns-redirect"
+base_commit: "a662c2ce357ee542fdac08ecaf083d27fd58391b"
 depends_on: "PF-27-S02, PF-33-S03"
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-10-06
 ---
 
 # PF-33-S01 — URL DNS and redirect policy

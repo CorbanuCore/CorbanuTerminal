@@ -1,6 +1,13 @@
 use crate::certs::ManagedMitmCa;
 use crate::config::NetworkMode;
 use crate::credential_broker::CredentialRouting;
+use crate::destination;
+use crate::destination::DenialSite;
+use crate::destination::DestinationDenial;
+use crate::destination::DestinationGuard;
+use crate::destination::RedirectLedger;
+use crate::destination::SystemResolver;
+use crate::destination::request_has_body;
 use crate::mitm_hook::HookEvaluation;
 use crate::mitm_hook::MitmHookActions;
 use crate::policy::normalize_host;
@@ -41,6 +48,7 @@ use rama_http::StatusCode;
 use rama_http::Uri;
 use rama_http::header::AUTHORIZATION;
 use rama_http::header::HOST;
+use rama_http::header::LOCATION;
 use rama_http::layer::remove_header::RemoveRequestHeaderLayer;
 use rama_http::layer::remove_header::RemoveResponseHeaderLayer;
 use rama_http_backend::server::HttpServer;
@@ -67,6 +75,8 @@ pub struct MitmState {
     upstream_tls_root_store: Arc<rustls::RootCertStore>,
     inspect: bool,
     max_body_bytes: usize,
+    /// PF-33-S01 redirect chains relayed through this proxy.
+    redirects: RedirectLedger,
 }
 
 pub(crate) struct MitmUpstreamConfig {
@@ -171,6 +181,7 @@ impl MitmState {
             upstream_tls_root_store,
             inspect: MITM_INSPECT_BODIES,
             max_body_bytes: MITM_MAX_BODY_BYTES,
+            redirects: RedirectLedger::default(),
         })
     }
 
@@ -296,8 +307,47 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
     let method = req.method().as_str().to_string();
     let path = path_and_query(req.uri());
     let log_path = path_for_log(req.uri());
+    let authority = authority_header_value(&target_host, target_port);
+    let app_state = &request_ctx.policy.app_state;
+
+    // PF-33-S01: authorize the full URL, method and DNS answers, and place the
+    // request in its redirect chain.
+    let destination = if destination::guard_enabled(app_state).await? {
+        let url = format!("https://{authority}{path}");
+        let client = req
+            .extensions()
+            .get::<SocketInfo>()
+            .map(|info| info.peer_addr().to_string());
+        match DestinationGuard::protected()
+            .authorize_request(&url, &method, &mitm.redirects, &SystemResolver)
+            .await
+        {
+            Ok(authorized) => Some((authorized, client)),
+            Err(denial) => {
+                let site = DenialSite {
+                    host: &target_host,
+                    port: target_port,
+                    method: Some(&method),
+                    protocol: "https",
+                    client,
+                    fail_command: false,
+                };
+                return Ok(destination::blocked(app_state, &denial, site).await);
+            }
+        }
+    } else {
+        None
+    };
 
     let (mut parts, body) = req.into_parts();
+    let has_body = request_has_body(&parts.headers);
+    if destination
+        .as_ref()
+        .is_some_and(|(authorized, _)| authorized.strip_credentials())
+    {
+        // A followed cross-origin redirect: credentials stay with their origin.
+        parts.headers.remove(AUTHORIZATION);
+    }
     if request_ctx
         .policy
         .app_state
@@ -329,7 +379,6 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
         return Ok(blocked_text_response(REASON_POLICY_DENIED));
     }
     apply_mitm_hook_actions(&mut parts.headers, hook_actions.as_ref());
-    let authority = authority_header_value(&target_host, target_port);
     parts.uri = build_https_uri(&authority, &path)?;
     parts
         .headers
@@ -367,6 +416,38 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
             }
         },
     };
+    if let Some((authorized, client)) = destination
+        && upstream_resp.status().is_redirection()
+        && let Some(location) = upstream_resp.headers().get(LOCATION)
+    {
+        let status = upstream_resp.status().as_u16();
+        let decision = match location.to_str() {
+            Ok(location) => {
+                DestinationGuard::protected()
+                    .authorize_redirect(
+                        &authorized,
+                        has_body,
+                        status,
+                        location,
+                        &mitm.redirects,
+                        &SystemResolver,
+                    )
+                    .await
+            }
+            Err(_) => Err(DestinationDenial::RedirectLocation),
+        };
+        if let Err(denial) = decision {
+            let site = DenialSite {
+                host: &target_host,
+                port: target_port,
+                method: Some(&method),
+                protocol: "https-redirect",
+                client,
+                fail_command: false,
+            };
+            return Ok(destination::blocked(app_state, &denial, site).await);
+        }
+    }
     respond_with_inspection(
         upstream_resp,
         inspect,

@@ -772,6 +772,9 @@
             "unified_exec_zsh_fork": {
               "type": "boolean"
             },
+            "url_destination_policy": {
+              "type": "boolean"
+            },
             "use_agent_identity": {
               "type": "boolean"
             },
@@ -5473,6 +5476,9 @@
           "type": "boolean"
         },
         "unified_exec_zsh_fork": {
+          "type": "boolean"
+        },
+        "url_destination_policy": {
           "type": "boolean"
         },
         "use_agent_identity": {

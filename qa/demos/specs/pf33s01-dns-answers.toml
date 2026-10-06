@@ -1,0 +1,72 @@
+# PF-33-S01: DNS answers are validated, not just the hostname.
+id = "pf33s01-dns-answers"
+feature = "URL destination policy: every DNS answer must be public; allow_local_binding is not a private-network grant"
+expected = "Flag on (allow_local_binding = true, names allowlisted): names that resolve to 127.0.0.1, 169.254.169.254 or 10.0.0.1 are refused at CONNECT (403); httpbin.org still returns 200. The log shows reason=private_destination."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[sandbox_workspace_write]
+network_access = true
+
+[features]
+url_destination_policy = true
+
+[features.network_proxy]
+enabled = true
+allow_local_binding = true
+
+[features.network_proxy.domains]
+"httpbin.org" = "allow"
+"postman-echo.com" = "allow"
+"localtest.me" = "allow"
+"*.nip.io" = "allow"
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"check.sh" = '''case "$1" in
+  1) u=https://localtest.me/ ;;
+  2) u=https://169.254.169.254.nip.io/ ;;
+  3) u=https://10.0.0.1.nip.io/ ;;
+  *) u=https://httpbin.org/get ;;
+esac
+echo "$u"
+curl -sS -o /dev/null -w 'HTTP %{http_code}\n' "$u"
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Make four separate shell calls, one at a time: sh check.sh 1, then sh check.sh 2, then sh check.sh 3, then sh check.sh 4. Then list each result verbatim."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = 'httpbin.org/get[\s\S]*HTTP 200'
+timeout = 300
+compress = 3
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+
+[[steps]]
+type = '!grep -ho "policy denied [a-z-]* (host=[^)]*)" {logs}/*.log | sort -u'
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "reason="
+timeout = 30
+
+[[steps]]
+pause = 4.0

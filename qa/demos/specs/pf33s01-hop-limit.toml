@@ -1,0 +1,68 @@
+# PF-33-S01: redirect chains have a hop limit (and a 120 s time limit, unit-tested).
+id = "pf33s01-hop-limit"
+feature = "URL destination policy: a redirect chain is cut off after 10 hops"
+expected = "Flag on: a 3-hop chain completes with HTTP 200; a 12-hop chain stops after 10 redirects with HTTP 403 (reason redirect_hop_limit)."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[sandbox_workspace_write]
+network_access = true
+
+[features]
+url_destination_policy = true
+
+[features.network_proxy]
+enabled = true
+allow_local_binding = true
+
+[features.network_proxy.domains]
+"httpbin.org" = "allow"
+"postman-echo.com" = "allow"
+"localtest.me" = "allow"
+"*.nip.io" = "allow"
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"hops.sh" = '''for n in 3 12; do
+  printf 'redirect chain of %-3s ' "$n:"
+  curl -sS -L --max-redirs 20 -o /dev/null -w 'followed %{num_redirects}, final HTTP %{http_code}\n' "https://httpbin.org/redirect/$n"
+done
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run sh hops.sh with your shell tool and show me its full output verbatim in a code block. Do not run anything else."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "12:.*followed"
+timeout = 300
+compress = 3
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+
+[[steps]]
+type = '!grep -ho "policy denied [a-z-]* (host=[^)]*)" {logs}/*.log | sort -u'
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "reason="
+timeout = 30
+
+[[steps]]
+pause = 4.0

@@ -157,6 +157,8 @@ pub enum Feature {
     IsolatedCredentialBroker,
     /// Launch agent commands without raw secrets and refuse launches the OS cannot contain (PF-27-S02).
     SecretlessAgentLaunch,
+    /// Enforce URL, DNS and redirect destination policy in the managed proxy (PF-33-S01).
+    UrlDestinationPolicy,
     /// Respect host system proxy settings for Codex-owned network clients.
     RespectSystemProxy,
     /// Enable collab tools.
@@ -875,6 +877,12 @@ pub const FEATURES: &[FeatureSpec] = &[
     FeatureSpec {
         id: Feature::SecretlessAgentLaunch,
         key: "secretless_agent_launch",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
+    },
+    FeatureSpec {
+        id: Feature::UrlDestinationPolicy,
+        key: "url_destination_policy",
         stage: Stage::UnderDevelopment,
         default_enabled: false,
     },

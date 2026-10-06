@@ -192,3 +192,26 @@ fn denied_network_policy_message_for_denylist_block_is_explicit() {
             )
         );
 }
+
+#[test]
+fn pf_33_s01_destination_policy_denial_names_the_reason() {
+    let blocked = BlockedRequest {
+        host: "httpbin.org".to_string(),
+        reason: "destination_policy:scheme_port_or_method".to_string(),
+        client: None,
+        method: Some("CONNECT".to_string()),
+        mode: None,
+        protocol: "http-connect".to_string(),
+        execution_id: None,
+        decision: Some("deny".to_string()),
+        source: Some("destination_policy".to_string()),
+        port: Some(8443),
+        timestamp: 0,
+    };
+    assert_eq!(
+        denied_network_policy_message(&blocked),
+        Some(
+            "Network access to \"httpbin.org\" was blocked by the URL destination policy (scheme_port_or_method).".to_string()
+        )
+    );
+}
