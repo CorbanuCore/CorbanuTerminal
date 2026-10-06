@@ -692,6 +692,8 @@ impl Broker {
         parts.version = Version::HTTP_11;
         if !pinned_addrs.is_empty() {
             // PF-33-S02: dial only the signed answers; never resolve the host.
+            // `UpstreamClient` opens a fresh connection per request; if it ever
+            // pools connections, the pool must be keyed by the pin.
             parts.extensions.insert(PinnedPeers::new(
                 operation.host(),
                 operation.port(),

@@ -422,9 +422,15 @@ impl IsolatedBrokerClient {
                     operation.port(),
                     pin.addrs().len()
                 );
+                // The guard keeps at most 16 answers; a subset is still checked.
                 operation
                     .clone()
-                    .with_pinned_addrs(pin.addrs().iter().copied())
+                    .with_pinned_addrs(
+                        pin.addrs()
+                            .iter()
+                            .copied()
+                            .take(codex_secret_broker::ipc::MAX_PINNED_ADDRS),
+                    )
                     .map_err(|_| IsolatedBrokerError::Unpinned)?
             }
             Some(_) => return Err(IsolatedBrokerError::Unpinned),

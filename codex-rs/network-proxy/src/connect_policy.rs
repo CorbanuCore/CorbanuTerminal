@@ -626,6 +626,15 @@ mod tests {
         request.extensions_mut().insert(pin);
         let result = Service::serve(&connector, request).await;
         assert!(result.is_ok(), "a matching pin dials: {result:?}");
+
+        // A pinned request is guarded: no upstream proxy, even with the flag off.
+        let pin = PinnedPeers::new(&target.ip().to_string(), target.port(), [target.ip()]);
+        let mut request = rama_tcp::client::Request::new(HostWithPort::from(target));
+        request.extensions_mut().insert(pin);
+        request
+            .extensions_mut()
+            .insert(ProxyAddress::try_from("http://proxy.example:3128").expect("proxy address"));
+        assert_refused(Service::serve(&connector, request).await, "upstream proxy");
     }
 
     #[test]
