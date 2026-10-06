@@ -11,8 +11,16 @@ use crate::legacy_core::config::ConfigBuilder;
 use codex_config::LoaderOverrides;
 
 async fn load(home: &Path, cwd: &Path, user_config: &str) -> Config {
+    load_with(home, cwd, user_config, base_overrides(home, home)).await
+}
+
+async fn load_with(
+    home: &Path,
+    cwd: &Path,
+    user_config: &str,
+    mut cli: Vec<(String, toml::Value)>,
+) -> Config {
     std::fs::write(home.join("config.toml"), user_config).unwrap();
-    let mut cli = base_overrides(home, home);
     cli.extend(env_overrides(&ShellEnvironmentPolicyToml::default()));
     let mut harness = ConfigOverrides {
         cwd: Some(cwd.to_path_buf()),
@@ -207,6 +215,60 @@ async fn codex_home_inside_the_workspace_stays_read_only() {
             config.codex_home.as_path()
         ),
         Vec::<String>::new()
+    );
+}
+
+/// A workspace that contains the Aggressive-homes registry (the home folder)
+/// cannot delete its entries, and a profile that would let it fails
+/// verification.
+#[tokio::test]
+async fn registry_inside_the_workspace_stays_read_only() {
+    // Only against the disposable account home `just test` provides.
+    if std::env::var_os("CORBANU_TEST_ACCOUNT_HOME").is_none() {
+        return;
+    }
+    let registry = super::super::nested::origin_registry_dir().unwrap();
+    std::fs::create_dir_all(&registry).unwrap();
+    let cwd = registry.parent().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let entry = registry.join("entry");
+
+    let config = load(home.path(), cwd, "").await;
+    let file_system = config.permissions.file_system_sandbox_policy();
+    assert!(!file_system.can_write_path_with_cwd(&entry, cwd));
+    assert!(file_system.can_write_path_with_cwd(&cwd.join("other"), cwd));
+    assert_eq!(
+        verify(
+            &config,
+            /*rules_present*/ true,
+            config.codex_home.as_path()
+        ),
+        Vec::<String>::new()
+    );
+
+    let registry_key = registry.to_str().unwrap().to_string();
+    let mut cli = base_overrides(home.path(), home.path());
+    for (key, value) in &mut cli {
+        if key == &format!("permissions.{PROFILE_ID}") {
+            value
+                .get_mut("filesystem")
+                .and_then(toml::Value::as_table_mut)
+                .unwrap()
+                .remove(&registry_key)
+                .unwrap();
+        }
+    }
+    let config = load_with(home.path(), cwd, "", cli).await;
+    assert_eq!(
+        verify(
+            &config,
+            /*rules_present*/ true,
+            config.codex_home.as_path()
+        ),
+        vec![format!(
+            "Sandbox: the Aggressive-homes registry {} is writable",
+            registry.display()
+        )]
     );
 }
 

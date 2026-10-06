@@ -122,6 +122,14 @@ pub(crate) fn base_overrides(codex_home: &Path, origin: &Path) -> Vec<(String, t
             filesystem.insert(path("secrets"), string("deny"));
             filesystem.insert(path("auth.json"), string("deny"));
         }
+        // The Aggressive-homes registry that nested-launch detection reads
+        // (`super::nested`) is read-only too, so an agent whose workspace
+        // contains it (the home folder) cannot delete its entries.
+        if let Some(registry) = super::nested::origin_registry_dir()
+            && let Some(registry) = registry.to_str()
+        {
+            filesystem.insert(registry.to_string(), string("read"));
+        }
     }
     vec![
         ("approval_policy".to_string(), string("untrusted")),
@@ -337,6 +345,15 @@ fn verify_sandbox(config: &Config, failures: &mut Vec<String>) {
         .to_path_buf();
     if file_system.can_write_path_with_cwd(&state_file, cwd) {
         failures.push(format!("Sandbox: {} is writable", state_file.display()));
+    }
+    if let Some(registry) = super::nested::origin_registry_dir() {
+        let entry = registry.join("corbanu-aggressive-probe");
+        if file_system.can_write_path_with_cwd(&entry, cwd) {
+            failures.push(format!(
+                "Sandbox: the Aggressive-homes registry {} is writable",
+                registry.display()
+            ));
+        }
     }
     for outside in outside_paths(config) {
         if !outside.starts_with(cwd) && file_system.can_write_path_with_cwd(&outside, cwd) {

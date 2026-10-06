@@ -56,6 +56,13 @@ impl LaunchPlan {
             if let Err(err) = std::fs::create_dir_all(codex_home.join("secrets")) {
                 tracing::warn!("could not create the vault store folder: {err}");
             }
+            // The profile keeps the registry read-only; it must exist before
+            // the first agent command so a command cannot create it first.
+            if let Some(registry) = super::nested::origin_registry_dir()
+                && let Err(err) = std::fs::create_dir_all(&registry)
+            {
+                tracing::warn!("could not create the Aggressive-homes registry: {err}");
+            }
         }
         Ok(plan)
     }
