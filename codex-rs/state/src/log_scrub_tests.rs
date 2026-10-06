@@ -9,12 +9,20 @@ fn temp_dir() -> io::Result<PathBuf> {
     Ok(dir)
 }
 
+fn scrub(text: &str) -> Option<String> {
+    scrub_bytes(text.as_bytes())
+}
+
 #[test]
-fn scrub_text_redacts_each_leaked_form_and_is_idempotent() {
+fn scrub_redacts_each_leaked_form_and_is_idempotent() {
     let cases = [
         (
             r#"ModelProviderInfo { experimental_bearer_token: Some("fake-bearer-1"), env_key: None }"#,
             r#"ModelProviderInfo { experimental_bearer_token: Some("REDACTED"), env_key: None }"#,
+        ),
+        (
+            r#"http_headers: Some({"X-Sentinel": "fake-h"}), query_params: Some({"sig": "fake-q", "v": "2"})"#,
+            r#"http_headers: Some({"X-Sentinel": "REDACTED"}), query_params: Some({"sig": "REDACTED", "v": "REDACTED"})"#,
         ),
         (
             r#"headers={"x-request-id": "req-1", "set-cookie": "__cf_bm=fake-cookie; Path=/", "X-Api-Key": "fake-2"}"#,
@@ -25,6 +33,10 @@ fn scrub_text_redacts_each_leaked_form_and_is_idempotent() {
             r#"line="{\"authorization\": \"REDACTED\"}""#,
         ),
         (
+            r#"spawn_child_async: "sh" ["-c"] {"PATH": "/usr/bin", "MNEMONIC": "fake words"}"#,
+            r#"spawn_child_async: "sh" ["-c"] {"PATH": "REDACTED", "MNEMONIC": "REDACTED"}"#,
+        ),
+        (
             "url=https://user:fake-pass@api.example.com/v1/models?key=fake-4&api-version=2025",
             "url=https://REDACTED@api.example.com/v1/models?key=REDACTED&api-version=REDACTED",
         ),
@@ -33,8 +45,20 @@ fn scrub_text_redacts_each_leaked_form_and_is_idempotent() {
             "authorization: Bearer REDACTED sent",
         ),
         (
+            "Authorization: Basic ZmFrZTpmYWtl",
+            "Authorization: Basic REDACTED",
+        ),
+        (
             "export GITHUB_TOKEN=fake-6 done",
             "export GITHUB_TOKEN=REDACTED done",
+        ),
+        (
+            r#"set DB_PASS="fake-7" and"#,
+            r#"set DB_PASS="REDACTED" and"#,
+        ),
+        (
+            r#"env API_KEY=\"fake-8\" end"#,
+            r#"env API_KEY=\"REDACTED\" end"#,
         ),
         (
             "key sk-proj-abcdefghijklmnopqrstuvwxyz0123 used",
@@ -42,16 +66,17 @@ fn scrub_text_redacts_each_leaked_form_and_is_idempotent() {
         ),
     ];
     for (leaked, expected) in cases {
-        let scrubbed = scrub_text(leaked);
-        assert_eq!(scrubbed.as_deref(), Some(expected), "{leaked}");
-        assert_eq!(scrub_text(expected), None, "idempotent: {expected}");
+        assert_eq!(scrub(leaked).as_deref(), Some(expected), "{leaked}");
+        assert_eq!(scrub(expected), None, "idempotent: {expected}");
     }
     for clean in [
         "Request completed status=200 url=https://api.example.com/v1/responses",
         r#"experimental_bearer_token: Some("<redacted>"), "X-Sentinel": "<redacted>""#,
-        "input_tokens=120 output_tokens=7",
+        r#"session_id: Some("0199-abc"), "auth_mode": "chatgpt", input_tokens=120"#,
+        "basic functionality works",
+        "┌─ résumé ─┐ ünïcode",
     ] {
-        assert_eq!(scrub_text(clean), None, "{clean}");
+        assert_eq!(scrub(clean), None, "{clean}");
     }
 }
 

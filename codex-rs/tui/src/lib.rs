@@ -1344,18 +1344,7 @@ pub async fn run_main(
             log_file_opts.mode(0o600);
         }
 
-        let log_path = log_dir.join(TUI_LOG_FILE_NAME);
-        // Older builds wrote credentials to this file (#179, #196). Masking
-        // keeps every byte offset, so it runs beside this process's appends.
-        std::thread::spawn({
-            let log_path = log_path.clone();
-            move || {
-                if let Err(err) = codex_state::log_scrub::scrub_log_file_once(&log_path) {
-                    tracing::warn!("failed to scrub old secrets from the TUI log: {err}");
-                }
-            }
-        });
-        let log_file = log_file_opts.open(&log_path)?;
+        let log_file = log_file_opts.open(log_dir.join(TUI_LOG_FILE_NAME))?;
         let (non_blocking, guard) = non_blocking(log_file);
         let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
             EnvFilter::new("codex_core=info,codex_tui=info,codex_rmcp_client=info")
@@ -1410,6 +1399,19 @@ pub async fn run_main(
         .with(otel_logger_layer)
         .with(otel_tracing_layer)
         .try_init();
+
+    // Older builds wrote credentials to these files (#179, #196). Masking
+    // keeps every byte offset, so it runs beside this process's appends.
+    std::thread::spawn({
+        let log_dir = config.log_dir.clone();
+        move || {
+            for name in [TUI_LOG_FILE_NAME, "codex-login.log"] {
+                if let Err(err) = codex_state::scrub_log_file_once(&log_dir.join(name)) {
+                    tracing::warn!("failed to scrub old secrets from {name}: {err}");
+                }
+            }
+        }
+    });
 
     run_ratatui_app(
         cli,

@@ -15,7 +15,7 @@ pub use runtime::accounting::store as accounting;
 mod audit;
 mod extract;
 pub mod log_db;
-pub mod log_scrub;
+mod log_scrub;
 mod migrations;
 mod model;
 mod paths;
@@ -23,11 +23,12 @@ mod runtime;
 mod sqlite;
 mod telemetry;
 
+/// Preferred entrypoint: owns configuration and metrics.
+pub use log_scrub::scrub_log_file_once;
 pub use model::LogEntry;
 pub use model::LogQuery;
 pub use model::LogRow;
 pub use model::Phase2JobClaimOutcome;
-/// Preferred entrypoint: owns configuration and metrics.
 pub use runtime::StateRuntime;
 pub use sqlite::SqliteConfig;
 

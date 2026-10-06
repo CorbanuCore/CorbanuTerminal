@@ -1,10 +1,11 @@
 //! One-time scrub of credential-shaped values that older builds wrote to the
-//! logs database and `codex-tui.log` (#179, #183, #196): provider bearer
-//! tokens and header values, URL query values and userinfo, response
-//! `set-cookie` headers and secret-named environment values.
+//! logs database and to log files (#179, #183, #196): provider bearer tokens,
+//! header and query values, URL userinfo, response `set-cookie` headers and
+//! environment values of spawned commands.
 //!
 //! Detection deliberately over-matches: a false positive only hides part of
-//! a log line.
+//! a log line. Known limits: values split across a 1 MiB line piece, and
+//! lines an older build still running writes after the pass.
 
 use std::fs::File;
 use std::fs::OpenOptions;
@@ -21,62 +22,110 @@ use std::path::PathBuf;
 use std::sync::LazyLock;
 
 use regex::bytes::Regex;
+use regex::bytes::RegexSet;
 
 /// Replacement for scrubbed values in the logs database.
-pub const REDACTED: &str = "REDACTED";
+const REDACTED: &str = "REDACTED";
 
-/// Lines longer than this are scrubbed in pieces.
+/// Lines longer than this are scrubbed in pieces; a value split across two
+/// pieces can be missed.
 const MAX_LINE_BYTES: u64 = 1024 * 1024;
 
-const SECRET_NAME: &str =
-    "(?:cookie|auth|token|key|secret|session|signature|credential|password|passphrase)";
+const SECRET_NAME: &str = "(?:cookie|auth|token|key|secret|session|signature|credential|pass|pwd|mnemonic|seed|private|jwt|dsn)";
+/// Credential-named keys whose values are diagnostics, not secrets.
+const NOT_SECRET_SUFFIXES: [&str; 7] =
+    ["_id", "_ids", "_count", "tokens", "_mode", "_kind", "_type"];
+/// A quoted Debug/JSON string (quotes escaped at most once), and the same
+/// capturing its contents as `v`.
+const QUOTED: &str = r#"\\?"(?:[^"\\]|\\[^"])*\\?""#;
+const QUOTED_VALUE: &str = r#"\\?"(?P<v>(?:[^"\\]|\\[^"])*)\\?""#;
 
-/// Each pattern's first capture group is the value to hide.
+/// Each pattern's group `v` is the value to hide; group `n`, when present,
+/// is the key name, checked against [`NOT_SECRET_SUFFIXES`].
 static PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     [
         // Header maps, environment maps and JSON: `"set-cookie": "v"`.
-        // Quotes may be escaped once (`\"`) when the map sits inside a string.
         format!(
-            r#"(?i)\\?"[a-z0-9_.-]*{SECRET_NAME}[a-z0-9_.-]*\\?"\s*(?::|=>|=)\s*\\?"((?:[^"\\]|\\[^"])*)\\?""#
+            r#"(?i-u)\\?"(?P<n>[a-z0-9_.-]*{SECRET_NAME}[a-z0-9_.-]*)\\?"\s*(?::|=>|=)\s*{QUOTED_VALUE}"#
         ),
         // Rust `Debug` fields: `experimental_bearer_token: Some("v")`.
         format!(
-            r#"(?i)\b[a-z0-9_]*{SECRET_NAME}[a-z0-9_]*: (?:Some\()?\\?"((?:[^"\\]|\\[^"])*)\\?""#
+            r#"(?i-u)\b(?P<n>[a-z0-9_]*{SECRET_NAME}[a-z0-9_]*): (?:Some\()?{QUOTED_VALUE}"#
         ),
-        // `NAME=value` for secret-named environment variables.
-        r#"\b[A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSPHRASE|CREDENTIAL)[A-Z0-9_]*=([^\s"'&;,]+)"#
-            .to_string(),
-        // `Authorization` schemes.
-        r"(?i)\b(?:bearer|basic)\s+([A-Za-z0-9._~+/=-]{8,})".to_string(),
+        // `NAME=value`, `NAME="value"` for secret-named variables.
+        format!(
+            r#"(?i-u)\b(?P<n>[a-z0-9_]*{SECRET_NAME}[a-z0-9_]*)=(?:\\?["'])?(?P<v>[^\s"'\\&;,]+)"#
+        ),
+        // Bearer tokens, and Basic credentials after `authorization`.
+        r"(?i-u)\bbearer\s+(?P<v>[a-z0-9._~+/=-]{8,})".to_string(),
+        r#"(?i-u)authorization\\?["']?\s*[:=]\s*\\?["']?basic\s+(?P<v>[a-z0-9+/=]{8,})"#.to_string(),
         // URL query values and userinfo.
-        r#"[?&][A-Za-z0-9_.%-]+=([^&#\s"'<>)\]]+)"#.to_string(),
-        r#"(?i)\b[a-z][a-z0-9+.-]*://([^/\s:@"']+:[^/\s@"']+)@"#.to_string(),
+        r#"(?-u)[?&][A-Za-z0-9_.%-]+=(?P<v>[^&#\s"'<>)\]\\]+)"#.to_string(),
+        r#"(?i-u)\b[a-z][a-z0-9+.-]*://(?P<v>[^/\s:@"']+:[^/\s@"']+)@"#.to_string(),
         // Well-known key formats anywhere.
-        r"\b(sk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|xox[abprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})"
+        r"(?-u)\b(?P<v>sk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|xox[abprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})"
             .to_string(),
     ]
     .iter()
-    .map(|pattern| {
-        #[expect(clippy::expect_used)]
-        Regex::new(pattern).expect("log scrub pattern compiles")
-    })
+    .map(|pattern| compile(pattern))
     .collect()
 });
+
+static PATTERN_SET: LazyLock<RegexSet> = LazyLock::new(|| {
+    #[expect(clippy::expect_used)]
+    RegexSet::new(PATTERNS.iter().map(Regex::as_str)).expect("log scrub patterns compile")
+});
+
+/// Maps whose values are secret whatever the key: a provider's
+/// `http_headers` and `query_params` in its `Debug` output (#196).
+static SECRET_MAP: LazyLock<Regex> =
+    LazyLock::new(|| compile(r"(?-u)\b(?:http_headers|query_params): Some\(\{(?P<v>[^}]*)\}\)"));
+/// Lines that printed a spawned command's whole environment (#179).
+static ENV_DUMP_LINE: LazyLock<Regex> =
+    LazyLock::new(|| compile(r"(?-u)spawn_child_async|ExecOneOffCommand"));
+/// Every value of a `"key": "value"` map.
+static MAP_VALUE: LazyLock<Regex> =
+    LazyLock::new(|| compile(&format!(r#"(?-u){QUOTED}\s*:\s*{QUOTED_VALUE}"#)));
+
+fn compile(pattern: &str) -> Regex {
+    #[expect(clippy::expect_used)]
+    Regex::new(pattern).expect("log scrub pattern compiles")
+}
 
 /// Sorted, non-overlapping byte ranges of credential-shaped values in
 /// `text`. Values that are already redacted are skipped, so scrubbing is
 /// idempotent.
-pub fn secret_spans(text: &[u8]) -> Vec<Range<usize>> {
-    let mut spans = PATTERNS
-        .iter()
-        .flat_map(|pattern| {
-            pattern
-                .captures_iter(text)
-                .filter_map(|captures| captures.get(1))
-                .map(|value| value.range())
-        })
-        .filter(|span| !is_redacted(&text[span.clone()]))
-        .collect::<Vec<_>>();
+fn secret_spans(text: &[u8]) -> Vec<Range<usize>> {
+    let mut spans = Vec::new();
+    for index in PATTERN_SET.matches(text).iter() {
+        for captures in PATTERNS[index].captures_iter(text) {
+            let is_diagnostic = captures.name("n").is_some_and(|name| {
+                let name = name.as_bytes().to_ascii_lowercase();
+                NOT_SECRET_SUFFIXES
+                    .iter()
+                    .any(|suffix| name.ends_with(suffix.as_bytes()))
+            });
+            if let Some(value) = captures.name("v").filter(|_| !is_diagnostic) {
+                spans.push(value.range());
+            }
+        }
+    }
+    let mut map_values = |region: Range<usize>| {
+        for captures in MAP_VALUE.captures_iter(&text[region.clone()]) {
+            if let Some(value) = captures.name("v") {
+                spans.push(region.start + value.start()..region.start + value.end());
+            }
+        }
+    };
+    for captures in SECRET_MAP.captures_iter(text) {
+        if let Some(map) = captures.name("v") {
+            map_values(map.range());
+        }
+    }
+    if ENV_DUMP_LINE.is_match(text) {
+        map_values(0..text.len());
+    }
+    spans.retain(|span| !is_redacted(&text[span.clone()]));
     spans.sort_by_key(|span| (span.start, span.end));
     let mut merged: Vec<Range<usize>> = Vec::with_capacity(spans.len());
     for span in spans {
@@ -95,28 +144,26 @@ fn is_redacted(value: &[u8]) -> bool {
         || value.iter().all(|byte| *byte == b'*')
 }
 
-/// `text` with every secret value replaced by [`REDACTED`], or `None` when
-/// nothing needs scrubbing.
-pub fn scrub_text(text: &str) -> Option<String> {
-    let spans = secret_spans(text.as_bytes());
+/// `text` with every secret value replaced by `REDACTED`, or `None` when
+/// nothing needs scrubbing. Invalid UTF-8 is replaced lossily.
+pub(crate) fn scrub_bytes(text: &[u8]) -> Option<String> {
+    let spans = secret_spans(text);
     if spans.is_empty() {
         return None;
     }
-    let mut scrubbed = String::with_capacity(text.len());
+    let mut scrubbed = Vec::with_capacity(text.len());
     let mut position = 0;
     for span in spans {
-        scrubbed.push_str(&String::from_utf8_lossy(
-            &text.as_bytes()[position..span.start],
-        ));
-        scrubbed.push_str(REDACTED);
+        scrubbed.extend_from_slice(&text[position..span.start]);
+        scrubbed.extend_from_slice(REDACTED.as_bytes());
         position = span.end;
     }
-    scrubbed.push_str(&String::from_utf8_lossy(&text.as_bytes()[position..]));
-    Some(scrubbed)
+    scrubbed.extend_from_slice(&text[position..]);
+    Some(String::from_utf8_lossy(&scrubbed).into_owned())
 }
 
 /// Marker written next to a log file once it has been scrubbed.
-pub fn log_file_scrub_marker(path: &Path) -> PathBuf {
+fn log_file_scrub_marker(path: &Path) -> PathBuf {
     let name = path
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
@@ -163,6 +210,11 @@ fn scrub_log_file_in_place(path: &Path) -> io::Result<usize> {
         }
         let spans = secret_spans(&line);
         if !spans.is_empty() {
+            // Another process truncated or replaced the file: writing past
+            // its new end would bring old (masked) bytes back.
+            if writer.metadata()?.len() < offset + read as u64 {
+                break;
+            }
             for span in &spans {
                 line[span.clone()].fill(b'*');
             }

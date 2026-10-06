@@ -49,6 +49,7 @@ mod external_agent_config_imports;
 mod goals;
 mod gpu_rentals;
 mod gpu_runtime_providers;
+mod log_scrub;
 mod logs;
 mod memories;
 mod provider_requests;
@@ -283,6 +284,7 @@ impl StateRuntime {
                 logs_path.display(),
             );
         }
+        runtime.spawn_log_scrub();
         Ok(runtime)
     }
 

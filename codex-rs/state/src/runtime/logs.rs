@@ -1,10 +1,6 @@
 use super::*;
 
 const LOG_RETENTION_DAYS: i64 = 10;
-/// `PRAGMA user_version` of a logs database whose old rows were scrubbed.
-const LOG_SCRUB_VERSION: i64 = 1;
-const MARK_LOG_SCRUB_DONE: &str = "PRAGMA user_version = 1";
-const LOG_SCRUB_BATCH_ROWS: i64 = 2_000;
 
 impl StateRuntime {
     pub async fn insert_log(&self, entry: &LogEntry) -> anyhow::Result<()> {
@@ -304,85 +300,11 @@ WHERE id IN (
             return Ok(());
         };
         self.delete_logs_before(cutoff.timestamp()).await?;
-        self.scrub_logged_secrets_once().await?;
         // Startup cleanup should not wait behind or block foreground work.
         // PASSIVE checkpoints copy whatever is immediately available and skip
         // frames that would require waiting on active readers or writers.
         sqlx::query("PRAGMA wal_checkpoint(PASSIVE)")
             .execute(self.logs_pool.as_ref())
-            .await?;
-        Ok(())
-    }
-
-    /// Older builds logged provider credentials and `set-cookie` values
-    /// (#179, #196). Once per database: redact them in existing rows, then
-    /// rewrite the file so deleted rows and freed space cannot hold them.
-    /// Unfinished work (another process holds the database) is retried on
-    /// the next start; every step is idempotent.
-    pub(crate) async fn scrub_logged_secrets_once(&self) -> anyhow::Result<()> {
-        let version = sqlx::query_scalar::<_, i64>("PRAGMA user_version")
-            .fetch_one(self.logs_pool.as_ref())
-            .await?;
-        if version >= LOG_SCRUB_VERSION {
-            return Ok(());
-        }
-        let mut connection = self.logs_pool.acquire().await?;
-        // The pragmas below are for this pass only.
-        connection.close_on_drop();
-        sqlx::query("PRAGMA secure_delete = ON")
-            .execute(&mut *connection)
-            .await?;
-        let mut after_id = 0_i64;
-        loop {
-            let rows = sqlx::query_as::<_, (i64, Option<String>)>(
-                "SELECT id, feedback_log_body FROM logs WHERE id > ? ORDER BY id LIMIT ?",
-            )
-            .bind(after_id)
-            .bind(LOG_SCRUB_BATCH_ROWS)
-            .fetch_all(&mut *connection)
-            .await?;
-            let Some((last_id, _)) = rows.last() else {
-                break;
-            };
-            after_id = *last_id;
-            let updates = rows
-                .iter()
-                .filter_map(|(id, body)| {
-                    let body = body.as_deref()?;
-                    let scrubbed = crate::log_scrub::scrub_text(body)?;
-                    let delta = scrubbed.len() as i64 - body.len() as i64;
-                    Some((*id, scrubbed, delta))
-                })
-                .collect::<Vec<_>>();
-            if updates.is_empty() {
-                continue;
-            }
-            let mut tx = sqlx::Connection::begin(&mut *connection).await?;
-            for (id, body, delta) in updates {
-                sqlx::query(
-                    "UPDATE logs SET feedback_log_body = ?, estimated_bytes = estimated_bytes + ? WHERE id = ?",
-                )
-                .bind(body)
-                .bind(delta)
-                .bind(id)
-                .execute(&mut *tx)
-                .await?;
-            }
-            tx.commit().await?;
-        }
-        // Do not hold up startup behind another process's transaction.
-        sqlx::query("PRAGMA busy_timeout = 250")
-            .execute(&mut *connection)
-            .await?;
-        sqlx::query("VACUUM").execute(&mut *connection).await?;
-        let (busy, _, _) = sqlx::query_as::<_, (i64, i64, i64)>("PRAGMA wal_checkpoint(TRUNCATE)")
-            .fetch_one(&mut *connection)
-            .await?;
-        if busy != 0 {
-            return Ok(());
-        }
-        sqlx::query(MARK_LOG_SCRUB_DONE)
-            .execute(&mut *connection)
             .await?;
         Ok(())
     }
@@ -682,134 +604,6 @@ mod tests {
 
         assert_eq!(logs_count, 1);
 
-        let _ = tokio::fs::remove_dir_all(codex_home).await;
-    }
-
-    /// A logs database written by an older build: leaked rows are redacted,
-    /// deleted rows leave nothing in the file, and the pass runs once.
-    #[tokio::test]
-    async fn init_scrubs_leaked_secrets_from_existing_logs_db_once() {
-        const KEY: &str = "fake-scrub-provider-key-0001";
-        const COOKIE: &str = "fake-scrub-cookie-0002";
-        const QUERY: &str = "fake-scrub-query-0003";
-        const ENV: &str = "fake-scrub-env-0004";
-        const DELETED: &str = "fake-scrub-deleted-row-0005";
-        const LATER: &str = "fake-scrub-after-marker-0006";
-        let codex_home = unique_temp_dir();
-        tokio::fs::create_dir_all(&codex_home)
-            .await
-            .expect("create codex home");
-        let logs_path =
-            crate::SqliteConfig::new_for_testing(codex_home.as_path().abs()).logs_db_path();
-        let pool = open_db_pool(logs_path.as_path()).await;
-        LOGS_MIGRATOR.run(&pool).await.expect("apply logs schema");
-        let now = Utc::now().timestamp();
-        let insert = |body: String| {
-            let pool = pool.clone();
-            async move {
-                sqlx::query(
-                    "INSERT INTO logs (ts, ts_nanos, level, target, feedback_log_body, estimated_bytes) VALUES (?, 0, 'DEBUG', 't', ?, ?)",
-                )
-                .bind(now)
-                .bind(&body)
-                .bind(body.len() as i64)
-                .execute(&pool)
-                .await
-                .expect("insert log row");
-            }
-        };
-        let leaked = [
-            format!(
-                "Configuring session: ModelProviderInfo {{ experimental_bearer_token: Some(\"{KEY}\"), query_params: Some({{\"key\": \"{QUERY}\"}}) }}"
-            ),
-            format!(
-                "Request completed headers={{\"content-type\": \"text/event-stream\", \"set-cookie\": \"session={COOKIE}; Path=/\"}}"
-            ),
-            format!("Request failed url=https://api.example.com/v1/models?key={QUERY}"),
-            format!("spawn env={{\"ZAI_API_KEY\": \"{ENV}\", \"HOME\": \"/home/me\"}}"),
-        ];
-        for body in &leaked {
-            insert(body.clone()).await;
-        }
-        let clean = "Request completed status=200 url=https://api.example.com/v1/responses";
-        insert(clean.to_string()).await;
-        for _ in 0..200 {
-            insert(format!("Bearer {DELETED} {}", "x".repeat(400))).await;
-        }
-        sqlx::query("DELETE FROM logs WHERE feedback_log_body LIKE 'Bearer %'")
-            .execute(&pool)
-            .await
-            .expect("delete rows");
-        pool.close().await;
-
-        let runtime = StateRuntime::init(
-            crate::SqliteConfig::new_for_testing(codex_home.as_path().abs()),
-            "test-provider".to_string(),
-        )
-        .await
-        .expect("initialize runtime");
-        let messages = |runtime: std::sync::Arc<StateRuntime>| async move {
-            runtime
-                .query_logs(&LogQuery::default())
-                .await
-                .expect("query logs")
-                .into_iter()
-                .filter_map(|row| row.message)
-                .collect::<Vec<_>>()
-        };
-        let scrubbed = messages(runtime.clone()).await;
-        assert_eq!(
-            scrubbed,
-            vec![
-                "Configuring session: ModelProviderInfo { experimental_bearer_token: Some(\"REDACTED\"), query_params: Some({\"key\": \"REDACTED\"}) }".to_string(),
-                "Request completed headers={\"content-type\": \"text/event-stream\", \"set-cookie\": \"REDACTED\"}".to_string(),
-                "Request failed url=https://api.example.com/v1/models?key=REDACTED".to_string(),
-                "spawn env={\"ZAI_API_KEY\": \"REDACTED\", \"HOME\": \"/home/me\"}".to_string(),
-                clean.to_string(),
-            ]
-        );
-        let user_version = sqlx::query_scalar::<_, i64>("PRAGMA user_version")
-            .fetch_one(runtime.logs_pool.as_ref())
-            .await
-            .expect("read user_version");
-        assert_eq!(user_version, super::LOG_SCRUB_VERSION);
-
-        // Once marked, later starts leave rows alone (new builds do not leak).
-        sqlx::query(
-            "INSERT INTO logs (ts, ts_nanos, level, target, feedback_log_body, estimated_bytes) VALUES (?, 0, 'DEBUG', 't', ?, 1)",
-        )
-        .bind(now)
-        .bind(format!("?key={LATER}"))
-        .execute(runtime.logs_pool.as_ref())
-        .await
-        .expect("insert later row");
-        runtime
-            .scrub_logged_secrets_once()
-            .await
-            .expect("second pass");
-        assert_eq!(
-            messages(runtime.clone()).await.last().map(String::as_str),
-            Some(format!("?key={LATER}").as_str())
-        );
-        runtime.logs_pool.close().await;
-        drop(runtime);
-
-        for entry in std::fs::read_dir(&codex_home).expect("read codex home") {
-            let path = entry.expect("dir entry").path();
-            if !path.to_string_lossy().contains("logs") {
-                continue;
-            }
-            let bytes = std::fs::read(&path).expect("read db file");
-            for secret in [KEY, COOKIE, QUERY, ENV, DELETED] {
-                assert!(
-                    !bytes
-                        .windows(secret.len())
-                        .any(|window| window == secret.as_bytes()),
-                    "{secret} left in {}",
-                    path.display()
-                );
-            }
-        }
         let _ = tokio::fs::remove_dir_all(codex_home).await;
     }
 
