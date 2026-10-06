@@ -262,7 +262,6 @@ pub use public_widgets::composer_input::ComposerAction;
 pub use public_widgets::composer_input::ComposerInput;
 pub use security::nested::NestedKind;
 pub use security::nested::NestedLaunch;
-pub use security::nested::ORIGIN_ENV as SECURITY_ORIGIN_ENV;
 pub use security::nested::aggressive_cli_overrides;
 pub use security::nested::aggressive_env_overrides;
 pub use security::nested::apply_aggressive_launch_overrides;
@@ -1040,12 +1039,9 @@ pub async fn run_main(
             std::process::exit(1);
         }
     };
-    let mut security_launch = security::launch::LaunchPlan::prepare(
-        &codex_home,
-        cli.nested_security_origin.as_deref(),
-        &mut cli_kv_overrides,
-    )
-    .unwrap_or_else(|message| exit_with_security_error(&message));
+    let mut security_launch =
+        security::launch::LaunchPlan::prepare(&codex_home, &mut cli_kv_overrides)
+            .unwrap_or_else(|message| exit_with_security_error(&message));
 
     let mut launch_loader_overrides = loader_overrides.clone();
     if let Some(profile_v2) = cli.config_profile_v2.as_ref() {
@@ -1244,8 +1240,12 @@ pub async fn run_main(
         strict_config,
     )
     .await;
+    let origin_registry_update = security_launch.origin_registry_update();
     if let Err(message) = security_launch.finish(&mut config).await {
         exit_with_security_error(&message);
+    }
+    if let Some(aggressive) = origin_registry_update {
+        security::nested::register_origin(&codex_home, aggressive);
     }
 
     let cloud_config_bundle = cloud_config_bundle_loader_for_storage(

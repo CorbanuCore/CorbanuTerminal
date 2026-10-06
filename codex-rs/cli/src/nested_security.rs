@@ -11,6 +11,79 @@ use codex_core::config::Config;
 use codex_core::config::ConfigOverrides;
 use codex_exec::EnforcedSecurity;
 
+use crate::AppServerCommand;
+use crate::AppServerSubcommand;
+use crate::DebugCommand;
+use crate::DebugSubcommand;
+use crate::Subcommand;
+
+/// Subcommands that start, host or hand credentials to agents, with how a
+/// nested launch under Aggressive treats them (see `codex_tui::nested_launch`).
+pub(crate) fn nested_launch_kind(
+    subcommand: Option<&Subcommand>,
+) -> Option<(&'static str, codex_tui::NestedKind)> {
+    use codex_tui::NestedKind::Agent;
+    use codex_tui::NestedKind::Credentials;
+    use codex_tui::NestedKind::Host;
+    use codex_tui::NestedKind::Interactive;
+    let Some(subcommand) = subcommand else {
+        return Some(("", Interactive));
+    };
+    Some(match subcommand {
+        Subcommand::Exec(_) => ("exec", Agent),
+        Subcommand::Review(_) => ("review", Agent),
+        Subcommand::Resume(_) => ("resume", Interactive),
+        Subcommand::Fork(_) => ("fork", Interactive),
+        Subcommand::McpServer(_) => ("mcp-server", Host),
+        Subcommand::AppServer(AppServerCommand {
+            subcommand:
+                Some(
+                    AppServerSubcommand::GenerateTs(_)
+                    | AppServerSubcommand::GenerateJsonSchema(_)
+                    | AppServerSubcommand::GenerateInternalJsonSchema(_),
+                ),
+            ..
+        }) => return None,
+        Subcommand::AppServer(_) => ("app-server", Host),
+        Subcommand::Debug(DebugCommand {
+            subcommand: DebugSubcommand::AppServer(_),
+        }) => ("debug app-server", Host),
+        Subcommand::RemoteControl(_) => ("remote-control", Host),
+        Subcommand::App(_) => ("app", Host),
+        Subcommand::ExecServer(_) => ("exec-server", Host),
+        Subcommand::Cloud(_) => ("cloud", Host),
+        Subcommand::Telegram(_) => ("telegram", Host),
+        Subcommand::ClaudePaneSmoke(_) => ("claude-pane-smoke", Host),
+        Subcommand::ClaudePaneWorkflowSuite(_) => ("claude-pane-workflow-suite", Host),
+        Subcommand::Vault(_) => ("vault", Credentials),
+        Subcommand::InternalClaudeOauthToken => ("internal-claude-oauth-token", Credentials),
+        Subcommand::InternalGpuEndpointToken { .. } => ("internal-gpu-endpoint-token", Credentials),
+        Subcommand::InternalGpuController(_) => ("internal-gpu-controller", Credentials),
+        Subcommand::InternalClaudeLoginHealth { .. } => {
+            ("internal-claude-login-health", Credentials)
+        }
+        Subcommand::Tasknode(_) => ("tasknode", Credentials),
+        // Account, configuration and inspection commands start no agent.
+        Subcommand::Login(_)
+        | Subcommand::Logout(_)
+        | Subcommand::Mcp(_)
+        | Subcommand::Plugin(_)
+        | Subcommand::Completion(_)
+        | Subcommand::Update
+        | Subcommand::Doctor(_)
+        | Subcommand::Sandbox(_)
+        | Subcommand::Debug(_)
+        | Subcommand::Execpolicy(_)
+        | Subcommand::Apply(_)
+        | Subcommand::Archive(_)
+        | Subcommand::Delete(_)
+        | Subcommand::Unarchive(_)
+        | Subcommand::ResponsesApiProxy(_)
+        | Subcommand::StdioToUds(_)
+        | Subcommand::Features(_) => return None,
+    })
+}
+
 pub(crate) struct NestedAggressive {
     codex_home: PathBuf,
     origin: PathBuf,

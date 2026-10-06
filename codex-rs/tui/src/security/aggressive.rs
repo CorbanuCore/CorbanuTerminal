@@ -63,7 +63,7 @@ pub(crate) fn nested_row(nested: super::level::NestedAgents) -> &'static str {
             "Nested agents: refuse. An agent command that starts another agent (`corbanu exec`, `review`, `resume`, `fork`, a new session, `app-server` or `mcp-server`) is refused."
         }
         super::level::NestedAgents::Pass => {
-            "Nested agents: pass. `corbanu exec`, `review`, `resume`, `fork` and new sessions started by an agent command run with Aggressive enforced; `app-server` and `mcp-server` stay refused."
+            "Nested agents: pass. `corbanu exec` and `review` started by an agent command run with Aggressive enforced; interactive sessions, `app-server` and `mcp-server` stay refused."
         }
     }
 }
@@ -234,12 +234,16 @@ pub(crate) fn apply_launch_overrides(overrides: &mut ConfigOverrides) -> Vec<&'s
     if !overrides.additional_writable_roots.is_empty() {
         replaced.push("--add-dir");
     }
+    if overrides.bypass_hook_trust == Some(true) {
+        replaced.push("--dangerously-bypass-hook-trust");
+    }
     overrides.approval_policy = Some(AskForApproval::UnlessTrusted);
     overrides.approvals_reviewer = Some(ApprovalsReviewer::User);
     overrides.sandbox_mode = None;
     overrides.permission_profile = None;
     overrides.default_permissions = Some(PROFILE_ID.to_string());
     overrides.additional_writable_roots.clear();
+    overrides.bypass_hook_trust = None;
     overrides.workspace_roots = None;
     overrides.tools_web_search_request = None;
     replaced

@@ -1,0 +1,78 @@
+# With nested agents set to pass in /security, an agent command's
+# `corbanu exec -s danger-full-access` runs with Aggressive enforced: the flag
+# is ignored. Under Aggressive the nested run cannot write the Corbanu home or
+# reach the network, so it stops after that. A nested interactive session is
+# still refused.
+# Record with
+#   PF24_CANDIDATE=<corbanu> --bin qa/security-levels/pf24-followups/nested-launch/restart-once.sh
+id = "nested-launch-pass"
+feature = "Nested agents set to pass run with Aggressive enforced"
+expected = "After pressing n in the Aggressive review, the agent's `corbanu exec -s danger-full-access` reports that Aggressive is enforced and --sandbox was ignored; a nested interactive session is still refused."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Nested agents: refuse"
+[[steps]]
+key = "n"
+[[steps]]
+wait = "Nested agents: pass"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive \\(nested agents: pass\\)"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "Enter"
+[[steps]]
+type = "/exit"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "restarting Corbanu Terminal.*model: +glm-5\\.2"
+timeout = 60
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run exactly this shell command once, without changing it: corbanu exec -s danger-full-access 'say hi' 2>&1 | grep -E 'Aggressive|Ignored'; corbanu 'hi' </dev/null 2>&1 | grep -o 'Interactive sessions are never allowed there' . Then tell me in one sentence what happened."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Would you like to run"
+timeout = 120
+compress = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)• Ran corbanu.*\\n• \\S"
+timeout = 120
+compress = 3
+[[steps]]
+pause = 4.0

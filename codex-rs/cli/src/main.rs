@@ -1097,70 +1097,6 @@ fn main() -> anyhow::Result<()> {
     })
 }
 
-/// Subcommands that start, host or hand credentials to agents, with how a
-/// nested launch under Aggressive treats them (see `codex_tui::nested_launch`).
-fn nested_launch_kind(
-    subcommand: Option<&Subcommand>,
-) -> Option<(&'static str, codex_tui::NestedKind)> {
-    use codex_tui::NestedKind::Agent;
-    use codex_tui::NestedKind::Credentials;
-    use codex_tui::NestedKind::Host;
-    let Some(subcommand) = subcommand else {
-        return Some(("", Agent));
-    };
-    Some(match subcommand {
-        Subcommand::Exec(_) => ("exec", Agent),
-        Subcommand::Review(_) => ("review", Agent),
-        Subcommand::Resume(_) => ("resume", Agent),
-        Subcommand::Fork(_) => ("fork", Agent),
-        Subcommand::McpServer(_) => ("mcp-server", Host),
-        Subcommand::AppServer(AppServerCommand {
-            subcommand:
-                Some(
-                    AppServerSubcommand::GenerateTs(_)
-                    | AppServerSubcommand::GenerateJsonSchema(_)
-                    | AppServerSubcommand::GenerateInternalJsonSchema(_),
-                ),
-            ..
-        }) => return None,
-        Subcommand::AppServer(_) => ("app-server", Host),
-        Subcommand::Debug(DebugCommand {
-            subcommand: DebugSubcommand::AppServer(_),
-        }) => ("debug app-server", Host),
-        Subcommand::RemoteControl(_) => ("remote-control", Host),
-        Subcommand::App(_) => ("app", Host),
-        Subcommand::ExecServer(_) => ("exec-server", Host),
-        Subcommand::Cloud(_) => ("cloud", Host),
-        Subcommand::Telegram(_) => ("telegram", Host),
-        Subcommand::ClaudePaneSmoke(_) => ("claude-pane-smoke", Host),
-        Subcommand::ClaudePaneWorkflowSuite(_) => ("claude-pane-workflow-suite", Host),
-        Subcommand::Vault(_) => ("vault", Credentials),
-        Subcommand::InternalClaudeOauthToken => ("internal-claude-oauth-token", Credentials),
-        Subcommand::InternalGpuEndpointToken { .. } => ("internal-gpu-endpoint-token", Credentials),
-        // Account, configuration and inspection commands start no agent.
-        Subcommand::Login(_)
-        | Subcommand::Logout(_)
-        | Subcommand::InternalClaudeLoginHealth { .. }
-        | Subcommand::InternalGpuController(_)
-        | Subcommand::Tasknode(_)
-        | Subcommand::Mcp(_)
-        | Subcommand::Plugin(_)
-        | Subcommand::Completion(_)
-        | Subcommand::Update
-        | Subcommand::Doctor(_)
-        | Subcommand::Sandbox(_)
-        | Subcommand::Debug(_)
-        | Subcommand::Execpolicy(_)
-        | Subcommand::Apply(_)
-        | Subcommand::Archive(_)
-        | Subcommand::Delete(_)
-        | Subcommand::Unarchive(_)
-        | Subcommand::ResponsesApiProxy(_)
-        | Subcommand::StdioToUds(_)
-        | Subcommand::Features(_) => return None,
-    })
-}
-
 async fn cli_main(
     arg0_paths: Arg0DispatchPaths,
     remote_control_disabled: bool,
@@ -1183,7 +1119,7 @@ async fn cli_main(
     if let Some(subcommand) = subcommand.as_ref() {
         profile_v2_for_subcommand(&interactive, subcommand)?;
     }
-    let nested_aggressive = match nested_launch_kind(subcommand.as_ref())
+    let nested_aggressive = match nested_security::nested_launch_kind(subcommand.as_ref())
         .map(|(name, kind)| codex_tui::nested_launch(name, kind))
     {
         None | Some(codex_tui::NestedLaunch::NotNested) => None,
@@ -1196,12 +1132,12 @@ async fn cli_main(
         }
         Some(codex_tui::NestedLaunch::EnforceAggressive(origin)) => Some(origin),
     };
-    interactive.nested_security_origin = nested_aggressive.clone();
     let exec_enforcement = match (&nested_aggressive, subcommand.as_ref()) {
         (Some(origin), Some(Subcommand::Exec(_) | Subcommand::Review(_))) => {
             Some(nested_security::NestedAggressive::new(origin.clone())?)
         }
-        _ => None,
+        (Some(_), _) => anyhow::bail!("this nested launch cannot be held to Aggressive"),
+        (None, _) => None,
     };
     let exec_enforcement = exec_enforcement
         .as_ref()

@@ -54,9 +54,10 @@ impl ChosenLevel {
     }
 }
 
-/// What an agent command may do when it starts another agent while
-/// Aggressive is enforced (a nested launch). Stored next to the level, so
-/// only a person using `/security` can change it.
+/// What an agent command may do when it starts `corbanu exec` or `review`
+/// while Aggressive is enforced (a nested launch). Stored next to the level,
+/// so only a person using `/security` can change it; saving Permissive resets
+/// it to refuse.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum NestedAgents {
     /// The nested launch is refused.
@@ -181,7 +182,8 @@ pub(crate) fn save(codex_home: &Path, level: ChosenLevel, nested: NestedAgents) 
     let contents = toml::to_string(&StateFile {
         version: STATE_VERSION,
         level: level.key().to_string(),
-        nested_agents: (nested == NestedAgents::Pass).then(|| nested.name().to_string()),
+        nested_agents: (level == ChosenLevel::Aggressive && nested == NestedAgents::Pass)
+            .then(|| nested.name().to_string()),
     })
     .map_err(io::Error::other)?;
     write_atomically(&state_path(codex_home), &contents)?;
@@ -189,7 +191,9 @@ pub(crate) fn save(codex_home: &Path, level: ChosenLevel, nested: NestedAgents) 
         sync_rules(codex_home, level)?;
     }
     match load_state(codex_home) {
-        (StoredLevel::Chosen(saved), saved_nested) if saved == level && saved_nested == nested => {
+        (StoredLevel::Chosen(saved), saved_nested)
+            if saved == level && (saved_nested == nested || level == ChosenLevel::Permissive) =>
+        {
             Ok(())
         }
         other => Err(io::Error::other(format!(
@@ -248,9 +252,6 @@ fn write_atomically(path: &Path, contents: &str) -> io::Result<()> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct LevelContext {
     pub(crate) codex_home: PathBuf,
-    /// The home whose stored level chose `active`: `codex_home`, or for a
-    /// nested launch the home of the session that started this one.
-    pub(crate) origin: PathBuf,
     /// The `security_levels` flag, or a stored non-Permissive level that the
     /// human must be able to see and change.
     pub(crate) picker_enabled: bool,

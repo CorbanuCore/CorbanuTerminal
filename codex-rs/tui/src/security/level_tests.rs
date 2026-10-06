@@ -149,6 +149,12 @@ fn nested_agents_setting_round_trips_and_fails_closed() {
             NestedAgents::Pass
         )
     );
+    // Saving Permissive resets it.
+    save(home.path(), ChosenLevel::Permissive, NestedAgents::Pass).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(state_path(home.path())).unwrap(),
+        "version = 1\nlevel = \"permissive\"\n"
+    );
     write_state(
         home.path(),
         "version = 1\nlevel = \"aggressive\"\nnested_agents = \"allow\"\n",

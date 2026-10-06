@@ -18,64 +18,57 @@ use crate::legacy_core::config::ConfigOverrides;
 pub(crate) struct LaunchPlan {
     codex_home: PathBuf,
     stored: StoredLevel,
-    /// Set when an agent command under Aggressive started this process; the
-    /// home whose level chose Aggressive.
-    nested_origin: Option<PathBuf>,
     replaced_flags: Vec<&'static str>,
 }
 
 impl LaunchPlan {
     /// Read the stored level before any config is loaded, keep the vault rule
-    /// file in step and add the Aggressive overrides. `nested_origin` forces
-    /// Aggressive whatever this home stores.
+    /// file in step and add the Aggressive overrides.
     pub(crate) fn prepare(
         codex_home: &Path,
-        nested_origin: Option<&Path>,
         cli_kv_overrides: &mut Vec<(String, toml::Value)>,
     ) -> Result<Self, String> {
         let stored = level::load(codex_home);
-        let plan = Self {
-            codex_home: codex_home.to_path_buf(),
-            stored,
-            nested_origin: nested_origin.map(Path::to_path_buf),
-            replaced_flags: Vec::new(),
-        };
-        if plan.stored != StoredLevel::Absent || plan.aggressive() {
-            level::sync_rules(codex_home, plan.enforced()).map_err(|err| {
+        if stored != StoredLevel::Absent {
+            level::sync_rules(codex_home, stored.enforced()).map_err(|err| {
                 format!(
                     "Could not apply the stored security level ({}): {err}",
                     level::rules_path(codex_home).display()
                 )
             })?;
         }
+        let plan = Self {
+            codex_home: codex_home.to_path_buf(),
+            stored,
+            replaced_flags: Vec::new(),
+        };
+        if plan.aggressive() && codex_home.to_str().is_none() {
+            return Err(format!(
+                "Security level Aggressive needs a UTF-8 Corbanu home path; {} is not.",
+                codex_home.display()
+            ));
+        }
         if plan.aggressive() {
-            for home in [codex_home, plan.origin()] {
-                if home.to_str().is_none() {
-                    return Err(format!(
-                        "Security level Aggressive needs a UTF-8 Corbanu home path; {} is not.",
-                        home.display()
-                    ));
-                }
+            cli_kv_overrides.extend(aggressive::base_overrides(codex_home, codex_home));
+            // The profile denies reading it; an existing folder makes that
+            // denial visible to nested-launch detection (`super::nested`).
+            // The vault itself only looks for files inside.
+            if let Err(err) = std::fs::create_dir_all(codex_home.join("secrets")) {
+                tracing::warn!("could not create the vault store folder: {err}");
             }
-            cli_kv_overrides.extend(aggressive::base_overrides(codex_home, plan.origin()));
         }
         Ok(plan)
     }
 
-    fn enforced(&self) -> ChosenLevel {
-        if self.nested_origin.is_some() {
-            ChosenLevel::Aggressive
-        } else {
-            self.stored.enforced()
-        }
+    /// Whether this home should be recorded as an Aggressive origin for
+    /// nested-launch detection (`Some(true)`), forgotten (`Some(false)`), or
+    /// left alone because the level was never chosen.
+    pub(crate) fn origin_registry_update(&self) -> Option<bool> {
+        (self.stored != StoredLevel::Absent).then(|| self.aggressive())
     }
 
     fn aggressive(&self) -> bool {
-        self.enforced() == ChosenLevel::Aggressive
-    }
-
-    fn origin(&self) -> &Path {
-        self.nested_origin.as_deref().unwrap_or(&self.codex_home)
+        self.stored.enforced() == ChosenLevel::Aggressive
     }
 
     /// A remote app server does not load these overrides; refuse rather than
@@ -113,13 +106,7 @@ impl LaunchPlan {
             StoredLevel::Absent | StoredLevel::Chosen(_) => None,
         };
         if self.aggressive() {
-            verify_aggressive(&self.codex_home, self.origin(), config).await?;
-            if let Some(origin) = &self.nested_origin {
-                config.startup_warnings.push(format!(
-                    "Security level Aggressive is enforced because an agent command under Aggressive started this session ({}).",
-                    origin.display()
-                ));
-            }
+            verify_aggressive(&self.codex_home, &self.codex_home, config).await?;
             if let Some(home) = std::env::var_os("HOME")
                 && config.cwd.as_path() == Path::new(&home)
             {
@@ -139,22 +126,21 @@ impl LaunchPlan {
                 ));
             }
         }
-        let active = self.enforced();
-        let origin = self.origin().to_path_buf();
         level::install_context(LevelContext {
             codex_home: self.codex_home,
-            origin,
             picker_enabled: config.features.enabled(Feature::SecurityLevels)
                 || !matches!(
                     self.stored,
                     StoredLevel::Absent | StoredLevel::Chosen(ChosenLevel::Permissive)
                 ),
-            active,
+            active: self.stored.enforced(),
         });
         Ok(())
     }
 }
 
+/// `origin` is the home whose level chose Aggressive: `codex_home`, or for a
+/// nested `corbanu exec` the home of the session that started it.
 pub(crate) async fn verify_aggressive(
     codex_home: &Path,
     origin: &Path,
@@ -179,7 +165,7 @@ pub(crate) async fn verify_aggressive(
 pub(crate) async fn verify_reloaded(config: &Config) -> Result<(), String> {
     match level::context() {
         Some(context) if context.active == ChosenLevel::Aggressive => {
-            verify_aggressive(&context.codex_home, &context.origin, config).await
+            verify_aggressive(&context.codex_home, &context.codex_home, config).await
         }
         Some(_) | None => Ok(()),
     }

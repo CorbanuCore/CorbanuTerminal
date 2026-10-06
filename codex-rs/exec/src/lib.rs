@@ -512,13 +512,9 @@ pub async fn run_main_enforced(
         additional_writable_roots: add_dir,
     };
     if let Some(enforced) = enforced {
-        // Exec has no approval flag; `Never` above is its headless default.
-        replaced_flags.extend(
-            enforced
-                .apply_overrides(&mut overrides)
-                .into_iter()
-                .filter(|flag| *flag != "--ask-for-approval"),
-        );
+        // `Never` above is the headless default, not a flag to report.
+        overrides.approval_policy = None;
+        replaced_flags.extend(enforced.apply_overrides(&mut overrides));
     }
 
     let build_config = |overrides| {

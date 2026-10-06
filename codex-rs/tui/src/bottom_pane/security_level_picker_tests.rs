@@ -15,7 +15,6 @@ fn key(code: KeyCode) -> KeyEvent {
 fn context(home: &std::path::Path, active: ChosenLevel) -> LevelContext {
     LevelContext {
         codex_home: home.to_path_buf(),
-        origin: home.to_path_buf(),
         picker_enabled: true,
         active,
     }

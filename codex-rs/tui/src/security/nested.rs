@@ -1,19 +1,24 @@
 //! Agents started by agent commands while Aggressive is enforced (nested
 //! launches).
 //!
-//! An Aggressive session puts [`ORIGIN_ENV`] into every agent command's
-//! environment. A command can drop that variable or change `CODEX_HOME`, so
-//! the launching `corbanu` also checks its own and the account's default
-//! Corbanu homes: a home that stores Aggressive but that this process cannot
-//! write means it runs inside an Aggressive agent command's sandbox, which
-//! makes the home read-only and cannot be left. Corbanu cannot run on a home
-//! it cannot write, so a person's own launch never matches. The level always
-//! comes from a stored `security_level.toml`, never from the environment.
+//! The level always comes from a stored `security_level.toml`, never from the
+//! environment. A Corbanu home is the origin of a nested launch when it
+//! enforces Aggressive and this process can neither write it nor read its
+//! vault store, which is exactly what the Aggressive profile does to agent
+//! commands; a person's own launch, and a Permissive sandbox, can read it. Candidate homes are the
+//! one named by [`ORIGIN_ENV`] (which Aggressive puts into every agent
+//! command's environment), this process's own home, the account's default
+//! homes, and every home registered by an Aggressive launch. Only the first
+//! two can be changed by a command; the registry sits outside the workspace,
+//! where agent commands cannot write.
 
+use std::io;
 use std::path::Path;
 use std::path::PathBuf;
 
 use codex_config::types::ShellEnvironmentPolicyToml;
+use sha2::Digest;
+use sha2::Sha256;
 
 use super::aggressive;
 use super::launch;
@@ -29,8 +34,12 @@ pub const ORIGIN_ENV: &str = "CORBANU_SECURITY_ORIGIN";
 /// What a `corbanu` subcommand does, for nested-launch decisions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NestedKind {
-    /// Starts an agent this process holds to Aggressive itself.
+    /// Runs an agent without a person (`exec`, `review`); held to Aggressive
+    /// when nested launches pass.
     Agent,
+    /// An interactive session. Its approval prompts would be answered by the
+    /// agent that started it, so it is never allowed nested.
+    Interactive,
     /// Serves agents to a client that chooses their sandbox and approvals,
     /// or runs an agent outside Corbanu's sandbox. Never allowed nested.
     Host,
@@ -49,44 +58,83 @@ pub enum NestedLaunch {
 /// Decide whether `corbanu <name>` may run here (`name` is empty for a new
 /// interactive session).
 pub fn nested_launch(name: &str, kind: NestedKind) -> NestedLaunch {
-    let marker = std::env::var_os(ORIGIN_ENV)
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from);
     let mut homes = Vec::new();
+    homes.extend(
+        std::env::var_os(ORIGIN_ENV)
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from),
+    );
     homes.extend(
         codex_utils_home_dir::find_codex_home()
             .ok()
             .map(|home| home.to_path_buf()),
     );
-    homes.extend(default_homes());
-    decide(name, kind, aggressive_origin(marker, homes))
+    let account_home = account_home();
+    if let Some(account_home) = account_home.as_deref() {
+        homes.push(account_home.join(".corbanu"));
+        homes.push(account_home.join(".pfterminal"));
+        homes.extend(registered_homes(&registry_dir(account_home)));
+    }
+    decide(name, kind, &nested_origins(homes))
 }
 
-/// The marker's home, or else the first unwritable candidate home, whose
-/// stored level enforces Aggressive. A forged marker can only make a launch
-/// stricter.
-pub(crate) fn aggressive_origin(
-    marker: Option<PathBuf>,
-    homes: Vec<PathBuf>,
-) -> Option<(PathBuf, NestedAgents)> {
-    let stored_aggressive = |home: PathBuf| {
+/// Every candidate home that is the origin of a nested launch, with its
+/// setting.
+pub(crate) fn nested_origins(homes: Vec<PathBuf>) -> Vec<(PathBuf, NestedAgents)> {
+    let mut origins: Vec<(PathBuf, NestedAgents)> = Vec::new();
+    for home in homes {
+        if origins.iter().any(|(seen, _)| *seen == home) {
+            continue;
+        }
         let (stored, nested) = level::load_state(&home);
-        (stored.enforced() == ChosenLevel::Aggressive).then_some((home, nested))
-    };
-    marker.and_then(stored_aggressive).or_else(|| {
-        homes
-            .into_iter()
-            .filter_map(stored_aggressive)
-            .find(|(home, _)| tempfile::NamedTempFile::new_in(home).is_err())
-    })
+        // An Aggressive session that saved Permissive stays Aggressive, with
+        // its rule file, until it restarts.
+        let aggressive = stored.enforced() == ChosenLevel::Aggressive
+            || std::fs::read_to_string(level::rules_path(&home))
+                .is_ok_and(|contents| contents == level::rules_contents());
+        if aggressive && sandboxed_away_from(&home) {
+            let nested = match stored {
+                level::StoredLevel::Chosen(ChosenLevel::Aggressive) => nested,
+                _ => NestedAgents::Refuse,
+            };
+            origins.push((home, nested));
+        }
+    }
+    origins
 }
 
+/// Whether this process can neither write `home` nor read its vault store,
+/// as inside an Aggressive agent command. Other errors (a full disk, a
+/// missing home) do not count; a Permissive sandbox leaves the vault store
+/// readable. Aggressive launches create the store's folder so the denial is
+/// observable.
+fn sandboxed_away_from(home: &Path) -> bool {
+    let denied = |err: &io::Error| {
+        matches!(
+            err.kind(),
+            io::ErrorKind::PermissionDenied | io::ErrorKind::ReadOnlyFilesystem
+        )
+    };
+    let write_denied = tempfile::NamedTempFile::new_in(home)
+        .err()
+        .is_some_and(|err| denied(&err));
+    let vault_unreadable = std::fs::read_dir(home.join("secrets"))
+        .err()
+        .is_some_and(|err| denied(&err));
+    write_denied && vault_unreadable
+}
+
+/// Refuse wins when several origins apply.
 pub(crate) fn decide(
     name: &str,
     kind: NestedKind,
-    origin: Option<(PathBuf, NestedAgents)>,
+    origins: &[(PathBuf, NestedAgents)],
 ) -> NestedLaunch {
-    let Some((origin, nested)) = origin else {
+    let Some((origin, nested)) = origins
+        .iter()
+        .find(|(_, nested)| *nested == NestedAgents::Refuse)
+        .or_else(|| origins.first())
+    else {
         return NestedLaunch::NotNested;
     };
     let command = if name.is_empty() {
@@ -96,12 +144,15 @@ pub(crate) fn decide(
     };
     let started = format!(
         "{command} was started by an agent command while security level Aggressive is enforced ({})",
-        level::state_path(&origin).display()
+        level::state_path(origin).display()
     );
     match (kind, nested) {
-        (NestedKind::Agent, NestedAgents::Pass) => NestedLaunch::EnforceAggressive(origin),
+        (NestedKind::Agent, NestedAgents::Pass) => NestedLaunch::EnforceAggressive(origin.clone()),
         (NestedKind::Agent, NestedAgents::Refuse) => NestedLaunch::Refuse(format!(
-            "{started}. Nested agent launches are set to refuse; a person can set them to pass, with Aggressive enforced in the nested agent, in /security."
+            "{started}. Nested agent launches are set to refuse; a person can let `corbanu exec` and `corbanu review` run with Aggressive enforced in /security."
+        )),
+        (NestedKind::Interactive, _) => NestedLaunch::Refuse(format!(
+            "{started}. Interactive sessions are never allowed there: the agent that started one would answer its approval prompts."
         )),
         (NestedKind::Host, _) => NestedLaunch::Refuse(format!(
             "{started}. It is never allowed there: its client chooses each agent's sandbox and approvals, or the agent runs outside Corbanu's sandbox, so Aggressive cannot be enforced."
@@ -109,6 +160,67 @@ pub(crate) fn decide(
         (NestedKind::Credentials, _) => NestedLaunch::Refuse(format!(
             "{started}. It reads stored credentials, which Aggressive keeps from agent commands."
         )),
+    }
+}
+
+/// Record or forget `codex_home` as an Aggressive origin, so nested launches
+/// that point `CODEX_HOME` elsewhere still find it. Best effort.
+pub(crate) fn register_origin(codex_home: &Path, aggressive: bool) {
+    let Some(account_home) = account_home() else {
+        return;
+    };
+    let result = registry_entry(&registry_dir(&account_home), codex_home, aggressive);
+    if let Err(err) = result {
+        tracing::warn!(
+            "could not update the Aggressive home registry for {}: {err}",
+            codex_home.display()
+        );
+    }
+}
+
+pub(crate) fn registry_entry(
+    registry: &Path,
+    codex_home: &Path,
+    aggressive: bool,
+) -> io::Result<()> {
+    let digest = Sha256::digest(codex_home.as_os_str().as_encoded_bytes());
+    let name = digest
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let entry = registry.join(name);
+    if !aggressive {
+        return match std::fs::remove_file(&entry) {
+            Err(err) if err.kind() != io::ErrorKind::NotFound => Err(err),
+            _ => Ok(()),
+        };
+    }
+    let path = codex_home
+        .to_str()
+        .ok_or_else(|| io::Error::other("Corbanu home path is not UTF-8"))?;
+    if std::fs::read_to_string(&entry).ok().as_deref() == Some(path) {
+        return Ok(());
+    }
+    std::fs::create_dir_all(registry)?;
+    std::fs::write(entry, path)
+}
+
+pub(crate) fn registered_homes(registry: &Path) -> Vec<PathBuf> {
+    std::fs::read_dir(registry)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| std::fs::read_to_string(entry.path()).ok())
+        .map(PathBuf::from)
+        .filter(|home| home.is_absolute())
+        .collect()
+}
+
+fn registry_dir(account_home: &Path) -> PathBuf {
+    if cfg!(target_os = "macos") {
+        account_home.join("Library/Application Support/Corbanu/aggressive-homes")
+    } else {
+        account_home.join(".local/state/corbanu/aggressive-homes")
     }
 }
 
@@ -155,40 +267,48 @@ pub async fn verify_aggressive_config(
     launch::verify_aggressive(codex_home, origin, config).await
 }
 
-/// Default Corbanu homes from the account database, not `$HOME`, which an
-/// agent command can change.
-fn default_homes() -> Vec<PathBuf> {
+/// The account's home directory from the account database, not `$HOME`,
+/// which an agent command can change.
+fn account_home() -> Option<PathBuf> {
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStrExt;
 
-        let mut buffer = vec![0 as libc::c_char; 16 * 1024];
-        // SAFETY: `passwd` is plain data that getpwuid_r overwrites.
-        let mut entry: libc::passwd = unsafe { std::mem::zeroed() };
-        let mut result = std::ptr::null_mut();
-        // SAFETY: every pointer is valid for the call and `buffer.len()` is
-        // its real size.
-        let status = unsafe {
-            libc::getpwuid_r(
-                libc::getuid(),
-                &mut entry,
-                buffer.as_mut_ptr(),
-                buffer.len(),
-                &mut result,
-            )
-        };
-        if status != 0 || result.is_null() || entry.pw_dir.is_null() {
-            return Vec::new();
+        let mut size = 16 * 1024;
+        while size <= 1024 * 1024 {
+            let mut buffer = vec![0 as libc::c_char; size];
+            // SAFETY: `passwd` is plain data that getpwuid_r overwrites.
+            let mut entry: libc::passwd = unsafe { std::mem::zeroed() };
+            let mut result = std::ptr::null_mut();
+            // SAFETY: every pointer is valid for the call and `buffer.len()`
+            // is its real size.
+            let status = unsafe {
+                libc::getpwuid_r(
+                    libc::getuid(),
+                    &mut entry,
+                    buffer.as_mut_ptr(),
+                    buffer.len(),
+                    &mut result,
+                )
+            };
+            if status == libc::ERANGE {
+                size *= 4;
+                continue;
+            }
+            if status != 0 || result.is_null() || entry.pw_dir.is_null() {
+                return None;
+            }
+            // SAFETY: getpwuid_r succeeded, so `pw_dir` is a NUL-terminated
+            // string inside `buffer`, which is still alive.
+            let dir = unsafe { std::ffi::CStr::from_ptr(entry.pw_dir) };
+            let home = PathBuf::from(std::ffi::OsStr::from_bytes(dir.to_bytes()));
+            return home.is_absolute().then_some(home);
         }
-        // SAFETY: getpwuid_r succeeded, so `pw_dir` is a NUL-terminated
-        // string inside `buffer`, which is still alive.
-        let dir = unsafe { std::ffi::CStr::from_ptr(entry.pw_dir) };
-        let home = PathBuf::from(std::ffi::OsStr::from_bytes(dir.to_bytes()));
-        vec![home.join(".corbanu"), home.join(".pfterminal")]
+        None
     }
     #[cfg(not(unix))]
     {
-        Vec::new()
+        None
     }
 }
 

@@ -425,3 +425,53 @@ async fn project_rules_count_only_when_the_project_is_trusted() {
         "{failures:?}"
     );
 }
+
+/// A nested `corbanu exec` with nested agents set to pass, on a home other
+/// than the origin: every row holds, and its commands can read neither vault
+/// store, write outside the folder or reach the network.
+#[tokio::test]
+async fn nested_child_on_another_home_protects_both_homes() {
+    let origin = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let cwd = root.path().join("workspace");
+    std::fs::create_dir_all(&cwd).unwrap();
+    let mut cli = base_overrides(home.path(), origin.path());
+    cli.extend(env_overrides(&ShellEnvironmentPolicyToml::default()));
+    let mut harness = ConfigOverrides {
+        cwd: Some(cwd.clone()),
+        sandbox_mode: Some(SandboxMode::DangerFullAccess),
+        bypass_hook_trust: Some(true),
+        ..Default::default()
+    };
+    assert_eq!(
+        apply_launch_overrides(&mut harness),
+        vec!["--sandbox", "--dangerously-bypass-hook-trust"]
+    );
+    let config = ConfigBuilder::default()
+        .codex_home(home.path().to_path_buf())
+        .cli_overrides(cli)
+        .harness_overrides(harness)
+        .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
+        .build()
+        .await
+        .unwrap();
+    assert_eq!(
+        verify(&config, /*rules_present*/ true, origin.path()),
+        Vec::<String>::new()
+    );
+    let file_system = config.permissions.file_system_sandbox_policy();
+    for vault in [origin.path(), home.path()] {
+        assert!(!file_system.can_read_path_with_cwd(&vault.join("secrets"), &cwd));
+        assert!(!file_system.can_write_path_with_cwd(&vault.join("security_level.toml"), &cwd));
+    }
+    assert!(!file_system.can_write_path_with_cwd(&root.path().join("outside.txt"), &cwd));
+    assert!(!config.permissions.network_sandbox_policy().is_enabled());
+    assert!(!config.bypass_hook_trust);
+    // A different marker fails verification.
+    assert!(
+        verify(&config, /*rules_present*/ true, home.path())
+            .iter()
+            .any(|failure| failure.starts_with("Child agents:"))
+    );
+}

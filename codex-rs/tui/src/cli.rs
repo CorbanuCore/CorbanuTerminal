@@ -73,12 +73,6 @@ pub struct Cli {
 
     #[clap(skip)]
     pub config_overrides: CliConfigOverrides,
-
-    /// Internal: an agent command under Aggressive started this session and
-    /// nested launches pass; the home that chose Aggressive. Set by the
-    /// `corbanu` entrypoint only.
-    #[clap(skip)]
-    pub nested_security_origin: Option<std::path::PathBuf>,
 }
 
 impl std::ops::Deref for Cli {
