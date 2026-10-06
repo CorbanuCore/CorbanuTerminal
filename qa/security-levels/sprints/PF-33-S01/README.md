@@ -36,7 +36,8 @@ Flag off: no guard code runs beyond reading the flag; behaviour is unchanged (de
 - Hosts with more than 16 A+AAAA answers are refused (contract limit). Timed-out lookups are abandoned, not
   cancelled (`tokio::net::lookup_host`).
 - PF-33-S02: pinning the connection to the checked answers, upstream and environment proxies (a local upstream
-  proxy is refused under the guard), `NO_PROXY`, SOCKS5 UDP, the `x-unix-socket` route and other alternate egress.
+  proxy is refused under the guard), `NO_PROXY`, any safe re-allowing of UDP (QUIC; the guard refuses all UDP
+  relays now), the `x-unix-socket` route and other alternate egress.
 - Byte limits: the redirect target is bounded at 4096 bytes. Response-body budgets belong to the retrieval consumer
   (the browser broker already caps 2 MiB per response and 16 MiB per session).
 
@@ -82,4 +83,4 @@ flag accessor (P3-9); plain HTTP refused without a lookup (P3-11); private contr
 [Review 2](review-opus-2.md) confirmed those and found SOCKS5 UDP unguarded (P1) plus four P3s. Fixed in the next
 commit: UDP relays refused under the guard (test `pf_33_s01_socks_udp_is_refused_under_the_guard`), expired markers
 kept so retries are refused, host patterns compiled only for redirect responses; the rest are listed as known limits.
-[Review 3](review-opus-3.md) is the final re-check.
+[Review 3](review-opus-3.md), the final re-check, returned APPROVE WITH NITS (documentation nits, applied).
