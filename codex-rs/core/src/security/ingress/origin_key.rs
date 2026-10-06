@@ -76,9 +76,7 @@ impl OriginKey {
                         Err(error)
                     }
                 },
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                    read_key(&path)
-                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => read_key(&path),
                 Err(error) => Err(error),
             },
         }
