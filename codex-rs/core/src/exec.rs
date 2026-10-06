@@ -1139,12 +1139,15 @@ async fn read_output<R: AsyncRead + Unpin + Send + 'static>(
                 },
                 chunk,
             });
-            let event = Event {
-                id: stream.sub_id.clone(),
-                msg,
-            };
-            #[allow(clippy::let_unit_value)]
-            let _ = stream.tx_event.send(event).await;
+            // PF-28-S01: hold back bytes that could end in part of a secret.
+            for msg in crate::security::disclosure_gate::gate_event(msg) {
+                let event = Event {
+                    id: stream.sub_id.clone(),
+                    msg,
+                };
+                #[allow(clippy::let_unit_value)]
+                let _ = stream.tx_event.send(event).await;
+            }
             emitted_deltas += 1;
         }
 

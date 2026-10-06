@@ -228,6 +228,16 @@ where
             .clone()
             .or_else(|| event_thread_id(event, &ctx));
         let feedback_log_body = format_feedback_log_body(event, &ctx);
+        // PF-28-S01: the log database is a diagnostic sink.
+        let gate = |text: String| {
+            codex_secret_broker::output_gate::scrub_if_armed(
+                codex_secret_broker::output_gate::OutputSink::Diagnostic,
+                &text,
+            )
+            .unwrap_or(text)
+        };
+        let feedback_log_body = gate(feedback_log_body);
+        let message = visitor.message.map(gate);
 
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -237,7 +247,7 @@ where
             ts_nanos: now.subsec_nanos() as i64,
             level: metadata.level().as_str().to_string(),
             target: metadata.target().to_string(),
-            message: visitor.message,
+            message,
             feedback_log_body: Some(feedback_log_body),
             thread_id,
             process_uuid: Some(self.process_uuid.clone()),

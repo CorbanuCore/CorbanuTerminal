@@ -116,7 +116,12 @@ pub async fn append_entry(
         }
     }
 
-    // TODO: check `text` for sensitive patterns
+    // PF-28-S01: managed secrets are not persisted in prompt history.
+    let gated = codex_secret_broker::output_gate::scrub_if_armed(
+        codex_secret_broker::output_gate::OutputSink::Transcript,
+        text,
+    );
+    let text = gated.as_deref().unwrap_or(text);
 
     // Resolve `~/.codex/history.jsonl` and ensure the parent directory exists.
     let path = history_filepath(config);

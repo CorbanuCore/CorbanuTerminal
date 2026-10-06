@@ -3658,6 +3658,20 @@ impl Config {
                 );
             }
         }
+        if features.enabled(Feature::SecretOutputGate) {
+            // PF-28-S01: gate managed secrets out of every output sink. Shell
+            // snapshots persist the environment, so they are off too.
+            crate::security::disclosure_gate::arm(codex_home.as_path())
+                .map_err(|err| std::io::Error::new(std::io::ErrorKind::PermissionDenied, err))?;
+            if features.enabled(Feature::ShellSnapshot)
+                && features.disable(Feature::ShellSnapshot).is_err()
+            {
+                startup_warnings.push(
+                    "secret_output_gate: shell_snapshot is required by policy; snapshots can hold managed secrets"
+                        .to_string(),
+                );
+            }
+        }
         let non_prefixed_mcp_tool_servers = if features.enabled(Feature::NonPrefixedMcpToolNames) {
             cfg.features
                 .as_ref()

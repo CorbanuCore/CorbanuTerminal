@@ -549,11 +549,20 @@ impl Vault {
         self.with_storage_lock(|| {
             // Validate the label exists in the index before attempting decryption.
             let index = self.load_index()?;
-            if !index.credentials.contains_key(&normalized) {
+            let Some(credential_type) = index
+                .credentials
+                .get(&normalized)
+                .map(|meta| meta.credential_type)
+            else {
                 return Err(VaultError::NotFound { label: normalized });
-            }
-            self.read_secret(&normalized)?
-                .ok_or_else(|| VaultError::NotFound { label: normalized })
+            };
+            let secret = self
+                .read_secret(&normalized)?
+                .ok_or_else(|| VaultError::NotFound {
+                    label: normalized.clone(),
+                })?;
+            protect_revealed(&normalized, credential_type, &secret)?;
+            Ok(secret)
         })
     }
 
@@ -590,8 +599,14 @@ impl Vault {
                     credential_type: meta.credential_type,
                 });
             }
-            self.read_secret(&normalized)?
-                .ok_or_else(|| VaultError::NotFound { label: normalized })
+            let credential_type = meta.credential_type;
+            let secret = self
+                .read_secret(&normalized)?
+                .ok_or_else(|| VaultError::NotFound {
+                    label: normalized.clone(),
+                })?;
+            protect_revealed(&normalized, credential_type, &secret)?;
+            Ok(secret)
         })
     }
 
@@ -715,6 +730,59 @@ fn index_secret_entry(index: &VaultIndex) -> Result<(SecretScope, SecretName, St
 }
 
 /// Format a Unix-seconds timestamp as an ISO-8601 string for display.
+/// PF-28-S01: once the output gate is armed, every value this process reveals
+/// is registered before it is returned, so no model, tool, transcript or log
+/// sink can carry it. Seed phrases and private keys are withheld whole. If the
+/// gate cannot admit the value, the credential is not released.
+fn protect_revealed(
+    label: &str,
+    credential_type: CredentialType,
+    secret: &str,
+) -> Result<(), VaultError> {
+    use codex_secret_broker::output_gate;
+    use codex_secret_broker::output_gate::SecretClass;
+    let Some(gate) = output_gate::active() else {
+        return Ok(());
+    };
+    let class = match credential_type {
+        CredentialType::SeedPhrase => SecretClass::SeedPhrase,
+        CredentialType::CryptoPrivateKey | CredentialType::KeystoreJson => SecretClass::PrivateKey,
+        _ => SecretClass::Operational,
+    };
+    let label = format!("vault:{label}");
+    let mut parts: Vec<Zeroizing<String>> = vec![Zeroizing::new(secret.to_string())];
+    if credential_type == CredentialType::SeedPhrase {
+        let words: Vec<&str> = secret.split_whitespace().collect();
+        parts.push(Zeroizing::new(words.join(" ")));
+        parts.push(Zeroizing::new(words.join("\n")));
+    } else {
+        if credential_type == CredentialType::BasicAuth
+            && let Some((_, password)) = secret.split_once(':')
+        {
+            parts.push(Zeroizing::new(password.to_string()));
+        }
+        // Multi-part values (key, secret, passphrase on separate lines).
+        parts.extend(
+            secret
+                .lines()
+                .map(str::trim)
+                .filter(|line| line.len() >= 8 && *line != secret.trim())
+                .map(|line| Zeroizing::new(line.to_string())),
+        );
+    }
+    let entries: Vec<(&str, SecretClass, &str)> = parts
+        .iter()
+        .enumerate()
+        .filter(|(index, part)| *index == 0 || part.trim().len() >= output_gate::MIN_VALUE_BYTES)
+        .map(|(_, part)| (label.as_str(), class, part.as_str()))
+        .collect();
+    gate.register_all(&entries).map(|_| ()).map_err(|err| {
+        VaultError::Storage(anyhow::anyhow!(
+            "{label} was not released because the secret output gate cannot protect it: {err}"
+        ))
+    })
+}
+
 pub fn format_timestamp(seconds: i64) -> String {
     DateTime::<Utc>::from_timestamp(seconds, 0)
         .map(|dt| dt.to_rfc3339_opts(chrono::SecondsFormat::Secs, /*use_z*/ true))

@@ -4389,6 +4389,10 @@ impl ModelClientSession {
         inference_trace: &InferenceTraceContext,
         same_turn_attempt_index: u64,
     ) -> Result<ResponseStream> {
+        // PF-28-S01: the model sink never receives a managed secret, even one
+        // recorded before the value was registered.
+        let gated_prompt = crate::security::disclosure_gate::gate_prompt(prompt);
+        let prompt = gated_prompt.as_ref().unwrap_or(prompt);
         let wire_api = self.client.state.provider.info().wire_api;
         match wire_api {
             WireApi::Responses => {

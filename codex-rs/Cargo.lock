@@ -3297,6 +3297,7 @@ dependencies = [
  "anyhow",
  "codex-login",
  "codex-protocol",
+ "codex-secret-broker",
  "mime_guess",
  "pretty_assertions",
  "sentry",
@@ -3805,6 +3806,7 @@ name = "codex-message-history"
 version = "0.1.48"
 dependencies = [
  "codex-config",
+ "codex-secret-broker",
  "memchr",
  "pretty_assertions",
  "serde",
@@ -4236,6 +4238,7 @@ dependencies = [
 name = "codex-secret-broker"
 version = "0.1.48"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
  "codex-security-audit",
  "codex-security-policy",
@@ -4243,6 +4246,7 @@ dependencies = [
  "hmac 0.12.1",
  "nix 0.30.1",
  "pretty_assertions",
+ "regex",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -4423,6 +4427,7 @@ dependencies = [
  "chrono",
  "codex-git-utils",
  "codex-protocol",
+ "codex-secret-broker",
  "codex-utils-absolute-path",
  "libsqlite3-sys",
  "log",
@@ -4624,6 +4629,7 @@ dependencies = [
  "codex-provider-auth",
  "codex-rollout",
  "codex-sandboxing",
+ "codex-secret-broker",
  "codex-shell-command",
  "codex-state",
  "codex-tasknode-session",
