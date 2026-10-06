@@ -82,8 +82,8 @@ launch.
   already open from round 3 and fits PF-24-S02.
 - **Under `pass`,** the nested run's hooks, MCP servers and trust records come
   from whichever home the agent chose. Only the outer sandbox contains them.
-- Only `corbanu` builds with this change check. The standalone `codex-exec`
-  and `codex-tui` binaries do not.
+- Only `corbanu` builds with this change check. The standalone binaries
+  check too since [standalone-nested](../standalone-nested/README.md).
 - **Older builds** read a file with `nested_agents = "pass"` as unreadable.
   They then enforce Aggressive and show a warning.
 - **Debug builds** honour `CORBANU_TEST_ACCOUNT_HOME` in place of the account
