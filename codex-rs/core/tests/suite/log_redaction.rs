@@ -12,6 +12,7 @@ use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::ExecCommandEndEvent;
 use codex_protocol::protocol::Op;
 use core_test_support::PathBufExt;
+use core_test_support::responses::WebSocketConnectionConfig;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_function_call;
@@ -21,6 +22,7 @@ use core_test_support::responses::mount_sse_once;
 use core_test_support::responses::sse;
 use core_test_support::responses::sse_response;
 use core_test_support::responses::start_mock_server;
+use core_test_support::responses::start_websocket_server_with_headers;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
 use pretty_assertions::assert_eq;
@@ -322,6 +324,51 @@ async fn provider_credentials_and_tool_env_never_reach_trace_logs() -> anyhow::R
             && log_text.contains("key=REDACTED")
             && log_text.contains("\"set-cookie\": \"REDACTED\""),
         "the provider headers, the request URL and the response headers should be logged with values redacted"
+    );
+    Ok(())
+}
+
+/// The Responses websocket logs its handshake response headers at INFO; a
+/// `set-cookie` value must not reach any sink.
+#[tokio::test]
+async fn websocket_handshake_response_headers_never_reach_logs() -> anyhow::Result<()> {
+    const COOKIE_VALUE: &str = "fake-websocket-cookie-0006-9a1b2c3d";
+
+    let (sinks, guard) = TraceSinks::install().await?;
+    let server = start_websocket_server_with_headers(vec![WebSocketConnectionConfig {
+        requests: vec![
+            // Startup prewarm, then the turn.
+            vec![ev_response_created("warm-1"), ev_completed("warm-1")],
+            vec![
+                ev_response_created("resp-1"),
+                ev_assistant_message("msg-1", "done"),
+                ev_completed("resp-1"),
+            ],
+        ],
+        response_headers: vec![(
+            "set-cookie".to_string(),
+            format!("session={COOKIE_VALUE}; Path=/"),
+        )],
+        accept_delay: None,
+        close_after_requests: false,
+    }])
+    .await;
+    let mut builder = test_codex();
+    let fixture = builder.build_with_websocket_server(&server).await?;
+    fixture.submit_turn("hi").await?;
+    assert_eq!(server.handshakes().len(), 1);
+    server.shutdown().await;
+
+    let log_text = sinks
+        .assert_clean(
+            guard,
+            &["successfully connected to websocket"],
+            &[COOKIE_VALUE],
+        )
+        .await?;
+    assert!(
+        log_text.contains("\"set-cookie\": \"REDACTED\""),
+        "the handshake headers should be logged with values redacted"
     );
     Ok(())
 }
