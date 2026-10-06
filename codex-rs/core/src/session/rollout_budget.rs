@@ -17,8 +17,12 @@ pub(super) async fn maybe_record_reminder(
     let response_item = ContextualUserFragment::into(crate::context::RolloutBudgetContext {
         remaining_tokens: reminder.remaining_tokens,
     });
-    sess.record_conversation_items(turn_context, std::slice::from_ref(&response_item))
-        .await;
+    sess.record_conversation_items_from(
+        turn_context,
+        std::slice::from_ref(&response_item),
+        Some(crate::security::ingress::MessageOrigin::Host),
+    )
+    .await;
     budget.mark_reminder_delivered(sess.thread_id(), window_id, reminder);
 }
 

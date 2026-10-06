@@ -128,7 +128,7 @@ impl NewerSections {
     }
 }
 
-fn strip_image_details(items: &mut [ResponseItem]) {
+pub(crate) fn strip_image_details(items: &mut [ResponseItem]) {
     for item in items {
         match item {
             ResponseItem::Message { content, .. } => {

@@ -106,6 +106,9 @@ pub enum Feature {
     UnifiedExec,
     /// Route shell tool execution through the zsh exec bridge.
     ShellZshFork,
+    /// Under Moderate/Aggressive security, send external content (tool, MCP,
+    /// hook and agent output) as labelled untrusted data instead of failing closed.
+    SourceEnvelopes,
     /// Allow unified exec to compose with the zsh exec bridge.
     ///
     /// This flag is only a composition gate. Enabling it by itself must not turn
@@ -866,6 +869,12 @@ pub const FEATURES: &[FeatureSpec] = &[
     FeatureSpec {
         id: Feature::ShellZshFork,
         key: "shell_zsh_fork",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
+    },
+    FeatureSpec {
+        id: Feature::SourceEnvelopes,
+        key: "source_envelopes",
         stage: Stage::UnderDevelopment,
         default_enabled: false,
     },

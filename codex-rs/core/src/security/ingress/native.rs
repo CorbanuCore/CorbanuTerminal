@@ -6,6 +6,8 @@ use super::IngressError;
 use super::MAX_INGRESS_TEXT_BYTES;
 use super::NativeScreeningCandidate;
 use super::PendingSource;
+use super::structural::LabelledCache;
+use super::structural::MessageOrigin;
 use crate::context::ContextualUserFragment;
 use crate::context::ProvenanceContext;
 use codex_content_security::ContentDigest;
@@ -17,7 +19,7 @@ use codex_protocol::provenance::SourceDescriptor;
 use codex_protocol::provenance::SourceKind;
 use std::collections::HashMap;
 
-const MAX_ADMITTED_ITEMS: usize = 256;
+const MAX_ADMITTED_ITEMS: usize = 4_096;
 
 // Enforce the raw bound while serializing, before allocating a whole oversized
 // history item merely to discover that it cannot enter this bounded carrier.
@@ -40,12 +42,22 @@ fn item_bytes(item: &ResponseItem) -> Result<Vec<u8>, IngressError> {
     Ok(writer.0)
 }
 
+fn message_key(item: &ResponseItem) -> Option<ContentDigest> {
+    serde_json::to_vec(item)
+        .ok()
+        .map(|bytes| ContentDigest::of(&bytes))
+}
+
 #[derive(Default)]
 pub(crate) struct NativeIngress {
     admitted: HashMap<ContentDigest, AdmittedSource>,
     pending: HashMap<ContentDigest, PendingSource>,
     calls: HashMap<ContentDigest, SourceKind>,
     unavailable: bool,
+    /// `source_envelopes`: project labelled data instead of failing closed.
+    labelled_mode: bool,
+    messages: HashMap<ContentDigest, MessageOrigin>,
+    pub(super) labelled: LabelledCache,
 }
 
 impl std::fmt::Debug for NativeIngress {
@@ -57,6 +69,44 @@ impl std::fmt::Debug for NativeIngress {
 }
 
 impl NativeIngress {
+    pub(crate) fn set_labelled_mode(&mut self, enabled: bool) {
+        self.labelled_mode = enabled;
+    }
+
+    pub(crate) fn labelled_mode(&self) -> bool {
+        self.labelled_mode
+    }
+
+    /// Record the host-chosen origin of exact history messages. Called only
+    /// from Core record seams; a full registry degrades new messages to
+    /// unattributed (labelled) data and never upgrades anything.
+    pub(crate) fn register_messages(&mut self, items: &[ResponseItem], origin: MessageOrigin) {
+        for item in items {
+            if !matches!(item, ResponseItem::Message { .. }) {
+                continue;
+            }
+            let Some(key) = message_key(item) else {
+                continue;
+            };
+            if self.messages.len() >= MAX_ADMITTED_ITEMS && !self.messages.contains_key(&key) {
+                continue;
+            }
+            // First registration wins: a later external copy of identical
+            // bytes cannot downgrade or upgrade the human/host record.
+            self.messages.entry(key).or_insert(origin);
+        }
+    }
+
+    pub(super) fn message_origin(&self, item: &ResponseItem) -> Option<MessageOrigin> {
+        self.messages.get(&message_key(item)?).copied()
+    }
+
+    pub(super) fn call_kind(&self, call_id: &str) -> Option<SourceKind> {
+        self.calls
+            .get(&ContentDigest::of(call_id.as_bytes()))
+            .copied()
+    }
+
     /// Invoked by the host tool dispatcher, never by source labels in output.
     pub(crate) fn register_call(&mut self, call_id: &str, kind: SourceKind) {
         let key = ContentDigest::of(call_id.as_bytes());
