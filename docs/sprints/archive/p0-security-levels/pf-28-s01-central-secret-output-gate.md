@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-28-S01"
 title: "Central secret and protected-output gate"
-status: draft
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-28"
 execution_order: 30
@@ -18,6 +18,17 @@ updated: 2026-10-06
 ---
 
 # PF-28-S01 — Central secret and protected-output gate
+
+## Closure — 2026-10-06
+
+Completed under the per-sprint gate (sec-common decision 5): merged as PR #208 behind `secret_output_gate`
+(default off). It waited only on PF-27-S02, archived the same day. The open items moved; nothing below is claimed:
+
+| Carried forward | To |
+| --- | --- |
+| Wrapped base64/hex and other decode-and-rescan cases; reflected values in responses | [PF-28-S02](../../current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md) |
+| Register MCP OAuth tokens refreshed after start; withhold comma-separated or numbered seed phrases; scrub known text fields per type (no serde round trip); per-session stream state and fewer rescans under load | [PF-28-S02](../../current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md) (gate carry-overs) |
+| Register a derived view for financial values | [PF-39-S01](../../current/p1-security-hardening/pf-39-s01-protected-financial-derived-views.md) (P1) |
 
 ## Execution mandate
 
@@ -42,7 +53,7 @@ updated: 2026-10-06
 
 ## Preconditions
 
-- [x] Active plan; PF-27-S02 merged behind its flag (#191). It is not archived yet (two open decisions), so this record stays `draft` until it is; the code merged behind `secret_output_gate`.
+- [x] Active plan; PF-27-S02 merged behind its flag (#191) and archived on 2026-10-06.
 - [x] Read root and nearest implementation-path AGENTS.md; plan/worktree coordinates verified.
 - [x] Source pins, crate/module paths and backend/API availability confirmed.
 
@@ -58,11 +69,7 @@ updated: 2026-10-06
 
 ## Remaining
 
-- [ ] Wrapped base64/hex and other decode-and-rescan cases, and reflected values in responses: PF-28-S02.
-- [ ] Register MCP OAuth tokens refreshed after start (rmcp-client store).
-- [ ] Withhold seed phrases written comma-separated or numbered; registering a derived view for financial values is still open.
-- [ ] Scrub known text fields per type instead of a serde round trip (`success` is lost on rebuilt tool outputs).
-- [ ] Performance under load: per-session stream state instead of one global mutex; recompiling outside the state lock; fewer repeat scans per event.
+- [x] Every open item moved on 2026-10-06; see the closure table above.
 
 ## Verification
 
@@ -71,11 +78,11 @@ updated: 2026-10-06
 - [x] Integration: affected crate suites; results in the evidence README.
 - [x] TUI applicability: four GLM 5.2 runs recorded as SOP videos ([index](../../../../qa/demos/index/PF-28-S01.md)).
 - [x] Candidate, commands and outcomes recorded; synthetic canaries only.
-- [ ] Milestone qualification (isolated code-blind VM run, human sign-off) when Moderate ships.
+- [x] Milestone qualification (isolated code-blind VM run, human sign-off) runs at "Moderate ships", not per sprint (decision 5).
 
 ## Exit evidence
 
 - [x] Implementation commits and outputs under `qa/security-levels/sprints/PF-28-S01/`.
 - [x] One independent Opus 5.5 High review, run in rounds until approved, dispositioned.
-- [ ] PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
-- [ ] Done/Remaining reflect reality; record archived when Remaining is empty or moved.
+- [x] PF-26 final qualification moved to the P1 hardening plan (decision 3); no release-complete claim here.
+- [x] Done/Remaining reflect reality; record archived and the plan/index updated.

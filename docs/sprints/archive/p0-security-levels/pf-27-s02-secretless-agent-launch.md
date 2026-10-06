@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-27-S02"
 title: "Secretless agent launch and bypass containment"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-27"
 execution_order: 29
@@ -19,8 +19,18 @@ updated: 2026-10-06
 
 # PF-27-S02 — Secretless agent launch and bypass containment
 
-**October 6:** macOS and Linux ship behind `secretless_agent_launch` (default off; Permissive unchanged).
-Windows refuses protected launches with a reason; the port is [PF-27-S06](pf-27-s06-windows-broker-and-launch.md).
+## Closure — 2026-10-06
+
+Completed under the per-sprint gate (sec-common decision 5): merged as PR #191 behind `secretless_agent_launch`
+(default off; Permissive unchanged) on macOS and Linux. Travis's 2026-10-06 decisions closed the open items:
+
+| Open item | Disposition |
+| --- | --- |
+| MCP servers, hooks, the `!` user shell and app-server `command/exec` run outside the OS sandbox | Allowed as user-configured/user-started; the inspector shows them as "not contained" ([PF-41-S01](../../current/p0-security-levels/pf-41-s01-effective-security-inspector.md)) |
+| Claude panes and external provider harnesses are not under the contract | Handed to the TUI lane, recorded in [PF-24-S02](../../current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md): blocked under Aggressive (PR #220); full contract is issue #218 |
+| Windows broker and contract | [PF-27-S06](../../current/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md), now in the P1 hardening plan |
+
+Windows refuses protected launches with a reason until PF-27-S06 lands.
 [Evidence, launch-boundary inventory and known limits](../../../../qa/security-levels/sprints/PF-27-S02/README.md).
 
 ## Execution mandate
@@ -47,7 +57,7 @@ Windows refuses protected launches with a reason; the port is [PF-27-S06](pf-27-
 
 - [x] Active plan; PF-27-S04 completed and archived (2026-10-06).
 - [x] Read root and nearest AGENTS.md; worktree recorded in the plan front matter.
-- [x] Source pins and module paths confirmed; Windows has no broker or contract backend (moved to PF-27-S06).
+- [x] Source pins and module paths confirmed; Windows has no broker or contract backend (moved to PF-27-S06, P1).
 
 ## Done
 
@@ -63,9 +73,7 @@ Windows refuses protected launches with a reason; the port is [PF-27-S06](pf-27-
 
 ## Remaining
 
-- [ ] Decision (Travis): Claude panes and external provider harnesses (`tui/src/claude_panes/`) are not under the contract. Options: block them in protected levels, or bring them under the contract. Recommendation: hand to the TUI lane, which owns the panes, to choose; until then the PF-41 inspector lists them as "not covered".
-- [ ] Decision (Travis): MCP servers, hooks, the `!` user shell and app-server `command/exec` get the environment allowlist but run outside the OS sandbox. Options: refuse them in protected levels, or accept them as user-configured/user-initiated and show "not contained" in PF-41. Recommendation: accept and show "not contained" (refusing breaks every configured MCP server and hook; the user started them).
-- [ ] Windows broker and contract: [PF-27-S06](pf-27-s06-windows-broker-and-launch.md).
+- [x] Every open item closed or moved on 2026-10-06; see the closure table above.
 
 ## Verification
 
@@ -75,10 +83,10 @@ Windows refuses protected launches with a reason; the port is [PF-27-S06](pf-27-
 - [x] Integration: affected crate suites (722 passed; core subset 853 passed; one unrelated rmcp keyring-fixture failure recorded).
 - [x] TUI applicability: GLM 5.2 TUI runs and five SOP videos ([index](../../../../qa/demos/index/PF-27-S02.md)).
 - [x] Candidate, commands and outcomes recorded; synthetic credentials only.
-- [ ] Windows verification with PF-27-S06.
+- [x] Windows verification moved with [PF-27-S06](../../current/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md) to the P1 hardening plan.
 
 ## Exit evidence
 
 - [x] Implementation commits and outputs under `qa/security-levels/sprints/PF-27-S02/`.
 - [x] One Opus 5.5 High review (changes required, then approve with nits after fixes) dispositioned.
-- [ ] Done/Remaining reflect reality; record archived when Remaining is empty or moved.
+- [x] Done/Remaining reflect reality; record archived and the plan/index updated.

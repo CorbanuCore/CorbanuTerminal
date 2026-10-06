@@ -55,6 +55,7 @@ updated: 2026-10-06
 - [ ] Show resolved runtime facts and their source/generation, not just configuration intent; label unsupported or degraded components and prevent a misleading healthy protected-mode badge.
 - [ ] Correlate session/task/child policy and recent decisions without returning secret values, opaque authorization tokens or raw financial records.
 - [ ] Offer trusted navigation from /security to grants and migration; inspector reading cannot mutate authority or clear a stop.
+- [ ] Show MCP servers, hooks, the `!` user shell and app-server `command/exec` as "not contained" in protected levels: they get the PF-27-S02 environment allowlist but run outside the OS sandbox, allowed as user-configured/user-started (Travis, 2026-10-06).
 - [ ] Show screened search routing (PF-32), brokered browser login (PF-37), quarantine (PF-34) and Agent Sweep (PF-40) as "not available" until their P1 sprints land; never as healthy or enabled.
 - [ ] Test conflicting config, unsupported platform, stale health, broker crash, expired grant, tainted memory and inherited stricter child policy.
 - [ ] Add named `pf_41_s01` regression tests; update affected Cargo/Bazel/lock/schema edges together without broadening this feature.
