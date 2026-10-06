@@ -4,15 +4,33 @@
 //! memory or unattributed text, PF-30-S02), a model-selected action that
 //! reaches credentials, the vault or security policy needs fresh, exact human
 //! approval. Neither a cached session approval, a permission hook, the
-//! automatic reviewer nor `approval_policy = never` can stand in for it.
+//! automatic reviewer nor `approval_policy = never` can stand in for it, and
+//! the approval is bound to the taint generation and the effective security
+//! policy it was given under.
 //!
-//! This is a deterministic lexical net over the exact command or patch the
-//! host will run, not a prompt classifier, and it never relaxes anything:
-//! outside `source_envelopes` with Moderate/Aggressive it does nothing.
+//! This is a deterministic net over the exact command or patch the host will
+//! run, not a prompt classifier, and it never relaxes anything: outside
+//! `source_envelopes` with Moderate/Aggressive it does nothing. Besides the
+//! words of the command it follows variables, `cd`/`-C` folders, symlinks,
+//! inline interpreter code, encoded payloads, script files and patched
+//! scripts; code it cannot see through (a decode-and-run pipeline) counts as
+//! protected.
 
 use crate::tools::sandboxing::ApprovalAction;
+use codex_security_policy::ActorChain;
+use codex_security_policy::SecurityLevel;
 use codex_utils_path_uri::PathUri;
+use invocation::Code;
+use paths::Homes;
+use shell::SimpleCommand;
+use shell::basename;
+use std::collections::HashMap;
 use std::path::Path;
+
+mod indirect;
+mod invocation;
+mod paths;
+mod shell;
 
 /// Protected surfaces a tainted session may not reach on model authority.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -23,6 +41,10 @@ pub(crate) enum ProtectedActionKind {
     Credentials,
     /// Security policy: Corbanu config, rules, hooks, requirements, login state.
     SecurityPolicy,
+    /// Code the host cannot read before it runs (a download piped into a
+    /// shell, a script it cannot read in full, a variable it cannot see), or
+    /// an action it cannot describe.
+    UnseenCode,
 }
 
 impl ProtectedActionKind {
@@ -31,22 +53,47 @@ impl ProtectedActionKind {
             Self::Vault => "vault access",
             Self::Credentials => "credential access",
             Self::SecurityPolicy => "a security policy change",
+            Self::UnseenCode => "running code the host cannot read first",
         }
     }
 }
 
+/// The effective security policy a post-taint approval is bound to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum PolicyBinding {
+    /// No live policy runtime is bound to this session.
+    Unbound,
+    /// The policy runtime could not be read.
+    Unavailable,
+    Bound {
+        epoch: u64,
+        revocation_generation: u64,
+        kill_switch_active: bool,
+        level: SecurityLevel,
+        /// The agent lineage the session acts for.
+        actor_chain: ActorChain,
+    },
+}
+
+/// Session state a post-taint decision depends on.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PostTaintState {
+    /// Count of recorded batches without standing.
+    pub(crate) taint_generation: u64,
+    pub(crate) policy: PolicyBinding,
+}
+
 /// Host-held state for one protected action, captured before approval and
 /// checked again right before it runs.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PostTaintAction {
     pub(crate) kind: ProtectedActionKind,
-    /// Count of recorded batches without standing when the check started.
-    pub(crate) taint_generation: u64,
+    pub(crate) state: PostTaintState,
 }
 
 impl PostTaintAction {
     /// Shown in the approval prompt so the human sees why it was asked again.
-    pub(crate) fn approval_reason(self) -> String {
+    pub(crate) fn approval_reason(&self) -> String {
         format!(
             "Security level: this is {} after untrusted content entered the session. \
              Approve only if you asked for it; a cached or automatic approval does not count.",
@@ -54,7 +101,7 @@ impl PostTaintAction {
         )
     }
 
-    pub(crate) fn approvals_off_rejection(self) -> String {
+    pub(crate) fn approvals_off_rejection(&self) -> String {
         format!(
             "Not run: this is {} after untrusted content entered the session, so it needs your \
              approval, and approvals are off (approval_policy = never).",
@@ -62,12 +109,40 @@ impl PostTaintAction {
         )
     }
 
-    pub(crate) fn stale_rejection(self) -> String {
-        format!(
-            "Not run: new untrusted content arrived while {} was waiting for approval. \
-             Ask again if it is still needed.",
-            self.kind.describe()
+    /// Refusal before any prompt: the kill switch denies protected actions.
+    pub(crate) fn refused_up_front(&self) -> Option<String> {
+        matches!(
+            self.state.policy,
+            PolicyBinding::Bound {
+                kill_switch_active: true,
+                ..
+            }
         )
+        .then(|| {
+            format!(
+                "Not run: this is {} after untrusted content entered the session, and the \
+                 security kill switch is on.",
+                self.kind.describe()
+            )
+        })
+    }
+
+    /// Re-check after the human answered: the decision covers only the taint
+    /// and policy that were in front of them. `now` is `None` when the checks
+    /// no longer apply (the level or flag changed), which also refuses.
+    pub(crate) fn recheck(&self, now: Option<&PostTaintState>) -> Result<(), String> {
+        let describe = self.kind.describe();
+        match now {
+            Some(now) if now.taint_generation != self.state.taint_generation => Err(format!(
+                "Not run: new untrusted content arrived while {describe} was waiting for \
+                 approval. Ask again if it is still needed."
+            )),
+            Some(now) if *now == self.state => Ok(()),
+            Some(_) | None => Err(format!(
+                "Not run: the security policy changed while {describe} was waiting for \
+                 approval. Ask again if it is still needed."
+            )),
+        }
     }
 }
 
@@ -89,24 +164,6 @@ const POLICY_CONFIG_KEYS: &[&str] = &[
     "shell_environment_policy",
     "projects",
 ];
-/// Folders whose contents are credentials wherever they are.
-const CREDENTIAL_SEGMENTS: &[&str] = &[".ssh", ".aws", ".gnupg", ".kube"];
-/// Credential folders only in the user's home (projects often have their own).
-const USER_CREDENTIAL_SEGMENTS: &[&str] = &[".docker", ".azure", ".config/gh", ".config/gcloud"];
-const CREDENTIAL_FILES: &[&str] = &[
-    ".credentials.json",
-    ".netrc",
-    ".git-credentials",
-    ".npmrc",
-    ".pypirc",
-    "id_rsa",
-    "id_ecdsa",
-    "id_ed25519",
-    "id_dsa",
-];
-const SHELLS: &[&str] = &["sh", "bash", "zsh", "dash", "ksh", "fish"];
-/// Corbanu home folder names (besides the configured `CODEX_HOME`).
-const HOME_SEGMENTS: &[&str] = &[".corbanu", ".codex", ".pfterminal"];
 /// Credential commands: the command name plus words that make it a secret read.
 const CREDENTIAL_COMMANDS: &[(&str, &[&str])] = &[
     (
@@ -133,6 +190,42 @@ const CREDENTIAL_COMMANDS: &[(&str, &[&str])] = &[
     ("gpg", &["--export-secret-keys", "--export-secret-subkeys"]),
     ("pass", &["show"]),
 ];
+/// Commands that read a folder tree (with the flag that makes them do so,
+/// if any): pointed at a folder holding a home, they take its credentials.
+const RECURSIVE_READERS: &[(&str, &[&str])] = &[
+    ("tar", &[]),
+    ("zip", &[]),
+    ("7z", &[]),
+    ("7za", &[]),
+    ("rsync", &[]),
+    ("scp", &[]),
+    ("ditto", &[]),
+    ("cpio", &[]),
+    ("pax", &[]),
+    ("cp", &["-r", "-R", "-a", "--recursive", "--archive"]),
+    ("grep", &["-r", "-R", "--recursive"]),
+    ("rg", &["--hidden", "-u", "-.", "--no-ignore"]),
+    ("find", &["-exec", "-execdir", "-ok"]),
+];
+/// Flags whose value is the folder later relative words resolve against.
+const FOLDER_FLAGS: &[&str] = &["-C", "--directory", "--cwd", "--cd", "--chdir"];
+/// Nesting limit for scripts, payloads and literals classified inside an
+/// action. Deeper nesting fails closed.
+const MAX_DEPTH: usize = 4;
+/// Bytes of command text one classification lexes; more fail closed.
+const MAX_COMMAND_BYTES: usize = 1024 * 1024;
+/// Script files one classification reads; more fail closed.
+const MAX_SCRIPT_FILES: usize = 16;
+/// Magic numbers of executables, which are not read as scripts.
+const BINARY_MAGIC: &[&[u8]] = &[
+    b"\x7fELF",
+    b"\xfe\xed\xfa\xce",
+    b"\xfe\xed\xfa\xcf",
+    b"\xce\xfa\xed\xfe",
+    b"\xcf\xfa\xed\xfe",
+    b"\xca\xfe\xba\xbe",
+    b"MZ",
+];
 
 /// Classify the exact action the host is about to run. `codex_home` is the
 /// session's Corbanu home; the user's home resolves `~` and `$HOME`.
@@ -145,275 +238,64 @@ pub(super) fn classify_with(
     codex_home: &Path,
     user_home: Option<&Path>,
 ) -> Option<ProtectedActionKind> {
-    let homes = Homes {
-        codex_home: normalized(&codex_home.to_string_lossy()),
-        user_home: user_home.map(|home| normalized(&home.to_string_lossy())),
+    let mut classifier = Classifier {
+        homes: Homes::new(codex_home, user_home),
+        found: None,
+        scripts_read: 0,
+        rebuilt: 0,
+        not_shell: 0,
     };
-    let strongest =
-        |kinds: &mut dyn Iterator<Item = ProtectedActionKind>| kinds.max_by_key(|kind| rank(*kind));
     match action {
         ApprovalAction::Shell { command, cwd, .. }
         | ApprovalAction::ExecCommand { command, cwd, .. } => {
             let cwd = path_text(cwd);
-            strongest(
-                &mut homes
-                    .classify_path(&cwd)
-                    .into_iter()
-                    .chain(classify_command(command, &homes, &cwd)),
-            )
+            classifier.homes.allow_lookups_under(&cwd);
+            classifier.path(&cwd);
+            classifier.command(command, &cwd, /*depth*/ 0);
         }
-        ApprovalAction::ApplyPatch { files, .. } => strongest(
-            &mut files
-                .iter()
-                .filter_map(|file| homes.classify_path(&path_text(file))),
-        ),
+        ApprovalAction::ApplyPatch {
+            files, patch, cwd, ..
+        } => {
+            let cwd = path_text(cwd);
+            classifier.homes.allow_lookups_under(&cwd);
+            for file in files {
+                classifier.path(&path_text(file));
+            }
+            // Commands written into a file that is run later are judged now,
+            // whether the file looks runnable by name or by where it leads.
+            for (file, body) in indirect::patch_additions(patch) {
+                let resolved = classifier.homes.resolve(&file, &cwd);
+                let canonical = classifier.homes.canonical(&resolved);
+                let runnable = [Some(resolved.to_lowercase()), canonical]
+                    .into_iter()
+                    .flatten()
+                    .any(|path| indirect::is_runnable_file(&path, &body));
+                if runnable {
+                    classifier.script(&body, &cwd, /*depth*/ 1);
+                }
+            }
+        }
     }
-}
-
-struct Homes {
-    codex_home: String,
-    user_home: Option<String>,
-}
-
-fn normalized(path: &str) -> String {
-    path.trim_end_matches('/').to_lowercase()
+    // A lookup budget ran out: something was not followed.
+    if classifier.homes.exhausted() {
+        classifier.note(ProtectedActionKind::UnseenCode);
+    }
+    classifier.found
 }
 
 fn path_text(path: &PathUri) -> String {
     path.to_abs_path()
         .map(|path| path.as_path().to_string_lossy().into_owned())
         .unwrap_or_else(|_| path.to_string())
-        .to_lowercase()
 }
 
 fn rank(kind: ProtectedActionKind) -> u8 {
     match kind {
-        ProtectedActionKind::SecurityPolicy => 0,
-        ProtectedActionKind::Credentials => 1,
-        ProtectedActionKind::Vault => 2,
+        ProtectedActionKind::UnseenCode => 0,
+        ProtectedActionKind::SecurityPolicy => 1,
+        ProtectedActionKind::Credentials => 2,
+        ProtectedActionKind::Vault => 3,
     }
-}
-
-fn basename(word: &str) -> &str {
-    word.trim_end_matches('/')
-        .rsplit('/')
-        .next()
-        .unwrap_or(word)
-}
-
-impl Homes {
-    /// Expand `~`, `$HOME` and `$CODEX_HOME` spellings and make a relative
-    /// word absolute against the command's working folder.
-    fn resolve(&self, word: &str, cwd: &str) -> String {
-        let mut word = word.to_string();
-        for (spelling, value) in [
-            ("${codex_home}", Some(&self.codex_home)),
-            ("$codex_home", Some(&self.codex_home)),
-            ("${home}", self.user_home.as_ref()),
-            ("$home", self.user_home.as_ref()),
-        ] {
-            if let Some(value) = value {
-                word = word.replace(spelling, value);
-            }
-        }
-        if let Some(home) = &self.user_home
-            && (word == "~" || word.starts_with("~/"))
-        {
-            word = format!("{home}{}", &word[1..]);
-        }
-        if word.starts_with('/') || cwd.is_empty() {
-            normalize_path(&word)
-        } else {
-            normalize_path(&format!("{cwd}/{word}"))
-        }
-    }
-
-    /// The protected kind of one absolute path. Glob segments count as any
-    /// protected folder they could match.
-    fn classify_path(&self, path: &str) -> Option<ProtectedActionKind> {
-        let path = normalize_path(&path.to_lowercase());
-        let segments: Vec<&str> = path
-            .split('/')
-            .filter(|segment| !segment.is_empty())
-            .collect();
-        let name = segments.last().copied().unwrap_or_default();
-        // Credential folders in the user's home, matched segment by segment
-        // so a glob such as `~/.dock*` still counts.
-        let under_user_home = |folder: &str| {
-            self.user_home.as_ref().is_some_and(|home| {
-                path.strip_prefix(home.as_str())
-                    .filter(|rest| rest.starts_with('/'))
-                    .is_some_and(|rest| {
-                        let mut actual = rest.split('/').filter(|segment| !segment.is_empty());
-                        folder.split('/').all(|expected| {
-                            actual.next().is_some_and(|got| {
-                                glob_matches(got, expected)
-                                    // `*` matches non-dot folder names.
-                                    || (!expected.starts_with('.') && glob_any(got, expected))
-                            })
-                        })
-                    })
-            })
-        };
-        if segments
-            .iter()
-            .any(|segment| matches_any(segment, CREDENTIAL_SEGMENTS))
-            || USER_CREDENTIAL_SEGMENTS
-                .iter()
-                .any(|folder| under_user_home(folder))
-            || CREDENTIAL_FILES.iter().any(|file| glob_matches(name, file))
-            || (glob_matches(name, "hosts.yml")
-                && segments.iter().any(|segment| glob_any(segment, "gh")))
-            || name.starts_with("id_rsa")
-            || name.starts_with("id_ed25519")
-        {
-            return Some(ProtectedActionKind::Credentials);
-        }
-        let below_home = self.below_home(&path, &segments)?;
-        let first = below_home
-            .split('/')
-            .find(|segment| !segment.is_empty())
-            .unwrap_or("");
-        // Agent worktrees kept under the home are ordinary workspaces.
-        if first == "worktrees" {
-            return None;
-        }
-        if name.contains("vault") || first.contains("vault") {
-            return Some(ProtectedActionKind::Vault);
-        }
-        if name.starts_with("auth") || name.contains("credential") || name.ends_with(".key") {
-            return Some(ProtectedActionKind::Credentials);
-        }
-        Some(ProtectedActionKind::SecurityPolicy)
-    }
-
-    /// The part of `path` below a Corbanu home, if it is inside one: the
-    /// configured home as a whole-segment run anywhere in the path, or a
-    /// default home folder name (or a glob that could match one) as a segment.
-    fn below_home<'a>(&self, path: &'a str, segments: &[&str]) -> Option<&'a str> {
-        if !self.codex_home.is_empty() {
-            let found = path
-                .match_indices(self.codex_home.as_str())
-                .find_map(|(index, _)| {
-                    let rest = &path[index + self.codex_home.len()..];
-                    (rest.is_empty() || rest.starts_with('/')).then_some(rest)
-                });
-            if found.is_some() {
-                return found;
-            }
-        }
-        let index = segments
-            .iter()
-            .position(|segment| matches_any(segment, HOME_SEGMENTS))?;
-        let marker = format!("/{}", segments[index]);
-        path.match_indices(&marker)
-            .map(|(at, _)| &path[at + marker.len()..])
-            .find(|rest| rest.is_empty() || rest.starts_with('/'))
-    }
-}
-
-/// Resolve `.`, `..` and repeated slashes without touching the filesystem.
-fn normalize_path(path: &str) -> String {
-    let mut parts: Vec<&str> = Vec::new();
-    for segment in path.split('/') {
-        match segment {
-            "" | "." => {}
-            ".." => {
-                parts.pop();
-            }
-            segment => parts.push(segment),
-        }
-    }
-    format!("/{}", parts.join("/"))
-}
-
-fn matches_any(segment: &str, names: &[&str]) -> bool {
-    names.iter().any(|name| glob_matches(segment, name))
-}
-
-/// Whether the shell glob `pattern` (`*`, `?`, `[...]`) could match `name`.
-/// Without glob characters this is equality.
-fn glob_matches(pattern: &str, name: &str) -> bool {
-    // A leading wildcard never expands to a dot-name in the shell (no
-    // `dotglob`), and treating `*` or `*.json` as protected would block
-    // ordinary work: only an explicit prefix can name a protected file.
-    if pattern.starts_with(['*', '?', '[']) {
-        return pattern == name;
-    }
-    glob_any(pattern, name)
-}
-
-/// The glob match itself, leading wildcards included.
-fn glob_any(pattern: &str, name: &str) -> bool {
-    fn matches(pattern: &[char], name: &[char]) -> bool {
-        match pattern.first() {
-            None => name.is_empty(),
-            Some('*') => (0..=name.len()).any(|skip| matches(&pattern[1..], &name[skip..])),
-            Some('?') => !name.is_empty() && matches(&pattern[1..], &name[1..]),
-            Some('[') => match pattern.iter().position(|ch| *ch == ']') {
-                Some(close) => !name.is_empty() && matches(&pattern[close + 1..], &name[1..]),
-                None => name.first() == Some(&'[') && matches(&pattern[1..], &name[1..]),
-            },
-            Some(ch) => name.first() == Some(ch) && matches(&pattern[1..], &name[1..]),
-        }
-    }
-    let pattern: Vec<char> = pattern.chars().collect();
-    let name: Vec<char> = name.chars().collect();
-    matches(&pattern, &name)
-}
-
-/// Simple commands of the argv and of any script inside it (`bash -lc
-/// "..."`): words split on whitespace, with quotes and backslashes removed as
-/// the shell does, and command boundaries kept.
-fn simple_commands(command: &[String]) -> Vec<Vec<String>> {
-    let mut commands: Vec<Vec<String>> = vec![Vec::new()];
-    let mut previous: Option<&str> = None;
-    for arg in command {
-        // The script after a shell's `-c`/`-lc` is its own command line.
-        let in_shell = commands
-            .last()
-            .and_then(|words| words.first())
-            .is_some_and(|_| {
-                commands.last().is_some_and(|words| {
-                    words
-                        .iter()
-                        .any(|word| SHELLS.contains(&basename(word.as_str())))
-                })
-            });
-        if in_shell
-            && previous.is_some_and(|flag| {
-                flag.starts_with('-') && !flag.starts_with("--") && flag.ends_with('c')
-            })
-        {
-            commands.push(Vec::new());
-        }
-        previous = Some(arg.as_str());
-        let mut word = String::new();
-        let flush = |word: &mut String, commands: &mut Vec<Vec<String>>| {
-            if !word.is_empty() {
-                commands
-                    .last_mut()
-                    .expect("one command")
-                    .push(std::mem::take(word).to_lowercase());
-            }
-        };
-        for ch in arg.chars() {
-            match ch {
-                '\'' | '"' | '\\' | '{' | '}' => {}
-                ';' | '|' | '&' | '(' | ')' | '`' | '\n' => {
-                    flush(&mut word, &mut commands);
-                    commands.push(Vec::new());
-                }
-                ch if ch.is_whitespace() || matches!(ch, '<' | '>' | ',') => {
-                    flush(&mut word, &mut commands);
-                }
-                ch => word.push(ch),
-            }
-        }
-        flush(&mut word, &mut commands);
-    }
-    commands.retain(|words| !words.is_empty());
-    commands
 }
 
 /// The CLI subcommand: the first word that is neither a flag nor a flag's value.
@@ -425,7 +307,6 @@ fn subcommand(args: &[String]) -> Option<&str> {
         "--profile",
         "-m",
         "--model",
-        "-C",
         "--cd",
         "-s",
         "--sandbox",
@@ -448,57 +329,263 @@ fn subcommand(args: &[String]) -> Option<&str> {
     None
 }
 
-fn classify_command(command: &[String], homes: &Homes, cwd: &str) -> Option<ProtectedActionKind> {
-    let mut found: Option<ProtectedActionKind> = None;
-    let mut note = |kind: ProtectedActionKind| {
-        if found.is_none_or(|current| rank(kind) > rank(current)) {
-            found = Some(kind);
+/// Whether `word` sets `flag`: exactly for long flags, and inside a group of
+/// short flags (`-rn` sets `-r`).
+fn has_flag(word: &str, flag: &str) -> bool {
+    if word == flag {
+        return true;
+    }
+    match flag.strip_prefix('-') {
+        Some(letter) if letter.len() == 1 && !letter.starts_with('-') => {
+            word.starts_with('-') && !word.starts_with("--") && word[1..].contains(letter)
         }
-    };
-    let policy_key = |value: &str| POLICY_CONFIG_KEYS.iter().any(|key| value.starts_with(key));
-    let mut cwd = cwd.to_string();
-    for words in simple_commands(command) {
-        // `cd` changes the folder later relative words resolve against.
-        if words.first().is_some_and(|word| word == "cd")
-            && let Some(target) = words.get(1)
+        _ => false,
+    }
+}
+
+/// Where the shell is while it runs a script: the folder, the previous one
+/// (`cd -`) and the `pushd` stack.
+struct Folders {
+    cwd: String,
+    previous: String,
+    stack: Vec<String>,
+}
+
+struct Classifier {
+    homes: Homes,
+    found: Option<ProtectedActionKind>,
+    scripts_read: usize,
+    /// Inside text rebuilt from joined literals: it names things but is not
+    /// itself run, so its variables are not judged as unseen code.
+    rebuilt: usize,
+    /// Inside a file that is not a shell script (Python, JavaScript, ...):
+    /// shell brace expansion does not apply to it.
+    not_shell: usize,
+}
+
+/// Whether a script the command runs must be read in full (it is what runs)
+/// or is read only if it is there (a module that may be installed).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Script {
+    Required,
+    IfPresent,
+}
+
+impl Classifier {
+    fn note(&mut self, kind: ProtectedActionKind) {
+        if self.found.is_none_or(|current| rank(kind) > rank(current)) {
+            self.found = Some(kind);
+        }
+    }
+
+    fn path(&mut self, path: &str) {
+        if let Some(kind) = self.homes.classify_resolved(path) {
+            self.note(kind);
+        }
+    }
+
+    /// A word that may be a path. Inside scripts, payloads and patches only
+    /// path-looking words are looked up on disk (the rest stay lexical), so a
+    /// long body cannot spend the lookup budget.
+    fn word_path(&mut self, resolved: &str, word: &str, depth: usize) {
+        if depth == 0 || word.contains('/') || word.starts_with(['.', '~', '$']) {
+            self.path(resolved);
+        } else if let Some(kind) = self.homes.classify_path(resolved) {
+            self.note(kind);
+        }
+    }
+
+    /// Text that is itself a command line (a script file, a decoded payload,
+    /// joined literals, patched lines).
+    fn script(&mut self, text: &str, cwd: &str, depth: usize) {
+        self.command(&["sh".into(), "-c".into(), text.into()], cwd, depth);
+    }
+
+    fn command(&mut self, command: &[String], cwd: &str, depth: usize) {
+        if depth > MAX_DEPTH {
+            // Too deeply nested to follow: fail closed.
+            self.note(ProtectedActionKind::UnseenCode);
+            return;
+        }
+        // A command line too long to classify fails closed.
+        if command.iter().map(String::len).sum::<usize>() > MAX_COMMAND_BYTES {
+            self.note(ProtectedActionKind::UnseenCode);
+            return;
+        }
+        let lexed = shell::simple_commands(command);
+        let pipe_sources: std::collections::HashSet<usize> = lexed
+            .commands
+            .iter()
+            .filter_map(|command| command.pipe_from)
+            .collect();
+        if (lexed.incomplete && self.not_shell == 0 && self.rebuilt == 0)
+            || indirect::opaque_execution(&lexed.commands)
         {
-            cwd = homes.resolve(target, &cwd);
+            self.note(ProtectedActionKind::UnseenCode);
+        }
+        let mut folders = Folders {
+            cwd: cwd.to_string(),
+            previous: cwd.to_string(),
+            stack: Vec::new(),
+        };
+        let mut variables: HashMap<String, String> = HashMap::new();
+        for (name, value) in [
+            ("PWD", Some(cwd)),
+            ("HOME", self.homes.user_home()),
+            ("CODEX_HOME", Some(self.homes.codex_home())),
+        ] {
+            if let Some(value) = value {
+                variables.insert(name.to_string(), value.to_string());
+            }
+        }
+        for (index, simple) in lexed.commands.iter().enumerate() {
+            let (words, unseen) = substitute(simple, &variables);
+            let feeds_pipe = pipe_sources.contains(&index);
+            self.simple_command(
+                simple,
+                &words,
+                &unseen,
+                feeds_pipe,
+                &mut folders,
+                &mut variables,
+                depth,
+            );
+        }
+        self.path(&folders.cwd);
+        // Strings assembled from literals by inline code (`'~/.co' + 'dex'`).
+        for arg in command {
+            for joined in indirect::joined_literals(arg) {
+                let resolved = self.homes.resolve(&joined, &folders.cwd);
+                self.word_path(&resolved, &joined, depth);
+                self.rebuilt += 1;
+                self.script(&joined, &folders.cwd, depth + 1);
+                self.rebuilt -= 1;
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn simple_command(
+        &mut self,
+        simple: &SimpleCommand,
+        words: &[String],
+        unseen: &[bool],
+        feeds_pipe: bool,
+        folders: &mut Folders,
+        variables: &mut HashMap<String, String>,
+        depth: usize,
+    ) {
+        let lower: Vec<String> = words.iter().map(|word| word.to_lowercase()).collect();
+        let command = indirect::command_word(words);
+        // Assignments (`A=x`, `export A=x`) feed later `$A` words.
+        let comment = words.first().is_some_and(|word| word.starts_with('#'));
+        let assigns = !comment
+            && command.as_ref().is_none_or(|(_, name)| {
+                matches!(
+                    name.as_str(),
+                    "export" | "local" | "declare" | "readonly" | "typeset"
+                )
+            });
+        if assigns {
+            for word in words {
+                if let Some((name, value)) = word.split_once('=')
+                    && !name.is_empty()
+                    && name
+                        .chars()
+                        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+                {
+                    // Output the classifier cannot see keeps the variable
+                    // unseen; an environment reference (`$JAVA_HOME/bin/java`)
+                    // is kept as written.
+                    // Once unseen, a variable stays unseen for the action
+                    // (a later assignment may not run).
+                    let value = if value.contains(shell::UNSEEN_OUTPUT)
+                        || variables
+                            .get(name)
+                            .is_some_and(|old| old.contains(shell::UNSEEN_OUTPUT))
+                    {
+                        shell::UNSEEN_OUTPUT.to_string()
+                    } else {
+                        value.to_string()
+                    };
+                    variables.insert(name.to_string(), value);
+                }
+            }
+        }
+        if let Some((index, name)) = &command {
+            let args = &words[index + 1..];
+            // Code named by a variable or substitution the classifier cannot
+            // see: the command word (`$X`, `bash -c "$X"`), an interpreter's
+            // inline code (`python3 -c "$X"`) or `eval "$x"`.
+            // Inline code, or an argument after it (`sh -c 'eval "$1"' _ "$X"`).
+            let inline_unseen = indirect::invocation(words).is_some_and(|invocation| {
+                matches!(invocation.code, Code::Inline(Some(code))
+                    if words
+                        .iter()
+                        // Attached code (`-c$X`) ends its option word.
+                        .position(|word| word.ends_with(code))
+                        .is_some_and(|at| unseen[at..].iter().any(|unseen| *unseen)))
+            });
+            let eval_unseen = name == "eval" && unseen[index + 1..].iter().any(|unseen| *unseen);
+            if self.rebuilt == 0 && (unseen[*index] || inline_unseen || eval_unseen) {
+                self.note(ProtectedActionKind::UnseenCode);
+            }
+            self.change_folder(name, args, folders, variables);
         }
         // Not only at command position: wrappers (`nice -n 5`, `sudo -u x`,
         // `timeout 9`, `eval`, `npx`, nested `sh -c`) put the real command later.
-        for (index, word) in words.iter().enumerate() {
+        for (index, word) in lower.iter().enumerate() {
             let name = basename(word);
-            let args = &words[index + 1..];
-            if CLI_NAMES.contains(&name) {
-                if args.iter().any(|word| word == "vault") {
-                    note(ProtectedActionKind::Vault);
-                }
-                if subcommand(args).is_some_and(|sub| CLI_POLICY_WORDS.contains(&sub)) {
-                    note(ProtectedActionKind::SecurityPolicy);
-                }
-                let policy_flag = args.iter().enumerate().any(|(index, word)| {
-                    CLI_POLICY_FLAGS.iter().any(|flag| word.contains(flag))
-                        || word.starts_with("--dangerously")
-                        || word.strip_prefix("--config=").is_some_and(policy_key)
-                        || (word.len() > 2 && word.strip_prefix("-c").is_some_and(policy_key))
-                        || (matches!(word.as_str(), "-c" | "--config")
-                            && args.get(index + 1).is_some_and(|value| policy_key(value)))
-                });
-                if policy_flag {
-                    note(ProtectedActionKind::SecurityPolicy);
-                }
+            let args = &lower[index + 1..];
+            let imported = index > 0 && matches!(lower[index - 1].as_str(), "from" | "import");
+            if CLI_NAMES.contains(&name) && !imported {
+                self.cli(args);
             }
             for (credential_command, verbs) in CREDENTIAL_COMMANDS {
                 if name == *credential_command
                     && args.iter().any(|word| verbs.contains(&word.as_str()))
                 {
-                    note(ProtectedActionKind::Credentials);
+                    self.note(ProtectedActionKind::Credentials);
                 }
             }
         }
-        for word in &words {
-            // Attached and assigned forms (`-o/path`, `f=@/path`) are paths too.
-            for candidate in word.split('=') {
+        let recursive = command.as_ref().is_some_and(|(_, name)| {
+            RECURSIVE_READERS.iter().any(|(reader, flags)| {
+                *reader == name.as_str()
+                    && (flags.is_empty()
+                        || (name == "find" && feeds_pipe)
+                        || lower
+                            .iter()
+                            .any(|word| flags.iter().any(|flag| has_flag(word, flag))))
+            })
+        });
+        let cwd = folders.cwd.clone();
+        // Words resolve against the folder of a `-C`/`--directory` flag
+        // (`tar -C ~ ...`, `git -C ~/.codex ...`) once one has been given.
+        let mut folder = cwd.clone();
+        let mut previous: Option<&str> = None;
+        for word in words {
+            // A folder flag's value is where the command runs, not what it reads.
+            let mut folder_value = false;
+            if let Some(flag) = previous
+                && FOLDER_FLAGS.contains(&flag)
+            {
+                folder = self.homes.resolve(word, &cwd);
+                folder_value = true;
+            } else if let Some((flag, value)) = word.split_once('=')
+                && FOLDER_FLAGS.contains(&flag)
+            {
+                folder = self.homes.resolve(value, &cwd);
+                folder_value = true;
+            }
+            previous = Some(word.as_str());
+            // Attached, assigned and volume forms (`-o/path`, `f=@/path`,
+            // `~/.aws:/c`) are paths too.
+            let pieces = std::iter::once(word.as_str()).chain(
+                word.split(['=', ':'])
+                    .filter(|piece| piece.len() < word.len()),
+            );
+            for candidate in pieces {
                 let candidate = candidate.trim_start_matches('@');
                 if candidate.is_empty() || candidate.starts_with('-') && !candidate.contains('/') {
                     continue;
@@ -507,16 +594,269 @@ fn classify_command(command: &[String], homes: &Homes, cwd: &str) -> Option<Prot
                     Some(slash) if candidate.starts_with('-') => &candidate[slash..],
                     _ => candidate,
                 };
-                if let Some(kind) = homes.classify_path(&homes.resolve(candidate, &cwd)) {
-                    note(kind);
+                // `-C` means something else to some commands (`grep -C 3`):
+                // resolve against both folders.
+                let bases = if folder == cwd {
+                    vec![folder.clone()]
+                } else {
+                    vec![folder.clone(), cwd.clone()]
+                };
+                for base in bases {
+                    let resolved = self.homes.resolve(candidate, &base);
+                    self.word_path(&resolved, candidate, depth);
+                    if recursive && !folder_value && self.homes.holds_a_home(&resolved) {
+                        self.note(ProtectedActionKind::Credentials);
+                    }
                 }
+            }
+            if let Some(payload) = indirect::decoded_payload(word) {
+                self.script(&payload, &cwd, depth + 1);
+            }
+        }
+        self.scripts_of(simple, words, unseen, command.as_ref(), &cwd, depth);
+    }
+
+    /// Read what the command runs from files: its script, a local Python
+    /// module, preloaded files, a redirected stdin, or the command itself when
+    /// it is a path. A required path the classifier cannot resolve (it holds
+    /// a variable) fails closed.
+    fn scripts_of(
+        &mut self,
+        simple: &SimpleCommand,
+        words: &[String],
+        unseen: &[bool],
+        command: Option<&(usize, String)>,
+        cwd: &str,
+        depth: usize,
+    ) {
+        let Some((index, name)) = command else {
+            return;
+        };
+        let local = |word: &str| word.starts_with(['.', '/', '~']);
+        let Some(invocation) = indirect::invocation(words) else {
+            let word = &words[*index];
+            if word.contains('/') {
+                // A binary through an environment path (`$JAVA_HOME/bin/java`)
+                // is not a script; an unseen one was already judged.
+                if !word.contains('$') {
+                    let file = self.homes.resolve(word, cwd);
+                    self.script_file(&file, cwd, depth, Script::Required);
+                }
+            }
+            return;
+        };
+        let shell =
+            shell::SHELLS.contains(&name.as_str()) || matches!(name.as_str(), "source" | ".");
+        match invocation.code {
+            Code::File(file) => self.required_script(file, cwd, depth, shell),
+            Code::Module(module) if module.contains('$') => {
+                self.note(ProtectedActionKind::UnseenCode);
+            }
+            Code::Module(module) => {
+                let module = module.replace('.', "/");
+                for candidate in [format!("{module}.py"), format!("{module}/__main__.py")] {
+                    let file = self.homes.resolve(&candidate, cwd);
+                    self.not_shell += 1;
+                    self.script_file(&file, cwd, depth, Script::IfPresent);
+                    self.not_shell -= 1;
+                }
+            }
+            Code::Stdin => {
+                if let Some(at) = simple.stdin_from {
+                    self.required_script(&words[at], cwd, depth, shell);
+                }
+                if simple.here_string.is_some_and(|at| unseen[at]) {
+                    self.note(ProtectedActionKind::UnseenCode);
+                }
+            }
+            Code::Inline(_) | Code::Tool => {}
+        }
+        for preload in invocation.preloads {
+            if local(preload) {
+                self.required_script(preload, cwd, depth, /*shell*/ false);
+            } else {
+                let file = self.homes.resolve(preload, cwd);
+                self.not_shell += 1;
+                self.script_file(&file, cwd, depth, Script::IfPresent);
+                self.not_shell -= 1;
             }
         }
     }
-    if let Some(kind) = homes.classify_path(&cwd) {
-        note(kind);
+
+    /// A script the command certainly runs: read in full or fail closed.
+    fn required_script(&mut self, file: &str, cwd: &str, depth: usize, shell: bool) {
+        if file.contains('$') || file.contains(shell::UNSEEN_OUTPUT) {
+            self.note(ProtectedActionKind::UnseenCode);
+            return;
+        }
+        let file = self.homes.resolve(file, cwd);
+        if !shell {
+            self.not_shell += 1;
+        }
+        self.script_file(&file, cwd, depth, Script::Required);
+        if !shell {
+            self.not_shell -= 1;
+        }
     }
-    found
+
+    /// Follow `cd`, `pushd` and `popd` (also behind `builtin`/`command`).
+    fn change_folder(
+        &self,
+        name: &str,
+        args: &[String],
+        folders: &mut Folders,
+        variables: &mut HashMap<String, String>,
+    ) {
+        let target = args
+            .iter()
+            .find(|word| !word.starts_with('-') || *word == "-");
+        let next = match (name, target) {
+            ("cd", None) => self.homes.user_home().map(str::to_string),
+            ("cd", Some(target)) if target == "-" => Some(folders.previous.clone()),
+            ("cd" | "pushd", Some(target)) => Some(self.homes.resolve(target, &folders.cwd)),
+            ("popd", _) => folders.stack.pop(),
+            _ => None,
+        };
+        if let Some(next) = next {
+            if name == "pushd" {
+                folders.stack.push(folders.cwd.clone());
+            }
+            folders.previous = std::mem::replace(&mut folders.cwd, next);
+            variables.insert("PWD".to_string(), folders.cwd.clone());
+            variables.insert("OLDPWD".to_string(), folders.previous.clone());
+        }
+    }
+
+    fn cli(&mut self, args: &[String]) {
+        let policy_key = |value: &str| POLICY_CONFIG_KEYS.iter().any(|key| value.starts_with(key));
+        if args.iter().any(|word| word == "vault") {
+            self.note(ProtectedActionKind::Vault);
+        }
+        if subcommand(args).is_some_and(|sub| CLI_POLICY_WORDS.contains(&sub)) {
+            self.note(ProtectedActionKind::SecurityPolicy);
+        }
+        let policy_flag = args.iter().enumerate().any(|(index, word)| {
+            CLI_POLICY_FLAGS.iter().any(|flag| word.contains(flag))
+                || word.starts_with("--dangerously")
+                || word.strip_prefix("--config=").is_some_and(policy_key)
+                || (word.len() > 2 && word.strip_prefix("-c").is_some_and(policy_key))
+                || (matches!(word.as_str(), "-c" | "--config")
+                    && args.get(index + 1).is_some_and(|value| policy_key(value)))
+        });
+        if policy_flag {
+            self.note(ProtectedActionKind::SecurityPolicy);
+        }
+    }
+
+    /// A script run from a file is judged by its text (a patched script run
+    /// later, `bash x.sh`, `./run`). Executables are recognised by their
+    /// magic number and skipped. A required script the classifier cannot read
+    /// in full (missing, written by the same command, not a regular file, too
+    /// large, past the file limit, or where lookups are not allowed) fails
+    /// closed; an optional one is skipped when it is not there.
+    fn script_file(&mut self, file: &str, cwd: &str, depth: usize, need: Script) {
+        use std::io::Read;
+        let unreadable = |classifier: &mut Self, missing: bool| {
+            if need == Script::Required || !missing {
+                classifier.note(ProtectedActionKind::UnseenCode);
+            }
+        };
+        if !self.homes.lookups_allowed(file) {
+            return unreadable(self, /*missing*/ false);
+        }
+        // Check before opening: opening a FIFO or device would block.
+        let Ok(metadata) = std::fs::metadata(file) else {
+            return unreadable(self, /*missing*/ true);
+        };
+        if !metadata.is_file() {
+            return unreadable(self, /*missing*/ false);
+        }
+        self.scripts_read += 1;
+        if self.scripts_read > MAX_SCRIPT_FILES {
+            return unreadable(self, /*missing*/ false);
+        }
+        let mut options = std::fs::OpenOptions::new();
+        options.read(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            // Never block if the file was swapped for a FIFO after the check.
+            options.custom_flags(libc::O_NONBLOCK);
+        }
+        let Ok(handle) = options.open(file) else {
+            return unreadable(self, /*missing*/ false);
+        };
+        if !handle.metadata().is_ok_and(|metadata| metadata.is_file()) {
+            return unreadable(self, /*missing*/ false);
+        }
+        let mut bytes = Vec::new();
+        let mut reader = handle.take(indirect::SCRIPT_READ_LIMIT + 1);
+        if reader.read_to_end(&mut bytes).is_err() {
+            return unreadable(self, /*missing*/ false);
+        }
+        // Executables first: their size does not matter.
+        if BINARY_MAGIC.iter().any(|magic| bytes.starts_with(magic)) {
+            return;
+        }
+        if bytes.len() as u64 > indirect::SCRIPT_READ_LIMIT {
+            return unreadable(self, /*missing*/ false);
+        }
+        // The shell skips NUL bytes; so does the scan.
+        bytes.retain(|byte| *byte != 0);
+        let text = String::from_utf8_lossy(&bytes);
+        self.script(&text, cwd, depth + 1);
+    }
+}
+
+/// Shell parameters that stand for the command's own arguments or status,
+/// which are already in front of the classifier.
+fn is_special_parameter(name: &str) -> bool {
+    matches!(name, "@" | "*" | "#" | "?" | "$" | "!" | "-" | "0")
+        || (name.len() == 1 && name.chars().all(|ch| ch.is_ascii_digit()))
+}
+
+/// Words with known `$NAME` variables replaced, left to right as the shell
+/// reads them (`$a$b` is `a` then `b`), and for each word whether it holds a
+/// value the classifier cannot see: a variable never assigned in this action
+/// (other than special parameters) or one set from an unseen substitution.
+fn substitute(
+    command: &SimpleCommand,
+    variables: &HashMap<String, String>,
+) -> (Vec<String>, Vec<bool>) {
+    command
+        .words
+        .iter()
+        .map(|word| {
+            let mut out = String::new();
+            let mut unseen = word.contains(shell::UNSEEN_OUTPUT);
+            let mut rest = word.as_str();
+            while let Some(at) = rest.find('$') {
+                out.push_str(&rest[..at]);
+                let after = &rest[at + 1..];
+                let len = match after.chars().next() {
+                    Some(ch) if "@*#?$!-".contains(ch) || ch.is_ascii_digit() => ch.len_utf8(),
+                    _ => after
+                        .find(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
+                        .unwrap_or(after.len()),
+                };
+                let name = &after[..len];
+                match variables.get(name) {
+                    Some(value) if len > 0 => {
+                        unseen |= value.contains(shell::UNSEEN_OUTPUT);
+                        out.push_str(value);
+                    }
+                    _ => {
+                        unseen |= len > 0 && !is_special_parameter(name);
+                        out.push('$');
+                        out.push_str(name);
+                    }
+                }
+                rest = &after[len..];
+            }
+            out.push_str(rest);
+            (out, unseen)
+        })
+        .unzip()
 }
 
 #[cfg(test)]

@@ -166,9 +166,24 @@ impl ToolOrchestrator {
         });
         // PF-30-S03: a protected action after untrusted content needs fresh,
         // exact human approval, whatever the requirement above would allow.
-        let post_taint = post_taint_action(tool, req, tool_ctx, &requirement);
-        if let Some(action) = post_taint {
+        let post_taint = post_taint_action(tool, req, tool_ctx, &requirement).await;
+        if let Some(action) = &post_taint {
+            if let Some(refusal) = action.refused_up_front() {
+                post_taint_outcome(
+                    action,
+                    tool_ctx,
+                    "refused_kill_switch",
+                    /*waited*/ None,
+                );
+                return Err(ToolError::Rejected(refusal));
+            }
             if approval_policy == AskForApproval::Never {
+                post_taint_outcome(
+                    action,
+                    tool_ctx,
+                    "refused_approvals_off",
+                    /*waited*/ None,
+                );
                 return Err(ToolError::Rejected(action.approvals_off_rejection()));
             }
             let approval_ctx = ApprovalCtx {
@@ -179,7 +194,8 @@ impl ToolOrchestrator {
                 network_approval_context: None,
                 fresh_human_authority: true,
             };
-            resolve_tool_apporval(
+            let asked = Instant::now();
+            let decision = resolve_tool_apporval(
                 tool,
                 req,
                 tool_ctx.call_id.as_str(),
@@ -188,18 +204,19 @@ impl ToolOrchestrator {
                 ApprovalReviewer::User,
                 &otel,
             )
-            .await?;
-            // Recompute at execution: taint that arrived while the prompt was
-            // open was not in front of the human when they decided.
-            if tool_ctx
-                .session
-                .services
-                .model_client()
-                .post_taint_generation()
-                != Some(action.taint_generation)
-            {
-                return Err(ToolError::Rejected(action.stale_rejection()));
-            }
+            .await;
+            post_taint_outcome(
+                action,
+                tool_ctx,
+                if decision.is_ok() {
+                    "approved"
+                } else {
+                    "declined"
+                },
+                Some(asked.elapsed()),
+            );
+            decision?;
+            post_taint_recheck(action, tool_ctx)?;
             already_approved = true;
         }
         match &requirement {
@@ -457,7 +474,7 @@ impl ToolOrchestrator {
                         session: &tool_ctx.session,
                         turn: &tool_ctx.turn,
                         call_id: &tool_ctx.call_id,
-                        retry_reason: Some(match post_taint {
+                        retry_reason: Some(match &post_taint {
                             Some(action) => format!("{} {retry_reason}", action.approval_reason()),
                             None => retry_reason,
                         }),
@@ -480,6 +497,9 @@ impl ToolOrchestrator {
                         &otel,
                     )
                     .await?;
+                    if let Some(action) = &post_taint {
+                        post_taint_recheck(action, tool_ctx)?;
+                    }
                 }
 
                 let retry_sandbox_requested = !unsandboxed_allowed
@@ -585,9 +605,12 @@ fn sandbox_outcome_from_tool_error(err: &ToolError) -> Option<&'static str> {
     }
 }
 
+/// PF-30-S03: how long classifying one post-taint action may take.
+const POST_TAINT_CLASSIFY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+
 /// PF-30-S03: the protected action this request performs, when post-taint
 /// checks apply and the session already holds content without standing.
-fn post_taint_action<Rq, Out, T>(
+async fn post_taint_action<Rq, Out, T>(
     tool: &T,
     req: &Rq,
     tool_ctx: &ToolCtx,
@@ -599,12 +622,12 @@ where
     if matches!(requirement, ExecApprovalRequirement::Forbidden { .. }) {
         return None;
     }
-    let taint_generation = tool_ctx
+    let state = tool_ctx
         .session
         .services
         .model_client()
-        .post_taint_generation()
-        .filter(|generation| *generation > 0)?;
+        .post_taint_state()
+        .filter(|state| state.taint_generation > 0)?;
     let ctx = ApprovalCtx {
         session: &tool_ctx.session,
         turn: &tool_ctx.turn,
@@ -614,24 +637,69 @@ where
         fresh_human_authority: true,
     };
     // An action the host cannot describe cannot be shown to be ordinary.
+    let started = Instant::now();
     let kind = match tool.approval_action(req, &ctx) {
-        Ok(action) => crate::security::tainted_action::classify(
-            &action,
-            tool_ctx.turn.config.codex_home.as_path(),
-        )?,
-        Err(_) => crate::security::tainted_action::ProtectedActionKind::SecurityPolicy,
+        Ok(action) => {
+            // Classification may look at the filesystem: keep it off the
+            // async workers and bounded in time; a stall fails closed.
+            let codex_home = tool_ctx.turn.config.codex_home.to_path_buf();
+            let classified = tokio::time::timeout(
+                POST_TAINT_CLASSIFY_TIMEOUT,
+                tokio::task::spawn_blocking(move || {
+                    crate::security::tainted_action::classify(&action, &codex_home)
+                }),
+            )
+            .await;
+            match classified {
+                Ok(Ok(kind)) => kind?,
+                Ok(Err(_)) | Err(_) => {
+                    crate::security::tainted_action::ProtectedActionKind::UnseenCode
+                }
+            }
+        }
+        Err(_) => crate::security::tainted_action::ProtectedActionKind::UnseenCode,
     };
     tracing::info!(
         target: "codex_core::security::tainted_action",
         kind = ?kind,
-        taint_generation,
+        taint_generation = state.taint_generation,
+        classify_us = started.elapsed().as_micros() as u64,
         call_id = %tool_ctx.call_id,
         "post-taint protected action needs fresh human approval"
     );
-    Some(crate::security::tainted_action::PostTaintAction {
-        kind,
-        taint_generation,
+    Some(crate::security::tainted_action::PostTaintAction { kind, state })
+}
+
+/// PF-30-S03: refuse when the taint or the effective policy changed while
+/// the human was deciding; they approved under what they saw.
+fn post_taint_recheck(
+    action: &crate::security::tainted_action::PostTaintAction,
+    tool_ctx: &ToolCtx,
+) -> Result<(), ToolError> {
+    let now = tool_ctx.session.services.model_client().post_taint_state();
+    action.recheck(now.as_ref()).map_err(|refusal| {
+        post_taint_outcome(action, tool_ctx, "refused_stale", /*waited*/ None);
+        ToolError::Rejected(refusal)
     })
+}
+
+/// PF-30-S03 / PF-26: one log line per post-taint decision, with how long
+/// the human took, so research workflows can count prompts and their cost.
+fn post_taint_outcome(
+    action: &crate::security::tainted_action::PostTaintAction,
+    tool_ctx: &ToolCtx,
+    outcome: &'static str,
+    waited: Option<std::time::Duration>,
+) {
+    tracing::info!(
+        target: "codex_core::security::tainted_action",
+        kind = ?action.kind,
+        taint_generation = action.state.taint_generation,
+        outcome,
+        waited_ms = waited.map(|waited| waited.as_millis() as u64),
+        call_id = %tool_ctx.call_id,
+        "post-taint decision"
+    );
 }
 
 fn build_denial_reason_from_output(_output: &ExecToolCallOutput) -> String {

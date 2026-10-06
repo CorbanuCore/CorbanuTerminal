@@ -159,7 +159,7 @@ separate authority. Current assignments/evidence are in the
 
 | Plan | Plan status | Current sprints | Execution authority |
 | --- | --- | ---: | --- |
-| [PF-13 / security — workstream 1](../plans/active/p0-security-levels.md) | Active | [16 current sprints](current/p0-security-levels/index.md) (core plus broker-lane PF-27-S05, 2 hosted), 40 archives | 2026-10-06: PF-27-S02, PF-28-S01 and PF-33-S01 completed and archived after Travis's decisions; PF-27-S06 moved to P1 |
+| [PF-13 / security — workstream 1](../plans/active/p0-security-levels.md) | Active | [15 current sprints](current/p0-security-levels/index.md) (core plus broker-lane PF-27-S05, 2 hosted), 41 archives | 2026-10-06: PF-30-S03 archived; PF-27-S02, PF-28-S01 and PF-33-S01 completed and archived after Travis's decisions; PF-27-S06 moved to P1 |
 | [P1 security hardening](../plans/proposed/p1-security-hardening.md) | Proposed | [32 draft sprints](current/p1-security-hardening/index.md) | None until plan activation; moved from P0 on 2026-10-06 |
 | [Accounting — workstream 2](../plans/active/portfolio-agent-cost-accounting.md) | Active | 3 current PF-60 sprints; S01 archived | S02 isolated native-state journal allocated after S01 review and defaults approval; no live collection |
 | [Task Node — workstream 3](../plans/active/initiative-delivery-control.md) | Active | PF-80-S01, two PF-79 beta drafts, PF-81-S01 visual QA draft | Offline native increments integrated locally; latest validity worker returned for manager review; beta/harness dependencies unchanged |
