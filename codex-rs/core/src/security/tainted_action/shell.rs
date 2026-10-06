@@ -23,6 +23,16 @@ pub(super) struct SimpleCommand {
     /// Commands inside this command's substitutions; their output is part of
     /// its words.
     pub(super) fed_by: Vec<usize>,
+    /// It runs inside `>(...)`: its stdin is the outer command's output.
+    pub(super) reads_outer_output: bool,
+}
+
+/// Lexed simple commands, in the order they finish (a substitution comes
+/// before the command using it), and whether some text was left unexpanded.
+pub(super) struct Lexed {
+    pub(super) commands: Vec<SimpleCommand>,
+    /// A brace expression had too many alternatives to expand.
+    pub(super) incomplete: bool,
 }
 
 pub(super) fn basename(word: &str) -> &str {
@@ -32,10 +42,10 @@ pub(super) fn basename(word: &str) -> &str {
         .unwrap_or(word)
 }
 
-/// Simple commands of the argv and of any script inside it (`bash -lc "..."`),
-/// in the order they finish: a substitution comes before the command using it.
-pub(super) fn simple_commands(command: &[String]) -> Vec<SimpleCommand> {
+/// Simple commands of the argv and of any script inside it (`bash -lc "..."`).
+pub(super) fn simple_commands(command: &[String]) -> Lexed {
     let mut lexer = Lexer::default();
+    let mut incomplete = false;
     let mut previous: Option<&str> = None;
     for arg in command {
         // The script after a shell's `-c`/`-lc` is its own command line.
@@ -46,18 +56,21 @@ pub(super) fn simple_commands(command: &[String]) -> Vec<SimpleCommand> {
             .any(|word| SHELLS.contains(&basename(&word.to_lowercase())));
         if in_shell
             && previous.is_some_and(|flag| {
-                flag.starts_with('-') && !flag.starts_with("--") && flag.ends_with('c')
+                flag.starts_with('-') && !flag.starts_with("--") && flag.contains('c')
             })
         {
             lexer.start(Start::Plain);
         }
         previous = Some(arg.as_str());
-        for expanded in expand_braces(&replace_ifs(arg)) {
-            lexer.arg(&expanded);
-            lexer.flush();
-        }
+        let (expanded, complete) = expand_braces(&replace_ifs(arg));
+        incomplete |= !complete;
+        lexer.arg(&expanded);
+        lexer.flush();
     }
-    lexer.finish()
+    Lexed {
+        commands: lexer.finish(),
+        incomplete,
+    }
 }
 
 /// `$IFS` and `${IFS}` separate words.
@@ -66,30 +79,45 @@ fn replace_ifs(arg: &str) -> String {
     super::paths::replace_variable(&arg, "IFS", " ")
 }
 
-/// Bounded brace expansion: `~/.{x,a}ws` names `~/.xws` and `~/.aws`. Each
-/// alternative becomes its own argument; too many are left as written.
-fn expand_braces(arg: &str) -> Vec<String> {
-    let mut words = vec![arg.to_string()];
-    loop {
-        let mut next = Vec::new();
-        let mut expanded = false;
-        for word in &words {
-            match brace_alternatives(word) {
-                Some(alternatives) => {
-                    expanded = true;
-                    next.extend(alternatives);
-                }
-                None => next.push(word.clone()),
-            }
-            if next.len() > MAX_BRACE_EXPANSION {
-                return vec![arg.to_string()];
+/// Bounded brace expansion inside each whitespace-separated word:
+/// `~/.{x,a}ws` names `~/.xws` and `~/.aws`. Returns the text with each
+/// word's alternatives separated by spaces, and `false` when a word had too
+/// many alternatives (left as written).
+fn expand_braces(text: &str) -> (String, bool) {
+    if !text.contains('{') {
+        return (text.to_string(), true);
+    }
+    let mut complete = true;
+    let mut out = String::with_capacity(text.len());
+    let mut word = String::new();
+    let mut flush = |word: &mut String, out: &mut String| {
+        if word.is_empty() {
+            return;
+        }
+        let mut words = vec![std::mem::take(word)];
+        while let Some(position) = words
+            .iter()
+            .position(|word| brace_alternatives(word).is_some())
+        {
+            let alternatives = brace_alternatives(&words[position]).unwrap_or_default();
+            words.splice(position..=position, alternatives);
+            if words.len() > MAX_BRACE_EXPANSION {
+                complete = false;
+                break;
             }
         }
-        words = next;
-        if !expanded {
-            return words;
+        out.push_str(&words.join(" "));
+    };
+    for ch in text.chars() {
+        if ch.is_whitespace() {
+            flush(&mut word, &mut out);
+            out.push(ch);
+        } else {
+            word.push(ch);
         }
     }
+    flush(&mut word, &mut out);
+    (out, complete)
 }
 
 /// The alternatives of the first innermost `{a,b}` group, if any.
@@ -97,7 +125,7 @@ fn brace_alternatives(word: &str) -> Option<Vec<String>> {
     let close = word.find('}')?;
     let open = word[..close].rfind('{')?;
     let inner = &word[open + 1..close];
-    if !inner.contains(',') || inner.contains(char::is_whitespace) {
+    if !inner.contains(',') {
         return None;
     }
     let (prefix, suffix) = (&word[..open], &word[close + 1..]);
@@ -122,6 +150,10 @@ struct Open {
     outer_word: String,
     first: usize,
     backtick: bool,
+    /// `>(...)`: the substitution reads the outer command's output.
+    output: bool,
+    /// `<(...)`: the outer command gets a file name, not the text.
+    process: bool,
 }
 
 #[derive(Default)]
@@ -144,21 +176,16 @@ impl Lexer {
     fn finish_current(&mut self) -> Option<usize> {
         self.flush();
         if self.current.words.is_empty() && self.current.fed_by.is_empty() {
-            let substituted = self.current.substituted;
-            self.current = SimpleCommand {
-                substituted,
-                ..SimpleCommand::default()
-            };
+            // Nothing to finish: keep its pipe and context (`a | (sh)`,
+            // `a |& sh`, `a |` + newline + `sh`).
             return None;
         }
-        let substituted = self.current.substituted;
-        let finished = std::mem::replace(
-            &mut self.current,
-            SimpleCommand {
-                substituted,
-                ..SimpleCommand::default()
-            },
-        );
+        let next = SimpleCommand {
+            substituted: self.current.substituted,
+            reads_outer_output: self.current.reads_outer_output,
+            ..SimpleCommand::default()
+        };
+        let finished = std::mem::replace(&mut self.current, next);
         self.done.push(finished);
         Some(self.done.len() - 1)
     }
@@ -171,11 +198,12 @@ impl Lexer {
         }
     }
 
-    fn open_substitution(&mut self, backtick: bool) {
+    fn open_substitution(&mut self, backtick: bool, output: bool, process: bool) {
         let outer = std::mem::replace(
             &mut self.current,
             SimpleCommand {
                 substituted: true,
+                reads_outer_output: output,
                 ..SimpleCommand::default()
             },
         );
@@ -185,6 +213,8 @@ impl Lexer {
             outer_word,
             first: self.done.len(),
             backtick,
+            output,
+            process,
         });
     }
 
@@ -198,14 +228,18 @@ impl Lexer {
         };
         let inner: Vec<usize> = (open.first..self.done.len()).collect();
         let spliced = match inner.as_slice() {
-            [only] => literal_output(&self.done[*only].words),
+            [only] if !open.output && !open.process => substitution_output(&self.done[*only].words),
             _ => None,
         };
         self.current = open.outer;
-        self.current.fed_by.extend(inner);
+        if !open.output {
+            self.current.fed_by.extend(inner);
+        }
         self.word = open.outer_word;
-        self.word
-            .push_str(spliced.as_deref().unwrap_or(UNSEEN_OUTPUT));
+        if !open.output {
+            self.word
+                .push_str(spliced.as_deref().unwrap_or(UNSEEN_OUTPUT));
+        }
     }
 
     fn finish(mut self) -> Vec<SimpleCommand> {
@@ -227,8 +261,12 @@ impl Lexer {
                     index = self.ansi_c(&chars, index + 2);
                     continue;
                 }
-                '$' | '<' if next == Some('(') => {
-                    self.open_substitution(/*backtick*/ false);
+                '$' | '<' | '>' if next == Some('(') => {
+                    self.open_substitution(
+                        /*backtick*/ false,
+                        /*output*/ ch == '>',
+                        /*process*/ ch == '<',
+                    );
                     index += 2;
                     continue;
                 }
@@ -238,7 +276,9 @@ impl Lexer {
                     if self.open.last().is_some_and(|open| open.backtick) {
                         self.close_substitution();
                     } else {
-                        self.open_substitution(/*backtick*/ true);
+                        self.open_substitution(
+                            /*backtick*/ true, /*output*/ false, /*process*/ false,
+                        );
                     }
                 }
                 ')' if self.open.last().is_some_and(|open| !open.backtick) => {
@@ -311,6 +351,27 @@ impl Lexer {
             }
         }
         index
+    }
+}
+
+/// What a substitution prints when the classifier can tell: `echo`/`printf`
+/// text, the name a lookup command was given (`which corbanu` stands for
+/// `corbanu`), or a neutral value for commands that print facts, not code.
+fn substitution_output(words: &[String]) -> Option<String> {
+    if let Some(printed) = literal_output(words) {
+        return Some(printed);
+    }
+    let (first, rest) = words.split_first()?;
+    let operand = rest.iter().rev().find(|word| !word.starts_with('-'));
+    match basename(&first.to_lowercase()) {
+        "which" | "dirname" | "basename" | "realpath" | "readlink" => operand.cloned(),
+        "command" if rest.first().is_some_and(|word| word == "-v") => operand.cloned(),
+        "pwd" => Some("$PWD".to_string()),
+        "date" | "uname" | "whoami" | "hostname" | "id" | "nproc" | "getconf" => {
+            Some("value".to_string())
+        }
+        "git" if rest.first().is_some_and(|word| word == "rev-parse") => Some("value".to_string()),
+        _ => None,
     }
 }
 

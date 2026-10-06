@@ -643,11 +643,11 @@ where
             match classified {
                 Ok(Ok(kind)) => kind?,
                 Ok(Err(_)) | Err(_) => {
-                    crate::security::tainted_action::ProtectedActionKind::SecurityPolicy
+                    crate::security::tainted_action::ProtectedActionKind::UnseenCode
                 }
             }
         }
-        Err(_) => crate::security::tainted_action::ProtectedActionKind::SecurityPolicy,
+        Err(_) => crate::security::tainted_action::ProtectedActionKind::UnseenCode,
     };
     tracing::info!(
         target: "codex_core::security::tainted_action",

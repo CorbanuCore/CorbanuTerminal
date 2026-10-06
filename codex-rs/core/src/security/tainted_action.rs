@@ -20,6 +20,7 @@ use crate::tools::sandboxing::ApprovalAction;
 use codex_security_policy::ActorChain;
 use codex_security_policy::SecurityLevel;
 use codex_utils_path_uri::PathUri;
+use invocation::Code;
 use paths::Homes;
 use shell::SimpleCommand;
 use shell::basename;
@@ -27,6 +28,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 mod indirect;
+mod invocation;
 mod paths;
 mod shell;
 
@@ -37,9 +39,12 @@ pub(crate) enum ProtectedActionKind {
     Vault,
     /// Credential stores: login tokens, SSH/cloud keys, OS keychain.
     Credentials,
-    /// Security policy: Corbanu config, rules, hooks, requirements, login
-    /// state, and code the host cannot describe.
+    /// Security policy: Corbanu config, rules, hooks, requirements, login state.
     SecurityPolicy,
+    /// Code the host cannot read before it runs (a download piped into a
+    /// shell, a script it cannot read in full, a variable it cannot see), or
+    /// an action it cannot describe.
+    UnseenCode,
 }
 
 impl ProtectedActionKind {
@@ -48,6 +53,7 @@ impl ProtectedActionKind {
             Self::Vault => "vault access",
             Self::Credentials => "credential access",
             Self::SecurityPolicy => "a security policy change",
+            Self::UnseenCode => "running code the host cannot read first",
         }
     }
 }
@@ -234,6 +240,7 @@ pub(super) fn classify_with(
         homes: Homes::new(codex_home, user_home),
         found: None,
         scripts_read: 0,
+        rebuilt: 0,
     };
     match action {
         ApprovalAction::Shell { command, cwd, .. }
@@ -268,7 +275,7 @@ pub(super) fn classify_with(
     }
     // A lookup budget ran out: something was not followed.
     if classifier.homes.exhausted() {
-        classifier.note(ProtectedActionKind::SecurityPolicy);
+        classifier.note(ProtectedActionKind::UnseenCode);
     }
     classifier.found
 }
@@ -281,9 +288,10 @@ fn path_text(path: &PathUri) -> String {
 
 fn rank(kind: ProtectedActionKind) -> u8 {
     match kind {
-        ProtectedActionKind::SecurityPolicy => 0,
-        ProtectedActionKind::Credentials => 1,
-        ProtectedActionKind::Vault => 2,
+        ProtectedActionKind::UnseenCode => 0,
+        ProtectedActionKind::SecurityPolicy => 1,
+        ProtectedActionKind::Credentials => 2,
+        ProtectedActionKind::Vault => 3,
     }
 }
 
@@ -344,6 +352,17 @@ struct Classifier {
     homes: Homes,
     found: Option<ProtectedActionKind>,
     scripts_read: usize,
+    /// Inside text rebuilt from joined literals: it names things but is not
+    /// itself run, so its variables are not judged as unseen code.
+    rebuilt: usize,
+}
+
+/// Whether a script the command runs must be read in full (it is what runs)
+/// or is read only if it is there (a module that may be installed).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Script {
+    Required,
+    IfPresent,
 }
 
 impl Classifier {
@@ -359,6 +378,17 @@ impl Classifier {
         }
     }
 
+    /// A word that may be a path. Inside scripts, payloads and patches only
+    /// path-looking words are looked up on disk (the rest stay lexical), so a
+    /// long body cannot spend the lookup budget.
+    fn word_path(&mut self, resolved: &str, word: &str, depth: usize) {
+        if depth == 0 || word.contains('/') || word.starts_with(['.', '~', '$']) {
+            self.path(resolved);
+        } else if let Some(kind) = self.homes.classify_path(resolved) {
+            self.note(kind);
+        }
+    }
+
     /// Text that is itself a command line (a script file, a decoded payload,
     /// joined literals, patched lines).
     fn script(&mut self, text: &str, cwd: &str, depth: usize) {
@@ -368,12 +398,12 @@ impl Classifier {
     fn command(&mut self, command: &[String], cwd: &str, depth: usize) {
         if depth > MAX_DEPTH {
             // Too deeply nested to follow: fail closed.
-            self.note(ProtectedActionKind::SecurityPolicy);
+            self.note(ProtectedActionKind::UnseenCode);
             return;
         }
-        let commands = shell::simple_commands(command);
-        if indirect::opaque_execution(&commands) {
-            self.note(ProtectedActionKind::SecurityPolicy);
+        let lexed = shell::simple_commands(command);
+        if lexed.incomplete || indirect::opaque_execution(&lexed.commands) {
+            self.note(ProtectedActionKind::UnseenCode);
         }
         let mut folders = Folders {
             cwd: cwd.to_string(),
@@ -390,25 +420,39 @@ impl Classifier {
                 variables.insert(name.to_string(), value.to_string());
             }
         }
-        for (index, simple) in commands.iter().enumerate() {
-            let words = substitute(simple, &variables);
-            let feeds_pipe = commands.iter().any(|later| later.pipe_from == Some(index));
-            self.simple_command(&words, feeds_pipe, &mut folders, &mut variables, depth);
+        for (index, simple) in lexed.commands.iter().enumerate() {
+            let (words, unseen) = substitute(simple, &variables);
+            let feeds_pipe = lexed
+                .commands
+                .iter()
+                .any(|later| later.pipe_from == Some(index));
+            self.simple_command(
+                &words,
+                &unseen,
+                feeds_pipe,
+                &mut folders,
+                &mut variables,
+                depth,
+            );
         }
         self.path(&folders.cwd);
         // Strings assembled from literals by inline code (`'~/.co' + 'dex'`).
         for arg in command {
             for joined in indirect::joined_literals(arg) {
                 let resolved = self.homes.resolve(&joined, &folders.cwd);
-                self.path(&resolved);
+                self.word_path(&resolved, &joined, depth);
+                self.rebuilt += 1;
                 self.script(&joined, &folders.cwd, depth + 1);
+                self.rebuilt -= 1;
             }
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn simple_command(
         &mut self,
         words: &[String],
+        unseen: &[bool],
         feeds_pipe: bool,
         folders: &mut Folders,
         variables: &mut HashMap<String, String>,
@@ -416,8 +460,7 @@ impl Classifier {
     ) {
         let lower: Vec<String> = words.iter().map(|word| word.to_lowercase()).collect();
         let command = indirect::command_word(words);
-        // Assignments (`A=x`, `export A=x`) feed later `$A` words. A value
-        // the classifier cannot see makes the variable unknown.
+        // Assignments (`A=x`, `export A=x`) feed later `$A` words.
         let assigns = command.as_ref().is_none_or(|(_, name)| {
             matches!(
                 name.as_str(),
@@ -432,26 +475,30 @@ impl Classifier {
                         .chars()
                         .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
                 {
-                    if value.contains('$') {
-                        variables.remove(name);
+                    // Output the classifier cannot see keeps the variable
+                    // unseen; an environment reference (`$JAVA_HOME/bin/java`)
+                    // is kept as written.
+                    let value = if value.contains(shell::UNSEEN_OUTPUT) {
+                        shell::UNSEEN_OUTPUT.to_string()
                     } else {
-                        variables.insert(name.to_string(), value.to_string());
-                    }
+                        value.to_string()
+                    };
+                    variables.insert(name.to_string(), value);
                 }
             }
         }
         if let Some((index, name)) = &command {
             let args = &words[index + 1..];
-            // Code named by a variable or a substitution the classifier
-            // cannot see (`$X`, `bash -c "$X"`, `python3 -c "$X"`).
-            let inline_unseen = args.windows(2).any(|pair| {
-                matches!(pair[0].as_str(), "-c" | "-e" | "--eval") && pair[1].starts_with('$')
+            // Code named by a variable or substitution the classifier cannot
+            // see: the command word (`$X`, `bash -c "$X"`), an interpreter's
+            // inline code (`python3 -c "$X"`) or `eval "$x"`.
+            let inline_unseen = indirect::invocation(words).is_some_and(|invocation| {
+                matches!(invocation.code, Code::Inline(Some(code))
+                    if words.iter().zip(unseen).any(|(word, unseen)| *unseen && word == code))
             });
-            if name.starts_with('$')
-                || inline_unseen
-                || (name == "eval" && args.iter().any(|arg| arg.contains('$')))
-            {
-                self.note(ProtectedActionKind::SecurityPolicy);
+            let eval_unseen = name == "eval" && unseen[index + 1..].iter().any(|unseen| *unseen);
+            if self.rebuilt == 0 && (unseen[*index] || inline_unseen || eval_unseen) {
+                self.note(ProtectedActionKind::UnseenCode);
             }
             self.change_folder(name, args, folders);
         }
@@ -521,7 +568,7 @@ impl Classifier {
                 };
                 for base in bases {
                     let resolved = self.homes.resolve(candidate, &base);
-                    self.path(&resolved);
+                    self.word_path(&resolved, candidate, depth);
                     if recursive && !folder_value && self.homes.holds_a_home(&resolved) {
                         self.note(ProtectedActionKind::Credentials);
                     }
@@ -531,12 +578,54 @@ impl Classifier {
                 self.script(&payload, &cwd, depth + 1);
             }
         }
-        match indirect::script_source(words) {
-            Some(indirect::ScriptSource::File(file)) => {
-                let file = self.homes.resolve(file, &cwd);
-                self.script_file(&file, &cwd, depth);
+        self.scripts_of(words, command.as_ref(), &cwd, depth);
+    }
+
+    /// Read what the command runs from files: its script, a local Python
+    /// module, preloaded files, or the command itself when it is a path.
+    fn scripts_of(
+        &mut self,
+        words: &[String],
+        command: Option<&(usize, String)>,
+        cwd: &str,
+        depth: usize,
+    ) {
+        let Some((index, _)) = command else {
+            return;
+        };
+        let path_like = |word: &str| word.contains('/') || word.starts_with('.');
+        match indirect::invocation(words) {
+            Some(invocation) => {
+                match invocation.code {
+                    // A path through an environment variable cannot be read.
+                    Code::File(file) if file.contains('$') => {}
+                    Code::File(file) => {
+                        let file = self.homes.resolve(file, cwd);
+                        self.script_file(&file, cwd, depth, Script::Required);
+                    }
+                    Code::Module(module) => {
+                        let module = module.replace('.', "/");
+                        for candidate in [format!("{module}.py"), format!("{module}/__main__.py")] {
+                            let file = self.homes.resolve(&candidate, cwd);
+                            self.script_file(&file, cwd, depth, Script::IfPresent);
+                        }
+                    }
+                    Code::Inline(_) | Code::Stdin | Code::Tool => {}
+                }
+                for preload in invocation.preloads {
+                    let need = if path_like(preload) {
+                        Script::Required
+                    } else {
+                        Script::IfPresent
+                    };
+                    let file = self.homes.resolve(preload, cwd);
+                    self.script_file(&file, cwd, depth, need);
+                }
             }
-            Some(indirect::ScriptSource::Unseen) => self.note(ProtectedActionKind::SecurityPolicy),
+            None if words[*index].contains('/') && !words[*index].contains('$') => {
+                let file = self.homes.resolve(&words[*index], cwd);
+                self.script_file(&file, cwd, depth, Script::Required);
+            }
             None => {}
         }
     }
@@ -583,25 +672,31 @@ impl Classifier {
     }
 
     /// A script run from a file is judged by its text (a patched script run
-    /// later, `bash x.sh`, `./run`). A script the classifier cannot read in
-    /// full (missing, written by the same command, not a regular file, too
+    /// later, `bash x.sh`, `./run`). Executables are recognised by their
+    /// magic number and skipped. A required script the classifier cannot read
+    /// in full (missing, written by the same command, not a regular file, too
     /// large, past the file limit, or where lookups are not allowed) fails
-    /// closed; executables are skipped by their magic number.
-    fn script_file(&mut self, file: &str, cwd: &str, depth: usize) {
+    /// closed; an optional one is skipped when it is not there.
+    fn script_file(&mut self, file: &str, cwd: &str, depth: usize, need: Script) {
         use std::io::Read;
-        let unreadable = |classifier: &mut Self| {
-            classifier.note(ProtectedActionKind::SecurityPolicy);
+        let unreadable = |classifier: &mut Self, missing: bool| {
+            if need == Script::Required || !missing {
+                classifier.note(ProtectedActionKind::UnseenCode);
+            }
         };
-        self.scripts_read += 1;
-        if self.scripts_read > MAX_SCRIPT_FILES || !self.homes.lookups_allowed(file) {
-            return unreadable(self);
+        if !self.homes.lookups_allowed(file) {
+            return unreadable(self, /*missing*/ false);
         }
         // Check before opening: opening a FIFO or device would block.
         let Ok(metadata) = std::fs::metadata(file) else {
-            return unreadable(self);
+            return unreadable(self, /*missing*/ true);
         };
-        if !metadata.is_file() || metadata.len() > indirect::SCRIPT_READ_LIMIT {
-            return unreadable(self);
+        if !metadata.is_file() {
+            return unreadable(self, /*missing*/ false);
+        }
+        self.scripts_read += 1;
+        if self.scripts_read > MAX_SCRIPT_FILES {
+            return unreadable(self, /*missing*/ false);
         }
         let mut options = std::fs::OpenOptions::new();
         options.read(true);
@@ -612,20 +707,22 @@ impl Classifier {
             options.custom_flags(libc::O_NONBLOCK);
         }
         let Ok(handle) = options.open(file) else {
-            return unreadable(self);
+            return unreadable(self, /*missing*/ false);
         };
-        let mut bytes = Vec::new();
-        if !handle.metadata().is_ok_and(|metadata| metadata.is_file())
-            || handle
-                .take(indirect::SCRIPT_READ_LIMIT + 1)
-                .read_to_end(&mut bytes)
-                .is_err()
-            || bytes.len() as u64 > indirect::SCRIPT_READ_LIMIT
-        {
-            return unreadable(self);
+        if !handle.metadata().is_ok_and(|metadata| metadata.is_file()) {
+            return unreadable(self, /*missing*/ false);
         }
+        let mut bytes = Vec::new();
+        let mut reader = handle.take(indirect::SCRIPT_READ_LIMIT + 1);
+        if reader.read_to_end(&mut bytes).is_err() {
+            return unreadable(self, /*missing*/ false);
+        }
+        // Executables first: their size does not matter.
         if BINARY_MAGIC.iter().any(|magic| bytes.starts_with(magic)) {
             return;
+        }
+        if bytes.len() as u64 > indirect::SCRIPT_READ_LIMIT {
+            return unreadable(self, /*missing*/ false);
         }
         // The shell skips NUL bytes; so does the scan.
         bytes.retain(|byte| *byte != 0);
@@ -634,34 +731,55 @@ impl Classifier {
     }
 }
 
+/// Shell parameters that stand for the command's own arguments or status,
+/// which are already in front of the classifier.
+fn is_special_parameter(name: &str) -> bool {
+    matches!(name, "@" | "*" | "#" | "?" | "$" | "!" | "-" | "0")
+        || (name.len() == 1 && name.chars().all(|ch| ch.is_ascii_digit()))
+}
+
 /// Words with known `$NAME` variables replaced, left to right as the shell
-/// reads them (`$a$b` is `a` then `b`).
-fn substitute(command: &SimpleCommand, variables: &HashMap<String, String>) -> Vec<String> {
+/// reads them (`$a$b` is `a` then `b`), and for each word whether it holds a
+/// value the classifier cannot see: a variable never assigned in this action
+/// (other than special parameters) or one set from an unseen substitution.
+fn substitute(
+    command: &SimpleCommand,
+    variables: &HashMap<String, String>,
+) -> (Vec<String>, Vec<bool>) {
     command
         .words
         .iter()
         .map(|word| {
             let mut out = String::new();
+            let mut unseen = false;
             let mut rest = word.as_str();
             while let Some(at) = rest.find('$') {
                 out.push_str(&rest[..at]);
                 let after = &rest[at + 1..];
-                let len = after
-                    .find(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
-                    .unwrap_or(after.len());
-                match variables.get(&after[..len]) {
-                    Some(value) if len > 0 => out.push_str(value),
+                let len = match after.chars().next() {
+                    Some(ch) if "@*#?$!-".contains(ch) || ch.is_ascii_digit() => ch.len_utf8(),
+                    _ => after
+                        .find(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
+                        .unwrap_or(after.len()),
+                };
+                let name = &after[..len];
+                match variables.get(name) {
+                    Some(value) if len > 0 => {
+                        unseen |= value.contains(shell::UNSEEN_OUTPUT);
+                        out.push_str(value);
+                    }
                     _ => {
+                        unseen |= len > 0 && !is_special_parameter(name);
                         out.push('$');
-                        out.push_str(&after[..len]);
+                        out.push_str(name);
                     }
                 }
                 rest = &after[len..];
             }
             out.push_str(rest);
-            out
+            (out, unseen)
         })
-        .collect()
+        .unzip()
 }
 
 #[cfg(test)]

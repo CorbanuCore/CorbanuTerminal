@@ -3,31 +3,13 @@
 //! scripts run from a file, opaque decode-and-run pipelines and patches that
 //! write commands into files that are run later.
 
-use super::shell::SHELLS;
+use super::invocation;
+use super::invocation::Code;
+use super::invocation::Invocation;
 use super::shell::SimpleCommand;
 use super::shell::basename;
 use base64::Engine;
 
-/// Interpreters that run a file argument or, without one, their stdin.
-pub(super) const INTERPRETERS: &[&str] = &[
-    "python",
-    "python2",
-    "python3",
-    "node",
-    "nodejs",
-    "deno",
-    "bun",
-    "perl",
-    "ruby",
-    "php",
-    "lua",
-    "osascript",
-    "tsx",
-    "ts-node",
-    "pwsh",
-];
-/// Flags after which an interpreter's next argument is inline code.
-const INLINE_CODE_FLAGS: &[&str] = &["-c", "-e", "-E", "--eval", "-r", "-p", "--print"];
 /// Bytes of one script file the classifier reads.
 pub(super) const SCRIPT_READ_LIMIT: u64 = 256 * 1024;
 
@@ -172,107 +154,104 @@ fn hex_bytes(word: &str) -> Option<Vec<u8>> {
 }
 
 /// Lowercase basename of the command a simple command runs, skipping
-/// assignments and common wrappers, with the index of that word.
+/// assignments, shell keywords and wrappers (with their options and
+/// arguments), with the index of that word.
 pub(super) fn command_word(words: &[String]) -> Option<(usize, String)> {
+    const KEYWORDS: &[&str] = &["!", "if", "then", "elif", "else", "do", "while", "until"];
     const WRAPPERS: &[&str] = &[
-        "sudo", "env", "nice", "nohup", "time", "timeout", "exec", "command", "builtin", "xargs",
-        "stdbuf", "doas",
+        "sudo",
+        "doas",
+        "env",
+        "nice",
+        "nohup",
+        "time",
+        "timeout",
+        "exec",
+        "command",
+        "builtin",
+        "xargs",
+        "stdbuf",
+        "setsid",
+        "caffeinate",
+        "arch",
+        "unbuffer",
+        "ionice",
+        "chrt",
+        "taskset",
+        "flock",
+        "runuser",
+        "sg",
+        "nsenter",
+        "unshare",
+        "firejail",
+        "systemd-run",
     ];
+    /// Wrappers that take one operand before the command.
+    const WRAPPERS_WITH_OPERAND: &[&str] = &["timeout", "chrt", "taskset", "flock", "sg"];
+    /// Wrapper options that take a value.
+    const VALUE_OPTIONS: &[&str] = &["-u", "-g", "-n", "-c", "-C", "-p", "-s", "-k", "-E"];
     let mut index = 0;
     while let Some(word) = words.get(index) {
         let name = basename(word).to_lowercase();
         let assignment = word.contains('=') && !word.starts_with('-');
-        if assignment || WRAPPERS.contains(&name.as_str()) || word.starts_with('-') {
+        if assignment || KEYWORDS.contains(&name.as_str()) {
             index += 1;
-            // A wrapper's numeric or user argument (`timeout 9`, `-u root`).
-            if let Some(next) = words.get(index)
-                && (next.parse::<f64>().is_ok() || words[index - 1] == "-u")
-            {
-                index += 1;
-            }
             continue;
         }
-        return Some((index, name));
+        // A comment (`#!/bin/sh`, `# note`) is not a command. Its words are
+        // still scanned, which can only over-match.
+        if word.starts_with('#') {
+            return None;
+        }
+        if !WRAPPERS.contains(&name.as_str()) {
+            return Some((index, name));
+        }
+        index += 1;
+        while let Some(option) = words.get(index) {
+            if option.starts_with('-') {
+                index += 1 + usize::from(VALUE_OPTIONS.contains(&option.as_str()));
+            } else if option.contains('=') && !option.starts_with('-') {
+                index += 1;
+            } else {
+                break;
+            }
+        }
+        if WRAPPERS_WITH_OPERAND.contains(&name.as_str()) {
+            index += 1;
+        }
     }
     None
 }
 
-/// What a shell or interpreter command runs from a file.
-#[derive(Debug, PartialEq, Eq)]
-pub(super) enum ScriptSource<'a> {
-    /// A file argument (`bash x.sh`, `python3 x.py`, `source x`) or the
-    /// command word itself when it is a path (`./run.sh`).
-    File(&'a str),
-    /// Code it cannot see: stdin (`-`, `-s`), or a module (`python -m`).
-    Unseen,
-}
-
-/// The script a command runs, if it runs one from outside its own words.
-pub(super) fn script_source(words: &[String]) -> Option<ScriptSource<'_>> {
+/// The invocation a simple command makes, if it runs a shell or interpreter.
+pub(super) fn invocation(words: &[String]) -> Option<Invocation<'_>> {
     let (index, name) = command_word(words)?;
-    let word = words[index].as_str();
-    if word.contains('/')
-        && !SHELLS.contains(&name.as_str())
-        && !INTERPRETERS.contains(&name.as_str())
-    {
-        return Some(ScriptSource::File(word));
-    }
-    let shell = SHELLS.contains(&name.as_str());
-    let runs_files =
-        shell || INTERPRETERS.contains(&name.as_str()) || matches!(name.as_str(), "source" | ".");
-    if !runs_files {
-        return None;
-    }
-    let args = &words[index + 1..];
-    if args
-        .iter()
-        .any(|arg| INLINE_CODE_FLAGS.contains(&arg.as_str()) || is_shell_c_flag(arg))
-    {
-        return None;
-    }
-    if args.iter().any(|arg| arg == "-" || (shell && arg == "-s")) {
-        return Some(ScriptSource::Unseen);
-    }
-    if args.iter().any(|arg| arg == "-m") {
-        // `python -m pytest`: a module. Ordinary, and not a file we can read.
-        return None;
-    }
-    args.iter()
-        .find(|arg| !arg.starts_with('-'))
-        .map(|arg| ScriptSource::File(arg.as_str()))
+    invocation::parse(&name, &words[index + 1..])
 }
 
-fn is_shell_c_flag(arg: &str) -> bool {
-    arg.starts_with('-') && !arg.starts_with("--") && arg.ends_with('c')
-}
-
-/// Whether the command runs code it reads from stdin or a substitution:
-/// `eval`, `source`/`.`, a shell or interpreter with no file or inline code
-/// (or reading `-`/`-s`), inline code given by a substitution, a trailing
-/// `-c` whose code comes from elsewhere (`xargs sh -c`), or a substitution
-/// used as the command itself (`$(curl ...)`).
+/// Whether the command runs code it reads from its input: `eval`, a shell or
+/// interpreter reading stdin, inline code that is missing from its words
+/// (`xargs sh -c`) or given by a substitution, `parallel` without a command,
+/// or a substitution used as the command itself (`$(curl ...)`).
 fn executes_input(command: &SimpleCommand) -> bool {
     let Some((index, name)) = command_word(&command.words) else {
-        return !command.fed_by.is_empty();
+        return command.words.is_empty() && !command.fed_by.is_empty();
     };
-    if name.starts_with('$') || matches!(name.as_str(), "eval" | "source" | ".") {
+    if name.starts_with('$') || name == "eval" {
         return true;
     }
-    let shell = SHELLS.contains(&name.as_str());
-    if !shell && !INTERPRETERS.contains(&name.as_str()) {
-        return false;
+    if name == "parallel" {
+        return command.words.len() == index + 1;
     }
-    let args = &command.words[index + 1..];
-    let inline =
-        |arg: &String| INLINE_CODE_FLAGS.contains(&arg.as_str()) || (shell && is_shell_c_flag(arg));
-    if args.last().is_some_and(inline) {
-        return true;
+    match invocation::parse(&name, &command.words[index + 1..]).map(|invocation| invocation.code) {
+        Some(Code::Stdin | Code::Inline(None)) => true,
+        Some(Code::Inline(Some(_))) => !command.fed_by.is_empty(),
+        // `source <(curl ...)`, `bash <(curl ...)`: the script is a substitution.
+        Some(Code::File(file)) if file.contains(super::shell::UNSEEN_OUTPUT) => {
+            !command.fed_by.is_empty()
+        }
+        Some(Code::File(_) | Code::Module(_) | Code::Tool) | None => false,
     }
-    if args.iter().any(inline) {
-        return !command.fed_by.is_empty();
-    }
-    args.iter().all(|arg| arg.starts_with('-'))
-        || args.iter().any(|arg| arg == "-" || (shell && arg == "-s"))
 }
 
 /// Whether a stage only prints text the classifier already sees.
@@ -280,14 +259,17 @@ fn literal_stage(command: &SimpleCommand) -> bool {
     super::shell::literal_output(&command.words).is_some() && command.fed_by.is_empty()
 }
 
-/// Opaque execution: code fed to an executor through a pipe or a
-/// substitution, by any stage that is not a plain `echo`/`printf` of visible
+/// Opaque execution: code fed to an executor through a pipe, a substitution
+/// or `>(...)`, by any stage that is not a plain `echo`/`printf` of visible
 /// text (a decoder, a download, `cat` of a file, a transform). The host
 /// cannot describe what will run, so it counts as protected.
 pub(super) fn opaque_execution(commands: &[SimpleCommand]) -> bool {
     commands.iter().any(|command| {
         if !executes_input(command) {
             return false;
+        }
+        if command.reads_outer_output {
+            return true;
         }
         // Every command whose output reaches this one, transitively.
         let mut feeders: Vec<usize> = command.fed_by.clone();
@@ -365,6 +347,8 @@ fn is_runnable_path(lower: &str) -> bool {
     let name = basename(lower);
     lower.contains(".git/hooks/")
         || lower.ends_with(".git/config")
+        || lower.ends_with(".gitconfig")
+        || lower.ends_with(".config/git/config")
         || lower.contains(".husky/")
         || ((lower.starts_with("bin/") || lower.contains("/bin/")) && !name.contains('.'))
 }
