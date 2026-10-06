@@ -1,6 +1,6 @@
 # PF-28-S02 reflected-secret response scrubbing: gate evidence (2026-10-06)
 
-Candidate: `10357ba50c` on `feat/pf28-s02-reflected-scrub-20261006` (base `24a57e38c4`, main with PF-28-S01),
+Merged to main in PR #216 (`b9f215ec50`). Candidate: `10357ba50c` on `feat/pf28-s02-reflected-scrub-20261006` (base `24a57e38c4`, main with PF-28-S01),
 macOS arm64 debug build, Rust 1.95.0. Feature flag: `[features] secret_output_gate = true` (default off). With the
 flag off nothing changes. Synthetic credentials only: the PF-27 fixture token (sha256 prefix `946ae98e9fbe`) and a
 40-byte random canary kept outside the repository.
