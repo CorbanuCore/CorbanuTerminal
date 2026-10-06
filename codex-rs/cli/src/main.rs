@@ -53,6 +53,7 @@ mod doctor;
 mod exec_server_telemetry;
 mod marketplace_cmd;
 mod mcp_cmd;
+mod nested_security;
 mod pfterminal_home;
 mod plugin_cmd;
 mod remote_control_cmd;
@@ -1118,6 +1119,29 @@ async fn cli_main(
     if let Some(subcommand) = subcommand.as_ref() {
         profile_v2_for_subcommand(&interactive, subcommand)?;
     }
+    let nested_aggressive = match nested_security::nested_launch_kind(subcommand.as_ref())
+        .map(|(name, kind)| codex_tui::nested_launch(name, kind))
+    {
+        None | Some(codex_tui::NestedLaunch::NotNested) => None,
+        Some(codex_tui::NestedLaunch::Refuse(message)) => {
+            #[allow(clippy::print_stderr)]
+            {
+                eprintln!("{message}");
+            }
+            std::process::exit(1);
+        }
+        Some(codex_tui::NestedLaunch::EnforceAggressive(origin)) => Some(origin),
+    };
+    let exec_enforcement = match (&nested_aggressive, subcommand.as_ref()) {
+        (Some(origin), Some(Subcommand::Exec(_) | Subcommand::Review(_))) => {
+            Some(nested_security::NestedAggressive::new(origin.clone())?)
+        }
+        (Some(_), _) => anyhow::bail!("this nested launch cannot be held to Aggressive"),
+        (None, _) => None,
+    };
+    let exec_enforcement = exec_enforcement
+        .as_ref()
+        .map(|enforcement| enforcement as &dyn codex_exec::EnforcedSecurity);
 
     match subcommand {
         None => {
@@ -1148,7 +1172,7 @@ async fn cli_main(
                 &mut exec_cli.config_overrides,
                 root_config_overrides.clone(),
             );
-            codex_exec::run_main(exec_cli, arg0_paths.clone()).await?;
+            codex_exec::run_main_enforced(exec_cli, arg0_paths.clone(), exec_enforcement).await?;
         }
         Some(Subcommand::Review(ReviewCommand {
             strict_config,
@@ -1169,7 +1193,7 @@ async fn cli_main(
                 &mut exec_cli.config_overrides,
                 root_config_overrides.clone(),
             );
-            codex_exec::run_main(exec_cli, arg0_paths.clone()).await?;
+            codex_exec::run_main_enforced(exec_cli, arg0_paths.clone(), exec_enforcement).await?;
         }
         Some(Subcommand::McpServer(McpServerCommand { strict_config })) => {
             reject_remote_mode_for_subcommand(
