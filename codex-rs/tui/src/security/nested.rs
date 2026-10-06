@@ -58,23 +58,34 @@ pub enum NestedLaunch {
 /// Decide whether `corbanu <name>` may run here (`name` is empty for a new
 /// interactive session).
 pub fn nested_launch(name: &str, kind: NestedKind) -> NestedLaunch {
+    let marker = std::env::var_os(ORIGIN_ENV)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from);
     let mut homes = Vec::new();
-    homes.extend(
-        std::env::var_os(ORIGIN_ENV)
-            .filter(|value| !value.is_empty())
-            .map(PathBuf::from),
-    );
     homes.extend(
         codex_utils_home_dir::find_codex_home()
             .ok()
             .map(|home| home.to_path_buf()),
     );
-    let account_home = account_home();
-    if let Some(account_home) = account_home.as_deref() {
-        homes.push(account_home.join(".corbanu"));
-        homes.push(account_home.join(".pfterminal"));
-        homes.extend(registered_homes(&registry_dir(account_home)));
+    match account_home() {
+        Ok(Some(account_home)) => {
+            homes.push(account_home.join(".corbanu"));
+            homes.push(account_home.join(".pfterminal"));
+            homes.extend(registered_homes(&registry_dir(&account_home)));
+        }
+        Ok(None) => {}
+        // An agent command can make the lookup fail; it is the only
+        // launcher that sets the marker.
+        Err(err) if marker.is_some() => {
+            return NestedLaunch::Refuse(format!(
+                "Could not check whether security level Aggressive applies to this launch ({err}), so it is refused."
+            ));
+        }
+        Err(_) => {}
     }
+    // The marker's home comes last, so a real origin found above is the one
+    // the nested run protects.
+    homes.extend(marker);
     decide(name, kind, &nested_origins(homes))
 }
 
@@ -103,25 +114,38 @@ pub(crate) fn nested_origins(homes: Vec<PathBuf>) -> Vec<(PathBuf, NestedAgents)
     origins
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Probe {
+    Allowed,
+    Denied,
+    /// Another error, such as no free file descriptors, which a command can
+    /// cause. Counted as denied.
+    Unknown,
+}
+
+fn probe<T>(result: io::Result<T>) -> Probe {
+    match result {
+        Ok(_) => Probe::Allowed,
+        Err(err)
+            if matches!(
+                err.kind(),
+                io::ErrorKind::PermissionDenied | io::ErrorKind::ReadOnlyFilesystem
+            ) =>
+        {
+            Probe::Denied
+        }
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Probe::Allowed,
+        Err(_) => Probe::Unknown,
+    }
+}
+
 /// Whether this process can neither write `home` nor read its vault store,
-/// as inside an Aggressive agent command. Other errors (a full disk, a
-/// missing home) do not count; a Permissive sandbox leaves the vault store
-/// readable. Aggressive launches create the store's folder so the denial is
-/// observable.
+/// as inside an Aggressive agent command. A person's own launch and a
+/// Permissive sandbox can read the store; Aggressive launches create its
+/// folder so the denial is observable.
 fn sandboxed_away_from(home: &Path) -> bool {
-    let denied = |err: &io::Error| {
-        matches!(
-            err.kind(),
-            io::ErrorKind::PermissionDenied | io::ErrorKind::ReadOnlyFilesystem
-        )
-    };
-    let write_denied = tempfile::NamedTempFile::new_in(home)
-        .err()
-        .is_some_and(|err| denied(&err));
-    let vault_unreadable = std::fs::read_dir(home.join("secrets"))
-        .err()
-        .is_some_and(|err| denied(&err));
-    write_denied && vault_unreadable
+    probe(tempfile::NamedTempFile::new_in(home)) != Probe::Allowed
+        && probe(std::fs::read_dir(home.join("secrets"))) != Probe::Allowed
 }
 
 /// Refuse wins when several origins apply.
@@ -164,18 +188,23 @@ pub(crate) fn decide(
 }
 
 /// Record or forget `codex_home` as an Aggressive origin, so nested launches
-/// that point `CODEX_HOME` elsewhere still find it. Best effort.
-pub(crate) fn register_origin(codex_home: &Path, aggressive: bool) {
-    let Some(account_home) = account_home() else {
-        return;
+/// that point `CODEX_HOME` elsewhere still find it, and drop entries for
+/// homes that no longer store a level.
+pub(crate) fn register_origin(codex_home: &Path, aggressive: bool) -> io::Result<()> {
+    let Some(account_home) = account_home()? else {
+        return Ok(());
     };
-    let result = registry_entry(&registry_dir(&account_home), codex_home, aggressive);
-    if let Err(err) = result {
-        tracing::warn!(
-            "could not update the Aggressive home registry for {}: {err}",
-            codex_home.display()
-        );
+    let registry = registry_dir(&account_home);
+    registry_entry(&registry, codex_home, aggressive)?;
+    for entry in std::fs::read_dir(&registry).into_iter().flatten().flatten() {
+        let stale = std::fs::read_to_string(entry.path())
+            .map(PathBuf::from)
+            .is_ok_and(|home| !level::state_path(&home).exists());
+        if stale {
+            let _ = std::fs::remove_file(entry.path());
+        }
     }
+    Ok(())
 }
 
 pub(crate) fn registry_entry(
@@ -224,8 +253,9 @@ fn registry_dir(account_home: &Path) -> PathBuf {
     }
 }
 
-/// `-c` overrides for a nested `corbanu exec` held to Aggressive.
-pub fn aggressive_cli_overrides(
+/// `-c` overrides for a nested `corbanu exec` held to Aggressive. Writes the
+/// Aggressive vault rule into `codex_home` when it is missing.
+pub fn prepare_nested_exec(
     codex_home: &Path,
     origin: &Path,
 ) -> Result<Vec<(String, toml::Value)>, String> {
@@ -268,14 +298,21 @@ pub async fn verify_aggressive_config(
 }
 
 /// The account's home directory from the account database, not `$HOME`,
-/// which an agent command can change.
-fn account_home() -> Option<PathBuf> {
+/// which an agent command can change. `Ok(None)` when the account has no
+/// entry. Debug builds honour `CORBANU_TEST_ACCOUNT_HOME` so tests never read
+/// the operator's profile.
+fn account_home() -> io::Result<Option<PathBuf>> {
+    if cfg!(debug_assertions)
+        && let Some(home) = std::env::var_os("CORBANU_TEST_ACCOUNT_HOME")
+    {
+        return Ok(Some(PathBuf::from(home)));
+    }
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStrExt;
 
         let mut size = 16 * 1024;
-        while size <= 1024 * 1024 {
+        loop {
             let mut buffer = vec![0 as libc::c_char; size];
             // SAFETY: `passwd` is plain data that getpwuid_r overwrites.
             let mut entry: libc::passwd = unsafe { std::mem::zeroed() };
@@ -291,24 +328,26 @@ fn account_home() -> Option<PathBuf> {
                     &mut result,
                 )
             };
-            if status == libc::ERANGE {
+            if status == libc::ERANGE && size < 4 * 1024 * 1024 {
                 size *= 4;
                 continue;
             }
-            if status != 0 || result.is_null() || entry.pw_dir.is_null() {
-                return None;
+            if status != 0 {
+                return Err(io::Error::from_raw_os_error(status));
+            }
+            if result.is_null() || entry.pw_dir.is_null() {
+                return Ok(None);
             }
             // SAFETY: getpwuid_r succeeded, so `pw_dir` is a NUL-terminated
             // string inside `buffer`, which is still alive.
             let dir = unsafe { std::ffi::CStr::from_ptr(entry.pw_dir) };
             let home = PathBuf::from(std::ffi::OsStr::from_bytes(dir.to_bytes()));
-            return home.is_absolute().then_some(home);
+            return Ok(home.is_absolute().then_some(home));
         }
-        None
     }
     #[cfg(not(unix))]
     {
-        None
+        Ok(None)
     }
 }
 

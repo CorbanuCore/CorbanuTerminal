@@ -49,10 +49,15 @@ pub(crate) fn nested_launch_kind(
             subcommand: DebugSubcommand::AppServer(_),
         }) => ("debug app-server", Host),
         Subcommand::RemoteControl(_) => ("remote-control", Host),
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         Subcommand::App(_) => ("app", Host),
         Subcommand::ExecServer(_) => ("exec-server", Host),
         Subcommand::Cloud(_) => ("cloud", Host),
         Subcommand::Telegram(_) => ("telegram", Host),
+        // They reach the person's sessions through an app server or daemon.
+        Subcommand::Archive(_) => ("archive", Host),
+        Subcommand::Delete(_) => ("delete", Host),
+        Subcommand::Unarchive(_) => ("unarchive", Host),
         Subcommand::ClaudePaneSmoke(_) => ("claude-pane-smoke", Host),
         Subcommand::ClaudePaneWorkflowSuite(_) => ("claude-pane-workflow-suite", Host),
         Subcommand::Vault(_) => ("vault", Credentials),
@@ -75,9 +80,6 @@ pub(crate) fn nested_launch_kind(
         | Subcommand::Debug(_)
         | Subcommand::Execpolicy(_)
         | Subcommand::Apply(_)
-        | Subcommand::Archive(_)
-        | Subcommand::Delete(_)
-        | Subcommand::Unarchive(_)
         | Subcommand::ResponsesApiProxy(_)
         | Subcommand::StdioToUds(_)
         | Subcommand::Features(_) => return None,
@@ -93,8 +95,8 @@ pub(crate) struct NestedAggressive {
 impl NestedAggressive {
     pub(crate) fn new(origin: PathBuf) -> anyhow::Result<Self> {
         let codex_home = codex_core::config::find_codex_home()?.to_path_buf();
-        let cli_overrides = codex_tui::aggressive_cli_overrides(&codex_home, &origin)
-            .map_err(anyhow::Error::msg)?;
+        let cli_overrides =
+            codex_tui::prepare_nested_exec(&codex_home, &origin).map_err(anyhow::Error::msg)?;
         Ok(Self {
             codex_home,
             origin,

@@ -71,6 +71,11 @@ impl Drop for Origin {
 }
 
 fn corbanu(home: &Path, cwd: &Path) -> Result<assert_cmd::Command> {
+    corbanu_with_account(home, cwd, &cwd.join("no-account"))
+}
+
+/// `account` stands in for the account database's home directory.
+fn corbanu_with_account(home: &Path, cwd: &Path, account: &Path) -> Result<assert_cmd::Command> {
     let mut command = assert_cmd::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?);
     for name in ["CORBANU_HOME", "PFTERMINAL_HOME", ORIGIN_ENV] {
         command.env_remove(name);
@@ -79,6 +84,7 @@ fn corbanu(home: &Path, cwd: &Path) -> Result<assert_cmd::Command> {
         .current_dir(cwd)
         .env("CODEX_HOME", home)
         .env("CODEX_SQLITE_HOME", home)
+        .env("CORBANU_TEST_ACCOUNT_HOME", account)
         .env("CORBANU_TEST_NO_NATIVE_KEYRING", "1");
     Ok(command)
 }
@@ -166,6 +172,43 @@ fn forged_pass_home_does_not_override_refuse() -> Result<()> {
         .assert()
         .failure()
         .stderr(contains("set to refuse"));
+    Ok(())
+}
+
+/// Dropping the marker and pointing `CODEX_HOME` and `HOME` elsewhere does
+/// not help: the origin is registered under the account's home.
+#[test]
+fn registered_origin_is_found_without_marker_or_home() -> Result<()> {
+    let Some(origin) = Origin::new(/*nested*/ None)? else {
+        return Ok(());
+    };
+    let account = TempDir::new()?;
+    let registry = if cfg!(target_os = "macos") {
+        account
+            .path()
+            .join("Library/Application Support/Corbanu/aggressive-homes")
+    } else {
+        account.path().join(".local/state/corbanu/aggressive-homes")
+    };
+    fs::create_dir_all(&registry)?;
+    fs::write(
+        registry.join("entry"),
+        origin.path().to_string_lossy().as_bytes(),
+    )?;
+    let home = TempDir::new()?;
+    let cwd = TempDir::new()?;
+    corbanu_with_account(home.path(), cwd.path(), account.path())?
+        .env("HOME", cwd.path())
+        .args(["exec", "hi"])
+        .assert()
+        .failure()
+        .stderr(contains("set to refuse"));
+    // Without the registry entry nothing marks the launch as nested.
+    fs::remove_file(registry.join("entry"))?;
+    corbanu_with_account(home.path(), cwd.path(), account.path())?
+        .args(["vault", "auth-helper", "provider/zai_api_key"])
+        .assert()
+        .stderr(contains("was started by an agent command").not());
     Ok(())
 }
 

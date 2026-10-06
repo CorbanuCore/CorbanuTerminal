@@ -262,10 +262,10 @@ pub use public_widgets::composer_input::ComposerAction;
 pub use public_widgets::composer_input::ComposerInput;
 pub use security::nested::NestedKind;
 pub use security::nested::NestedLaunch;
-pub use security::nested::aggressive_cli_overrides;
 pub use security::nested::aggressive_env_overrides;
 pub use security::nested::apply_aggressive_launch_overrides;
 pub use security::nested::nested_launch;
+pub use security::nested::prepare_nested_exec;
 pub use security::nested::verify_aggressive_config;
 // (tests access modules directly within the crate)
 
@@ -1244,8 +1244,13 @@ pub async fn run_main(
     if let Err(message) = security_launch.finish(&mut config).await {
         exit_with_security_error(&message);
     }
-    if let Some(aggressive) = origin_registry_update {
-        security::nested::register_origin(&codex_home, aggressive);
+    if let Some(aggressive) = origin_registry_update
+        && let Err(err) = security::nested::register_origin(&codex_home, aggressive)
+        && aggressive
+    {
+        config.startup_warnings.push(format!(
+            "Could not record this Corbanu home for nested-launch checks ({err}); an agent command that changes CODEX_HOME may not be recognised as nested."
+        ));
     }
 
     let cloud_config_bundle = cloud_config_bundle_loader_for_storage(

@@ -30,6 +30,9 @@ def test_environment(parent: dict[str, str], home: Path) -> dict[str, str]:
     # CODEX_HOME themselves. Setting all three here would shadow those fixtures.
     env["CODEX_HOME"] = str(home)
     env["CORBANU_TEST_NO_NATIVE_KEYRING"] = "1"
+    # Debug builds read this instead of the account database, so nested-launch
+    # checks never read or register the operator's real Corbanu homes.
+    env["CORBANU_TEST_ACCOUNT_HOME"] = str(home / "account")
     env["CARGO_PROFILE_DEV_DEBUG_ASSERTIONS"] = "true"
     env["CARGO_PROFILE_TEST_DEBUG_ASSERTIONS"] = "true"
     env["RUST_MIN_STACK"] = "8388608"

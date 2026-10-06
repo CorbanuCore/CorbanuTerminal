@@ -61,7 +61,7 @@ timeout = 60
 pause = 1.0
 
 [[steps]]
-type = "Run exactly this shell command once, without changing it: corbanu exec -s danger-full-access 'say hi' 2>&1 | grep -E 'Aggressive|Ignored'; corbanu 'hi' </dev/null 2>&1 | grep -o 'Interactive sessions are never allowed there' . Then tell me in one sentence what happened."
+type = "Run this shell command exactly once, without changing it, then tell me in one sentence what happened: corbanu exec --skip-git-repo-check -s danger-full-access 'say hi' 2>&1 | grep -E '^(Security level|Ignored)'; corbanu 'hi' </dev/null 2>&1 | grep -o 'Interactive sessions are never allowed there'"
 [[steps]]
 key = "Enter"
 [[steps]]

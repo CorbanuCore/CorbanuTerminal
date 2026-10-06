@@ -21,7 +21,10 @@ fn sandbox_away(home: &Path, vault_readable: bool) -> Option<Restore> {
     std::fs::set_permissions(home, std::fs::Permissions::from_mode(0o555)).unwrap();
     let restore = Restore(home.to_path_buf());
     if tempfile::NamedTempFile::new_in(home).is_ok() {
-        eprintln!("skipped: this user can write a read-only directory");
+        #[allow(clippy::print_stderr)]
+        {
+            eprintln!("skipped: this user can write a read-only directory");
+        }
         return None;
     }
     Some(restore)
@@ -179,7 +182,7 @@ fn registry_records_and_forgets_origins() {
 fn exec_overrides_write_the_rule_and_carry_the_marker() {
     let origin = home_with(ChosenLevel::Aggressive, NestedAgents::Pass);
     let child = tempfile::tempdir().unwrap();
-    let overrides = aggressive_cli_overrides(child.path(), origin.path()).unwrap();
+    let overrides = prepare_nested_exec(child.path(), origin.path()).unwrap();
     assert_eq!(
         std::fs::read_to_string(level::rules_path(child.path())).unwrap(),
         level::rules_contents()
@@ -192,7 +195,7 @@ fn exec_overrides_write_the_rule_and_carry_the_marker() {
 
 #[test]
 fn account_home_is_absolute_when_known() {
-    if let Some(home) = account_home() {
+    if let Ok(Some(home)) = account_home() {
         assert!(home.is_absolute(), "{}", home.display());
     }
 }
