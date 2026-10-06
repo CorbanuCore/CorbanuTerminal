@@ -395,6 +395,50 @@ class SprintCheckerTests(unittest.TestCase):
             result = checker.check_sprints(root, repo)
             self.assertTrue(result["ok"], result["errors"])
 
+    def test_dependency_merged_behind_flag_with_gate_evidence_unblocks(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            coordinates = ("/tmp/first", "feat/first", "a" * 40)
+            repo, root, first = self.make_repo(
+                temporary, plan_status="active", plan_worktree=coordinates
+            )
+            dependency = first.with_name("pf-01-s02-dependency.md")
+            first.write_text(
+                sprint_text(
+                    status="ready",
+                    worktree=coordinates[0],
+                    branch=coordinates[1],
+                    base_commit=coordinates[2],
+                )
+                .replace("execution_order: 1", "execution_order: 2")
+                .replace('depends_on: "none"', 'depends_on: "PF-01-S02"')
+            )
+            plan = repo / "docs/plans/proposed/plan.md"
+            plan.write_text(
+                plan.read_text()
+                + f"\n[{dependency.name}](../../sprints/current/plan/{dependency.name})\n"
+            )
+
+            def errors(extra):
+                dependency.write_text(
+                    sprint_text()
+                    .replace("PF-01-S01", "PF-01-S02")
+                    .replace('depends_on: "none"\n', f'depends_on: "none"\n{extra}')
+                )
+                return checker.check_sprints(root, repo)["errors"]
+
+            blocked = "not completed and archived"
+            evidence = 'gate_evidence: "qa/PF-01-S02/README.md"\n'
+            flag = 'merged_behind_flag: "some_flag"\n'
+            # The flag alone, missing evidence, or an escaping path stays blocked.
+            self.assertTrue(any(blocked in e for e in errors(flag)))
+            self.assertTrue(any(blocked in e for e in errors(flag + evidence)))
+            (repo / "qa/PF-01-S02").mkdir(parents=True)
+            (repo / "qa/PF-01-S02/README.md").write_text("gate evidence\n")
+            self.assertTrue(any(blocked in e for e in errors(evidence)))
+            escaping = 'gate_evidence: "../qa/PF-01-S02/README.md"\n'
+            self.assertTrue(any(blocked in e for e in errors(flag + escaping)))
+            self.assertEqual(errors(flag + evidence), [])
+
 
 class ParallelAllocationTests(unittest.TestCase):
     def records(self, count=3):

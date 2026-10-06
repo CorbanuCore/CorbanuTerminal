@@ -233,6 +233,23 @@ def dependency_ids(value):
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def merged_behind_flag(record, repo_root):
+    """Coordinator decision, 2026-10-06 (PF-28-S01 precedent): a current
+    dependency whose code merged to main behind a default-off feature flag,
+    with its per-sprint gate evidence recorded, unblocks its successor."""
+    flag = record.get("merged_behind_flag", "")
+    evidence = record.get("gate_evidence", "")
+    if not (concrete(flag) and concrete(evidence)):
+        return False
+    path = Path(evidence)
+    return (
+        record["lifecycle"] == "current"
+        and not path.is_absolute()
+        and ".." not in path.parts
+        and (repo_root / path).is_file()
+    )
+
+
 def sprint_files(root):
     records = []
     for lifecycle in ("current", "archive"):
@@ -280,6 +297,8 @@ def check_sprints(root=ROOT, repo_root=REPO_ROOT):
                     "parallel_lane",
                     "write_scope",
                     "integration_gate",
+                    "merged_behind_flag",
+                    "gate_evidence",
                 )
             },
         }
@@ -440,8 +459,11 @@ def check_sprints(root=ROOT, repo_root=REPO_ROOT):
             else:
                 dependency_record = metadata_by_id[dependency]
                 if values.get("status") in EXECUTABLE_STATUSES and not (
-                    dependency_record["lifecycle"] == "archive"
-                    and dependency_record["status"] == "completed"
+                    (
+                        dependency_record["lifecycle"] == "archive"
+                        and dependency_record["status"] == "completed"
+                    )
+                    or merged_behind_flag(dependency_record, repo_root)
                 ):
                     errors.append(
                         f"{relative}: executable sprint dependency is not completed "

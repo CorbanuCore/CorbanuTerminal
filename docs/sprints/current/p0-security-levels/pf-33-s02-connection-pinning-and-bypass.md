@@ -1,17 +1,20 @@
 ---
 sprint_id: "PF-33-S02"
 title: "Connection pinning and alternate-egress denial"
-status: draft
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-33"
 execution_order: 33
-owner: "Jim Ricketts"
-worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
-branch: "feat/p0-security-levels"
-base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
+owner: "network-lane worker round 2 (codex, 2026-10-06)"
+parallel_lane: "tui"
+write_scope: "codex-rs/network-proxy/src/connect_policy.rs, codex-rs/network-proxy/src/upstream.rs, codex-rs/network-proxy/src/upstream_tests.rs, codex-rs/network-proxy/src/mitm.rs, codex-rs/network-proxy/src/mitm_tests.rs, codex-rs/network-proxy/src/destination.rs, codex-rs/network-proxy/src/destination_tests.rs, codex-rs/network-proxy/src/proxy.rs, docs/sprints/check.py, docs/sprints/tests/test_check.py, qa/security-levels/sprints/PF-33-S02/, qa/demos/index/PF-33-S02.md, docs/sprints/current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md"
+integration_gate: "PR to main under the per-sprint gate (sec-common decision 5): focused tests, GLM 5.2 tmux run, one Opus 5.5 High review, SOP videos; merged behind the existing url_destination_policy flag (default off). No Cargo, lockfile, lib.rs, config.rs or runtime.rs change. Shared-record hunks serialized by the integration owner: plan worktree coordinates, the PF-33-S01 and PF-28-S02 notes (coordinator decision), the sprint index row, and new demo specs qa/demos/specs/pf33s02-*.toml under the directory PF-30-S03 reserves (new files only)."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-33-s02-20261006"
+branch: "pf-33-s02-20261006"
+base_commit: "39c1f06213da3f15ec41cdd673a09a98cbc7d027"
 depends_on: "PF-33-S01"
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-10-06
 ---
 
 # PF-33-S02 — Connection pinning and alternate-egress denial
@@ -39,9 +42,13 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] Active plan; PF-33-S01 completed and archived.
-- [ ] Read root and nearest implementation-path AGENTS.md; verify exact plan/worktree coordinates.
-- [ ] Confirm source pins, declared crate/module paths, and backend/API availability; unresolved security prerequisites block readiness.
+- [x] Active plan. PF-33-S01 merged behind `url_destination_policy` (#210, #213) with gate evidence but is not
+  archived; the coordinator let S02 start anyway (2026-10-06, PF-28-S01 precedent). The checker accepts a current
+  dependency with `merged_behind_flag` and an existing `gate_evidence` file (`docs/sprints/check.py`, tested).
+- [x] Read root and nearest implementation-path AGENTS.md; plan/worktree coordinates recorded; both checkers pass.
+- [x] Reuses `url_destination_policy` (same feature, same proxy). Pinning lives in `connect_policy.rs` instead of a new
+  `connection_policy.rs` so `lib.rs` (PF-27-S02 scope) is untouched. `secret-broker` is broker-lane scope: no
+  `secret-broker/tests/egress.rs` here.
 
 ## Done
 

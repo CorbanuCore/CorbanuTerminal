@@ -1,0 +1,63 @@
+# PF-33-S02: under the destination guard the OS sandbox reaches only the managed proxy.
+id = "pf33s02-sandbox-egress"
+feature = "Alternate-egress denial: the sandbox reaches only the proxy (no loopback services, raw DNS or Unix sockets)"
+expected = "Flag on, with allow_local_binding and a Unix-socket grant configured: a direct loopback service, raw DNS to 1.1.1.1:53 and the granted Unix socket all fail inside the sandbox; HTTPS through the managed proxy still returns 200. Host-side fixtures: 127.0.0.1:18733 and /tmp/pf33s02.sock serve canaries."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[sandbox_workspace_write]
+network_access = true
+
+[features]
+url_destination_policy = true
+
+[features.network_proxy]
+enabled = true
+allow_local_binding = true
+
+[features.network_proxy.domains]
+"httpbin.org" = "allow"
+"postman-echo.com" = "allow"
+
+[features.network_proxy.unix_sockets]
+"/tmp/pf33s02.sock" = "allow"
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"check.sh" = '''case "$1" in
+  1) echo "1 direct loopback service:"; curl --noproxy '*' -sS -m 5 http://127.0.0.1:18733/canary.txt ;;
+  2) echo "2 raw DNS to 1.1.1.1:53:"; dig +time=2 +tries=1 +short @1.1.1.1 example.com | head -1 ;;
+  3) echo "3 unix socket:"; curl -sS -m 5 --unix-socket /tmp/pf33s02.sock http://local/canary.txt ;;
+  *) echo "4 via managed proxy:"; curl -sS -o /dev/null -w 'HTTP %{http_code}\n' https://httpbin.org/get ;;
+esac
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Make four separate shell calls, one at a time: sh check.sh 1, then sh check.sh 2, then sh check.sh 3, then sh check.sh 4. Then list each numbered result verbatim, including errors."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = '4 via managed proxy:[\s\S]*HTTP 200'
+timeout = 300
+compress = 3
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+
+[[steps]]
+pause = 4.0

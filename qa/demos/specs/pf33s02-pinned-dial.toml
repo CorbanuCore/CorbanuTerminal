@@ -1,0 +1,68 @@
+# PF-33-S02: each guarded request connects to the DNS answers the guard checked.
+id = "pf33s02-pinned-dial"
+feature = "Connection pinning: each request connects only to the DNS answers the destination guard checked"
+expected = "Flag on: both HTTPS requests return 200, and the proxy log shows one pinned dial per request (host, port, number of checked answers); the connector never resolves the name again."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[sandbox_workspace_write]
+network_access = true
+
+[features]
+url_destination_policy = true
+
+[features.network_proxy]
+enabled = true
+allow_local_binding = true
+
+[features.network_proxy.domains]
+"httpbin.org" = "allow"
+"postman-echo.com" = "allow"
+
+[features.network_proxy.unix_sockets]
+"/tmp/pf33s02.sock" = "allow"
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"check.sh" = '''u=https://httpbin.org/get; [ "$1" = 2 ] && u=https://postman-echo.com/get
+echo "$u"
+curl -sS -o /dev/null -w 'HTTP %{http_code}\n' "$u"
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Make two separate shell calls, one at a time: sh check.sh 1, then sh check.sh 2. Then list each result verbatim."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = 'postman-echo.com/get[\s\S]*HTTP 200'
+timeout = 300
+compress = 3
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+
+[[steps]]
+type = '!grep -ho "pinned dial established (host=[^)]*)" {logs}/*.log | sort | uniq -c'
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "answers="
+timeout = 30
+
+[[steps]]
+pause = 4.0

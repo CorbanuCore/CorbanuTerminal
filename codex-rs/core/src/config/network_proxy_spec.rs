@@ -100,7 +100,8 @@ impl NetworkProxySpec {
 
     #[cfg(any(target_os = "windows", test))]
     pub(crate) fn allow_local_binding(&self) -> bool {
-        self.config.allow_local_binding
+        // PF-33-S02: the destination guard leaves the sandbox only the proxy ports.
+        self.config.allow_local_binding && !self.config.url_destination_policy
     }
 
     pub fn from_config_and_constraints(
