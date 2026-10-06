@@ -1,5 +1,12 @@
+#[cfg(unix)]
+pub(crate) mod isolated;
 mod providers;
 mod resolver;
+
+#[cfg(unix)]
+pub use isolated::CODEX_CREDENTIAL_BROKER_ARG1;
+#[cfg(unix)]
+pub use isolated::run_credential_broker_main;
 
 pub use resolver::IsolatedCredentialDispatchError;
 pub use resolver::IsolatedCredentialDispatcher;
@@ -21,12 +28,85 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use zeroize::Zeroizing;
 
+#[cfg(unix)]
+use codex_secret_broker::CredentialReference as BrokerCredentialReference;
+#[cfg(unix)]
+use codex_secret_broker::ProviderRequestOperation;
+#[cfg(unix)]
+use isolated::IsolatedBrokerClient;
+#[cfg(unix)]
+use isolated::IsolatedBrokerError;
+#[cfg(unix)]
+use isolated::IsolatedBrokerLauncher;
+#[cfg(unix)]
+pub(crate) use isolated::IsolatedBrokerOptions;
+#[cfg(unix)]
+use isolated::protocol::HostBindingWire;
+#[cfg(not(unix))]
+#[allow(dead_code)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct IsolatedBrokerOptions {
+    pub(crate) allow_local_binding: bool,
+    pub(crate) allow_upstream_proxy: bool,
+}
+
 pub const CREDENTIAL_BROKER_ACTIVE_ENV_KEY: &str = "CODEX_NETWORK_PROXY_CREDENTIAL_BROKER_ACTIVE";
 pub(crate) const BROKERED_CREDENTIALS_ENV_KEY: &str = "CODEX_NETWORK_PROXY_BROKERED_CREDENTIALS";
 
 #[derive(Clone)]
 pub(crate) struct CredentialBroker {
     state: Arc<RwLock<CredentialBrokerState>>,
+    isolation: Isolation,
+}
+
+/// Where raw provider credential values live while the broker is enabled.
+#[derive(Clone)]
+enum Isolation {
+    /// Legacy in-process injection: the proxy state holds raw values.
+    InProcess,
+    /// PF-27-S04: raw values live only in a separate broker process.
+    #[cfg(unix)]
+    Process(Arc<IsolatedMode>),
+    /// Isolation was requested on a platform without the broker process.
+    /// Credentials are virtualized but never injected (fail closed).
+    #[cfg(not(unix))]
+    Unsupported,
+}
+
+#[cfg(unix)]
+struct IsolatedMode {
+    launcher: IsolatedBrokerLauncher,
+    options: IsolatedBrokerOptions,
+    client: std::sync::Mutex<Option<Arc<IsolatedBrokerClient>>>,
+    fingerprint_key: Zeroizing<[u8; 32]>,
+}
+
+/// Routing decision for one outbound request after credential policy.
+pub(crate) enum CredentialRouting {
+    /// Send upstream from the proxy (any legacy injection already applied).
+    Direct,
+    /// Send through the broker, which substitutes the credential itself.
+    #[cfg(unix)]
+    Brokered(BrokeredCredentialRoute),
+}
+
+#[cfg(unix)]
+pub(crate) struct BrokeredCredentialRoute {
+    client: Arc<IsolatedBrokerClient>,
+    reference: BrokerCredentialReference,
+    operation: ProviderRequestOperation,
+}
+
+#[cfg(unix)]
+impl BrokeredCredentialRoute {
+    pub(crate) async fn forward(
+        &self,
+        request: rama_http::Request,
+    ) -> Result<rama_http::Response, IsolatedBrokerError> {
+        self.client
+            .forward(&self.reference, &self.operation, request)
+            .await
+    }
 }
 
 #[derive(Default)]
@@ -41,8 +121,23 @@ struct CredentialRecord {
     env_var: String,
     provider: &'static providers::CredentialProvider,
     host_binding: providers::CredentialHostBinding,
-    real_value: Zeroizing<String>,
+    secret: RecordSecret,
     dummy_value: String,
+}
+
+enum RecordSecret {
+    Raw(Zeroizing<String>),
+    /// Opaque broker reference; the raw value is not retained in this process.
+    #[cfg(unix)]
+    Brokered {
+        fingerprint: [u8; 32],
+        reference: BrokerCredentialReference,
+        client: Arc<IsolatedBrokerClient>,
+    },
+    /// Isolation is active but the broker could not hold this value.
+    Unavailable {
+        fingerprint: [u8; 32],
+    },
 }
 
 struct ScopedCredentialRecord {
@@ -59,12 +154,73 @@ struct IsolatedCredentialRecord {
 
 impl CredentialBroker {
     pub(crate) fn new(enabled: bool) -> Self {
+        Self::with_isolation(enabled, Isolation::InProcess)
+    }
+
+    pub(crate) fn new_isolated(enabled: bool, options: IsolatedBrokerOptions) -> Self {
+        #[cfg(unix)]
+        {
+            Self::new_isolated_with_launcher(
+                enabled,
+                options,
+                IsolatedBrokerLauncher::current_exe(),
+            )
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = options;
+            Self::with_isolation(enabled, Isolation::Unsupported)
+        }
+    }
+
+    #[cfg(unix)]
+    pub(crate) fn new_isolated_with_launcher(
+        enabled: bool,
+        options: IsolatedBrokerOptions,
+        launcher: IsolatedBrokerLauncher,
+    ) -> Self {
+        let mut fingerprint_key = Zeroizing::new([0_u8; 32]);
+        rand::Rng::fill(&mut rand::rng(), fingerprint_key.as_mut_slice());
+        Self::with_isolation(
+            enabled,
+            Isolation::Process(Arc::new(IsolatedMode {
+                launcher,
+                options,
+                client: std::sync::Mutex::new(None),
+                fingerprint_key,
+            })),
+        )
+    }
+
+    fn with_isolation(enabled: bool, isolation: Isolation) -> Self {
         Self {
             state: Arc::new(RwLock::new(CredentialBrokerState {
                 enabled,
                 ..CredentialBrokerState::default()
             })),
+            isolation,
         }
+    }
+
+    pub(crate) fn isolated(&self) -> bool {
+        !matches!(self.isolation, Isolation::InProcess)
+    }
+
+    /// Revokes every brokered reference: the broker advances its generation,
+    /// closes in-flight channels, and this process forgets the references.
+    /// Returns false when isolation is not active or the broker is unavailable.
+    pub(crate) fn revoke_isolated_credentials(&self) -> bool {
+        let mut state = self.write_state();
+        state
+            .credentials
+            .retain(|credential| matches!(credential.secret, RecordSecret::Raw(_)));
+        #[cfg(unix)]
+        if let Isolation::Process(mode) = &self.isolation
+            && let Some(client) = mode.live_client()
+        {
+            return client.revoke().is_ok();
+        }
+        false
     }
 
     pub(crate) fn enabled(&self) -> bool {
@@ -95,6 +251,7 @@ impl CredentialBroker {
                         virtualize_env_var(
                             env,
                             &mut state,
+                            &self.isolation,
                             env_var,
                             provider,
                             host_binding.clone(),
@@ -193,16 +350,36 @@ impl CredentialBroker {
         path: &str,
         headers: &mut HeaderMap,
     ) -> Result<(), ScopedCredentialInjectionError> {
+        // A brokered route cannot be honored by in-process callers; the request
+        // proceeds with its dummy value and never receives the raw credential.
+        self.route_request_credentials(scheme, host, port, method, path, headers)
+            .map(|_| ())
+    }
+
+    /// Applies credential policy and decides whether the request must travel
+    /// through the isolated broker process.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn route_request_credentials(
+        &self,
+        scheme: &str,
+        host: &str,
+        port: u16,
+        method: &str,
+        path: &str,
+        headers: &mut HeaderMap,
+    ) -> Result<CredentialRouting, ScopedCredentialInjectionError> {
         let normalized_host = normalize_host(host);
         let mut state = self.write_state();
         if !state.enabled {
-            return Ok(());
+            return Ok(CredentialRouting::Direct);
         }
 
         if let Some(scoped) = state.scoped_openai.as_mut() {
             let carries_reference = scoped.matches_reference(headers);
             if normalized_host == resolver::OPENAI_API_HOST || carries_reference {
-                return scoped.inject(scheme, &normalized_host, port, method, path, headers);
+                return scoped
+                    .inject(scheme, &normalized_host, port, method, path, headers)
+                    .map(|()| CredentialRouting::Direct);
             }
         }
         if let Some(isolated) = state.isolated_openai.as_ref() {
@@ -218,18 +395,43 @@ impl CredentialBroker {
             .filter(|credential| credential.matches_host(&normalized_host))
             .collect::<Vec<_>>();
         let Some(credential) = select_credential(headers, &matching_credentials) else {
-            return Ok(());
+            return Ok(CredentialRouting::Direct);
         };
-        let Some(header_value) = credential
-            .provider
-            .request_header_value(credential.real_value.as_str())
-        else {
-            return Ok(());
-        };
-        credential
-            .provider
-            .insert_request_header(headers, header_value);
-        Ok(())
+        match &credential.secret {
+            RecordSecret::Raw(real_value) => {
+                if let Some(header_value) = credential
+                    .provider
+                    .request_header_value(real_value.as_str())
+                {
+                    credential
+                        .provider
+                        .insert_request_header(headers, header_value);
+                }
+                Ok(CredentialRouting::Direct)
+            }
+            #[cfg(unix)]
+            RecordSecret::Brokered {
+                reference, client, ..
+            } => {
+                if scheme != "https" {
+                    return Err(ScopedCredentialInjectionError::SchemeDenied);
+                }
+                if !client.is_alive() {
+                    return Err(ScopedCredentialInjectionError::IsolatedBrokerUnavailable);
+                }
+                let operation =
+                    ProviderRequestOperation::new(normalized_host.as_str(), port, method, path)
+                        .map_err(|_| ScopedCredentialInjectionError::PathDenied)?;
+                Ok(CredentialRouting::Brokered(BrokeredCredentialRoute {
+                    client: client.clone(),
+                    reference: reference.clone(),
+                    operation,
+                }))
+            }
+            RecordSecret::Unavailable { .. } => {
+                Err(ScopedCredentialInjectionError::IsolatedBrokerUnavailable)
+            }
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -277,6 +479,7 @@ impl CredentialBroker {
 fn virtualize_env_var(
     env: &mut HashMap<String, String>,
     state: &mut CredentialBrokerState,
+    isolation: &Isolation,
     env_var: &str,
     provider: &'static providers::CredentialProvider,
     host_binding: providers::CredentialHostBinding,
@@ -285,8 +488,61 @@ fn virtualize_env_var(
         return;
     };
 
-    let dummy_value = state.register(env_var, provider, host_binding, real_value);
+    let dummy_value = match isolation {
+        Isolation::InProcess => state.register(env_var, provider, host_binding, real_value),
+        #[cfg(unix)]
+        Isolation::Process(mode) => {
+            state.register_isolated(mode, env_var, provider, host_binding, real_value)
+        }
+        #[cfg(not(unix))]
+        Isolation::Unsupported => state.register_unavailable(
+            fingerprint(&[0; 32], env_var, real_value),
+            env_var,
+            provider,
+            host_binding,
+            real_value,
+        ),
+    };
     env.insert(env_var.to_string(), dummy_value);
+}
+
+fn fingerprint(key: &[u8; 32], env_var: &str, value: &str) -> [u8; 32] {
+    use sha2::Digest as _;
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(key);
+    hasher.update(env_var.as_bytes());
+    hasher.update([0]);
+    hasher.update(value.as_bytes());
+    hasher.finalize().into()
+}
+
+#[cfg(unix)]
+impl IsolatedMode {
+    /// Returns the current broker, starting a fresh one when the previous
+    /// broker died. A fresh broker never inherits earlier references.
+    fn live_client(&self) -> Option<Arc<IsolatedBrokerClient>> {
+        let mut client = self
+            .client
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(current) = client.as_ref()
+            && current.is_alive()
+        {
+            return Some(current.clone());
+        }
+        *client = None;
+        match IsolatedBrokerClient::spawn(&self.launcher, self.options) {
+            Ok(spawned) => {
+                let spawned = Arc::new(spawned);
+                *client = Some(spawned.clone());
+                Some(spawned)
+            }
+            Err(error) => {
+                tracing::warn!("isolated credential broker unavailable: {error}");
+                None
+            }
+        }
+    }
 }
 
 fn brokerable_credential_value<'a>(
@@ -314,25 +570,127 @@ impl CredentialBrokerState {
             credential.env_var == env_var
                 && std::ptr::eq(credential.provider, provider)
                 && credential.host_binding == host_binding
-                && credential.real_value.as_str() == real_value
+                && matches!(&credential.secret, RecordSecret::Raw(value) if value.as_str() == real_value)
         }) {
             return existing.dummy_value.clone();
         }
 
-        let dummy_value = loop {
-            let candidate = provider.dummy_value(real_value);
-            if candidate != real_value && !self.is_dummy_value(&candidate) {
-                break candidate;
-            }
-        };
+        let dummy_value = self.fresh_dummy(provider, real_value);
         self.credentials.push(CredentialRecord {
             env_var: env_var.to_string(),
             provider,
             host_binding,
-            real_value: Zeroizing::new(real_value.to_string()),
+            secret: RecordSecret::Raw(Zeroizing::new(real_value.to_string())),
             dummy_value: dummy_value.clone(),
         });
         dummy_value
+    }
+
+    #[cfg(unix)]
+    fn register_isolated(
+        &mut self,
+        mode: &IsolatedMode,
+        env_var: &str,
+        provider: &'static providers::CredentialProvider,
+        host_binding: providers::CredentialHostBinding,
+        real_value: &str,
+    ) -> String {
+        let fingerprint = fingerprint(&mode.fingerprint_key, env_var, real_value);
+        let client = mode.live_client();
+        // References from a dead or replaced broker are never reused.
+        self.credentials
+            .retain(|credential| match &credential.secret {
+                RecordSecret::Brokered { client: owner, .. } => client
+                    .as_ref()
+                    .is_some_and(|current| Arc::ptr_eq(current, owner)),
+                RecordSecret::Raw(_) | RecordSecret::Unavailable { .. } => true,
+            });
+        if let Some(existing) = self.credentials.iter().position(|credential| {
+            credential.env_var == env_var
+                && std::ptr::eq(credential.provider, provider)
+                && credential.host_binding == host_binding
+                && credential.fingerprint() == Some(fingerprint)
+        }) {
+            if matches!(
+                self.credentials[existing].secret,
+                RecordSecret::Brokered { .. }
+            ) || client.is_none()
+            {
+                return self.credentials[existing].dummy_value.clone();
+            }
+            self.credentials.remove(existing);
+        }
+        let Some(client) = client else {
+            return self.register_unavailable(
+                fingerprint,
+                env_var,
+                provider,
+                host_binding,
+                real_value,
+            );
+        };
+        let reference = match client.register(
+            providers::provider_id(provider),
+            HostBindingWire::from_binding(&host_binding),
+            real_value,
+        ) {
+            Ok(reference) => reference,
+            Err(error) => {
+                tracing::warn!("isolated credential broker rejected a credential: {error}");
+                return self.register_unavailable(
+                    fingerprint,
+                    env_var,
+                    provider,
+                    host_binding,
+                    real_value,
+                );
+            }
+        };
+        let dummy_value = self.fresh_dummy(provider, real_value);
+        self.credentials.push(CredentialRecord {
+            env_var: env_var.to_string(),
+            provider,
+            host_binding,
+            secret: RecordSecret::Brokered {
+                fingerprint,
+                reference,
+                client,
+            },
+            dummy_value: dummy_value.clone(),
+        });
+        dummy_value
+    }
+
+    fn register_unavailable(
+        &mut self,
+        fingerprint: [u8; 32],
+        env_var: &str,
+        provider: &'static providers::CredentialProvider,
+        host_binding: providers::CredentialHostBinding,
+        real_value: &str,
+    ) -> String {
+        let dummy_value = self.fresh_dummy(provider, real_value);
+        self.credentials.push(CredentialRecord {
+            env_var: env_var.to_string(),
+            provider,
+            host_binding,
+            secret: RecordSecret::Unavailable { fingerprint },
+            dummy_value: dummy_value.clone(),
+        });
+        dummy_value
+    }
+
+    fn fresh_dummy(
+        &self,
+        provider: &'static providers::CredentialProvider,
+        real_value: &str,
+    ) -> String {
+        loop {
+            let candidate = provider.dummy_value(real_value);
+            if candidate != real_value && !self.is_dummy_value(&candidate) {
+                break candidate;
+            }
+        }
     }
 
     fn is_dummy_value(&self, value: &str) -> bool {
@@ -353,6 +711,15 @@ impl CredentialBrokerState {
 impl CredentialRecord {
     fn matches_host(&self, host: &str) -> bool {
         self.host_binding.matches_host(host)
+    }
+
+    fn fingerprint(&self) -> Option<[u8; 32]> {
+        match &self.secret {
+            RecordSecret::Raw(_) => None,
+            #[cfg(unix)]
+            RecordSecret::Brokered { fingerprint, .. } => Some(*fingerprint),
+            RecordSecret::Unavailable { fingerprint } => Some(*fingerprint),
+        }
     }
 }
 
@@ -538,6 +905,29 @@ pub fn brokered_credential_env_keys(
         .get(CREDENTIAL_BROKER_ACTIVE_ENV_KEY)
         .is_some_and(|value| value == "1");
     providers::credential_broker_env_keys().filter(move |_| active)
+}
+
+#[cfg(test)]
+impl CredentialBroker {
+    /// True when this process still retains `value` as raw credential material.
+    pub(crate) fn holds_raw_value(&self, value: &str) -> bool {
+        self.read_state()
+            .credentials
+            .iter()
+            .any(|credential| matches!(&credential.secret, RecordSecret::Raw(raw) if raw.as_str() == value))
+    }
+
+    #[cfg(unix)]
+    pub(crate) fn current_isolated_client(&self) -> Option<Arc<IsolatedBrokerClient>> {
+        match &self.isolation {
+            Isolation::Process(mode) => mode
+                .client
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone(),
+            Isolation::InProcess => None,
+        }
+    }
 }
 
 #[cfg(test)]

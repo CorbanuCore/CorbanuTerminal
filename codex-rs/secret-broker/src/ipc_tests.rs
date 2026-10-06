@@ -140,3 +140,119 @@ fn pf_27_s04_pf_27_s01_debug_output_is_redacted() {
     assert_eq!(format!("{mac:?}"), "BrokerChannelMac(<redacted>)");
     assert_eq!(format!("{frame:?}"), "SignedBrokerFrame(<authenticated>)");
 }
+
+fn provider_request() -> ProviderRequestOperation {
+    ProviderRequestOperation::new("api.github.com", /*port*/ 443, "GET", "/user?per_page=1")
+        .expect("provider request")
+}
+
+fn reference() -> CredentialReference {
+    CredentialReference::from_sha256_hex(REFERENCE).expect("reference")
+}
+
+#[test]
+fn pf_27_s04_pf_27_s01_provider_frame_round_trip_is_typed_and_secret_free() {
+    let mac = BrokerChannelMac::from_secret(KEY);
+    let frame = mac
+        .sign_provider_request(
+            binding(),
+            /*sequence*/ 3,
+            reference(),
+            provider_request(),
+        )
+        .expect("frame");
+    let verified = mac.verify_provider_request(&frame).expect("verified");
+
+    assert_eq!(
+        verified,
+        VerifiedProviderRequest {
+            sequence: 3,
+            binding: binding(),
+            credential: reference(),
+            request: provider_request(),
+        }
+    );
+    let wire = String::from_utf8_lossy(frame.as_bytes()).to_ascii_lowercase();
+    assert!(!wire.contains("authorization"));
+    assert!(!wire.contains("bearer"));
+}
+
+#[test]
+fn pf_27_s04_pf_27_s01_provider_and_openai_frames_are_domain_separated() {
+    let mac = BrokerChannelMac::from_secret(KEY);
+    let provider = mac
+        .sign_provider_request(
+            binding(),
+            /*sequence*/ 1,
+            reference(),
+            provider_request(),
+        )
+        .expect("provider frame");
+    let openai = mac
+        .sign(binding(), /*sequence*/ 1, operation())
+        .expect("openai frame");
+
+    assert_eq!(
+        mac.verify(&provider).err(),
+        Some(BrokerFrameError::MalformedFrame)
+    );
+    assert_eq!(
+        mac.verify_provider_request(&openai).err(),
+        Some(BrokerFrameError::MalformedFrame)
+    );
+}
+
+#[test]
+fn pf_27_s04_pf_27_s01_provider_frame_rejects_forgery_and_untyped_requests() {
+    let frame = BrokerChannelMac::from_secret(KEY)
+        .sign_provider_request(
+            binding(),
+            /*sequence*/ 1,
+            reference(),
+            provider_request(),
+        )
+        .expect("frame");
+    assert_eq!(
+        BrokerChannelMac::from_secret([8; 32])
+            .verify_provider_request(&frame)
+            .err(),
+        Some(BrokerFrameError::AuthenticationFailed)
+    );
+
+    let mut tampered = frame.as_bytes().to_vec();
+    let index = tampered.len() / 2;
+    tampered[index] ^= 1;
+    assert_eq!(
+        BrokerChannelMac::from_secret(KEY)
+            .verify_provider_request(&SignedBrokerFrame::from_bytes(tampered).expect("bounded"))
+            .err(),
+        Some(BrokerFrameError::AuthenticationFailed)
+    );
+
+    for (host, port, method, path) in [
+        ("API.GITHUB.COM", 443, "GET", "/user"),
+        ("api.github.com", 0, "GET", "/user"),
+        ("api.github.com", 443, "CONNECT", "/user"),
+        ("api.github.com", 443, "GET", "user"),
+        ("api.github.com", 443, "GET", "/user#fragment"),
+        ("api.github.com", 443, "GET", "/user name"),
+        ("api.github.com/evil", 443, "GET", "/user"),
+    ] {
+        assert_eq!(
+            ProviderRequestOperation::new(host, port, method, path).err(),
+            Some(BrokerFrameError::UnsupportedOperation),
+            "{host} {port} {method} {path}"
+        );
+    }
+    assert_eq!(
+        BrokerChannelMac::from_secret(KEY)
+            .sign_provider_request(
+                binding(),
+                /*sequence*/ 0,
+                reference(),
+                provider_request()
+            )
+            .err(),
+        Some(BrokerFrameError::InvalidSequence)
+    );
+}

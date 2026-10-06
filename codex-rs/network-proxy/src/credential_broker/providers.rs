@@ -94,6 +94,27 @@ pub(super) fn openai_provider() -> &'static CredentialProvider {
     &openai::PROVIDER
 }
 
+#[cfg(unix)]
+pub(super) fn provider_by_id(
+    id: super::isolated::protocol::ProviderId,
+) -> &'static CredentialProvider {
+    match id {
+        super::isolated::protocol::ProviderId::Github => &github::PROVIDER,
+        super::isolated::protocol::ProviderId::Openai => &openai::PROVIDER,
+    }
+}
+
+#[cfg(unix)]
+pub(super) fn provider_id(
+    provider: &'static CredentialProvider,
+) -> super::isolated::protocol::ProviderId {
+    if std::ptr::eq(provider, &github::PROVIDER) {
+        super::isolated::protocol::ProviderId::Github
+    } else {
+        super::isolated::protocol::ProviderId::Openai
+    }
+}
+
 // Only the protected scoped route uses this path. Legacy provider behavior and
 // dummy shaping remain unchanged. The final wire header is necessarily a copy;
 // its sensitive flag prevents Debug disclosure, not memory persistence.

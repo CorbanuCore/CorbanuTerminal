@@ -99,22 +99,42 @@ impl ManagedMitmCa {
 
     pub(super) fn tls_acceptor_data_for_host(&self, host: &str) -> Result<TlsAcceptorData> {
         let (cert_pem, key_pem) = issue_host_certificate_pem(host, &self.issuer)?;
-        let cert = CertificateDer::from_pem_slice(cert_pem.as_bytes())
-            .context("failed to parse host cert PEM")?;
-        let key = PrivateKeyDer::from_pem_slice(key_pem.as_bytes())
-            .context("failed to parse host key PEM")?;
-        let mut server_config =
-            rustls::ServerConfig::builder_with_protocol_versions(rustls::ALL_VERSIONS)
-                .with_no_client_auth()
-                .with_single_cert(vec![cert], key)
-                .context("failed to build rustls server config")?;
-        server_config.alpn_protocols = vec![
-            ApplicationProtocol::HTTP_2.as_bytes().to_vec(),
-            ApplicationProtocol::HTTP_11.as_bytes().to_vec(),
-        ];
-
-        Ok(TlsAcceptorData::from(server_config))
+        acceptor_data_for_pem(&cert_pem, &key_pem)
     }
+}
+
+fn acceptor_data_for_pem(cert_pem: &str, key_pem: &str) -> Result<TlsAcceptorData> {
+    let cert = CertificateDer::from_pem_slice(cert_pem.as_bytes())
+        .context("failed to parse host cert PEM")?;
+    let key = PrivateKeyDer::from_pem_slice(key_pem.as_bytes())
+        .context("failed to parse host key PEM")?;
+    let mut server_config =
+        rustls::ServerConfig::builder_with_protocol_versions(rustls::ALL_VERSIONS)
+            .with_no_client_auth()
+            .with_single_cert(vec![cert], key)
+            .context("failed to build rustls server config")?;
+    server_config.alpn_protocols = vec![
+        ApplicationProtocol::HTTP_2.as_bytes().to_vec(),
+        ApplicationProtocol::HTTP_11.as_bytes().to_vec(),
+    ];
+
+    Ok(TlsAcceptorData::from(server_config))
+}
+
+/// Throwaway CA plus an HTTP/1.1-only (no ALPN) acceptor for local TLS test
+/// upstreams, matching simple origin servers.
+#[cfg(all(test, unix))]
+pub(crate) fn test_ca_and_host_acceptor(host: &str) -> Result<(String, TlsAcceptorData)> {
+    let (ca_pem, ca_key) = generate_ca()?;
+    let issuer =
+        Issuer::from_ca_cert_pem(&ca_pem, ca_key).context("failed to parse test CA certificate")?;
+    let (cert_pem, key_pem) = issue_host_certificate_pem(host, &issuer)?;
+    let cert = CertificateDer::from_pem_slice(cert_pem.as_bytes())?;
+    let key = PrivateKeyDer::from_pem_slice(key_pem.as_bytes())?;
+    let server_config = rustls::ServerConfig::builder_with_protocol_versions(rustls::ALL_VERSIONS)
+        .with_no_client_auth()
+        .with_single_cert(vec![cert], key)?;
+    Ok((ca_pem, TlsAcceptorData::from(server_config)))
 }
 
 fn issue_host_certificate_pem(
@@ -244,6 +264,41 @@ pub(crate) fn upstream_tls_root_store_for_cert_path(
             "ignored invalid platform or startup roots for MITM upstream TLS"
         );
     }
+    Ok(Arc::new(roots))
+}
+
+/// Upstream trust for the isolated credential broker: platform roots plus the
+/// startup CA environment, without the controller's managed MITM CA.
+#[cfg(unix)]
+pub(crate) fn broker_upstream_root_store(
+    env: &HashMap<&'static str, String>,
+) -> Result<Arc<rustls::RootCertStore>> {
+    let startup_env_values = startup_ca_file_env_values(env);
+    let rustls_native_certs::CertificateResult { certs, .. } =
+        crate::native_certs::load_platform_native_certs();
+    let mut certificates = certs;
+    let mut appended_startup_paths = HashSet::new();
+    for path in CUSTOM_CA_ENV_KEYS
+        .into_iter()
+        .filter_map(|key| startup_env_values.get(key))
+        .map(PathBuf::from)
+    {
+        if appended_startup_paths.insert(path.clone()) {
+            certificates.extend(read_ca_certificates(&path)?);
+        }
+    }
+    if let Some(startup_cert_dir) = env
+        .get(SSL_CERT_DIR_ENV_KEY)
+        .filter(|value| !value.is_empty())
+    {
+        for path in std::env::split_paths(startup_cert_dir) {
+            if appended_startup_paths.insert(path.clone()) {
+                certificates.extend(load_ca_directory_certificates(&path));
+            }
+        }
+    }
+    let mut roots = rustls::RootCertStore::empty();
+    roots.add_parsable_certificates(certificates);
     Ok(Arc::new(roots))
 }
 

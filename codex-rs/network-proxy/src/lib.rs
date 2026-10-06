@@ -39,6 +39,8 @@ pub use config::NetworkUnixSocketPermission;
 pub use config::NetworkUnixSocketPermissions;
 pub use config::host_and_port_from_network_addr;
 pub use config::managed_proxy_ports;
+#[cfg(unix)]
+pub use credential_broker::CODEX_CREDENTIAL_BROKER_ARG1;
 pub use credential_broker::CREDENTIAL_BROKER_ACTIVE_ENV_KEY;
 pub use credential_broker::IsolatedCredentialDispatchError;
 pub use credential_broker::IsolatedCredentialDispatcher;
@@ -54,6 +56,8 @@ pub use credential_broker::ScopedCredentialRouteError;
 pub use credential_broker::ScopedCredentialUse;
 pub use credential_broker::brokered_credential_dummy_env_keys;
 pub use credential_broker::brokered_credential_env_keys;
+#[cfg(unix)]
+pub use credential_broker::run_credential_broker_main;
 pub use mitm_hook::InjectedHeaderConfig;
 pub use mitm_hook::MitmHookActionsConfig;
 pub use mitm_hook::MitmHookBodyConfig;

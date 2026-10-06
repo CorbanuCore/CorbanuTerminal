@@ -17,6 +17,7 @@ anyhow = { workspace = true }
 base64 = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 chrono = { workspace = true }
+codex-secret-broker = { workspace = true }
 codex-security-policy = { workspace = true }
 codex-utils-absolute-path = { workspace = true }
 codex-utils-home-dir = { workspace = true }
@@ -40,10 +41,10 @@ rama-tcp = { version = "=0.3.0-alpha.4", features = ["http"] }
 rama-tls-rustls = { version = "=0.3.0-alpha.4", features = ["http"] }
 rustls-native-certs = { workspace = true }
 sha2 = { workspace = true }
+tempfile = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }
-tempfile = { workspace = true }
 
 [target.'cfg(target_family = "unix")'.dependencies]
 rama-unix = { version = "=0.3.0-alpha.4" }
