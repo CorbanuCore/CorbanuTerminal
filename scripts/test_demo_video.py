@@ -52,6 +52,10 @@ class DemoVideoTest(unittest.TestCase):
         self.assertEqual(spec.steps[3].compress, 2)
         self.assertEqual(spec.credentials, {"ZAI_API_KEY": "provider/zai_api_key"})
 
+    def test_tmux_literal_escapes_command_separator(self):
+        self.assertEqual(dv.tmux_literal(";"), "\\;")
+        self.assertEqual(dv.tmux_literal("a"), "a")
+
     def test_rejects_ambiguous_step(self):
         self.spec_path.write_text(SPEC + '[[steps]]\ntype = "x"\nkey = "Enter"\n')
         with self.assertRaisesRegex(dv.DemoError, "exactly one"):
