@@ -9,8 +9,8 @@ parallel_lanes: "broker, untrusted-content, tui"
 integration_owner: "Codex /root security round-five coordinator"
 activation_authority: "Product authority defined in the product specification"
 activation_basis: "P0 sequencing plus Travis Good’s 2026-08-28 decision to reconcile the complete security program into this active plan; scope cut and lanes per Travis's 2026-10-06 decisions."
-target_release: "TBD — candidate qualified by 2026-10-08"
-deadline: 2026-10-08
+target_release: "TBD — candidate qualified by 2026-10-09"
+deadline: 2026-10-09
 created: 2026-08-23
 updated: 2026-10-06
 product_spec:
@@ -47,7 +47,7 @@ Deferred features are in the [P1 security hardening plan](../proposed/p1-securit
 | Authoritative decision | “Accountable sequencing,” item 1: `/security` is P0 and begins immediately |
 | Binding scope decisions | Travis, 2026-10-06: PF-83 closes; flagged picker ships early; 20-sprint core; 3 lanes; tiered gate |
 | Delivery owner / integration owner | Jim Ricketts / Codex /root security coordinator |
-| Deadline | 2026-10-08 (unchanged; not re-estimated) |
+| Deadline | 2026-10-09 (Travis, 2026-10-06) |
 
 ## User pain
 
@@ -232,7 +232,7 @@ describe only behaviour verified at a milestone, citing **P0 `/security` levels*
 | --- | --- |
 | PF-83 open items (designer packet, review count 7/5, process isolation) | Recorded in the archived [PF-83-S01](../../sprints/archive/p0-security-levels/pf-83-s01-permission-confirmation.md); not blocking the core |
 | Aggressive vault denial from existing controls | PF-24-S03 must prove it; if impossible, stop and escalate |
-| Global reservation cap | 3 security lanes + 1 accounting + 1 Task Node = 5 (`docs/sprints/index.md`) |
+| Global reservation cap | 3 security lanes + 1 accounting + 1 Task Node = 5 (`docs/sprints/index.md`); confirmed by Travis 2026-10-06 |
 | October 8 deadline | Unchanged and not re-estimated against the 20-sprint core |
 
 ## Release linkage

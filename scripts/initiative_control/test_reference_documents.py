@@ -22,6 +22,7 @@ class ReferenceDocumentTests(unittest.TestCase):
             repo = Path(tmp)
             (repo / "scripts/initiative_control").mkdir(parents=True)
             selected = ["docs/research/accounting/allocation.md", "qa/proof.md"]
+            self.assertEqual(control.reference_documents({"reference_documents": ["docs/specs/flow.md"]}), ["docs/specs/flow.md"])
             texts = ["# Allocation\n[Proof](../../../qa/proof.md)",
                      "# Proof\n[Private](../private.md)"]
             for relative, text in zip(selected, texts):
