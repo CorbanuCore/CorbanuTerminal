@@ -143,6 +143,35 @@ fn pf_30_s01_all_native_wire_builders_reject_missing_admission() {
 }
 
 #[test]
+fn pf_30_s02_flag_off_protected_request_says_the_feature_is_off() {
+    // Host context larger than the old admission bound used to surface as
+    // "registry is full or poisoned"; the real cause is the disabled flag.
+    let client = test_model_client(SessionSource::Cli)
+        .with_ingress_level(codex_security_policy::SecurityLevel::Moderate);
+    let host = ResponseItem::Message {
+        id: None,
+        role: "developer".into(),
+        content: vec![ContentItem::InputText {
+            text: "host context ".repeat(400),
+        }],
+        phase: None,
+        internal_chat_message_metadata_passthrough: None,
+    };
+    client.observe_native_ingress(std::slice::from_ref(&host));
+    let prompt = Prompt {
+        input: vec![host],
+        ..Default::default()
+    };
+    let error = client
+        .build_anthropic_messages_request(&prompt, &test_model_info(), /*effort*/ None)
+        .expect_err("flag-off protected requests fail closed");
+    let message = error.to_string();
+    assert!(message.contains("`source_envelopes` feature, which is off"), "{message}");
+    assert!(message.contains("before anything was sent"), "{message}");
+    assert!(!message.contains("full or poisoned"), "{message}");
+}
+
+#[test]
 fn pf_30_s01_permissive_wire_payload_is_unchanged() {
     let mut model = test_model_info();
     model.max_output_tokens = Some(4096);

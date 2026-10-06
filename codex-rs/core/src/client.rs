@@ -918,9 +918,13 @@ impl ModelClient {
             }
             return Ok(input);
         }
-        ingress
-            .project(&prompt.input)
-            .map_err(|error| CodexErr::InvalidRequest(error.to_string()))
+        // Without `source_envelopes` no producer admits external context, so
+        // every protected request fails closed here; say why, not how.
+        ingress.project(&prompt.input).map_err(|_| {
+            CodexErr::InvalidRequest(
+                crate::security::ingress::IngressError::SourceEnvelopesOff.to_string(),
+            )
+        })
     }
 
     /// `source_envelopes`: send external context as labelled untrusted data
