@@ -173,7 +173,8 @@ impl RouteAwareHttpRequestRunner {
             Ok(response) => response,
             Err(error) => {
                 request_span.record("error.type", "request");
-                let error_message = error.to_string();
+                // Shown to users (MCP startup failures); the URL can carry credentials.
+                let error_message = error.redacted_message();
                 log_send_error(&method, error);
                 return Err(internal_error(format!(
                     "http/request failed: {error_message}"
@@ -200,7 +201,8 @@ impl RouteAwareHttpRequestRunner {
 
         let body = response.bytes().await.map_err(|error| {
             internal_error(format!(
-                "failed to read http/request response body: {error}"
+                "failed to read http/request response body: {}",
+                codex_http_client::redact_reqwest_error(&error)
             ))
         })?;
 
@@ -253,7 +255,7 @@ impl RouteAwareHttpRequestRunner {
                             seq,
                             delta: Vec::new().into(),
                             done: true,
-                            error: Some(error.to_string()),
+                            error: Some(codex_http_client::redact_reqwest_error(&error)),
                         },
                     )
                     .await;
