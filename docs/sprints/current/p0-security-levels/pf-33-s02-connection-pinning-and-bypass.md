@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-33-S02"
 title: "Connection pinning and alternate-egress denial"
-status: in_progress
+status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-33"
 execution_order: 33
@@ -18,6 +18,10 @@ updated: 2026-10-06
 ---
 
 # PF-33-S02 — Connection pinning and alternate-egress denial
+
+**October 6:** merged (PR #215) behind `url_destination_policy` (default off; Permissive unchanged).
+[Evidence, platform matrix and review](../../../../qa/security-levels/sprints/PF-33-S02/README.md). Returned to `draft`
+to free the TUI lane: the remaining items belong to the broker lane, a future SearXNG adapter and PF-25-S02.
 
 ## Execution mandate
 
@@ -83,7 +87,8 @@ updated: 2026-10-06
   failing identically on the base commit: temp-dir writable roots, unrelated); core `windows_sandbox`/`network_proxy`.
 - [x] GLM 5.2 tmux runs as five SOP videos ([index](../../../../qa/demos/index/PF-33-S02.md)); Opus 5.5 High review
   APPROVE WITH NITS, dispositions in the [evidence README](../../../../qa/security-levels/sprints/PF-33-S02/README.md).
-- [ ] PR CI green and merged behind `url_destination_policy`; PF-26 final-candidate requalification (milestone).
+- [x] PR CI green; merged behind `url_destination_policy` as PR #215 (`a0d96aea4b`).
+- [ ] PF-26 final-candidate requalification (milestone gate).
 
 ## Exit evidence
 
