@@ -134,6 +134,11 @@ fn pf_30_s03_vault_credential_and_policy_commands_are_protected() {
     assert_eq!(kind(&["sh", "-c", "corbanu vault list"]), Some(Vault));
     assert_eq!(script("cat ~/.dock*/config.json"), Some(Credentials));
     assert_eq!(script("cat ~/.config/g?/hosts.yml"), Some(Credentials));
+    assert_eq!(script("cat ~/.config/*/hosts.yml"), Some(Credentials));
+    assert_eq!(
+        kind(&["sudo", "sh", "-c", "cd ~ && cat .docker/config.json"]),
+        Some(Credentials)
+    );
     // The strongest kind wins when one command touches several.
     assert_eq!(
         script("cat ~/.corbanu/config.toml; corbanu vault list"),
@@ -178,6 +183,7 @@ fn pf_30_s03_ordinary_commands_are_not_protected() {
         "ls /home/fixture/homepage",
         "codex exec 'security review of the features list'",
         "cat inventory/hosts.yml",
+        "cat ~/go/src/github.com/acme/ops/inventory/hosts.yml",
         "cat .docker/compose.yaml",
         "ls .azure",
         "ls *",

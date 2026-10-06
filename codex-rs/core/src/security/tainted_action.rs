@@ -246,7 +246,11 @@ impl Homes {
                     .is_some_and(|rest| {
                         let mut actual = rest.split('/').filter(|segment| !segment.is_empty());
                         folder.split('/').all(|expected| {
-                            actual.next().is_some_and(|got| glob_matches(got, expected))
+                            actual.next().is_some_and(|got| {
+                                glob_matches(got, expected)
+                                    // `*` matches non-dot folder names.
+                                    || (!expected.starts_with('.') && glob_any(got, expected))
+                            })
                         })
                     })
             })
@@ -258,7 +262,8 @@ impl Homes {
                 .iter()
                 .any(|folder| under_user_home(folder))
             || CREDENTIAL_FILES.iter().any(|file| glob_matches(name, file))
-            || (glob_matches(name, "hosts.yml") && path.contains("/gh"))
+            || (glob_matches(name, "hosts.yml")
+                && segments.iter().any(|segment| glob_any(segment, "gh")))
             || name.starts_with("id_rsa")
             || name.starts_with("id_ed25519")
         {
@@ -335,6 +340,11 @@ fn glob_matches(pattern: &str, name: &str) -> bool {
     if pattern.starts_with(['*', '?', '[']) {
         return pattern == name;
     }
+    glob_any(pattern, name)
+}
+
+/// The glob match itself, leading wildcards included.
+fn glob_any(pattern: &str, name: &str) -> bool {
     fn matches(pattern: &[char], name: &[char]) -> bool {
         match pattern.first() {
             None => name.is_empty(),
@@ -363,7 +373,13 @@ fn simple_commands(command: &[String]) -> Vec<Vec<String>> {
         let in_shell = commands
             .last()
             .and_then(|words| words.first())
-            .is_some_and(|word| SHELLS.contains(&basename(word.as_str())));
+            .is_some_and(|_| {
+                commands.last().is_some_and(|words| {
+                    words
+                        .iter()
+                        .any(|word| SHELLS.contains(&basename(word.as_str())))
+                })
+            });
         if in_shell
             && previous.is_some_and(|flag| {
                 flag.starts_with('-') && !flag.starts_with("--") && flag.ends_with('c')
