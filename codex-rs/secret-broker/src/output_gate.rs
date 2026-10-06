@@ -912,7 +912,14 @@ fn representations(value: &str) -> (Vec<Zeroizing<Vec<u8>>>, std::ops::Range<usi
     push(raw.to_vec(), &mut reps);
     if let Ok(json) = serde_json::to_string(value) {
         let inner = Zeroizing::new(json);
-        push(inner[1..inner.len() - 1].as_bytes().to_vec(), &mut reps);
+        let escaped = &inner[1..inner.len() - 1];
+        push(escaped.as_bytes().to_vec(), &mut reps);
+        // Escaped again: text that already held the escaped form (a JSON
+        // file in tool output) inside a serialized item.
+        if let Ok(twice) = serde_json::to_string(escaped) {
+            let twice = Zeroizing::new(twice);
+            push(twice[1..twice.len() - 1].as_bytes().to_vec(), &mut reps);
+        }
     }
     for upper in [true, false] {
         push(percent_encode(raw, upper, /*form*/ false), &mut reps);

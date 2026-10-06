@@ -75,6 +75,7 @@ Windows refuses protected launches with a reason; the port is [PF-27-S06](pf-27-
 - [x] Integration: affected crate suites (722 passed; core subset 853 passed; one unrelated rmcp keyring-fixture failure recorded).
 - [x] TUI applicability: GLM 5.2 TUI runs and five SOP videos ([index](../../../../qa/demos/index/PF-27-S02.md)).
 - [x] Candidate, commands and outcomes recorded; synthetic credentials only.
+- [ ] Windows verification with PF-27-S06.
 
 ## Exit evidence
 

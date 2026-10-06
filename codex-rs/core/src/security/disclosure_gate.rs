@@ -251,9 +251,8 @@ fn strip_value<T: Serialize + DeserializeOwned>(
     [WITHHELD_FIELD, ""].into_iter().find_map(|with| {
         let mut json = original.clone();
         strip(gate, sink, &mut json, with);
-        let serialized = serde_json::to_string(&json).ok()?;
-        // Found only across fields: nothing single to replace.
-        if gate.scrub(sink, &serialized).is_some() {
+        // Found only across fields or in a number: nothing to replace.
+        if survives_walk(gate, sink, &json) {
             return None;
         }
         serde_json::from_value(json).ok()
@@ -285,12 +284,16 @@ fn gate_value_with<T: Serialize + DeserializeOwned>(
     let Ok(mut json) = serde_json::from_str::<serde_json::Value>(&serialized) else {
         return Gated::Withheld;
     };
-    scrub_json(gate, sink, &mut json);
+    let changed = scrub_json(gate, sink, &mut json);
     // Still found after every key and string was gated (a number, or a value
     // spanning fields): fail closed.
-    if serde_json::to_string(&json).map_or(true, |text| gate.scrub(sink, &text).is_some()) {
+    if survives_walk(gate, sink, &json) {
         tracing::warn!("PF-28-S01: withheld a {} value", sink.as_str());
         return Gated::Withheld;
+    }
+    if !changed {
+        // Only the size of the whole triggered the quick scan.
+        return Gated::Unchanged;
     }
     match serde_json::from_value(json) {
         Ok(value) => Gated::Changed(value),
@@ -383,6 +386,28 @@ fn scrub_json(gate: &OutputGate, sink: OutputSink, value: &mut serde_json::Value
             changed
         }
         _ => false,
+    }
+}
+
+/// True when a managed value is still present after every key and string
+/// was gated: in a number, or spanning fields. A document over the scan
+/// limit cannot be rescanned whole (the size alone would hit), so its number
+/// leaves are checked one by one.
+fn survives_walk(gate: &OutputGate, sink: OutputSink, json: &serde_json::Value) -> bool {
+    fn number_hit(gate: &OutputGate, sink: OutputSink, value: &serde_json::Value) -> bool {
+        match value {
+            serde_json::Value::Number(number) => gate.scrub(sink, &number.to_string()).is_some(),
+            serde_json::Value::Array(items) => {
+                items.iter().any(|item| number_hit(gate, sink, item))
+            }
+            serde_json::Value::Object(map) => map.values().any(|item| number_hit(gate, sink, item)),
+            _ => false,
+        }
+    }
+    match serde_json::to_string(json) {
+        Ok(text) if text.len() <= output_gate::MAX_SCAN_BYTES => gate.scrub(sink, &text).is_some(),
+        Ok(_) => number_hit(gate, sink, json),
+        Err(_) => true,
     }
 }
 

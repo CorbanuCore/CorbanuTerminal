@@ -39,7 +39,7 @@ Final tree, after `just fix` and `just fmt`:
 
 | Command | Result |
 | --- | --- |
-| `just test -p codex-secret-broker -p codex-vault -p codex-login -p codex-otel -p codex-core -E 'test(pf_28_s01)'` | 35 passed (secret-broker 20, core 13, vault 1, login 1) |
+| `just test -p codex-secret-broker -p codex-vault -p codex-login -p codex-otel -p codex-core -E 'test(pf_28_s01)'` | 38 passed (secret-broker 20, core 16, vault 1, login 1) |
 | `just test -p codex-secret-broker -p codex-vault -p codex-login -p codex-otel -p codex-feedback -p codex-state -p codex-message-history -p codex-features` | 792 passed |
 | `just test -p codex-core -E 'test(pf_28) \| test(security::) \| test(session::) \| test(client::) \| test(exec::) \| test(config::) \| test(schema) \| test(compact)'` | 1422 of 1426. The 4 failures (`config_schema_matches_fixture`, two `skills_*` developer-message tests, `remote_compact_trim_estimate_uses_session_base_instructions`) fail the same way on `origin/main` `ce25d20b59` in a clean worktree |
 | `just test -p codex-tui -E 'test(log) \| test(pf_28)'` | 104 of 105. `tmux_first_run_anthropic_account_selects_claude_login_after_success` times out because the long worktree path truncates the status line it waits for (`Corbanu Terminal · T…`); flag-off path, unrelated |
@@ -48,7 +48,8 @@ The named tests cover: exact values and every encoding; overlapping and repeated
 capacity exhaustion without eviction; more than 512 representations; rotation with leases, also concurrent;
 per-owner retirement; chunk splits at every byte; and prefix-only hold-back. They also cover: a stream forwarded
 from a sub-session and gated twice; a reasoning section break; an aborted turn; delivery of events sent on a cloned
-sender; events that cannot be rebuilt; values in object keys and numbers; false-positive seeding; URL query secrets; sign-in login and two refreshes
+sender; events that cannot be rebuilt; values in object keys and numbers; clean documents over the scan limit;
+values already JSON-escaped in text; false-positive seeding; URL query secrets; sign-in login and two refreshes
 across separate stores; seed-phrase windows; bare and re-cased hex keys; and keystore scaffolding.
 
 ## GLM 5.2 runs and videos (SOP, `qa/demos/index/PF-28-S01.md`)
@@ -77,6 +78,11 @@ Independent Opus 5.5 High review in three rounds:
 - `review-opus-4.md`: R1 to R4 verified, with no regressions. It found K1 (P2): a value held only in a JSON object
   key was passed raw. Fixed in the final commit: keys are gated, and a value still found after the walk is withheld.
   A re-check of that commit is `review-opus-5.md`.
+- `review-opus-5.md`: K1 verified, with no false withholds in normal use. It found V1 (P2): a clean document over
+  the 16 MiB scan limit was withheld, because the rescan hit on size alone. It also found V2 (P3): a value already
+  JSON-escaped inside a string was missed by the serialized quick scan. Both are fixed in the final commit, along
+  with N4 (a test for stripped keys). Over the limit, only number leaves are rescanned. The doubly escaped form is
+  now registered. N3 is recorded below. A re-check is `review-opus-6.md`.
 
 ## Known limits (not claimed)
 
@@ -99,5 +105,7 @@ Independent Opus 5.5 High review in three rounds:
   rescrubbed. Each event is scanned up to three times; stream state uses one global mutex; registration recompiles
   the matcher under the state lock.
 - The base64 partial character before a value can be emitted in an earlier chunk (at most 4 bits).
+- A `TurnComplete` or `TurnAborted` that cannot be rebuilt is delivered with its text cleared, but its numbers
+  unchanged. In a document over 16 MiB, a value spanning fields is not checked; number leaves are.
 - The `pf_28_s01` tests in login, vault and core arm the process-wide gate, so they need nextest (`just test`).
 - Memory summaries containing a managed value are refused as a batch (the endpoint is unused in production).

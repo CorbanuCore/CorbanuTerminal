@@ -1,17 +1,17 @@
 ---
 sprint_id: "PF-28-S01"
 title: "Central secret and protected-output gate"
-status: in_progress
+status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-28"
 execution_order: 30
 owner: "broker lane worker (codex, 2026-10-06)"
 parallel_lane: "broker"
-write_scope: "codex-rs/secret-broker/src/output_gate.rs, codex-rs/secret-broker/src/output_gate_tests.rs, codex-rs/secret-broker/src/lib.rs, codex-rs/secret-broker/Cargo.toml, codex-rs/core/src/security/disclosure_gate.rs, codex-rs/core/src/security/disclosure_gate_tests.rs, codex-rs/core/src/security/mod.rs, codex-rs/core/src/client.rs, codex-rs/core/src/exec.rs, codex-rs/core/src/session/mod.rs, codex-rs/core/src/session/session.rs, codex-rs/login/src/auth/storage_gate.rs, codex-rs/login/src/auth/storage.rs, codex-rs/login/Cargo.toml, codex-rs/vault/src/lib.rs, codex-rs/vault/src/tests.rs, codex-rs/otel/src/events/session_telemetry.rs, codex-rs/otel/Cargo.toml, codex-rs/feedback/, codex-rs/message-history/, codex-rs/state/src/log_db.rs, codex-rs/state/Cargo.toml, codex-rs/tui/src/gated_log_writer.rs, codex-rs/tui/src/lib.rs, codex-rs/tui/Cargo.toml, codex-rs/Cargo.lock, qa/security-levels/sprints/PF-28-S01/, qa/demos/specs/pf28s01-*.toml, qa/demos/index/PF-28-S01.md, docs/sprints/current/p0-security-levels/pf-28-s01-central-secret-output-gate.md"
+write_scope: "codex-rs/secret-broker/src/output_gate.rs, codex-rs/secret-broker/src/output_gate_tests.rs, codex-rs/secret-broker/src/lib.rs, codex-rs/secret-broker/Cargo.toml, codex-rs/core/src/security/disclosure_gate.rs, codex-rs/core/src/security/disclosure_gate_tests.rs, codex-rs/core/src/security/mod.rs, codex-rs/core/src/client.rs, codex-rs/core/src/exec.rs, codex-rs/core/src/session/mod.rs, codex-rs/core/src/session/session.rs, codex-rs/login/src/auth/storage_gate.rs, codex-rs/login/src/auth/storage.rs, codex-rs/login/Cargo.toml, codex-rs/vault/src/lib.rs, codex-rs/vault/src/tests.rs, codex-rs/otel/src/events/session_telemetry.rs, codex-rs/otel/Cargo.toml, codex-rs/feedback/, codex-rs/message-history/, codex-rs/state/src/log_db.rs, codex-rs/state/Cargo.toml, codex-rs/tui/src/gated_log_writer.rs, codex-rs/tui/src/lib.rs, codex-rs/tui/Cargo.toml, codex-rs/Cargo.lock, qa/security-levels/sprints/PF-28-S01/, qa/demos/specs/pf28s01-tool-output-gated.toml, qa/demos/specs/pf28s01-split-output.toml, qa/demos/specs/pf28s01-persistence-clean.toml, qa/demos/specs/pf28s01-baseline-flag-off.toml, qa/demos/index/PF-28-S01.md, docs/sprints/current/p0-security-levels/pf-28-s01-central-secret-output-gate.md"
 integration_gate: "PR to main under the per-sprint gate (sec-common decision 5); merged behind secret_output_gate. Shared files kept to small hunks: the flag in codex-rs/features/src/lib.rs and codex-rs/core/config.schema.json, and one hunk in codex-rs/core/src/config/mod.rs (arm, snapshot off, warning)."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf28-s01-secret-gate-20261006"
 branch: "feat/pf28-s01-secret-gate-20261006"
-base_commit: "699bd4a82f"
+base_commit: "699bd4a82f78c5967de7daf4314d4d426b464260"
 depends_on: "PF-27-S02"
 created: 2026-08-28
 updated: 2026-10-06
@@ -42,7 +42,7 @@ updated: 2026-10-06
 
 ## Preconditions
 
-- [x] Active plan; PF-27-S02 merged behind its flag (#191). It is not archived; its open decisions do not block this sprint.
+- [x] Active plan; PF-27-S02 merged behind its flag (#191). It is not archived yet (two open decisions), so this record stays `draft` until it is; the code merged behind `secret_output_gate`.
 - [x] Read root and nearest implementation-path AGENTS.md; plan/worktree coordinates verified.
 - [x] Source pins, crate/module paths and backend/API availability confirmed.
 
@@ -53,7 +53,7 @@ updated: 2026-10-06
 - [x] Exact values, JSON, percent, base64 (all alignments, both alphabets) and hex. Covers short values (whole-word, 3 to 5 bytes), overlapping and repeated values, chunk splits, rotation with leases, per-owner retirement, and more than 512 representations. Capacity exhaustion denies without evicting; oversized payloads are withheld.
 - [x] Gated sinks: model requests (turns, compaction), recorded history, rollout transcript, client events (at `send_event` and again at delivery), errors, tool and prompt telemetry, TUI log, feedback, log database and prompt history. Rollout traces and shell snapshots are off while armed.
 - [x] Sign-in tokens are registered on load and save (login, refresh, keyring), and vault values on reveal; a value that cannot be protected is not released. Seed phrases (also any three consecutive words) and private keys withhold the whole payload. Seeding skips ordinary settings.
-- [x] Named `pf_28_s01` tests (35) in secret-broker, core, vault and login; Cargo lock updated.
+- [x] Named `pf_28_s01` tests (38) in secret-broker, core, vault and login; Cargo lock updated.
 - [x] GLM 5.2 TUI runs and four SOP videos; Opus 5.5 High review rounds dispositioned. [Evidence](../../../../qa/security-levels/sprints/PF-28-S01/README.md).
 
 ## Remaining
@@ -67,10 +67,11 @@ updated: 2026-10-06
 ## Verification
 
 - [x] `just fix -p` on every touched crate, then `just fmt`; final diff inspected.
-- [x] Focused: `just test -p codex-secret-broker -p codex-vault -p codex-login -p codex-otel -p codex-core -E 'test(pf_28_s01)'`: 35 passed. (`codex-secrets` gained no tests: its sanitizer is not used by the gate.)
+- [x] Focused: `just test -p codex-secret-broker -p codex-vault -p codex-login -p codex-otel -p codex-core -E 'test(pf_28_s01)'`: 38 passed. (`codex-secrets` gained no tests: its sanitizer is not used by the gate.)
 - [x] Integration: affected crate suites; results in the evidence README.
 - [x] TUI applicability: four GLM 5.2 runs recorded as SOP videos ([index](../../../../qa/demos/index/PF-28-S01.md)).
 - [x] Candidate, commands and outcomes recorded; synthetic canaries only.
+- [ ] Milestone qualification (isolated code-blind VM run, human sign-off) when Moderate ships.
 
 ## Exit evidence
 

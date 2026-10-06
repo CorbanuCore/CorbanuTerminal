@@ -274,13 +274,15 @@ fn pf_28_s01_undecodable_value_is_withheld() {
 #[test]
 fn pf_28_s01_model_request_is_gated() {
     let gate = gate();
-    let mut prompt = crate::client_common::Prompt::default();
-    prompt.input = vec![ResponseItem::FunctionCallOutput {
-        id: None,
-        call_id: "call-pf28-prompt".to_string(),
-        output: FunctionCallOutputPayload::from_text(CANARY.to_string()),
-        internal_chat_message_metadata_passthrough: None,
-    }];
+    let mut prompt = crate::client_common::Prompt {
+        input: vec![ResponseItem::FunctionCallOutput {
+            id: None,
+            call_id: "call-pf28-prompt".to_string(),
+            output: FunctionCallOutputPayload::from_text(CANARY.to_string()),
+            internal_chat_message_metadata_passthrough: None,
+        }],
+        ..Default::default()
+    };
     prompt.base_instructions.text = format!("instructions {CANARY}");
     let gated = gate_prompt_with(&gate, &prompt).expect("gated");
     let serialized = serde_json::to_string(&gated.input).expect("json");
@@ -543,4 +545,47 @@ fn pf_28_s01_value_in_an_object_key_or_number_is_never_delivered_raw() {
         gate_value_with(&numeric, OutputSink::Presentation, &value),
         Gated::Withheld
     ));
+}
+
+#[test]
+fn pf_28_s01_clean_value_over_the_scan_limit_passes_unchanged() {
+    let gate = gate();
+    let big = "a".repeat(9 * 1024 * 1024);
+    let value = serde_json::json!({ "first": big, "second": big, "count": 7 });
+    assert!(matches!(
+        gate_value_with(&gate, OutputSink::Presentation, &value),
+        Gated::Unchanged
+    ));
+}
+
+#[test]
+fn pf_28_s01_stripped_delivery_replaces_keys_too() {
+    let gate = gate();
+    let value = serde_json::json!({ CANARY: [1, 2], "kept": "ok" });
+    let stripped: serde_json::Value =
+        strip_value(&gate, OutputSink::Presentation, &value).expect("stripped");
+    assert_eq!(
+        stripped,
+        serde_json::json!({ "[WITHHELD]": [1, 2], "kept": "ok" })
+    );
+}
+
+#[test]
+fn pf_28_s01_escaped_value_inside_a_string_is_found_in_the_serialized_item() {
+    let gate = OutputGate::new();
+    gate.register("escaped", SecretClass::Operational, "pf28\"quoted\"pw-77")
+        .expect("register");
+    // `cat config.json` output: the text already holds the escaped form.
+    let item = ResponseItem::FunctionCallOutput {
+        id: None,
+        call_id: "call-pf28-escaped".to_string(),
+        output: FunctionCallOutputPayload::from_text(
+            "{\"password\": \"pf28\\\"quoted\\\"pw-77\"}".to_string(),
+        ),
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let gated = gate_values_with(&gate, OutputSink::ToolResult, &[item]).expect("gated");
+    let text = serde_json::to_string(&gated).expect("json");
+    assert!(!text.contains("pw-77"), "{text}");
+    assert!(text.contains("[REDACTED:escaped]"), "{text}");
 }
