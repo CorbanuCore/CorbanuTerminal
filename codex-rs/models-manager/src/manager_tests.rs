@@ -1681,6 +1681,8 @@ fn bundled_zai_anthropic_models_have_output_limits() {
 /// Anthropic-wire provider can run must resolve to an output limit (#181).
 #[test]
 fn bundled_anthropic_wire_provider_models_have_output_limits() {
+    use codex_model_provider_info::CORBANU_API_CLAUDE_FABLE_5_MODEL;
+    use codex_model_provider_info::CORBANU_API_KIMI_K3_MODEL;
     use codex_model_provider_info::WireApi;
     use codex_model_provider_info::built_in_model_providers;
     use codex_model_provider_info::canonical_catalog_provider;
@@ -1715,8 +1717,14 @@ fn bundled_anthropic_wire_provider_models_have_output_limits() {
         let family = provider_id
             .strip_suffix("-anthropic")
             .unwrap_or(provider_id);
+        // Catalogue slugs, plus public slugs that providers accept but that
+        // borrow another row's metadata (Corbanu API identities).
         let requested = std::iter::once(None)
-            .chain(response.models.iter().map(|model| Some(model.slug.clone())));
+            .chain(response.models.iter().map(|model| Some(model.slug.clone())))
+            .chain(
+                [CORBANU_API_KIMI_K3_MODEL, CORBANU_API_CLAUDE_FABLE_5_MODEL]
+                    .map(|model| Some(model.to_string())),
+            );
         for request in requested {
             let explicit = request.is_some();
             let Some(model) = resolve_model_for_provider(request, provider_id) else {
