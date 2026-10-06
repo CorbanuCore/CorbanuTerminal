@@ -1,0 +1,24 @@
+# Reads the admin password from stdin, never echoes it, runs one script as root.
+log_user 0
+set timeout 60
+gets stdin pw
+set script [lindex $argv 0]
+spawn -noecho su neo2 -c "/usr/bin/sudo -S -p PF83SUDO: /bin/bash $script"
+expect {
+  "Password:" { send -- "$pw\r" }
+  timeout { puts "PF83ADMIN: su prompt timeout"; exit 2 }
+}
+expect {
+  "PF83SUDO:" { send -- "$pw\r"; exp_continue }
+  "PF83BEGIN" {}
+  "Sorry" { puts "PF83ADMIN: auth failed"; exit 3 }
+  "failure" { puts "PF83ADMIN: su failure"; exit 3 }
+  timeout { puts "PF83ADMIN: sudo timeout"; exit 2 }
+  eof { puts "PF83ADMIN: early eof"; exit 4 }
+}
+unset pw
+log_user 1
+set timeout -1
+expect eof
+catch wait result
+exit [lindex $result 3]

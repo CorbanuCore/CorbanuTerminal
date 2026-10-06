@@ -1,0 +1,160 @@
+{
+ "feature": "PF-83-S01 request-correlated permission confirmation",
+ "designer": null,
+ "designer_note": "Original designer session/access packet, brief and screenshots were not supplied; the proposal's own header is its only provenance. Not manufactured.",
+ "fresh_context": null,
+ "code_blind": null,
+ "results_blind": null,
+ "isolation": "instruction-only",
+ "proposal": {
+  "path": "original-F01-F11.md",
+  "sha256": "c97bf701cd7aff2e26f08884f35dbc9a4fc33b1eef14eee6328d2ea1f1411726"
+ },
+ "screenshots": [],
+ "priority_note": "All originals treated as blockers (P1 F09/F11 included), matching the prior normalization; none waived.",
+ "cases": [
+  {
+   "id": "F01",
+   "title": "Idle restricted → Full Access",
+   "original_priority": "P0",
+   "priority": "blocker",
+   "starting_conditions": "idle session, restricted/ask-for-approval visibly effective; probe behavior established.",
+   "actions": [
+    "choose Full Access; follow any clearly presented application path; submit a new probe after effectiveness is reported."
+   ],
+   "expected": [
+    "selected and effective levels are distinguishable during any delay. A truthful success state appears only once Full Access applies. The new probe completes without the needless command approval previously caused by the restricted level. Any remaining prompt must have an understandable independent basis; a stale restricted command gate is a failure."
+   ]
+  },
+  {
+   "id": "F02",
+   "title": "Idle Full Access → restricted",
+   "original_priority": "P0",
+   "priority": "blocker",
+   "starting_conditions": "idle session with Full Access visibly and behaviorally effective.",
+   "actions": [
+    "choose restricted; submit a fresh probe during any pending interval, then again after the UI reports application. Do not approve either probe initially."
+   ],
+   "expected": [
+    "the UI does not imply protection is active before it is. The application path prevents newly admitted over-privileged work from slipping through the transition. Once restriction is effective, a probe requiring approval cannot perform its protected effect without approval. If restriction cannot take effect immediately, the user sees the safe boundary and what is needed to reach it."
+   ]
+  },
+  {
+   "id": "F03",
+   "title": "Active turn restricted → Full Access, no pending approval",
+   "original_priority": "P0",
+   "priority": "blocker",
+   "starting_conditions": "restricted session; a turn is actively doing harmless local work; no approval is pending.",
+   "actions": [
+    "choose Full Access while the turn is active; request a uniquely labeled probe as the next operation in that turn where supported. If application is deferred, follow the offered path and repeat the probe at the stated boundary."
+   ],
+   "expected": [
+    "working status does not hide a selected/effective mismatch. Once safely effective, subsequent eligible commands stop receiving restricted-mode approvals. If the current turn keeps its prior level, that limitation and the path to Full Access are clear. Task progress and any required continuation are understandable."
+   ]
+  },
+  {
+   "id": "F04",
+   "title": "Active turn Full Access → restricted",
+   "original_priority": "P0",
+   "priority": "blocker",
+   "starting_conditions": "active Full Access turn with harmless work underway and another probe requested but not yet started.",
+   "actions": [
+    "select restricted; request an additional uniquely labeled probe after the selection. Withhold all approvals."
+   ],
+   "expected": [
+    "the transition has an observable safe boundary; new work cannot quietly acquire excess authority while restriction is requested or applying. After restriction is effective, newly admitted protected work is gated. Work already authorized before the boundary is assessed under F06, not assumed retroactively revoked. If timing prevents distinguishing admission order, record that part as inconclusive and repeat with clearly separated actions."
+   ]
+  },
+  {
+   "id": "F05",
+   "title": "Full Access selected while approval is already pending",
+   "original_priority": "P0",
+   "priority": "blocker",
+   "starting_conditions": "restricted session paused at a visible approval for a probe; its protected marker does not yet exist.",
+   "actions": [
+    "select Full Access without accepting the pending approval. Observe the original operation. In fresh repetitions, explicitly decline the original approval, then explicitly accept it. If the change invalidates or replaces the request, follow the disclosed resolution path instead."
+   ],
+   "expected": [
+    "selecting Full Access alone does not count as approval of the pending request or silently execute its protected effect. The original request has an understandable disposition; it is not quietly reissued to bypass the withheld decision. Declining does not perform the declined effect; accepting authorizes only the scope communicated by that approval. Subsequent distinct work follows the truthfully effective level. Deferral, cancellation, or explicit resolution are acceptable only if clear and safe."
+   ]
+  },
+  {
+   "id": "F06",
+   "title": "Permission change during an in-flight operation, both directions",
+   "original_priority": "P0",
+   "priority": "blocker",
+   "starting_conditions": "a bounded slow operation has visibly written its `started` marker. Run once under Full Access; run again under restricted mode after explicitly approving that operation.",
+   "actions": [
+    "while the operation is running, select the opposite level. Request a separate probe afterward and observe both operations."
+   ],
+   "expected": [
+    "the UI truthfully describes whether the change is effective or waiting for a boundary. It does not imply that already performed effects were undone. The separate probe follows the safe transition boundary and effective level. Completion, interruption, or continuation of the already-authorized operation is recorded as product behavior, not judged against invented retroactive termination/revocation rules. If interrupted, partial fixture effects and continuation are understandable."
+   ]
+  },
+  {
+   "id": "F07",
+   "title": "Rapid or conflicting selections",
+   "original_priority": "P0",
+   "priority": "blocker",
+   "starting_conditions": "an active harmless turn with no pending approval; use a visible pending-application interval if the product provides one.",
+   "actions": [
+    "select Full Access → restricted → Full Access, then in a fresh repetition restricted → Full Access → restricted. Make changes before earlier changes settle where possible. Also try a later conflicting selection while an application confirmation is open. Submit a probe after the UI settles."
+   ],
+   "expected": [
+    "the UI makes clear which requests were accepted, superseded, cancelled, or refused. An older completion cannot falsely overwrite the latest accepted selection or effective level. Final probe behavior matches the reported effective level; an intermediate Full Access request does not silently defeat a final accepted restriction. If controls serialize changes, that limitation is visible and the refused selection is not reported as accepted. No ordering policy is assumed beyond truthful, safe behavior."
+   ]
+  },
+  {
+   "id": "F08",
+   "title": "Cancelled or failed application",
+   "original_priority": "P0",
+   "priority": "blocker",
+   "starting_conditions": "repeat from each effective level using any naturally available confirmation or safe application step.",
+   "actions": [
+    "cancel the change at an offered cancellation point. Separately exercise a reproducible benign application failure through exposed behavior, if available; do not corrupt settings or invent a hidden failure mechanism. Submit a probe after each resolved attempt."
+   ],
+   "expected": [
+    "cancellation/failure is reported accurately; neither the label nor probe behavior falsely presents the requested change as successful. The UI shows the actual remaining effective authority and any unresolved request. Retry, dismissal, or recovery is understandable and preserves the safe restriction boundary. If no cancellation or safe failure route exists, record the relevant branch as not exercised, not passed."
+   ]
+  },
+  {
+   "id": "F09",
+   "title": "Continuation and new turn across an application boundary",
+   "original_priority": "P1",
+   "priority": "blocker",
+   "starting_conditions": "active work with completed synthetic output and a permission change selected. Repeat both directions; include a deferred change if supported.",
+   "actions": [
+    "continue the task through the stated application path; let the turn finish; submit a new turn containing a fresh probe. If the path requires stopping or starting a session, follow it and inspect the visible retained context."
+   ],
+   "expected": [
+    "the user can tell which level applies to continuation and to the new turn. A deferred change is not silently forgotten or falsely shown as applied. Completed work is not silently duplicated, and any lost context, paused work, or need to resubmit is clear. Conversation wording alone does not silently replace the user's chosen permission level."
+   ]
+  },
+  {
+   "id": "F10",
+   "title": "Restart and recovery",
+   "original_priority": "P0",
+   "priority": "blocker",
+   "starting_conditions": "separate disposable runs with (a) effective restricted, (b) effective Full Access, (c) a change pending in either direction, and (d) a pending command approval.",
+   "actions": [
+    "use an ordinary app/session restart. For pending states, also use an exposed safe interruption/recovery route if available. Reopen the relevant session, inspect permission state, then request a new probe without accepting any restored pending approval."
+   ],
+   "expected": [
+    "restored selected/effective state is intelligible before further protected work. Persistence or reset behavior is accurately communicated and must not silently increase authority. An unfinished transition is not reported as complete without application, and recovery never treats the pending approval as accepted. The user can identify retained work and the next safe continuation step. No persistence default or automatic resumption policy is assumed."
+   ]
+  },
+  {
+   "id": "F11",
+   "title": "Model route neutrality",
+   "original_priority": "P1",
+   "priority": "blocker",
+   "starting_conditions": "the same fixture and permission starting state on each exposed supported model route; use at least two routes if available.",
+   "actions": [
+    "repeat F03, F04, and F05 per route. If route switching within a session is supported, switch with a permission change pending and repeat the post-boundary probe."
+   ],
+   "expected": [
+    "safety, truthful selection/effectiveness, and treatment of pending approval hold across routes. A route change does not silently grant authority or approve a command. Different capabilities or application timing are acceptable when disclosed with a safe path; identical controls or timing are not required. Unavailable routes and unsupported switching are recorded as coverage limits."
+   ]
+  }
+ ]
+}

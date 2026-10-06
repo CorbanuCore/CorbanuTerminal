@@ -16,6 +16,9 @@ LIFECYCLE_STATUS = {
     "cancelled": "cancelled",
 }
 ACTIVE_LIMIT = 3
+# Travis, 2026-10-06: a plan may run up to three sprints at once, one per named
+# lane, when their write scopes do not overlap (enforced by docs/sprints/check.py).
+MAX_PARALLEL_SPRINTS = 3
 REQUIRED_ACTIVE_KEYS = (
     "title",
     "status",
@@ -57,6 +60,14 @@ def scalar(value):
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
         return value[1:-1]
     return value
+
+
+def lane_names(value):
+    return [
+        lane.strip().casefold()
+        for lane in value.split(",")
+        if lane.strip() and "<" not in lane and lane.strip().upper() != "UNALLOCATED"
+    ]
 
 
 def parse_front_matter(path):
@@ -154,16 +165,26 @@ def check_active(path, text, values, front, root):
 
     try:
         sprint_limit = int(values.get("parallel_sprint_limit", "1"))
-        if sprint_limit != 1 or values.get("max_active_sprints", "1") != "1":
+        if not 1 <= sprint_limit <= MAX_PARALLEL_SPRINTS or values.get(
+            "max_active_sprints", str(sprint_limit)
+        ) != str(sprint_limit):
             raise ValueError
     except ValueError:
-        errors.append(f"{relative}: sequential initiative requires parallel_sprint_limit: 1")
+        errors.append(
+            f"{relative}: parallel_sprint_limit must be 1-{MAX_PARALLEL_SPRINTS}"
+        )
         sprint_limit = 1
     if sprint_limit > 1:
         owner = values.get("integration_owner", "")
         if owner in {"", "UNALLOCATED", "TBD"} or "<" in owner:
             errors.append(
                 f"{relative}: concurrent plan requires a concrete integration_owner"
+            )
+        lanes = lane_names(values.get("parallel_lanes", ""))
+        if len(lanes) < sprint_limit or len(set(lanes)) != len(lanes):
+            errors.append(
+                f"{relative}: parallel_sprint_limit {sprint_limit} requires "
+                f"parallel_lanes naming at least {sprint_limit} distinct lanes"
             )
 
     product_file = nested_value(front, "product_spec", "file")

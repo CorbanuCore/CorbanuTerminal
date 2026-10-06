@@ -1,7 +1,7 @@
 [codespell]
 # Ref: https://github.com/codespell-project/codespell#using-a-config-file
 # Captured QA evidence (logs, transcripts, JSON results, hashes) is retained verbatim and must not be rewritten.
-skip = .git*,vendor,*-lock.yaml,*.lock,.codespellrc,*test.ts,*.jsonl,frame*.txt,*.snap,*.snap.new,./qa/*.json,./qa/*.txt,./qa/*.log,./qa/*.sha256,./qa/*.raw,./qa/*.xml
+skip = .git*,vendor,*-lock.yaml,*.lock,.codespellrc,*test.ts,*.jsonl,frame*.txt,*.snap,*.snap.new,./qa/*.json,./qa/*.txt,./qa/*.log,./qa/*.sha256,./qa/*.raw,./qa/*.stderr,./qa/*.stdout,./qa/*.xml
 check-hidden = true
 ignore-regex = ^\s*"image/\S+": ".*|\b(afterAll)\b
 ignore-words-list = ratatui,ser,iTerm,iterm2,iterm,te,TE,PASE,SEH

@@ -9,9 +9,9 @@ owner: "Jim Ricketts"
 worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
 branch: "feat/p0-security-levels"
 base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
-depends_on: "PF-23-S03, PF-24-S01, PF-29-S02"
+depends_on: "PF-24-S03, PF-23-S03, PF-24-S01, PF-29-S02"
 created: 2026-08-24
-updated: 2026-08-28
+updated: 2026-10-06
 ---
 
 # PF-24-S02 — Security confirm, cancel, and downgrade
@@ -37,7 +37,7 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] PF-23-S03, PF-24-S01, PF-29-S02 are completed and archived.
+- [ ] PF-24-S03 (flagged picker), PF-23-S03, PF-24-S01, PF-29-S02 are completed and archived.
 - [ ] Read root, Rust, Core, TUI, and TUI style instructions.
 - [ ] Exact worktree coordinates match the active plan.
 
