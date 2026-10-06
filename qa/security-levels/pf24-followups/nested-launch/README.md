@@ -85,17 +85,30 @@ launch.
     registry, the setting, the picker, and a nested child config that cannot
     read either vault store, write outside or use the network.
   - `just test -p codex-exec` (130).
-- **tmux run on GLM 5.2** (`tmux-run/`, real nesting: GLM ran the commands
-  under Aggressive):
-  1. `refuse`: `corbanu exec` and, with the variable removed,
-     `env -u CORBANU_SECURITY_ORIGIN corbanu exec`, `corbanu mcp-server` and a
-     new session were all refused.
-  2. `/security`, `n`, save: the file reads `nested_agents = "pass"`.
-  3. `pass`: `corbanu exec -s danger-full-access` reported that Aggressive was
-     enforced and `--sandbox` ignored, then failed on the read-only home.
-  4. A child started outside a sandbox but pointed at a `pass` origin (an
-     earlier build in which nested sessions could pass): its approved
-     commands could not read either vault store, reach example.com or write
-     `../outside`, and `/permissions` was refused. GLM first declined to run
-     the probes (`model-refusal*.txt`), so they ran through a script.
+- **tmux run on GLM 5.2** (`tmux-run/`; real nesting: GLM ran each command
+  under Aggressive and a person approved it):
+  1. `refuse` (`1-refuse.txt`): refused, one count each:
+     - `corbanu exec`;
+     - `env -u CORBANU_SECURITY_ORIGIN corbanu exec`;
+     - `CODEX_HOME=$PWD corbanu exec`;
+     - `corbanu mcp-server`;
+     - a new session;
+     - `corbanu tasknode status`.
+  2. Variable removed and both `CODEX_HOME` and `HOME` pointed at the
+     workspace: still refused, found through the registry
+     (`2-marker-and-home-dropped.txt`).
+  3. `/security`, `n`, save: the file reads `nested_agents = "pass"`
+     (`3-*`).
+  4. `pass` (`4-*`): `corbanu exec -s danger-full-access` reported that
+     Aggressive was enforced and `--sandbox` ignored, then failed on the
+     read-only home. A new session was still refused.
+  5. Earlier build only (`5-earlier-build-*`), where nested sessions could
+     pass. A session started outside a sandbox but pointed at a `pass` origin
+     could not, even with approval:
+     - read either vault store;
+     - reach example.com;
+     - write `../outside`.
+
+     `/permissions` was refused. GLM first declined to run the probes
+     (`model-refusal*`), so they ran through a script.
 - **Review (Opus 5.5 High):** see the PR's `review/disposition.md`.
