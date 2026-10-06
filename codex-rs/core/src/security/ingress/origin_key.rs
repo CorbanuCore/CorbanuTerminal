@@ -66,7 +66,18 @@ impl OriginKey {
             Ok(()) => Ok(Self(bytes)),
             // Another session created it first: use theirs.
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => read_key(&path),
-            Err(error) => Err(error),
+            // Filesystems without hard links: create the key in place.
+            Err(_) => match options.open(&path) {
+                Ok(mut file) => {
+                    file.write_all(&bytes)?;
+                    file.sync_all()?;
+                    Ok(Self(bytes))
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    read_key(&path)
+                }
+                Err(error) => Err(error),
+            },
         }
     }
 
