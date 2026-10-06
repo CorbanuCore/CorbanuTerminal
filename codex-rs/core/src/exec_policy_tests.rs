@@ -2463,3 +2463,110 @@ async fn exec_policy_warnings_ignore_untrusted_project_rules_without_config_toml
 
     Ok(())
 }
+
+fn words(command: &str) -> Vec<String> {
+    shlex::split(command).expect("test command splits")
+}
+
+#[test]
+fn unwrap_command_finds_the_program_behind_wrappers_and_relative_paths() {
+    let cases = [
+        ("env corbanu vault list", Some("corbanu vault list")),
+        ("/usr/bin/env FOO=1 BAR=x=y ./corbanu vault", Some("./corbanu vault")),
+        ("env -i -u HOME -C /tmp - corbanu vault", Some("corbanu vault")),
+        ("env -iuHOME --chdir /tmp -- corbanu vault", Some("corbanu vault")),
+        ("env -P /bin -a name corbanu vault", Some("corbanu vault")),
+        ("env -S 'FOO=1 corbanu vault' list", Some("corbanu vault list")),
+        ("env -iS'corbanu vault'", Some("corbanu vault")),
+        ("env --split-string='-i corbanu vault'", Some("corbanu vault")),
+        ("command -p env nohup corbanu vault", Some("corbanu vault")),
+        ("exec -a name corbanu vault", Some("corbanu vault")),
+        // Nothing to unwrap: the policy already sees these as written.
+        ("corbanu vault list", None),
+        ("./corbanu vault list", None),
+        ("/opt/bin/corbanu vault list", None),
+        ("env", None),
+        ("env FOO=1", None),
+        ("command -v", None),
+    ];
+    for (command, expected) in cases {
+        assert_eq!(
+            unwrap_command(&words(command)),
+            expected.map(words),
+            "{command}"
+        );
+    }
+}
+
+/// Strict rules (Aggressive) apply `forbidden` rules through wrappers;
+/// otherwise the policy behaves exactly as before. Program paths, relative
+/// or absolute, resolve by file name in both modes.
+#[tokio::test]
+async fn strict_rules_forbid_wrapped_program_forms() -> anyhow::Result<()> {
+    let temp_dir = tempdir()?;
+    let policy_dir = temp_dir.path().join(RULES_DIR_NAME);
+    fs::create_dir_all(&policy_dir)?;
+    fs::write(
+        policy_dir.join("vault.rules"),
+        r#"prefix_rule(pattern = ["corbanu", "vault"], decision = "forbidden", justification = "no vault")
+prefix_rule(pattern = ["git", "status"], decision = "allow")"#,
+    )?;
+    let config_stack = config_stack_for_dot_codex_folder(temp_dir.path());
+    let lenient = ExecPolicyManager::load(&config_stack, /*strict_rules*/ false).await?;
+    let strict = ExecPolicyManager::load(&config_stack, /*strict_rules*/ true).await?;
+
+    async fn requirement(manager: &ExecPolicyManager, script: &str) -> ExecApprovalRequirement {
+        let command = vec!["bash".to_string(), "-lc".to_string(), script.to_string()];
+        manager
+            .create_exec_approval_requirement_for_command(ExecApprovalRequest {
+                command: &command,
+                approval_policy: AskForApproval::UnlessTrusted,
+                permission_profile: PermissionProfile::read_only(),
+                windows_sandbox_level: WindowsSandboxLevel::Disabled,
+                sandbox_permissions: SandboxPermissions::UseDefault,
+                prefix_rule: None,
+            })
+            .await
+    }
+    for manager in [&strict, &lenient] {
+        for script in ["./corbanu vault list", "/opt/x/corbanu vault list"] {
+            assert!(
+                matches!(
+                    requirement(manager, script).await,
+                    ExecApprovalRequirement::Forbidden { .. }
+                ),
+                "{script}"
+            );
+        }
+    }
+    for script in [
+        "env ./corbanu vault auth-helper x",
+        "env corbanu vault list",
+        "/usr/bin/env -i FOO=1 corbanu vault list",
+        "echo hi && env -S 'corbanu vault' list",
+        "command corbanu vault list",
+    ] {
+        assert!(
+            matches!(
+                requirement(&strict, script).await,
+                ExecApprovalRequirement::Forbidden { ref reason } if reason.contains("no vault")
+            ),
+            "strict: {script}"
+        );
+        assert!(
+            !matches!(
+                requirement(&lenient, script).await,
+                ExecApprovalRequirement::Forbidden { .. }
+            ),
+            "lenient is unchanged: {script}"
+        );
+    }
+    // Wrappers never widen an allow rule.
+    for manager in [&strict, &lenient] {
+        assert!(!matches!(
+            requirement(manager, "env git status").await,
+            ExecApprovalRequirement::Skip { .. }
+        ));
+    }
+    Ok(())
+}

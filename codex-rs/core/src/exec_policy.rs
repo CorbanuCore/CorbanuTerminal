@@ -277,6 +277,8 @@ pub enum ExecPolicyUpdateError {
 pub(crate) struct ExecPolicyManager {
     policy: ArcSwap<Policy>,
     update_lock: Semaphore,
+    /// See [`Self::load`]: forbidden rules also match wrapped commands.
+    strict_rules: bool,
 }
 
 pub(crate) struct ExecApprovalRequest<'a> {
@@ -293,18 +295,23 @@ impl ExecPolicyManager {
         Self {
             policy: ArcSwap::from(policy),
             update_lock: Semaphore::new(/*permits*/ 1),
+            strict_rules: false,
         }
     }
 
     /// With `strict_rules`, a `.rules` file that fails to parse is an error
-    /// instead of a warning that drops every user and project rule.
+    /// instead of a warning that drops every user and project rule, and a
+    /// `forbidden` rule also matches the command behind an `env`, `command`,
+    /// `exec` or `nohup` wrapper.
     #[instrument(level = "info", skip_all)]
     pub(crate) async fn load(
         config_stack: &ConfigLayerStack,
         strict_rules: bool,
     ) -> Result<Self, ExecPolicyError> {
         if strict_rules {
-            return Ok(Self::new(Arc::new(load_exec_policy(config_stack).await?)));
+            let mut manager = Self::new(Arc::new(load_exec_policy(config_stack).await?));
+            manager.strict_rules = true;
+            return Ok(manager);
         }
         let (policy, warning) = load_exec_policy_with_warning(config_stack).await?;
         if let Some(err) = warning.as_ref() {
@@ -355,11 +362,29 @@ impl ExecPolicyManager {
         let match_options = MatchOptions {
             resolve_host_executables: true,
         };
-        let evaluation = exec_policy.check_multiple_with_options(
+        let mut evaluation = exec_policy.check_multiple_with_options(
             commands.iter(),
             &exec_policy_fallback,
             &match_options,
         );
+        if self.strict_rules {
+            let wrapped_forbidden = commands
+                .iter()
+                .filter_map(|command| unwrap_command(command))
+                .flat_map(|command| {
+                    exec_policy.matches_for_command_with_options(
+                        &command,
+                        /*heuristics_fallback*/ None,
+                        &match_options,
+                    )
+                })
+                .filter(|rule_match| rule_match.decision() == Decision::Forbidden)
+                .collect::<Vec<_>>();
+            if !wrapped_forbidden.is_empty() {
+                evaluation.decision = Decision::Forbidden;
+                evaluation.matched_rules.extend(wrapped_forbidden);
+            }
+        }
 
         let requested_amendment = if auto_amendment_allowed {
             derive_requested_execpolicy_amendment_from_prefix_rule(
@@ -848,6 +873,106 @@ fn profile_has_managed_filesystem_restrictions(permission_profile: &PermissionPr
 
 pub(crate) fn default_policy_path(codex_home: &Path) -> PathBuf {
     codex_home.join(RULES_DIR_NAME).join(DEFAULT_POLICY_FILE)
+}
+
+/// Wrappers that run their operand as a program with the same arguments.
+const TRANSPARENT_WRAPPERS: [&str; 4] = ["env", "command", "exec", "nohup"];
+
+/// The command behind `env`/`command`/`exec`/`nohup` wrappers, or `None`
+/// when there is no wrapper. Program paths (`./corbanu`) are left to
+/// host-executable resolution. Used only to apply `forbidden` rules more
+/// widely, so over-matching can only refuse a command, never allow one.
+fn unwrap_command(command: &[String]) -> Option<Vec<String>> {
+    let mut rest = command.to_vec();
+    // Bounded: each pass removes at least the wrapper word.
+    for _ in 0..8 {
+        let Some(program) = rest.first() else {
+            return None;
+        };
+        let name = Path::new(program)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or(program);
+        if !TRANSPARENT_WRAPPERS.contains(&name) {
+            break;
+        }
+        rest = if name == "env" {
+            unwrap_env_args(&rest[1..])?
+        } else {
+            // `command [-pvV]`, `exec [-cl] [-a NAME]`, `nohup`.
+            let mut index = 1;
+            while let Some(arg) = rest.get(index).filter(|arg| arg.starts_with('-')) {
+                index += if arg == "-a" { 2 } else { 1 };
+                if arg == "--" {
+                    break;
+                }
+            }
+            rest.get(index..)?.to_vec()
+        };
+    }
+    (!rest.is_empty() && rest.as_slice() != command).then_some(rest)
+}
+
+/// `env [OPTION]... [NAME=VALUE]... COMMAND [ARG]...` -> `COMMAND [ARG]...`
+/// for GNU and BSD `env`. A `-S`/`--split-string` operand is split into
+/// words first, as `env` does.
+fn unwrap_env_args(args: &[String]) -> Option<Vec<String>> {
+    // Short options whose value is the rest of the cluster or the next word.
+    const SHORT_WITH_VALUE: [char; 4] = ['u', 'C', 'P', 'a'];
+    const LONG_WITH_VALUE: [&str; 3] = ["--unset", "--chdir", "--argv0"];
+    let mut index = 0;
+    while let Some(arg) = args.get(index) {
+        index += 1;
+        let split = if arg == "--" {
+            break;
+        } else if arg == "--split-string" {
+            index += 1;
+            Some(args.get(index - 1)?.clone())
+        } else if let Some(value) = arg.strip_prefix("--split-string=") {
+            Some(value.to_string())
+        } else if LONG_WITH_VALUE.contains(&arg.as_str()) {
+            index += 1;
+            None
+        } else if arg.starts_with("--") || arg == "-" {
+            None
+        } else if let Some(cluster) = arg.strip_prefix('-') {
+            let mut split = None;
+            for (position, option) in cluster.char_indices() {
+                let value = &cluster[position + option.len_utf8()..];
+                if option == 'S' {
+                    split = Some(if value.is_empty() {
+                        index += 1;
+                        args.get(index - 1)?.clone()
+                    } else {
+                        value.to_string()
+                    });
+                    break;
+                }
+                if SHORT_WITH_VALUE.contains(&option) {
+                    if value.is_empty() {
+                        index += 1;
+                    }
+                    break;
+                }
+            }
+            split
+        } else {
+            index -= 1;
+            break;
+        };
+        if let Some(split) = split {
+            let mut words = shlex::split(&split)?;
+            words.extend(args.iter().skip(index).cloned());
+            return unwrap_env_args(&words);
+        }
+    }
+    let command = args
+        .get(index..)?
+        .iter()
+        .skip_while(|arg| arg.contains('=') && !arg.starts_with('='))
+        .cloned()
+        .collect::<Vec<_>>();
+    (!command.is_empty()).then_some(command)
 }
 
 fn commands_for_exec_policy(command: &[String]) -> ExecPolicyCommands {
