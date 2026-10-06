@@ -3,6 +3,7 @@ use crate::config::NetworkMode;
 use crate::credential_broker::CredentialRouting;
 use crate::destination;
 use crate::destination::DenialSite;
+use crate::destination::DestinationDenial;
 use crate::destination::DestinationGuard;
 use crate::destination::HostPatterns;
 use crate::destination::RedirectLedger;
@@ -327,6 +328,20 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
                 .map(|info| info.peer_addr().ip().to_string())
                 .unwrap_or_default()
         );
+        // PF-33-S02: an upstream proxy would resolve and connect on its own,
+        // so the checked answers could not be pinned.
+        if request_ctx.upstream.has_upstream_proxy() {
+            let site = DenialSite {
+                host: &target_host,
+                port: target_port,
+                method: Some(&method),
+                protocol: "https",
+                client,
+                fail_command: false,
+            };
+            let denial = DestinationDenial::UpstreamProxy;
+            return Ok(destination::blocked(app_state, &denial, site).await);
+        }
         match DestinationGuard::protected()
             .authorize_request(
                 &url,
@@ -358,6 +373,8 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
     let has_body = request_has_body(&parts.headers);
     if let Some((authorized, _)) = destination.as_ref() {
         authorized.strip_cross_origin_credentials(&mut parts.headers);
+        // PF-33-S02: the connector dials only these checked answers.
+        parts.extensions.insert(authorized.pinned_peers());
     }
     if request_ctx
         .policy
@@ -516,13 +533,29 @@ async fn evaluate_mitm_policy(
 
     // CONNECT already handled allowlist/denylist + decider policy. Re-check local/private
     // resolution here to defend against DNS rebinding between CONNECT and inner HTTPS requests.
-    if matches!(
-        policy
-            .app_state
-            .host_blocked(&policy.target_host, policy.target_port)
-            .await?,
-        HostBlockDecision::Blocked(HostBlockReason::NotAllowedLocal)
-    ) {
+    let host_decision = policy
+        .app_state
+        .host_blocked(&policy.target_host, policy.target_port)
+        .await?;
+    // PF-33-S02: under the destination guard, a host denied after its tunnel
+    // opened is refused on the open tunnel too, not only on the next CONNECT.
+    if host_decision == HostBlockDecision::Blocked(HostBlockReason::Denied)
+        && destination::guard_enabled(&policy.app_state).await?
+    {
+        let site = DenialSite {
+            host: &policy.target_host,
+            port: policy.target_port,
+            method: Some(&method),
+            protocol: "https",
+            client,
+            fail_command: false,
+        };
+        let denial = DestinationDenial::HostDeniedAfterConnect;
+        return Ok(MitmPolicyDecision::Block(
+            destination::blocked(&policy.app_state, &denial, site).await,
+        ));
+    }
+    if host_decision == HostBlockDecision::Blocked(HostBlockReason::NotAllowedLocal) {
         let reason = HostBlockReason::NotAllowedLocal.as_str();
         let _ = policy
             .app_state

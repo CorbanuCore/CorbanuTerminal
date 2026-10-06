@@ -149,6 +149,14 @@ impl UpstreamClient {
         )
     }
 
+    /// Whether HTTPS requests would leave through an upstream proxy from the
+    /// environment. The destination guard refuses those (PF-33-S02).
+    pub(crate) fn has_upstream_proxy(&self) -> bool {
+        self.proxy_config
+            .proxy_for_protocol(/*is_secure*/ true)
+            .is_some()
+    }
+
     #[cfg(unix)]
     pub(crate) fn unix_socket(path: &str) -> Self {
         let connector = build_unix_connector(path);

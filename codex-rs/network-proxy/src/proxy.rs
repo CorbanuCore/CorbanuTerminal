@@ -388,10 +388,19 @@ impl NetworkProxyRuntimeSettings {
         } else {
             None
         };
+        // PF-33-S02: under the destination guard the OS sandbox may reach only
+        // the proxy's own loopback ports. Local binding (all loopback ports and
+        // port 53) and Unix-socket grants would be egress around the proxy.
+        let guarded = config.url_destination_policy;
         Ok(Self {
-            allow_local_binding: config.allow_local_binding,
-            allow_unix_sockets: config.allow_unix_sockets().into(),
-            dangerously_allow_all_unix_sockets: config.dangerously_allow_all_unix_sockets,
+            allow_local_binding: config.allow_local_binding && !guarded,
+            allow_unix_sockets: if guarded {
+                Arc::from([])
+            } else {
+                config.allow_unix_sockets().into()
+            },
+            dangerously_allow_all_unix_sockets: config.dangerously_allow_all_unix_sockets
+                && !guarded,
             mitm_ca_trust_bundle,
         })
     }
@@ -1857,6 +1866,55 @@ mod tests {
         proxy.apply_to_env_for_environment(&mut legacy_env, "local")?;
         assert_eq!(legacy_env, local.env);
 
+        handle.shutdown().await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn pf_33_s02_guard_limits_sandbox_egress_to_proxy_ports() -> Result<()> {
+        #[cfg(target_os = "windows")]
+        let _permit = WINDOWS_INGRESS_TEST_LOCK.acquire().await.unwrap();
+        let config = |guarded: bool| {
+            let mut config = NetworkProxyConfig {
+                enabled: true,
+                allow_local_binding: true,
+                dangerously_allow_all_unix_sockets: true,
+                ..NetworkProxyConfig::default()
+            };
+            config.set_allow_unix_sockets(vec!["/tmp/pf-33-s02.sock".to_string()]);
+            config.set_url_destination_policy(guarded);
+            config
+        };
+
+        // Flag off: today's grants reach the OS sandbox unchanged.
+        let open = NetworkProxy::builder()
+            .state(Arc::new(network_proxy_state_for_policy(config(false))))
+            .build()
+            .await?;
+        assert!(open.allow_local_binding());
+        assert!(open.dangerously_allow_all_unix_sockets());
+        assert_eq!(open.allow_unix_sockets().len(), 1);
+
+        // Guarded: loopback-wide, port 53 and Unix-socket grants are dropped,
+        // so the sandbox may reach only the proxy's own loopback ports.
+        let guarded = NetworkProxy::builder()
+            .state(Arc::new(network_proxy_state_for_policy(config(true))))
+            .build()
+            .await?;
+        assert!(!guarded.allow_local_binding());
+        assert!(!guarded.dangerously_allow_all_unix_sockets());
+        assert!(guarded.allow_unix_sockets().is_empty());
+        let handle = guarded.run().await?;
+        let prepared = guarded.prepare_for_optional_environment(HashMap::new(), None)?;
+        assert_eq!(
+            prepared
+                .env
+                .get(ALLOW_LOCAL_BINDING_ENV_KEY)
+                .map(String::as_str),
+            Some("0")
+        );
+        assert!(!prepared.sandbox_context.allow_local_binding);
+        assert!(!prepared.sandbox_context.loopback_ports.is_empty());
         handle.shutdown().await?;
         Ok(())
     }

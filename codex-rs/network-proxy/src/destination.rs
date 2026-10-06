@@ -3,9 +3,13 @@
 //!
 //! Applies the frozen PF-33-S03 contract to real resolver answers and to every
 //! redirect the proxy relays. Runs after, never instead of, the existing host
-//! allow/deny policy: it can only narrow what that policy allows. Connection
-//! pinning to the checked answers and alternate-egress denial are PF-33-S02.
+//! allow/deny policy: it can only narrow what that policy allows.
+//!
+//! PF-33-S02 pins each authorized request to the answers checked here: the
+//! request carries them as [`PinnedPeers`] and the guarded connector dials only
+//! those addresses, never an upstream proxy and never a second DNS answer.
 
+use crate::connect_policy::PinnedPeers;
 use crate::destination_contract::BodyReplay;
 use crate::destination_contract::ContractError;
 use crate::destination_contract::CredentialReplay;
@@ -75,6 +79,12 @@ pub(crate) enum DestinationDenial {
     RedirectHopLimit,
     RedirectChainExpired,
     UdpRelay,
+    /// PF-33-S02: an upstream proxy would resolve and connect on its own.
+    UpstreamProxy,
+    /// PF-33-S02: the host was denied after its tunnel was opened.
+    HostDeniedAfterConnect,
+    /// PF-33-S02: the proxy's `x-unix-socket` route to local daemons.
+    UnixSocket,
 }
 
 impl DestinationDenial {
@@ -94,6 +104,9 @@ impl DestinationDenial {
             Self::RedirectHopLimit => "redirect_hop_limit",
             Self::RedirectChainExpired => "redirect_chain_expired",
             Self::UdpRelay => "udp_relay",
+            Self::UpstreamProxy => "upstream_proxy",
+            Self::HostDeniedAfterConnect => "host_denied",
+            Self::UnixSocket => "unix_socket",
         }
     }
 }
@@ -148,11 +161,17 @@ impl Resolve for SystemResolver {
 #[derive(Debug)]
 pub(crate) struct AuthorizedRequest {
     destination: NormalizedDestination,
+    peers: PinnedPeers,
     chain: ChainPosition,
     client: String,
 }
 
 impl AuthorizedRequest {
+    /// The checked answers this request must connect to (PF-33-S02).
+    pub(crate) fn pinned_peers(&self) -> PinnedPeers {
+        self.peers.clone()
+    }
+
     /// Remove credentials the request must not carry: on a followed
     /// cross-origin redirect hop, `Authorization` stays with its origin. Call
     /// before any broker or hook adds headers for this destination.
@@ -363,16 +382,33 @@ impl DestinationGuard {
     }
 
     /// Authorize one HTTP request against its URL and current DNS answers.
+    #[cfg(test)]
     pub(crate) async fn authorize_url(
         &self,
         url: &str,
         method: &str,
         resolver: &dyn Resolve,
     ) -> Result<NormalizedDestination, DestinationDenial> {
+        self.authorize_resolved(url, method, resolver)
+            .await
+            .map(|(destination, _)| destination)
+    }
+
+    async fn authorize_resolved(
+        &self,
+        url: &str,
+        method: &str,
+        resolver: &dyn Resolve,
+    ) -> Result<(NormalizedDestination, PinnedPeers), DestinationDenial> {
         let destination = normalize(url, method)?;
         let answers = self.resolve(&destination, resolver).await?;
         decide(evaluate_destination(&self.policy, &destination, &answers))?;
-        Ok(destination)
+        let peers = PinnedPeers::new(
+            destination.host(),
+            destination.port(),
+            answers.addresses().iter().copied(),
+        );
+        Ok((destination, peers))
     }
 
     /// Authorize one HTTP request and place it in `client`'s redirect chain.
@@ -384,7 +420,7 @@ impl DestinationGuard {
         ledger: &RedirectLedger,
         resolver: &dyn Resolve,
     ) -> Result<AuthorizedRequest, DestinationDenial> {
-        let destination = self.authorize_url(url, method, resolver).await?;
+        let (destination, peers) = self.authorize_resolved(url, method, resolver).await?;
         let origin = Origin::of(&destination);
         let now = Instant::now();
         let chain = match ledger.take(client, &chain_key(url)?, now) {
@@ -402,6 +438,7 @@ impl DestinationGuard {
         };
         Ok(AuthorizedRequest {
             destination,
+            peers,
             chain,
             client: client.to_owned(),
         })

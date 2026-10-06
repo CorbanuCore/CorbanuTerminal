@@ -1453,3 +1453,64 @@ fn populate_tmpdir(tmp: &Path) -> PopulatedTmp {
         empty_root_canonical,
     }
 }
+
+/// PF-33-S02: under the destination guard (`url_destination_policy`) the
+/// macOS sandbox may reach only the proxy's loopback ports. Local binding
+/// (every loopback port, raw DNS) and Unix-socket grants are dropped, so the
+/// loopback exemption cannot become a route around the proxy.
+#[tokio::test]
+async fn pf_33_s02_guard_limits_seatbelt_egress_to_proxy_ports() -> anyhow::Result<()> {
+    let cwd = TempDir::new().expect("temp cwd");
+    let file_system_policy = FileSystemSandboxPolicy::from_legacy_sandbox_policy_for_cwd(
+        &SandboxPolicy::new_read_only_policy(),
+        cwd.path(),
+    );
+    let mut policies = Vec::new();
+    for guarded in [false, true] {
+        let mut network_config = NetworkProxyConfig {
+            enabled: true,
+            mode: NetworkMode::Full,
+            allow_local_binding: true,
+            ..Default::default()
+        };
+        network_config.set_allow_unix_sockets(vec!["/tmp/pf-33-s02-docker.sock".to_string()]);
+        network_config.set_url_destination_policy(guarded);
+        let state = build_config_state(network_config, NetworkProxyConstraints::default())?;
+        let network_proxy = NetworkProxy::builder()
+            .state(Arc::new(NetworkProxyState::with_reloader(
+                state,
+                Arc::new(TestConfigReloader),
+            )))
+            .managed_by_codex(/*managed_by_codex*/ false)
+            .build()
+            .await?;
+        let args = create_seatbelt_command_args(CreateSeatbeltCommandArgsParams {
+            command: vec!["/usr/bin/true".to_string()],
+            file_system_sandbox_policy: &file_system_policy,
+            network_sandbox_policy: NetworkSandboxPolicy::Restricted,
+            sandbox_policy_cwd: cwd.path(),
+            enforce_managed_network: true,
+            managed_network: None,
+            environment_id: None,
+            network: Some(&network_proxy),
+            extra_allow_unix_sockets: &[],
+        })
+        .unwrap();
+        policies.push(args.join("\n"));
+    }
+    let [open, guarded] = [&policies[0], &policies[1]];
+
+    for rule in [
+        "(allow network-outbound (remote ip \"localhost:*\"))",
+        "(allow network-outbound (remote ip \"*:53\"))",
+        "UNIX_SOCKET_PATH_0",
+    ] {
+        assert!(open.contains(rule), "flag off keeps {rule}:\n{open}");
+        assert!(!guarded.contains(rule), "guard drops {rule}:\n{guarded}");
+    }
+    assert!(
+        guarded.contains("(allow network-outbound (remote ip \"localhost:"),
+        "guard keeps the proxy port rules:\n{guarded}"
+    );
+    Ok(())
+}

@@ -13,6 +13,8 @@ worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-33-s01-20261006"
 branch: "feat/pf-33-s01-url-dns-redirect"
 base_commit: "a662c2ce357ee542fdac08ecaf083d27fd58391b"
 depends_on: "PF-27-S02, PF-33-S03"
+merged_behind_flag: "url_destination_policy"
+gate_evidence: "qa/security-levels/sprints/PF-33-S01/README.md"
 created: 2026-08-28
 updated: 2026-10-06
 ---
@@ -21,6 +23,10 @@ updated: 2026-10-06
 
 **October 6:** merged (PR #210) behind `url_destination_policy` (default off; Permissive unchanged) in the managed
 network proxy. [Evidence, behaviour and known limits](../../../../qa/security-levels/sprints/PF-33-S01/README.md).
+
+**Coordinator, October 6:** PF-33-S02 may start with this record merged behind its flag but not archived (PF-28-S01
+precedent); `merged_behind_flag`/`gate_evidence` above let the checker accept that. Credential method/path binding
+moved to [PF-28-S02](pf-28-s02-reflected-secret-response-scrubbing.md) (broker lane).
 
 ## Execution mandate
 
@@ -69,9 +75,6 @@ network proxy. [Evidence, behaviour and known limits](../../../../qa/security-le
 
 ## Remaining
 
-- [ ] Bind credential adapters to exact host, port, method and path. The scoped OpenAI route already does; legacy
-  per-host brokered credentials only bind host, and the guard adds HTTPS/443/method. This lives in
-  `credential_broker.rs` (broker lane); recommend moving it to PF-28-S02 or a broker follow-up.
 - [ ] Known costs, recorded: POST answered 301/302 is refused (contract); hosts with more than 16 answers are refused;
   timed-out lookups are not cancelled; redirects to hosts approved only at runtime are refused; local upstream
   proxies, connection pinning to the checked answers and an in-process MITM test seam are PF-33-S02.
@@ -90,4 +93,4 @@ network proxy. [Evidence, behaviour and known limits](../../../../qa/security-le
 
 - [x] Commits, commands, outcomes and review records under `qa/security-levels/sprints/PF-33-S01/`.
 - [ ] PF-26 final-candidate requalification remains mandatory; no release-complete claim here.
-- [ ] Archive after PF-27-S02 is archived and the remaining item is placed.
+- [ ] Archive after PF-27-S02 is archived.
