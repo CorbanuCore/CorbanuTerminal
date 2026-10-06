@@ -586,6 +586,9 @@
             "in_app_updates": {
               "type": "boolean"
             },
+            "isolated_credential_broker": {
+              "type": "boolean"
+            },
             "item_ids": {
               "type": "boolean"
             },
@@ -5278,6 +5281,9 @@
           "type": "boolean"
         },
         "in_app_updates": {
+          "type": "boolean"
+        },
+        "isolated_credential_broker": {
           "type": "boolean"
         },
         "item_ids": {

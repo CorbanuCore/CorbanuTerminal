@@ -1,0 +1,72 @@
+# PF-27-S04 isolated credential broker. Needs the synthetic GitHub Enterprise fixture:
+# see qa/security-levels/sprints/PF-27-S04/isolated-broker-20261006/README.md (GH_HOST,
+# SSL_CERT_FILE exported; GH_ENTERPRISE_TOKEN passed with --credential ...=file:...).
+id = "pf27-broker-direct-call-denied"
+feature = "Isolated credential broker: nothing but Core can call the broker socket"
+expected = "The agent's direct curl to the broker socket fails, and the same curl from the user's own shell gets an empty reply (wrong OS peer)."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[sandbox_workspace_write]
+network_access = true
+
+[features]
+isolated_credential_broker = true
+
+[features.network_proxy]
+enabled = true
+allow_local_binding = true
+
+[features.network_proxy.domains]
+"127.0.0.1.nip.io" = "allow"
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"call-broker.sh" = '''
+for s in "$TMPDIR"/cbk-*/b.sock /tmp/cbk-*/b.sock; do
+  [ -S "$s" ] || continue
+  curl -sS --max-time 5 --unix-socket "$s" http://broker/api/v3/user
+  echo "$1 curl exit: $?"
+done
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run sh call-broker.sh agent once and show me its raw output, then stop."
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "agent curl exit: \\d+"
+timeout = 180
+compress = 3
+
+[[steps]]
+pause = 2.0
+
+[[steps]]
+type = "!sh call-broker.sh user-shell"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "user-shell curl exit: \\d+"
+
+[[steps]]
+pause = 4.0

@@ -150,6 +150,8 @@ pub enum Feature {
     EnableRequestCompression,
     /// Start the managed network proxy for sandboxed sessions.
     NetworkProxy,
+    /// Virtualize provider credentials through a separate broker process (PF-27-S04).
+    IsolatedCredentialBroker,
     /// Respect host system proxy settings for Codex-owned network clients.
     RespectSystemProxy,
     /// Enable collab tools.
@@ -858,6 +860,12 @@ pub const FEATURES: &[FeatureSpec] = &[
         key: "secret_auth_storage",
         stage: Stage::Stable,
         default_enabled: cfg!(windows),
+    },
+    FeatureSpec {
+        id: Feature::IsolatedCredentialBroker,
+        key: "isolated_credential_broker",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
     },
     FeatureSpec {
         id: Feature::UnifiedExec,

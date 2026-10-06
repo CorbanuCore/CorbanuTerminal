@@ -18,6 +18,7 @@ pub const MAX_FRAME_BYTES: usize = 16 * 1024;
 const MAC_BYTES: usize = 32;
 const MAX_ID_BYTES: usize = 128;
 const MAX_PATH_BYTES: usize = 1_024;
+const MAX_HOST_BYTES: usize = 253;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -208,6 +209,106 @@ struct BrokerFramePayload {
     operation: BrokerOperation,
 }
 
+/// Typed provider request accepted by the user-session credential broker.
+///
+/// The broker substitutes the provider's credential header for this exact
+/// HTTPS destination only. The operation carries no header name, header value
+/// or body, so it cannot express generic resolve-to-string or injection.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderRequestOperation {
+    host: String,
+    port: u16,
+    method: String,
+    path: String,
+}
+
+impl ProviderRequestOperation {
+    pub fn new(
+        host: impl Into<String>,
+        port: u16,
+        method: impl Into<String>,
+        path: impl Into<String>,
+    ) -> Result<Self, BrokerFrameError> {
+        let operation = Self {
+            host: host.into(),
+            port,
+            method: method.into(),
+            path: path.into(),
+        };
+        operation.validate()?;
+        Ok(operation)
+    }
+
+    pub const fn scheme(&self) -> &'static str {
+        "https"
+    }
+
+    pub fn host(&self) -> &str {
+        &self.host
+    }
+
+    pub const fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn method(&self) -> &str {
+        &self.method
+    }
+
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+
+    fn validate(&self) -> Result<(), BrokerFrameError> {
+        let host_valid = !self.host.is_empty()
+            && self.host.len() <= MAX_HOST_BYTES
+            && self.host.bytes().all(|byte| {
+                byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'-')
+            });
+        let method_valid = matches!(
+            self.method.as_str(),
+            "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE"
+        );
+        let path_valid = self.path.len() <= MAX_PATH_BYTES
+            && self.path.starts_with('/')
+            && self.path.bytes().all(|byte| byte.is_ascii_graphic())
+            && !self.path.contains('#');
+        if !host_valid || self.port == 0 || !method_valid || !path_valid {
+            return Err(BrokerFrameError::UnsupportedOperation);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum ProviderFrameKind {
+    ProviderRequest,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProviderFramePayload {
+    protocol_version: u32,
+    frame_kind: ProviderFrameKind,
+    sequence: u64,
+    binding: BrokerBinding,
+    credential: CredentialReference,
+    request: ProviderRequestOperation,
+}
+
+/// Authenticated provider request after MAC, version and shape checks.
+///
+/// Callers still own binding, replay-window and credential-generation checks.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VerifiedProviderRequest {
+    pub sequence: u64,
+    pub binding: BrokerBinding,
+    pub credential: CredentialReference,
+    pub request: ProviderRequestOperation,
+}
+
 /// Length-prefixed payload plus HMAC-SHA256 tag.
 pub struct SignedBrokerFrame(Vec<u8>);
 
@@ -256,6 +357,61 @@ impl BrokerChannelMac {
             operation,
         };
         let payload = serde_json::to_vec(&payload).map_err(|_| BrokerFrameError::MalformedFrame)?;
+        self.seal(payload)
+    }
+
+    /// Signs one typed provider request. Its payload is domain-separated from
+    /// [`BrokerOperation`] frames, so neither verifier accepts the other.
+    pub fn sign_provider_request(
+        &self,
+        binding: BrokerBinding,
+        sequence: u64,
+        credential: CredentialReference,
+        request: ProviderRequestOperation,
+    ) -> Result<SignedBrokerFrame, BrokerFrameError> {
+        binding.validate()?;
+        credential.validate()?;
+        request.validate()?;
+        if sequence == 0 {
+            return Err(BrokerFrameError::InvalidSequence);
+        }
+        let payload = ProviderFramePayload {
+            protocol_version: IPC_PROTOCOL_VERSION,
+            frame_kind: ProviderFrameKind::ProviderRequest,
+            sequence,
+            binding,
+            credential,
+            request,
+        };
+        let payload = serde_json::to_vec(&payload).map_err(|_| BrokerFrameError::MalformedFrame)?;
+        self.seal(payload)
+    }
+
+    pub fn verify_provider_request(
+        &self,
+        frame: &SignedBrokerFrame,
+    ) -> Result<VerifiedProviderRequest, BrokerFrameError> {
+        let payload = self.open(frame)?;
+        let payload: ProviderFramePayload =
+            serde_json::from_slice(&payload).map_err(|_| BrokerFrameError::MalformedFrame)?;
+        if payload.protocol_version != IPC_PROTOCOL_VERSION {
+            return Err(BrokerFrameError::UnsupportedProtocol);
+        }
+        payload.binding.validate()?;
+        payload.credential.validate()?;
+        payload.request.validate()?;
+        if payload.sequence == 0 {
+            return Err(BrokerFrameError::InvalidSequence);
+        }
+        Ok(VerifiedProviderRequest {
+            sequence: payload.sequence,
+            binding: payload.binding,
+            credential: payload.credential,
+            request: payload.request,
+        })
+    }
+
+    fn seal(&self, payload: Vec<u8>) -> Result<SignedBrokerFrame, BrokerFrameError> {
         if payload.len() > MAX_FRAME_BYTES - MAC_BYTES - size_of::<u32>() {
             return Err(BrokerFrameError::FrameTooLarge);
         }
@@ -273,10 +429,7 @@ impl BrokerChannelMac {
         Ok(SignedBrokerFrame(wire))
     }
 
-    pub(crate) fn verify(
-        &self,
-        frame: &SignedBrokerFrame,
-    ) -> Result<VerifiedBrokerRequest, BrokerFrameError> {
+    fn open(&self, frame: &SignedBrokerFrame) -> Result<Vec<u8>, BrokerFrameError> {
         validate_wire_length(frame.as_bytes())?;
         let (length, rest) = frame.as_bytes().split_at(size_of::<u32>());
         let payload_len = u32::from_be_bytes(
@@ -291,8 +444,16 @@ impl BrokerChannelMac {
         mac.update(payload);
         mac.verify_slice(tag)
             .map_err(|_| BrokerFrameError::AuthenticationFailed)?;
+        Ok(payload.to_vec())
+    }
+
+    pub(crate) fn verify(
+        &self,
+        frame: &SignedBrokerFrame,
+    ) -> Result<VerifiedBrokerRequest, BrokerFrameError> {
+        let payload = self.open(frame)?;
         let payload: BrokerFramePayload =
-            serde_json::from_slice(payload).map_err(|_| BrokerFrameError::MalformedFrame)?;
+            serde_json::from_slice(&payload).map_err(|_| BrokerFrameError::MalformedFrame)?;
         if payload.protocol_version != IPC_PROTOCOL_VERSION {
             return Err(BrokerFrameError::UnsupportedProtocol);
         }

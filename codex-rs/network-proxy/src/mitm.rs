@@ -1,5 +1,6 @@
 use crate::certs::ManagedMitmCa;
 use crate::config::NetworkMode;
+use crate::credential_broker::CredentialRouting;
 use crate::mitm_hook::HookEvaluation;
 use crate::mitm_hook::MitmHookActions;
 use crate::policy::normalize_host;
@@ -306,7 +307,7 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
         warn!("scoped credential request denied: authorization hook collision");
         return Ok(blocked_text_response(REASON_POLICY_DENIED));
     }
-    if let Err(error) = request_ctx.policy.app_state.inject_request_credentials(
+    let routing = match request_ctx.policy.app_state.route_request_credentials(
         "https",
         &target_host,
         target_port,
@@ -314,7 +315,17 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
         &path,
         &mut parts.headers,
     ) {
-        warn!("scoped credential request denied: {error}");
+        Ok(routing) => routing,
+        Err(error) => {
+            warn!("scoped credential request denied: {error}");
+            return Ok(blocked_text_response(REASON_POLICY_DENIED));
+        }
+    };
+    #[cfg(unix)]
+    if matches!(routing, CredentialRouting::Brokered(_))
+        && hook_actions_touch_authorization(hook_actions.as_ref())
+    {
+        warn!("brokered credential request denied: authorization hook collision");
         return Ok(blocked_text_response(REASON_POLICY_DENIED));
     }
     apply_mitm_hook_actions(&mut parts.headers, hook_actions.as_ref());
@@ -341,7 +352,21 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
     };
 
     let upstream_req = Request::from_parts(parts, body);
-    let upstream_resp = request_ctx.upstream.serve(upstream_req).await?;
+    let upstream_resp = match routing {
+        CredentialRouting::Direct => request_ctx.upstream.serve(upstream_req).await?,
+        #[cfg(unix)]
+        CredentialRouting::Brokered(route) => match route.forward(upstream_req).await {
+            Ok(response) => response,
+            Err(error) => {
+                // Fail closed: the proxy holds no raw value to fall back to.
+                warn!("brokered credential request failed: {error}");
+                return Ok(text_response(
+                    StatusCode::BAD_GATEWAY,
+                    "credential broker unavailable",
+                ));
+            }
+        },
+    };
     respond_with_inspection(
         upstream_resp,
         inspect,
