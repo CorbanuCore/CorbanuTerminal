@@ -326,6 +326,43 @@ async fn pf_23_s01_typing_a_protected_command_into_a_running_shell_needs_the_hum
     let output = output_text(&captured.requests()[2], "call-stdin");
     assert!(output.contains("approvals are off"), "{output}");
 
+    // Split across two writes: the second completes the vault command.
+    let (test, captured) = start_turn(
+        SecurityLevel::Moderate,
+        AskForApproval::Never,
+        vec![
+            call(
+                "call-open",
+                "exec_command",
+                json!({ "cmd": "/bin/bash --noprofile --norc -i", "yield_time_ms": 200, "tty": true }),
+            ),
+            call(
+                "call-half",
+                "write_stdin",
+                json!({ "session_id": 1000, "chars": "corban", "yield_time_ms": 200 }),
+            ),
+            call(
+                "call-stdin",
+                "write_stdin",
+                json!({ "session_id": 1000, "chars": "u vault list\n", "yield_time_ms": 200 }),
+            ),
+            done_step(),
+        ],
+        |config| {
+            config.use_experimental_unified_exec_tool = true;
+            config
+                .features
+                .enable(Feature::UnifiedExec)
+                .expect("unified exec");
+        },
+    )
+    .await?;
+    assert!(next_question(&test).await.is_none());
+    let requests = captured.requests();
+    assert!(!output_text(&requests[2], "call-half").contains("approvals are off"));
+    let output = output_text(&requests[3], "call-stdin");
+    assert!(output.contains("approvals are off"), "{output}");
+
     let (test, captured) = stdin_turn(AskForApproval::Never, "echo typed-ok\n").await?;
     assert!(next_question(&test).await.is_none());
     let output = output_text(&captured.requests()[2], "call-stdin");

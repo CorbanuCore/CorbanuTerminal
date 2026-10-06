@@ -20,12 +20,14 @@ use serde_json::Value;
 use std::path::Path;
 
 mod gate;
+mod typed;
 
 pub(crate) use gate::Admission;
 pub(crate) use gate::Route;
 pub(crate) use gate::admit;
 pub(crate) use gate::ask_human;
 pub(crate) use gate::check_dispatch;
+pub(crate) use typed::TypedWindow;
 
 /// Who provides a tool. Only first-party code says `Builtin` or `Extension`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -197,6 +199,14 @@ const SENT_VALUE_WORDS: &[&str] = &[
     "lamports",
     "transaction",
 ];
+/// A tool name starting with one of these reads (unless it also acts).
+const READ_VERBS: &[&str] = &[
+    "get", "list", "fetch", "read", "search", "view", "show", "describe", "quote", "estimate",
+    "preview", "simulate", "check", "lookup", "find", "query",
+];
+const ACTION_VERBS: &[&str] = &[
+    "send", "execute", "submit", "place", "confirm", "sign", "create", "initiate", "approve",
+];
 /// Argument strings read from one call; more fail closed.
 const MAX_ARGUMENT_STRINGS: usize = 1024;
 const MAX_ARGUMENT_DEPTH: usize = 16;
@@ -207,15 +217,14 @@ const MAX_ARGUMENT_DEPTH: usize = 16;
 pub(crate) fn classify_mcp(call: &McpCall<'_>, codex_home: &Path) -> Option<ProtectedActionKind> {
     let names = [Some(call.tool), call.title].into_iter().flatten();
     let words: Vec<String> = names.flat_map(name_words).collect();
-    let sends_value = words.iter().any(|word| word == "send")
-        && words
-            .iter()
-            .any(|word| SENT_VALUE_WORDS.contains(&word.as_str()));
-    if sends_value
-        || words
-            .iter()
-            .any(|word| TRANSFER_WORDS.contains(&word.as_str()))
-    {
+    let has = |list: &[&str]| words.iter().any(|word| list.contains(&word.as_str()));
+    // `get_swap_quote`, `list_buy_orders`: a read of value, not a move.
+    let reads = name_words(call.tool)
+        .first()
+        .is_some_and(|word| READ_VERBS.contains(&word.as_str()))
+        && !has(ACTION_VERBS);
+    let sends_value = has(&["send"]) && has(SENT_VALUE_WORDS);
+    if !reads && (sends_value || has(TRANSFER_WORDS)) {
         return Some(ProtectedActionKind::ValueTransfer);
     }
     let mut found = call.acts_outside.then_some(ProtectedActionKind::Disclosure);
@@ -272,19 +281,31 @@ pub(crate) fn classify_typed_input(
     };
     let sh = |text: &str| vec!["sh".to_string(), "-c".to_string(), text.to_string()];
     let process = classify(&exec(sh(process_command)), codex_home);
-    let program = shlex::split(process_command)
-        .and_then(|words| words.into_iter().next())
-        .map(|word| word.rsplit('/').next().unwrap_or_default().to_lowercase())
-        .unwrap_or_default();
-    let (interpreter, flag) = match program.as_str() {
-        name if name.starts_with("python") || name == "ipython" => ("python3", "-c"),
-        "node" | "deno" | "bun" => ("node", "-e"),
-        "ruby" | "irb" => ("ruby", "-e"),
-        "perl" => ("perl", "-e"),
-        _ => ("sh", "-c"),
-    };
-    let typed = vec![interpreter.to_string(), flag.to_string(), chars.to_string()];
-    strongest(process, classify(&exec(typed), codex_home))
+    // The first interpreter named anywhere in the process command
+    // (`env python3`, `cd x && node`, `uv run python`), else a shell.
+    let interpreter = shlex::split(process_command)
+        .unwrap_or_default()
+        .iter()
+        .find_map(|word| {
+            let name = word.rsplit('/').next().unwrap_or_default().to_lowercase();
+            let python = name
+                .strip_prefix("python")
+                .is_some_and(|version| version.chars().all(|ch| ch.is_ascii_digit() || ch == '.'));
+            match name.as_str() {
+                _ if python || name == "ipython" => Some(("python3", "-c")),
+                "node" | "deno" | "bun" => Some(("node", "-e")),
+                "ruby" | "irb" => Some(("ruby", "-e")),
+                "perl" => Some(("perl", "-e")),
+                _ => None,
+            }
+        });
+    // Typed text is judged as shell input and, for an interpreter, as its code.
+    let mut found = strongest(process, classify(&exec(sh(chars)), codex_home));
+    if let Some((interpreter, flag)) = interpreter {
+        let typed = vec![interpreter.to_string(), flag.to_string(), chars.to_string()];
+        found = strongest(found, classify(&exec(typed), codex_home));
+    }
+    found
 }
 
 fn strongest(
@@ -303,10 +324,9 @@ fn name_words(name: &str) -> Vec<String> {
     let mut current = String::new();
     let mut previous_lower = false;
     for ch in name.chars() {
-        if (!ch.is_alphanumeric() || (ch.is_uppercase() && previous_lower))
-            && !current.is_empty() {
-                words.push(std::mem::take(&mut current));
-            }
+        if (!ch.is_alphanumeric() || (ch.is_uppercase() && previous_lower)) && !current.is_empty() {
+            words.push(std::mem::take(&mut current));
+        }
         if ch.is_alphanumeric() {
             current.extend(ch.to_lowercase());
         }

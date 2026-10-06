@@ -1,9 +1,11 @@
 use crate::function_tool::FunctionCallError;
 use crate::security::protected_surface::Admission;
 use crate::security::protected_surface::Route;
+use crate::security::protected_surface::TypedWindow;
 use crate::security::protected_surface::admit;
 use crate::security::protected_surface::ask_human;
 use crate::security::protected_surface::classify_typed_input;
+use crate::security::tainted_action::ProtectedActionKind;
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
 use crate::tools::context::ToolInvocation;
@@ -131,37 +133,72 @@ async fn post_taint_check(
         // No such running process: the write fails on its own.
         return Ok(());
     };
+    let tainted = session
+        .services
+        .model_client()
+        .post_taint_state()
+        .is_some_and(|state| state.taint_generation > 0);
+    // Judged with what was typed since untrusted content arrived, so a
+    // command split across calls is seen whole.
+    let window = TypedWindow::open(session.thread_id(), args.session_id, &args.chars);
     let codex_home = turn.config.codex_home.to_path_buf();
-    let chars = args.chars.clone();
+    let (text, overflows) = (window.text.clone(), window.overflows());
     let command = process.command.clone();
     let admission = admit(
         session,
         turn.approval_policy.value(),
         Route::WriteStdin,
         call_id,
-        move || classify_typed_input(&command, &chars, &process.cwd, &codex_home),
+        move || {
+            if overflows {
+                return Some(ProtectedActionKind::UnseenCode);
+            }
+            classify_typed_input(&command, &text, &process.cwd, &codex_home)
+        },
     )
     .await;
     let check = match admission {
-        Admission::Clear => return Ok(()),
+        Admission::Clear => {
+            if tainted {
+                window.keep();
+            }
+            return Ok(());
+        }
         Admission::Refused(refusal) => return Err(FunctionCallError::RespondToModel(refusal)),
         Admission::AskHuman(check) => check,
     };
-    let typed: String = args.chars.chars().take(TYPED_TEXT_SHOWN).collect();
-    let more = if args.chars.chars().count() > TYPED_TEXT_SHOWN {
-        " (shortened)"
+    let shown = |text: &str| {
+        let count = text.chars().count();
+        let tail: String = text
+            .chars()
+            .skip(count.saturating_sub(TYPED_TEXT_SHOWN))
+            .collect();
+        if count > TYPED_TEXT_SHOWN {
+            format!("…{tail:?}")
+        } else {
+            format!("{tail:?}")
+        }
+    };
+    let earlier = if window.text == args.chars {
+        String::new()
     } else {
-        ""
+        format!(
+            " (with what was typed before, it reads {})",
+            shown(&window.text)
+        )
     };
     let question = format!(
-        "Type {typed:?}{more} into the running `{}` (session {process_id})? {}",
+        "Type {}{earlier} into the running `{}` (session {process_id})? {}",
+        shown(&args.chars),
         process.command,
         check.reason()
     );
     let approved = ask_human(session, turn, call_id, question).await;
     check
         .resolve(session, approved)
-        .map_err(FunctionCallError::RespondToModel)
+        .map_err(FunctionCallError::RespondToModel)?;
+    window.clear();
+    Ok(())
 }
 
 /// Characters of typed text shown in the approval question.

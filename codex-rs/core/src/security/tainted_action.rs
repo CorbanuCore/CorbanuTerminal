@@ -574,7 +574,9 @@ impl Classifier {
         }
         let stdin_fed =
             simple.pipe_from.is_some() || simple.stdin_from.is_some() || simple.reads_outer_output;
-        if let Some(kind) = outbound::classify(words, stdin_fed) {
+        if let Some((index, _)) = &command
+            && let Some(kind) = outbound::classify(&words[*index..], stdin_fed)
+        {
             self.note(kind);
         }
         let recursive = command.as_ref().is_some_and(|(_, name)| {

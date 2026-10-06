@@ -366,6 +366,9 @@ pub(crate) async fn handle_mcp_tool_call(
     .await
 }
 
+/// Characters of MCP arguments shown in a post-taint approval question.
+const MCP_ARGUMENTS_SHOWN: usize = 400;
+
 /// PF-23-S01: `Ok(true)` when the human just approved this call after
 /// untrusted content, `Ok(false)` when post-taint checks do not apply, and
 /// the refusal otherwise.
@@ -414,8 +417,20 @@ async fn post_taint_mcp_check(
         protected_surface::Admission::Refused(refusal) => return Err(refusal),
         protected_surface::Admission::AskHuman(check) => check,
     };
+    // The human sees what is sent: arguments, shortened.
+    let arguments = invocation
+        .arguments
+        .as_ref()
+        .map(ToString::to_string)
+        .unwrap_or_default();
+    let shown: String = arguments.chars().take(MCP_ARGUMENTS_SHOWN).collect();
+    let more = if arguments.chars().count() > MCP_ARGUMENTS_SHOWN {
+        "…"
+    } else {
+        ""
+    };
     let question = format!(
-        "Allow the {} MCP tool `{}`? {}",
+        "Allow the {} MCP tool `{}` with {shown}{more}? {}",
         invocation.server,
         invocation.tool,
         check.reason()

