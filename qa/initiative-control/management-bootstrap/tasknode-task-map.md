@@ -141,6 +141,29 @@ against these tasks.
   `.codex-work/workers-20261002/tasknode-f4bec7e-evidence.md`.
 - Worker record: `.codex-work/workers-20261002/l1v2-bug.result.md`.
 
+## Personal tasks (not PF-80)
+
+### `task_96e88f7099fd906d9b8080775ab6c402`: Draft the private inference user flow spec for PF Terminal
+
+- Request: `req_e7e9d13a-7aaa-48fd-9be8-741f6346b065`. Reward shown: 2.5.
+  It has been Accepted since 2026-08-12. This worker did not accept or move it.
+- Work: `docs/specs/private-inference-user-flow.md` (draft proposal, not a shipped
+  feature), PR https://github.com/CorbanuCore/CorbanuTerminal/pull/170 (branch
+  `docs/private-inference-user-flow-spec`, base `6bd7fe8413`). Commits
+  `059685a57f`, `36ae77ebe7`, `f7e9fb6964` (file sha256 `b227050e…3fdc39`). Open,
+  not merged.
+- Review: two independent read-only reviews. Round 1 failed 2 criteria with 9
+  findings. Round 2 resolved 8 and left 1 partial, raised 3 new issues, and
+  rated all criteria PASS. All open items were fixed in `f7e9fb6964`.
+- Evidence: submitted once on 2026-10-06 at about 00:53Z, receipt
+  `task_evt_4e144110-eae5-4fa9-8683-ee884407c145`. The verification request
+  asked for the tier tables and the B.3 billing example verbatim. Response
+  receipt: `task_evt_d04d92f3-2be4-4603-8a4d-be08fd8efa10`. Bodies are in
+  `.codex-work/workers-20261005/tasknode-96e88f7-{evidence,verification}.md`.
+- Outcome: **Rewarded** 2026-10-06 00:56Z, 2.25 PFT, tx
+  `6075F5DD81161E15ED333A275EC7B13642626D86B04B6B71CF9954CAD571965B`.
+- Open: product decisions OD1–OD4 and dependencies D1–D3 listed in the spec.
+
 ## Rules for evidence against these tasks
 
 1. Submit evidence only after Task Node shows the task as accepted and
