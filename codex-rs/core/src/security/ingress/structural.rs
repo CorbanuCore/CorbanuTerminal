@@ -90,7 +90,7 @@ impl NativeIngress {
         // injected) become labelled data together with their outputs.
         let unrecorded_calls: std::collections::HashSet<String> = items
             .iter()
-            .filter(|item| !self.is_model_item(item))
+            .filter(|item| call_id_of(item).is_some() && !self.is_model_item(item))
             .filter_map(call_id_of)
             .collect();
         let mut projected = Vec::with_capacity(items.len());
@@ -169,20 +169,14 @@ impl NativeIngress {
                 })
             }
             ResponseItem::FunctionCallOutput {
-                id,
-                call_id,
-                output,
-                ..
+                call_id, output, ..
             }
             | ResponseItem::CustomToolCallOutput {
-                id,
-                call_id,
-                output,
-                ..
+                call_id, output, ..
             } if unrecorded_calls.contains(call_id) => {
                 let kind = self.call_kind(call_id).unwrap_or(SourceKind::Unknown);
                 let text = output.body.to_text().unwrap_or_default();
-                Some(self.labelled_message(id, kind, call_id, &text, now))
+                Some(self.labelled_message(kind, call_id, &text, now))
             }
             ResponseItem::FunctionCallOutput {
                 id,
@@ -214,21 +208,21 @@ impl NativeIngress {
                 // Unrecorded reasoning or generated images are withheld.
                 self.is_model_item(item).then(|| item.clone())
             }
-            ResponseItem::LocalShellCall { id, .. }
-            | ResponseItem::FunctionCall { id, .. }
-            | ResponseItem::ToolSearchCall { id, .. }
-            | ResponseItem::CustomToolCall { id, .. }
-            | ResponseItem::WebSearchCall { id, .. } => {
+            ResponseItem::LocalShellCall { .. }
+            | ResponseItem::FunctionCall { .. }
+            | ResponseItem::ToolSearchCall { .. }
+            | ResponseItem::CustomToolCall { .. }
+            | ResponseItem::WebSearchCall { .. } => {
                 if self.is_model_item(item) {
                     return Some(item.clone());
                 }
                 let text = serde_json::to_string(item).unwrap_or_default();
-                Some(self.labelled_message(id, SourceKind::Unknown, "call", &text, now))
+                Some(self.labelled_message(SourceKind::Unknown, "call", &text, now))
             }
-            ResponseItem::ToolSearchOutput { id, call_id, .. } => match call_id {
+            ResponseItem::ToolSearchOutput { call_id, .. } => match call_id {
                 Some(call_id) if unrecorded_calls.contains(call_id) => {
                     let text = serde_json::to_string(item).unwrap_or_default();
-                    Some(self.labelled_message(id, SourceKind::Unknown, call_id, &text, now))
+                    Some(self.labelled_message(SourceKind::Unknown, call_id, &text, now))
                 }
                 // MCP-supplied tool descriptions are not yet labelled (known gap).
                 _ => Some(item.clone()),
@@ -243,16 +237,22 @@ impl NativeIngress {
         }
     }
 
+    /// A new data message for converted call structure. It gets no item id:
+    /// provider ids such as `fc_`/`fco_` are invalid on a message.
     fn labelled_message(
         &mut self,
-        id: &Option<codex_protocol::ResponseItemId>,
         kind: SourceKind,
         origin: &str,
         text: &str,
         now: u64,
     ) -> ResponseItem {
+        let text = if text.is_empty() {
+            "(no text output)"
+        } else {
+            text
+        };
         ResponseItem::Message {
-            id: id.clone(),
+            id: None,
             role: "user".into(),
             content: vec![ContentItem::InputText {
                 text: self.label(kind, origin, text, now),

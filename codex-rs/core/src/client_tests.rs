@@ -242,8 +242,35 @@ fn pf_30_s01_labelled_context_round_trips_through_each_real_provider_adapter() {
         ),
         internal_chat_message_metadata_passthrough: None,
     };
+    // Restored/injected call structure with provider ids becomes data
+    // messages that carry no `fc_`/`fco_` item id.
+    let restored_call = ResponseItem::FunctionCall {
+        id: Some(codex_protocol::ResponseItemId::from_server(
+            "fc_restored".into(),
+        )),
+        name: "shell".into(),
+        namespace: None,
+        arguments: "{}".into(),
+        encrypted_function_args: None,
+        call_id: "call-restored".into(),
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let restored_output = ResponseItem::FunctionCallOutput {
+        id: Some(codex_protocol::ResponseItemId::from_server(
+            "fco_restored".into(),
+        )),
+        call_id: "call-restored".into(),
+        output: FunctionCallOutputPayload::from_text(String::new()),
+        internal_chat_message_metadata_passthrough: None,
+    };
     let prompt = Prompt {
-        input: vec![human.clone(), call.clone(), output],
+        input: vec![
+            human.clone(),
+            call.clone(),
+            output,
+            restored_call,
+            restored_output,
+        ],
         ..Default::default()
     };
     let base = test_model_client(SessionSource::Cli).with_source_envelopes(true);
@@ -321,9 +348,12 @@ fn pf_30_s01_labelled_context_round_trips_through_each_real_provider_adapter() {
             assert!(!wire.contains("<system>"), "{wire}");
             assert_eq!(
                 wire.matches("</corbanu_untrusted_data>").count(),
-                1,
+                3,
                 "{wire}"
             );
+            assert!(!wire.contains("\"id\":\"fc_restored\""), "{wire}");
+            assert!(!wire.contains("\"id\":\"fco_restored\""), "{wire}");
+            assert!(wire.contains("(no text output)"), "{wire}");
         }
     }
 }
@@ -334,9 +364,7 @@ fn pf_30_s01_labelled_restore_reinjection_waits_while_permissive() {
     client.note_restored_history(&[]);
     // Permissive history is unchanged: the request stays pending.
     assert!(!client.take_host_context_reinjection());
-    let moderate = client
-        .clone()
-        .with_ingress_level(codex_security_policy::SecurityLevel::Moderate);
+    let moderate = client.with_ingress_level(codex_security_policy::SecurityLevel::Moderate);
     assert!(moderate.take_host_context_reinjection());
     assert!(!moderate.take_host_context_reinjection());
     // Flag off never requests reinjection.

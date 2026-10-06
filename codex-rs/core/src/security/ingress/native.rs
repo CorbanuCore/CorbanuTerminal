@@ -60,7 +60,8 @@ fn message_key(item: &ResponseItem) -> Option<ContentDigest> {
         .iter()
         .filter_map(|part| match part {
             ContentItem::InputText { text } | ContentItem::OutputText { text }
-                if text != crate::context_manager::IMAGE_CONTENT_OMITTED_PLACEHOLDER =>
+                if text != crate::context_manager::IMAGE_CONTENT_OMITTED_PLACEHOLDER
+                    && text != crate::context_manager::AUDIO_CONTENT_OMITTED_PLACEHOLDER =>
             {
                 Some(text.as_str())
             }

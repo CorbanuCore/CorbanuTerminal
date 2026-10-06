@@ -13,7 +13,7 @@ use tracing::warn;
 
 pub(crate) const IMAGE_CONTENT_OMITTED_PLACEHOLDER: &str =
     "image content omitted because you do not support image input";
-const AUDIO_CONTENT_OMITTED_PLACEHOLDER: &str =
+pub(crate) const AUDIO_CONTENT_OMITTED_PLACEHOLDER: &str =
     "audio content omitted because you do not support audio input";
 // Changing this value would change model-visible IDs and invalidate prompt caches.
 const SYNTHETIC_OUTPUT_ID_NAMESPACE: Uuid = Uuid::from_u128(0x90d38d3e_6a5b_4d52_bfe2_2f1e634bfac4);
