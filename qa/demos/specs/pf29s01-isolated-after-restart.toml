@@ -20,12 +20,13 @@ ZAI_API_KEY = "provider/zai_api_key"
 
 [fixtures]
 "seed.sh" = '''
-mkdir -p "$HOME/.ssh" && printf 'synthetic demo key pf29\n' > "$HOME/.ssh/id_ed25519" && printf 'ssh-ed25519 AAAAsyntheticpublic pf29\n' > "$HOME/.ssh/id_ed25519.pub" && echo seeded fake ssh key pair
+mkdir -p "$HOME/.ssh" && printf 'synthetic demo key pf29\n' > "$HOME/.ssh/id_ed25519" && printf 'ssh-ed25519 AAAAsyntheticpublic pf29\n' > "$HOME/.ssh/id_ed25519.pub" && printf 'ordinary notes\n' > "$HOME/notes.txt" && echo seeded fake ssh key pair
 '''
 "probe.sh" = '''
 probe() { if eval "$2" >/dev/null 2>&1; then echo "$1: ALLOWED"; else echo "$1: denied"; fi; }
 probe "read ~/.ssh/id_ed25519 (private key)" 'cat "$HOME/.ssh/id_ed25519"'
 probe "read ~/.ssh/id_ed25519.pub (public key)" 'cat "$HOME/.ssh/id_ed25519.pub"'
+probe "read ~/notes.txt (ordinary file)" 'cat "$HOME/notes.txt"'
 echo probes done
 '''
 
