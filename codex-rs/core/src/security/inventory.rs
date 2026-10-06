@@ -256,7 +256,7 @@ pub enum VaultState {
     Unusable,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct ConfigLayerInput {
     /// Shown to the human, for example `user config`.
     pub label: String,
@@ -265,7 +265,16 @@ pub struct ConfigLayerInput {
     pub toml: toml::Value,
 }
 
-#[derive(Clone, Debug, Default)]
+impl std::fmt::Debug for ConfigLayerInput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ConfigLayerInput")
+            .field("label", &self.label)
+            .field("path", &self.path)
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Clone, Default)]
 pub struct InventorySources {
     pub codex_home: PathBuf,
     pub home: Option<PathBuf>,
@@ -273,6 +282,29 @@ pub struct InventorySources {
     /// The process environment. Values are read for classification only.
     pub env: Vec<(String, String)>,
     pub config_layers: Vec<ConfigLayerInput>,
+}
+
+/// Variable names only: the values are secrets.
+impl std::fmt::Debug for InventorySources {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InventorySources")
+            .field("codex_home", &self.codex_home)
+            .field("home", &self.home)
+            .field("cwd", &self.cwd)
+            .field(
+                "env",
+                &self.env.iter().map(|(name, _)| name).collect::<Vec<_>>(),
+            )
+            .field(
+                "config_layers",
+                &self
+                    .config_layers
+                    .iter()
+                    .map(|layer| &layer.label)
+                    .collect::<Vec<_>>(),
+            )
+            .finish()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -428,12 +460,46 @@ fn probe(path: &Path) -> Option<Probe> {
     Some(probe)
 }
 
+/// Opens regular files only, without blocking: a device (`/dev/zero`) would
+/// never end and a named pipe would block, and a project can ship either.
+fn open_regular(path: &Path) -> Result<std::fs::File, String> {
+    let not_regular = || "not a regular file".to_string();
+    if !std::fs::metadata(path)
+        .map_err(|err| err.kind().to_string())?
+        .is_file()
+    {
+        return Err(not_regular());
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        options.custom_flags(libc::O_NONBLOCK);
+    }
+    let file = options.open(path).map_err(|err| err.kind().to_string())?;
+    // The path may have been swapped between the check and the open.
+    if !file
+        .metadata()
+        .map_err(|err| err.kind().to_string())?
+        .is_file()
+    {
+        return Err(not_regular());
+    }
+    Ok(file)
+}
+
 fn read_bounded(path: &Path) -> Result<Vec<u8>, String> {
-    let metadata = std::fs::metadata(path).map_err(|err| err.kind().to_string())?;
-    if metadata.len() > MAX_READ_BYTES {
+    use std::io::Read as _;
+    let mut bytes = Vec::new();
+    open_regular(path)?
+        .take(MAX_READ_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|err| err.kind().to_string())?;
+    if bytes.len() as u64 > MAX_READ_BYTES {
         return Err(format!("larger than {MAX_READ_BYTES} bytes"));
     }
-    std::fs::read(path).map_err(|err| err.kind().to_string())
+    Ok(bytes)
 }
 
 struct Collector<'a> {
@@ -769,13 +835,24 @@ impl<'a> Collector<'a> {
         let Some(home) = self.sources.home.clone() else {
             return;
         };
-        const CREDENTIAL_FILES: [&str; 22] = [
+        // Whole folders where the tool keeps only credentials, so a file
+        // added later or under another name is covered too.
+        for name in [".ssh", ".aws", ".kube", ".config/gcloud", ".azure"] {
+            self.path_finding(PathFinding {
+                kind: FindingKind::CredentialFile,
+                class: SecretClass::UnmanagedSecret,
+                disposition: Disposition::Isolate,
+                scope: Scope::Home,
+                path: &home.join(name),
+                detail: None,
+                unsupported: Some("credential folder"),
+            });
+        }
+        const CREDENTIAL_FILES: [&str; 15] = [
             ".netrc",
             ".git-credentials",
             ".config/gh/hosts.yml",
             ".config/hub",
-            ".aws/credentials",
-            ".aws/config",
             ".docker/config.json",
             ".npmrc",
             ".yarnrc.yml",
@@ -783,11 +860,6 @@ impl<'a> Collector<'a> {
             ".cargo/credentials",
             ".cargo/credentials.toml",
             ".gem/credentials",
-            ".kube/config",
-            ".config/gcloud/application_default_credentials.json",
-            ".config/gcloud/credentials.db",
-            ".azure/accessTokens.json",
-            ".azure/msal_token_cache.json",
             ".vault-token",
             ".terraform.d/credentials.tfrc.json",
             ".claude/.credentials.json",
@@ -1262,12 +1334,11 @@ impl<'a> Collector<'a> {
             .filter(|path| path.extension().is_some_and(|extension| extension == "age"))
             .collect::<Vec<_>>();
         let usable = |path: &PathBuf| {
-            std::fs::File::open(path)
-                .and_then(|mut file| {
-                    let mut header = [0u8; 21];
-                    std::io::Read::read_exact(&mut file, &mut header).map(|()| header)
-                })
-                .is_ok_and(|header| &header == b"age-encryption.org/v1")
+            open_regular(path).is_ok_and(|mut file| {
+                let mut header = [0u8; 21];
+                std::io::Read::read_exact(&mut file, &mut header).is_ok()
+                    && &header == b"age-encryption.org/v1"
+            })
         };
         let vault = if stores.is_empty() {
             VaultState::Absent

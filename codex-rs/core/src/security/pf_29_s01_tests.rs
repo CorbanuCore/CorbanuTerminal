@@ -127,11 +127,15 @@ fn pf_29_s01_credential_files_and_ssh_keys_are_isolated_not_blocking() {
     let preflight = fixture.run(&fixture.sources());
 
     let isolated = preflight.inventory.isolation_paths();
-    for path in [".ssh/id_ed25519", ".ssh/deploy", ".kube/config", ".netrc"] {
+    // Whole credential folders, so later or oddly named keys are covered.
+    for path in [".ssh", ".ssh/id_ed25519", ".ssh/deploy", ".kube", ".netrc"] {
         assert!(isolated.contains(&home.join(path)), "{path} not isolated");
     }
-    for path in [".ssh/id_ed25519.pub", ".ssh/config"] {
-        assert!(!isolated.contains(&home.join(path)), "{path} isolated");
+    for path in [".ssh/id_ed25519.pub", ".ssh/config", ".kube/config"] {
+        assert!(
+            !isolated.contains(&home.join(path)),
+            "{path} listed separately"
+        );
     }
     assert_eq!(find(&preflight, FindingKind::SshPrivateKey).len(), 2);
     assert!(preflight.is_clean(), "{:?}", preflight.blockers());
@@ -356,11 +360,10 @@ fn pf_29_s01_symlinks_isolate_targets_and_survive_loops() {
     let fixture = Fixture::new();
     let home = fixture.home();
     let elsewhere = fixture.root.path().join("elsewhere/creds");
-    fixture.write(&elsewhere, b"aws_secret_access_key = fake");
-    std::fs::create_dir_all(home.join(".aws")).unwrap_or_else(|err| panic!("{err}"));
-    std::os::unix::fs::symlink(&elsewhere, home.join(".aws/credentials"))
+    fixture.write(&elsewhere, b"machine x password fake");
+    std::os::unix::fs::symlink(&elsewhere, home.join(".netrc"))
         .unwrap_or_else(|err| panic!("{err}"));
-    std::os::unix::fs::symlink(home.join("missing"), home.join(".netrc"))
+    std::os::unix::fs::symlink(home.join("missing"), home.join(".git-credentials"))
         .unwrap_or_else(|err| panic!("{err}"));
     std::os::unix::fs::symlink(home.join(".pgpass"), home.join(".pgpass"))
         .unwrap_or_else(|err| panic!("{err}"));
@@ -368,7 +371,7 @@ fn pf_29_s01_symlinks_isolate_targets_and_survive_loops() {
 
     let isolated = preflight.inventory.isolation_paths();
     let target = std::fs::canonicalize(&elsewhere).unwrap_or_else(|err| panic!("{err}"));
-    assert!(isolated.contains(&home.join(".aws/credentials")));
+    assert!(isolated.contains(&home.join(".netrc")));
     assert!(isolated.contains(&target));
     let entry = |name: &str| {
         preflight
@@ -380,9 +383,9 @@ fn pf_29_s01_symlinks_isolate_targets_and_survive_loops() {
             .cloned()
             .unwrap_or_else(|| panic!("{name} missing from manifest"))
     };
-    assert_eq!(entry(".aws/credentials").symlink_target, Some(target));
-    assert_eq!(entry(".aws/credentials").status, EntryStatus::Supported);
-    for name in [".netrc", ".pgpass"] {
+    assert_eq!(entry(".netrc").symlink_target, Some(target));
+    assert_eq!(entry(".netrc").status, EntryStatus::Supported);
+    for name in [".git-credentials", ".pgpass"] {
         assert!(
             matches!(entry(name).status, EntryStatus::Unreadable(_)),
             "{name}: {:?}",
@@ -565,4 +568,51 @@ fn pf_29_s01_workspace_env_files_found_without_recursion() {
     let env_files = find(&preflight, FindingKind::EnvFile);
     assert_eq!(env_files.len(), 1);
     assert_eq!(env_files[0].paths, vec![work.join(".env")]);
+}
+
+/// A project can ship `.env` as a link to a device or as a named pipe; the
+/// preflight must neither read forever nor block.
+#[cfg(unix)]
+#[test]
+fn pf_29_s01_devices_and_pipes_neither_hang_nor_exhaust_memory() {
+    let fixture = Fixture::new();
+    let work = fixture.root.path().join("work");
+    std::os::unix::fs::symlink("/dev/zero", work.join(".env"))
+        .unwrap_or_else(|err| panic!("{err}"));
+    let fifo = work.join(".envrc");
+    let status = std::process::Command::new("mkfifo")
+        .arg(&fifo)
+        .status()
+        .unwrap_or_else(|err| panic!("mkfifo: {err}"));
+    assert!(status.success());
+    std::os::unix::fs::symlink(&fifo, fixture.home().join(".zshrc"))
+        .unwrap_or_else(|err| panic!("{err}"));
+    let mut big = vec![b'a'; 2 * 1024 * 1024];
+    big.extend_from_slice(b"\nexport API_KEY=fake\n");
+    fixture.write(&fixture.home().join(".bashrc"), &big);
+
+    let started = std::time::Instant::now();
+    let preflight = fixture.run(&fixture.sources());
+    assert!(started.elapsed() < std::time::Duration::from_secs(10));
+    let status = |path: PathBuf| {
+        preflight
+            .inventory
+            .manifest
+            .entries
+            .iter()
+            .find(|entry| entry.path == path)
+            .map(|entry| entry.status.clone())
+    };
+    for name in [".env", ".envrc"] {
+        assert!(
+            matches!(status(work.join(name)), Some(EntryStatus::Unreadable(_))),
+            "{name}"
+        );
+    }
+    // Too large to read: listed for the human, not parsed.
+    assert!(
+        find(&preflight, FindingKind::ShellProfileExport)
+            .iter()
+            .any(|finding| finding.location == "~/.bashrc (not readable)")
+    );
 }

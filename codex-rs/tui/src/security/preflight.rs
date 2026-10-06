@@ -37,7 +37,7 @@ const RECEIPT_VERSION: u32 = 1;
 pub(crate) struct Receipt {
     version: u32,
     pub(crate) saved_at: i64,
-    /// First verified protected launch after the save.
+    /// First verified protected launch after the save (Unix milliseconds).
     pub(crate) activated_at: Option<i64>,
     pub(crate) findings: Vec<String>,
 }
@@ -46,7 +46,7 @@ pub(crate) struct Receipt {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Boundary {
     /// Preflight clean at this launch; conversations from before
-    /// `activated_at` (Unix seconds) are contaminated.
+    /// `activated_at` (Unix milliseconds) are contaminated.
     Clean {
         activated_at: i64,
     },
@@ -116,7 +116,7 @@ pub(crate) fn save_receipt(codex_home: &Path, preflight: &Preflight) -> io::Resu
         codex_home,
         &Receipt {
             version: RECEIPT_VERSION,
-            saved_at: now(),
+            saved_at: now_ms(),
             activated_at: None,
             findings: preflight.inventory.finding_ids().into_iter().collect(),
         },
@@ -143,11 +143,11 @@ fn write_receipt(codex_home: &Path, receipt: &Receipt) -> io::Result<()> {
     Ok(())
 }
 
-fn now() -> i64 {
+fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |elapsed| {
-            i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX)
+            i64::try_from(elapsed.as_millis()).unwrap_or(i64::MAX)
         })
 }
 
@@ -206,7 +206,11 @@ pub(crate) fn audit_at_launch(codex_home: &Path, config: &Config) -> Boundary {
     blockers.extend(
         verify_isolation(config, &preflight.inventory.isolation_paths())
             .into_iter()
-            .map(|line| format!("{line}; restart so launch can deny it")),
+            .map(|line| {
+                format!(
+                    "{line}; it was not found when Corbanu Terminal started (another folder or config layer, or a new file). Remove it, or restart from the folder that holds it"
+                )
+            }),
     );
     if !blockers.is_empty() {
         return Boundary::NotClean { blockers };
@@ -214,7 +218,7 @@ pub(crate) fn audit_at_launch(codex_home: &Path, config: &Config) -> Boundary {
     let activated_at = match receipt.activated_at {
         Some(activated_at) => activated_at,
         None => {
-            let activated_at = now();
+            let activated_at = now_ms();
             let updated = Receipt {
                 activated_at: Some(activated_at),
                 ..receipt
@@ -253,11 +257,14 @@ fn refusal_for(context: &level::LevelContext, thread_id: &ThreadId) -> Option<St
     })
 }
 
-/// Thread IDs are UUIDv7: the creation time is part of the ID.
+/// Thread IDs are UUIDv7: the creation time (milliseconds) is part of the ID.
 fn thread_created_at(thread_id: &ThreadId) -> Option<i64> {
     let uuid = uuid::Uuid::parse_str(&thread_id.to_string()).ok()?;
-    let (seconds, _) = uuid.get_timestamp()?.to_unix();
-    i64::try_from(seconds).ok()
+    let (seconds, nanos) = uuid.get_timestamp()?.to_unix();
+    i64::try_from(seconds)
+        .ok()?
+        .checked_mul(1000)?
+        .checked_add(i64::from(nanos / 1_000_000))
 }
 
 #[cfg(test)]

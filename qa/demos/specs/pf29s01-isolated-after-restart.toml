@@ -2,7 +2,7 @@
 #   PF29_CANDIDATE=<corbanu> --bin qa/security-levels/sprints/PF-29-S01/demos/restart-once.sh
 id = "pf29s01-isolated-after-restart"
 feature = "Preflight passes and Aggressive isolates the SSH private key after restart"
-expected = "The review shows a passed preflight that will deny ~/.ssh/id_ed25519; after a real restart /status claims the checked boundary and the agent's probe reads the public key but is denied the private key."
+expected = "The review shows a passed preflight that will deny ~/.ssh; after a real restart /status claims the checked boundary and the agent's probe is denied the private and public key but still reads an ordinary home file."
 model = "glm-5.2"
 provider = "zai"
 config = """
@@ -64,7 +64,7 @@ key = "Down"
 repeat = 20
 
 [[steps]]
-wait = "Credential files denied to agent commands after restart: ~/.ssh/id_ed25519"
+wait = "Credential files denied to agent commands after restart: ~/.ssh, ~/.ssh/id_ed25519"
 
 [[steps]]
 wait = "Preflight passed"
@@ -124,7 +124,7 @@ compress = 3
 key = "Enter"
 
 [[steps]]
-wait = "private key\\): (denied|ALLOWED)[\\s\\S]*probes done[\\s\\S]*probes done"
+wait = "ordinary file\\): (denied|ALLOWED)[\\s\\S]*probes done[\\s\\S]*probes done"
 timeout = 180
 compress = 3
 

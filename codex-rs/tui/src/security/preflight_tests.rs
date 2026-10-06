@@ -63,7 +63,7 @@ fn pf_29_s01_isolation_only_after_a_preflight_and_lands_in_the_profile() {
     // Even an unreadable receipt asks for isolation.
     std::fs::write(receipt_path(&corbanu), "garbage").unwrap();
     let paths = isolation_paths(&corbanu, Some(&home), /*cwd*/ None);
-    assert_eq!(paths, vec![home.join(".ssh/id_rsa")]);
+    assert_eq!(paths, vec![home.join(".ssh"), home.join(".ssh/id_rsa")]);
 
     let mut overrides = aggressive::base_overrides(&corbanu);
     aggressive::deny_reads(&mut overrides, &paths);
@@ -80,17 +80,22 @@ fn pf_29_s01_isolation_only_after_a_preflight_and_lands_in_the_profile() {
 
 #[test]
 fn pf_29_s01_resume_refused_for_conversations_before_activation() {
-    let now = now();
+    let now = now_ms();
     let fresh = ThreadId::new();
     let created = thread_created_at(&fresh).unwrap();
-    assert!((created - now).abs() <= 2, "{created} vs {now}");
+    assert!((created - now).abs() <= 2_000, "{created} vs {now}");
 
+    // Millisecond precision: a thread one millisecond older is refused.
+    let at_creation = context(Some(Boundary::Clean {
+        activated_at: created + 1,
+    }));
+    assert!(refusal_for(&at_creation, &fresh).is_some());
     let clean_before = context(Some(Boundary::Clean {
-        activated_at: now - 60,
+        activated_at: created,
     }));
     assert_eq!(refusal_for(&clean_before, &fresh), None);
     let clean_after = context(Some(Boundary::Clean {
-        activated_at: now + 60,
+        activated_at: now + 60_000,
     }));
     assert!(
         refusal_for(&clean_after, &fresh)

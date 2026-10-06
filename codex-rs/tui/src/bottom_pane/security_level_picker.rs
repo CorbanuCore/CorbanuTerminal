@@ -207,7 +207,13 @@ impl SecurityLevelPicker {
         }
         level::save(&self.codex_home, target)
             .map(|()| target)
-            .map_err(|err| err.to_string())
+            .map_err(|err| {
+                // Never leave a receipt for a level that was not saved.
+                if target == ChosenLevel::Aggressive {
+                    let _ = preflight::remove_receipt(&self.codex_home);
+                }
+                err.to_string()
+            })
     }
 
     fn preflight_lines(&self, preflight: &Preflight) -> Vec<String> {

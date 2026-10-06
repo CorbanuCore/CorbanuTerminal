@@ -76,11 +76,20 @@ impl ReadinessItem {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Preflight {
     pub readiness: Vec<ReadinessItem>,
     pub inventory: Inventory,
     key: [u8; 32],
+}
+
+impl std::fmt::Debug for Preflight {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Preflight")
+            .field("readiness", &self.readiness)
+            .field("inventory", &self.inventory)
+            .finish_non_exhaustive()
+    }
 }
 
 /// What changed between two preflights, by finding ID.
