@@ -136,7 +136,9 @@ Resolution, evaluated by Terminal before any bytes leave the host:
 
 ```text
 floor   = max(T2, T3, T4)                   # unset inputs count as 0
-tier    = selected_model.tier               # self-hosted/direct: per §1.2
+tier    = selected_model.tier               # catalog models: 1, 2 or 3
+        # self-hosted and direct Ambient (tier null): 2 if
+        # self_hosted_satisfies = "l2", else 1; never 3
 allowed = tier >= floor
 ```
 
@@ -149,6 +151,13 @@ allowed = tier >= floor
   lower it. Their own model selection is checked against it the same way.
 - T3 is code, not model judgment. A model asserting that content is safe never
   lowers a floor.
+
+**Tools.** The tier covers the model request and response only. Tools run in
+Terminal under the existing permission and approval policy. Tiered models do
+not enable provider-hosted tools. A tool that sends data to an external service
+(web fetch, MCP server, connector) is outside the tier boundary. When the floor
+is L2 or higher, that tool's approval prompt adds "sends data outside the L2
+boundary" and such calls are never auto-approved by the tier itself.
 
 ### A.2 Screens
 
@@ -408,8 +417,8 @@ Terminal (proposed boundaries; the implementing sprint fixes the exact files):
 | Local package | — | At send and completion | Salt, canonical request and response | **Never by default** |
 | Daily statement (B.4) | Corbanu | Daily | Balance, receipt Merkle root | Fetched |
 
-The **shareable bundle** `<receipt_id>.cpr.json` contains the receipt and
-proof attestation. The **full package** adds the local package and is exported
+The **shareable bundle** `<receipt_id>.cpr.json` contains the receipt and,
+for L3, the proof attestation. The **full package** adds the local package and is exported
 only through the warning in A.2.
 
 ### C.2 Receipt (all tiers)
@@ -447,6 +456,10 @@ only through the warning in A.2.
   `receipt_hash = SHA-256(JCS(receipt including signature))`.
 - Signing keys come from the catalog. Terminal pins them on first use and
   warns when a key changes.
+- `weights_digest` is required for L2 and L3, where Corbanu controls the
+  weights. For L1 it is `null` and the receipt carries
+  `upstream_model_version` as reported by the aggregator; Terminal labels it
+  "reported by third party".
 - Self-hosted local receipts use the same fields with `operator_class:
   "user-rented"`, `tier: null`, no charge and no signature.
 
@@ -513,12 +526,12 @@ C5-7. This is a target to measure in PF-65 S02, not a measured result.
 | Step | Check | Inputs | Offline? | Fails as |
 | --- | --- | --- | --- | --- |
 | C5-1 | Recompute both commitments; compare to the receipt | Local package + receipt | Yes (full package only) | `commitment_mismatch` |
-| C5-2 | Receipt and attestation Ed25519 signatures against pinned Corbanu keys | Receipt, attestation, pinned keys | Yes | `bad_signature` |
+| C5-2 | Receipt Ed25519 signature (all tiers) and attestation signature (L3) against pinned Corbanu keys | Receipt, (L3) attestation, pinned keys | Yes | `bad_signature` |
 | C5-3 | Recompute the charge from token counts and the signed schedule | Receipt, schedule | Yes | `charge_mismatch` |
 | C5-4 | (L3) Attestation's `receipt_hash`, `response_commitment` and `weights_digest` equal the receipt's | Receipt, attestation | Yes | `proof_binding_mismatch` |
 | C5-5 | (L3) Each `logits_hash` + `merkle_path` hashes to `logits_root`; each validator signature verifies against the validator set at `block_height` | Attestation, validator set | Yes, given a cached validator set | `bad_spot_check` |
 | C5-6 | (L3) `job_inclusion_proof` places the job in `block_hash`, and that block is final according to at least two independent Ambient RPC endpoints chosen by the user | Attestation, RPC | No (`--online`) | `inclusion_failed` / `not_finalized` |
-| C5-7 | `weights_digest` equals the digest published for that model in the signed catalog | Receipt, cached catalog | Yes | `unknown_weights` |
+| C5-7 | (L2/L3) `weights_digest` equals the digest published for that model in the signed catalog | Receipt, cached catalog | Yes | `unknown_weights` |
 | C5-8 | `receipt_hash` is included in that day's signed statement | Receipt, statement | No (`--online`) | `missing_from_statement` |
 
 Results (`--json`): `{receipt_id, tier, result, checks: [{id, result,
@@ -529,8 +542,8 @@ without the local package) are reported as `skipped` and the overall result
 says `partial`. The exit code is 0 only for `verified`, `receipt_ok` or
 `local_receipt` with no failed check.
 
-The TUI runs C5-1 to C5-5 and C5-7 automatically, C5-6 when the proof arrives,
-and C5-8 once a day.
+The TUI runs C5-1 to C5-3 at completion (plus C5-7 for L2), C5-4 to C5-7 when
+an L3 proof arrives, and C5-8 once a day.
 
 ### C.7 Optional deep audit (later phase; not CPU)
 
