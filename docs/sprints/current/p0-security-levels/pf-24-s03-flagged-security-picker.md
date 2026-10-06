@@ -54,36 +54,47 @@ updated: 2026-10-06
 If any row cannot be enforced with existing controls, stop and escalate; do not
 label Aggressive as active while a row is missing.
 
+### As built (2026-10-06)
+
+- Sandbox: permission profile `corbanu-aggressive` (`:workspace`, tmp and `$CODEX_HOME` read-only,
+  network off, deny-read vault store and `auth.json`). Under `untrusted` a legacy `SandboxPolicy`
+  retries an approved, sandbox-blocked command unsandboxed; a denied-read entry forbids that.
+- Env row also turns off shell snapshots and login shells (they re-export removed variables).
+- Applies at the next start (web search, env and exec policy are session-static, so not via the
+  PF-83 path); every config build is verified row by row; `config.toml` is never written.
+
 ## Preconditions
 
-- [ ] Plan active; PF-24-S01 archived (done); exact worktree/branch/base and disjoint `write_scope` recorded.
-- [ ] Read root, `codex-rs`, TUI and TUI style AGENTS.md.
+- [x] Plan active; PF-24-S01 archived (done); exact worktree/branch/base and disjoint `write_scope` recorded.
+- [x] Read root, `codex-rs`, TUI and TUI style AGENTS.md.
 
 ## Done
 
 - [x] Sprint record created and linked to PF-24 (2026-10-06).
+- [x] `security_levels` flag; flag off and no state file: no change (old view snapshots unchanged; launch no-op test; video `pf24-flag-off`).
+- [x] Picker: Permissive, Moderate “not available yet”, Aggressive; review shows every row first; `Esc` changes nothing.
+- [x] Active only after the applied outcome: saved level shown as pending until a restart whose loaded config passes verification (see As built for the PF-83-path deviation).
+- [x] Persisted in `$CODEX_HOME/security_level.toml`; restart restores it; unknown or corrupt state (or a deleted state file beside the rule file) enforces Aggressive with a warning.
+- [x] Return to Permissive removes overlay and rule file (`config.toml` hash unchanged); pending approvals end at restart.
+- [x] No agent path: file outside every config layer, agent writes denied; `/permissions`/auto-review refused.
+- [x] Regressions: tests, tmux run and 9 videos; code-blind design frozen first (49 cases, `FROZEN.sha256`).
 
 ## Remaining
 
-- [ ] Add the `security_levels` flag; with it off, `/security` and every other path is unchanged (snapshot proof).
-- [ ] With it on, list Permissive (current) and Aggressive; show Moderate as “not available yet”.
-- [ ] Before confirmation, show the exact differences from the table above; `Esc` changes nothing.
-- [ ] Apply through the PF-83 confirmed path; show the level as active only after the applied outcome.
-- [ ] Persist the level; restart restores it; an unknown stored value fails visibly, never Permissive.
-- [ ] Return to Permissive restores the saved prior settings exactly and invalidates incompatible pending approvals.
-- [ ] No agent tool, prompt, config overlay or project file can change the level.
-- [ ] Regressions: flag off, cancel, confirm, restart, unknown value, child inheritance, vault/network/outside-write probes.
-- [ ] Code-blind design for the Aggressive milestone frozen before results are disclosed.
+- [ ] Merge behind the flag; then archive this record.
+
+Follow-ups (not this sprint's scope) are listed in `qa/security-levels/sprints/PF-24-S03/README.md`.
 
 ## Verification
 
-- [ ] `cd codex-rs && just fmt && just fix -p codex-tui && just fix -p codex-features`, then focused `just test -p codex-tui security` and `just test -p codex-features`.
-- [ ] tmux functional run, product on GLM 5.2 (`-m glm-5.2 -c model_provider="zai"`): flag off, select/cancel, select Aggressive, probes denied, restart, back to Permissive.
-- [ ] One independent Opus 5.5 High review; findings dispositioned.
-- [ ] Short videos of each core feature end to end (`qa/demos/README.md` SOP, else asciinema `.cast`).
+- [x] `just fmt`, `just fix -p codex-tui -p codex-features`; `just test -p codex-tui -- security` 31/31, `just test -p codex-features` 33/33; full `codex-tui` log kept (host-only `SUN_LEN` failures).
+- [x] tmux functional run on GLM 5.2: flag off, select/cancel, select Aggressive, probes denied, restart, back to Permissive (`qa/.../tmux-run/`).
+- [x] Independent Opus 5.5 High review: request changes, 12 findings dispositioned (`qa/.../review/`).
+- [x] Videos with the demo SOP script (PR #177 branch): 9 at `72735863b6` (`qa/.../demos/index.md`).
+- [ ] PR checks green on the final head before merge.
 
 ## Exit evidence
 
-- [ ] Commit, changed paths, test output, tmux keys and `.cast` files under `qa/security-levels/sprints/PF-24-S03/`.
+- [x] Commit, paths, tests, tmux keys and video links in `qa/security-levels/sprints/PF-24-S03/` (casts: release assets).
 - [ ] Merged behind the flag; milestone code-blind run and human sign-off stay with “Aggressive ships”.
 - [ ] Done/Remaining reflect reality; completed record archived.
