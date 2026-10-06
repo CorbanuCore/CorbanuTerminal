@@ -374,16 +374,14 @@ impl ExecPolicyManager {
             &match_options,
         );
         if self.strict_rules {
-            let forbidden = commands
-                .iter()
-                .flat_map(|command| {
-                    strict_forbidden_matches(exec_policy.as_ref(), command, &match_options)
-                })
-                .collect::<Vec<_>>();
-            if !forbidden.is_empty() {
-                evaluation.decision = Decision::Forbidden;
-                evaluation.matched_rules.extend(forbidden);
-            }
+            // The original command, not the parsed one: parsing keeps only
+            // the first command of a heredoc script.
+            apply_strict_forbidden_matches(
+                &mut evaluation,
+                exec_policy.as_ref(),
+                command,
+                &match_options,
+            );
         }
 
         let requested_amendment = if auto_amendment_allowed {
@@ -875,35 +873,46 @@ pub(crate) fn default_policy_path(codex_home: &Path) -> PathBuf {
     codex_home.join(RULES_DIR_NAME).join(DEFAULT_POLICY_FILE)
 }
 
-/// Programs whose string arguments are themselves command lines: shells
-/// (`sh -c '…'`) and `env -S '…'`.
-const COMMAND_LINE_RUNNERS: [&str; 8] = ["sh", "bash", "zsh", "dash", "ksh", "mksh", "fish", "env"];
 /// Longer than any prefix rule needs; bounds the work per candidate.
 const STRICT_MATCH_WINDOW: usize = 16;
+/// Words skipped after a program's leading options, at most.
+const STRICT_MAX_OPTION_WORDS: usize = 256;
+/// Program-name suffixes a launcher may add (Windows, npm shims).
+const PROGRAM_SUFFIXES: [&str; 6] = [".exe", ".com", ".cmd", ".bat", ".ps1", ".js"];
 
-/// `forbidden` rule matches for every command `command` could run that the
-/// exact match misses: the program behind any wrapper (`env -i X=1`,
-/// `nohup`, `exec -a n`, `timeout 5`), a program named by a path or in
-/// another case (`./corbanu`, `CORBANU`), options before a subcommand
-/// (`corbanu -c k=v vault`), and words of shell `-c` scripts and `env -S`
-/// strings. Used only under `strict_rules` and only to refuse, so the
-/// deliberate over-matching (`echo corbanu vault`) cannot allow anything.
-pub(crate) fn strict_forbidden_matches(
+/// Best-effort `forbidden` rule matches for commands that `command` could
+/// run but the exact match misses. Used only under `strict_rules` and only to
+/// refuse, so over-matching cannot allow anything.
+///
+/// Every word, including the words of scripts and strings at any depth
+/// (`sh -c '…'`, `env -S '…'`, `eval`, heredocs, `python -c`), is split on
+/// whitespace, quotes and shell punctuation into one token stream. Each
+/// token that names a program with rules (after dropping directories, case
+/// and launcher suffixes) starts a candidate, so wrappers (`env -i X=1`,
+/// `nohup`, `timeout 5`) and options before a subcommand
+/// (`corbanu -c k=v vault`) are seen through. Names built at run time,
+/// aliases, functions and copies of a binary are out of reach; the sandbox
+/// is the control for those. Accepted over-matching: `echo corbanu vault`,
+/// `git commit -m "… corbanu vault …"`.
+fn strict_forbidden_matches(
     policy: &Policy,
     command: &[String],
     match_options: &MatchOptions,
 ) -> Vec<RuleMatch> {
+    let tokens = command
+        .iter()
+        .flat_map(|word| loose_tokens(word))
+        .collect::<Vec<_>>();
     let mut matches = Vec::new();
-    let mut check = |words: &[String]| {
-        for start in 0..words.len() {
-            let program = program_key(&words[start]);
-            if program.is_empty() {
+    for (start, token) in tokens.iter().enumerate() {
+        let rest = &tokens[start + 1..];
+        for program in program_keys(token) {
+            if policy.rules().get_vec(&program).is_none() {
                 continue;
             }
-            let rest = &words[start + 1..];
-            // Also drop leading options (and their values) after the program.
+            // Also skip words after leading options.
             let skips = if rest.first().is_some_and(|word| word.starts_with('-')) {
-                rest.len().min(STRICT_MATCH_WINDOW)
+                rest.len().clamp(1, STRICT_MAX_OPTION_WORDS)
             } else {
                 1
             };
@@ -911,63 +920,84 @@ pub(crate) fn strict_forbidden_matches(
                 let candidate = std::iter::once(program.clone())
                     .chain(rest.iter().skip(skip).take(STRICT_MATCH_WINDOW).cloned())
                     .collect::<Vec<_>>();
-                matches.extend(
-                    policy
-                        .matches_for_command_with_options(
-                            &candidate,
-                            /*heuristics_fallback*/ None,
-                            match_options,
-                        )
-                        .into_iter()
-                        .filter(|rule_match| rule_match.decision() == Decision::Forbidden),
-                );
+                for rule_match in policy.matches_for_command_with_options(
+                    &candidate,
+                    /*heuristics_fallback*/ None,
+                    match_options,
+                ) {
+                    if rule_match.decision() == Decision::Forbidden
+                        && !matches.contains(&rule_match)
+                    {
+                        matches.push(rule_match);
+                    }
+                }
             }
         }
-    };
-    check(command);
-    let mut runner_seen = false;
-    for (index, arg) in command.iter().enumerate() {
-        if runner_seen && (arg.contains(char::is_whitespace) || arg.contains("\\_")) {
-            let mut words = command_line_words(arg);
-            words.extend(command[index + 1..].iter().cloned());
-            check(&words);
-        }
-        runner_seen |= COMMAND_LINE_RUNNERS.contains(&program_key(arg).as_str());
     }
     matches
 }
 
-/// The rule key a word could run as: shell punctuation trimmed (`$(corbanu`),
-/// directories dropped, ASCII-lowercased (case-insensitive file systems) and
-/// without `.exe`.
-fn program_key(word: &str) -> String {
-    let word = word
-        .trim_start_matches(['$', '(', '`', '{', ';', '&', '|', '!', '<', '>'])
-        .trim_end_matches([')', '`', '}', ';', '&', '|']);
-    let name = word.rsplit(['/', '\\']).next().unwrap_or(word);
-    let name = name.to_ascii_lowercase();
-    match name.strip_suffix(".exe") {
-        Some(stem) => stem.to_string(),
-        None => name,
+/// Make `evaluation` Forbidden when [`strict_forbidden_matches`] finds any.
+pub(crate) fn apply_strict_forbidden_matches(
+    evaluation: &mut Evaluation,
+    policy: &Policy,
+    command: &[String],
+    match_options: &MatchOptions,
+) {
+    for rule_match in strict_forbidden_matches(policy, command, match_options) {
+        evaluation.decision = Decision::Forbidden;
+        if !evaluation.matched_rules.contains(&rule_match) {
+            evaluation.matched_rules.push(rule_match);
+        }
     }
 }
 
-/// Words of a shell script or `env -S` string. `\_` separates words in
-/// `env -S`; an attached `-S`/`--split-string=` prefix is dropped.
-fn command_line_words(text: &str) -> Vec<String> {
-    let text = text.replace("\\_", " ");
-    let mut words =
-        shlex::split(&text).unwrap_or_else(|| text.split_whitespace().map(str::to_string).collect());
-    if let Some(first) = words.first_mut() {
-        if let Some((_, value)) = first.strip_prefix("--").and_then(|long| long.split_once('=')) {
-            *first = value.to_string();
-        } else if first.starts_with('-')
-            && let Some((_, value)) = first.split_once('S')
-        {
-            *first = value.to_string();
+/// `word` split into shell words, ignoring quoting: quotes, escapes, shell
+/// punctuation and `env -S`'s `\_` separate words.
+fn loose_tokens(word: &str) -> Vec<String> {
+    word.replace("\\_", " ")
+        .split(|c: char| {
+        c.is_whitespace()
+            || matches!(
+                c,
+                '\'' | '"' | '`' | '\\' | '^' | ';' | '&' | '|' | '(' | ')' | '<' | '>' | '{'
+                    | '}' | '[' | ']' | ',' | '=' | '$' | '!'
+            )
+    })
+        .filter(|token| !token.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+/// The rule keys `token` could run as: its file name as written and
+/// ASCII-lowercased (case-insensitive file systems), without a launcher
+/// suffix.
+fn program_keys(token: &str) -> Vec<String> {
+    let name = token.rsplit('/').next().unwrap_or(token);
+    // An option cluster with an attached `env -S` string: `-iScorbanu`.
+    let name = match name.strip_prefix('-') {
+        Some(cluster) if !cluster.starts_with('-') => match cluster.split_once('S') {
+            Some((_, program)) => program,
+            None => return Vec::new(),
+        },
+        _ => name,
+    };
+    let mut keys = Vec::with_capacity(2);
+    for key in [name.to_string(), name.to_ascii_lowercase()] {
+        let lower = key.to_ascii_lowercase();
+        let key = PROGRAM_SUFFIXES
+            .iter()
+            .find_map(|suffix| {
+                lower
+                    .ends_with(suffix)
+                    .then(|| key[..key.len() - suffix.len()].to_string())
+            })
+            .unwrap_or(key);
+        if !key.is_empty() && !keys.contains(&key) {
+            keys.push(key);
         }
     }
-    words
+    keys
 }
 
 fn commands_for_exec_policy(command: &[String]) -> ExecPolicyCommands {

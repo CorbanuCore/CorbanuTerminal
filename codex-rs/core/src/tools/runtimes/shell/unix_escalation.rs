@@ -616,17 +616,14 @@ impl CoreShellActionProvider {
                 },
             );
             if self.strict_rules {
-                let forbidden = crate::exec_policy::strict_forbidden_matches(
+                crate::exec_policy::apply_strict_forbidden_matches(
+                    &mut evaluation,
                     &policy,
                     &join_program_and_argv(program, argv),
                     &MatchOptions {
                         resolve_host_executables: true,
                     },
                 );
-                if !forbidden.is_empty() {
-                    evaluation.decision = Decision::Forbidden;
-                    evaluation.matched_rules.extend(forbidden);
-                }
             }
             evaluation
         };

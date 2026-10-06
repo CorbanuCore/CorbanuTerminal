@@ -5899,7 +5899,7 @@
       "description": "Directory where Codex stores the SQLite state DB. Defaults to `$CODEX_SQLITE_HOME` when set. Otherwise uses `$CODEX_HOME`."
     },
     "strict_rules": {
-      "description": "When `true`, a `.rules` exec-policy file that fails to parse stops the session from starting instead of falling back to requirements-only rules with a warning, and `forbidden` rules also match wrapped forms of a command (`env …`, `sh -c '…'`, a path to or another case of the program, options before a subcommand). Defaults to `false`.",
+      "description": "When `true`, a `.rules` exec-policy file that fails to parse stops the session from starting instead of falling back to requirements-only rules with a warning, and `forbidden` rules also match, best effort, wrapped forms of a command (`env …`, `sh -c '…'`, a path to or another case of the program, options before a subcommand). This is name matching, not a containment boundary. Defaults to `false`.",
       "type": "boolean"
     },
     "suppress_unstable_features_warning": {

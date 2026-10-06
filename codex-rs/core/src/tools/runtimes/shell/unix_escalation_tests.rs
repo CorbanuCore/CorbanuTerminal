@@ -925,3 +925,60 @@ host_executable(name = "git", paths = ["{allowed_git_literal}"])
         evaluation.decision
     ));
 }
+
+/// Under strict rules, an intercepted `env corbanu vault …` is refused by the
+/// `corbanu vault` rule; without them it is not.
+#[tokio::test(flavor = "current_thread")]
+async fn strict_rules_refuse_intercepted_wrapped_vault_exec() -> anyhow::Result<()> {
+    let mut parser = PolicyParser::new();
+    parser.parse(
+        "vault.rules",
+        r#"prefix_rule(pattern = ["corbanu", "vault"], decision = "forbidden", justification = "no vault")"#,
+    )?;
+    let policy = parser.build();
+    let env = AbsolutePathBuf::try_from(host_absolute_path(&["usr", "bin", "env"])).unwrap();
+    let argv = ["env", "FOO=1", "corbanu", "vault", "list"].map(str::to_string);
+    let mut actions = Vec::new();
+    for strict_rules in [true, false] {
+        let (session, turn_context) = make_session_and_context().await;
+        let provider = CoreShellActionProvider {
+            policy: Arc::new(RwLock::new(policy.clone())),
+            strict_rules,
+            session: Arc::new(session),
+            turn: Arc::new(turn_context),
+            call_id: "strict-wrapped-vault".to_string(),
+            environment_id: "local".to_string(),
+            tool_name: GuardianCommandSource::Shell,
+            approval_policy: AskForApproval::Never,
+            permission_profile: PermissionProfile::workspace_write(),
+            sandbox_permissions: SandboxPermissions::UseDefault,
+            approval_sandbox_permissions: SandboxPermissions::UseDefault,
+            prompt_permissions: None,
+            stopwatch: codex_shell_escalation::Stopwatch::new(Duration::from_secs(1)),
+        };
+        actions.push(
+            codex_shell_escalation::EscalationPolicy::determine_action(
+                &provider,
+                &env,
+                &argv,
+                &test_sandbox_cwd(),
+            )
+            .await?,
+        );
+    }
+    assert!(
+        matches!(
+            actions[0],
+            codex_shell_escalation::EscalationDecision::Deny { .. }
+        ),
+        "{actions:?}"
+    );
+    assert!(
+        !matches!(
+            actions[1],
+            codex_shell_escalation::EscalationDecision::Deny { .. }
+        ),
+        "{actions:?}"
+    );
+    Ok(())
+}

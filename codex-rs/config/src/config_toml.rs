@@ -367,9 +367,10 @@ pub struct ConfigToml {
 
     /// When `true`, a `.rules` exec-policy file that fails to parse stops the
     /// session from starting instead of falling back to requirements-only
-    /// rules with a warning, and `forbidden` rules also match wrapped forms
-    /// of a command (`env …`, `sh -c '…'`, a path to or another case of the
-    /// program, options before a subcommand). Defaults to `false`.
+    /// rules with a warning, and `forbidden` rules also match, best effort,
+    /// wrapped forms of a command (`env …`, `sh -c '…'`, a path to or another
+    /// case of the program, options before a subcommand). This is name
+    /// matching, not a containment boundary. Defaults to `false`.
     pub strict_rules: Option<bool>,
 
     /// When set to `true`, `AgentReasoning` events will be hidden from the

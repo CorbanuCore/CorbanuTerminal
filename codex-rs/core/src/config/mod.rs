@@ -764,7 +764,7 @@ pub struct Config {
 
     /// When `true`, a `.rules` file that fails to parse is fatal for a new
     /// session instead of dropping every user and project rule, and
-    /// `forbidden` rules also match wrapped forms of a command.
+    /// `forbidden` rules also match wrapped forms of a command (best effort).
     pub strict_rules: bool,
 
     /// When `true`, `AgentReasoning` events emitted by the backend will be
