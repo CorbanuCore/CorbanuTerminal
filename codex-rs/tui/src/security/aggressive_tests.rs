@@ -159,3 +159,29 @@ set = { MY_API_KEY = "abc" }
         vec!["Vault: the exec-policy rule file is missing".to_string()]
     );
 }
+
+/// A workspace that contains the Corbanu home still cannot rewrite the level.
+#[tokio::test]
+async fn codex_home_inside_the_workspace_stays_read_only() {
+    let cwd = tempfile::tempdir().unwrap();
+    let home = cwd.path().join(".corbanu");
+    std::fs::create_dir_all(&home).unwrap();
+    let mut cli = base_overrides(&home);
+    cli.extend(env_overrides(&ShellEnvironmentPolicyToml::default()));
+    let mut harness = ConfigOverrides {
+        cwd: Some(cwd.path().to_path_buf()),
+        ..Default::default()
+    };
+    apply_launch_overrides(&mut harness);
+    let config = ConfigBuilder::default()
+        .codex_home(home.clone())
+        .cli_overrides(cli)
+        .harness_overrides(harness)
+        .build()
+        .await
+        .unwrap();
+    assert_eq!(
+        verify(&config, /*rules_present*/ true),
+        Vec::<String>::new()
+    );
+}

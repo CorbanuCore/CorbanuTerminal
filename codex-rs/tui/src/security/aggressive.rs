@@ -69,6 +69,9 @@ pub(crate) fn base_overrides(codex_home: &Path) -> Vec<(String, toml::Value)> {
         .get_mut("filesystem")
         .and_then(toml::Value::as_table_mut)
     {
+        // Read-only even when the workspace contains it: the stored level,
+        // rules and config cannot be rewritten by an agent command.
+        filesystem.insert(codex_home.display().to_string(), string("read"));
         filesystem.insert(vault_store, string("deny"));
     }
     vec![
@@ -184,6 +187,13 @@ pub(crate) fn verify(config: &Config, rules_present: bool) -> Vec<String> {
     if !file_system.has_denied_read_restrictions() {
         failures.push("Sandbox: approved commands could run outside the sandbox".to_string());
     }
+    let state_file = config
+        .codex_home
+        .join(super::level::STATE_FILE)
+        .to_path_buf();
+    if file_system.can_write_path_with_cwd(&state_file, cwd) {
+        failures.push(format!("Sandbox: {} is writable", state_file.display()));
+    }
     for outside in outside_paths(config) {
         if !outside.starts_with(cwd) && file_system.can_write_path_with_cwd(&outside, cwd) {
             failures.push(format!("Sandbox: {} is writable", outside.display()));
@@ -237,13 +247,7 @@ pub(crate) fn verify(config: &Config, rules_present: bool) -> Vec<String> {
 }
 
 fn outside_paths(config: &Config) -> Vec<std::path::PathBuf> {
-    let mut paths = vec![
-        std::path::PathBuf::from("/tmp/corbanu-aggressive-probe"),
-        config
-            .codex_home
-            .join(super::level::STATE_FILE)
-            .to_path_buf(),
-    ];
+    let mut paths = vec![std::path::PathBuf::from("/tmp/corbanu-aggressive-probe")];
     if let Some(parent) = config.cwd.as_path().parent() {
         paths.push(parent.join("corbanu-aggressive-probe"));
     }
