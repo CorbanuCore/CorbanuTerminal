@@ -2,11 +2,18 @@ use super::*;
 use pretty_assertions::assert_eq;
 
 #[test]
+fn enter_on_an_untouched_prompt_confirms_the_highlighted_row() {
+    let mut guard = TypingGuard::default();
+
+    assert_eq!(guard.on_confirm(), Confirm::Highlighted);
+}
+
+#[test]
 fn one_decision_key_arms_its_option_for_enter() {
     let mut guard = TypingGuard::default();
 
     assert_eq!(guard.on_text_key(Some(1)), Some(1));
-    assert!(guard.allows_accept());
+    assert_eq!(guard.on_confirm(), Confirm::Option(1));
 }
 
 #[test]
@@ -16,10 +23,10 @@ fn second_character_is_typed_text_however_slowly_it_arrives() {
 
     assert_eq!(guard.on_text_key(Some(1)), Some(1));
     assert_eq!(guard.on_text_key(/*option*/ None), None);
-    assert!(!guard.allows_accept());
+    assert_eq!(guard.on_confirm(), Confirm::Blocked);
     // Later decision keys stay text until the user navigates.
     assert_eq!(guard.on_text_key(Some(0)), None);
-    assert!(guard.typed_text());
+    assert_eq!(guard.notice(), Some(Notice::TypedText));
 
     guard.reset();
     assert_eq!(guard.on_text_key(Some(0)), Some(0));
@@ -30,9 +37,9 @@ fn two_decision_keys_are_typed_text() {
     let mut guard = TypingGuard::default();
 
     guard.on_text_key(Some(0));
-    assert_eq!(guard.on_text_key(Some(0)), None);
 
-    assert!(guard.typed_text());
+    assert_eq!(guard.on_text_key(Some(0)), None);
+    assert_eq!(guard.on_confirm(), Confirm::Blocked);
 }
 
 #[test]
@@ -41,7 +48,7 @@ fn unbound_first_character_is_typed_text() {
 
     assert_eq!(guard.on_text_key(/*option*/ None), None);
 
-    assert!(!guard.allows_accept());
+    assert_eq!(guard.on_confirm(), Confirm::Blocked);
 }
 
 #[test]
@@ -52,17 +59,33 @@ fn editing_input_after_a_decision_key_blocks_enter() {
     guard.on_text_key(Some(1));
     guard.on_typed_input();
 
-    assert!(!guard.allows_accept());
+    assert_eq!(guard.on_confirm(), Confirm::Blocked);
 }
 
 #[test]
-fn request_change_disarms_but_keeps_typed_text() {
-    let mut armed = TypingGuard::default();
-    armed.on_text_key(Some(0));
-    armed.on_request_changed();
-    assert!(!armed.allows_accept());
+fn next_request_needs_a_fresh_choice() {
+    let mut guard = TypingGuard::default();
+    guard.on_text_key(Some(0));
+    assert_eq!(guard.on_confirm(), Confirm::Option(0));
 
-    let mut idle = TypingGuard::default();
-    idle.on_request_changed();
-    assert!(idle.is_idle());
+    guard.on_request_changed();
+
+    // A second Enter is explained, not confirmed.
+    assert_eq!(guard.notice(), None);
+    assert_eq!(guard.on_confirm(), Confirm::Blocked);
+    assert_eq!(guard.notice(), Some(Notice::ChooseFirst));
+    // A decision key or navigation makes Enter work again.
+    assert_eq!(guard.on_text_key(Some(2)), Some(2));
+    assert_eq!(guard.on_confirm(), Confirm::Option(2));
+}
+
+#[test]
+fn request_change_keeps_typed_text() {
+    let mut guard = TypingGuard::default();
+    guard.on_typed_input();
+
+    guard.on_request_changed();
+
+    assert_eq!(guard.notice(), Some(Notice::TypedText));
+    assert!(!guard.accepts_commands());
 }

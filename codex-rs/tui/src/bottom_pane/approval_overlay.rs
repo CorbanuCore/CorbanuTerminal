@@ -24,6 +24,8 @@ use crate::app_event_sender::AppEventSender;
 use crate::approval_events::ApprovalResponseDestination;
 use crate::bottom_pane::BottomPaneView;
 use crate::bottom_pane::CancellationEvent;
+use crate::bottom_pane::approval_typing_guard::Confirm;
+use crate::bottom_pane::approval_typing_guard::Notice;
 use crate::bottom_pane::approval_typing_guard::TypingGuard;
 use crate::bottom_pane::list_selection_view::ListSelectionView;
 use crate::bottom_pane::list_selection_view::SelectionItem;
@@ -210,6 +212,8 @@ impl ApprovalOverlay {
             typing_guard: TypingGuard::default(),
         };
         view.set_current(request);
+        // The first request has not replaced anything.
+        view.typing_guard.reset();
         view
     }
 
@@ -595,9 +599,26 @@ impl ApprovalOverlay {
         }
     }
 
-    fn is_list_navigation(&self, key_event: KeyEvent) -> bool {
+    /// Deliberate navigation: arrow, Page, Home and End keys, plus any
+    /// configured list-navigation key that is neither a character nor a chord.
+    /// Characters and chords such as Ctrl+N or Ctrl+J (a raw newline) could be
+    /// composer editing, so they count as typed text instead.
+    fn is_deliberate_navigation(&self, key_event: KeyEvent) -> bool {
+        if key_hint::is_plain_text_key_event(key_event)
+            || key_hint::has_ctrl_or_alt(key_event.modifiers)
+        {
+            return false;
+        }
         let keymap = &self.list_keymap;
-        [
+        matches!(
+            key_event.code,
+            KeyCode::Up
+                | KeyCode::Down
+                | KeyCode::PageUp
+                | KeyCode::PageDown
+                | KeyCode::Home
+                | KeyCode::End
+        ) || [
             &keymap.move_up,
             &keymap.move_down,
             &keymap.page_up,
@@ -609,10 +630,27 @@ impl ApprovalOverlay {
         .any(|bindings| bindings.is_pressed(key_event))
     }
 
+    /// Accept keys that cannot be typed text. A character accept binding
+    /// would let a typed word confirm an armed option, so Enter stands in
+    /// when no other accept key is configured.
+    fn is_accept(&self, key_event: KeyEvent) -> bool {
+        let mut bindings = self
+            .list_keymap
+            .accept
+            .iter()
+            .filter(|binding| !matches!(binding.parts(), (KeyCode::Char(_), _)))
+            .peekable();
+        if bindings.peek().is_none() {
+            return key_event.code == KeyCode::Enter
+                && !key_hint::has_ctrl_or_alt(key_event.modifiers);
+        }
+        bindings.any(|binding| binding.is_press(key_event))
+    }
+
     /// Route a plain character. Characters never answer the prompt: a decision
     /// key highlights its option for Enter, and anything else is typed text.
     fn handle_text_key(&mut self, key_event: KeyEvent) {
-        if self.typing_guard.is_idle() {
+        if self.typing_guard.accepts_commands() {
             if self.try_handle_view_shortcut(&key_event) {
                 return;
             }
@@ -639,13 +677,17 @@ impl ApprovalOverlay {
     }
 
     fn typed_text_notice(&self, width: u16) -> Vec<Line<'static>> {
-        if !self.typing_guard.typed_text() {
+        let Some(notice) = self.typing_guard.notice() else {
             return Vec::new();
-        }
+        };
+        // Name only keys that work here: neither characters nor chords.
         let label = |bindings: &[KeyBinding], fallback: &str| {
             bindings
                 .iter()
-                .find(|binding| !matches!(binding.parts(), (KeyCode::Char(_), _)))
+                .find(|binding| {
+                    let (code, modifiers) = binding.parts();
+                    !matches!(code, KeyCode::Char(_)) && !key_hint::has_ctrl_or_alt(modifiers)
+                })
                 .map_or_else(|| fallback.to_string(), KeyBinding::display_label)
         };
         let keymap = &self.list_keymap;
@@ -653,11 +695,17 @@ impl ApprovalOverlay {
         let down = label(&keymap.move_down, "↓");
         let accept = label(&keymap.accept, "enter");
         let cancel = label(&keymap.cancel, "esc");
-        let text = format!(
-            "Typed text is not sent while this request is open. Use {up}/{down} and {accept} \
-             to answer, or {cancel} to cancel. Slash commands such as /permissions work after \
-             you answer."
-        );
+        let text = match notice {
+            Notice::TypedText => format!(
+                "Typed text is not sent while this request is open. Use {up}/{down} and {accept} \
+                 to answer, or {cancel} to cancel. Slash commands such as /permissions work \
+                 after you answer."
+            ),
+            Notice::ChooseFirst => format!(
+                "This is a new request. Choose an option with {up}/{down} or its key, then \
+                 {accept}; {cancel} cancels."
+            ),
+        };
         let wrap_width = usize::from(width.saturating_sub(4)).max(1);
         std::iter::once(Line::from(""))
             .chain(
@@ -674,27 +722,34 @@ impl BottomPaneView for ApprovalOverlay {
         if key_event.kind == KeyEventKind::Release {
             return;
         }
-        if self.list_keymap.accept.is_pressed(key_event) {
-            if self.typing_guard.allows_accept() {
-                self.typing_guard.reset();
-                self.list.handle_key_event(key_event);
-                if let Some(idx) = self.list.take_last_selected_index() {
-                    self.apply_selection(idx);
+        if self.is_accept(key_event) {
+            // A held Enter repeats; only a fresh press confirms.
+            if key_event.kind == KeyEventKind::Repeat {
+                return;
+            }
+            match self.typing_guard.on_confirm() {
+                Confirm::Option(idx) => self.apply_selection(idx),
+                Confirm::Highlighted => {
+                    if let Some(idx) = BottomPaneView::selected_index(&self.list) {
+                        self.apply_selection(idx);
+                    }
                 }
+                Confirm::Blocked => {}
             }
             return;
         }
         if key_hint::is_plain_text_key_event(key_event) {
-            self.handle_text_key(key_event);
+            if key_event.kind == KeyEventKind::Repeat {
+                self.typing_guard.on_typed_input();
+            } else {
+                self.handle_text_key(key_event);
+            }
             return;
         }
         if self.try_handle_shortcut(&key_event) {
             return;
         }
-        // Arrow, Page, Home and End keys are deliberate navigation. Chords
-        // such as Ctrl+N or Ctrl+J (a raw newline) and editing keys could be
-        // composer editing, so they count as typed text.
-        if self.is_list_navigation(key_event) && !key_hint::has_ctrl_or_alt(key_event.modifiers) {
+        if self.is_deliberate_navigation(key_event) {
             self.typing_guard.reset();
             self.list.handle_key_event(key_event);
         } else {
@@ -1840,7 +1895,7 @@ mod tests {
                 (KeyCode::Char('p'), KeyModifiers::NONE),
                 (KeyCode::Backspace, KeyModifiers::NONE),
             ],
-            // A decision key held down (Repeat arrives as a second press).
+            // A decision key pressed twice.
             &[
                 (KeyCode::Char('2'), KeyModifiers::NONE),
                 (KeyCode::Char('2'), KeyModifiers::NONE),
@@ -1938,6 +1993,100 @@ mod tests {
         press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
 
         assert_eq!(exec_decisions(&mut rx), Vec::<String>::new());
+    }
+
+    #[test]
+    fn double_or_held_enter_does_not_answer_the_next_request() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = make_overlay(
+            make_prefix_exec_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+        let ApprovalRequest::Exec(mut second) = make_prefix_exec_request() else {
+            unreachable!("exec request");
+        };
+        second.id = "second".to_string();
+        view.enqueue_request(ApprovalRequest::Exec(second));
+
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+        view.handle_key_event(KeyEvent::new_with_kind(
+            KeyCode::Enter,
+            KeyModifiers::NONE,
+            KeyEventKind::Repeat,
+        ));
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+
+        assert_eq!(exec_decisions(&mut rx), vec!["Accept".to_string()]);
+        assert_snapshot!(
+            "approval_overlay_next_request_notice",
+            render_overlay_lines(&view, /*width*/ 80)
+        );
+        press(&mut view, KeyCode::Char('3'), KeyModifiers::NONE);
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+        assert_eq!(exec_decisions(&mut rx), vec!["Cancel".to_string()]);
+    }
+
+    #[test]
+    fn character_accept_binding_cannot_confirm_typed_text() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut keymap = crate::keymap::RuntimeKeymap::defaults();
+        keymap.list.accept = vec![key_hint::plain(KeyCode::Char(' '))];
+        let mut view = make_overlay_with_keymap(
+            make_prefix_exec_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+            keymap.approval,
+            keymap.list,
+        );
+
+        // "2 things": `2` arms the "don't ask again" option; Space must not confirm it.
+        type_text(&mut view, "2 things");
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+
+        assert_eq!(exec_decisions(&mut rx), Vec::<String>::new());
+    }
+
+    #[test]
+    fn uppercase_and_chords_are_typed_text() {
+        for (code, modifiers) in [
+            (KeyCode::Char('Y'), KeyModifiers::SHIFT),
+            (KeyCode::Char('n'), KeyModifiers::CONTROL),
+        ] {
+            let (tx, mut rx) = unbounded_channel::<AppEvent>();
+            let mut view = make_overlay(
+                make_prefix_exec_request(),
+                AppEventSender::new(tx),
+                Features::with_defaults(),
+            );
+
+            press(&mut view, code, modifiers);
+
+            // Ctrl+N edits the composer elsewhere; here it neither moves the
+            // highlight nor lets Enter confirm.
+            assert!(render_overlay_lines(&view, /*width*/ 80).contains("› 1. Yes"));
+            press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+            assert_eq!(exec_decisions(&mut rx), Vec::<String>::new(), "{code:?}");
+        }
+    }
+
+    #[test]
+    fn typed_text_does_not_grant_requested_permissions() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = make_overlay(
+            make_permissions_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+
+        type_text(&mut view, "/permissions");
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+
+        assert!(
+            std::iter::from_fn(|| rx.try_recv().ok())
+                .all(|event| !matches!(event, AppEvent::SubmitThreadOp { .. })),
+            "typed text must not answer a permissions request"
+        );
     }
 
     #[test]
