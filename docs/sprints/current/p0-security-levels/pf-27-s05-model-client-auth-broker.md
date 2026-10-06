@@ -61,9 +61,10 @@ proxy, and it needs PF-27-S02's containment before the broker is a real boundary
   base URL's HTTPS origin and path prefix, and keeps an opaque reference. Every model request (Responses, Chat,
   Anthropic Messages, compact, memories, realtime call) goes as plain HTTP over the broker's private Unix socket with
   a single-use signed frame for its exact origin, method and path; the broker attaches the key and makes the HTTPS
-  request. No raw-key fallback: a broker that fails to start or dies fails the request (never respawned in-process,
-  as PF-27-S04). Responses websockets are off under the flag. Sign-in tokens, agent identity, command, header and AWS
-  auth, plain-HTTP and IPv6-literal providers are not brokered (sent as before; a warning names the URL case).
+  request. No raw-key fallback: a broker that fails to start or dies, a provider URL the broker cannot bind (plain
+  HTTP, IPv6 literal, query) and non-Unix platforms all fail the request with a non-retried error. The broker is never
+  respawned in-process (as PF-27-S04). Responses websockets are off under the flag; redirects come back unfollowed.
+  Sign-in tokens, agent identity, command, header and AWS auth are not brokered (sent as before).
 - [x] `pf_27_s05` tests: broker-only key use for both header styles, single-use frames, origin and path-prefix binding
   enforced by Core and again by the broker, malformed bindings refused, broker death fails closed (network-proxy);
   key extraction matches direct auth and sign-in auth is not extracted (model-provider); base-URL binding and request
@@ -73,8 +74,11 @@ proxy, and it needs PF-27-S02's containment before the broker is a real boundary
 
 - [ ] Core still reads the key to register it (and on each setup to detect a changed key): resolve vault labels inside
   the broker so Core never decrypts them, and read env keys once.
-- [ ] Other Core requests that still attach keys directly: model catalog refresh (`models_endpoint.rs`), file uploads and
-  realtime websockets (header-only `add_auth_headers`), and helper clients outside `ModelClient`.
+- [ ] Other Core paths that still attach the key directly with the flag on (review 1 H1, H2, M1, M2): web search
+  (`ext/web-search/src/tool.rs`) and image generation (`ext/image-generation/src/backend.rs`) via `provider.api_auth()`;
+  the model catalog refresh (`model-provider/src/models_endpoint.rs`); the realtime conversation websocket
+  (`core/src/realtime_conversation.rs`); OpenAI API-key users of `auth_provider_from_auth` (`core/src/mcp_openai_file.rs`,
+  `codex-mcp`, `core-plugins`, `core-skills`, `analytics`). Broker them or refuse them under the flag.
 - [ ] Remove env-sourced provider keys from Core's process environment once the broker holds them, so unsandboxed same-user processes (MCP servers, hooks) cannot read them from Core's launch environment (the macOS limit PF-27-S02 records).
 - [ ] Resolve vault-label credentials inside the broker only; the agent and Core see labels and dummies.
 - [ ] ChatGPT sign-in (refreshing tokens) and Responses websockets: decision recorded for slice 1 (not brokered;

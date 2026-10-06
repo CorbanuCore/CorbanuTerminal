@@ -88,6 +88,15 @@ async fn start_upstream_for(tls_host: &str) -> Upstream {
                 .and_then(|value| value.to_str().ok())
                 .unwrap_or("<none>")
                 .to_string();
+            if request.uri().path().ends_with("/redirect") {
+                let mut response = Response::new(Body::empty());
+                *response.status_mut() = rama_http::StatusCode::FOUND;
+                response.headers_mut().insert(
+                    rama_http::header::LOCATION,
+                    HeaderValue::from_static("https://elsewhere.invalid/v1/steal"),
+                );
+                return Ok::<_, Infallible>(response);
+            }
             let body = if request.uri().path() == STREAM_PATH {
                 let first = rama_core::futures::stream::iter([Ok::<_, Infallible>(Bytes::from(
                     "first-chunk\n",
@@ -931,6 +940,17 @@ mod pf_27_s05 {
         assert_eq!(first.status(), 200);
         let replay = send(&bearer, "POST", "/v1/responses", frame).await;
         assert_eq!(denial(&replay), Some("replay"));
+
+        // A redirect comes back to Core unfollowed; the key goes nowhere else.
+        let redirect = signed(&bearer, upstream.port, "/v1/redirect").await;
+        assert_eq!(redirect.status(), 302);
+        assert_eq!(
+            redirect
+                .headers()
+                .get(rama_http::header::LOCATION)
+                .and_then(|value| value.to_str().ok()),
+            Some("https://elsewhere.invalid/v1/steal")
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

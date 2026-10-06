@@ -315,7 +315,7 @@ fn broker_http_client(credential: &BrokeredCredential) -> Result<codex_http_clie
     #[cfg(unix)]
     {
         crate::model_broker_auth::broker_http_client(credential)
-            .map_err(|error| std::io::Error::from(error).into())
+            .map_err(|error| CodexErr::Fatal(error.to_string()))
     }
     #[cfg(not(unix))]
     {
@@ -2743,31 +2743,38 @@ impl ModelClient {
         else {
             return Ok(None);
         };
+        // No fallback: a key the broker cannot hold is not sent by Core.
         let Some(binding) =
             crate::model_broker_auth::binding_for_base_url(&api_provider.base_url, key.header)
         else {
-            tracing::warn!(
-                provider = %api_provider.name,
-                "broker_model_auth: this provider URL cannot be brokered (not HTTPS); its key is sent directly"
-            );
-            return Ok(None);
+            return Err(CodexErr::Fatal(format!(
+                "broker_model_auth: the base URL of provider `{}` cannot be brokered (it needs HTTPS \
+                 with a DNS name or IPv4 address and no query); turn broker_model_auth off to use it",
+                api_provider.name
+            )));
         };
+        // Not retried: the broker is never restarted within this process.
         crate::model_broker_auth::credential_for(config, binding, key)
             .await
             .map(Some)
-            .map_err(|error| std::io::Error::from(error).into())
+            .map_err(|error| CodexErr::Fatal(error.to_string()))
     }
 
     #[cfg(not(unix))]
     async fn brokered_model_credential(
         &self,
-        _auth: Option<&CodexAuth>,
+        auth: Option<&CodexAuth>,
         _api_provider: &ApiProvider,
     ) -> Result<Option<BrokeredCredential>> {
-        if self.broker_model_auth.is_some() {
-            tracing::warn!(
-                "broker_model_auth: no credential broker on this platform; model keys are sent directly"
-            );
+        if self.broker_model_auth.is_some()
+            && codex_model_provider::provider_api_key(auth, self.state.provider.info())?.is_some()
+        {
+            // No fallback: the broker does not run on this platform (PF-27-S06).
+            return Err(CodexErr::Fatal(
+                "broker_model_auth: the credential broker is not available on this platform; \
+                 turn broker_model_auth off to use API-key providers"
+                    .to_string(),
+            ));
         }
         Ok(None)
     }

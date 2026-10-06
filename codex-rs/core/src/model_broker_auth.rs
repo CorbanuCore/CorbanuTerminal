@@ -10,8 +10,11 @@
 //! fails the request.
 //!
 //! Not brokered (sent as before): sign-in tokens, agent identity, command or
-//! header auth, AWS auth and plain-HTTP providers. Responses websockets are
-//! off under the flag; a websocket handshake cannot carry a signed frame.
+//! header auth and AWS auth. An API key whose provider URL cannot be brokered
+//! (plain HTTP, an IPv6 literal, a query) fails instead of being sent.
+//! Responses websockets are off under the flag; a websocket handshake cannot
+//! carry a signed frame. The process lock is held while the broker starts, so
+//! sessions wait for the first start; a failed start is not retried.
 
 use crate::client::BrokerModelAuthConfig;
 use codex_api::AuthError;
@@ -65,12 +68,6 @@ pub(crate) enum BrokerModelAuthError {
     Unavailable,
     #[error("the isolated credential broker refused the model provider key")]
     Rejected,
-}
-
-impl From<BrokerModelAuthError> for std::io::Error {
-    fn from(error: BrokerModelAuthError) -> Self {
-        std::io::Error::other(error.to_string())
-    }
 }
 
 /// Where a key for `base_url` may be sent, or `None` when the URL cannot be
