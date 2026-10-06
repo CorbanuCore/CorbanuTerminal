@@ -396,6 +396,11 @@ pub struct FeedbackUploadOptions<'a> {
 }
 
 impl FeedbackSnapshot {
+    /// Captured log bytes, as they would be attached to an upload.
+    pub fn log_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
     pub fn feedback_diagnostics(&self) -> &FeedbackDiagnostics {
         &self.feedback_diagnostics
     }

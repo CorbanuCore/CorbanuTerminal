@@ -453,6 +453,13 @@ async fn persist_user_shell_output(
     mode: UserShellCommandMode,
 ) {
     let output_item = user_shell_command_record_item(raw_command, exec_output, turn_context);
+    // The human chose the command; its output is still external data.
+    session.services.model_client().register_message_origin(
+        std::slice::from_ref(&output_item),
+        crate::security::ingress::MessageOrigin::External(
+            codex_protocol::provenance::SourceKind::Tool,
+        ),
+    );
 
     if mode == UserShellCommandMode::StandaloneTurn {
         session

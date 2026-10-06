@@ -627,14 +627,15 @@ impl MessageProcessor {
     pub(crate) async fn process_notification(&self, notification: JSONRPCNotification) {
         // Currently, we do not expect to receive any notifications from the
         // client, so we just log them.
-        tracing::info!("<- notification: {:?}", notification);
+        // Params are client-supplied and may carry credentials; log the method only.
+        tracing::info!("<- notification: {}", notification.method);
     }
 
     /// Handles typed notifications from in-process clients.
     pub(crate) async fn process_client_notification(&self, notification: ClientNotification) {
         // Currently, we do not expect to receive any typed notifications from
         // in-process clients, so we just log them.
-        tracing::info!("<- typed notification: {:?}", notification);
+        tracing::info!("<- typed notification: {notification}");
     }
 
     async fn run_request_with_context<F>(
@@ -747,7 +748,8 @@ impl MessageProcessor {
 
     /// Handle a standalone JSON-RPC response originating from the peer.
     pub(crate) async fn process_response(&self, response: JSONRPCResponse) {
-        tracing::info!("<- response: {:?}", response);
+        // Results can hold tokens (e.g. account/chatgptAuthTokens/refresh); log the id only.
+        tracing::info!("<- response: {:?}", response.id);
         let JSONRPCResponse { id, result, .. } = response;
         self.outgoing.notify_client_response(id, result).await
     }

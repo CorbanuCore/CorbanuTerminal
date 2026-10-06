@@ -484,6 +484,49 @@ async fn full_access_confirmation_popup_snapshot() {
     assert_chatwidget_snapshot!("full_access_confirmation_popup", popup);
 }
 
+/// Cancel is preselected, so Enter alone keeps the current permissions. The
+/// outcome must be visible; PF-83 testers read the silent return to the picker
+/// as full access having been applied.
+#[tokio::test]
+async fn full_access_confirmation_cancel_reports_permissions_unchanged() {
+    for (key, reopens_picker) in [(KeyCode::Enter, true), (KeyCode::Esc, false)] {
+        let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+        let before = chat.config.permissions.permission_profile().clone();
+        let preset = builtin_approval_presets()
+            .into_iter()
+            .find(|preset| preset.id == "full-access")
+            .expect("full access preset");
+        chat.open_full_access_confirmation(
+            preset, /*return_to_permissions*/ true, /*profile_selection*/ None,
+        );
+
+        chat.handle_key_event(KeyEvent::from(key));
+
+        let events = std::iter::from_fn(|| rx.try_recv().ok()).collect::<Vec<_>>();
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, AppEvent::SelectPermissionPreset(_))),
+            "cancel must not request a permission change ({key:?})"
+        );
+        let notices = events
+            .iter()
+            .filter_map(|event| match event {
+                AppEvent::InsertHistoryCell(cell) => {
+                    Some(lines_to_single_string(&cell.display_lines(/*width*/ 80)))
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let saw_picker = events
+            .iter()
+            .any(|event| matches!(event, AppEvent::OpenPermissionsPopup));
+        assert_eq!((notices.len(), saw_picker), (1, reopens_picker), "{key:?}");
+        assert_chatwidget_snapshot!("full_access_confirmation_cancel_notice", notices[0]);
+        assert_eq!(chat.config.permissions.permission_profile(), &before);
+    }
+}
+
 #[cfg(target_os = "windows")]
 #[tokio::test]
 async fn windows_auto_mode_prompt_requests_enabling_sandbox_feature() {

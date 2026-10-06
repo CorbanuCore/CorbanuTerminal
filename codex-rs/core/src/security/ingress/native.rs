@@ -6,6 +6,8 @@ use super::IngressError;
 use super::MAX_INGRESS_TEXT_BYTES;
 use super::NativeScreeningCandidate;
 use super::PendingSource;
+use super::structural::LabelledCache;
+use super::structural::MessageOrigin;
 use crate::context::ContextualUserFragment;
 use crate::context::ProvenanceContext;
 use codex_content_security::ContentDigest;
@@ -18,6 +20,8 @@ use codex_protocol::provenance::SourceKind;
 use std::collections::HashMap;
 
 const MAX_ADMITTED_ITEMS: usize = 256;
+/// Labelled mode keeps only digests and kinds, so it can hold a long session.
+const MAX_LABELLED_REGISTRATIONS: usize = 65_536;
 
 // Enforce the raw bound while serializing, before allocating a whole oversized
 // history item merely to discover that it cannot enter this bounded carrier.
@@ -40,12 +44,48 @@ fn item_bytes(item: &ResponseItem) -> Result<Vec<u8>, IngressError> {
     Ok(writer.0)
 }
 
+fn item_key(item: &ResponseItem) -> Option<ContentDigest> {
+    serde_json::to_vec(item)
+        .ok()
+        .map(|bytes| ContentDigest::of(&bytes))
+}
+
+/// Role plus exact text parts. Media is excluded so history normalization
+/// that strips images for a text-only model keeps the host registration.
+fn message_key(item: &ResponseItem) -> Option<ContentDigest> {
+    let ResponseItem::Message { role, content, .. } = item else {
+        return None;
+    };
+    let texts: Vec<&str> = content
+        .iter()
+        .filter_map(|part| match part {
+            ContentItem::InputText { text } | ContentItem::OutputText { text }
+                if text != crate::context_manager::IMAGE_CONTENT_OMITTED_PLACEHOLDER
+                    && text != crate::context_manager::AUDIO_CONTENT_OMITTED_PLACEHOLDER =>
+            {
+                Some(text.as_str())
+            }
+            _ => None,
+        })
+        .collect();
+    serde_json::to_vec(&(role, texts))
+        .ok()
+        .map(|bytes| ContentDigest::of(&bytes))
+}
+
 #[derive(Default)]
 pub(crate) struct NativeIngress {
     admitted: HashMap<ContentDigest, AdmittedSource>,
     pending: HashMap<ContentDigest, PendingSource>,
     calls: HashMap<ContentDigest, SourceKind>,
     unavailable: bool,
+    /// `source_envelopes`: project labelled data instead of failing closed.
+    labelled_mode: bool,
+    messages: HashMap<ContentDigest, MessageOrigin>,
+    model_items: std::collections::HashSet<ContentDigest>,
+    pub(super) labelled: LabelledCache,
+    /// Restored history has no recorded origins; reinject host context once.
+    host_context_reinjection: bool,
 }
 
 impl std::fmt::Debug for NativeIngress {
@@ -57,10 +97,103 @@ impl std::fmt::Debug for NativeIngress {
 }
 
 impl NativeIngress {
+    pub(crate) fn set_labelled_mode(&mut self, enabled: bool) {
+        self.labelled_mode = enabled;
+    }
+
+    pub(crate) fn labelled_mode(&self) -> bool {
+        self.labelled_mode
+    }
+
+    /// Record the host-chosen origin of exact history messages. Called only
+    /// from Core record seams; a full registry degrades new messages to
+    /// unattributed (labelled) data and never upgrades anything.
+    pub(crate) fn register_messages(&mut self, items: &[ResponseItem], origin: MessageOrigin) {
+        for item in items {
+            match item {
+                // Model standing is only for assistant text from the stream.
+                ResponseItem::Message { role, .. }
+                    if origin != MessageOrigin::Model || role == "assistant" => {}
+                ResponseItem::Reasoning { .. }
+                | ResponseItem::FunctionCall { .. }
+                | ResponseItem::CustomToolCall { .. }
+                | ResponseItem::LocalShellCall { .. }
+                | ResponseItem::ToolSearchCall { .. }
+                | ResponseItem::WebSearchCall { .. }
+                | ResponseItem::ImageGenerationCall { .. }
+                    if origin == MessageOrigin::Model =>
+                {
+                    if let Some(key) = item_key(item)
+                        && (self.model_items.len() < MAX_LABELLED_REGISTRATIONS
+                            || self.model_items.contains(&key))
+                    {
+                        self.model_items.insert(key);
+                    }
+                    continue;
+                }
+                _ => continue,
+            }
+            let Some(key) = message_key(item) else {
+                continue;
+            };
+            if self.messages.len() >= MAX_LABELLED_REGISTRATIONS
+                && !self.messages.contains_key(&key)
+            {
+                continue;
+            }
+            // First registration wins: a later external copy of identical
+            // bytes cannot downgrade or upgrade the human/host record.
+            self.messages.entry(key).or_insert(origin);
+        }
+    }
+
+    /// Restored or forked history carries no host-recorded origins, so its
+    /// messages stay labelled; ask for fresh host context on the next turn.
+    pub(crate) fn note_restored_history(&mut self, items: &[ResponseItem]) {
+        if !self.labelled_mode {
+            return;
+        }
+        self.host_context_reinjection = true;
+        // Keep the real route label for restored tool calls (still untrusted).
+        for item in items {
+            match item {
+                ResponseItem::FunctionCall { call_id, .. }
+                | ResponseItem::CustomToolCall { call_id, .. } => {
+                    self.register_call(call_id, SourceKind::Tool);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    pub(crate) fn take_host_context_reinjection(&mut self) -> bool {
+        std::mem::take(&mut self.host_context_reinjection)
+    }
+
+    /// Whether this exact model-structure item was recorded from the stream.
+    pub(super) fn is_model_item(&self, item: &ResponseItem) -> bool {
+        item_key(item).is_some_and(|key| self.model_items.contains(&key))
+    }
+
+    pub(super) fn message_origin(&self, item: &ResponseItem) -> Option<MessageOrigin> {
+        self.messages.get(&message_key(item)?).copied()
+    }
+
+    pub(super) fn call_kind(&self, call_id: &str) -> Option<SourceKind> {
+        self.calls
+            .get(&ContentDigest::of(call_id.as_bytes()))
+            .copied()
+    }
+
     /// Invoked by the host tool dispatcher, never by source labels in output.
     pub(crate) fn register_call(&mut self, call_id: &str, kind: SourceKind) {
         let key = ContentDigest::of(call_id.as_bytes());
-        if self.calls.len() >= MAX_ADMITTED_ITEMS && !self.calls.contains_key(&key) {
+        let capacity = if self.labelled_mode {
+            MAX_LABELLED_REGISTRATIONS
+        } else {
+            MAX_ADMITTED_ITEMS
+        };
+        if self.calls.len() >= capacity && !self.calls.contains_key(&key) {
             self.unavailable = true;
             return;
         }

@@ -260,6 +260,11 @@ def flat(text: str) -> str:
     return re.sub(r"\s+", "", text)
 
 
+def tmux_literal(char: str) -> str:
+    """tmux reads an argument ending in ';' as a command separator; escape it."""
+    return "\\;" if char == ";" else char
+
+
 def drive(tmux: Tmux, spec: Spec, places: dict[str, str], t0: float, log) -> dict:
     pauses, compress = [], []
     for number, step in enumerate(spec.steps, 1):
@@ -268,7 +273,7 @@ def drive(tmux: Tmux, spec: Spec, places: dict[str, str], t0: float, log) -> dic
         if step.kind == "type":
             text = expand(str(step.value), places)
             for char in text:
-                tmux.run("send-keys", "-t", "demo", "-l", char)
+                tmux.run("send-keys", "-t", "demo", "-l", tmux_literal(char))
                 time.sleep(TYPE_DELAY)
             if step.verify:  # text and Enter are always separate sends
                 tail = flat(text)[-24:]

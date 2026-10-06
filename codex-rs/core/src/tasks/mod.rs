@@ -1114,9 +1114,10 @@ impl Session {
                 ),
             )
         {
-            self.record_conversation_items(
+            self.record_conversation_items_from(
                 task.turn_context.as_ref(),
                 std::slice::from_ref(&marker),
+                Some(crate::security::ingress::MessageOrigin::Host),
             )
             .await;
             // Ensure the marker is durably visible before emitting TurnAborted: some clients
