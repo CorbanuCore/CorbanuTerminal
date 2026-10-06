@@ -63,8 +63,21 @@ pub(crate) fn note_interrupt(thread: ThreadId, process: i32) {
             store.order.push_back(key);
         }
         let kept = store.kept.entry(key).or_default();
-        let at = kept.text.len();
-        kept.starts.push(at);
+        // One past the limit is enough to mark the text unreadable.
+        if kept.starts.len() <= MAX_INTERRUPTS {
+            let at = kept.text.len();
+            kept.starts.push(at);
+        }
+        evict_past_backstop(&mut store);
+    }
+}
+
+fn evict_past_backstop(store: &mut Store) {
+    while store.order.len() > MAX_PROCESSES {
+        if let Some(oldest) = store.order.pop_front() {
+            store.kept.remove(&oldest);
+            store.lost.insert(oldest);
+        }
     }
 }
 
@@ -116,8 +129,12 @@ impl TypedWindow {
         }
     }
 
-    /// The whole text, then the text from each interrupt on.
+    /// The whole text, then the text from each interrupt on (empty when the
+    /// window is unreadable, which is judged without reading it).
     pub(crate) fn texts(&self) -> Vec<String> {
+        if self.unreadable() {
+            return Vec::new();
+        }
         std::iter::once(self.kept.text.clone())
             .chain(
                 self.kept
@@ -147,12 +164,7 @@ impl TypedWindow {
             if store.kept.insert(self.key, self.kept).is_none() {
                 store.order.push_back(self.key);
             }
-            while store.order.len() > MAX_PROCESSES {
-                if let Some(oldest) = store.order.pop_front() {
-                    store.kept.remove(&oldest);
-                    store.lost.insert(oldest);
-                }
-            }
+            evict_past_backstop(&mut store);
         }
     }
 
