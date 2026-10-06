@@ -581,7 +581,11 @@ impl Classifier {
             previous = Some(word.as_str());
             // Attached, assigned and volume forms (`-o/path`, `f=@/path`,
             // `~/.aws:/c`) are paths too.
-            for candidate in word.split(['=', ':']) {
+            let pieces = std::iter::once(word.as_str()).chain(
+                word.split(['=', ':'])
+                    .filter(|piece| piece.len() < word.len()),
+            );
+            for candidate in pieces {
                 let candidate = candidate.trim_start_matches('@');
                 if candidate.is_empty() || candidate.starts_with('-') && !candidate.contains('/') {
                     continue;

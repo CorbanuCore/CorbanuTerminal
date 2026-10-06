@@ -9,8 +9,6 @@
 pub(super) const SHELLS: &[&str] = &[
     "sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh", "ash", "mksh", "yash",
 ];
-/// Open groups tracked at once.
-const MAX_GROUPS: usize = 64;
 /// Words one brace expression may expand to before it is left as written.
 const MAX_BRACE_EXPANSION: usize = 64;
 /// Placeholder for the output of a substitution the classifier cannot see.
@@ -97,22 +95,46 @@ fn expand_braces(text: &str) -> (String, bool) {
     if !text.contains('{') {
         return (text.to_string(), true);
     }
-    // Mask quoted braces and commas so only unquoted ones expand.
+    // Mask quoted braces and commas so only unquoted ones expand. The quote
+    // state follows comments and `$'...'`; a word without any quote character
+    // expands whatever the state says, so a stray apostrophe elsewhere (a
+    // here-document line) cannot hide it.
     const MASKS: [(char, char); 3] = [('{', '\u{2}'), ('}', '\u{3}'), (',', '\u{4}')];
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum Quote {
+        None,
+        Single,
+        Double,
+        AnsiC,
+        Comment,
+    }
+    let chars: Vec<char> = text.chars().collect();
     let mut masked = String::with_capacity(text.len());
-    let mut quote: Option<char> = None;
+    let mut quote = Quote::None;
     let mut escaped = false;
-    for ch in text.chars() {
-        match (quote, ch) {
-            _ if escaped => escaped = false,
-            (Some('\''), '\'') | (Some('"'), '"') => quote = None,
-            (None, '\'' | '"') => quote = Some(ch),
-            (None | Some('"'), '\\') => escaped = true,
-            _ => {}
+    for (index, &ch) in chars.iter().enumerate() {
+        let previous = index.checked_sub(1).map(|at| chars[at]);
+        if escaped {
+            escaped = false;
+        } else {
+            quote = match (quote, ch) {
+                (Quote::Comment, '\n') => Quote::None,
+                (Quote::None, '#') if previous.is_none_or(char::is_whitespace) => Quote::Comment,
+                (Quote::None, '\'') if previous == Some('$') => Quote::AnsiC,
+                (Quote::None, '\'') => Quote::Single,
+                (Quote::None, '"') => Quote::Double,
+                (Quote::Single | Quote::AnsiC, '\'') | (Quote::Double, '"') => Quote::None,
+                (Quote::None | Quote::Double | Quote::AnsiC, '\\') => {
+                    escaped = true;
+                    quote
+                }
+                (state, _) => state,
+            };
         }
+        let inside = matches!(quote, Quote::Single | Quote::Double | Quote::AnsiC);
         let mask = MASKS
             .iter()
-            .find(|(from, _)| quote.is_some() && *from == ch)
+            .find(|(from, _)| inside && *from == ch)
             .map_or(ch, |(_, to)| *to);
         masked.push(mask);
     }
@@ -142,13 +164,22 @@ fn expand_braces(text: &str) -> (String, bool) {
         }
         out.push_str(&unmask(&words.join(" ")));
     };
-    for ch in masked.chars() {
+    let mut has_quote = false;
+    for (original, ch) in chars.iter().zip(masked.chars()) {
         if ch.is_whitespace() {
+            if !has_quote {
+                word = unmask(&word);
+            }
             flush(&mut word, &mut out);
+            has_quote = false;
             out.push(ch);
         } else {
+            has_quote |= matches!(original, '\'' | '"');
             word.push(ch);
         }
+    }
+    if !has_quote {
+        word = unmask(&word);
     }
     flush(&mut word, &mut out);
     (out, complete)
@@ -232,17 +263,14 @@ impl Lexer {
         }
     }
 
-    /// The pipe feeding the innermost group that has one.
+    /// The pipe feeding the innermost group (stored with it when it opened).
     fn group_pipe(&self) -> Option<usize> {
-        self.groups.iter().rev().find_map(|(_, pipe)| *pipe)
+        self.groups.last().and_then(|(_, pipe)| *pipe)
     }
 
     fn open_group(&mut self, group: Group, pipe: Option<usize>) {
-        // Text that is not shell (Python, JavaScript) opens keyword groups it
-        // never closes; keep the stack, and its lookups, bounded.
-        if self.groups.len() < MAX_GROUPS {
-            self.groups.push((group, pipe));
-        }
+        let inherited = pipe.or(self.group_pipe());
+        self.groups.push((group, inherited));
     }
 
     fn close_group(&mut self, group: Group) {
