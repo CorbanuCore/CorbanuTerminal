@@ -19,8 +19,8 @@ updated: 2026-10-06
 
 # PF-33-S01 — URL DNS and redirect policy
 
-**October 6:** ships behind `url_destination_policy` (default off; Permissive unchanged) in the managed network
-proxy. [Evidence, behaviour and known limits](../../../../qa/security-levels/sprints/PF-33-S01/README.md).
+**October 6:** merged (PR #210) behind `url_destination_policy` (default off; Permissive unchanged) in the managed
+network proxy. [Evidence, behaviour and known limits](../../../../qa/security-levels/sprints/PF-33-S01/README.md).
 
 ## Execution mandate
 
@@ -83,7 +83,8 @@ proxy. [Evidence, behaviour and known limits](../../../../qa/security-levels/spr
 - [x] Integration: `cargo test -p codex-network-proxy` (265 + 16 contract tests); core schema fixture test passes.
 - [x] TUI: GLM 5.2 tmux runs through the real proxy against httpbin.org, recorded as SOP videos.
 - [x] Independent Opus 5.5 High review and re-checks; findings dispositioned in the evidence README.
-- [ ] Linux and Bazel CI on the PR.
+- [x] Linux and Bazel CI on the PR: all checks green; merged as PR #210 (`8dd531714a`).
+- [ ] PF-26 final-candidate requalification (milestone gate).
 
 ## Exit evidence
 
