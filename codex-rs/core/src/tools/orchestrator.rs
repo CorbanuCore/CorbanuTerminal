@@ -169,11 +169,21 @@ impl ToolOrchestrator {
         let post_taint = post_taint_action(tool, req, tool_ctx, &requirement).await;
         if let Some(action) = &post_taint {
             if let Some(refusal) = action.refused_up_front() {
-                post_taint_outcome(action, tool_ctx, "refused_kill_switch", None);
+                post_taint_outcome(
+                    action,
+                    tool_ctx,
+                    "refused_kill_switch",
+                    /*waited*/ None,
+                );
                 return Err(ToolError::Rejected(refusal));
             }
             if approval_policy == AskForApproval::Never {
-                post_taint_outcome(action, tool_ctx, "refused_approvals_off", None);
+                post_taint_outcome(
+                    action,
+                    tool_ctx,
+                    "refused_approvals_off",
+                    /*waited*/ None,
+                );
                 return Err(ToolError::Rejected(action.approvals_off_rejection()));
             }
             let approval_ctx = ApprovalCtx {
@@ -668,7 +678,7 @@ fn post_taint_recheck(
 ) -> Result<(), ToolError> {
     let now = tool_ctx.session.services.model_client().post_taint_state();
     action.recheck(now.as_ref()).map_err(|refusal| {
-        post_taint_outcome(action, tool_ctx, "refused_stale", None);
+        post_taint_outcome(action, tool_ctx, "refused_stale", /*waited*/ None);
         ToolError::Rejected(refusal)
     })
 }
