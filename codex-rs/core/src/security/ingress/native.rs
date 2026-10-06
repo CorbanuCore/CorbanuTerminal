@@ -19,7 +19,9 @@ use codex_protocol::provenance::SourceDescriptor;
 use codex_protocol::provenance::SourceKind;
 use std::collections::HashMap;
 
-const MAX_ADMITTED_ITEMS: usize = 4_096;
+const MAX_ADMITTED_ITEMS: usize = 256;
+/// Labelled mode keeps only digests and kinds, so it can hold a long session.
+const MAX_LABELLED_REGISTRATIONS: usize = 65_536;
 
 // Enforce the raw bound while serializing, before allocating a whole oversized
 // history item merely to discover that it cannot enter this bounded carrier.
@@ -42,8 +44,22 @@ fn item_bytes(item: &ResponseItem) -> Result<Vec<u8>, IngressError> {
     Ok(writer.0)
 }
 
+/// Role plus exact text parts. Media is excluded so history normalization
+/// that strips images for a text-only model keeps the host registration.
 fn message_key(item: &ResponseItem) -> Option<ContentDigest> {
-    serde_json::to_vec(item)
+    let ResponseItem::Message { role, content, .. } = item else {
+        return None;
+    };
+    let texts: Vec<&str> = content
+        .iter()
+        .filter_map(|part| match part {
+            ContentItem::InputText { text } | ContentItem::OutputText { text } => {
+                Some(text.as_str())
+            }
+            _ => None,
+        })
+        .collect();
+    serde_json::to_vec(&(role, texts))
         .ok()
         .map(|bytes| ContentDigest::of(&bytes))
 }
@@ -58,6 +74,8 @@ pub(crate) struct NativeIngress {
     labelled_mode: bool,
     messages: HashMap<ContentDigest, MessageOrigin>,
     pub(super) labelled: LabelledCache,
+    /// Restored history has no recorded origins; reinject host context once.
+    host_context_reinjection: bool,
 }
 
 impl std::fmt::Debug for NativeIngress {
@@ -88,13 +106,38 @@ impl NativeIngress {
             let Some(key) = message_key(item) else {
                 continue;
             };
-            if self.messages.len() >= MAX_ADMITTED_ITEMS && !self.messages.contains_key(&key) {
+            if self.messages.len() >= MAX_LABELLED_REGISTRATIONS
+                && !self.messages.contains_key(&key)
+            {
                 continue;
             }
             // First registration wins: a later external copy of identical
             // bytes cannot downgrade or upgrade the human/host record.
             self.messages.entry(key).or_insert(origin);
         }
+    }
+
+    /// Restored or forked history carries no host-recorded origins, so its
+    /// messages stay labelled; ask for fresh host context on the next turn.
+    pub(crate) fn note_restored_history(&mut self, items: &[ResponseItem]) {
+        if !self.labelled_mode {
+            return;
+        }
+        self.host_context_reinjection = true;
+        // Keep the real route label for restored tool calls (still untrusted).
+        for item in items {
+            match item {
+                ResponseItem::FunctionCall { call_id, .. }
+                | ResponseItem::CustomToolCall { call_id, .. } => {
+                    self.register_call(call_id, SourceKind::Tool);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    pub(crate) fn take_host_context_reinjection(&mut self) -> bool {
+        std::mem::take(&mut self.host_context_reinjection)
     }
 
     pub(super) fn message_origin(&self, item: &ResponseItem) -> Option<MessageOrigin> {
@@ -110,7 +153,12 @@ impl NativeIngress {
     /// Invoked by the host tool dispatcher, never by source labels in output.
     pub(crate) fn register_call(&mut self, call_id: &str, kind: SourceKind) {
         let key = ContentDigest::of(call_id.as_bytes());
-        if self.calls.len() >= MAX_ADMITTED_ITEMS && !self.calls.contains_key(&key) {
+        let capacity = if self.labelled_mode {
+            MAX_LABELLED_REGISTRATIONS
+        } else {
+            MAX_ADMITTED_ITEMS
+        };
+        if self.calls.len() >= capacity && !self.calls.contains_key(&key) {
             self.unavailable = true;
             return;
         }

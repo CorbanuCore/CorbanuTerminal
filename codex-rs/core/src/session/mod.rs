@@ -1522,15 +1522,9 @@ impl Session {
         // This meets media preparation requirements without modifying persisted rollouts.
         prepare_image_response_items(&mut history);
         prepare_audio_response_items(&mut history);
-        let restored_host_messages: Vec<ResponseItem> = history
-            .iter()
-            .filter(|item| crate::security::ingress::is_restorable_host_message(item))
-            .cloned()
-            .collect();
-        self.services.model_client().register_message_origin(
-            &restored_host_messages,
-            crate::security::ingress::MessageOrigin::Host,
-        );
+        // Restored messages have no recorded origin and stay labelled; host
+        // context is reinjected fresh on the next turn instead.
+        self.services.model_client().note_restored_history(&history);
         {
             let mut state = self.state.lock().await;
             state.replace_history(history, reference_context_item);
@@ -4114,7 +4108,8 @@ impl Session {
         };
         let turn_context_item = turn_context.to_turn_context_item();
         let turn_context_changed = reference_context_item.as_ref() != Some(&turn_context_item);
-        let should_inject_full_context = reference_context_item.is_none();
+        let reinject_host_context = self.services.model_client().take_host_context_reinjection();
+        let should_inject_full_context = reference_context_item.is_none() || reinject_host_context;
         let world_state = Arc::new(self.build_world_state_for_step(step_context).await?);
         // Full initial context resets the baseline; later turns persist only its changes.
         let (mut context_items, world_state_item) = if should_inject_full_context {

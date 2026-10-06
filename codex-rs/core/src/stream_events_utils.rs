@@ -94,8 +94,12 @@ pub(crate) async fn record_completed_response_item_with_finalized_facts(
     item: &ResponseItem,
     finalized_facts: Option<&FinalizedTurnItemFacts>,
 ) {
-    sess.record_conversation_items(turn_context, std::slice::from_ref(item))
-        .await;
+    sess.record_conversation_items_from(
+        turn_context,
+        std::slice::from_ref(item),
+        Some(crate::security::ingress::MessageOrigin::Model),
+    )
+    .await;
     let defers_mailbox_delivery = finalized_facts.map_or_else(
         || {
             completed_item_defers_mailbox_delivery_to_next_turn(

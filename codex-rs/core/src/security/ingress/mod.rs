@@ -301,7 +301,6 @@ mod native;
 pub(crate) use native::NativeIngress;
 mod structural;
 pub(crate) use structural::MessageOrigin;
-pub(crate) use structural::is_restorable_host_message;
 
 #[cfg(test)]
 #[path = "ingress_tests.rs"]

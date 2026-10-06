@@ -932,6 +932,20 @@ impl ModelClient {
         self
     }
 
+    /// Restored/forked history has no recorded origins: keep it labelled and
+    /// reinject fresh host context on the next turn.
+    pub(crate) fn note_restored_history(&self, items: &[ResponseItem]) {
+        if let Ok(mut ingress) = self.ingress_items.lock() {
+            ingress.note_restored_history(items);
+        }
+    }
+
+    pub(crate) fn take_host_context_reinjection(&self) -> bool {
+        self.ingress_items
+            .lock()
+            .is_ok_and(|mut ingress| ingress.take_host_context_reinjection())
+    }
+
     /// Record the host-chosen origin of exact history messages. Only Core
     /// record seams call this; text and role labels cannot choose an origin.
     pub(crate) fn register_message_origin(
