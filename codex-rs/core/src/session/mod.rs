@@ -2344,13 +2344,9 @@ impl Session {
 
     async fn send_event_raw_with_persistence(&self, event: Event, persist: bool) {
         let mut event = event;
-        match crate::security::disclosure_gate::gate_value(
-            codex_secret_broker::output_gate::OutputSink::Presentation,
-            &event.msg,
-        ) {
-            crate::security::disclosure_gate::Gated::Unchanged => {}
-            crate::security::disclosure_gate::Gated::Changed(msg) => event.msg = msg,
-            crate::security::disclosure_gate::Gated::Withheld => return,
+        match crate::security::disclosure_gate::gate_presented(event.msg) {
+            Some(msg) => event.msg = msg,
+            None => return,
         }
         // Persist the event into rollout storage; the store applies its persistence policy.
         if persist {

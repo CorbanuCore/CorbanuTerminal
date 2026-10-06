@@ -181,9 +181,18 @@ pub(crate) fn gate_delivered(msg: EventMsg) -> Option<EventMsg> {
     }
 }
 
+/// Gates an event for presentation on paths that do not stream (raw sends).
+/// `None` drops the event.
+pub(crate) fn gate_presented(msg: EventMsg) -> Option<EventMsg> {
+    match active() {
+        Some(gate) => present(gate, msg),
+        None => Some(msg),
+    }
+}
+
 /// Gates a non-streamed event for presentation. An event that cannot be
-/// rebuilt with redaction markers is sent with the affected text emptied
-/// (ids and structure kept), so approvals, completions and turn ends still
+/// rebuilt with redaction markers is sent with the affected text replaced by
+/// a placeholder (ids and structure kept), so approvals, completions and turn ends still
 /// arrive; only if even that fails is it replaced by an error notice.
 fn present(gate: &OutputGate, msg: EventMsg) -> Option<EventMsg> {
     match gate_value_with(gate, OutputSink::Presentation, &msg) {
@@ -209,34 +218,45 @@ fn present(gate: &OutputGate, msg: EventMsg) -> Option<EventMsg> {
     }
 }
 
-/// Rebuilds `value` with every string that holds a managed value emptied.
+/// Placeholder for a field whose value cannot hold a redaction marker.
+const WITHHELD_FIELD: &str = "[WITHHELD]";
+
+/// Rebuilds `value` with every string that holds a managed value replaced
+/// by a fixed placeholder, or emptied where the placeholder does not fit
+/// (byte fields).
 fn strip_value<T: Serialize + DeserializeOwned>(
     gate: &OutputGate,
     sink: OutputSink,
     value: &T,
 ) -> Option<T> {
-    fn strip(gate: &OutputGate, sink: OutputSink, value: &mut serde_json::Value) {
+    fn strip(gate: &OutputGate, sink: OutputSink, value: &mut serde_json::Value, with: &str) {
         match value {
             serde_json::Value::String(text) if gate.scrub(sink, text).is_some() => {
-                text.clear();
+                *text = with.to_string();
             }
             serde_json::Value::Array(items) => {
-                items.iter_mut().for_each(|item| strip(gate, sink, item));
+                items
+                    .iter_mut()
+                    .for_each(|item| strip(gate, sink, item, with));
             }
             serde_json::Value::Object(map) => {
-                map.values_mut().for_each(|item| strip(gate, sink, item));
+                map.values_mut()
+                    .for_each(|item| strip(gate, sink, item, with));
             }
             _ => {}
         }
     }
-    let mut json = serde_json::to_value(value).ok()?;
-    strip(gate, sink, &mut json);
-    let serialized = serde_json::to_string(&json).ok()?;
-    // Found only across fields: nothing single to empty; do not deliver.
-    if gate.scrub(sink, &serialized).is_some() {
-        return None;
-    }
-    serde_json::from_value(json).ok()
+    let original = serde_json::to_value(value).ok()?;
+    [WITHHELD_FIELD, ""].into_iter().find_map(|with| {
+        let mut json = original.clone();
+        strip(gate, sink, &mut json, with);
+        let serialized = serde_json::to_string(&json).ok()?;
+        // Found only across fields: nothing single to replace.
+        if gate.scrub(sink, &serialized).is_some() {
+            return None;
+        }
+        serde_json::from_value(json).ok()
+    })
 }
 
 /// Result of gating a structured value.
@@ -250,13 +270,6 @@ pub(crate) enum Gated<T> {
 /// Gates every string in a serializable value (items, events, rollout
 /// lines). A quick scan of the serialized form decides whether the walk is
 /// needed at all.
-pub(crate) fn gate_value<T: Serialize + DeserializeOwned>(sink: OutputSink, value: &T) -> Gated<T> {
-    match active() {
-        Some(gate) => gate_value_with(gate, sink, value),
-        None => Gated::Unchanged,
-    }
-}
-
 fn gate_value_with<T: Serialize + DeserializeOwned>(
     gate: &OutputGate,
     sink: OutputSink,
@@ -415,8 +428,9 @@ pub(crate) fn gate_event(scope: &str, msg: EventMsg) -> Vec<EventMsg> {
 
 fn gate_event_with(gate: &OutputGate, scope: &str, msg: EventMsg) -> Vec<EventMsg> {
     let mut out = Vec::new();
-    // Keys carry the turn: a sub-session's already-gated stream forwarded
-    // into its parent's turn gets its own scrubber, never the child's.
+    // Keys and every finisher carry the turn: a sub-session's already-gated
+    // stream forwarded into its parent's turn has its own scrubber, and the
+    // child's events never drain the parent's (or the reverse).
     match msg {
         EventMsg::ExecCommandOutputDelta(mut event) => {
             let key = format!("exec\0{scope}\0{}\0{:?}", event.call_id, event.stream);
@@ -457,7 +471,8 @@ fn gate_event_with(gate: &OutputGate, scope: &str, msg: EventMsg) -> Vec<EventMs
             // A new summary section ends the earlier ones of the same item.
             let section = key.clone();
             out.extend(finish_streams(gate, |key, stream| {
-                stream.item_id == event.item_id
+                stream.scope == scope
+                    && stream.item_id == event.item_id
                     && key.starts_with("reasoning\0")
                     && key != section.as_str()
             }));
@@ -479,16 +494,20 @@ fn gate_event_with(gate: &OutputGate, scope: &str, msg: EventMsg) -> Vec<EventMs
             match &msg {
                 EventMsg::ExecCommandEnd(end) => {
                     out.extend(finish_streams(gate, |_, stream| {
-                        stream.item_id == end.call_id
+                        stream.scope == scope && stream.item_id == end.call_id
                     }));
                 }
                 EventMsg::ItemCompleted(completed) => {
                     let id = completed.item.id();
-                    out.extend(finish_streams(gate, |_, stream| stream.item_id == id));
+                    out.extend(finish_streams(gate, |_, stream| {
+                        stream.scope == scope && stream.item_id == id
+                    }));
                 }
                 EventMsg::AgentReasoningSectionBreak(event) => {
                     out.extend(finish_streams(gate, |key, stream| {
-                        stream.item_id == event.item_id && key.starts_with("reasoning\0")
+                        stream.scope == scope
+                            && stream.item_id == event.item_id
+                            && key.starts_with("reasoning\0")
                     }));
                 }
                 // Turns that end without completing their items (abort,

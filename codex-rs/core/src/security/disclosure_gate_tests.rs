@@ -308,34 +308,116 @@ fn chunks(events: Vec<EventMsg>) -> Vec<u8> {
     out
 }
 
+fn exec_end(call_id: &str, turn_id: &str) -> EventMsg {
+    EventMsg::ExecCommandEnd(codex_protocol::protocol::ExecCommandEndEvent {
+        call_id: call_id.to_string(),
+        plugin_id: None,
+        script_path: None,
+        process_id: None,
+        turn_id: turn_id.to_string(),
+        completed_at_ms: 0,
+        command: vec!["sh".to_string()],
+        cwd: codex_utils_path_uri::PathUri::parse("file:///tmp").expect("cwd"),
+        parsed_cmd: Vec::new(),
+        source: codex_protocol::protocol::ExecCommandSource::Agent,
+        interaction_input: None,
+        stdout: String::new(),
+        stderr: String::new(),
+        aggregated_output: String::new(),
+        exit_code: 0,
+        duration: std::time::Duration::ZERO,
+        formatted_output: String::new(),
+        status: codex_protocol::protocol::ExecCommandStatus::Completed,
+    })
+}
+
+fn reasoning_delta(turn_id: &str, index: i64, text: &str) -> EventMsg {
+    EventMsg::ReasoningContentDelta(
+        serde_json::from_value(serde_json::json!({
+            "thread_id": "thread-pf28",
+            "turn_id": turn_id,
+            "item_id": "rs-pf28-forwarded",
+            "delta": text,
+            "summary_index": index,
+        }))
+        .expect("delta"),
+    )
+}
+
+fn reasoning_text(events: &[EventMsg]) -> String {
+    events
+        .iter()
+        .filter_map(|event| match event {
+            EventMsg::ReasoningContentDelta(event) => Some(event.delta.as_str()),
+            _ => None,
+        })
+        .collect()
+}
+
 #[test]
 fn pf_28_s01_forwarded_sub_session_stream_is_gated_twice_without_leaking() {
     let gate = gate();
+    let (child, parent) = ("turn-pf28-child", "turn-pf28-parent");
+    // Review mode: every event the child's turn emits is forwarded, as is,
+    // into the parent's turn, which gates it again. Only `gate_event_with`
+    // runs, as in production.
+    let forward = |events: Vec<EventMsg>, out: &mut Vec<EventMsg>| {
+        for event in events {
+            out.extend(gate_event_with(&gate, parent, event));
+        }
+    };
+    let mut delivered = Vec::new();
+
+    // Command output with the value split across chunks, then its end.
     let call_id = "call-pf28-forwarded";
     let full = format!("hello {CANARY} done");
     let (first, second) = full.as_bytes().split_at(16);
-    let mut parent = Vec::new();
-    // The child's turn gates each chunk; its output is forwarded into the
-    // parent's turn, which gates it again (review mode).
     for chunk in [first, second] {
-        for event in gate_event_with(&gate, "turn-pf28-child", exec_delta(call_id, chunk)) {
-            parent.extend(gate_event_with(&gate, "turn-pf28-parent", event));
-        }
+        forward(
+            gate_event_with(&gate, child, exec_delta(call_id, chunk)),
+            &mut delivered,
+        );
     }
-    // The child's command ends: its tail is released and forwarded, then
-    // the parent's stream for the same call ends too.
-    for event in finish_streams(&gate, |_, stream| {
-        stream.scope == "turn-pf28-child" && stream.item_id == call_id
-    }) {
-        parent.extend(gate_event_with(&gate, "turn-pf28-parent", event));
-    }
-    parent.extend(finish_streams(&gate, |_, stream| {
-        stream.scope == "turn-pf28-parent" && stream.item_id == call_id
-    }));
+    forward(
+        gate_event_with(&gate, child, exec_end(call_id, child)),
+        &mut delivered,
+    );
     assert_eq!(
-        String::from_utf8(chunks(parent)).expect("utf8"),
+        String::from_utf8(chunks(delivered)).expect("utf8"),
         "hello [REDACTED:env:PF28_CANARY_API_KEY] done"
     );
+
+    // Reasoning with the value split across chunks: each forwarded delta
+    // must not drain the child's held-back prefix.
+    let mut delivered = Vec::new();
+    let text = format!("think {CANARY} more");
+    let (first, second) = text.split_at(12);
+    for piece in [first, second] {
+        forward(
+            gate_event_with(&gate, child, reasoning_delta(child, 0, piece)),
+            &mut delivered,
+        );
+    }
+    forward(
+        gate_event_with(&gate, child, reasoning_delta(child, 1, "next")),
+        &mut delivered,
+    );
+    let aborted = |turn: &str| {
+        EventMsg::TurnAborted(TurnAbortedEvent {
+            turn_id: Some(turn.to_string()),
+            reason: TurnAbortReason::Interrupted,
+            started_at: None,
+            completed_at: None,
+            duration_ms: None,
+        })
+    };
+    forward(
+        gate_event_with(&gate, child, aborted(child)),
+        &mut delivered,
+    );
+    delivered.extend(gate_event_with(&gate, parent, aborted(parent)));
+    let shown = reasoning_text(&delivered);
+    assert_eq!(shown, "think [REDACTED:env:PF28_CANARY_API_KEY] morenext");
 }
 
 #[test]
