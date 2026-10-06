@@ -242,6 +242,29 @@ async fn role_that_changes_child_values_fails_verification() {
     );
 }
 
+/// A role cannot hand children lenient rule parsing.
+#[tokio::test]
+async fn role_that_relaxes_strict_rules_fails_verification() {
+    let home = tempfile::tempdir().unwrap();
+    let cwd = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(home.path().join("agents")).unwrap();
+    std::fs::write(
+        home.path().join("agents/lenient.toml"),
+        "strict_rules = false\n",
+    )
+    .unwrap();
+    let config = load(
+        home.path(),
+        cwd.path(),
+        "[agents.lenient]\ndescription = \"x\"\nconfig_file = \"./agents/lenient.toml\"\n",
+    )
+    .await;
+    assert_eq!(
+        verify(&config, /*rules_present*/ true),
+        vec!["Child agents: role `lenient` sets strict_rules".to_string()]
+    );
+}
+
 /// The launch check loads the whole exec policy the way a session does.
 #[tokio::test]
 async fn exec_policy_must_load_and_forbid_vault_commands() {
@@ -295,7 +318,7 @@ async fn exec_policy_must_load_and_forbid_vault_commands() {
 /// New threads must fail rather than drop the vault rule when a `.rules` file
 /// breaks after launch; a user `strict_rules = false` cannot turn that off.
 #[tokio::test]
-async fn rules_parse_errors_are_fatal_for_later_threads() {
+async fn strict_rules_is_forced_and_verified() {
     let home = tempfile::tempdir().unwrap();
     let cwd = tempfile::tempdir().unwrap();
     let config = load(home.path(), cwd.path(), "strict_rules = false\n").await;

@@ -125,6 +125,19 @@ async fn child_uses_parent_exec_policy_when_layer_stack_matches() {
 }
 
 #[tokio::test]
+async fn strict_child_does_not_reuse_lenient_parent_exec_policy() {
+    let (_home, parent_config) = test_config().await;
+    let mut child_config = parent_config.clone();
+    child_config.strict_rules = true;
+
+    assert!(!child_uses_parent_exec_policy(
+        &parent_config,
+        &child_config
+    ));
+    assert!(child_uses_parent_exec_policy(&child_config, &parent_config));
+}
+
+#[tokio::test]
 async fn child_uses_parent_exec_policy_when_non_exec_policy_layers_differ() {
     let (_home, parent_config) = test_config().await;
     let mut child_config = parent_config.clone();

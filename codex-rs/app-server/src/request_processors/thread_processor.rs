@@ -1562,8 +1562,11 @@ impl ThreadRequestProcessor {
                 .map_err(|err| config_load_error(&err))?;
         }
 
-        if let Ok(Some(err)) =
-            codex_core::check_execpolicy_for_warnings(&config.config_layer_stack).await
+        // With strict rules the thread fails to start and its error says why;
+        // "custom rules not applied" would wrongly suggest it ran without them.
+        if !config.strict_rules
+            && let Ok(Some(err)) =
+                codex_core::check_execpolicy_for_warnings(&config.config_layer_stack).await
         {
             let notification = crate::exec_policy_config_warning(&err);
             if !initial_config_warnings.contains(&notification) {
