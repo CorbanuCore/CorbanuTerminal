@@ -108,7 +108,6 @@ nav:
                   - "PF-28-S01 — Central secret and protected-output gate": sprints/current/p0-security-levels/pf-28-s01-central-secret-output-gate.md
                   - "PF-28-S02 — Reflected-secret response scrubbing": sprints/current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md
               - "Untrusted-content lane":
-                  - "PF-30-S01 — Typed source envelope and trusted ingress": sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md
                   - "PF-30-S02 — Persistent taint across summaries and memory": sprints/current/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md
                   - "PF-30-S03 — Post-taint authority checks": sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md
                   - "PF-23-S01 — Moderate ingress and disclosure enforcement": sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md
