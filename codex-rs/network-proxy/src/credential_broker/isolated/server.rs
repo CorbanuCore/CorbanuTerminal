@@ -5,8 +5,10 @@
 //! the bound host, and performs the upstream HTTPS request itself.
 
 use super::protocol::BROKER_ERROR_HEADER;
+use super::protocol::BROKER_RUNTIME_DIR_ENV;
 use super::protocol::BROKER_SESSION_ID;
 use super::protocol::BROKER_TASK_ID;
+use super::protocol::BrokerBootstrap;
 use super::protocol::CONTROL_PROTOCOL_VERSION;
 use super::protocol::ControlErrorCode;
 use super::protocol::ControlRequest;
@@ -81,12 +83,20 @@ const ACCEPT_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis
 const RESPONSE_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
 const MAX_FRAME_HEADER_BYTES: usize = 22 * 1024;
 const BROKER_EXIT_UNAVAILABLE: i32 = 78;
+const CONTROL_ACCEPT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+const PARENT_CHECK_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
 
 /// Entry point for `corbanu --codex-run-as-credential-broker`.
 pub fn run_credential_broker_main() -> ! {
     // Raw values and the channel key live here: refuse debugger attach and
     // core dumps, and drop loader-injection variables, before anything else.
     codex_process_hardening::pre_main_hardening();
+    // PF-27-S02: confine the broker while it is still single-threaded, so
+    // every runtime thread inherits it: no program execution or new
+    // processes, no cross-process inspection, writes only under the runtime
+    // directory.
+    let runtime_dir = runtime_dir();
+    let containment = codex_process_hardening::contain_credential_broker(&runtime_dir);
     let Ok(runtime) = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
@@ -94,18 +104,64 @@ pub fn run_credential_broker_main() -> ! {
     else {
         std::process::exit(BROKER_EXIT_UNAVAILABLE);
     };
-    let exit_code = match runtime.block_on(run_broker()) {
+    let exit_code = match runtime.block_on(run_broker(runtime_dir, containment.mechanism)) {
         Ok(()) => 0,
         Err(_) => BROKER_EXIT_UNAVAILABLE,
     };
-    // Exit without dropping the runtime: its blocking stdin reader may still be
-    // parked on a pipe the controller holds open (signal-initiated shutdown).
+    // Exit without dropping the runtime: a blocking reader may still be
+    // parked on a channel the controller holds open (signal-initiated shutdown).
     std::process::exit(exit_code)
 }
 
-async fn run_broker() -> anyhow::Result<()> {
-    let mut control = BufReader::new(tokio::io::stdin());
+/// Where the private socket directory is created: the controller's runtime
+/// directory (`CODEX_HOME/run`), or the temporary directory as a fallback.
+fn runtime_dir() -> std::path::PathBuf {
+    std::env::var_os(BROKER_RUNTIME_DIR_ENV)
+        .map(std::path::PathBuf::from)
+        .filter(|dir| dir.is_absolute() && dir.is_dir())
+        .unwrap_or_else(socket_parent)
+}
+
+async fn run_broker(runtime_dir: std::path::PathBuf, containment: String) -> anyhow::Result<()> {
+    // The control channel accepts exactly the process that spawned us. A
+    // stale parent (reparented to init or launchd) means the controller died.
+    let parent_pid = std::os::unix::process::parent_id();
+    let socket_dir = tempfile::Builder::new()
+        .prefix("cbk-")
+        .tempdir_in(&runtime_dir)
+        .context("create private broker directory")?;
+    std::fs::set_permissions(socket_dir.path(), std::fs::Permissions::from_mode(0o700))?;
+    let owner_uid = std::fs::metadata(socket_dir.path())?.uid();
+    let control_path = socket_dir.path().join("c.sock");
+    let control_listener = tokio::net::UnixListener::bind(&control_path)?;
+    std::fs::set_permissions(&control_path, std::fs::Permissions::from_mode(0o600))?;
+    let socket_path = socket_dir.path().join("b.sock");
+    let listener = UnixListener::bind_path(&socket_path).await?;
+    std::fs::set_permissions(&socket_path, std::fs::Permissions::from_mode(0o600))?;
+
+    // PF-27-S02: stdout carries only the (non-secret) control socket path.
+    // Secrets never cross a descriptor the controller created, so a process
+    // that inherits one during the macOS close-on-exec window gets nothing.
     let mut stdout = tokio::io::stdout();
+    write_json_line(
+        &mut stdout,
+        &BrokerBootstrap {
+            protocol_version: CONTROL_PROTOCOL_VERSION,
+            control_socket: control_path.to_string_lossy().into_owned(),
+        },
+    )
+    .await?;
+    let control_stream = tokio::time::timeout(
+        CONTROL_ACCEPT_TIMEOUT,
+        accept_controller(&control_listener, parent_pid, owner_uid),
+    )
+    .await
+    .context("controller did not connect")??;
+    drop(control_listener);
+    let _ = std::fs::remove_file(&control_path);
+    let (control_read, mut control_write) = control_stream.into_split();
+    let mut control = BufReader::new(control_read);
+
     let hello = read_control_line(&mut control)
         .await?
         .context("controller closed before hello")?;
@@ -123,8 +179,8 @@ async fn run_broker() -> anyhow::Result<()> {
         anyhow::bail!("controller did not start with hello");
     };
     if *protocol_version != CONTROL_PROTOCOL_VERSION {
-        write_control_line(
-            &mut stdout,
+        write_json_line(
+            &mut control_write,
             &ControlResponse::Error {
                 code: ControlErrorCode::UnsupportedProtocol,
             },
@@ -137,16 +193,6 @@ async fn run_broker() -> anyhow::Result<()> {
         *controller_pid != 0 && valid_id(controller_instance),
         "invalid controller identity"
     );
-
-    let socket_dir = tempfile::Builder::new()
-        .prefix("cbk-")
-        .tempdir_in(socket_parent())
-        .context("create private broker directory")?;
-    std::fs::set_permissions(socket_dir.path(), std::fs::Permissions::from_mode(0o700))?;
-    let owner_uid = std::fs::metadata(socket_dir.path())?.uid();
-    let socket_path = socket_dir.path().join("b.sock");
-    let listener = UnixListener::bind_path(&socket_path).await?;
-    std::fs::set_permissions(&socket_path, std::fs::Permissions::from_mode(0o600))?;
 
     let broker_instance = format!("broker-{}", random_hex::<8>());
     let (generation, _) = watch::channel(1_u64);
@@ -162,13 +208,14 @@ async fn run_broker() -> anyhow::Result<()> {
     });
     drop(hello);
 
-    write_control_line(
-        &mut stdout,
+    write_json_line(
+        &mut control_write,
         &ControlResponse::Ready {
             protocol_version: CONTROL_PROTOCOL_VERSION,
             broker_instance,
             socket_path: socket_path.to_string_lossy().into_owned(),
             run_generation: 1,
+            containment,
         },
     )
     .await?;
@@ -178,12 +225,23 @@ async fn run_broker() -> anyhow::Result<()> {
     let mut terminate = signal(SignalKind::terminate())?;
     let mut hangup = signal(SignalKind::hangup())?;
     let mut interrupt = signal(SignalKind::interrupt())?;
+    let parent_gone = async move {
+        let mut interval = tokio::time::interval(PARENT_CHECK_INTERVAL);
+        loop {
+            interval.tick().await;
+            if std::os::unix::process::parent_id() != parent_pid {
+                break;
+            }
+        }
+    };
+    tokio::pin!(parent_gone);
     loop {
         let line = tokio::select! {
             line = read_control_line(&mut control) => line?,
             _ = terminate.recv() => None,
             _ = hangup.recv() => None,
             _ = interrupt.recv() => None,
+            () = &mut parent_gone => None,
         };
         let Some(line) = line else {
             break;
@@ -194,14 +252,37 @@ async fn run_broker() -> anyhow::Result<()> {
                 code: ControlErrorCode::Malformed,
             },
         };
-        write_control_line(&mut stdout, &response).await?;
+        write_json_line(&mut control_write, &response).await?;
     }
-    // Controller EOF or a termination signal: close every outstanding channel
-    // by revoking, then remove the private socket directory before exiting.
+    // Controller EOF, controller death or a termination signal: close every
+    // outstanding channel by revoking, then remove the private socket
+    // directory before exiting.
     broker.revoke();
     accept.abort();
     drop(socket_dir);
     Ok(())
+}
+
+/// Accepts the first control connection whose OS peer is the spawning
+/// controller; any other peer is dropped before a byte is read.
+async fn accept_controller(
+    listener: &tokio::net::UnixListener,
+    parent_pid: u32,
+    owner_uid: u32,
+) -> std::io::Result<tokio::net::UnixStream> {
+    loop {
+        let (stream, _) = listener.accept().await?;
+        let from_parent = stream.peer_cred().is_ok_and(|peer| {
+            peer.uid() == owner_uid
+                && peer
+                    .pid()
+                    .and_then(|pid| u32::try_from(pid).ok())
+                    .is_some_and(|pid| pid == parent_pid)
+        });
+        if from_parent {
+            return Ok(stream);
+        }
+    }
 }
 
 /// Unix socket paths are limited to roughly 100 bytes; fall back to `/tmp`
@@ -692,12 +773,13 @@ where
     Ok(Some(line))
 }
 
-async fn write_control_line(
-    stdout: &mut tokio::io::Stdout,
-    response: &ControlResponse,
-) -> std::io::Result<()> {
-    let mut line = serde_json::to_vec(response).map_err(std::io::Error::other)?;
+async fn write_json_line<W, T>(writer: &mut W, message: &T) -> std::io::Result<()>
+where
+    W: tokio::io::AsyncWrite + Unpin,
+    T: serde::Serialize,
+{
+    let mut line = serde_json::to_vec(message).map_err(std::io::Error::other)?;
     line.push(b'\n');
-    stdout.write_all(&line).await?;
-    stdout.flush().await
+    writer.write_all(&line).await?;
+    writer.flush().await
 }

@@ -730,6 +730,13 @@ impl UnifiedExecProcessManager {
                     return Err(UnifiedExecError::StdinClosed);
                 }
             } else {
+                if let Some(contract) = crate::security::launch_contract::active() {
+                    contract
+                        .check_stdin(request.input.as_bytes())
+                        .map_err(|denied| UnifiedExecError::ProtectedLaunch {
+                            message: denied.to_string(),
+                        })?;
+                }
                 match process.write(request.input.as_bytes()).await {
                     Ok(()) => {
                         // Give the remote process a brief window to react so that we are
@@ -1256,6 +1263,13 @@ impl UnifiedExecProcessManager {
             .map(|result| (result.output, result.deferred_network_approval))
             .map_err(|err| match err {
                 ToolError::Codex(err) => match err.details() {
+                    CodexErrorDetails::UnsupportedOperation(message)
+                        if crate::security::launch_contract::is_launch_denial(message) =>
+                    {
+                        UnifiedExecError::ProtectedLaunch {
+                            message: message.clone(),
+                        }
+                    }
                     CodexErrorDetails::Sandbox(SandboxErr::Denied { output, .. }) => {
                         let output = output.as_ref().clone();
                         let message = if output.aggregated_output.text.is_empty() {

@@ -1,0 +1,55 @@
+# PF-27-S02: the isolated broker confines itself (Seatbelt on macOS) and keeps its sockets
+# in CODEX_HOME/run; the control socket is gone once Core is connected.
+id = "pf27s02-broker-contained"
+feature = "Secretless agent launch: the credential broker runs contained, with its socket under CODEX_HOME/run"
+expected = "The log shows the broker started with containment=seatbelt; CODEX_HOME/run holds one cbk- directory with only b.sock (no control socket left)."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[sandbox_workspace_write]
+network_access = true
+
+[features]
+isolated_credential_broker = true
+secretless_agent_launch = true
+
+[features.network_proxy]
+enabled = true
+allow_local_binding = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "!grep -ho 'isolated credential broker started.*' {logs}/*.log | head -n 1"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "containment=seatbelt"
+
+[[steps]]
+type = "!ls -la {home}/run/cbk-*"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "b\\.sock"
+
+[[steps]]
+pause = 4.0

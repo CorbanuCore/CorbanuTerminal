@@ -886,6 +886,13 @@ impl CoreShellCommandExecutor {
             ));
         };
 
+        if matches!(execution, EscalationExecution::Unsandboxed)
+            && crate::security::launch_contract::active().is_some()
+        {
+            return Err(anyhow::anyhow!(
+                crate::security::launch_contract::LaunchDenied::Unsandboxed
+            ));
+        }
         let prepared = match execution {
             EscalationExecution::Unsandboxed => PreparedExec {
                 command,
@@ -955,7 +962,7 @@ impl CoreShellCommandExecutor {
         );
         let cwd = PathUri::from_abs_path(workdir);
         let sandbox_policy_cwd = PathUri::from_abs_path(&self.sandbox_policy_cwd);
-        let command = SandboxCommand {
+        let mut command = SandboxCommand {
             program: program.clone().into(),
             args: args.to_vec(),
             cwd,
@@ -963,6 +970,19 @@ impl CoreShellCommandExecutor {
             managed_network: None,
             additional_permissions,
         };
+        // PF-27-S02: intercepted execs get the same protected launch contract.
+        let protected = match crate::security::launch_contract::active() {
+            Some(contract) => Some(contract.protect_launch(
+                sandbox,
+                sandbox != SandboxType::None,
+                /*exec_server*/ false,
+                &mut command,
+                permission_profile,
+                self.sandbox_policy_cwd.as_path(),
+            )?),
+            None => None,
+        };
+        let permission_profile = protected.as_ref().unwrap_or(permission_profile);
         let options = ExecOptions {
             expiration: ExecExpiration::DefaultTimeout,
             capture_policy: ExecCapturePolicy::ShellTool,

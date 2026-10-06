@@ -3275,6 +3275,21 @@ fn current_time_reminder_toml_config(
     }
 }
 
+/// PF-27-S02: agent environments no longer carry provider tokens, so the
+/// proxy sources brokered values from Core's own environment; the isolated
+/// broker keeps its sockets under `CODEX_HOME/run`, which agent commands can
+/// neither read nor write under the launch contract.
+fn apply_secretless_launch_network_config(
+    config: &mut NetworkProxyConfig,
+    secretless_agent_launch: bool,
+    codex_home: &AbsolutePathBuf,
+) {
+    config.set_secretless_agent_launch(secretless_agent_launch);
+    if config.isolated_credential_broker {
+        config.set_credential_broker_runtime_dir(Some(codex_home.join("run").to_path_buf()));
+    }
+}
+
 fn network_proxy_toml_config(features: Option<&FeaturesToml>) -> Option<&NetworkProxyConfigToml> {
     match features?.network_proxy.as_ref()? {
         FeatureToml::Enabled(_) => None,
@@ -3613,11 +3628,25 @@ impl Config {
             },
             feature_overrides,
         );
-        let features = ManagedFeatures::from_configured_with_warnings(
+        let mut features = ManagedFeatures::from_configured_with_warnings(
             configured_features,
             feature_requirements,
             &mut startup_warnings,
         )?;
+        let secretless_agent_launch = features.enabled(Feature::SecretlessAgentLaunch);
+        if secretless_agent_launch {
+            // PF-27-S02: arm the launch contract for this process, and never
+            // replay a login-shell snapshot that re-exports profile secrets.
+            crate::security::launch_contract::arm(&codex_home);
+            if features.enabled(Feature::ShellSnapshot)
+                && features.disable(Feature::ShellSnapshot).is_err()
+            {
+                startup_warnings.push(
+                    "secretless_agent_launch: shell_snapshot is required by policy; agent commands cannot read the snapshot files"
+                        .to_string(),
+                );
+            }
+        }
         let non_prefixed_mcp_tool_servers = if features.enabled(Feature::NonPrefixedMcpToolNames) {
             cfg.features
                 .as_ref()
@@ -3929,6 +3958,11 @@ impl Config {
                 configured_network_proxy_config
                     .set_isolated_credential_broker_enabled(/*enabled*/ true);
             }
+            apply_secretless_launch_network_config(
+                &mut configured_network_proxy_config,
+                secretless_agent_launch,
+                &codex_home,
+            );
         }
         let approval_policy_was_explicit =
             approval_policy_override.is_some() || cfg.approval_policy.is_some();
@@ -4147,8 +4181,14 @@ impl Config {
                 }
                 None => (model_provider_id, model_provider, model, false),
             };
-        let shell_environment_policy = cfg.shell_environment_policy.into();
-        let allow_login_shell = cfg.allow_login_shell.unwrap_or(true);
+        let mut shell_environment_policy: ShellEnvironmentPolicy =
+            cfg.shell_environment_policy.into();
+        let mut allow_login_shell = cfg.allow_login_shell.unwrap_or(true);
+        if secretless_agent_launch {
+            // Profiles and login shells can export secrets the allowlist removed.
+            shell_environment_policy.use_profile = false;
+            allow_login_shell = false;
+        }
 
         let history = cfg.history.unwrap_or_default();
 
@@ -4955,6 +4995,11 @@ impl Config {
                     configured_network_proxy_config
                         .set_isolated_credential_broker_enabled(/*enabled*/ true);
                 }
+                apply_secretless_launch_network_config(
+                    &mut configured_network_proxy_config,
+                    self.features.enabled(Feature::SecretlessAgentLaunch),
+                    &self.codex_home,
+                );
             }
             configured_network_proxy_config
         } else {

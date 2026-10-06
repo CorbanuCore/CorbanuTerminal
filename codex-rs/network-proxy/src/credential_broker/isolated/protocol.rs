@@ -1,8 +1,10 @@
 //! Versioned, bounded control messages between Core and the credential broker.
 //!
-//! The control channel is the broker's private stdin/stdout pipe pair, so only
-//! the spawning controller can register or revoke credentials. Raw values move
-//! one way (controller to broker) and are never echoed back.
+//! The broker prints one bootstrap line (its control socket path) on stdout;
+//! the control channel is that Unix socket, accepted only from the spawning
+//! controller's pid, and the controller checks the socket's peer is the
+//! broker it spawned (PF-27-S02). Raw values move one way (controller to
+//! broker) and are never echoed back.
 
 use super::super::providers::CredentialHostBinding;
 use serde::Deserialize;
@@ -10,7 +12,9 @@ use serde::Serialize;
 use std::fmt;
 use zeroize::Zeroize;
 
-pub(crate) const CONTROL_PROTOCOL_VERSION: u32 = 1;
+pub(crate) const CONTROL_PROTOCOL_VERSION: u32 = 2;
+/// Environment variable naming the broker's runtime parent directory.
+pub(crate) const BROKER_RUNTIME_DIR_ENV: &str = "CODEX_CREDENTIAL_BROKER_RUNTIME_DIR";
 pub(crate) const MAX_CONTROL_LINE_BYTES: usize = 16 * 1024;
 pub(crate) const MAX_CREDENTIAL_VALUE_BYTES: usize = 8 * 1024;
 pub(crate) const MAX_BINDING_ENTRIES: usize = 16;
@@ -114,6 +118,14 @@ impl Drop for ControlRequest {
     }
 }
 
+/// The broker's only stdout message: where to connect for control.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct BrokerBootstrap {
+    pub(crate) protocol_version: u32,
+    pub(crate) control_socket: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum ControlResponse {
@@ -122,6 +134,8 @@ pub(crate) enum ControlResponse {
         broker_instance: String,
         socket_path: String,
         run_generation: u64,
+        /// OS containment the broker applied to itself, e.g. `seatbelt`.
+        containment: String,
     },
     Registered {
         reference: String,

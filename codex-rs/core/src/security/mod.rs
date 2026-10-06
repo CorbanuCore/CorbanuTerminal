@@ -14,6 +14,7 @@ pub(crate) mod confidentiality;
 mod effective_policy;
 pub(crate) mod ingress;
 mod integration;
+pub(crate) mod launch_contract;
 mod protected_runtime;
 pub(crate) mod protected_surface;
 pub(crate) mod recovery;

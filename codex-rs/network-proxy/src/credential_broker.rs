@@ -44,10 +44,11 @@ pub(crate) use isolated::IsolatedBrokerOptions;
 use isolated::protocol::HostBindingWire;
 #[cfg(not(unix))]
 #[allow(dead_code)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct IsolatedBrokerOptions {
     pub(crate) allow_local_binding: bool,
     pub(crate) allow_upstream_proxy: bool,
+    pub(crate) runtime_dir: Option<std::path::PathBuf>,
 }
 
 pub const CREDENTIAL_BROKER_ACTIVE_ENV_KEY: &str = "CODEX_NETWORK_PROXY_CREDENTIAL_BROKER_ACTIVE";
@@ -57,6 +58,16 @@ pub(crate) const BROKERED_CREDENTIALS_ENV_KEY: &str = "CODEX_NETWORK_PROXY_BROKE
 pub(crate) struct CredentialBroker {
     state: Arc<RwLock<CredentialBrokerState>>,
     isolation: Isolation,
+    /// PF-27-S02: agent environments arrive without provider tokens, so raw
+    /// values are read from Core's own process environment instead.
+    process_env_source: Option<ProcessEnvLookup>,
+}
+
+/// Reads one variable from Core's environment (replaceable in tests).
+type ProcessEnvLookup = fn(&str) -> Option<String>;
+
+fn core_process_env(key: &str) -> Option<String> {
+    std::env::var(key).ok()
 }
 
 /// Where raw provider credential values live while the broker is enabled.
@@ -208,7 +219,19 @@ impl CredentialBroker {
                 ..CredentialBrokerState::default()
             })),
             isolation,
+            process_env_source: None,
         }
+    }
+
+    /// PF-27-S02: source brokered values from Core's environment rather than
+    /// the (stripped) child environment.
+    pub(crate) fn with_process_env_source(self, enabled: bool) -> Self {
+        self.with_process_env_lookup(enabled.then_some(core_process_env as ProcessEnvLookup))
+    }
+
+    pub(crate) fn with_process_env_lookup(mut self, lookup: Option<ProcessEnvLookup>) -> Self {
+        self.process_env_source = lookup;
+        self
     }
 
     pub(crate) fn isolated(&self) -> bool {
@@ -248,6 +271,13 @@ impl CredentialBroker {
             "1".to_string(),
         );
 
+        // With secretless launch the child environment no longer carries the
+        // provider tokens; read them (and host context) from Core's own
+        // environment, letting any value already in the child win.
+        let source_env = self
+            .process_env_source
+            .map(|lookup| process_credential_env(env, lookup));
+        let source_env = source_env.as_ref().unwrap_or(env).clone();
         for provider in providers::credential_providers() {
             if (state.scoped_openai.is_some() || state.isolated_openai.is_some())
                 && std::ptr::eq(provider, providers::openai_provider())
@@ -255,9 +285,10 @@ impl CredentialBroker {
                 continue;
             }
             for source in provider.sources() {
-                if let Some(host_binding) = (source.host_binding)(env) {
+                if let Some(host_binding) = (source.host_binding)(&source_env) {
                     for env_var in source.env_vars {
                         virtualize_env_var(
+                            &source_env,
                             env,
                             &mut state,
                             &self.isolation,
@@ -488,7 +519,23 @@ impl CredentialBroker {
     }
 }
 
+/// Core's own values for every broker-managed variable, overridden by any
+/// value the child environment already carries (for example a dummy).
+fn process_credential_env(
+    child_env: &HashMap<String, String>,
+    lookup: ProcessEnvLookup,
+) -> HashMap<String, String> {
+    let mut source = HashMap::new();
+    for key in providers::credential_broker_env_keys() {
+        if let Some(value) = child_env.get(key).cloned().or_else(|| lookup(key)) {
+            source.insert(key.to_string(), value);
+        }
+    }
+    source
+}
+
 fn virtualize_env_var(
+    source_env: &HashMap<String, String>,
     env: &mut HashMap<String, String>,
     state: &mut CredentialBrokerState,
     isolation: &Isolation,
@@ -496,7 +543,7 @@ fn virtualize_env_var(
     provider: &'static providers::CredentialProvider,
     host_binding: providers::CredentialHostBinding,
 ) {
-    let Some(real_value) = brokerable_credential_value(env, state, env_var, provider) else {
+    let Some(real_value) = brokerable_credential_value(source_env, state, env_var, provider) else {
         return;
     };
 

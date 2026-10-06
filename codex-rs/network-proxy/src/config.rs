@@ -140,6 +140,14 @@ pub struct NetworkProxyConfig {
     /// PF-27-S04: keep brokered raw credentials in a separate broker process.
     #[serde(default)]
     pub isolated_credential_broker: bool,
+    /// PF-27-S02: agent environments are built without provider tokens, so
+    /// brokered values come from Core's own environment. Set by Core only.
+    #[serde(skip)]
+    pub secretless_agent_launch: bool,
+    /// PF-27-S02: parent directory for the isolated broker's private socket
+    /// directory (Core passes `CODEX_HOME/run`). Set by Core only.
+    #[serde(skip)]
+    pub credential_broker_runtime_dir: Option<std::path::PathBuf>,
     #[serde(default)]
     pub dangerously_allow_plaintext_credential_injection: bool,
     #[serde(default)]
@@ -164,6 +172,8 @@ impl Default for NetworkProxyConfig {
             mitm: false,
             credential_broker: false,
             isolated_credential_broker: false,
+            secretless_agent_launch: false,
+            credential_broker_runtime_dir: None,
             dangerously_allow_plaintext_credential_injection: false,
             mitm_hooks: Vec::new(),
         }
@@ -183,6 +193,16 @@ impl NetworkProxyConfig {
         if enabled {
             self.set_credential_broker_enabled(/*enabled*/ true);
         }
+    }
+
+    /// PF-27-S02: source brokered credential values from Core's environment.
+    pub fn set_secretless_agent_launch(&mut self, enabled: bool) {
+        self.secretless_agent_launch = enabled;
+    }
+
+    /// PF-27-S02: where the isolated broker creates its private directory.
+    pub fn set_credential_broker_runtime_dir(&mut self, dir: Option<std::path::PathBuf>) {
+        self.credential_broker_runtime_dir = dir;
     }
 
     pub fn allowed_domains(&self) -> Option<Vec<String>> {
@@ -633,6 +653,8 @@ mod tests {
                 mitm: false,
                 credential_broker: false,
                 isolated_credential_broker: false,
+                secretless_agent_launch: false,
+                credential_broker_runtime_dir: None,
                 dangerously_allow_plaintext_credential_injection: false,
                 mitm_hooks: Vec::new(),
             }

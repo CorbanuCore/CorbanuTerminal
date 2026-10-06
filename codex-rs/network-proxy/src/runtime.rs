@@ -1103,17 +1103,19 @@ fn is_explicit_local_allowlisted(allowed_domains: &[String], host: &Host) -> boo
 }
 
 fn credential_broker_for_config(config: &crate::config::NetworkProxyConfig) -> CredentialBroker {
-    if config.isolated_credential_broker {
+    let broker = if config.isolated_credential_broker {
         CredentialBroker::new_isolated(
             config.credential_broker,
             IsolatedBrokerOptions {
                 allow_local_binding: config.allow_local_binding,
                 allow_upstream_proxy: config.allow_upstream_proxy,
+                runtime_dir: config.credential_broker_runtime_dir.clone(),
             },
         )
     } else {
         CredentialBroker::new(config.credential_broker)
-    }
+    };
+    broker.with_process_env_source(config.secretless_agent_launch)
 }
 
 fn unix_timestamp() -> i64 {

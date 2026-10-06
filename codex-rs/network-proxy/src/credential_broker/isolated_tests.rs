@@ -120,6 +120,7 @@ fn options() -> IsolatedBrokerOptions {
     IsolatedBrokerOptions {
         allow_local_binding: true,
         allow_upstream_proxy: false,
+        runtime_dir: None,
     }
 }
 
@@ -554,6 +555,84 @@ async fn pf_27_s04_pf_27_s01_externally_terminated_broker_is_detected_and_cleane
 
     assert_eq!(
         route(&broker, upstream.port, "/echo", &dummy).err(),
+        Some(ScopedCredentialInjectionError::IsolatedBrokerUnavailable)
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn pf_27_s02_broker_sockets_live_in_the_private_runtime_dir() {
+    let upstream = start_upstream().await;
+    let runtime = tempfile::Builder::new()
+        .prefix("pf27s02-")
+        .tempdir_in("/tmp")
+        .expect("runtime dir");
+    let runtime_dir = std::fs::canonicalize(runtime.path()).expect("canonical runtime dir");
+    let broker = CredentialBroker::new_isolated_with_launcher(
+        /*enabled*/ true,
+        IsolatedBrokerOptions {
+            runtime_dir: Some(runtime_dir.clone()),
+            ..options()
+        },
+        launcher(&upstream, /*controller_pid_override*/ None),
+    );
+    let dummy = virtualized_dummy(&broker);
+    let client = broker.current_isolated_client().expect("broker client");
+    let broker_dir = client.socket_path().parent().expect("broker dir");
+
+    assert_eq!(broker_dir.parent(), Some(runtime_dir.as_path()));
+    // The control socket is unlinked once the controller is connected.
+    assert!(!broker_dir.join("c.sock").exists());
+    let mode = std::os::unix::fs::PermissionsExt::mode(
+        &std::fs::metadata(broker_dir)
+            .expect("broker dir")
+            .permissions(),
+    );
+    assert_eq!(mode & 0o777, 0o700);
+    if cfg!(target_os = "macos") {
+        assert_eq!(client.containment(), "seatbelt");
+    } else if cfg!(target_os = "linux") {
+        assert!(
+            client.containment().contains("seccomp"),
+            "{}",
+            client.containment()
+        );
+    }
+
+    // Brokered requests still work from the contained broker.
+    let response = forward(&broker, upstream.port, "/echo", &dummy).await;
+    assert_eq!(
+        response.try_into_string().await.expect("body"),
+        format!("Bearer {SYNTHETIC_TOKEN}")
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn pf_27_s02_a_spoofed_bootstrap_path_is_never_trusted() {
+    // A "broker" that prints a control socket owned by someone else: the
+    // controller refuses it because the socket's peer is not its child.
+    let squatter_dir = tempfile::Builder::new()
+        .prefix("cbk-")
+        .tempdir_in("/tmp")
+        .expect("squatter dir");
+    let control = squatter_dir.path().join("c.sock");
+    let _listener = std::os::unix::net::UnixListener::bind(&control).expect("squatter socket");
+    let line = format!(
+        "{{\"protocol_version\":2,\"control_socket\":\"{}\"}}",
+        control.display()
+    );
+    let broker = isolated_broker(IsolatedBrokerLauncher::test_harness(
+        Some(PathBuf::from("/bin/sh")),
+        vec![
+            OsString::from("-c"),
+            OsString::from(format!("echo '{line}'; sleep 5")),
+        ],
+        Vec::new(),
+        /*controller_pid_override*/ None,
+    ));
+    let dummy = virtualized_dummy(&broker);
+    assert!(broker.current_isolated_client().is_none());
+    assert_eq!(
+        route(&broker, /*port*/ 443, "/echo", &dummy).err(),
         Some(ScopedCredentialInjectionError::IsolatedBrokerUnavailable)
     );
 }

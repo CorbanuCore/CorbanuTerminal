@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-27-S04"
 title: "Isolated credential broker process"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-27"
 execution_order: 28
@@ -17,6 +17,22 @@ created: 2026-08-28
 updated: 2026-10-06
 ---
 # PF-27-S04 — Isolated credential broker process
+
+## Closure — 2026-10-06
+
+Completed under the per-sprint gate (sec-common decision 5): focused tests, GLM 5.2 tmux run, one Opus 5.5 High
+review (APPROVE WITH NITS, no P0/P1) and SOP demo videos, all in the
+[evidence](../../../../qa/security-levels/sprints/PF-27-S04/isolated-broker-20261006/README.md). Merged as PR #180
+(`13cf4a2d0c`) behind `isolated_credential_broker` (default off). The coordinator's 2026-10-06 decision moved the
+open items out, so nothing below is claimed as done here:
+
+| Carried forward | To |
+| --- | --- |
+| Core's own model-client auth through the broker; vault-label credentials resolved inside the broker | [PF-27-S05](../../current/p0-security-levels/pf-27-s05-model-client-auth-broker.md) (new, after PF-27-S02) |
+| Broker same-uid and unsandboxed; agent access to controller memory/environ; broker socket in an agent-writable directory; macOS setup-pipe inheritance window | [PF-27-S02](../../current/p0-security-levels/pf-27-s02-secretless-agent-launch.md) |
+| Windows broker (today Windows fails closed: dummies, no injection) | [PF-27-S06](../../current/p0-security-levels/pf-27-s06-windows-broker-and-launch.md) (new) |
+| Production revocation trigger (`revoke_brokered_credentials` has no product caller) | [PF-23-S03](../../current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) |
+| Known limits with the flag on: no broker restart until a new session; only GET/HEAD/POST/PUT/PATCH/DELETE and paths up to 1,024 bytes; private-IP GitHub Enterprise needs `allow_local_binding`; uploads over 5 minutes are cut off and an unread response holds a broker slot | Documented behaviour; not scheduled |
 
 **October 6 (decision 5 gate):** the isolated broker process ships behind the `isolated_credential_broker` feature flag (default off; Permissive unchanged). Inventory: all 17 commits on `feat/security-broker-resume-20260911` were already on main as equivalent commits, so nothing was redone. The review-budget and system-preflight micro-allocations below are superseded. [Evidence](../../../../qa/security-levels/sprints/PF-27-S04/isolated-broker-20261006/README.md).
 
@@ -76,21 +92,18 @@ updated: 2026-10-06
 - [x] Sealed image `ee1ac023c`: default3/synthetic39/affected356 (2 existing skips), scoped lint/parity/build/TMUX pass; Astra18/Fable19 clean. Kernel write/truncate/seal denials and failure cleanup proven; no invocation or loader trust. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/sealed-20260912/README.md).
 - [x] Static probe build/linkage feasibility passes on unchanged Rust0aa65bd: staticPIE f6ca8e3368dc/no interpreter or external libs and GNU control, actual-key TMUX. Fable20 patch correct/P3 receipt gap repaired; original exit1 and failed attempts retained. No artifact invocation/native qualification. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/static-probe-20260912/CURRENT.md).
 ## Remaining
-- [ ] Model-client auth (Core's own provider API keys) through the broker; vault-label credentials resolved inside the broker; Windows broker (today isolation on Windows fails closed: dummies, no injection).
-- [ ] OS constraint (PF-27-S02): broker same-uid and unsandboxed; agent access to controller memory/environ, broker socket paths and inherited descriptors (macOS close-on-exec window when another session starts its broker).
-- [ ] Production revocation trigger (today a run ends with the controller process; PF-23-S03 can call `revoke_brokered_credentials`).
-- [ ] Known limits with the flag on: a dead broker is not restarted until a new session starts its proxy; only GET/HEAD/POST/PUT/PATCH/DELETE and paths up to 1,024 bytes are brokered; private-IP GitHub Enterprise hosts need `allow_local_binding`; uploads longer than 5 minutes are cut off and an unread response holds a broker slot.
+- [x] Every open item moved out on 2026-10-06; see the closure table above.
 
 ## Verification
-- [ ] Apply [independent isolated execution](../../../../qa/code-blind-functional/isolated-execution.md) to affected functional handoff; record schema-2 proof or integrator-accepted internal-only N/A and later gate. Historical tests are not upgraded.
-- [ ] Run `cd codex-rs && just fix -p <affected-crate>` for each listed crate, then `just fmt`; inspect the final diff.
-- [ ] Focused: `cd codex-rs && just test -p codex-secret-broker pf_27_s01 && just test -p codex-core pf_27_s01`; confirm tests actually ran.
-- [ ] Integration: full affected crate suites via `just test -p <affected-crate>`; update Bazel locks when manifests change.
-- [ ] TUI applicability: none; integration flows are re-run by PF-26-S02
-- [ ] Record candidate/commit, commands, expected/actual outcomes and safe artifact digests; no production credentials or funds.
+- [x] Independent isolated execution: not a per-sprint gate under decision 5; it runs at the "Aggressive ships", "Moderate ships" and flag-removal milestones.
+- [x] `just fix` and `just fmt` on the touched crates (evidence README).
+- [x] Focused: `just test -p codex-secret-broker pf_27_s01` (24) and `just test -p codex-core pf_27_s01` (2); both ran.
+- [x] Integration: affected crates 334 passed, related Core 88 passed; Cargo lock updated in PR #180.
+- [x] TUI applicability: none; the GLM 5.2 tmux run covers the agent-visible behaviour.
+- [x] Candidate, commands, expected/actual outcomes and recording digests recorded in the evidence README; synthetic credentials only.
 
 ## Exit evidence
-- [ ] Implementation commit and final-tree outputs under `qa/security-levels/sprints/PF-27-S04/`.
-- [ ] Acceptance and source-mapping assertions proven; applicable true-TUI keys/checkpoints captured after formatting.
-- [ ] PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
-- [ ] Done/Remaining reflect reality; completed record moved to the archive and plan/navigation updated.
+- [x] Implementation commit `cf852aa347` / merge `13cf4a2d0c`; outputs under `qa/security-levels/sprints/PF-27-S04/isolated-broker-20261006/`.
+- [x] Acceptance shown by the tmux cases V0-V3 and three SOP videos (`qa/demos/index/PF-27-S04.md`).
+- [x] PF-26 final qualification moved to the P1 hardening plan (decision 3); no release-complete claim here.
+- [x] Done/Remaining reflect reality; record archived and the plan/index updated.

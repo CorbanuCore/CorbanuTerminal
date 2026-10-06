@@ -704,3 +704,42 @@ fn pf_27_s04_isolated_route_never_injects_raw_auth_and_supports_fresh_dispatches
         Err(IsolatedCredentialDispatchError::Denied)
     );
 }
+
+const PF27_S02_CORE_TOKEN: &str = "ghp_pf27s02CoreEnvironmentCanary00000000000";
+
+fn pf27_s02_core_env(key: &str) -> Option<String> {
+    (key == "GITHUB_TOKEN").then(|| PF27_S02_CORE_TOKEN.to_string())
+}
+
+#[test]
+fn pf_27_s02_stripped_child_env_still_gets_a_brokered_dummy() {
+    let broker = CredentialBroker::new(/*enabled*/ true)
+        .with_process_env_lookup(Some(pf27_s02_core_env as ProcessEnvLookup));
+    // The launch allowlist removed GITHUB_TOKEN before the proxy saw the env.
+    let mut env = env_map([("PATH", "/usr/bin")]);
+    broker.virtualize_child_env(&mut env);
+
+    let dummy = env.get("GITHUB_TOKEN").expect("dummy inserted").clone();
+    assert_credential_shape(PF27_S02_CORE_TOKEN, &dummy, "ghp_");
+    assert!(env.values().all(|value| value != PF27_S02_CORE_TOKEN));
+
+    // A request carrying the dummy is authorized with Core's value.
+    let mut headers = headers_with_bearer(&dummy);
+    broker.inject_request_headers("api.github.com", &mut headers);
+    assert_eq!(
+        authorization(&headers),
+        Some(format!("Bearer {PF27_S02_CORE_TOKEN}").as_str())
+    );
+
+    // Re-applying to the same env keeps the same dummy.
+    broker.virtualize_child_env(&mut env);
+    assert_eq!(env.get("GITHUB_TOKEN"), Some(&dummy));
+}
+
+#[test]
+fn pf_27_s02_without_secretless_launch_the_child_env_is_the_only_source() {
+    let broker = CredentialBroker::new(/*enabled*/ true);
+    let mut env = env_map([("PATH", "/usr/bin")]);
+    broker.virtualize_child_env(&mut env);
+    assert_eq!(env.get("GITHUB_TOKEN"), None);
+}
