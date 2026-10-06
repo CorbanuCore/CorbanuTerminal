@@ -321,11 +321,15 @@ fn verify_vault(config: &Config, rules_present: bool, failures: &mut Vec<String>
         "AWS_SECRET",
     ]
     .map(|name| (name.to_string(), "x".to_string()));
-    let leaked = create_env_from_vars(probe, &config.permissions.shell_environment_policy, None)
-        .into_iter()
-        .filter(|(name, value)| is_secret_name(name) && !value.is_empty())
-        .map(|(name, _)| name)
-        .collect::<Vec<_>>();
+    let leaked = create_env_from_vars(
+        probe,
+        &config.permissions.shell_environment_policy,
+        /*thread_id*/ None,
+    )
+    .into_iter()
+    .filter(|(name, value)| is_secret_name(name) && !value.is_empty())
+    .map(|(name, _)| name)
+    .collect::<Vec<_>>();
     if !leaked.is_empty() {
         failures.push(format!("Vault: environment keeps {}", leaked.join(", ")));
     }
