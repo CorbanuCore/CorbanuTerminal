@@ -887,12 +887,18 @@ impl SessionIo {
     }
 
     pub(crate) async fn next_event(&self) -> CodexResult<Event> {
-        let event = self
-            .rx_event
-            .recv()
-            .await
-            .map_err(|_| CodexErr::InternalAgentDied)?;
-        Ok(event)
+        loop {
+            let event = self
+                .rx_event
+                .recv()
+                .await
+                .map_err(|_| CodexErr::InternalAgentDied)?;
+            // PF-28-S01: one choke point for every producer, including those
+            // holding a cloned sender (MCP startup, elicitation).
+            if let Some(msg) = crate::security::disclosure_gate::gate_delivered(event.msg) {
+                return Ok(Event { id: event.id, msg });
+            }
+        }
     }
 
     pub(crate) async fn agent_status(&self) -> AgentStatus {
@@ -2099,6 +2105,13 @@ impl Session {
 
     /// Persist the event to rollout and send it to clients.
     pub(crate) async fn send_event(&self, turn_context: &TurnContext, msg: EventMsg) {
+        // PF-28-S01: gate before traces, rollout, realtime mirroring and clients.
+        for msg in crate::security::disclosure_gate::gate_event(&turn_context.sub_id, msg) {
+            self.send_gated_event(turn_context, msg).await;
+        }
+    }
+
+    async fn send_gated_event(&self, turn_context: &TurnContext, msg: EventMsg) {
         let legacy_source = msg.clone();
         if let EventMsg::Error(error) = &legacy_source
             && error
@@ -2350,6 +2363,11 @@ impl Session {
     }
 
     async fn send_event_raw_with_persistence(&self, event: Event, persist: bool) {
+        let mut event = event;
+        match crate::security::disclosure_gate::gate_presented(event.msg) {
+            Some(msg) => event.msg = msg,
+            None => return,
+        }
         // Persist the event into rollout storage; the store applies its persistence policy.
         if persist {
             let rollout_items = vec![RolloutItem::EventMsg(event.msg.clone())];
@@ -3272,7 +3290,13 @@ impl Session {
         origin: Option<crate::security::ingress::MessageOrigin>,
     ) {
         let items = self.prepare_conversation_items_for_history(turn_context, items);
-        let items = items.as_ref();
+        // PF-28-S01: tool results and model output are gated before history,
+        // rollout and clients see them.
+        let gated = crate::security::disclosure_gate::gate_values(
+            codex_secret_broker::output_gate::OutputSink::ToolResult,
+            items.as_ref(),
+        );
+        let items = gated.as_deref().unwrap_or(items.as_ref());
         if let Some(origin) = origin {
             self.services
                 .model_client()
@@ -4125,6 +4149,11 @@ impl Session {
 
     #[tracing::instrument(level = "trace", skip_all, fields(item_count = items.len()))]
     pub(crate) async fn persist_rollout_items(&self, items: &[RolloutItem]) {
+        let gated = crate::security::disclosure_gate::gate_values(
+            codex_secret_broker::output_gate::OutputSink::Transcript,
+            items,
+        );
+        let items = gated.as_deref().unwrap_or(items);
         if let Some(live_thread) = self.live_thread()
             && let Err(e) = live_thread.append_items(items).await
         {

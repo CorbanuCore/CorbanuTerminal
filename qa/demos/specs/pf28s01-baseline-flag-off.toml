@@ -1,0 +1,67 @@
+# PF-28-S01 control run with the gate off. Pass the synthetic canary with
+# --credential PF28_CANARY_API_KEY=file:<canary file>. The canary line sits in the
+# collapsed middle of the output so the recording itself stays clean.
+id = "pf28s01-baseline-flag-off"
+feature = "Control: with secret_output_gate off, the transcript and logs store the secret"
+expected = "Same command with the flag off: profile and log files now hold the canary, and the transcript has no redaction marker."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"show.sh" = '''
+for i in 1 2 3 4 5 6; do echo "filler line $i"; done
+echo "canary: $PF28_CANARY_API_KEY"
+for i in 7 8 9 10 11 12; do echo "filler line $i"; done
+'''
+"count.sh" = '''
+files=$(grep -rlF "$PF28_CANARY_API_KEY" ../home ../logs 2>/dev/null | wc -l | tr -d ' ')
+markers=$(grep -rhoF 'REDACTED:env:PF28_CANARY_API_KEY' ../home/sessions 2>/dev/null | wc -l | tr -d ' ')
+echo "files holding the canary: $files; markers in the transcript: $markers"
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run sh show.sh and reply with only the word done."
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "filler line 12"
+timeout = 180
+compress = 3
+
+[[steps]]
+wait = "›"
+timeout = 120
+compress = 2
+
+[[steps]]
+pause = 2.0
+
+[[steps]]
+type = "!sh count.sh"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "files holding the canary: [1-9]\\d*; markers in the transcript: 0"
+
+[[steps]]
+pause = 4.0

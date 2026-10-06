@@ -5,13 +5,16 @@ status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-28"
 execution_order: 30
-owner: "Jim Ricketts"
-worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
-branch: "feat/p0-security-levels"
-base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
+owner: "broker lane worker (codex, 2026-10-06)"
+parallel_lane: "broker"
+write_scope: "codex-rs/secret-broker/src/output_gate.rs, codex-rs/secret-broker/src/output_gate_tests.rs, codex-rs/secret-broker/src/lib.rs, codex-rs/secret-broker/Cargo.toml, codex-rs/core/src/security/disclosure_gate.rs, codex-rs/core/src/security/disclosure_gate_tests.rs, codex-rs/core/src/security/mod.rs, codex-rs/core/src/client.rs, codex-rs/core/src/exec.rs, codex-rs/core/src/session/mod.rs, codex-rs/core/src/session/session.rs, codex-rs/login/src/auth/storage_gate.rs, codex-rs/login/src/auth/storage.rs, codex-rs/login/Cargo.toml, codex-rs/vault/src/lib.rs, codex-rs/vault/src/tests.rs, codex-rs/otel/src/events/session_telemetry.rs, codex-rs/otel/Cargo.toml, codex-rs/feedback/, codex-rs/message-history/, codex-rs/state/src/log_db.rs, codex-rs/state/Cargo.toml, codex-rs/tui/src/gated_log_writer.rs, codex-rs/tui/src/lib.rs, codex-rs/tui/Cargo.toml, codex-rs/Cargo.lock, qa/security-levels/sprints/PF-28-S01/, qa/demos/specs/pf28s01-tool-output-gated.toml, qa/demos/specs/pf28s01-split-output.toml, qa/demos/specs/pf28s01-persistence-clean.toml, qa/demos/specs/pf28s01-baseline-flag-off.toml, qa/demos/index/PF-28-S01.md, docs/sprints/current/p0-security-levels/pf-28-s01-central-secret-output-gate.md"
+integration_gate: "PR to main under the per-sprint gate (sec-common decision 5); merged behind secret_output_gate. Shared files kept to small hunks: the flag in codex-rs/features/src/lib.rs and codex-rs/core/config.schema.json, and one hunk in codex-rs/core/src/config/mod.rs (arm, snapshot off, warning)."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf28-s01-secret-gate-20261006"
+branch: "feat/pf28-s01-secret-gate-20261006"
+base_commit: "699bd4a82f78c5967de7daf4314d4d426b464260"
 depends_on: "PF-27-S02"
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-10-06
 ---
 
 # PF-28-S01 — Central secret and protected-output gate
@@ -39,38 +42,40 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] Active plan; PF-27-S02 completed and archived.
-- [ ] Read root and nearest implementation-path AGENTS.md; verify exact plan/worktree coordinates.
-- [ ] Confirm source pins, declared crate/module paths, and backend/API availability; unresolved security prerequisites block readiness.
+- [x] Active plan; PF-27-S02 merged behind its flag (#191). It is not archived yet (two open decisions), so this record stays `draft` until it is; the code merged behind `secret_output_gate`.
+- [x] Read root and nearest implementation-path AGENTS.md; plan/worktree coordinates verified.
+- [x] Source pins, crate/module paths and backend/API availability confirmed.
 
 ## Done
 
-- [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
+- [x] New single-feature record reconciled with current ownership and archived design input.
+- [x] Typed output classes and one registry of active values in `secret-broker/src/output_gate.rs`, inside Core's process. Agent processes never get raw values (PF-27-S02).
+- [x] Exact values, JSON, percent, base64 (all alignments, both alphabets) and hex. Covers short values (whole-word, 3 to 5 bytes), overlapping and repeated values, chunk splits, rotation with leases, per-owner retirement, and more than 512 representations. Capacity exhaustion denies without evicting; oversized payloads are withheld.
+- [x] Gated sinks: model requests (turns, compaction), recorded history, rollout transcript, client events (at `send_event` and again at delivery), errors, tool and prompt telemetry, TUI log, feedback, log database and prompt history. Rollout traces and shell snapshots are off while armed.
+- [x] Sign-in tokens are registered on load and save (login, refresh, keyring), and vault values on reveal; a value that cannot be protected is not released. Seed phrases (also any three consecutive words) and private keys withhold the whole payload. Seeding skips ordinary settings.
+- [x] Named `pf_28_s01` tests (38) in secret-broker, core, vault and login; Cargo lock updated.
+- [x] GLM 5.2 TUI runs and four SOP videos; Opus 5.5 High review rounds dispositioned. [Evidence](../../../../qa/security-levels/sprints/PF-28-S01/README.md).
 
 ## Remaining
 
-- [ ] Trace every diagnostic/request-capture adapter to its final sink; test short secrets, capacity exhaustion and concurrent rotation. Retain all active managed values through their response lifetime or deny safely; registry eviction cannot make an in-flight secret unprotected.
-
-- [ ] Add short values below six characters, more than 512 distinct representations, repeated/encoded values and split-output chunks to canary tests. Protected sinks remove the whole credential, not a diagnostic prefix/suffix; capacity exhaustion must fail safely without evicting live protection.
-
-- [ ] Define typed output classes and a single broker-side registry for active secret values; never copy raw registry values into the agent process.
-- [ ] Cover exact values, URI/JSON/base64 encodings and bounded pattern matches; include short credentials, overlapping matches, chunk boundaries and rotation; capacity exhaustion denies rather than evicting live protection.
-- [ ] Gate model requests/responses, tool results, transcript, traces, errors, audit, snapshots, exports and diagnostic artifacts before persistence or presentation; attach provenance to safe output.
-- [ ] Keep operational credentials/seeds/private keys permanently non-disclosable in protected modes; protected financial values require a separately authorized derived view, not string redaction alone.
-- [ ] Add sentinel canaries for every sink, structured/streamed/error output and concurrency; unknown encoding or oversized payload receives bounded denial, not a claimed universal detector guarantee.
-- [ ] Add named `pf_28_s01` regression tests; update affected Cargo/Bazel/lock/schema edges together without broadening this feature.
+- [ ] Wrapped base64/hex and other decode-and-rescan cases, and reflected values in responses: PF-28-S02.
+- [ ] Register MCP OAuth tokens refreshed after start (rmcp-client store).
+- [ ] Withhold seed phrases written comma-separated or numbered; registering a derived view for financial values is still open.
+- [ ] Scrub known text fields per type instead of a serde round trip (`success` is lost on rebuilt tool outputs).
+- [ ] Performance under load: per-session stream state instead of one global mutex; recompiling outside the state lock; fewer repeat scans per event.
 
 ## Verification
 
-- [ ] Run `cd codex-rs && just fix -p <affected-crate>` for each listed crate, then `just fmt`; inspect the final diff.
-- [ ] Focused: `cd codex-rs && just test -p codex-secret-broker pf_28_s01 && just test -p codex-core pf_28_s01 && just test -p codex-secrets pf_28_s01`; confirm tests actually ran.
-- [ ] Integration: full affected crate suites via `just test -p <affected-crate>`; update Bazel locks when manifests change.
-- [ ] TUI applicability: none; integration flows are re-run by PF-26-S02
-- [ ] Record candidate/commit, commands, expected/actual outcomes and safe artifact digests; no production credentials or funds.
+- [x] `just fix -p` on every touched crate, then `just fmt`; final diff inspected.
+- [x] Focused: `just test -p codex-secret-broker -p codex-vault -p codex-login -p codex-otel -p codex-core -E 'test(pf_28_s01)'`: 38 passed. (`codex-secrets` gained no tests: its sanitizer is not used by the gate.)
+- [x] Integration: affected crate suites; results in the evidence README.
+- [x] TUI applicability: four GLM 5.2 runs recorded as SOP videos ([index](../../../../qa/demos/index/PF-28-S01.md)).
+- [x] Candidate, commands and outcomes recorded; synthetic canaries only.
+- [ ] Milestone qualification (isolated code-blind VM run, human sign-off) when Moderate ships.
 
 ## Exit evidence
 
-- [ ] Implementation commit and final-tree outputs under `qa/security-levels/sprints/PF-28-S01/`.
-- [ ] Acceptance and source-mapping assertions proven; applicable true-TUI keys/checkpoints captured after formatting.
+- [x] Implementation commits and outputs under `qa/security-levels/sprints/PF-28-S01/`.
+- [x] One independent Opus 5.5 High review, run in rounds until approved, dispositioned.
 - [ ] PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
-- [ ] Done/Remaining reflect reality; completed record moved to the archive and plan/navigation updated.
+- [ ] Done/Remaining reflect reality; record archived when Remaining is empty or moved.

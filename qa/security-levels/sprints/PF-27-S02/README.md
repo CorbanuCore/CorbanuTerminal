@@ -72,6 +72,26 @@ fixture from PF-27-S04 (`127.0.0.1.nip.io:8443`, real token sha `946ae98e9fbe`) 
 | Run under `danger-full-access` | runs | `Protected launch refused: this command would run outside the OS sandbox …` |
 | Reach `auth.json` through file tools | n/a | refused (GLM reported no bytes read) |
 
+## Linux end-to-end (Landlock host)
+
+October 6, merge commit `699bd4a82f` built on the RTX box (Ubuntu, kernel 7.0.0, LSMs include `landlock`), debug
+build, disposable homes. Same fixture and canary as the macOS runs; driver `linux-e2e/launch.sh`, pane captures in
+`linux-e2e/`. Both cases also run `isolated_credential_broker`.
+
+| Case | Flag off | Flag on |
+| --- | --- | --- |
+| Credential-looking variables in the agent | `GH_ENTERPRISE_TOKEN` (dummy), `PF27_CANARY_API_KEY`, `ZAI_API_KEY` | `GH_ENTERPRISE_TOKEN` only, a dummy |
+| Brokered request | `authorized: true`, server saw `946ae98e9fbe` | `authorized: true`, server saw `946ae98e9fbe` |
+| Read `auth.json`, `secrets/`, `.env`, `config.toml`, shell snapshots | ALLOWED | denied |
+| Same-user host read of Core's `/proc/<pid>/environ` | ALLOWED | denied (root-owned: Core is non-dumpable) |
+| Broker containment | `landlock+seccomp`, socket dir in `/tmp` | `landlock+seccomp`, owner-only `CODEX_HOME/run/cbk-*` holding only `b.sock` |
+| Run under `danger-full-access` | not run | `Protected launch refused: this command would run outside the OS sandbox …` |
+
+`cargo test -p codex-process-hardening -p codex-network-proxy -p codex-protocol pf_27` on the same host: all passed
+(19 + 4 + 4), including `pf_27_s02_contained_broker_cannot_exec_or_write_outside_its_dir`, which asserts
+`mechanism=landlock+seccomp exec=denied inside=ok outside=denied` on a Landlock kernel (`linux-e2e/linux-tests.txt`).
+The checkout, build output and key file were removed from the host afterwards.
+
 ## Videos (SOP, `qa/demos/index/PF-27-S02.md`)
 
 1. `pf27s02-secretless-env`: the agent sees only a dummy, and the broker still authorizes.
@@ -111,4 +131,4 @@ requirement change only with `secretless_agent_launch`.
 - Linux Landlock is best effort; seccomp is required. `/security` does not show the broker's containment yet (PF-41).
 - In-process file tools refused by the contract fail with a plain permission error, without the stated reason.
 - Brokered OpenAI keys are not sourced under the flag (provider keys are never passed to agents).
-- Windows: PF-27-S06. Linux end-to-end agent run: Remaining (Docker Desktop VM ran out of disk building Core).
+- Windows: PF-27-S06.

@@ -831,7 +831,10 @@ impl Session {
                 approval_policy: session_configuration.approval_policy.value().to_string(),
                 sandbox_policy: format!("{:?}", session_configuration.sandbox_policy()),
             };
-            let rollout_thread_trace = if matches!(
+            let rollout_thread_trace = if crate::security::disclosure_gate::active().is_some() {
+                // PF-28-S01: rollout traces record raw tool and model output.
+                ThreadTraceContext::disabled()
+            } else if matches!(
                 session_configuration.session_source,
                 SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. })
             ) {
