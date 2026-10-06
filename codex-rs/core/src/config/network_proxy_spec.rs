@@ -87,6 +87,12 @@ impl NetworkProxySpec {
         self.config.enable_socks5
     }
 
+    /// True when brokered provider credentials live in the separate broker
+    /// process instead of this process (PF-27-S04).
+    pub fn isolated_credential_broker_enabled(&self) -> bool {
+        self.config.credential_broker && self.config.isolated_credential_broker
+    }
+
     #[cfg(any(target_os = "windows", test))]
     pub(crate) fn configured_proxy_ports(&self) -> std::io::Result<Vec<u16>> {
         managed_proxy_ports(&self.config).map_err(std::io::Error::other)

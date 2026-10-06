@@ -60,8 +60,11 @@ pub(crate) async fn spawn_child_async(request: SpawnChildRequest<'_>) -> std::io
         mut env,
     } = request;
 
+    // Log variable names only: values can hold credentials (PF-27-S04 demo finding).
+    let mut env_keys = env.keys().collect::<Vec<_>>();
+    env_keys.sort();
     trace!(
-        "spawn_child_async: {program:?} {args:?} {arg0:?} {cwd:?} {network_sandbox_policy:?} {stdio_policy:?} {env:?}"
+        "spawn_child_async: {program:?} {args:?} {arg0:?} {cwd:?} {network_sandbox_policy:?} {stdio_policy:?} env_keys={env_keys:?}"
     );
 
     let mut cmd = Command::new(&program);
