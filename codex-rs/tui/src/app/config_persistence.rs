@@ -175,6 +175,10 @@ impl App {
         app_server: &mut AppServerSession,
         selection: PermissionProfileSelection,
     ) -> bool {
+        if let Some(reason) = crate::security::level::permission_change_block_reason() {
+            self.chat_widget.add_error_message(reason);
+            return false;
+        }
         let PermissionProfileSelection {
             profile_id,
             approval_policy,

@@ -1,0 +1,21 @@
+---
+source: tui/src/bottom_pane/security_level_picker_tests.rs
+assertion_line: 78
+expression: "render(&picker, 80)"
+---
+Switch to Aggressive?
+These settings replace yours for every session and child agent:
+• Sandbox: write only in the current folder: no extra writable folders, no /tmp
+or $TMPDIR; approved commands stay inside it too
+• Approvals: untrusted: you approve every command that is not known read-only
+(reviewer: you, never auto-review)
+• Network: off for agent commands; web search off
+• Vault: agent commands running `corbanu vault …` are refused; the vault store
+is unreadable; secret-like environment variables (KEY, SECRET, TOKEN, VAULT,
+PASSWORD, PASSPHRASE, CREDENTIAL) are removed
+• Child agents: spawned agents get the same values
+Unchanged: model and provider, MCP servers and apps, wallet scopes, and commands
+you have already allowed permanently.
+Takes effect when you restart Corbanu Terminal; this session keeps its current
+settings until then. Your config.toml is not modified.
+enter confirm and save · esc back, nothing changes

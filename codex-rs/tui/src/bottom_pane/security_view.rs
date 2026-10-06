@@ -1,4 +1,6 @@
 //! Observation-only profile exploration: no sender, persistence or authority API.
+//! With the `security_levels` flag (or a stored non-Permissive level) the view
+//! delegates to the human-only [`SecurityLevelPicker`].
 
 use codex_protocol::security::SecurityLevel;
 use crossterm::event::KeyCode;
@@ -23,6 +25,7 @@ use crate::security::view::requested_summary;
 use super::CancellationEvent;
 use super::bottom_pane_view::BottomPaneView;
 use super::bottom_pane_view::ViewCompletion;
+use super::security_level_picker::SecurityLevelPicker;
 
 pub(crate) struct SecurityView {
     requested: Option<SecurityLevel>,
@@ -30,6 +33,7 @@ pub(crate) struct SecurityView {
     keymap: ListKeymap,
     cancelled: bool,
     inspected: bool,
+    picker: Option<SecurityLevelPicker>,
 }
 
 impl SecurityView {
@@ -40,6 +44,9 @@ impl SecurityView {
                 .iter()
                 .position(|level| Some(*level) == requested)
                 .unwrap_or(0),
+            picker: crate::security::level::context()
+                .filter(|context| context.picker_enabled)
+                .map(|context| SecurityLevelPicker::new(context, keymap.clone())),
             keymap,
             cancelled: false,
             inspected: false,
@@ -107,8 +114,29 @@ impl SecurityView {
     }
 }
 
+impl SecurityView {
+    fn body(&self, width: u16) -> Vec<Line<'static>> {
+        match &self.picker {
+            Some(picker) => picker.lines(width),
+            None => self.lines(width),
+        }
+    }
+
+    fn footer_text(&self) -> String {
+        match &self.picker {
+            Some(picker) => picker.footer(),
+            None => self.footer(),
+        }
+    }
+}
+
 impl BottomPaneView for SecurityView {
     fn handle_key_event(&mut self, key: KeyEvent) {
+        if let Some(picker) = self.picker.as_mut() {
+            picker.handle_key_event(key);
+            self.cancelled = picker.closed;
+            return;
+        }
         if key_hint::plain(KeyCode::Esc).is_press(key) || self.keymap.cancel.is_pressed(key) {
             self.cancelled = true;
         } else if self.keymap.move_up.is_pressed(key) {
@@ -142,14 +170,14 @@ impl BottomPaneView for SecurityView {
 
 impl Renderable for SecurityView {
     fn desired_height(&self, width: u16) -> u16 {
-        self.lines(width).len() as u16
-            + textwrap::wrap(&self.footer(), usize::from(width.max(1))).len() as u16
+        self.body(width).len() as u16
+            + textwrap::wrap(&self.footer_text(), usize::from(width.max(1))).len() as u16
             + 1
     }
 
     fn render(&self, area: Rect, buf: &mut Buffer) {
         Clear.render(area, buf);
-        let footer = self.footer();
+        let footer = self.footer_text();
         let footer_lines: Vec<Line> = textwrap::wrap(&footer, usize::from(area.width.max(1)))
             .into_iter()
             .map(|line| Line::from(line.into_owned()).dim())
@@ -159,7 +187,7 @@ impl Renderable for SecurityView {
             height: area.height.saturating_sub(footer_height),
             ..area
         };
-        Paragraph::new(self.lines(area.width)).render(body, buf);
+        Paragraph::new(self.body(area.width)).render(body, buf);
         Paragraph::new(footer_lines).render(
             Rect {
                 y: area.bottom().saturating_sub(footer_height),

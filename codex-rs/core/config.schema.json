@@ -691,6 +691,9 @@
             "secret_auth_storage": {
               "type": "boolean"
             },
+            "security_levels": {
+              "type": "boolean"
+            },
             "shell_snapshot": {
               "type": "boolean"
             },
@@ -5380,6 +5383,9 @@
           "type": "boolean"
         },
         "secret_auth_storage": {
+          "type": "boolean"
+        },
+        "security_levels": {
           "type": "boolean"
         },
         "shell_snapshot": {

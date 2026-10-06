@@ -1,17 +1,17 @@
 ---
 sprint_id: "PF-24-S03"
 title: "Flagged /security picker: Permissive and Aggressive"
-status: draft
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-24"
 execution_order: 20
-owner: "TUI lane worker (unassigned)"
+owner: "TUI lane worker (codex, 2026-10-06)"
 parallel_lane: "tui"
-write_scope: "UNALLOCATED"
-integration_gate: "UNALLOCATED"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+write_scope: "codex-rs/tui/src/security, codex-rs/tui/src/bottom_pane/security_view.rs, codex-rs/tui/src/bottom_pane/security_view_tests.rs, codex-rs/tui/src/bottom_pane/security_level_picker.rs, codex-rs/tui/src/bottom_pane/security_level_picker_tests.rs, codex-rs/tui/src/bottom_pane/snapshots, codex-rs/tui/src/bottom_pane/mod.rs, codex-rs/tui/src/app/permission_confirmation.rs, codex-rs/tui/src/app/config_persistence.rs, codex-rs/tui/src/lib.rs, codex-rs/features/src/lib.rs, codex-rs/core/config.schema.json, qa/security-levels/sprints/PF-24-S03"
+integration_gate: "PR to main, per-sprint gate (sec-common decision 5)"
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-24-s03-security-picker"
+branch: "codex/pf-24-s03-security-picker"
+base_commit: "24242c1b0ee5388cbfbfe1b0d8f63459945b588d"
 depends_on: "PF-24-S01"
 created: 2026-10-06
 updated: 2026-10-06

@@ -1,0 +1,11 @@
+---
+source: tui/src/bottom_pane/security_level_picker_tests.rs
+assertion_line: 128
+expression: "render(&picker, 80)"
+---
+Return to Permissive?
+Your own approval, sandbox, network, web search and environment settings from
+config apply again exactly as saved. The Aggressive vault rule file is removed.
+Takes effect when you restart Corbanu Terminal; this session stays Aggressive
+until then, and its pending approvals end with it.
+enter confirm and save · esc back, nothing changes

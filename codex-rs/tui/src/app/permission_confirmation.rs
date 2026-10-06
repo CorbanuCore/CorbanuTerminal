@@ -41,6 +41,10 @@ impl App {
         label: String,
         persist_reviewer: Option<ApprovalsReviewer>,
     ) {
+        if let Some(reason) = crate::security::level::permission_change_block_reason() {
+            self.chat_widget.add_error_message(reason);
+            return;
+        }
         if self.pending_permission_confirmation.is_some() {
             self.chat_widget.add_error_message("A permission selection is still pending. Wait for its result before choosing again.".into());
             return;

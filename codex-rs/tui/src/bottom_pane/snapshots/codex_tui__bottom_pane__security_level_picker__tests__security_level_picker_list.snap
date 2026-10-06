@@ -1,0 +1,15 @@
+---
+source: tui/src/bottom_pane/security_level_picker_tests.rs
+assertion_line: 72
+expression: "render(&picker, 80)"
+---
+Security level
+Active in this session: Permissive
+
+> Permissive  (active)
+  Moderate  not available yet
+  Aggressive
+
+Today's behaviour. Your approval, sandbox, network, vault and agent settings
+apply exactly as configured.
+↑/↓ move · enter choose · esc close

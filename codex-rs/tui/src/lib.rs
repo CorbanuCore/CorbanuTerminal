@@ -944,6 +944,12 @@ fn app_server_target_for_launch(
     }
 }
 
+#[allow(clippy::print_stderr)]
+fn exit_with_security_error(message: &str) -> ! {
+    eprintln!("{message}");
+    std::process::exit(1);
+}
+
 fn loader_overrides_are_default(loader_overrides: &LoaderOverrides) -> bool {
     let loader_overrides_are_default = loader_overrides.user_config_path.is_none()
         && loader_overrides.user_config_profile.is_none()
@@ -1006,7 +1012,7 @@ pub async fn run_main(
     let raw_overrides = cli.config_overrides.raw_overrides.clone();
     // `oss` model provider.
     let overrides_cli = codex_utils_cli::CliConfigOverrides { raw_overrides };
-    let cli_kv_overrides = match overrides_cli.parse_overrides() {
+    let mut cli_kv_overrides = match overrides_cli.parse_overrides() {
         // Parse `-c` overrides from the CLI.
         Ok(v) => v,
         #[allow(clippy::print_stderr)]
@@ -1025,6 +1031,9 @@ pub async fn run_main(
             std::process::exit(1);
         }
     };
+    let mut security_launch =
+        security::launch::LaunchPlan::prepare(&codex_home, &mut cli_kv_overrides)
+            .unwrap_or_else(|message| exit_with_security_error(&message));
 
     let mut launch_loader_overrides = loader_overrides.clone();
     if let Some(profile_v2) = cli.config_profile_v2.as_ref() {
@@ -1052,6 +1061,11 @@ pub async fn run_main(
         .cwd
         .clone()
         .filter(|_| app_server_target.uses_remote_workspace());
+    if let Err(message) =
+        security_launch.check_target(!matches!(app_server_target, AppServerTarget::Embedded))
+    {
+        exit_with_security_error(&message);
+    }
 
     let local_runtime_paths = ExecServerRuntimePaths::from_optional_paths(
         arg0_paths.codex_self_exe.clone(),
@@ -1087,6 +1101,10 @@ pub async fn run_main(
     )
     .await;
     let bootstrap_config_toml = &bootstrap_config.config_toml;
+    security_launch.extend_env_overrides(
+        &bootstrap_config_toml.shell_environment_policy,
+        &mut cli_kv_overrides,
+    );
 
     let chatgpt_base_url = bootstrap_config_toml
         .chatgpt_base_url
@@ -1184,7 +1202,7 @@ pub async fn run_main(
 
     let additional_dirs = cli.add_dir.clone();
 
-    let overrides = ConfigOverrides {
+    let mut overrides = ConfigOverrides {
         model,
         // Interactive startup must tolerate model/provider pairs persisted by
         // older releases. Preserve the configured provider and let its model
@@ -1204,8 +1222,9 @@ pub async fn run_main(
         additional_writable_roots: additional_dirs,
         ..Default::default()
     };
+    security_launch.apply_launch_overrides(&mut overrides);
 
-    let config = load_config_or_exit(
+    let mut config = load_config_or_exit(
         cli_kv_overrides.clone(),
         overrides.clone(),
         loader_overrides.clone(),
@@ -1213,6 +1232,9 @@ pub async fn run_main(
         strict_config,
     )
     .await;
+    if let Err(message) = security_launch.finish(&mut config) {
+        exit_with_security_error(&message);
+    }
 
     let cloud_config_bundle = cloud_config_bundle_loader_for_storage(
         config.codex_home.to_path_buf(),

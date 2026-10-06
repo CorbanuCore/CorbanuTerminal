@@ -268,6 +268,8 @@ pub enum Feature {
     UseAgentIdentity,
     /// Enable workspace dependency support.
     WorkspaceDependencies,
+    /// Let a human choose a `/security` level (Permissive or Aggressive).
+    SecurityLevels,
 
     // Removed
     /// Removed compatibility flag retained as a no-op so old configs can
@@ -1472,6 +1474,12 @@ pub const FEATURES: &[FeatureSpec] = &[
         key: "workspace_dependencies",
         stage: Stage::Stable,
         default_enabled: true,
+    },
+    FeatureSpec {
+        id: Feature::SecurityLevels,
+        key: "security_levels",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
     },
 ];
 
