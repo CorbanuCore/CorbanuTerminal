@@ -108,7 +108,11 @@ impl ApplyPatchRuntime {
                     attempt.sandbox != SandboxType::None,
                     cwd.as_path(),
                 ),
-                None => contract.file_tool_permissions(&permissions, false, Path::new("/")),
+                None => contract.file_tool_permissions(
+                    &permissions,
+                    /*sandboxed*/ false,
+                    Path::new("/"),
+                ),
             };
         }
         Some(FileSystemSandboxContext {

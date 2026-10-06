@@ -67,16 +67,28 @@ fn pf_27_s02_unsandboxed_and_unhardened_launches_are_refused() {
     let contract = &fixture.contract;
     if cfg!(any(target_os = "macos", target_os = "linux")) {
         assert_eq!(
-            contract.check_sandbox(SandboxType::None, /*sandbox_requested*/ false, false),
+            contract.check_sandbox(
+                SandboxType::None,
+                /*sandbox_requested*/ false,
+                /*exec_server*/ false
+            ),
             Err(LaunchDenied::Unsandboxed)
         );
         assert_eq!(
-            contract.check_sandbox(SandboxType::None, /*sandbox_requested*/ true, false),
+            contract.check_sandbox(
+                SandboxType::None,
+                /*sandbox_requested*/ true,
+                /*exec_server*/ false
+            ),
             Err(LaunchDenied::Unsandboxed)
         );
         // Remote environments build the child environment on their own host.
         assert_eq!(
-            contract.check_sandbox(SandboxType::None, /*sandbox_requested*/ true, true),
+            contract.check_sandbox(
+                SandboxType::None,
+                /*sandbox_requested*/ true,
+                /*exec_server*/ true
+            ),
             Err(LaunchDenied::RemoteEnvironment)
         );
         let unhardened = LaunchContract::capture(
@@ -85,12 +97,20 @@ fn pf_27_s02_unsandboxed_and_unhardened_launches_are_refused() {
             /*hardened*/ false,
         );
         assert_eq!(
-            unhardened.check_sandbox(SandboxType::MacosSeatbelt, true, false),
+            unhardened.check_sandbox(
+                SandboxType::MacosSeatbelt,
+                /*sandbox_requested*/ true,
+                /*exec_server*/ false
+            ),
             Err(LaunchDenied::ProcessHardening)
         );
     } else {
         assert_eq!(
-            contract.check_sandbox(SandboxType::WindowsRestrictedToken, true, false),
+            contract.check_sandbox(
+                SandboxType::WindowsRestrictedToken,
+                /*sandbox_requested*/ true,
+                /*exec_server*/ false
+            ),
             Err(LaunchDenied::UnsupportedPlatform)
         );
     }
