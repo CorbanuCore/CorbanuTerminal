@@ -158,3 +158,29 @@ fn provisioning_settings_are_empty_when_managed_network_is_disabled() {
         codex_windows_sandbox::WindowsSandboxProvisioningSettings::default()
     );
 }
+
+#[test]
+fn pf_33_s02_destination_guard_drops_local_binding_from_provisioning() {
+    let mut config = NetworkProxyConfig {
+        enabled: true,
+        proxy_url: "http://127.0.0.1:43128".to_string(),
+        enable_socks5: false,
+        allow_local_binding: true,
+        ..Default::default()
+    };
+    config.set_url_destination_policy(/*enabled*/ true);
+    let spec = crate::config::NetworkProxySpec::from_config_and_constraints(
+        config,
+        /*requirements*/ None,
+        &PermissionProfile::workspace_write(),
+    )
+    .expect("managed proxy config should resolve");
+
+    assert_eq!(
+        provisioning_settings(Some(&spec)).expect("provisioning settings should resolve"),
+        codex_windows_sandbox::WindowsSandboxProvisioningSettings {
+            proxy_ports: vec![43128],
+            allow_local_binding: false,
+        }
+    );
+}

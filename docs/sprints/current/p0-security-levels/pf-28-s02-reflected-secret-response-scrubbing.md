@@ -11,7 +11,7 @@ branch: "feat/p0-security-levels"
 base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
 depends_on: "PF-28-S01"
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-10-06
 ---
 
 # PF-28-S02 — Reflected-secret response scrubbing
@@ -58,6 +58,8 @@ updated: 2026-08-28
 - [ ] Reject unsupported content encodings, redirects carrying auth, malformed/oversized frames, and TLS-pinned blind tunnels requiring secrets; do not return raw response bytes on failure.
 - [ ] Test a permitted-host fake provider deliberately reflecting each active credential; scan downstream model payloads, logs, artifacts and reconnect output.
 - [ ] Prove timeout/revoke/rotation clears buffers and kills old streams without reusing stale auth; run Permissive compatibility regressions.
+- [ ] Bind legacy brokered credentials to exact host, port, method and path in `credential_broker.rs` (moved from
+  PF-33-S01 by the coordinator, 2026-10-06; the scoped OpenAI route already does, legacy routes bind host only).
 - [ ] Add named `pf_28_s02` regression tests; update affected Cargo/Bazel/lock/schema edges together without broadening this feature.
 - [ ] Output-gate carry-overs from [PF-28-S01](../../archive/p0-security-levels/pf-28-s01-central-secret-output-gate.md) (2026-10-06): decode and rescan wrapped base64/hex; register MCP OAuth tokens refreshed after start; withhold comma-separated or numbered seed phrases; scrub known text fields per type instead of a serde round trip; per-session stream state and fewer rescans under load.
 

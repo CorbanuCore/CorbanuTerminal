@@ -599,6 +599,25 @@ async fn http_plain_proxy(
             )
             .await);
         }
+        // PF-33-S02: under the destination guard the proxy is not a route to
+        // local daemons; Unix-socket grants do not apply.
+        match destination::guard_enabled(&app_state).await {
+            Ok(false) => {}
+            Ok(true) => {
+                let site = DenialSite {
+                    host: "unix-socket",
+                    port: 0,
+                    method: Some(req.method().as_str()),
+                    protocol: "http-unix-socket",
+                    client: client.clone(),
+                    fail_command: true,
+                };
+                return Ok(
+                    destination::blocked(&app_state, &DestinationDenial::UnixSocket, site).await,
+                );
+            }
+            Err(err) => return Ok(internal_error("failed to read destination policy", err)),
+        }
         if !method_allowed {
             emit_http_block_decision_audit_event(
                 &app_state,
@@ -1322,6 +1341,35 @@ mod tests {
             blocked[0].reason,
             "destination_policy:scheme_port_or_method"
         );
+    }
+
+    #[tokio::test]
+    async fn pf_33_s02_unix_socket_escape_hatch_is_refused_under_the_guard() {
+        let mut policy = NetworkProxyConfig {
+            dangerously_allow_all_unix_sockets: true,
+            ..NetworkProxyConfig::default()
+        };
+        policy.set_allow_unix_sockets(vec!["/tmp/pf-33-s02.sock".to_string()]);
+        policy.set_url_destination_policy(/*enabled*/ true);
+        let state = Arc::new(network_proxy_state_for_policy(policy));
+        let mut req = Request::builder()
+            .method(Method::GET)
+            .uri("http://localhost/containers/json")
+            .header("x-unix-socket", "/tmp/pf-33-s02.sock")
+            .body(Body::empty())
+            .unwrap();
+        req.extensions_mut().insert(state.clone());
+
+        let response = http_plain_proxy(
+            /*policy_decider*/ None, /*environment_id*/ None, req,
+        )
+        .await
+        .unwrap();
+
+        assert!(pf_33_s01_blocked_by_destination_policy(&response));
+        let blocked = state.blocked_snapshot().await.unwrap();
+        assert_eq!(blocked.len(), 1);
+        assert_eq!(blocked[0].reason, "destination_policy:unix_socket");
     }
 
     #[tokio::test]

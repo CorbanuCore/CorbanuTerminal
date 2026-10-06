@@ -54,7 +54,6 @@ proxy, and it needs PF-27-S02's containment before the broker is a real boundary
 - [ ] Route model-provider requests that use API keys through the broker; Core keeps references; no raw-key fallback when the broker is down.
 - [ ] Remove env-sourced provider keys from Core's process environment once the broker holds them, so unsandboxed same-user processes (MCP servers, hooks) cannot read them from Core's launch environment (the macOS limit PF-27-S02 records).
 - [ ] Resolve vault-label credentials inside the broker only; the agent and Core see labels and dummies.
-- [ ] Bind legacy per-host brokered credential adapters to exact host, port, method and path, as the scoped OpenAI route already does (from [PF-33-S01](../../archive/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md), 2026-10-06).
 - [ ] Decide streaming/websocket and token-refresh handling for ChatGPT sign-in; unsupported routes stay explicit.
 - [ ] Add `pf_27_s05` tests: broker-only key use, broker death fails closed, no raw key in Core memory dumps/logs.
 

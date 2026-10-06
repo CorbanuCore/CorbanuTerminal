@@ -45,6 +45,9 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-33-s01-20261006"
     branch: "feat/pf-33-s01-url-dns-redirect"
     base_commit: "a662c2ce357ee542fdac08ecaf083d27fd58391b"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-33-s02-20261006"
+    branch: "pf-33-s02-20261006"
+    base_commit: "39c1f06213da3f15ec41cdd673a09a98cbc7d027"
 ---
 
 # P0 `/security` levels

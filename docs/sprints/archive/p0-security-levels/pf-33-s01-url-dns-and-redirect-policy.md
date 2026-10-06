@@ -27,8 +27,8 @@ Completed under the per-sprint gate (sec-common decision 5): merged (PR #210) be
 
 | Carried forward | To |
 | --- | --- |
-| Bind legacy per-host credential adapters to exact host, port, method and path (`credential_broker.rs`) | [PF-27-S05](../../current/p0-security-levels/pf-27-s05-model-client-auth-broker.md) (broker lane) |
-| Local upstream proxies, connection pinning to the checked answers, in-process MITM test seam | [PF-33-S02](../../current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md) |
+| Bind legacy per-host credential adapters to exact host, port, method and path (`credential_broker.rs`) | [PF-28-S02](../../current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md) (broker lane; coordinator, 2026-10-06) |
+| Local upstream proxies, connection pinning to the checked answers, in-process MITM test seam | Done in [PF-33-S02](../../current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md) |
 | POST answered 301/302 refused; more than 16 answers refused; timed-out lookups not cancelled; redirects to runtime-only approved hosts refused | Documented behaviour; not scheduled |
 
 ## Execution mandate
