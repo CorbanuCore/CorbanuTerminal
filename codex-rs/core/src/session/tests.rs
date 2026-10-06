@@ -6263,7 +6263,7 @@ pub(crate) async fn make_session_and_context_with_provider_auth() -> ProviderAut
     (session, turn_context, codex_home)
 }
 
-async fn make_session_with_config(
+pub(crate) async fn make_session_with_config(
     mutator: impl FnOnce(&mut Config),
 ) -> anyhow::Result<Arc<Session>> {
     let (session, _rx_event) = make_session_with_config_and_rx(mutator).await?;

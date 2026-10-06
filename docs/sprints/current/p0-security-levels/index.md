@@ -8,7 +8,8 @@ core sprints may be reserved at once, one per lane, with disjoint `write_scope`.
 PF-83-S01 closed on 2026-10-06 and is [archived](../../archive/p0-security-levels/pf-83-s01-permission-confirmation.md);
 PF-30-S01 completed (PR #178) and is [archived](../../archive/p0-security-levels/pf-30-s01-typed-source-envelope.md);
 PF-24-S03 completed (PR #186) and is [archived](../../archive/p0-security-levels/pf-24-s03-flagged-security-picker.md);
-PF-30-S02 completed (PRs #190, #198) and is [archived](../../archive/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md).
+PF-30-S02 completed (PRs #190, #198) and is [archived](../../archive/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md);
+PF-30-S03 completed (PRs #204, #212) and is [archived](../../archive/p0-security-levels/pf-30-s03-post-taint-authority-checks.md).
 PF-27-S04 completed on 2026-10-06 and is [archived](../../archive/p0-security-levels/pf-27-s04-isolated-credential-broker.md);
 its open items moved to PF-27-S02, the new PF-27-S05 and PF-27-S06, and PF-23-S03.
 Deferred sprints moved to the [P1 hardening sprints](../p1-security-hardening/index.md).
@@ -23,8 +24,7 @@ Earlier allocation notes are in the [plan history](../../../plans/history/p0-sec
 | 33 | [PF-33-S02](pf-33-s02-connection-pinning-and-bypass.md) | Connection pinning and alternate-egress denial | first free | PF-33-S01 |
 | 35 | [PF-29-S01](pf-29-s01-protected-mode-inventory.md) | Protected-mode inventory and activation preflight | first free | PF-28-S02, PF-20-S02 |
 | 36 | [PF-29-S02](pf-29-s02-human-secret-migration.md) | Human-reviewed credential migration and recovery | first free | PF-29-S01, PF-24-S01 |
-| 39 | [PF-30-S03](pf-30-s03-post-taint-authority-checks.md) | Post-taint authority checks | untrusted content | PF-30-S02, PF-13-S05 |
-| 40 | [PF-23-S01](pf-23-s01-moderate-ingress-and-disclosure-enforcement.md) | Moderate ingress and disclosure enforcement | untrusted content | PF-13-S05, PF-22-S02, PF-30-S03 |
+| 40 | [PF-23-S01](pf-23-s01-moderate-ingress-and-disclosure-enforcement.md) | Moderate ingress and disclosure enforcement (next in the lane; takes PF-30-S03's moved items) | untrusted content | PF-13-S05, PF-22-S02, PF-30-S03 (archived) |
 | 41 | [PF-23-S02](pf-23-s02-aggressive-deny-and-grant-enforcement.md) | Aggressive deny and grant enforcement | untrusted content | PF-17-S01, PF-23-S01 |
 | 42 | [PF-23-S03](pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) | Downgrade, restart, and inheritance enforcement | untrusted content | PF-19-S02, PF-20-S02, PF-23-S02 |
 | 43 | [PF-24-S02](pf-24-s02-security-confirm-cancel-and-downgrade.md) | Security confirm, cancel, and downgrade | tui | PF-24-S03, PF-23-S03, PF-24-S01, PF-29-S02 |

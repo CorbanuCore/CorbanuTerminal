@@ -77,7 +77,7 @@ Nothing. Two items were moved to the sprints that own them:
 
 - Positive protected memory extraction (stage one under Moderate using labelled input) is new protected
   inference, not persistence: moved to [PF-23-S01](../../current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md).
-- Authority checks on tainted follow-on actions are [PF-30-S03](../../current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md).
+- Authority checks on tainted follow-on actions are [PF-30-S03](pf-30-s03-post-taint-authority-checks.md).
 
 ## Verification
 
