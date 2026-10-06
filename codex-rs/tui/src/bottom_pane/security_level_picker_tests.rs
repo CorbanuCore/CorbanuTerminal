@@ -158,12 +158,14 @@ fn return_to_permissive_while_aggressive_is_active() {
         "security_level_picker_saved_permissive_pending",
         render(&picker, 80)
     );
+    // The session is still Aggressive, so its vault rule file stays until the
+    // restart that activates Permissive (#203).
     assert_eq!(
         (
             level::load(home.path()),
             level::rules_path(home.path()).exists()
         ),
-        (StoredLevel::Chosen(ChosenLevel::Permissive), false)
+        (StoredLevel::Chosen(ChosenLevel::Permissive), true)
     );
 }
 
