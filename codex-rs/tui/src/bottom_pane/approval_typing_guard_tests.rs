@@ -1,91 +1,68 @@
 use super::*;
 use pretty_assertions::assert_eq;
 
-const SETTLE: Duration = SHORTCUT_SETTLE_DELAY;
-
 #[test]
-fn lone_decision_key_applies_after_quiet_period() {
-    let now = Instant::now();
+fn one_decision_key_arms_its_option_for_enter() {
     let mut guard = TypingGuard::default();
 
-    guard.on_text_key(Some(ShortcutTarget::Option(0)), now);
-
-    assert_eq!(guard.next_delay(now), Some(SETTLE));
-    assert_eq!(
-        guard.take_due(now + SETTLE - Duration::from_millis(1)),
-        None
-    );
-    assert_eq!(
-        guard.take_due(now + SETTLE),
-        Some(ShortcutTarget::Option(0))
-    );
-    assert!(!guard.is_engaged());
+    assert_eq!(guard.on_text_key(Some(1)), Some(1));
+    assert!(guard.allows_accept());
 }
 
 #[test]
-fn second_text_key_turns_a_held_key_into_typed_text() {
-    let now = Instant::now();
+fn second_character_is_typed_text_however_slowly_it_arrives() {
+    // "permissions": `p` is bound, `e` is not. Timing plays no part.
     let mut guard = TypingGuard::default();
 
-    // "permissions": `p` is bound, `e` is not.
-    guard.on_text_key(Some(ShortcutTarget::Option(1)), now);
-    guard.on_text_key(None, now + Duration::from_millis(5));
-
-    assert_eq!(guard.take_due(now + SETTLE * 4), None);
-    assert!(guard.typed_text());
+    assert_eq!(guard.on_text_key(Some(1)), Some(1));
+    assert_eq!(guard.on_text_key(/*option*/ None), None);
+    assert!(!guard.allows_accept());
     // Later decision keys stay text until the user navigates.
-    guard.on_text_key(Some(ShortcutTarget::Option(0)), now + SETTLE * 5);
-    assert_eq!(guard.take_due(now + SETTLE * 10), None);
+    assert_eq!(guard.on_text_key(Some(0)), None);
+    assert!(guard.typed_text());
+
+    guard.reset();
+    assert_eq!(guard.on_text_key(Some(0)), Some(0));
 }
 
 #[test]
-fn two_bound_keys_in_a_burst_are_typed_text() {
-    let now = Instant::now();
+fn two_decision_keys_are_typed_text() {
     let mut guard = TypingGuard::default();
 
-    guard.on_text_key(Some(ShortcutTarget::Option(0)), now);
-    guard.on_text_key(
-        Some(ShortcutTarget::Option(0)),
-        now + Duration::from_millis(1),
-    );
+    guard.on_text_key(Some(0));
+    assert_eq!(guard.on_text_key(Some(0)), None);
 
-    assert_eq!(guard.take_due(now + SETTLE * 2), None);
     assert!(guard.typed_text());
 }
 
 #[test]
 fn unbound_first_character_is_typed_text() {
-    let now = Instant::now();
     let mut guard = TypingGuard::default();
 
-    guard.on_text_key(/*target*/ None, now);
+    assert_eq!(guard.on_text_key(/*option*/ None), None);
 
-    assert!(guard.typed_text());
+    assert!(!guard.allows_accept());
 }
 
 #[test]
-fn enter_after_typed_text_is_blocked_until_reset() {
-    let now = Instant::now();
+fn editing_input_after_a_decision_key_blocks_enter() {
+    // `p` then Backspace, or a paste.
     let mut guard = TypingGuard::default();
 
-    assert!(!guard.blocks_accept());
-    guard.on_text_key(Some(ShortcutTarget::Option(0)), now);
-    // Enter right after a held key cancels it rather than confirming anything.
-    assert!(guard.blocks_accept());
-    assert_eq!(guard.take_due(now + SETTLE), None);
+    guard.on_text_key(Some(1));
+    guard.on_typed_input();
 
-    guard.reset();
-    assert!(!guard.blocks_accept());
+    assert!(!guard.allows_accept());
 }
 
 #[test]
-fn paste_is_typed_text() {
-    let now = Instant::now();
-    let mut guard = TypingGuard::default();
+fn request_change_disarms_but_keeps_typed_text() {
+    let mut armed = TypingGuard::default();
+    armed.on_text_key(Some(0));
+    armed.on_request_changed();
+    assert!(!armed.allows_accept());
 
-    guard.on_text_key(Some(ShortcutTarget::Cancel), now);
-    guard.on_paste();
-
-    assert_eq!(guard.take_due(now + SETTLE), None);
-    assert!(guard.blocks_accept());
+    let mut idle = TypingGuard::default();
+    idle.on_request_changed();
+    assert!(idle.is_idle());
 }

@@ -1859,10 +1859,9 @@ fn hook_event_label(event_name: codex_app_server_protocol::HookEventName) -> &'s
     }
 }
 
-/// Press an approval-prompt shortcut the way a person does: alone, then a
-/// pause long enough for the prompt to treat it as deliberate, not typed text.
+/// Answer an approval prompt with a decision key: the key highlights its
+/// option and Enter confirms it.
 pub(super) fn press_approval_shortcut(chat: &mut ChatWidget, key: char) {
     chat.handle_key_event(KeyEvent::new(KeyCode::Char(key), KeyModifiers::NONE));
-    std::thread::sleep(crate::bottom_pane::SHORTCUT_SETTLE_DELAY);
-    chat.pre_draw_tick();
+    chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 }

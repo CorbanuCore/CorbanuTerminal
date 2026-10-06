@@ -855,6 +855,16 @@ impl ListSelectionView {
         self.apply_filter();
     }
 
+    /// Highlight the row at `idx` without accepting it. Only meaningful for
+    /// lists without search, where row and item indices match.
+    pub(crate) fn highlight(&mut self, idx: usize) {
+        let len = self.visible_len();
+        if idx < len && !self.is_searchable {
+            self.state.selected_idx = Some(idx);
+            self.state.ensure_visible(len, Self::max_visible_rows(len));
+        }
+    }
+
     pub(crate) fn take_last_selected_index(&mut self) -> Option<usize> {
         self.last_selected_actual_idx.take()
     }

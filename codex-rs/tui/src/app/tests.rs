@@ -759,7 +759,7 @@ async fn enqueue_primary_thread_session_replays_buffered_approval_after_attach()
     ));
 
     app.handle_thread_event_now(event);
-    // Enter confirms the highlighted "Yes, proceed"; letter shortcuts settle on a timer.
+    // Enter confirms the highlighted "Yes, proceed".
     app.chat_widget
         .handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
@@ -827,7 +827,7 @@ async fn resolved_buffered_approval_does_not_become_actionable_after_drain() -> 
     ));
 
     app.handle_thread_event_now(event);
-    // Enter confirms the highlighted "Yes, proceed"; letter shortcuts settle on a timer.
+    // Enter confirms the highlighted "Yes, proceed".
     app.chat_widget
         .handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 

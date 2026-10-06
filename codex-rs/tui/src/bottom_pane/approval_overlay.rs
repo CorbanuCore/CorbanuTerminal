@@ -2,19 +2,19 @@
 //!
 //! This module converts agent approval requests (exec/apply-patch/MCP
 //! elicitation) into a list-selection view with action-specific options and
-//! shortcuts. It owns two important contracts:
+//! shortcuts. It owns three important contracts:
 //!
 //! 1. Selection always emits an explicit decision event back to the app.
 //! 2. MCP elicitation keeps `Esc` mapped to `Cancel`, even with custom
 //!    keybindings, so dismissal never silently becomes "continue without info".
+//! 3. Typed or pasted text never answers a request: a decision key only
+//!    highlights its option until Enter (see `approval_typing_guard`).
 //!
 //! This module does not evaluate whether an action is safe to run; it only
 //! presents choices and routes user decisions.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::time::Duration;
-use std::time::Instant;
 
 use crate::app::app_server_requests::ResolvedAppServerRequest;
 #[cfg(test)]
@@ -24,7 +24,6 @@ use crate::app_event_sender::AppEventSender;
 use crate::approval_events::ApprovalResponseDestination;
 use crate::bottom_pane::BottomPaneView;
 use crate::bottom_pane::CancellationEvent;
-use crate::bottom_pane::approval_typing_guard::ShortcutTarget;
 use crate::bottom_pane::approval_typing_guard::TypingGuard;
 use crate::bottom_pane::list_selection_view::ListSelectionView;
 use crate::bottom_pane::list_selection_view::SelectionItem;
@@ -237,7 +236,7 @@ impl ApprovalOverlay {
 
     fn set_current(&mut self, request: ApprovalRequest) {
         self.current_complete = false;
-        self.typing_guard.reset();
+        self.typing_guard.on_request_changed();
         let header = build_header(&request);
         let (options, params) = Self::build_options(
             &request,
@@ -610,80 +609,59 @@ impl ApprovalOverlay {
         .any(|bindings| bindings.is_pressed(key_event))
     }
 
-    /// Route a plain character. Characters never answer the prompt directly:
-    /// a decision key waits until [`TypingGuard`] confirms it was pressed
-    /// alone, and any other character marks the input as typed text.
-    fn handle_text_key(&mut self, key_event: KeyEvent, now: Instant) {
-        if !self.typing_guard.is_engaged() {
+    /// Route a plain character. Characters never answer the prompt: a decision
+    /// key highlights its option for Enter, and anything else is typed text.
+    fn handle_text_key(&mut self, key_event: KeyEvent) {
+        if self.typing_guard.is_idle() {
             if self.try_handle_view_shortcut(&key_event) {
                 return;
             }
-            if self.is_list_navigation(key_event) {
-                self.list.handle_key_event(key_event);
+            // A character cancel binding only declines, which is always safe.
+            if self.list_keymap.cancel.is_pressed(key_event) {
+                self.cancel_current_request();
                 return;
             }
         }
-        let target = if self.list_keymap.cancel.is_pressed(key_event) {
-            Some(ShortcutTarget::Cancel)
-        } else {
-            self.options
-                .iter()
-                .position(|opt| opt.shortcuts.iter().any(|s| s.is_press(key_event)))
-                .or_else(|| match key_event.code {
-                    KeyCode::Char(c) => c
-                        .to_digit(/*radix*/ 10)
-                        .and_then(|number| (number as usize).checked_sub(1))
-                        .filter(|idx| *idx < self.options.len()),
-                    _ => None,
-                })
-                .map(ShortcutTarget::Option)
-        };
-        self.typing_guard.on_text_key(target, now);
-    }
-
-    fn handle_key_event_at(&mut self, key_event: KeyEvent, now: Instant) {
-        if key_event.kind == KeyEventKind::Release {
-            return;
+        let option = self
+            .options
+            .iter()
+            .position(|opt| opt.shortcuts.iter().any(|s| s.is_press(key_event)))
+            .or_else(|| match key_event.code {
+                KeyCode::Char(c) => c
+                    .to_digit(/*radix*/ 10)
+                    .and_then(|number| (number as usize).checked_sub(1))
+                    .filter(|idx| *idx < self.options.len()),
+                _ => None,
+            });
+        if let Some(idx) = self.typing_guard.on_text_key(option) {
+            self.list.highlight(idx);
         }
-        if key_hint::is_plain_text_key_event(key_event) {
-            self.handle_text_key(key_event, now);
-            return;
-        }
-        if self.try_handle_shortcut(&key_event) {
-            return;
-        }
-        if self.list_keymap.accept.is_pressed(key_event) && self.typing_guard.blocks_accept() {
-            return;
-        }
-        if self.is_list_navigation(key_event) {
-            self.typing_guard.reset();
-        }
-        self.list.handle_key_event(key_event);
-        if let Some(idx) = self.list.take_last_selected_index() {
-            self.apply_selection(idx);
-        }
-    }
-
-    /// Apply a decision key once it has settled without further typing.
-    fn tick_at(&mut self, now: Instant) -> bool {
-        match self.typing_guard.take_due(now) {
-            Some(ShortcutTarget::Option(idx)) => self.apply_selection(idx),
-            Some(ShortcutTarget::Cancel) => self.cancel_current_request(),
-            None => return false,
-        }
-        true
     }
 
     fn typed_text_notice(&self, width: u16) -> Vec<Line<'static>> {
         if !self.typing_guard.typed_text() {
             return Vec::new();
         }
-        let text = "Typed text is not sent while this request is open. Use ↑/↓ and Enter to answer, \
-                    or Esc to cancel. Slash commands such as /permissions work after you answer.";
+        let label = |bindings: &[KeyBinding], fallback: &str| {
+            bindings
+                .iter()
+                .find(|binding| !matches!(binding.parts(), (KeyCode::Char(_), _)))
+                .map_or_else(|| fallback.to_string(), KeyBinding::display_label)
+        };
+        let keymap = &self.list_keymap;
+        let up = label(&keymap.move_up, "↑");
+        let down = label(&keymap.move_down, "↓");
+        let accept = label(&keymap.accept, "enter");
+        let cancel = label(&keymap.cancel, "esc");
+        let text = format!(
+            "Typed text is not sent while this request is open. Use {up}/{down} and {accept} \
+             to answer, or {cancel} to cancel. Slash commands such as /permissions work after \
+             you answer."
+        );
         let wrap_width = usize::from(width.saturating_sub(4)).max(1);
         std::iter::once(Line::from(""))
             .chain(
-                textwrap::wrap(text, wrap_width)
+                textwrap::wrap(&text, wrap_width)
                     .into_iter()
                     .map(|line| Line::from(vec!["  ".into(), line.into_owned().cyan()])),
             )
@@ -693,20 +671,40 @@ impl ApprovalOverlay {
 
 impl BottomPaneView for ApprovalOverlay {
     fn handle_key_event(&mut self, key_event: KeyEvent) {
-        self.handle_key_event_at(key_event, Instant::now());
+        if key_event.kind == KeyEventKind::Release {
+            return;
+        }
+        if self.list_keymap.accept.is_pressed(key_event) {
+            if self.typing_guard.allows_accept() {
+                self.typing_guard.reset();
+                self.list.handle_key_event(key_event);
+                if let Some(idx) = self.list.take_last_selected_index() {
+                    self.apply_selection(idx);
+                }
+            }
+            return;
+        }
+        if key_hint::is_plain_text_key_event(key_event) {
+            self.handle_text_key(key_event);
+            return;
+        }
+        if self.try_handle_shortcut(&key_event) {
+            return;
+        }
+        // Arrow, Page, Home and End keys are deliberate navigation. Chords
+        // such as Ctrl+N or Ctrl+J (a raw newline) and editing keys could be
+        // composer editing, so they count as typed text.
+        if self.is_list_navigation(key_event) && !key_hint::has_ctrl_or_alt(key_event.modifiers) {
+            self.typing_guard.reset();
+            self.list.handle_key_event(key_event);
+        } else {
+            self.typing_guard.on_typed_input();
+        }
     }
 
     fn handle_paste(&mut self, _pasted: String) -> bool {
-        self.typing_guard.on_paste();
+        self.typing_guard.on_typed_input();
         true
-    }
-
-    fn pre_draw_tick(&mut self, now: Instant) -> bool {
-        self.tick_at(now)
-    }
-
-    fn next_frame_delay(&self) -> Option<Duration> {
-        self.typing_guard.next_delay(Instant::now())
     }
 
     fn on_ctrl_c(&mut self) -> CancellationEvent {
@@ -1261,7 +1259,6 @@ fn elicitation_options(keymap: &ApprovalKeymap) -> Vec<ApprovalOption> {
 mod tests {
     use super::*;
     use crate::app_event::AppEvent;
-    use crate::bottom_pane::approval_typing_guard::SHORTCUT_SETTLE_DELAY;
     use codex_app_server_protocol::AdditionalFileSystemPermissions;
     use codex_app_server_protocol::AdditionalNetworkPermissions;
     use codex_app_server_protocol::ExecPolicyAmendment;
@@ -1279,11 +1276,10 @@ mod tests {
         AbsolutePathBuf::from_absolute_path(path).expect("absolute path")
     }
 
-    /// Press a decision key the way a person does: alone, then a pause.
-    fn press_alone(view: &mut ApprovalOverlay, code: KeyCode) {
-        let now = Instant::now();
-        view.handle_key_event_at(KeyEvent::new(code, KeyModifiers::NONE), now);
-        view.tick_at(now + SHORTCUT_SETTLE_DELAY);
+    /// Answer with a decision key: it highlights its option and Enter confirms.
+    fn press_and_confirm(view: &mut ApprovalOverlay, code: KeyCode) {
+        view.handle_key_event(KeyEvent::new(code, KeyModifiers::NONE));
+        view.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     }
 
     fn render_overlay_lines(view: &ApprovalOverlay, width: u16) -> String {
@@ -1430,7 +1426,7 @@ mod tests {
             keymap.list,
         );
 
-        press_alone(&mut view, KeyCode::Char('q'));
+        view.handle_key_event(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
 
         assert!(view.is_complete());
         let mut decision = None;
@@ -1461,7 +1457,7 @@ mod tests {
             keymap.list,
         );
 
-        press_alone(&mut view, KeyCode::Char('q'));
+        view.handle_key_event(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
 
         assert!(view.is_complete());
         let mut decision = None;
@@ -1484,7 +1480,7 @@ mod tests {
         let tx = AppEventSender::new(tx);
         let mut view = make_overlay(make_exec_request(), tx, Features::with_defaults());
         assert!(!view.is_complete());
-        press_alone(&mut view, KeyCode::Char('y'));
+        press_and_confirm(&mut view, KeyCode::Char('y'));
         // We expect at least one thread-scoped approval op message in the queue.
         let mut saw_op = false;
         while let Ok(ev) = rx.try_recv() {
@@ -1519,7 +1515,7 @@ mod tests {
             Features::with_defaults(),
         );
 
-        press_alone(&mut view, KeyCode::Char('d'));
+        press_and_confirm(&mut view, KeyCode::Char('d'));
 
         let mut saw_denied = false;
         while let Ok(ev) = rx.try_recv() {
@@ -1568,7 +1564,7 @@ mod tests {
             Features::with_defaults(),
         );
 
-        press_alone(&mut view, KeyCode::Char('d'));
+        press_and_confirm(&mut view, KeyCode::Char('d'));
 
         let mut saw_deny = false;
         while let Ok(ev) = rx.try_recv() {
@@ -1747,7 +1743,7 @@ mod tests {
             tx,
             Features::with_defaults(),
         );
-        press_alone(&mut view, KeyCode::Char('p'));
+        press_and_confirm(&mut view, KeyCode::Char('p'));
         let mut saw_op = false;
         while let Ok(ev) = rx.try_recv() {
             if let AppEvent::SubmitThreadOp {
@@ -1795,10 +1791,14 @@ mod tests {
         })
     }
 
-    fn type_burst(view: &mut ApprovalOverlay, text: &str, now: Instant) {
+    fn type_text(view: &mut ApprovalOverlay, text: &str) {
         for ch in text.chars() {
-            view.handle_key_event_at(KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE), now);
+            view.handle_key_event(KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE));
         }
+    }
+
+    fn press(view: &mut ApprovalOverlay, code: KeyCode, modifiers: KeyModifiers) {
+        view.handle_key_event(KeyEvent::new(code, modifiers));
     }
 
     fn exec_decisions(rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>) -> Vec<String> {
@@ -1815,29 +1815,62 @@ mod tests {
         decisions
     }
 
-    /// PF-83 F05 finding: typing `/permissions` into an open prompt approved it
-    /// with "don't ask again" through the `p` shortcut.
+    /// PF-83 F05 finding (#174): typing `/permissions` into an open prompt
+    /// approved it with "don't ask again" through the `p` shortcut.
     #[test]
     fn typed_text_never_answers_the_prompt() {
-        for text in ["/permissions", "permissions", "yes", "1", "ap"] {
+        let typed: [&[(KeyCode, KeyModifiers)]; 7] = [
+            // `/permissions` then Enter, twice.
+            &[
+                (KeyCode::Char('/'), KeyModifiers::NONE),
+                (KeyCode::Char('p'), KeyModifiers::NONE),
+            ],
+            // A word that starts with a decision key, however slowly typed.
+            &[
+                (KeyCode::Char('p'), KeyModifiers::NONE),
+                (KeyCode::Char('e'), KeyModifiers::NONE),
+            ],
+            // Two decision keys.
+            &[
+                (KeyCode::Char('y'), KeyModifiers::NONE),
+                (KeyCode::Char('p'), KeyModifiers::NONE),
+            ],
+            // A decision key corrected with Backspace.
+            &[
+                (KeyCode::Char('p'), KeyModifiers::NONE),
+                (KeyCode::Backspace, KeyModifiers::NONE),
+            ],
+            // A decision key held down (Repeat arrives as a second press).
+            &[
+                (KeyCode::Char('2'), KeyModifiers::NONE),
+                (KeyCode::Char('2'), KeyModifiers::NONE),
+            ],
+            // Composer chords after a decision key: history and a raw newline
+            // (Ctrl+J) must not make Enter accept.
+            &[
+                (KeyCode::Char('y'), KeyModifiers::NONE),
+                (KeyCode::Char('n'), KeyModifiers::CONTROL),
+            ],
+            &[
+                (KeyCode::Char('y'), KeyModifiers::NONE),
+                (KeyCode::Char('j'), KeyModifiers::CONTROL),
+            ],
+        ];
+        for keys in typed {
             let (tx, mut rx) = unbounded_channel::<AppEvent>();
             let mut view = make_overlay(
                 make_prefix_exec_request(),
                 AppEventSender::new(tx),
                 Features::with_defaults(),
             );
-            let now = Instant::now();
-            // "1" alone is a deliberate key; follow it with Enter in the same burst.
-            type_burst(&mut view, text, now);
-            view.handle_key_event_at(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), now);
-            view.tick_at(now + SHORTCUT_SETTLE_DELAY * 4);
-            view.handle_key_event_at(
-                KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
-                now + SHORTCUT_SETTLE_DELAY * 5,
-            );
+            for (code, modifiers) in keys {
+                press(&mut view, *code, *modifiers);
+            }
+            press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+            press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
 
-            assert_eq!(exec_decisions(&mut rx), Vec::<String>::new(), "{text:?}");
-            assert!(!view.is_complete(), "{text:?}");
+            assert_eq!(exec_decisions(&mut rx), Vec::<String>::new(), "{keys:?}");
+            assert!(!view.is_complete(), "{keys:?}");
         }
     }
 
@@ -1849,9 +1882,7 @@ mod tests {
             AppEventSender::new(tx),
             Features::with_defaults(),
         );
-        let now = Instant::now();
-        type_burst(&mut view, "/permissions", now);
-        view.tick_at(now + SHORTCUT_SETTLE_DELAY);
+        type_text(&mut view, "/permissions");
 
         assert_snapshot!(
             "approval_overlay_typed_text_notice",
@@ -1859,30 +1890,54 @@ mod tests {
         );
 
         // Navigating is deliberate: it clears the notice and Enter selects.
-        view.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
-        view.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+        press(&mut view, KeyCode::Down, KeyModifiers::NONE);
+        press(&mut view, KeyCode::Up, KeyModifiers::NONE);
         assert!(!render_overlay_lines(&view, /*width*/ 80).contains("Typed text"));
-        view.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
         assert_eq!(exec_decisions(&mut rx), vec!["Accept".to_string()]);
     }
 
     #[test]
-    fn decision_key_applies_only_after_the_keyboard_is_quiet() {
+    fn decision_key_highlights_and_waits_for_enter() {
         let (tx, mut rx) = unbounded_channel::<AppEvent>();
         let mut view = make_overlay(
             make_prefix_exec_request(),
             AppEventSender::new(tx),
             Features::with_defaults(),
         );
-        let now = Instant::now();
-        view.handle_key_event_at(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE), now);
 
-        assert!(view.next_frame_delay().is_some());
-        view.tick_at(now + SHORTCUT_SETTLE_DELAY - Duration::from_millis(1));
+        press(&mut view, KeyCode::Char('3'), KeyModifiers::NONE);
         assert_eq!(exec_decisions(&mut rx), Vec::<String>::new());
+        assert!(render_overlay_lines(&view, /*width*/ 80).contains("› 3. No"));
 
-        view.tick_at(now + SHORTCUT_SETTLE_DELAY);
-        assert_eq!(exec_decisions(&mut rx), vec!["Accept".to_string()]);
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+        assert_eq!(exec_decisions(&mut rx), vec!["Cancel".to_string()]);
+    }
+
+    #[test]
+    fn armed_key_does_not_carry_over_to_the_next_request() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = make_overlay(
+            make_prefix_exec_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+        let ApprovalRequest::Exec(mut second) = make_prefix_exec_request() else {
+            unreachable!("exec request");
+        };
+        second.id = "second".to_string();
+        view.enqueue_request(ApprovalRequest::Exec(second));
+
+        press(&mut view, KeyCode::Char('y'), KeyModifiers::NONE);
+        // Another client resolves the first request before Enter arrives.
+        assert!(
+            view.dismiss_resolved_request(&ResolvedAppServerRequest::ExecApproval {
+                id: "test".to_string(),
+            })
+        );
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+
+        assert_eq!(exec_decisions(&mut rx), Vec::<String>::new());
     }
 
     #[test]
@@ -1895,7 +1950,7 @@ mod tests {
         );
 
         assert!(view.handle_paste("please continue".to_string()));
-        view.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
 
         assert_eq!(exec_decisions(&mut rx), Vec::<String>::new());
     }
@@ -1932,7 +1987,7 @@ mod tests {
             tx,
             Features::with_defaults(),
         );
-        press_alone(&mut view, KeyCode::Char('d'));
+        press_and_confirm(&mut view, KeyCode::Char('d'));
 
         assert!(
             rx.try_recv().is_err(),
@@ -2158,7 +2213,7 @@ mod tests {
         let tx = AppEventSender::new(tx);
         let mut view = make_overlay(make_permissions_request(), tx, Features::with_defaults());
 
-        press_alone(&mut view, KeyCode::Char('a'));
+        press_and_confirm(&mut view, KeyCode::Char('a'));
 
         let mut saw_op = false;
         while let Ok(ev) = rx.try_recv() {
@@ -2193,7 +2248,7 @@ mod tests {
             keymap.list,
         );
 
-        press_alone(&mut view, KeyCode::Char('x'));
+        press_and_confirm(&mut view, KeyCode::Char('x'));
 
         let mut saw_op = false;
         while let Ok(ev) = rx.try_recv() {
@@ -2221,7 +2276,7 @@ mod tests {
         let tx = AppEventSender::new(tx);
         let mut view = make_overlay(make_permissions_request(), tx, Features::with_defaults());
 
-        press_alone(&mut view, KeyCode::Char('r'));
+        press_and_confirm(&mut view, KeyCode::Char('r'));
 
         let mut saw_op = false;
         while let Ok(ev) = rx.try_recv() {
@@ -2543,7 +2598,7 @@ mod tests {
             Features::with_defaults(),
         );
 
-        press_alone(&mut view, KeyCode::Char('y'));
+        press_and_confirm(&mut view, KeyCode::Char('y'));
 
         let mut decision = None;
         while let Ok(event) = rx.try_recv() {
@@ -2633,7 +2688,7 @@ mod tests {
             keymap.approval,
             keymap.list,
         );
-        press_alone(&mut view, KeyCode::Char('n'));
+        press_and_confirm(&mut view, KeyCode::Char('n'));
         let mut n_decision = None;
         while let Ok(ev) = rx.try_recv() {
             if let AppEvent::SubmitThreadOp {

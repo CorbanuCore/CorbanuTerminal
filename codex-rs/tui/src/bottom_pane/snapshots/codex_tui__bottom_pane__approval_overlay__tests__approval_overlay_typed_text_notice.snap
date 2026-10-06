@@ -14,6 +14,6 @@ expression: "render_overlay_lines(&view, 80)"
 
   Press enter to confirm or esc to cancel
 
-  Typed text is not sent while this request is open. Use ↑/↓ and Enter to
-  answer, or Esc to cancel. Slash commands such as /permissions work after
+  Typed text is not sent while this request is open. Use ↑/↓ and enter to
+  answer, or esc to cancel. Slash commands such as /permissions work after
   you answer.

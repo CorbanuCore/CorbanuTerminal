@@ -1,97 +1,80 @@
 //! Keeps typed or pasted text from answering an approval prompt.
 //!
-//! Approval prompts answer on single keys (`y`, `p`, `1`, ...). Someone who
-//! believes the composer is focused types a word, and its first letter would
-//! pick an option: typing `/permissions` used to approve with "don't ask
-//! again" through `p`. The guard therefore holds a decision key until the
-//! keyboard has been quiet for [`SHORTCUT_SETTLE_DELAY`]. A deliberate key
-//! press arrives alone and applies after that delay; any other text key in the
-//! meantime, an unbound character or a paste marks the input as typed text.
-//! Typed text disables decision keys and Enter until the user navigates the
-//! list, so only an explicit key press or selection can answer the prompt.
+//! Someone who believes the composer is focused types a word into the prompt.
+//! When characters answered it, the first letter picked an option: typing
+//! `/permissions` approved with "don't ask again" through `p`. Characters
+//! therefore never answer on their own. A decision key only highlights its
+//! option and Enter confirms it, so the prompt is answered by exactly one
+//! decision key then Enter, by navigation then Enter, by a chord shortcut, or
+//! cancelled with Esc. Any other input (a second character, an unbound
+//! character, a paste, editing keys) is typed text: Enter is ignored and the
+//! prompt explains how to answer until the user navigates with the arrow,
+//! Page, Home or End keys. No timing is involved.
 
-use std::time::Duration;
-use std::time::Instant;
-
-/// How long a decision key waits for a following key before it applies.
-///
-/// Typed words and pastes arrive faster than this; a deliberate single key
-/// press is followed by a pause.
-pub(crate) const SHORTCUT_SETTLE_DELAY: Duration = Duration::from_millis(250);
-
-/// What a held decision key does once it settles.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum ShortcutTarget {
-    /// Select the option at this index.
-    Option(usize),
-    /// Cancel the request through a character cancel binding.
-    Cancel,
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum State {
+    /// No input since the prompt opened or the user last navigated.
+    #[default]
+    Idle,
+    /// One decision key highlighted this option; Enter confirms it.
+    Armed(usize),
+    /// Input looked like typing; Enter must not confirm anything.
+    Typed,
 }
 
 #[derive(Debug, Default)]
 pub(super) struct TypingGuard {
-    pending: Option<(ShortcutTarget, Instant)>,
-    typed_text: bool,
+    state: State,
 }
 
 impl TypingGuard {
-    /// Whether text keys are currently treated as typing rather than commands.
-    pub(super) fn is_engaged(&self) -> bool {
-        self.typed_text || self.pending.is_some()
+    /// Whether nothing has been typed since the last navigation.
+    pub(super) fn is_idle(&self) -> bool {
+        self.state == State::Idle
     }
 
     /// Whether typed text was detected; the prompt explains how to answer.
     pub(super) fn typed_text(&self) -> bool {
-        self.typed_text
+        self.state == State::Typed
     }
 
-    /// Record a text key. `target` is the decision the key is bound to, if any.
-    pub(super) fn on_text_key(&mut self, target: Option<ShortcutTarget>, now: Instant) {
-        if self.typed_text {
-            return;
+    /// Record a plain character. `option` is the option the key is bound to.
+    /// Returns the option to highlight when the key armed one.
+    pub(super) fn on_text_key(&mut self, option: Option<usize>) -> Option<usize> {
+        match (self.state, option) {
+            (State::Idle, Some(idx)) => {
+                self.state = State::Armed(idx);
+                Some(idx)
+            }
+            (State::Idle | State::Armed(_) | State::Typed, _) => {
+                self.state = State::Typed;
+                None
+            }
         }
-        match (self.pending.take(), target) {
-            (None, Some(target)) => self.pending = Some((target, now)),
-            (Some(_), _) | (None, None) => self.typed_text = true,
-        }
     }
 
-    /// Record pasted text.
-    pub(super) fn on_paste(&mut self) {
-        self.pending = None;
-        self.typed_text = true;
+    /// Record input that is not a decision: a paste, editing keys, or chords
+    /// that edit text in the composer.
+    pub(super) fn on_typed_input(&mut self) {
+        self.state = State::Typed;
     }
 
-    /// Return true when Enter must not confirm the highlighted option because
-    /// it follows typed text (including a key that had not settled yet).
-    pub(super) fn blocks_accept(&mut self) -> bool {
-        if self.pending.take().is_some() {
-            self.typed_text = true;
-        }
-        self.typed_text
+    /// Whether Enter may confirm the highlighted option.
+    pub(super) fn allows_accept(&self) -> bool {
+        !self.typed_text()
     }
 
-    /// Forget typed text after deliberate navigation or a new request.
+    /// Forget earlier input after deliberate navigation or an answer.
     pub(super) fn reset(&mut self) {
-        self.pending = None;
-        self.typed_text = false;
+        self.state = State::Idle;
     }
 
-    /// Take the held decision once the keyboard has been quiet long enough.
-    pub(super) fn take_due(&mut self, now: Instant) -> Option<ShortcutTarget> {
-        let (target, pressed_at) = self.pending?;
-        if now.saturating_duration_since(pressed_at) < SHORTCUT_SETTLE_DELAY {
-            return None;
+    /// The prompt now shows another request. A key armed for the previous one
+    /// must not let Enter confirm the new one; typed text stays typed text.
+    pub(super) fn on_request_changed(&mut self) {
+        if let State::Armed(_) = self.state {
+            self.state = State::Typed;
         }
-        self.pending = None;
-        Some(target)
-    }
-
-    /// Time until the held decision settles, used to schedule a redraw.
-    pub(super) fn next_delay(&self, now: Instant) -> Option<Duration> {
-        self.pending.map(|(_, pressed_at)| {
-            SHORTCUT_SETTLE_DELAY.saturating_sub(now.saturating_duration_since(pressed_at))
-        })
     }
 }
 

@@ -57,8 +57,6 @@ mod action_required_title;
 mod app_link_view;
 mod approval_overlay;
 mod approval_typing_guard;
-#[cfg(test)]
-pub(crate) use approval_typing_guard::SHORTCUT_SETTLE_DELAY;
 mod mcp_server_elicitation;
 mod multi_select_picker;
 mod request_user_input;
@@ -2291,7 +2289,7 @@ mod tests {
 
         pane.pre_draw_tick_at(now + APPROVAL_PROMPT_TYPING_IDLE_DELAY);
         pane.handle_key_event(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
-        pane.pre_draw_tick_at(Instant::now() + SHORTCUT_SETTLE_DELAY);
+        pane.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
         let mut approval_decision = None;
         while let Ok(event) = rx.try_recv() {
@@ -2440,7 +2438,7 @@ mod tests {
         use crossterm::event::KeyEvent;
         use crossterm::event::KeyModifiers;
         pane.handle_key_event(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
-        pane.pre_draw_tick_at(Instant::now() + SHORTCUT_SETTLE_DELAY);
+        pane.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
         // After denial, since the task is still running, the status indicator should be
         // visible above the composer. The modal should be gone.
