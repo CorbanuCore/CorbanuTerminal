@@ -1,0 +1,53 @@
+
+╭────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                  │
+│                                                │
+│ model:     loading   /model to change          │
+│ directory: <run>/workspace │
+╰────────────────────────────────────────────────╯
+
+
+› Improve documentation in @filename
+
+  Z.AI GLM 5.2 via zai standard · <run>/workspace · Corbanu Terminal · TPS: -- tok/s
+
+╭────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                  │
+│                                                │
+│ model:     glm-5.2   /model to change          │
+│ directory: <run>/workspace │
+╰────────────────────────────────────────────────╯
+
+/status
+
+╭─────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                      │
+│                                                                                     │
+│  Model:                Z.AI GLM 5.2                                                 │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4                          │
+│  Directory:            <run>/workspace                          │
+│  Permissions:          Next turn: Profile corbanu-aggressive (workspace, untrusted) │
+│  Security:             Aggressive active (/security)                                │
+│  Agents.md:            <none>                                                       │
+│  Account:              Z.AI API key configured                                      │
+│  Collaboration mode:   Default                                                      │
+│  Session:              01a11146-d06d-7e00-b728-3e5a0bca476f                         │
+│                                                                                     │
+│  Token usage:          0 total  (0 input + 0 output)                                │
+│  Limits:               data not available yet                                       │
+╰─────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Improve documentation in @filename
+
+  Z.AI GLM 5.2 via zai standard · <run>/workspace · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+
+
+
+
+

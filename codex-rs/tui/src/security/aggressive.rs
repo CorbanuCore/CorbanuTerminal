@@ -59,7 +59,7 @@ pub(crate) const ROWS: [(&str, &str); 5] = [
 pub(crate) const UNCHANGED: &str = "Unchanged: model and provider, MCP servers, apps and hooks (they run outside the sandbox), wallet scopes, and commands you have already allowed permanently (they skip the prompt but stay sandboxed). `corbanu exec` and IDE sessions are not covered yet.";
 
 /// Role config keys (dotted) that would give a spawned child different values.
-const ROLE_KEYS: [&str; 14] = [
+const ROLE_KEYS: [&str; 15] = [
     "approval_policy",
     "approvals_reviewer",
     "sandbox_mode",
@@ -74,6 +74,7 @@ const ROLE_KEYS: [&str; 14] = [
     "features.shell_snapshot",
     "features.request_permissions_tool",
     "features.exec_permission_approvals",
+    "strict_rules",
 ];
 
 fn string(value: &str) -> toml::Value {
@@ -112,6 +113,11 @@ pub(crate) fn base_overrides(codex_home: &Path) -> Vec<(String, toml::Value)> {
         (format!("permissions.{PROFILE_ID}"), profile),
         ("default_permissions".to_string(), string(PROFILE_ID)),
         ("web_search".to_string(), string("disabled")),
+        // Every thread this process starts later, including `/new`, resume,
+        // fork and children with their own config folder, reloads the rules;
+        // a file broken after launch must stop that thread, not drop the
+        // vault rule.
+        ("strict_rules".to_string(), toml::Value::Boolean(true)),
         // The shell snapshot and login-shell profiles re-export variables the
         // environment policy removed; agent commands must not load either.
         (
@@ -312,6 +318,12 @@ fn verify_vault(config: &Config, rules_present: bool, failures: &mut Vec<String>
     }
     if !rules_present {
         failures.push("Vault: the exec-policy rule file is missing".to_string());
+    }
+    if !config.strict_rules {
+        failures.push(
+            "Vault: a rules file that breaks later would let new threads drop the vault rule"
+                .to_string(),
+        );
     }
     if config
         .config_layer_stack

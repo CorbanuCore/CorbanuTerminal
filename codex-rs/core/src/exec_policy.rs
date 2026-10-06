@@ -199,6 +199,8 @@ pub(crate) fn child_uses_parent_exec_policy(parent_config: &Config, child_config
                 .ignore_user_and_project_exec_policy_rules()
         && parent_config.config_layer_stack.requirements().exec_policy
             == child_config.config_layer_stack.requirements().exec_policy
+        // A leniently loaded policy may be a parse-error fallback.
+        && (parent_config.strict_rules || !child_config.strict_rules)
 }
 
 fn is_policy_match(rule_match: &RuleMatch) -> bool {
@@ -296,8 +298,16 @@ impl ExecPolicyManager {
         }
     }
 
+    /// With `strict_rules`, a `.rules` file that fails to parse is an error
+    /// instead of a warning that drops every user and project rule.
     #[instrument(level = "info", skip_all)]
-    pub(crate) async fn load(config_stack: &ConfigLayerStack) -> Result<Self, ExecPolicyError> {
+    pub(crate) async fn load(
+        config_stack: &ConfigLayerStack,
+        strict_rules: bool,
+    ) -> Result<Self, ExecPolicyError> {
+        if strict_rules {
+            return Ok(Self::new(Arc::new(load_exec_policy(config_stack).await?)));
+        }
         let (policy, warning) = load_exec_policy_with_warning(config_stack).await?;
         if let Some(err) = warning.as_ref() {
             tracing::warn!("failed to parse rules: {err}");

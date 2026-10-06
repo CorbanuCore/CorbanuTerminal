@@ -762,6 +762,10 @@ pub struct Config {
     /// using backend-specific headers or URLs to enforce this.
     pub enforce_residency: Constrained<Option<ResidencyRequirement>>,
 
+    /// When `true`, a `.rules` file that fails to parse is fatal for a new
+    /// session instead of dropping every user and project rule.
+    pub strict_rules: bool,
+
     /// When `true`, `AgentReasoning` events emitted by the backend will be
     /// suppressed from the frontend output. This can reduce visual noise when
     /// users are only interested in the final agent responses.
@@ -4761,6 +4765,7 @@ impl Config {
             main_execve_wrapper_exe,
             zsh_path,
 
+            strict_rules: cfg.strict_rules.unwrap_or(false),
             hide_agent_reasoning: cfg.hide_agent_reasoning.unwrap_or(false),
             show_raw_agent_reasoning: cfg
                 .show_raw_agent_reasoning

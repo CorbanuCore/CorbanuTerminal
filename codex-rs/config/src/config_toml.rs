@@ -365,6 +365,11 @@ pub struct ConfigToml {
     #[serde(default)]
     pub telegram: Option<BTreeMap<String, JsonValue>>,
 
+    /// When `true`, a `.rules` exec-policy file that fails to parse stops the
+    /// session from starting instead of falling back to requirements-only
+    /// rules with a warning. Defaults to `false`.
+    pub strict_rules: Option<bool>,
+
     /// When set to `true`, `AgentReasoning` events will be hidden from the
     /// UI/output. Defaults to `false`.
     #[serde(default = "default_hide_agent_reasoning")]

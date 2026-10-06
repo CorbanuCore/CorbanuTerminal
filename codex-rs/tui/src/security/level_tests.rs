@@ -63,6 +63,10 @@ fn aggressive_round_trip_restores_permissive_files_exactly() {
         load(home.path()),
         StoredLevel::Chosen(ChosenLevel::Permissive)
     );
+    // This session stays Aggressive until restart, so its later threads keep
+    // the vault rule; the next launch removes it.
+    assert!(rules_path(home.path()).exists());
+    sync_rules(home.path(), ChosenLevel::Permissive).unwrap();
     let mut rules = std::fs::read_dir(home.path().join(RULES_DIR))
         .unwrap()
         .map(|entry| entry.unwrap().file_name().into_string().unwrap())

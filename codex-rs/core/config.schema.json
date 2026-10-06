@@ -1723,7 +1723,7 @@
     },
     "ModelProviderInfo": {
       "additionalProperties": false,
-      "description": "Serializable representation of a provider definition.",
+      "description": "Serializable representation of a provider definition.\n\n`Debug` (in `provider_debug.rs`) redacts credentials: provider definitions are logged, for example when a session is configured.",
       "properties": {
         "auth": {
           "allOf": [
@@ -5897,6 +5897,10 @@
         }
       ],
       "description": "Directory where Codex stores the SQLite state DB. Defaults to `$CODEX_SQLITE_HOME` when set. Otherwise uses `$CODEX_HOME`."
+    },
+    "strict_rules": {
+      "description": "When `true`, a `.rules` exec-policy file that fails to parse stops the session from starting instead of falling back to requirements-only rules with a warning. Defaults to `false`.",
+      "type": "boolean"
     },
     "suppress_unstable_features_warning": {
       "description": "Suppress warnings about unstable (under development) features.",

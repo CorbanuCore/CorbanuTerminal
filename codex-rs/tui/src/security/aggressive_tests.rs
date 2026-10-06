@@ -242,6 +242,29 @@ async fn role_that_changes_child_values_fails_verification() {
     );
 }
 
+/// A role cannot hand children lenient rule parsing.
+#[tokio::test]
+async fn role_that_relaxes_strict_rules_fails_verification() {
+    let home = tempfile::tempdir().unwrap();
+    let cwd = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(home.path().join("agents")).unwrap();
+    std::fs::write(
+        home.path().join("agents/lenient.toml"),
+        "strict_rules = false\n",
+    )
+    .unwrap();
+    let config = load(
+        home.path(),
+        cwd.path(),
+        "[agents.lenient]\ndescription = \"x\"\nconfig_file = \"./agents/lenient.toml\"\n",
+    )
+    .await;
+    assert_eq!(
+        verify(&config, /*rules_present*/ true),
+        vec!["Child agents: role `lenient` sets strict_rules".to_string()]
+    );
+}
+
 /// The launch check loads the whole exec policy the way a session does.
 #[tokio::test]
 async fn exec_policy_must_load_and_forbid_vault_commands() {
@@ -289,6 +312,44 @@ async fn exec_policy_must_load_and_forbid_vault_commands() {
             "Vault: the loaded exec policy does not forbid `corbanu vault`, `codex vault`, `pfterminal vault`, `corbanu-debug vault`, `pfterminal-debug vault`"
                 .to_string()
         ]
+    );
+}
+
+/// New threads must fail rather than drop the vault rule when a `.rules` file
+/// breaks after launch; a user `strict_rules = false` cannot turn that off.
+#[tokio::test]
+async fn strict_rules_is_forced_and_verified() {
+    let home = tempfile::tempdir().unwrap();
+    let cwd = tempfile::tempdir().unwrap();
+    let config = load(home.path(), cwd.path(), "strict_rules = false\n").await;
+    assert!(config.strict_rules);
+    assert_eq!(
+        verify(&config, /*rules_present*/ true),
+        Vec::<String>::new()
+    );
+
+    let cli = base_overrides(home.path())
+        .into_iter()
+        .filter(|(key, _)| key != "strict_rules")
+        .collect::<Vec<_>>();
+    let mut harness = ConfigOverrides {
+        cwd: Some(cwd.path().to_path_buf()),
+        ..Default::default()
+    };
+    apply_launch_overrides(&mut harness);
+    let lenient = ConfigBuilder::default()
+        .codex_home(home.path().to_path_buf())
+        .cli_overrides(cli)
+        .harness_overrides(harness)
+        .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
+        .build()
+        .await
+        .unwrap();
+    assert!(
+        verify(&lenient, /*rules_present*/ true).contains(
+            &"Vault: a rules file that breaks later would let new threads drop the vault rule"
+                .to_string()
+        )
     );
 }
 
