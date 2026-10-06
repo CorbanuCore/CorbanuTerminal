@@ -48,7 +48,7 @@ fn aggressive_round_trip_restores_permissive_files_exactly() {
     )
     .unwrap();
 
-    save(home.path(), ChosenLevel::Aggressive).unwrap();
+    save(home.path(), ChosenLevel::Aggressive, NestedAgents::Refuse).unwrap();
     assert_eq!(
         load(home.path()),
         StoredLevel::Chosen(ChosenLevel::Aggressive)
@@ -58,7 +58,7 @@ fn aggressive_round_trip_restores_permissive_files_exactly() {
         rules_contents()
     );
 
-    save(home.path(), ChosenLevel::Permissive).unwrap();
+    save(home.path(), ChosenLevel::Permissive, NestedAgents::Refuse).unwrap();
     assert_eq!(
         load(home.path()),
         StoredLevel::Chosen(ChosenLevel::Permissive)
@@ -127,8 +127,39 @@ fn status_line_reports_active_and_pending_levels() {
 #[test]
 fn deleted_state_file_next_to_the_rule_file_is_invalid() {
     let home = tempfile::tempdir().unwrap();
-    save(home.path(), ChosenLevel::Aggressive).unwrap();
+    save(home.path(), ChosenLevel::Aggressive, NestedAgents::Refuse).unwrap();
     std::fs::remove_file(state_path(home.path())).unwrap();
     assert_eq!(load(home.path()).enforced(), ChosenLevel::Aggressive);
     assert!(matches!(load(home.path()), StoredLevel::Invalid(_)));
+}
+
+#[test]
+fn nested_agents_setting_round_trips_and_fails_closed() {
+    let home = tempfile::tempdir().unwrap();
+    save(home.path(), ChosenLevel::Aggressive, NestedAgents::Refuse).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(state_path(home.path())).unwrap(),
+        "version = 1\nlevel = \"aggressive\"\n"
+    );
+    save(home.path(), ChosenLevel::Aggressive, NestedAgents::Pass).unwrap();
+    assert_eq!(
+        load_state(home.path()),
+        (
+            StoredLevel::Chosen(ChosenLevel::Aggressive),
+            NestedAgents::Pass
+        )
+    );
+    write_state(
+        home.path(),
+        "version = 1\nlevel = \"aggressive\"\nnested_agents = \"allow\"\n",
+    );
+    let (stored, nested) = load_state(home.path());
+    assert!(
+        matches!(&stored, StoredLevel::Invalid(reason) if reason.contains("nested_agents")),
+        "{stored:?}"
+    );
+    assert_eq!(
+        (stored.enforced(), nested),
+        (ChosenLevel::Aggressive, NestedAgents::Refuse)
+    );
 }

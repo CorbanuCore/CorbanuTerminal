@@ -260,6 +260,14 @@ use codex_arg0::Arg0DispatchPaths;
 pub use markdown_render::render_markdown_text;
 pub use public_widgets::composer_input::ComposerAction;
 pub use public_widgets::composer_input::ComposerInput;
+pub use security::nested::NestedKind;
+pub use security::nested::NestedLaunch;
+pub use security::nested::ORIGIN_ENV as SECURITY_ORIGIN_ENV;
+pub use security::nested::aggressive_cli_overrides;
+pub use security::nested::aggressive_env_overrides;
+pub use security::nested::apply_aggressive_launch_overrides;
+pub use security::nested::nested_launch;
+pub use security::nested::verify_aggressive_config;
 // (tests access modules directly within the crate)
 
 const TUI_LOG_FILE_NAME: &str = "codex-tui.log";
@@ -1032,9 +1040,12 @@ pub async fn run_main(
             std::process::exit(1);
         }
     };
-    let mut security_launch =
-        security::launch::LaunchPlan::prepare(&codex_home, &mut cli_kv_overrides)
-            .unwrap_or_else(|message| exit_with_security_error(&message));
+    let mut security_launch = security::launch::LaunchPlan::prepare(
+        &codex_home,
+        cli.nested_security_origin.as_deref(),
+        &mut cli_kv_overrides,
+    )
+    .unwrap_or_else(|message| exit_with_security_error(&message));
 
     let mut launch_loader_overrides = loader_overrides.clone();
     if let Some(profile_v2) = cli.config_profile_v2.as_ref() {

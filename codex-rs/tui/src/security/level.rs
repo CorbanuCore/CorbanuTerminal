@@ -54,6 +54,34 @@ impl ChosenLevel {
     }
 }
 
+/// What an agent command may do when it starts another agent while
+/// Aggressive is enforced (a nested launch). Stored next to the level, so
+/// only a person using `/security` can change it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum NestedAgents {
+    /// The nested launch is refused.
+    #[default]
+    Refuse,
+    /// The nested agent runs with Aggressive enforced.
+    Pass,
+}
+
+impl NestedAgents {
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Refuse => "refuse",
+            Self::Pass => "pass",
+        }
+    }
+
+    pub(crate) fn toggled(self) -> Self {
+        match self {
+            Self::Refuse => Self::Pass,
+            Self::Pass => Self::Refuse,
+        }
+    }
+}
+
 /// What the state file says.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum StoredLevel {
@@ -79,6 +107,9 @@ impl StoredLevel {
 struct StateFile {
     version: u32,
     level: String,
+    /// Absent means refuse, so files written before this setting read the same.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    nested_agents: Option<String>,
 }
 
 pub(crate) fn state_path(codex_home: &Path) -> PathBuf {
@@ -90,52 +121,77 @@ pub(crate) fn rules_path(codex_home: &Path) -> PathBuf {
 }
 
 pub(crate) fn load(codex_home: &Path) -> StoredLevel {
+    load_state(codex_home).0
+}
+
+/// The stored level and nested-launch setting. Anything unreadable enforces
+/// Aggressive and refuses nested launches.
+pub(crate) fn load_state(codex_home: &Path) -> (StoredLevel, NestedAgents) {
+    match load_file(codex_home) {
+        Ok((level, nested)) => (StoredLevel::Chosen(level), nested),
+        Err(stored) => (stored, NestedAgents::Refuse),
+    }
+}
+
+fn load_file(codex_home: &Path) -> Result<(ChosenLevel, NestedAgents), StoredLevel> {
     let path = state_path(codex_home);
     let contents = match std::fs::read_to_string(&path) {
         Ok(contents) => contents,
         // The rule file exists only while Aggressive is stored: a missing state
         // file next to it was deleted, not never written.
         Err(err) if err.kind() == io::ErrorKind::NotFound && rules_path(codex_home).exists() => {
-            return StoredLevel::Invalid(format!(
+            return Err(StoredLevel::Invalid(format!(
                 "{} is missing but {} exists",
                 path.display(),
                 rules_path(codex_home).display()
-            ));
+            )));
         }
-        Err(err) if err.kind() == io::ErrorKind::NotFound => return StoredLevel::Absent,
-        Err(err) => return StoredLevel::Invalid(format!("cannot read {}: {err}", path.display())),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Err(StoredLevel::Absent),
+        Err(err) => {
+            return Err(StoredLevel::Invalid(format!(
+                "cannot read {}: {err}",
+                path.display()
+            )));
+        }
     };
     let invalid = |reason: String| StoredLevel::Invalid(format!("{}: {reason}", path.display()));
-    let file: StateFile = match toml::from_str(&contents) {
-        Ok(file) => file,
-        Err(err) => return invalid(err.message().to_string()),
-    };
+    let file: StateFile =
+        toml::from_str(&contents).map_err(|err| invalid(err.message().to_string()))?;
     if file.version != STATE_VERSION {
-        return invalid(format!("unsupported version {}", file.version));
+        return Err(invalid(format!("unsupported version {}", file.version)));
     }
-    match file.level.as_str() {
-        "permissive" => StoredLevel::Chosen(ChosenLevel::Permissive),
-        "aggressive" => StoredLevel::Chosen(ChosenLevel::Aggressive),
-        other => invalid(format!("unknown level `{other}`")),
-    }
+    let level = match file.level.as_str() {
+        "permissive" => ChosenLevel::Permissive,
+        "aggressive" => ChosenLevel::Aggressive,
+        other => return Err(invalid(format!("unknown level `{other}`"))),
+    };
+    let nested = match file.nested_agents.as_deref() {
+        None | Some("refuse") => NestedAgents::Refuse,
+        Some("pass") => NestedAgents::Pass,
+        Some(other) => return Err(invalid(format!("unknown nested_agents `{other}`"))),
+    };
+    Ok((level, nested))
 }
 
 /// Persist a human choice and read the result back. Only a verified
 /// read-back counts as saved. Aggressive writes the vault rule now; the rule
 /// is removed only at the next launch, because an Aggressive session that
 /// saves Permissive stays Aggressive (and keeps starting threads) until then.
-pub(crate) fn save(codex_home: &Path, level: ChosenLevel) -> io::Result<()> {
+pub(crate) fn save(codex_home: &Path, level: ChosenLevel, nested: NestedAgents) -> io::Result<()> {
     let contents = toml::to_string(&StateFile {
         version: STATE_VERSION,
         level: level.key().to_string(),
+        nested_agents: (nested == NestedAgents::Pass).then(|| nested.name().to_string()),
     })
     .map_err(io::Error::other)?;
     write_atomically(&state_path(codex_home), &contents)?;
     if level == ChosenLevel::Aggressive {
         sync_rules(codex_home, level)?;
     }
-    match load(codex_home) {
-        StoredLevel::Chosen(saved) if saved == level => Ok(()),
+    match load_state(codex_home) {
+        (StoredLevel::Chosen(saved), saved_nested) if saved == level && saved_nested == nested => {
+            Ok(())
+        }
         other => Err(io::Error::other(format!(
             "saved level could not be verified: {other:?}"
         ))),
@@ -192,6 +248,9 @@ fn write_atomically(path: &Path, contents: &str) -> io::Result<()> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct LevelContext {
     pub(crate) codex_home: PathBuf,
+    /// The home whose stored level chose `active`: `codex_home`, or for a
+    /// nested launch the home of the session that started this one.
+    pub(crate) origin: PathBuf,
     /// The `security_levels` flag, or a stored non-Permissive level that the
     /// human must be able to see and change.
     pub(crate) picker_enabled: bool,

@@ -395,6 +395,7 @@ mod tests {
     fn security_description_matches_what_the_command_opens() {
         let context = |picker_enabled| LevelContext {
             codex_home: std::path::PathBuf::from("/home"),
+            origin: std::path::PathBuf::from("/home"),
             picker_enabled,
             active: ChosenLevel::Permissive,
         };
