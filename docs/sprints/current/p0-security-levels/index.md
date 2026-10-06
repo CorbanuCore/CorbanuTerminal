@@ -18,7 +18,7 @@ Earlier allocation notes are in the [plan history](../../../plans/history/p0-sec
 | ---: | --- | --- | --- | --- |
 | 29 | [PF-27-S02](pf-27-s02-secretless-agent-launch.md) | Secretless agent launch and bypass containment (in progress, macOS+Linux) | broker | PF-27-S04 (archived) |
 | 30 | [PF-28-S01](pf-28-s01-central-secret-output-gate.md) | Central secret and protected-output gate (merged behind `secret_output_gate`) | broker | PF-27-S02 |
-| 31 | [PF-28-S02](pf-28-s02-reflected-secret-response-scrubbing.md) | Reflected-secret response scrubbing | broker | PF-28-S01 |
+| 31 | [PF-28-S02](pf-28-s02-reflected-secret-response-scrubbing.md) | Reflected-secret response scrubbing (merged behind `secret_output_gate`; two carried items open) | broker | PF-28-S01 |
 | 32 | [PF-33-S01](pf-33-s01-url-dns-and-redirect-policy.md) | URL DNS and redirect policy (merged behind `url_destination_policy`) | first free | PF-27-S02, PF-33-S03 |
 | 33 | [PF-33-S02](pf-33-s02-connection-pinning-and-bypass.md) | Connection pinning and alternate-egress denial | first free | PF-33-S01 |
 | 35 | [PF-29-S01](pf-29-s01-protected-mode-inventory.md) | Protected-mode inventory and activation preflight | first free | PF-28-S02, PF-20-S02 |
