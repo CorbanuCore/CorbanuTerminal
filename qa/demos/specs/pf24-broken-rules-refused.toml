@@ -59,7 +59,7 @@ key = "Enter"
 [[steps]]
 wait = "restarting Corbanu Terminal"
 [[steps]]
-wait = "rules do not load"
+wait = "rules file does not parse"
 timeout = 60
 [[steps]]
 pause = 4.0
