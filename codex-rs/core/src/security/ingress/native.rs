@@ -104,7 +104,16 @@ pub(crate) struct NativeIngress {
     /// PF-30-S03: recorded batches that carried content without standing.
     /// Monotone: compaction, a new turn or a summary never lowers it.
     taint_generation: u64,
+    /// Inputs another agent submitted to this session, keyed by the exact
+    /// `Vec<UserInput>` digest, waiting for the prompt seam to consume them.
+    agent_inputs: HashMap<ContentDigest, Vec<MessageOrigin>>,
+    agent_inputs_pending: usize,
+    /// The ledger overflowed: every later prompt is treated as agent data.
+    agent_inputs_overflowed: bool,
 }
+
+/// Agent inputs submitted but not yet recorded (rejected inputs never are).
+const MAX_PENDING_AGENT_INPUTS: usize = 1_024;
 
 impl std::fmt::Debug for NativeIngress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -121,6 +130,39 @@ impl NativeIngress {
 
     pub(crate) fn labelled_mode(&self) -> bool {
         self.labelled_mode
+    }
+
+    /// Mark an input another agent is about to submit to this session. A full
+    /// ledger fails closed: from then on every prompt counts as agent data.
+    pub(crate) fn mark_agent_input(&mut self, key: ContentDigest, origin: MessageOrigin) {
+        if !self.labelled_mode {
+            return;
+        }
+        if self.agent_inputs_pending >= MAX_PENDING_AGENT_INPUTS {
+            self.agent_inputs_overflowed = true;
+            return;
+        }
+        self.agent_inputs.entry(key).or_default().push(origin);
+        self.agent_inputs_pending += 1;
+    }
+
+    /// The origin of a prompt about to be recorded: the marking agent's, or
+    /// `None` for a human prompt. Each mark is consumed once.
+    pub(crate) fn take_agent_input(&mut self, key: &ContentDigest) -> Option<MessageOrigin> {
+        if !self.labelled_mode {
+            return None;
+        }
+        if let Some(origins) = self.agent_inputs.get_mut(key)
+            && let Some(origin) = origins.pop()
+        {
+            if origins.is_empty() {
+                self.agent_inputs.remove(key);
+            }
+            self.agent_inputs_pending -= 1;
+            return Some(origin);
+        }
+        self.agent_inputs_overflowed
+            .then_some(MessageOrigin::External(SourceKind::ChildAgent))
     }
 
     pub(crate) fn has_origin_key(&self) -> bool {

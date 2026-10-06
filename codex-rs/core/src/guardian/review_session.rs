@@ -806,6 +806,16 @@ async fn run_review_on_session(
         .and_then(|environment| environment.cwd().to_abs_path().ok())
         .unwrap_or_else(|| params.parent_turn.config.cwd.clone());
 
+    // The review prompt carries the parent's transcript: it has the parent's
+    // standing, never human standing, in the reviewer's history (PF-30-S02).
+    review_session
+        .session
+        .services
+        .model_client()
+        .mark_agent_input(
+            &prompt_items.items,
+            params.parent_session.agent_handoff_origin().await,
+        );
     let submission = review_session.io.submit_with_trace(
         Op::UserInput {
             items: prompt_items.items,

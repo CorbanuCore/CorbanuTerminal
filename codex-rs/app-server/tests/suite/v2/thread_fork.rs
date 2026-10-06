@@ -2275,7 +2275,7 @@ async fn pf_30_s02_referenced_fork_and_cold_resume_keep_recorded_standing() -> R
     MockResponsesConfig::new(&server.uri())
         .with_provider_config("supports_websockets = false")
         .enable_feature(Feature::SourceEnvelopes)
-        .with_extra_config("[security]\nlevel = \"moderate\"")
+        .with_extra_config("[security]\nversion = 1\nlevel = \"moderate\"")
         .write(codex_home.path())?;
 
     async fn run_turn(mcp: &mut TestAppServer, thread_id: &str, text: &str) -> Result<()> {

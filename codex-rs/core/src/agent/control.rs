@@ -1343,11 +1343,12 @@ fn non_empty_bounded_message(message: String, max_chars: usize) -> Option<String
     }
 }
 /// PF-30-S02 lineage. Text one agent hands another arrives as `Op::UserInput`,
-/// which the receiver would otherwise record with human standing. Register
-/// it on the receiver first (the first registration wins) with the sender's
-/// standing: host only while every item in the sender's history had standing,
-/// otherwise agent data. An unknown sender counts as agent data. Only the
-/// receiver's `source_envelopes` mode records anything; otherwise a no-op.
+/// which the receiver would otherwise record with human standing. Mark the
+/// exact input on the receiver before submitting it; its prompt seam then
+/// records it with the sender's standing: host only while every item in the
+/// sender's history had standing, otherwise agent data. An unknown sender
+/// counts as agent data. Only the receiver's `source_envelopes` mode records
+/// anything; otherwise a no-op.
 async fn register_agent_input_origin(
     state: &Arc<ThreadManagerState>,
     agent_id: ThreadId,
@@ -1369,10 +1370,7 @@ async fn register_agent_input_origin(
         },
         None => MessageOrigin::External(codex_protocol::provenance::SourceKind::ChildAgent),
     };
-    let item = receiver
-        .session
-        .response_item_from_user_input(input.to_vec());
-    client.register_message_origin(std::slice::from_ref(&item), origin);
+    client.mark_agent_input(input, origin);
 }
 
 #[cfg(test)]
