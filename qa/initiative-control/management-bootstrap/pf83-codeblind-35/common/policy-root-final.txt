@@ -1,0 +1,107 @@
+## pfctl -a corbanu.pf83 -vsr (2026-10-06T01:54:01Z)
+pass out quick on lo0 inet proto tcp from any to 127.0.0.1 port = 18443 user = 602 flags S/SA keep state
+  [ Evaluations: 112502    Packets: 26477     Bytes: 70315218    States: 0     ]
+  [ Inserted: uid 0 pid 52267 ]
+pass out quick on lo0 inet proto tcp from any to 127.0.0.1 port = 18443 user = 603 flags S/SA keep state
+  [ Evaluations: 1195      Packets: 18621     Bytes: 44653980    States: 0     ]
+  [ Inserted: uid 0 pid 52267 ]
+pass out quick on lo0 inet proto tcp from any to 127.0.0.1 port = 18443 user = 604 flags S/SA keep state
+  [ Evaluations: 561       Packets: 17438     Bytes: 45504909    States: 0     ]
+  [ Inserted: uid 0 pid 52267 ]
+block drop out log quick proto tcp all user = 602
+  [ Evaluations: 61777     Packets: 1947      Bytes: 120752      States: 0     ]
+  [ Inserted: uid 0 pid 52267 ]
+block drop out log quick proto tcp all user = 603
+  [ Evaluations: 59436     Packets: 2079      Bytes: 128896      States: 0     ]
+  [ Inserted: uid 0 pid 52267 ]
+block drop out log quick proto tcp all user = 604
+  [ Evaluations: 57357     Packets: 1460      Bytes: 90432       States: 0     ]
+  [ Inserted: uid 0 pid 52267 ]
+block drop out log quick proto udp all user = 602
+  [ Evaluations: 58831     Packets: 0         Bytes: 0           States: 0     ]
+  [ Inserted: uid 0 pid 52267 ]
+block drop out log quick proto udp all user = 603
+  [ Evaluations: 2875      Packets: 0         Bytes: 0           States: 0     ]
+  [ Inserted: uid 0 pid 52267 ]
+block drop out log quick proto udp all user = 604
+  [ Evaluations: 2875      Packets: 0         Bytes: 0           States: 0     ]
+  [ Inserted: uid 0 pid 52267 ]
+pass quick on lo0 all no state
+  [ Evaluations: 104945    Packets: 91670     Bytes: 163275195   States: 0     ]
+  [ Inserted: uid 0 pid 52267 ]
+pass in quick on en0 inet proto tcp from 192.168.64.1 to (en0) port = 22 flags S/SA keep state
+  [ Evaluations: 13275     Packets: 17723     Bytes: 24419408    States: 3     ]
+  [ Inserted: uid 0 pid 52267 ]
+pass out quick on en0 inet proto tcp from (en0) port = 22 to 192.168.64.1 flags S/SA keep state
+  [ Evaluations: 12888     Packets: 0         Bytes: 0           States: 0     ]
+  [ Inserted: uid 0 pid 52267 ]
+pass out quick on en0 inet proto udp from any port = 68 to 192.168.64.1 port = 67 keep state
+  [ Evaluations: 12993     Packets: 6         Bytes: 2052        States: 0     ]
+  [ Inserted: uid 0 pid 52267 ]
+pass in quick on en0 inet proto icmp from 192.168.64.1 to (en0) icmp-type echoreq keep state
+  [ Evaluations: 12990     Packets: 0         Bytes: 0           States: 0     ]
+  [ Inserted: uid 0 pid 52267 ]
+pass out quick on en0 inet proto tcp from (en0) to <__automatic_513e4f68_0> port = 443 flags S/SA keep state
+  [ Evaluations: 12990     Packets: 138988    Bytes: 168198688   States: 0     ]
+  [ Inserted: uid 0 pid 52267 ]
+block drop log quick on en0 all
+  [ Evaluations: 12006     Packets: 12006     Bytes: 836244      States: 0     ]
+  [ Inserted: uid 0 pid 52267 ]
+
+## pfctl -sI -v (lo0)
+lo0
+
+## /etc/sudoers.d/pf83-codeblind
+agent ALL=(pf83x1,pf83x2,pf83x3) NOPASSWD: ALL
+
+## executor accounts
+uid=602(pf83x1) gid=601(pf83exec) groups=601(pf83exec),12(everyone),61(localaccounts),701(com.apple.sharepoint.group.1),100(_lpoperator)
+dsAttrTypeNative:IsHidden: 1 NFSHomeDirectory: /Users/pf83x1 PrimaryGroupID: 601 UniqueID: 602 UserShell: /bin/bash 
+no pf83x1 is NOT a member of admin
+no pf83x1 is NOT a member of com.apple.access_ssh
+no pf83x1 is NOT a member of staff
+uid=603(pf83x2) gid=601(pf83exec) groups=601(pf83exec),12(everyone),61(localaccounts),701(com.apple.sharepoint.group.1),100(_lpoperator)
+dsAttrTypeNative:IsHidden: 1 NFSHomeDirectory: /Users/pf83x2 PrimaryGroupID: 601 UniqueID: 603 UserShell: /bin/bash 
+no pf83x2 is NOT a member of admin
+no pf83x2 is NOT a member of com.apple.access_ssh
+no pf83x2 is NOT a member of staff
+uid=604(pf83x3) gid=601(pf83exec) groups=601(pf83exec),12(everyone),61(localaccounts),701(com.apple.sharepoint.group.1),100(_lpoperator)
+dsAttrTypeNative:IsHidden: 1 NFSHomeDirectory: /Users/pf83x3 PrimaryGroupID: 601 UniqueID: 604 UserShell: /bin/bash 
+no pf83x3 is NOT a member of admin
+no pf83x3 is NOT a member of com.apple.access_ssh
+no pf83x3 is NOT a member of staff
+
+## modes
+/Users/agent drwx------ agent:staff
+/Users/neo drwx------ neo:staff
+/Users/neo_1 drwx------ neo2:staff
+/Users/pf83x1 drwx------ pf83x1:pf83exec
+/Users/pf83x2 drwx------ pf83x2:pf83exec
+/Users/pf83x3 drwx------ pf83x3:pf83exec
+/opt/pf83 drwxr-xr-x root:wheel
+/opt/pf83/pkg dr-xr-xr-x root:wheel
+/opt/pf83/pkg/codex-code-mode-host -r-xr-xr-x root:wheel
+/opt/pf83/pkg/corbanu -r-xr-xr-x root:wheel
+/opt/pf83/pkg/corbanu-acp -r-xr-xr-x root:wheel
+/opt/pf83/pkg/corbanu-walletd -r-xr-xr-x root:wheel
+/opt/pf83/bin dr-xr-xr-x root:wheel
+/opt/pf83/bin/pf83-launch -r-xr-xr-x root:wheel
+/opt/pf83/bin/pf83-probe -r-xr-xr-x root:wheel
+/opt/pf83/bin/pf83-product -r-xr-xr-x root:wheel
+/opt/pf83/bin/pf83-tui -r-xr-xr-x root:wheel
+/opt/pf83/bin/tmux -r-xr-xr-x root:wheel
+/opt/pf83/etc/mediation-ca.pem -r--r--r-- root:wheel
+/opt/pf83/etc/tmux.conf -r--r--r-- root:wheel
+/opt/pf83/packet dr-xr-xr-x root:wheel
+/private/tmp/.s.PGSQL.5432 srwx------ neo2:wheel
+
+## host share mounts
+none mounted
+
+## machine
+ProductName:		macOS
+ProductVersion:		26.2
+BuildVersion:		25C56
+IOPlatformUUID F9AABE1C-BA2C-55D7-9859-A6ED560D3218
+Neos-Virtual-Machine.local
+arm64

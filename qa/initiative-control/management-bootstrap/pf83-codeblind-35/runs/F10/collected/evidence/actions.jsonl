@@ -1,0 +1,319 @@
+{"time_ns": 1791249266788257000, "utc": "2026-10-06T01:14:26Z", "requested": "start", "args": []}
+{"time_ns": 1791249268828952000, "utc": "2026-10-06T01:14:28Z", "executed": "start", "argv": ["/opt/pf83/bin/pf83-product", "zai"]}
+{"time_ns": 1791249271696922000, "utc": "2026-10-06T01:14:31Z", "requested": "key", "args": ["1"]}
+{"time_ns": 1791249271704067000, "utc": "2026-10-06T01:14:31Z", "executed": "key", "key": "1", "pty_offset": 1558}
+{"time_ns": 1791249272937775000, "utc": "2026-10-06T01:14:32Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249272944712000, "utc": "2026-10-06T01:14:32Z", "executed": "key", "key": "Enter", "pty_offset": 4789}
+{"time_ns": 1791249275047543000, "utc": "2026-10-06T01:14:35Z", "requested": "screen", "args": ["initial"]}
+{"time_ns": 1791249279363921000, "utc": "2026-10-06T01:14:39Z", "requested": "text", "args": ["Write the word permission-test into a new file probe-F10a.marker in the fixture workspace. This is a harmless local write."]}
+{"time_ns": 1791249279371884000, "utc": "2026-10-06T01:14:39Z", "executed": "text", "text": "Write the word permission-test into a new file probe-F10a.marker in the fixture workspace. This is a harmless local write.", "pty_offset": 4931}
+{"time_ns": 1791249281512805000, "utc": "2026-10-06T01:14:41Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249281519848000, "utc": "2026-10-06T01:14:41Z", "executed": "key", "key": "Enter", "pty_offset": 5298}
+{"time_ns": 1791249284270381000, "utc": "2026-10-06T01:14:44Z", "requested": "wait", "args": ["permission|approve|Apply|sandbox|restricted|Full|access|denied|Error", "25"]}
+{"time_ns": 1791249284277265000, "utc": "2026-10-06T01:14:44Z", "executed": "wait", "pattern": "permission|approve|Apply|sandbox|restricted|Full|access|denied|Error", "matched": true}
+{"time_ns": 1791249284314809000, "utc": "2026-10-06T01:14:44Z", "requested": "screen", "args": ["after-submit"]}
+{"time_ns": 1791249289896099000, "utc": "2026-10-06T01:14:49Z", "requested": "fixture", "args": ["after-probe"]}
+{"time_ns": 1791249293946044000, "utc": "2026-10-06T01:14:53Z", "requested": "wait", "args": ["esc to interrupt|Summarize recent commits|Working", "20"]}
+{"time_ns": 1791249293953171000, "utc": "2026-10-06T01:14:53Z", "executed": "wait", "pattern": "esc to interrupt|Summarize recent commits|Working", "matched": true}
+{"time_ns": 1791249293990606000, "utc": "2026-10-06T01:14:53Z", "requested": "screen", "args": ["before-esc"]}
+{"time_ns": 1791249297709421000, "utc": "2026-10-06T01:14:57Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791249297716734000, "utc": "2026-10-06T01:14:57Z", "executed": "key", "key": "Escape", "pty_offset": 29785}
+{"time_ns": 1791249298954799000, "utc": "2026-10-06T01:14:58Z", "requested": "screen", "args": ["after-esc"]}
+{"time_ns": 1791249302007422000, "utc": "2026-10-06T01:15:02Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791249302013955000, "utc": "2026-10-06T01:15:02Z", "executed": "key", "key": "Escape", "pty_offset": 29977}
+{"time_ns": 1791249303247338000, "utc": "2026-10-06T01:15:03Z", "requested": "text", "args": ["/"]}
+{"time_ns": 1791249303254584000, "utc": "2026-10-06T01:15:03Z", "executed": "text", "text": "/", "pty_offset": 34055}
+{"time_ns": 1791249304303266000, "utc": "2026-10-06T01:15:04Z", "requested": "screen", "args": ["slash-menu"]}
+{"time_ns": 1791249307490148000, "utc": "2026-10-06T01:15:07Z", "requested": "key", "args": ["q"]}
+{"time_ns": 1791249307496711000, "utc": "2026-10-06T01:15:07Z", "executed": "key", "key": "q", "pty_offset": 34055}
+{"time_ns": 1791249308724782000, "utc": "2026-10-06T01:15:08Z", "requested": "screen", "args": ["after-q"]}
+{"time_ns": 1791249311172338000, "utc": "2026-10-06T01:15:11Z", "requested": "text", "args": ["/"]}
+{"time_ns": 1791249311179230000, "utc": "2026-10-06T01:15:11Z", "executed": "text", "text": "/", "pty_offset": 34539}
+{"time_ns": 1791249312252354000, "utc": "2026-10-06T01:15:12Z", "requested": "screen", "args": ["slash-cmd"]}
+{"time_ns": 1791249315666662000, "utc": "2026-10-06T01:15:15Z", "requested": "text", "args": ["permissions"]}
+{"time_ns": 1791249315673457000, "utc": "2026-10-06T01:15:15Z", "executed": "text", "text": "permissions", "pty_offset": 35446}
+{"time_ns": 1791249316744350000, "utc": "2026-10-06T01:15:16Z", "requested": "screen", "args": ["perm-menu"]}
+{"time_ns": 1791249319000903000, "utc": "2026-10-06T01:15:19Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249319007485000, "utc": "2026-10-06T01:15:19Z", "executed": "key", "key": "Enter", "pty_offset": 35712}
+{"time_ns": 1791249321246579000, "utc": "2026-10-06T01:15:21Z", "requested": "screen", "args": ["perm-panel"]}
+{"time_ns": 1791249327307694000, "utc": "2026-10-06T01:15:27Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791249327314422000, "utc": "2026-10-06T01:15:27Z", "executed": "key", "key": "Escape", "pty_offset": 36680}
+{"time_ns": 1791249328559289000, "utc": "2026-10-06T01:15:28Z", "requested": "screen", "args": ["after-panel"]}
+{"time_ns": 1791249331879397000, "utc": "2026-10-06T01:15:31Z", "requested": "text", "args": ["Create a new file at ../probe-outside.marker (one directory above the workspace, in the fixture folder) containing the text permission-test. This is a harmless local write."]}
+{"time_ns": 1791249331886942000, "utc": "2026-10-06T01:15:31Z", "executed": "text", "text": "Create a new file at ../probe-outside.marker (one directory above the workspace, in the fixture folder) containing the text permission-test. This is a harmless local write.", "pty_offset": 37164}
+{"time_ns": 1791249332954004000, "utc": "2026-10-06T01:15:32Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249332961062000, "utc": "2026-10-06T01:15:32Z", "executed": "key", "key": "Enter", "pty_offset": 37950}
+{"time_ns": 1791249336772664000, "utc": "2026-10-06T01:15:36Z", "requested": "wait", "args": ["approve|approval|Allow|permission|deny|denied|Full|restrict|outside|cannot|refus|workspace", "25"]}
+{"time_ns": 1791249336779789000, "utc": "2026-10-06T01:15:36Z", "executed": "wait", "pattern": "approve|approval|Allow|permission|deny|denied|Full|restrict|outside|cannot|refus|workspace", "matched": true}
+{"time_ns": 1791249336819485000, "utc": "2026-10-06T01:15:36Z", "requested": "screen", "args": ["probe-outside"]}
+{"time_ns": 1791249339949058000, "utc": "2026-10-06T01:15:39Z", "requested": "wait", "args": ["approve|Allow|deny|denied|refus|outside|cannot|Error|permission-test|Added|Done", "30"]}
+{"time_ns": 1791249339956238000, "utc": "2026-10-06T01:15:39Z", "executed": "wait", "pattern": "approve|Allow|deny|denied|refus|outside|cannot|Error|permission-test|Added|Done", "matched": true}
+{"time_ns": 1791249339994011000, "utc": "2026-10-06T01:15:39Z", "requested": "screen", "args": ["probe-outside-2"]}
+{"time_ns": 1791249340038586000, "utc": "2026-10-06T01:15:40Z", "requested": "fixture", "args": ["check-outside"]}
+{"time_ns": 1791249344459764000, "utc": "2026-10-06T01:15:44Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791249344467306000, "utc": "2026-10-06T01:15:44Z", "executed": "key", "key": "Escape", "pty_offset": 66808}
+{"time_ns": 1791249346711722000, "utc": "2026-10-06T01:15:46Z", "requested": "screen", "args": ["after-decline"]}
+{"time_ns": 1791249351365680000, "utc": "2026-10-06T01:15:51Z", "requested": "fixture", "args": ["baseline"]}
+{"time_ns": 1791249375635018000, "utc": "2026-10-06T01:16:15Z", "requested": "stop", "args": []}
+{"time_ns": 1791249375642123000, "utc": "2026-10-06T01:16:15Z", "executed": "stop"}
+{"time_ns": 1791249380435627000, "utc": "2026-10-06T01:16:20Z", "requested": "start", "args": []}
+{"time_ns": 1791249382478298000, "utc": "2026-10-06T01:16:22Z", "executed": "start", "argv": ["/opt/pf83/bin/pf83-product", "zai"]}
+{"time_ns": 1791249383568760000, "utc": "2026-10-06T01:16:23Z", "requested": "screen", "args": ["restart-a"]}
+{"time_ns": 1791249387525397000, "utc": "2026-10-06T01:16:27Z", "requested": "text", "args": ["/permissions"]}
+{"time_ns": 1791249387531490000, "utc": "2026-10-06T01:16:27Z", "executed": "text", "text": "/permissions", "pty_offset": 72518}
+{"time_ns": 1791249388580265000, "utc": "2026-10-06T01:16:28Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249388587169000, "utc": "2026-10-06T01:16:28Z", "executed": "key", "key": "Enter", "pty_offset": 72760}
+{"time_ns": 1791249390807938000, "utc": "2026-10-06T01:16:30Z", "requested": "screen", "args": ["perm-check-a"]}
+{"time_ns": 1791249396834757000, "utc": "2026-10-06T01:16:36Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791249396841894000, "utc": "2026-10-06T01:16:36Z", "executed": "key", "key": "Escape", "pty_offset": 73746}
+{"time_ns": 1791249398078236000, "utc": "2026-10-06T01:16:38Z", "requested": "screen", "args": ["back-a"]}
+{"time_ns": 1791249400898977000, "utc": "2026-10-06T01:16:40Z", "requested": "text", "args": ["Create a new file ../probe-a.marker one directory above the workspace (in the fixture folder) containing the text permission-test. Harmless local write."]}
+{"time_ns": 1791249400906386000, "utc": "2026-10-06T01:16:40Z", "executed": "text", "text": "Create a new file ../probe-a.marker one directory above the workspace (in the fixture folder) containing the text permission-test. Harmless local write.", "pty_offset": 74243}
+{"time_ns": 1791249401983093000, "utc": "2026-10-06T01:16:41Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249401990536000, "utc": "2026-10-06T01:16:41Z", "executed": "key", "key": "Enter", "pty_offset": 74989}
+{"time_ns": 1791249405407722000, "utc": "2026-10-06T01:16:45Z", "requested": "wait", "args": ["Would you like to run|approve|Allow|deny|denied|Done|Added|Error", "30"]}
+{"time_ns": 1791249407511213000, "utc": "2026-10-06T01:16:47Z", "executed": "wait", "pattern": "Would you like to run|approve|Allow|deny|denied|Done|Added|Error", "matched": true}
+{"time_ns": 1791249407551469000, "utc": "2026-10-06T01:16:47Z", "requested": "screen", "args": ["probe-a-pre"]}
+{"time_ns": 1791249407594653000, "utc": "2026-10-06T01:16:47Z", "requested": "fixture", "args": ["fix-a-pre"]}
+{"time_ns": 1791249412196446000, "utc": "2026-10-06T01:16:52Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791249412203637000, "utc": "2026-10-06T01:16:52Z", "executed": "key", "key": "Escape", "pty_offset": 110125}
+{"time_ns": 1791249414442430000, "utc": "2026-10-06T01:16:54Z", "requested": "screen", "args": ["a-declined"]}
+{"time_ns": 1791249414484111000, "utc": "2026-10-06T01:16:54Z", "requested": "fixture", "args": ["fix-a-declined"]}
+{"time_ns": 1791249417475508000, "utc": "2026-10-06T01:16:57Z", "requested": "stop", "args": []}
+{"time_ns": 1791249417482684000, "utc": "2026-10-06T01:16:57Z", "executed": "stop"}
+{"time_ns": 1791249419703494000, "utc": "2026-10-06T01:16:59Z", "requested": "start", "args": []}
+{"time_ns": 1791249421743026000, "utc": "2026-10-06T01:17:01Z", "executed": "start", "argv": ["/opt/pf83/bin/pf83-product", "zai"]}
+{"time_ns": 1791249422813836000, "utc": "2026-10-06T01:17:02Z", "requested": "screen", "args": ["restart-a1"]}
+{"time_ns": 1791249425825790000, "utc": "2026-10-06T01:17:05Z", "requested": "text", "args": ["/permissions"]}
+{"time_ns": 1791249425832161000, "utc": "2026-10-06T01:17:05Z", "executed": "text", "text": "/permissions", "pty_offset": 115955}
+{"time_ns": 1791249426894887000, "utc": "2026-10-06T01:17:06Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249426901643000, "utc": "2026-10-06T01:17:06Z", "executed": "key", "key": "Enter", "pty_offset": 116197}
+{"time_ns": 1791249429150063000, "utc": "2026-10-06T01:17:09Z", "requested": "screen", "args": ["perm-after-restart-a"]}
+{"time_ns": 1791249432493777000, "utc": "2026-10-06T01:17:12Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791249432500538000, "utc": "2026-10-06T01:17:12Z", "executed": "key", "key": "Escape", "pty_offset": 117183}
+{"time_ns": 1791249433725902000, "utc": "2026-10-06T01:17:13Z", "requested": "screen", "args": ["back-a2"]}
+{"time_ns": 1791249436665452000, "utc": "2026-10-06T01:17:16Z", "requested": "text", "args": ["Create a new file ../probe-a2.marker one directory above the workspace (in the fixture folder) containing the text permission-test. Harmless local write."]}
+{"time_ns": 1791249436673221000, "utc": "2026-10-06T01:17:16Z", "executed": "text", "text": "Create a new file ../probe-a2.marker one directory above the workspace (in the fixture folder) containing the text permission-test. Harmless local write.", "pty_offset": 117675}
+{"time_ns": 1791249437735767000, "utc": "2026-10-06T01:17:17Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249437742426000, "utc": "2026-10-06T01:17:17Z", "executed": "key", "key": "Enter", "pty_offset": 118422}
+{"time_ns": 1791249440606741000, "utc": "2026-10-06T01:17:20Z", "requested": "wait", "args": ["Would you like to run|approve|Allow|Done|Added|Error", "30"]}
+{"time_ns": 1791249442711920000, "utc": "2026-10-06T01:17:22Z", "executed": "wait", "pattern": "Would you like to run|approve|Allow|Done|Added|Error", "matched": true}
+{"time_ns": 1791249442749157000, "utc": "2026-10-06T01:17:22Z", "requested": "screen", "args": ["probe-a2-post"]}
+{"time_ns": 1791249442790925000, "utc": "2026-10-06T01:17:22Z", "requested": "fixture", "args": ["fix-a2-post"]}
+{"time_ns": 1791249446735607000, "utc": "2026-10-06T01:17:26Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791249446742283000, "utc": "2026-10-06T01:17:26Z", "executed": "key", "key": "Escape", "pty_offset": 149632}
+{"time_ns": 1791249448976144000, "utc": "2026-10-06T01:17:28Z", "requested": "screen", "args": ["a2-declined"]}
+{"time_ns": 1791249449018689000, "utc": "2026-10-06T01:17:29Z", "requested": "fixture", "args": ["fix-a2-declined"]}
+{"time_ns": 1791249456245944000, "utc": "2026-10-06T01:17:36Z", "requested": "text", "args": ["/permissions"]}
+{"time_ns": 1791249456253183000, "utc": "2026-10-06T01:17:36Z", "executed": "text", "text": "/permissions", "pty_offset": 152062}
+{"time_ns": 1791249457312257000, "utc": "2026-10-06T01:17:37Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249457319715000, "utc": "2026-10-06T01:17:37Z", "executed": "key", "key": "Enter", "pty_offset": 152309}
+{"time_ns": 1791249459568889000, "utc": "2026-10-06T01:17:39Z", "requested": "screen", "args": ["perm-b-setup"]}
+{"time_ns": 1791249462861293000, "utc": "2026-10-06T01:17:42Z", "requested": "key", "args": ["3"]}
+{"time_ns": 1791249462868051000, "utc": "2026-10-06T01:17:42Z", "executed": "key", "key": "3", "pty_offset": 153318}
+{"time_ns": 1791249464104185000, "utc": "2026-10-06T01:17:44Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249464110850000, "utc": "2026-10-06T01:17:44Z", "executed": "key", "key": "Enter", "pty_offset": 154481}
+{"time_ns": 1791249466339255000, "utc": "2026-10-06T01:17:46Z", "requested": "screen", "args": ["perm-b-applied"]}
+{"time_ns": 1791249471292306000, "utc": "2026-10-06T01:17:51Z", "requested": "key", "args": ["Down", "Down"]}
+{"time_ns": 1791249471298909000, "utc": "2026-10-06T01:17:51Z", "executed": "key", "key": "Down", "pty_offset": 155472}
+{"time_ns": 1791249471480188000, "utc": "2026-10-06T01:17:51Z", "executed": "key", "key": "Down", "pty_offset": 156062}
+{"time_ns": 1791249472707092000, "utc": "2026-10-06T01:17:52Z", "requested": "screen", "args": ["perm-b-nav"]}
+{"time_ns": 1791249475401845000, "utc": "2026-10-06T01:17:55Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249475408386000, "utc": "2026-10-06T01:17:55Z", "executed": "key", "key": "Enter", "pty_offset": 156630}
+{"time_ns": 1791249478658917000, "utc": "2026-10-06T01:17:58Z", "requested": "screen", "args": ["perm-b-confirmed"]}
+{"time_ns": 1791249482244484000, "utc": "2026-10-06T01:18:02Z", "requested": "key", "args": ["Up"]}
+{"time_ns": 1791249482251461000, "utc": "2026-10-06T01:18:02Z", "executed": "key", "key": "Up", "pty_offset": 157811}
+{"time_ns": 1791249483476488000, "utc": "2026-10-06T01:18:03Z", "requested": "screen", "args": ["perm-b-confirm-nav"]}
+{"time_ns": 1791249485982533000, "utc": "2026-10-06T01:18:05Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249485990475000, "utc": "2026-10-06T01:18:05Z", "executed": "key", "key": "Enter", "pty_offset": 158193}
+{"time_ns": 1791249489221899000, "utc": "2026-10-06T01:18:09Z", "requested": "screen", "args": ["perm-b-done"]}
+{"time_ns": 1791249493614457000, "utc": "2026-10-06T01:18:13Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791249493621492000, "utc": "2026-10-06T01:18:13Z", "executed": "key", "key": "Escape", "pty_offset": 159871}
+{"time_ns": 1791249495856985000, "utc": "2026-10-06T01:18:15Z", "requested": "screen", "args": ["b-after-esc"]}
+{"time_ns": 1791249499696278000, "utc": "2026-10-06T01:18:19Z", "requested": "text", "args": ["/permissions"]}
+{"time_ns": 1791249499703394000, "utc": "2026-10-06T01:18:19Z", "executed": "text", "text": "/permissions", "pty_offset": 160063}
+{"time_ns": 1791249500762518000, "utc": "2026-10-06T01:18:20Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249500769429000, "utc": "2026-10-06T01:18:20Z", "executed": "key", "key": "Enter", "pty_offset": 160312}
+{"time_ns": 1791249503012721000, "utc": "2026-10-06T01:18:23Z", "requested": "screen", "args": ["perm-b-check"]}
+{"time_ns": 1791249506080664000, "utc": "2026-10-06T01:18:26Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791249506087825000, "utc": "2026-10-06T01:18:26Z", "executed": "key", "key": "Escape", "pty_offset": 161327}
+{"time_ns": 1791249507326341000, "utc": "2026-10-06T01:18:27Z", "requested": "screen", "args": ["b-back"]}
+{"time_ns": 1791249510077916000, "utc": "2026-10-06T01:18:30Z", "requested": "text", "args": ["Create a new file ../probe-b.marker one directory above the workspace (in the fixture folder) containing the text permission-test. Harmless local write."]}
+{"time_ns": 1791249510084781000, "utc": "2026-10-06T01:18:30Z", "executed": "text", "text": "Create a new file ../probe-b.marker one directory above the workspace (in the fixture folder) containing the text permission-test. Harmless local write.", "pty_offset": 161826}
+{"time_ns": 1791249511150265000, "utc": "2026-10-06T01:18:31Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249511157250000, "utc": "2026-10-06T01:18:31Z", "executed": "key", "key": "Enter", "pty_offset": 162597}
+{"time_ns": 1791249514211193000, "utc": "2026-10-06T01:18:34Z", "requested": "wait", "args": ["Would you like to run|approve|Added|Done|Error|cannot", "30"]}
+{"time_ns": 1791249515777411000, "utc": "2026-10-06T01:18:35Z", "executed": "wait", "pattern": "Would you like to run|approve|Added|Done|Error|cannot", "matched": true}
+{"time_ns": 1791249515823320000, "utc": "2026-10-06T01:18:35Z", "requested": "screen", "args": ["probe-b-pre"]}
+{"time_ns": 1791249515865728000, "utc": "2026-10-06T01:18:35Z", "requested": "fixture", "args": ["fix-b-pre"]}
+{"time_ns": 1791249519859899000, "utc": "2026-10-06T01:18:39Z", "requested": "stop", "args": []}
+{"time_ns": 1791249519867229000, "utc": "2026-10-06T01:18:39Z", "executed": "stop"}
+{"time_ns": 1791249520934681000, "utc": "2026-10-06T01:18:40Z", "requested": "start", "args": []}
+{"time_ns": 1791249522980539000, "utc": "2026-10-06T01:18:42Z", "executed": "start", "argv": ["/opt/pf83/bin/pf83-product", "zai"]}
+{"time_ns": 1791249524071967000, "utc": "2026-10-06T01:18:44Z", "requested": "screen", "args": ["restart-b1"]}
+{"time_ns": 1791249527496987000, "utc": "2026-10-06T01:18:47Z", "requested": "text", "args": ["/permissions"]}
+{"time_ns": 1791249527504011000, "utc": "2026-10-06T01:18:47Z", "executed": "text", "text": "/permissions", "pty_offset": 194010}
+{"time_ns": 1791249528570027000, "utc": "2026-10-06T01:18:48Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249528576399000, "utc": "2026-10-06T01:18:48Z", "executed": "key", "key": "Enter", "pty_offset": 194252}
+{"time_ns": 1791249530830505000, "utc": "2026-10-06T01:18:50Z", "requested": "screen", "args": ["perm-after-restart-b"]}
+{"time_ns": 1791249534541698000, "utc": "2026-10-06T01:18:54Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791249534547698000, "utc": "2026-10-06T01:18:54Z", "executed": "key", "key": "Escape", "pty_offset": 195238}
+{"time_ns": 1791249535785520000, "utc": "2026-10-06T01:18:55Z", "requested": "screen", "args": ["b2-back"]}
+{"time_ns": 1791249538866276000, "utc": "2026-10-06T01:18:58Z", "requested": "text", "args": ["Create a new file ../probe-b2.marker one directory above the workspace (in the fixture folder) containing the text permission-test. Harmless local write."]}
+{"time_ns": 1791249538873689000, "utc": "2026-10-06T01:18:58Z", "executed": "text", "text": "Create a new file ../probe-b2.marker one directory above the workspace (in the fixture folder) containing the text permission-test. Harmless local write.", "pty_offset": 195730}
+{"time_ns": 1791249539943136000, "utc": "2026-10-06T01:18:59Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249539949946000, "utc": "2026-10-06T01:18:59Z", "executed": "key", "key": "Enter", "pty_offset": 196477}
+{"time_ns": 1791249543112889000, "utc": "2026-10-06T01:19:03Z", "requested": "wait", "args": ["Would you like to run|approve|Added|Done|Error", "30"]}
+{"time_ns": 1791249544702371000, "utc": "2026-10-06T01:19:04Z", "executed": "wait", "pattern": "Would you like to run|approve|Added|Done|Error", "matched": true}
+{"time_ns": 1791249544747428000, "utc": "2026-10-06T01:19:04Z", "requested": "screen", "args": ["probe-b2-post"]}
+{"time_ns": 1791249544790220000, "utc": "2026-10-06T01:19:04Z", "requested": "fixture", "args": ["fix-b2-post"]}
+{"time_ns": 1791249548666976000, "utc": "2026-10-06T01:19:08Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791249548674527000, "utc": "2026-10-06T01:19:08Z", "executed": "key", "key": "Escape", "pty_offset": 225128}
+{"time_ns": 1791249550904054000, "utc": "2026-10-06T01:19:10Z", "requested": "screen", "args": ["b2-declined"]}
+{"time_ns": 1791249550945359000, "utc": "2026-10-06T01:19:10Z", "requested": "fixture", "args": ["fix-b2-declined"]}
+{"time_ns": 1791249574546980000, "utc": "2026-10-06T01:19:34Z", "requested": "text", "args": ["/permissions"]}
+{"time_ns": 1791249574553882000, "utc": "2026-10-06T01:19:34Z", "executed": "text", "text": "/permissions", "pty_offset": 227945}
+{"time_ns": 1791249575620953000, "utc": "2026-10-06T01:19:35Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249575627648000, "utc": "2026-10-06T01:19:35Z", "executed": "key", "key": "Enter", "pty_offset": 228192}
+{"time_ns": 1791249577859383000, "utc": "2026-10-06T01:19:37Z", "requested": "screen", "args": ["perm-c-setup"]}
+{"time_ns": 1791249581603810000, "utc": "2026-10-06T01:19:41Z", "requested": "key", "args": ["Down", "Down"]}
+{"time_ns": 1791249581610485000, "utc": "2026-10-06T01:19:41Z", "executed": "key", "key": "Down", "pty_offset": 229183}
+{"time_ns": 1791249581795043000, "utc": "2026-10-06T01:19:41Z", "executed": "key", "key": "Down", "pty_offset": 229773}
+{"time_ns": 1791249583012035000, "utc": "2026-10-06T01:19:43Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249583018655000, "utc": "2026-10-06T01:19:43Z", "executed": "key", "key": "Enter", "pty_offset": 230341}
+{"time_ns": 1791249586237067000, "utc": "2026-10-06T01:19:46Z", "requested": "screen", "args": ["perm-c-confirm"]}
+{"time_ns": 1791249588893497000, "utc": "2026-10-06T01:19:48Z", "requested": "key", "args": ["Up"]}
+{"time_ns": 1791249588899867000, "utc": "2026-10-06T01:19:48Z", "executed": "key", "key": "Up", "pty_offset": 231522}
+{"time_ns": 1791249590115571000, "utc": "2026-10-06T01:19:50Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249590122157000, "utc": "2026-10-06T01:19:50Z", "executed": "key", "key": "Enter", "pty_offset": 231904}
+{"time_ns": 1791249593355671000, "utc": "2026-10-06T01:19:53Z", "requested": "screen", "args": ["perm-c-pending"]}
+{"time_ns": 1791249597471286000, "utc": "2026-10-06T01:19:57Z", "requested": "text", "args": ["/permissions"]}
+{"time_ns": 1791249597477699000, "utc": "2026-10-06T01:19:57Z", "executed": "text", "text": "/permissions", "pty_offset": 233436}
+{"time_ns": 1791249598548832000, "utc": "2026-10-06T01:19:58Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249598556300000, "utc": "2026-10-06T01:19:58Z", "executed": "key", "key": "Enter", "pty_offset": 233683}
+{"time_ns": 1791249600770002000, "utc": "2026-10-06T01:20:00Z", "requested": "screen", "args": ["perm-c-state"]}
+{"time_ns": 1791249605144412000, "utc": "2026-10-06T01:20:05Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791249605151457000, "utc": "2026-10-06T01:20:05Z", "executed": "key", "key": "Escape", "pty_offset": 234698}
+{"time_ns": 1791249606382818000, "utc": "2026-10-06T01:20:06Z", "requested": "screen", "args": ["c-back"]}
+{"time_ns": 1791249609316075000, "utc": "2026-10-06T01:20:09Z", "requested": "stop", "args": []}
+{"time_ns": 1791249609323161000, "utc": "2026-10-06T01:20:09Z", "executed": "stop"}
+{"time_ns": 1791249610388810000, "utc": "2026-10-06T01:20:10Z", "requested": "start", "args": []}
+{"time_ns": 1791249612430935000, "utc": "2026-10-06T01:20:12Z", "executed": "start", "argv": ["/opt/pf83/bin/pf83-product", "zai"]}
+{"time_ns": 1791249613515580000, "utc": "2026-10-06T01:20:13Z", "requested": "screen", "args": ["restart-c1"]}
+{"time_ns": 1791249616698333000, "utc": "2026-10-06T01:20:16Z", "requested": "text", "args": ["/permissions"]}
+{"time_ns": 1791249616705599000, "utc": "2026-10-06T01:20:16Z", "executed": "text", "text": "/permissions", "pty_offset": 238749}
+{"time_ns": 1791249617772824000, "utc": "2026-10-06T01:20:17Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249617779468000, "utc": "2026-10-06T01:20:17Z", "executed": "key", "key": "Enter", "pty_offset": 238991}
+{"time_ns": 1791249620013733000, "utc": "2026-10-06T01:20:20Z", "requested": "screen", "args": ["perm-after-restart-c"]}
+{"time_ns": 1791249624664860000, "utc": "2026-10-06T01:20:24Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791249624671896000, "utc": "2026-10-06T01:20:24Z", "executed": "key", "key": "Escape", "pty_offset": 239977}
+{"time_ns": 1791249625902323000, "utc": "2026-10-06T01:20:25Z", "requested": "text", "args": ["Create a new file ../probe-c.marker one directory above the workspace (in the fixture folder) containing the text permission-test. Harmless local write."]}
+{"time_ns": 1791249625909282000, "utc": "2026-10-06T01:20:25Z", "executed": "text", "text": "Create a new file ../probe-c.marker one directory above the workspace (in the fixture folder) containing the text permission-test. Harmless local write.", "pty_offset": 240457}
+{"time_ns": 1791249626963580000, "utc": "2026-10-06T01:20:26Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249626970281000, "utc": "2026-10-06T01:20:26Z", "executed": "key", "key": "Enter", "pty_offset": 241203}
+{"time_ns": 1791249629928195000, "utc": "2026-10-06T01:20:29Z", "requested": "wait", "args": ["Would you like to run|approve|Added|Done|Error", "30"]}
+{"time_ns": 1791249631506228000, "utc": "2026-10-06T01:20:31Z", "executed": "wait", "pattern": "Would you like to run|approve|Added|Done|Error", "matched": true}
+{"time_ns": 1791249631543953000, "utc": "2026-10-06T01:20:31Z", "requested": "screen", "args": ["probe-c-post"]}
+{"time_ns": 1791249631587829000, "utc": "2026-10-06T01:20:31Z", "requested": "fixture", "args": ["fix-c-post"]}
+{"time_ns": 1791249636347116000, "utc": "2026-10-06T01:20:36Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791249636354325000, "utc": "2026-10-06T01:20:36Z", "executed": "key", "key": "Escape", "pty_offset": 271404}
+{"time_ns": 1791249638594604000, "utc": "2026-10-06T01:20:38Z", "requested": "screen", "args": ["c-declined"]}
+{"time_ns": 1791249638636552000, "utc": "2026-10-06T01:20:38Z", "requested": "fixture", "args": ["fix-c-declined"]}
+{"time_ns": 1791249642160446000, "utc": "2026-10-06T01:20:42Z", "requested": "text", "args": ["/permissions"]}
+{"time_ns": 1791249642167109000, "utc": "2026-10-06T01:20:42Z", "executed": "text", "text": "/permissions", "pty_offset": 274171}
+{"time_ns": 1791249643234133000, "utc": "2026-10-06T01:20:43Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249643241002000, "utc": "2026-10-06T01:20:43Z", "executed": "key", "key": "Enter", "pty_offset": 274418}
+{"time_ns": 1791249645492361000, "utc": "2026-10-06T01:20:45Z", "requested": "key", "args": ["Down", "Down"]}
+{"time_ns": 1791249645498837000, "utc": "2026-10-06T01:20:45Z", "executed": "key", "key": "Down", "pty_offset": 275409}
+{"time_ns": 1791249645668252000, "utc": "2026-10-06T01:20:45Z", "executed": "key", "key": "Down", "pty_offset": 275999}
+{"time_ns": 1791249646900047000, "utc": "2026-10-06T01:20:46Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249646907269000, "utc": "2026-10-06T01:20:46Z", "executed": "key", "key": "Enter", "pty_offset": 276567}
+{"time_ns": 1791249650145928000, "utc": "2026-10-06T01:20:50Z", "requested": "screen", "args": ["c2-fa-confirm"]}
+{"time_ns": 1791249652631520000, "utc": "2026-10-06T01:20:52Z", "requested": "key", "args": ["Up"]}
+{"time_ns": 1791249652638555000, "utc": "2026-10-06T01:20:52Z", "executed": "key", "key": "Up", "pty_offset": 277748}
+{"time_ns": 1791249653869052000, "utc": "2026-10-06T01:20:53Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249653875937000, "utc": "2026-10-06T01:20:53Z", "executed": "key", "key": "Enter", "pty_offset": 278130}
+{"time_ns": 1791249657090830000, "utc": "2026-10-06T01:20:57Z", "requested": "screen", "args": ["c2-fa-applied"]}
+{"time_ns": 1791249661238280000, "utc": "2026-10-06T01:21:01Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791249661244956000, "utc": "2026-10-06T01:21:01Z", "executed": "key", "key": "Escape", "pty_offset": 279650}
+{"time_ns": 1791249662475597000, "utc": "2026-10-06T01:21:02Z", "requested": "text", "args": ["List the files in the current workspace directory. Read-only, no writes."]}
+{"time_ns": 1791249662482067000, "utc": "2026-10-06T01:21:02Z", "executed": "text", "text": "List the files in the current workspace directory. Read-only, no writes.", "pty_offset": 279842}
+{"time_ns": 1791249663553127000, "utc": "2026-10-06T01:21:03Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249663560643000, "utc": "2026-10-06T01:21:03Z", "executed": "key", "key": "Enter", "pty_offset": 280385}
+{"time_ns": 1791249666662372000, "utc": "2026-10-06T01:21:06Z", "requested": "wait", "args": ["workspace|Done|Error|files", "20"]}
+{"time_ns": 1791249666668995000, "utc": "2026-10-06T01:21:06Z", "executed": "wait", "pattern": "workspace|Done|Error|files", "matched": true}
+{"time_ns": 1791249666704026000, "utc": "2026-10-06T01:21:06Z", "requested": "screen", "args": ["c2-trivial"]}
+{"time_ns": 1791249669937355000, "utc": "2026-10-06T01:21:09Z", "requested": "wait", "args": ["Done|completed|finished", "25"]}
+{"time_ns": 1791249695144040000, "utc": "2026-10-06T01:21:35Z", "executed": "wait", "pattern": "Done|completed|finished", "matched": false}
+{"time_ns": 1791249695188470000, "utc": "2026-10-06T01:21:35Z", "requested": "screen", "args": ["c2-done"]}
+{"time_ns": 1791249698039045000, "utc": "2026-10-06T01:21:38Z", "requested": "text", "args": ["/permissions"]}
+{"time_ns": 1791249698045541000, "utc": "2026-10-06T01:21:38Z", "executed": "text", "text": "/permissions", "pty_offset": 308930}
+{"time_ns": 1791249699103321000, "utc": "2026-10-06T01:21:39Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249699110049000, "utc": "2026-10-06T01:21:39Z", "executed": "key", "key": "Enter", "pty_offset": 309177}
+{"time_ns": 1791249701342008000, "utc": "2026-10-06T01:21:41Z", "requested": "screen", "args": ["c2-fa-check"]}
+{"time_ns": 1791249704715894000, "utc": "2026-10-06T01:21:44Z", "requested": "key", "args": ["Up", "Up"]}
+{"time_ns": 1791249704723511000, "utc": "2026-10-06T01:21:44Z", "executed": "key", "key": "Up", "pty_offset": 310206}
+{"time_ns": 1791249704904066000, "utc": "2026-10-06T01:21:44Z", "executed": "key", "key": "Up", "pty_offset": 310776}
+{"time_ns": 1791249706131853000, "utc": "2026-10-06T01:21:46Z", "requested": "screen", "args": ["c2-restrict-nav"]}
+{"time_ns": 1791249708772028000, "utc": "2026-10-06T01:21:48Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249708778750000, "utc": "2026-10-06T01:21:48Z", "executed": "key", "key": "Enter", "pty_offset": 311350}
+{"time_ns": 1791249712011610000, "utc": "2026-10-06T01:21:52Z", "requested": "screen", "args": ["c2-restrict-pending"]}
+{"time_ns": 1791249715487957000, "utc": "2026-10-06T01:21:55Z", "requested": "stop", "args": []}
+{"time_ns": 1791249715494548000, "utc": "2026-10-06T01:21:55Z", "executed": "stop"}
+{"time_ns": 1791249716563274000, "utc": "2026-10-06T01:21:56Z", "requested": "start", "args": []}
+{"time_ns": 1791249718606430000, "utc": "2026-10-06T01:21:58Z", "executed": "start", "argv": ["/opt/pf83/bin/pf83-product", "zai"]}
+{"time_ns": 1791249719682080000, "utc": "2026-10-06T01:21:59Z", "requested": "screen", "args": ["restart-c2"]}
+{"time_ns": 1791249722674785000, "utc": "2026-10-06T01:22:02Z", "requested": "text", "args": ["/permissions"]}
+{"time_ns": 1791249722681656000, "utc": "2026-10-06T01:22:02Z", "executed": "text", "text": "/permissions", "pty_offset": 316726}
+{"time_ns": 1791249723754728000, "utc": "2026-10-06T01:22:03Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249723761862000, "utc": "2026-10-06T01:22:03Z", "executed": "key", "key": "Enter", "pty_offset": 316968}
+{"time_ns": 1791249725995481000, "utc": "2026-10-06T01:22:05Z", "requested": "screen", "args": ["perm-after-restart-c2"]}
+{"time_ns": 1791249731177983000, "utc": "2026-10-06T01:22:11Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791249731184185000, "utc": "2026-10-06T01:22:11Z", "executed": "key", "key": "Escape", "pty_offset": 317954}
+{"time_ns": 1791249732413757000, "utc": "2026-10-06T01:22:12Z", "requested": "text", "args": ["Create a new file ../probe-c2.marker one directory above the workspace (in the fixture folder) containing the text permission-test. Harmless local write."]}
+{"time_ns": 1791249732420712000, "utc": "2026-10-06T01:22:12Z", "executed": "text", "text": "Create a new file ../probe-c2.marker one directory above the workspace (in the fixture folder) containing the text permission-test. Harmless local write.", "pty_offset": 318436}
+{"time_ns": 1791249733484622000, "utc": "2026-10-06T01:22:13Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249733492908000, "utc": "2026-10-06T01:22:13Z", "executed": "key", "key": "Enter", "pty_offset": 319183}
+{"time_ns": 1791249736730981000, "utc": "2026-10-06T01:22:16Z", "requested": "wait", "args": ["Would you like to run|approve|Added|Done|Error", "30"]}
+{"time_ns": 1791249740412435000, "utc": "2026-10-06T01:22:20Z", "executed": "wait", "pattern": "Would you like to run|approve|Added|Done|Error", "matched": true}
+{"time_ns": 1791249740457794000, "utc": "2026-10-06T01:22:20Z", "requested": "screen", "args": ["probe-c2-post"]}
+{"time_ns": 1791249740499197000, "utc": "2026-10-06T01:22:20Z", "requested": "fixture", "args": ["fix-c2-post"]}
+{"time_ns": 1791249744016583000, "utc": "2026-10-06T01:22:24Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791249744023033000, "utc": "2026-10-06T01:22:24Z", "executed": "key", "key": "Escape", "pty_offset": 360214}
+{"time_ns": 1791249746265785000, "utc": "2026-10-06T01:22:26Z", "requested": "screen", "args": ["c2-declined"]}
+{"time_ns": 1791249746309430000, "utc": "2026-10-06T01:22:26Z", "requested": "fixture", "args": ["fix-c2-declined"]}
+{"time_ns": 1791249788518670000, "utc": "2026-10-06T01:23:08Z", "requested": "text", "args": ["Create a new file ../probe-d.marker one directory above the workspace (in the fixture folder) containing the text permission-test. Harmless local write."]}
+{"time_ns": 1791249788525933000, "utc": "2026-10-06T01:23:08Z", "executed": "text", "text": "Create a new file ../probe-d.marker one directory above the workspace (in the fixture folder) containing the text permission-test. Harmless local write.", "pty_offset": 362296}
+{"time_ns": 1791249789591282000, "utc": "2026-10-06T01:23:09Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249789597983000, "utc": "2026-10-06T01:23:09Z", "executed": "key", "key": "Enter", "pty_offset": 363067}
+{"time_ns": 1791249792846084000, "utc": "2026-10-06T01:23:12Z", "requested": "wait", "args": ["Would you like to run", "25"]}
+{"time_ns": 1791249792852904000, "utc": "2026-10-06T01:23:12Z", "executed": "wait", "pattern": "Would you like to run", "matched": true}
+{"time_ns": 1791249792889529000, "utc": "2026-10-06T01:23:12Z", "requested": "screen", "args": ["probe-d-pending"]}
+{"time_ns": 1791249792931377000, "utc": "2026-10-06T01:23:12Z", "requested": "fixture", "args": ["fix-d-pending"]}
+{"time_ns": 1791249796653834000, "utc": "2026-10-06T01:23:16Z", "requested": "stop", "args": []}
+{"time_ns": 1791249796660173000, "utc": "2026-10-06T01:23:16Z", "executed": "stop"}
+{"time_ns": 1791249797732013000, "utc": "2026-10-06T01:23:17Z", "requested": "start", "args": []}
+{"time_ns": 1791249799778275000, "utc": "2026-10-06T01:23:19Z", "executed": "start", "argv": ["/opt/pf83/bin/pf83-product", "zai"]}
+{"time_ns": 1791249800869828000, "utc": "2026-10-06T01:23:20Z", "requested": "screen", "args": ["restart-d1"]}
+{"time_ns": 1791249804714059000, "utc": "2026-10-06T01:23:24Z", "requested": "fixture", "args": ["fix-d-after-restart"]}
+{"time_ns": 1791249808051932000, "utc": "2026-10-06T01:23:28Z", "requested": "text", "args": ["/permissions"]}
+{"time_ns": 1791249808059041000, "utc": "2026-10-06T01:23:28Z", "executed": "text", "text": "/permissions", "pty_offset": 387856}
+{"time_ns": 1791249809125865000, "utc": "2026-10-06T01:23:29Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249809132608000, "utc": "2026-10-06T01:23:29Z", "executed": "key", "key": "Enter", "pty_offset": 388115}
+{"time_ns": 1791249811376895000, "utc": "2026-10-06T01:23:31Z", "requested": "screen", "args": ["perm-after-restart-d"]}
+{"time_ns": 1791249814870314000, "utc": "2026-10-06T01:23:34Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791249814877580000, "utc": "2026-10-06T01:23:34Z", "executed": "key", "key": "Escape", "pty_offset": 389809}
+{"time_ns": 1791249816115848000, "utc": "2026-10-06T01:23:36Z", "requested": "text", "args": ["Create a new file ../probe-d2.marker one directory above the workspace (in the fixture folder) containing the text permission-test. Harmless local write."]}
+{"time_ns": 1791249816122885000, "utc": "2026-10-06T01:23:36Z", "executed": "text", "text": "Create a new file ../probe-d2.marker one directory above the workspace (in the fixture folder) containing the text permission-test. Harmless local write.", "pty_offset": 389951}
+{"time_ns": 1791249817197577000, "utc": "2026-10-06T01:23:37Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791249817204633000, "utc": "2026-10-06T01:23:37Z", "executed": "key", "key": "Enter", "pty_offset": 390698}
+{"time_ns": 1791249820340563000, "utc": "2026-10-06T01:23:40Z", "requested": "wait", "args": ["Would you like to run|approve|Added|Done|Error", "30"]}
+{"time_ns": 1791249822454771000, "utc": "2026-10-06T01:23:42Z", "executed": "wait", "pattern": "Would you like to run|approve|Added|Done|Error", "matched": true}
+{"time_ns": 1791249822501045000, "utc": "2026-10-06T01:23:42Z", "requested": "screen", "args": ["probe-d2-post"]}
+{"time_ns": 1791249822545299000, "utc": "2026-10-06T01:23:42Z", "requested": "fixture", "args": ["fix-d2-post"]}
+{"time_ns": 1791249827401499000, "utc": "2026-10-06T01:23:47Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791249827408711000, "utc": "2026-10-06T01:23:47Z", "executed": "key", "key": "Escape", "pty_offset": 422124}
+{"time_ns": 1791249829650483000, "utc": "2026-10-06T01:23:49Z", "requested": "screen", "args": ["d2-declined"]}
+{"time_ns": 1791249829696534000, "utc": "2026-10-06T01:23:49Z", "requested": "fixture", "args": ["fix-d2-declined"]}
+{"time_ns": 1791249832582798000, "utc": "2026-10-06T01:23:52Z", "requested": "stop", "args": []}
+{"time_ns": 1791249832590768000, "utc": "2026-10-06T01:23:52Z", "executed": "stop"}
