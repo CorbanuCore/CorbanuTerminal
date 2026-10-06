@@ -82,7 +82,9 @@ Independent Opus 5.5 High review in three rounds:
   the 16 MiB scan limit was withheld, because the rescan hit on size alone. It also found V2 (P3): a value already
   JSON-escaped inside a string was missed by the serialized quick scan. Both are fixed in the final commit, along
   with N4 (a test for stripped keys). Over the limit, only number leaves are rescanned. The doubly escaped form is
-  now registered. N3 is recorded below. A re-check is `review-opus-6.md`.
+  now registered. N3 is recorded below.
+- `review-opus-6.md`: APPROVE WITH NITS. V1 and V2 are verified, with no regressions and no change with the flag off.
+  Nits M1 and M2 are recorded below.
 
 ## Known limits (not claimed)
 
@@ -106,6 +108,8 @@ Independent Opus 5.5 High review in three rounds:
   the matcher under the state lock.
 - The base64 partial character before a value can be emitted in an earlier chunk (at most 4 bits).
 - A `TurnComplete` or `TurnAborted` that cannot be rebuilt is delivered with its text cleared, but its numbers
-  unchanged. In a document over 16 MiB, a value spanning fields is not checked; number leaves are.
+  unchanged. In a document over 16 MiB, a value spanning fields or keys is not checked; number leaves are.
+- Escaping is matched one level deep inside serialized items: text that already holds the doubly escaped form
+  (JSON nested in JSON in tool output) is not found.
 - The `pf_28_s01` tests in login, vault and core arm the process-wide gate, so they need nextest (`just test`).
 - Memory summaries containing a managed value are refused as a batch (the endpoint is unused in production).
