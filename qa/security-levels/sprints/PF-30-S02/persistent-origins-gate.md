@@ -43,3 +43,8 @@ requests as before.
 - After `/compact`, a labelled summary can make a model repeat earlier answers (seen once with GLM 5.2).
 - Not yet covered: a real paginated/referenced-fork resume test, fork restore tests, agent spawn and mailbox
   lineage, export/import, memory stage-one policy binding, the token-budget MCP thread hint (still host).
+
+## Merge
+
+Slice 1 merged to main on 2026-10-06 as PR #190, merge commit `7b2a04ea41`, behind `source_envelopes`.
+All 29 CI checks passed. The sprint stays `in_progress` for the remaining slices.

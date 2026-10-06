@@ -1,12 +1,13 @@
 # P0 security-level execution sprints
 
 The [P0 security plan](../../../plans/active/p0-security-levels.md) owns these
-22 records: the rest of the 20-sprint core from Travis's 2026-10-06 decisions (19 named
+21 records: the rest of the 20-sprint core from Travis's 2026-10-06 decisions (19 named
 sprints plus the flagged picker), the broker-lane additions PF-27-S05 and PF-27-S06
 (coordinator, 2026-10-06), and two hosted non-security records. Up to three
 core sprints may be reserved at once, one per lane, with disjoint `write_scope`.
 PF-83-S01 closed on 2026-10-06 and is [archived](../../archive/p0-security-levels/pf-83-s01-permission-confirmation.md);
-PF-30-S01 completed (PR #178) and is [archived](../../archive/p0-security-levels/pf-30-s01-typed-source-envelope.md).
+PF-30-S01 completed (PR #178) and is [archived](../../archive/p0-security-levels/pf-30-s01-typed-source-envelope.md);
+PF-24-S03 completed (PR #186) and is [archived](../../archive/p0-security-levels/pf-24-s03-flagged-security-picker.md).
 PF-27-S04 completed on 2026-10-06 and is [archived](../../archive/p0-security-levels/pf-27-s04-isolated-credential-broker.md);
 its open items moved to PF-27-S02, the new PF-27-S05 and PF-27-S06, and PF-23-S03.
 Deferred sprints moved to the [P1 hardening sprints](../p1-security-hardening/index.md).
@@ -14,7 +15,6 @@ Earlier allocation notes are in the [plan history](../../../plans/history/p0-sec
 
 | Order | Sprint | Outcome | Lane | Depends on |
 | ---: | --- | --- | --- | --- |
-| 20 | [PF-24-S03](pf-24-s03-flagged-security-picker.md) | Flagged /security picker: Permissive and Aggressive | tui (first) | PF-24-S01 |
 | 29 | [PF-27-S02](pf-27-s02-secretless-agent-launch.md) | Secretless agent launch and bypass containment (in progress, macOS+Linux) | broker | PF-27-S04 (archived) |
 | 30 | [PF-28-S01](pf-28-s01-central-secret-output-gate.md) | Central secret and protected-output gate | broker | PF-27-S02 |
 | 31 | [PF-28-S02](pf-28-s02-reflected-secret-response-scrubbing.md) | Reflected-secret response scrubbing | broker | PF-28-S01 |
