@@ -48,28 +48,32 @@ updated: 2026-10-06
 ## Done
 
 - [x] Allocated 2026-10-06 to the untrusted-content lane after PF-30-S01 closed.
+- [x] Origins persist in the rollout (`source_origin`, version 1, digests only) and are restored on resume and
+  fork, and restated at compaction checkpoints. Missing, old, unknown-version or malformed records stay untrusted;
+  a record never upgrades a live registration.
+- [x] Compaction: retained human messages keep human standing; the summary is host only when every input had
+  standing. Memory context reaches protected requests as `source=memory`. Window-reset context registered as host.
+- [x] Flag-off Moderate names the disabled feature (separate commit `836ec41e04`).
+- [x] Gate at `01a3a88330`: [persistent-origins-gate.md](../../../../qa/security-levels/sprints/PF-30-S02/persistent-origins-gate.md);
+  videos in [qa/demos/index/PF-30-S02.md](../../../../qa/demos/index/PF-30-S02.md).
 
 ## Remaining
 
-- [ ] Persist each message's host-recorded origin in the rollout, versioned and bound to a content digest;
-  restore it on resume and fork. Missing, old, unknown-version or malformed records stay untrusted.
-- [ ] Compaction: a summary keeps host standing only when every compacted input had it; retained human
-  messages keep human standing; anything else stays labelled.
-- [ ] Memory: memory-derived developer context reaches a protected request as labelled `memory` data.
-- [ ] Flag off, Moderate: say the request stopped because `source_envelopes` is off (separate commit).
 - [ ] Later slices: agent spawn/mailbox lineage, export/import, memory stage-one policy binding
   ([follow-up](../../../../qa/security-levels/sprints/PF-30-S01-typed-source-envelope/memory-stage-one-follow-up.md)),
-  provenance-store capacity and read-time digest tests, sticky taint across exact-action approvals.
+  provenance-store capacity and read-time digest tests, sticky taint across exact-action approvals,
+  a real paginated/referenced-fork resume test, and the token-budget MCP thread hint (still host context).
 
 ## Verification
 
-- [ ] `just fmt`; `just fix -p` for each changed crate.
-- [ ] Focused: `just test -p codex-core pf_30_s02`, plus the protocol, rollout and memories suites.
-- [ ] Integration: full `codex-core` suite with baseline failures recorded.
-- [ ] Real TUI: GLM 5.2 tmux demos (resume keeps standing; hostile memory stays labelled; flag-off message).
-- [ ] One independent Opus 5.5 High review.
+- [x] `just fmt`; `just fix -p` for each changed crate.
+- [x] Focused: `just test -p codex-core pf_30_s0` (70 pass), plus the protocol, rollout, state and memories suites.
+- [x] Integration: nine affected crates, 5,052/5,056; the four failures are recorded as baseline or flake.
+- [x] Real TUI: GLM 5.2 tmux run and four demos (resume, memory, compaction, flag-off message).
+- [x] One independent Opus 5.5 High review: round 1 changes requested, round 2 APPROVE.
+- [ ] Remaining slices get the same gate; milestone VM run and sign-off when Moderate ships.
 
 ## Exit evidence
 
-- [ ] Gate record under `qa/security-levels/sprints/PF-30-S02/`; videos in `qa/demos/index/PF-30-S02.md`.
-- [ ] PR merged to main behind `source_envelopes`; Done/Remaining reflect reality.
+- [x] Gate record under `qa/security-levels/sprints/PF-30-S02/`; videos in `qa/demos/index/PF-30-S02.md`.
+- [ ] This slice merged to main behind `source_envelopes`; later slices merged and the record archived.

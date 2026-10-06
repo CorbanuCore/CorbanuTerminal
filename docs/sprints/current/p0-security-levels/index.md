@@ -20,7 +20,7 @@ Earlier allocation notes are in the [plan history](../../../plans/history/p0-sec
 | 33 | [PF-33-S02](pf-33-s02-connection-pinning-and-bypass.md) | Connection pinning and alternate-egress denial | first free | PF-33-S01 |
 | 35 | [PF-29-S01](pf-29-s01-protected-mode-inventory.md) | Protected-mode inventory and activation preflight | first free | PF-28-S02, PF-20-S02 |
 | 36 | [PF-29-S02](pf-29-s02-human-secret-migration.md) | Human-reviewed credential migration and recovery | first free | PF-29-S01, PF-24-S01 |
-| 38 | [PF-30-S02](pf-30-s02-persistent-taint-and-memory.md) | Persistent taint across summaries and memory | untrusted content | PF-30-S01 |
+| 38 | [PF-30-S02](pf-30-s02-persistent-taint-and-memory.md) | Persistent taint across summaries and memory (slice 1: rollout origins, compaction, memory) | untrusted content | PF-30-S01 |
 | 39 | [PF-30-S03](pf-30-s03-post-taint-authority-checks.md) | Post-taint authority checks | untrusted content | PF-30-S02, PF-13-S05 |
 | 40 | [PF-23-S01](pf-23-s01-moderate-ingress-and-disclosure-enforcement.md) | Moderate ingress and disclosure enforcement | untrusted content | PF-13-S05, PF-22-S02, PF-30-S03 |
 | 41 | [PF-23-S02](pf-23-s02-aggressive-deny-and-grant-enforcement.md) | Aggressive deny and grant enforcement | untrusted content | PF-17-S01, PF-23-S01 |
