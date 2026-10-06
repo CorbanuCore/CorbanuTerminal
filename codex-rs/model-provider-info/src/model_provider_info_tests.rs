@@ -1778,15 +1778,18 @@ fn zai_glm_5_3_resolves_only_on_the_direct_zai_route() {
 }
 
 /// Provider definitions are logged when a session is configured; credentials
-/// in them must not reach the log (PF-24-S03 follow-up).
+/// in them must not reach the log (#196).
 #[test]
-fn debug_redacts_bearer_token_header_and_query_values() {
+fn debug_redacts_credentials_and_keeps_names() {
     let provider = ModelProviderInfo {
         name: "Example".to_string(),
+        base_url: Some(
+            "https://user:fake-userinfo-sentinel@example.com/v1?key=fake-url-sentinel".to_string(),
+        ),
         experimental_bearer_token: Some("fake-bearer-sentinel".to_string()),
         http_headers: Some(maplit::hashmap! {
-            "Authorization".to_string() => "Bearer fake-header-sentinel".to_string(),
             "X-Version".to_string() => "fake-version-sentinel".to_string(),
+            "Authorization".to_string() => "Bearer fake-header-sentinel".to_string(),
         }),
         query_params: Some(maplit::hashmap! {
             "key".to_string() => "fake-query-sentinel".to_string(),
@@ -1796,22 +1799,8 @@ fn debug_redacts_bearer_token_header_and_query_values() {
         }),
         ..Default::default()
     };
-    let debug = format!("{provider:?}");
-    assert!(
-        !debug.contains("sentinel"),
-        "credential value in provider Debug: {debug}"
-    );
-    for kept in [
-        "experimental_bearer_token: Some(\"<redacted>\")",
-        "http_headers: Some({\"Authorization\": \"<redacted>\", \"X-Version\": \"<redacted>\"})",
-        "query_params: Some({\"key\": \"<redacted>\"})",
-        "env_http_headers: Some({\"X-Project\": \"PROJECT_ENV\"})",
-        "name: \"Example\"",
-    ] {
-        assert!(debug.contains(kept), "missing {kept} in {debug}");
-    }
     assert_eq!(
-        format!("{:?}", ModelProviderInfo::default()).contains("<redacted>"),
-        false
+        format!("{provider:?}"),
+        "ModelProviderInfo { name: \"Example\", base_url: Some(\"https://<redacted>@example.com/v1?<redacted>\"), env_key: None, env_key_instructions: None, experimental_bearer_token: Some(\"<redacted>\"), auth: None, aws: None, wire_api: Responses, query_params: Some({\"key\": \"<redacted>\"}), http_headers: Some({\"Authorization\": \"<redacted>\", \"X-Version\": \"<redacted>\"}), env_http_headers: Some({\"X-Project\": \"PROJECT_ENV\"}), chat_completions_provider: None, request_max_retries: None, stream_max_retries: None, stream_idle_timeout_ms: None, stream_actionable_timeout_ms: None, stream_long_failure_retry_threshold_ms: None, stream_long_failure_max_retries: None, runtime_policy: ProviderRuntimePolicy { request_body_max_bytes: 30000000, retry_request_body_max_bytes: 15000000, web_search_max_uses: None }, websocket_connect_timeout_ms: None, requires_openai_auth: false, supports_websockets: false, supports_standalone_web_search: false }"
     );
 }

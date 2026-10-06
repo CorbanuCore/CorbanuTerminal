@@ -119,7 +119,7 @@ impl HttpClient {
         if self.request_logging == RequestLogging::Enabled {
             tracing::debug!(
                 method = %method,
-                url = %url,
+                url = %crate::redact_url(url),
                 status = %response.status(),
                 headers = ?response.headers(),
                 version = ?response.version(),
@@ -132,9 +132,9 @@ impl HttpClient {
         if self.request_logging == RequestLogging::Enabled {
             tracing::debug!(
                 method = %method,
-                url = %url,
+                url = %crate::redact_url(url),
                 status = error.status().map(|status| status.as_u16()),
-                error = %error,
+                error = %crate::redact_reqwest_error(error),
                 "Request failed"
             );
         }
@@ -143,7 +143,7 @@ impl HttpClient {
         if self.request_logging == RequestLogging::Enabled {
             tracing::debug!(
                 method = %method,
-                url = %url,
+                url = %crate::redact_url(url),
                 status = error.status().map(|status| status.as_u16()),
                 is_timeout = error.is_timeout(),
                 is_connect = error.is_connect(),
@@ -251,7 +251,7 @@ impl RequestBuilder {
                 if self.request_logging == RequestLogging::Enabled {
                     tracing::debug!(
                         method = %self.method,
-                        url = %self.url,
+                        url = %crate::redact_url(&self.url),
                         status = %response.status(),
                         headers = ?response.headers(),
                         version = ?response.version(),
@@ -266,9 +266,9 @@ impl RequestBuilder {
                     let status = error.status();
                     tracing::debug!(
                         method = %self.method,
-                        url = %self.url,
+                        url = %crate::redact_url(&self.url),
                         status = status.map(|s| s.as_u16()),
-                        error = %error,
+                        error = %crate::redact_reqwest_error(&error),
                         "Request failed"
                     );
                 }

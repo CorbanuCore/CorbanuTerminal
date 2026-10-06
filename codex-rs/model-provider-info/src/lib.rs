@@ -30,6 +30,8 @@ use std::fmt;
 use std::num::NonZeroU64;
 use std::time::Duration;
 
+mod provider_debug;
+
 const DEFAULT_ANTHROPIC_REQUEST_BODY_MAX_BYTES: usize = 30_000_000;
 const DEFAULT_ANTHROPIC_RETRY_BODY_MAX_BYTES: usize = 15_000_000;
 
@@ -861,9 +863,8 @@ pub enum ModelProviderCredentialSource<'a> {
 
 /// Serializable representation of a provider definition.
 ///
-/// `Debug` redacts `experimental_bearer_token` and the values of
-/// `http_headers` and `query_params`, which can hold credentials: provider
-/// definitions are logged (for example when a session is configured).
+/// `Debug` (in `provider_debug.rs`) redacts credentials: provider definitions
+/// are logged, for example when a session is configured.
 #[derive(Clone, Default, Deserialize, Serialize, PartialEq, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct ModelProviderInfo {
@@ -936,88 +937,6 @@ pub struct ModelProviderInfo {
     /// Whether this provider supports the standalone web-search endpoint.
     #[serde(default)]
     pub supports_standalone_web_search: bool,
-}
-
-impl fmt::Debug for ModelProviderInfo {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        /// Keeps the map's keys and hides its values.
-        struct RedactedValues<'a>(&'a HashMap<String, String>);
-        impl fmt::Debug for RedactedValues<'_> {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                let mut keys = self.0.keys().collect::<Vec<_>>();
-                keys.sort();
-                f.debug_map()
-                    .entries(keys.into_iter().map(|key| (key, REDACTED)))
-                    .finish()
-            }
-        }
-        const REDACTED: &str = "<redacted>";
-
-        // Destructured so a new field cannot be added without deciding
-        // whether it must be redacted.
-        let Self {
-            name,
-            base_url,
-            env_key,
-            env_key_instructions,
-            experimental_bearer_token,
-            auth,
-            aws,
-            wire_api,
-            query_params,
-            http_headers,
-            env_http_headers,
-            chat_completions_provider,
-            request_max_retries,
-            stream_max_retries,
-            stream_idle_timeout_ms,
-            stream_actionable_timeout_ms,
-            stream_long_failure_retry_threshold_ms,
-            stream_long_failure_max_retries,
-            runtime_policy,
-            websocket_connect_timeout_ms,
-            requires_openai_auth,
-            supports_websockets,
-            supports_standalone_web_search,
-        } = self;
-        f.debug_struct("ModelProviderInfo")
-            .field("name", name)
-            .field("base_url", base_url)
-            .field("env_key", env_key)
-            .field("env_key_instructions", env_key_instructions)
-            .field(
-                "experimental_bearer_token",
-                &experimental_bearer_token.as_ref().map(|_| REDACTED),
-            )
-            .field("auth", auth)
-            .field("aws", aws)
-            .field("wire_api", wire_api)
-            .field("query_params", &query_params.as_ref().map(RedactedValues))
-            .field("http_headers", &http_headers.as_ref().map(RedactedValues))
-            .field("env_http_headers", env_http_headers)
-            .field("chat_completions_provider", chat_completions_provider)
-            .field("request_max_retries", request_max_retries)
-            .field("stream_max_retries", stream_max_retries)
-            .field("stream_idle_timeout_ms", stream_idle_timeout_ms)
-            .field("stream_actionable_timeout_ms", stream_actionable_timeout_ms)
-            .field(
-                "stream_long_failure_retry_threshold_ms",
-                stream_long_failure_retry_threshold_ms,
-            )
-            .field(
-                "stream_long_failure_max_retries",
-                stream_long_failure_max_retries,
-            )
-            .field("runtime_policy", runtime_policy)
-            .field("websocket_connect_timeout_ms", websocket_connect_timeout_ms)
-            .field("requires_openai_auth", requires_openai_auth)
-            .field("supports_websockets", supports_websockets)
-            .field(
-                "supports_standalone_web_search",
-                supports_standalone_web_search,
-            )
-            .finish()
-    }
 }
 
 /// AWS SigV4 auth configuration for a model provider.
@@ -1133,7 +1052,12 @@ impl ModelProviderInfo {
         let mut headers = HeaderMap::with_capacity(capacity);
         if let Some(extra) = &self.http_headers {
             for (k, v) in extra {
-                if let (Ok(name), Ok(value)) = (HeaderName::try_from(k), HeaderValue::try_from(v)) {
+                if let (Ok(name), Ok(mut value)) =
+                    (HeaderName::try_from(k), HeaderValue::try_from(v))
+                {
+                    // Provider headers can carry credentials; keep them out of
+                    // `HeaderMap` Debug output.
+                    value.set_sensitive(true);
                     headers.insert(name, value);
                 }
             }
@@ -1143,9 +1067,10 @@ impl ModelProviderInfo {
             for (header, env_var) in env_headers {
                 if let Ok(val) = std::env::var(env_var)
                     && !val.trim().is_empty()
-                    && let (Ok(name), Ok(value)) =
+                    && let (Ok(name), Ok(mut value)) =
                         (HeaderName::try_from(header), HeaderValue::try_from(val))
                 {
+                    value.set_sensitive(true);
                     headers.insert(name, value);
                 }
             }
