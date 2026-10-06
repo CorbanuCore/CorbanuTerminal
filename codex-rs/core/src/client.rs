@@ -942,6 +942,25 @@ impl ModelClient {
         self
     }
 
+    /// `source_envelopes`: load the key that authenticates origin records
+    /// for `codex_home`. Without it no records are written or restored, so
+    /// content resumes labelled. Replacement clients share the loaded key.
+    pub(crate) fn with_source_origin_key(self, codex_home: &std::path::Path) -> Self {
+        if let Ok(mut ingress) = self.ingress_items.lock()
+            && ingress.labelled_mode()
+            && !ingress.has_origin_key()
+        {
+            match crate::security::ingress::OriginKey::load_or_create(codex_home) {
+                Ok(key) => ingress.set_origin_key(key),
+                Err(error) => tracing::warn!(
+                    "source origin key unavailable ({}); content resumes as labelled data",
+                    error.kind()
+                ),
+            }
+        }
+        self
+    }
+
     /// Restored/forked history keeps the standing its rollout origin records
     /// give it; unrecorded content stays labelled and, when restored messages
     /// lack records, fresh host context is reinjected on the next turn.
@@ -995,6 +1014,67 @@ impl ModelClient {
         self.ingress_items
             .lock()
             .is_ok_and(|ingress| ingress.labelled_mode() && ingress.all_have_standing(items))
+    }
+
+    /// Mark `input` as submitted to this session by another agent (see
+    /// `NativeIngress::mark_agent_input`). Keyed on the exact input, before
+    /// any media preparation, so the prompt seam sees the same key.
+    pub(crate) fn mark_agent_input(
+        &self,
+        input: &[codex_protocol::user_input::UserInput],
+        origin: crate::security::ingress::MessageOrigin,
+    ) {
+        if !self.source_envelopes_enabled() {
+            return;
+        }
+        if let Ok(bytes) = serde_json::to_vec(input)
+            && let Ok(mut ingress) = self.ingress_items.lock()
+        {
+            ingress.mark_agent_input(codex_content_security::ContentDigest::of(&bytes), origin);
+        }
+    }
+
+    /// A prompt that will never be recorded (blocked by a hook) drops one mark.
+    pub(crate) fn discard_agent_input(&self, input: &[codex_protocol::user_input::UserInput]) {
+        if !self.source_envelopes_enabled() {
+            return;
+        }
+        if let Ok(bytes) = serde_json::to_vec(input)
+            && let Ok(mut ingress) = self.ingress_items.lock()
+        {
+            ingress.discard_agent_input(&codex_content_security::ContentDigest::of(&bytes));
+        }
+    }
+
+    /// The origin to record for a prompt: another agent's mark, if any.
+    pub(crate) fn take_agent_input_origin(
+        &self,
+        input: &[codex_protocol::user_input::UserInput],
+    ) -> Option<crate::security::ingress::MessageOrigin> {
+        if !self.source_envelopes_enabled() {
+            return None;
+        }
+        let bytes = serde_json::to_vec(input).ok()?;
+        self.ingress_items
+            .lock()
+            .ok()?
+            .take_agent_input(&codex_content_security::ContentDigest::of(&bytes))
+    }
+
+    /// Standing of text this session's model hands to another agent (a
+    /// spawn task or `send_input`): host only while every item in `history`
+    /// had standing, otherwise agent data. Mirrors the compaction-summary rule,
+    /// so one tool output, memory or unattributed input taints the handoff.
+    pub(crate) fn agent_handoff_origin(
+        &self,
+        history: &[ResponseItem],
+    ) -> crate::security::ingress::MessageOrigin {
+        use crate::security::ingress::MessageOrigin;
+        if self.all_have_standing(history) {
+            MessageOrigin::Host
+        } else {
+            MessageOrigin::External(codex_protocol::provenance::SourceKind::ChildAgent)
+        }
     }
 
     /// Consumed only while protected: Permissive history stays unchanged and
