@@ -503,6 +503,8 @@ fn pf_30_s03_taint_generation_counts_content_without_standing() {
     let mut off = NativeIngress::default();
     off.note_recorded(&[output("call-1", "tool output")]);
     assert_eq!(off.taint_generation(), 0);
+}
+
 /// The per-home key is created owner-only, reused, and refused when others
 /// can read it or when it is a symlink.
 #[cfg(unix)]

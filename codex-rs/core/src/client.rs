@@ -1035,6 +1035,8 @@ impl ModelClient {
             Ok(ingress) => (ingress.labelled_mode() && protected).then(|| ingress.taint_generation()),
             Err(_) => protected.then_some(u64::MAX),
         }
+    }
+
     /// Mark `input` as submitted to this session by another agent (see
     /// `NativeIngress::mark_agent_input`). Keyed on the exact input, before
     /// any media preparation, so the prompt seam sees the same key.
