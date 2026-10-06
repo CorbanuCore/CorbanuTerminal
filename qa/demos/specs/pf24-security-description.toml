@@ -1,0 +1,34 @@
+# PF-24-S03 follow-up: with the `security_levels` flag on, the /security
+# command description no longer says "read only"; it says what the command
+# does. (Flag off keeps the read-only description; covered by a unit test.)
+id = "pf24-security-description"
+feature = "/security description matches the picker"
+expected = "With the flag on, the command popup describes /security as choosing a security level that takes effect at the next start, and the command opens the level picker."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/secur"
+[[steps]]
+wait = "choose a security level; takes effect at the next start"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+pause = 3.5

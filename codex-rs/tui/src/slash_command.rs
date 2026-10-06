@@ -148,9 +148,7 @@ impl SlashCommand {
                 "start a side conversation in an ephemeral fork"
             }
             SlashCommand::Permissions => "choose what Corbanu Terminal is allowed to do",
-            SlashCommand::Security => {
-                "explore security profiles and protection readiness (read only)"
-            }
+            SlashCommand::Security => security_description(crate::security::level::context()),
             SlashCommand::Keymap => "remap TUI shortcuts",
             SlashCommand::Vim => "toggle Vim mode for the composer",
             SlashCommand::ElevateSandbox => "set up elevated agent sandbox",
@@ -331,6 +329,16 @@ pub fn built_in_slash_commands() -> Vec<(&'static str, SlashCommand)> {
         .collect()
 }
 
+/// `/security` opens the level picker when the `security_levels` flag is on
+/// (or a non-Permissive level is stored); otherwise it is the read-only view.
+fn security_description(context: Option<&crate::security::level::LevelContext>) -> &'static str {
+    if context.is_some_and(|context| context.picker_enabled) {
+        "choose a security level; takes effect at the next start"
+    } else {
+        "explore security profiles and protection readiness (read only)"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -375,6 +383,33 @@ mod tests {
         assert_eq!(
             SlashCommand::from_str("approve"),
             Ok(SlashCommand::AutoReview)
+        );
+    }
+
+    /// The description follows what `/security` opens: the picker when the
+    /// launch context enables it, otherwise the read-only view.
+    #[test]
+    fn security_description_matches_what_the_command_opens() {
+        use crate::security::level::ChosenLevel;
+        use crate::security::level::LevelContext;
+
+        let context = |picker_enabled| LevelContext {
+            codex_home: std::path::PathBuf::from("/home"),
+            picker_enabled,
+            active: ChosenLevel::Permissive,
+        };
+        let read_only = "explore security profiles and protection readiness (read only)";
+        assert_eq!(
+            [
+                super::security_description(Some(&context(true))),
+                super::security_description(Some(&context(false))),
+                super::security_description(/*context*/ None),
+            ],
+            [
+                "choose a security level; takes effect at the next start",
+                read_only,
+                read_only,
+            ]
         );
     }
 }
