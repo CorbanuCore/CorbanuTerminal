@@ -23,12 +23,16 @@ use rama_http::header::ACCEPT_ENCODING;
 use rama_http::header::CONTENT_ENCODING;
 use rama_http::header::CONTENT_LENGTH;
 use rama_http::header::HeaderName;
+use rama_http::header::TRANSFER_ENCODING;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
 
 /// Header naming why a response was refused.
 const ERROR_HEADER: &str = "x-proxy-error";
+/// Shortest part of a hook header value registered on its own (shorter
+/// parts are schemes and names such as `Bearer` or `key`, not secrets).
+const MIN_HOOK_PART_BYTES: usize = 12;
 
 /// Asks the origin for a body the gate can read.
 pub(crate) fn request_identity_body(headers: &mut HeaderMap) {
@@ -49,12 +53,13 @@ pub(crate) fn with_hook_values(
         None => ResponseGate::new(std::iter::empty())?,
     };
     for header in &actions.inject_request_headers {
-        let Ok(value) = header.value.to_str() else {
-            continue;
-        };
+        // A value that is not text cannot be matched reliably: refuse.
+        let value = header.value.to_str().map_err(|_| RegisterError::TooShort)?;
         let label = format!("hook:{}", header.name);
-        let token = value.rsplit_once(' ').map(|(_, token)| token);
-        for part in std::iter::once(value).chain(token) {
+        let parts = value
+            .split(|ch: char| ch.is_whitespace() || matches!(ch, '=' | ':' | ',' | ';'))
+            .filter(|part| part.len() >= MIN_HOOK_PART_BYTES && *part != value);
+        for part in std::iter::once(value).chain(parts) {
             match gate.add(&label, part) {
                 Ok(()) | Err(RegisterError::TooShort) => {}
                 Err(err) => return Err(err),
@@ -64,27 +69,55 @@ pub(crate) fn with_hook_values(
     Ok(Some(gate))
 }
 
-/// Scrubs `response` with `gate`, or refuses it when its body is encoded.
+/// Scrubs `response` with `gate`. Refuses it when its body is encoded (any
+/// `Content-Encoding` occurrence other than identity, or a transfer coding
+/// other than chunked) or when it switches protocols, since the scrubber
+/// would not see those bytes.
 pub(crate) fn scrub_response(gate: &ResponseGate, response: Response) -> Response {
     let (mut parts, body) = response.into_parts();
-    let encoding = parts
+    let encodings = parts
         .headers
-        .get(CONTENT_ENCODING)
+        .get_all(CONTENT_ENCODING)
+        .iter()
         .map(HeaderValue::as_bytes);
-    if !ResponseGate::checks_content_encoding(encoding) {
-        tracing::warn!("PF-28-S02: refused an encoded response to a credentialed request");
+    let transfer_coded = parts
+        .headers
+        .get_all(TRANSFER_ENCODING)
+        .iter()
+        .any(|value| {
+            value.as_bytes().split(|byte| *byte == b',').any(|coding| {
+                let coding = coding.trim_ascii();
+                !coding.eq_ignore_ascii_case(b"chunked")
+                    && !coding.eq_ignore_ascii_case(b"identity")
+            })
+        });
+    let refusal = if parts.status == StatusCode::SWITCHING_PROTOCOLS {
+        Some(("credential-response-upgrade", "it switched protocols"))
+    } else if transfer_coded || !ResponseGate::checks_content_encoding(encodings) {
+        Some(("credential-response-encoding", "it was compressed"))
+    } else {
+        None
+    };
+    if let Some((code, why)) = refusal {
+        tracing::warn!("PF-28-S02: refused a response to a credentialed request: {code}");
         return Response::builder()
             .status(StatusCode::BAD_GATEWAY)
             .header("content-type", "text/plain")
-            .header(ERROR_HEADER, "credential-response-encoding")
-            .body(Body::from(
-                "Corbanu refused this response: it was compressed, so it could not be checked for the credential it was sent with.\n",
-            ))
+            .header(ERROR_HEADER, code)
+            .body(Body::from(format!(
+                "Corbanu refused this response: {why}, so it could not be checked for the credential it was sent with.\n"
+            )))
             .unwrap_or_else(|_| Response::new(Body::from("refused\n")));
     }
     scrub_headers(gate, &mut parts.headers);
-    // The scrubbed body may differ in length.
-    parts.headers.remove(CONTENT_LENGTH);
+    // The scrubbed body may differ in length; responses without a body keep
+    // theirs.
+    if !matches!(
+        parts.status,
+        StatusCode::NO_CONTENT | StatusCode::NOT_MODIFIED
+    ) {
+        parts.headers.remove(CONTENT_LENGTH);
+    }
     let body = ScrubbedBody {
         inner: body,
         scrubber: gate.body(),

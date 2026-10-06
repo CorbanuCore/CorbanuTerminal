@@ -815,6 +815,20 @@ fn pf_28_s02_legacy_credential_is_bound_to_https_method_and_path() {
             Err(ScopedCredentialInjectionError::PathDenied),
         ),
         (
+            ("https", "api.github.com", 443, "GET", "/repos/o/r/..;/user"),
+            Err(ScopedCredentialInjectionError::PathDenied),
+        ),
+        (
+            (
+                "https",
+                "api.github.com",
+                443,
+                "GET",
+                "/repos/%252e%252e/user",
+            ),
+            Err(ScopedCredentialInjectionError::PathDenied),
+        ),
+        (
             ("https", "api.github.com", 8443, "GET", "/user"),
             Err(ScopedCredentialInjectionError::PortDenied),
         ),

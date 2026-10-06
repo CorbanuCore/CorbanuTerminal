@@ -87,18 +87,20 @@ fn pf_28_s02_clean_body_streams_with_a_bounded_hold() {
 
 #[test]
 fn pf_28_s02_only_identity_bodies_are_checked() {
-    for (value, checked) in [
-        (None, true),
-        (Some(b"identity".as_slice()), true),
-        (Some(b" Identity ".as_slice()), true),
-        (Some(b"gzip".as_slice()), false),
-        (Some(b"identity, br".as_slice()), false),
-        (Some(b"zstd".as_slice()), false),
+    for (values, checked) in [
+        (vec![], true),
+        (vec![b"identity".as_slice()], true),
+        (vec![b" Identity ".as_slice()], true),
+        (vec![b"gzip".as_slice()], false),
+        (vec![b"identity, br".as_slice()], false),
+        (vec![b"zstd".as_slice()], false),
+        // A repeated header counts too, not only the first.
+        (vec![b"identity".as_slice(), b"gzip".as_slice()], false),
     ] {
         assert_eq!(
-            ResponseGate::checks_content_encoding(value),
+            ResponseGate::checks_content_encoding(values.iter().copied()),
             checked,
-            "{value:?}"
+            "{values:?}"
         );
     }
 }
@@ -109,4 +111,33 @@ fn pf_28_s02_response_gate_refuses_a_value_it_cannot_hold() {
         ResponseGate::new([("broker:SHORT", "ab")]).err(),
         Some(RegisterError::TooShort)
     );
+}
+
+#[test]
+fn pf_28_s02_doubly_encoded_reflection_is_scrubbed_at_every_split() {
+    let gate = gate();
+    let hex: String = TOKEN.bytes().map(|byte| format!("{byte:02x}")).collect();
+    let nested = STANDARD.encode(STANDARD.encode(format!("{{\"auth\":\"Bearer {TOKEN}\"}}")));
+    for blob in [STANDARD.encode(&hex), nested] {
+        let input = format!("data: {{\"echo\":\"{blob}\"}}\n\n");
+        let expected = "data: {\"echo\":\"[REDACTED:broker:GITHUB_TOKEN]\"}\n\n";
+        let bytes = input.as_bytes();
+        for cut in 0..=bytes.len() {
+            assert_eq!(
+                body(&gate, &[&bytes[..cut], &bytes[cut..]]),
+                expected,
+                "cut {cut}"
+            );
+        }
+    }
+}
+
+#[test]
+fn pf_28_s02_long_encoded_run_is_held_within_the_bound() {
+    let gate = gate();
+    let mut scrubber = gate.body();
+    let run = vec![b'A'; 64 * 1024];
+    let out = scrubber.push(&run);
+    assert_eq!(out.len() + scrubber.pending(), run.len());
+    assert!(scrubber.pending() <= crate::output_gate::MAX_BLOCK_CARRY);
 }

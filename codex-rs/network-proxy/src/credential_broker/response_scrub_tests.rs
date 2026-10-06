@@ -98,25 +98,76 @@ async fn pf_28_s02_reflected_headers_body_and_trailers_are_scrubbed() {
 }
 
 #[tokio::test]
-async fn pf_28_s02_compressed_response_is_refused_without_its_bytes() {
-    let upstream = response(
-        &[("content-encoding", "gzip")],
-        vec![Frame::data(Bytes::from(format!("raw {TOKEN}")))],
+async fn pf_28_s02_unreadable_responses_are_refused_without_their_bytes() {
+    for (status, headers, code) in [
+        (
+            200,
+            vec![("content-encoding", "gzip")],
+            "credential-response-encoding",
+        ),
+        // Every occurrence counts, not only the first.
+        (
+            200,
+            vec![("content-encoding", "identity"), ("content-encoding", "br")],
+            "credential-response-encoding",
+        ),
+        (
+            200,
+            vec![("transfer-encoding", "gzip, chunked")],
+            "credential-response-encoding",
+        ),
+        (
+            101,
+            vec![("upgrade", "websocket")],
+            "credential-response-upgrade",
+        ),
+    ] {
+        let mut upstream = response(
+            &headers,
+            vec![Frame::data(Bytes::from(format!("raw {TOKEN}")))],
+        );
+        *upstream.status_mut() = StatusCode::from_u16(status).expect("status");
+
+        let refused = scrub_response(&gate(), upstream);
+
+        assert_eq!(refused.status(), StatusCode::BAD_GATEWAY, "{headers:?}");
+        assert_eq!(
+            refused
+                .headers()
+                .get(ERROR_HEADER)
+                .map(HeaderValue::as_bytes),
+            Some(code.as_bytes())
+        );
+        let (data, _) = frames(refused).await;
+        assert!(!data.contains(TOKEN));
+        assert!(data.starts_with("Corbanu refused this response"));
+    }
+}
+
+#[tokio::test]
+async fn pf_28_s02_bodiless_responses_keep_their_length_and_names_are_scrubbed() {
+    // Header names are lowercase on the wire, so use a lowercase value.
+    let lowercase = "ghp_pf28s02lowercasenamecanary000000";
+    let gate = ResponseGate::new([("broker:GH_TOKEN", lowercase)]).expect("gate");
+    let mut trailers = HeaderMap::new();
+    trailers.insert(
+        HeaderName::from_bytes(format!("x-{lowercase}").as_bytes()).expect("name"),
+        HeaderValue::from_static("1"),
     );
+    let mut upstream = response(&[("content-length", "0")], vec![Frame::trailers(trailers)]);
+    *upstream.status_mut() = StatusCode::NOT_MODIFIED;
 
-    let refused = scrub_response(&gate(), upstream);
+    let scrubbed = scrub_response(&gate, upstream);
 
-    assert_eq!(refused.status(), StatusCode::BAD_GATEWAY);
     assert_eq!(
-        refused
+        scrubbed
             .headers()
-            .get(ERROR_HEADER)
+            .get(CONTENT_LENGTH)
             .map(HeaderValue::as_bytes),
-        Some(b"credential-response-encoding".as_slice())
+        Some(b"0".as_slice())
     );
-    let (data, _) = frames(refused).await;
-    assert!(!data.contains(TOKEN));
-    assert!(data.starts_with("Corbanu refused this response"));
+    let (_, trailers) = frames(scrubbed).await;
+    assert_eq!(trailers, vec![HeaderMap::new()]);
 }
 
 #[test]
@@ -143,4 +194,20 @@ fn pf_28_s02_hook_injected_values_join_the_gate() {
             .expect("no hooks")
             .is_none()
     );
+
+    // `name=value` pairs register the long part alone; short parts are not
+    // treated as secrets. A value that is not text is refused.
+    let mut actions = actions;
+    actions.inject_request_headers[0].value =
+        HeaderValue::from_static("key=pf28s02-hook-pair-0000;v=1");
+    let gate = with_hook_values(/*gate*/ None, Some(&actions))
+        .expect("gate")
+        .expect("hook values gated");
+    assert_eq!(
+        gate.scrub_header(b"key pf28s02-hook-pair-0000 v"),
+        Some(b"key [REDACTED:hook:x-api-key] v".to_vec())
+    );
+    actions.inject_request_headers[0].value =
+        HeaderValue::from_bytes(b"pf28s02-\xff-opaque").expect("opaque value");
+    assert!(with_hook_values(/*gate*/ None, Some(&actions)).is_err());
 }

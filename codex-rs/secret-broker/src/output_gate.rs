@@ -48,6 +48,10 @@ pub const MAX_REPRESENTATIONS: usize = 4096;
 pub const MAX_REPRESENTATION_TOTAL_BYTES: usize = 4 * 1024 * 1024;
 /// Payloads larger than this are withheld instead of scanned.
 pub const MAX_SCAN_BYTES: usize = 16 * 1024 * 1024;
+/// Longest encoded run a stream holds back so it is decoded whole (a value
+/// of 4 KiB encoded twice, with room for a wrapper). Longer runs split by a
+/// chunk boundary are matched on their direct encodings only (PF-28-S02).
+pub const MAX_BLOCK_CARRY: usize = 16 * 1024;
 /// Values shorter than this cannot be told apart from ordinary text.
 pub const MIN_VALUE_BYTES: usize = 3;
 /// Values shorter than this match only as a whole word and get no encodings.

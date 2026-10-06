@@ -70,9 +70,11 @@ impl ResponseGate {
         }
     }
 
-    /// Whether a body with this `Content-Encoding` can be checked.
-    pub fn checks_content_encoding(value: Option<&[u8]>) -> bool {
-        value.is_none_or(|value| {
+    /// Whether a body sent with these `Content-Encoding` header values
+    /// (every occurrence, each possibly a list) can be checked: only
+    /// `identity`.
+    pub fn checks_content_encoding<'a>(values: impl IntoIterator<Item = &'a [u8]>) -> bool {
+        values.into_iter().all(|value| {
             value
                 .split(|byte| *byte == b',')
                 .all(|coding| coding.trim_ascii().eq_ignore_ascii_case(b"identity"))

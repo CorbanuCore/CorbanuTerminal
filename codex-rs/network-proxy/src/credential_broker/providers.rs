@@ -93,17 +93,17 @@ impl CredentialProvider {
     }
 }
 
-/// An absolute path with no dot segments, empty segments, backslashes or
-/// encoded separators, so the origin cannot resolve it outside the paths a
-/// provider allows.
+/// An absolute path with no dot segments, empty segments, backslashes, path
+/// parameters or encoded separators (single or double), so the origin cannot
+/// resolve it outside the paths a provider allows.
 fn plain_path(path: &str) -> bool {
     let lower = path.to_ascii_lowercase();
     path.starts_with('/')
         && path.len() <= 4096
         && path
             .bytes()
-            .all(|byte| byte.is_ascii_graphic() && byte != b'\\' && byte != b'#')
-        && !["%2e", "%2f", "%5c", "//"]
+            .all(|byte| byte.is_ascii_graphic() && !matches!(byte, b'\\' | b'#' | b';'))
+        && !["%2e", "%2f", "%5c", "%25", "//"]
             .iter()
             .any(|bad| lower.contains(bad))
         && !path

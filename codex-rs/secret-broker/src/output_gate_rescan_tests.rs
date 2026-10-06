@@ -125,8 +125,17 @@ fn pf_28_s02_nested_encodings_are_decoded_and_rescanned() {
 #[test]
 fn pf_28_s02_rescans_leave_ordinary_text_alone() {
     let gate = gate("env:PF28S02", SecretClass::Operational, CANARY);
+    gate.register("vault:wallet", SecretClass::SeedPhrase, SEED)
+        .expect("seed");
     let other = STANDARD.encode("an unrelated document that holds no managed value at all");
+    let shas = "5b107095a68f0c1d2e3f405162738495a6b7c8d9\n\
+                24a57e38c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9\n\
+                39c1f06213a4b5c6d7e8f90a1b2c3d4e5f6a7b8c\n";
+    let json = serde_json::json!({ "image": STANDARD.encode([7u8; 3000]), "ok": true }).to_string();
     for input in [
+        shas.to_string(),
+        json,
+        "We are able to see above it, and about the ability to abandon it.".to_string(),
         "CODEX_SANDBOX_NETWORK_DISABLED_ENV_VAR is read by tests".to_string(),
         format!("data:{}\n{}\n", wrap(&other, 20, "\n"), other),
         "0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),

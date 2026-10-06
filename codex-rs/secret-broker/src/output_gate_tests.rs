@@ -259,7 +259,8 @@ fn pf_28_s01_chunk_boundaries_never_split_a_value() {
 fn pf_28_s01_stream_holds_back_at_most_the_longest_value() {
     let gate = gate_with(CANARY);
     let mut scrubber = StreamScrubber::new();
-    let out = scrubber.push(&gate, OutputSink::ToolResult, &[b'z'; 4096], true);
+    // Ordinary text (PF-28-S02 holds long encoded runs separately).
+    let out = scrubber.push(&gate, OutputSink::ToolResult, &b"z ".repeat(2048), true);
     assert!(scrubber.pending() <= gate.snapshot().max_len + BASE64_SLACK + 2);
     assert_eq!(out.len() + scrubber.pending(), 4096);
 }

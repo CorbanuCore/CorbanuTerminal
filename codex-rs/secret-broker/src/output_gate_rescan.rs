@@ -14,6 +14,7 @@
 //! - Seed phrases: three consecutive words of a registered phrase, in order,
 //!   whatever separates them (commas, numbering, quotes, escapes, lines).
 
+use super::MAX_BLOCK_CARRY;
 use super::Match;
 use super::SecretClass;
 use super::Snapshot;
@@ -103,9 +104,9 @@ pub(super) fn rescan(snapshot: &Snapshot, input: &[u8]) -> Vec<Match> {
 
 /// Where a stream must hold back so a value is not emitted in part: the
 /// longest tail of a wrapped block (its last line break may already have
-/// arrived) that could still grow into a value, or seed words that may
-/// start a window. Bounded by the longest value plus a line break; a block
-/// split across chunks is matched on its direct encodings, not decoded.
+/// arrived) that could still grow into a value, an encoded run that may
+/// continue (up to [`MAX_BLOCK_CARRY`], so it is decoded whole), or seed
+/// words that may start a window.
 pub(super) fn stream_hold(snapshot: &Snapshot, buffer: &[u8]) -> Option<usize> {
     if snapshot.reps.is_empty() {
         return None;
@@ -121,6 +122,16 @@ pub(super) fn stream_hold(snapshot: &Snapshot, buffer: &[u8]) -> Option<usize> {
         if partial > 0 {
             keep(at(end - partial).saturating_sub(1));
         }
+    }
+    let run = view[..end]
+        .iter()
+        .rev()
+        .take_while(|byte| is_base64_byte(**byte))
+        .count();
+    // Any length: a run whose first characters were already emitted would
+    // be decoded out of alignment.
+    if run > 0 && view.len() - (end - run) <= MAX_BLOCK_CARRY {
+        keep(at(end - run));
     }
     if let Some(start) = seed_hold(snapshot, buffer) {
         keep(start);
