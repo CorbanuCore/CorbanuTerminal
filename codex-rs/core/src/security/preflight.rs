@@ -261,6 +261,35 @@ fn drift(before: &Preflight, after: &Preflight) -> Drift {
     }
 }
 
+/// Corbanu's own stores that a protected launch denies even before they
+/// exist: Corbanu creates them during startup, after launch takes its
+/// inventory.
+pub const CORBANU_HOME_STORES: [&str; 9] = [
+    ".credentials.json",
+    "provider_auth.json",
+    ".env",
+    "wallet",
+    "sessions",
+    "archived_sessions",
+    "history.jsonl",
+    "shell_snapshots",
+    "log",
+];
+
+/// Deny-read glob for Corbanu's state databases and their `-wal`/`-shm`
+/// files, which come and go while Corbanu runs.
+pub fn database_glob(codex_home: &std::path::Path) -> std::path::PathBuf {
+    codex_home.join("*.sqlite*")
+}
+
+/// Whether `path` is one of the files [`database_glob`] denies.
+pub fn is_database_file(codex_home: &std::path::Path, path: &std::path::Path) -> bool {
+    path.parent() == Some(codex_home)
+        && path
+            .file_name()
+            .is_some_and(|name| name.to_string_lossy().contains(".sqlite"))
+}
+
 /// The home directory the inventory checks (`$HOME` on Unix).
 pub fn home_dir() -> Option<std::path::PathBuf> {
     dirs::home_dir()

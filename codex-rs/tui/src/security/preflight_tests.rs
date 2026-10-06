@@ -65,8 +65,24 @@ fn pf_29_s01_isolation_only_after_a_preflight_and_lands_in_the_profile() {
     );
     // Even an unreadable receipt asks for isolation.
     std::fs::write(receipt_path(&corbanu), "garbage").unwrap();
+    std::fs::write(corbanu.join("state_5.sqlite"), "db").unwrap();
     let paths = isolation_paths(&corbanu, Some(&home), /*cwd*/ None);
-    assert_eq!(paths, vec![home.join(".ssh"), home.join(".ssh/id_rsa")]);
+    for path in [
+        home.join(".ssh"),
+        home.join(".ssh/id_rsa"),
+        // Corbanu's stores even before startup creates them, and every
+        // database (with its -wal/-shm files) through one glob.
+        corbanu.join("sessions"),
+        corbanu.join("history.jsonl"),
+        corbanu.join("*.sqlite*"),
+    ] {
+        assert!(
+            paths.contains(&path),
+            "{} missing from {paths:?}",
+            path.display()
+        );
+    }
+    assert!(!paths.contains(&corbanu.join("state_5.sqlite")));
 
     let mut overrides = aggressive::base_overrides(&corbanu, &corbanu);
     aggressive::deny_reads(&mut overrides, &paths);
@@ -75,10 +91,12 @@ fn pf_29_s01_isolation_only_after_a_preflight_and_lands_in_the_profile() {
         .find(|(key, _)| key == &format!("permissions.{}", aggressive::PROFILE_ID))
         .map(|(_, value)| value.clone())
         .unwrap();
-    assert_eq!(
-        profile["filesystem"][home.join(".ssh/id_rsa").to_string_lossy().as_ref()],
-        toml::Value::String("deny".to_string())
-    );
+    for path in [home.join(".ssh/id_rsa"), corbanu.join("*.sqlite*")] {
+        assert_eq!(
+            profile["filesystem"][path.to_string_lossy().as_ref()],
+            toml::Value::String("deny".to_string())
+        );
+    }
 }
 
 #[test]

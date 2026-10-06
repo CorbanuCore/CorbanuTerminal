@@ -111,7 +111,7 @@ wait = "protected boundary checked at launch"
 pause = 3.0
 
 [[steps]]
-type = "Run sh probe.sh once and show me its raw output, then stop."
+type = "Run exactly this command once and nothing else: sh probe.sh  Then show its raw output and stop."
 
 [[steps]]
 key = "Enter"

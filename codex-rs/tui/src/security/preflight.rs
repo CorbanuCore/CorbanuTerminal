@@ -24,10 +24,13 @@ use serde::Serialize;
 use super::level;
 use super::level::ChosenLevel;
 use crate::legacy_core::config::Config;
+use crate::legacy_core::protected_preflight::CORBANU_HOME_STORES;
 use crate::legacy_core::protected_preflight::InventorySources;
 use crate::legacy_core::protected_preflight::Preflight;
 use crate::legacy_core::protected_preflight::ReadinessFlags;
+use crate::legacy_core::protected_preflight::database_glob;
 use crate::legacy_core::protected_preflight::file_sources;
+use crate::legacy_core::protected_preflight::is_database_file;
 
 pub(crate) const RECEIPT_FILE: &str = "security_preflight.toml";
 /// 2: `activated_at` in milliseconds. A version-1 receipt (seconds) is
@@ -163,21 +166,47 @@ pub(crate) fn isolation_paths(
     if !receipt_path(codex_home).exists() {
         return Vec::new();
     }
-    Preflight::run(
+    let mut paths = Preflight::run(
         &file_sources(codex_home, home, cwd),
         ReadinessFlags::default(),
     )
     .inventory
     .isolation_paths()
+    .into_iter()
+    // Databases are covered by the glob, including files created later.
+    .filter(|path| !is_database_file(codex_home, path))
+    .chain(CORBANU_HOME_STORES.iter().map(|name| codex_home.join(name)))
+    .chain([database_glob(codex_home)])
+    .collect::<Vec<_>>();
+    paths.sort();
+    paths.dedup();
+    paths
 }
 
 /// Every isolated path must be unreadable to agent commands.
 pub(crate) fn verify_isolation(config: &Config, paths: &[PathBuf]) -> Vec<String> {
     let policy = config.permissions.file_system_sandbox_policy();
     let cwd = config.cwd.as_path();
+    let codex_home = config.codex_home.as_path();
+    // The path check does not evaluate globs; the database glob must be in
+    // the policy for the files it covers to count as denied.
+    let glob = database_glob(codex_home).to_string_lossy().into_owned();
+    let databases_denied = policy
+        .get_unreadable_globs_with_cwd(cwd)
+        .iter()
+        .any(|pattern| *pattern == glob);
     paths
         .iter()
-        .filter(|path| policy.can_read_path_with_cwd(path, cwd))
+        .filter(|path| {
+            let covered = if path.as_os_str().to_string_lossy() == glob
+                || is_database_file(codex_home, path)
+            {
+                databases_denied
+            } else {
+                !policy.can_read_path_with_cwd(path, cwd)
+            };
+            !covered
+        })
         .map(|path| {
             format!(
                 "Isolation: agent commands can still read {}",
