@@ -66,9 +66,10 @@ updated: 2026-10-06
   time. A 25-command research workflow plus 5 protected actions gives exactly 5 prompts, about 1 ms per
   classification (debug build).
 
-## Moved
+## Remaining
 
-Moved to [PF-23-S01](../../current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md), which owns typed protected
+Nothing. The milestone VM run and human sign-off happen when Moderate ships (program milestone). These items were
+moved to [PF-23-S01](../../current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md), which owns typed protected
 surfaces:
 
 - MCP tool calls, `write_stdin` into running processes and code mode, which do not pass the shared approval seam.
@@ -83,7 +84,6 @@ surfaces:
 - [x] Focused: `just test -p codex-core pf_30_s03` (27 pass); full crate with only the three known baselines
   failing.
 - [x] Each slice: GLM 5.2 tmux demos and an independent Opus 5.5 High review until APPROVE.
-- [ ] Milestone VM run and human sign-off when Moderate ships (program milestone, not this sprint).
 
 ## Exit evidence
 

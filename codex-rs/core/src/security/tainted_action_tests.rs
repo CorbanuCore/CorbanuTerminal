@@ -726,7 +726,7 @@ fn pf_30_s03_review_bypasses_are_closed() {
         ("find ~ -name '*.json' | xargs cat", Credentials),
         ("tar czf x.tgz /home/*", Credentials),
         // A home matched through a glob.
-        ("cat /home/fix?ure/.docker/config.json", Credentials),
+        ("cat /home/fixtur?/.docker/config.json", Credentials),
         // Literals joined without a separator.
         (
             "python3 -c \"print(''.join(['~/.s','sh/config']))\"",
