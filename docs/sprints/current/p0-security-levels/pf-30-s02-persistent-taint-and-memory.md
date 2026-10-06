@@ -67,7 +67,7 @@ updated: 2026-10-06
 ## Verification
 
 - [x] `just fmt`; `just fix -p` for each changed crate.
-- [x] Focused: `just test -p codex-core pf_30_s0` (70 pass), plus the protocol, rollout, state and memories suites.
+- [x] Focused: `just test -p codex-core pf_30_s0` (62 pass), plus the protocol, rollout, state and memories suites.
 - [x] Integration: nine affected crates, 5,052/5,056; the four failures are recorded as baseline or flake.
 - [x] Real TUI: GLM 5.2 tmux run and four demos (resume, memory, compaction, flag-off message).
 - [x] One independent Opus 5.5 High review: round 1 changes requested, round 2 APPROVE.

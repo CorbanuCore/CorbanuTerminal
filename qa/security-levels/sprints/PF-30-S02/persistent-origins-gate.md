@@ -20,7 +20,7 @@ requests as before.
 
 - `just fmt`; `just fix -p` for codex-core, codex-protocol, codex-rollout, codex-state, codex-thread-store,
   codex-app-server-protocol, codex-memories-write, codex-memories-extension, codex-extension-api: clean.
-- Focused: `just test -p codex-core pf_30_s0` — 70 pass (12 `pf_30_s02`: 8 unit, 1 client, 1 session, 2 suite).
+- Focused: `just test -p codex-core pf_30_s0` — 62 pass, also after merging main (12 `pf_30_s02`: 8 unit, 1 client, 1 session, 2 suite).
 - Final tree, all nine crates: 5,056 run, 5,052 pass. Failures: `skills_append_to_developer_message`,
   `skills_use_aliases_in_developer_message_under_budget_pressure` (machine-installed skills, also on main per
   PF-30-S01), `remote_compact_trim_estimate_uses_session_base_instructions` (reproduced on a clean `b96b23344b`
