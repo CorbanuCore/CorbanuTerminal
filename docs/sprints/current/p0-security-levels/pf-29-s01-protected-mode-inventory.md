@@ -90,8 +90,8 @@ updated: 2026-10-06
 ## Verification
 
 - [x] `just fix -p codex-features -p codex-core -p codex-app-server-client -p codex-tui`, `just fmt`; diff inspected.
-- [x] Focused: `pf_29_s01` in codex-core (13) and codex-tui (7).
-- [ ] Gate: suites, GLM 5.2 tmux videos and Opus review in the [evidence](../../../../qa/security-levels/sprints/PF-29-S01/README.md).
+- [x] Focused `pf_29_s01`: core 14, tui 7. Suites, five GLM 5.2 videos, Opus review (changes, then approve with nits).
+- [ ] Merge behind the flag; details in the [evidence](../../../../qa/security-levels/sprints/PF-29-S01/README.md).
 
 ## Exit evidence
 

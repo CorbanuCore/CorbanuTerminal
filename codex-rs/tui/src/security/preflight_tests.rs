@@ -35,12 +35,15 @@ fn pf_29_s01_receipt_round_trip_and_corrupt_receipts_fail_closed() {
 
     std::fs::write(receipt_path(home.path()), "version = 1\nsaved_at = \"x\"").unwrap();
     assert!(load_receipt(home.path()).is_err());
-    std::fs::write(
-        receipt_path(home.path()),
-        "version = 9\nsaved_at = 1\nfindings = []",
-    )
-    .unwrap();
-    assert!(load_receipt(home.path()).is_err());
+    // Version 1 stored seconds; it must not be read as milliseconds.
+    for version in [1, 9] {
+        std::fs::write(
+            receipt_path(home.path()),
+            format!("version = {version}\nsaved_at = 1\nactivated_at = 1791323285\nfindings = []"),
+        )
+        .unwrap();
+        assert!(load_receipt(home.path()).is_err(), "version {version}");
+    }
 
     remove_receipt(home.path()).unwrap();
     remove_receipt(home.path()).unwrap();

@@ -30,7 +30,9 @@ use crate::legacy_core::protected_preflight::ReadinessFlags;
 use crate::legacy_core::protected_preflight::file_sources;
 
 pub(crate) const RECEIPT_FILE: &str = "security_preflight.toml";
-const RECEIPT_VERSION: u32 = 1;
+/// 2: `activated_at` in milliseconds. A version-1 receipt (seconds) is
+/// unreadable, so it can never make old conversations look new.
+const RECEIPT_VERSION: u32 = 2;
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]

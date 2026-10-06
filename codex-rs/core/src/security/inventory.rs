@@ -472,6 +472,7 @@ fn open_regular(path: &Path) -> Result<std::fs::File, String> {
     }
     let mut options = std::fs::OpenOptions::new();
     options.read(true);
+    // Windows has no FIFO that passes the `is_file` check above.
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt as _;
