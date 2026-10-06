@@ -715,6 +715,9 @@
             "sleep_tool": {
               "type": "boolean"
             },
+            "source_envelopes": {
+              "type": "boolean"
+            },
             "sqlite": {
               "type": "boolean"
             },
@@ -5407,6 +5410,9 @@
           "type": "boolean"
         },
         "sleep_tool": {
+          "type": "boolean"
+        },
+        "source_envelopes": {
           "type": "boolean"
         },
         "sqlite": {

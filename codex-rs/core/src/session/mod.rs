@@ -1522,6 +1522,9 @@ impl Session {
         // This meets media preparation requirements without modifying persisted rollouts.
         prepare_image_response_items(&mut history);
         prepare_audio_response_items(&mut history);
+        // Restored messages have no recorded origin and stay labelled; host
+        // context is reinjected fresh on the next turn instead.
+        self.services.model_client().note_restored_history(&history);
         {
             let mut state = self.state.lock().await;
             state.replace_history(history, reference_context_item);
@@ -1782,6 +1785,7 @@ impl Session {
             self.services.agent_control.effective_security_policy(),
         )
         .with_native_ingress_from(&self.services.model_client())
+        .with_source_envelopes(config.features.enabled(Feature::SourceEnvelopes))
         .with_prompt_cache_key_override(
             crate::guardian::prompt_cache_key_override_for_review_session(
                 &configuration.session_source,
@@ -3229,8 +3233,25 @@ impl Session {
         turn_context: &TurnContext,
         items: &[ResponseItem],
     ) {
+        self.record_conversation_items_from(turn_context, items, /*origin*/ None)
+            .await;
+    }
+
+    /// Record items whose messages have a host-known origin. Unattributed
+    /// messages (`None`) reach a protected provider only as labelled data.
+    pub(crate) async fn record_conversation_items_from(
+        &self,
+        turn_context: &TurnContext,
+        items: &[ResponseItem],
+        origin: Option<crate::security::ingress::MessageOrigin>,
+    ) {
         let items = self.prepare_conversation_items_for_history(turn_context, items);
         let items = items.as_ref();
+        if let Some(origin) = origin {
+            self.services
+                .model_client()
+                .register_message_origin(items, origin);
+        }
         self.services.model_client().observe_native_ingress(items);
         {
             let mut state = self.state.lock().await;
@@ -3262,7 +3283,12 @@ impl Session {
             world_state.render_diff(&previous_snapshot),
         );
         if !items.is_empty() {
-            self.record_conversation_items(turn_context, &items).await;
+            self.record_conversation_items_from(
+                turn_context,
+                &items,
+                Some(crate::security::ingress::MessageOrigin::Host),
+            )
+            .await;
         }
 
         // ContextManager remembers this for later turns; run_turn owns the live value.
@@ -4087,8 +4113,9 @@ impl Session {
         };
         let turn_context_item = turn_context.to_turn_context_item();
         let turn_context_changed = reference_context_item.as_ref() != Some(&turn_context_item);
-        let should_inject_full_context = reference_context_item.is_none();
         let world_state = Arc::new(self.build_world_state_for_step(step_context).await?);
+        let reinject_host_context = self.services.model_client().take_host_context_reinjection();
+        let should_inject_full_context = reference_context_item.is_none() || reinject_host_context;
         // Full initial context resets the baseline; later turns persist only its changes.
         let (mut context_items, world_state_item) = if should_inject_full_context {
             let context_items = self
@@ -4128,8 +4155,12 @@ impl Session {
             return Ok(world_state);
         }
         if !context_items.is_empty() {
-            self.record_conversation_items(turn_context, &context_items)
-                .await;
+            self.record_conversation_items_from(
+                turn_context,
+                &context_items,
+                Some(crate::security::ingress::MessageOrigin::Host),
+            )
+            .await;
         }
         // Persist state only after any model-visible context generated from it.
         if let Some(world_state_item) = world_state_item {
@@ -4316,8 +4347,12 @@ impl Session {
         // UI-only `text_elements` are preserved. `ResponseItem::Message` does not carry
         // those spans, and `record_response_item_and_emit_turn_item` would drop them.
         let response_item = self.response_item_from_user_input(input.to_vec());
-        self.record_conversation_items(turn_context, std::slice::from_ref(&response_item))
-            .await;
+        self.record_conversation_items_from(
+            turn_context,
+            std::slice::from_ref(&response_item),
+            Some(crate::security::ingress::MessageOrigin::Human),
+        )
+        .await;
         let mut user_message_item = UserMessageItem::new(input);
         user_message_item.client_id = client_id;
         let turn_item = TurnItem::UserMessage(user_message_item);

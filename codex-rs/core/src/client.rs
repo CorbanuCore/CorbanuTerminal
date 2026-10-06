@@ -907,13 +907,65 @@ impl ModelClient {
         if self.source_admission_level()? == codex_security_policy::SecurityLevel::Permissive {
             return Ok(prompt.get_formatted_input_for_request(use_responses_lite));
         }
-        self.ingress_items
-            .lock()
-            .map_err(|_| {
-                CodexErr::InvalidRequest("source admission registry is unavailable".into())
-            })?
+        let mut ingress = self.ingress_items.lock().map_err(|_| {
+            CodexErr::InvalidRequest("source admission registry is unavailable".into())
+        })?;
+        if ingress.labelled_mode() {
+            // Look up host registrations on recorded bytes, then format.
+            let mut input = ingress.project_labelled(&prompt.input);
+            if use_responses_lite {
+                crate::client_common::strip_image_details(&mut input);
+            }
+            return Ok(input);
+        }
+        ingress
             .project(&prompt.input)
             .map_err(|error| CodexErr::InvalidRequest(error.to_string()))
+    }
+
+    /// `source_envelopes`: send external context as labelled untrusted data
+    /// under Moderate/Aggressive. Permissive requests are unchanged.
+    pub(crate) fn with_source_envelopes(self, enabled: bool) -> Self {
+        if let Ok(mut ingress) = self.ingress_items.lock() {
+            ingress.set_labelled_mode(enabled);
+        }
+        self
+    }
+
+    /// Restored/forked history has no recorded origins: keep it labelled and
+    /// reinject fresh host context on the next turn.
+    pub(crate) fn note_restored_history(&self, items: &[ResponseItem]) {
+        if let Ok(mut ingress) = self.ingress_items.lock() {
+            ingress.note_restored_history(items);
+        }
+    }
+
+    /// Consumed only while protected: Permissive history stays unchanged and
+    /// a later live strengthening still gets fresh host context.
+    pub(crate) fn take_host_context_reinjection(&self) -> bool {
+        if self
+            .source_admission_level()
+            .is_ok_and(|level| level == codex_security_policy::SecurityLevel::Permissive)
+        {
+            return false;
+        }
+        self.ingress_items
+            .lock()
+            .is_ok_and(|mut ingress| ingress.take_host_context_reinjection())
+    }
+
+    /// Record the host-chosen origin of exact history messages. Only Core
+    /// record seams call this; text and role labels cannot choose an origin.
+    pub(crate) fn register_message_origin(
+        &self,
+        items: &[ResponseItem],
+        origin: crate::security::ingress::MessageOrigin,
+    ) {
+        if let Ok(mut ingress) = self.ingress_items.lock()
+            && ingress.labelled_mode()
+        {
+            ingress.register_messages(items, origin);
+        }
     }
 
     pub(crate) fn observe_native_ingress(&self, items: &[ResponseItem]) {
@@ -923,7 +975,9 @@ impl ModelClient {
         {
             return;
         }
-        if let Ok(mut ingress) = self.ingress_items.lock() {
+        if let Ok(mut ingress) = self.ingress_items.lock()
+            && !ingress.labelled_mode()
+        {
             let now = u64::try_from(chrono::Utc::now().timestamp_millis()).unwrap_or_default();
             ingress.observe(items, now);
         }
@@ -965,13 +1019,14 @@ impl ModelClient {
         call_id: &str,
         kind: codex_protocol::provenance::SourceKind,
     ) {
-        if self
+        let permissive = self
             .source_admission_level()
-            .is_ok_and(|level| level == codex_security_policy::SecurityLevel::Permissive)
+            .is_ok_and(|level| level == codex_security_policy::SecurityLevel::Permissive);
+        // Labelled mode records origins even while Permissive so a later live
+        // strengthening still labels earlier tool output with its real route.
+        if let Ok(mut ingress) = self.ingress_items.lock()
+            && (!permissive || ingress.labelled_mode())
         {
-            return;
-        }
-        if let Ok(mut ingress) = self.ingress_items.lock() {
             ingress.register_call(call_id, kind);
         }
     }
