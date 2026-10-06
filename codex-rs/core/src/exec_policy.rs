@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::ErrorKind;
 use std::path::Path;
 use std::path::PathBuf;
@@ -16,6 +17,7 @@ use codex_execpolicy::MatchOptions;
 use codex_execpolicy::NetworkRuleProtocol;
 use codex_execpolicy::Policy;
 use codex_execpolicy::PolicyParser;
+use codex_execpolicy::PrefixRule;
 use codex_execpolicy::RuleMatch;
 use codex_execpolicy::blocking_append_allow_prefix_rule;
 use codex_execpolicy::blocking_append_network_rule;
@@ -376,12 +378,7 @@ impl ExecPolicyManager {
         if self.strict_rules {
             // The original command, not the parsed one: parsing keeps only
             // the first command of a heredoc script.
-            apply_strict_forbidden_matches(
-                &mut evaluation,
-                exec_policy.as_ref(),
-                command,
-                &match_options,
-            );
+            apply_strict_forbidden_matches(&mut evaluation, exec_policy.as_ref(), command);
         }
 
         let requested_amendment = if auto_amendment_allowed {
@@ -873,61 +870,90 @@ pub(crate) fn default_policy_path(codex_home: &Path) -> PathBuf {
     codex_home.join(RULES_DIR_NAME).join(DEFAULT_POLICY_FILE)
 }
 
-/// Longer than any prefix rule needs; bounds the work per candidate.
-const STRICT_MATCH_WINDOW: usize = 16;
-/// Words skipped after a program's leading options, at most.
-const STRICT_MAX_OPTION_WORDS: usize = 256;
 /// Program-name suffixes a launcher may add (Windows, npm shims).
 const PROGRAM_SUFFIXES: [&str; 6] = [".exe", ".com", ".cmd", ".bat", ".ps1", ".js"];
+/// Later occurrences of a rule's second word tried per program word.
+const STRICT_MAX_SECOND_WORDS: usize = 8;
+/// Added to the reason when only strict matching found the rule.
+const STRICT_MATCH_NOTE: &str = "matched in the command text under strict rules (security level Aggressive); put data in a file rather than on the command line";
 
-/// Best-effort `forbidden` rule matches for commands that `command` could
-/// run but the exact match misses. Used only under `strict_rules` and only to
-/// refuse, so over-matching cannot allow anything.
+/// Best-effort matches of multi-word `forbidden` prefix rules (such as
+/// `corbanu vault`) against what `command` could run. Used only under
+/// `strict_rules` and only to refuse, so over-matching cannot allow anything.
 ///
-/// Every word, including the words of scripts and strings at any depth
-/// (`sh -c '…'`, `env -S '…'`, `eval`, heredocs, `python -c`), is split on
-/// whitespace, quotes and shell punctuation into one token stream. Each
-/// token that names a program with rules (after dropping directories, case
-/// and launcher suffixes) starts a candidate, so wrappers (`env -i X=1`,
-/// `nohup`, `timeout 5`) and options before a subcommand
-/// (`corbanu -c k=v vault`) are seen through. Names built at run time,
-/// aliases, functions and copies of a binary are out of reach; the sandbox
-/// is the control for those. Accepted over-matching: `echo corbanu vault`,
-/// `git commit -m "… corbanu vault …"`.
-fn strict_forbidden_matches(
-    policy: &Policy,
-    command: &[String],
-    match_options: &MatchOptions,
-) -> Vec<RuleMatch> {
-    let tokens = command
-        .iter()
-        .flat_map(|word| loose_tokens(word))
-        .collect::<Vec<_>>();
+/// The command's words, including scripts and strings at any depth
+/// (`sh -c '…'`, `env -S '…'`, `eval`, heredocs, `python -c`), become one
+/// token stream split on whitespace and shell punctuation, once with quotes
+/// as separators and once with quotes removed (`va''ult`). A token naming a
+/// rule's program (any directory, case or launcher suffix) followed by the
+/// rule's next word, directly or after options (`corbanu -c k=v vault`),
+/// matches. So wrappers (`env -i X=1`, `nohup`, `timeout 5`) are seen
+/// through. Out of reach: names or arguments built at run time
+/// (`c=corbanu; $c vault`, `corbanu "$@"`, `${x:-vault}`, `$'\x76ault'`),
+/// aliases, functions and copies of a binary; the sandbox and the zsh-fork
+/// exec check cover those. Accepted over-matching: the words appearing in
+/// text, such as `git commit -m "… corbanu vault …"`.
+fn strict_forbidden_matches(policy: &Policy, command: &[String]) -> Vec<RuleMatch> {
+    let mut rules_by_program: HashMap<String, Vec<&PrefixRule>> = HashMap::new();
+    for rule in policy.rules().iter_all().flat_map(|(_, rules)| rules) {
+        if let Some(rule) = rule.as_any().downcast_ref::<PrefixRule>()
+            && rule.decision == Decision::Forbidden
+            && !rule.pattern.rest.is_empty()
+        {
+            rules_by_program
+                .entry(rule.pattern.first.to_ascii_lowercase())
+                .or_default()
+                .push(rule);
+        }
+    }
     let mut matches = Vec::new();
-    for (start, token) in tokens.iter().enumerate() {
-        let rest = &tokens[start + 1..];
-        for program in program_keys(token) {
-            if policy.rules().get_vec(&program).is_none() {
+    if rules_by_program.is_empty() {
+        return matches;
+    }
+    for remove_quotes in [false, true] {
+        let tokens = command
+            .iter()
+            .flat_map(|word| loose_tokens(word, remove_quotes))
+            .collect::<Vec<_>>();
+        let mut positions: HashMap<&str, Vec<usize>> = HashMap::new();
+        for (index, token) in tokens.iter().enumerate() {
+            positions.entry(token.as_str()).or_default().push(index);
+        }
+        for (start, token) in tokens.iter().enumerate() {
+            let Some(rules) = program_key(token).and_then(|key| rules_by_program.get(&key)) else {
                 continue;
-            }
-            // Also skip words after leading options.
-            let skips = if rest.first().is_some_and(|word| word.starts_with('-')) {
-                rest.len().clamp(1, STRICT_MAX_OPTION_WORDS)
-            } else {
-                1
             };
-            for skip in 0..skips {
-                let candidate = std::iter::once(program.clone())
-                    .chain(rest.iter().skip(skip).take(STRICT_MATCH_WINDOW).cloned())
-                    .collect::<Vec<_>>();
-                for rule_match in policy.matches_for_command_with_options(
-                    &candidate,
-                    /*heuristics_fallback*/ None,
-                    match_options,
-                ) {
-                    if rule_match.decision() == Decision::Forbidden
-                        && !matches.contains(&rule_match)
-                    {
+            let after_options = tokens
+                .get(start + 1)
+                .is_some_and(|next| next.starts_with('-'));
+            for rule in rules {
+                let seconds = rule.pattern.rest[0]
+                    .alternatives()
+                    .iter()
+                    .filter_map(|second| positions.get(second.as_str()))
+                    .flat_map(|found| {
+                        let first = found.partition_point(|&index| index <= start);
+                        found[first..].iter().take(STRICT_MAX_SECOND_WORDS)
+                    })
+                    .filter(|&&index| index == start + 1 || after_options);
+                for &second in seconds {
+                    let candidate = std::iter::once(rule.pattern.first.to_string())
+                        .chain(tokens[second..].iter().take(rule.pattern.rest.len()).cloned())
+                        .collect::<Vec<_>>();
+                    let Some(matched_prefix) = rule.pattern.matches_prefix(&candidate) else {
+                        continue;
+                    };
+                    let justification = Some(match &rule.justification {
+                        Some(justification) => format!("{justification} ({STRICT_MATCH_NOTE})"),
+                        None => STRICT_MATCH_NOTE.to_string(),
+                    });
+                    let rule_match = RuleMatch::PrefixRuleMatch {
+                        matched_prefix,
+                        decision: Decision::Forbidden,
+                        resolved_program: None,
+                        justification,
+                    };
+                    if !matches.contains(&rule_match) {
                         matches.push(rule_match);
                     }
                 }
@@ -942,62 +968,59 @@ pub(crate) fn apply_strict_forbidden_matches(
     evaluation: &mut Evaluation,
     policy: &Policy,
     command: &[String],
-    match_options: &MatchOptions,
 ) {
-    for rule_match in strict_forbidden_matches(policy, command, match_options) {
-        evaluation.decision = Decision::Forbidden;
-        if !evaluation.matched_rules.contains(&rule_match) {
-            evaluation.matched_rules.push(rule_match);
-        }
+    let found = strict_forbidden_matches(policy, command);
+    if found.is_empty() || evaluation.decision == Decision::Forbidden {
+        return;
     }
+    evaluation.decision = Decision::Forbidden;
+    // Strict matches first, so the reason says why the command was refused.
+    let mut matched_rules = found;
+    matched_rules.append(&mut evaluation.matched_rules);
+    evaluation.matched_rules = matched_rules;
 }
 
-/// `word` split into shell words, ignoring quoting: quotes, escapes, shell
-/// punctuation and `env -S`'s `\_` separate words.
-fn loose_tokens(word: &str) -> Vec<String> {
-    word.replace("\\_", " ")
-        .split(|c: char| {
+/// `word` split into shell words, ignoring quoting: whitespace, shell
+/// punctuation and `env -S`'s `\_` separate words. Quotes and escapes
+/// separate words too, or with `remove_quotes` are dropped so that
+/// `va''ult` reads as `vault`.
+fn loose_tokens(word: &str, remove_quotes: bool) -> Vec<String> {
+    let is_quote = |c: char| matches!(c, '\'' | '"' | '`' | '\\' | '^');
+    let word = word.replace("\\_", " ");
+    let word = if remove_quotes {
+        word.replace(is_quote, "")
+    } else {
+        word
+    };
+    word.split(|c: char| {
         c.is_whitespace()
+            || is_quote(c)
             || matches!(
                 c,
-                '\'' | '"' | '`' | '\\' | '^' | ';' | '&' | '|' | '(' | ')' | '<' | '>' | '{'
-                    | '}' | '[' | ']' | ',' | '=' | '$' | '!'
+                ';' | '&' | '|' | '(' | ')' | '<' | '>' | '{' | '}' | '[' | ']' | ',' | '=' | '$'
+                    | '!'
             )
     })
-        .filter(|token| !token.is_empty())
-        .map(str::to_string)
-        .collect()
+    .filter(|token| !token.is_empty())
+    .map(str::to_string)
+    .collect()
 }
 
-/// The rule keys `token` could run as: its file name as written and
-/// ASCII-lowercased (case-insensitive file systems), without a launcher
-/// suffix.
-fn program_keys(token: &str) -> Vec<String> {
+/// The lowercased rule key `token` could run as: its file name without a
+/// launcher suffix. An option cluster with an attached `env -S` string
+/// (`-iScorbanu`) yields the string; the check is deliberately loose.
+fn program_key(token: &str) -> Option<String> {
     let name = token.rsplit('/').next().unwrap_or(token);
-    // An option cluster with an attached `env -S` string: `-iScorbanu`.
     let name = match name.strip_prefix('-') {
-        Some(cluster) if !cluster.starts_with('-') => match cluster.split_once('S') {
-            Some((_, program)) => program,
-            None => return Vec::new(),
-        },
+        Some(cluster) if !cluster.starts_with('-') => cluster.split_once('S')?.1,
         _ => name,
     };
-    let mut keys = Vec::with_capacity(2);
-    for key in [name.to_string(), name.to_ascii_lowercase()] {
-        let lower = key.to_ascii_lowercase();
-        let key = PROGRAM_SUFFIXES
-            .iter()
-            .find_map(|suffix| {
-                lower
-                    .ends_with(suffix)
-                    .then(|| key[..key.len() - suffix.len()].to_string())
-            })
-            .unwrap_or(key);
-        if !key.is_empty() && !keys.contains(&key) {
-            keys.push(key);
-        }
-    }
-    keys
+    let name = name.to_ascii_lowercase();
+    let name = PROGRAM_SUFFIXES
+        .iter()
+        .find_map(|suffix| name.strip_suffix(suffix))
+        .unwrap_or(&name);
+    (!name.is_empty()).then(|| name.to_string())
 }
 
 fn commands_for_exec_policy(command: &[String]) -> ExecPolicyCommands {

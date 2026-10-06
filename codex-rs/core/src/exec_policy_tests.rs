@@ -2490,6 +2490,7 @@ fn vault_policy() -> Policy {
             "vault.rules",
             r#"prefix_rule(pattern = ["corbanu", "vault"], decision = "forbidden", justification = "no vault")
 prefix_rule(pattern = ["codex", "vault"], decision = "forbidden", justification = "no vault")
+prefix_rule(pattern = ["rm"], decision = "forbidden")
 prefix_rule(pattern = ["env"], decision = "allow")"#,
         )
         .expect("parse policy");
@@ -2499,12 +2500,12 @@ prefix_rule(pattern = ["env"], decision = "allow")"#,
 #[test]
 fn strict_forbidden_matches_find_wrapped_vault_commands() {
     let policy = vault_policy();
-    let options = MatchOptions {
-        resolve_host_executables: true,
-    };
-    let forbidden = |command: &[String]| {
-        !strict_forbidden_matches(&policy, command, &options).is_empty()
-    };
+    let forbidden = |command: &[String]| !strict_forbidden_matches(&policy, command).is_empty();
+    let long_value = format!("x=\"{}\"", "a ".repeat(300));
+    assert!(
+        forbidden(&["corbanu", "-c", &long_value, "vault", "list"].map(str::to_string)),
+        "a long option value"
+    );
     let options_before_vault = std::iter::once("corbanu".to_string())
         .chain((0..9).flat_map(|n| ["-c".to_string(), format!("k{n}=v")]))
         .chain(["vault".to_string(), "list".to_string()])
@@ -2544,6 +2545,9 @@ fn strict_forbidden_matches_find_wrapped_vault_commands() {
         "bash -lc \"sh <<'EOF'\ncorbanu vault list\nEOF\"",
         "python3 -c \"import subprocess; subprocess.run(['corbanu','vault','list'])\"",
         "git -c 'alias.v=!corbanu vault list' v",
+        "sh -c \"corbanu va''ult list\"",
+        "bash -lc \"sh <<'EOF'\nc\\orbanu vault\nEOF\"",
+        "cmd /c cor^banu vault list",
         // Accepted over-matching: it can only refuse.
         "echo corbanu vault",
         "git commit -m 'corbanu vault docs'",
@@ -2556,6 +2560,12 @@ fn strict_forbidden_matches_find_wrapped_vault_commands() {
         "corbanu --help",
         "env FOO=1 git status",
         "cat vault.md",
+        // Single-word rules (`rm`) keep exact matching only.
+        "git commit -m 'rm dead code'",
+        // Known gaps: names or arguments built at run time.
+        "bash -lc 'V=vault; corbanu $V list'",
+        "bash -lc 'corbanu ${x:-vault} list'",
+        "bash -lc \"corbanu $'\\x76ault' list\"",
     ] {
         assert!(!forbidden(&words(command)), "should not be forbidden: {command}");
     }
@@ -2573,7 +2583,8 @@ async fn strict_rules_forbid_wrapped_program_forms() -> anyhow::Result<()> {
         policy_dir.join("vault.rules"),
         r#"prefix_rule(pattern = ["corbanu", "vault"], decision = "forbidden", justification = "no vault")
 prefix_rule(pattern = ["env"], decision = "allow")
-prefix_rule(pattern = ["git", "status"], decision = "allow")"#,
+prefix_rule(pattern = ["git", "status"], decision = "allow")
+prefix_rule(pattern = ["rm"], decision = "forbidden")"#,
     )?;
     let config_stack = config_stack_for_dot_codex_folder(temp_dir.path());
     let lenient = ExecPolicyManager::load(&config_stack, /*strict_rules*/ false).await?;
@@ -2638,13 +2649,35 @@ prefix_rule(pattern = ["git", "status"], decision = "allow")"#,
             "lenient is unchanged: {script}"
         );
     }
-    // Strict matching only adds refusals.
-    for script in ["git status", "env git status", "sh -c 'git status' 2>&1"] {
-        assert_eq!(
-            format!("{:?}", requirement(&strict, script).await),
-            format!("{:?}", requirement(&lenient, script).await),
+    // Strict matching is never less restrictive.
+    fn rank(requirement: &ExecApprovalRequirement) -> u8 {
+        match requirement {
+            ExecApprovalRequirement::Skip { .. } => 0,
+            ExecApprovalRequirement::NeedsApproval { .. } => 1,
+            ExecApprovalRequirement::Forbidden { .. } => 2,
+        }
+    }
+    for script in agent_shaped.into_iter().chain([
+        "git status",
+        "env git status",
+        "sh -c 'git status' 2>&1",
+        "rm -rf build",
+        "./corbanu vault list",
+        "corbanu --help",
+    ]) {
+        let strict_requirement = requirement(&strict, script).await;
+        let lenient_requirement = requirement(&lenient, script).await;
+        assert!(
+            rank(&strict_requirement) >= rank(&lenient_requirement),
             "{script}"
         );
+        if rank(&lenient_requirement) < 2 && rank(&strict_requirement) == rank(&lenient_requirement) {
+            assert_eq!(
+                format!("{strict_requirement:?}"),
+                format!("{lenient_requirement:?}"),
+                "{script}"
+            );
+        }
     }
     Ok(())
 }

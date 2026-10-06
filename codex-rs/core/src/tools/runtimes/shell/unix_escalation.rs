@@ -620,9 +620,6 @@ impl CoreShellActionProvider {
                     &mut evaluation,
                     &policy,
                     &join_program_and_argv(program, argv),
-                    &MatchOptions {
-                        resolve_host_executables: true,
-                    },
                 );
             }
             evaluation
