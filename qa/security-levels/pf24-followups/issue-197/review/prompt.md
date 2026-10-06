@@ -1,0 +1,9 @@
+You are an independent senior security and Rust reviewer (Opus 5.5, high effort). Review the commits on this branch that are not on origin/main (`git log origin/main..HEAD`, `git diff origin/main...HEAD`). Do not edit files; read the code and report.
+
+Context: issue #197 (read it with `gh issue view 197 --repo CorbanuCore/CorbanuTerminal` if you can; summary follows). Under the TUI's Aggressive security level (`tui/src/security/`), a managed `.rules` file forbids `corbanu vault …`. The launch check refuses to start if any `.rules` file fails to parse. But core's `load_exec_policy_with_warning` falls back to requirements-only rules with only a warning, so a `.rules` file broken after launch (by the human, an editor, another process) made every later thread (`/new`, resume, fork, children with their own config folder) run without the vault rule while the TUI still showed Aggressive. Chosen fix (option 1 in the issue): a new core config key `strict_rules` (default false) that makes rule parse errors fatal when a session loads its exec policy; Aggressive sets it through its `-c` overrides (which also reach the embedded app server), adds it to the role keys a custom agent role may not set, and the launch verification requires it.
+
+Look for:
+- Every path that loads or reloads exec-policy rules for a session/thread/child (thread/start, resume, fork, subagent spawn with different config, review/guardian sessions, `inherited_exec_policy`, config reload) and whether `strict_rules` reaches it. Can any layer (project config, role file, app-server client `config` overrides on thread/start, `/permissions`, requirements) turn it off under Aggressive?
+- What the user sees when `/new` fails (is the failure clear, does the TUI stay usable).
+- Permissive must be byte-for-byte today's behaviour.
+- Schema/config plumbing completeness, test validity.

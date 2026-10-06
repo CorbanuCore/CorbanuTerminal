@@ -101,6 +101,9 @@ pub(crate) struct NativeIngress {
     /// Without it nothing is written and nothing is restored.
     origin_key: Option<super::origin_key::OriginKey>,
     missing_key_reported: bool,
+    /// PF-30-S03: recorded batches that carried content without standing.
+    /// Monotone: compaction, a new turn or a summary never lowers it.
+    taint_generation: u64,
     /// Inputs another agent submitted to this session, keyed by the exact
     /// `Vec<UserInput>` digest, waiting for the prompt seam to consume them.
     agent_inputs: HashMap<ContentDigest, Vec<MessageOrigin>>,
@@ -400,6 +403,8 @@ impl NativeIngress {
                 _ => {}
             }
         }
+        // Restored content without standing taints the resumed session too.
+        self.note_recorded(items);
         let unattributed_message = items.iter().any(|item| {
             matches!(item, ResponseItem::Message { role, .. } if role != "assistant")
                 && self.message_origin(item).is_none()
@@ -409,6 +414,28 @@ impl NativeIngress {
 
     pub(crate) fn take_host_context_reinjection(&mut self) -> bool {
         std::mem::take(&mut self.host_context_reinjection)
+    }
+
+    /// PF-30-S03: note a recorded batch. Content without standing (tool, MCP,
+    /// agent, memory or unattributed text) advances the taint generation;
+    /// host request structure does not. Labelled mode only.
+    pub(crate) fn note_recorded(&mut self, items: &[ResponseItem]) {
+        if !self.labelled_mode {
+            return;
+        }
+        let carries_taint = items.iter().any(|item| {
+            !matches!(
+                item,
+                ResponseItem::AdditionalTools { .. } | ResponseItem::CompactionTrigger {}
+            ) && !self.all_have_standing(std::slice::from_ref(item))
+        });
+        if carries_taint {
+            self.taint_generation = self.taint_generation.saturating_add(1);
+        }
+    }
+
+    pub(crate) fn taint_generation(&self) -> u64 {
+        self.taint_generation
     }
 
     /// Whether every item reached history with human, host or model standing.

@@ -1016,6 +1016,33 @@ impl ModelClient {
             .is_ok_and(|ingress| ingress.labelled_mode() && ingress.all_have_standing(items))
     }
 
+    /// PF-30-S03: note a batch just recorded into history (see
+    /// `NativeIngress::note_recorded`).
+    pub(crate) fn note_recorded_for_taint(&self, items: &[ResponseItem]) {
+        if let Ok(mut ingress) = self.ingress_items.lock() {
+            ingress.note_recorded(items);
+        }
+    }
+
+    /// PF-30-S03: the session's taint generation when post-taint checks apply
+    /// (`source_envelopes` on and a protected level in force), else `None`.
+    /// An unavailable policy counts as protected; a poisoned registry as tainted.
+    pub(crate) fn post_taint_generation(&self) -> Option<u64> {
+        let protected = self.source_admission_level().map_or(true, |level| {
+            level != codex_security_policy::SecurityLevel::Permissive
+        });
+        match self.ingress_items.lock() {
+            Ok(ingress) => {
+                (ingress.labelled_mode() && protected).then(|| ingress.taint_generation())
+            }
+            // A poisoned registry still says whether the flag is on; with it on,
+            // count the session as tainted (fail closed). Flag off stays off.
+            Err(poisoned) => {
+                (poisoned.into_inner().labelled_mode() && protected).then_some(u64::MAX)
+            }
+        }
+    }
+
     /// Mark `input` as submitted to this session by another agent (see
     /// `NativeIngress::mark_agent_input`). Keyed on the exact input, before
     /// any media preparation, so the prompt seam sees the same key.

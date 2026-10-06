@@ -68,11 +68,16 @@ impl ApprovalStore {
 /// - If all keys are already approved for session, we skip prompting.
 /// - If the user approves for session, we store the decision for each key individually
 ///   so future requests touching any subset can also skip prompting.
+///
+/// With `fresh_human_authority` (PF-30-S03 post-taint actions) the cache is
+/// neither read nor written: the human decides this exact action, and a
+/// "for session" answer counts for this one call only.
 pub(crate) async fn with_cached_approval<K, F, Fut>(
     services: &SessionServices,
     // Name of the tool, used for metrics collection.
     tool_name: &str,
     keys: Vec<K>,
+    fresh_human_authority: bool,
     fetch: F,
 ) -> ReviewDecision
 where
@@ -80,6 +85,12 @@ where
     F: FnOnce() -> Fut,
     Fut: Future<Output = ReviewDecision>,
 {
+    if fresh_human_authority {
+        return match fetch().await {
+            ReviewDecision::ApprovedForSession => ReviewDecision::Approved,
+            decision => decision,
+        };
+    }
     // To be defensive here, don't bother with checking the cache if keys are empty.
     if keys.is_empty() {
         return fetch().await;
@@ -123,6 +134,8 @@ pub(crate) struct ApprovalCtx<'a> {
     pub call_id: &'a str,
     pub retry_reason: Option<String>,
     pub network_approval_context: Option<NetworkApprovalContext>,
+    /// PF-30-S03: ask the human about this exact action; no cache, no preapproval.
+    pub fresh_human_authority: bool,
 }
 
 pub(crate) use super::approvals::ApprovalAction;

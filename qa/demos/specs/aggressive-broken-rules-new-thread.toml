@@ -1,0 +1,80 @@
+# #197: under Aggressive, a .rules file that breaks after launch stops new
+# threads instead of silently dropping the `corbanu vault` rule. The `!`
+# command stands in for an editor or another process. Record with
+#   PF24_CANDIDATE=<corbanu> --bin qa/security-levels/sprints/PF-24-S03/demos/wrappers/restart-once.sh
+id = "aggressive-broken-rules-new-thread"
+feature = "#197: a rules file broken after launch stops new threads"
+expected = "With Aggressive active, a rules file that stops parsing makes /new fail with the file and line, instead of starting a thread without the vault rule."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Switch to Aggressive\\?"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "Enter"
+[[steps]]
+type = "/exit"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "restarting Corbanu Terminal.*model: +glm-5\\.2"
+timeout = 60
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Aggressive active"
+[[steps]]
+pause = 1.5
+
+[[steps]]
+type = "!printf 'prefix_rule(pattern = [\"git\"], decision = \\n' > ../home/rules/mine.rules && echo broke mine.rules"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "broke mine\\.rules"
+[[steps]]
+pause = 1.5
+
+[[steps]]
+type = "/new"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "fix or remove it"
+timeout = 60
+[[steps]]
+pause = 4.0

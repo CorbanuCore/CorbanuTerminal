@@ -612,9 +612,19 @@ impl Session {
                 }
             }
             Arc::new(
-                ExecPolicyManager::load(&config.config_layer_stack)
+                ExecPolicyManager::load(&config.config_layer_stack, config.strict_rules)
                     .await
-                    .map_err(|err| CodexErr::Fatal(format!("failed to load rules: {err}")))?,
+                    .map_err(|err| match err {
+                        err @ crate::exec_policy::ExecPolicyError::ParsePolicy { .. }
+                            if config.strict_rules =>
+                        {
+                            CodexErr::Fatal(format!(
+                                "failed to load rules: {}. A rules file that does not parse stops new threads while strict_rules is on (security level Aggressive); fix or remove it, then start a new thread.",
+                                crate::exec_policy::format_exec_policy_error_with_source(&err)
+                            ))
+                        }
+                        err => CodexErr::Fatal(format!("failed to load rules: {err}")),
+                    })?,
             )
         };
 
@@ -3292,6 +3302,7 @@ impl Session {
                 .model_client()
                 .register_message_origin(items, origin);
         }
+        self.services.model_client().note_recorded_for_taint(items);
         self.services.model_client().observe_native_ingress(items);
         {
             let mut state = self.state.lock().await;
@@ -3495,6 +3506,8 @@ impl Session {
         );
         let items = items.as_ref();
         let response_item = items[0].clone();
+        // Agent mail is data without standing (PF-30-S03 taint).
+        self.services.model_client().note_recorded_for_taint(items);
         {
             let mut state = self.state.lock().await;
             state.current_time_reminder.note_recorded_items(items);

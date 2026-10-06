@@ -120,8 +120,10 @@ pub(crate) fn load(codex_home: &Path) -> StoredLevel {
     }
 }
 
-/// Persist a human choice, keep the rules file in step, and read the result
-/// back. Only a verified read-back counts as saved.
+/// Persist a human choice and read the result back. Only a verified
+/// read-back counts as saved. Aggressive writes the vault rule now; the rule
+/// is removed only at the next launch, because an Aggressive session that
+/// saves Permissive stays Aggressive (and keeps starting threads) until then.
 pub(crate) fn save(codex_home: &Path, level: ChosenLevel) -> io::Result<()> {
     let contents = toml::to_string(&StateFile {
         version: STATE_VERSION,
@@ -129,7 +131,9 @@ pub(crate) fn save(codex_home: &Path, level: ChosenLevel) -> io::Result<()> {
     })
     .map_err(io::Error::other)?;
     write_atomically(&state_path(codex_home), &contents)?;
-    sync_rules(codex_home, level)?;
+    if level == ChosenLevel::Aggressive {
+        sync_rules(codex_home, level)?;
+    }
     match load(codex_home) {
         StoredLevel::Chosen(saved) if saved == level => Ok(()),
         other => Err(io::Error::other(format!(
