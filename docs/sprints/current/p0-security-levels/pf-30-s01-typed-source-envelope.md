@@ -6,7 +6,7 @@ plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-30"
 execution_order: 37
 owner: "untrusted-content lane"
-parallel_lane: "source-envelope"
+parallel_lane: "untrusted-content"
 write_scope: "codex-rs/core/config.schema.json, codex-rs/core/src/client.rs, codex-rs/core/src/client_common.rs, codex-rs/core/src/client_tests.rs, codex-rs/core/src/context_manager/mod.rs, codex-rs/core/src/context_manager/normalize.rs, codex-rs/core/src/hook_runtime.rs, codex-rs/core/src/security/ingress/, codex-rs/core/src/session/mod.rs, codex-rs/core/src/session/rollout_budget.rs, codex-rs/core/src/session/session.rs, codex-rs/core/src/session/time_reminder.rs, codex-rs/core/src/session/token_budget.rs, codex-rs/core/src/stream_events_utils.rs, codex-rs/core/src/tasks/mod.rs, codex-rs/core/src/tasks/user_shell.rs, codex-rs/core/tests/suite/provenance.rs, codex-rs/features/src/lib.rs, qa/security-levels/sprints/PF-30-S01-typed-source-envelope/, qa/demos/specs/, qa/demos/index/PF-30-S01.md, docs/sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md"
 integration_gate: "Per-sprint gate of 2026-10-06: focused tests, GLM 5.2 tmux demos, one independent Opus 5.5 High review; merge behind source_envelopes."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf30-s01-20261006"

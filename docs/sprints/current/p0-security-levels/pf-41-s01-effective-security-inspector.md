@@ -9,9 +9,9 @@ owner: "Jim Ricketts"
 worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
 branch: "feat/p0-security-levels"
 base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
-depends_on: "PF-23-S03, PF-29-S02, PF-32-S06, PF-37-S02, PF-40-S03, PF-24-S02"
+depends_on: "PF-23-S03, PF-29-S02, PF-24-S02"
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-10-06
 ---
 
 # PF-41-S01 — Effective security inspector and degradation state
@@ -39,7 +39,7 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] Active plan; PF-23-S03, PF-29-S02, PF-32-S06, PF-37-S02, PF-40-S03, PF-24-S02 completed and archived.
+- [ ] Active plan; PF-23-S03, PF-29-S02, PF-24-S02 completed and archived. Decision 3 (2026-10-06) dropped PF-32-S06, PF-37-S02 and PF-40-S03; those controls belong to the P1 hardening plan.
 - [ ] Read root and nearest implementation-path AGENTS.md; verify exact plan/worktree coordinates.
 - [ ] Confirm source pins, declared crate/module paths, and backend/API availability; unresolved security prerequisites block readiness.
 
@@ -54,7 +54,8 @@ updated: 2026-08-28
 - [ ] Expose a read-only snapshot of requested/effective level, actual sandbox/backend, egress path, broker/classifier health, active references/grants and expiry, taint, retention and recent denial reasons.
 - [ ] Show resolved runtime facts and their source/generation, not just configuration intent; label unsupported or degraded components and prevent a misleading healthy protected-mode badge.
 - [ ] Correlate session/task/child policy and recent decisions without returning secret values, opaque authorization tokens or raw financial records.
-- [ ] Offer trusted navigation from /security to grants, migration, quarantine and Sweep; inspector reading cannot mutate authority or clear a stop.
+- [ ] Offer trusted navigation from /security to grants and migration; inspector reading cannot mutate authority or clear a stop.
+- [ ] Show screened search routing (PF-32), brokered browser login (PF-37), quarantine (PF-34) and Agent Sweep (PF-40) as "not available" until their P1 sprints land; never as healthy or enabled.
 - [ ] Test conflicting config, unsupported platform, stale health, broker crash, expired grant, tainted memory and inherited stricter child policy.
 - [ ] Add named `pf_41_s01` regression tests; update affected Cargo/Bazel/lock/schema edges together without broadening this feature.
 

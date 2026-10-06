@@ -1,0 +1,4 @@
+{"time_ns": 1791250297518395000, "utc": "2026-10-06T01:31:37Z", "label": "FIXTURE_PROBE_PENDING", "files": {"events.txt": "", "input.txt": "permission-test\n"}}
+{"time_ns": 1791250305598168000, "utc": "2026-10-06T01:31:45Z", "label": "FIXTURE_AFTER_CANCEL", "files": {"events.txt": "", "input.txt": "permission-test\n"}}
+{"time_ns": 1791250344487753000, "utc": "2026-10-06T01:32:24Z", "label": "FIXTURE_SLOWTASK_DONE", "files": {"events.txt": "", "input.txt": "permission-test\n", "workspace/slowtask.txt": "f03-task started\nf03-task finished\n"}}
+{"time_ns": 1791250608633899000, "utc": "2026-10-06T01:36:48Z", "label": "FIXTURE_FINAL", "files": {"events.txt": "", "input.txt": "permission-test\n", "workspace/slowtask.txt": "f03-task started\nf03-task finished\n", "workspace/slowtask2.txt": "f03-task2 started\nf03-task2 finished\n"}}

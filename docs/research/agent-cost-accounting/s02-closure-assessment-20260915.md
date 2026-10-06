@@ -161,7 +161,7 @@ This proposal edits no repository path, so its overlap with all reserved impleme
 | Existing record | Current consequence |
 | --- | --- |
 | docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md | Draft after September 14 reservation return to PF-83; not cancelled/completed/resumed. Preserve broker/protected-state/vault/credential-proxy ownership and manager-owned manifests/locks. No gateway auth work is authorized here. |
-| docs/sprints/current/p0-security-levels/pf-83-s01-permission-confirmation.md | In progress; app-server confirmation, v2 thread protocol/schema and TUI routing/settings/app/tests are reserved. A future S03 expansion beyond usage.rs may collide directly and must be serialized or reallocated before dispatch. |
+| docs/sprints/archive/p0-security-levels/pf-83-s01-permission-confirmation.md | In progress; app-server confirmation, v2 thread protocol/schema and TUI routing/settings/app/tests are reserved. A future S03 expansion beyond usage.rs may collide directly and must be serialized or reallocated before dispatch. |
 | docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md | In progress; initiative-control scripts, coordinator research/QA and coordinatorInstructions.md remain owned. No accounting design write intersects. |
 | docs/research/tasknode-integration/owned-ingress-allocation-20260913.md | Historical ten-file responses-api-proxy allocation and manager-owned dependency integration; not proof of an active proxy worker. Preserve shared receiving/build coordination and do not borrow its fixtures as an accounting authority. |
 
