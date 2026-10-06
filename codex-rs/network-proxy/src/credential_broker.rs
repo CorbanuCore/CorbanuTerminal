@@ -179,9 +179,10 @@ impl CredentialBroker {
     ) -> Self {
         let mut fingerprint_key = Zeroizing::new([0_u8; 32]);
         rand::Rng::fill(&mut rand::rng(), fingerprint_key.as_mut_slice());
-        // Start the broker with the proxy, before agent processes exist, so no
-        // concurrent spawn can inherit its control pipes. It is never respawned:
-        // after it dies, brokered credentials fail closed until Core restarts.
+        // Start the broker once per proxy (session), before this session spawns
+        // agent processes, to narrow the window in which a concurrent spawn could
+        // inherit its control pipes. It is never respawned: after it dies,
+        // brokered credentials fail closed until a new session starts its proxy.
         let client = enabled
             .then(|| IsolatedBrokerClient::spawn(&launcher, options))
             .and_then(|spawned| match spawned {

@@ -1,6 +1,7 @@
 # PF-27-S04 isolated broker process: gate evidence (2026-10-06)
 
-Candidate: `cf852aa347` on `feat/pf27-s04-broker-20261006` (macOS arm64 debug build, Rust 1.95.0).
+Candidate: `cf852aa347` (tests, tmux run) and `1a4370992f5a` (demo videos; adds the spawn-log fix below) on
+`feat/pf27-s04-broker-20261006`, macOS arm64 debug build, Rust 1.95.0. Later commits change only comments and docs.
 Feature flag: `[features] isolated_credential_broker = true` (default off). Synthetic credentials only.
 
 ## What ships
@@ -48,9 +49,20 @@ request carried the real synthetic token and a SHA-256 prefix of what it receive
 
 No raw synthetic token appears in any recording (checked by search).
 
-## Videos (asciinema, kept outside git because of size)
+## Demo videos (SOP: `qa/demos/README.md`)
 
-Directory: `/Volumes/CorbanuDrive/Corbanu/.codex-work/broker-lane-20261006/casts/`
+Recorded with `scripts/demo_video.py` from `qa/demos/specs/pf27-*.toml` and published to the `demos`
+prerelease. The links are in [`qa/demos/index/PF-27-S04.md`](../../../../demos/index/PF-27-S04.md).
+1. Substitution: the broker is running, the agent's token hashes differently, and the server reports `authorized: true`.
+2. Direct call denied: the agent's curl exits 7, and the user-shell curl gets `(52) Empty reply`.
+3. Crash fails closed: after `pkill` of the broker, `Request blocked by network policy.`
+
+The secret scan of the first take flagged a **product finding**. Core's `spawn_child_async` trace logged the child
+environment, including raw credentials, before virtualization. Fixed in `1a4370992f5a`, which now logs variable
+names only. The later takes are clean.
+
+Earlier tmux recordings (asciinema, before the SOP landed) are kept outside git in
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/broker-lane-20261006/casts/`:
 
 | File | SHA-256 |
 | --- | --- |
@@ -65,7 +77,9 @@ timing errors, not product failures. The V3 case was then reworded to keep the t
 
 ## Review
 
-One independent Opus 5.5 High review of `1c1ab846a2` returned **APPROVE WITH NITS** (no P0/P1). Fixed in `cf852aa347`:
+One independent Opus 5.5 High review of `1c1ab846a2` returned **APPROVE WITH NITS** (no P0/P1). A re-check of
+the fixes (`review-opus-2.md`) also returned APPROVE WITH NITS. Its nits are a comment wording fix (done) and two
+timeout limits, now recorded in the sprint file. Fixed in `cf852aa347`:
 - P2: the broker now hardens itself (no debugger attach, no core dumps).
 - P2: the broker starts with the proxy, before any agent process exists, and is never respawned.
 - P3: accept-error backoff, idle response timeout, spawn cleanup gaps, Unix-only arg0 dependency, Windows dead-code
