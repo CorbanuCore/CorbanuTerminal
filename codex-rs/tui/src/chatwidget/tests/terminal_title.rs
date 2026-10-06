@@ -34,7 +34,7 @@ async fn terminal_title_shows_action_required_while_exec_approval_is_pending() {
     );
     assert!(!chat.should_animate_terminal_title_spinner());
 
-    chat.handle_key_event(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+    press_approval_shortcut(&mut chat, 'y');
     chat.pre_draw_tick();
 
     let title = chat

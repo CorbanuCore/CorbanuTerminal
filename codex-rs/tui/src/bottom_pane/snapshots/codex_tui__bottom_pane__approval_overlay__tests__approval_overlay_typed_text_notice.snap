@@ -1,0 +1,19 @@
+---
+source: tui/src/bottom_pane/approval_overlay.rs
+expression: "render_overlay_lines(&view, 80)"
+---
+
+  Would you like to run the following command?
+
+  $ touch /outside/marker
+
+› 1. Yes, proceed (y)
+  2. Yes, and don't ask again for commands that start with `touch /outside/
+     marker` (p)
+  3. No, and tell Corbanu Terminal what to do differently (esc)
+
+  Press enter to confirm or esc to cancel
+
+  Typed text is not sent while this request is open. Use ↑/↓ and enter to
+  answer, or esc to cancel. Slash commands such as /permissions work after
+  you answer.
