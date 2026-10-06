@@ -1,0 +1,12 @@
+{"time_ns": 1791250237813551000, "utc": "2026-10-06T01:30:37Z", "label": "F-DECLINED", "files": {"events.txt": "", "input.txt": "permission-test\n"}}
+{"time_ns": 1791250278110109000, "utc": "2026-10-06T01:31:18Z", "label": "F-VARa-PRESTOP", "files": {"events.txt": "", "input.txt": "permission-test\n"}}
+{"time_ns": 1791250318903915000, "utc": "2026-10-06T01:31:58Z", "label": "F-VARa-END", "files": {"events.txt": "", "input.txt": "permission-test\n"}}
+{"time_ns": 1791250372041990000, "utc": "2026-10-06T01:32:52Z", "label": "F-VARb-PROBE", "files": {"events.txt": "F10-PROBE-VARb-FA\n", "input.txt": "permission-test\n"}}
+{"time_ns": 1791250375145924000, "utc": "2026-10-06T01:32:55Z", "label": "F-VARb-PRESTOP", "files": {"events.txt": "F10-PROBE-VARb-FA\n", "input.txt": "permission-test\n"}}
+{"time_ns": 1791250413098499000, "utc": "2026-10-06T01:33:33Z", "label": "F-VARb-END", "files": {"events.txt": "F10-PROBE-VARb-FA\nF10-PROBE-VARb-POSTRESTART\n", "input.txt": "permission-test\n"}}
+{"time_ns": 1791250420155096000, "utc": "2026-10-06T01:33:40Z", "label": "F-VARb-END", "files": {"events.txt": "F10-PROBE-VARb-FA\nF10-PROBE-VARb-POSTRESTART\n", "input.txt": "permission-test\n"}}
+{"time_ns": 1791250440806631000, "utc": "2026-10-06T01:34:00Z", "label": "F-VARc-PRESTOP", "files": {"events.txt": "F10-PROBE-VARb-FA\nF10-PROBE-VARb-POSTRESTART\n", "input.txt": "permission-test\n"}}
+{"time_ns": 1791250491524169000, "utc": "2026-10-06T01:34:51Z", "label": "F-VARc-END", "files": {"events.txt": "F10-PROBE-VARb-FA\nF10-PROBE-VARb-POSTRESTART\n", "input.txt": "permission-test\n"}}
+{"time_ns": 1791250517556717000, "utc": "2026-10-06T01:35:17Z", "label": "F-VARd-PRESTOP", "files": {"events.txt": "F10-PROBE-VARb-FA\nF10-PROBE-VARb-POSTRESTART\n", "input.txt": "permission-test\n"}}
+{"time_ns": 1791250535472023000, "utc": "2026-10-06T01:35:35Z", "label": "F-VARd-POSTRESTART", "files": {"events.txt": "F10-PROBE-VARb-FA\nF10-PROBE-VARb-POSTRESTART\n", "input.txt": "permission-test\n"}}
+{"time_ns": 1791250567194709000, "utc": "2026-10-06T01:36:07Z", "label": "F-VARd-END", "files": {"events.txt": "F10-PROBE-VARb-FA\nF10-PROBE-VARb-POSTRESTART\n", "input.txt": "permission-test\n"}}

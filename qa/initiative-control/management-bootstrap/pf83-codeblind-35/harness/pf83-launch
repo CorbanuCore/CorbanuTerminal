@@ -1,0 +1,81 @@
+#!/bin/bash
+# Root-owned launcher, run by the coordinator as: sudo -u LANE -H /opt/pf83/bin/pf83-launch MODE RUN_ID [CASE]
+# sudo's env_reset gives a clean environment; everything the run sees is set here.
+set -euo pipefail
+umask 077
+mode="$1"; run_id="$2"; case_id="${3:-}"
+[[ "$run_id" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "bad run id" >&2; exit 64; }
+export PF83_RUN="$HOME/runs/$run_id"
+export PF83_PROXY=http://127.0.0.1:18443
+export HTTPS_PROXY="$PF83_PROXY" CODEX_CA_CERTIFICATE=/opt/pf83/etc/mediation-ca.pem
+export ZAI_API_KEY=pf83-synthetic-placeholder-not-a-credential
+export PATH=/opt/pf83/bin:/usr/bin:/bin:/usr/sbin:/sbin
+export TMPDIR="$PF83_RUN/tmp/" LANG=en_US.UTF-8 SHELL=/bin/bash TERM=screen-256color
+mkdir -p "$PF83_RUN"/{evidence,tmp,work,product-home,executor-home,product-logs,fixture/workspace}
+[ -f "$PF83_RUN/fixture/input.txt" ] || printf 'permission-test\n' > "$PF83_RUN/fixture/input.txt"
+[ -f "$PF83_RUN/fixture/events.txt" ] || : > "$PF83_RUN/fixture/events.txt"
+cd "$PF83_RUN/work"
+TM=(/opt/pf83/bin/tmux -f /opt/pf83/etc/tmux.conf -S "$PF83_RUN/tmp/probe-tmux.sock")
+case "$mode" in
+  probe)
+    /usr/bin/python3 /opt/pf83/bin/pf83-probe all > "$PF83_RUN/evidence/preflight-launcher.json" || true
+    # Same probes from a process whose parent is a tmux server (the product's position), plus PTY input.
+    "${TM[@]}" new-session -d -s probe -x 120 -y 30 \
+      "/usr/bin/python3 /opt/pf83/bin/pf83-probe negatives > '$PF83_RUN/evidence/preflight-tmux-child.json'; exec /bin/cat"
+    for _ in $(seq 1 240); do
+      grep -q '"ok"' "$PF83_RUN/evidence/preflight-tmux-child.json" 2>/dev/null && break; sleep 0.5
+    done
+    sleep 1
+    "${TM[@]}" send-keys -t probe -l "pf83-pty-input-control"
+    "${TM[@]}" send-keys -t probe Enter
+    sleep 1
+    "${TM[@]}" capture-pane -p -t probe > "$PF83_RUN/evidence/preflight-pty-control.txt"
+    "${TM[@]}" kill-server || true
+    /usr/bin/python3 - "$PF83_RUN/evidence" <<'PY'
+import json, sys, os
+d = sys.argv[1]
+docs = {}
+for name in ("preflight-launcher.json", "preflight-tmux-child.json"):
+    try:
+        docs[name] = json.load(open(os.path.join(d, name)))
+    except Exception as exc:
+        docs[name] = {"ok": False, "error": repr(exc)}
+pty = open(os.path.join(d, "preflight-pty-control.txt")).read()
+pty_ok = pty.count("pf83-pty-input-control") >= 2
+summary = {"launcher_ok": docs["preflight-launcher.json"].get("ok"),
+           "tmux_child_ok": docs["preflight-tmux-child.json"].get("ok"),
+           "pty_input_echoed": pty_ok,
+           "probe_count": len(docs["preflight-launcher.json"].get("probes", [])) +
+                          len(docs["preflight-tmux-child.json"].get("probes", []))}
+summary["ok"] = bool(summary["launcher_ok"] and summary["tmux_child_ok"] and pty_ok)
+json.dump(summary, open(os.path.join(d, "preflight-summary.json"), "w"), indent=1)
+print(json.dumps(summary))
+PY
+    ;;
+  smoke)
+    export CORBANU_HOME="$PF83_RUN/executor-home" CODEX_HOME="$PF83_RUN/executor-home"
+    exec /opt/pf83/pkg/corbanu exec --json --skip-git-repo-check --ephemeral \
+      -m glm-5.2 -c 'model_provider="zai"' -c 'cli_auth_credentials_store="file"' \
+      -C "$PF83_RUN/work" "Reply with exactly PF83-SMOKE-OK and nothing else."
+    ;;
+  executor)
+    [[ "$case_id" =~ ^F(0[1-9]|1[01])$ ]] || { echo "bad case" >&2; exit 64; }
+    export CORBANU_HOME="$PF83_RUN/executor-home" CODEX_HOME="$PF83_RUN/executor-home"
+    prompt="$(cat "/opt/pf83/packet/prompts/$case_id.md")"
+    # Hard wall-clock budget; SIGALRM terminates the executor.
+    exec /usr/bin/perl -e 'alarm shift; exec @ARGV or die' "${PF83_BUDGET_SECONDS:-5400}" \
+      /opt/pf83/pkg/corbanu exec --json --skip-git-repo-check \
+      --dangerously-bypass-approvals-and-sandbox \
+      -m glm-5.2 -c 'model_provider="zai"' -c 'cli_auth_credentials_store="file"' \
+      -C "$PF83_RUN/work" "$prompt"
+    ;;
+  cleanup)
+    /opt/pf83/bin/tmux -S "$PF83_RUN/tmux.sock" kill-server 2>/dev/null || true
+    pkill -u "$(id -u)" -f /opt/pf83/pkg/corbanu || true
+    ;;
+  collect)
+    cd "$PF83_RUN"
+    exec /usr/bin/tar -cf - evidence fixture product-logs product-home/sessions work 2>/dev/null
+    ;;
+  *) echo "unknown mode" >&2; exit 64;;
+esac

@@ -1,0 +1,5 @@
+{"time_ns": 1791247675287761000, "utc": "2026-10-06T00:47:55Z", "label": "S11-fixture-fa", "files": {"events.txt": "", "input.txt": "permission-test\n", "output-fa.txt": "FA-probe-1\n"}}
+{"time_ns": 1791247712173647000, "utc": "2026-10-06T00:48:32Z", "label": "S17-fixture-pending", "files": {"events.txt": "", "input.txt": "permission-test\n", "output-fa.txt": "FA-probe-1\n"}}
+{"time_ns": 1791247727922968000, "utc": "2026-10-06T00:48:47Z", "label": "S20-fixture-declined", "files": {"events.txt": "", "input.txt": "permission-test\n", "output-fa.txt": "FA-probe-1\n"}}
+{"time_ns": 1791247754172792000, "utc": "2026-10-06T00:49:14Z", "label": "S25-fixture-applied", "files": {"events.txt": "", "input.txt": "permission-test\n", "output-fa.txt": "FA-probe-1\n"}}
+{"time_ns": 1791247768138129000, "utc": "2026-10-06T00:49:28Z", "label": "S28-fixture-final", "files": {"events.txt": "", "input.txt": "permission-test\n", "output-fa.txt": "FA-probe-1\n"}}
