@@ -31,6 +31,8 @@ pub use crate::custom_ca::build_rustls_client_config_with_custom_ca;
 pub use crate::custom_ca::maybe_build_rustls_client_config_with_custom_ca;
 pub use crate::error::StreamError;
 pub use crate::error::TransportError;
+pub use crate::log_redaction::RedactedHeaders;
+pub use crate::log_redaction::redact_headers;
 pub use crate::log_redaction::redact_reqwest_error;
 pub use crate::log_redaction::redact_url;
 pub use crate::outbound_proxy::BuildRouteAwareHttpClientError;

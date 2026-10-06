@@ -16,8 +16,10 @@ use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_function_call;
 use core_test_support::responses::ev_response_created;
+use core_test_support::responses::mount_response_once;
 use core_test_support::responses::mount_sse_once;
 use core_test_support::responses::sse;
+use core_test_support::responses::sse_response;
 use core_test_support::responses::start_mock_server;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
@@ -213,8 +215,8 @@ async fn user_shell_cmd_env_values_never_reach_trace_logs() -> anyhow::Result<()
 }
 
 /// #196: the provider's bearer token, static header and query values, sent on
-/// every model request, and the environment of a model-requested shell
-/// command never reach the log sinks. The session-configured line and the
+/// every model request, a `set-cookie` response header, and the environment
+/// of a model-requested shell command never reach the log sinks. The session-configured line and the
 /// request URL are still logged, with the values redacted.
 #[tokio::test]
 async fn provider_credentials_and_tool_env_never_reach_trace_logs() -> anyhow::Result<()> {
@@ -223,6 +225,7 @@ async fn provider_credentials_and_tool_env_never_reach_trace_logs() -> anyhow::R
     const QUERY_VALUE: &str = "fake-provider-query-0003-0e5d77b1";
     const ENV_NAME: &str = "CORBANU_SENTINEL_TOOL_TOKEN";
     const ENV_VALUE: &str = "fake-tool-env-trace-0004-b83f05aa";
+    const COOKIE_VALUE: &str = "fake-response-cookie-0005-c2e94d10";
 
     let (sinks, guard) = TraceSinks::install().await?;
     let cwd = TempDir::new()?;
@@ -261,12 +264,14 @@ async fn provider_credentials_and_tool_env_never_reach_trace_logs() -> anyhow::R
         ]),
     )
     .await;
-    let second = mount_sse_once(
+    // Response headers are logged; credential-like values must not be.
+    let second = mount_response_once(
         &server,
-        sse(vec![
+        sse_response(sse(vec![
             ev_assistant_message("msg-1", "done"),
             ev_completed("resp-2"),
-        ]),
+        ]))
+        .insert_header("set-cookie", format!("session={COOKIE_VALUE}; Path=/")),
     )
     .await;
     fixture
@@ -303,12 +308,20 @@ async fn provider_credentials_and_tool_env_never_reach_trace_logs() -> anyhow::R
                 "spawn_child_async",
                 "experimental_bearer_token: Some(\"<redacted>\")",
             ],
-            &[PROVIDER_KEY, HEADER_VALUE, QUERY_VALUE, ENV_VALUE],
+            &[
+                PROVIDER_KEY,
+                HEADER_VALUE,
+                QUERY_VALUE,
+                ENV_VALUE,
+                COOKIE_VALUE,
+            ],
         )
         .await?;
     assert!(
-        log_text.contains("\"X-Sentinel\": \"<redacted>\"") && log_text.contains("key=REDACTED"),
-        "the provider headers and the request URL should be logged with values redacted"
+        log_text.contains("\"X-Sentinel\": \"<redacted>\"")
+            && log_text.contains("key=REDACTED")
+            && log_text.contains("\"set-cookie\": \"REDACTED\""),
+        "the provider headers, the request URL and the response headers should be logged with values redacted"
     );
     Ok(())
 }
