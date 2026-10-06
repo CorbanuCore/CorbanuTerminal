@@ -1024,14 +1024,18 @@ impl ModelClient {
         }
     }
 
-    /// PF-30-S03: the session's taint generation when post-taint checks apply
-    /// (`source_envelopes` on and a protected level in force), else `None`.
-    /// An unavailable policy counts as protected; a poisoned registry as tainted.
-    pub(crate) fn post_taint_generation(&self) -> Option<u64> {
+    /// PF-30-S03: the session's taint generation and effective policy when
+    /// post-taint checks apply (`source_envelopes` on and a protected level in
+    /// force), else `None`. An unavailable policy counts as protected; a
+    /// poisoned registry as tainted.
+    pub(crate) fn post_taint_state(
+        &self,
+    ) -> Option<crate::security::tainted_action::PostTaintState> {
+        use crate::security::tainted_action::PolicyBinding;
         let protected = self.source_admission_level().map_or(true, |level| {
             level != codex_security_policy::SecurityLevel::Permissive
         });
-        match self.ingress_items.lock() {
+        let taint_generation = match self.ingress_items.lock() {
             Ok(ingress) => {
                 (ingress.labelled_mode() && protected).then(|| ingress.taint_generation())
             }
@@ -1040,7 +1044,24 @@ impl ModelClient {
             Err(poisoned) => {
                 (poisoned.into_inner().labelled_mode() && protected).then_some(u64::MAX)
             }
-        }
+        }?;
+        let policy = match &self.ingress_policy {
+            None => PolicyBinding::Unbound,
+            Some(policy) => match policy.0.snapshot_for_agent(self.state.thread_id) {
+                Ok(snapshot) => PolicyBinding::Bound {
+                    epoch: snapshot.epoch,
+                    revocation_generation: snapshot.revocation_generation,
+                    kill_switch_active: snapshot.kill_switch_active,
+                    level: snapshot.level,
+                    actor_chain: snapshot.actor_chain,
+                },
+                Err(_) => PolicyBinding::Unavailable,
+            },
+        };
+        Some(crate::security::tainted_action::PostTaintState {
+            taint_generation,
+            policy,
+        })
     }
 
     /// Mark `input` as submitted to this session by another agent (see
