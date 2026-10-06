@@ -3925,6 +3925,10 @@ impl Config {
                 );
             }
             configured_network_proxy_config.enabled = true;
+            if features.enabled(Feature::IsolatedCredentialBroker) {
+                configured_network_proxy_config
+                    .set_isolated_credential_broker_enabled(/*enabled*/ true);
+            }
         }
         let approval_policy_was_explicit =
             approval_policy_override.is_some() || cfg.approval_policy.is_some();
@@ -4947,6 +4951,10 @@ impl Config {
                     );
                 }
                 configured_network_proxy_config.enabled = true;
+                if self.features.enabled(Feature::IsolatedCredentialBroker) {
+                    configured_network_proxy_config
+                        .set_isolated_credential_broker_enabled(/*enabled*/ true);
+                }
             }
             configured_network_proxy_config
         } else {
