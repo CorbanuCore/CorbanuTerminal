@@ -87,9 +87,12 @@ const POLICY_CONFIG_KEYS: &[&str] = &[
     "security",
     "features",
     "shell_environment_policy",
+    "projects",
 ];
 /// Folders whose contents are credentials wherever they are.
-const CREDENTIAL_SEGMENTS: &[&str] = &[".ssh", ".aws", ".gnupg", ".kube", ".docker", ".azure"];
+const CREDENTIAL_SEGMENTS: &[&str] = &[".ssh", ".aws", ".gnupg", ".kube"];
+/// Credential folders only in the user's home (projects often have their own).
+const USER_CREDENTIAL_SEGMENTS: &[&str] = &[".docker", ".azure", ".config/gh", ".config/gcloud"];
 const CREDENTIAL_FILES: &[&str] = &[
     ".credentials.json",
     ".netrc",
@@ -128,10 +131,6 @@ const CREDENTIAL_COMMANDS: &[(&str, &[&str])] = &[
     ("secret-tool", &["lookup", "search"]),
     ("gpg", &["--export-secret-keys", "--export-secret-subkeys"]),
     ("pass", &["show"]),
-];
-/// Words that only run another command.
-const PREFIX_COMMANDS: &[&str] = &[
-    "sudo", "env", "command", "exec", "nohup", "time", "nice", "builtin", "xargs",
 ];
 
 /// Classify the exact action the host is about to run. `codex_home` is the
@@ -222,47 +221,43 @@ impl Homes {
             word = format!("{home}{}", &word[1..]);
         }
         if word.starts_with('/') || cwd.is_empty() {
-            word
+            normalize_path(&word)
         } else {
-            format!("{cwd}/{word}")
+            normalize_path(&format!("{cwd}/{word}"))
         }
     }
 
-    /// The protected kind of one absolute path (wildcards keep their fixed prefix).
+    /// The protected kind of one absolute path. Glob segments count as any
+    /// protected folder they could match.
     fn classify_path(&self, path: &str) -> Option<ProtectedActionKind> {
-        let path = normalized(path);
+        let path = normalize_path(&path.to_lowercase());
         let segments: Vec<&str> = path
             .split('/')
             .filter(|segment| !segment.is_empty())
             .collect();
         let name = segments.last().copied().unwrap_or_default();
+        let under_user_home = |folder: &str| {
+            self.user_home
+                .as_ref()
+                .is_some_and(|home| path.starts_with(&format!("{home}/{folder}")))
+        };
         if segments
             .iter()
-            .any(|segment| CREDENTIAL_SEGMENTS.contains(segment))
-            || CREDENTIAL_FILES.contains(&name)
+            .any(|segment| matches_any(segment, CREDENTIAL_SEGMENTS))
+            || USER_CREDENTIAL_SEGMENTS
+                .iter()
+                .any(|folder| under_user_home(folder))
+            || CREDENTIAL_FILES.iter().any(|file| glob_matches(name, file))
             || (name == "hosts.yml" && path.contains("/gh/"))
             || name.starts_with("id_rsa")
             || name.starts_with("id_ed25519")
         {
             return Some(ProtectedActionKind::Credentials);
         }
-        // Inside a Corbanu home: the rest of the path below it.
-        let below_home = if !self.codex_home.is_empty()
-            && (path == self.codex_home || path.starts_with(&format!("{}/", self.codex_home)))
-        {
-            Some(&path[self.codex_home.len()..])
-        } else {
-            HOME_SEGMENTS.iter().find_map(|home| {
-                let marker = format!("/{home}");
-                path.match_indices(&marker)
-                    .map(|(index, _)| &path[index + marker.len()..])
-                    .find(|rest| rest.is_empty() || rest.starts_with('/'))
-            })
-        }?;
+        let below_home = self.below_home(&path, &segments)?;
         let first = below_home
-            .trim_start_matches('/')
             .split('/')
-            .next()
+            .find(|segment| !segment.is_empty())
             .unwrap_or("");
         // Agent worktrees kept under the home are ordinary workspaces.
         if first == "worktrees" {
@@ -276,6 +271,69 @@ impl Homes {
         }
         Some(ProtectedActionKind::SecurityPolicy)
     }
+
+    /// The part of `path` below a Corbanu home, if it is inside one: the
+    /// configured home as a whole-segment run anywhere in the path, or a
+    /// default home folder name (or a glob that could match one) as a segment.
+    fn below_home<'a>(&self, path: &'a str, segments: &[&str]) -> Option<&'a str> {
+        if !self.codex_home.is_empty() {
+            let found = path
+                .match_indices(self.codex_home.as_str())
+                .find_map(|(index, _)| {
+                    let rest = &path[index + self.codex_home.len()..];
+                    (rest.is_empty() || rest.starts_with('/')).then_some(rest)
+                });
+            if found.is_some() {
+                return found;
+            }
+        }
+        let index = segments
+            .iter()
+            .position(|segment| matches_any(segment, HOME_SEGMENTS))?;
+        let marker = format!("/{}", segments[index]);
+        path.match_indices(&marker)
+            .map(|(at, _)| &path[at + marker.len()..])
+            .find(|rest| rest.is_empty() || rest.starts_with('/'))
+    }
+}
+
+/// Resolve `.`, `..` and repeated slashes without touching the filesystem.
+fn normalize_path(path: &str) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    for segment in path.split('/') {
+        match segment {
+            "" | "." => {}
+            ".." => {
+                parts.pop();
+            }
+            segment => parts.push(segment),
+        }
+    }
+    format!("/{}", parts.join("/"))
+}
+
+fn matches_any(segment: &str, names: &[&str]) -> bool {
+    names.iter().any(|name| glob_matches(segment, name))
+}
+
+/// Whether the shell glob `pattern` (`*`, `?`, `[...]`) could match `name`.
+/// Without glob characters this is equality.
+fn glob_matches(pattern: &str, name: &str) -> bool {
+    fn matches(pattern: &[char], name: &[char]) -> bool {
+        match pattern.first() {
+            None => name.is_empty(),
+            Some('*') => (0..=name.len()).any(|skip| matches(&pattern[1..], &name[skip..])),
+            Some('?') => !name.is_empty() && matches(&pattern[1..], &name[1..]),
+            Some('[') => match pattern.iter().position(|ch| *ch == ']') {
+                Some(close) => !name.is_empty() && matches(&pattern[close + 1..], &name[1..]),
+                None => name.first() == Some(&'[') && matches(&pattern[1..], &name[1..]),
+            },
+            Some(ch) => name.first() == Some(ch) && matches(&pattern[1..], &name[1..]),
+        }
+    }
+    let pattern: Vec<char> = pattern.chars().collect();
+    let name: Vec<char> = name.chars().collect();
+    matches(&pattern, &name)
 }
 
 /// Simple commands of the argv and of any script inside it (`bash -lc
@@ -293,7 +351,7 @@ fn simple_commands(command: &[String]) -> Vec<Vec<String>> {
         }
         previous = Some(arg.as_str());
         let mut word = String::new();
-        let mut flush = |word: &mut String, commands: &mut Vec<Vec<String>>| {
+        let flush = |word: &mut String, commands: &mut Vec<Vec<String>>| {
             if !word.is_empty() {
                 commands
                     .last_mut()
@@ -318,17 +376,6 @@ fn simple_commands(command: &[String]) -> Vec<Vec<String>> {
     }
     commands.retain(|words| !words.is_empty());
     commands
-}
-
-/// The command name of a simple command: skips `VAR=value` assignments and
-/// wrappers such as `sudo` and `env`.
-fn command_index(words: &[String]) -> Option<usize> {
-    words.iter().position(|word| {
-        let name = basename(word);
-        !(word.contains('=') && !word.starts_with('-'))
-            && !PREFIX_COMMANDS.contains(&name)
-            && !word.starts_with('-')
-    })
 }
 
 /// The CLI subcommand: the first word that is neither a flag nor a flag's value.
@@ -370,9 +417,19 @@ fn classify_command(command: &[String], homes: &Homes, cwd: &str) -> Option<Prot
             found = Some(kind);
         }
     };
+    let policy_key = |value: &str| POLICY_CONFIG_KEYS.iter().any(|key| value.starts_with(key));
+    let mut cwd = cwd.to_string();
     for words in simple_commands(command) {
-        if let Some(index) = command_index(&words) {
-            let name = basename(&words[index]);
+        // `cd` changes the folder later relative words resolve against.
+        if words.first().is_some_and(|word| word == "cd")
+            && let Some(target) = words.get(1)
+        {
+            cwd = homes.resolve(target, &cwd);
+        }
+        // Not only at command position: wrappers (`nice -n 5`, `sudo -u x`,
+        // `timeout 9`, `eval`, `npx`, nested `sh -c`) put the real command later.
+        for (index, word) in words.iter().enumerate() {
+            let name = basename(word);
             let args = &words[index + 1..];
             if CLI_NAMES.contains(&name) {
                 if args.iter().any(|word| word == "vault") {
@@ -381,12 +438,11 @@ fn classify_command(command: &[String], homes: &Homes, cwd: &str) -> Option<Prot
                 if subcommand(args).is_some_and(|sub| CLI_POLICY_WORDS.contains(&sub)) {
                     note(ProtectedActionKind::SecurityPolicy);
                 }
-                let policy_key =
-                    |value: &str| POLICY_CONFIG_KEYS.iter().any(|key| value.starts_with(key));
                 let policy_flag = args.iter().enumerate().any(|(index, word)| {
-                    CLI_POLICY_FLAGS.contains(&word.as_str())
+                    CLI_POLICY_FLAGS.iter().any(|flag| word.contains(flag))
                         || word.starts_with("--dangerously")
                         || word.strip_prefix("--config=").is_some_and(policy_key)
+                        || (word.len() > 2 && word.strip_prefix("-c").is_some_and(policy_key))
                         || (matches!(word.as_str(), "-c" | "--config")
                             && args.get(index + 1).is_some_and(|value| policy_key(value)))
                 });
@@ -403,16 +459,24 @@ fn classify_command(command: &[String], homes: &Homes, cwd: &str) -> Option<Prot
             }
         }
         for word in &words {
-            // `$HOME`-style words were split from `$`; resolve them whole.
+            // Attached and assigned forms (`-o/path`, `f=@/path`) are paths too.
             for candidate in word.split('=') {
+                let candidate = candidate.trim_start_matches('@');
                 if candidate.is_empty() || candidate.starts_with('-') && !candidate.contains('/') {
                     continue;
                 }
-                if let Some(kind) = homes.classify_path(&homes.resolve(candidate, cwd)) {
+                let candidate = match candidate.find('/') {
+                    Some(slash) if candidate.starts_with('-') => &candidate[slash..],
+                    _ => candidate,
+                };
+                if let Some(kind) = homes.classify_path(&homes.resolve(candidate, &cwd)) {
                     note(kind);
                 }
             }
         }
+    }
+    if let Some(kind) = homes.classify_path(&cwd) {
+        note(kind);
     }
     found
 }

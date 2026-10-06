@@ -613,11 +613,14 @@ where
         network_approval_context: None,
         fresh_human_authority: true,
     };
-    let action = tool.approval_action(req, &ctx).ok()?;
-    let kind = crate::security::tainted_action::classify(
-        &action,
-        tool_ctx.turn.config.codex_home.as_path(),
-    )?;
+    // An action the host cannot describe cannot be shown to be ordinary.
+    let kind = match tool.approval_action(req, &ctx) {
+        Ok(action) => crate::security::tainted_action::classify(
+            &action,
+            tool_ctx.turn.config.codex_home.as_path(),
+        )?,
+        Err(_) => crate::security::tainted_action::ProtectedActionKind::SecurityPolicy,
+    };
     tracing::info!(
         target: "codex_core::security::tainted_action",
         kind = ?kind,
