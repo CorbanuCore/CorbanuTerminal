@@ -6,7 +6,7 @@ use crate::destination::DenialSite;
 use crate::destination::DestinationDenial;
 use crate::destination::DestinationGuard;
 use crate::destination::SystemResolver;
-use crate::destination_contract::ContractError;
+use crate::destination_contract::DecisionReason;
 use crate::mitm;
 use crate::network_policy::BlockDecisionAuditEventArgs;
 use crate::network_policy::NetworkDecision;
@@ -321,15 +321,18 @@ async fn http_connect_accept(
         ConnectMitmMode::Enabled
     } else {
         match host_mitm_requirement {
-            // The guard checks path, method and redirects of inner HTTPS
-            // requests whenever interception is available.
-            HostMitmRequirement::None if destination_guard && mitm_state.is_some() => {
-                ConnectMitmMode::DetectTls
-            }
             HostMitmRequirement::None => ConnectMitmMode::Disabled,
             HostMitmRequirement::Tls => ConnectMitmMode::DetectTls,
             HostMitmRequirement::Always => ConnectMitmMode::Enabled,
         }
+    };
+    // PF-33-S01: under the guard every tunnel is intercepted so each inner
+    // request and redirect is checked. A non-TLS stream fails the handshake
+    // instead of passing through, and missing MITM state is refused below.
+    let connect_mitm_mode = if destination_guard {
+        ConnectMitmMode::Enabled
+    } else {
+        connect_mitm_mode
     };
 
     if connect_mitm_mode == ConnectMitmMode::Enabled && mitm_state.is_none() {
@@ -792,23 +795,11 @@ async fn http_plain_proxy(
     }
 
     // PF-33-S01: public retrieval is HTTPS-only, so the guard refuses every
-    // plain-HTTP request (after URL and DNS checks that name the reason).
+    // plain-HTTP request without resolving it.
     match destination::guard_enabled(&app_state).await {
         Ok(false) => {}
         Ok(true) => {
-            let denial = match DestinationGuard::protected()
-                .authorize_url(
-                    &req.uri().to_string(),
-                    req.method().as_str(),
-                    &SystemResolver,
-                )
-                .await
-            {
-                Ok(_) => {
-                    DestinationDenial::Url(ContractError::UnsupportedScheme("http".to_string()))
-                }
-                Err(denial) => denial,
-            };
+            let denial = DestinationDenial::Decision(DecisionReason::PublicRuleMismatch);
             let site = DenialSite {
                 host: &host,
                 port,
@@ -1292,11 +1283,21 @@ mod tests {
                 "{authority}"
             );
         }
+        // An allowed tunnel is always intercepted under the guard; without MITM
+        // state it fails closed instead of passing through unchecked.
         let state = pf_33_s01_policy("93.184.216.34", true);
         let response = pf_33_s01_connect(state.clone(), "93.184.216.34:443").await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(
+            response.headers().get("x-proxy-error").unwrap(),
+            "blocked-by-mitm-required"
+        );
+        let response = pf_33_s01_connect(
+            pf_33_s01_policy("93.184.216.34", false),
+            "93.184.216.34:443",
+        )
+        .await;
         assert_eq!(response.status(), StatusCode::OK);
-        let blocked = state.blocked_snapshot().await.unwrap();
-        assert!(blocked.is_empty(), "{blocked:?}");
     }
 
     #[tokio::test]

@@ -777,6 +777,13 @@ impl NetworkProxyState {
         Ok(guard.config.allow_local_binding)
     }
 
+    /// PF-33-S01: whether Core armed the URL destination guard.
+    pub(crate) async fn url_destination_policy(&self) -> Result<bool> {
+        self.reload_if_needed().await?;
+        let guard = self.state.read().await;
+        Ok(guard.config.url_destination_policy)
+    }
+
     pub async fn network_mode(&self) -> Result<NetworkMode> {
         self.reload_if_needed().await?;
         let guard = self.state.read().await;

@@ -24,11 +24,15 @@ use crate::destination_contract::evaluate_destination;
 use crate::destination_contract::evaluate_redirect;
 use crate::destination_contract::is_intrinsically_private_name;
 use crate::destination_contract::normalize_destination;
+use crate::policy::compile_allowlist_globset;
+use crate::policy::compile_denylist_globset;
 use crate::state::BlockedRequest;
 use crate::state::BlockedRequestArgs;
 use crate::state::NetworkProxyState;
+use globset::GlobSet;
 use rama_http::Body;
 use rama_http::HeaderMap;
+use rama_http::HeaderValue;
 use rama_http::Response;
 use rama_http::StatusCode;
 use rama_http::header;
@@ -52,6 +56,7 @@ const DNS_TIMEOUT: Duration = Duration::from_secs(3);
 /// Matches the contract's answer limit; one extra answer makes the set too large.
 const MAX_DNS_ANSWERS: usize = 16;
 const LEDGER_CAPACITY: usize = 256;
+const LEDGER_CLIENT_CAPACITY: usize = 32;
 /// Public retrieval: HTTPS on 443 only. Method clamps of the network mode
 /// still apply on top of this list; CONNECT is the tunnel-only authorization.
 const GUARDED_METHODS: [&str; 8] = [
@@ -66,6 +71,7 @@ pub(crate) enum DestinationDenial {
     DnsFailure,
     Decision(DecisionReason),
     RedirectLocation,
+    RedirectHostNotAllowed,
     RedirectHopLimit,
     RedirectChainExpired,
 }
@@ -83,6 +89,7 @@ impl DestinationDenial {
             Self::DnsFailure => "dns_failure",
             Self::Decision(reason) => decision_code(*reason),
             Self::RedirectLocation => "redirect_location",
+            Self::RedirectHostNotAllowed => "redirect_host_not_allowed",
             Self::RedirectHopLimit => "redirect_hop_limit",
             Self::RedirectChainExpired => "redirect_chain_expired",
         }
@@ -140,13 +147,17 @@ impl Resolve for SystemResolver {
 pub(crate) struct AuthorizedRequest {
     destination: NormalizedDestination,
     chain: ChainPosition,
+    client: String,
 }
 
 impl AuthorizedRequest {
-    /// The request must not carry `Authorization`: it follows a cross-origin
-    /// redirect and credentials do not cross origins.
-    pub(crate) fn strip_credentials(&self) -> bool {
-        self.chain.strip_credentials
+    /// Remove credentials the request must not carry: on a followed
+    /// cross-origin redirect hop, `Authorization` stays with its origin. Call
+    /// before any broker or hook adds headers for this destination.
+    pub(crate) fn strip_cross_origin_credentials(&self, headers: &mut HeaderMap) {
+        if self.chain.strip_credentials {
+            headers.remove(header::AUTHORIZATION);
+        }
     }
 }
 
@@ -176,10 +187,25 @@ struct ChainPosition {
 }
 
 /// Pending redirect targets, so a followed redirect inherits its chain's hop
-/// count, start time and credential origin. Bounded and expiring: a request
-/// that matches nothing simply starts a new, fully authorized chain.
+/// count, start time and credential origin. Entries are scoped to one client
+/// (execution and peer address), bounded per client and overall, and kept as
+/// markers after the chain age so a late follow-up is refused rather than
+/// treated as a fresh chain. A request that matches nothing starts a new,
+/// fully authorized chain.
 pub(crate) struct RedirectLedger {
-    pending: Mutex<VecDeque<(String, ChainPosition)>>,
+    pending: Mutex<VecDeque<PendingHop>>,
+}
+
+struct PendingHop {
+    client: String,
+    url: String,
+    position: ChainPosition,
+}
+
+enum LedgerMatch {
+    Fresh,
+    Continued(ChainPosition),
+    Expired,
 }
 
 impl Default for RedirectLedger {
@@ -191,28 +217,79 @@ impl Default for RedirectLedger {
 }
 
 impl RedirectLedger {
-    fn take(&self, key: &str, now: Instant) -> Option<ChainPosition> {
+    fn take(&self, client: &str, url: &str, now: Instant) -> LedgerMatch {
         let mut pending = self
             .pending
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        pending.retain(|(_, position)| now.duration_since(position.started) <= MAX_CHAIN_AGE);
-        let index = pending
+        pending.retain(|hop| now.duration_since(hop.position.started) <= MAX_CHAIN_AGE * 2);
+        let Some(index) = pending
             .iter()
-            .position(|(pending_key, _)| pending_key == key)?;
-        pending.remove(index).map(|(_, position)| position)
+            .position(|hop| hop.client == client && hop.url == url)
+        else {
+            return LedgerMatch::Fresh;
+        };
+        match pending.remove(index) {
+            Some(hop) if now.duration_since(hop.position.started) > MAX_CHAIN_AGE => {
+                LedgerMatch::Expired
+            }
+            Some(hop) => LedgerMatch::Continued(hop.position),
+            None => LedgerMatch::Fresh,
+        }
     }
 
-    fn record(&self, key: String, position: ChainPosition) {
+    fn record(&self, client: &str, url: String, position: ChainPosition) {
         let mut pending = self
             .pending
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        pending.retain(|(pending_key, _)| pending_key != &key);
+        pending.retain(|hop| !(hop.client == client && hop.url == url));
+        if pending.iter().filter(|hop| hop.client == client).count() >= LEDGER_CLIENT_CAPACITY
+            && let Some(oldest) = pending.iter().position(|hop| hop.client == client)
+        {
+            pending.remove(oldest);
+        }
         if pending.len() >= LEDGER_CAPACITY {
             pending.pop_front();
         }
-        pending.push_back((key, position));
+        pending.push_back(PendingHop {
+            client: client.to_owned(),
+            url,
+            position,
+        });
+    }
+}
+
+/// What a redirect check consults: host patterns, the chain ledger and DNS.
+#[derive(Clone, Copy)]
+pub(crate) struct RedirectScope<'a> {
+    pub(crate) hosts: &'a HostPatterns,
+    pub(crate) ledger: &'a RedirectLedger,
+    pub(crate) resolver: &'a dyn Resolve,
+}
+
+/// Host allow/deny patterns, checked before a redirect target is resolved so
+/// a denied or unlisted name never reaches a resolver.
+pub(crate) struct HostPatterns {
+    allow: GlobSet,
+    deny: GlobSet,
+}
+
+impl HostPatterns {
+    pub(crate) fn compile(allowed: &[String], denied: &[String]) -> anyhow::Result<Self> {
+        Ok(Self {
+            allow: compile_allowlist_globset(allowed)?,
+            deny: compile_denylist_globset(denied)?,
+        })
+    }
+
+    pub(crate) async fn current(state: &NetworkProxyState) -> anyhow::Result<Self> {
+        let (allowed, denied) = state.current_patterns().await?;
+        Self::compile(&allowed, &denied)
+    }
+
+    fn permits(&self, host: &str) -> bool {
+        !self.deny.is_match(host) && self.allow.is_match(host)
     }
 }
 
@@ -290,50 +367,100 @@ impl DestinationGuard {
         Ok(destination)
     }
 
-    /// Authorize one HTTP request and place it in its redirect chain.
+    /// Authorize one HTTP request and place it in `client`'s redirect chain.
     pub(crate) async fn authorize_request(
         &self,
         url: &str,
         method: &str,
+        client: &str,
         ledger: &RedirectLedger,
         resolver: &dyn Resolve,
     ) -> Result<AuthorizedRequest, DestinationDenial> {
         let destination = self.authorize_url(url, method, resolver).await?;
         let origin = Origin::of(&destination);
         let now = Instant::now();
-        let chain = match ledger.take(&chain_key(url)?, now) {
-            Some(mut position) => {
+        let chain = match ledger.take(client, &chain_key(url)?, now) {
+            LedgerMatch::Continued(mut position) => {
                 position.strip_credentials = position.origin != origin;
                 position
             }
-            None => ChainPosition {
+            LedgerMatch::Expired => return Err(DestinationDenial::RedirectChainExpired),
+            LedgerMatch::Fresh => ChainPosition {
                 hops: 0,
                 started: now,
                 origin,
                 strip_credentials: false,
             },
         };
-        Ok(AuthorizedRequest { destination, chain })
+        Ok(AuthorizedRequest {
+            destination,
+            chain,
+            client: client.to_owned(),
+        })
+    }
+
+    /// Check an upstream response before it is relayed. A 3xx with a
+    /// `Location` is re-authorized, and its `Location` is rewritten to the
+    /// exact absolute URL that was checked, so the client follows that URL.
+    pub(crate) async fn check_response(
+        &self,
+        request: &AuthorizedRequest,
+        has_body: bool,
+        status: u16,
+        headers: &mut HeaderMap,
+        scope: RedirectScope<'_>,
+    ) -> Result<(), DestinationDenial> {
+        if !(300..400).contains(&status) || !headers.contains_key(header::LOCATION) {
+            return Ok(());
+        }
+        let mut locations = headers.get_all(header::LOCATION).iter();
+        let (Some(location), None) = (locations.next(), locations.next()) else {
+            return Err(DestinationDenial::RedirectLocation);
+        };
+        let location = location
+            .to_str()
+            .map_err(|_| DestinationDenial::RedirectLocation)?;
+        let target = self
+            .authorize_redirect(request, has_body, status, location, scope)
+            .await?;
+        let target =
+            HeaderValue::from_str(&target).map_err(|_| DestinationDenial::RedirectLocation)?;
+        headers.insert(header::LOCATION, target);
+        Ok(())
     }
 
     /// Re-authorize a redirect the upstream returned before relaying it. The
-    /// target is resolved now and checked again when the client follows it.
-    /// Returns the absolute target URL on success.
+    /// target must be on the host allowlist before it is resolved; it is then
+    /// resolved now and checked again when the client follows it. Returns the
+    /// absolute target URL on success.
     pub(crate) async fn authorize_redirect(
         &self,
         request: &AuthorizedRequest,
         has_body: bool,
         status: u16,
         location: &str,
-        ledger: &RedirectLedger,
-        resolver: &dyn Resolve,
+        scope: RedirectScope<'_>,
     ) -> Result<String, DestinationDenial> {
+        let RedirectScope {
+            hosts,
+            ledger,
+            resolver,
+        } = scope;
         let hops = request.chain.hops + 1;
         if hops > MAX_REDIRECT_HOPS {
             return Err(DestinationDenial::RedirectHopLimit);
         }
         if request.chain.started.elapsed() > MAX_CHAIN_AGE {
             return Err(DestinationDenial::RedirectChainExpired);
+        }
+        // The contract's ambiguity screen, applied to the raw header: clients
+        // differ on backslashes, controls and surrounding whitespace.
+        if location.is_empty()
+            || location.trim() != location
+            || location.contains('\\')
+            || location.chars().any(char::is_control)
+        {
+            return Err(DestinationDenial::RedirectLocation);
         }
         let from = &request.destination;
         let base = Url::parse(&format!(
@@ -358,6 +485,9 @@ impl DestinationGuard {
             _ => (from.method(), BodyReplay::None),
         };
         let to = normalize(target, method)?;
+        if !hosts.permits(to.host()) {
+            return Err(DestinationDenial::RedirectHostNotAllowed);
+        }
         let answers = self.resolve(&to, resolver).await?;
         // The proxy strips `Authorization` from every hop outside the chain's
         // origin (`strip_credentials`), so no credential is replayed across
@@ -372,6 +502,7 @@ impl DestinationGuard {
             &answers,
         ))?;
         ledger.record(
+            &request.client,
             chain_key(target)?,
             ChainPosition {
                 hops,
@@ -453,7 +584,7 @@ fn bracket_ipv6(host: &str) -> String {
 /// Whether the session armed the guard (Core sets this from the feature flag).
 /// Callers treat an error like any other unreadable proxy config: they refuse.
 pub(crate) async fn guard_enabled(state: &NetworkProxyState) -> anyhow::Result<bool> {
-    Ok(state.current_cfg().await?.url_destination_policy)
+    state.url_destination_policy().await
 }
 
 /// Where a denial happened, for the blocked-request record. Holds no URL

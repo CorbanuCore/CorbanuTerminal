@@ -1,5 +1,6 @@
 use super::*;
 use pretty_assertions::assert_eq;
+use rama_http::HeaderValue;
 use std::collections::HashMap;
 use std::sync::Mutex as StdMutex;
 
@@ -215,13 +216,28 @@ async fn pf_33_s01_suffix_confusion_does_not_reach_lookup_of_another_name() {
     assert_eq!(resolver.lookups(), vec!["public.example.evil".to_string()]);
 }
 
+const CLIENT: &str = "exec-1|127.0.0.1";
+
+fn hosts() -> HostPatterns {
+    let allowed = [
+        "public.example",
+        "other.example",
+        "*.example",
+        "127.0.0.1",
+        "169.254.169.254",
+        "::ffff:169.254.169.254",
+    ]
+    .map(String::from);
+    HostPatterns::compile(&allowed, &["denied.example".to_string()]).expect("patterns")
+}
+
 async fn start(
     ledger: &RedirectLedger,
     target: &str,
     method: &str,
 ) -> Result<AuthorizedRequest, DestinationDenial> {
     DestinationGuard::protected()
-        .authorize_request(target, method, ledger, &resolver())
+        .authorize_request(target, method, CLIENT, ledger, &resolver())
         .await
 }
 
@@ -233,8 +249,28 @@ async fn redirect(
     has_body: bool,
 ) -> Result<String, DestinationDenial> {
     DestinationGuard::protected()
-        .authorize_redirect(request, has_body, status, location, ledger, &resolver())
+        .authorize_redirect(
+            request,
+            has_body,
+            status,
+            location,
+            RedirectScope {
+                hosts: &hosts(),
+                ledger,
+                resolver: &resolver(),
+            },
+        )
         .await
+}
+
+fn stripped(request: &AuthorizedRequest) -> bool {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::AUTHORIZATION,
+        "Bearer fake-key-0001".parse().expect("header"),
+    );
+    request.strip_cross_origin_credentials(&mut headers);
+    !headers.contains_key(header::AUTHORIZATION)
 }
 
 #[tokio::test]
@@ -256,6 +292,12 @@ async fn pf_33_s01_every_redirect_hop_is_reauthorized() {
         ("https://nxdomain.example/", "dns_failure"),
         ("https://user:pw@public.example/", "url_userinfo"),
         ("https://public.example:8443/", "scheme_port_or_method"),
+        ("https://unlisted.test/", "redirect_host_not_allowed"),
+        ("https://denied.example/", "redirect_host_not_allowed"),
+        ("https:\\\\public.example/", "redirect_location"),
+        (" /next", "redirect_location"),
+        ("/next\tx", "redirect_location"),
+        ("", "redirect_location"),
     ] {
         assert_eq!(
             denial_code(redirect(&ledger, &first, 302, location, false).await),
@@ -342,18 +384,18 @@ async fn pf_33_s01_credentials_do_not_cross_origins() {
     let first = start(&ledger, "https://public.example/login", "GET")
         .await
         .expect("first");
-    assert!(!first.strip_credentials());
+    assert!(!stripped(&first));
     let target = redirect(&ledger, &first, 302, "https://other.example/cdn", false)
         .await
         .expect("cross-origin redirect is allowed without credentials");
     let second = start(&ledger, &target, "GET").await.expect("second");
-    assert!(second.strip_credentials());
+    assert!(stripped(&second));
     // Returning to the chain origin restores normal credential handling.
     let target = redirect(&ledger, &second, 302, "https://public.example/home", false)
         .await
         .expect("back to origin");
     let third = start(&ledger, &target, "GET").await.expect("third");
-    assert!(!third.strip_credentials());
+    assert!(!stripped(&third));
     assert_eq!(third.chain.hops, 2);
 }
 
@@ -396,41 +438,187 @@ async fn pf_33_s01_private_networks_need_an_exact_service_grant() {
     );
 }
 
-#[test]
-fn pf_33_s01_ledger_is_bounded_and_expires() {
-    let ledger = RedirectLedger::default();
-    let now = Instant::now();
-    let position = ChainPosition {
+fn position(started: Instant) -> ChainPosition {
+    ChainPosition {
         hops: 1,
-        started: now,
+        started,
         origin: Origin {
             scheme: "https".to_string(),
             host: "public.example".to_string(),
             port: 443,
         },
         strip_credentials: false,
-    };
+    }
+}
+
+#[test]
+fn pf_33_s01_ledger_is_scoped_bounded_and_keeps_expired_markers() {
+    let ledger = RedirectLedger::default();
+    let now = Instant::now();
+    for index in 0..=LEDGER_CLIENT_CAPACITY {
+        ledger.record(
+            CLIENT,
+            format!("https://public.example:443/{index}"),
+            position(now),
+        );
+    }
+    // One client cannot hold more than its share; its oldest entry goes first.
+    assert!(matches!(
+        ledger.take(CLIENT, "https://public.example:443/0", now),
+        LedgerMatch::Fresh
+    ));
+    // Another client never inherits this client's chain.
+    assert!(matches!(
+        ledger.take("exec-2|127.0.0.1", "https://public.example:443/1", now),
+        LedgerMatch::Fresh
+    ));
+    assert!(matches!(
+        ledger.take(CLIENT, "https://public.example:443/1", now),
+        LedgerMatch::Continued(_)
+    ));
+    // Past the chain age the marker refuses the follow-up instead of starting fresh.
+    let later = now + MAX_CHAIN_AGE + Duration::from_secs(1);
+    assert!(matches!(
+        ledger.take(CLIENT, "https://public.example:443/2", later),
+        LedgerMatch::Expired
+    ));
+    // Markers are dropped after twice the chain age.
+    let much_later = now + MAX_CHAIN_AGE * 2 + Duration::from_secs(1);
+    assert!(matches!(
+        ledger.take(CLIENT, "https://public.example:443/3", much_later),
+        LedgerMatch::Fresh
+    ));
+    // The global bound holds across clients.
     for index in 0..=LEDGER_CAPACITY {
         ledger.record(
-            format!("https://public.example:443/{index}"),
-            position.clone(),
+            &format!("exec-{index}|127.0.0.1"),
+            "https://public.example:443/x".to_string(),
+            position(now),
         );
     }
     assert_eq!(
         ledger.pending.lock().expect("ledger").len(),
         LEDGER_CAPACITY
     );
-    assert!(ledger.take("https://public.example:443/0", now).is_none());
-    assert!(
-        ledger
-            .take(
-                &format!("https://public.example:443/{LEDGER_CAPACITY}"),
-                now
-            )
-            .is_some()
+}
+
+#[tokio::test]
+async fn pf_33_s01_late_follow_up_of_an_expired_chain_is_refused() {
+    let ledger = RedirectLedger::default();
+    let started = Instant::now()
+        .checked_sub(MAX_CHAIN_AGE + Duration::from_secs(1))
+        .expect("monotonic clock has run long enough");
+    ledger.record(
+        CLIENT,
+        "https://public.example:443/late".to_string(),
+        position(started),
     );
-    let later = now + MAX_CHAIN_AGE + Duration::from_secs(1);
-    assert!(ledger.take("https://public.example:443/1", later).is_none());
+    assert_eq!(
+        denial_code(start(&ledger, "https://public.example/late", "GET").await),
+        "redirect_chain_expired"
+    );
+}
+
+#[tokio::test]
+async fn pf_33_s01_unlisted_redirect_targets_never_reach_the_resolver() {
+    let ledger = RedirectLedger::default();
+    let resolver = resolver();
+    let guard = DestinationGuard::protected();
+    let first = guard
+        .authorize_request(
+            "https://public.example/r",
+            "GET",
+            CLIENT,
+            &ledger,
+            &resolver,
+        )
+        .await
+        .expect("first");
+    for location in ["https://denied.example/", "https://secret-data.exfil.test/"] {
+        let result = guard
+            .authorize_redirect(
+                &first,
+                false,
+                302,
+                location,
+                RedirectScope {
+                    hosts: &hosts(),
+                    ledger: &ledger,
+                    resolver: &resolver,
+                },
+            )
+            .await;
+        assert_eq!(denial_code(result), "redirect_host_not_allowed");
+    }
+    assert_eq!(resolver.lookups(), vec!["public.example".to_string()]);
+}
+
+#[tokio::test]
+async fn pf_33_s01_response_check_rewrites_or_refuses_location() {
+    let ledger = RedirectLedger::default();
+    let first = start(&ledger, "https://public.example/a/b", "GET")
+        .await
+        .expect("first");
+    let check = |status: u16, headers: HeaderMap| {
+        let first = &first;
+        let ledger = &ledger;
+        async move {
+            let mut headers = headers;
+            let result = DestinationGuard::protected()
+                .check_response(
+                    first,
+                    false,
+                    status,
+                    &mut headers,
+                    RedirectScope {
+                        hosts: &hosts(),
+                        ledger,
+                        resolver: &resolver(),
+                    },
+                )
+                .await;
+            (result, headers)
+        }
+    };
+    let location = |values: &[&[u8]]| {
+        let mut headers = HeaderMap::new();
+        for value in values {
+            headers.append(
+                header::LOCATION,
+                HeaderValue::from_bytes(value).expect("header bytes"),
+            );
+        }
+        headers
+    };
+    // Relative targets are relayed as the exact absolute URL that was checked.
+    let (result, headers) = check(302, location(&[b"../c?x=1#frag"])).await;
+    assert_eq!(result, Ok(()));
+    assert_eq!(
+        headers.get(header::LOCATION).expect("location"),
+        "https://public.example/c?x=1"
+    );
+    // Responses without a redirect are untouched, even with a Location.
+    let (result, headers) = check(201, location(&[b"http://127.0.0.1/"])).await;
+    assert_eq!(result, Ok(()));
+    assert_eq!(
+        headers.get(header::LOCATION).expect("location"),
+        "http://127.0.0.1/"
+    );
+    assert_eq!(check(304, HeaderMap::new()).await.0, Ok(()));
+    // Ambiguous headers are refused.
+    for headers in [location(&[b"/one", b"/two"]), location(&[b"/caf\xe9"])] {
+        assert_eq!(
+            check(302, headers).await.0.map_err(|denial| denial.code()),
+            Err("redirect_location")
+        );
+    }
+    assert_eq!(
+        check(302, location(&[b"https://127.0.0.1/"]))
+            .await
+            .0
+            .map_err(|denial| denial.code()),
+        Err("private_destination")
+    );
 }
 
 #[test]

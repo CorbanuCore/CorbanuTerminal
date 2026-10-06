@@ -3,9 +3,10 @@ use crate::config::NetworkMode;
 use crate::credential_broker::CredentialRouting;
 use crate::destination;
 use crate::destination::DenialSite;
-use crate::destination::DestinationDenial;
 use crate::destination::DestinationGuard;
+use crate::destination::HostPatterns;
 use crate::destination::RedirectLedger;
+use crate::destination::RedirectScope;
 use crate::destination::SystemResolver;
 use crate::destination::request_has_body;
 use crate::mitm_hook::HookEvaluation;
@@ -48,7 +49,6 @@ use rama_http::StatusCode;
 use rama_http::Uri;
 use rama_http::header::AUTHORIZATION;
 use rama_http::header::HOST;
-use rama_http::header::LOCATION;
 use rama_http::layer::remove_header::RemoveRequestHeaderLayer;
 use rama_http::layer::remove_header::RemoveResponseHeaderLayer;
 use rama_http_backend::server::HttpServer;
@@ -311,15 +311,29 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
     let app_state = &request_ctx.policy.app_state;
 
     // PF-33-S01: authorize the full URL, method and DNS answers, and place the
-    // request in its redirect chain.
+    // request in its client's redirect chain.
     let destination = if destination::guard_enabled(app_state).await? {
         let url = format!("https://{authority}{path}");
         let client = req
             .extensions()
             .get::<SocketInfo>()
             .map(|info| info.peer_addr().to_string());
+        let chain_client = format!(
+            "{}|{}",
+            app_state.execution_id().unwrap_or_default(),
+            req.extensions()
+                .get::<SocketInfo>()
+                .map(|info| info.peer_addr().ip().to_string())
+                .unwrap_or_default()
+        );
         match DestinationGuard::protected()
-            .authorize_request(&url, &method, &mitm.redirects, &SystemResolver)
+            .authorize_request(
+                &url,
+                &method,
+                &chain_client,
+                &mitm.redirects,
+                &SystemResolver,
+            )
             .await
         {
             Ok(authorized) => Some((authorized, client)),
@@ -341,12 +355,8 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
 
     let (mut parts, body) = req.into_parts();
     let has_body = request_has_body(&parts.headers);
-    if destination
-        .as_ref()
-        .is_some_and(|(authorized, _)| authorized.strip_credentials())
-    {
-        // A followed cross-origin redirect: credentials stay with their origin.
-        parts.headers.remove(AUTHORIZATION);
+    if let Some((authorized, _)) = destination.as_ref() {
+        authorized.strip_cross_origin_credentials(&mut parts.headers);
     }
     if request_ctx
         .policy
@@ -401,7 +411,7 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
     };
 
     let upstream_req = Request::from_parts(parts, body);
-    let upstream_resp = match routing {
+    let mut upstream_resp = match routing {
         CredentialRouting::Direct => request_ctx.upstream.serve(upstream_req).await?,
         #[cfg(unix)]
         CredentialRouting::Brokered(route) => match route.forward(upstream_req).await {
@@ -416,27 +426,27 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
             }
         },
     };
-    if let Some((authorized, client)) = destination
-        && upstream_resp.status().is_redirection()
-        && let Some(location) = upstream_resp.headers().get(LOCATION)
-    {
+    if let Some((authorized, client)) = destination {
         let status = upstream_resp.status().as_u16();
-        let decision = match location.to_str() {
-            Ok(location) => {
+        let checked = match HostPatterns::current(app_state).await {
+            Ok(hosts) => {
                 DestinationGuard::protected()
-                    .authorize_redirect(
+                    .check_response(
                         &authorized,
                         has_body,
                         status,
-                        location,
-                        &mitm.redirects,
-                        &SystemResolver,
+                        upstream_resp.headers_mut(),
+                        RedirectScope {
+                            hosts: &hosts,
+                            ledger: &mitm.redirects,
+                            resolver: &SystemResolver,
+                        },
                     )
                     .await
             }
-            Err(_) => Err(DestinationDenial::RedirectLocation),
+            Err(err) => return Err(err.context("read host policy for redirect check")),
         };
-        if let Err(denial) = decision {
+        if let Err(denial) = checked {
             let site = DenialSite {
                 host: &target_host,
                 port: target_port,

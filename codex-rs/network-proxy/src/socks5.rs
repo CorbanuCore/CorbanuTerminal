@@ -405,13 +405,16 @@ async fn handle_socks5_tcp(
         SocksMitmMode::Enabled
     } else {
         match host_mitm_requirement {
-            HostMitmRequirement::None if destination_guard && mitm_state.is_some() => {
-                SocksMitmMode::DetectTls
-            }
             HostMitmRequirement::None => SocksMitmMode::Disabled,
             HostMitmRequirement::Tls => SocksMitmMode::DetectTls,
             HostMitmRequirement::Always => SocksMitmMode::Enabled,
         }
+    };
+    // PF-33-S01: intercept every guarded tunnel (see the CONNECT path).
+    let socks_mitm_mode = if destination_guard {
+        SocksMitmMode::Enabled
+    } else {
+        socks_mitm_mode
     };
     let unsupported_hook_protocol =
         host_mitm_requirement == HostMitmRequirement::Always && !socks5_tcp_target_is_https;
@@ -907,6 +910,44 @@ mod tests {
             state: state.clone(),
         });
         Arc::new(NetworkProxyState::with_reloader(state, reloader))
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn pf_33_s01_socks_tunnel_passes_the_destination_policy() {
+        let mut config = NetworkProxyConfig {
+            enabled: true,
+            mode: NetworkMode::Full,
+            ..NetworkProxyConfig::default()
+        };
+        config.set_allowed_domains(vec!["93.184.216.34".to_string()]);
+        // Field only: no MITM CA is created in this test.
+        config.url_destination_policy = true;
+        let state = state_for_settings(config);
+        for (authority, reason) in [
+            (
+                "93.184.216.34:8443",
+                "destination_policy:scheme_port_or_method",
+            ),
+            ("93.184.216.34:443", "mitm_required"),
+        ] {
+            let mut request =
+                TcpRequest::new(HostWithPort::try_from(authority).expect("valid authority"));
+            request.extensions_mut().insert(state.clone());
+            let result = handle_socks5_tcp(
+                request,
+                TargetCheckedTcpConnector::new(state.clone()),
+                /*policy_decider*/ None,
+                /*environment_id*/ None,
+            )
+            .await;
+            assert!(result.is_err(), "{authority} should be refused");
+            let blocked = state.drain_blocked().await.expect("blocked");
+            assert_eq!(
+                blocked.last().map(|entry| entry.reason.as_str()),
+                Some(reason),
+                "{authority}"
+            );
+        }
     }
 
     #[tokio::test(flavor = "current_thread")]
