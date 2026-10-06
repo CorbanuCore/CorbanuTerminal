@@ -578,7 +578,9 @@ async fn user_shell_cmd_env_values_never_reach_trace_logs() -> anyhow::Result<()
     )
     .await?;
     let log_db = codex_state::log_db::start(Arc::clone(&state_db));
-    // Mirror the TUI subscriber: trace file layer with span events, plus the log DB.
+    let feedback = codex_feedback::CodexFeedback::new();
+    // Mirror the TUI subscriber: trace file layer with span events, the
+    // feedback buffer (uploaded by /feedback) and the log DB.
     let subscriber = tracing_subscriber::registry()
         .with(
             tracing_subscriber::fmt::layer()
@@ -588,6 +590,7 @@ async fn user_shell_cmd_env_values_never_reach_trace_logs() -> anyhow::Result<()
                 .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
                 .with_filter(LevelFilter::TRACE),
         )
+        .with(feedback.logger_layer())
         .with(
             log_db
                 .clone()
@@ -628,13 +631,27 @@ async fn user_shell_cmd_env_values_never_reach_trace_logs() -> anyhow::Result<()
     drop(guard);
 
     let log_text = std::fs::read_to_string(&log_path)?;
+    let env_names_needle = format!("\"{SENTINEL_NAME}\"");
     assert!(
-        log_text.contains("spawn_child_async") && log_text.contains(SENTINEL_NAME),
+        log_text
+            .lines()
+            .any(|line| line.contains("spawn_child_async")
+                && line.contains("env_names=")
+                && line.contains(&env_names_needle)),
         "trace log should record the spawn with env names only"
     );
     assert!(
         !log_text.contains(SENTINEL_VALUE),
         "sentinel env value leaked into the trace log file"
+    );
+
+    let feedback_bytes = feedback.snapshot(/*session_id*/ None).log_bytes().to_vec();
+    assert!(
+        !feedback_bytes.is_empty()
+            && !feedback_bytes
+                .windows(SENTINEL_VALUE.len())
+                .any(|window| window == SENTINEL_VALUE.as_bytes()),
+        "sentinel env value leaked into the feedback log buffer"
     );
 
     let rows = state_db

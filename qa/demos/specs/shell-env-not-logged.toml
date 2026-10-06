@@ -34,10 +34,10 @@ wait = "(?m)└\\s+[1-9]\\d*\\s*$"
 pause = 2.0
 
 [[steps]]
-type = "!sleep 2; grep -c \"$DEMO_SENTINEL_API_KEY\" ../logs/codex-tui.log ../home/pfterminal_logs_*"
+type = "!sleep 2; grep -c \"$DEMO_SENTINEL_API_KEY\" ../logs/codex-tui.log ../home/pfterminal_logs_* | awk -F: '{print; n+=$NF} END {print \"total matches:\", n}'"
 [[steps]]
 key = "Enter"
 [[steps]]
-wait = "codex-tui\\.log:0"
+wait = "total matches: 0\\b"
 [[steps]]
 pause = 3.5
