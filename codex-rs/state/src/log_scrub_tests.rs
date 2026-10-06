@@ -61,6 +61,22 @@ fn scrub_redacts_each_leaked_form_and_is_idempotent() {
             r#"env API_KEY=\"REDACTED\" end"#,
         ),
         (
+            r#"MNEMONIC="abandon ability able about" SEED='two words' TOKEN=\"a b\""#,
+            r#"MNEMONIC="REDACTED" SEED='REDACTED' TOKEN=\"REDACTED\""#,
+        ),
+        (
+            r#"{"refresh_tokens": "fake-rt", "input_tokens": "12"}"#,
+            r#"{"refresh_tokens": "REDACTED", "input_tokens": "12"}"#,
+        ),
+        (
+            r#"body="{\\\"token\\\": \\\"fake-9\\\"}""#,
+            r#"body="{\\\"token\\\": \\\"REDACTED\\\"}""#,
+        ),
+        (
+            "remote https://fake-pat-10@git.example.com/x.git",
+            "remote https://REDACTED@git.example.com/x.git",
+        ),
+        (
             "key sk-proj-abcdefghijklmnopqrstuvwxyz0123 used",
             "key REDACTED used",
         ),

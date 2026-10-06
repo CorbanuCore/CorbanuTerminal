@@ -7,6 +7,7 @@ use sqlx::SqlitePool;
 
 use super::DONE;
 use super::ROWS_SCRUBBED_AND_VACUUMED;
+use super::scrub_once;
 use crate::LogQuery;
 use crate::StateRuntime;
 use crate::migrations::LOGS_MIGRATOR;
@@ -116,9 +117,13 @@ async fn startup_scrubs_leaked_secrets_from_existing_logs_db_once() {
         .await
         .expect("delete rows");
     pool.close().await;
+    let present = files_containing(&home, &SECRETS)
+        .into_iter()
+        .filter_map(|found| found.split(' ').next().map(str::to_string))
+        .collect::<std::collections::BTreeSet<_>>();
     assert_eq!(
-        files_containing(&home, &SECRETS).len(),
-        SECRETS.len(),
+        present,
+        SECRETS.iter().map(|secret| secret.to_string()).collect(),
         "every secret is in the fixture before the scrub"
     );
 
@@ -154,8 +159,7 @@ async fn startup_scrubs_leaked_secrets_from_existing_logs_db_once() {
     // Once done, later starts leave rows alone (new builds do not leak).
     let later = "?key=fake-scrub-after-marker-0007";
     insert(runtime.logs_pool.as_ref(), later.as_bytes()).await;
-    runtime
-        .scrub_logged_secrets_once()
+    scrub_once(runtime.logs_pool.as_ref())
         .await
         .expect("second pass");
     let last = runtime
@@ -178,10 +182,7 @@ async fn busy_checkpoint_is_finished_on_a_later_start() {
     LOGS_MIGRATOR.run(&pool).await.expect("apply logs schema");
     insert(&pool, format!("?key={QUERY}").as_bytes()).await;
     let mut reader = pool.acquire().await.expect("reader connection");
-    sqlx::query("BEGIN")
-        .execute(&mut *reader)
-        .await
-        .expect("begin");
+    sqlx::query("BEGIN").execute(&mut *reader).await.expect("begin");
     sqlx::query("SELECT COUNT(*) FROM logs")
         .execute(&mut *reader)
         .await
@@ -194,8 +195,10 @@ async fn busy_checkpoint_is_finished_on_a_later_start() {
     .await
     .expect("initialize runtime");
     wait_for_stage(&runtime, ROWS_SCRUBBED_AND_VACUUMED).await;
-    // Let the background checkpoint give up.
-    tokio::time::sleep(Duration::from_secs(7)).await;
+    // The checkpoint reports busy (not an error) while the reader is open.
+    scrub_once(runtime.logs_pool.as_ref())
+        .await
+        .expect("a busy checkpoint is not an error");
     assert_eq!(stage(&runtime).await, ROWS_SCRUBBED_AND_VACUUMED);
 
     sqlx::query("ROLLBACK")
@@ -204,11 +207,31 @@ async fn busy_checkpoint_is_finished_on_a_later_start() {
         .expect("end read");
     drop(reader);
     pool.close().await;
-    runtime
-        .scrub_logged_secrets_once()
-        .await
-        .expect("later start");
+    // A later start: pooled connections may still be finishing reads.
+    for _ in 0..50 {
+        scrub_once(runtime.logs_pool.as_ref())
+            .await
+            .expect("later start");
+        if stage(&runtime).await == DONE {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
     assert_eq!(stage(&runtime).await, DONE);
     assert_eq!(files_containing(&home, &[QUERY]), Vec::<String>::new());
+    let _ = std::fs::remove_dir_all(home);
+}
+
+/// A new database has nothing to scrub and starts done.
+#[tokio::test]
+async fn new_logs_db_starts_done() {
+    let home = unique_temp_dir();
+    let runtime = StateRuntime::init(
+        crate::SqliteConfig::new_for_testing(home.abs()),
+        "test-provider".to_string(),
+    )
+    .await
+    .expect("initialize runtime");
+    assert_eq!(stage(&runtime).await, DONE);
     let _ = std::fs::remove_dir_all(home);
 }

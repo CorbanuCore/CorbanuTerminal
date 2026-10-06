@@ -33,35 +33,43 @@ const MAX_LINE_BYTES: u64 = 1024 * 1024;
 
 const SECRET_NAME: &str = "(?:cookie|auth|token|key|secret|session|signature|credential|pass|pwd|mnemonic|seed|private|jwt|dsn)";
 /// Credential-named keys whose values are diagnostics, not secrets.
-const NOT_SECRET_SUFFIXES: [&str; 7] =
-    ["_id", "_ids", "_count", "tokens", "_mode", "_kind", "_type"];
-/// A quoted Debug/JSON string (quotes escaped at most once), and the same
-/// capturing its contents as `v`.
-const QUOTED: &str = r#"\\?"(?:[^"\\]|\\[^"])*\\?""#;
-const QUOTED_VALUE: &str = r#"\\?"(?P<v>(?:[^"\\]|\\[^"])*)\\?""#;
+const NOT_SECRET_SUFFIXES: [&str; 6] = ["_id", "_ids", "_count", "_mode", "_kind", "_type"];
+const TOKEN_COUNTERS: [&str; 8] = [
+    "input_tokens",
+    "output_tokens",
+    "max_tokens",
+    "max_output_tokens",
+    "cached_tokens",
+    "cached_input_tokens",
+    "reasoning_tokens",
+    "total_tokens",
+];
+/// A quoted Debug/JSON string (quotes escaped any number of times), and the
+/// same capturing its contents as `v`.
+const QUOTED: &str = r#"\\*"(?:[^"\\]|\\[^"\\])*\\*""#;
+const QUOTED_VALUE: &str = r#"\\*"(?P<v>(?:[^"\\]|\\[^"\\])*)\\*""#;
 
 /// Each pattern's group `v` is the value to hide; group `n`, when present,
-/// is the key name, checked against [`NOT_SECRET_SUFFIXES`].
+/// is the key name, checked by [`is_diagnostic_name`].
 static PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
+    let name = format!("(?P<n>[a-z0-9_]*{SECRET_NAME}[a-z0-9_]*)");
     [
         // Header maps, environment maps and JSON: `"set-cookie": "v"`.
         format!(
-            r#"(?i-u)\\?"(?P<n>[a-z0-9_.-]*{SECRET_NAME}[a-z0-9_.-]*)\\?"\s*(?::|=>|=)\s*{QUOTED_VALUE}"#
+            r#"(?i-u)\\*"(?P<n>[a-z0-9_.-]*{SECRET_NAME}[a-z0-9_.-]*)\\*"\s*(?::|=>|=)\s*{QUOTED_VALUE}"#
         ),
         // Rust `Debug` fields: `experimental_bearer_token: Some("v")`.
-        format!(
-            r#"(?i-u)\b(?P<n>[a-z0-9_]*{SECRET_NAME}[a-z0-9_]*): (?:Some\()?{QUOTED_VALUE}"#
-        ),
-        // `NAME=value`, `NAME="value"` for secret-named variables.
-        format!(
-            r#"(?i-u)\b(?P<n>[a-z0-9_]*{SECRET_NAME}[a-z0-9_]*)=(?:\\?["'])?(?P<v>[^\s"'\\&;,]+)"#
-        ),
+        format!(r#"(?i-u)\b{name}: (?:Some\()?{QUOTED_VALUE}"#),
+        // `NAME=value`, `NAME="two words"` and `NAME='two words'`.
+        format!(r#"(?i-u)\b{name}=(?P<v>[^\s"'\\&;,]+)"#),
+        format!(r#"(?i-u)\b{name}={QUOTED_VALUE}"#),
+        format!(r#"(?i-u)\b{name}='(?P<v>[^']*)'"#),
         // Bearer tokens, and Basic credentials after `authorization`.
         r"(?i-u)\bbearer\s+(?P<v>[a-z0-9._~+/=-]{8,})".to_string(),
-        r#"(?i-u)authorization\\?["']?\s*[:=]\s*\\?["']?basic\s+(?P<v>[a-z0-9+/=]{8,})"#.to_string(),
-        // URL query values and userinfo.
+        r#"(?i-u)authorization\\*["']?\s*[:=]\s*\\*["']?basic\s+(?P<v>[a-z0-9+/=]{8,})"#.to_string(),
+        // URL query values and userinfo (with or without a password).
         r#"(?-u)[?&][A-Za-z0-9_.%-]+=(?P<v>[^&#\s"'<>)\]\\]+)"#.to_string(),
-        r#"(?i-u)\b[a-z][a-z0-9+.-]*://(?P<v>[^/\s:@"']+:[^/\s@"']+)@"#.to_string(),
+        r#"(?i-u)\b[a-z][a-z0-9+.-]*://(?P<v>[^/\s@"']+)@"#.to_string(),
         // Well-known key formats anywhere.
         r"(?-u)\b(?P<v>sk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|xox[abprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})"
             .to_string(),
@@ -99,12 +107,9 @@ fn secret_spans(text: &[u8]) -> Vec<Range<usize>> {
     let mut spans = Vec::new();
     for index in PATTERN_SET.matches(text).iter() {
         for captures in PATTERNS[index].captures_iter(text) {
-            let is_diagnostic = captures.name("n").is_some_and(|name| {
-                let name = name.as_bytes().to_ascii_lowercase();
-                NOT_SECRET_SUFFIXES
-                    .iter()
-                    .any(|suffix| name.ends_with(suffix.as_bytes()))
-            });
+            let is_diagnostic = captures
+                .name("n")
+                .is_some_and(|name| is_diagnostic_name(name.as_bytes()));
             if let Some(value) = captures.name("v").filter(|_| !is_diagnostic) {
                 spans.push(value.range());
             }
@@ -135,6 +140,16 @@ fn secret_spans(text: &[u8]) -> Vec<Range<usize>> {
         }
     }
     merged
+}
+
+fn is_diagnostic_name(name: &[u8]) -> bool {
+    let name = name.to_ascii_lowercase();
+    NOT_SECRET_SUFFIXES
+        .iter()
+        .any(|suffix| name.ends_with(suffix.as_bytes()))
+        || TOKEN_COUNTERS
+            .iter()
+            .any(|counter| name == counter.as_bytes())
 }
 
 fn is_redacted(value: &[u8]) -> bool {
@@ -187,7 +202,13 @@ pub fn scrub_log_file_once(path: &Path) -> io::Result<Option<usize>> {
         Err(err) if err.kind() == io::ErrorKind::NotFound => 0,
         Err(err) => return Err(err),
     };
-    File::create(marker)?;
+    match File::create(marker) {
+        // No log directory: nothing was ever written there.
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+        result => {
+            result?;
+        }
+    }
     Ok(Some(masked))
 }
 
@@ -211,7 +232,8 @@ fn scrub_log_file_in_place(path: &Path) -> io::Result<usize> {
         let spans = secret_spans(&line);
         if !spans.is_empty() {
             // Another process truncated or replaced the file: writing past
-            // its new end would bring old (masked) bytes back.
+            // its new end would bring old (masked) bytes back. (A rewrite
+            // between this check and the write is not detected.)
             if writer.metadata()?.len() < offset + read as u64 {
                 break;
             }
