@@ -122,6 +122,7 @@ fn options() -> IsolatedBrokerOptions {
         allow_upstream_proxy: false,
         runtime_dir: None,
         require_containment: true,
+        scrub_responses: false,
     }
 }
 
@@ -380,7 +381,7 @@ async fn pf_27_s04_pf_27_s01_revocation_closes_open_channels_and_old_generations
     // Core forgot the reference, so the dummy no longer routes to the broker.
     assert!(matches!(
         route(&broker, upstream.port, "/echo", &dummy),
-        Ok(CredentialRouting::Direct)
+        Ok(CredentialRouting::Direct(None))
     ));
     // A frame from the old generation cannot reach the old credential.
     let operation = operation(upstream.port, "/echo");
@@ -425,7 +426,7 @@ async fn pf_27_s04_pf_27_s01_broker_crash_fails_closed_and_restart_rejects_old_h
     );
     assert!(matches!(
         route(&broker, upstream.port, "/echo", &old_dummy),
-        Ok(CredentialRouting::Direct)
+        Ok(CredentialRouting::Direct(None))
     ));
 
     // A restarted controller gets a fresh broker that never honors old handles.
@@ -635,5 +636,28 @@ async fn pf_27_s02_a_spoofed_bootstrap_path_is_never_trusted() {
     assert_eq!(
         route(&broker, /*port*/ 443, "/echo", &dummy).err(),
         Some(ScopedCredentialInjectionError::IsolatedBrokerUnavailable)
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn pf_28_s02_broker_scrubs_its_credential_from_the_response() {
+    let upstream = start_upstream().await;
+    let broker = CredentialBroker::new_isolated_with_launcher(
+        /*enabled*/ true,
+        IsolatedBrokerOptions {
+            scrub_responses: true,
+            ..options()
+        },
+        launcher(&upstream, /*controller_pid_override*/ None),
+    );
+    let dummy = virtualized_dummy(&broker);
+
+    // The upstream echoes the Authorization header it received.
+    let response = forward(&broker, upstream.port, "/echo", &dummy).await;
+
+    assert_eq!(response.status(), 200);
+    assert_eq!(
+        response.try_into_string().await.expect("body"),
+        "Bearer [REDACTED:broker:credential]"
     );
 }

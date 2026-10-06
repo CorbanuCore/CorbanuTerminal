@@ -22,6 +22,9 @@ pub(super) struct CredentialProvider {
     request_header: RequestHeader,
     request_header_value: fn(&str) -> Option<HeaderValue>,
     insert_request_header: fn(&mut HeaderMap, HeaderValue),
+    /// PF-28-S02: request paths (query removed) the credential may be sent
+    /// to on a bound host.
+    allows_path: fn(host: &str, path: &str) -> bool,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -60,6 +63,53 @@ impl CredentialProvider {
     pub(super) fn insert_request_header(&self, headers: &mut HeaderMap, value: HeaderValue) {
         (self.insert_request_header)(headers, value);
     }
+
+    /// PF-28-S02: whether a credential of this provider may be sent with
+    /// this request (its host binding is checked separately). HTTPS on 443,
+    /// ordinary methods, a plain path the provider uses.
+    pub(super) fn allows_request(
+        &self,
+        scheme: &str,
+        host: &str,
+        port: u16,
+        method: &str,
+        path: &str,
+    ) -> Result<(), super::ScopedCredentialInjectionError> {
+        use super::ScopedCredentialInjectionError as Denied;
+        if scheme != "https" {
+            return Err(Denied::SchemeDenied);
+        }
+        if port != 443 {
+            return Err(Denied::PortDenied);
+        }
+        if !matches!(method, "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE") {
+            return Err(Denied::MethodDenied);
+        }
+        let path = path.split_once('?').map_or(path, |(path, _)| path);
+        if !plain_path(path) || !(self.allows_path)(host, path) {
+            return Err(Denied::PathDenied);
+        }
+        Ok(())
+    }
+}
+
+/// An absolute path with no dot segments, empty segments, backslashes or
+/// encoded separators, so the origin cannot resolve it outside the paths a
+/// provider allows.
+fn plain_path(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    path.starts_with('/')
+        && path.len() <= 4096
+        && path
+            .bytes()
+            .all(|byte| byte.is_ascii_graphic() && byte != b'\\' && byte != b'#')
+        && !["%2e", "%2f", "%5c", "//"]
+            .iter()
+            .any(|bad| lower.contains(bad))
+        && !path
+            .split('/')
+            .skip(1)
+            .any(|segment| matches!(segment, "." | ".."))
 }
 
 impl CredentialHostBinding {

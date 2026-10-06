@@ -4142,6 +4142,7 @@ dependencies = [
  "codex-http-client",
  "codex-keyring-store",
  "codex-protocol",
+ "codex-secret-broker",
  "codex-secrets",
  "codex-utils-cargo-bin",
  "codex-utils-home-dir",

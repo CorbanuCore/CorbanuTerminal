@@ -33,7 +33,19 @@ pub(super) static PROVIDER: CredentialProvider = CredentialProvider {
     request_header,
     request_header_value,
     insert_request_header,
+    allows_path,
 };
+
+/// API hosts take any path; web hosts take the API (GitHub Enterprise
+/// Server's `/api/`), git smart HTTP and LFS.
+fn allows_path(host: &str, path: &str) -> bool {
+    host.starts_with("api.")
+        || path.starts_with("/api/")
+        || path.ends_with("/info/refs")
+        || path.ends_with("/git-upload-pack")
+        || path.ends_with("/git-receive-pack")
+        || path.contains("/info/lfs/")
+}
 
 fn dummy_value(real_value: &str) -> String {
     shaped_dummy_value(

@@ -15,6 +15,7 @@ use super::delete_oauth_tokens_from_file;
 use super::delete_oauth_tokens_from_secrets_keyring;
 use super::load_oauth_tokens_from_file;
 use super::load_oauth_tokens_from_keyring;
+use super::output_gate;
 use super::save_oauth_tokens_to_file;
 use super::save_oauth_tokens_with_keyring;
 
@@ -41,7 +42,7 @@ impl ResolvedOAuthCredentialStore {
         server_name: &str,
         url: &str,
     ) -> Result<Option<StoredOAuthTokens>> {
-        match self {
+        let tokens = match self {
             Self::File => load_oauth_tokens_from_file(server_name, url)
                 .context("failed to reread OAuth tokens from resolved file storage"),
             Self::Keyring(keyring_backend_kind) => load_oauth_tokens_from_keyring(
@@ -54,7 +55,11 @@ impl ResolvedOAuthCredentialStore {
             .context(
                 "failed to reread OAuth tokens from resolved keyring storage; refusing file fallback",
             ),
+        }?;
+        if let Some(tokens) = &tokens {
+            output_gate::protect(tokens)?;
         }
+        Ok(tokens)
     }
 
     /// Saves credentials only to this already-resolved authority.
@@ -64,6 +69,7 @@ impl ResolvedOAuthCredentialStore {
         server_name: &str,
         tokens: &StoredOAuthTokens,
     ) -> Result<()> {
+        output_gate::protect(tokens)?;
         match self {
             Self::File => save_oauth_tokens_to_file(tokens),
             Self::Keyring(keyring_backend_kind) => save_oauth_tokens_with_keyring(
@@ -103,7 +109,29 @@ pub(crate) struct ResolvedOAuthTokens {
     pub(crate) store: ResolvedOAuthCredentialStore,
 }
 
+/// Resolves the store and registers the loaded tokens with the secret output
+/// gate (PF-28-S02).
 pub(crate) fn resolve_oauth_tokens_from_store_policy<K: KeyringStore + Clone + 'static>(
+    keyring_store: &K,
+    server_name: &str,
+    url: &str,
+    store_mode: OAuthCredentialsStoreMode,
+    keyring_backend_kind: AuthKeyringBackendKind,
+) -> Result<Option<ResolvedOAuthTokens>> {
+    let resolved = resolve_from_store_policy(
+        keyring_store,
+        server_name,
+        url,
+        store_mode,
+        keyring_backend_kind,
+    )?;
+    if let Some(resolved) = &resolved {
+        output_gate::protect(&resolved.tokens)?;
+    }
+    Ok(resolved)
+}
+
+fn resolve_from_store_policy<K: KeyringStore + Clone + 'static>(
     keyring_store: &K,
     server_name: &str,
     url: &str,

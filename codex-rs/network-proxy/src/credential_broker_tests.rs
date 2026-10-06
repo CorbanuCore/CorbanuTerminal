@@ -755,3 +755,130 @@ fn pf_27_s02_core_values_the_user_policy_excluded_are_not_brokered() {
     broker.virtualize_child_env(&mut env);
     assert_eq!(env.get("GITHUB_TOKEN"), None);
 }
+
+fn pf_28_s02_gated_broker() -> (CredentialBroker, String) {
+    let broker = CredentialBroker::new(/*enabled*/ true).with_response_gate(/*enabled*/ true);
+    let mut env = env_map([("GH_TOKEN", PF28_S02_TOKEN)]);
+    broker.virtualize_child_env(&mut env);
+    (broker, env["GH_TOKEN"].clone())
+}
+
+const PF28_S02_TOKEN: &str = "ghp_pf28s02LegacyBindingCanary000000000000";
+
+#[test]
+fn pf_28_s02_legacy_credential_is_bound_to_https_method_and_path() {
+    let (broker, dummy) = pf_28_s02_gated_broker();
+    let route = |scheme: &str, host: &str, port: u16, method: &str, path: &str| {
+        let mut headers = headers_with_bearer(&dummy);
+        let result = broker
+            .route_request_credentials(scheme, host, port, method, path, &mut headers)
+            .map(|routing| match routing {
+                CredentialRouting::Direct(gate) => gate.is_some(),
+                #[cfg(unix)]
+                CredentialRouting::Brokered(_) => false,
+            });
+        (result, authorization(&headers).map(str::to_string))
+    };
+    let injected = Some(format!("Bearer {PF28_S02_TOKEN}"));
+    let kept = Some(format!("Bearer {dummy}"));
+    for (request, expected) in [
+        (
+            ("https", "api.github.com", 443, "GET", "/user?per_page=1"),
+            Ok(true),
+        ),
+        (
+            (
+                "https",
+                "github.com",
+                443,
+                "POST",
+                "/o/r.git/git-upload-pack",
+            ),
+            Ok(true),
+        ),
+        (
+            ("https", "github.com", 443, "GET", "/settings/tokens"),
+            Err(ScopedCredentialInjectionError::PathDenied),
+        ),
+        (
+            ("https", "api.github.com", 443, "GET", "/repos/../user"),
+            Err(ScopedCredentialInjectionError::PathDenied),
+        ),
+        (
+            (
+                "https",
+                "github.com",
+                443,
+                "GET",
+                "/%2e%2e/o/r.git/info/refs",
+            ),
+            Err(ScopedCredentialInjectionError::PathDenied),
+        ),
+        (
+            ("https", "api.github.com", 8443, "GET", "/user"),
+            Err(ScopedCredentialInjectionError::PortDenied),
+        ),
+        (
+            ("http", "api.github.com", 443, "GET", "/user"),
+            Err(ScopedCredentialInjectionError::SchemeDenied),
+        ),
+        (
+            ("https", "api.github.com", 443, "TRACE", "/user"),
+            Err(ScopedCredentialInjectionError::MethodDenied),
+        ),
+    ] {
+        let (scheme, host, port, method, path) = request;
+        let header = if expected.is_ok() { &injected } else { &kept };
+        assert_eq!(
+            route(scheme, host, port, method, path),
+            (expected, header.clone()),
+            "{request:?}"
+        );
+    }
+    // Plain-HTTP injection is off while credentials are bound to HTTPS.
+    let mut headers = headers_with_bearer(&dummy);
+    broker.inject_request_headers("api.github.com", &mut headers);
+    assert_eq!(authorization(&headers), kept.as_deref());
+}
+
+#[test]
+fn pf_28_s02_legacy_route_returns_a_gate_for_the_injected_value() {
+    let (broker, dummy) = pf_28_s02_gated_broker();
+    let mut headers = headers_with_bearer(&dummy);
+    let Ok(CredentialRouting::Direct(Some(gate))) = broker.route_request_credentials(
+        "https",
+        "api.github.com",
+        443,
+        "GET",
+        "/user",
+        &mut headers,
+    ) else {
+        panic!("expected a gated direct route");
+    };
+    let echoed = format!("{{\"authorization\":\"Bearer {PF28_S02_TOKEN}\"}}");
+    assert_eq!(
+        gate.scrub_header(echoed.as_bytes()),
+        Some(b"{\"authorization\":\"Bearer [REDACTED:broker:GH_TOKEN]\"}".to_vec())
+    );
+}
+
+#[test]
+fn pf_28_s02_legacy_route_is_unchanged_without_the_gate() {
+    let broker = CredentialBroker::new(/*enabled*/ true);
+    let mut env = env_map([("GH_TOKEN", PF28_S02_TOKEN)]);
+    broker.virtualize_child_env(&mut env);
+    let mut headers = headers_with_bearer(&env["GH_TOKEN"]);
+    let routing = broker.route_request_credentials(
+        "https",
+        "github.com",
+        443,
+        "GET",
+        "/settings/tokens",
+        &mut headers,
+    );
+    assert!(matches!(routing, Ok(CredentialRouting::Direct(None))));
+    assert_eq!(
+        authorization(&headers),
+        Some(format!("Bearer {PF28_S02_TOKEN}").as_str())
+    );
+}

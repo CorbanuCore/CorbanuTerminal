@@ -19,6 +19,10 @@
 //!   fails and the caller must not use the value;
 //! - payloads larger than [`MAX_SCAN_BYTES`] are withheld, not passed.
 //!
+//! PF-28-S02 adds rescans (`output_gate_rescan.rs`): values in wrapped base64/hex
+//! blocks, inside a second encoding (decoded and rescanned), and seed
+//! phrases with any separators.
+//!
 //! There is no universal detector: values in unknown encodings (compressed,
 //! encrypted, split across separate fields) are not found. Raw values never
 //! leave this process; agent processes get none of them.
@@ -98,6 +102,8 @@ pub enum OutputSink {
     Snapshot,
     Export,
     Diagnostic,
+    /// A proxied response returned to an agent (PF-28-S02).
+    ProviderResponse,
 }
 
 impl OutputSink {
@@ -126,6 +132,7 @@ impl OutputSink {
             Self::Snapshot => "snapshot",
             Self::Export => "export",
             Self::Diagnostic => "diagnostic",
+            Self::ProviderResponse => "provider_response",
         }
     }
 }
@@ -226,6 +233,7 @@ struct Snapshot {
     /// Sorted by bytes for lookup of a match's owner.
     reps: Vec<Rep>,
     max_len: usize,
+    seed: rescan::SeedIndex,
 }
 
 #[derive(Default)]
@@ -605,6 +613,10 @@ impl StreamScrubber {
             0 => len,
             partial => len - partial.saturating_add(1).min(len),
         };
+        // A wrapped or encoded block, or seed words, that may continue.
+        if let Some(hold) = rescan::stream_hold(&snapshot, &buffer) {
+            cut = cut.min(hold);
+        }
         // Never cut through a value, nor emit one whose trailing partial
         // characters or padding may still arrive; moving the cut back only
         // ever holds more.
@@ -752,14 +764,22 @@ struct Match {
     class: SecretClass,
 }
 
-/// Every occurrence, overlapping ones included (the scan restarts one byte
-/// after each match start). A whole-word value at the very end of the input
-/// counts as a match: at a stream cut the next byte is not known yet.
+/// Every occurrence, direct and rescanned, sorted by position.
 fn find_all(snapshot: &Snapshot, input: &[u8]) -> Vec<Match> {
+    let mut found = find_in(snapshot, input, /*whole_words*/ true);
+    found.extend(rescan::rescan(snapshot, input));
+    found.sort_by_key(|m| (m.start, m.end));
+    found
+}
+
+/// Every direct occurrence, overlapping ones included (the scan restarts one
+/// byte after each match start). A whole-word value at the very end of the
+/// input counts as a match: at a stream cut the next byte is not known yet.
+fn find_in(snapshot: &Snapshot, input: &[u8], whole_words: bool) -> Vec<Match> {
     let mut found = Vec::new();
     for (regex, whole_word) in [
         (snapshot.substring.as_ref(), false),
-        (snapshot.whole_word.as_ref(), true),
+        (snapshot.whole_word.as_ref().filter(|_| whole_words), true),
     ] {
         let Some(regex) = regex else {
             continue;
@@ -1027,11 +1047,26 @@ fn compile(state: &State) -> Option<Snapshot> {
         }
     }
     let max_len = reps.iter().map(|rep| rep.bytes.len()).max().unwrap_or(0);
+    let seed = rescan::SeedIndex::build(
+        state
+            .entries
+            .iter()
+            .filter(|entry| entry.class == SecretClass::SeedPhrase)
+            .filter_map(|entry| {
+                let phrase = entry.reps.first()?;
+                Some((
+                    phrase.as_slice(),
+                    Arc::from(entry.label.as_str()),
+                    entry.class,
+                ))
+            }),
+    );
     Some(Snapshot {
         substring: alternation(reps.iter().filter(|rep| !rep.whole_word))?,
         whole_word: alternation(reps.iter().filter(|rep| rep.whole_word))?,
         reps,
         max_len,
+        seed,
     })
 }
 
@@ -1064,6 +1099,9 @@ fn alternation<'a>(reps: impl Iterator<Item = &'a Rep>) -> Option<Option<Regex>>
         .ok()
         .map(Some)
 }
+
+#[path = "output_gate_rescan.rs"]
+mod rescan;
 
 #[cfg(test)]
 #[path = "output_gate_tests.rs"]
