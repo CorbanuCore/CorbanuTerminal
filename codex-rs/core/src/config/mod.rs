@@ -3660,17 +3660,23 @@ impl Config {
         }
         if features.enabled(Feature::SecretOutputGate) {
             // PF-28-S01: gate managed secrets out of every output sink. Shell
-            // snapshots persist the environment, so they are off too.
-            crate::security::disclosure_gate::arm(codex_home.as_path())
-                .map_err(|err| std::io::Error::new(std::io::ErrorKind::PermissionDenied, err))?;
+            // snapshots persist the environment, so they are off too; if
+            // policy pins them on, fail closed before arming.
             if features.enabled(Feature::ShellSnapshot)
                 && features.disable(Feature::ShellSnapshot).is_err()
             {
-                // Snapshots persist the environment: fail closed.
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::PermissionDenied,
                     "secret_output_gate: shell_snapshot is required by policy, but snapshots can hold managed secrets",
                 ));
+            }
+            crate::security::disclosure_gate::arm(codex_home.as_path())
+                .map_err(|err| std::io::Error::new(std::io::ErrorKind::PermissionDenied, err))?;
+            if !features.enabled(Feature::SecretlessAgentLaunch) {
+                startup_warnings.push(
+                    "secret_output_gate: without secretless_agent_launch, agent commands can read the vault themselves (for example `corbanu vault auth-helper`); values revealed outside Core are not gated"
+                        .to_string(),
+                );
             }
         }
         let non_prefixed_mcp_tool_servers = if features.enabled(Feature::NonPrefixedMcpToolNames) {

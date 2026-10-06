@@ -500,3 +500,18 @@ fn pf_28_s01_debug_and_markers_never_show_values() {
         "[REDACTED:badlabelscript]"
     );
 }
+
+#[test]
+fn pf_28_s01_short_value_is_not_redacted_inside_a_longer_word_at_a_cut() {
+    let gate = OutputGate::new();
+    gate.register("short", SecretClass::Operational, "abc")
+        .expect("register");
+    let mut scrubber = StreamScrubber::new();
+    let mut out = scrubber.push(&gate, OutputSink::ToolResult, b"abcdzzq", true);
+    out.extend(scrubber.push(&gate, OutputSink::ToolResult, b"x end abc.", true));
+    out.extend(scrubber.finish(&gate, OutputSink::ToolResult));
+    assert_eq!(
+        String::from_utf8(out).expect("utf8"),
+        "abcdzzqx end [REDACTED:short]."
+    );
+}

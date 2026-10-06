@@ -1,7 +1,10 @@
-//! PF-28-S01: sign-in tokens enter the secret output gate whenever the sign-in
-//! store loads or saves them, so a login, a token refresh or a keyring-held
-//! credential is protected from the moment this process holds it. A changed
-//! value rotates: the new one is admitted before the old one is retired.
+//! PF-28-S01: while the secret output gate is armed, sign-in tokens enter it
+//! whenever a sign-in store loads or saves them, so a login, a token refresh
+//! or a keyring-held credential is protected from the moment this process
+//! holds it. Registrations are process-wide (one per field, however many
+//! stores are created). A changed value is admitted first; the value before
+//! it stays protected (it may still be valid) and the one before that is
+//! retired, which bounds the registry across refreshes.
 
 use super::AgentIdentityStorage;
 use super::AuthDotJson;
@@ -13,6 +16,7 @@ use sha2::Digest;
 use sha2::Sha256;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::LazyLock;
 use std::sync::Mutex;
 use zeroize::Zeroizing;
 
@@ -20,26 +24,35 @@ use zeroize::Zeroizing;
 /// text).
 const MIN_TOKEN_BYTES: usize = 8;
 
+/// Per field: the current value's handle and digest (never the value) and
+/// the previous value's handle.
+#[derive(Clone, Copy)]
+struct Registered {
+    current: SecretHandle,
+    digest: [u8; 32],
+    previous: Option<SecretHandle>,
+}
+
+static REGISTERED: LazyLock<Mutex<HashMap<&'static str, Registered>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
 #[derive(Debug)]
 pub(super) struct GatedAuthStorage {
     inner: Arc<dyn AuthStorageBackend>,
-    /// Per field: the registered value's handle and digest (never the value).
-    registered: Mutex<HashMap<&'static str, (SecretHandle, [u8; 32])>>,
 }
 
 impl GatedAuthStorage {
     pub(super) fn wrap(inner: Arc<dyn AuthStorageBackend>) -> Arc<dyn AuthStorageBackend> {
-        Arc::new(Self {
-            inner,
-            registered: Mutex::new(HashMap::new()),
-        })
+        Arc::new(Self { inner })
     }
 
-    /// Registers every token in `auth`. Fails only while the gate is armed:
-    /// a credential the gate cannot protect is not used.
+    /// Registers every token in `auth` while the gate is armed. A credential
+    /// the gate cannot protect is not used.
     fn protect(&self, auth: &AuthDotJson) -> std::io::Result<()> {
-        let gate = output_gate::global();
-        let mut registered = match self.registered.lock() {
+        let Some(gate) = output_gate::active() else {
+            return Ok(());
+        };
+        let mut registered = match REGISTERED.lock() {
             Ok(guard) => guard,
             Err(poisoned) => poisoned.into_inner(),
         };
@@ -49,27 +62,30 @@ impl GatedAuthStorage {
                 continue;
             }
             let digest: [u8; 32] = Sha256::digest(value.as_bytes()).into();
-            let previous = registered.get(field).copied();
-            if previous.is_some_and(|(_, known)| known == digest) {
+            let known = registered.get(field).copied();
+            if known.is_some_and(|known| known.digest == digest) {
                 continue;
             }
             let label = format!("auth.json:{field}");
-            let result = match previous {
-                Some((old, _)) => gate.rotate(old, &label, SecretClass::Operational, value),
-                None => gate.register(&label, SecretClass::Operational, value),
-            };
-            match result {
-                Ok(handle) => {
-                    registered.insert(field, (handle, digest));
-                }
-                Err(err) if gate.is_armed() => {
-                    return Err(std::io::Error::new(
+            let handle = gate
+                .register(&label, SecretClass::Operational, value)
+                .map_err(|err| {
+                    std::io::Error::new(
                         std::io::ErrorKind::PermissionDenied,
                         format!("secret_output_gate cannot protect the sign-in {field}: {err}"),
-                    ));
-                }
-                Err(_) => {}
+                    )
+                })?;
+            if let Some(retired) = known.and_then(|known| known.previous) {
+                gate.retire(retired);
             }
+            registered.insert(
+                field,
+                Registered {
+                    current: handle,
+                    digest,
+                    previous: known.map(|known| known.current),
+                },
+            );
         }
         Ok(())
     }
@@ -156,28 +172,34 @@ mod tests {
     }
 
     #[test]
-    fn pf_28_s01_login_and_rotation_after_arm_are_protected() {
-        // Process-wide gate: armed before any sign-in, as Core does.
+    fn pf_28_s01_login_and_refresh_after_arm_are_protected() {
+        // Process-wide gate (nextest runs each test in its own process):
+        // armed before any sign-in, as Core does.
         output_gate::global().arm().expect("arm");
-        let storage = GatedAuthStorage::wrap(Arc::new(Memory::default()));
         let scrub = |text: &str| output_gate::scrub_if_armed(OutputSink::ToolResult, text);
-        // Synthetic values only.
-        storage
-            .save(&api_key_auth("sk-pf28-login-after-arm-1111"))
-            .expect("login");
+        // Production creates a store per load or save; registrations are
+        // shared. Synthetic values only.
+        let save = |key: &str| {
+            GatedAuthStorage::wrap(Arc::new(Memory::default()))
+                .save(&api_key_auth(key))
+                .expect("save");
+        };
+        save("sk-pf28-login-after-arm-1111");
         assert_eq!(
             scrub("k=sk-pf28-login-after-arm-1111").as_deref(),
             Some("k=[REDACTED:auth.json:OPENAI_API_KEY]")
         );
-        // A refresh replaces the key: the new one is protected, the old one
-        // retired.
-        storage
-            .save(&api_key_auth("sk-pf28-refreshed-key-2222"))
-            .expect("refresh");
+        // A refresh: the new value and the previous one are protected.
+        save("sk-pf28-refreshed-key-2222");
+        assert!(scrub("sk-pf28-refreshed-key-2222").is_some());
+        assert!(scrub("sk-pf28-login-after-arm-1111").is_some());
+        // The next refresh retires the oldest.
+        save("sk-pf28-refreshed-key-3333");
+        assert!(scrub("sk-pf28-refreshed-key-3333").is_some());
         assert!(scrub("sk-pf28-refreshed-key-2222").is_some());
         assert_eq!(scrub("sk-pf28-login-after-arm-1111"), None);
-        // Loading the same value again changes nothing.
-        storage.load().expect("load");
+        // The same value again changes nothing.
+        save("sk-pf28-refreshed-key-3333");
         assert!(scrub("sk-pf28-refreshed-key-2222").is_some());
     }
 }

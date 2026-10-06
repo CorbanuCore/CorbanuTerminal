@@ -562,6 +562,8 @@ impl SessionTelemetry {
         auth_error_code: Option<&str>,
         agent_identity_telemetry: Option<&AgentIdentityTelemetry>,
     ) {
+        let gated_error = error.and_then(trace_gated);
+        let error = gated_error.as_deref().or(error);
         let success = status.is_some_and(|code| (200..=299).contains(&code)) && error.is_none();
         let success_str = if success { "true" } else { "false" };
         let status_str = status
@@ -628,6 +630,8 @@ impl SessionTelemetry {
         auth_error_code: Option<&str>,
         agent_identity_telemetry: Option<&AgentIdentityTelemetry>,
     ) {
+        let gated_error = error.and_then(trace_gated);
+        let error = gated_error.as_deref().or(error);
         let success = error.is_none()
             && status
                 .map(|code| (200..=299).contains(&code))
@@ -673,6 +677,8 @@ impl SessionTelemetry {
         connection_reused: bool,
         agent_identity_telemetry: Option<&AgentIdentityTelemetry>,
     ) {
+        let gated_error = error.and_then(trace_gated);
+        let error = gated_error.as_deref().or(error);
         let success_str = if error.is_none() { "true" } else { "false" };
         self.counter(
             WEBSOCKET_REQUEST_COUNT_METRIC,
@@ -872,6 +878,7 @@ impl SessionTelemetry {
     where
         T: std::fmt::Display,
     {
+        let error = trace_gated_display(error);
         let kind_str = kind.map_or(SSE_UNKNOWN_KIND, String::as_str);
         self.counter(
             SSE_EVENT_COUNT_METRIC,
@@ -911,6 +918,7 @@ impl SessionTelemetry {
     where
         T: std::fmt::Display,
     {
+        let error = trace_gated_display(error);
         log_and_trace_event!(
             self,
             common: {
@@ -965,8 +973,13 @@ impl SessionTelemetry {
             .filter(|item| matches!(item, UserInput::LocalImage { .. }))
             .count();
 
+        let gated_prompt = self
+            .metadata
+            .log_user_prompts
+            .then(|| trace_gated(&prompt))
+            .flatten();
         let prompt_to_log = if self.metadata.log_user_prompts {
-            prompt.as_str()
+            gated_prompt.as_deref().unwrap_or(prompt.as_str())
         } else {
             "[REDACTED]"
         };
@@ -1272,6 +1285,12 @@ fn f64_ms_value(value: Option<&serde_json::Value>) -> Option<f64> {
         return None;
     }
     Some(ms.min(u64::MAX as f64))
+}
+
+/// Gates a displayed error through the PF-28-S01 secret output gate.
+fn trace_gated_display(error: &impl std::fmt::Display) -> String {
+    let text = error.to_string();
+    trace_gated(&text).unwrap_or(text)
 }
 
 /// Gates exported text through the PF-28-S01 secret output gate when armed.

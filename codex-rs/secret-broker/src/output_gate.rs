@@ -623,6 +623,18 @@ impl StreamScrubber {
                 break;
             }
         }
+        // A short whole-word value is judged by the bytes around it, which
+        // `emit` would not see past the cut: never cut inside a short word.
+        if snapshot.whole_word.is_some() && cut > 0 && cut < len && is_word_byte(buffer[cut]) {
+            let run_start = (cut.saturating_sub(MIN_SUBSTRING_BYTES)..cut)
+                .rev()
+                .take_while(|&at| is_word_byte(buffer[at]))
+                .last()
+                .unwrap_or(cut);
+            if cut - run_start < MIN_SUBSTRING_BYTES {
+                cut = run_start;
+            }
+        }
         if utf8 {
             while cut > 0 && cut < buffer.len() && (buffer[cut] & 0xC0) == 0x80 {
                 cut -= 1;

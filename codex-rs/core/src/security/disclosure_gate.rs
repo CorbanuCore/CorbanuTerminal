@@ -26,6 +26,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::collections::VecDeque;
 use std::path::Path;
 use std::sync::LazyLock;
 use std::sync::Mutex;
@@ -180,9 +181,10 @@ pub(crate) fn gate_delivered(msg: EventMsg) -> Option<EventMsg> {
     }
 }
 
-/// Gates a non-streamed event for presentation. A terminal turn event is
-/// never dropped (the client would wait forever): if it cannot be rebuilt it
-/// is sent without its text.
+/// Gates a non-streamed event for presentation. An event that cannot be
+/// rebuilt with redaction markers is sent with the affected text emptied
+/// (ids and structure kept), so approvals, completions and turn ends still
+/// arrive; only if even that fails is it replaced by an error notice.
 fn present(gate: &OutputGate, msg: EventMsg) -> Option<EventMsg> {
     match gate_value_with(gate, OutputSink::Presentation, &msg) {
         Gated::Unchanged => Some(msg),
@@ -194,9 +196,47 @@ fn present(gate: &OutputGate, msg: EventMsg) -> Option<EventMsg> {
                 Some(EventMsg::TurnComplete(event))
             }
             msg @ EventMsg::TurnAborted(_) => Some(msg),
-            _ => None,
+            msg => Some(
+                strip_value(gate, OutputSink::Presentation, &msg).unwrap_or_else(|| {
+                    EventMsg::Error(codex_protocol::protocol::ErrorEvent {
+                        message: "Corbanu withheld an event that held a protected value."
+                            .to_string(),
+                        codex_error_info: None,
+                    })
+                }),
+            ),
         },
     }
+}
+
+/// Rebuilds `value` with every string that holds a managed value emptied.
+fn strip_value<T: Serialize + DeserializeOwned>(
+    gate: &OutputGate,
+    sink: OutputSink,
+    value: &T,
+) -> Option<T> {
+    fn strip(gate: &OutputGate, sink: OutputSink, value: &mut serde_json::Value) {
+        match value {
+            serde_json::Value::String(text) if gate.scrub(sink, text).is_some() => {
+                text.clear();
+            }
+            serde_json::Value::Array(items) => {
+                items.iter_mut().for_each(|item| strip(gate, sink, item));
+            }
+            serde_json::Value::Object(map) => {
+                map.values_mut().for_each(|item| strip(gate, sink, item));
+            }
+            _ => {}
+        }
+    }
+    let mut json = serde_json::to_value(value).ok()?;
+    strip(gate, sink, &mut json);
+    let serialized = serde_json::to_string(&json).ok()?;
+    // Found only across fields: nothing single to empty; do not deliver.
+    if gate.scrub(sink, &serialized).is_some() {
+        return None;
+    }
+    serde_json::from_value(json).ok()
 }
 
 /// Result of gating a structured value.
@@ -348,6 +388,7 @@ const MAX_WITHHELD_TOMBSTONES: usize = 4096;
 struct Streams {
     open: HashMap<String, OpenStream>,
     withheld: HashSet<String>,
+    withheld_order: VecDeque<String>,
     next_order: u64,
 }
 
@@ -374,9 +415,11 @@ pub(crate) fn gate_event(scope: &str, msg: EventMsg) -> Vec<EventMsg> {
 
 fn gate_event_with(gate: &OutputGate, scope: &str, msg: EventMsg) -> Vec<EventMsg> {
     let mut out = Vec::new();
+    // Keys carry the turn: a sub-session's already-gated stream forwarded
+    // into its parent's turn gets its own scrubber, never the child's.
     match msg {
         EventMsg::ExecCommandOutputDelta(mut event) => {
-            let key = format!("exec\0{}\0{:?}", event.call_id, event.stream);
+            let key = format!("exec\0{scope}\0{}\0{:?}", event.call_id, event.stream);
             let template = EventMsg::ExecCommandOutputDelta(event.clone());
             event.chunk = push_stream(
                 gate,
@@ -391,7 +434,7 @@ fn gate_event_with(gate: &OutputGate, scope: &str, msg: EventMsg) -> Vec<EventMs
             }
         }
         EventMsg::AgentMessageContentDelta(mut event) => {
-            let key = format!("agent\0{}", event.item_id);
+            let key = format!("agent\0{scope}\0{}", event.item_id);
             let template = EventMsg::AgentMessageContentDelta(event.clone());
             event.delta = push_text(gate, key, (scope, &event.item_id), template, &event.delta);
             if !event.delta.is_empty() {
@@ -399,7 +442,7 @@ fn gate_event_with(gate: &OutputGate, scope: &str, msg: EventMsg) -> Vec<EventMs
             }
         }
         EventMsg::PlanDelta(mut event) => {
-            let key = format!("plan\0{}", event.item_id);
+            let key = format!("plan\0{scope}\0{}", event.item_id);
             let template = EventMsg::PlanDelta(event.clone());
             event.delta = push_text(gate, key, (scope, &event.item_id), template, &event.delta);
             if !event.delta.is_empty() {
@@ -407,7 +450,10 @@ fn gate_event_with(gate: &OutputGate, scope: &str, msg: EventMsg) -> Vec<EventMs
             }
         }
         EventMsg::ReasoningContentDelta(mut event) => {
-            let key = format!("reasoning\0{}\0{}", event.item_id, event.summary_index);
+            let key = format!(
+                "reasoning\0{scope}\0{}\0{}",
+                event.item_id, event.summary_index
+            );
             // A new summary section ends the earlier ones of the same item.
             let section = key.clone();
             out.extend(finish_streams(gate, |key, stream| {
@@ -422,7 +468,7 @@ fn gate_event_with(gate: &OutputGate, scope: &str, msg: EventMsg) -> Vec<EventMs
             }
         }
         EventMsg::ReasoningRawContentDelta(mut event) => {
-            let key = format!("raw\0{}\0{}", event.item_id, event.content_index);
+            let key = format!("raw\0{scope}\0{}\0{}", event.item_id, event.content_index);
             let template = EventMsg::ReasoningRawContentDelta(event.clone());
             event.delta = push_text(gate, key, (scope, &event.item_id), template, &event.delta);
             if !event.delta.is_empty() {
@@ -502,9 +548,13 @@ fn push_stream(
             && let Some(evicted) = streams.open.remove(&oldest)
             && evicted.scrubber.is_withheld()
         {
-            if streams.withheld.len() >= MAX_WITHHELD_TOMBSTONES {
-                streams.withheld.clear();
+            // Oldest tombstones go first.
+            while streams.withheld_order.len() >= MAX_WITHHELD_TOMBSTONES {
+                if let Some(expired) = streams.withheld_order.pop_front() {
+                    streams.withheld.remove(&expired);
+                }
             }
+            streams.withheld_order.push_back(oldest.clone());
             streams.withheld.insert(oldest);
         }
     }
@@ -646,6 +696,9 @@ where
         if let Some(password) = url_password(value) {
             values.push((format!("env:{name}:password"), password));
         }
+        for (param, secret) in url_query_secrets(value) {
+            values.push((format!("env:{name}:{param}"), secret));
+        }
     }
     values
 }
@@ -660,6 +713,27 @@ fn url_password(value: &str) -> Option<Zeroizing<String>> {
     let (_, password) = userinfo.split_once(':')?;
     let password = password.trim();
     is_plausible_secret(password).then(|| Zeroizing::new(password.to_string()))
+}
+
+/// Secret-named query parameters of a URL (`?token=`, `?api_key=`, `?sig=`).
+fn url_query_secrets(value: &str) -> Vec<(String, Zeroizing<String>)> {
+    if !value.contains("://") {
+        return Vec::new();
+    }
+    let Some((_, query)) = value.split_once('?') else {
+        return Vec::new();
+    };
+    let query = query.split('#').next().unwrap_or_default();
+    query
+        .split('&')
+        .filter_map(|pair| pair.split_once('='))
+        .filter(|(name, secret)| {
+            let lower = name.to_ascii_lowercase();
+            (is_secret_key(name) || matches!(lower.as_str(), "key" | "sig" | "signature"))
+                && is_plausible_secret(secret)
+        })
+        .map(|(name, secret)| (name.to_string(), Zeroizing::new(secret.to_string())))
+        .collect()
 }
 
 fn is_secret_key(key: &str) -> bool {

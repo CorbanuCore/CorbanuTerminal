@@ -825,7 +825,6 @@ fn has_key_material(line: &str) -> bool {
 }
 
 /// Format a Unix-seconds timestamp as an ISO-8601 string for display.
-
 pub fn format_timestamp(seconds: i64) -> String {
     DateTime::<Utc>::from_timestamp(seconds, 0)
         .map(|dt| dt.to_rfc3339_opts(chrono::SecondsFormat::Secs, /*use_z*/ true))
