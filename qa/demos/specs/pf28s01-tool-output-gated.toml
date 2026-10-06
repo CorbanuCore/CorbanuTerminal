@@ -1,0 +1,49 @@
+# PF-28-S01 secret output gate. Pass the synthetic canary with
+# --credential PF28_CANARY_API_KEY=file:<canary file> (see qa/security-levels/sprints/PF-28-S01/README.md).
+id = "pf28s01-tool-output-gated"
+feature = "Secret output gate: a managed secret in command output is removed, in every encoding"
+expected = "The agent prints Core's canary raw, base64, URL-encoded and in JSON. Every form shows as [REDACTED:env:PF28_CANARY_API_KEY] on screen and in what the model receives."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[features]
+secret_output_gate = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"show.sh" = '''
+v="$PF28_CANARY_API_KEY"
+echo "raw:    $v"
+echo "base64: $(printf %s "$v" | base64)"
+echo "url:    $(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1],safe=""))' "$v")"
+echo "json:   $(python3 -c 'import json,sys;print(json.dumps({"key":sys.argv[1]}))' "$v")"
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run sh show.sh. Reply with its four output lines exactly as you received them, then stop."
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "json:.*REDACTED[\\s\\S]*json:.*REDACTED"
+timeout = 180
+compress = 3
+
+[[steps]]
+pause = 4.0

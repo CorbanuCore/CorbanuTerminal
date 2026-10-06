@@ -129,6 +129,7 @@ mod external_editor;
 mod external_plan_agent_adapter;
 mod file_search;
 mod frames;
+mod gated_log_writer;
 mod get_git_diff;
 mod git_action_directives;
 mod goal_display;
@@ -1350,7 +1351,7 @@ pub async fn run_main(
             EnvFilter::new("codex_core=info,codex_tui=info,codex_rmcp_client=info")
         });
         let file_layer = tracing_subscriber::fmt::layer()
-            .with_writer(non_blocking)
+            .with_writer(move || gated_log_writer::GatedLogWriter(non_blocking.clone()))
             .with_target(true)
             .with_ansi(false)
             .with_span_events(

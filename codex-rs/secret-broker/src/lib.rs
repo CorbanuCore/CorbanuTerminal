@@ -6,6 +6,7 @@ pub mod ipc;
 pub mod journal_adapter;
 #[cfg(target_os = "linux")]
 pub mod linux_transport;
+pub mod output_gate;
 pub mod platform_contract;
 pub mod resolver;
 mod resolver_types;

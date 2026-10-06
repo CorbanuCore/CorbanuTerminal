@@ -11,6 +11,7 @@ pub(crate) mod authoritative_state_anchor;
 pub(crate) mod broker_client;
 pub(crate) mod browser_isolation;
 pub(crate) mod confidentiality;
+pub(crate) mod disclosure_gate;
 mod effective_policy;
 pub(crate) mod ingress;
 mod integration;

@@ -694,6 +694,9 @@
             "secret_auth_storage": {
               "type": "boolean"
             },
+            "secret_output_gate": {
+              "type": "boolean"
+            },
             "secretless_agent_launch": {
               "type": "boolean"
             },
@@ -5398,6 +5401,9 @@
           "type": "boolean"
         },
         "secret_auth_storage": {
+          "type": "boolean"
+        },
+        "secret_output_gate": {
           "type": "boolean"
         },
         "secretless_agent_launch": {

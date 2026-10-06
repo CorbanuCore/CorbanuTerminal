@@ -586,3 +586,76 @@ fn canonical_home_alias_preserves_keyring_identity_and_label_case() {
         "second-value"
     );
 }
+
+#[test]
+fn pf_28_s01_revealed_values_are_registered_with_the_output_gate() {
+    use codex_secret_broker::output_gate;
+    use codex_secret_broker::output_gate::OutputSink;
+    // Process-wide gate: arming here only affects this test binary.
+    output_gate::global().arm().expect("arm");
+    let directory = tempfile::tempdir().expect("tempdir");
+    let vault = Vault::new_with_keyring_store(
+        directory.path().to_path_buf(),
+        Arc::new(MockKeyringStore::default()),
+    );
+    let add = |label: &str, credential_type, secret: &str| {
+        vault
+            .add(AddCredential {
+                label: label.to_string(),
+                credential_type,
+                provider: None,
+                notes: None,
+                revocation_notes: None,
+                secret: secret.to_string(),
+            })
+            .expect("add");
+    };
+    add(
+        "pf28-basic",
+        CredentialType::BasicAuth,
+        "pf28user:pf28-basic-password-9",
+    );
+    add(
+        "pf28-seed",
+        CredentialType::SeedPhrase,
+        "pf28 legal winner thank year wave sausage worth useful legal winner thank yellow",
+    );
+    let scrub = |text: &str| output_gate::scrub_if_armed(OutputSink::ToolResult, text);
+    assert_eq!(scrub("pw pf28-basic-password-9"), None);
+    vault
+        .reveal_for_programmatic_use("pf28-basic", SecurityLevel::Permissive)
+        .expect("reveal");
+    assert_eq!(
+        scrub("pw pf28-basic-password-9").as_deref(),
+        Some("pw [REDACTED:vault:pf28-basic]")
+    );
+    vault.reveal("pf28-seed").expect("human reveal");
+    let withheld =
+        scrub("pf28 legal winner thank year wave sausage worth useful legal winner thank yellow")
+            .expect("withheld");
+    assert!(withheld.starts_with("[WITHHELD: output contained a protected seed phrase"));
+    // Part of the phrase is withheld too.
+    assert!(
+        scrub("first words: wave sausage worth").is_some_and(|text| text.starts_with("[WITHHELD:"))
+    );
+
+    // A hex key matches with or without `0x`, in either case.
+    let key = "0xA1B2C3D4E5F60718293A4B5C6D7E8F90A1B2C3D4E5F60718293A4B5C6D7E8F90";
+    add("pf28-key", CredentialType::CryptoPrivateKey, key);
+    vault.reveal("pf28-key").expect("key reveal");
+    let bare = key[2..].to_ascii_lowercase();
+    assert!(scrub(&format!("k={bare}")).is_some_and(|text| text.starts_with("[WITHHELD:")));
+
+    // Keystore scaffolding lines are not key material.
+    add(
+        "pf28-keystore",
+        CredentialType::KeystoreJson,
+        "{\n  \"version\": 3,\n  \"kdf\": \"scrypt\",\n  \"ciphertext\": \"pf28c1phert3xtAAAABBBBCCCCDDDD\"\n}",
+    );
+    vault.reveal("pf28-keystore").expect("keystore reveal");
+    assert_eq!(scrub("  \"kdf\": \"scrypt\","), None);
+    assert!(
+        scrub("  \"ciphertext\": \"pf28c1phert3xtAAAABBBBCCCCDDDD\"")
+            .is_some_and(|text| text.starts_with("[WITHHELD:"))
+    );
+}

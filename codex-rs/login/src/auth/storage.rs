@@ -515,7 +515,7 @@ fn create_auth_storage_with_store(
     keyring_store: Arc<dyn KeyringStore>,
     keyring_backend_kind: AuthKeyringBackendKind,
 ) -> Arc<dyn AuthStorageBackend> {
-    match mode {
+    let storage: Arc<dyn AuthStorageBackend> = match mode {
         AuthCredentialsStoreMode::File => Arc::new(FileAuthStorage::new(codex_home)),
         AuthCredentialsStoreMode::Keyring => {
             create_keyring_auth_storage(codex_home, keyring_store, keyring_backend_kind)
@@ -526,7 +526,8 @@ fn create_auth_storage_with_store(
             keyring_backend_kind,
         )),
         AuthCredentialsStoreMode::Ephemeral => Arc::new(EphemeralAuthStorage::new(codex_home)),
-    }
+    };
+    storage_gate::GatedAuthStorage::wrap(storage)
 }
 
 fn create_keyring_auth_storage(
@@ -543,6 +544,9 @@ fn create_keyring_auth_storage(
         }
     }
 }
+
+#[path = "storage_gate.rs"]
+mod storage_gate;
 
 #[cfg(test)]
 #[path = "storage_tests.rs"]
