@@ -11,7 +11,7 @@ use crate::util::error_or_panic;
 use tracing::info;
 use tracing::warn;
 
-const IMAGE_CONTENT_OMITTED_PLACEHOLDER: &str =
+pub(crate) const IMAGE_CONTENT_OMITTED_PLACEHOLDER: &str =
     "image content omitted because you do not support image input";
 const AUDIO_CONTENT_OMITTED_PLACEHOLDER: &str =
     "audio content omitted because you do not support audio input";

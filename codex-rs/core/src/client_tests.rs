@@ -243,11 +243,12 @@ fn pf_30_s01_labelled_context_round_trips_through_each_real_provider_adapter() {
         internal_chat_message_metadata_passthrough: None,
     };
     let prompt = Prompt {
-        input: vec![human.clone(), call, output],
+        input: vec![human.clone(), call.clone(), output],
         ..Default::default()
     };
     let base = test_model_client(SessionSource::Cli).with_source_envelopes(true);
     base.register_message_origin(std::slice::from_ref(&human), MessageOrigin::Human);
+    base.register_message_origin(std::slice::from_ref(&call), MessageOrigin::Model);
     base.register_native_tool_origin("call-1", codex_protocol::provenance::SourceKind::Tool);
     let provider = base
         .state
@@ -325,6 +326,24 @@ fn pf_30_s01_labelled_context_round_trips_through_each_real_provider_adapter() {
             );
         }
     }
+}
+
+#[test]
+fn pf_30_s01_labelled_restore_reinjection_waits_while_permissive() {
+    let client = test_model_client(SessionSource::Cli).with_source_envelopes(true);
+    client.note_restored_history(&[]);
+    // Permissive history is unchanged: the request stays pending.
+    assert!(!client.take_host_context_reinjection());
+    let moderate = client
+        .clone()
+        .with_ingress_level(codex_security_policy::SecurityLevel::Moderate);
+    assert!(moderate.take_host_context_reinjection());
+    assert!(!moderate.take_host_context_reinjection());
+    // Flag off never requests reinjection.
+    let off = test_model_client(SessionSource::Cli)
+        .with_ingress_level(codex_security_policy::SecurityLevel::Moderate);
+    off.note_restored_history(&[]);
+    assert!(!off.take_host_context_reinjection());
 }
 
 #[test]

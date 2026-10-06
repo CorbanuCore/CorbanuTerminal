@@ -44,6 +44,12 @@ fn item_bytes(item: &ResponseItem) -> Result<Vec<u8>, IngressError> {
     Ok(writer.0)
 }
 
+fn item_key(item: &ResponseItem) -> Option<ContentDigest> {
+    serde_json::to_vec(item)
+        .ok()
+        .map(|bytes| ContentDigest::of(&bytes))
+}
+
 /// Role plus exact text parts. Media is excluded so history normalization
 /// that strips images for a text-only model keeps the host registration.
 fn message_key(item: &ResponseItem) -> Option<ContentDigest> {
@@ -53,7 +59,9 @@ fn message_key(item: &ResponseItem) -> Option<ContentDigest> {
     let texts: Vec<&str> = content
         .iter()
         .filter_map(|part| match part {
-            ContentItem::InputText { text } | ContentItem::OutputText { text } => {
+            ContentItem::InputText { text } | ContentItem::OutputText { text }
+                if text != crate::context_manager::IMAGE_CONTENT_OMITTED_PLACEHOLDER =>
+            {
                 Some(text.as_str())
             }
             _ => None,
@@ -73,6 +81,7 @@ pub(crate) struct NativeIngress {
     /// `source_envelopes`: project labelled data instead of failing closed.
     labelled_mode: bool,
     messages: HashMap<ContentDigest, MessageOrigin>,
+    model_items: std::collections::HashSet<ContentDigest>,
     pub(super) labelled: LabelledCache,
     /// Restored history has no recorded origins; reinject host context once.
     host_context_reinjection: bool,
@@ -100,8 +109,28 @@ impl NativeIngress {
     /// unattributed (labelled) data and never upgrades anything.
     pub(crate) fn register_messages(&mut self, items: &[ResponseItem], origin: MessageOrigin) {
         for item in items {
-            if !matches!(item, ResponseItem::Message { .. }) {
-                continue;
+            match item {
+                // Model standing is only for assistant text from the stream.
+                ResponseItem::Message { role, .. }
+                    if origin != MessageOrigin::Model || role == "assistant" => {}
+                ResponseItem::Reasoning { .. }
+                | ResponseItem::FunctionCall { .. }
+                | ResponseItem::CustomToolCall { .. }
+                | ResponseItem::LocalShellCall { .. }
+                | ResponseItem::ToolSearchCall { .. }
+                | ResponseItem::WebSearchCall { .. }
+                | ResponseItem::ImageGenerationCall { .. }
+                    if origin == MessageOrigin::Model =>
+                {
+                    if let Some(key) = item_key(item)
+                        && (self.model_items.len() < MAX_LABELLED_REGISTRATIONS
+                            || self.model_items.contains(&key))
+                    {
+                        self.model_items.insert(key);
+                    }
+                    continue;
+                }
+                _ => continue,
             }
             let Some(key) = message_key(item) else {
                 continue;
@@ -138,6 +167,11 @@ impl NativeIngress {
 
     pub(crate) fn take_host_context_reinjection(&mut self) -> bool {
         std::mem::take(&mut self.host_context_reinjection)
+    }
+
+    /// Whether this exact model-structure item was recorded from the stream.
+    pub(super) fn is_model_item(&self, item: &ResponseItem) -> bool {
+        item_key(item).is_some_and(|key| self.model_items.contains(&key))
     }
 
     pub(super) fn message_origin(&self, item: &ResponseItem) -> Option<MessageOrigin> {

@@ -86,9 +86,16 @@ impl NativeIngress {
     pub(crate) fn project_labelled(&mut self, items: &[ResponseItem]) -> Vec<ResponseItem> {
         let now = now_ms();
         self.labelled.previous = std::mem::take(&mut self.labelled.current);
+        // Calls not recorded from the model stream (restored, forked or
+        // injected) become labelled data together with their outputs.
+        let unrecorded_calls: std::collections::HashSet<String> = items
+            .iter()
+            .filter(|item| !self.is_model_item(item))
+            .filter_map(call_id_of)
+            .collect();
         let mut projected = Vec::with_capacity(items.len());
         for item in items {
-            if let Some(item) = self.project_labelled_item(item, now) {
+            if let Some(item) = self.project_labelled_item(item, &unrecorded_calls, now) {
                 projected.push(item);
             }
         }
@@ -96,7 +103,12 @@ impl NativeIngress {
         projected
     }
 
-    fn project_labelled_item(&mut self, item: &ResponseItem, now: u64) -> Option<ResponseItem> {
+    fn project_labelled_item(
+        &mut self,
+        item: &ResponseItem,
+        unrecorded_calls: &std::collections::HashSet<String>,
+        now: u64,
+    ) -> Option<ResponseItem> {
         // Exhaustive on purpose: a new provider/tool item variant must choose
         // a provenance rule before it can compile.
         match item {
@@ -161,6 +173,22 @@ impl NativeIngress {
                 call_id,
                 output,
                 ..
+            }
+            | ResponseItem::CustomToolCallOutput {
+                id,
+                call_id,
+                output,
+                ..
+            } if unrecorded_calls.contains(call_id) => {
+                let kind = self.call_kind(call_id).unwrap_or(SourceKind::Unknown);
+                let text = output.body.to_text().unwrap_or_default();
+                Some(self.labelled_message(id, kind, call_id, &text, now))
+            }
+            ResponseItem::FunctionCallOutput {
+                id,
+                call_id,
+                output,
+                ..
             } => Some(ResponseItem::FunctionCallOutput {
                 id: id.clone(),
                 call_id: call_id.clone(),
@@ -180,23 +208,57 @@ impl NativeIngress {
                 output: self.label_output(call_id, output, now),
                 internal_chat_message_metadata_passthrough: None,
             }),
-            // Model-generated request structure: calls pair with outputs that
-            // are labelled above, reasoning is opaque. MCP-supplied tool
-            // search descriptions are not yet labelled (known gap).
+            // Model structure keeps model standing only when it was recorded
+            // from the provider stream.
+            ResponseItem::Reasoning { .. } | ResponseItem::ImageGenerationCall { .. } => {
+                // Unrecorded reasoning or generated images are withheld.
+                self.is_model_item(item).then(|| item.clone())
+            }
+            ResponseItem::LocalShellCall { id, .. }
+            | ResponseItem::FunctionCall { id, .. }
+            | ResponseItem::ToolSearchCall { id, .. }
+            | ResponseItem::CustomToolCall { id, .. }
+            | ResponseItem::WebSearchCall { id, .. } => {
+                if self.is_model_item(item) {
+                    return Some(item.clone());
+                }
+                let text = serde_json::to_string(item).unwrap_or_default();
+                Some(self.labelled_message(id, SourceKind::Unknown, "call", &text, now))
+            }
+            ResponseItem::ToolSearchOutput { id, call_id, .. } => match call_id {
+                Some(call_id) if unrecorded_calls.contains(call_id) => {
+                    let text = serde_json::to_string(item).unwrap_or_default();
+                    Some(self.labelled_message(id, SourceKind::Unknown, call_id, &text, now))
+                }
+                // MCP-supplied tool descriptions are not yet labelled (known gap).
+                _ => Some(item.clone()),
+            },
+            // Host request structure and provider-encrypted compaction state.
             ResponseItem::AdditionalTools { .. }
-            | ResponseItem::Reasoning { .. }
-            | ResponseItem::LocalShellCall { .. }
-            | ResponseItem::FunctionCall { .. }
-            | ResponseItem::ToolSearchCall { .. }
-            | ResponseItem::CustomToolCall { .. }
-            | ResponseItem::ToolSearchOutput { .. }
-            | ResponseItem::WebSearchCall { .. }
-            | ResponseItem::ImageGenerationCall { .. }
             | ResponseItem::Compaction { .. }
             | ResponseItem::CompactionTrigger {}
             | ResponseItem::ContextCompaction { .. } => Some(item.clone()),
             // Unknown wire variants have no registered producer: withhold.
             ResponseItem::Other => None,
+        }
+    }
+
+    fn labelled_message(
+        &mut self,
+        id: &Option<codex_protocol::ResponseItemId>,
+        kind: SourceKind,
+        origin: &str,
+        text: &str,
+        now: u64,
+    ) -> ResponseItem {
+        ResponseItem::Message {
+            id: id.clone(),
+            role: "user".into(),
+            content: vec![ContentItem::InputText {
+                text: self.label(kind, origin, text, now),
+            }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
         }
     }
 
@@ -248,6 +310,16 @@ impl NativeIngress {
         });
         self.labelled.current.insert(key, rendered.clone());
         rendered
+    }
+}
+
+fn call_id_of(item: &ResponseItem) -> Option<String> {
+    match item {
+        ResponseItem::FunctionCall { call_id, .. }
+        | ResponseItem::CustomToolCall { call_id, .. } => Some(call_id.clone()),
+        ResponseItem::LocalShellCall { call_id, .. }
+        | ResponseItem::ToolSearchCall { call_id, .. } => call_id.clone(),
+        _ => None,
     }
 }
 
@@ -444,7 +516,7 @@ const MARKER_NAMES: &[&str] = &[
 /// Whether the `<` (or look-alike) at `at` opens a host wrapper, special token
 /// or role tag, in folded form, allowing whitespace around the `/`.
 fn opens_marker(chars: &[char], folded: &[char], at: usize) -> bool {
-    let is_space = |ch: &char| matches!(ch, ' ' | '\t');
+    let is_space = |ch: &char| ch.is_whitespace();
     let mut index = at + 1;
     while folded.get(index).is_some_and(is_space) {
         index += 1;
@@ -465,8 +537,13 @@ fn opens_marker(chars: &[char], folded: &[char], at: usize) -> bool {
     let name_start = index;
     let name: String = folded[index..]
         .iter()
-        .take_while(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-'))
+        .take_while(|ch| ch.is_alphanumeric() || matches!(ch, '_' | '-'))
         .collect();
+    // A tag name with any unfolded non-ASCII letter may imitate a host tag
+    // through a look-alike this table does not know: neutralize it.
+    if !name.is_ascii() {
+        return true;
+    }
     let complete = name_start + name.chars().count() < folded.len();
     // Any host wrapper (`corbanu_*`) or chat-template turn tag, everywhere.
     for prefix in ["corbanu", "im_", "start_of_turn", "end_of_turn", "eot"] {

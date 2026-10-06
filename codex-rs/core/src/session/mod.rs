@@ -3283,7 +3283,12 @@ impl Session {
             world_state.render_diff(&previous_snapshot),
         );
         if !items.is_empty() {
-            self.record_conversation_items(turn_context, &items).await;
+            self.record_conversation_items_from(
+                turn_context,
+                &items,
+                Some(crate::security::ingress::MessageOrigin::Host),
+            )
+            .await;
         }
 
         // ContextManager remembers this for later turns; run_turn owns the live value.
@@ -4108,9 +4113,9 @@ impl Session {
         };
         let turn_context_item = turn_context.to_turn_context_item();
         let turn_context_changed = reference_context_item.as_ref() != Some(&turn_context_item);
+        let world_state = Arc::new(self.build_world_state_for_step(step_context).await?);
         let reinject_host_context = self.services.model_client().take_host_context_reinjection();
         let should_inject_full_context = reference_context_item.is_none() || reinject_host_context;
-        let world_state = Arc::new(self.build_world_state_for_step(step_context).await?);
         // Full initial context resets the baseline; later turns persist only its changes.
         let (mut context_items, world_state_item) = if should_inject_full_context {
             let context_items = self

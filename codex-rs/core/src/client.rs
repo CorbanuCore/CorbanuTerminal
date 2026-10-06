@@ -940,7 +940,15 @@ impl ModelClient {
         }
     }
 
+    /// Consumed only while protected: Permissive history stays unchanged and
+    /// a later live strengthening still gets fresh host context.
     pub(crate) fn take_host_context_reinjection(&self) -> bool {
+        if self
+            .source_admission_level()
+            .is_ok_and(|level| level == codex_security_policy::SecurityLevel::Permissive)
+        {
+            return false;
+        }
         self.ingress_items
             .lock()
             .is_ok_and(|mut ingress| ingress.take_host_context_reinjection())
