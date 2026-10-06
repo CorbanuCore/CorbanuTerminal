@@ -2707,15 +2707,18 @@ impl ModelClient {
                 agent_identity_session_fallback: self.state.agent_identity_session_fallback.clone(),
             })
             .await?;
-        let mut api_auth = resolved_auth.auth;
         let broker = self
             .brokered_model_credential(auth.as_ref(), &api_provider)
             .await?;
-        #[cfg(unix)]
-        if let Some(credential) = broker.as_ref() {
-            api_auth =
-                crate::model_broker_auth::BrokeredModelAuthProvider::shared(credential.clone());
-        }
+        let api_auth = match broker.as_ref() {
+            #[cfg(unix)]
+            Some(credential) => {
+                crate::model_broker_auth::BrokeredModelAuthProvider::shared(credential.clone())
+            }
+            #[cfg(not(unix))]
+            Some(credential) => match *credential {},
+            None => resolved_auth.auth,
+        };
         Ok(CurrentClientSetup {
             auth,
             api_provider,
