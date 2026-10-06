@@ -18,6 +18,10 @@ which flows it must cover. Load the repository's `test-tui` skill before a
 qualification run; see [Skills](skills.md) for how repository skills are
 discovered.
 
+To record a short feature demo video of an interactive run, use
+[`qa/demos/README.md`](../qa/demos/README.md). It drives the TUI by the same
+rules and renders an MP4 for the sprint gate.
+
 ## Harness map
 
 | Path                                           | Responsibility                                                                  |
