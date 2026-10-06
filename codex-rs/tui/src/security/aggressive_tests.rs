@@ -241,3 +241,89 @@ async fn role_that_changes_child_values_fails_verification() {
         vec!["Child agents: role `loose` sets web_search, features.shell_snapshot".to_string()]
     );
 }
+
+/// The launch check loads the whole exec policy the way a session does.
+#[tokio::test]
+async fn exec_policy_must_load_and_forbid_vault_commands() {
+    let home = tempfile::tempdir().unwrap();
+    let cwd = tempfile::tempdir().unwrap();
+    super::super::level::sync_rules(home.path(), super::super::level::ChosenLevel::Aggressive)
+        .unwrap();
+    let rules = home.path().join("rules");
+    let config = load(home.path(), cwd.path(), "").await;
+    assert_eq!(verify_exec_policy(&config).await, Vec::<String>::new());
+
+    // A broken file next to the vault rule: a session would drop every rule.
+    let broken = rules.join("mine.rules");
+    std::fs::write(&broken, "prefix_rule(pattern = [\"git\"], decision = \n").unwrap();
+    let failures = verify_exec_policy(&config).await;
+    assert_eq!(failures.len(), 1, "{failures:?}");
+    assert!(
+        failures[0].starts_with(&format!(
+            "Vault: an exec-policy rules file does not parse, so sessions would drop every rule, including the vault rule: {}:",
+            broken.display()
+        )),
+        "{failures:?}"
+    );
+    std::fs::remove_file(&broken).unwrap();
+
+    // `host_executable` would make the rule skip `corbanu` at other paths.
+    std::fs::write(
+        rules.join("paths.rules"),
+        "host_executable(name = \"corbanu\", paths = [\"/opt/elsewhere/corbanu\"])\n",
+    )
+    .unwrap();
+    assert_eq!(
+        verify_exec_policy(&config).await,
+        vec![
+            "Vault: host_executable rules limit `corbanu` to listed paths, so the vault rule would not apply at other paths"
+                .to_string()
+        ]
+    );
+    std::fs::remove_file(rules.join("paths.rules")).unwrap();
+
+    std::fs::remove_file(super::super::level::rules_path(home.path())).unwrap();
+    assert_eq!(
+        verify_exec_policy(&config).await,
+        vec![
+            "Vault: the loaded exec policy does not forbid `corbanu vault`, `codex vault`, `pfterminal vault`, `corbanu-debug vault`, `pfterminal-debug vault`"
+                .to_string()
+        ]
+    );
+}
+
+/// A broken `.rules` file in the project's `.codex/rules` counts only when the
+/// project is trusted, exactly as a session loads it.
+#[tokio::test]
+async fn project_rules_count_only_when_the_project_is_trusted() {
+    let home = tempfile::tempdir().unwrap();
+    let cwd = tempfile::tempdir().unwrap();
+    super::super::level::sync_rules(home.path(), super::super::level::ChosenLevel::Aggressive)
+        .unwrap();
+    let project_rules = cwd.path().join(".codex").join("rules");
+    std::fs::create_dir_all(&project_rules).unwrap();
+    std::fs::write(
+        project_rules.join("broken.rules"),
+        "prefix_rule(pattern = [\"git\"], decision = \n",
+    )
+    .unwrap();
+
+    let untrusted = load(home.path(), cwd.path(), "").await;
+    assert_eq!(verify_exec_policy(&untrusted).await, Vec::<String>::new());
+
+    let trusted = load(
+        home.path(),
+        cwd.path(),
+        &format!(
+            "[projects.{:?}]\ntrust_level = \"trusted\"\n",
+            cwd.path().display().to_string()
+        ),
+    )
+    .await;
+    let failures = verify_exec_policy(&trusted).await;
+    assert_eq!(failures.len(), 1, "{failures:?}");
+    assert!(
+        failures[0].contains("does not parse") && failures[0].contains("broken.rules"),
+        "{failures:?}"
+    );
+}

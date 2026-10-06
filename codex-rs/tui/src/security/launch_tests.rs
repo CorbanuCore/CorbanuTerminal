@@ -74,10 +74,63 @@ async fn finish_refuses_a_config_that_misses_a_row() {
         .build()
         .await
         .unwrap();
-    let error = plan.finish(&mut config).unwrap_err();
+    let error = plan.finish(&mut config).await.unwrap_err();
     assert!(
         error.contains("could not be fully applied") && error.contains("Approvals"),
         "{error}"
+    );
+    assert_eq!(level::context(), None);
+}
+
+/// A `.rules` file that fails to parse would make the session drop every rule,
+/// including the vault rule, so launch refuses Aggressive.
+#[tokio::test]
+async fn finish_refuses_a_broken_rules_file() {
+    let home = tempfile::tempdir().unwrap();
+    let cwd = tempfile::tempdir().unwrap();
+    level::save(home.path(), ChosenLevel::Aggressive).unwrap();
+    let mut cli = Vec::new();
+    let mut plan = LaunchPlan::prepare(home.path(), &mut cli).unwrap();
+    plan.extend_env_overrides(&ShellEnvironmentPolicyToml::default(), &mut cli);
+    let mut overrides = ConfigOverrides {
+        cwd: Some(cwd.path().to_path_buf()),
+        ..Default::default()
+    };
+    plan.apply_launch_overrides(&mut overrides);
+    std::fs::write(
+        level::rules_path(home.path()).with_file_name("mine.rules"),
+        "prefix_rule(pattern = [\"git\"], decision = \n",
+    )
+    .unwrap();
+    let mut config = crate::legacy_core::config::ConfigBuilder::default()
+        .codex_home(home.path().to_path_buf())
+        .cli_overrides(cli)
+        .harness_overrides(overrides)
+        .loader_overrides(codex_config::LoaderOverrides::without_managed_config_for_tests())
+        .build()
+        .await
+        .unwrap();
+    let error = plan.finish(&mut config).await.unwrap_err();
+    let lines = error.lines().collect::<Vec<_>>();
+    assert_eq!(
+        lines.first().copied(),
+        Some("Security level Aggressive could not be fully applied:"),
+        "{error}"
+    );
+    assert_eq!(
+        lines
+            .iter()
+            .filter(|line| line
+                .trim_start()
+                .starts_with("Vault: an exec-policy rules file does not parse"))
+            .count(),
+        1,
+        "{error}"
+    );
+    assert_eq!(
+        lines.len(),
+        3,
+        "only the rules failure and the fix hint: {error}"
     );
     assert_eq!(level::context(), None);
 }

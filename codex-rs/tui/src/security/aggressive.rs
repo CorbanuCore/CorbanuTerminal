@@ -15,14 +15,18 @@ use std::path::Path;
 use codex_config::ConfigLayerSource;
 use codex_config::ConfigLayerStackOrdering;
 use codex_config::types::ShellEnvironmentPolicyToml;
+use codex_execpolicy::Decision;
 use codex_features::Feature;
 use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::config_types::WebSearchMode;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::shell_environment::create_env_from_vars;
 
+use crate::legacy_core::ExecPolicyError;
 use crate::legacy_core::config::Config;
 use crate::legacy_core::config::ConfigOverrides;
+use crate::legacy_core::format_exec_policy_error_with_source;
+use crate::legacy_core::load_exec_policy;
 
 /// The permission profile Aggressive defines and selects.
 pub(crate) const PROFILE_ID: &str = "corbanu-aggressive";
@@ -347,6 +351,57 @@ fn verify_vault(config: &Config, rules_present: bool, failures: &mut Vec<String>
     if !explicit.is_empty() {
         failures.push(format!("Vault: environment sets {}", explicit.join(", ")));
     }
+}
+
+/// Load the exec policy exactly as a session will and require it to forbid
+/// every `<program> vault` command. A session that fails to parse any
+/// `.rules` file falls back to an empty policy with only a warning, which
+/// would silently drop the Aggressive vault rule.
+pub(crate) async fn verify_exec_policy(config: &Config) -> Vec<String> {
+    let policy = match load_exec_policy(&config.config_layer_stack).await {
+        Ok(policy) => policy,
+        Err(err @ ExecPolicyError::ParsePolicy { .. }) => {
+            return vec![format!(
+                "Vault: an exec-policy rules file does not parse, so sessions would drop every rule, including the vault rule: {}",
+                format_exec_policy_error_with_source(&err)
+            )];
+        }
+        Err(err) => {
+            return vec![format!(
+                "Vault: the exec-policy rules cannot be read: {}",
+                format_exec_policy_error_with_source(&err)
+            )];
+        }
+    };
+    let mut failures = Vec::new();
+    let allowed = super::level::VAULT_PROGRAMS
+        .into_iter()
+        .filter(|program| {
+            let command = [*program, "vault", "auth-helper", "probe"].map(str::to_string);
+            policy.check(&command, &|_| Decision::Allow).decision != Decision::Forbidden
+        })
+        .map(|program| format!("`{program} vault`"))
+        .collect::<Vec<_>>();
+    if !allowed.is_empty() {
+        failures.push(format!(
+            "Vault: the loaded exec policy does not forbid {}",
+            allowed.join(", ")
+        ));
+    }
+    // Sessions resolve absolute program paths through `host_executable`
+    // entries; one for a vault program makes the rule skip every other path.
+    let restricted = super::level::VAULT_PROGRAMS
+        .into_iter()
+        .filter(|program| policy.host_executables().contains_key(*program))
+        .map(|program| format!("`{program}`"))
+        .collect::<Vec<_>>();
+    if !restricted.is_empty() {
+        failures.push(format!(
+            "Vault: host_executable rules limit {} to listed paths, so the vault rule would not apply at other paths",
+            restricted.join(", ")
+        ));
+    }
+    failures
 }
 
 /// A custom role's config layer is applied to spawned children after these

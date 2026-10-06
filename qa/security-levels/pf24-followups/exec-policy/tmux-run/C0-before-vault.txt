@@ -1,0 +1,49 @@
+
+⚠ Error parsing rules; custom rules not applied.: failed to parse rules file /Volumes/CorbanuDrive/Corbanu/tmp/tui-r2-
+  2c/workspace/.codex/rules/broken.rules: starlark error: error: Parse error: unexpected new line, expected expression
+  --> <run>/workspace/.codex/rules/broken.rules:1:1
+   |
+   |
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     glm-5.2   /model to change                  │
+│ directory: /Volumes/CorbanuDrive/…/tui-r2-2c/workspace │
+╰────────────────────────────────────────────────────────╯
+
+/status
+
+╭─────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                      │
+│                                                                                     │
+│  Model:                Z.AI GLM 5.2                                                 │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4                          │
+│  Directory:            <run>/workspace        │
+│  Permissions:          Next turn: Profile corbanu-aggressive (workspace, untrusted) │
+│  Security:             Aggressive active (/security)                                │
+│  Agents.md:            <none>                                                       │
+│  Account:              Z.AI API key configured                                      │
+│  Collaboration mode:   Default                                                      │
+│  Session:              01a110d9-2a90-7b10-9c86-270976f15fc2                         │
+│                                                                                     │
+│  Token usage:          0 total  (0 input + 0 output)                                │
+│  Limits:               data not available yet                                       │
+╰─────────────────────────────────────────────────────────────────────────────────────╯
+
+› Run the command `corbanu vault list` in the shell and tell me exactly what happened.
+
+• Running corbanu vault list
+
+  Would you like to run the following command?
+
+  Environment: local
+
+  $ corbanu vault list
+
+› 1. Yes, proceed (y)
+  2. Yes, and don't ask again for commands that start with `corbanu vault list`
+  3. No, and tell Corbanu Terminal what to do differently (esc)
+
+  Options that last beyond this request: choose with ↑/↓, then enter.
+  Press enter to confirm or esc to cancel

@@ -4603,6 +4603,7 @@ dependencies = [
  "codex-connectors",
  "codex-core-plugins",
  "codex-exec-server",
+ "codex-execpolicy",
  "codex-features",
  "codex-feedback",
  "codex-file-search",

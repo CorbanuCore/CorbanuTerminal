@@ -1,0 +1,65 @@
+# PF-24-S03 follow-up: Aggressive's launch check loads the whole exec policy.
+# A `.rules` file that does not parse would make the session drop every rule,
+# including the `corbanu vault` rule, so Aggressive refuses to start and names
+# the broken file. Record with
+#   PF24_CANDIDATE=<corbanu> --bin qa/security-levels/sprints/PF-24-S03/demos/wrappers/restart-once.sh
+id = "pf24-broken-rules-refused"
+feature = "Aggressive refuses a broken .rules file"
+expected = "After Aggressive is saved and a hand-edited rules file has a syntax error, the restart is refused: the vault rule would be dropped, and the message names mine.rules and its line."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Switch to Aggressive\\?"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+
+[[steps]]
+type = "!printf 'prefix_rule(pattern = [\"git\"], decision = \\n' > ../home/rules/mine.rules; ls ../home/rules"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "mine\\.rules"
+[[steps]]
+pause = 2.0
+
+[[steps]]
+type = "/exit"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "restarting Corbanu Terminal"
+[[steps]]
+wait = "rules file does not parse"
+timeout = 60
+[[steps]]
+pause = 4.0
