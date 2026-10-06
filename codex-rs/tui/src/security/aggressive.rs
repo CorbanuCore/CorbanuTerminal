@@ -20,7 +20,6 @@ use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::config_types::WebSearchMode;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::shell_environment::create_env_from_vars;
-use codex_utils_sandbox_summary::summarize_permission_profile;
 
 use crate::legacy_core::config::Config;
 use crate::legacy_core::config::ConfigOverrides;
@@ -45,7 +44,7 @@ pub(crate) const ROWS: [(&str, &str); 5] = [
     ("Network", "off for agent commands; web search off"),
     (
         "Vault",
-        "the vault store and sign-in file are unreadable to agent commands, and direct `corbanu vault …` commands are refused; secret-like environment variables (KEY, SECRET, TOKEN, VAULT, PASSWORD, PASSPHRASE, CREDENTIAL) are removed and shell profiles are not loaded",
+        "the vault store and sign-in file are unreadable to agent commands, and direct `corbanu vault …` commands are refused; secret-like environment variables (KEY, SECRET, TOKEN, VAULT, PASSWORD, PASSPHRASE, CREDENTIAL) are removed, and login profiles and shell snapshots are not used",
     ),
     (
         "Child agents",
@@ -55,135 +54,13 @@ pub(crate) const ROWS: [(&str, &str); 5] = [
 
 pub(crate) const UNCHANGED: &str = "Unchanged: model and provider, MCP servers, apps and hooks (they run outside the sandbox), wallet scopes, and commands you have already allowed permanently (they skip the prompt but stay sandboxed). `corbanu exec` and IDE sessions are not covered yet.";
 
-/// Secret-like name fragments, each with a probe variable that contains it.
-const SECRET_PROBES: [(&str, &str); 7] = [
-    ("KEY", "API_KEY"),
-    ("SECRET", "AWS_SECRET"),
-    ("TOKEN", "GITHUB_TOKEN"),
-    ("VAULT", "CORBANU_VAULT_X"),
-    ("PASSWORD", "DB_PASSWORD"),
-    ("PASSPHRASE", "GPG_PASSPHRASE"),
-    ("CREDENTIAL", "SVC_CREDENTIAL"),
-];
-
-/// This session's value for each row of [`ROWS`], in the same order.
-pub(crate) type CurrentValues = [String; ROWS.len()];
-
-/// So the review shows what Aggressive would replace (code-blind case B-06).
-pub(crate) fn current_values(config: &Config) -> CurrentValues {
-    let cwd = config.cwd.as_path();
-    let file_system = config.permissions.file_system_sandbox_policy();
-
-    let mut sandbox = summarize_permission_profile(
-        &config.permissions.effective_permission_profile(),
-        &config.cwd,
-        config.effective_workspace_roots().as_slice(),
-    );
-    if let Some(profile) = config.permissions.active_permission_profile()
-        && !profile.id.starts_with(':')
-    {
-        sandbox = format!("profile {}: {sandbox}", profile.id);
-    }
-    let request_tools = config.features.enabled(Feature::RequestPermissionsTool)
-        || config.features.enabled(Feature::ExecPermissionApprovals);
-    sandbox.push_str(if request_tools {
-        "; permission-request tools are on"
-    } else {
-        "; permission-request tools are off"
-    });
-
-    let reviewer = match config.approvals_reviewer {
-        ApprovalsReviewer::User => "you",
-        ApprovalsReviewer::AutoReview => "auto-review",
-    };
-    let approvals = format!(
-        "{} (reviewer: {reviewer})",
-        config.permissions.approval_policy.value()
-    );
-
-    let network = format!(
-        "{} for agent commands; web search {}",
-        if config.permissions.network_sandbox_policy().is_enabled() {
-            "on"
-        } else {
-            "off"
-        },
-        config.web_search_mode.value()
-    );
-
-    let store_readable = ["secrets", "auth.json"].iter().any(|protected| {
-        file_system.can_read_path_with_cwd(&config.codex_home.join(protected), cwd)
-    });
-    let kept = kept_secret_kinds(config);
-    let vault = format!(
-        "the vault store and sign-in file are {} to agent commands; {}; shell profiles are {}",
-        if store_readable {
-            "readable"
-        } else {
-            "unreadable"
-        },
-        if kept.is_empty() {
-            "secret-like environment variables are removed".to_string()
-        } else {
-            format!(
-                "secret-like environment variables are passed through ({})",
-                kept.join(", ")
-            )
-        },
-        if config.features.enabled(Feature::ShellSnapshot) || config.permissions.allow_login_shell {
-            "loaded"
-        } else {
-            "not loaded"
-        }
-    );
-
-    let changing_roles = config
-        .agent_roles
-        .iter()
-        .filter(|(_, role)| {
-            role.config_file
-                .as_ref()
-                .is_some_and(|file| !matches!(role_keys(file), Some(keys) if keys.is_empty()))
-        })
-        .map(|(name, _)| format!("`{name}`"))
-        .collect::<Vec<_>>();
-    let children = if changing_roles.is_empty() {
-        "spawned agents get this session's values".to_string()
-    } else {
-        format!(
-            "spawned agents get this session's values, except custom roles that change them: {}",
-            changing_roles.join(", ")
-        )
-    };
-
-    [sandbox, approvals, network, vault, children]
-}
-
-/// Secret-like name fragments whose variables reach agent commands.
-fn kept_secret_kinds(config: &Config) -> Vec<&'static str> {
-    let kept = create_env_from_vars(
-        SECRET_PROBES.map(|(_, name)| (name.to_string(), "x".to_string())),
-        &config.permissions.shell_environment_policy,
-        /*thread_id*/ None,
-    );
-    let explicit = &config.permissions.shell_environment_policy.r#set;
-    SECRET_PROBES
-        .iter()
-        .filter(|(kind, probe)| {
-            kept.get(*probe).is_some_and(|value| !value.is_empty())
-                || explicit.iter().any(|(name, value)| {
-                    !value.is_empty() && name.to_ascii_uppercase().contains(kind)
-                })
-        })
-        .map(|(kind, _)| *kind)
-        .collect()
-}
-
 /// Role config keys (dotted) that would give a spawned child different values.
-const ROLE_KEYS: [&str; 12] = [
+const ROLE_KEYS: [&str; 14] = [
     "approval_policy",
     "approvals_reviewer",
     "sandbox_mode",
+    "sandbox_workspace_write",
+    "profile",
     "default_permissions",
     "permissions",
     "web_search",
@@ -294,7 +171,7 @@ pub(crate) fn env_overrides(user_env: &ShellEnvironmentPolicyToml) -> Vec<(Strin
     overrides
 }
 
-fn is_secret_name(name: &str) -> bool {
+pub(super) fn is_secret_name(name: &str) -> bool {
     let upper = name.to_ascii_uppercase();
     [
         "KEY",
@@ -489,7 +366,21 @@ fn verify_roles(config: &Config, failures: &mut Vec<String>) {
                 file.display()
             ));
         }
-        match role_keys(file) {
+        let keys = std::fs::read_to_string(file)
+            .ok()
+            .and_then(|contents| toml::from_str::<toml::Table>(&contents).ok())
+            .map(toml::Value::Table)
+            .map(|value| {
+                ROLE_KEYS
+                    .into_iter()
+                    .filter(|key| {
+                        key.split('.')
+                            .try_fold(&value, |node, part| node.get(part))
+                            .is_some()
+                    })
+                    .collect::<Vec<_>>()
+            });
+        match keys {
             Some(keys) if keys.is_empty() => {}
             Some(keys) => failures.push(format!(
                 "Child agents: role `{name}` sets {}",
@@ -501,24 +392,6 @@ fn verify_roles(config: &Config, failures: &mut Vec<String>) {
             )),
         }
     }
-}
-
-/// The [`ROLE_KEYS`] a role config file sets; `None` when it cannot be read.
-fn role_keys(file: &Path) -> Option<Vec<&'static str>> {
-    let value = std::fs::read_to_string(file)
-        .ok()
-        .and_then(|contents| toml::from_str::<toml::Table>(&contents).ok())
-        .map(toml::Value::Table)?;
-    Some(
-        ROLE_KEYS
-            .into_iter()
-            .filter(|key| {
-                key.split('.')
-                    .try_fold(&value, |node, part| node.get(part))
-                    .is_some()
-            })
-            .collect(),
-    )
 }
 
 fn outside_paths(config: &Config) -> Vec<std::path::PathBuf> {

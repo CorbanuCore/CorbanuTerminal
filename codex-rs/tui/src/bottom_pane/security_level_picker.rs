@@ -3,6 +3,7 @@
 //! A saved level takes effect at the next start, where it is verified before
 //! being shown as active.
 
+use std::cell::Cell;
 use std::path::PathBuf;
 
 use crossterm::event::KeyCode;
@@ -14,6 +15,7 @@ use crate::key_hint;
 use crate::key_hint::KeyBindingListExt;
 use crate::keymap::ListKeymap;
 use crate::security::aggressive;
+use crate::security::current::CurrentValues;
 use crate::security::level;
 use crate::security::level::ChosenLevel;
 use crate::security::level::LevelContext;
@@ -58,20 +60,20 @@ enum Screen {
 pub(crate) struct SecurityLevelPicker {
     codex_home: PathBuf,
     active: ChosenLevel,
-    current: aggressive::CurrentValues,
+    current: CurrentValues,
     stored: StoredLevel,
     selected: usize,
     screen: Screen,
     keymap: ListKeymap,
+    /// Rows scrolled off the top of a review that is taller than the pane.
+    scroll: u16,
+    /// Largest useful `scroll`, recorded by the last render.
+    max_scroll: Cell<u16>,
     pub(super) closed: bool,
 }
 
 impl SecurityLevelPicker {
-    pub(crate) fn new(
-        context: &LevelContext,
-        current: aggressive::CurrentValues,
-        keymap: ListKeymap,
-    ) -> Self {
+    pub(crate) fn new(context: &LevelContext, current: CurrentValues, keymap: ListKeymap) -> Self {
         let stored = level::load(&context.codex_home);
         let selected = match stored.enforced() {
             ChosenLevel::Permissive => 0,
@@ -85,6 +87,8 @@ impl SecurityLevelPicker {
             selected,
             screen: Screen::List { note: None },
             keymap,
+            scroll: 0,
+            max_scroll: Cell::new(0),
             closed: false,
         }
     }
@@ -105,10 +109,15 @@ impl SecurityLevelPicker {
                     self.screen = Screen::List { note: None };
                 } else if accept {
                     self.screen = self.choose(ROWS[self.selected]);
+                    self.scroll = 0;
                 }
             }
             Screen::Review(target) => {
-                if cancel {
+                if self.keymap.move_up.is_pressed(key) {
+                    self.scroll = self.scroll.saturating_sub(1);
+                } else if self.keymap.move_down.is_pressed(key) {
+                    self.scroll = (self.scroll + 1).min(self.max_scroll.get());
+                } else if cancel {
                     self.screen = Screen::List {
                         note: Some("Cancelled. Nothing changed.".to_string()),
                     };
@@ -220,6 +229,8 @@ impl SecurityLevelPicker {
                 lines.extend(wrap(
                     "These settings replace yours in Corbanu Terminal sessions and their child agents:",
                 ));
+                // Indents only when there is room for text after them.
+                let (indent, hanging) = if width < 20 { ("", "") } else { ("  ", "    ") };
                 for ((control, value), current) in aggressive::ROWS.iter().zip(&self.current) {
                     let now: Line<'static> = vec![
                         format!("• {control}").bold(),
@@ -228,13 +239,13 @@ impl SecurityLevelPicker {
                     .into();
                     lines.extend(word_wrap_lines(
                         [now],
-                        RtOptions::new(width).subsequent_indent("    ".into()),
+                        RtOptions::new(width).subsequent_indent(hanging.into()),
                     ));
                     lines.extend(word_wrap_lines(
                         [Line::from(format!("Aggressive: {value}"))],
                         RtOptions::new(width)
-                            .initial_indent("  ".into())
-                            .subsequent_indent("    ".into()),
+                            .initial_indent(indent.into())
+                            .subsequent_indent(hanging.into()),
                     ));
                 }
                 lines.extend(wrap(aggressive::UNCHANGED));
@@ -279,6 +290,21 @@ impl SecurityLevelPicker {
         lines
     }
 
+    /// Rows to skip when `body_height` rows are visible. Records the limit
+    /// so the review can be scrolled until its last line is shown.
+    pub(crate) fn scroll_for(&self, line_count: usize, body_height: u16) -> u16 {
+        let max = u16::try_from(line_count)
+            .unwrap_or(u16::MAX)
+            .saturating_sub(body_height);
+        let max = if matches!(self.screen, Screen::Review(_)) {
+            max
+        } else {
+            0
+        };
+        self.max_scroll.set(max);
+        self.scroll.min(max)
+    }
+
     pub(crate) fn footer(&self) -> String {
         let label = |bindings: &[key_hint::KeyBinding]| {
             bindings
@@ -290,6 +316,11 @@ impl SecurityLevelPicker {
         match self.screen {
             Screen::List { .. } => format!(
                 "{}/{} move · {accept} choose · esc close",
+                label(&self.keymap.move_up),
+                label(&self.keymap.move_down),
+            ),
+            Screen::Review(_) if self.max_scroll.get() > 0 => format!(
+                "{}/{} scroll · {accept} confirm and save · esc back, nothing changes",
                 label(&self.keymap.move_up),
                 label(&self.keymap.move_down),
             ),

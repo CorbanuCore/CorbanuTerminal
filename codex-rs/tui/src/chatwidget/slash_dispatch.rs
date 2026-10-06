@@ -365,7 +365,7 @@ impl ChatWidget {
                 self.bottom_pane.show_view(Box::new(
                     crate::bottom_pane::security_view::SecurityView::new(
                         Some(self.config.security_level),
-                        crate::security::aggressive::current_values(&self.config),
+                        || crate::security::current::current_values(&self.config),
                         self.bottom_pane.list_keymap(),
                     ),
                 ));

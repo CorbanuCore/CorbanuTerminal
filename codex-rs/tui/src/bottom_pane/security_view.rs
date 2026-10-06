@@ -17,6 +17,7 @@ use crate::key_hint;
 use crate::key_hint::KeyBindingListExt;
 use crate::keymap::ListKeymap;
 use crate::render::renderable::Renderable;
+use crate::security::current::CurrentValues;
 use crate::security::view::PROFILES;
 use crate::security::view::profile_name;
 use crate::security::view::profile_summary;
@@ -37,11 +38,11 @@ pub(crate) struct SecurityView {
 }
 
 impl SecurityView {
-    /// `current` is this session's value for each Aggressive row, shown on
-    /// the picker's review screen.
+    /// `current` computes this session's value for each Aggressive row; it is
+    /// called only when the level picker is enabled.
     pub(crate) fn new(
         requested: Option<SecurityLevel>,
-        current: crate::security::aggressive::CurrentValues,
+        current: impl FnOnce() -> CurrentValues,
         keymap: ListKeymap,
     ) -> Self {
         Self {
@@ -52,7 +53,7 @@ impl SecurityView {
                 .unwrap_or(0),
             picker: crate::security::level::context()
                 .filter(|context| context.picker_enabled)
-                .map(|context| SecurityLevelPicker::new(context, current, keymap.clone())),
+                .map(|context| SecurityLevelPicker::new(context, current(), keymap.clone())),
             keymap,
             cancelled: false,
             inspected: false,
@@ -183,18 +184,31 @@ impl Renderable for SecurityView {
 
     fn render(&self, area: Rect, buf: &mut Buffer) {
         Clear.render(area, buf);
-        let footer = self.footer_text();
-        let footer_lines: Vec<Line> = textwrap::wrap(&footer, usize::from(area.width.max(1)))
-            .into_iter()
-            .map(|line| Line::from(line.into_owned()).dim())
-            .collect();
-        let footer_height = (footer_lines.len() as u16).min(area.height);
+        let footer_lines = |text: String| -> Vec<Line<'static>> {
+            textwrap::wrap(&text, usize::from(area.width.max(1)))
+                .into_iter()
+                .map(|line| Line::from(line.into_owned()).dim())
+                .collect()
+        };
+        let lines = self.body(area.width);
+        let mut footer = footer_lines(self.footer_text());
+        if let Some(picker) = self.picker.as_ref() {
+            // A review taller than the pane scrolls, and its footer says so.
+            let body_height = area.height.saturating_sub(footer.len() as u16);
+            picker.scroll_for(lines.len(), body_height);
+            footer = footer_lines(self.footer_text());
+        }
+        let footer_height = (footer.len() as u16).min(area.height);
         let body = Rect {
             height: area.height.saturating_sub(footer_height),
             ..area
         };
-        Paragraph::new(self.body(area.width)).render(body, buf);
-        Paragraph::new(footer_lines).render(
+        let scroll = self
+            .picker
+            .as_ref()
+            .map_or(0, |picker| picker.scroll_for(lines.len(), body.height));
+        Paragraph::new(lines).scroll((scroll, 0)).render(body, buf);
+        Paragraph::new(footer).render(
             Rect {
                 y: area.bottom().saturating_sub(footer_height),
                 height: footer_height,
