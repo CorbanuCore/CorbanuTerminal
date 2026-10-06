@@ -339,6 +339,10 @@ impl App {
     }
 
     pub(crate) fn open_claude_pane_profile_picker(&mut self) {
+        if let Some(reason) = crate::security::level::external_agent_block_reason() {
+            self.chat_widget.add_error_message(reason);
+            return;
+        }
         let mut items = Vec::new();
         for profile in ClaudeProviderProfileKind::creation_options() {
             let profile_config = profile.profile();
@@ -871,6 +875,10 @@ impl App {
         if self.chat_widget.try_dispatch_slash_input(&prompt) {
             return true;
         }
+        if let Some(reason) = crate::security::level::external_agent_block_reason() {
+            self.chat_widget.fail_external_pane_turn(reason);
+            return true;
+        }
         self.note_assignment_user_turn(&crate::spawn_orchestration::pane_node_id(&pane_id));
         let prompt_context = self.claude_pane_prompt_context(&pane_id);
         let prompt = compose_claude_pane_prompt(prompt, prompt_context.as_deref());
@@ -902,6 +910,13 @@ impl App {
         if task.is_empty() {
             self.chat_widget
                 .add_error_message("Claude pane task cannot be empty.".to_string());
+            return;
+        }
+        if let Some(reason) = crate::security::level::external_agent_block_reason() {
+            let node_key = crate::spawn_orchestration::pane_node_id(&pane_id);
+            self.abort_spawn_auto_processing_turn(&node_key);
+            self.record_spawn_dispatch_failed_for_task(&target_node_id, &task, reason.clone());
+            self.chat_widget.add_error_message(reason);
             return;
         }
         let is_active = self.claude_panes.active_user_pane_id() == pane_id;
