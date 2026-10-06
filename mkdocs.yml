@@ -103,11 +103,8 @@ nav:
           - Current Security Work:
               - Overview: sprints/current/p0-security-levels/index.md
               - "Broker lane":
-                  - "PF-27-S02 — Secretless agent launch and bypass containment": sprints/current/p0-security-levels/pf-27-s02-secretless-agent-launch.md
-                  - "PF-28-S01 — Central secret and protected-output gate": sprints/current/p0-security-levels/pf-28-s01-central-secret-output-gate.md
                   - "PF-28-S02 — Reflected-secret response scrubbing": sprints/current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md
                   - "PF-27-S05 — Core model-client auth and vault labels through the broker": sprints/current/p0-security-levels/pf-27-s05-model-client-auth-broker.md
-                  - "PF-27-S06 — Windows broker and secretless launch": sprints/current/p0-security-levels/pf-27-s06-windows-broker-and-launch.md
               - "Untrusted-content lane":
                   - "PF-30-S03 — Post-taint authority checks": sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md
                   - "PF-23-S01 — Moderate ingress and disclosure enforcement": sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md
@@ -118,7 +115,6 @@ nav:
                   - "PF-25-S01 — Temporary grant TUI": sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md
                   - "PF-25-S02 — Revocation and kill-switch TUI": sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md
               - "First free lane":
-                  - "PF-33-S01 — URL DNS and redirect policy": sprints/current/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md
                   - "PF-33-S02 — Connection pinning and alternate-egress denial": sprints/current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md
                   - "PF-29-S01 — Protected-mode inventory and activation preflight": sprints/current/p0-security-levels/pf-29-s01-protected-mode-inventory.md
                   - "PF-29-S02 — Human-reviewed credential migration and recovery": sprints/current/p0-security-levels/pf-29-s02-human-secret-migration.md
@@ -133,6 +129,7 @@ nav:
               - "PF-26-S02 — True-TUI and live-repository qualification": sprints/current/p1-security-hardening/pf-26-s02-true-tui-and-live-repository-qualification.md
               - "PF-26-S03 — Human acceptance, finished docs, and release evidence": sprints/current/p1-security-hardening/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md
               - "PF-26-S04 — Final integrated automated security qualification": sprints/current/p1-security-hardening/pf-26-s04-final-automated-qualification.md
+              - "PF-27-S06 — Windows broker and secretless launch": sprints/current/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md
               - "PF-31-S01 — Pinned retriever artifact and sandbox": sprints/current/p1-security-hardening/pf-31-s01-pinned-retriever-isolation.md
               - "PF-31-S02 — Bounded fetch adapter with no host fallback": sprints/current/p1-security-hardening/pf-31-s02-bounded-fetch-no-fallback.md
               - "PF-31-S03 — Download quarantine and human file promotion": sprints/current/p1-security-hardening/pf-31-s03-download-quarantine-promotion.md

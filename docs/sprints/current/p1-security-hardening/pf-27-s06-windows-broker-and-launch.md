@@ -2,9 +2,9 @@
 sprint_id: "PF-27-S06"
 title: "Windows broker and secretless launch"
 status: draft
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/proposed/p1-security-hardening.md"
 plan_feature: "PF-27"
-execution_order: 47
+execution_order: 45
 owner: "broker lane"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"
@@ -19,7 +19,8 @@ updated: 2026-10-06
 Explicit follow-up from PF-27-S04 (no Windows broker) and PF-27-S02 (macOS and Linux only), per the
 coordinator's 2026-10-06 instruction not to block on Windows. Until this lands, Windows with
 `isolated_credential_broker` virtualizes but never injects, and with `secretless_agent_launch` it refuses
-agent commands with a stated reason.
+agent commands with a stated reason. Moved to the P1 hardening plan on 2026-10-06 (Travis); its dependency
+on [PF-27-S02](../../archive/p0-security-levels/pf-27-s02-secretless-agent-launch.md) is unchanged.
 
 ## Execution mandate
 
@@ -28,7 +29,7 @@ agent commands with a stated reason.
 
 ## Plan linkage
 
-- Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md#pf-27).
+- Plan: [P1 security hardening](../../../plans/proposed/p1-security-hardening.md#pf-27).
 - Feature: `PF-27`.
 - Product citation: **Required trust boundaries** — “Credentials are referenced by label and resolved only inside a trusted execution boundary.”
 - Acceptance advanced: no raw managed secret enters agent environment, command line or process memory on Windows.

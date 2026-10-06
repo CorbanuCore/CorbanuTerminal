@@ -59,6 +59,7 @@ updated: 2026-08-28
 - [ ] Test a permitted-host fake provider deliberately reflecting each active credential; scan downstream model payloads, logs, artifacts and reconnect output.
 - [ ] Prove timeout/revoke/rotation clears buffers and kills old streams without reusing stale auth; run Permissive compatibility regressions.
 - [ ] Add named `pf_28_s02` regression tests; update affected Cargo/Bazel/lock/schema edges together without broadening this feature.
+- [ ] Output-gate carry-overs from [PF-28-S01](../../archive/p0-security-levels/pf-28-s01-central-secret-output-gate.md) (2026-10-06): decode and rescan wrapped base64/hex; register MCP OAuth tokens refreshed after start; withhold comma-separated or numbered seed phrases; scrub known text fields per type instead of a serde round trip; per-session stream state and fewer rescans under load.
 
 ## Verification
 

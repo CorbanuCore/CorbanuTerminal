@@ -52,6 +52,7 @@ updated: 2026-08-28
 - [ ] Use real transport fixtures to prove the checked DNS peer is used: mocks may skip DNS. Attack trusted-env/explicit/managed proxies, pinDns=false equivalents, NO_PROXY and stale pooled connections; abort/release one request without breaking an authorized sibling.
 
 - [ ] Pin approved resolution to the actual connection; reject DNS rebinding, mismatched peer/TLS identity and reused pooled connections under changed authority.
+- [ ] From [PF-33-S01](../../archive/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md): local upstream proxies under the destination guard and an in-process MITM test seam.
 - [ ] Enforce outbound-only broker/retriever routes using the OS backend; deny direct sockets, UDP/QUIC bypass, alternate proxies, Unix/domain sockets, host networking and metadata APIs.
 - [ ] Distinguish authenticated local broker IPC from forbidden local network destinations; a caller cannot turn the loopback exemption into general SSRF.
 - [ ] Route self-hosted SearXNG only through a separately human-configured exact service endpoint and narrow adapter; never widen public-fetch private-IP policy.

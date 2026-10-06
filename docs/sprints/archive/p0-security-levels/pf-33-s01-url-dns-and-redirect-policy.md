@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-33-S01"
 title: "URL DNS and redirect policy"
-status: draft
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-33"
 execution_order: 32
@@ -19,8 +19,17 @@ updated: 2026-10-06
 
 # PF-33-S01 — URL DNS and redirect policy
 
-**October 6:** merged (PR #210) behind `url_destination_policy` (default off; Permissive unchanged) in the managed
-network proxy. [Evidence, behaviour and known limits](../../../../qa/security-levels/sprints/PF-33-S01/README.md).
+## Closure — 2026-10-06
+
+Completed under the per-sprint gate (sec-common decision 5): merged (PR #210) behind `url_destination_policy`
+(default off; Permissive unchanged) in the managed network proxy. It waited only on PF-27-S02, archived the same day.
+[Evidence, behaviour and known limits](../../../../qa/security-levels/sprints/PF-33-S01/README.md).
+
+| Carried forward | To |
+| --- | --- |
+| Bind legacy per-host credential adapters to exact host, port, method and path (`credential_broker.rs`) | [PF-27-S05](../../current/p0-security-levels/pf-27-s05-model-client-auth-broker.md) (broker lane) |
+| Local upstream proxies, connection pinning to the checked answers, in-process MITM test seam | [PF-33-S02](../../current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md) |
+| POST answered 301/302 refused; more than 16 answers refused; timed-out lookups not cancelled; redirects to runtime-only approved hosts refused | Documented behaviour; not scheduled |
 
 ## Execution mandate
 
@@ -45,8 +54,7 @@ network proxy. [Evidence, behaviour and known limits](../../../../qa/security-le
 
 ## Preconditions
 
-- [x] PF-33-S03 completed and archived. PF-27-S02 merged behind its flag (#191) but is not archived (open
-  decisions), so this record stays `draft` like PF-28-S01; the code merges behind `url_destination_policy`.
+- [x] PF-33-S03 completed and archived; PF-27-S02 merged behind its flag (#191) and archived on 2026-10-06.
 - [x] Root and `codex-rs` AGENTS.md read; plan/worktree coordinates recorded; both checkers pass.
 - [x] Reused the frozen `pf33-destination-policy/v1` contract unchanged except one visibility change.
 
@@ -69,12 +77,7 @@ network proxy. [Evidence, behaviour and known limits](../../../../qa/security-le
 
 ## Remaining
 
-- [ ] Bind credential adapters to exact host, port, method and path. The scoped OpenAI route already does; legacy
-  per-host brokered credentials only bind host, and the guard adds HTTPS/443/method. This lives in
-  `credential_broker.rs` (broker lane); recommend moving it to PF-28-S02 or a broker follow-up.
-- [ ] Known costs, recorded: POST answered 301/302 is refused (contract); hosts with more than 16 answers are refused;
-  timed-out lookups are not cancelled; redirects to hosts approved only at runtime are refused; local upstream
-  proxies, connection pinning to the checked answers and an in-process MITM test seam are PF-33-S02.
+- [x] Every open item moved or recorded on 2026-10-06; see the closure table above.
 
 ## Verification
 
@@ -84,10 +87,10 @@ network proxy. [Evidence, behaviour and known limits](../../../../qa/security-le
 - [x] TUI: GLM 5.2 tmux runs through the real proxy against httpbin.org, recorded as SOP videos.
 - [x] Independent Opus 5.5 High review and re-checks; findings dispositioned in the evidence README.
 - [x] Linux and Bazel CI on the PR: all checks green; merged as PR #210 (`8dd531714a`).
-- [ ] PF-26 final-candidate requalification (milestone gate).
+- [x] PF-26 final-candidate requalification runs at the milestones, not per sprint (decision 5).
 
 ## Exit evidence
 
 - [x] Commits, commands, outcomes and review records under `qa/security-levels/sprints/PF-33-S01/`.
-- [ ] PF-26 final-candidate requalification remains mandatory; no release-complete claim here.
-- [ ] Archive after PF-27-S02 is archived and the remaining item is placed.
+- [x] PF-26 final qualification moved to the P1 hardening plan (decision 3); no release-complete claim here.
+- [x] Done/Remaining reflect reality; record archived and the plan/index updated.
