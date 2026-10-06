@@ -33,8 +33,8 @@ its sprints is ready. This spec is an input to that research and to a later
 decision, not an executable sprint. Building it is a **product initiative**
 under `AGENTS.md`. It needs a new or amended active plan, a ready sprint and
 answers to the [open decisions](#open-decisions-and-dependencies). OD1 (PFT
-settlement chain) and OD2 (product-spec amendment for PFT) block the payment
-milestone. Terminal-side work that is independent of the chain (receipts,
+settlement chain) is decided: `xrpl_pft`. OD2 (product-spec amendment for PFT)
+blocks the payment milestone. Terminal-side work that is independent of the chain (receipts,
 verifier, tier picker against a fixture gateway) can start once a plan is
 active.
 
@@ -306,8 +306,9 @@ A price schedule is a signed, versioned document fetched from the catalog:
 4. Untagged or malformed deposits are held and can be refunded to the sender
    through support.
 
-The chain-specific parts sit behind one gateway interface so OD1 changes only
-an adapter:
+OD1 is decided (Travis, 2026-10-06): settle on the ledger where Task Node pays
+PFT today (`xrpl_pft`). The chain-specific parts sit behind one gateway
+interface, so a later move to PostFiat L1 changes only an adapter:
 
 ```text
 trait PftSettlementAdapter {
@@ -319,8 +320,8 @@ trait PftSettlementAdapter {
 
 | Adapter | Use if OD1 picks | Tag | Finality and validity rule |
 | --- | --- | --- | --- |
-| `xrpl_pft` (recommended default) | The ledger where Task Node pays PFT to the linked `r…` address today | 32-bit `DestinationTag`, unique per account | Transaction in a validated ledger, result `tesSUCCESS`, currency and issuer equal to the canonical PFT asset. Credit `meta.delivered_amount`, never `Amount` (prevents partial-payment over-crediting) |
-| `postfiat_l1` | PostFiat L1 | Per-account deposit memo or a derived deposit address | Accepted receipt in a certified, finalized block. Same delivered-amount rule |
+| `xrpl_pft` (**selected**, OD1) | The ledger where Task Node pays PFT to the linked `r…` address today | 32-bit `DestinationTag`, unique per account | Transaction in a validated ledger, result `tesSUCCESS`, currency and issuer equal to the canonical PFT asset. Credit `meta.delivered_amount`, never `Amount` (prevents partial-payment over-crediting) |
+| `postfiat_l1` (possible later migration) | PostFiat L1 | Per-account deposit memo or a derived deposit address | Accepted receipt in a certified, finalized block. Same delivered-amount rule |
 
 Phase 2 (separate initiative) adds in-Terminal signing once the wallet daemon
 supports Post Fiat keys. Terminal's wallet signs Solana transactions only.
@@ -589,11 +590,11 @@ release (`AGENTS.md`, "Interactive product proof").
 
 ## Open decisions and dependencies
 
-None is decided by this spec.
+OD1 is decided; the rest are open.
 
 | ID | Question | Owner | Blocks |
 | --- | --- | --- | --- |
-| OD1 | PFT settlement chain: the ledger where Task Node pays PFT today (`xrpl_pft`, recommended) or PostFiat L1 (`postfiat_l1`) | Travis | M2 |
+| OD1 | **Decided 2026-10-06 (Travis):** settle PFT on the ledger where Task Node pays PFT today (`xrpl_pft`). Revisit a move to PostFiat L1 (`postfiat_l1`) once it is live and PFT is used there | Travis | — |
 | OD2 | Product-spec amendment. The spec funds Corbanu API in USDC and names "USDAI as the preferred stablecoin partner rather than centering a Corbanu-native token". PFT is Post Fiat's token, not Corbanu's, but PFT settlement still changes a financial flow | Alex Good (Head of Product) / Travis | M0 |
 | OD3 | Rates and whether a USD reference is shown | Alex Good | M2 |
 | OD4 | Refund policy for failed or unavailable proofs (B.4 proposes full refund, or refund down to L2) | Alex Good | M3 |
