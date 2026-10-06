@@ -165,6 +165,8 @@ fn pf_23_s01_mcp_calls_are_classified_by_effect_and_arguments() {
         ("swapTokens", false, json!({}), Some(ValueTransfer)),
         ("place_buy_order", false, json!({}), Some(ValueTransfer)),
         ("get_and_send_funds", false, json!({}), Some(ValueTransfer)),
+        ("quote_and_swap", false, json!({}), Some(ValueTransfer)),
+        ("checkThenWithdraw", false, json!({}), Some(ValueTransfer)),
         // Adjacent words that do not move value.
         ("get_swap_quote", false, json!({}), None),
         ("get_trade_history", false, json!({}), None),
@@ -220,6 +222,22 @@ fn pf_23_s01_typed_input_is_judged_as_the_command_it_amounts_to() {
         Some(Credentials)
     );
     assert_eq!(typed("cd /work && node", "console.log(1)\n"), None);
+    // Line editing and history the host does not replay.
+    assert_eq!(typed("bash -i", "corba\t vault list\n"), Some(UnseenCode));
+    assert_eq!(typed("bash -i", "\u{1b}[A\n"), Some(UnseenCode));
+    assert_eq!(
+        typed("bash -i", "x\u{15}corbanu vault list\n"),
+        Some(UnseenCode)
+    );
+    assert_eq!(typed("bash -i", "!!\n"), Some(UnseenCode));
+    assert_eq!(typed("bash -i", "^ls^corbanu vault^\n"), Some(UnseenCode));
+    assert_eq!(typed("bash -i", "echo hi && ls\n"), None);
+    // Interpreter input is judged as its code, not as shell text.
+    assert_eq!(typed("python3", "print(1 != 2)\n"), None);
+    assert_eq!(typed("node", "if (!ok) console.log(1)\n"), None);
+    assert_eq!(typed("ipython", "!cat ~/.ssh/id_rsa\n"), Some(Credentials));
+    assert!(is_interrupt("\u{3}"));
+    assert!(!is_interrupt("\u{3}corbanu vault list\n"));
     // A process that is itself protected: anything typed into it counts.
     assert_eq!(typed("corbanu vault login github", "yes\n"), Some(Vault));
 }
@@ -235,15 +253,19 @@ fn pf_23_s01_name_words_split_punctuation_and_camel_case() {
 #[test]
 fn pf_23_s01_typed_window_joins_split_input_until_a_human_approves() {
     let thread = codex_protocol::ThreadId::new();
-    let first = TypedWindow::open(thread, 7, "corban");
+    let live = [7, 8, 9];
+    let first = TypedWindow::open(thread, 7, "corban", &live);
     assert_eq!(first.text, "corban");
     first.keep();
-    let second = TypedWindow::open(thread, 7, "u vault list\n");
+    let second = TypedWindow::open(thread, 7, "u vault list\n", &live);
     assert_eq!(second.text, "corbanu vault list\n");
     // Another process of the same thread starts empty.
-    assert_eq!(TypedWindow::open(thread, 8, "ls\n").text, "ls\n");
+    assert_eq!(TypedWindow::open(thread, 8, "ls\n", &live).text, "ls\n");
     second.clear();
-    assert_eq!(TypedWindow::open(thread, 7, "ls\n").text, "ls\n");
+    assert_eq!(TypedWindow::open(thread, 7, "ls\n", &live).text, "ls\n");
     let big = "x".repeat(typed::MAX_TYPED_BYTES + 1);
-    assert!(TypedWindow::open(thread, 9, &big).overflows());
+    assert!(TypedWindow::open(thread, 9, &big, &live).unreadable());
+    // An exited process's text is dropped when the thread next types.
+    TypedWindow::open(thread, 8, "corban", &live).keep();
+    assert_eq!(TypedWindow::open(thread, 8, "x", &[7]).text, "x");
 }

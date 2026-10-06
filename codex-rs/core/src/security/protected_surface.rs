@@ -28,6 +28,7 @@ pub(crate) use gate::admit;
 pub(crate) use gate::ask_human;
 pub(crate) use gate::check_dispatch;
 pub(crate) use typed::TypedWindow;
+pub(crate) use typed::lock as lock_typed_input;
 
 /// Who provides a tool. Only first-party code says `Builtin` or `Extension`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -219,10 +220,12 @@ pub(crate) fn classify_mcp(call: &McpCall<'_>, codex_home: &Path) -> Option<Prot
     let words: Vec<String> = names.flat_map(name_words).collect();
     let has = |list: &[&str]| words.iter().any(|word| list.contains(&word.as_str()));
     // `get_swap_quote`, `list_buy_orders`: a read of value, not a move.
+    // `quote_and_swap`, `checkThenWithdraw`: a read joined to an act.
     let reads = name_words(call.tool)
         .first()
         .is_some_and(|word| READ_VERBS.contains(&word.as_str()))
-        && !has(ACTION_VERBS);
+        && !has(ACTION_VERBS)
+        && !has(&["and", "then"]);
     let sends_value = has(&["send"]) && has(SENT_VALUE_WORDS);
     if !reads && (sends_value || has(TRANSFER_WORDS)) {
         return Some(ProtectedActionKind::ValueTransfer);
@@ -282,7 +285,8 @@ pub(crate) fn classify_typed_input(
     let sh = |text: &str| vec!["sh".to_string(), "-c".to_string(), text.to_string()];
     let process = classify(&exec(sh(process_command)), codex_home);
     // The first interpreter named anywhere in the process command
-    // (`env python3`, `cd x && node`, `uv run python`), else a shell.
+    // (`env python3`, `cd x && node`, `uv run python`), else a shell. Typed
+    // text is judged as that program's input.
     let interpreter = shlex::split(process_command)
         .unwrap_or_default()
         .iter()
@@ -299,13 +303,61 @@ pub(crate) fn classify_typed_input(
                 _ => None,
             }
         });
-    // Typed text is judged as shell input and, for an interpreter, as its code.
-    let mut found = strongest(process, classify(&exec(sh(chars)), codex_home));
-    if let Some((interpreter, flag)) = interpreter {
-        let typed = vec![interpreter.to_string(), flag.to_string(), chars.to_string()];
-        found = strongest(found, classify(&exec(typed), codex_home));
-    }
-    found
+    // Line editing the host does not replay (Tab completion, history keys,
+    // Ctrl-U/Ctrl-A, escape sequences) can turn typed text into anything.
+    let edits = chars
+        .chars()
+        .any(|ch| (ch.is_control() && ch != '\n' && ch != '\r') || ch == '\u{7f}');
+    let typed = match interpreter {
+        Some((name, flag)) => {
+            let code = vec![name.to_string(), flag.to_string(), chars.to_string()];
+            let as_code = classify(&exec(code), codex_home);
+            // IPython runs `!command` lines in a shell.
+            if program_is(process_command, "ipython") {
+                strongest(as_code, classify(&exec(sh(chars)), codex_home))
+            } else {
+                as_code
+            }
+        }
+        // Shell history expansion (`!!`, `!-2`, `!corb`, `^old^new`).
+        None if shell_history(chars) => strongest(
+            classify(&exec(sh(chars)), codex_home),
+            Some(ProtectedActionKind::UnseenCode),
+        ),
+        None => classify(&exec(sh(chars)), codex_home),
+    };
+    let typed = if edits {
+        strongest(typed, Some(ProtectedActionKind::UnseenCode))
+    } else {
+        typed
+    };
+    strongest(process, typed)
+}
+
+/// Single keys that stop or end input rather than add to it (Ctrl-C,
+/// Ctrl-D, Ctrl-Z, Ctrl-\); sent alone they are not judged.
+pub(crate) fn is_interrupt(chars: &str) -> bool {
+    matches!(chars, "\u{3}" | "\u{4}" | "\u{1a}" | "\u{1c}")
+}
+
+fn program_is(process_command: &str, name: &str) -> bool {
+    shlex::split(process_command)
+        .unwrap_or_default()
+        .iter()
+        .any(|word| {
+            word.rsplit('/')
+                .next()
+                .unwrap_or_default()
+                .eq_ignore_ascii_case(name)
+        })
+}
+
+fn shell_history(chars: &str) -> bool {
+    let bytes = chars.as_bytes();
+    chars.lines().any(|line| line.trim_start().starts_with('^'))
+        || bytes.windows(2).any(|pair| {
+            pair[0] == b'!' && (pair[1].is_ascii_alphanumeric() || b"!-?#$".contains(&pair[1]))
+        })
 }
 
 fn strongest(

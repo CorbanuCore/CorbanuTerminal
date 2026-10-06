@@ -366,8 +366,8 @@ pub(crate) async fn handle_mcp_tool_call(
     .await
 }
 
-/// Characters of MCP arguments shown in a post-taint approval question.
-const MCP_ARGUMENTS_SHOWN: usize = 400;
+/// Characters of MCP arguments shown from each end in a post-taint question.
+const MCP_ARGUMENTS_SHOWN: usize = 300;
 
 /// PF-23-S01: `Ok(true)` when the human just approved this call after
 /// untrusted content, `Ok(false)` when post-taint checks do not apply, and
@@ -423,14 +423,19 @@ async fn post_taint_mcp_check(
         .as_ref()
         .map(ToString::to_string)
         .unwrap_or_default();
-    let shown: String = arguments.chars().take(MCP_ARGUMENTS_SHOWN).collect();
-    let more = if arguments.chars().count() > MCP_ARGUMENTS_SHOWN {
-        "…"
+    let count = arguments.chars().count();
+    let shown = if count <= MCP_ARGUMENTS_SHOWN * 2 {
+        arguments
     } else {
-        ""
+        let head: String = arguments.chars().take(MCP_ARGUMENTS_SHOWN).collect();
+        let tail: String = arguments
+            .chars()
+            .skip(count - MCP_ARGUMENTS_SHOWN)
+            .collect();
+        format!("{head} … {tail} ({count} characters)")
     };
     let question = format!(
-        "Allow the {} MCP tool `{}` with {shown}{more}? {}",
+        "Allow the {} MCP tool `{}` with {shown}? {}",
         invocation.server,
         invocation.tool,
         check.reason()
