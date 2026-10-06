@@ -491,6 +491,7 @@ async fn full_access_confirmation_popup_snapshot() {
 async fn full_access_confirmation_cancel_reports_permissions_unchanged() {
     for (key, reopens_picker) in [(KeyCode::Enter, true), (KeyCode::Esc, false)] {
         let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+        let before = chat.config.permissions.permission_profile().clone();
         let preset = builtin_approval_presets()
             .into_iter()
             .find(|preset| preset.id == "full-access")
@@ -501,45 +502,28 @@ async fn full_access_confirmation_cancel_reports_permissions_unchanged() {
 
         chat.handle_key_event(KeyEvent::from(key));
 
-        let mut notices = Vec::new();
-        let mut saw_picker = false;
-        while let Ok(event) = rx.try_recv() {
-            match event {
-                AppEvent::InsertHistoryCell(cell) => notices.push(
-                    cell.display_lines(/*width*/ 120)
-                        .iter()
-                        .map(|line| {
-                            line.spans
-                                .iter()
-                                .map(|span| span.content.as_ref())
-                                .collect::<String>()
-                        })
-                        .collect::<Vec<_>>()
-                        .join("\n"),
-                ),
-                AppEvent::OpenPermissionsPopup => saw_picker = true,
-                AppEvent::SelectPermissionPreset(selection) => {
-                    panic!("cancel must not request a permission change: {selection:?}")
+        let events = std::iter::from_fn(|| rx.try_recv().ok()).collect::<Vec<_>>();
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, AppEvent::SelectPermissionPreset(_))),
+            "cancel must not request a permission change ({key:?})"
+        );
+        let notices = events
+            .iter()
+            .filter_map(|event| match event {
+                AppEvent::InsertHistoryCell(cell) => {
+                    Some(lines_to_single_string(&cell.display_lines(/*width*/ 80)))
                 }
-                _ => {}
-            }
-        }
-        assert_eq!(
-            (notices, saw_picker),
-            (
-                vec![
-                    "• Full access was not enabled; permissions are unchanged. \
-                     Choose \"Yes, continue anyway\" to enable it."
-                        .to_string()
-                ],
-                reopens_picker
-            ),
-            "{key:?}"
-        );
-        assert_ne!(
-            chat.config.permissions.permission_profile(),
-            &PermissionProfile::Disabled
-        );
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let saw_picker = events
+            .iter()
+            .any(|event| matches!(event, AppEvent::OpenPermissionsPopup));
+        assert_eq!((notices.len(), saw_picker), (1, reopens_picker), "{key:?}");
+        assert_chatwidget_snapshot!("full_access_confirmation_cancel_notice", notices[0]);
+        assert_eq!(chat.config.permissions.permission_profile(), &before);
     }
 }
 

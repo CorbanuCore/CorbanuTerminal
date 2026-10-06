@@ -423,7 +423,10 @@ impl ChatWidget {
             tx.send(AppEvent::InsertHistoryCell(Box::new(
                 history_cell::new_info_event(
                     "Full access was not enabled; permissions are unchanged.".to_string(),
-                    Some("Choose \"Yes, continue anyway\" to enable it.".to_string()),
+                    Some(
+                        "To enable it, choose Full Access, then \"Yes, continue anyway\"."
+                            .to_string(),
+                    ),
                 ),
             )));
         };
