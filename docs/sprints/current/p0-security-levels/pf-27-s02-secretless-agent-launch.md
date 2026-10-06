@@ -21,7 +21,7 @@ updated: 2026-10-06
 
 **October 6:** macOS and Linux ship behind `secretless_agent_launch` (default off; Permissive unchanged).
 Windows refuses protected launches with a reason; the port is [PF-27-S06](pf-27-s06-windows-broker-and-launch.md).
-[Evidence, launch-boundary inventory and limits](../../../../qa/security-levels/sprints/PF-27-S02/README.md).
+[Evidence, launch-boundary inventory and known limits](../../../../qa/security-levels/sprints/PF-27-S02/README.md).
 
 ## Execution mandate
 

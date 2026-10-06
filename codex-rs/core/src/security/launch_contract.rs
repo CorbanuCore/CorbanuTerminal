@@ -167,19 +167,37 @@ pub(crate) fn arm(codex_home: &AbsolutePathBuf) {
 
 /// Brokered variables (for example `GITHUB_TOKEN`) that the user's shell
 /// environment policy would pass to agent commands, before the launch
-/// allowlist runs and without the provider keys Core strips for the shell
-/// tool. Only these may be sourced from Core's environment as dummies.
+/// allowlist runs and without the model-provider keys Core strips for the
+/// shell tool (built-in ones and `provider_env_keys`). Only these may be
+/// sourced from Core's environment as dummies.
 pub(crate) fn policy_permitted_brokered_env_keys(
     policy: &codex_protocol::config_types::ShellEnvironmentPolicy,
+    provider_env_keys: &[String],
 ) -> Vec<String> {
-    let mut env = codex_protocol::shell_environment::create_env_from_vars(
+    permitted_brokered_env_keys(
         std::env::vars_os().filter_map(|(name, value)| {
             Some((name.into_string().ok()?, value.into_string().ok()?))
         }),
         policy,
-        /*thread_id*/ None,
+        provider_env_keys,
+    )
+}
+
+pub(crate) fn permitted_brokered_env_keys<I>(
+    vars: I,
+    policy: &codex_protocol::config_types::ShellEnvironmentPolicy,
+    provider_env_keys: &[String],
+) -> Vec<String>
+where
+    I: IntoIterator<Item = (String, String)>,
+{
+    let mut env = codex_protocol::shell_environment::create_env_from_vars(
+        vars, policy, /*thread_id*/ None,
     );
-    crate::exec_env::remove_provider_auth_env_vars(&mut env, std::iter::empty());
+    crate::exec_env::remove_provider_auth_env_vars(
+        &mut env,
+        provider_env_keys.iter().map(String::as_str),
+    );
     codex_network_proxy::credential_broker_env_var_names()
         .into_iter()
         .filter(|name| env.contains_key(*name))
@@ -365,10 +383,24 @@ impl LaunchContract {
                 ));
             }
         }
-        let writable_inside_home = file_system
-            .get_writable_roots_with_cwd(cwd)
-            .iter()
-            .any(|root| root.root.as_path().starts_with(self.codex_home.as_path()));
+        let canonical_home = std::fs::canonicalize(self.codex_home.as_path()).ok();
+        let writable_inside_home =
+            file_system
+                .get_writable_roots_with_cwd(cwd)
+                .iter()
+                .any(|root| {
+                    let root = root.root.as_path();
+                    let canonical_root = std::fs::canonicalize(root).ok();
+                    [Some(root), canonical_root.as_deref()]
+                        .into_iter()
+                        .flatten()
+                        .any(|root| {
+                            root.starts_with(self.codex_home.as_path())
+                                || canonical_home
+                                    .as_deref()
+                                    .is_some_and(|home| root.starts_with(home))
+                        })
+                });
         if writable_inside_home
             || file_system.can_write_path_with_cwd(self.codex_home.as_path(), cwd)
             || file_system.can_write_path_with_cwd(&self.codex_home.join("config.toml"), cwd)

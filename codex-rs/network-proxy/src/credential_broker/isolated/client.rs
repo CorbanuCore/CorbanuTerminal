@@ -807,3 +807,36 @@ fn random_hex<const N: usize>() -> String {
     rand::rng().fill_bytes(&mut bytes);
     encode_hex(&bytes)
 }
+
+#[cfg(test)]
+mod pf_27_s02_tests {
+    use super::*;
+
+    #[test]
+    fn pf_27_s02_containment_requirement_is_platform_specific() {
+        assert!(!containment_sufficient("none"));
+        if cfg!(target_os = "macos") {
+            assert!(containment_sufficient("seatbelt"));
+            assert!(!containment_sufficient("seccomp"));
+        } else if cfg!(target_os = "linux") {
+            assert!(containment_sufficient("seccomp"));
+            assert!(containment_sufficient("landlock+seccomp"));
+            assert!(!containment_sufficient("landlock"));
+        }
+    }
+
+    #[test]
+    fn pf_27_s02_long_runtime_dirs_fall_back_to_the_user_runtime_dir() {
+        let short = tempfile::tempdir().expect("short dir");
+        let configured = short.path().join("run");
+        assert_eq!(
+            prepare_runtime_dir(Some(&configured)),
+            Some(configured.clone())
+        );
+        assert_eq!(prepare_runtime_dir(None), None);
+
+        let long = PathBuf::from("/").join("x".repeat(120)).join("run");
+        let fallback = user_runtime_dir().and_then(|dir| create_runtime_dir(&dir));
+        assert_eq!(prepare_runtime_dir(Some(&long)), fallback);
+    }
+}

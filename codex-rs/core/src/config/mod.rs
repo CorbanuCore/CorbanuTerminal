@@ -3284,6 +3284,7 @@ fn apply_secretless_launch_network_config(
     config: &mut NetworkProxyConfig,
     secretless_agent_launch: bool,
     shell_environment_policy: &ShellEnvironmentPolicy,
+    provider_env_keys: &[String],
     codex_home: &AbsolutePathBuf,
 ) {
     if !secretless_agent_launch {
@@ -3292,6 +3293,7 @@ fn apply_secretless_launch_network_config(
     config.set_secretless_agent_launch(Some(
         crate::security::launch_contract::policy_permitted_brokered_env_keys(
             shell_environment_policy,
+            provider_env_keys,
         ),
     ));
     if config.isolated_credential_broker {
@@ -3971,6 +3973,10 @@ impl Config {
                 &mut configured_network_proxy_config,
                 secretless_agent_launch,
                 &cfg.shell_environment_policy.clone().into(),
+                &cfg.model_providers
+                    .values()
+                    .filter_map(|provider| provider.env_key.clone())
+                    .collect::<Vec<_>>(),
                 &codex_home,
             );
         }
@@ -5009,6 +5015,11 @@ impl Config {
                     &mut configured_network_proxy_config,
                     self.features.enabled(Feature::SecretlessAgentLaunch),
                     &self.permissions.shell_environment_policy,
+                    &self
+                        .model_providers
+                        .values()
+                        .filter_map(|provider| provider.env_key.clone())
+                        .collect::<Vec<_>>(),
                     &self.codex_home,
                 );
             }

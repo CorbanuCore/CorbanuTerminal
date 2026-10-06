@@ -290,3 +290,34 @@ fn pf_27_s02_file_tools_fail_closed_when_unprotectable() {
     assert!(file_system.can_write_path_with_cwd(&fixture.workspace.join("a.txt"), cwd));
     assert!(!file_system.can_read_path_with_cwd(&fixture.codex_home.join("auth.json"), cwd));
 }
+
+#[test]
+fn pf_27_s02_only_policy_permitted_broker_keys_are_sourced() {
+    use codex_protocol::config_types::EnvironmentVariablePattern;
+    use codex_protocol::config_types::ShellEnvironmentPolicy;
+    let vars = || {
+        [
+            ("GITHUB_TOKEN", "ghp_x"),
+            ("GH_TOKEN", "ghp_y"),
+            ("OPENAI_API_KEY", "sk-x"),
+            ("PATH", "/usr/bin"),
+        ]
+        .map(|(name, value)| (name.to_string(), value.to_string()))
+    };
+    let mut keys = permitted_brokered_env_keys(vars(), &ShellEnvironmentPolicy::default(), &[]);
+    keys.sort();
+    // Provider keys Core strips for the shell tool are never brokered.
+    assert_eq!(
+        keys,
+        vec!["GH_TOKEN".to_string(), "GITHUB_TOKEN".to_string()]
+    );
+
+    let excluding = ShellEnvironmentPolicy {
+        exclude: vec![EnvironmentVariablePattern::new_case_insensitive("GH_TOKEN")],
+        ..ShellEnvironmentPolicy::default()
+    };
+    assert_eq!(
+        permitted_brokered_env_keys(vars(), &excluding, &["GITHUB_TOKEN".to_string()]),
+        Vec::<String>::new()
+    );
+}
