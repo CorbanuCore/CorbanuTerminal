@@ -97,6 +97,10 @@ pub(crate) struct NativeIngress {
     /// Registrations waiting to be persisted next to their rollout items.
     pending_origins: Vec<SourceOriginEntry>,
     journal_overflow_reported: bool,
+    /// Authenticates records this home writes and checks restored ones.
+    /// Without it nothing is written and nothing is restored.
+    origin_key: Option<super::origin_key::OriginKey>,
+    missing_key_reported: bool,
 }
 
 impl std::fmt::Debug for NativeIngress {
@@ -114,6 +118,14 @@ impl NativeIngress {
 
     pub(crate) fn labelled_mode(&self) -> bool {
         self.labelled_mode
+    }
+
+    pub(crate) fn has_origin_key(&self) -> bool {
+        self.origin_key.is_some()
+    }
+
+    pub(crate) fn set_origin_key(&mut self, key: super::origin_key::OriginKey) {
+        self.origin_key = Some(key);
     }
 
     /// Record the host-chosen origin of exact history messages. Called only
@@ -205,11 +217,34 @@ impl NativeIngress {
 
     /// Drain registrations for the rollout. Only Core record seams call this,
     /// right after appending the items the registrations describe.
+    /// Without this home's key nothing is written, so the content resumes
+    /// labelled (fail closed) rather than with an unauthenticated record.
     pub(crate) fn take_origin_record(&mut self) -> Option<SourceOriginRecord> {
-        (!self.pending_origins.is_empty()).then(|| SourceOriginRecord {
+        if self.pending_origins.is_empty() {
+            return None;
+        }
+        let entries = std::mem::take(&mut self.pending_origins);
+        let Some(key) = &self.origin_key else {
+            if !std::mem::replace(&mut self.missing_key_reported, true) {
+                tracing::warn!("source origin key unavailable; content resumes as labelled data");
+            }
+            return None;
+        };
+        let mac = key.tag(&entries_bytes(&entries)?);
+        Some(SourceOriginRecord {
             version: SOURCE_ORIGIN_RECORD_VERSION,
-            entries: std::mem::take(&mut self.pending_origins),
+            entries,
+            mac,
         })
+    }
+
+    /// A record restores only when it carries this home's tag over exactly
+    /// its entries: copies from another home and hand edits do not verify.
+    fn verified(&self, record: &SourceOriginRecord) -> bool {
+        record.version == SOURCE_ORIGIN_RECORD_VERSION
+            && self.origin_key.as_ref().is_some_and(|key| {
+                entries_bytes(&record.entries).is_some_and(|bytes| key.verify(&bytes, &record.mac))
+            })
     }
 
     /// Reinstate origins recorded by this host in the rollout being resumed or
@@ -222,7 +257,7 @@ impl NativeIngress {
     ) -> usize {
         let mut restored = 0;
         for record in records {
-            if record.version != SOURCE_ORIGIN_RECORD_VERSION {
+            if !self.verified(record) {
                 continue;
             }
             for entry in &record.entries {
@@ -550,6 +585,11 @@ fn message_origin(origin: RecordedOrigin) -> MessageOrigin {
         RecordedOrigin::Model => MessageOrigin::Model,
         RecordedOrigin::External { kind } => MessageOrigin::External(kind),
     }
+}
+
+/// The authenticated form of a record's entries: their canonical JSON.
+fn entries_bytes(entries: &[SourceOriginEntry]) -> Option<Vec<u8>> {
+    serde_json::to_vec(entries).ok()
 }
 
 /// Exactly 64 lowercase hex digits, as written by `ContentDigest::to_hex`.

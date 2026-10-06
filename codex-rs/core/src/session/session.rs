@@ -1203,6 +1203,7 @@ impl Session {
                 )
                 .with_ingress_policy(config.security_level, ingress_policy)
                 .with_source_envelopes(config.features.enabled(Feature::SourceEnvelopes))
+                .with_source_origin_key(config.codex_home.as_path())
                 .with_prompt_cache_key_override(
                     crate::guardian::prompt_cache_key_override_for_review_session(
                         &session_configuration.session_source,

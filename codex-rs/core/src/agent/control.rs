@@ -349,27 +349,30 @@ impl AgentControl {
         })
     }
 
-    /// Send rich user input items to an existing agent thread.
+    /// Send rich user input items from the agent `sender` to an existing agent thread.
     pub(crate) async fn send_input(
         &self,
         agent_id: ThreadId,
+        sender: Option<ThreadId>,
         input: Vec<UserInput>,
         parent_turn_id: Option<String>,
     ) -> CodexResult<String> {
         let state = self.upgrade()?;
         self.ensure_execution_capacity_for_turn_start(agent_id, /*starts_turn*/ true)
             .await?;
-        self.send_input_after_capacity_check(agent_id, &state, input, parent_turn_id)
+        self.send_input_after_capacity_check(agent_id, sender, &state, input, parent_turn_id)
             .await
     }
 
     async fn send_input_after_capacity_check(
         &self,
         agent_id: ThreadId,
+        sender: Option<ThreadId>,
         state: &Arc<ThreadManagerState>,
         input: Vec<UserInput>,
         parent_turn_id: Option<String>,
     ) -> CodexResult<String> {
+        Box::pin(register_agent_input_origin(state, agent_id, sender, &input)).await;
         self.handle_thread_request_result(
             agent_id,
             state,
@@ -952,7 +955,7 @@ impl AgentControl {
                 return;
             };
             parent_thread
-                .inject_user_message_without_turn(message)
+                .inject_agent_result_without_turn(message)
                 .await;
         });
     }
@@ -1339,6 +1342,39 @@ fn non_empty_bounded_message(message: String, max_chars: usize) -> Option<String
         Some(preview)
     }
 }
+/// PF-30-S02 lineage. Text one agent hands another arrives as `Op::UserInput`,
+/// which the receiver would otherwise record with human standing. Register
+/// it on the receiver first (the first registration wins) with the sender's
+/// standing: host only while every item in the sender's history had standing,
+/// otherwise agent data. An unknown sender counts as agent data. Only the
+/// receiver's `source_envelopes` mode records anything; otherwise a no-op.
+async fn register_agent_input_origin(
+    state: &Arc<ThreadManagerState>,
+    agent_id: ThreadId,
+    sender: Option<ThreadId>,
+    input: &[UserInput],
+) {
+    use crate::security::ingress::MessageOrigin;
+    let Ok(receiver) = state.get_thread(agent_id).await else {
+        return;
+    };
+    let client = receiver.session.services.model_client();
+    if !client.source_envelopes_enabled() {
+        return;
+    }
+    let origin = match sender {
+        Some(sender) => match state.get_thread(sender).await {
+            Ok(sender) => sender.session.agent_handoff_origin().await,
+            Err(_) => MessageOrigin::External(codex_protocol::provenance::SourceKind::ChildAgent),
+        },
+        None => MessageOrigin::External(codex_protocol::provenance::SourceKind::ChildAgent),
+    };
+    let item = receiver
+        .session
+        .response_item_from_user_input(input.to_vec());
+    client.register_message_origin(std::slice::from_ref(&item), origin);
+}
+
 #[cfg(test)]
 #[path = "control_tests.rs"]
 mod tests;
