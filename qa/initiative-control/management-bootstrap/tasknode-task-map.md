@@ -141,6 +141,28 @@ against these tasks.
   `.codex-work/workers-20261002/tasknode-f4bec7e-evidence.md`.
 - Worker record: `.codex-work/workers-20261002/l1v2-bug.result.md`.
 
+## Personal task (not PF-80)
+
+### `task_05099d2ec350b875c3b6b638571a22ca`: Draft the AI newsletter section covering NeoClouds, SpaceX/XAI, and AI Capex
+
+- Request: `req_f9052fb2-f908-40de-88e2-4714ca863561`. Reward shown: 2.5. Accepted
+  2026-08-13 (`evt_0fbc65d1fccc1be80982df0a`). Corbanu did not accept it, move it
+  or claim the reward.
+- Work: the AI section for the newsletter Travis writes with Alex, "AI: Everybody
+  Wants to Be the Landlord". It covers AI capex, NeoClouds and SpaceX/xAI, with data
+  current to 2026-10-05, 26 dated sources and a HyperLiquid/Binance angle. An
+  independent agent reviewed it: the first pass failed, the issues were fixed, and the
+  re-review passed. Alex has not reviewed it yet, and it is not published.
+- Deliverable: `.codex-work/workers-20261005/ai-newsletter-section-20261005.md`,
+  sha256 `8b8ac8a1f08f884f8f68890db8f8a0c36bb61f8bc2e88fdb617c19c1b1026b83`.
+- Evidence: one initial submission on 2026-10-06 ~00:46Z (full section text), receipt
+  `task_evt_eabb4ab0-56e9-4800-b0c1-6fbddde18e7a`. Task Node then asked for the
+  file's sha256. One verification response was sent, receipt
+  `task_evt_1f2d6d31-3472-4492-90d8-4395f142d4c1`, and the task read **Rewarded**
+  (2.5 PFT) at 2026-10-06T00:47:11Z. The CLI creates its own idempotency key, so the
+  local guard key, bodies and receipts are in
+  `.codex-work/workers-20261005/tasknode-05099d2/`.
+
 ## Rules for evidence against these tasks
 
 1. Submit evidence only after Task Node shows the task as accepted and
