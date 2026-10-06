@@ -52,7 +52,7 @@ pub(crate) const ROWS: [(&str, &str); 5] = [
     ),
     (
         "Child agents",
-        "spawned agents get the same values; custom roles that would change them are refused at start",
+        "spawned agents get the same values; custom roles that would change them are refused at start; Claude panes are refused because Claude Code runs outside the sandbox (Claude Code sign-in still runs)",
     ),
 ];
 

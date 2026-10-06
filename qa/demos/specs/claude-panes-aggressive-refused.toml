@@ -1,0 +1,84 @@
+# Claude panes run Claude Code outside Corbanu's sandbox, so Aggressive
+# refuses them (full fix: #218). Permissive still opens the provider list.
+# Record with
+#   PF24_CANDIDATE=<corbanu> --bin qa/security-levels/sprints/PF-24-S03/demos/wrappers/restart-once.sh
+id = "claude-panes-aggressive-refused"
+feature = "Aggressive refuses Claude panes"
+expected = "Under Permissive, + Claude Pane opens the provider list; after switching to Aggressive and restarting, it shows why Claude panes are off."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/panes"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "\\+ Claude Pane"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "New Claude Pane"
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Escape"
+
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Switch to Aggressive\\?"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+[[steps]]
+key = "Enter"
+[[steps]]
+type = "/exit"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "restarting Corbanu Terminal.*model: +glm-5\\.2"
+timeout = 60
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/panes"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "\\+ Claude Pane"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Claude panes are off under security level Aggressive"
+[[steps]]
+pause = 4.0
