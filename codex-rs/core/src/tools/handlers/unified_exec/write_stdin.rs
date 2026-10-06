@@ -7,6 +7,7 @@ use crate::security::protected_surface::ask_human;
 use crate::security::protected_surface::classify_typed_input;
 use crate::security::protected_surface::is_interrupt;
 use crate::security::protected_surface::lock_typed_input;
+use crate::security::protected_surface::note_interrupt;
 use crate::security::tainted_action::ProtectedActionKind;
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
@@ -90,16 +91,22 @@ impl WriteStdinHandler {
 
         let args: WriteStdinArgs = parse_arguments_for_tool("write_stdin", &arguments)?;
         // PF-23-S01: writes to one process are judged and sent one at a time.
-        let _typing = if !args.chars.is_empty()
-            && !is_interrupt(&args.chars)
-            && session.services.model_client().post_taint_state().is_some()
+        let post_taint = session.services.model_client().post_taint_state();
+        if is_interrupt(&args.chars)
+            && post_taint
+                .as_ref()
+                .is_some_and(|state| state.taint_generation > 0)
         {
-            let guard = lock_typed_input(session.thread_id(), args.session_id).await;
-            post_taint_check(&session, &turn, &call_id, &args).await?;
-            Some(guard)
-        } else {
-            None
-        };
+            note_interrupt(session.thread_id(), args.session_id);
+        }
+        let _typing =
+            if !args.chars.is_empty() && !is_interrupt(&args.chars) && post_taint.is_some() {
+                let guard = lock_typed_input(session.thread_id(), args.session_id).await;
+                post_taint_check(&session, &turn, &call_id, &args).await?;
+                Some(guard)
+            } else {
+                None
+            };
         let response = session
             .services
             .unified_exec_manager
@@ -153,7 +160,11 @@ async fn post_taint_check(
     // command split across calls is seen whole.
     let window = TypedWindow::open(session.thread_id(), args.session_id, &args.chars, &live);
     let codex_home = turn.config.codex_home.to_path_buf();
-    let (text, unreadable) = (window.text.clone(), window.unreadable());
+    let (text, alone, unreadable) = (
+        window.text.clone(),
+        window.alone.clone(),
+        window.unreadable(),
+    );
     let command = process.command.clone();
     let admission = admit(
         session,
@@ -164,7 +175,15 @@ async fn post_taint_check(
             if unreadable {
                 return Some(ProtectedActionKind::UnseenCode);
             }
-            classify_typed_input(&command, &text, &process.cwd, &codex_home)
+            let joined = classify_typed_input(&command, &text, &process.cwd, &codex_home);
+            // After an interrupt the program may have dropped the kept text.
+            let alone = alone.and_then(|alone| {
+                classify_typed_input(&command, &alone, &process.cwd, &codex_home)
+            });
+            match (joined, alone) {
+                (Some(joined), Some(alone)) => Some(joined.strongest(alone)),
+                (joined, alone) => joined.or(alone),
+            }
         },
     )
     .await;

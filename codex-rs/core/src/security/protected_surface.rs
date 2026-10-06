@@ -29,6 +29,7 @@ pub(crate) use gate::ask_human;
 pub(crate) use gate::check_dispatch;
 pub(crate) use typed::TypedWindow;
 pub(crate) use typed::lock as lock_typed_input;
+pub(crate) use typed::note_interrupt;
 
 /// Who provides a tool. Only first-party code says `Builtin` or `Extension`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -285,46 +286,56 @@ pub(crate) fn classify_typed_input(
     let sh = |text: &str| vec!["sh".to_string(), "-c".to_string(), text.to_string()];
     let process = classify(&exec(sh(process_command)), codex_home);
     // The first interpreter named anywhere in the process command
-    // (`env python3`, `cd x && node`, `uv run python`), else a shell. Typed
-    // text is judged as that program's input.
-    let interpreter = shlex::split(process_command)
-        .unwrap_or_default()
-        .iter()
-        .find_map(|word| {
-            let name = word.rsplit('/').next().unwrap_or_default().to_lowercase();
-            let python = name
-                .strip_prefix("python")
-                .is_some_and(|version| version.chars().all(|ch| ch.is_ascii_digit() || ch == '.'));
-            match name.as_str() {
-                _ if python || name == "ipython" => Some(("python3", "-c")),
-                "node" | "deno" | "bun" => Some(("node", "-e")),
-                "ruby" | "irb" => Some(("ruby", "-e")),
-                "perl" => Some(("perl", "-e")),
-                _ => None,
-            }
-        });
+    // (`env python3`, `cd x && node`, `uv run python`).
+    let words = shlex::split(process_command).unwrap_or_default();
+    let interpreter = words.iter().find_map(|word| interpreter_of(word));
+    // Only a plain REPL (`python3 -i`, `node`) reads typed text as code
+    // alone; anything else (`nix-shell -p python3`, `python3 x.py; bash`,
+    // a pty spawned by `-c`) may hand it to a shell too.
+    let plain_repl = {
+        let rest: Vec<&String> = words
+            .iter()
+            .skip_while(|word| {
+                word.contains('=') || matches!(word.as_str(), "env" | "exec" | "command" | "nohup")
+            })
+            .collect();
+        rest.first()
+            .is_some_and(|word| interpreter_of(word).is_some())
+            && rest[1..].iter().all(|arg| {
+                arg.starts_with('-')
+                    && !matches!(
+                        arg.as_str(),
+                        "-c" | "-e"
+                            | "-m"
+                            | "-p"
+                            | "-r"
+                            | "-x"
+                            | "--eval"
+                            | "--print"
+                            | "--require"
+                    )
+            })
+            && !program_is(process_command, "ipython")
+    };
     // Line editing the host does not replay (Tab completion, history keys,
     // Ctrl-U/Ctrl-A, escape sequences) can turn typed text into anything.
     let edits = chars
         .chars()
         .any(|ch| (ch.is_control() && ch != '\n' && ch != '\r') || ch == '\u{7f}');
-    let typed = match interpreter {
-        Some((name, flag)) => {
-            let code = vec![name.to_string(), flag.to_string(), chars.to_string()];
-            let as_code = classify(&exec(code), codex_home);
-            // IPython runs `!command` lines in a shell.
-            if program_is(process_command, "ipython") {
-                strongest(as_code, classify(&exec(sh(chars)), codex_home))
-            } else {
-                as_code
-            }
-        }
-        // Shell history expansion (`!!`, `!-2`, `!corb`, `^old^new`).
-        None if shell_history(chars) => strongest(
-            classify(&exec(sh(chars)), codex_home),
-            Some(ProtectedActionKind::UnseenCode),
-        ),
-        None => classify(&exec(sh(chars)), codex_home),
+    let as_code = interpreter.and_then(|(name, flag)| {
+        classify(
+            &exec(vec![name.to_string(), flag.to_string(), chars.to_string()]),
+            codex_home,
+        )
+    });
+    let typed = if plain_repl {
+        as_code
+    } else {
+        // Shell input, with history re-execution (`!!`, `^a^b`, `fc -s`, `r`)
+        // unreadable, and for a named interpreter also its code.
+        let as_shell = classify(&exec(sh(chars)), codex_home);
+        let history = shell_history(chars).then_some(ProtectedActionKind::UnseenCode);
+        strongest(strongest(as_shell, history), as_code)
     };
     let typed = if edits {
         strongest(typed, Some(ProtectedActionKind::UnseenCode))
@@ -352,12 +363,29 @@ fn program_is(process_command: &str, name: &str) -> bool {
         })
 }
 
+/// The interpreter a word names, with its inline-code flag.
+fn interpreter_of(word: &str) -> Option<(&'static str, &'static str)> {
+    let name = word.rsplit('/').next().unwrap_or_default().to_lowercase();
+    let python = name
+        .strip_prefix("python")
+        .is_some_and(|version| version.chars().all(|ch| ch.is_ascii_digit() || ch == '.'));
+    match name.as_str() {
+        _ if python || name == "ipython" => Some(("python3", "-c")),
+        "node" | "deno" | "bun" => Some(("node", "-e")),
+        "ruby" | "irb" => Some(("ruby", "-e")),
+        "perl" => Some(("perl", "-e")),
+        _ => None,
+    }
+}
+
 fn shell_history(chars: &str) -> bool {
     let bytes = chars.as_bytes();
-    chars.lines().any(|line| line.trim_start().starts_with('^'))
-        || bytes.windows(2).any(|pair| {
-            pair[0] == b'!' && (pair[1].is_ascii_alphanumeric() || b"!-?#$".contains(&pair[1]))
-        })
+    chars.lines().any(|line| {
+        let line = line.trim_start();
+        line.starts_with('^') || line.starts_with("fc ") || line == "r" || line.starts_with("r ")
+    }) || bytes.windows(2).any(|pair| {
+        pair[0] == b'!' && (pair[1].is_ascii_alphanumeric() || b"!-?#$".contains(&pair[1]))
+    })
 }
 
 fn strongest(

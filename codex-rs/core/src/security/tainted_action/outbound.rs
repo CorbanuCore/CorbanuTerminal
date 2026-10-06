@@ -58,6 +58,7 @@ const CURL_UPLOAD: &[&str] = &["-T", "--upload-file"];
 /// Other curl options that take a value (so it is not a destination).
 const CURL_VALUE: &[&str] = &[
     "--variable",
+    "--url-query",
     "-o",
     "--output",
     "-H",
@@ -101,14 +102,10 @@ const CURL_LOCAL_VALUE: &[&str] = &[
     "--cert",
     "--key",
     "--cacert",
-    "-r",
-    "--range",
     "--retry",
     "-m",
     "--max-time",
     "--connect-timeout",
-    "-X",
-    "--request",
 ];
 /// curl options that can send a named local destination somewhere else.
 const CURL_REDIRECT: &[&str] = &[
@@ -162,6 +159,9 @@ const EXEC_WRAPPERS: &[&str] = &[
     "pnpm",
     "yarn",
 ];
+/// Places one command may start (an exec wrapper's words, exec markers);
+/// more fail closed.
+const MAX_JUDGED_POSITIONS: usize = 64;
 /// Words after which the next word is run as a command (`find -exec curl`).
 const EXEC_MARKERS: &[&str] = &["-exec", "-execdir", "-ok", "-okdir", "--"];
 
@@ -174,23 +174,31 @@ pub(super) fn classify(
     words: &[String],
     command: usize,
     stdin_fed: bool,
+    proxy_set: bool,
 ) -> Option<ProtectedActionKind> {
-    // `ALL_PROXY=... curl http://localhost` leaves the machine.
-    let proxied = words[..command].iter().any(|word| {
-        word.split_once('=')
-            .is_some_and(|(name, _)| name.to_lowercase().ends_with("_proxy"))
-    });
-    let wrapped = words
+    // `ALL_PROXY=... curl http://localhost` (or an earlier `export
+    // https_proxy=...`) leaves the machine.
+    let proxied = proxy_set
+        || words[..command].iter().any(|word| {
+            word.split_once('=')
+                .is_some_and(|(name, _)| name.to_lowercase().ends_with("_proxy"))
+        });
+    let lower: Vec<String> = words.iter().map(|word| word.to_lowercase()).collect();
+    let wrapped = lower
         .get(command)
-        .is_some_and(|word| EXEC_WRAPPERS.contains(&basename(&word.to_lowercase())));
+        .is_some_and(|word| EXEC_WRAPPERS.contains(&basename(word)));
     let mut found = None;
+    let mut judged = 0;
     for index in command..words.len() {
-        let judged =
-            index == command || wrapped || EXEC_MARKERS.contains(&words[index - 1].as_str());
-        if !judged {
+        if !(index == command || wrapped || EXEC_MARKERS.contains(&words[index - 1].as_str())) {
             continue;
         }
-        let kind = classify_at(&words[index..], stdin_fed, proxied);
+        judged += 1;
+        if judged > MAX_JUDGED_POSITIONS {
+            // Too many places a command could start: fail closed.
+            return found.or(Some(ProtectedActionKind::UnseenCode));
+        }
+        let kind = classify_at(&words[index..], &lower[index..], stdin_fed, proxied);
         if kind == Some(ProtectedActionKind::ValueTransfer) {
             return kind;
         }
@@ -199,17 +207,22 @@ pub(super) fn classify(
     found
 }
 
-fn classify_at(words: &[String], stdin_fed: bool, proxied: bool) -> Option<ProtectedActionKind> {
-    let (name, args) = words.split_first()?;
-    let name = basename(name).to_lowercase();
-    let lower: Vec<String> = args.iter().map(|word| word.to_lowercase()).collect();
+fn classify_at(
+    words: &[String],
+    lower: &[String],
+    stdin_fed: bool,
+    proxied: bool,
+) -> Option<ProtectedActionKind> {
+    let (_, args) = words.split_first()?;
+    let (name, lower) = lower.split_first()?;
+    let name = basename(name);
     let transfer = VALUE_TRANSFER.iter().any(|(command, verbs)| {
         name == *command && lower.iter().any(|arg| verbs.contains(&arg.as_str()))
     });
     if transfer {
         return Some(ProtectedActionKind::ValueTransfer);
     }
-    sends_local_content(&name, args, &lower, stdin_fed, proxied)
+    sends_local_content(name, args, lower, stdin_fed, proxied)
         .then_some(ProtectedActionKind::Disclosure)
 }
 
@@ -283,6 +296,8 @@ fn curl_sends_local_content(args: &[String], proxied: bool) -> bool {
             continue;
         };
         redirects |= CURL_REDIRECT.contains(&flag);
+        // `--expand-data` and friends splice variables into what is sent.
+        uploads |= flag.starts_with("--expand-");
         let takes_value = CURL_DATA.contains(&flag)
             || CURL_UPLOAD.contains(&flag)
             || CURL_VALUE.contains(&flag)
@@ -300,7 +315,9 @@ fn curl_sends_local_content(args: &[String], proxied: bool) -> bool {
         };
         let reads_file = match flag {
             "-T" | "--upload-file" | "-K" | "--config" => true,
-            "--data-urlencode" | "--variable" => value.contains('@'),
+            "--data-urlencode" | "--url-query" => value.contains('@'),
+            // `x@file`, or `%NAME` from the environment.
+            "--variable" => value.contains('@') || value.starts_with('%'),
             "-H" | "--header" => value.starts_with('@'),
             _ => CURL_DATA.contains(&flag) && names_local_content(value),
         };

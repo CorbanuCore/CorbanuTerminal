@@ -25,8 +25,12 @@ type Key = (ThreadId, i32);
 struct Store {
     text: HashMap<Key, String>,
     order: VecDeque<Key>,
-    /// Evicted while text was kept: judged as unreadable once.
+    /// Evicted while text was kept: judged as unreadable until a human
+    /// approves (tiny keys; only grows past the backstop).
     lost: HashSet<Key>,
+    /// An interrupt (Ctrl-C/Z) was sent: the program may have dropped the
+    /// kept text, so the next text is also judged on its own.
+    interrupted: HashSet<Key>,
     locks: HashMap<Key, Arc<tokio::sync::Mutex<()>>>,
 }
 
@@ -42,11 +46,20 @@ pub(crate) async fn lock(thread: ThreadId, process: i32) -> tokio::sync::OwnedMu
     lock.lock_owned().await
 }
 
+/// A lone interrupt was sent to the process after untrusted content.
+pub(crate) fn note_interrupt(thread: ThreadId, process: i32) {
+    if let Ok(mut store) = STORE.lock() {
+        store.interrupted.insert((thread, process));
+    }
+}
+
 /// The text a process will have read once `chars` is sent.
 pub(crate) struct TypedWindow {
     key: Key,
     lost: bool,
     pub(crate) text: String,
+    /// After an interrupt: `chars` alone, judged as well.
+    pub(crate) alone: Option<String>,
 }
 
 impl TypedWindow {
@@ -59,6 +72,7 @@ impl TypedWindow {
                 key,
                 lost: true,
                 text: chars.to_string(),
+                alone: None,
             };
         };
         let dead: Vec<Key> = store
@@ -71,6 +85,7 @@ impl TypedWindow {
         for dead in dead {
             store.text.remove(&dead);
             store.lost.remove(&dead);
+            store.interrupted.remove(&dead);
             if store
                 .locks
                 .get(&dead)
@@ -79,12 +94,17 @@ impl TypedWindow {
                 store.locks.remove(&dead);
             }
         }
-        let Store { text, order, .. } = &mut *store;
+        let Store {
+            text, order, locks, ..
+        } = &mut *store;
         order.retain(|key| text.contains_key(key));
+        // Idle locks of processes with no kept text (other threads too).
+        locks.retain(|key, lock| text.contains_key(key) || Arc::strong_count(lock) > 1);
         let previous = store.text.get(&key).cloned().unwrap_or_default();
         Self {
             key,
             lost: store.lost.contains(&key),
+            alone: store.interrupted.contains(&key).then(|| chars.to_string()),
             text: previous + chars,
         }
     }
@@ -97,15 +117,14 @@ impl TypedWindow {
     /// The text was sent after untrusted content: keep it.
     pub(crate) fn keep(self) {
         if let Ok(mut store) = STORE.lock() {
+            store.interrupted.remove(&self.key);
             if store.text.insert(self.key, self.text).is_none() {
                 store.order.push_back(self.key);
             }
             while store.order.len() > MAX_PROCESSES {
                 if let Some(oldest) = store.order.pop_front() {
                     store.text.remove(&oldest);
-                    if store.lost.len() < MAX_PROCESSES {
-                        store.lost.insert(oldest);
-                    }
+                    store.lost.insert(oldest);
                 }
             }
         }
@@ -116,6 +135,7 @@ impl TypedWindow {
         if let Ok(mut store) = STORE.lock() {
             store.text.remove(&self.key);
             store.lost.remove(&self.key);
+            store.interrupted.remove(&self.key);
             store.order.retain(|key| *key != self.key);
         }
     }

@@ -575,7 +575,14 @@ impl Classifier {
         let stdin_fed =
             simple.pipe_from.is_some() || simple.stdin_from.is_some() || simple.reads_outer_output;
         if let Some((index, _)) = &command
-            && let Some(kind) = outbound::classify(words, *index, stdin_fed)
+            && let Some(kind) = outbound::classify(
+                words,
+                *index,
+                stdin_fed,
+                variables
+                    .keys()
+                    .any(|name| name.to_lowercase().ends_with("_proxy")),
+            )
         {
             self.note(kind);
         }
