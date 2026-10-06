@@ -293,9 +293,11 @@ fn strictest_hit(snapshot: &Snapshot, decoded: &[u8], depth: usize) -> Option<Ma
 
 fn decodings(run: &[u8]) -> Vec<Zeroizing<Vec<u8>>> {
     let mut out = Vec::new();
-    if run.len().is_multiple_of(2) && run.iter().all(u8::is_ascii_hexdigit) {
+    if run.iter().all(u8::is_ascii_hexdigit) {
+        // An odd length lost its first character (emitted earlier).
+        let even = &run[run.len() % 2..];
         out.push(Zeroizing::new(
-            run.chunks(2)
+            even.chunks(2)
                 .map(|pair| (hex_digit(pair[0]) << 4) | hex_digit(pair[1]))
                 .collect(),
         ));

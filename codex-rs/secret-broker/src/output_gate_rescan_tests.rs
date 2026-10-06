@@ -212,3 +212,29 @@ fn pf_28_s02_display_streams_do_not_hold_ordinary_words() {
     assert_eq!(out.as_slice(), b"ld\nblob ".as_slice());
     assert_eq!(scrubber.pending(), "QUJDREVGR0hJSktMTU5P".len());
 }
+
+#[test]
+fn pf_28_s02_display_stream_decodes_a_run_whose_start_was_emitted() {
+    let gate = gate("env:PF28S02", SecretClass::Operational, CANARY);
+    let hex: String = CANARY.bytes().map(|byte| format!("{byte:02x}")).collect();
+    let marker = "[REDACTED:env:PF28S02]";
+    for nested in [
+        STANDARD.encode(STANDARD.encode(format!("padding-{CANARY}"))),
+        STANDARD.encode(format!("padding-{hex}")),
+        // Up to 7 characters can go out before the hold: the padding covers
+        // them, as any prefix before the value does.
+        format!("padding-{}", STANDARD.encode(CANARY))
+            .bytes()
+            .map(|byte| format!("{byte:02x}"))
+            .collect(),
+    ] {
+        let input = format!("out {nested} end");
+        for lead in 1..8 {
+            let (first, rest) = input.split_at(4 + lead);
+            let out = String::from_utf8(stream(&gate, &[first.as_bytes(), rest.as_bytes()]))
+                .expect("utf8");
+            assert!(out.contains(marker), "lead {lead}: {out}");
+            assert!(out.ends_with(" end"), "lead {lead}: {out}");
+        }
+    }
+}

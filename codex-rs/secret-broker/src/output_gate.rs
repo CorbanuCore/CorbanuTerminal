@@ -580,6 +580,9 @@ pub struct StreamScrubber {
 impl StreamScrubber {
     /// For Core's display streams: a trailing encoded run is held once it is
     /// as long as the shortest encoded form, so ordinary words stream through.
+    /// Up to 7 leading characters of a run (under 6 bytes of what it
+    /// encodes) can be emitted before the hold starts; the decode tolerates
+    /// the misalignment.
     pub fn new() -> Self {
         Self::holding_runs_from(MIN_ENCODED_BYTES)
     }
