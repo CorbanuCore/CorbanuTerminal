@@ -1,12 +1,13 @@
 # #196: provider credentials never reach the trace log or the logs database.
 # The Z.AI key comes from the vault (env_key) and is never shown. A copy of the
-# Z.AI provider adds a static header holding a fake sentinel; before the fix
-# the "Configuring session" DEBUG line printed it. The on-screen checks expand
+# Z.AI provider adds a static header and a query parameter holding fake
+# sentinels; before the fix the "Configuring session" DEBUG line printed the
+# header and every request log printed the query value. The on-screen checks expand
 # both values inside the shell, and the recorder scans every private file for
 # the real key afterwards.
 id = "provider-key-not-logged"
 feature = "#196: provider secrets stay out of the trace log"
-expected = "With RUST_LOG=trace, after a model turn that runs a command, the log shows the X-Demo-Secret header as <redacted>, and the real Z.AI key and the fake header value appear 0 times in codex-tui.log and the logs database."
+expected = "With RUST_LOG=trace, after a model turn that runs a command, the log shows the header as <redacted> and the query value as REDACTED, and the real Z.AI key and both fake values appear 0 times in codex-tui.log and the logs database."
 model = "glm-5.2"
 provider = "zai-demo"
 config = """
@@ -16,6 +17,7 @@ base_url = "https://api.z.ai/api/paas/v4"
 env_key = "ZAI_API_KEY"
 wire_api = "chat"
 http_headers = { "X-Demo-Secret" = "fake-header-0196-SENTINEL-6b2d" }
+query_params = { "demo_key" = "fake-query-0196-SENTINEL-91fe" }
 """
 
 [credentials]
@@ -38,16 +40,16 @@ compress = 3
 pause = 1.5
 
 [[steps]]
-type = "!grep -o 'X-Demo-Secret\": \"[^\"]*\"' ../logs/codex-tui.log"
+type = "!grep -o -e 'X-Demo-Secret\": \"[^\"]*\"' -e 'demo_key=[A-Z][A-Za-z]*' ../logs/codex-tui.log | sort | uniq -c"
 [[steps]]
 key = "Enter"
 [[steps]]
-wait = "X-Demo-Secret\": \"<redacted>\""
+wait = "demo_key=REDACTED"
 [[steps]]
 pause = 2.0
 
 [[steps]]
-type = "!sleep 2; S=fake-header-0196-SENTINEL; grep -c -e \"$ZAI_API_KEY\" -e \"$S-6b2d\" ../logs/codex-tui.log ../home/pfterminal_logs_* | awk -F: '{print; n+=$NF} END {print \"total matches:\", n}'"
+type = "!sleep 2; S=fake-header-0196-SENTINEL; Q=fake-query-0196-SENTINEL; grep -c -e \"$ZAI_API_KEY\" -e \"$S-6b2d\" -e \"$Q-91fe\" ../logs/codex-tui.log ../home/pfterminal_logs_* | awk -F: '{print; n+=$NF} END {print \"total matches:\", n}'"
 [[steps]]
 key = "Enter"
 [[steps]]
