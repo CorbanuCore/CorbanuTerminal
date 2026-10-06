@@ -212,6 +212,8 @@ const FOLDER_FLAGS: &[&str] = &["-C", "--directory", "--cwd", "--cd", "--chdir"]
 /// Nesting limit for scripts, payloads and literals classified inside an
 /// action. Deeper nesting fails closed.
 const MAX_DEPTH: usize = 4;
+/// Bytes of command text one classification lexes; more fail closed.
+const MAX_COMMAND_BYTES: usize = 1024 * 1024;
 /// Script files one classification reads; more fail closed.
 const MAX_SCRIPT_FILES: usize = 16;
 /// Magic numbers of executables, which are not read as scripts.
@@ -405,8 +407,19 @@ impl Classifier {
             self.note(ProtectedActionKind::UnseenCode);
             return;
         }
+        // A command line too long to classify fails closed.
+        if command.iter().map(String::len).sum::<usize>() > MAX_COMMAND_BYTES {
+            self.note(ProtectedActionKind::UnseenCode);
+            return;
+        }
         let lexed = shell::simple_commands(command);
-        if (lexed.incomplete && self.not_shell == 0) || indirect::opaque_execution(&lexed.commands)
+        let pipe_sources: std::collections::HashSet<usize> = lexed
+            .commands
+            .iter()
+            .filter_map(|command| command.pipe_from)
+            .collect();
+        if (lexed.incomplete && self.not_shell == 0 && self.rebuilt == 0)
+            || indirect::opaque_execution(&lexed.commands)
         {
             self.note(ProtectedActionKind::UnseenCode);
         }
@@ -427,10 +440,7 @@ impl Classifier {
         }
         for (index, simple) in lexed.commands.iter().enumerate() {
             let (words, unseen) = substitute(simple, &variables);
-            let feeds_pipe = lexed
-                .commands
-                .iter()
-                .any(|later| later.pipe_from == Some(index));
+            let feeds_pipe = pipe_sources.contains(&index);
             self.simple_command(
                 simple,
                 &words,
@@ -569,8 +579,9 @@ impl Classifier {
                 folder_value = true;
             }
             previous = Some(word.as_str());
-            // Attached and assigned forms (`-o/path`, `f=@/path`) are paths too.
-            for candidate in word.split('=') {
+            // Attached, assigned and volume forms (`-o/path`, `f=@/path`,
+            // `~/.aws:/c`) are paths too.
+            for candidate in word.split(['=', ':']) {
                 let candidate = candidate.trim_start_matches('@');
                 if candidate.is_empty() || candidate.starts_with('-') && !candidate.contains('/') {
                     continue;

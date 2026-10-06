@@ -52,8 +52,9 @@ pub(super) fn joined_literals(text: &str) -> Vec<String> {
         if literal.contains(['\'', '"', '`']) {
             nested.extend(joined_literals(&literal));
         }
-        // A lone literal matters too once escapes are decoded (`'\x2ecodex'`).
-        if escaped {
+        // A lone literal matters too once escapes are decoded (`'\x2ecodex'`)
+        // or when a shell would expand its braces (`shell=True`).
+        if escaped || (literal.contains('{') && literal.contains(',')) {
             nested.push(literal.clone());
         }
         let joins = gap

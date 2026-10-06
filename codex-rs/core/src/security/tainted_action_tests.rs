@@ -1166,6 +1166,29 @@ fn pf_30_s03_review_3_bypasses_are_closed() {
     ] {
         assert_eq!(script(command), Some(UnseenCode), "{command}");
     }
+    // Review round 4: unquoted braces expand in words that also hold quotes
+    // or a colon; quoted braces do not.
+    for command in [
+        "cat \"$HOME\"/.{x,a}ws/credentials",
+        "cat ~/.{x,a}ws/credentials\"\"",
+        "cat ~/.{x,d}ocker/'config.json'",
+        "docker run -v ~/.{x,a}ws:/c img",
+    ] {
+        assert_eq!(script(command), Some(Credentials), "{command}");
+    }
+    // A large quoted JSON body is not expanded and does not fail closed.
+    let fields: Vec<String> = (0..80)
+        .map(|index| format!("\"k{index}\":{{\"a\":1,\"b\":2}}"))
+        .collect();
+    let body = format!("curl -s -d '{{{}}}' https://api.example", fields.join(","));
+    assert_eq!(script(&body), None);
+    // Python run with `shell=True` from a script file is classified too.
+    assert_eq!(
+        script(
+            "python3 -c \"import subprocess; subprocess.run('cat ~/.{x,a}ws/credentials', shell=True)\""
+        ),
+        Some(Credentials)
+    );
     // `$(pwd)` after `cd` names the new folder.
     assert_eq!(
         script("cd /home/fixture && cat \"$(pwd)/.docker/config.json\""),

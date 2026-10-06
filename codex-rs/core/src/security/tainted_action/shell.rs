@@ -9,6 +9,8 @@
 pub(super) const SHELLS: &[&str] = &[
     "sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh", "ash", "mksh", "yash",
 ];
+/// Open groups tracked at once.
+const MAX_GROUPS: usize = 64;
 /// Words one brace expression may expand to before it is left as written.
 const MAX_BRACE_EXPANSION: usize = 64;
 /// Placeholder for the output of a substitution the classifier cannot see.
@@ -87,23 +89,43 @@ fn replace_ifs(arg: &str) -> String {
 }
 
 /// Bounded brace expansion inside each whitespace-separated word:
-/// `~/.{x,a}ws` names `~/.xws` and `~/.aws`. Returns the text with each
+/// `~/.{x,a}ws` names `~/.xws` and `~/.aws`. Braces inside quotes are left as
+/// written, as the shell does (JSON bodies, code). Returns the text with each
 /// word's alternatives separated by spaces, and `false` when a word had too
 /// many alternatives (left as written).
 fn expand_braces(text: &str) -> (String, bool) {
     if !text.contains('{') {
         return (text.to_string(), true);
     }
+    // Mask quoted braces and commas so only unquoted ones expand.
+    const MASKS: [(char, char); 3] = [('{', '\u{2}'), ('}', '\u{3}'), (',', '\u{4}')];
+    let mut masked = String::with_capacity(text.len());
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    for ch in text.chars() {
+        match (quote, ch) {
+            _ if escaped => escaped = false,
+            (Some('\''), '\'') | (Some('"'), '"') => quote = None,
+            (None, '\'' | '"') => quote = Some(ch),
+            (None | Some('"'), '\\') => escaped = true,
+            _ => {}
+        }
+        let mask = MASKS
+            .iter()
+            .find(|(from, _)| quote.is_some() && *from == ch)
+            .map_or(ch, |(_, to)| *to);
+        masked.push(mask);
+    }
+    let unmask = |word: &str| {
+        MASKS.iter().fold(word.to_string(), |word, (from, to)| {
+            word.replace(*to, &from.to_string())
+        })
+    };
     let mut complete = true;
     let mut out = String::with_capacity(text.len());
     let mut word = String::new();
     let mut flush = |word: &mut String, out: &mut String| {
         if word.is_empty() {
-            return;
-        }
-        // The shell does not expand braces inside quotes (JSON bodies, code).
-        if word.contains(['\'', '"', ':']) {
-            out.push_str(&std::mem::take(word));
             return;
         }
         let mut words = vec![std::mem::take(word)];
@@ -118,9 +140,9 @@ fn expand_braces(text: &str) -> (String, bool) {
                 break;
             }
         }
-        out.push_str(&words.join(" "));
+        out.push_str(&unmask(&words.join(" ")));
     };
-    for ch in text.chars() {
+    for ch in masked.chars() {
         if ch.is_whitespace() {
             flush(&mut word, &mut out);
             out.push(ch);
@@ -216,7 +238,11 @@ impl Lexer {
     }
 
     fn open_group(&mut self, group: Group, pipe: Option<usize>) {
-        self.groups.push((group, pipe));
+        // Text that is not shell (Python, JavaScript) opens keyword groups it
+        // never closes; keep the stack, and its lookups, bounded.
+        if self.groups.len() < MAX_GROUPS {
+            self.groups.push((group, pipe));
+        }
     }
 
     fn close_group(&mut self, group: Group) {
