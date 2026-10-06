@@ -12,3 +12,7 @@ codex-rs/tui/src/app/tests.rs
 # PF-60-S03 accounting evidence (full TUI run output), kept verbatim.
 qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-tui-full-final.junit.xml
 qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-tui-full-final.log
+# PF-83 campaign 35 code-blind evidence (mediator log, reviewer events, raw PTY), kept verbatim.
+qa/initiative-control/management-bootstrap/pf83-codeblind-35/common/mediator-campaign.jsonl
+qa/initiative-control/management-bootstrap/pf83-codeblind-35/review/reviewer-r1-events.jsonl
+qa/initiative-control/management-bootstrap/pf83-codeblind-35/runs/F04/collected/evidence/pty.raw
