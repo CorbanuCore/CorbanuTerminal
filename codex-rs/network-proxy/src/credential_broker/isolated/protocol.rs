@@ -87,6 +87,10 @@ pub(crate) enum ControlRequest {
         /// PF-28-S02: scrub registered values from returned responses.
         #[serde(default)]
         scrub_responses: bool,
+        /// PF-33-S02: refuse provider requests that carry no checked DNS
+        /// answers; pinned requests never resolve their host in the broker.
+        #[serde(default)]
+        pin_connections: bool,
     },
     Register {
         provider: ProviderId,

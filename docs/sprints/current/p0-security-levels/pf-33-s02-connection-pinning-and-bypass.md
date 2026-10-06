@@ -72,8 +72,8 @@ to free the TUI lane: the remaining items belong to the broker lane, a future Se
 
 ## Remaining
 
-- [ ] Brokered credential routes (isolated broker) dial without the pin; the broker re-resolves with its own peer
-  check. Carry `PinnedPeers` through the broker protocol (broker lane; coordinator to place).
+- [x] Brokered credential routes (isolated broker) dial without the pin. Placed in PF-28-S02 (broker lane) and done
+  there: the checked answers travel in the signed broker frame and the broker dials only those.
 - [ ] SearXNG: no adapter exists in the tree; route it through an exact private-service grant when one is added.
 - [ ] Runtime-approved (decider) hosts are not revoked on an open tunnel (PF-25-S02). No live rebinding-resolver
   fixture; rebinding is covered by pinning tests.

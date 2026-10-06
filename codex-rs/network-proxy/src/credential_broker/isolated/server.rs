@@ -22,6 +22,7 @@ use super::protocol::decode_key;
 use super::protocol::encode_hex;
 use super::protocol::valid_id;
 use crate::config::NetworkProxyConfig;
+use crate::connect_policy::PinnedPeers;
 use crate::credential_broker::providers;
 use crate::credential_broker::response_scrub;
 use crate::runtime::NetworkProxyState;
@@ -177,6 +178,7 @@ async fn run_broker(runtime_dir: std::path::PathBuf, containment: String) -> any
         allow_local_binding,
         allow_upstream_proxy,
         scrub_responses,
+        pin_connections,
     } = &hello
     else {
         anyhow::bail!("controller did not start with hello");
@@ -209,6 +211,7 @@ async fn run_broker(runtime_dir: std::path::PathBuf, containment: String) -> any
         generation,
         upstream: upstream_client(*allow_local_binding, *allow_upstream_proxy)?,
         scrub_responses: *scrub_responses,
+        pin_connections: *pin_connections,
     });
     drop(hello);
 
@@ -371,6 +374,8 @@ struct Broker {
     upstream: UpstreamClient,
     /// PF-28-S02: scrub each credential from the responses it authorizes.
     scrub_responses: bool,
+    /// PF-33-S02: provider requests must carry checked answers to dial.
+    pin_connections: bool,
 }
 
 struct BrokerState {
@@ -430,6 +435,7 @@ pub(crate) enum DenyCode {
     Capacity,
     Revoked,
     UpstreamFailed,
+    Unpinned,
 }
 
 impl DenyCode {
@@ -447,6 +453,7 @@ impl DenyCode {
             Self::Capacity => "capacity",
             Self::Revoked => "revoked",
             Self::UpstreamFailed => "upstream_failed",
+            Self::Unpinned => "unpinned",
         }
     }
 
@@ -656,6 +663,10 @@ impl Broker {
             return deny(DenyCode::Revoked);
         }
         let operation = &authorized.request.request;
+        let pinned_addrs = operation.pinned_addrs();
+        if pinned_addrs.is_empty() && self.pin_connections {
+            return deny(DenyCode::Unpinned);
+        }
         let authority = if operation.port() == 443 {
             operation.host().to_string()
         } else {
@@ -679,6 +690,14 @@ impl Broker {
         // The agent may have spoken HTTP/2 to the proxy. Send HTTP/1.1 so an
         // origin that does not negotiate ALPN still understands the request.
         parts.version = Version::HTTP_11;
+        if !pinned_addrs.is_empty() {
+            // PF-33-S02: dial only the signed answers; never resolve the host.
+            parts.extensions.insert(PinnedPeers::new(
+                operation.host(),
+                operation.port(),
+                pinned_addrs.iter().copied(),
+            ));
+        }
         let upstream_request = Request::from_parts(parts, body);
 
         let response = tokio::select! {
