@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-24-S03"
 title: "Flagged /security picker: Permissive and Aggressive"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-24"
 execution_order: 20
@@ -81,7 +81,7 @@ label Aggressive as active while a row is missing.
 
 ## Remaining
 
-- [ ] Merge behind the flag; then archive this record.
+- [x] Merged behind the flag (PR #186, merge `023355670a`) and archived (2026-10-06).
 
 Follow-ups (not this sprint's scope) are listed in `qa/security-levels/sprints/PF-24-S03/README.md`.
 
@@ -91,10 +91,10 @@ Follow-ups (not this sprint's scope) are listed in `qa/security-levels/sprints/P
 - [x] tmux functional run on GLM 5.2: flag off, select/cancel, select Aggressive, probes denied, restart, back to Permissive (`qa/.../tmux-run/`).
 - [x] Independent Opus 5.5 High review: request changes, 12 findings dispositioned (`qa/.../review/`).
 - [x] Videos with the demo SOP script (PR #177 branch): 9 at `7f6c88912c` (`qa/.../demos/index.md`).
-- [ ] PR checks green on the final head before merge.
+- [x] PR checks green on head `65bc762d41` (27 pass, 9 skipped) before merge.
 
 ## Exit evidence
 
 - [x] Commit, paths, tests, tmux keys and video links in `qa/security-levels/sprints/PF-24-S03/` (casts: release assets).
-- [ ] Merged behind the flag; milestone code-blind run and human sign-off stay with “Aggressive ships”.
-- [ ] Done/Remaining reflect reality; completed record archived.
+- [x] Merged behind the flag; milestone code-blind run and human sign-off stay with “Aggressive ships”.
+- [x] Done/Remaining reflect reality; completed record archived.
