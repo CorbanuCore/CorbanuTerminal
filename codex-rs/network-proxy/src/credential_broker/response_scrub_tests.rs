@@ -209,5 +209,8 @@ fn pf_28_s02_hook_injected_values_join_the_gate() {
     );
     actions.inject_request_headers[0].value =
         HeaderValue::from_bytes(b"pf28s02-\xff-opaque").expect("opaque value");
-    assert!(with_hook_values(/*gate*/ None, Some(&actions)).is_err());
+    assert_eq!(
+        with_hook_values(/*gate*/ None, Some(&actions)).err(),
+        Some(RegisterError::NotText)
+    );
 }

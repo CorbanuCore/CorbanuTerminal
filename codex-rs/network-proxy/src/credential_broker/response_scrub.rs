@@ -54,7 +54,7 @@ pub(crate) fn with_hook_values(
     };
     for header in &actions.inject_request_headers {
         // A value that is not text cannot be matched reliably: refuse.
-        let value = header.value.to_str().map_err(|_| RegisterError::TooShort)?;
+        let value = header.value.to_str().map_err(|_| RegisterError::NotText)?;
         let label = format!("hook:{}", header.name);
         let parts = value
             .split(|ch: char| ch.is_whitespace() || matches!(ch, '=' | ':' | ',' | ';'))
@@ -80,6 +80,8 @@ pub(crate) fn scrub_response(gate: &ResponseGate, response: Response) -> Respons
         .get_all(CONTENT_ENCODING)
         .iter()
         .map(HeaderValue::as_bytes);
+    // Defence in depth: the HTTP client decodes chunked bodies itself, so a
+    // remaining transfer coding means bytes the scrubber cannot read.
     let transfer_coded = parts
         .headers
         .get_all(TRANSFER_ENCODING)

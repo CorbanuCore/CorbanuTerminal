@@ -57,7 +57,7 @@ pub const MIN_VALUE_BYTES: usize = 3;
 /// Values shorter than this match only as a whole word and get no encodings.
 pub const MIN_SUBSTRING_BYTES: usize = 6;
 /// Shortest encoded (base64/hex) form searched for.
-const MIN_ENCODED_BYTES: usize = 8;
+pub(crate) const MIN_ENCODED_BYTES: usize = 8;
 /// Longest value whose encodings are generated; longer values match raw/JSON.
 const MAX_ENCODED_VALUE_BYTES: usize = 4096;
 /// Padding characters removed after a base64 core.
@@ -147,6 +147,8 @@ pub enum RegisterError {
     TooShort,
     #[error("the output gate is full ({limit} representations); the value was not admitted")]
     CapacityExhausted { limit: usize },
+    #[error("a managed value that is not text cannot be protected")]
+    NotText,
 }
 
 /// Identifies one registered value without exposing it.
@@ -568,15 +570,34 @@ impl Drop for SecretLease {
 /// managed value are held back until the next chunk shows whether they are,
 /// so no prefix or suffix of a value is ever emitted. After a withheld-class
 /// match the rest of the stream is withheld.
-#[derive(Default)]
 pub struct StreamScrubber {
     carry: Zeroizing<Vec<u8>>,
     withheld: bool,
+    /// Shortest trailing encoded run held back so it is decoded whole.
+    min_held_run: usize,
 }
 
 impl StreamScrubber {
+    /// For Core's display streams: a trailing encoded run is held once it is
+    /// as long as the shortest encoded form, so ordinary words stream through.
     pub fn new() -> Self {
-        Self::default()
+        Self::holding_runs_from(MIN_ENCODED_BYTES)
+    }
+
+    /// PF-28-S02, for proxied responses: every trailing encoded run is held
+    /// (up to [`MAX_BLOCK_CARRY`]), so an origin cannot split a nested
+    /// encoding at a chunk boundary to defeat the decode. A body that pauses
+    /// mid-word waits for its next chunk or its end.
+    pub fn for_responses() -> Self {
+        Self::holding_runs_from(/*min_held_run*/ 1)
+    }
+
+    fn holding_runs_from(min_held_run: usize) -> Self {
+        Self {
+            carry: Zeroizing::new(Vec::new()),
+            withheld: false,
+            min_held_run,
+        }
     }
 
     /// Bytes currently held back.
@@ -618,7 +639,7 @@ impl StreamScrubber {
             partial => len - partial.saturating_add(1).min(len),
         };
         // A wrapped or encoded block, or seed words, that may continue.
-        if let Some(hold) = rescan::stream_hold(&snapshot, &buffer) {
+        if let Some(hold) = rescan::stream_hold(&snapshot, &buffer, self.min_held_run) {
             cut = cut.min(hold);
         }
         // Never cut through a value, nor emit one whose trailing partial
@@ -697,6 +718,12 @@ impl StreamScrubber {
                 bytes
             }
         }
+    }
+}
+
+impl Default for StreamScrubber {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

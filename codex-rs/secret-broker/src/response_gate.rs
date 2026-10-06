@@ -66,7 +66,7 @@ impl ResponseGate {
     pub fn body(&self) -> ResponseBodyScrubber {
         ResponseBodyScrubber {
             gate: self.gate.clone(),
-            stream: StreamScrubber::new(),
+            stream: StreamScrubber::for_responses(),
         }
     }
 

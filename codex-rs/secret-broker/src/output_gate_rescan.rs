@@ -107,7 +107,11 @@ pub(super) fn rescan(snapshot: &Snapshot, input: &[u8]) -> Vec<Match> {
 /// arrived) that could still grow into a value, an encoded run that may
 /// continue (up to [`MAX_BLOCK_CARRY`], so it is decoded whole), or seed
 /// words that may start a window.
-pub(super) fn stream_hold(snapshot: &Snapshot, buffer: &[u8]) -> Option<usize> {
+pub(super) fn stream_hold(
+    snapshot: &Snapshot,
+    buffer: &[u8],
+    min_held_run: usize,
+) -> Option<usize> {
     if snapshot.reps.is_empty() {
         return None;
     }
@@ -128,9 +132,10 @@ pub(super) fn stream_hold(snapshot: &Snapshot, buffer: &[u8]) -> Option<usize> {
         .rev()
         .take_while(|byte| is_base64_byte(**byte))
         .count();
-    // Any length: a run whose first characters were already emitted would
-    // be decoded out of alignment.
-    if run > 0 && view.len() - (end - run) <= MAX_BLOCK_CARRY {
+    // Display streams hold from the shortest encoded form on (decoding
+    // tolerates a few leading characters emitted before); response streams
+    // hold every run.
+    if run >= min_held_run.max(1) && view.len() - (end - run) <= MAX_BLOCK_CARRY {
         keep(at(end - run));
     }
     if let Some(start) = seed_hold(snapshot, buffer) {
@@ -303,10 +308,15 @@ fn decodings(run: &[u8]) -> Vec<Zeroizing<Vec<u8>>> {
         } else {
             &STANDARD_LENIENT
         };
-        // A length of 1 mod 4 cannot be base64; drop the stray character.
-        let usable = &run[..run.len() - usize::from(run.len() % 4 == 1)];
-        if let Ok(bytes) = engine.decode(usable) {
-            out.push(Zeroizing::new(bytes));
+        // The run may start mid-quantum (a stream emitted its first
+        // characters): try each alignment. A length of 1 mod 4 cannot be
+        // base64; drop the stray character.
+        for skip in 0..4.min(run.len()) {
+            let rest = &run[skip..];
+            let usable = &rest[..rest.len() - usize::from(rest.len() % 4 == 1)];
+            if let Ok(bytes) = engine.decode(usable) {
+                out.push(Zeroizing::new(bytes));
+            }
         }
     }
     out

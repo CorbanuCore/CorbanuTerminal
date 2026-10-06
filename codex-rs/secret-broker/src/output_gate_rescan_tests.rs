@@ -190,3 +190,25 @@ fn pf_28_s02_streamed_numbered_seed_phrase_never_shows_three_words() {
         assert!(!out.contains("ability"), "{out}");
     }
 }
+
+#[test]
+fn pf_28_s02_display_streams_do_not_hold_ordinary_words() {
+    let gate = gate("env:PF28S02", SecretClass::Operational, CANARY);
+    let mut scrubber = StreamScrubber::new();
+    let out = scrubber.push(
+        &gate,
+        OutputSink::ToolResult,
+        b"hello wor",
+        /*utf8*/ true,
+    );
+    assert_eq!(out.as_slice(), b"hello wor".as_slice());
+    // A long encoded tail is held so it can be decoded whole.
+    let out = scrubber.push(
+        &gate,
+        OutputSink::ToolResult,
+        b"ld\nblob QUJDREVGR0hJSktMTU5P",
+        /*utf8*/ true,
+    );
+    assert_eq!(out.as_slice(), b"ld\nblob ".as_slice());
+    assert_eq!(scrubber.pending(), "QUJDREVGR0hJSktMTU5P".len());
+}

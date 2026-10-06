@@ -141,3 +141,22 @@ fn pf_28_s02_long_encoded_run_is_held_within_the_bound() {
     assert_eq!(out.len() + scrubber.pending(), run.len());
     assert!(scrubber.pending() <= crate::output_gate::MAX_BLOCK_CARRY);
 }
+
+#[test]
+fn pf_28_s02_value_in_a_run_over_the_carry_bound_is_still_found() {
+    let gate = gate();
+    let mut document = vec![b'x'; 15_000];
+    document.extend_from_slice(TOKEN.as_bytes());
+    document.extend_from_slice(&[b'y'; 6_000]);
+    // One unbroken run of about 28 KiB, longer than MAX_BLOCK_CARRY.
+    let blob = STANDARD.encode(&document);
+    let core = STANDARD.encode(TOKEN);
+    let at = blob
+        .find(&core[..core.len() - 4])
+        .expect("aligned token core");
+    for cut in [1_000, at - 1, at + 5, at + 30, blob.len() - 10] {
+        let out = body(&gate, &[&blob.as_bytes()[..cut], &blob.as_bytes()[cut..]]);
+        assert!(out.contains("[REDACTED:broker:GITHUB_TOKEN]"), "cut {cut}");
+        assert!(!out.contains(&core[4..core.len() - 8]), "cut {cut}");
+    }
+}
