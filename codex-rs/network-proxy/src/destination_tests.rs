@@ -478,10 +478,12 @@ fn pf_33_s01_ledger_is_scoped_bounded_and_keeps_expired_markers() {
     ));
     // Past the chain age the marker refuses the follow-up instead of starting fresh.
     let later = now + MAX_CHAIN_AGE + Duration::from_secs(1);
-    assert!(matches!(
-        ledger.take(CLIENT, "https://public.example:443/2", later),
-        LedgerMatch::Expired
-    ));
+    for _ in 0..2 {
+        assert!(matches!(
+            ledger.take(CLIENT, "https://public.example:443/2", later),
+            LedgerMatch::Expired
+        ));
+    }
     // Markers are dropped after twice the chain age.
     let much_later = now + MAX_CHAIN_AGE * 2 + Duration::from_secs(1);
     assert!(matches!(

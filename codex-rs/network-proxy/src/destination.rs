@@ -74,6 +74,7 @@ pub(crate) enum DestinationDenial {
     RedirectHostNotAllowed,
     RedirectHopLimit,
     RedirectChainExpired,
+    UdpRelay,
 }
 
 impl DestinationDenial {
@@ -92,6 +93,7 @@ impl DestinationDenial {
             Self::RedirectHostNotAllowed => "redirect_host_not_allowed",
             Self::RedirectHopLimit => "redirect_hop_limit",
             Self::RedirectChainExpired => "redirect_chain_expired",
+            Self::UdpRelay => "udp_relay",
         }
     }
 }
@@ -229,10 +231,11 @@ impl RedirectLedger {
         else {
             return LedgerMatch::Fresh;
         };
+        if now.duration_since(pending[index].position.started) > MAX_CHAIN_AGE {
+            // The marker stays until twice the chain age, so retries are refused too.
+            return LedgerMatch::Expired;
+        }
         match pending.remove(index) {
-            Some(hop) if now.duration_since(hop.position.started) > MAX_CHAIN_AGE => {
-                LedgerMatch::Expired
-            }
             Some(hop) => LedgerMatch::Continued(hop.position),
             None => LedgerMatch::Fresh,
         }
@@ -291,6 +294,11 @@ impl HostPatterns {
     fn permits(&self, host: &str) -> bool {
         !self.deny.is_match(host) && self.allow.is_match(host)
     }
+}
+
+/// Whether a response is a redirect the guard must re-authorize.
+pub(crate) fn is_redirect_response(status: u16, headers: &HeaderMap) -> bool {
+    (300..400).contains(&status) && headers.contains_key(header::LOCATION)
 }
 
 /// Whether a request carries a body that a 307/308 follow-up would replay.
@@ -410,7 +418,7 @@ impl DestinationGuard {
         headers: &mut HeaderMap,
         scope: RedirectScope<'_>,
     ) -> Result<(), DestinationDenial> {
-        if !(300..400).contains(&status) || !headers.contains_key(header::LOCATION) {
+        if !is_redirect_response(status, headers) {
             return Ok(());
         }
         let mut locations = headers.get_all(header::LOCATION).iter();

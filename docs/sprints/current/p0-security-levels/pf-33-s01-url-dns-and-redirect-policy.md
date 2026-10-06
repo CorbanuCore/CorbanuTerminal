@@ -19,6 +19,9 @@ updated: 2026-10-06
 
 # PF-33-S01 — URL DNS and redirect policy
 
+**October 6:** ships behind `url_destination_policy` (default off; Permissive unchanged) in the managed network
+proxy. [Evidence, behaviour and known limits](../../../../qa/security-levels/sprints/PF-33-S01/README.md).
+
 ## Execution mandate
 
 - Deliver: URL authorization remains valid through DNS and every redirect, not merely on the initial hostname.
@@ -42,36 +45,48 @@ updated: 2026-10-06
 
 ## Preconditions
 
-- [ ] All dependencies in front matter are completed and archived; plan remains active.
-- [ ] Read root and nearest implementation-path AGENTS.md; verify exact plan/worktree coordinates.
-- [ ] Confirm source pins, declared crate/module paths, and backend/API availability; unresolved security prerequisites block readiness.
+- [x] PF-33-S03 completed and archived. PF-27-S02 merged behind its flag (#191) but is not archived (open
+  decisions), so this record stays `draft` like PF-28-S01; the code merges behind `url_destination_policy`.
+- [x] Root and `codex-rs` AGENTS.md read; plan/worktree coordinates recorded; both checkers pass.
+- [x] Reused the frozen `pf33-destination-policy/v1` contract unchanged except one visibility change.
 
 ## Done
 
-- [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
+- [x] New single-feature record reconciled with current ownership and archived design input.
+- [x] `network-proxy/src/destination.rs`: a guard over the contract. Public retrieval is HTTPS on 443 with standard
+  methods; private networks need an exact private-service grant (`allow_local_binding` and literal local allowlist
+  entries are not grants); reserved names never reach a resolver without one.
+- [x] Every A/AAAA answer is checked (loopback, private, link-local, metadata, CGNAT, multicast, NAT64/6to4, mapped
+  IPv6, mixed answers, empty, failure, more than 16); the connector refuses non-public peers under the guard.
+- [x] URLs canonicalized by the contract (IDNA, case, trailing dot, numeric IPv4 forms, mapped IPv6); userinfo,
+  fragments and ambiguous syntax refused; plain HTTP and other ports refused.
+- [x] Every CONNECT and SOCKS TCP tunnel is checked and intercepted (UDP relays refused); each inner request and every 3xx is re-authorized
+  before it is relayed: host allowlist before DNS, downgrade, method/body replay, private targets; `Location` is
+  screened and rewritten to the checked absolute URL. Chains are cut at 10 hops or 120 s (late follow-ups refused);
+  `Authorization` is stripped on cross-origin hops. Byte bound: `Location` ≤ 4096 bytes (contract).
+- [x] Agent sees "blocked by the URL destination policy (<reason>)"; records and logs carry host, port and reason only.
+- [x] 23 `pf_33_s01` network-proxy tests with synthetic DNS (no private endpoint contacted), plus a core test.
 
 ## Remaining
 
-- [ ] Port mixed/private DNS, mapped IPv6 and per-hop redirect cases; distinguish restricting host allowlists from private-network trust grants. Explicitly authorize scheme/port/method/path and redirect body/credential replay; reference hostname binding alone is insufficient.
-
-- [ ] Canonicalize scheme, IDNA hostname, port, userinfo, literal IP and unusual numeric forms; public retrieval permits HTTPS only and rejects ambiguous/credential-bearing URLs.
-- [ ] Validate every A/AAAA answer and connected peer; deny loopback/private/link-local/metadata/reserved/multicast and IPv4-mapped variants, mixed public/private answers and DNS failures.
-- [ ] Re-authorize every redirect and retry with hop/time/byte limits; drop credentials across origins, reject downgrade and auth-host confusion.
-- [ ] Bind credential adapters to exact normalized host, port, method and supported path; this is stricter than a hostname allowlist.
-- [ ] Test redirect chains, dual stack, alternate IP encodings, trailing dots, suffix confusion, CNAME chains and synthetic DNS fixtures without contacting real private endpoints.
-- [ ] Add named `pf_33_s01` regression tests; update affected Cargo/Bazel/lock/schema edges together without broadening this feature.
+- [ ] Bind credential adapters to exact host, port, method and path. The scoped OpenAI route already does; legacy
+  per-host brokered credentials only bind host, and the guard adds HTTPS/443/method. This lives in
+  `credential_broker.rs` (broker lane); recommend moving it to PF-28-S02 or a broker follow-up.
+- [ ] Known costs, recorded: POST answered 301/302 is refused (contract); hosts with more than 16 answers are refused;
+  timed-out lookups are not cancelled; redirects to hosts approved only at runtime are refused; local upstream
+  proxies, connection pinning to the checked answers and an in-process MITM test seam are PF-33-S02.
 
 ## Verification
 
-- [ ] Run `cd codex-rs && just fix -p <affected-crate>` for each listed crate, then `just fmt`; inspect the final diff.
-- [ ] Focused: `cd codex-rs && just test -p codex-network-proxy pf_33_s01`; confirm tests actually ran.
-- [ ] Integration: full affected crate suites via `just test -p <affected-crate>`; update Bazel locks when manifests change.
-- [ ] TUI applicability: none; integration flows are re-run by PF-26-S02
-- [ ] Record candidate/commit, commands, expected/actual outcomes and safe artifact digests; no production credentials or funds.
+- [x] `just fix -p codex-network-proxy`, `-p codex-features`, `-p codex-core`; `just fmt`; final diff inspected.
+- [x] Focused: `cargo test -p codex-network-proxy pf_33_s01` (23 passed); `cargo test -p codex-core pf_33_s01` (1).
+- [x] Integration: `cargo test -p codex-network-proxy` (265 + 16 contract tests); core schema fixture test passes.
+- [x] TUI: GLM 5.2 tmux runs through the real proxy against httpbin.org, recorded as SOP videos.
+- [x] Independent Opus 5.5 High review and re-checks; findings dispositioned in the evidence README.
+- [ ] Linux and Bazel CI on the PR.
 
 ## Exit evidence
 
-- [ ] Implementation commit and final-tree outputs under `qa/security-levels/sprints/PF-33-S01/`.
-- [ ] Acceptance and source-mapping assertions proven; applicable true-TUI keys/checkpoints captured after formatting.
-- [ ] PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
-- [ ] Done/Remaining reflect reality; completed record moved to the archive and plan/navigation updated.
+- [x] Commits, commands, outcomes and review records under `qa/security-levels/sprints/PF-33-S01/`.
+- [ ] PF-26 final-candidate requalification remains mandatory; no release-complete claim here.
+- [ ] Archive after PF-27-S02 is archived and the remaining item is placed.

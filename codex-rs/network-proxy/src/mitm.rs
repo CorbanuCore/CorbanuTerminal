@@ -8,6 +8,7 @@ use crate::destination::HostPatterns;
 use crate::destination::RedirectLedger;
 use crate::destination::RedirectScope;
 use crate::destination::SystemResolver;
+use crate::destination::is_redirect_response;
 use crate::destination::request_has_body;
 use crate::mitm_hook::HookEvaluation;
 use crate::mitm_hook::MitmHookActions;
@@ -426,7 +427,9 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
             }
         },
     };
-    if let Some((authorized, client)) = destination {
+    if let Some((authorized, client)) = destination
+        && is_redirect_response(upstream_resp.status().as_u16(), upstream_resp.headers())
+    {
         let status = upstream_resp.status().as_u16();
         let checked = match HostPatterns::current(app_state).await {
             Ok(hosts) => {
