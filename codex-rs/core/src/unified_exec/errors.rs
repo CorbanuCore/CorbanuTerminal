@@ -20,6 +20,9 @@ pub(crate) enum UnifiedExecError {
     StdinClosed,
     #[error("missing command line for unified exec request")]
     MissingCommandLine,
+    /// PF-27-S02: the secretless launch contract refused the input.
+    #[error("{message}")]
+    ProtectedLaunch { message: String },
     #[error("Command denied by sandbox: {message}")]
     SandboxDenied {
         message: String,

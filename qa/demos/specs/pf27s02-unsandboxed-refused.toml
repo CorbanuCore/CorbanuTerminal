@@ -1,0 +1,36 @@
+# PF-27-S02: protected launch never runs an agent command outside the OS sandbox.
+id = "pf27s02-unsandboxed-refused"
+feature = "Secretless agent launch: a command that would run unsandboxed is refused, with the reason"
+expected = "With full access selected, the agent's command is refused: Protected launch refused: this command would run outside the OS sandbox."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+suppress_unstable_features_warning = true
+
+[features]
+secretless_agent_launch = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+type = "Run the shell command: echo hello. Run it exactly once, then tell me the exact error text if it fails, and stop."
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Protected launch refused"
+timeout = 180
+compress = 3
+
+[[steps]]
+pause = 4.0

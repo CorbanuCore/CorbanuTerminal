@@ -11,7 +11,7 @@ branch: "feat/p0-security-levels"
 base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
 depends_on: "PF-19-S02, PF-20-S02, PF-23-S02"
 created: 2026-08-24
-updated: 2026-08-28
+updated: 2026-10-06
 ---
 
 # PF-23-S03 — Downgrade, restart, and inheritance enforcement
@@ -51,6 +51,7 @@ updated: 2026-08-28
 
 - [ ] Block transitions until required isolation/migration/screening probes pass; confirmed changes invalidate broker/browser sessions, pending financial actions, child authority and queued disclosures. Test updates arriving during execution.
 
+- [ ] Production broker revocation trigger (moved from PF-27-S04, 2026-10-06): a confirmed restrictive change, kill switch or run end calls `revoke_brokered_credentials`, so the isolated broker advances its generation and closes open channels; today nothing in the product calls it.
 - [ ] Define prepare/commit/cancel transition state so only trusted human confirmation commits a level change.
 - [ ] Atomically advance revocation generation and invalidate cached decisions, grants, mandates, approvals, and incompatible child authority.
 - [ ] Persist level and restrictive revocation/kill state before protected work resumes.

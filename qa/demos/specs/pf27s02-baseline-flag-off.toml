@@ -1,0 +1,74 @@
+# PF-27-S02 control run: the same probes with secretless_agent_launch OFF (today's behaviour).
+# The last step shows that the human's own unsandboxed shell can read Core's environment
+# (count only), which proves the probe targets the right pid.
+id = "pf27s02-baseline-flag-off"
+feature = "Control: with secretless_agent_launch off, agent commands can read the vault store and sign-in file"
+expected = "Flag off: reading auth.json, secrets/ and shell_snapshots/ is ALLOWED (writes to config.toml and Core's environment stay denied by the existing sandbox). The human's shell reads Core's environment (count 1)."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[sandbox_workspace_write]
+network_access = true
+
+[features]
+isolated_credential_broker = true
+
+[features.network_proxy]
+enabled = true
+allow_local_binding = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"probe.sh" = '''
+probe() { if eval "$2" >/dev/null 2>&1; then echo "$1: ALLOWED"; else echo "$1: denied"; fi; }
+probe "read auth.json" 'cat "$CODEX_HOME/auth.json"'
+probe "read secrets/" 'cat "$CODEX_HOME"/secrets/*'
+probe "read shell snapshots" 'ls "$CODEX_HOME/shell_snapshots/"'
+probe "write config.toml" 'printf "\n" >> "$CODEX_HOME/config.toml"'
+probe "read Core environment (pid $PPID)" 'ps eww -o command= -p "$PPID" | grep -q ZAI_API_KEY='
+echo probes done
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+type = "!mkdir -p {home}/secrets {home}/shell_snapshots && echo synthetic-vault > {home}/secrets/local.age && echo '{{}}' > {home}/auth.json && echo seeded"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "seeded"
+
+[[steps]]
+type = "Run sh probe.sh once and show me its raw output, then stop."
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "probes done"
+timeout = 180
+compress = 3
+
+[[steps]]
+type = "!ps eww -o command= -p $PPID | grep -c ZAI_API_KEY="
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "└ 1"
+
+[[steps]]
+pause = 4.0

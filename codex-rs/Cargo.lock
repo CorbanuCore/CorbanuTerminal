@@ -3892,6 +3892,7 @@ dependencies = [
  "codex-utils-rustls-provider",
  "codex-windows-sandbox",
  "globset",
+ "libc",
  "pretty_assertions",
  "rama-core",
  "rama-http",
@@ -3986,8 +3987,10 @@ dependencies = [
 name = "codex-process-hardening"
 version = "0.1.48"
 dependencies = [
+ "landlock",
  "libc",
  "pretty_assertions",
+ "seccompiler",
 ]
 
 [[package]]

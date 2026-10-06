@@ -16,10 +16,15 @@ pub(crate) fn create_env_for_mcp_server(
     env_vars: &[McpServerEnvVar],
 ) -> Result<HashMap<OsString, OsString>> {
     let additional_env_vars = local_stdio_env_var_names(env_vars)?;
+    // PF-27-S02: with secretless agent launch armed, inherited variables
+    // must pass the launch allowlist; literal `env` values from the server's
+    // own config are still applied below.
+    let armed = codex_protocol::secretless_launch::is_armed();
     let env = DEFAULT_ENV_VARS
         .iter()
         .copied()
         .chain(additional_env_vars)
+        .filter(|var| !armed || codex_protocol::secretless_launch::is_launch_env_name_allowed(var))
         .filter_map(|var| env::var_os(var).map(|value| (OsString::from(var), value)))
         .chain(extra_env.unwrap_or_default())
         .collect();
