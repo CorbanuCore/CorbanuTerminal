@@ -1,20 +1,20 @@
 ---
 sprint_id: "PF-30-S01"
 title: "Typed source envelope and trusted ingress"
-status: draft
+status: "completed behind flag"
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-30"
 execution_order: 37
-owner: "/root/provenance"
+owner: "untrusted-content lane"
 parallel_lane: "source-envelope"
 write_scope: "codex-rs/protocol/src/provenance.rs, codex-rs/protocol/src/provenance_tests.rs, codex-rs/core/src/security/ingress/, codex-rs/core/src/context/provenance.rs, codex-rs/core/src/session/session.rs, codex-rs/core/src/client_tests.rs, codex-rs/core/src/session/turn.rs, codex-rs/core/src/client_common.rs, codex-rs/core/src/realtime_conversation.rs, codex-rs/core/src/realtime_conversation_tests.rs, codex-rs/core/src/tools/router.rs, codex-rs/core/src/mcp_tool_call.rs, codex-rs/core/tests/suite/provenance.rs, qa/security-levels/sprints/PF-30-S01-typed-source-envelope/, docs/sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md"
 integration_gate: "Codex /root owns protocol/context/test exports and shared Cargo/Bazel/lock registration, audits native ingress coverage without changing Permissive, reruns protocol/Core/governance plus actual TMUX on RTX and Astra High/Fable 5.1 High reviews (maximum five per lane). Contract-only evidence cannot complete this sprint."
-worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-round5-provenance"
-branch: "feat/security-round5-provenance"
-base_commit: "07791288b6feeccfaee5a57c12452359cc666957"
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf30-s01-20261006"
+branch: "feat/pf-30-s01-source-envelope"
+base_commit: "cb78550a31cdeec2a0c37cd0fc5608fba9b6cb6c"
 depends_on: "PF-22-S02"
 created: 2026-08-28
-updated: 2026-09-04
+updated: 2026-10-06
 ---
 
 # PF-30-S01 — Typed source envelope and trusted ingress
@@ -55,7 +55,34 @@ updated: 2026-09-04
 - [x] Add named source/role/metadata and missing-source regressions, including a synthetic unknown route/tool variant; connect exact admitted input to the three real provider adapters with unchanged Permissive shaping.
 - [x] Rolling continuation implements complete-input screening transport segmentation within the existing 2,048-byte input bound: chunks at most 512 bytes, one exact source/digest/count, full reassembly and atomic admission. No prefix release or per-segment authority. RTX after scoped fix/full formatting: 27 Core provenance tests and 22 content-security contract tests pass, including split Unicode escapes, partial/duplicate/cross-source/swapped-content chunks and exact provider-wire replay stability. Source checkpoint `078342d85` plus synchronized remote formatting; final candidate/TMUX/review ledger is recorded in QA.
 
+- [x] 2026-10-06 (security decisions of 2026-10-06; PF-35 is now P1): behind the default-off `source_envelopes`
+  feature, Moderate/Aggressive no longer fail closed. A deterministic host producer
+  (`core/src/security/ingress/structural.rs`) runs every external text through the existing screening contract
+  and sends it as labelled untrusted data: `<corbanu_untrusted_data>` + `source=<kind> id sha256 authority=none`.
+  It neutralizes wrapper closes, role tags, chat special tokens, look-alike brackets/letters (fullwidth,
+  mathematical, Cyrillic/Greek, any non-ASCII tag name) and invisible/bidi/tag/variation characters, and withholds
+  oversize text. Permissive and flag-off requests are unchanged.
+- [x] Standing comes only from Core recording seams: human prompt (`record_user_prompt_and_emit_turn_item`), host
+  context/reminders/world-state, and the provider stream (assistant text and exact model-structure items). Tool/MCP
+  outputs, hook context, user-shell output, agent messages and anything unrecorded (injected, restored, forked) are
+  labelled; unrecorded calls become labelled data with their outputs; unrecorded reasoning is withheld; unknown wire
+  variants are withheld. Quoted approvals in data never become grants; approvals stay on the host Op channel.
+- [x] Resume/fork: restored messages have no recorded origin and stay labelled; fresh host context is reinjected
+  once on the next protected turn.
+- [x] Gate: focused `pf_30_s01` Core 39/39, protocol/features suites, full Core (2 failures reproduce on main; see
+  QA), GLM 5.2 tmux demos, independent Opus 5.5 High review (three rounds). Evidence:
+  [labelled-ingress-gate.md](../../../../qa/security-levels/sprints/PF-30-S01-typed-source-envelope/labelled-ingress-gate.md).
+
 ## Remaining
+
+Moved out of this sprint (not blocking the flagged merge):
+
+- PF-30-S02: persist per-message origins and lineage in the rollout so restored history can regain standing.
+- PF-35 (P1): a calibrated classifier producer can replace the deterministic producer behind the same contract.
+- Known gaps, recorded in QA: images and encrypted agent content pass unwrapped; MCP tool-search descriptions;
+  realtime and memory summarisation still fail closed; parent→child messages carry the `child_agent` label.
+
+Historical checklist (superseded by the 2026-10-06 decisions):
 
 - [ ] Connect a real trusted screening producer to the completed candidate/segment handoff. `codex-content-security` currently provides the contract/reassembler, not a production classifier; the positive tests use an explicitly synthetic engine. A production verdict cannot be fabricated and PF-35 qualification cannot be bypassed. Core client.rs and session/mod.rs belong exclusively to PF-30-S04; request any additional integration hooks from the coordinator.
 
