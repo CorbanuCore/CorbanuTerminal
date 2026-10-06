@@ -1061,6 +1061,18 @@ impl ModelClient {
         }
     }
 
+    /// A prompt that will never be recorded (blocked by a hook) drops one mark.
+    pub(crate) fn discard_agent_input(&self, input: &[codex_protocol::user_input::UserInput]) {
+        if !self.source_envelopes_enabled() {
+            return;
+        }
+        if let Ok(bytes) = serde_json::to_vec(input)
+            && let Ok(mut ingress) = self.ingress_items.lock()
+        {
+            ingress.discard_agent_input(&codex_content_security::ContentDigest::of(&bytes));
+        }
+    }
+
     /// The origin to record for a prompt: another agent's mark, if any.
     pub(crate) fn take_agent_input_origin(
         &self,

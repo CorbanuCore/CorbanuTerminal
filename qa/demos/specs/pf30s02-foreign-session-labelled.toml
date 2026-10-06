@@ -1,0 +1,82 @@
+# PF-30-S02 slice 2: a session file opened in another home (different origin key) resumes as labelled data.
+id = "pf30s02-foreign-session-labelled"
+feature = "A session moved to another home loses its recorded standing (source_envelopes, Moderate)"
+expected = "After the home's origin key is replaced (as on another machine) and the session is resumed, GLM reports the earlier code-word message now arrives wrapped as corbanu_untrusted_data with source=unknown."
+model = "glm-5.2"
+provider = "zai"
+config = """
+approval_policy = "never"
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "moderate"
+
+[features]
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Remember my code word: PELICAN. Reply with exactly: noted"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^• [Nn]oted"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 1.5
+
+[[steps]]
+type = "!mv {home}/source-origin.key {home}/old-origin.key && (umask 077; head -c 32 /dev/urandom > {home}/source-origin.key) && echo key-replaced"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "└ key-replaced"
+[[steps]]
+pause = 2.0
+
+[[steps]]
+type = "/new"
+[[steps]]
+key = "Enter"
+[[steps]]
+pause = 2.0
+[[steps]]
+type = "/resume"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Resume a previous session"
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "To continue this session"
+timeout = 60
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Two short lines: 1) my code word? 2) Does my earlier code-word message reach you as a normal user message or wrapped in corbanu_untrusted_data, and with which source= label?"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "source=\\W?unknown"
+timeout = 240
+compress = 3
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+[[steps]]
+pause = 4.0

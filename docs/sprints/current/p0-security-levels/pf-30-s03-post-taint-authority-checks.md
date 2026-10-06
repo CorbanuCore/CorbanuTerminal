@@ -7,11 +7,11 @@ plan_feature: "PF-30"
 execution_order: 39
 owner: "untrusted-content lane"
 parallel_lane: "untrusted-content"
-write_scope: "codex-rs/core/src/security/tainted_action.rs, codex-rs/core/src/security/tainted_action_tests.rs, codex-rs/core/src/security/mod.rs, codex-rs/core/src/security/ingress/native.rs, codex-rs/core/src/security/ingress/pf_30_s02_tests.rs, codex-rs/core/src/client.rs, codex-rs/core/src/session/mod.rs, codex-rs/core/src/tools/orchestrator.rs, codex-rs/core/src/tools/approvals.rs, codex-rs/core/src/tools/sandboxing.rs, codex-rs/core/src/tools/runtimes/shell.rs, codex-rs/core/src/tools/runtimes/unified_exec.rs, codex-rs/core/src/tools/runtimes/apply_patch.rs, codex-rs/core/tests/suite/provenance.rs, qa/security-levels/sprints/PF-30-S03/, qa/demos/specs/, qa/demos/index/PF-30-S03.md, docs/sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md"
-integration_gate: "Per-sprint gate of 2026-10-06: focused tests, GLM 5.2 tmux demos, one independent Opus 5.5 High review; merge behind source_envelopes."
+write_scope: "codex-rs/core/src/security/tainted_action.rs, codex-rs/core/src/security/tainted_action_tests.rs, codex-rs/core/src/security/ingress/native.rs, codex-rs/core/src/security/ingress/pf_30_s02_tests.rs, codex-rs/core/src/client.rs, codex-rs/core/src/session/mod.rs, codex-rs/core/src/tools/orchestrator.rs, codex-rs/core/src/tools/approvals.rs, codex-rs/core/src/tools/runtimes/shell.rs, codex-rs/core/src/tools/runtimes/unified_exec.rs, codex-rs/core/tests/suite/provenance.rs, qa/security-levels/sprints/PF-30-S03/, qa/demos/specs/, qa/demos/index/PF-30-S03.md, docs/sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md"
+integration_gate: "Per-sprint gate of 2026-10-06: focused tests, GLM 5.2 tmux demos, one independent Opus 5.5 High review; merge behind source_envelopes. Shared with PF-27-S02 and serialized by the integration owner, not reserved here: the one-line module registration in codex-rs/core/src/security/mod.rs, the fresh_human_authority field and cache bypass in codex-rs/core/src/tools/sandboxing.rs, and the preapproval bypass in codex-rs/core/src/tools/runtimes/apply_patch.rs."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf30-s03-20261006"
 branch: "feat/pf-30-s03-post-taint"
-base_commit: "BASE_COMMIT_PLACEHOLDER"
+base_commit: "743a7c22dabba6a0368e8390dcd9dd7b2ecdd9e8"
 depends_on: "PF-30-S02, PF-13-S05"
 created: 2026-08-28
 updated: 2026-10-06

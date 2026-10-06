@@ -48,7 +48,7 @@ pub(crate) const ROWS: [(&str, &str); 5] = [
     ("Network", "off for agent commands; web search off"),
     (
         "Vault",
-        "the vault store and sign-in file are unreadable to agent commands, and direct `corbanu vault …` commands are refused; secret-like environment variables (KEY, SECRET, TOKEN, VAULT, PASSWORD, PASSPHRASE, CREDENTIAL) are removed and shell profiles are not loaded",
+        "the vault store and sign-in file are unreadable to agent commands, and direct `corbanu vault …` commands are refused; secret-like environment variables (KEY, SECRET, TOKEN, VAULT, PASSWORD, PASSPHRASE, CREDENTIAL) are removed, and login profiles and shell snapshots are not used",
     ),
     (
         "Child agents",
@@ -59,10 +59,12 @@ pub(crate) const ROWS: [(&str, &str); 5] = [
 pub(crate) const UNCHANGED: &str = "Unchanged: model and provider, MCP servers, apps and hooks (they run outside the sandbox), wallet scopes, and commands you have already allowed permanently (they skip the prompt but stay sandboxed). `corbanu exec` and IDE sessions are not covered yet.";
 
 /// Role config keys (dotted) that would give a spawned child different values.
-const ROLE_KEYS: [&str; 12] = [
+const ROLE_KEYS: [&str; 14] = [
     "approval_policy",
     "approvals_reviewer",
     "sandbox_mode",
+    "sandbox_workspace_write",
+    "profile",
     "default_permissions",
     "permissions",
     "web_search",
@@ -173,7 +175,7 @@ pub(crate) fn env_overrides(user_env: &ShellEnvironmentPolicyToml) -> Vec<(Strin
     overrides
 }
 
-fn is_secret_name(name: &str) -> bool {
+pub(super) fn is_secret_name(name: &str) -> bool {
     let upper = name.to_ascii_uppercase();
     [
         "KEY",

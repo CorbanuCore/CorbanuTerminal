@@ -1,0 +1,55 @@
+# PF-24-S03 follow-up (code-blind case B-06): the Aggressive review shows this
+# session's value next to the Aggressive value for every row. The user config
+# is the design's Config C: on-request approvals, an extra writable folder,
+# network on and live web search.
+id = "pf24-review-shows-current"
+feature = "Aggressive review shows your current settings"
+expected = "Each row of the Aggressive review shows what this session has now (on-request, the extra writable folder, network on, live web search, secret variables kept) above the Aggressive value; Esc changes nothing."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+web_search = "live"
+
+[sandbox_workspace_write]
+writable_roots = ["{outside}"]
+network_access = true
+
+[shell_environment_policy]
+inherit = "all"
+ignore_default_excludes = true
+
+[features]
+security_levels = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Approvals now: on-request"
+[[steps]]
+pause = 6.0
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "Cancelled\\. Nothing changed\\."
+[[steps]]
+pause = 2.5

@@ -1,0 +1,24 @@
+
+Switch to Aggressive?
+These settings replace yours in Corbanu Terminal sessions and their child
+agents:
+• Sandbox now: profile corbanu-aggressive: commands can write to the current
+    folder; permission-request tools are off
+  Aggressive: write only in the current folder: no extra writable folders, no /
+    tmp or $TMPDIR; approved commands stay inside it too; escalation and
+    permission-request tools are off
+• Approvals now: untrusted (reviewer: you)
+  Aggressive: untrusted: you approve every command that is not known read-only
+    (reviewer: you, never auto-review)
+• Network now: off for agent commands; web search disabled
+  Aggressive: off for agent commands; web search off
+• Vault now: the vault store and sign-in file are unreadable to agent commands;
+    secret-like environment variables are removed; login profiles and shell
+    snapshots are not used
+  Aggressive: the vault store and sign-in file are unreadable to agent commands,
+    and direct `corbanu vault …` commands are refused; secret-like environment
+    variables (KEY, SECRET, TOKEN, VAULT, PASSWORD, PASSPHRASE, CREDENTIAL) are
+    removed, and login profiles and shell snapshots are not used
+• Child agents now: spawned agents get this session's values
+  Aggressive: spawned agents get the same values; custom roles that would change
+↑/↓ scroll · enter confirm and save · esc back, nothing changes
