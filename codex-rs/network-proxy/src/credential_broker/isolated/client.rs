@@ -13,6 +13,7 @@ use super::protocol::ControlResponse;
 use super::protocol::FRAME_HEADER;
 use super::protocol::HostBindingWire;
 use super::protocol::MAX_CONTROL_LINE_BYTES;
+use super::protocol::ModelBindingWire;
 use super::protocol::ProviderId;
 use super::protocol::encode_hex;
 use super::protocol::valid_id;
@@ -301,7 +302,6 @@ impl IsolatedBrokerClient {
         &self.broker_instance
     }
 
-    #[cfg(test)]
     pub(crate) fn socket_path(&self) -> &std::path::Path {
         &self.socket_path
     }
@@ -329,6 +329,26 @@ impl IsolatedBrokerClient {
             binding,
             value: value.to_string(),
         })?;
+        self.registered(response)
+    }
+
+    /// PF-27-S05: hands one of Core's model-provider keys to the broker.
+    pub(crate) fn register_model(
+        &self,
+        binding: ModelBindingWire,
+        value: &str,
+    ) -> Result<CredentialReference, IsolatedBrokerError> {
+        let response = self.call(&ControlRequest::RegisterModel {
+            binding,
+            value: value.to_string(),
+        })?;
+        self.registered(response)
+    }
+
+    fn registered(
+        &self,
+        response: ControlResponse,
+    ) -> Result<CredentialReference, IsolatedBrokerError> {
         match response {
             ControlResponse::Registered {
                 reference,

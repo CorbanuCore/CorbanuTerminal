@@ -40,6 +40,22 @@ impl HttpClient {
         Self::from_parts(inner, RequestLogging::Disabled)
     }
 
+    /// A client whose every connection goes to the Unix socket `path` (plain
+    /// HTTP for `http://` URLs), never following redirects. Used for Core's
+    /// model requests to the isolated credential broker (PF-27-S05).
+    #[cfg(unix)]
+    pub fn unix_socket(
+        path: &std::path::Path,
+        default_headers: HeaderMap,
+    ) -> Result<Self, HttpError> {
+        reqwest::Client::builder()
+            .default_headers(default_headers)
+            .redirect(reqwest::redirect::Policy::none())
+            .unix_socket(path.to_path_buf())
+            .build()
+            .map(Self::new)
+    }
+
     pub(crate) fn from_parts(inner: reqwest::Client, request_logging: RequestLogging) -> Self {
         Self {
             inner,

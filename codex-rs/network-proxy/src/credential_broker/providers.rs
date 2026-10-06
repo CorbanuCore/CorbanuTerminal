@@ -96,7 +96,7 @@ impl CredentialProvider {
 /// An absolute path with no dot segments, empty segments, backslashes, path
 /// parameters or encoded separators (single or double), so the origin cannot
 /// resolve it outside the paths a provider allows.
-fn plain_path(path: &str) -> bool {
+pub(super) fn plain_path(path: &str) -> bool {
     let lower = path.to_ascii_lowercase();
     path.starts_with('/')
         && path.len() <= 4096

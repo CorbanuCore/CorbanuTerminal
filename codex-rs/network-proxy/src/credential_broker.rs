@@ -1,5 +1,7 @@
 #[cfg(unix)]
 pub(crate) mod isolated;
+#[cfg(unix)]
+pub mod model_auth;
 mod providers;
 mod resolver;
 pub(crate) mod response_scrub;

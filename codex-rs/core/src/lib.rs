@@ -204,4 +204,6 @@ pub use installation_id::resolve_installation_id;
 pub mod compact;
 pub mod memory_stage_one;
 mod memory_usage;
+#[cfg(unix)]
+mod model_broker_auth;
 pub mod otel_init;

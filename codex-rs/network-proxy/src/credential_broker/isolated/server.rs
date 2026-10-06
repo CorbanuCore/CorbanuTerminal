@@ -17,6 +17,8 @@ use super::protocol::FRAME_HEADER;
 use super::protocol::HostBindingWire;
 use super::protocol::MAX_CONTROL_LINE_BYTES;
 use super::protocol::MAX_CREDENTIAL_VALUE_BYTES;
+use super::protocol::ModelAuthHeader;
+use super::protocol::ModelBindingWire;
 use super::protocol::ProviderId;
 use super::protocol::decode_key;
 use super::protocol::encode_hex;
@@ -397,10 +399,26 @@ impl Default for BrokerState {
 }
 
 struct BrokerCredential {
-    provider: ProviderId,
-    binding: HostBindingWire,
+    kind: CredentialKind,
     value: Zeroizing<String>,
     reflection: Option<ResponseGate>,
+}
+
+enum CredentialKind {
+    /// An agent credential virtualized by the network proxy (PF-27-S04).
+    Provider {
+        provider: ProviderId,
+        binding: HostBindingWire,
+    },
+    /// One of Core's own model-provider keys (PF-27-S05).
+    Model(ModelBindingWire),
+}
+
+/// Where an authorized request's credential header goes.
+#[derive(Clone, Copy)]
+enum HeaderTarget {
+    Provider(ProviderId),
+    Model(ModelAuthHeader),
 }
 
 #[derive(Default)]
@@ -468,7 +486,7 @@ impl DenyCode {
 
 struct Authorized {
     request: VerifiedProviderRequest,
-    provider: ProviderId,
+    target: HeaderTarget,
     header: HeaderValue,
     /// PF-28-S02: scrubs this credential from the response.
     reflection: Option<ResponseGate>,
@@ -486,25 +504,32 @@ impl Broker {
                 provider,
                 binding,
                 value,
-            } => self.register(*provider, binding, value),
+            } => {
+                let usable = binding.validate()
+                    && providers::provider_by_id(*provider)
+                        .request_header_value(value)
+                        .is_some();
+                self.register(
+                    usable,
+                    CredentialKind::Provider {
+                        provider: *provider,
+                        binding: binding.clone(),
+                    },
+                    value,
+                )
+            }
+            ControlRequest::RegisterModel { binding, value } => {
+                let usable = binding.validate() && binding.header.value(value).is_some();
+                self.register(usable, CredentialKind::Model(binding.clone()), value)
+            }
             ControlRequest::Revoke => ControlResponse::Revoked {
                 run_generation: self.revoke(),
             },
         }
     }
 
-    fn register(
-        &self,
-        provider: ProviderId,
-        binding: &HostBindingWire,
-        value: &str,
-    ) -> ControlResponse {
-        let usable = !value.is_empty()
-            && value.len() <= MAX_CREDENTIAL_VALUE_BYTES
-            && binding.validate()
-            && providers::provider_by_id(provider)
-                .request_header_value(value)
-                .is_some();
+    fn register(&self, usable: bool, kind: CredentialKind, value: &str) -> ControlResponse {
+        let usable = usable && !value.is_empty() && value.len() <= MAX_CREDENTIAL_VALUE_BYTES;
         if !usable {
             return ControlResponse::Error {
                 code: ControlErrorCode::InvalidCredential,
@@ -538,8 +563,7 @@ impl Broker {
         state.credentials.insert(
             reference.clone(),
             BrokerCredential {
-                provider,
-                binding: binding.clone(),
+                kind,
                 value: Zeroizing::new(value.to_string()),
                 reflection,
             },
@@ -620,9 +644,6 @@ impl Broker {
             .get(&verified.credential)
             .ok_or(DenyCode::UnknownCredential)?;
         let operation = &verified.request;
-        if !credential.binding.matches_host(operation.host()) {
-            return Err(DenyCode::HostNotBound);
-        }
         let path = request
             .uri()
             .path_and_query()
@@ -631,18 +652,40 @@ impl Broker {
         if request.method().as_str() != operation.method() || path != operation.path() {
             return Err(DenyCode::RequestMismatch);
         }
+        let (target, header) = match &credential.kind {
+            CredentialKind::Provider { provider, binding } => {
+                if !binding.matches_host(operation.host()) {
+                    return Err(DenyCode::HostNotBound);
+                }
+                // PF-33-S02: proxied agent requests carry the guard's answers.
+                if self.pin_connections && operation.pinned_addrs().is_empty() {
+                    return Err(DenyCode::Unpinned);
+                }
+                (
+                    HeaderTarget::Provider(*provider),
+                    providers::provider_by_id(*provider)
+                        .request_header_value(credential.value.as_str()),
+                )
+            }
+            CredentialKind::Model(binding) => {
+                if !binding.allows(operation.host(), operation.port(), operation.path()) {
+                    return Err(DenyCode::HostNotBound);
+                }
+                (
+                    HeaderTarget::Model(binding.header),
+                    binding.header.value(credential.value.as_str()),
+                )
+            }
+        };
         if state.in_flight >= MAX_BROKER_IN_FLIGHT {
             return Err(DenyCode::Capacity);
         }
-        let provider = credential.provider;
-        let mut header = providers::provider_by_id(provider)
-            .request_header_value(credential.value.as_str())
-            .ok_or(DenyCode::UnknownCredential)?;
+        let mut header = header.ok_or(DenyCode::UnknownCredential)?;
         header.set_sensitive(true);
         let reflection = credential.reflection.clone();
         state.in_flight += 1;
         Ok(Authorized {
-            provider,
+            target,
             generation: state.run_generation,
             request: verified,
             header,
@@ -664,9 +707,6 @@ impl Broker {
         }
         let operation = &authorized.request.request;
         let pinned_addrs = operation.pinned_addrs();
-        if pinned_addrs.is_empty() && self.pin_connections {
-            return deny(DenyCode::Unpinned);
-        }
         let authority = if operation.port() == 443 {
             operation.host().to_string()
         } else {
@@ -674,8 +714,16 @@ impl Broker {
         };
         let (mut parts, body) = request.into_parts();
         parts.headers.remove(FRAME_HEADER);
-        providers::provider_by_id(authorized.provider)
-            .insert_request_header(&mut parts.headers, authorized.header);
+        match authorized.target {
+            HeaderTarget::Provider(provider) => providers::provider_by_id(provider)
+                .insert_request_header(&mut parts.headers, authorized.header),
+            HeaderTarget::Model(header) => {
+                // Core sends no credential header; drop any anyway.
+                parts.headers.remove(rama_http::header::AUTHORIZATION);
+                parts.headers.remove("x-api-key");
+                parts.headers.insert(header.name(), authorized.header);
+            }
+        }
         let Ok(uri) = format!("https://{authority}{}", operation.path()).parse() else {
             return deny(DenyCode::RequestMismatch);
         };
