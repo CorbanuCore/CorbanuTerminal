@@ -3,15 +3,37 @@ use crossterm::event::KeyModifiers;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
-
 use super::*;
 
 /// Upper bound for fixture subprocesses that are expected to answer. These tests assert the
 /// answer, not its latency, so a loaded CI runner must not turn them into timeout checks.
 #[cfg(unix)]
 const FIXTURE_SUCCESS_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Writes an executable fixture script from a child process.
+///
+/// Writing it with `std::fs::write` leaves a write descriptor open in this process; a sibling
+/// test that forks in that window keeps a copy until it execs, and executing the fixture then
+/// fails with ETXTBSY ("Text file busy"). Only the short-lived child ever opens this file.
+#[cfg(unix)]
+fn write_fixture_executable(path: &Path, contents: impl AsRef<[u8]>) {
+    use std::io::Write as _;
+
+    let mut writer = std::process::Command::new("/bin/sh")
+        .args(["-c", "cat > \"$1\" && chmod 700 \"$1\"", "sh"])
+        .arg(path)
+        .stdin(Stdio::piped())
+        .spawn()
+        .expect("spawn fixture writer");
+    writer
+        .stdin
+        .take()
+        .expect("fixture writer stdin")
+        .write_all(contents.as_ref())
+        .expect("write fixture contents");
+    let status = writer.wait().expect("wait for fixture writer");
+    assert!(status.success(), "fixture writer failed: {status}");
+}
 
 #[test]
 fn managed_token_normalization_removes_only_pasted_line_breaks() {
@@ -289,7 +311,7 @@ async fn claude_cli_owns_token_exchange_and_status_verification() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let fake_claude = temp_dir.path().join("claude");
     let source_id = current_platform_login_source_id().expect("source id");
-    std::fs::write(
+    write_fixture_executable(
         &fake_claude,
         format!(
             r#"#!/bin/sh
@@ -310,13 +332,7 @@ fi
 exit 2
 "#
         ),
-    )
-    .expect("write fake claude");
-    let mut permissions = std::fs::metadata(&fake_claude)
-        .expect("fake claude metadata")
-        .permissions();
-    permissions.set_mode(0o700);
-    std::fs::set_permissions(&fake_claude, permissions).expect("make fake claude executable");
+    );
     let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel();
     let app_event_tx = AppEventSender::new(event_tx);
 
@@ -366,7 +382,7 @@ async fn cancel_after_code_submission_kills_login_without_persisting_selection()
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let fake_claude = temp_dir.path().join("claude");
     let code_received = temp_dir.path().join("code-received");
-    std::fs::write(
+    write_fixture_executable(
         &fake_claude,
         format!(
             r#"#!/bin/sh
@@ -382,13 +398,7 @@ exit 2
 "#,
             code_received.display()
         ),
-    )
-    .expect("write fake claude");
-    let mut permissions = std::fs::metadata(&fake_claude)
-        .expect("fake claude metadata")
-        .permissions();
-    permissions.set_mode(0o700);
-    std::fs::set_permissions(&fake_claude, permissions).expect("make fake claude executable");
+    );
     let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel();
     let app_event_tx = AppEventSender::new(event_tx);
 
@@ -439,16 +449,12 @@ async fn existing_claude_login_is_selected_without_reauthorization() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let fake_claude = temp_dir.path().join("claude");
     let source_id = current_platform_login_source_id().expect("source id");
-    std::fs::write(
+    write_fixture_executable(
         &fake_claude,
-        format!("#!/bin/sh\nif [ \"$1\" = \"internal-claude-login-health\" ]; then printf '%s\\n' '{source_id}'; exit 0; fi\n[ \"$1 $2 $3\" = \"auth status --json\" ] || exit 2\nprintf '{{\"loggedIn\":true,\"authMethod\":\"claude.ai\",\"email\":\"fixture@example.invalid\",\"orgId\":\"org-fixture\",\"subscriptionType\":\"max\"}}\\n'\n"),
-    )
-    .expect("write fake claude");
-    let mut permissions = std::fs::metadata(&fake_claude)
-        .expect("fake claude metadata")
-        .permissions();
-    permissions.set_mode(0o700);
-    std::fs::set_permissions(&fake_claude, permissions).expect("make executable");
+        format!(
+            "#!/bin/sh\nif [ \"$1\" = \"internal-claude-login-health\" ]; then printf '%s\\n' '{source_id}'; exit 0; fi\n[ \"$1 $2 $3\" = \"auth status --json\" ] || exit 2\nprintf '{{\"loggedIn\":true,\"authMethod\":\"claude.ai\",\"email\":\"fixture@example.invalid\",\"orgId\":\"org-fixture\",\"subscriptionType\":\"max\"}}\\n'\n"
+        ),
+    );
 
     assert!(
         select_existing_claude_code_login(
@@ -473,16 +479,10 @@ async fn existing_claude_login_is_selected_without_reauthorization() {
 async fn unhealthy_platform_record_does_not_replace_the_previous_selection() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let fake_claude = temp_dir.path().join("claude");
-    std::fs::write(
+    write_fixture_executable(
         &fake_claude,
         "#!/bin/sh\n[ \"$1\" = \"internal-claude-login-health\" ] && exit 1\n[ \"$1 $2 $3\" = \"auth status --json\" ] || exit 2\nprintf '{\"loggedIn\":true,\"authMethod\":\"claude.ai\",\"email\":\"fixture@example.invalid\",\"orgId\":\"org-fixture\",\"subscriptionType\":\"max\"}\\n'\n",
-    )
-    .expect("write fake claude");
-    let mut permissions = std::fs::metadata(&fake_claude)
-        .expect("fake claude metadata")
-        .permissions();
-    permissions.set_mode(0o700);
-    std::fs::set_permissions(&fake_claude, permissions).expect("make executable");
+    );
     let vault = Vault::new(temp_dir.path().to_path_buf());
     let previous = ClaudeAuthSelection::new(
         ClaudeAuthSource::ManagedSubscriptionToken,
@@ -514,16 +514,10 @@ async fn unhealthy_platform_record_does_not_replace_the_previous_selection() {
 async fn providers_status_reports_selected_login_reauthorization_need() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let fake_claude = temp_dir.path().join("claude");
-    std::fs::write(
+    write_fixture_executable(
         &fake_claude,
         "#!/bin/sh\n[ \"$1\" = \"internal-claude-login-health\" ] && exit 1\n[ \"$1 $2 $3\" = \"auth status --json\" ] || exit 2\nprintf '{\"loggedIn\":true,\"authMethod\":\"claude.ai\",\"email\":\"fixture@example.invalid\",\"orgId\":\"org-fixture\",\"subscriptionType\":\"max\"}\\n'\n",
-    )
-    .expect("write fake claude");
-    let mut permissions = std::fs::metadata(&fake_claude)
-        .expect("fake claude metadata")
-        .permissions();
-    permissions.set_mode(0o700);
-    std::fs::set_permissions(&fake_claude, permissions).expect("make executable");
+    );
     let selection = ClaudeAuthSelection::new(
         ClaudeAuthSource::ClaudeCodeLogin,
         current_platform_login_source_id().expect("current source id"),
@@ -549,12 +543,7 @@ async fn providers_status_reports_selected_login_reauthorization_need() {
 async fn providers_status_reports_health_probe_timeout_as_error() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let hanging_health = temp_dir.path().join("hanging-health");
-    std::fs::write(&hanging_health, "#!/bin/sh\nsleep 30\n").expect("write health fixture");
-    let mut permissions = std::fs::metadata(&hanging_health)
-        .expect("health fixture metadata")
-        .permissions();
-    permissions.set_mode(0o700);
-    std::fs::set_permissions(&hanging_health, permissions).expect("make health fixture executable");
+    write_fixture_executable(&hanging_health, "#!/bin/sh\nsleep 30\n");
     let selection = ClaudeAuthSelection::new(
         ClaudeAuthSource::ClaudeCodeLogin,
         current_platform_login_source_id().expect("current source id"),
@@ -581,16 +570,10 @@ async fn providers_status_preserves_unavailable_claude_after_a_healthy_probe() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let healthy_probe = temp_dir.path().join("healthy-probe");
     let source_id = current_platform_login_source_id().expect("current source id");
-    std::fs::write(
+    write_fixture_executable(
         &healthy_probe,
         format!("#!/bin/sh\nprintf '%s\\n' '{source_id}'\n"),
-    )
-    .expect("write health fixture");
-    let mut permissions = std::fs::metadata(&healthy_probe)
-        .expect("health fixture metadata")
-        .permissions();
-    permissions.set_mode(0o700);
-    std::fs::set_permissions(&healthy_probe, permissions).expect("make health fixture executable");
+    );
     let authority_id = codex_vault::claude_login_authority_id(
         "fixture@example.invalid",
         Some("org-fixture"),
@@ -637,12 +620,7 @@ async fn invalid_persisted_source_id_surfaces_recovery_status() {
 async fn claude_status_timeout_resolves_to_error() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let fake_claude = temp_dir.path().join("claude");
-    std::fs::write(&fake_claude, "#!/bin/sh\nsleep 30\n").expect("write fake claude");
-    let mut permissions = std::fs::metadata(&fake_claude)
-        .expect("fake claude metadata")
-        .permissions();
-    permissions.set_mode(0o700);
-    std::fs::set_permissions(&fake_claude, permissions).expect("make fake claude executable");
+    write_fixture_executable(&fake_claude, "#!/bin/sh\nsleep 30\n");
 
     let status = tokio::time::timeout(
         Duration::from_secs(1),
@@ -685,12 +663,7 @@ async fn provider_status_timeout_includes_vault_lock_contention() {
 async fn post_login_status_timeout_does_not_persist_a_selection() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let fake_claude = temp_dir.path().join("claude");
-    std::fs::write(&fake_claude, "#!/bin/sh\nsleep 30\n").expect("write hanging fake Claude");
-    let mut permissions = std::fs::metadata(&fake_claude)
-        .expect("fake Claude metadata")
-        .permissions();
-    permissions.set_mode(0o700);
-    std::fs::set_permissions(&fake_claude, permissions).expect("make fake Claude executable");
+    write_fixture_executable(&fake_claude, "#!/bin/sh\nsleep 30\n");
 
     let error = tokio::time::timeout(
         Duration::from_secs(1),
@@ -723,16 +696,10 @@ async fn post_login_status_timeout_does_not_persist_a_selection() {
 async fn claude_status_preserves_custom_oauth_profile_identity() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let fake_claude = temp_dir.path().join("claude");
-    std::fs::write(
+    write_fixture_executable(
         &fake_claude,
         "#!/bin/sh\n[ \"$CLAUDE_CODE_CUSTOM_OAUTH_URL\" = \"https://oauth.example.invalid\" ] || exit 3\nprintf '{\"loggedIn\":true,\"authMethod\":\"claude.ai\",\"email\":\"fixture@example.invalid\",\"orgId\":\"org-fixture\",\"subscriptionType\":\"max\"}\\n'\n",
-    )
-    .expect("write fake claude");
-    let mut permissions = std::fs::metadata(&fake_claude)
-        .expect("fake claude metadata")
-        .permissions();
-    permissions.set_mode(0o700);
-    std::fs::set_permissions(&fake_claude, permissions).expect("make executable");
+    );
 
     assert!(matches!(
         read_status_with_profile(
@@ -751,16 +718,10 @@ async fn claude_status_preserves_custom_oauth_profile_identity() {
 async fn selected_source_mismatch_is_typed_as_identity_conflict() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let health = temp_dir.path().join("health");
-    std::fs::write(
+    write_fixture_executable(
         &health,
         "#!/bin/sh\nprintf '%s\\n' 'claude-login:credentials-file:actual'\n",
-    )
-    .expect("write health fixture");
-    let mut permissions = std::fs::metadata(&health)
-        .expect("health fixture metadata")
-        .permissions();
-    permissions.set_mode(0o700);
-    std::fs::set_permissions(&health, permissions).expect("make health fixture executable");
+    );
 
     assert!(matches!(
         verify_current_platform_login_health(
@@ -778,25 +739,16 @@ async fn selected_source_mismatch_is_typed_as_identity_conflict() {
 async fn preserve_selected_source_change_is_identity_conflict_without_persistence() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let fake_claude = temp_dir.path().join("claude");
-    std::fs::write(
+    write_fixture_executable(
         &fake_claude,
         "#!/bin/sh\n[ \"$1 $2 $3\" = \"auth status --json\" ] || exit 2\nprintf '{\"loggedIn\":true,\"authMethod\":\"claude.ai\",\"email\":\"fixture@example.invalid\",\"orgId\":\"org-fixture\",\"subscriptionType\":\"max\"}\\n'\n",
-    )
-    .expect("write Claude fixture");
+    );
     let current_source = current_platform_login_source_id().expect("current source");
     let health = temp_dir.path().join("health");
-    std::fs::write(
+    write_fixture_executable(
         &health,
         format!("#!/bin/sh\nprintf '%s\\n' '{current_source}'\n"),
-    )
-    .expect("write health fixture");
-    for executable in [&fake_claude, &health] {
-        let mut permissions = std::fs::metadata(executable)
-            .expect("fixture metadata")
-            .permissions();
-        permissions.set_mode(0o700);
-        std::fs::set_permissions(executable, permissions).expect("make fixture executable");
-    }
+    );
 
     let authority_id =
         claude_login_authority_id("fixture@example.invalid", Some("org-fixture"), Some("max"))
