@@ -3280,6 +3280,21 @@ fn current_time_reminder_toml_config(
     }
 }
 
+/// Feature-gated proxy protections. Shared by config load and permission
+/// profile changes so a mid-session profile switch keeps them (PF-33-S01,
+/// PF-28-S02, PF-27-S04).
+fn apply_security_network_features(config: &mut NetworkProxyConfig, features: &Features) {
+    if features.enabled(Feature::UrlDestinationPolicy) {
+        config.set_url_destination_policy(/*enabled*/ true);
+    }
+    if features.enabled(Feature::SecretOutputGate) {
+        config.set_credential_response_gate(/*enabled*/ true);
+    }
+    if features.enabled(Feature::IsolatedCredentialBroker) {
+        config.set_isolated_credential_broker_enabled(/*enabled*/ true);
+    }
+}
+
 /// PF-27-S02: agent environments no longer carry provider tokens, so the
 /// proxy sources brokered values from Core's own environment, limited to the
 /// variables the user's environment policy would have passed. The isolated
@@ -3991,17 +4006,7 @@ impl Config {
                 );
             }
             configured_network_proxy_config.enabled = true;
-            if features.enabled(Feature::UrlDestinationPolicy) {
-                configured_network_proxy_config.set_url_destination_policy(/*enabled*/ true);
-            }
-            // PF-28-S02: bind injected credentials and scrub them from responses.
-            if features.enabled(Feature::SecretOutputGate) {
-                configured_network_proxy_config.set_credential_response_gate(/*enabled*/ true);
-            }
-            if features.enabled(Feature::IsolatedCredentialBroker) {
-                configured_network_proxy_config
-                    .set_isolated_credential_broker_enabled(/*enabled*/ true);
-            }
+            apply_security_network_features(&mut configured_network_proxy_config, &features);
             apply_secretless_launch_network_config(
                 &mut configured_network_proxy_config,
                 secretless_agent_launch,
@@ -5041,14 +5046,10 @@ impl Config {
                     );
                 }
                 configured_network_proxy_config.enabled = true;
-                if self.features.enabled(Feature::SecretOutputGate) {
-                    configured_network_proxy_config
-                        .set_credential_response_gate(/*enabled*/ true);
-                }
-                if self.features.enabled(Feature::IsolatedCredentialBroker) {
-                    configured_network_proxy_config
-                        .set_isolated_credential_broker_enabled(/*enabled*/ true);
-                }
+                apply_security_network_features(
+                    &mut configured_network_proxy_config,
+                    &self.features,
+                );
                 apply_secretless_launch_network_config(
                     &mut configured_network_proxy_config,
                     self.features.enabled(Feature::SecretlessAgentLaunch),
