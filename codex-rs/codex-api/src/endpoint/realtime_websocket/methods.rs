@@ -833,7 +833,8 @@ impl RealtimeWebsocketClient {
         );
         request.headers_mut().extend(headers);
 
-        info!("connecting realtime websocket: {ws_url}");
+        let log_url = codex_http_client::redact_url(ws_url.as_str());
+        info!("connecting realtime websocket: {log_url}");
         // Realtime websocket TLS should honor the same custom-CA env vars as the rest of Codex's
         // outbound HTTPS and websocket traffic.
         let connector = maybe_build_rustls_client_config_with_custom_ca()
@@ -848,7 +849,7 @@ impl RealtimeWebsocketClient {
         .await
         .map_err(|err| ApiError::Stream(format!("failed to connect realtime websocket: {err}")))?;
         info!(
-            ws_url = %ws_url,
+            ws_url = %log_url,
             status = %response.status(),
             "realtime websocket connected"
         );

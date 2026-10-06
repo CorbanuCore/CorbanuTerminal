@@ -81,7 +81,7 @@ impl ReqwestTransport {
         if err.is_timeout() {
             TransportError::Timeout
         } else {
-            TransportError::Network(err.to_string())
+            TransportError::Network(crate::redact_reqwest_error(&err))
         }
     }
 
@@ -90,7 +90,7 @@ impl ReqwestTransport {
             trace!(
                 "{} to {}: {}",
                 req.method,
-                req.url,
+                crate::redact_url(&req.url),
                 request_body_for_trace(req)
             );
         }

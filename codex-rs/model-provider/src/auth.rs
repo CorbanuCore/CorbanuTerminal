@@ -85,10 +85,19 @@ struct AgentIdentityAuthProvider {
     auth: AgentIdentityAuth,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct ApiKeyHeaderAuthProvider {
     header_name: HeaderName,
     api_key: String,
+}
+
+impl std::fmt::Debug for ApiKeyHeaderAuthProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ApiKeyHeaderAuthProvider")
+            .field("header_name", &self.header_name)
+            .field("api_key", &"<redacted>")
+            .finish()
+    }
 }
 
 impl ApiKeyHeaderAuthProvider {
@@ -102,7 +111,8 @@ impl ApiKeyHeaderAuthProvider {
 
 impl AuthProvider for ApiKeyHeaderAuthProvider {
     fn add_auth_headers(&self, headers: &mut HeaderMap) {
-        if let Ok(header) = HeaderValue::from_str(&self.api_key) {
+        if let Ok(mut header) = HeaderValue::from_str(&self.api_key) {
+            header.set_sensitive(true);
             let _ = headers.insert(self.header_name.clone(), header);
         }
     }
@@ -121,8 +131,9 @@ impl AuthProvider for AgentIdentityAuthProvider {
         .map_err(std::io::Error::other);
 
         if let Ok(header_value) = header_value
-            && let Ok(header) = HeaderValue::from_str(&header_value)
+            && let Ok(mut header) = HeaderValue::from_str(&header_value)
         {
+            header.set_sensitive(true);
             let _ = headers.insert(http::header::AUTHORIZATION, header);
         }
 
