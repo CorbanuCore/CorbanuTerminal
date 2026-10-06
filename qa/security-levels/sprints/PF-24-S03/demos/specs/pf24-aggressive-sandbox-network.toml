@@ -38,7 +38,7 @@ compress = 2
 [[steps]]
 pause = 2.5
 [[steps]]
-key = "y"
+key = "Enter"
 [[steps]]
 wait = "(?s)outside-denied.*tmp-denied.*network-denied"
 timeout = 180

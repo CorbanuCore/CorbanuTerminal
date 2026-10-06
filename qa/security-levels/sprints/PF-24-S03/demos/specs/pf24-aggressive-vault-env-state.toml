@@ -45,7 +45,7 @@ wait = "Would you like to run the following command\\?"
 timeout = 180
 compress = 2
 [[steps]]
-key = "y"
+key = "Enter"
 [[steps]]
 wait = "level-write-denied"
 timeout = 180

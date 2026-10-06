@@ -36,7 +36,7 @@ compress = 2
 [[steps]]
 pause = 2.5
 [[steps]]
-key = "y"
+key = "Enter"
 [[steps]]
 wait = "(?s)child-outside-denied.*child-canary-bytes=0"
 timeout = 240
