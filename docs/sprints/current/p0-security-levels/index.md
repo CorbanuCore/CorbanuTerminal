@@ -7,7 +7,7 @@ core sprints may be reserved at once, one per lane, with disjoint `write_scope`.
 PF-83-S01 closed on 2026-10-06 and is [archived](../../archive/p0-security-levels/pf-83-s01-permission-confirmation.md);
 PF-30-S01 completed (PR #178) and is [archived](../../archive/p0-security-levels/pf-30-s01-typed-source-envelope.md);
 PF-24-S03 completed (PR #186) and is [archived](../../archive/p0-security-levels/pf-24-s03-flagged-security-picker.md);
-PF-30-S02 completed (PRs #190, #196) and is [archived](../../archive/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md).
+PF-30-S02 completed (PRs #190, #198) and is [archived](../../archive/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md).
 Deferred sprints moved to the [P1 hardening sprints](../p1-security-hardening/index.md).
 Earlier allocation notes are in the [plan history](../../../plans/history/p0-security-levels-2026-10-06.md).
 
