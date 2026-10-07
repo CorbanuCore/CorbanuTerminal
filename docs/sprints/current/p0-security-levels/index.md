@@ -24,15 +24,15 @@ Earlier allocation notes are in the [plan history](../../../plans/history/p0-sec
 | ---: | --- | --- | --- | --- |
 | 31 | [PF-28-S02](pf-28-s02-reflected-secret-response-scrubbing.md) | Reflected-secret response scrubbing (merged behind `secret_output_gate`; two carried items open) | broker | PF-28-S01 (archived) |
 | 33 | [PF-33-S02](pf-33-s02-connection-pinning-and-bypass.md) | Connection pinning and alternate-egress denial (merged behind `url_destination_policy`, #215; open items recorded) | first free | PF-33-S01 (archived) |
-| 35 | [PF-29-S01](pf-29-s01-protected-mode-inventory.md) | Protected-mode inventory and activation preflight | first free | PF-28-S02, PF-20-S02 |
-| 36 | [PF-29-S02](pf-29-s02-human-secret-migration.md) | Human-reviewed credential migration and recovery | first free | PF-29-S01, PF-24-S01 |
-| 40 | [PF-23-S01](pf-23-s01-moderate-ingress-and-disclosure-enforcement.md) | Moderate ingress and disclosure enforcement (next in the lane; takes PF-30-S03's moved items) | untrusted content | PF-13-S05, PF-22-S02, PF-30-S03 (archived) |
+| 35 | [PF-29-S01](pf-29-s01-protected-mode-inventory.md) | Protected-mode inventory and activation preflight (merged behind `protected_mode_preflight`, #228; open items recorded) | first free | PF-28-S02 (merged behind flag), PF-20-S02 (archived) |
+| 36 | [PF-29-S02](pf-29-s02-human-secret-migration.md) | Human-reviewed credential migration and recovery (in progress behind `protected_mode_preflight`) | first free | PF-29-S01 (merged behind flag), PF-24-S01 (archived) |
+| 40 | [PF-23-S01](pf-23-s01-moderate-ingress-and-disclosure-enforcement.md) | Moderate ingress and disclosure enforcement (in progress: slice 1, MCP / `write_stdin` / code mode / outbound and value transfer, behind `source_envelopes`) | untrusted content | PF-13-S05, PF-22-S02, PF-30-S03 (archived) |
 | 41 | [PF-23-S02](pf-23-s02-aggressive-deny-and-grant-enforcement.md) | Aggressive deny and grant enforcement | untrusted content | PF-17-S01, PF-23-S01 |
 | 42 | [PF-23-S03](pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) | Downgrade, restart, and inheritance enforcement | untrusted content | PF-19-S02, PF-20-S02, PF-23-S02 |
 | 43 | [PF-24-S02](pf-24-s02-security-confirm-cancel-and-downgrade.md) | Security confirm, cancel, and downgrade | tui | PF-24-S03, PF-23-S03, PF-24-S01, PF-29-S02 |
 | 44 | [PF-25-S01](pf-25-s01-temporary-grant-tui.md) | Temporary grant TUI | tui | PF-17-S01, PF-23-S02, PF-24-S02 |
 | 45 | [PF-25-S02](pf-25-s02-revocation-and-kill-switch-tui.md) | Revocation and kill-switch TUI | tui | PF-19-S02, PF-23-S03, PF-25-S01 |
-| 46 | [PF-27-S05](pf-27-s05-model-client-auth-broker.md) | Core model-client auth and vault labels through the broker | broker | PF-27-S02 (archived) |
+| 46 | [PF-27-S05](pf-27-s05-model-client-auth-broker.md) | Core model-client auth and vault labels through the broker (slice 1 behind `broker_model_auth`: `ModelClient` API keys; vault labels and other paths open) | broker | PF-27-S02 (archived) |
 | 71 | [PF-41-S01](pf-41-s01-effective-security-inspector.md) | Effective security inspector and degradation state | convergence | PF-23-S03, PF-29-S02, PF-24-S02 |
 | 73 | [PF-13-S07](pf-13-s07-integrated-credential-boundary-qualification.md) | Integrated credential boundary qualification | convergence | PF-13-S05, PF-13-S06, PF-27-S02, PF-28-S02, PF-29-S02, PF-33-S02 |
 | 79 | [PF-77-S01](pf-77-s01-tasknode-reliability.md) | Task Node durable command and transport recovery | hosted, not security | none |

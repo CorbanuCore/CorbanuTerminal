@@ -1,5 +1,7 @@
 #[cfg(unix)]
 pub(crate) mod isolated;
+#[cfg(unix)]
+pub mod model_auth;
 mod providers;
 mod resolver;
 pub(crate) mod response_scrub;
@@ -53,6 +55,7 @@ pub(crate) struct IsolatedBrokerOptions {
     pub(crate) runtime_dir: Option<std::path::PathBuf>,
     pub(crate) require_containment: bool,
     pub(crate) scrub_responses: bool,
+    pub(crate) pin_connections: bool,
 }
 
 pub const CREDENTIAL_BROKER_ACTIVE_ENV_KEY: &str = "CODEX_NETWORK_PROXY_CREDENTIAL_BROKER_ACTIVE";

@@ -60,6 +60,10 @@ impl ToolExecutor<ToolInvocation> for ExtensionToolAdapter {
 }
 
 impl CoreToolRuntime for ExtensionToolAdapter {
+    fn tool_origin(&self) -> crate::security::protected_surface::ToolOrigin {
+        crate::security::protected_surface::ToolOrigin::Extension
+    }
+
     fn matches_kind(&self, payload: &ToolPayload) -> bool {
         matches!(payload, ToolPayload::Function { .. })
     }

@@ -10,6 +10,7 @@ use super::protocol::BROKER_ERROR_HEADER;
 use super::protocol::HostBindingWire;
 use super::protocol::ProviderId;
 use super::run_credential_broker_main;
+use crate::connect_policy::PinnedPeers;
 use crate::credential_broker::CredentialBroker;
 use crate::credential_broker::CredentialRouting;
 use crate::credential_broker::ScopedCredentialInjectionError;
@@ -19,6 +20,7 @@ use codex_secret_broker::ProviderRequestOperation;
 use pretty_assertions::assert_eq;
 use rama_core::Layer as _;
 use rama_core::bytes::Bytes;
+use rama_core::extensions::ExtensionsMut as _;
 use rama_core::service::service_fn;
 use rama_http::Body;
 use rama_http::BodyExtractExt as _;
@@ -59,8 +61,13 @@ struct Upstream {
 
 /// Local TLS upstream that echoes the Authorization header it received.
 async fn start_upstream() -> Upstream {
+    start_upstream_for(UPSTREAM_HOST).await
+}
+
+/// Like [`start_upstream`], with a certificate for `tls_host`.
+async fn start_upstream_for(tls_host: &str) -> Upstream {
     let (ca_pem, acceptor) =
-        crate::certs::test_ca_and_host_acceptor(UPSTREAM_HOST).expect("test TLS material");
+        crate::certs::test_ca_and_host_acceptor(tls_host).expect("test TLS material");
     let ca_dir = tempfile::tempdir().expect("ca dir");
     let ca_path = ca_dir.path().join("ca.pem");
     std::fs::write(&ca_path, ca_pem).expect("write test CA");
@@ -70,12 +77,26 @@ async fn start_upstream() -> Upstream {
     let port = listener.local_addr().expect("upstream addr").port();
     let service = TlsAcceptorLayer::new(acceptor).into_layer(HttpServer::http1().service(
         service_fn(|request: Request| async move {
+            let echoed = if request.uri().path().ends_with("/xkey") {
+                rama_http::header::HeaderName::from_static("x-api-key")
+            } else {
+                AUTHORIZATION
+            };
             let authorization = request
                 .headers()
-                .get(AUTHORIZATION)
+                .get(echoed)
                 .and_then(|value| value.to_str().ok())
                 .unwrap_or("<none>")
                 .to_string();
+            if request.uri().path().ends_with("/redirect") {
+                let mut response = Response::new(Body::empty());
+                *response.status_mut() = rama_http::StatusCode::FOUND;
+                response.headers_mut().insert(
+                    rama_http::header::LOCATION,
+                    HeaderValue::from_static("https://elsewhere.invalid/v1/steal"),
+                );
+                return Ok::<_, Infallible>(response);
+            }
             let body = if request.uri().path() == STREAM_PATH {
                 let first = rama_core::futures::stream::iter([Ok::<_, Infallible>(Bytes::from(
                     "first-chunk\n",
@@ -123,6 +144,7 @@ fn options() -> IsolatedBrokerOptions {
         runtime_dir: None,
         require_containment: true,
         scrub_responses: false,
+        pin_connections: false,
     }
 }
 
@@ -131,8 +153,12 @@ fn isolated_broker(launcher: IsolatedBrokerLauncher) -> CredentialBroker {
 }
 
 fn virtualized_dummy(broker: &CredentialBroker) -> String {
+    virtualized_dummy_for(broker, UPSTREAM_HOST)
+}
+
+fn virtualized_dummy_for(broker: &CredentialBroker, host: &str) -> String {
     let mut env = HashMap::from([
-        ("GH_HOST".to_string(), UPSTREAM_HOST.to_string()),
+        ("GH_HOST".to_string(), host.to_string()),
         (
             "GH_ENTERPRISE_TOKEN".to_string(),
             SYNTHETIC_TOKEN.to_string(),
@@ -687,4 +713,340 @@ async fn pf_28_s02_revocation_still_closes_a_scrubbed_stream() {
         .expect("revocation closes the scrubbed download")
         .expect("reader task");
     assert!(stream_failed);
+}
+
+/// PF-33-S02 fixture name that no resolver answers, so reaching the upstream
+/// proves the broker dialled the pinned answer instead of resolving.
+const PINNED_NAME: &str = "pinned.invalid";
+
+fn pinned_broker(upstream: &Upstream, options: IsolatedBrokerOptions) -> CredentialBroker {
+    CredentialBroker::new_isolated_with_launcher(
+        /*enabled*/ true,
+        options,
+        launcher(upstream, /*controller_pid_override*/ None),
+    )
+}
+
+fn pinned_route(
+    broker: &CredentialBroker,
+    port: u16,
+    dummy: &str,
+) -> super::super::BrokeredCredentialRoute {
+    match broker.route_request_credentials(
+        "https",
+        PINNED_NAME,
+        port,
+        "GET",
+        "/echo",
+        &mut bearer(dummy),
+    ) {
+        Ok(CredentialRouting::Brokered(route)) => route,
+        _ => panic!("expected a brokered route"),
+    }
+}
+
+fn pinned_request(dummy: &str, pin: Option<PinnedPeers>) -> Request {
+    let mut request = request("/echo", dummy);
+    if let Some(pin) = pin {
+        request.extensions_mut().insert(pin);
+    }
+    request
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn pf_33_s02_brokered_request_dials_the_pinned_answer_without_dns() {
+    let upstream = start_upstream_for(PINNED_NAME).await;
+    let broker = pinned_broker(
+        &upstream,
+        IsolatedBrokerOptions {
+            pin_connections: true,
+            ..options()
+        },
+    );
+    let dummy = virtualized_dummy_for(&broker, PINNED_NAME);
+    let loopback = std::net::IpAddr::from([127, 0, 0, 1]);
+
+    let pin = PinnedPeers::new(PINNED_NAME, upstream.port, [loopback]);
+    let response = pinned_route(&broker, upstream.port, &dummy)
+        .forward(pinned_request(&dummy, Some(pin)))
+        .await
+        .expect("pinned broker response");
+    assert_eq!(response.status(), 200);
+    assert_eq!(
+        response.try_into_string().await.expect("body"),
+        format!("Bearer {SYNTHETIC_TOKEN}")
+    );
+
+    // No checked answers, or answers for another authority: Core refuses
+    // before the broker is asked.
+    let wrong_port = PinnedPeers::new(PINNED_NAME, upstream.port + 1, [loopback]);
+    let wrong_host = PinnedPeers::new("other.invalid", upstream.port, [loopback]);
+    for pin in [None, Some(wrong_port), Some(wrong_host)] {
+        assert_eq!(
+            pinned_route(&broker, upstream.port, &dummy)
+                .forward(pinned_request(&dummy, pin))
+                .await
+                .err(),
+            Some(IsolatedBrokerError::Unpinned)
+        );
+    }
+
+    // The broker enforces it too: a signed but unpinned frame is refused.
+    let route = pinned_route(&broker, upstream.port, &dummy);
+    let client = broker.current_isolated_client().expect("broker client");
+    let frame = client
+        .sign_frame(&route.reference, &route.operation)
+        .expect("frame");
+    let response = client
+        .send_with_frame(&route.operation, request("/echo", &dummy), &frame)
+        .await
+        .expect("response");
+    assert_eq!(denial(&response), Some("unpinned"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn pf_33_s02_unpinned_broker_resolves_and_pins_keep_the_private_peer_check() {
+    let upstream = start_upstream_for(PINNED_NAME).await;
+    let loopback = std::net::IpAddr::from([127, 0, 0, 1]);
+
+    // Control (guard off): the broker resolves the name itself, which fails.
+    let broker = pinned_broker(&upstream, options());
+    let dummy = virtualized_dummy_for(&broker, PINNED_NAME);
+    let response = pinned_route(&broker, upstream.port, &dummy)
+        .forward(pinned_request(&dummy, None))
+        .await
+        .expect("broker response");
+    assert_eq!(denial(&response), Some("upstream_failed"));
+
+    // A pin cannot grant a private peer the broker's policy does not allow.
+    let broker = pinned_broker(
+        &upstream,
+        IsolatedBrokerOptions {
+            allow_local_binding: false,
+            pin_connections: true,
+            ..options()
+        },
+    );
+    let dummy = virtualized_dummy_for(&broker, PINNED_NAME);
+    let pin = PinnedPeers::new(PINNED_NAME, upstream.port, [loopback]);
+    let response = pinned_route(&broker, upstream.port, &dummy)
+        .forward(pinned_request(&dummy, Some(pin)))
+        .await
+        .expect("broker response");
+    assert_eq!(denial(&response), Some("upstream_failed"));
+}
+
+mod pf_27_s05 {
+    use super::Body;
+    use super::Duration;
+    use super::Request;
+    use super::Response;
+    use super::UPSTREAM_HOST;
+    use super::Upstream;
+    use super::denial;
+    use super::launcher;
+    use super::start_upstream;
+    use crate::credential_broker::model_auth::MODEL_BROKER_FRAME_HEADER;
+    use crate::credential_broker::model_auth::ModelAuthHeader;
+    use crate::credential_broker::model_auth::ModelCredential;
+    use crate::credential_broker::model_auth::ModelCredentialBinding;
+    use crate::credential_broker::model_auth::ModelCredentialBroker;
+    use crate::credential_broker::model_auth::ModelCredentialBrokerError;
+    use crate::credential_broker::model_auth::ModelCredentialBrokerOptions;
+    use crate::upstream::UpstreamClient;
+    use pretty_assertions::assert_eq;
+    use rama_core::Service as _;
+    use rama_http::BodyExtractExt as _;
+
+    const MODEL_KEY: &str = "sk-pf27s05SyntheticModelKey000000000000000000";
+
+    fn model_broker(upstream: &Upstream) -> ModelCredentialBroker {
+        ModelCredentialBroker::spawn_with_launcher(
+            ModelCredentialBrokerOptions::default(),
+            &launcher(upstream, /*controller_pid_override*/ None),
+        )
+        .expect("model broker")
+    }
+
+    fn binding(port: u16, path_prefix: &str, header: ModelAuthHeader) -> ModelCredentialBinding {
+        ModelCredentialBinding {
+            host: UPSTREAM_HOST.to_string(),
+            port,
+            path_prefix: path_prefix.to_string(),
+            header,
+        }
+    }
+
+    async fn send(
+        credential: &ModelCredential,
+        method: &str,
+        path: &str,
+        frame: String,
+    ) -> Response {
+        let request = Request::builder()
+            .method(method)
+            .uri(path)
+            .header(rama_http::header::HOST, UPSTREAM_HOST)
+            .header(MODEL_BROKER_FRAME_HEADER, frame)
+            .body(Body::empty())
+            .expect("request");
+        UpstreamClient::unix_socket(&credential.socket_path().to_string_lossy())
+            .serve(request)
+            .await
+            .expect("broker response")
+    }
+
+    async fn signed(credential: &ModelCredential, port: u16, path: &str) -> Response {
+        let frame = credential
+            .sign("POST", UPSTREAM_HOST, port, path)
+            .expect("signed frame");
+        send(credential, "POST", path, frame).await
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn pf_27_s05_model_key_is_attached_only_inside_the_broker() {
+        let upstream = start_upstream().await;
+        let broker = model_broker(&upstream);
+        let bearer = broker
+            .register(
+                binding(upstream.port, "/v1", ModelAuthHeader::Bearer),
+                MODEL_KEY,
+            )
+            .expect("register bearer key");
+        let x_api_key = broker
+            .register(
+                binding(upstream.port, "/v1", ModelAuthHeader::XApiKey),
+                MODEL_KEY,
+            )
+            .expect("register x-api-key key");
+        // Core's handles carry no copy of the key.
+        assert!(!format!("{bearer:?}{x_api_key:?}{broker:?}").contains(MODEL_KEY));
+
+        let response = signed(&bearer, upstream.port, "/v1/responses?stream=true").await;
+        assert_eq!(response.status(), 200);
+        assert_eq!(
+            response.try_into_string().await.expect("body"),
+            format!("Bearer {MODEL_KEY}")
+        );
+        let response = signed(&x_api_key, upstream.port, "/v1/messages/xkey").await;
+        assert_eq!(response.status(), 200);
+        assert_eq!(response.try_into_string().await.expect("body"), MODEL_KEY);
+
+        // Each frame is single-use.
+        let frame = bearer
+            .sign("POST", UPSTREAM_HOST, upstream.port, "/v1/responses")
+            .expect("frame");
+        let first = send(&bearer, "POST", "/v1/responses", frame.clone()).await;
+        assert_eq!(first.status(), 200);
+        let replay = send(&bearer, "POST", "/v1/responses", frame).await;
+        assert_eq!(denial(&replay), Some("replay"));
+
+        // A redirect comes back to Core unfollowed; the key goes nowhere else.
+        let redirect = signed(&bearer, upstream.port, "/v1/redirect").await;
+        assert_eq!(redirect.status(), 302);
+        assert_eq!(
+            redirect
+                .headers()
+                .get(rama_http::header::LOCATION)
+                .and_then(|value| value.to_str().ok()),
+            Some("https://elsewhere.invalid/v1/steal")
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn pf_27_s05_model_key_is_bound_to_its_origin_and_path_prefix() {
+        let upstream = start_upstream().await;
+        let broker = model_broker(&upstream);
+        let credential = broker
+            .register(
+                binding(upstream.port, "/v1", ModelAuthHeader::Bearer),
+                MODEL_KEY,
+            )
+            .expect("register");
+
+        // Core refuses to sign outside the binding ...
+        for (host, port, path) in [
+            ("api.example.com", upstream.port, "/v1/responses"),
+            (UPSTREAM_HOST, upstream.port + 1, "/v1/responses"),
+            (UPSTREAM_HOST, upstream.port, "/v2/responses"),
+            (UPSTREAM_HOST, upstream.port, "/v1x/responses"),
+            (UPSTREAM_HOST, upstream.port, "/v1/../admin"),
+            (UPSTREAM_HOST, upstream.port, "/v1/%2e%2e/admin"),
+        ] {
+            assert_eq!(
+                credential.sign("POST", host, port, path).err(),
+                Some(ModelCredentialBrokerError::Rejected),
+                "{host}:{port}{path}"
+            );
+        }
+        // ... and the broker refuses such frames itself.
+        for path in ["/v2/responses", "/v1x/responses", "/v1/../admin"] {
+            let frame =
+                credential.sign_unchecked_for_test("POST", UPSTREAM_HOST, upstream.port, path);
+            let response = send(&credential, "POST", path, frame).await;
+            assert_eq!(denial(&response), Some("host_not_bound"), "{path}");
+        }
+        let frame =
+            credential.sign_unchecked_for_test("POST", UPSTREAM_HOST, upstream.port + 1, "/v1/x");
+        let response = send(&credential, "POST", "/v1/x", frame).await;
+        assert_eq!(denial(&response), Some("host_not_bound"));
+
+        // Malformed bindings are not admitted.
+        for (prefix, host) in [
+            ("v1", UPSTREAM_HOST),
+            ("/v1/", UPSTREAM_HOST),
+            ("/v1/../x", UPSTREAM_HOST),
+            ("/v1", "Bad.Host"),
+        ] {
+            let binding = ModelCredentialBinding {
+                host: host.to_string(),
+                ..binding(upstream.port, prefix, ModelAuthHeader::Bearer)
+            };
+            assert_eq!(
+                broker.register(binding, MODEL_KEY).err(),
+                Some(ModelCredentialBrokerError::Rejected),
+                "{host} {prefix}"
+            );
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn pf_27_s05_model_broker_death_fails_closed() {
+        let upstream = start_upstream().await;
+        let broker = model_broker(&upstream);
+        let credential = broker
+            .register(
+                binding(upstream.port, "/", ModelAuthHeader::Bearer),
+                MODEL_KEY,
+            )
+            .expect("register");
+        assert_eq!(
+            signed(&credential, upstream.port, "/v1/responses")
+                .await
+                .status(),
+            200
+        );
+
+        broker.kill_for_test();
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while credential.is_alive() && std::time::Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(!credential.is_alive());
+        assert_eq!(
+            credential
+                .sign("POST", UPSTREAM_HOST, upstream.port, "/v1/responses")
+                .err(),
+            Some(ModelCredentialBrokerError::Unavailable)
+        );
+        assert_eq!(
+            broker
+                .register(
+                    binding(upstream.port, "/", ModelAuthHeader::Bearer),
+                    MODEL_KEY
+                )
+                .err(),
+            Some(ModelCredentialBrokerError::Unavailable)
+        );
+    }
 }

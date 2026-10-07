@@ -1,0 +1,55 @@
+# PF-29-S01: the preflight refuses Aggressive while required controls are off
+# or a raw secret stays readable (a shell-profile export). No value is shown.
+id = "pf29s01-blocked"
+feature = "Preflight blocks Aggressive while a raw-secret route stays open"
+expected = "The review lists the missing controls and the ~/.zshrc export by location only (never the value); Enter does not save."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+protected_mode_preflight = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"seed.sh" = '''
+printf 'export OPENAI_API_KEY=fake-key-0001-pf29-demo\n' > "$HOME/.zshrc" && echo seeded fake profile export
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "!sh seed.sh"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "seeded fake profile export"
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Switch to Aggressive\\?"
+[[steps]]
+key = "Down"
+repeat = 14
+[[steps]]
+wait = "zshrc:1 OPENAI_API_KEY"
+[[steps]]
+pause = 4.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Not saved: resolve the blockers above first"
+[[steps]]
+pause = 3.0

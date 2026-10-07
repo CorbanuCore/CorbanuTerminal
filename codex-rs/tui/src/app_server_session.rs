@@ -908,6 +908,10 @@ impl AppServerSession {
         model_settings: ResumeModelSettings,
         permission_settings: ResumePermissionSettings,
     ) -> Result<AppServerStartedThread> {
+        // PF-29-S01: every TUI resume passes here.
+        if let Some(message) = crate::security::preflight::resume_refusal(&thread_id) {
+            color_eyre::eyre::bail!(message);
+        }
         let request_id = self.next_request_id();
         let session_config = if model_settings == ResumeModelSettings::RestoreFromThread {
             config.clone()
@@ -1000,6 +1004,10 @@ impl AppServerSession {
         goal_continuation: ForkGoalContinuation,
         presentation: ForkPresentation,
     ) -> Result<AppServerStartedThread> {
+        // PF-29-S01: every TUI fork passes here.
+        if let Some(message) = crate::security::preflight::resume_refusal(&thread_id) {
+            color_eyre::eyre::bail!(message);
+        }
         let request_id = self.next_request_id();
         let session_config = self.session_config_with_effective_service_tier(&config);
         let response: ThreadForkResponse = self

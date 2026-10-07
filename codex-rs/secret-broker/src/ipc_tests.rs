@@ -261,3 +261,60 @@ fn pf_27_s04_pf_27_s01_provider_frame_rejects_forgery_and_untyped_requests() {
         Some(BrokerFrameError::InvalidSequence)
     );
 }
+
+#[test]
+fn pf_33_s02_provider_frame_carries_authenticated_pins() {
+    let addrs: Vec<std::net::IpAddr> = vec![
+        "93.184.216.34".parse().expect("ipv4"),
+        "2606:2800:220:1::248".parse().expect("ipv6"),
+    ];
+    let pinned = provider_request()
+        .with_pinned_addrs(addrs.clone())
+        .expect("pinned");
+    assert_eq!(pinned.pinned_addrs(), addrs.as_slice());
+    let mac = BrokerChannelMac::from_secret(KEY);
+    let frame = mac
+        .sign_provider_request(binding(), /*sequence*/ 1, reference(), pinned.clone())
+        .expect("frame");
+    assert_eq!(
+        mac.verify_provider_request(&frame)
+            .expect("verified")
+            .request,
+        pinned
+    );
+    // The pins are inside the MAC: changing one byte of an address fails.
+    let wire = frame.as_bytes().to_vec();
+    let needle = b"93.184.216.34";
+    let at = wire
+        .windows(needle.len())
+        .position(|window| window == needle)
+        .expect("pin on the wire");
+    let mut tampered = wire;
+    tampered[at] = b'1';
+    assert_eq!(
+        mac.verify_provider_request(&SignedBrokerFrame::from_bytes(tampered).expect("bounded"))
+            .err(),
+        Some(BrokerFrameError::AuthenticationFailed)
+    );
+    // Unpinned frames keep their previous wire shape.
+    let unpinned = mac
+        .sign_provider_request(
+            binding(),
+            /*sequence*/ 2,
+            reference(),
+            provider_request(),
+        )
+        .expect("frame");
+    assert!(!String::from_utf8_lossy(unpinned.as_bytes()).contains("pinned_addrs"));
+
+    assert_eq!(
+        provider_request().with_pinned_addrs([]).err(),
+        Some(BrokerFrameError::UnsupportedOperation)
+    );
+    let too_many =
+        (0..=MAX_PINNED_ADDRS as u8).map(|octet| std::net::IpAddr::from([93, 184, 216, octet]));
+    assert_eq!(
+        provider_request().with_pinned_addrs(too_many).err(),
+        Some(BrokerFrameError::UnsupportedOperation)
+    );
+}

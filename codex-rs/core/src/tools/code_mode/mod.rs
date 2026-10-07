@@ -316,7 +316,7 @@ fn truncate_code_mode_result(
 }
 
 async fn call_nested_tool(
-    _exec: ExecContext,
+    exec: ExecContext,
     tool_runtime: ToolCallRuntime,
     invocation: CodeModeNestedToolCall,
     cancellation_token: CancellationToken,
@@ -354,8 +354,14 @@ async fn call_nested_tool(
             },
             cancellation_token,
         )
-        .await?;
-    Ok(result.code_mode_result())
+        .await;
+    // PF-23-S01: the cell reads this result (or its error) before it is
+    // recorded, so a later call in the same cell is already post-taint.
+    exec.session
+        .services
+        .model_client()
+        .note_unrecorded_input_for_taint();
+    Ok(result?.code_mode_result())
 }
 
 fn build_nested_tool_payload(

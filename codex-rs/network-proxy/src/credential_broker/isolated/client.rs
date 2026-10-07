@@ -13,9 +13,11 @@ use super::protocol::ControlResponse;
 use super::protocol::FRAME_HEADER;
 use super::protocol::HostBindingWire;
 use super::protocol::MAX_CONTROL_LINE_BYTES;
+use super::protocol::ModelBindingWire;
 use super::protocol::ProviderId;
 use super::protocol::encode_hex;
 use super::protocol::valid_id;
+use crate::connect_policy::PinnedPeers;
 use crate::credential_broker::providers;
 use crate::upstream::UpstreamClient;
 use base64::Engine as _;
@@ -24,6 +26,7 @@ use codex_secret_broker::BrokerChannelMac;
 use codex_secret_broker::CredentialReference;
 use codex_secret_broker::ProviderRequestOperation;
 use rama_core::Service as _;
+use rama_core::extensions::ExtensionsRef as _;
 use rama_http::HeaderValue;
 use rama_http::Request;
 use rama_http::Response;
@@ -72,6 +75,9 @@ pub(crate) struct IsolatedBrokerOptions {
     /// PF-28-S02: scrub the broker's credentials from the responses it
     /// returns.
     pub(crate) scrub_responses: bool,
+    /// PF-33-S02: every provider request must carry the destination guard's
+    /// checked answers, which the broker dials instead of resolving.
+    pub(crate) pin_connections: bool,
 }
 
 /// How Core starts the broker. Production re-executes the current binary.
@@ -124,6 +130,8 @@ pub(crate) enum IsolatedBrokerError {
     Rejected,
     #[error("credential broker is unavailable")]
     Unavailable,
+    #[error("credential broker request carries no checked DNS answers")]
+    Unpinned,
 }
 
 type LineReceiver = mpsc::Receiver<std::io::Result<Zeroizing<Vec<u8>>>>;
@@ -145,6 +153,7 @@ pub(crate) struct IsolatedBrokerClient {
     run_generation: AtomicU64,
     next_sequence: AtomicU64,
     alive: AtomicBool,
+    pin_connections: bool,
 }
 
 impl fmt::Debug for IsolatedBrokerClient {
@@ -236,6 +245,7 @@ impl IsolatedBrokerClient {
             allow_local_binding: options.allow_local_binding,
             allow_upstream_proxy: options.allow_upstream_proxy,
             scrub_responses: options.scrub_responses,
+            pin_connections: options.pin_connections,
         };
         let ready = control.send(&hello).and_then(|()| control.receive());
         drop(hello);
@@ -283,6 +293,7 @@ impl IsolatedBrokerClient {
             run_generation: AtomicU64::new(run_generation),
             next_sequence: AtomicU64::new(1),
             alive: AtomicBool::new(true),
+            pin_connections: options.pin_connections,
         })
     }
 
@@ -291,7 +302,6 @@ impl IsolatedBrokerClient {
         &self.broker_instance
     }
 
-    #[cfg(test)]
     pub(crate) fn socket_path(&self) -> &std::path::Path {
         &self.socket_path
     }
@@ -319,6 +329,26 @@ impl IsolatedBrokerClient {
             binding,
             value: value.to_string(),
         })?;
+        self.registered(response)
+    }
+
+    /// PF-27-S05: hands one of Core's model-provider keys to the broker.
+    pub(crate) fn register_model(
+        &self,
+        binding: ModelBindingWire,
+        value: &str,
+    ) -> Result<CredentialReference, IsolatedBrokerError> {
+        let response = self.call(&ControlRequest::RegisterModel {
+            binding,
+            value: value.to_string(),
+        })?;
+        self.registered(response)
+    }
+
+    fn registered(
+        &self,
+        response: ControlResponse,
+    ) -> Result<CredentialReference, IsolatedBrokerError> {
         match response {
             ControlResponse::Registered {
                 reference,
@@ -402,8 +432,33 @@ impl IsolatedBrokerClient {
         if !self.is_alive() {
             return Err(IsolatedBrokerError::Unavailable);
         }
-        let frame = self.sign_frame(credential, operation)?;
-        self.send_with_frame(operation, request, &frame).await
+        // PF-33-S02: the checked answers travel inside the signed frame, so
+        // the broker connects to the peer Core authorized.
+        let operation = match request.extensions().get::<PinnedPeers>() {
+            Some(pin) if pin.covers_authority(operation.host(), operation.port()) => {
+                tracing::info!(
+                    "brokered request pinned (host={}, port={}, answers={})",
+                    operation.host(),
+                    operation.port(),
+                    pin.addrs().len()
+                );
+                // The guard keeps at most 16 answers; a subset is still checked.
+                operation
+                    .clone()
+                    .with_pinned_addrs(
+                        pin.addrs()
+                            .iter()
+                            .copied()
+                            .take(codex_secret_broker::ipc::MAX_PINNED_ADDRS),
+                    )
+                    .map_err(|_| IsolatedBrokerError::Unpinned)?
+            }
+            Some(_) => return Err(IsolatedBrokerError::Unpinned),
+            None if self.pin_connections => return Err(IsolatedBrokerError::Unpinned),
+            None => operation.clone(),
+        };
+        let frame = self.sign_frame(credential, &operation)?;
+        self.send_with_frame(&operation, request, &frame).await
     }
 
     pub(crate) async fn send_with_frame(

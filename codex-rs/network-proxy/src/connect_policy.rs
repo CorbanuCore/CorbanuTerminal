@@ -52,7 +52,16 @@ impl PinnedPeers {
 
     /// Whether this pin was issued for exactly `target`.
     fn covers(&self, target: &HostWithPort) -> bool {
-        self.port == target.port && self.host == pin_host_key(&target.host.to_string())
+        self.covers_authority(&target.host.to_string(), target.port)
+    }
+
+    /// Whether this pin was issued for exactly `host` and `port`.
+    pub(crate) fn covers_authority(&self, host: &str, port: u16) -> bool {
+        self.port == port && self.host == pin_host_key(host)
+    }
+
+    pub(crate) fn addrs(&self) -> &[IpAddr] {
+        &self.addrs
     }
 }
 
@@ -118,7 +127,10 @@ where
     type Error = BoxError;
 
     async fn serve(&self, input: Input) -> Result<Self::Output, Self::Error> {
-        let guarded = guard_enabled(&self.state).await?;
+        // A pin is honoured even where the guard is off: the isolated broker
+        // has no guard of its own and dials the answers Core checked.
+        let pin = input.extensions().get::<PinnedPeers>().cloned();
+        let guarded = pin.is_some() || guard_enabled(&self.state).await?;
         if input.extensions().get::<ProxyAddress>().is_some() {
             // PF-33-S02: an upstream proxy resolves and connects on its own, so
             // the checked answers could not be pinned. The guard refuses it.
@@ -137,11 +149,7 @@ where
         if guarded {
             // Every guarded dial carries the guard's checked answers for its
             // exact authority; anything else is refused, never re-resolved.
-            let pin = input
-                .extensions()
-                .get::<PinnedPeers>()
-                .cloned()
-                .ok_or_else(|| pinning_refused("no checked answers"))?;
+            let pin = pin.ok_or_else(|| pinning_refused("no checked answers"))?;
             if !pin.covers(&target) {
                 return Err(pinning_refused("authority changed"));
             }
@@ -588,7 +596,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn pf_33_s02_flag_off_ignores_pins() {
+    async fn pf_33_s02_pins_bind_even_with_the_flag_off() {
         let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
             .await
             .expect("bind local listener");
@@ -599,13 +607,34 @@ mod tests {
                 ..NetworkProxyConfig::default()
             },
         )));
+        // Without a pin the flag-off dial is today's dial.
+        let request = rama_tcp::client::Request::new(HostWithPort::from(target));
+        let result = Service::serve(&connector, request).await;
+        assert!(result.is_ok(), "flag off keeps today's dial: {result:?}");
+
+        // A pin only narrows a dial, so it binds without the guard too: the
+        // isolated broker has no guard and dials the answers Core checked.
         let stale = PinnedPeers::new("other.example", 1, ["93.184.216.34".parse().expect("ip")]);
         let mut request = rama_tcp::client::Request::new(HostWithPort::from(target));
         request.extensions_mut().insert(stale);
-
+        assert_refused(
+            Service::serve(&connector, request).await,
+            "network target rejected by connection pinning (authority changed)",
+        );
+        let pin = PinnedPeers::new(&target.ip().to_string(), target.port(), [target.ip()]);
+        let mut request = rama_tcp::client::Request::new(HostWithPort::from(target));
+        request.extensions_mut().insert(pin);
         let result = Service::serve(&connector, request).await;
+        assert!(result.is_ok(), "a matching pin dials: {result:?}");
 
-        assert!(result.is_ok(), "flag off keeps today's dial: {result:?}");
+        // A pinned request is guarded: no upstream proxy, even with the flag off.
+        let pin = PinnedPeers::new(&target.ip().to_string(), target.port(), [target.ip()]);
+        let mut request = rama_tcp::client::Request::new(HostWithPort::from(target));
+        request.extensions_mut().insert(pin);
+        request
+            .extensions_mut()
+            .insert(ProxyAddress::try_from("http://proxy.example:3128").expect("proxy address"));
+        assert_refused(Service::serve(&connector, request).await, "upstream proxy");
     }
 
     #[test]
