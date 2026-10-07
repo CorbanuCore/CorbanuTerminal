@@ -67,11 +67,13 @@ Merged 2026-10-07: #246 (recovery), #247 (transitions), #248 (fan-out), #249 (me
 - [x] Merging step and summaries under Aggressive (from PF-23-S01): kept off (stage one denies, consolidation is
   skipped above Permissive); now also off for sessions that ran under Aggressive. Product decision pending
   (gate record).
+- [x] GLM 5.2 tmux functional run and videos (2026-10-07, Z.AI balance cleared): four demos in
+  `qa/demos/index/PF-23-S03.md`, each under 90 s with clean leak scans; focused tests re-run on candidate
+  `a230f2082141` (`security_transition security_recovery` 26/26, `revocation` 11/11).
 
 ## Remaining
 
-- [ ] GLM 5.2 tmux run and videos: blocked, Z.AI reports insufficient balance (specs ready in `qa/demos/specs/pf23s03-*`).
-- Handed to PF-24-S02 (first production caller of `commit_transition`): call it off the async runtime (up to 2 s
+- [ ] Handed to PF-24-S02 (first production caller of `commit_transition`): call it off the async runtime (up to 2 s
   lock wait); reconcile `security_level.toml` with `security_state.json`; a way out after `StoredLevelChanged` /
   `StoredStateChanged` and for `UnreadableState`'s session-long kill switch; warn when a project or managed layer
   sets a level above a requested downgrade. Known limits are in the gate record.
@@ -81,8 +83,10 @@ Merged 2026-10-07: #246 (recovery), #247 (transitions), #248 (fan-out), #249 (me
 - [x] `just fix -p codex-core`, `just fmt`; `just test -p codex-core security_transition security_recovery` and
   the wider affected sets per PR; full `just test` of core and touched crates (gate record).
 - [x] Linux clippy (`-D warnings`) on the RTX box; Opus 5.5 High review (three rounds, APPROVE).
-- [ ] GLM 5.2 tmux functional run and videos (blocked: Z.AI balance).
+- [x] GLM 5.2 tmux functional run and videos (Z.AI balance cleared 2026-10-07).
+- [ ] Full isolated code-blind VM run and human sign-off (milestone gate only; not required per sprint).
 
 ## Exit evidence
 
-- [ ] Videos (blocked); state diagram and changed paths in the gate record; record archived after merge.
+- [x] Videos (four demos, `qa/demos/index/PF-23-S03.md`); state diagram and changed paths in the gate record.
+- [ ] Archive this record after the qualification PR merges.
