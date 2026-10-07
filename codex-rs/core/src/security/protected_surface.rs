@@ -29,6 +29,7 @@ pub(crate) use gate::admit;
 pub(crate) use gate::ask_human;
 pub(crate) use gate::check_dispatch;
 pub(crate) use read_denials::ReadDenials;
+pub(crate) use read_denials::protect_file_tool_context;
 pub(crate) use typed::TypedWindow;
 pub(crate) use typed::lock as lock_typed_input;
 pub(crate) use typed::note_interrupt;

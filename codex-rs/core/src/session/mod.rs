@@ -3437,9 +3437,14 @@ impl Session {
                 .map(|environment| {
                     (
                         environment.environment_id.clone(),
-                        turn_context.file_system_sandbox_context(
-                            /*additional_permissions*/ None,
-                            environment,
+                        // PF-23-S01: post-taint read denials, as for file tools.
+                        crate::security::protected_surface::protect_file_tool_context(
+                            self,
+                            &turn_context,
+                            turn_context.file_system_sandbox_context(
+                                /*additional_permissions*/ None,
+                                environment,
+                            ),
                         ),
                     )
                 })

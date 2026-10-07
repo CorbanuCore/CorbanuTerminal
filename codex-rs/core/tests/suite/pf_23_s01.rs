@@ -556,3 +556,47 @@ async fn pf_23_s01_human_approval_lifts_read_denials_only_under_moderate() -> an
     }
     Ok(())
 }
+
+/// Review 1: a model-chosen working folder inside a denied path does not
+/// switch the denial off (Aggressive keeps it even after approval).
+#[cfg(target_os = "macos")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pf_23_s01_working_folder_inside_a_denied_path_keeps_the_denial() -> anyhow::Result<()> {
+    use codex_protocol::protocol::ReviewDecision;
+    skip_if_no_network!(Ok(()));
+    skip_if_sandbox!(Ok(()));
+    let (home, _, _) = canary_home()?;
+    // The working folder is the denied entry itself (`<home>/wallet`).
+    let wallet = home.path().canonicalize()?.join("wallet");
+    std::fs::create_dir_all(&wallet)?;
+    std::fs::write(wallet.join("pf23-notes.txt"), CANARY)?;
+    let workdir = wallet.to_string_lossy().into_owned();
+    let read = call(
+        "call-read",
+        "shell_command",
+        json!({ "command": "cat pf23-notes.txt", "workdir": workdir }),
+    );
+    let (test, captured) = start_turn_in(
+        Some(home),
+        SecurityLevel::Aggressive,
+        AskForApproval::OnRequest,
+        vec![injected_step(), read, done_step()],
+        |_| {},
+    )
+    .await?;
+    if let Some(approval) = next_exec_approval(&test).await {
+        test.codex
+            .submit(Op::ExecApproval {
+                id: approval.effective_approval_id(),
+                turn_id: None,
+                decision: ReviewDecision::Approved,
+            })
+            .await?;
+        assert!(next_exec_approval(&test).await.is_none());
+    }
+    let requests = captured.requests();
+    let output = output_text(&requests[requests.len() - 1], "call-read");
+    assert!(!output.contains(CANARY), "{output}");
+    assert!(output.contains("Operation not permitted"), "{output}");
+    Ok(())
+}

@@ -10,7 +10,7 @@ unattributed text); it never resets within a session or across resume, fork, com
 
 | Action | Permissive | Moderate, untainted | Moderate, tainted | Aggressive, tainted |
 | --- | --- | --- | --- | --- |
-| Ordinary shell / exec / patch | unchanged | unchanged | runs; sandbox denies credential and Corbanu-home reads | same as Moderate; workspace sandbox, approvals on |
+| Ordinary shell / exec / patch, in-process file tools | unchanged | unchanged | runs; sandbox and file tools deny credential and Corbanu-home reads | same as Moderate; workspace sandbox, approvals on |
 | Command the text net marks protected (vault, credentials, policy, disclosure, value transfer, unseen code) | unchanged | unchanged | fresh human approval; refused with approvals off; approval lifts the read denials for that run | fresh human approval; read denials stay (grants: PF-23-S02) |
 | MCP call that may change/send data, moves value, or names a protected path/command | unchanged | unchanged | fresh human approval | fresh human approval |
 | Typing into a running process | unchanged | unchanged | judged as one command since taint | same |
@@ -30,7 +30,7 @@ policy epoch it was given under, and is refused stale otherwise).
 | Post-taint checks: shell, exec, patch | PF-30-S03 | merged | yes |
 | Post-taint checks: MCP, typing, code mode, unclassified tools | PF-23-S01 slice 1 | merged (#223) | yes |
 | Labelled, session-bound stage-one memory | PF-23-S01 slice 2 | this PR | yes |
-| OS read denials after taint | PF-23-S01 slice 3 | this PR (macOS, Linux bwrap, Windows elevated; not external sandboxes) | yes |
+| OS read denials after taint | PF-23-S01 slice 3 | this PR (macOS, Linux bwrap, Windows elevated; not external sandboxes or remote exec servers; fails closed where no sandbox starts) | yes |
 | Secretless agent launch | PF-27-S02 | merged, `secretless_agent_launch` | yes |
 | Isolated credential broker; model-client auth | PF-27-S04 / PF-27-S05 | merged / open (#229) | yes |
 | Secret output gate, reflected scrubbing | PF-28-S01/S02 | merged, `secret_output_gate` | yes |

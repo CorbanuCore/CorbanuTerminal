@@ -1,7 +1,7 @@
 # PF-23-S01 slice 2: memory summarisation runs under Moderate on labelled, session-bound input.
 id = "pf23s01-moderate-memory-labelled"
 feature = "Memory summaries run under Moderate, on labelled input"
-expected = "A session reads a hostile file; in a new chat the memory worker summarises that session under Moderate (stage one completes) and stores a summary; consolidation is skipped."
+expected = "A session reads a hostile file and is aged past the 6-hour idle minimum (visible setup step); in a new chat the memory worker summarises it under Moderate from labelled input and stores the summary."
 model = "glm-5.2"
 provider = "zai"
 config = """
@@ -16,8 +16,6 @@ level = "moderate"
 source_envelopes = true
 memories = true
 
-[memories]
-min_rollout_idle_hours = 0
 """
 
 [credentials]
@@ -53,6 +51,15 @@ key = "Enter"
 pause = 2.0
 
 [[steps]]
+type = "!sqlite3 {home}/pfterminal_state_5.sqlite 'update threads set updated_at = updated_at - 28800, updated_at_ms = updated_at_ms - 28800000' && echo aged"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "aged"
+[[steps]]
+pause = 1.0
+
+[[steps]]
 type = "Say hello in three words."
 [[steps]]
 key = "Enter"
@@ -64,11 +71,11 @@ compress = 1
 pause = 20.0
 
 [[steps]]
-type = "!grep -ho 'memory stage-1 extraction complete[^\"]*' {logs}/*.log | tail -1; sqlite3 {home}/memories_1.sqlite 'select rollout_summary from stage1_outputs'"
+type = "!sqlite3 {home}/pfterminal_memories_1.sqlite 'select count(*) || \" summary stored: \" || rollout_summary from stage1_outputs'"
 [[steps]]
 key = "Enter"
 [[steps]]
-wait = "1 succeeded"
+wait = "1 summary stored"
 timeout = 60
 [[steps]]
 pause = 5.0

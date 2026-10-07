@@ -145,3 +145,41 @@ fn pf_23_s01_claude_config_dir_credentials_are_denied() {
             .any(|path| path == &abs(&claude.join(".credentials.json")))
     );
 }
+
+/// Review 1: in-process file tools (patch pre-check, structured edits, image
+/// view, extension tools) get the same denials once the session is tainted,
+/// and nothing changes before that.
+#[tokio::test]
+async fn pf_23_s01_file_tools_get_the_denials_after_taint() {
+    let (session, turn) = crate::session::tests::make_session_and_context().await;
+    let client = (*session.services.model_client())
+        .clone()
+        .with_ingress_level(codex_security_policy::SecurityLevel::Moderate)
+        .with_source_envelopes(true);
+    session.services.replace_model_client(client);
+    let environment = turn
+        .environments
+        .primary()
+        .expect("a primary environment")
+        .clone();
+    let auth = turn.config.codex_home.join("auth.json");
+    let readable = |context: codex_file_system::FileSystemSandboxContext| {
+        let profile = PermissionProfile::try_from(context.permissions).unwrap();
+        #[allow(deprecated)]
+        let cwd = turn.cwd.clone();
+        profile
+            .file_system_sandbox_policy()
+            .can_read_path_with_cwd(auth.as_path(), cwd.as_path())
+    };
+    let context = || turn.file_system_sandbox_context(None, &environment);
+    let before = protect_file_tool_context(&session, &turn, context());
+    assert_eq!(before, context());
+
+    session
+        .services
+        .model_client()
+        .note_unrecorded_input_for_taint();
+    let after = protect_file_tool_context(&session, &turn, context());
+    assert!(readable(context()));
+    assert!(!readable(after));
+}

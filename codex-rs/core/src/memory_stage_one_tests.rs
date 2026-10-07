@@ -710,12 +710,11 @@ async fn pf_23_s01_labelled_rollout_is_bound_to_its_source_session() {
         ]
     };
     let label = |items: &[RolloutItem], thread| {
-        client.label_rollout(thread, items, |item| Some(item.clone()), |text| text)
+        client.label_items(thread, items, /*token_limit*/ 100_000, |text| text)
     };
 
     let labelled = label(&rollout(home_record), source).unwrap();
-    assert_eq!(labelled.source_thread(), source);
-    let got = texts(labelled.contents());
+    let got = texts(&labelled);
     assert_eq!(got[0], "HUMAN_CANARY remember my build flags");
     for (text, canary) in [(&got[1], "TOOL_CANARY"), (&got[2], "FORGED_CANARY")] {
         assert!(text.contains("authority=none"), "{text}");
@@ -725,21 +724,20 @@ async fn pf_23_s01_labelled_rollout_is_bound_to_its_source_session() {
 
     // A record signed by another home restores nothing: the human text is
     // labelled too.
-    let foreign = label(
-        &rollout(record_with(OriginKey::from_bytes([9; 32]))),
-        source,
-    )
-    .unwrap();
-    assert!(texts(foreign.contents())[0].contains("authority=none"));
+    let other = rollout(record_with(OriginKey::from_bytes([9; 32])));
+    assert!(texts(&label(&other, source).unwrap())[0].contains("authority=none"));
 
-    // Not opened by the claimed session (another session's file, or no
-    // session record at all): refused before anything is built.
-    for items in [
-        rollout(record_with(OriginKey::from_bytes([9; 32]))),
-        rollout(record_with(OriginKey::from_bytes([9; 32])))[1..].to_vec(),
+    // Not opened by the claimed session: another session's file, no session
+    // record, or the claimed session's record only further down.
+    let mut later = other[1..].to_vec();
+    later.push(opened_by(source));
+    for (items, thread) in [
+        (other.clone(), ThreadId::new()),
+        (other[1..].to_vec(), source),
+        (later, source),
     ] {
         assert!(matches!(
-            label(&items, ThreadId::new()),
+            label(&items, thread),
             Err(StageOneMemoryError::Denied(
                 StageOneMemoryDenial::SourceLineageMismatch
             ))
@@ -747,27 +745,62 @@ async fn pf_23_s01_labelled_rollout_is_bound_to_its_source_session() {
     }
 }
 
-/// PF-23-S01 slice 2: a labelled request whose prompt does not carry the
-/// labelled text is an unlabelled request and is refused under Moderate.
+/// PF-23-S01 review 1: an over-long rollout is cut by whole items, never
+/// inside a label, so it still fits the stage-one budget.
 #[tokio::test]
-async fn pf_23_s01_prompt_must_embed_the_labelled_text() {
+async fn pf_23_s01_long_rollouts_drop_whole_items_and_keep_labels_intact() {
+    let owner = owner(SecurityLevel::Moderate).await;
+    let _ = (*owner.services.model_client())
+        .clone()
+        .with_source_envelopes(true);
+    let client = client(&owner).await.unwrap();
+    let source = ThreadId::new();
+    let mut items = vec![opened_by(source)];
+    for index in 0..40 {
+        items.push(RolloutItem::ResponseItem(
+            ResponseItem::FunctionCallOutput {
+                id: None,
+                call_id: format!("call-{index}"),
+                output: codex_protocol::models::FunctionCallOutputPayload::from_text(format!(
+                    "TOOL_{index} {}",
+                    "x".repeat(400)
+                )),
+                internal_chat_message_metadata_passthrough: None,
+            },
+        ));
+    }
+    let limit = 2_000;
+    let contents = client
+        .label_items(source, &items, limit, |text| text)
+        .unwrap();
+    let policy = codex_utils_output_truncation::TruncationPolicy::Tokens(limit);
+    assert_eq!(
+        codex_utils_output_truncation::truncate_text(&contents, policy),
+        contents
+    );
+    let kept = texts(&contents);
+    assert!(kept.len() > 1 && kept.len() < 40, "{}", kept.len());
+    // Head and tail survive; every kept item is a whole label.
+    assert!(kept.first().unwrap().contains("TOOL_0 "));
+    assert!(kept.last().unwrap().contains("TOOL_39 "));
+    for text in kept {
+        assert!(text.contains("authority=none") && text.contains("Untrusted data."));
+    }
+}
+
+/// PF-23-S01 slice 2: a labelled request whose prompt is not exactly the
+/// Core-built message is an unlabelled request and is refused under Moderate.
+#[tokio::test]
+async fn pf_23_s01_prompt_must_be_the_labelled_message() {
     let owner = owner(SecurityLevel::Moderate).await;
     let _ = (*owner.services.model_client())
         .clone()
         .with_source_envelopes(true);
     let mut client = client(&owner).await.unwrap();
-    let source = ThreadId::new();
-    let labelled = client
-        .label_rollout(
-            source,
-            &[
-                opened_by(source),
-                RolloutItem::ResponseItem(rollout_message("user", "hello")),
-            ],
-            |item| Some(item.clone()),
-            |text| text,
-        )
-        .unwrap();
+    let labelled = LabelledStageOneInput {
+        source_thread: ThreadId::new(),
+        message: "Analyze this rollout: []".into(),
+    };
     let context = crate::session::tests::make_session_and_context().await.1;
     let prompt = Prompt {
         input: vec![rollout_message(

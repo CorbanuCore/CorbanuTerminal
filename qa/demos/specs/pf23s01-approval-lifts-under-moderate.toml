@@ -27,7 +27,7 @@ ZAI_API_KEY = "provider/zai_api_key"
 [[steps]]
 wait = "Corbanu Terminal \\(v"
 [[steps]]
-type = "!echo team-notes-canary-0001 > {home}/team-notes.txt"
+type = "!printf 'shipped-%s\\n' v2-canary > {home}/team-notes.txt"
 [[steps]]
 key = "Enter"
 [[steps]]
@@ -49,7 +49,7 @@ compress = 1
 pause = 1.0
 
 [[steps]]
-type = "Run exactly: cat ../home/team-notes.txt"
+type = "Run exactly: cat ../home/team-notes.txt and quote its output."
 [[steps]]
 key = "Enter"
 [[steps]]
@@ -59,9 +59,9 @@ compress = 3
 [[steps]]
 pause = 2.5
 [[steps]]
-key = "y"
+key = "Enter"
 [[steps]]
-wait = "team-notes-canary-0001"
+wait = "shipped-v2-canary"
 timeout = 240
 compress = 3
 [[steps]]

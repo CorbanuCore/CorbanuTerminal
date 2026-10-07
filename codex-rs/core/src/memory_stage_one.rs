@@ -88,16 +88,16 @@ pub struct StageOneMemoryRequest<'a> {
     pub service_tier: Option<String>,
     pub responses_metadata: &'a CodexResponsesMetadata,
     /// Required whenever the effective level is above Permissive: the prompt
-    /// must embed exactly this Core-built text.
+    /// must be exactly this Core-built message.
     pub labelled_input: Option<&'a LabelledStageOneInput>,
 }
 
-/// Rollout text for one stage-one request, built by Core from one source
-/// session's own rollout. Content without verified human, host or model
+/// The stage-one message for one source session, built by Core from that
+/// session's own rollout file. Content without verified human, host or model
 /// standing is labelled untrusted data. Only Core constructs it.
 pub struct LabelledStageOneInput {
     source_thread: ThreadId,
-    contents: String,
+    message: String,
 }
 
 impl LabelledStageOneInput {
@@ -105,9 +105,57 @@ impl LabelledStageOneInput {
         self.source_thread
     }
 
-    pub fn contents(&self) -> &str {
-        &self.contents
+    /// The whole user message the request must carry.
+    pub fn message(&self) -> &str {
+        &self.message
     }
+}
+
+/// Fixed stage-one filter (mirrors the memories worker's Permissive one):
+/// developer messages and AGENTS.md / skill fragments are dropped; nothing is
+/// added or rewritten.
+fn keep_for_stage_one(item: &ResponseItem) -> Option<ResponseItem> {
+    let ResponseItem::Message {
+        id,
+        role,
+        content,
+        phase,
+        internal_chat_message_metadata_passthrough: metadata,
+    } = item
+    else {
+        return codex_rollout::should_persist_response_item_for_memories(item)
+            .then(|| item.clone());
+    };
+    if role == "developer" {
+        return None;
+    }
+    if role != "user" {
+        return Some(item.clone());
+    }
+    let marked = |text: &str, start: &str, end: &str| {
+        let text = text.trim();
+        text.get(..start.len())
+            .is_some_and(|head| head.eq_ignore_ascii_case(start))
+            && text
+                .get(text.len().saturating_sub(end.len())..)
+                .is_some_and(|tail| tail.eq_ignore_ascii_case(end))
+    };
+    let content: Vec<ContentItem> = content
+        .iter()
+        .filter(|part| {
+            !matches!(part, ContentItem::InputText { text }
+                if marked(text, "# AGENTS.md instructions", "</INSTRUCTIONS>")
+                    || marked(text, "<skill>", "</skill>"))
+        })
+        .cloned()
+        .collect();
+    (!content.is_empty()).then(|| ResponseItem::Message {
+        id: id.clone(),
+        role: role.clone(),
+        content,
+        phase: phase.clone(),
+        internal_chat_message_metadata_passthrough: metadata.clone(),
+    })
 }
 
 pub struct StageOneMemoryOutput {
@@ -310,7 +358,9 @@ impl StageOneMemoryClient {
             denial: Mutex::new(None),
             unlabelled_request: AtomicBool::new(false),
         });
-        let requires_labelled_input = binding.floor.max(policy.level) != SecurityLevel::Permissive;
+        // The same level `evaluate` checks at dispatch.
+        let requires_labelled_input =
+            binding.floor.max(config.security_level).max(policy.level) != SecurityLevel::Permissive;
         binding.check().await?;
         let client = ModelClient::new(
             Some(Arc::clone(&session.services.auth_manager)),
@@ -344,26 +394,47 @@ impl StageOneMemoryClient {
         self.requires_labelled_input
     }
 
-    /// PF-23-S01: label one source session's rollout for stage one.
+    /// PF-23-S01: the stage-one message for one source session.
     ///
-    /// The rollout must open with `source_thread`'s own session record, and
-    /// only origin records this home signed restore standing; everything else
-    /// (tool, MCP, agent, memory or unattributed text) becomes labelled data.
-    /// `keep` filters the projected items; `finish` post-processes the
-    /// serialized text (secret redaction) before it is fixed.
-    pub fn label_rollout(
+    /// Core reads the rollout itself. Its opening record must be
+    /// `source_thread`'s own session record; only origin records this home
+    /// signed restore standing, everything else (tool, MCP, agent, memory or
+    /// unattributed text) is labelled data. Whole items are dropped from the
+    /// middle until the text fits `token_limit`, so no label is ever cut.
+    /// The host supplies only its secret redaction and its prompt template.
+    pub async fn label_rollout(
+        &self,
+        source_thread: ThreadId,
+        rollout_path: &std::path::Path,
+        token_limit: usize,
+        redact: fn(String) -> String,
+        render: impl FnOnce(&str) -> anyhow::Result<String>,
+    ) -> Result<LabelledStageOneInput, StageOneMemoryError> {
+        let (items, _, _) = crate::RolloutRecorder::load_rollout_items(rollout_path)
+            .await
+            .map_err(|err| CodexErr::InvalidRequest(format!("failed to read rollout: {err}")))?;
+        let contents = self.label_items(source_thread, &items, token_limit, redact)?;
+        let message = render(&contents)
+            .map_err(|err| CodexErr::InvalidRequest(format!("stage-one prompt: {err}")))?;
+        if !message.contains(&contents) {
+            return Err(StageOneMemoryDenial::ProtectedInputUnavailable.into());
+        }
+        Ok(LabelledStageOneInput {
+            source_thread,
+            message,
+        })
+    }
+
+    fn label_items(
         &self,
         source_thread: ThreadId,
         items: &[RolloutItem],
-        keep: impl Fn(&ResponseItem) -> Option<ResponseItem>,
-        finish: impl FnOnce(String) -> String,
-    ) -> Result<LabelledStageOneInput, StageOneMemoryError> {
-        let opened_by = items.iter().find_map(|item| match item {
-            RolloutItem::SessionMeta(line) => Some(line.meta.id),
-            _ => None,
-        });
-        if opened_by != Some(source_thread) {
-            return Err(StageOneMemoryDenial::SourceLineageMismatch.into());
+        token_limit: usize,
+        redact: fn(String) -> String,
+    ) -> Result<String, StageOneMemoryError> {
+        match items.first() {
+            Some(RolloutItem::SessionMeta(line)) if line.meta.id == source_thread => {}
+            _ => return Err(StageOneMemoryDenial::SourceLineageMismatch.into()),
         }
         let mut ingress = NativeIngress::default();
         ingress.set_labelled_mode(true);
@@ -388,18 +459,24 @@ impl StageOneMemoryClient {
                 _ => None,
             }),
         );
-        let kept: Vec<ResponseItem> = ingress
+        let mut kept: Vec<ResponseItem> = ingress
             .project_labelled(&conversation)
             .iter()
-            .filter_map(keep)
+            .filter_map(keep_for_stage_one)
             .collect();
-        let contents = serde_json::to_string(&kept).map_err(|err| {
-            CodexErr::InvalidRequest(format!("failed to serialize rollout memory: {err}"))
-        })?;
-        Ok(LabelledStageOneInput {
-            source_thread,
-            contents: finish(contents),
-        })
+        let policy = codex_utils_output_truncation::TruncationPolicy::Tokens(token_limit);
+        loop {
+            let contents = serde_json::to_string(&kept)
+                .map(redact)
+                .map_err(|err| CodexErr::InvalidRequest(format!("serialize rollout: {err}")))?;
+            if kept.is_empty()
+                || codex_utils_output_truncation::truncate_text(&contents, policy) == contents
+            {
+                return Ok(contents);
+            }
+            // Keep the head and the tail, as the Permissive text cut does.
+            kept.remove(kept.len() / 2);
+        }
     }
 
     pub async fn check_completion(&self) -> Result<(), StageOneMemoryError> {
@@ -454,8 +531,8 @@ impl StageOneMemoryClient {
         &mut self,
         request: StageOneMemoryRequest<'_>,
     ) -> Result<StageOneMemoryOutput, StageOneMemoryError> {
-        // The labelled text must be the rollout this prompt carries: one user
-        // message embedding it. Anything else is an unlabelled request.
+        // The prompt must be exactly the Core-built message (one user
+        // message). Anything else is an unlabelled request.
         let labelled = request.labelled_input.is_some_and(|input| {
             matches!(
                 request.prompt.input.as_slice(),
@@ -463,7 +540,7 @@ impl StageOneMemoryClient {
                     if role == "user"
                         && matches!(
                             content.as_slice(),
-                            [ContentItem::InputText { text }] if text.contains(input.contents())
+                            [ContentItem::InputText { text }] if text == input.message()
                         )
             )
         });

@@ -27,7 +27,7 @@ ZAI_API_KEY = "provider/zai_api_key"
 [[steps]]
 wait = "Corbanu Terminal \\(v"
 [[steps]]
-type = "!echo team-notes-canary-0001 > {home}/team-notes.txt"
+type = "!printf 'shipped-%s\\n' v2-canary > {home}/team-notes.txt"
 [[steps]]
 key = "Enter"
 [[steps]]

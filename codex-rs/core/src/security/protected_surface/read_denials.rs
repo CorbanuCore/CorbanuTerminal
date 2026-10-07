@@ -144,6 +144,34 @@ impl ReadDenials {
         denials
     }
 
+    /// The denials for this host's user: what stays readable is the turn's
+    /// working folder, its workspace roots and the profile's writable roots
+    /// resolved against that folder.
+    pub(crate) fn for_turn(
+        codex_home: &Path,
+        turn_cwd: &AbsolutePathBuf,
+        workspace_roots: &[AbsolutePathBuf],
+        profile: &PermissionProfile,
+    ) -> Self {
+        let mut keep = vec![turn_cwd.clone()];
+        keep.extend(workspace_roots.iter().cloned());
+        keep.extend(
+            profile
+                .file_system_sandbox_policy()
+                .get_writable_roots_with_cwd(turn_cwd.as_path())
+                .into_iter()
+                .map(|root| root.root),
+        );
+        Self::collect(
+            codex_home,
+            dirs::home_dir().as_deref(),
+            std::env::var_os("CLAUDE_CONFIG_DIR")
+                .as_deref()
+                .map(Path::new),
+            &keep,
+        )
+    }
+
     fn holds_kept(path: &AbsolutePathBuf, keep: &[AbsolutePathBuf]) -> bool {
         keep.iter()
             .any(|kept| kept.as_path().starts_with(path.as_path()))
@@ -212,6 +240,49 @@ impl ReadDenials {
         (file_system.kind == FileSystemSandboxKind::Restricted)
             .then(|| PermissionProfile::from_runtime_permissions(&file_system, network))
     }
+}
+
+/// In-process file tools (the patch pre-check, structured edits, image
+/// viewing, extension tools) read files with the same denials after
+/// untrusted content. No approval lifts them here.
+pub(crate) fn protect_file_tool_context(
+    session: &crate::session::session::Session,
+    turn: &crate::session::turn_context::TurnContext,
+    mut context: codex_file_system::FileSystemSandboxContext,
+) -> codex_file_system::FileSystemSandboxContext {
+    if session
+        .services
+        .model_client()
+        .post_taint_state().is_none_or(|state| state.taint_generation <= 0)
+    {
+        return context;
+    }
+    let Ok(profile) = PermissionProfile::try_from(context.permissions.clone()) else {
+        // Unreadable permissions: no file access at all (fail closed).
+        context.permissions = PermissionProfile::from_runtime_permissions(
+            &FileSystemSandboxPolicy::restricted(Vec::new()),
+            codex_protocol::permissions::NetworkSandboxPolicy::Restricted,
+        )
+        .into();
+        return context;
+    };
+    #[allow(deprecated)]
+    let turn_cwd = turn.cwd.clone();
+    let workspace_roots: Vec<AbsolutePathBuf> = context
+        .workspace_roots
+        .iter()
+        .filter_map(|root| root.to_abs_path().ok())
+        .collect();
+    let denials = ReadDenials::for_turn(
+        turn.config.codex_home.as_path(),
+        &turn_cwd,
+        &workspace_roots,
+        &profile,
+    );
+    if let Some(protected) = denials.apply(&profile) {
+        context.permissions = protected.into();
+    }
+    context
 }
 
 #[cfg(test)]

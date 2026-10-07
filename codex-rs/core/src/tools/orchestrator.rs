@@ -283,15 +283,14 @@ impl ToolOrchestrator {
 
         // PF-23-S01 slice 3: after untrusted content the sandbox itself denies
         // credential and Corbanu home reads, whatever the command text says.
+        // What stays readable comes from the turn, never from the command's
+        // own (model-chosen) working folder.
         #[allow(deprecated)]
-        let sandbox_cwd_for_denials = tool
-            .sandbox_cwd(req)
-            .and_then(|cwd| cwd.to_abs_path().ok())
-            .unwrap_or_else(|| turn_ctx.cwd.clone());
+        let turn_cwd = turn_ctx.cwd.clone();
         let denied = post_taint_read_denials(
             tool_ctx,
             &post_taint,
-            sandbox_cwd_for_denials,
+            turn_cwd,
             &materialized_workspace_roots,
             permission_profile,
             &permissions,
@@ -738,22 +737,11 @@ fn post_taint_read_denials(
         );
         return None;
     }
-    let mut keep = vec![cwd.clone()];
-    keep.extend(workspace_roots.iter().cloned());
-    keep.extend(
-        materialized
-            .file_system_sandbox_policy()
-            .get_writable_roots_with_cwd(cwd.as_path())
-            .into_iter()
-            .map(|root| root.root),
-    );
-    let denials = ReadDenials::collect(
+    let denials = ReadDenials::for_turn(
         tool_ctx.turn.config.codex_home.as_path(),
-        dirs::home_dir().as_deref(),
-        std::env::var_os("CLAUDE_CONFIG_DIR")
-            .as_deref()
-            .map(std::path::Path::new),
-        &keep,
+        &cwd,
+        workspace_roots,
+        materialized,
     );
     let (Some(exec_server), Some(materialized)) =
         (denials.apply(exec_server), denials.apply(materialized))
