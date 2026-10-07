@@ -1,0 +1,95 @@
+# PF-25-S01: A grant until expiry is listed in /security (GLM 5.2).
+id = "pf25s01-grant-until-expiry"
+feature = "A grant until expiry is listed in /security"
+expected = "In the grant review, u changes the limit to any run of this exact command until it expires; Enter grants it and GLM's read works. /security then lists the grant with its command, limit and expiry time."
+model = "glm-5.2"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "!printf 'shipped-%s\\n' v2-canary > {home}/team-notes.txt && echo seeded"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "seeded"
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Preflight passed"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "r restart now"
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Restarting Corbanu Terminal[\\s\\S]*Corbanu Terminal \\(v[\\s\\S]*› "
+timeout = 60
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run exactly this command and quote its output: cat \"$(printf '../ho%s/team-notes.txt' me)\""
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Grant once: run without the Aggressive protected-path rules"
+timeout = 240
+compress = 2
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "g"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Grant this command\\?[\\s\\S]*Still denied"
+[[steps]]
+pause = 4.0
+[[steps]]
+key = "u"
+[[steps]]
+wait = "any run of this exact command until it expires"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "shipped-v2-canary"
+timeout = 240
+compress = 2
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Grant: `[^`]*team-notes[^`]*` without the protected-path rules · any run · expires"
+[[steps]]
+pause = 4.0

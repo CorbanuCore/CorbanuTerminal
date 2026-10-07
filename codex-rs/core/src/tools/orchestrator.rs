@@ -165,6 +165,11 @@ impl ToolOrchestrator {
         let requirement = tool.exec_approval_requirement(req).unwrap_or_else(|| {
             default_exec_approval_requirement(approval_policy, &file_system_sandbox_policy)
         });
+        // PF-23-S02: under Aggressive, the grant digest of this exact command.
+        // PF-25-S01: while its approval is open, the human may grant it once
+        // in the TUI; the offer ends with the approval.
+        let grant_operation = aggressive_grant_operation(tool, req, tool_ctx);
+        let grant_offer = aggressive_grant_offer(grant_operation.as_ref(), tool_ctx);
         // PF-30-S03: a protected action after untrusted content needs fresh,
         // exact human approval, whatever the requirement above would allow.
         let post_taint = post_taint_action(tool, req, tool_ctx, &requirement).await;
@@ -338,13 +343,14 @@ impl ToolOrchestrator {
             }
         }
 
+        drop(grant_offer);
+
         // PF-23-S01 slice 3: after untrusted content the sandbox itself denies
         // credential and Corbanu home reads, whatever the command text says.
         // What stays readable comes from the turn, never from the command's
         // own (model-chosen) working folder.
         #[allow(deprecated)]
         let turn_cwd = turn_ctx.cwd.clone();
-        let grant_operation = aggressive_grant_operation(tool, req, tool_ctx);
         // The taint generation a human approval of this run was given under.
         let human_approved_at = match &post_taint {
             Some(action) => Some(action.state.taint_generation),
@@ -353,7 +359,9 @@ impl ToolOrchestrator {
         let denied = post_taint_read_denials(
             tool_ctx,
             human_approved_at,
-            grant_operation.as_deref(),
+            grant_operation
+                .as_ref()
+                .map(|(operation, _)| operation.as_str()),
             turn_cwd,
             &materialized_workspace_roots,
             permission_profile,
@@ -774,9 +782,17 @@ where
             .is_some_and(|state| state.taint_generation == 0 && state.moderate_bound())
 }
 
+/// The command and folder a grant offer shows (PF-25-S01).
+type GrantShown = Option<(Vec<String>, String)>;
+
 /// PF-23-S02: under Aggressive, the grant operation naming this exact
-/// command or patch in its folder. `None` under any other level.
-fn aggressive_grant_operation<Rq, Out, T>(tool: &T, req: &Rq, tool_ctx: &ToolCtx) -> Option<String>
+/// command or patch in its folder, and for a command what a grant offer
+/// shows (PF-25-S01). `None` under any other level.
+fn aggressive_grant_operation<Rq, Out, T>(
+    tool: &T,
+    req: &Rq,
+    tool_ctx: &ToolCtx,
+) -> Option<(String, GrantShown)>
 where
     T: ToolRuntime<Rq, Out>,
 {
@@ -814,12 +830,38 @@ where
             let permissions = format!("{sandbox_permissions:?} {additional_permissions:?}");
             let mut parts = vec!["command", cwd.as_str(), permissions.as_str()];
             parts.extend(command.iter().map(String::as_str));
-            command_operation(&parts)
+            let operation = command_operation(&parts);
+            (operation, Some((command, cwd)))
         }
-        ApprovalAction::ApplyPatch { cwd, patch, .. } => {
-            command_operation(&["patch", &cwd.to_string(), &patch])
-        }
+        ApprovalAction::ApplyPatch { cwd, patch, .. } => (
+            command_operation(&["patch", &cwd.to_string(), &patch]),
+            None,
+        ),
     })
+}
+
+/// PF-25-S01: offer the human a grant for this exact command while its
+/// approval is open (only under a live Aggressive policy).
+fn aggressive_grant_offer(
+    operation: Option<&(String, GrantShown)>,
+    tool_ctx: &ToolCtx,
+) -> Option<crate::security::grant_offer::OfferGuard> {
+    let (operation, Some((command, cwd))) = operation? else {
+        return None;
+    };
+    let state = tool_ctx
+        .session
+        .services
+        .model_client()
+        .post_taint_state()?;
+    Some(crate::security::grant_offer::offer_for_approval(
+        &tool_ctx.session,
+        &state,
+        &tool_ctx.call_id,
+        operation.clone(),
+        command.clone(),
+        cwd.clone(),
+    ))
 }
 
 /// PF-23-S01 slice 3 / PF-23-S02 / issue #239: the exec-server and

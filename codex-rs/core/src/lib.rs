@@ -87,9 +87,10 @@ pub(crate) mod mentions {
 mod sandbox_tags;
 pub mod sandboxing;
 pub(crate) mod security;
+/// PF-29-S01 protected-mode inventory and activation preflight.
+pub use security::grant_offer as security_grant;
 pub use security::launch_contract::external_agent_contract_armed;
 pub use security::launch_contract::protect_external_agent_launch;
-/// PF-29-S01 protected-mode inventory and activation preflight.
 pub use security::level_change as security_level_change;
 pub use security::preflight as protected_preflight;
 mod session_prefix;

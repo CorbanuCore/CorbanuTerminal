@@ -5,13 +5,18 @@ status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-25"
 execution_order: 44
-owner: "Jim Ricketts"
-worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
-branch: "feat/p0-security-levels"
-base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
+owner: "tui lane worker (round 8, 2026-10-07)"
+parallel_lane: "tui"
+write_scope: "codex-rs/core/src/security/grant_offer.rs, codex-rs/core/src/security/grant_offer_tests.rs, codex-rs/core/src/security/aggressive.rs, codex-rs/core/src/security/mod.rs, codex-rs/core/src/lib.rs, codex-rs/core/src/tools/orchestrator.rs, codex-rs/app-server-client/src/lib.rs, codex-rs/tui/src/security/grant_view.rs, codex-rs/tui/src/security/grant_view_tests.rs, codex-rs/tui/src/security/mod.rs, codex-rs/tui/src/bottom_pane/approval_overlay.rs, codex-rs/tui/src/bottom_pane/approval_overlay_grant_tests.rs, codex-rs/tui/src/bottom_pane/security_level_picker.rs, codex-rs/tui/src/bottom_pane/snapshots/, qa/security-levels/sprints/PF-25-S01/, qa/demos/specs/, qa/demos/index/PF-25-S01.md"
+integration_gate: "Per-sprint gate of 2026-10-06 behind security_levels; grants are offered only under a live Aggressive policy."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-25-s01-20261007"
+branch: "feat/pf-25-s01-grant-tui"
+base_commit: "e4d17dbdc6f0d6a4c460d9005fd7cc73aebc2566"
 depends_on: "PF-17-S01, PF-23-S02, PF-24-S02"
+merged_behind_flag: "security_levels"
+gate_evidence: "qa/security-levels/sprints/PF-25-S01/README.md"
 created: 2026-08-24
-updated: 2026-08-28
+updated: 2026-10-07
 ---
 
 # PF-25-S01 — Temporary grant TUI
@@ -37,32 +42,46 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] PF-17-S01, PF-23-S02, and PF-24-S02 are completed and archived.
-- [ ] Read root, Rust, Core, TUI, and TUI style instructions.
-- [ ] Exact worktree coordinates match the active plan.
+- [x] PF-17-S01, PF-23-S02 archived; PF-24-S02 merged (#253) and archived with its GLM pass.
+- [x] Read root, Rust, Core, TUI, and TUI style instructions.
+- [x] Worktree coordinates above.
 
 ## Done
 
+Gate: [qa/security-levels/sprints/PF-25-S01/README.md](../../../../qa/security-levels/sprints/PF-25-S01/README.md).
+
 - [x] Sprint record is linked only to PF-25.
+- [x] Typed, secret-free request: while Core waits for the approval of one command under a live Aggressive policy it
+  records an offer (`core/src/security/grant_offer.rs`): actor chain, session, action, resource, command, folder,
+  digest, expiry. It is data, never authority, ends when the approval is answered, and at most 8 are open per
+  session (rate limit). A confirmed grant for an operation already held is refused (deduplication).
+- [x] Grant review (`tui/src/security/grant_view.rs`), opened with `g` from the command approval: every field above,
+  the limit (1 run, or `u` for any run until it expires; 10 minutes), and what stays denied. Enter grants and
+  approves the command; Esc goes back to the approval with nothing granted; a refusal is shown and grants nothing.
+- [x] Only the review's Enter calls `security_grant::confirm`; no `Op`, app-server method, tool or model output
+  reaches it. Core issues only an open offer equal to the one shown, under the same policy epoch, with the
+  session's human principal as issuer and the asking session's actor chain (a descendant's grant reaches only it).
+- [x] `/security` lists the grants held now with their command, runs left and expiry.
+- [x] Tests: Core (exact single use, adjacent command, Moderate/Permissive/kill switch/unbound give no offer,
+  answered approval, forged or changed offer, epoch/kill switch/level change/session end since shown, depth-4
+  descendant, flood and duplicate, until-expiry); TUI (option only with an offer and the flag, review snapshot,
+  Esc, refused offer, other keys).
 
 ## Remaining
 
-- [ ] Add a typed secret-free descendant authority-request view with exact actor/parent/task/action/resource/destination/limits/expiry, rate limits and deduplication. Requests and explanations remain untrusted; only a separately confirmed human event can issue the existing narrow grant.
-- [ ] Test forged parent/human identity, request flooding, deduplication, Esc/deny, scoped approval, actor replacement and expiry in true TUI; notification alone grants nothing.
-
-- [ ] Render canonical actor/action/resource/destination/limit/expiry fields and the adjacent access that remains denied.
-- [ ] Require explicit human confirmation; prevent agent, prompt, tool, or project content from creating the event.
-- [ ] Persist only the signed secret-free grant record and show active scope/expiry in `/security`.
-- [ ] Support Esc cancel and visible validation/persistence errors without creating authority.
-- [ ] Add mutation, adjacent-scope, child, expiry, cancel, failure, and agent-attempt tests with snapshots.
+- [ ] Gate: Opus review, Linux clippy, final videos, merge, archive.
+- Decision: grants stay in memory only (PF-23-S02's design: a restart ends them), so nothing is persisted; the sprint
+  text's "persist the signed grant record" is not done, on purpose.
+- Not offered: patches (their approval has no grant option yet) and typing into an unconfined process (still
+  refused under Aggressive; start a new process). Commands an automatic reviewer answers never show the option.
 
 ## Verification
 
-- [ ] Fix: `cd codex-rs && just fix -p codex-tui && just fix -p codex-core`.
-- [ ] Format: `cd codex-rs && just fmt`; then inspect the final diff.
-- [ ] Tests: `cd codex-rs && just test -p codex-tui security_grant && just test -p codex-core bounded_grant`.
-- [ ] Snapshot review: inspect and intentionally accept only PF-25 grant output.
-- [ ] True-TUI proof with actual request/inspect/deny/Esc/grant/expiry keys on the final sprint candidate; PF-26-S02 repeats the combined-tree workflows.
+- [x] `just fix -p codex-core -p codex-tui -p codex-app-server-client`; `just fmt`.
+- [x] `just test -p codex-core` (`grant_offer`, `aggressive`, `pf_23_s02`, `transition`); `just test -p codex-tui`
+  (`pf_25_s01`, `approval_overlay`, `security`).
+- [x] Snapshots reviewed and accepted (PF-25 grant output only).
+- [ ] GLM 5.2 tmux run and videos on the final candidate; Linux clippy on the RTX box.
 
 ## Exit evidence
 
