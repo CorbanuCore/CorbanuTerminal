@@ -882,3 +882,71 @@ async fn pf_23_s01_redaction_runs_before_labelling() {
         assert!(text.contains("</corbanu_untrusted_data>"), "{text}");
     }
 }
+
+fn turn_ran_under(level: SecurityLevel) -> RolloutItem {
+    let mut context: codex_protocol::protocol::TurnContextItem =
+        serde_json::from_value(serde_json::json!({
+            "cwd": std::env::temp_dir(),
+            "approval_policy": "never",
+            "sandbox_policy": { "type": "danger-full-access" },
+            "model": "test",
+            "summary": "auto",
+        }))
+        .unwrap();
+    context.security_level = Some(level);
+    RolloutItem::TurnContext(context)
+}
+
+/// PF-23-S03: the level a past session ran under is a floor for its memory.
+/// Under Permissive now, a session that ran under Moderate still gets the
+/// labelled message, and one that ran under Aggressive is never summarized.
+#[tokio::test]
+async fn pf_23_s03_past_session_level_is_a_floor_for_its_memory() {
+    let owner = owner(SecurityLevel::Permissive).await;
+    let client = client(&owner).await.unwrap();
+    assert!(!client.requires_labelled_input());
+    let source = ThreadId::new();
+    let rollout = |level: Option<SecurityLevel>| {
+        let mut items = vec![
+            opened_by(source),
+            RolloutItem::ResponseItem(rollout_message("user", "remember my build flags")),
+        ];
+        items.extend(level.map(turn_ran_under));
+        items
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let mut needs_labels = Vec::new();
+    for level in [
+        None,
+        Some(SecurityLevel::Permissive),
+        Some(SecurityLevel::Moderate),
+        Some(SecurityLevel::Aggressive),
+    ] {
+        let path = dir.path().join(format!("rollout-{level:?}.jsonl"));
+        let lines: Vec<String> = rollout(level)
+            .into_iter()
+            .map(|item| {
+                serde_json::to_string(&codex_protocol::protocol::RolloutLine {
+                    timestamp: "2026-10-07T00:00:00Z".into(),
+                    ordinal: None,
+                    item,
+                })
+                .unwrap()
+            })
+            .collect();
+        std::fs::write(&path, lines.join("\n") + "\n").unwrap();
+        needs_labels.push(client.requires_labelled_input_for(&path).await.unwrap());
+    }
+    assert_eq!(needs_labels, vec![false, false, true, true]);
+
+    let label = |items: &[RolloutItem]| {
+        client.label_items(source, items, /*token_limit*/ 100_000, |text| text)
+    };
+    assert!(label(&rollout(Some(SecurityLevel::Moderate))).is_ok());
+    assert!(matches!(
+        label(&rollout(Some(SecurityLevel::Aggressive))),
+        Err(StageOneMemoryError::Denied(
+            StageOneMemoryDenial::ProtectedInputUnavailable
+        ))
+    ));
+}

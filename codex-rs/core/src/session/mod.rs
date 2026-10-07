@@ -4265,7 +4265,18 @@ impl Session {
             let state = self.state.lock().await;
             state.reference_context_item()
         };
-        let turn_context_item = turn_context.to_turn_context_item();
+        let mut turn_context_item = turn_context.to_turn_context_item();
+        // PF-23-S03: record the level in force, including a stricter one
+        // committed during this session; memory work treats it as a floor.
+        if let Ok(policy) = self
+            .services
+            .agent_control
+            .effective_security_policy()
+            .snapshot_for_agent(self.thread_id)
+        {
+            turn_context_item.security_level =
+                turn_context_item.security_level.max(Some(policy.level));
+        }
         let turn_context_changed = reference_context_item.as_ref() != Some(&turn_context_item);
         let world_state = Arc::new(self.build_world_state_for_step(step_context).await?);
         let reinject_host_context = self.services.model_client().take_host_context_reinjection();

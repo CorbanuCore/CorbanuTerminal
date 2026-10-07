@@ -808,6 +808,7 @@ mod tests {
                 multi_agent_mode: None,
                 realtime_active: None,
                 effort: None,
+                security_level: None,
                 summary: ReasoningSummary::Auto,
             })
         };
