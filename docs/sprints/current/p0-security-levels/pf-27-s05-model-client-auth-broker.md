@@ -68,7 +68,9 @@ proxy, and it needs PF-27-S02's containment before the broker is a real boundary
 - [x] `pf_27_s05` tests: broker-only key use for both header styles, single-use frames, origin and path-prefix binding
   enforced by Core and again by the broker, malformed bindings refused, broker death fails closed (network-proxy);
   key extraction matches direct auth and sign-in auth is not extracted (model-provider); base-URL binding and request
-  rewrite (core). Live check: GLM 5.2 via Z.AI answered through the broker (`containment=seatbelt`).
+  rewrite, unbrokerable key fails closed with a flag-off control (core). Live check: GLM 5.2 via Z.AI answered through
+  the broker (`containment=seatbelt`). [Evidence](../../../../qa/security-levels/sprints/PF-27-S05/README.md).
+- [x] Opus 5.5 High: review 1 CHANGES REQUESTED (H3 fixed; H1/H2/M1/M2 moved to Remaining), review 2 APPROVE.
 
 ## Remaining
 
@@ -84,11 +86,13 @@ proxy, and it needs PF-27-S02's containment before the broker is a real boundary
 - [ ] ChatGPT sign-in (refreshing tokens) and Responses websockets: decision recorded for slice 1 (not brokered;
   websockets off under the flag); a later slice needs a broker-side token holder and a websocket upgrade route.
 - [ ] Memory-dump check (no raw key in Core's address space) once Core no longer reads the key.
+- [ ] Windows: the non-Unix branch fails closed but has no direct test (PF-27-S06, P1).
 
 ## Verification
 
-- [ ] `just fix -p <crate>` and `just fmt`; focused `just test -p codex-core pf_27_s05` and the affected crates.
-- [ ] GLM 5.2 tmux run, one Opus 5.5 High review, SOP demo videos (decision 5).
+- [x] `just fix -p` and `just fmt`; focused `pf_27_s05` tests and the affected crates (577 + 910 passed); Linux
+  clippy clean on the RTX box.
+- [x] GLM 5.2 tmux runs as two SOP videos ([index](../../../../qa/demos/index/PF-27-S05.md)); Opus 5.5 High review.
 
 ## Exit evidence
 

@@ -2856,6 +2856,12 @@ impl ModelClient {
         auth_context: AuthRequestTelemetryContext,
         request_route_telemetry: RequestRouteTelemetry,
     ) -> std::result::Result<ApiWebSocketConnection, ApiError> {
+        // PF-27-S05: a brokered key never travels over a websocket handshake.
+        if self.broker_model_auth.is_some() {
+            return Err(ApiError::InvalidRequest {
+                message: "websockets are off under broker_model_auth".to_string(),
+            });
+        }
         let headers = self.build_websocket_headers(responses_metadata).await;
         let websocket_telemetry = ModelClientSession::build_websocket_telemetry(
             session_telemetry,
