@@ -23,3 +23,15 @@ Round 1 (Opus 5.5 High, APPROVE WITH FIXES):
 11. For Travis (not changed): with `security_levels` off there is no `/security` picker, so a saved kill switch cannot
     be turned off from the TUI (it can by editing nothing else: only a later build with the flag). Under Permissive with
     no grants and the switch off, `g` is not offered.
+
+Round 2 (Opus 5.5 High, APPROVE WITH FIXES):
+
+1. "Nothing changed" when another session took an unsaved change: fixed. `propagate` reports whether another tree
+   took the change; then the result says it applied to running sessions and was not saved. Test added.
+2. A release reaching a different switch: fixed. A release reaches only trees whose kill switch in force is the
+   released event; others keep their switch and epoch. Test added.
+3. A kill switch that lost a race: grants of the process are cleared first, and the view says authority was revoked
+   but the switch was changed elsewhere (review it again).
+4. Restart offered next to an error: fixed (`restartable` needs an Ok message and a save).
+5. `i` (PF-41-S01) now has the same keymap guard as `g`.
+6. A tall review starts at its end: known limit (the choices stay visible; panes are normally tall enough).

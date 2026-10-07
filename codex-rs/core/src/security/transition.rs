@@ -128,6 +128,8 @@ pub(crate) struct CommittedTransition {
     /// Set when a restrictive transition applied but could not be saved: it
     /// holds until this process ends, not across a restart.
     pub(crate) not_saved: Option<String>,
+    /// Whether it reached another policy tree of this process on the home.
+    pub(crate) reached_other_trees: bool,
 }
 
 /// Told after a committed restrictive transition, kill switch or run end,
@@ -355,43 +357,44 @@ impl TrustedSecurityController {
             }
             Err(error) => return Err(error),
         };
-        let committed = self.apply(&prepared, next.clone(), not_saved)?;
+        let mut committed = self.apply(&prepared, next.clone(), not_saved)?;
         if let Some(home) = store.home() {
-            match prepared.kind {
-                TransitionKind::Restrictive => {
-                    propagate(
-                        &self.shared,
-                        home,
-                        &next,
-                        prepared.closes_channels(),
-                        /*only_if_stricter*/ false,
-                    );
-                }
+            let reached = match prepared.kind {
+                TransitionKind::Restrictive => propagate(
+                    &self.shared,
+                    home,
+                    &next,
+                    prepared.closes_channels(),
+                    /*only_if_stricter*/ false,
+                    /*only_with_switch*/ None,
+                ),
                 // The level in force is chosen again (PF-24-S02): sessions of
                 // this process below it rise to it.
-                TransitionKind::Unchanged => {
-                    propagate(
-                        &self.shared,
-                        home,
-                        &next,
-                        /*closes_channels*/ false,
-                        /*only_if_stricter*/ true,
-                    );
-                }
+                TransitionKind::Unchanged => propagate(
+                    &self.shared,
+                    home,
+                    &next,
+                    /*closes_channels*/ false,
+                    /*only_if_stricter*/ true,
+                    /*only_with_switch*/ None,
+                ),
                 // PF-25-S02: the switch is saved for the home, so the other
-                // sessions of this process that hold the same switch release
-                // it too (a newer switch there stays: the merge keeps it).
-                TransitionKind::KillSwitchRelease => {
-                    propagate(
+                // sessions of this process that hold this very switch release
+                // it too; a tree with another switch is left alone.
+                TransitionKind::KillSwitchRelease => match memory.kill_switch_event_id() {
+                    Some(released) => propagate(
                         &self.shared,
                         home,
                         &next,
                         /*closes_channels*/ false,
                         /*only_if_stricter*/ false,
-                    );
-                }
-                TransitionKind::Downgrade => {}
-            }
+                        Some(released),
+                    ),
+                    None => 0,
+                },
+                TransitionKind::Downgrade => 0,
+            };
+            committed.reached_other_trees = reached > 0;
         }
         if prepared.closes_channels() {
             self.notify_revocation_sinks();
@@ -458,6 +461,7 @@ impl TrustedSecurityController {
             next_start_level: state.next_start_level,
             kill_switch_active: state.persisted.revocations.kill_switch_active,
             not_saved,
+            reached_other_trees: false,
         })
     }
 
@@ -595,13 +599,17 @@ fn adopt(
 /// A restrictive commit reaches the other trees of this process on `home`:
 /// their level rises to it, they take the merged revocations (the kill
 /// switch included) when those are newer, and their sinks revoke.
+/// `only_with_switch`: only trees whose kill switch in force is this event
+/// (a release). Returns how many trees took it.
 fn propagate(
     origin: &Arc<SharedEffectivePolicy>,
     home: &Path,
     next: &DurableSecurityState,
     closes_channels: bool,
     only_if_stricter: bool,
-) {
+    only_with_switch: Option<&codex_security_policy::BoundedText>,
+) -> usize {
+    let mut reached = 0;
     let home = canonical(home);
     let trees: Vec<Arc<SharedEffectivePolicy>> = {
         let mut trees = TREES.lock().unwrap_or_else(PoisonError::into_inner);
@@ -623,6 +631,11 @@ fn propagate(
             if only_if_stricter && level == state.persisted.settings.level {
                 continue;
             }
+            if let Some(switch) = only_with_switch
+                && state.persisted.revocations.kill_switch_event_id() != Some(switch)
+            {
+                continue;
+            }
             let rose = level > state.persisted.settings.level;
             let mut revocations = state.persisted.revocations.clone();
             let merged = revocations
@@ -637,6 +650,7 @@ fn propagate(
                 continue;
             }
             state.next_start_level = state.next_start_level.max(next.level);
+            reached += 1;
             rose
         };
         // A raised level ends the tree's "for session" approvals and
@@ -645,6 +659,7 @@ fn propagate(
             notify(&tree);
         }
     }
+    reached
 }
 
 impl super::EffectivePolicyView {

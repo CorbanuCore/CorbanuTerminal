@@ -206,6 +206,9 @@ impl BottomPaneView for SecurityView {
         }
         if let Some(input) = &self.inspector_input
             && key_hint::plain(KeyCode::Char('i')).is_press(key)
+            && !self.keymap.move_up.is_pressed(key)
+            && !self.keymap.move_down.is_pressed(key)
+            && !self.keymap.accept.is_pressed(key)
         {
             self.inspector = Some(SecurityInspector::new(input.clone(), self.keymap.clone()));
             return;

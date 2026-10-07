@@ -213,6 +213,7 @@ fn security_transition_restrictive_persists_first_and_applies_now() {
             next_start_level: SecurityLevel::Aggressive,
             kill_switch_active: false,
             not_saved: None,
+            reached_other_trees: false,
         }
     );
     assert_eq!(store.saved(), vec![(SecurityLevel::Aggressive, 1, false)]);

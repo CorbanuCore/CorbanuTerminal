@@ -231,7 +231,11 @@ fn pf_25_s02_selection_follows_the_grant() {
     key(&mut view, KeyCode::Down);
     assert!(text(&view).contains("> Revoke all active authority"));
     key(&mut view, KeyCode::Enter);
-    assert!(text(&view).contains("Revoke all active authority?"), "{}", text(&view));
+    assert!(
+        text(&view).contains("Revoke all active authority?"),
+        "{}",
+        text(&view)
+    );
 }
 
 /// Off the test thread, the commit runs in the background and its result is
@@ -247,7 +251,10 @@ fn pf_25_s02_commit_runs_off_the_ui_thread() {
     assert!(view.saving());
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     while !view.poll() {
-        assert!(std::time::Instant::now() < deadline, "the commit never finished");
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the commit never finished"
+        );
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
     assert!(kill_switch_saved(&home));

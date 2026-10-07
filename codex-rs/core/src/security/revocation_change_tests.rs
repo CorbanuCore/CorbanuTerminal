@@ -287,7 +287,10 @@ fn security_revocation_release_is_for_the_switch_reviewed() {
         HumanRevocation::KillSwitchOff,
         now(),
     );
-    assert!(matches!(result, Err(LevelChangeError::Changed)), "{result:?}");
+    assert!(
+        matches!(result, Err(LevelChangeError::Changed)),
+        "{result:?}"
+    );
     assert_eq!(
         stored_kill_switch(&home),
         Some((SecurityLevel::Permissive, true))
@@ -316,4 +319,33 @@ fn security_revocation_all_ends_every_grant_of_the_process() {
     hold_grant(elsewhere, "cat elsewhere");
     revoke(&home, Some(root), HumanRevocation::AllActiveAuthority).unwrap();
     assert_eq!(held_by(elsewhere), Vec::<String>::new());
+}
+
+/// A release reaches only the sessions that hold the switch released; a
+/// session whose switch is another one keeps it (and its epoch).
+#[test]
+fn security_revocation_release_reaches_only_the_same_switch() {
+    let home = TempDir::new().unwrap();
+    let other_home = TempDir::new().unwrap();
+    let (_view, root) = live_tree(&home, SecurityLevel::Aggressive);
+    // A tree on another home with its own switch is never touched.
+    let (other_view, other) = live_tree(&other_home, SecurityLevel::Aggressive);
+    revoke(&other_home, Some(other), HumanRevocation::KillSwitchOn).unwrap();
+    let before = other_view.authority_marker().unwrap();
+    revoke(&home, Some(root), HumanRevocation::KillSwitchOn).unwrap();
+    revoke(&home, Some(root), HumanRevocation::KillSwitchOff).unwrap();
+    assert!(basis(&other_home, Some(other)).kill_switch_active);
+    assert_eq!(other_view.authority_marker().unwrap(), before);
+}
+
+/// Without a session but with another live session on the home, an unsaved
+/// kill switch applied there, and the report says so.
+#[test]
+fn security_revocation_unsaved_but_taken_by_another_session_is_reported() {
+    let home = TempDir::new().unwrap();
+    let (_view, other) = live_tree(&home, SecurityLevel::Aggressive);
+    std::fs::create_dir(home.path().join("security_state.lock")).unwrap();
+    let report = revoke(&home, None, HumanRevocation::KillSwitchOn).unwrap();
+    assert!(report.live && report.not_saved.is_some(), "{report:?}");
+    assert!(basis(&home, Some(other)).kill_switch_active);
 }

@@ -119,16 +119,6 @@ pub fn commit_human_revocation(
         &HomeTransitionStore::new(codex_home),
         now_unix_seconds,
     )?;
-    // Without a live tree the change exists only in the saved file.
-    if !live && let Some(reason) = &committed.not_saved {
-        return Err(LevelChangeError::NotSaved(format!(
-            "the security state could not be saved, so nothing changed: {reason}"
-        )));
-    }
-    // Another process changed the switch first (a newer event wins).
-    if choice == HumanRevocation::KillSwitchOn && !committed.kill_switch_active {
-        return Err(LevelChangeError::Changed);
-    }
     if matches!(
         choice,
         HumanRevocation::AllActiveAuthority | HumanRevocation::KillSwitchOn
@@ -137,10 +127,20 @@ pub fn commit_human_revocation(
         // listed every grant of the process.
         super::aggressive::revoke_everything();
     }
+    // Without a live tree and without a save, the change reached nothing
+    // unless another session of this process took it.
+    if !live
+        && !committed.reached_other_trees
+        && let Some(reason) = &committed.not_saved
+    {
+        return Err(LevelChangeError::NotSaved(format!(
+            "the security state could not be saved, so nothing changed: {reason}"
+        )));
+    }
     Ok(RevocationReport {
         in_force: committed.level,
         kill_switch_active: committed.kill_switch_active,
-        live,
+        live: live || committed.reached_other_trees,
         not_saved: committed.not_saved,
     })
 }

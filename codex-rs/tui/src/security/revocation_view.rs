@@ -305,9 +305,12 @@ impl RevocationView {
                             message: Err(format!("Not changed: {error}.")),
                             restartable: false,
                         },
-                        |report| Outcome {
-                            restartable: report.not_saved.is_none(),
-                            message: outcome_line(revocation, &report),
+                        |report| {
+                            let message = outcome_line(revocation, &report);
+                            Outcome {
+                                restartable: message.is_ok() && report.not_saved.is_none(),
+                                message,
+                            }
                         },
                     )
                 };
@@ -485,8 +488,14 @@ fn review_text(choice: &Choice, level: SecurityLevel) -> (String, Vec<String>) {
 }
 
 fn outcome_line(choice: HumanRevocation, report: &RevocationReport) -> Result<String, String> {
+    if choice == HumanRevocation::KillSwitchOn && !report.kill_switch_active {
+        return Err("All active authority was revoked, but another session changed the kill switch first, so it is off. Review it again.".to_string());
+    }
     if choice == HumanRevocation::KillSwitchOff && report.kill_switch_active {
-        return Err("The kill switch is still on (another session turned it on again). Review it again.".to_string());
+        return Err(
+            "The kill switch is still on (another session turned it on again). Review it again."
+                .to_string(),
+        );
     }
     let what = match choice {
         HumanRevocation::AllActiveAuthority => "All active authority revoked",
