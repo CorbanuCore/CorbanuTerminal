@@ -624,6 +624,8 @@ pub(crate) enum AppEvent {
         pane_id: String,
         result: Result<crate::claude_panes::ClaudePaneTurnOutput, String>,
     },
+    /// A contained Claude pane (#218) asks to use a tool; a person answers.
+    ClaudePaneApprovalRequested(Box<crate::claude_panes::approval::ClaudeApprovalRequest>),
     /// A Claude Code headless pane emitted bounded live progress.
     ClaudePaneTurnProgress {
         progress: crate::claude_panes::ClaudePaneTurnProgress,

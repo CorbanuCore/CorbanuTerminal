@@ -362,12 +362,31 @@ pub(crate) fn build_claude_command_plan(
         "--verbose".to_string(),
         "--settings".to_string(),
         settings_path.to_string_lossy().into_owned(),
-        "--permission-mode".to_string(),
-        "bypassPermissions".to_string(),
         "--exclude-dynamic-system-prompt-sections".to_string(),
         "--model".to_string(),
         profile.claude_model.to_string(),
     ]);
+    if containment.is_some() {
+        // Claude Code asks before every tool that is not read-only, through
+        // stdin/stdout, and Corbanu asks a person (`super::approval`). The
+        // prompt then goes in on stdin as well.
+        args.extend(
+            [
+                "--permission-mode",
+                "default",
+                "--permission-prompt-tool",
+                "stdio",
+                "--input-format",
+                "stream-json",
+            ]
+            .map(str::to_string),
+        );
+    } else {
+        args.extend([
+            "--permission-mode".to_string(),
+            "bypassPermissions".to_string(),
+        ]);
+    }
     if matches!(profile.kind, ClaudeProviderProfileKind::ClaudePlan) {
         args.extend(["--effort".to_string(), "high".to_string()]);
     }
@@ -382,7 +401,12 @@ pub(crate) fn build_claude_command_plan(
         args.push(session_id.clone());
         (ClaudeCommandMode::NewSession, session_id)
     };
-    args.push(prompt);
+    let stdin_prompt = if containment.is_some() {
+        Some(prompt)
+    } else {
+        args.push(prompt);
+        None
+    };
 
     // With a bridge, every send passes through this process and is reported
     // there. Without one, the pane talks to the provider itself and the only
@@ -420,6 +444,7 @@ pub(crate) fn build_claude_command_plan(
         bridge,
         direct_accounting,
         containment,
+        stdin_prompt,
     })
 }
 

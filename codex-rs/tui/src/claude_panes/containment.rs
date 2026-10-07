@@ -93,6 +93,14 @@ pub(crate) mod test_settings {
     }
 }
 
+/// Whether Claude panes can run contained here: the feature is on, the
+/// secretless launch contract is armed, and the platform has a sandbox.
+pub(crate) fn contained_launch_ready() -> bool {
+    enabled().is_some()
+        && crate::legacy_core::external_agent_contract_armed()
+        && get_platform_sandbox(/*windows_sandbox_enabled*/ false).is_some()
+}
+
 /// How one contained turn is launched.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ClaudeContainment {

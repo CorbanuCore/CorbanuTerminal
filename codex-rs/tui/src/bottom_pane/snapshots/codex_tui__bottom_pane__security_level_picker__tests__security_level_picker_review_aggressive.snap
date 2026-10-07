@@ -29,7 +29,8 @@ at launch.
 • Child agents now: spawned agents get this session's values
   Aggressive: spawned agents get the same values; custom roles that would change
     them are refused at start; Claude panes are refused because Claude Code runs
-    outside the sandbox (Claude Code sign-in still runs)
+    outside the sandbox, unless contained_external_agents runs them in it,
+    asking you before each tool (Claude Code sign-in still runs)
 • Nested agents: refuse. An agent command that starts another agent (`corbanu
     exec`, `review`, `resume`, `fork`, a new session, `app-server` or `mcp-
     server`) is refused.

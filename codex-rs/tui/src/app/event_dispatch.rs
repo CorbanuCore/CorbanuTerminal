@@ -5919,6 +5919,10 @@ impl App {
             AppEvent::ClaudePaneTurnProgress { progress } => {
                 self.on_claude_pane_turn_progress(progress);
             }
+            AppEvent::ClaudePaneApprovalRequested(request) => {
+                self.chat_widget
+                    .show_selection_view(crate::claude_panes::approval::selection_view(*request));
+            }
             AppEvent::PaneBridgeModelRequestSent {
                 provider_id,
                 base_url,

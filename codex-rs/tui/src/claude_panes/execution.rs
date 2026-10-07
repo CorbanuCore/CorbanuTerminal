@@ -2,6 +2,7 @@
 
 use std::io::Write as _;
 use std::process::Stdio;
+use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -16,8 +17,10 @@ use anyhow::anyhow;
 use serde_json::Value;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::AsyncReadExt;
+use tokio::io::AsyncWriteExt;
 use tokio::io::BufReader;
 use tokio::process::Child;
+use tokio::process::ChildStdin;
 use tokio::process::Command;
 use tokio::time::MissedTickBehavior;
 use tokio::time::interval;
@@ -28,6 +31,7 @@ use zeroize::Zeroizing;
 use crate::app_event::AppEvent;
 use crate::app_event_sender::AppEventSender;
 
+use super::approval;
 use super::bridge::run_claude_bridge;
 use super::output_parse::ParsedClaudeOutput;
 use super::output_parse::parse_claude_output;
@@ -203,7 +207,11 @@ pub(crate) async fn run_claude_command_plan(
     }
     let mut child = command
         .current_dir(&plan.cwd)
-        .stdin(Stdio::null())
+        .stdin(if plan.stdin_prompt.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -216,6 +224,14 @@ pub(crate) async fn run_claude_command_plan(
         .stderr
         .take()
         .ok_or_else(|| anyhow!("Claude stderr pipe was not available"))?;
+    // Contained turns (#218): the prompt and every tool approval go through
+    // Claude Code's stdin; it is closed once the turn's result arrives.
+    let stdin: ClaudeStdin = Arc::new(tokio::sync::Mutex::new(child.stdin.take()));
+    if let Some(prompt) = plan.stdin_prompt.as_deref()
+        && let Err(err) = write_claude_input(&stdin, &approval::user_message(prompt)).await
+    {
+        tracing::debug!(error = %err, "failed to send the prompt to Claude Code");
+    }
     let stderr_task = tokio::spawn(async move {
         let mut stderr_reader = BufReader::new(stderr);
         let mut stderr_text = String::new();
@@ -267,6 +283,19 @@ pub(crate) async fn run_claude_command_plan(
                     )
                 })?;
                 if let Ok(value) = serde_json::from_str::<Value>(&line) {
+                    if approval::is_control_request(&value) {
+                        answer_control_request(
+                            &value,
+                            &plan,
+                            &stdin,
+                            progress_tx.as_ref(),
+                            &redactor,
+                        );
+                        continue;
+                    }
+                    if value.get("type").and_then(Value::as_str) == Some("result") {
+                        stdin.lock().await.take();
+                    }
                     for progress in progresses_from_claude_value(&plan, &started_at, &value) {
                         last_progress_elapsed_ms = Some(progress.elapsed_ms);
                         let is_assistant_text = progress.phase == "assistant-text";
@@ -483,6 +512,67 @@ pub(crate) async fn run_claude_command_plan(
         last_progress_elapsed_ms,
     )?;
     Ok(output)
+}
+
+/// Claude Code's stdin for a contained turn; `None` once closed.
+type ClaudeStdin = Arc<tokio::sync::Mutex<Option<ChildStdin>>>;
+
+async fn write_claude_input(stdin: &ClaudeStdin, value: &Value) -> Result<()> {
+    let mut stdin = stdin.lock().await;
+    let Some(writer) = stdin.as_mut() else {
+        return Ok(());
+    };
+    let mut line = serde_json::to_vec(value).context("failed to encode Claude input")?;
+    line.push(b'\n');
+    writer
+        .write_all(&line)
+        .await
+        .context("failed to write Claude input")?;
+    writer.flush().await.context("failed to flush Claude input")
+}
+
+/// Ask a person about one `can_use_tool` request and answer it on stdin;
+/// refuse every other control request. With nobody to ask, deny.
+fn answer_control_request(
+    value: &Value,
+    plan: &ClaudeCommandPlan,
+    stdin: &ClaudeStdin,
+    progress_tx: Option<&AppEventSender>,
+    redactor: &ClaudeSecretRedactor,
+) {
+    let stdin = stdin.clone();
+    let Some((request_id, tool_name, input)) = approval::tool_request(value) else {
+        if let Some(response) = approval::unsupported_response(value) {
+            tokio::spawn(async move {
+                let _ = write_claude_input(&stdin, &response).await;
+            });
+        }
+        return;
+    };
+    let request_id = request_id.to_string();
+    let input = input.clone();
+    let decision = progress_tx.map(|tx| {
+        let (responder, decision) = approval::ApprovalResponder::new();
+        tx.send(AppEvent::ClaudePaneApprovalRequested(Box::new(
+            approval::ClaudeApprovalRequest {
+                pane_title: plan.pane_title.clone(),
+                tool_name: tool_name.to_string(),
+                summary: redactor.redact(&approval::summary(tool_name, &input)),
+                responder,
+            },
+        )));
+        decision
+    });
+    tokio::spawn(async move {
+        let allow = match decision {
+            Some(decision) => decision.await.unwrap_or(false),
+            None => false,
+        };
+        let response = approval::tool_response(&request_id, allow, &input);
+        if let Err(err) = write_claude_input(&stdin, &response).await {
+            tracing::debug!(error = %err, "failed to answer a Claude tool approval");
+        }
+    });
 }
 
 async fn resolve_deferred_claude_plan_token(
