@@ -7,11 +7,11 @@ plan_feature: "PF-23"
 execution_order: 40
 owner: "untrusted-content lane"
 parallel_lane: "untrusted-content"
-write_scope: "codex-rs/core/Cargo.toml, codex-rs/core/src/security/protected_surface.rs, codex-rs/core/src/security/protected_surface/, codex-rs/core/src/security/protected_surface_tests.rs, codex-rs/core/src/security/tainted_action.rs, codex-rs/core/src/security/tainted_action/, codex-rs/core/src/security/tainted_action_tests.rs, codex-rs/core/src/security/ingress/native.rs, codex-rs/core/src/client.rs, codex-rs/core/src/mcp_tool_call.rs, codex-rs/core/src/tools/registry.rs, codex-rs/core/src/tools/code_mode/mod.rs, codex-rs/core/src/tools/handlers/dynamic.rs, codex-rs/core/src/tools/handlers/extension_tools.rs, codex-rs/core/src/tools/handlers/mcp.rs, codex-rs/core/src/tools/handlers/unified_exec/write_stdin.rs, codex-rs/core/tests/suite/pf_23_s01.rs, codex-rs/core/tests/suite/mod.rs, qa/security-levels/sprints/PF-23-S01/, qa/demos/specs/, qa/demos/index/PF-23-S01.md, docs/sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md"
+write_scope: "codex-rs/core/Cargo.toml, codex-rs/core/src/security/protected_surface.rs, codex-rs/core/src/security/protected_surface/, codex-rs/core/src/security/protected_surface_tests.rs, codex-rs/core/src/security/tainted_action.rs, codex-rs/core/src/security/tainted_action/, codex-rs/core/src/security/tainted_action_tests.rs, codex-rs/core/src/security/ingress/native.rs, codex-rs/core/src/client.rs, codex-rs/core/src/mcp_tool_call.rs, codex-rs/core/src/tools/registry.rs, codex-rs/core/src/tools/code_mode/mod.rs, codex-rs/core/src/tools/handlers/dynamic.rs, codex-rs/core/src/tools/handlers/extension_tools.rs, codex-rs/core/src/tools/handlers/mcp.rs, codex-rs/core/src/tools/handlers/unified_exec/write_stdin.rs, codex-rs/core/tests/suite/pf_23_s01.rs, codex-rs/core/tests/suite/mod.rs, codex-rs/core/src/memory_stage_one.rs, codex-rs/core/src/memory_stage_one_tests.rs, codex-rs/core/src/accounting_tests.rs, codex-rs/core/src/tools/orchestrator.rs, codex-rs/memories/write/src/phase1.rs, codex-rs/memories/write/src/runtime.rs, codex-rs/memories/write/src/start.rs, codex-rs/memories/write/src/startup_tests.rs, qa/security-levels/sprints/PF-23-S01/, qa/demos/specs/, qa/demos/index/PF-23-S01.md, docs/sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md"
 integration_gate: "Per-sprint gate of 2026-10-06: focused tests, GLM 5.2 tmux demos, one independent Opus 5.5 High review; merge behind source_envelopes. Not reserved here and serialized by the integration owner: codex-rs/core/src/security/mod.rs (PF-27-S02), codex-rs/core/src/tools/sandboxing.rs, codex-rs/core/src/unified_exec/process_manager.rs and codex-rs/Cargo.lock."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf23-s01-20261006"
-branch: "feat/pf-23-s01-moderate-ingress"
-base_commit: "55339d5b24d955cf245efa7b8af9243eac66254a"
+branch: "feat/pf-23-s01-slice2-3"
+base_commit: "8cf46179f569050bf066cc3367f593057023e178"
 depends_on: "PF-13-S05, PF-22-S02, PF-30-S03"
 created: 2026-08-24
 updated: 2026-10-06
@@ -34,66 +34,62 @@ updated: 2026-10-06
 
 ## Code boundaries
 
-- Route matrix and post-taint check outside the approval seam: `core/src/security/protected_surface.rs`,
-  `protected_surface/{gate,typed}.rs`; dispatch-boundary call in `core/src/tools/registry.rs`
-  (`CoreToolRuntime::tool_origin`, overridden by MCP, dynamic and extension tools).
-- Routes: `core/src/mcp_tool_call.rs`, `tools/handlers/unified_exec/write_stdin.rs`, `tools/code_mode/mod.rs`
-  (nested results raise the taint generation through `client.rs` / `security/ingress/native.rs`).
-- Shell classifier kinds `Disclosure` and `ValueTransfer`: `core/src/security/tainted_action/outbound.rs`.
-- Tests: `protected_surface_tests.rs`, `tainted_action_tests.rs`, `core/tests/suite/pf_23_s01.rs`.
+- Slice 1: `core/src/security/protected_surface.rs`, `protected_surface/{gate,typed}.rs`, dispatch call in
+  `tools/registry.rs`; routes in `mcp_tool_call.rs`, `handlers/unified_exec/write_stdin.rs`, `code_mode/mod.rs`;
+  shell kinds `Disclosure`/`ValueTransfer` in `security/tainted_action/outbound.rs`.
+- Slice 2: `core/src/memory_stage_one.rs` (`label_rollout`), `memories/write/src/{phase1,runtime,start}.rs`.
+- Slice 3: `core/src/security/protected_surface/read_denials.rs`, applied in `core/src/tools/orchestrator.rs`.
+- Tests: `protected_surface_tests.rs`, `tainted_action_tests.rs`, `read_denials_tests.rs`,
+  `memory_stage_one_tests.rs`, `memories/write/src/startup_tests.rs`, `core/tests/suite/pf_23_s01.rs`.
+
+## Split with PF-29
+
+Slice 3 is the runtime net: after untrusted content under Moderate/Aggressive, Core adds read denials to each
+agent command's sandbox (Corbanu home, other Corbanu homes, fixed `$HOME` credentials such as `~/.ssh`). PF-29
+owns launch and user data: S01 inventory and launch isolation (every credential file found, from launch), S02
+migration of secrets out of shell profiles and config. Slice 3 never denies shell profiles; no shared files.
 
 ## Preconditions
 
 - [x] PF-13-S05, PF-22-S02, PF-30-S03 are completed and archived.
-- [x] Read root, `codex-rs/AGENTS.md`, and `codex-rs/core/AGENTS.md`.
-- [x] Exact worktree coordinates match the active plan (stale PF-30-S03 slice-1 entry replaced, 2026-10-06).
+- [x] Read root, `codex-rs/AGENTS.md`, and `codex-rs/core/AGENTS.md`; coordinates match the active plan.
 
 ## Done
 
-- [x] Sprint record is linked only to PF-23.
-- [x] Slice 1 ([gate](../../../../qa/security-levels/sprints/PF-23-S01/slice-1-gate.md)), behind `source_envelopes`
-  with Moderate/Aggressive; flag off, Permissive and untainted sessions unchanged:
-  - Typed route matrix at the Core dispatch boundary. Shell/exec/patch use the PF-30-S03 seam; MCP calls and
-    `write_stdin` have their own check; code mode only reaches tools through dispatch; child-agent, read and
-    report tools reach nothing protected. Client (dynamic) tools, unlisted extension tools and unknown built-ins
-    are unclassified and need a fresh human answer after untrusted content, refused under `never`;
-    `request_permissions` needs it when an automatic reviewer would answer, `request_plugin_install` always.
-  - MCP calls: protected when the tool may change or send data (its annotations can only add protection), when
-    its name moves value (read verbs excepted), or when its arguments reach a protected path or command. The
-    check runs before remembered approvals, hooks, auto-approve and the automatic reviewer; the question shows
-    the arguments and uses an id the delegate's reviewer never answers.
-  - `write_stdin`: the text typed into a process since untrusted content is judged whole (split commands),
-    as input to the program it goes to; line editing, history expansion and over 16 KiB are unreadable; writes
-    to one process are serialized.
-  - Code mode: each nested result raises the taint generation as the cell reads it.
-  - Disclosure (local file, stdin or unseen text sent to another machine; literal bodies and loopback are quiet)
-    and value transfer (wallet CLIs, MCP tools), through exec-style wrappers.
-  - Decisions log `route`, kind, taint generation, outcome and wait time; never arguments.
+All behind `source_envelopes` with Moderate/Aggressive; flag off, Permissive and untainted sessions unchanged.
+
+- [x] Slice 1, #223 ([gate](../../../../qa/security-levels/sprints/PF-23-S01/slice-1-gate.md)): route matrix at the
+  dispatch boundary (unclassified tools need a fresh human answer after taint); MCP calls that may change/send
+  data, move value or name a protected path ask before remembered approvals, hooks and auto-review; typing into a
+  process is judged as one command since taint; code-mode nested results raise the taint generation;
+  Disclosure and value-transfer kinds; decisions logged without arguments.
+- [x] Slice 2: stage one under Moderate. Core builds the input from the claimed session's own rollout (it must
+  open with that session's record); only origin records this home signed keep standing, the rest is labelled
+  data; the prompt must embed exactly that text or the request is refused before dispatch, also when the level
+  rises mid-job. Aggressive, and Moderate without the flag, deny; consolidation is skipped above Permissive.
+- [x] Slice 3: after taint every agent command's sandbox denies reads of the Corbanu home (all entries but `tmp`,
+  `shell_snapshots`, skills, plugins, packages, worktrees, `AGENTS.md`; fixed stores and `*.sqlite*` even before
+  they exist), other Corbanu homes and `$HOME` credentials. Full access gets a sandbox that only denies those
+  reads; denials block unsandboxed retries. Under Moderate a fresh human approval of the exact protected command
+  lifts them for that run. [Readiness matrix](../../../../qa/security-levels/sprints/PF-23-S01/activation-readiness.md).
 
 ## Remaining
 
-- [ ] Slice 2, moved from PF-30-S02: positive protected memory extraction. Stage one still denies under
-  Moderate/Aggressive (PF-30-S04); allowing it needs labelled, lineage-bound rollout input and the
-  [stage-one handoff](../../../../qa/security-levels/sprints/PF-30-S01-typed-source-envelope/memory-stage-one-follow-up.md) matrix.
-- [ ] Slice 3, moved from PF-30-S03: what a command-text net cannot see (run-time strings, build tools, hard
-  links, unknown exec wrappers, reads of a home through an unclassified route). Typed resources plus
-  sandbox-level denial of home and credential reads replace the lexical net. Lexical gaps from the PF-30-S03
-  review: `cd` in a substitution or subshell, positional parameters/functions/`set --`, `su -c`/`runuser -c`/
-  `script -c`/`ssh host cmd`, `${!x}`, `cd -P`/`||`, loop stdin from a process substitution, `awk system()`/
-  `sed e`, automount symlink hops.
-- [ ] Action/profile usability matrix with conservative data and control-flow ancestry; no runtime Moderate
-  activation until all required subsystems qualify (full plan readiness matrix).
-- [ ] Slice-1 known limits, listed in its [gate](../../../../qa/security-levels/sprints/PF-23-S01/slice-1-gate.md#known-limits).
-- [ ] Product finding (not this sprint): Chat Completions and Anthropic wires drop namespace (MCP) tools.
+- [ ] Slices 2-3 gate (tests, Linux clippy, GLM 5.2 videos, Opus review) and merge; then archive.
+
+Moved: Aggressive grants lifting denials, write/action gaps of the command-text net and processes started before
+untrusted content (sandbox fixed at spawn; typing still judged) to PF-23-S02; consolidation and Aggressive stage
+one to PF-23-S03 or later. Known limits: external sandboxes take no extra rules; MCP servers, hooks and notify run
+outside the sandbox; the shell snapshot stays readable. Product finding: Chat Completions and Anthropic wires
+drop namespace (MCP) tools.
 
 ## Verification
 
-- [ ] Per slice: `just fix -p codex-core`, `just fmt`, `just test -p codex-core pf_23_s01` and `pf_30_s0`, full
-  `just test -p codex-core`, Linux clippy on the RTX box, GLM 5.2 tmux demos, one Opus 5.5 High review
-  (slice 1 done: [gate](../../../../qa/security-levels/sprints/PF-23-S01/slice-1-gate.md)).
+- [ ] Per slice: `just fix -p codex-core -p codex-memories-write`, `just fmt`, `just test -p codex-core pf_23_s01`,
+  `pf_30_s0`, `just test -p codex-memories-write`, full `just test -p codex-core`, Linux clippy on the RTX box,
+  GLM 5.2 videos, one Opus 5.5 High review.
 
 ## Exit evidence
 
-- [ ] Commit, typed surface matrix, and changed paths recorded.
-- [ ] Test output linked under `qa/security-levels/sprints/PF-23-S01/`.
+- [ ] Gates under `qa/security-levels/sprints/PF-23-S01/`; videos in `qa/demos/index/PF-23-S01.md`.
 - [ ] Ledgers reflect reality and the completed record is archived.

@@ -72,3 +72,11 @@ updated: 2026-08-28
 - [ ] Acceptance and source-mapping assertions proven; applicable true-TUI keys/checkpoints captured after formatting.
 - [ ] PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
 - [ ] Done/Remaining reflect reality; completed record moved to the archive and plan/navigation updated.
+
+## Split with PF-23-S01 (recorded 2026-10-06)
+
+PF-23-S01 slice 3 adds runtime read denials in Core after untrusted content (Moderate/Aggressive): the Corbanu home,
+other Corbanu homes and fixed `$HOME` credential paths such as `~/.ssh`. PF-29 keeps launch-time inventory and
+isolation (S01) and moving secrets out of shell profiles and config (S02); slice 3 never denies shell profiles.
+Write scopes are disjoint: slice 3 is `core/src/security/protected_surface/read_denials.rs` and
+`core/src/tools/orchestrator.rs`.
