@@ -10,7 +10,8 @@ PF-30-S01 completed (PR #178) and is [archived](../../archive/p0-security-levels
 PF-24-S03 completed (PR #186) and is [archived](../../archive/p0-security-levels/pf-24-s03-flagged-security-picker.md);
 PF-30-S02 completed (PRs #190, #198) and is [archived](../../archive/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md);
 PF-30-S03 completed (PRs #204, #212) and is [archived](../../archive/p0-security-levels/pf-30-s03-post-taint-authority-checks.md).
-PF-23-S01 completed (PRs #223, #233) and is [archived](../../archive/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md).
+PF-23-S01 completed (PRs #223, #233) and is [archived](../../archive/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md);
+PF-23-S02 completed and is [archived](../../archive/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md).
 PF-27-S04 completed on 2026-10-06 and is [archived](../../archive/p0-security-levels/pf-27-s04-isolated-credential-broker.md);
 its open items moved to PF-27-S02, the new PF-27-S05 and PF-27-S06, and PF-23-S03.
 PF-27-S02 (PR #191), PF-28-S01 (PR #208) and PF-33-S01 (PR #210) completed on 2026-10-06 after Travis's
@@ -27,8 +28,7 @@ Earlier allocation notes are in the [plan history](../../../plans/history/p0-sec
 | 33 | [PF-33-S02](pf-33-s02-connection-pinning-and-bypass.md) | Connection pinning and alternate-egress denial (merged behind `url_destination_policy`, #215; open items recorded) | first free | PF-33-S01 (archived) |
 | 35 | [PF-29-S01](pf-29-s01-protected-mode-inventory.md) | Protected-mode inventory and activation preflight (merged behind `protected_mode_preflight`, #228; open items recorded) | first free | PF-28-S02 (merged behind flag), PF-20-S02 (archived) |
 | 36 | [PF-29-S02](pf-29-s02-human-secret-migration.md) | Human-reviewed credential migration and recovery (merged behind `protected_mode_preflight`, #235; open items recorded) | first free | PF-29-S01 (merged behind flag), PF-24-S01 (archived) |
-| 41 | [PF-23-S02](pf-23-s02-aggressive-deny-and-grant-enforcement.md) | Aggressive deny and grant enforcement | untrusted content | PF-17-S01, PF-23-S01 (archived) |
-| 42 | [PF-23-S03](pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) | Downgrade, restart, and inheritance enforcement | untrusted content | PF-19-S02, PF-20-S02, PF-23-S02 |
+| 42 | [PF-23-S03](pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) | Downgrade, restart, and inheritance enforcement | untrusted content | PF-19-S02, PF-20-S02, PF-23-S02 (archived) |
 | 43 | [PF-24-S02](pf-24-s02-security-confirm-cancel-and-downgrade.md) | Security confirm, cancel, and downgrade | tui | PF-24-S03, PF-23-S03, PF-24-S01, PF-29-S02 |
 | 44 | [PF-25-S01](pf-25-s01-temporary-grant-tui.md) | Temporary grant TUI | tui | PF-17-S01, PF-23-S02, PF-24-S02 |
 | 45 | [PF-25-S02](pf-25-s02-revocation-and-kill-switch-tui.md) | Revocation and kill-switch TUI | tui | PF-19-S02, PF-23-S03, PF-25-S01 |

@@ -24,7 +24,7 @@
   `just test -p codex-sandboxing renaming_a_folder`: 1/1 (real `sandbox-exec`). Two seatbelt arg tests
   (`create_seatbelt_args_for_cwd_as_git_repo`, `..._with_read_only_git_and_codex_subpaths`) fail the same way on
   main in this checkout (temp folder under `/Volumes`), not from this change.
-- **Review (Opus 5.5 High):** `.codex-work/workers-20261002/pf23s02-review{1,2}/`. Round 1 CHANGES REQUESTED: parent
+- **Review (Opus 5.5 High):** `.codex-work/workers-20261002/pf23s02-review{1..5}/`; round 5 APPROVE. Round 1 CHANGES REQUESTED: parent
   rename and symlink bypasses on macOS, Linux bwrap failing on symlinked or worktree paths, worktree hooks, call-id
   confinement keys, grant resurrection, upload fallback, classifier gaps; fixed in `bd9d3aa48b`. Round 2 CHANGES
   REQUESTED: rename onto a missing parent, Linux placeholders in the real home, the enclosing repository from a
@@ -32,8 +32,18 @@
   could be pointed elsewhere through `commondir` or a rewritten `.git` file, Linux placeholders through dangling
   links; fixed in `23a1818ec8`. Round 4 CHANGES REQUESTED on Linux records only: anything below `.git` (but
   objects, refs, index) is now Persistence for the command-text net, and the Linux limits are recorded below.
-- **Full crate:** `just test -p codex-core`: 3,897 of 3,901; the 4 failures fail the same way on main
-  (`config_schema_matches_fixture` and the 3 known baselines).
+- **Full crate** at `93e149e066` (merged with main): `just test -p codex-core` 3,897 of 3,902. Four failures
+  fail the same way on main (`config_schema_matches_fixture` and the 3 known baselines);
+  `shell_command_snapshot_still_intercepts_apply_patch` failed once under load and passes 3/3 alone (it passed in
+  the earlier full run). `just test -p codex-sandboxing`: only the two baseline seatbelt arg tests fail.
+- **Linux clippy** (`cargo clippy --locked -p codex-core -p codex-memories-write --all-targets -- -D warnings`) on
+  the RTX box: clean at `93e149e066` (round 1 caught two too-many-arguments and one type-complexity error).
+- **GLM 5.2 videos** at `93e149e066`, in [qa/demos/index/PF-23-S02.md](../../../demos/index/PF-23-S02.md):
+  Aggressive denies a hidden home read before any untrusted content; with full access after untrusted content a
+  run-time-built hook write gets "Operation not permitted" while an ordinary write works; a literal `~/.zshrc`
+  append asks first (declined, file unchanged); typing into a shell started before untrusted content asks once.
+  Earlier takes were recorded verbatim: GLM refused two hook/alias requests it read as injected.
+  No video for grants (no issuing UI until PF-25-S01) or uploads (need ChatGPT auth): unit tests only.
 
 ## Known limits
 

@@ -81,7 +81,7 @@ All behind `source_envelopes` with Moderate/Aggressive; flag off, Permissive and
 
 Nothing in this sprint. Moved: Aggressive grants lifting denials, write/action gaps of the command-text net,
 processes started before untrusted content, and the Codex Apps upload check-then-read race (read through the
-protected sandbox before the flag is turned on) to [PF-23-S02](../../current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md);
+protected sandbox before the flag is turned on) to [PF-23-S02](pf-23-s02-aggressive-deny-and-grant-enforcement.md);
 consolidation, Aggressive stage one and the level a source session ran under to
 [PF-23-S03](../../current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md).
 Known limits and product findings: [slices 2-3 gate](../../../../qa/security-levels/sprints/PF-23-S01/slices-2-3-gate.md#known-limits-moved-or-open).
