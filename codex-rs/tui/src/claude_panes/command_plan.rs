@@ -394,9 +394,7 @@ pub(crate) fn build_claude_command_plan(
         // Settings, hooks and MCP servers a pane could write into its own
         // folder must not run or allow anything without a person: only
         // Corbanu's settings file applies.
-        args.extend(
-            ["--setting-sources", "", "--strict-mcp-config"].map(str::to_string),
-        );
+        args.extend(["--setting-sources", "", "--strict-mcp-config"].map(str::to_string));
     } else {
         args.extend(["--setting-sources".to_string(), "project".to_string()]);
     }

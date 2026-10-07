@@ -5,8 +5,8 @@ Corbanu's whole environment, no sandbox and full network, and direct
 providers handed Claude Code the raw key through `apiKeyHelper`. Round 4
 (#220) refused them under protected levels. #218 brings them under the
 PF-27-S02 secretless launch contract, behind the default-off feature
-`contained_external_agents`, in two PRs. Panes stay refused under protected
-levels until the second lands.
+`contained_external_agents`, in two PRs: part 1 contains the launch, part 2
+routes tool approvals to a person and lifts the refusal.
 
 ## Part 1: contained launch
 
@@ -27,6 +27,37 @@ contained turn starts a new session.
 
 `--permission-mode bypassPermissions` is unchanged in part 1, which is why
 the refusal under protected levels stays.
+
+## Part 2: tool approvals, and panes allowed under protected levels
+
+- **No permission bypass:** a contained turn runs Claude Code with
+  `--permission-mode default --permission-prompt-tool stdio
+  --input-format stream-json`. Claude Code still allows its own read-only
+  tools; for anything else it writes a `can_use_tool` request to stdout.
+- **A person decides:** each request opens a popup naming the pane, the tool
+  and what it would do (the command, path or URL, redacted and shortened):
+  "Allow once" or "Deny"; Esc denies, and digits do nothing. The answer goes
+  back on Claude Code's stdin. With nobody to ask (the smoke commands), every
+  request is denied. Other control requests are refused.
+- **Prompt on stdin:** the prompt is Claude Code's first stream-json input,
+  not an argv entry; stdin closes once the turn's result arrives.
+- **Nothing a pane writes can allow tools:** contained panes load no setting
+  sources (`--setting-sources ""`, so no project hooks or allow rules from
+  the pane's folder) and no MCP servers (`--strict-mcp-config`); only
+  Corbanu's read-only settings file applies. Without this, a hook the pane
+  wrote into `.claude/settings.json` ran on the next turn without approval
+  (checked with Claude Code 2.1.292).
+- **Allowed under Aggressive:** with `contained_external_agents` on and the
+  secretless launch contract armed, Claude panes are no longer refused under
+  protected levels. Otherwise the refusal stays, and its message names the
+  two features. The `/security` review's Child agents row says so.
+
+### Limits (part 2)
+
+- A popup still open when its turn ends (interrupt) stays on screen;
+  answering it does nothing.
+- Projects' own Claude Code settings, hooks and MCP servers are not used by
+  contained panes.
 
 ## Limits
 

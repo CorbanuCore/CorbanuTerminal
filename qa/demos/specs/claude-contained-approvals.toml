@@ -1,0 +1,103 @@
+# Under Aggressive, with contained_external_agents on, a Claude pane opens and
+# asks a person before each tool: the first Bash command is allowed, the second
+# denied with Esc. Record with
+#   DEMO_RESTART=1 PF24_CANDIDATE=<corbanu> CLAUDE_BIN_DIR=<claude 2.1.29x bin>
+#   --bin qa/security-levels/pf24-followups/claude-contained/demo-launch.sh
+id = "claude-contained-approvals"
+feature = "Contained Claude pane under Aggressive asks before each tool"
+expected = "With Aggressive active the Z.AI Claude pane opens; each Bash command shows an approval popup; the allowed one creates approved.txt, the denied one (Esc) does not run."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+secretless_agent_launch = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Nested agents: refuse"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+[[steps]]
+key = "Enter"
+[[steps]]
+type = "/exit"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "restarting Corbanu Terminal.*model: +glm-5\\.2"
+timeout = 60
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/panes"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "\\+ Claude Pane"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "GLM 5.2 Z.AI"
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Name Claude pane"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "GLM 5.2 Z.AI · "
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Make two separate Bash tool calls, one after the other: first run touch approved.txt , then run touch denied.txt . Then report what happened with each."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "wants to use Bash"
+timeout = 120
+compress = 2
+[[steps]]
+pause = 2.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)wants to use Bash.*touch denied\\.txt"
+timeout = 120
+compress = 2
+[[steps]]
+pause = 2.5
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "Claude pane turn complete"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 4.0
