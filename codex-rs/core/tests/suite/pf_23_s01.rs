@@ -629,6 +629,34 @@ async fn pf_23_s02_aggressive_denies_home_reads_before_untrusted_content() -> an
     Ok(())
 }
 
+/// PF-23-S03: a level confirmed earlier and stored in `security_state.json`
+/// is enforced after a restart even when the configured level is lower.
+#[cfg(target_os = "macos")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pf_23_s03_stored_level_survives_restart_over_a_lower_config() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    skip_if_sandbox!(Ok(()));
+    let (home, evading, _) = canary_home()?;
+    std::fs::write(
+        home.path().join("security_state.json"),
+        r#"{"version":1,"level":"aggressive","revocations":{"schema_version":1,"generation":0,"kill_switch_active":false}}"#,
+    )?;
+    let (test, captured) = start_turn_in(
+        Some(home),
+        SecurityLevel::Permissive,
+        AskForApproval::Never,
+        vec![shell_step("call-read", &evading), done_step()],
+        |_| {},
+    )
+    .await?;
+    assert!(next_exec_approval(&test).await.is_none());
+    let requests = captured.requests();
+    let output = output_text(&requests[requests.len() - 1], "call-read");
+    assert!(!output.contains(CANARY), "{output}");
+    assert!(output.contains("Operation not permitted"), "{output}");
+    Ok(())
+}
+
 /// PF-23-S02: with full access, the sandbox still makes git hooks and the
 /// project's `.codex` read-only once the rules apply, whatever the command
 /// text says; other workspace writes go through.

@@ -620,6 +620,13 @@ impl Session {
             }
         });
         let initial_auto_compact_window_ids = AutoCompactWindowIds::new_initial();
+        // PF-23-S03: the stored level and revocations, read again at every
+        // session start; unreadable state is reported below.
+        let security_recovery =
+            crate::security::recovery::recover(config.codex_home.as_path(), config.security_level);
+        let security_recovery_warning = security_recovery
+            .warning()
+            .filter(|warning| !config.startup_warnings.contains(warning));
         let agent_control = agent_control
             .with_session_id(
                 session_id,
@@ -627,8 +634,8 @@ impl Session {
                     .effective_agent_max_threads(MultiAgentVersion::V2)
                     .unwrap_or(usize::MAX),
             )
-            .with_effective_security_policy(
-                config.security_level,
+            .with_recovered_security_policy(
+                security_recovery,
                 thread_id,
                 matches!(
                     session_configuration.session_source,
@@ -860,7 +867,11 @@ impl Session {
                     }),
                 });
             }
-            for message in &config.startup_warnings {
+            for message in config
+                .startup_warnings
+                .iter()
+                .chain(security_recovery_warning.iter())
+            {
                 post_session_configured_events.push(Event {
                     id: "".to_owned(),
                     msg: EventMsg::Warning(WarningEvent {

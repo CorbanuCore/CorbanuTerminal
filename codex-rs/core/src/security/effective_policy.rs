@@ -76,6 +76,9 @@ struct EffectivePolicyState {
     epoch: u64,
     root_agent_id: ThreadId,
     agents: HashMap<ThreadId, AgentSecurityBinding>,
+    /// The level the next start enforces: lower than the level in force
+    /// after a confirmed downgrade, which applies only at the next start.
+    next_start_level: SecurityLevel,
 }
 
 #[derive(Default)]
@@ -105,8 +108,12 @@ pub(crate) struct TrustedSecurityController {
 pub(crate) enum EffectivePolicyInitialization {
     Root,
     DetachedSpawnedAgent,
+    /// PF-23-S03: the durable security state could not be read. Aggressive
+    /// and the kill switch apply until a human confirms a level.
+    UnreadableState,
 }
 
+#[cfg(test)]
 #[derive(Clone, Debug)]
 pub(crate) struct ConfirmedSecurityLevelChange {
     expected_epoch: u64,
@@ -128,6 +135,9 @@ pub(crate) struct EffectivePolicySnapshot {
     pub(crate) revocation_generation: u64,
     pub(crate) authority_kill_switch_active: bool,
     pub(crate) kill_switch_active: bool,
+    /// What the next start enforces (PF-23-S03); below `requested_level`
+    /// only after a confirmed downgrade.
+    pub(crate) next_start_level: SecurityLevel,
 }
 
 impl EffectivePolicySnapshot {
@@ -285,11 +295,13 @@ impl TrustedSecurityController {
             task_id: BoundedText::new(format!("task:{root_agent_id}"))?,
             minimum_level: match initialization {
                 EffectivePolicyInitialization::Root => SecurityLevel::Permissive,
-                EffectivePolicyInitialization::DetachedSpawnedAgent => SecurityLevel::Aggressive,
+                EffectivePolicyInitialization::DetachedSpawnedAgent
+                | EffectivePolicyInitialization::UnreadableState => SecurityLevel::Aggressive,
             },
-            force_deny: initialization == EffectivePolicyInitialization::DetachedSpawnedAgent,
+            force_deny: initialization != EffectivePolicyInitialization::Root,
         };
         let proposed = EffectivePolicyState {
+            next_start_level: persisted.settings.level,
             persisted,
             runtime_nonce: *Uuid::new_v4().as_bytes(),
             epoch: 0,
@@ -313,6 +325,9 @@ impl TrustedSecurityController {
         })
     }
 
+    /// Test fixture only: an in-memory change without persistence. The
+    /// product path is `commit_transition` (PF-23-S03).
+    #[cfg(test)]
     pub(crate) fn confirm_level_change(
         &self,
         next_level: SecurityLevel,
@@ -340,6 +355,7 @@ impl TrustedSecurityController {
 
     /// Validate the complete replacement before taking the write lock, then
     /// replace the state in one critical section. Readers see either snapshot.
+    #[cfg(test)]
     pub(crate) fn apply_confirmed_change(
         &self,
         confirmation: ConfirmedSecurityLevelChange,
@@ -368,6 +384,7 @@ impl TrustedSecurityController {
             .epoch
             .checked_add(1)
             .ok_or(SecurityPolicyError::EpochOverflow)?;
+        state.next_start_level = confirmation.next.settings.level;
         state.persisted = confirmation.next;
         state.epoch = next_epoch;
         Ok(next_epoch)
@@ -410,6 +427,7 @@ fn snapshot(
         revocation_generation: state.persisted.revocations.generation,
         authority_kill_switch_active: state.persisted.revocations.kill_switch_active,
         kill_switch_active: binding.force_deny || state.persisted.revocations.kill_switch_active,
+        next_start_level: state.next_start_level,
     }
 }
 
