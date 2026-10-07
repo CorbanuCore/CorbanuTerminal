@@ -50,7 +50,10 @@ export CARGO_HOME="$RUNTIME/cargo"
 export CORBANU_TEST_NO_NATIVE_KEYRING=1
 
 # Resolve the ZAI key from the real vault (installed signed binary; parent env).
-ZAI_KEY="$(env -u CORBANU_TEST_NO_NATIVE_KEYRING "$CORBANU_BIN" vault auth-helper provider/zai_api_key 2>/dev/null)"
+# If ZAI_KEY is already set in the environment, use it directly.
+if [ -z "${ZAI_KEY:-}" ]; then
+  ZAI_KEY="$(env -u CORBANU_TEST_NO_NATIVE_KEYRING "$CORBANU_BIN" vault auth-helper provider/zai_api_key 2>/dev/null)"
+fi
 
 # The security level this invocation runs under (aggressive | moderate).
 

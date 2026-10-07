@@ -49,7 +49,11 @@ echo | sed "${SED_INPLACE[@]}" 's/x/x/' >/dev/null 2>&1 || SED_INPLACE=(-i)
 export CORBANU_TEST_NO_NATIVE_KEYRING=1
 
 # Resolve the ZAI key from the real vault (installed signed binary; parent env).
-ZAI_KEY="$(env -u CORBANU_TEST_NO_NATIVE_KEYRING "$CORBANU_BIN" vault auth-helper provider/zai_api_key 2>/dev/null)"
+# If ZAI_KEY is already set in the environment (e.g. passed from macOS to a
+# remote Linux box that has no installed corbanu), use it directly.
+if [ -z "${ZAI_KEY:-}" ]; then
+  ZAI_KEY="$(env -u CORBANU_TEST_NO_NATIVE_KEYRING "$CORBANU_BIN" vault auth-helper provider/zai_api_key 2>/dev/null)"
+fi
 ZAI_DIGEST="$(printf '%s' "$ZAI_KEY" | SHA256_STDIN | cut -d' ' -f1)"
 CANARY_DIGEST="$(printf '%s' "$CANARY_VALUE" | SHA256_STDIN | cut -d' ' -f1)"
 
@@ -70,7 +74,8 @@ echo "candidate_version: $CANDIDATE_VERSION"
 echo "source_commit: $SOURCE_COMMIT"
 echo "script_sha256: $SCRIPT_SHA"
 echo "saved_level: $LEVEL"
-echo "zai_key_resolved: $([ -n "$ZAI_KEY" ] && echo yes || echo NO)"
+ZAI_KEY_RESOLVED=$([ -n "$ZAI_KEY" ] && echo yes || echo no)
+echo "zai_key_resolved: $ZAI_KEY_RESOLVED"
 echo "zai_digest_prefix: ${ZAI_DIGEST:0:16}"
 echo
 
@@ -212,9 +217,9 @@ probe "corbanu_home_store" "$B/home" "$B/userhome" "$B/ws" \
   "$B/stdout.txt" 90
 
 # Build summary JSON
-python3 - "$RESULTS" "$RUNDIR/direct-probes-saved-$LEVEL-$PLATFORM.json" "$CANDIDATE_SHA" "$CANDIDATE_VERSION" "$SOURCE_COMMIT" "$LEVEL" "$PLATFORM" "$ZAI_DIGEST" "$CANARY_DIGEST" "$SCRIPT_SHA" <<'PY'
+python3 - "$RESULTS" "$RUNDIR/direct-probes-saved-$LEVEL-$PLATFORM.json" "$CANDIDATE_SHA" "$CANDIDATE_VERSION" "$SOURCE_COMMIT" "$LEVEL" "$PLATFORM" "$ZAI_DIGEST" "$CANARY_DIGEST" "$SCRIPT_SHA" "$ZAI_KEY_RESOLVED" <<'PY'
 import json, pathlib, sys
-results_path, matrix_path, cand_sha, cand_ver, src_commit, level, platform, zai_digest, canary_digest, script_sha = sys.argv[1:11]
+results_path, matrix_path, cand_sha, cand_ver, src_commit, level, platform, zai_digest, canary_digest, script_sha, zai_resolved = sys.argv[1:12]
 results = [json.loads(l) for l in pathlib.Path(results_path).read_text().splitlines() if l.strip()]
 matrix = {
     "sprint": "PF-13-S07",
@@ -227,7 +232,7 @@ matrix = {
     "script_sha256": script_sha,
     "zai_digest_prefix": zai_digest[:16],
     "canary_digest_prefix": canary_digest[:16],
-    "zai_key_resolved": "yes",
+    "zai_key_resolved": zai_resolved,
     "method": "exec-block inspection: scans for leaks first (canary/ZAI key anywhere), then accepts a denial only inside the exec block; model-mediated but exec block is deterministic",
     "probes": results,
     "summary": {
