@@ -1,13 +1,13 @@
 ---
 sprint_id: "PF-27-S05"
 title: "Core model-client auth and vault labels through the broker"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-27"
 execution_order: 46
 owner: "broker lane worker round 6 (2026-10-06)"
 parallel_lane: "broker"
-write_scope: "codex-rs/network-proxy/src/credential_broker/model_auth.rs, codex-rs/network-proxy/src/credential_broker/isolated/, codex-rs/network-proxy/src/credential_broker/isolated_tests.rs, codex-rs/network-proxy/src/credential_broker/env_scrub.rs, codex-rs/network-proxy/src/credential_broker/env_scrub_tests.rs, codex-rs/network-proxy/src/credential_broker/memory_scan_tests.rs, codex-rs/network-proxy/src/credential_broker.rs, codex-rs/network-proxy/src/credential_broker/providers.rs, codex-rs/network-proxy/src/lib.rs, codex-rs/model-provider/src/auth.rs, codex-rs/model-provider/src/lib.rs, codex-rs/model-provider/src/provider.rs, codex-rs/model-provider/src/model_key_broker.rs, codex-rs/http-client/, codex-rs/login/src/auth/manager.rs, codex-rs/login/src/lib.rs, codex-rs/secrets/src/local.rs, codex-rs/process-hardening/, codex-rs/arg0/, codex-rs/features/src/lib.rs, codex-rs/core/src/model_broker_auth.rs, codex-rs/core/src/model_broker_auth_tests.rs, codex-rs/core/src/client_tests.rs, codex-rs/core/src/lib.rs, codex-rs/core/src/session/mod.rs, codex-rs/core/src/session/session.rs, codex-rs/core/src/memory_stage_one.rs, codex-rs/core/src/realtime_conversation.rs, codex-rs/core/config.schema.json, codex-rs/Cargo.lock, qa/security-levels/sprints/PF-27-S05/, qa/demos/index/PF-27-S05.md, docs/sprints/current/p0-security-levels/pf-27-s05-model-client-auth-broker.md"
+write_scope: "codex-rs/network-proxy/src/credential_broker/model_auth.rs, codex-rs/network-proxy/src/credential_broker/isolated/, codex-rs/network-proxy/src/credential_broker/isolated_tests.rs, codex-rs/network-proxy/src/credential_broker/env_scrub.rs, codex-rs/network-proxy/src/credential_broker/env_scrub_tests.rs, codex-rs/network-proxy/src/credential_broker/memory_scan_tests.rs, codex-rs/network-proxy/src/credential_broker.rs, codex-rs/network-proxy/src/credential_broker/providers.rs, codex-rs/network-proxy/src/lib.rs, codex-rs/model-provider/src/auth.rs, codex-rs/model-provider/src/lib.rs, codex-rs/model-provider/src/provider.rs, codex-rs/model-provider/src/model_key_broker.rs, codex-rs/http-client/, codex-rs/login/src/auth/manager.rs, codex-rs/login/src/lib.rs, codex-rs/secrets/src/local.rs, codex-rs/process-hardening/, codex-rs/arg0/, codex-rs/features/src/lib.rs, codex-rs/core/src/model_broker_auth.rs, codex-rs/core/src/model_broker_auth_tests.rs, codex-rs/core/src/client_tests.rs, codex-rs/core/src/lib.rs, codex-rs/core/src/session/mod.rs, codex-rs/core/src/session/session.rs, codex-rs/core/src/memory_stage_one.rs, codex-rs/core/src/realtime_conversation.rs, codex-rs/core/config.schema.json, codex-rs/Cargo.lock, qa/security-levels/sprints/PF-27-S05/, qa/demos/index/PF-27-S05.md, docs/sprints/archive/p0-security-levels/pf-27-s05-model-client-auth-broker.md"
 integration_gate: "PR to main under the per-sprint gate (sec-common decision 5); merged behind the default-off broker_model_auth flag. Shared files serialized by the integration owner, not reserved here: small hunks in codex-rs/core/src/client.rs (transport and websocket selection; PF-23-S01 reserves it) and codex-rs/core/src/config/mod.rs (marks the process brokered, as PF-27-S02 arms its contract; PF-60-S03 reserves the file) and two new demo specs qa/demos/specs/pf27s05-*.toml (new files only, in the directory PF-23-S01 reserves)."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/sec-broker6-20261006"
 branch: "feat/pf27-s05-broker-finish-20261006"
@@ -20,6 +20,11 @@ updated: 2026-10-07
 # PF-27-S05 — Core model-client auth and vault labels through the broker
 
 Coordinator decision 2026-10-06: Core's model-client auth moves into the broker, behind `broker_model_auth` (off).
+
+## Closure — 2026-10-07
+
+Completed under the per-sprint gate (PR #237, slice 1 #229), merged behind `broker_model_auth` (off by default).
+Known limits below are follow-ups for the plan worker; the main one is the in-process vault opens by other features.
 
 ## Execution mandate
 
@@ -71,7 +76,7 @@ Coordinator decision 2026-10-06: Core's model-client auth moves into the broker,
 
 ## Remaining
 
-- [ ] Final Opus re-review approves; merge; archive this record.
+- None in this sprint; follow-ups are under Known limits.
 
 ## Known limits (follow-ups for the plan worker)
 
@@ -92,9 +97,9 @@ Coordinator decision 2026-10-06: Core's model-client auth moves into the broker,
   and the Linux `pf_27_s05` tests pass.
 - [x] GLM 5.2 tmux runs as SOP videos, keyring-isolated ([index](../../../../qa/demos/index/PF-27-S05.md)).
 - [x] Opus 5.5 High reviews 3 and 4 (changes requested, fixed); see [evidence](../../../../qa/security-levels/sprints/PF-27-S05/README.md).
-- [ ] Final re-review verdict.
+- [x] Final re-review (review 5): APPROVE.
 
 ## Exit evidence
 
 - [x] Outputs under `qa/security-levels/sprints/PF-27-S05/`; Done and Known limits reflect reality.
-- [ ] Record archived after merge.
+- [x] Record archived with the PR (#237).

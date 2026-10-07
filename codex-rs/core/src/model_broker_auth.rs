@@ -7,8 +7,9 @@
 //! every model-provider request this process makes (model client, web
 //! search, image generation, model catalog) is signed for the broker, which
 //! attaches the credential and performs the HTTPS request; the HTTP transport
-//! sends such a request only to the broker's socket. Provider keys stored in
-//! the vault are read by the broker, never by Core.
+//! sends such a request only to the broker's socket. For these requests,
+//! provider keys stored in the vault are read by the broker, not by Core
+//! (other features may still open the vault; see the sprint's known limits).
 //!
 //! Nothing falls back to sending a credential directly: a broker that cannot
 //! start or has died, a provider URL the broker cannot bind (plain HTTP, an

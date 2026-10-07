@@ -18,8 +18,8 @@ There is no fallback to sending the key directly. The request fails, and is not 
 - the provider URL cannot be brokered (plain HTTP, an IPv6 literal, or a query string);
 - Core is running on a platform other than Unix.
 
-Responses websockets are turned off. The paths that still send keys directly are listed under Remaining in the sprint
-record.
+Responses websockets are turned off. (Slice 1 text, kept for history; round 6 below brokers or refuses the paths
+that still sent keys directly.)
 
 ## Tests
 
@@ -58,7 +58,7 @@ Opus 5.5 High via `corbanu exec -m claude-opus-5-5-plan`, run read-only.
 
 ## Round 6: the rest of the sprint (PR from `feat/pf27-s05-broker-finish-20261006`)
 
-What changed is listed under Done in the [sprint record](../../../../docs/sprints/current/p0-security-levels/pf-27-s05-model-client-auth-broker.md),
+What changed is listed under Done in the [sprint record](../../../../docs/sprints/archive/p0-security-levels/pf-27-s05-model-client-auth-broker.md),
 together with the known limits.
 
 ### New tests
@@ -111,3 +111,6 @@ Opus 5.5 High via OpenRouter, run read-only in a keyring-isolated profile.
   - keys are scrubbed when the broker fails to start;
   - stale snapshots no longer replace a newer registration;
   - the record and claims are corrected.
+- [Review 5](review-opus-5.md): **APPROVE**. Its two documentation notes are applied. Its third note is recorded
+  as a follow-up: a stale snapshot that starts after a refresh can still swap the copy back, costing one failed
+  request; monotonic versions for sign-in slots would end that.
