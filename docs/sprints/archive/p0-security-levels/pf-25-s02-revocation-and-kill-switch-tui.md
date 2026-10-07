@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-25-S02"
 title: "Revocation and kill-switch TUI"
-status: draft
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-25"
 execution_order: 45
@@ -61,7 +61,8 @@ Gate: [qa/security-levels/sprints/PF-25-S02/README.md](../../../../qa/security-l
   session's policy tree and the others of the process on the home (grants, "for session" approvals, broker
   channels end) and are saved in `security_state.json`, so they hold after a restart; `r` restarts to check.
   Only the kill switch the person saw can be released, and releasing keeps the level.
-- [x] A state changed since the review is refused with "review it again"; a save failure is reported.
+- [x] A state changed since the review is refused with "review it again" (the basis includes the kill-switch event);
+  a save failure is reported; a release reaches the other sessions that hold the same switch.
 - [x] Tests: Core (kill switch now, other trees, saved, next start, release keeps the level, release of an off switch
   refused, no session, revoke all ends grants and moves the epoch, changed state refused, one grant); TUI (list and
   review snapshots, Esc, on then off with the Back guard, revoke all, changed state, restart key, scan that only
@@ -69,7 +70,7 @@ Gate: [qa/security-levels/sprints/PF-25-S02/README.md](../../../../qa/security-l
 
 ## Remaining
 
-- [ ] Gate: Opus review, Linux clippy, GLM videos, merge, archive.
+Nothing in this sprint. Merged after PF-25-S01 (#260).
 - Not here: a fake financial effect under the kill switch (PF-38-S03/PF-26); mandates (none are issued yet, so none
   are listed); scoped revocation of one agent (Core supports `Actor`, no UI yet).
 
@@ -79,10 +80,11 @@ Gate: [qa/security-levels/sprints/PF-25-S02/README.md](../../../../qa/security-l
 - [x] `just test -p codex-core` (`security_revocation`, `transition`, `level_change`, `grant_offer`);
   `just test -p codex-tui` (`pf_25_s02`, `security`).
 - [x] Snapshots reviewed and accepted (PF-25 revocation output only).
-- [ ] GLM 5.2 tmux run and videos with revoke/kill/restart/recovery keys; Linux clippy on the RTX box.
+- [x] GLM 5.2 tmux run and three videos (revoke one grant, kill switch on and after restart, off keeps the level);
+  Linux clippy on the RTX box; Opus 5.5 High review (three rounds, final APPROVE).
 
 ## Exit evidence
 
-- [ ] Commit, snapshots, changed paths, and key script recorded.
-- [ ] Test output linked under `qa/security-levels/sprints/PF-25-S02/`.
-- [ ] Ledgers reflect reality and the completed record is archived.
+- [x] Commit, snapshots, changed paths, and key script recorded (gate record).
+- [x] Test output under `qa/security-levels/sprints/PF-25-S02/`.
+- [x] Ledgers reflect reality and the completed record is archived.
