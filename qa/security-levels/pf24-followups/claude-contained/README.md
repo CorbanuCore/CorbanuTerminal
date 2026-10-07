@@ -216,3 +216,6 @@ would read the login keychain.
   `⏎` and `\u{202e}`.
 - **Videos:** [approvals under Aggressive](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/claude-contained-claude-contained-approvals-e562055c0b97-2026-10-06.mp4),
   [popup guard and escaping](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/claude-contained-claude-contained-approval-guard-e562055c0b97-2026-10-06.mp4)
+- **Review** (Opus 5.5 High through the installed `corbanu exec`,
+  claude-plan, read-only): round 1 request changes, rounds 2 and 3 approve
+  with fixes (all fixed), round 4 **approve**; `review/part2-review-*.md`.
