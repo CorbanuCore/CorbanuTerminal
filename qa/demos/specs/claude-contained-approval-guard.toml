@@ -1,0 +1,85 @@
+# A contained Claude pane's approval popup cannot be answered by accident: it
+# opens on Deny, ignores an Enter pressed as it appears, shows a two-line
+# command with its hidden right-to-left override escaped, and allows only
+# after Right then Enter. Claude Code is the protocol stand-in in
+# qa/security-levels/pf24-followups/claude-contained/fake-claude (it asks for
+# two fixed Bash commands), so the run needs no model. Record with
+#   PF24_CANDIDATE=<corbanu> CLAUDE_BIN_DIR=<repo>/qa/security-levels/pf24-followups/claude-contained/fake-claude
+#   --bin qa/security-levels/pf24-followups/claude-contained/demo-launch.sh
+id = "claude-contained-approval-guard"
+feature = "Contained Claude pane approval popup: Deny by default, input guard, full escaped command"
+expected = "The first request shows `touch first.txt⏎` and `ls first.txt # \\u{202e}txt.hs`; an Enter pressed as it appears does nothing, the next Enter denies; the second is allowed with Right, Enter; only second.txt is created."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+secretless_agent_launch = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/panes"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "\\+ Claude Pane"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "GLM 5.2 Z.AI"
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Name Claude pane"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "GLM 5.2 Z.AI · "
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Create the two files."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "wants to use Bash"
+timeout = 60
+# Pressed as the popup appears: ignored.
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)u\\{202e\\}txt\\.hs.*Deny.*choose · Enter confirms"
+[[steps]]
+pause = 3.0
+# Untouched popup: Enter denies.
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)wants to use Bash.*touch second\\.txt"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Right"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "touch first\\.txt was denied; touch second\\.txt was allowed"
+timeout = 60
+[[steps]]
+pause = 3.0

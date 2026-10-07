@@ -191,6 +191,35 @@ fn claude_panes_are_refused_while_a_protected_level_is_active_or_saved() {
     }
 }
 
+/// #218: the refusal lifts only with `contained_external_agents` on, the
+/// secretless launch contract armed, and a platform sandbox.
+#[test]
+fn contained_panes_lift_the_refusal_only_when_containment_is_ready() {
+    use crate::claude_panes::containment::ContainmentSettings;
+    use crate::claude_panes::containment::test_settings;
+    let _levels = test_levels::set(ChosenLevel::Aggressive, ChosenLevel::Aggressive);
+    let feature = |enabled| {
+        test_settings::set(ContainmentSettings {
+            enabled,
+            linux_sandbox_exe: None,
+            state_root: None,
+        })
+    };
+    for (enabled, armed) in [(false, false), (false, true), (true, false)] {
+        let _feature = feature(enabled);
+        let _armed = test_settings::set_contract_armed(armed);
+        assert!(
+            external_agent_block_reason().is_some(),
+            "feature {enabled}, contract armed {armed}"
+        );
+    }
+    let _feature = feature(true);
+    let _armed = test_settings::set_contract_armed(true);
+    let has_sandbox =
+        codex_sandboxing::get_platform_sandbox(/*windows_sandbox_enabled*/ false).is_some();
+    assert_eq!(external_agent_block_reason().is_none(), has_sandbox);
+}
+
 #[test]
 fn smoke_runs_without_a_launch_context_read_the_stored_level() {
     let home = tempfile::tempdir().unwrap();

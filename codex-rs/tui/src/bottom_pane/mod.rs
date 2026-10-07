@@ -85,6 +85,8 @@ pub(crate) use mcp_server_elicitation::McpServerElicitationOverlay;
 pub(crate) use request_user_input::RequestUserInputOverlay;
 pub(crate) use status_line_style::status_line_from_segments;
 mod bottom_pane_view;
+mod claude_approval_view;
+pub(crate) use claude_approval_view::ClaudeApprovalView;
 mod effort_ignition;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -233,6 +235,11 @@ pub(crate) struct BottomPane {
     view_stack: Vec<Box<dyn BottomPaneView>>,
     delayed_approval_requests: VecDeque<DelayedApprovalRequest>,
     last_composer_activity_at: Option<Instant>,
+    /// Any key the composer handled last (arrows too): a contained Claude
+    /// pane's approval popup stays guarded after it (#218).
+    last_composer_key_at: Option<Instant>,
+    /// The view on top at the last check, to tell it when it is uncovered.
+    last_top_view: Option<usize>,
 
     app_event_tx: AppEventSender,
     frame_requester: FrameRequester,
@@ -300,6 +307,8 @@ impl BottomPane {
             view_stack: Vec::new(),
             delayed_approval_requests: VecDeque::new(),
             last_composer_activity_at: None,
+            last_composer_key_at: None,
+            last_top_view: None,
             app_event_tx,
             frame_requester,
             thread_id: None,
@@ -565,6 +574,7 @@ impl BottomPane {
                 }
                 None => {}
             }
+            self.on_top_view_removed();
             self.on_view_stack_depth_decreased();
         }
     }
@@ -631,6 +641,7 @@ impl BottomPane {
             if key_event.kind == KeyEventKind::Release {
                 return InputResult::None;
             }
+            self.sync_top_view();
 
             // We need three pieces of information after routing the key:
             // whether Esc completed the view, whether the view finished for any
@@ -697,6 +708,9 @@ impl BottomPane {
                             | KeyCode::Tab
                     );
             let (input_result, needs_redraw) = self.composer.handle_key_event(key_event);
+            if matches!(key_event.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
+                self.last_composer_key_at = Some(Instant::now());
+            }
             if records_composer_activity {
                 self.record_composer_activity_at(Instant::now());
             }
@@ -779,6 +793,7 @@ impl BottomPane {
     }
 
     fn pre_draw_tick_at(&mut self, now: Instant) {
+        self.sync_top_view();
         self.composer.sync_popups();
         self.maybe_show_delayed_approval_requests_at(now);
         self.tick_active_view(now);
@@ -1310,6 +1325,69 @@ impl BottomPane {
         true
     }
 
+    /// A contained Claude pane's tool request (#218): queued in the open
+    /// Claude approval popup if there is one, so requests never cover each
+    /// other, otherwise shown in a new one.
+    pub(crate) fn show_claude_approval(
+        &mut self,
+        request: crate::claude_panes::approval::ClaudeApprovalRequest,
+    ) {
+        let mut request = Some(request);
+        for view in self.view_stack.iter_mut().rev() {
+            if let Some(pending) = request.take() {
+                request = view.try_consume_claude_approval(pending);
+            }
+        }
+        if let Some(request) = request {
+            let typed_at = self
+                .last_composer_key_at
+                .max(self.last_composer_activity_at);
+            self.push_view(Box::new(ClaudeApprovalView::new(request, typed_at)));
+        }
+        self.request_redraw();
+    }
+
+    /// Drop requests settled elsewhere (see
+    /// [`BottomPaneView::remove_settled_requests`]) and remove views left
+    /// with none, keeping the rest in order.
+    pub(crate) fn remove_views_settled_elsewhere(&mut self) {
+        let before = self.view_stack.len();
+        let mut emptied = Vec::new();
+        for (index, view) in self.view_stack.iter_mut().enumerate() {
+            if view.remove_settled_requests() {
+                emptied.push(index);
+            }
+        }
+        for index in emptied.into_iter().rev() {
+            self.view_stack.remove(index);
+        }
+        if self.view_stack.len() != before {
+            self.on_top_view_removed();
+            self.on_view_stack_depth_decreased();
+            self.schedule_active_view_frame();
+        }
+        self.request_redraw();
+    }
+
+    /// Tell the view now on top that it is active again whenever the top
+    /// view changed, however the view above it went away. Runs before each
+    /// draw and each key, so no key reaches an uncovered view first.
+    fn sync_top_view(&mut self) {
+        let top = self.view_stack.last().map(|view| {
+            std::ptr::from_ref::<dyn BottomPaneView>(view.as_ref()).cast::<()>() as usize
+        });
+        if top != self.last_top_view {
+            self.last_top_view = top;
+            if let Some(view) = self.view_stack.last_mut() {
+                view.on_uncovered();
+            }
+        }
+    }
+
+    fn on_top_view_removed(&mut self) {
+        self.sync_top_view();
+    }
+
     /// Dismiss the newest matching view without disturbing views stacked above it.
     pub(crate) fn dismiss_view_by_id(&mut self, view_id: &'static str) -> bool {
         let Some(index) = self
@@ -1323,6 +1401,7 @@ impl BottomPane {
         let removed_active_view = index + 1 == self.view_stack.len();
         self.view_stack.remove(index);
         if removed_active_view {
+            self.on_top_view_removed();
             self.schedule_active_view_frame();
         }
         self.request_redraw();
@@ -2335,6 +2414,45 @@ mod tests {
         );
     }
 
+    /// #218: contained Claude pane requests queue in one popup, under other
+    /// views too, and leave when their turn stops waiting.
+    #[test]
+    fn claude_approvals_queue_in_one_popup_and_leave_when_settled() {
+        use crate::claude_panes::approval::ApprovalResponder;
+        use crate::claude_panes::approval::ClaudeApprovalRequest;
+        let request = || {
+            let (responder, rx) = ApprovalResponder::new();
+            let request = ClaudeApprovalRequest {
+                pane_id: "claude-1234abcd".to_string(),
+                pane_title: "Claude".to_string(),
+                cwd: PathBuf::from("/w"),
+                tool_name: "Bash".to_string(),
+                tool_use_id: None,
+                details: crate::claude_panes::approval::details(
+                    "Bash",
+                    &serde_json::json!({ "command": "touch x" }),
+                    str::to_string,
+                ),
+                responder,
+            };
+            (request, rx)
+        };
+        let (tx_raw, _rx) = unbounded_channel::<AppEvent>();
+        let mut pane = test_pane(AppEventSender::new(tx_raw));
+        let (first, first_rx) = request();
+        let (second, second_rx) = request();
+        pane.show_claude_approval(first);
+        pane.show_claude_approval(second);
+        assert_eq!(pane.view_stack.len(), 1);
+
+        drop(first_rx);
+        pane.remove_views_settled_elsewhere();
+        assert_eq!(pane.view_stack.len(), 1);
+        drop(second_rx);
+        pane.remove_views_settled_elsewhere();
+        assert!(pane.view_stack.is_empty());
+    }
+
     #[test]
     fn dismiss_app_server_request_prunes_delayed_approval() {
         let (tx_raw, _rx) = unbounded_channel::<AppEvent>();
@@ -3085,6 +3203,38 @@ mod tests {
 
         assert_eq!(on_ctrl_c_calls.get(), 0);
         assert_eq!(handle_calls.get(), 1);
+    }
+
+    /// #218 round 3: however the view above goes away, the view below is
+    /// told it is uncovered before the next draw or key reaches it.
+    #[test]
+    fn uncovered_views_are_told_on_any_removal_path() {
+        struct UncoverView(Rc<Cell<usize>>);
+        impl Renderable for UncoverView {
+            fn render(&self, _area: Rect, _buf: &mut Buffer) {}
+            fn desired_height(&self, _width: u16) -> u16 {
+                1
+            }
+        }
+        impl BottomPaneView for UncoverView {
+            fn on_uncovered(&mut self) {
+                self.0.set(self.0.get() + 1);
+            }
+        }
+        let (tx_raw, _rx) = unbounded_channel::<AppEvent>();
+        let mut pane = test_pane(AppEventSender::new(tx_raw));
+        let below = Rc::new(Cell::new(0));
+        pane.push_view(Box::new(UncoverView(Rc::clone(&below))));
+        pane.pre_draw_tick_at(Instant::now());
+        let shown = below.get();
+        pane.push_view(Box::new(UncoverView(Rc::new(Cell::new(0)))));
+        pane.pre_draw_tick_at(Instant::now());
+        // Removed without any of the usual pop paths.
+        pane.view_stack.pop();
+        pane.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(below.get(), shown + 1);
+        pane.pre_draw_tick_at(Instant::now());
+        assert_eq!(below.get(), shown + 1);
     }
 
     #[test]

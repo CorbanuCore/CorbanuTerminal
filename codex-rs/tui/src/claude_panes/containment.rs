@@ -69,6 +69,7 @@ pub(crate) fn enabled() -> Option<ContainmentSettings> {
 /// Stand-in settings for tests, on the current thread only.
 #[cfg(test)]
 pub(crate) mod test_settings {
+    use std::cell::Cell;
     use std::cell::RefCell;
 
     use super::ContainmentSettings;
@@ -76,6 +77,22 @@ pub(crate) mod test_settings {
     thread_local! {
         pub(super) static SETTINGS: RefCell<Option<ContainmentSettings>> =
             const { RefCell::new(None) };
+        pub(super) static CONTRACT_ARMED: Cell<Option<bool>> = const { Cell::new(None) };
+    }
+
+    /// Stands in for whether the secretless launch contract is armed, until
+    /// dropped.
+    pub(crate) struct ArmedGuard;
+
+    pub(crate) fn set_contract_armed(armed: bool) -> ArmedGuard {
+        CONTRACT_ARMED.set(Some(armed));
+        ArmedGuard
+    }
+
+    impl Drop for ArmedGuard {
+        fn drop(&mut self) {
+            CONTRACT_ARMED.set(None);
+        }
     }
 
     /// Sets the settings until dropped.
@@ -91,6 +108,20 @@ pub(crate) mod test_settings {
             SETTINGS.with(|cell| *cell.borrow_mut() = None);
         }
     }
+}
+
+/// Whether Claude panes can run contained here: the feature is on, the
+/// secretless launch contract is armed, and the platform has a sandbox.
+pub(crate) fn contained_launch_ready() -> bool {
+    #[cfg(test)]
+    let armed = test_settings::CONTRACT_ARMED
+        .get()
+        .unwrap_or_else(crate::legacy_core::external_agent_contract_armed);
+    #[cfg(not(test))]
+    let armed = crate::legacy_core::external_agent_contract_armed();
+    enabled().is_some()
+        && armed
+        && get_platform_sandbox(/*windows_sandbox_enabled*/ false).is_some()
 }
 
 /// How one contained turn is launched.

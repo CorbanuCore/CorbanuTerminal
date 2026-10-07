@@ -2483,6 +2483,7 @@ fn bridge_redaction_plan(
         command_mode: ClaudeCommandMode::NewSession,
         direct_accounting: None,
         containment: None,
+        stdin_prompt: None,
         command_session_id: "11111111-1111-4111-8111-111111111111".to_string(),
         max_turns: None,
         artifact_path: dir.path().join("turn-0001.jsonl"),
@@ -3135,6 +3136,7 @@ async fn cancelling_running_command_returns_interrupted_output() {
             command_mode: ClaudeCommandMode::NewSession,
             direct_accounting: None,
             containment: None,
+        stdin_prompt: None,
             command_session_id: "55555555-5555-4555-8555-555555555555".to_string(),
             max_turns: None,
             artifact_path: artifact_path.clone(),
@@ -4858,3 +4860,92 @@ fn passthrough_bridge_forwards_only_messages_routes_to_its_own_host() {
         "https://api.z.ai/api/anthropic/v1/messages"
     );
 }
+
+/// #218: a contained pane asks before each tool through Claude Code's stdio
+/// permission prompt instead of bypassing permissions, and sends the prompt
+/// on stdin rather than in argv.
+#[test]
+fn contained_plan_routes_tool_approvals_to_corbanu() {
+    let state_root = tempfile::tempdir().expect("state root");
+    let _settings =
+        super::containment::test_settings::set(super::containment::ContainmentSettings {
+            enabled: true,
+            linux_sandbox_exe: None,
+            state_root: Some(state_root.path().to_path_buf()),
+        });
+    let (dir, contained_pane) = pane(ClaudeProviderProfileKind::ZaiGlm52);
+    let plan = build_claude_command_plan(&contained_pane, "do the thing".to_string(), dir.path())
+        .expect("plan");
+    assert!(!plan.args.iter().any(|arg| arg == "bypassPermissions"));
+    assert!(!plan.args.iter().any(|arg| arg == "do the thing"));
+    assert_eq!(plan.stdin_prompt.as_deref(), Some("do the thing"));
+    let flag = |name: &str| {
+        plan.args
+            .iter()
+            .position(|arg| arg == name)
+            .and_then(|index| plan.args.get(index + 1))
+            .map(String::as_str)
+    };
+    assert_eq!(flag("--permission-mode"), Some("default"));
+    assert_eq!(flag("--permission-prompt-tool"), Some("stdio"));
+    assert_eq!(flag("--input-format"), Some("stream-json"));
+    // Project settings (hooks, allow rules), MCP servers, CLAUDE.md, skills,
+    // plugins, custom commands and agents are not loaded.
+    assert_eq!(flag("--setting-sources"), Some(""));
+    assert!(plan.args.iter().any(|arg| arg == "--strict-mcp-config"));
+    assert!(plan.args.iter().any(|arg| arg == "--safe-mode"));
+    // Only these tools; no subagents, skills or slash commands.
+    assert_eq!(
+        flag("--tools"),
+        Some("Bash,Read,Edit,Write,MultiEdit,NotebookEdit,Glob,Grep,WebFetch,WebSearch,TodoWrite")
+    );
+    assert_eq!(
+        flag("--disallowedTools"),
+        Some(
+            "Agent,Task,Skill,SlashCommand,Workflow,CronCreate,ScheduleWakeup,SendMessage,EnterWorktree"
+        )
+    );
+    // Corbanu's settings: no hooks, ask before every command, edit and web
+    // request, no bypass.
+    let settings: Value = serde_json::from_str(
+        &std::fs::read_to_string(flag("--settings").expect("settings")).expect("settings file"),
+    )
+    .expect("settings json");
+    assert_eq!(settings["disableAllHooks"], json!(true));
+    assert_eq!(
+        settings["permissions"],
+        json!({
+            "ask": ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch"],
+            "deny": [
+                "Agent", "Task", "Skill", "SlashCommand", "Workflow", "CronCreate",
+                "ScheduleWakeup", "SendMessage", "EnterWorktree"
+            ],
+            "disableBypassPermissionsMode": "disable",
+        })
+    );
+
+    // A prompt starting with `/` reaches the model as text, not a command.
+    let plan =
+        build_claude_command_plan(&contained_pane, "/loop 1m rm -rf .".to_string(), dir.path())
+            .expect("plan");
+    assert_eq!(plan.stdin_prompt.as_deref(), Some(" /loop 1m rm -rf ."));
+
+    // Without the feature nothing changes.
+    drop(_settings);
+    let (dir, pane) = pane(ClaudeProviderProfileKind::ZaiGlm52);
+    let plan =
+        build_claude_command_plan(&pane, "do the thing".to_string(), dir.path()).expect("plan");
+    assert!(plan.args.iter().any(|arg| arg == "bypassPermissions"));
+    assert!(
+        !plan
+            .args
+            .iter()
+            .any(|arg| arg == "--safe-mode" || arg == "--disallowedTools")
+    );
+    assert_eq!(plan.args.last().map(String::as_str), Some("do the thing"));
+    assert_eq!(plan.stdin_prompt, None);
+}
+
+#[cfg(unix)]
+#[path = "approval_turn_tests.rs"]
+mod approval_turn;
