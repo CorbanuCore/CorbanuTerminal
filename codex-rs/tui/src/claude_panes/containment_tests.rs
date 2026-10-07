@@ -68,6 +68,7 @@ fn base_profile_writes_only_the_pane_folder_and_its_state_with_network_off() {
     let cwd = tempfile::tempdir().unwrap();
     let state_root = tempfile::tempdir().unwrap();
     let state = state_root.path().join("pane-a");
+    std::fs::create_dir_all(state_root.path().join("pane-b/config")).unwrap();
     let containment = ClaudeContainment {
         state_dir: state.clone(),
         panes_dir: cwd.path().join("panes"),
@@ -81,6 +82,9 @@ fn base_profile_writes_only_the_pane_folder_and_its_state_with_network_off() {
     assert!(file_system.can_write_path_with_cwd(&state.join("config/x"), cwd));
     assert!(file_system.can_read_path_with_cwd(&state.join("config/x"), cwd));
     assert!(!file_system.can_read_path_with_cwd(&state_root.path().join("pane-b/config/x"), cwd));
+    // The folder holding the panes' state stays readable: Claude Code
+    // examines every component of its own paths.
+    assert!(file_system.can_read_path_with_cwd(state_root.path(), cwd));
     // Corbanu's settings for the turn are read-only; other panes' records
     // are unreadable.
     let settings = containment.settings_path();

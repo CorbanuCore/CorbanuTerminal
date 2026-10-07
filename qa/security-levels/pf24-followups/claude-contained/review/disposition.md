@@ -10,7 +10,7 @@
 
 ## Second round (approve with fixes)
 
-1. **Medium, sibling panes' Claude state readable:** fixed. The folder holding every pane's state for this Corbanu home is denied; the pane's own folder, more specific, stays writable. Test in `base_profile_*`; probe 7 in the tmux runs.
+1. **Medium, sibling panes' Claude state readable:** fixed. Every other pane's state folder that exists at launch is denied. The folder holding them is not: Claude Code examines every component of its own paths and refuses a settings file it cannot vet (seen when the parent was denied). A pane created during another pane's turn is not denied to that turn. Test in `base_profile_*`; probe 7 in the tmux runs.
 2. **Low, evidence:** the macOS and Linux runs were recorded again on the final tree with probes 6 (`panes`) and 7 (sibling state). The hostile-target cases are covered by the bridge unit test, not a raw request in the runs.
 3. **Low, demo script:** fixed. Each step of the vault popup must be on screen, or the script stops; the key is only pasted into the masked field. The candidate keeps `ZAI_API_KEY`: the spec's main model uses it.
 4. **Info, settings write:** fixed; the file is written to a temporary file in the folder and renamed over `settings.json`.
