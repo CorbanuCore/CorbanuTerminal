@@ -1,17 +1,17 @@
 ---
 sprint_id: "PF-24-S02"
 title: "Security confirm, cancel, and downgrade"
-status: in_progress
+status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-24"
 execution_order: 43
 owner: "tui lane worker (round 7, 2026-10-07)"
 parallel_lane: "tui"
-write_scope: "codex-rs/tui/src/security/{confirm,restart,launch,level,mod}.rs, codex-rs/tui/src/bottom_pane/security_{level_picker,view}.rs and tests/snapshots, codex-rs/tui/src/{app,app_event,lib,main}.rs, codex-rs/tui/src/app/event_dispatch.rs, codex-rs/tui/src/chatwidget/slash_dispatch.rs, codex-rs/cli/src/main.rs, codex-rs/core/src/security/level_change.rs (new), core/src/security/{transition,recovery,preflight,mod}.rs, codex-rs/core/src/lib.rs, codex-rs/app-server-client/src/lib.rs, codex-rs/security-level/, qa/security-levels/sprints/PF-24-S02/, qa/demos/specs/pf24s02-*.toml, qa/demos/index/PF-24-S02.md"
+write_scope: "codex-rs/core/src/security/level_change.rs, codex-rs/core/src/security/level_change_tests.rs, codex-rs/core/src/security/transition.rs, codex-rs/core/src/security/recovery.rs, codex-rs/core/src/security/preflight.rs, codex-rs/core/src/security/mod.rs, codex-rs/core/src/lib.rs, codex-rs/app-server-client/src/lib.rs, codex-rs/security-level/, codex-rs/tui/src/security/, codex-rs/tui/src/bottom_pane/security_level_picker.rs, codex-rs/tui/src/bottom_pane/security_level_picker_tests.rs, codex-rs/tui/src/bottom_pane/security_view.rs, codex-rs/tui/src/bottom_pane/snapshots/, codex-rs/tui/src/app.rs, codex-rs/tui/src/app_event.rs, codex-rs/tui/src/app/event_dispatch.rs, codex-rs/tui/src/chatwidget/slash_dispatch.rs, codex-rs/tui/src/lib.rs, codex-rs/tui/src/main.rs, codex-rs/cli/src/main.rs, qa/security-levels/sprints/PF-24-S02/, qa/demos/specs/, qa/demos/index/PF-24-S02.md"
 integration_gate: "Per-sprint gate of 2026-10-06 behind security_levels; Core's level is raised only after the protected_mode_preflight preflight passes."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-24-s02-20261007"
 branch: "feat/pf-24-s02-security-confirm"
-base_commit: "4f09d7af99"
+base_commit: "4f09d7af996b9b5fb68ae8363a0c33de021484f4"
 depends_on: "PF-24-S03, PF-23-S03, PF-24-S01, PF-29-S02"
 merged_behind_flag: "security_levels"
 gate_evidence: "qa/security-levels/sprints/PF-24-S02/README.md"
@@ -80,8 +80,7 @@ Gate: [qa/security-levels/sprints/PF-24-S02/README.md](../../../../qa/security-l
 
 - [ ] GLM 5.2 tmux run: Z.AI has no balance. The gate used a mock model (no model turn), and four videos are recorded
   with it. A GLM run can be added later.
-- [ ] Merge, then archive this record.
-- Follow-ups: Windows "restart now" doesn't ignore Ctrl-C in the waiting parent; a downgrade doesn't rewrite a
+- [ ] Merge, then archive this record. Follow-ups: Windows "restart now" doesn't ignore Ctrl-C in the waiting parent; a downgrade doesn't rewrite a
   profile-v2 user config path (errs strict); startup warnings aren't shown in mock runs (existing display path).
 - Known limits are in the gate record.
 
