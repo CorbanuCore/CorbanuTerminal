@@ -690,6 +690,7 @@ impl TurnContext {
             multi_agent_mode: None,
             realtime_active: Some(self.realtime_active),
             effort: self.reasoning_effort.clone(),
+            security_level: Some(self.config.security_level),
             summary: ReasoningSummaryConfig::Auto,
         }
     }

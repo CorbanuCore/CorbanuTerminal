@@ -608,6 +608,7 @@ fn turn_context(root: &Path, turn_id: &str) -> RolloutItem {
         multi_agent_mode: None,
         realtime_active: None,
         effort: None,
+        security_level: None,
         summary: ReasoningSummary::Auto,
     })
 }

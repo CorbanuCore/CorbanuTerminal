@@ -24,7 +24,6 @@ pub(crate) mod protected_surface;
 pub(crate) mod recovery;
 pub(crate) mod taint;
 pub(crate) mod tainted_action;
-pub(crate) mod transition;
 pub(crate) mod ui_events;
 
 pub(crate) use effective_policy::EffectivePolicyInitialization;
@@ -32,6 +31,7 @@ pub(crate) use effective_policy::EffectivePolicyView;
 pub(crate) use effective_policy::PersistedHumanSecurityState;
 pub(crate) use effective_policy::SecurityPolicyError;
 pub(crate) use effective_policy::TrustedSecurityController;
+pub(crate) use effective_policy::transition;
 
 #[cfg(test)]
 #[path = "effective_policy_tests.rs"]

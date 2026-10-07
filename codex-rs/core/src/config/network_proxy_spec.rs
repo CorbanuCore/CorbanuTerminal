@@ -47,6 +47,11 @@ impl StartedNetworkProxy {
     pub fn proxy(&self) -> NetworkProxy {
         self.proxy.clone()
     }
+
+    /// PF-23-S03: see [`NetworkProxy::revoke_brokered_credentials`].
+    pub(crate) fn revoke_brokered_credentials(&self) -> bool {
+        self.proxy.revoke_brokered_credentials()
+    }
 }
 
 #[derive(Clone)]

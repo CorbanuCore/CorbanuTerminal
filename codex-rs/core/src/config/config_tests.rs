@@ -5724,6 +5724,46 @@ async fn missing_security_state_defaults_to_permissive() -> std::io::Result<()> 
     Ok(())
 }
 
+/// PF-23-S03: a level confirmed through the trusted controller is a floor at
+/// the next start; an unreadable store enforces Aggressive and says so.
+#[tokio::test]
+async fn security_recovery_config_load_uses_the_stricter_stored_level() -> std::io::Result<()> {
+    let codex_home = TempDir::new()?;
+    let load = |home: &TempDir| {
+        Config::load_from_base_config_with_overrides(
+            ConfigToml {
+                security: Some(codex_security_policy::SecuritySettings::new(
+                    SecurityLevel::Permissive,
+                )),
+                ..Default::default()
+            },
+            ConfigOverrides::default(),
+            home.abs(),
+        )
+    };
+    std::fs::write(
+        codex_home.path().join("security_state.json"),
+        r#"{"version":1,"level":"moderate","revocations":{"schema_version":1,"generation":0,"kill_switch_active":false}}"#,
+    )?;
+    assert_eq!(
+        load(&codex_home).await?.security_level,
+        SecurityLevel::Moderate
+    );
+
+    std::fs::write(codex_home.path().join("security_state.json"), "not json")?;
+    let config = load(&codex_home).await?;
+    assert_eq!(config.security_level, SecurityLevel::Aggressive);
+    assert!(
+        config
+            .startup_warnings
+            .iter()
+            .any(|warning| warning.starts_with("Security state is unreadable")),
+        "{:?}",
+        config.startup_warnings
+    );
+    Ok(())
+}
+
 #[tokio::test]
 async fn explicit_security_state_round_trips_into_effective_config() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;

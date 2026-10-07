@@ -365,7 +365,8 @@ mod job {
         let client = context.stage_one_client(config).await?;
         // PF-23-S01: above Permissive Core builds the whole message from the
         // source session's own rollout; Permissive is unchanged.
-        let labelled = if client.requires_labelled_input() {
+        // PF-23-S03: also when the source session ran above Permissive.
+        let labelled = if client.requires_labelled_input_for(rollout_path).await? {
             let model_info = &stage_one_context.model_info;
             Some(
                 client

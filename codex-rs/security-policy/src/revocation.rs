@@ -371,6 +371,42 @@ impl RevocationState {
                 .is_some_and(|revoked_at| mandate.approved_at_unix_seconds <= revoked_at)
     }
 
+    /// Combine two histories of the same revocations (what another session
+    /// stored and what this one holds). Every revoked id and applied event of
+    /// either is kept, the later all-authority time wins, and the kill switch
+    /// follows the later kill-switch event. The generation is the number of
+    /// distinct applied events, so the union never goes back.
+    pub fn merge(&mut self, other: &Self) -> Result<(), RevocationError> {
+        self.validate()?;
+        other.validate()?;
+        self.revoked_grant_ids
+            .extend(other.revoked_grant_ids.iter().cloned());
+        self.revoked_mandate_ids
+            .extend(other.revoked_mandate_ids.iter().cloned());
+        self.revoked_actor_ids
+            .extend(other.revoked_actor_ids.iter().cloned());
+        self.applied_event_ids
+            .extend(other.applied_event_ids.iter().cloned());
+        self.all_authority_revoked_at_unix_seconds = self
+            .all_authority_revoked_at_unix_seconds
+            .max(other.all_authority_revoked_at_unix_seconds);
+        if other.last_kill_switch_event > self.last_kill_switch_event {
+            self.last_kill_switch_event = other.last_kill_switch_event.clone();
+            self.kill_switch_active = other.kill_switch_active;
+        }
+        self.generation = u64::try_from(self.applied_event_ids.len())
+            .map_err(|_| RevocationError::GenerationOverflow)?;
+        self.validate()
+    }
+
+    /// The kill-switch event in force, if any. A release is only valid
+    /// against the one the human saw.
+    pub fn kill_switch_event_id(&self) -> Option<&BoundedText> {
+        self.last_kill_switch_event
+            .as_ref()
+            .map(|event| &event.event_id)
+    }
+
     pub fn validate(&self) -> Result<(), RevocationError> {
         if self.schema_version != REVOCATION_SCHEMA_VERSION {
             return Err(RevocationError::UnsupportedSchemaVersion {

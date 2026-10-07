@@ -17,6 +17,16 @@ pub(crate) struct ConfirmedSecurityRequest {
     authority: PolicyPrincipal,
 }
 
+impl ConfirmedSecurityRequest {
+    pub(crate) fn request(&self) -> &SecurityControlRequest {
+        &self.request
+    }
+
+    pub(crate) fn authority(&self) -> &PolicyPrincipal {
+        &self.authority
+    }
+}
+
 impl TrustedSecurityController {
     /// Called only by the future trusted human-confirmation adapter, never by a
     /// model tool or by receipt of a wire request. Does not apply a policy change.
@@ -76,7 +86,7 @@ impl TrustedSecurityController {
     }
 }
 
-fn check_epoch(
+pub(super) fn check_epoch(
     state: &EffectivePolicyState,
     request: &SecurityControlRequest,
 ) -> Result<(), SecurityPolicyError> {

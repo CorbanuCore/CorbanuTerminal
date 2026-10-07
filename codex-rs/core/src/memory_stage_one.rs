@@ -111,6 +111,19 @@ impl LabelledStageOneInput {
     }
 }
 
+/// PF-23-S03: the strictest level any turn of a rollout recorded;
+/// Permissive for rollouts written before the level was recorded.
+fn recorded_security_level(items: &[RolloutItem]) -> SecurityLevel {
+    items
+        .iter()
+        .filter_map(|item| match item {
+            RolloutItem::TurnContext(context) => context.security_level,
+            _ => None,
+        })
+        .max()
+        .unwrap_or_default()
+}
+
 /// Fixed stage-one filter (mirrors the memories worker's Permissive one):
 /// developer messages and AGENTS.md / skill fragments are dropped; nothing is
 /// added or rewritten.
@@ -394,6 +407,22 @@ impl StageOneMemoryClient {
         self.requires_labelled_input
     }
 
+    /// PF-23-S03: whether this source session needs the labelled message:
+    /// the level now, or the strictest level its turns ran under, is above
+    /// Permissive. An unreadable rollout fails the job.
+    pub async fn requires_labelled_input_for(
+        &self,
+        rollout_path: &std::path::Path,
+    ) -> Result<bool, StageOneMemoryError> {
+        if self.requires_labelled_input {
+            return Ok(true);
+        }
+        let (items, _, _) = crate::RolloutRecorder::load_rollout_items(rollout_path)
+            .await
+            .map_err(|err| CodexErr::InvalidRequest(format!("failed to read rollout: {err}")))?;
+        Ok(recorded_security_level(&items) != SecurityLevel::Permissive)
+    }
+
     /// PF-23-S01: the stage-one message for one source session.
     ///
     /// Core reads the rollout itself. Its opening record must be
@@ -435,6 +464,11 @@ impl StageOneMemoryClient {
         match items.first() {
             Some(RolloutItem::SessionMeta(line)) if line.meta.id == source_thread => {}
             _ => return Err(StageOneMemoryDenial::SourceLineageMismatch.into()),
+        }
+        // PF-23-S03: a session that ran under Aggressive is never summarized,
+        // whatever the level is now.
+        if recorded_security_level(items) == SecurityLevel::Aggressive {
+            return Err(StageOneMemoryDenial::ProtectedInputUnavailable.into());
         }
         let mut ingress = NativeIngress::default();
         ingress.set_labelled_mode(/*enabled*/ true);

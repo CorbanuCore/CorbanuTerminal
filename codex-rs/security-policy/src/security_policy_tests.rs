@@ -1331,3 +1331,55 @@ fn policy_contracts_have_no_arbitrary_payload_or_secret_fields() {
         );
     }
 }
+
+/// PF-23-S03: two histories merge into their union. Nothing either revoked
+/// comes back, the generation never goes back, and the later kill-switch
+/// event decides the switch.
+#[test]
+fn revocation_merge_is_a_union_and_the_later_kill_switch_wins() {
+    let event = |target, at| {
+        RevocationEvent::new(human(), target, RevocationReason::HumanRequest, at).expect("event")
+    };
+    let mut stored = RevocationState::new();
+    for at in 1..=3 {
+        stored
+            .apply(&event(
+                RevocationTarget::Actor {
+                    actor_id: text(&format!("agent:{at}")),
+                },
+                at,
+            ))
+            .expect("actor");
+    }
+    let mut held = RevocationState::new();
+    let grant = grant();
+    held.apply(&event(
+        RevocationTarget::Grant {
+            grant_id: grant.grant_id.clone(),
+        },
+        10,
+    ))
+    .expect("grant");
+    held.apply(&event(RevocationTarget::KillSwitch { active: true }, 20))
+        .expect("kill");
+
+    let mut merged = stored.clone();
+    merged.merge(&held).expect("merge");
+    assert_eq!(merged.generation, 5);
+    assert!(merged.kill_switch_active);
+    assert!(merged.grant_is_revoked(&grant));
+    assert_eq!(merged.kill_switch_event_id(), held.kill_switch_event_id());
+    let mut other_way = held.clone();
+    other_way.merge(&stored).expect("merge");
+    assert_eq!(other_way, merged);
+
+    // A later release on one side wins over the earlier kill.
+    let mut released = merged.clone();
+    released
+        .apply(&event(RevocationTarget::KillSwitch { active: false }, 30))
+        .expect("release");
+    let mut again = held.clone();
+    again.merge(&released).expect("merge");
+    assert!(!again.kill_switch_active);
+    assert_eq!(again.generation, 6);
+}
