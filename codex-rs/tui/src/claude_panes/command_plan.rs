@@ -234,9 +234,17 @@ pub(crate) fn build_claude_command_plan(
                     containment.state_dir.display()
                 )
             })?;
-            std::fs::write(&path, settings.to_string()).with_context(|| {
-                format!("failed to write Claude pane settings `{}`", path.display())
-            })?;
+            // The folder is writable to the pane; replace the file rather
+            // than write through whatever is there.
+            let mut file = tempfile::NamedTempFile::new_in(&containment.state_dir)
+                .context("failed to create Claude pane settings")?;
+            std::io::Write::write_all(&mut file, settings.to_string().as_bytes())
+                .context("failed to write Claude pane settings")?;
+            file.persist(&path)
+                .map_err(|err| err.error)
+                .with_context(|| {
+                    format!("failed to write Claude pane settings `{}`", path.display())
+                })?;
             path
         }
         None => settings_path,

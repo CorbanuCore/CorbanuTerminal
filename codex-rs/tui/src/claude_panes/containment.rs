@@ -185,12 +185,24 @@ pub(crate) fn base_profile(containment: &ClaudeContainment) -> Result<Permission
         /*exclude_tmpdir_env_var*/ true,
         /*exclude_slash_tmp*/ true,
     );
+    let other_panes_state = containment
+        .state_dir
+        .parent()
+        .ok_or_else(|| anyhow!("Claude pane state folder has no parent"))?;
     file_system.entries.extend([
         FileSystemSandboxEntry::new(
             FileSystemPath::Path {
                 path: absolute(&containment.settings_path())?,
             },
             FileSystemAccessMode::Read,
+        ),
+        // Other panes' Claude state (their session transcripts) sits next to
+        // this pane's; the pane's own, more specific folder stays writable.
+        FileSystemSandboxEntry::new(
+            FileSystemPath::Path {
+                path: absolute(other_panes_state)?,
+            },
+            FileSystemAccessMode::Deny,
         ),
         FileSystemSandboxEntry::new(
             FileSystemPath::Path {

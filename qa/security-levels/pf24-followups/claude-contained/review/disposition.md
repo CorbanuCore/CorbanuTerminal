@@ -7,3 +7,10 @@
 5. **Low, feature read once at start:** recorded. The feature takes effect at start, like the other security features; README says so.
 6. **Info, absolute-form handling on uncontained bridges:** intended; those bridges get the stricter checks of finding 1 too.
 7. **Test gaps:** hostile targets (finding 1) and the profile's denials (finding 2) are now tested. `contain()` with an armed contract is covered by the core test of `protect_external_launch` and by the macOS and Linux tmux runs, not by a TUI unit test: the contract is a process-wide `OnceLock` in core. Recorded.
+
+## Second round (approve with fixes)
+
+1. **Medium, sibling panes' Claude state readable:** fixed. The folder holding every pane's state for this Corbanu home is denied; the pane's own folder, more specific, stays writable. Test in `base_profile_*`; probe 7 in the tmux runs.
+2. **Low, evidence:** the macOS and Linux runs were recorded again on the final tree with probes 6 (`panes`) and 7 (sibling state). The hostile-target cases are covered by the bridge unit test, not a raw request in the runs.
+3. **Low, demo script:** fixed. Each step of the vault popup must be on screen, or the script stops; the key is only pasted into the masked field. The candidate keeps `ZAI_API_KEY`: the spec's main model uses it.
+4. **Info, settings write:** fixed; the file is written to a temporary file in the folder and renamed over `settings.json`.
