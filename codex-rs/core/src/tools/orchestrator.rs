@@ -296,10 +296,14 @@ impl ToolOrchestrator {
         #[allow(deprecated)]
         let turn_cwd = turn_ctx.cwd.clone();
         let grant_operation = aggressive_grant_operation(tool, req, tool_ctx);
+        // The taint generation a human approval of this run was given under.
+        let human_approved_at = match &post_taint {
+            Some(action) => Some(action.state.taint_generation),
+            None => escalation_approved_by_human.then_some(0),
+        };
         let denied = post_taint_read_denials(
             tool_ctx,
-            &post_taint,
-            escalation_approved_by_human,
+            human_approved_at,
             grant_operation.as_deref(),
             turn_cwd,
             &materialized_workspace_roots,
@@ -776,16 +780,15 @@ where
 ///
 /// Under Moderate a fresh human approval lifts the rules for this run: after
 /// untrusted content, of this exact protected command; before it, of this
-/// command's request to run outside the sandbox (`escalation_approved`, still
-/// checked against the state after the approval). Under Aggressive an approval
-/// never does; only a matching human grant for this exact command
-/// (`security::aggressive`). Lifting only leaves these rules out: every
+/// command's request to run outside the sandbox. `human_approved_at` is the
+/// taint generation that approval was given under; new taint since voids it.
+/// Under Aggressive an approval never does; only a matching human grant for
+/// this exact command (`security::aggressive`). Lifting only leaves these rules out: every
 /// denial of the profile itself stays. An external sandbox cannot take the
 /// rules and keeps its own.
 fn post_taint_read_denials(
     tool_ctx: &ToolCtx,
-    post_taint: &Option<crate::security::tainted_action::PostTaintAction>,
-    escalation_approved: bool,
+    human_approved_at: Option<u64>,
     grant_operation: Option<&str>,
     cwd: codex_utils_absolute_path::AbsolutePathBuf,
     workspace_roots: &[codex_utils_absolute_path::AbsolutePathBuf],
@@ -804,9 +807,7 @@ fn post_taint_read_denials(
         .model_client()
         .post_taint_state()
         .filter(crate::security::tainted_action::PostTaintState::protected_paths_apply)?;
-    if state.moderate_bound()
-        && (post_taint.is_some() || (escalation_approved && state.taint_generation == 0))
-    {
+    if state.moderate_bound() && human_approved_at == Some(state.taint_generation) {
         tracing::info!(
             target: "codex_core::security::tainted_action",
             taint_generation = state.taint_generation,
