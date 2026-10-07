@@ -550,6 +550,16 @@ fn create_filesystem_args(
         append_unreadable_root_args(&mut bwrap_args, unreadable_root, &allowed_write_paths)?;
     }
 
+    // `:root = write` (full access with denials), not a project at `/`.
+    let full_write_root = file_system_sandbox_policy.entries.iter().any(|entry| {
+        entry.access == FileSystemAccessMode::Write
+            && matches!(
+                entry.path,
+                FileSystemPath::Special {
+                    value: FileSystemSpecialPath::Root
+                }
+            )
+    });
     for writable_root in &sorted_writable_roots {
         let root = writable_root.root.as_path();
         let symlink_target = canonical_target_if_symlinked_path(root);
@@ -577,10 +587,10 @@ fn create_filesystem_args(
             .filter(|path| !missing_auto_metadata_read_only_project_root_subpaths.contains(path))
             .collect();
         // The filesystem root of a full-write profile with denials (PF-23
-        // protected paths under full access) holds no repository metadata,
-        // and an unprivileged bwrap cannot create a mount point there:
-        // `mkdir /.git` would fail every command.
-        let protected_metadata_names = if root.parent().is_none() {
+        // protected paths under full access) is not a project root, and an
+        // unprivileged bwrap cannot create a mount point there: `mkdir /.git`
+        // would fail every command.
+        let protected_metadata_names = if root.parent().is_none() && full_write_root {
             Vec::new()
         } else {
             writable_root.protected_metadata_names.clone()

@@ -415,7 +415,7 @@ fn git_persistence_paths(root: &AbsolutePathBuf) -> Vec<AbsolutePathBuf> {
         return Vec::new();
     };
     let (mut paths, git_dirs) = if dot_git.as_path().is_dir() {
-        (Vec::new(), vec![dot_git.clone()])
+        (Vec::new(), vec![dot_git])
     } else {
         let mut git_dirs = Vec::new();
         if let Some(git_dir) = std::fs::read_to_string(dot_git.as_path())
@@ -435,7 +435,7 @@ fn git_persistence_paths(root: &AbsolutePathBuf) -> Vec<AbsolutePathBuf> {
             git_dirs.push(git_dir);
             git_dirs.extend(common);
         }
-        (vec![dot_git.clone()], git_dirs)
+        (vec![dot_git], git_dirs)
     };
     for dir in &git_dirs {
         paths.extend(entries(dir));

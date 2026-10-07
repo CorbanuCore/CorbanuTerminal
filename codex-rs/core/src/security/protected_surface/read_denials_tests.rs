@@ -228,6 +228,8 @@ fn pf_23_s02_persistence_files_become_read_only() {
     let fx = fixture();
     let cwd = fx.user_home.join("project");
     std::fs::create_dir_all(cwd.join(".git/hooks")).unwrap();
+    // An existing start-up file; the ones below do not exist.
+    std::fs::write(fx.user_home.join(".bashrc"), "x").unwrap();
     let denials = ReadDenials::collect(&fx.codex_home, Some(&fx.user_home), None, &[abs(&cwd)]);
     let policy = denials
         .apply(&PermissionProfile::Disabled)
@@ -235,12 +237,25 @@ fn pf_23_s02_persistence_files_become_read_only() {
         .file_system_sandbox_policy();
     let writable = |path: &Path| policy.can_write_path_with_cwd(path, &cwd);
     let readable = |path: &Path| policy.can_read_path_with_cwd(path, &cwd);
-    for protected in [
+    let missing_home_files = [
         fx.user_home.join(".zshrc"),
         fx.user_home.join(".config/fish/config.fish"),
         fx.user_home.join("Library/LaunchAgents/x.plist"),
         fx.user_home.join(".local/bin/corbanu"),
         fx.user_home.join(".claude/settings.json"),
+    ];
+    // Linux leaves missing home files to the command-text net: the sandbox
+    // would put an empty placeholder in the real home for the command's run.
+    for missing in &missing_home_files {
+        assert_eq!(
+            writable(missing),
+            cfg!(target_os = "linux"),
+            "{}",
+            missing.display()
+        );
+    }
+    for protected in [
+        fx.user_home.join(".bashrc"),
         cwd.join(".git/hooks/pre-commit"),
         cwd.join(".git/config"),
         cwd.join(".codex/config.toml"),
