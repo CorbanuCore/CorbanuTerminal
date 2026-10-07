@@ -64,6 +64,19 @@ impl SecurityView {
         }
     }
 
+    /// PF-24-S02: Core's configured levels, and where "restart now" goes.
+    pub(crate) fn with_confirmation(
+        mut self,
+        core: super::security_level_picker::CoreLevels,
+        app_event_tx: crate::app_event_sender::AppEventSender,
+    ) -> Self {
+        if let Some(picker) = self.picker.as_mut() {
+            picker.set_core_levels(core);
+            picker.set_app_event_tx(app_event_tx);
+        }
+        self
+    }
+
     fn lines(&self, width: u16) -> Vec<Line<'static>> {
         let mut lines = vec!["Security profiles — read only".bold().into()];
         let paragraphs = [
@@ -170,12 +183,30 @@ impl BottomPaneView for SecurityView {
     }
 
     fn on_ctrl_c(&mut self) -> CancellationEvent {
-        self.cancelled = true;
+        // A confirmation being saved finishes first; its result is shown.
+        if !self
+            .picker
+            .as_ref()
+            .is_some_and(SecurityLevelPicker::saving)
+        {
+            self.cancelled = true;
+        }
         CancellationEvent::Handled
     }
 
     fn prefer_esc_to_handle_key_event(&self) -> bool {
         true
+    }
+
+    fn pre_draw_tick(&mut self, _now: std::time::Instant) -> bool {
+        self.picker.as_mut().is_some_and(SecurityLevelPicker::poll)
+    }
+
+    fn next_frame_delay(&self) -> Option<std::time::Duration> {
+        self.picker
+            .as_ref()
+            .filter(|picker| picker.saving())
+            .map(|_| std::time::Duration::from_millis(50))
     }
 }
 

@@ -22,6 +22,7 @@ Your own settings from config apply instead of each of these.
     secretless_agent_launch run them in it, asking you before every command,
     file edit and web request (reading files stays automatic) (Claude Code sign-
     in still runs)
+Core's level becomes Permissive from the next start.
 Your own approval, sandbox, network, web search and environment settings from
 config apply again exactly as saved. The Aggressive vault rule file is removed
 at the next start.

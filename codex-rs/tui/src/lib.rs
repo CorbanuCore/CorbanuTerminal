@@ -267,6 +267,8 @@ pub use security::nested::apply_aggressive_launch_overrides;
 pub use security::nested::nested_launch;
 pub use security::nested::prepare_nested_exec;
 pub use security::nested::verify_aggressive_config;
+pub use security::restart::restart_process;
+pub use security::restart::take_restart_marker;
 // (tests access modules directly within the crate)
 
 const TUI_LOG_FILE_NAME: &str = "codex-tui.log";
@@ -995,6 +997,12 @@ pub async fn run_main(
     loader_overrides: LoaderOverrides,
     explicit_remote_endpoint: Option<RemoteAppServerEndpoint>,
 ) -> std::io::Result<AppExitInfo> {
+    // PF-24-S02 "restart now": the same arguments, without sending the
+    // initial prompt and images a second time.
+    if security::restart::restarted() {
+        cli.prompt = None;
+        cli.images.clear();
+    }
     let strict_config = cli.strict_config;
     let (sandbox_mode, approval_policy) = if cli.dangerously_bypass_approvals_and_sandbox {
         (

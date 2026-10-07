@@ -2,6 +2,13 @@
 //! Aggressive; the differences are shown first and only the accept key saves.
 //! A saved level takes effect at the next start, where it is verified before
 //! being shown as active.
+//!
+//! PF-24-S02: the accept key on a review is the one human-origin transition
+//! event. It saves the level file and commits Core's transition off the UI
+//! thread ([`crate::security::confirm`]): a stricter Core level applies to
+//! running sessions now, a downgrade at the next start. A failed save keeps
+//! the view open and changes nothing; a saved level that needs a restart
+//! offers one.
 
 use std::cell::Cell;
 use std::path::PathBuf;
@@ -11,6 +18,8 @@ use crossterm::event::KeyEvent;
 use ratatui::style::Stylize;
 use ratatui::text::Line;
 
+use crate::app_event::AppEvent;
+use crate::app_event_sender::AppEventSender;
 use crate::key_hint;
 use crate::key_hint::KeyBindingListExt;
 use crate::keymap::ListKeymap;
@@ -22,7 +31,16 @@ use crate::legacy_core::protected_preflight::migration;
 use crate::legacy_core::protected_preflight::migration::CredentialStore;
 use crate::legacy_core::protected_preflight::migration::MigrationOutcome;
 use crate::legacy_core::protected_preflight::migration::MigrationPlan;
+use crate::legacy_core::security_level_change::LevelBasis;
+use crate::legacy_core::security_level_change::LevelChangeKind;
+use crate::legacy_core::security_level_change::SecurityLevel;
+use crate::legacy_core::security_level_change::StoredSecurityState;
 use crate::security::aggressive;
+use crate::security::confirm;
+use crate::security::confirm::Pending;
+use crate::security::confirm::TransitionFailure;
+use crate::security::confirm::TransitionOutcome;
+use crate::security::confirm::TransitionRequest;
 use crate::security::current::CurrentValues;
 use crate::security::level;
 use crate::security::level::ChosenLevel;
@@ -69,7 +87,9 @@ enum Screen {
         note: Option<String>,
     },
     Review(ChosenLevel),
-    Saved(Result<ChosenLevel, String>),
+    /// The confirmation is being saved and committed.
+    Saving(ChosenLevel),
+    Saved(Result<TransitionOutcome, TransitionFailure>),
     /// PF-29-S02: what a credential migration would do.
     MigrationPreview,
     MigrationResult(Result<MigrationOutcome, String>),
@@ -99,6 +119,28 @@ pub(crate) struct SecurityLevelPicker {
     /// PF-29-S02: the previewed plan, and a store tests can replace.
     migration: Option<MigrationPlan>,
     pub(super) store: Option<Rc<dyn CredentialStore>>,
+    /// Core's level settings from the session config (PF-24-S02).
+    core: CoreLevels,
+    /// Core's state as last read; the review commits only while it holds.
+    basis: LevelBasis,
+    pending: Option<Pending>,
+    /// Run the commit on the calling thread (tests).
+    pub(super) commit_inline: bool,
+    /// Sends the "restart now" request.
+    app_event_tx: Option<AppEventSender>,
+}
+
+/// Core's `[security]` levels from the session's config layers, and the
+/// session the picker was opened in.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct CoreLevels {
+    /// The session's thread, once it has started: its policy tree is the one
+    /// a confirmation commits through.
+    pub(crate) thread: Option<codex_protocol::ThreadId>,
+    /// The strictest level any layer sets (without the stored state).
+    pub(crate) configured: SecurityLevel,
+    /// The strictest level a layer other than the user's `config.toml` sets.
+    pub(crate) outside_user_config: SecurityLevel,
 }
 
 impl SecurityLevelPicker {
@@ -131,7 +173,57 @@ impl SecurityLevelPicker {
             preflight_note: None,
             migration: None,
             store: None,
+            core: CoreLevels::default(),
+            basis: LevelBasis::read(
+                &context.codex_home,
+                SecurityLevel::Permissive,
+                /*thread*/ None,
+            ),
+            pending: None,
+            commit_inline: cfg!(test),
+            app_event_tx: None,
         }
+    }
+
+    pub(crate) fn set_core_levels(&mut self, core: CoreLevels) {
+        self.core = core;
+        self.basis = LevelBasis::read(&self.codex_home, core.configured, core.thread);
+    }
+
+    fn read_basis(&self) -> LevelBasis {
+        LevelBasis::read(&self.codex_home, self.core.configured, self.core.thread)
+    }
+
+    pub(crate) fn set_app_event_tx(&mut self, app_event_tx: AppEventSender) {
+        self.app_event_tx = Some(app_event_tx);
+    }
+
+    /// Whether Core's record still needs the saved Aggressive confirmed:
+    /// it was saved without it, or a step did not finish.
+    fn core_behind(&self) -> bool {
+        self.preflight_input.is_some()
+            && self.stored == StoredLevel::Chosen(ChosenLevel::Aggressive)
+            && confirm::core_commit_needed(
+                &self.basis,
+                ChosenLevel::Aggressive,
+                /*raise*/ true,
+            )
+    }
+
+    /// Collect a finished commit. Returns whether the screen changed.
+    pub(crate) fn poll(&mut self) -> bool {
+        let Some(result) = self.pending.as_mut().and_then(Pending::poll) else {
+            return false;
+        };
+        self.pending = None;
+        (self.stored, self.nested) = level::load_state(&self.codex_home);
+        self.basis = self.read_basis();
+        self.screen = Screen::Saved(result);
+        true
+    }
+
+    pub(crate) fn saving(&self) -> bool {
+        matches!(self.screen, Screen::Saving(_))
     }
 
     pub(crate) fn handle_key_event(&mut self, key: KeyEvent) {
@@ -142,6 +234,9 @@ impl SecurityLevelPicker {
             Screen::List { .. } => {
                 if cancel {
                     self.closed = true;
+                } else if key_hint::plain(KeyCode::Char('r')).is_press(key) && self.restart_useful()
+                {
+                    self.restart();
                 } else if self.keymap.move_up.is_pressed(key) {
                     self.selected = (self.selected + ROWS.len() - 1) % ROWS.len();
                     self.screen = Screen::List { note: None };
@@ -155,9 +250,11 @@ impl SecurityLevelPicker {
                     self.preflight_note = None;
                     // Only a move to Aggressive is a transition; a saved
                     // Aggressive reopens its review for the nested setting.
+                    self.basis = self.read_basis();
                     self.preflight = match (&self.screen, &self.preflight_input) {
                         (Screen::Review(ChosenLevel::Aggressive), Some(input))
-                            if self.stored != StoredLevel::Chosen(ChosenLevel::Aggressive) =>
+                            if self.stored != StoredLevel::Chosen(ChosenLevel::Aggressive)
+                                || self.core_behind() =>
                         {
                             Some(Preflight::run(&input.sources, input.flags))
                         }
@@ -194,6 +291,7 @@ impl SecurityLevelPicker {
                 } else if accept
                     && self.stored == StoredLevel::Chosen(target)
                     && self.nested_choice == self.nested
+                    && !self.core_behind()
                 {
                     self.screen = Screen::List {
                         note: Some(format!(
@@ -205,13 +303,25 @@ impl SecurityLevelPicker {
                     if !self.preflight_allows_save(target) {
                         return;
                     }
-                    let result = self.save(target);
-                    (self.stored, self.nested) = level::load_state(&self.codex_home);
-                    self.screen = Screen::Saved(result);
+                    self.confirm(target);
                 }
             }
-            Screen::Saved(_) => {
-                if cancel || accept {
+            // Nothing can be cancelled halfway; the result comes from `poll`.
+            Screen::Saving(_) => {}
+            Screen::Saved(Err(failure)) => {
+                // The view stays open: back to the review to try again.
+                if cancel {
+                    self.screen = Screen::List {
+                        note: Some("Nothing changed.".to_string()),
+                    };
+                } else if accept {
+                    self.back_to_review(&failure);
+                }
+            }
+            Screen::Saved(Ok(_)) => {
+                if key_hint::plain(KeyCode::Char('r')).is_press(key) && self.restart_useful() {
+                    self.restart();
+                } else if cancel || accept {
                     self.closed = true;
                 }
             }
@@ -379,27 +489,73 @@ impl SecurityLevelPicker {
         self.preflight_note.is_none()
     }
 
-    fn save(&self, target: ChosenLevel) -> Result<ChosenLevel, String> {
-        // The receipt goes first: without Aggressive stored it is ignored,
-        // while Aggressive without it would start unverified.
-        match (target, &self.preflight) {
-            (ChosenLevel::Aggressive, Some(passed)) => {
-                preflight::save_receipt(&self.codex_home, passed).map_err(|err| err.to_string())?;
-            }
-            (ChosenLevel::Aggressive, None) => {}
-            (ChosenLevel::Permissive, _) => {
-                preflight::remove_receipt(&self.codex_home).map_err(|err| err.to_string())?;
-            }
+    /// The confirm key: one typed transition request, committed off the UI
+    /// thread. The receipt goes first (without Aggressive stored it is
+    /// ignored); Core's level is raised only after a passed preflight.
+    fn confirm(&mut self, target: ChosenLevel) {
+        let raise_core = target == ChosenLevel::Aggressive
+            && self.preflight_input.is_some()
+            && (self.preflight.is_some() || !self.core_behind());
+        let request = TransitionRequest {
+            codex_home: self.codex_home.clone(),
+            target,
+            nested: self.nested_choice,
+            configured: self.core.configured,
+            thread: self.core.thread,
+            reviewed: self.basis.clone(),
+            passed_preflight: match target {
+                ChosenLevel::Aggressive => self.preflight.clone(),
+                ChosenLevel::Permissive => None,
+            },
+            raise_core,
+        };
+        self.screen = Screen::Saving(target);
+        self.pending = Some(confirm::start(request, self.commit_inline));
+        self.poll();
+    }
+
+    /// After a failed save: the review again, with fresh state.
+    fn back_to_review(&mut self, failure: &TransitionFailure) {
+        let Some(target) = self.last_target() else {
+            self.screen = Screen::List { note: None };
+            return;
+        };
+        self.basis = self.read_basis();
+        if target == ChosenLevel::Aggressive
+            && let Some(input) = &self.preflight_input
+            && (failure.review_again || self.preflight.is_some())
+        {
+            self.preflight = Some(Preflight::run(&input.sources, input.flags));
         }
-        level::save(&self.codex_home, target, self.nested_choice)
-            .map(|()| target)
-            .map_err(|err| {
-                // Never leave a receipt for a level that was not saved.
-                if target == ChosenLevel::Aggressive && self.preflight.is_some() {
-                    let _ = preflight::remove_receipt(&self.codex_home);
-                }
-                err.to_string()
-            })
+        self.preflight_note = Some(if failure.review_again {
+            "The state changed; this review shows it now.".to_string()
+        } else {
+            "Not saved before; confirm to try again.".to_string()
+        });
+        self.scroll = 0;
+        self.screen = Screen::Review(target);
+    }
+
+    fn last_target(&self) -> Option<ChosenLevel> {
+        ROWS[self.selected].chosen()
+    }
+
+    /// A restart activates what was saved, or ends this session's
+    /// Core state that only a new start clears.
+    fn restart_useful(&self) -> bool {
+        let pending =
+            self.stored.enforced() != self.active || self.basis.in_force != self.basis.next_start;
+        match &self.screen {
+            Screen::Saved(Ok(_)) | Screen::List { .. } => pending,
+            _ => false,
+        }
+    }
+
+    fn restart(&mut self) {
+        if let Some(tx) = &self.app_event_tx {
+            tx.send(AppEvent::RestartForSecurityLevel);
+        }
+        self.closed = true;
     }
 
     fn preflight_lines(&self, preflight: &Preflight) -> Vec<String> {
@@ -414,10 +570,21 @@ impl SecurityLevelPicker {
         } else {
             "Preflight blocked: Aggressive cannot be saved until these are resolved.".to_string()
         }];
-        lines.push(format!(
-            "Controls ready: {ready} of {}",
-            preflight.readiness.len()
-        ));
+        let ready_labels = preflight
+            .readiness
+            .iter()
+            .filter(|item| item.is_ready())
+            .map(|item| item.label.as_str())
+            .collect::<Vec<_>>();
+        lines.push(if ready_labels.is_empty() {
+            format!("Controls ready: 0 of {}", preflight.readiness.len())
+        } else {
+            format!(
+                "Controls ready: {ready} of {} ({})",
+                preflight.readiness.len(),
+                ready_labels.join(", ")
+            )
+        });
         lines.extend(
             preflight
                 .blockers()
@@ -514,7 +681,7 @@ impl SecurityLevelPicker {
         let mut lines = vec![format!("Active in this session: {}", self.active.name())];
         match &self.stored {
             StoredLevel::Invalid(reason) => lines.push(format!(
-                "Stored level is unreadable ({reason}); Aggressive is enforced. Choose a level to repair it."
+                "Stored level is unreadable or was changed outside /security ({reason}); Aggressive is enforced. Choose a level to repair it."
             )),
             StoredLevel::Absent | StoredLevel::Chosen(_) if saved != self.active => lines.push(
                 format!(
@@ -523,6 +690,9 @@ impl SecurityLevelPicker {
                 ),
             ),
             StoredLevel::Absent | StoredLevel::Chosen(_) => {}
+        }
+        if let Some(line) = core_status(&self.basis) {
+            lines.push(line);
         }
         lines
     }
@@ -627,21 +797,55 @@ impl SecurityLevelPicker {
                 lines.extend(wrap(if self.active == ChosenLevel::Aggressive {
                     "This session is already Aggressive; saving keeps it after restart. Your config.toml is not modified."
                 } else {
-                    "Takes effect when you restart Corbanu Terminal; this session keeps its current settings until then. Your config.toml is not modified."
+                    "The rows above take effect when you restart Corbanu Terminal (you can restart right after saving); this session keeps its current settings until then. Your config.toml is not modified."
                 }));
+                for line in self.core_lines_for_aggressive() {
+                    lines.extend(wrap(&line));
+                }
             }
             Screen::Review(ChosenLevel::Permissive) => {
                 lines.push("Return to Permissive?".bold().into());
+                if self.active == ChosenLevel::Aggressive {
+                    lines.push("Protections removed at the next start:".bold().red().into());
+                    lines.extend(
+                        wrap("Your own settings from config apply instead of each of these.")
+                            .into_iter()
+                            .map(Stylize::dim),
+                    );
+                    let hanging = if width < 20 { "" } else { "    " };
+                    for (control, value) in aggressive::ROWS {
+                        lines.extend(word_wrap_lines(
+                            [Line::from(vec![
+                                format!("• {control}:").bold(),
+                                format!(" {value}").into(),
+                            ])],
+                            RtOptions::new(width).subsequent_indent(hanging.into()),
+                        ));
+                    }
+                }
+                for line in self.core_lines_for_permissive() {
+                    lines.extend(wrap(&line));
+                }
                 lines.extend(wrap(
-                    "Your own approval, sandbox, network, web search and environment settings from config apply again exactly as saved. The Aggressive vault rule file is removed.",
+                    "Your own approval, sandbox, network, web search and environment settings from config apply again exactly as saved. The Aggressive vault rule file is removed at the next start.",
                 ));
                 lines.extend(wrap(if self.active == ChosenLevel::Aggressive {
                     "Takes effect when you restart Corbanu Terminal; this session stays Aggressive until then, and its pending approvals end with it."
                 } else {
                     "This session is already Permissive; saving cancels the Aggressive level saved for the next start."
                 }));
+                if let Some(note) = &self.preflight_note {
+                    lines.extend(wrap(note).into_iter().map(Stylize::cyan));
+                }
             }
-            Screen::Saved(Ok(level)) => {
+            Screen::Saving(level) => {
+                lines.push(format!("Saving {}…", level.name()).bold().into());
+                lines.extend(wrap(
+                    "Writing the level and confirming it with Core. Nothing is active until this finishes.",
+                ));
+            }
+            Screen::Saved(Ok(outcome)) => {
+                let level = outcome.level;
                 let saved = match level {
                     ChosenLevel::Aggressive => {
                         format!("Saved: Aggressive (nested agents: {})", self.nested.name())
@@ -649,22 +853,59 @@ impl SecurityLevelPicker {
                     ChosenLevel::Permissive => format!("Saved: {}", level.name()),
                 };
                 lines.push(saved.bold().into());
-                let message = if *level == self.active {
-                    format!("{} is active in this session.", level.name())
+                if level == self.active {
+                    lines.extend(wrap(&format!(
+                        "{} is active in this session.",
+                        level.name()
+                    )));
                 } else {
-                    format!(
-                        "Restart Corbanu Terminal to activate {}. Until then this session stays {}. Resume this conversation with /resume after restarting.",
+                    lines.extend(wrap(&format!(
+                        "Restart Corbanu Terminal to activate {}. Until then this session stays {}.",
                         level.name(),
                         self.active.name()
-                    )
-                };
-                lines.extend(wrap(&message));
+                    )));
+                }
+                if let Some(report) = &outcome.core {
+                    lines.extend(wrap(&core_outcome_line(report)));
+                    if let Some(reason) = &report.not_saved {
+                        lines.extend(
+                            wrap(&format!(
+                                "Core's level applies now but could not be saved ({reason}); it holds until this process ends, and the next start reports it."
+                            ))
+                            .into_iter()
+                            .map(Stylize::red),
+                        );
+                    }
+                }
+                if self.basis.kill_switch_active
+                    && matches!(self.basis.stored, StoredSecurityState::Level(_))
+                {
+                    lines.extend(wrap(
+                        "The kill switch stays on in this session until you restart.",
+                    ));
+                }
+                if self.restart_useful() {
+                    // Resuming earlier conversations is refused only under
+                    // the protected boundary (PF-29-S01).
+                    lines.extend(wrap(if level == ChosenLevel::Aggressive
+                        && self.preflight_input.is_some()
+                    {
+                        "Press r to restart now: Corbanu Terminal closes this session and starts again in this folder with the same options. Conversations from before cannot be resumed under Aggressive."
+                    } else {
+                        "Press r to restart now: Corbanu Terminal closes this session and starts again in this folder with the same options. Resume this conversation with /resume afterwards."
+                    }));
+                }
+                if let Some(non_user) = self.outside_user_config_floor(level) {
+                    lines.extend(wrap(&non_user).into_iter().map(Stylize::red));
+                }
             }
-            Screen::Saved(Err(error)) => {
+            Screen::Saved(Err(failure)) => {
                 lines.push("Security level not saved".bold().red().into());
+                lines.extend(wrap(&format!("{}.", failure.message)));
                 lines.extend(wrap(&format!(
-                    "{error}. The stored level is now: {}.",
-                    self.stored.enforced().name()
+                    "Saved for the next start: {}. Active in this session: {}.",
+                    self.stored.enforced().name(),
+                    self.active.name()
                 )));
             }
             Screen::MigrationPreview => {
@@ -719,9 +960,14 @@ impl SecurityLevelPicker {
         let accept = label(&self.keymap.accept);
         match self.screen {
             Screen::List { .. } => format!(
-                "{}/{} move · {accept} choose · esc close",
+                "{}/{} move · {accept} choose · {}esc close",
                 label(&self.keymap.move_up),
                 label(&self.keymap.move_down),
+                if self.restart_useful() {
+                    "r restart now · "
+                } else {
+                    ""
+                },
             ),
             Screen::Review(target) => {
                 let scroll = if self.max_scroll.get() > 0 {
@@ -756,7 +1002,12 @@ impl SecurityLevelPicker {
                     format!("{scroll}{nested}{accept} confirm and save · esc back, nothing changes")
                 }
             }
-            Screen::Saved(_) => format!("{accept} or esc close"),
+            Screen::Saving(_) => "saving…".to_string(),
+            Screen::Saved(Ok(_)) if self.restart_useful() => {
+                format!("r restart now · {accept} or esc close")
+            }
+            Screen::Saved(Ok(_)) => format!("{accept} or esc close"),
+            Screen::Saved(Err(_)) => format!("{accept} review again · esc back, nothing changes"),
             Screen::MigrationPreview => {
                 let count = self.migration.as_ref().map_or(0, |plan| plan.moves.len());
                 format!(
@@ -768,6 +1019,147 @@ impl SecurityLevelPicker {
             }
             Screen::MigrationResult(_) => format!("{accept} or esc back to the review"),
         }
+    }
+}
+
+impl SecurityLevelPicker {
+    /// What confirming Aggressive does to Core's level (PF-23).
+    fn core_lines_for_aggressive(&self) -> Vec<String> {
+        if self.preflight_input.is_none() {
+            return vec![format!(
+                "Core's level stays {}: raising it needs the activation preflight (the protected_mode_preflight feature).",
+                name(self.basis.in_force)
+            )];
+        }
+        if !confirm::core_commit_needed(&self.basis, ChosenLevel::Aggressive, /*raise*/ true) {
+            return Vec::new();
+        }
+        let effects = "agent commands cannot open protected paths, sensitive surfaces need a grant, external content reaches the model labelled untrusted, and memory summaries stop";
+        vec![
+            if self.basis.live && self.basis.in_force == SecurityLevel::Aggressive {
+                "Core's level is already Aggressive in this session; confirming saves it for every start and raises the other sessions of this Corbanu Terminal that are below it.".to_string()
+            } else if self.basis.live {
+                format!(
+                    "Core's level becomes Aggressive as soon as you confirm, in this session and the others of this Corbanu Terminal: {effects}; grants and \"for session\" approvals end."
+                )
+            } else {
+                format!(
+                    "Core's level becomes Aggressive from the next start (this session's policy does not run in this process yet): {effects}."
+                )
+            },
+        ]
+    }
+
+    /// What confirming Permissive does to Core's level.
+    fn core_lines_for_permissive(&self) -> Vec<String> {
+        if !confirm::core_commit_needed(&self.basis, ChosenLevel::Permissive, /*raise*/ false) {
+            return Vec::new();
+        }
+        let saved_above = match self.basis.stored {
+            StoredSecurityState::Level(stored) if stored > SecurityLevel::Permissive => {
+                Some(stored)
+            }
+            StoredSecurityState::Level(_)
+            | StoredSecurityState::Absent
+            | StoredSecurityState::Unreadable(_) => None,
+        };
+        let mut lines = vec![if self.basis.live
+            && self.basis.in_force == SecurityLevel::Permissive
+            && let Some(saved) = saved_above
+        {
+            format!(
+                "The Core level saved for the next start becomes Permissive (it is {} now, saved by another session); this session stays Permissive. Grants and \"for session\" approvals in this session end as soon as you confirm.",
+                name(saved)
+            )
+        } else if self.basis.in_force == SecurityLevel::Permissive {
+            "Core's saved record is set to Permissive (it is repaired if unreadable); this session stays Permissive.".to_string()
+        } else if self.basis.live {
+            format!(
+                "Core's level stays {} in this session and becomes Permissive from the next start. Grants, \"for session\" approvals and child agents' authority in this session end as soon as you confirm.",
+                name(self.basis.in_force)
+            )
+        } else {
+            "Core's level becomes Permissive from the next start.".to_string()
+        }];
+        if crate::legacy_core::security_level_change::downgrade_rewrites_user_config(
+            &self.codex_home,
+            SecurityLevel::Permissive,
+        ) {
+            lines.push(
+                "Your config.toml sets a stricter [security] level; confirming rewrites it to \"permissive\".".to_string(),
+            );
+        }
+        if let Some(line) = self.outside_user_config_floor(ChosenLevel::Permissive) {
+            lines.push(line);
+        }
+        lines
+    }
+
+    /// A level a config layer other than the user's sets above `level`.
+    fn outside_user_config_floor(&self, level: ChosenLevel) -> Option<String> {
+        (self.core.outside_user_config > confirm::core_level(level)).then(|| {
+            format!(
+                "A configuration layer other than your config.toml (a project's .codex/config.toml, a profile, -c or managed configuration) sets [security] level = \"{}\"; Core's next start still enforces it there.",
+                self.core.outside_user_config
+            )
+        })
+    }
+}
+
+fn name(level: SecurityLevel) -> &'static str {
+    crate::security::view::profile_name(level)
+}
+
+fn core_status(basis: &LevelBasis) -> Option<String> {
+    let stored = match &basis.stored {
+        StoredSecurityState::Unreadable(_) => {
+            return Some(
+                "Core's security state is unreadable: Aggressive and the kill switch are enforced. Choose a level to repair it.".to_string(),
+            );
+        }
+        StoredSecurityState::Absent => None,
+        StoredSecurityState::Level(level) => Some(*level),
+    };
+    if basis.in_force == SecurityLevel::Permissive && stored.is_none() {
+        return None;
+    }
+    Some(if basis.in_force == basis.next_start {
+        format!("Core's level: {}", name(basis.in_force))
+    } else {
+        format!(
+            "Core's level: {} now, {} from the next start",
+            name(basis.in_force),
+            name(basis.next_start)
+        )
+    })
+}
+
+fn core_outcome_line(
+    report: &crate::legacy_core::security_level_change::LevelChangeReport,
+) -> String {
+    match report.kind {
+        LevelChangeKind::Stricter if report.live => format!(
+            "Core's level is {} now in this session, and from every start.",
+            name(report.in_force)
+        ),
+        LevelChangeKind::Stricter => {
+            format!(
+                "Core's level is {} from the next start.",
+                name(report.next_start)
+            )
+        }
+        LevelChangeKind::Downgrade if !report.live => {
+            format!(
+                "Core's level is {} from the next start.",
+                name(report.next_start)
+            )
+        }
+        LevelChangeKind::Downgrade => format!(
+            "Core's level stays {} in this session and is {} from the next start; grants and \"for session\" approvals ended now.",
+            name(report.in_force),
+            name(report.next_start)
+        ),
+        LevelChangeKind::Unchanged => format!("Core's level: {}.", name(report.in_force)),
     }
 }
 

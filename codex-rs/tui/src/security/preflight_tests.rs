@@ -21,6 +21,7 @@ fn clean_preflight(home: &Path) -> Preflight {
             secretless_launch: true,
             credential_broker: true,
             output_gate: true,
+            untrusted_content: true,
         },
     )
 }

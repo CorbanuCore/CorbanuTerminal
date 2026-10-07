@@ -1312,6 +1312,13 @@ impl App {
                         .add_error_message(format!("Logout failed: {err}"));
                 }
             },
+            AppEvent::RestartForSecurityLevel => {
+                self.show_shutdown_feedback(tui)?;
+                let _ = self
+                    .handle_exit_mode(app_server, ExitMode::ShutdownFirst)
+                    .await;
+                return Ok(AppRunControl::Exit(ExitReason::Restart));
+            }
             AppEvent::FatalExitRequest(message) => {
                 return Ok(AppRunControl::Exit(ExitReason::Fatal(message)));
             }

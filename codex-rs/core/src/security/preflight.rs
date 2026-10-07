@@ -41,6 +41,10 @@ pub struct ReadinessFlags {
     pub secretless_launch: bool,
     pub credential_broker: bool,
     pub output_gate: bool,
+    /// PF-24-S02: `source_envelopes`. Core's protected levels refuse model
+    /// requests that carry unlabelled external content, so without it a
+    /// session cannot work under them.
+    pub untrusted_content: bool,
 }
 
 impl ReadinessFlags {
@@ -49,6 +53,7 @@ impl ReadinessFlags {
             secretless_launch: config.features.enabled(Feature::SecretlessAgentLaunch),
             credential_broker: config.features.enabled(Feature::IsolatedCredentialBroker),
             output_gate: config.features.enabled(Feature::SecretOutputGate),
+            untrusted_content: config.features.enabled(Feature::SourceEnvelopes),
         }
     }
 }
@@ -221,6 +226,11 @@ fn readiness(inventory: &Inventory, flags: ReadinessFlags) -> Vec<ReadinessItem>
             "output-gate",
             "Secret output gate",
             required(flags.output_gate, "secret_output_gate"),
+        ),
+        item(
+            "untrusted-content",
+            "Untrusted-content labels",
+            required(flags.untrusted_content, "source_envelopes"),
         ),
         item("vault", "Vault", vault),
     ];

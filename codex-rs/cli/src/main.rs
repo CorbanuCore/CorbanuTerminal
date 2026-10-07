@@ -865,6 +865,12 @@ fn handle_app_exit(exit_info: AppExitInfo) -> anyhow::Result<()> {
             eprintln!("ERROR: {message}");
             true
         }
+        ExitReason::Restart => {
+            println!("Restarting Corbanu Terminal to apply the saved security level…");
+            std::io::stdout().flush()?;
+            let err = codex_tui::restart_process();
+            anyhow::bail!("could not restart Corbanu Terminal ({err}); start it again yourself");
+        }
         ExitReason::UserRequested => false,
     };
 
@@ -1088,6 +1094,7 @@ fn stage_str(stage: Stage) -> &'static str {
 }
 
 fn main() -> anyhow::Result<()> {
+    codex_tui::take_restart_marker();
     pfterminal_home::configure_for_current_process()?;
     pfterminal_home::exit_if_home_blocked_by_macos_privacy();
     let remote_control_disabled = codex_app_server::take_remote_control_disabled_env();
