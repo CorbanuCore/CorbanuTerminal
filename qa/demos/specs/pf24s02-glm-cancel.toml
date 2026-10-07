@@ -1,0 +1,70 @@
+# PF-24-S02 (GLM 5.2 pass): Esc on the Aggressive review leaves the level and the session unchanged (GLM 5.2).
+id = "pf24s02-glm-cancel"
+feature = "Esc on the review changes nothing"
+expected = "/security, Aggressive, then Esc on the review: Cancelled. Nothing changed. Core stays Permissive, and GLM's read of the hidden Corbanu home file still works."
+model = "glm-5.2"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "!printf 'shipped-%s\\n' v2-canary > {home}/team-notes.txt && echo seeded"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "seeded"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Preflight passed"
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "Cancelled\\. Nothing changed\\."
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Escape"
+[[steps]]
+pause = 0.5
+[[steps]]
+type = "Run exactly this command and quote its output: cat \"$(printf '../ho%s/team-notes.txt' me)\""
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "shipped-v2-canary"
+timeout = 240
+compress = 3
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+[[steps]]
+pause = 4.0
