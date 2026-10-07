@@ -12,7 +12,7 @@ use serde::Serialize;
 use std::fmt;
 use zeroize::Zeroize;
 
-pub(crate) const CONTROL_PROTOCOL_VERSION: u32 = 2;
+pub(crate) const CONTROL_PROTOCOL_VERSION: u32 = 3;
 /// Environment variable naming the broker's runtime parent directory.
 pub(crate) const BROKER_RUNTIME_DIR_ENV: &str = "CODEX_CREDENTIAL_BROKER_RUNTIME_DIR";
 pub(crate) const MAX_CONTROL_LINE_BYTES: usize = 16 * 1024;
@@ -74,6 +74,79 @@ impl HostBindingWire {
     }
 }
 
+/// PF-27-S05: how a model-provider key is attached to a request.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelAuthHeader {
+    /// `Authorization: Bearer <key>`.
+    Bearer,
+    /// `x-api-key: <key>` (Anthropic Messages).
+    XApiKey,
+}
+
+impl ModelAuthHeader {
+    pub(crate) fn name(self) -> rama_http::header::HeaderName {
+        match self {
+            Self::Bearer => rama_http::header::AUTHORIZATION,
+            Self::XApiKey => rama_http::header::HeaderName::from_static("x-api-key"),
+        }
+    }
+
+    pub(crate) fn value(self, key: &str) -> Option<rama_http::HeaderValue> {
+        let mut value = match self {
+            Self::Bearer => {
+                let mut bearer = zeroize::Zeroizing::new(String::with_capacity(7 + key.len()));
+                bearer.push_str("Bearer ");
+                bearer.push_str(key);
+                rama_http::HeaderValue::from_str(&bearer).ok()?
+            }
+            Self::XApiKey => rama_http::HeaderValue::from_str(key).ok()?,
+        };
+        value.set_sensitive(true);
+        Some(value)
+    }
+}
+
+/// PF-27-S05: a model-provider key is sent only to this HTTPS origin and
+/// under this path prefix.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ModelBindingWire {
+    pub(crate) host: String,
+    pub(crate) port: u16,
+    pub(crate) path_prefix: String,
+    pub(crate) header: ModelAuthHeader,
+}
+
+impl ModelBindingWire {
+    pub(crate) fn validate(&self) -> bool {
+        valid_host(&self.host)
+            && self.port != 0
+            && (self.path_prefix == "/"
+                || (self.path_prefix.len() <= MAX_PATH_PREFIX_BYTES
+                    && !self.path_prefix.ends_with('/')
+                    && !self.path_prefix.contains('?')
+                    && super::super::providers::plain_path(&self.path_prefix)))
+    }
+
+    /// Whether a request for `host:port` and `path` (query allowed) may carry
+    /// this key: same origin, a plain path under the prefix.
+    pub(crate) fn allows(&self, host: &str, port: u16, path: &str) -> bool {
+        let path = path.split_once('?').map_or(path, |(path, _)| path);
+        let under_prefix = self.path_prefix == "/"
+            || path == self.path_prefix
+            || path
+                .strip_prefix(self.path_prefix.as_str())
+                .is_some_and(|rest| rest.starts_with('/'));
+        host == self.host
+            && port == self.port
+            && under_prefix
+            && super::super::providers::plain_path(path)
+    }
+}
+
+pub(crate) const MAX_PATH_PREFIX_BYTES: usize = 512;
+
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum ControlRequest {
@@ -87,10 +160,19 @@ pub(crate) enum ControlRequest {
         /// PF-28-S02: scrub registered values from returned responses.
         #[serde(default)]
         scrub_responses: bool,
+        /// PF-33-S02: refuse provider requests that carry no checked DNS
+        /// answers; pinned requests never resolve their host in the broker.
+        #[serde(default)]
+        pin_connections: bool,
     },
     Register {
         provider: ProviderId,
         binding: HostBindingWire,
+        value: String,
+    },
+    /// PF-27-S05: one of Core's own model-provider keys.
+    RegisterModel {
+        binding: ModelBindingWire,
         value: String,
     },
     Revoke,
@@ -106,6 +188,12 @@ impl fmt::Debug for ControlRequest {
                     "ControlRequest::Register({provider:?}, <redacted>)"
                 )
             }
+            Self::RegisterModel { binding, .. } => {
+                write!(
+                    formatter,
+                    "ControlRequest::RegisterModel({binding:?}, <redacted>)"
+                )
+            }
             Self::Revoke => formatter.write_str("ControlRequest::Revoke"),
         }
     }
@@ -115,7 +203,7 @@ impl Drop for ControlRequest {
     fn drop(&mut self) {
         match self {
             Self::Hello { channel_key, .. } => channel_key.zeroize(),
-            Self::Register { value, .. } => value.zeroize(),
+            Self::Register { value, .. } | Self::RegisterModel { value, .. } => value.zeroize(),
             Self::Revoke => {}
         }
     }

@@ -6,7 +6,9 @@ pub(crate) mod aggressive;
 pub(crate) mod current;
 pub(crate) mod launch;
 pub(crate) mod level;
+pub(crate) mod migration;
 pub(crate) mod nested;
+pub(crate) mod preflight;
 pub(crate) mod view;
 
 use codex_protocol::security::SecurityControlAction;

@@ -87,6 +87,13 @@ where
     env
 }
 
+/// A built-in provider credential variable that Core keeps for itself.
+pub(crate) fn is_provider_auth_env_var(name: &str) -> bool {
+    BUILT_IN_PROVIDER_AUTH_ENV_VARS
+        .iter()
+        .any(|known| name.eq_ignore_ascii_case(known))
+}
+
 pub fn remove_provider_auth_env_vars<'a, I>(env: &mut HashMap<String, String>, provider_env_keys: I)
 where
     I: IntoIterator<Item = &'a str>,

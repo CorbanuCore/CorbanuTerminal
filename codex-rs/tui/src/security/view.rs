@@ -39,7 +39,12 @@ pub(crate) fn requested_summary(requested: Option<SecurityLevel>) -> String {
 
 pub(crate) fn status_summary(requested: SecurityLevel) -> String {
     if let Some(context) = super::level::context().filter(|context| context.picker_enabled) {
-        return super::level::status_line(context.active, &super::level::load(&context.codex_home));
+        let line =
+            super::level::status_line(context.active, &super::level::load(&context.codex_home));
+        return match &context.boundary {
+            Some(boundary) => format!("{line}; {}", boundary.summary()),
+            None => line,
+        };
     }
     format!(
         "Requested {}; effective protection unverified (/security)",

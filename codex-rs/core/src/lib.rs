@@ -89,6 +89,8 @@ pub mod sandboxing;
 pub(crate) mod security;
 pub use security::launch_contract::external_agent_contract_armed;
 pub use security::launch_contract::protect_external_agent_launch;
+/// PF-29-S01 protected-mode inventory and activation preflight.
+pub use security::preflight as protected_preflight;
 mod session_prefix;
 mod session_startup_prewarm;
 pub mod skills;
@@ -206,4 +208,6 @@ pub use installation_id::resolve_installation_id;
 pub mod compact;
 pub mod memory_stage_one;
 mod memory_usage;
+#[cfg(unix)]
+mod model_broker_auth;
 pub mod otel_init;

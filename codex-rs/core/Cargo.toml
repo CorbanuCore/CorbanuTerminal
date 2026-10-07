@@ -191,7 +191,6 @@ ignored-paths = [
     # PF-23-S02 registration seams: declared modules that intentionally hold only docs.
     "src/security/aggressive.rs",
     "src/security/confidentiality/mod.rs",
-    "src/security/protected_surface.rs",
     "src/security/recovery.rs",
     "src/security/taint/mod.rs",
     "src/security/transition.rs",

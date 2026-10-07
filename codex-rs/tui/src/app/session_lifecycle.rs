@@ -961,6 +961,12 @@ impl App {
             tui.frame_requester().schedule_frame();
             return Ok(AppRunControl::Continue);
         }
+        if let Some(message) = crate::security::preflight::resume_refusal(&target_session.thread_id)
+        {
+            self.chat_widget.add_error_message(message);
+            tui.frame_requester().schedule_frame();
+            return Ok(AppRunControl::Continue);
+        }
 
         self.refresh_in_memory_config_from_disk_best_effort("resuming a thread")
             .await;

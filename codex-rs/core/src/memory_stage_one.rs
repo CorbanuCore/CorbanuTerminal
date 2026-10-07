@@ -270,7 +270,8 @@ impl StageOneMemoryClient {
             /*concurrent_reasoning_summaries_enabled*/ false,
             /*attestation_provider*/ None,
             config.http_client_factory(),
-        );
+        )
+        .with_broker_model_auth(crate::client::BrokerModelAuthConfig::for_config(&config));
         client.with_stage_one_memory_binding(Arc::clone(&binding))?;
         Ok(Self {
             client,
