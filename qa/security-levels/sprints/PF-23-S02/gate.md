@@ -57,7 +57,9 @@
   (walked without following links, git's own folders skipped) and the folder `core.hooksPath` names (repository,
   `~/.gitconfig`, `~/.config/git/config`; `~/` expanded) are read-only too (Linux: when they exist). Past 512
   folders, 8 levels, or a folder that cannot be read, all of `.git/modules` is read-only (submodule updates then
-  fail under the rules). Not covered: config includes, `~user/`, `GIT_CONFIG_GLOBAL`; a module folder a command
+  fail under the rules); an unreadable folder on the way to `.git` makes that `.git` and those above it read-only,
+  and an unreadable config keeps the `hooksPath` this process read from it before. A module folder holding very
+  many plain files slows every command. Not covered: config includes, `~user/`, `GIT_CONFIG_GLOBAL`; a module folder a command
   creates is protected from the next command on; a new nested `.git` stays with the command-text net (the profile
   cannot deny creating one name anywhere without denying the repository's own).
 - Linux, full-write profiles only: a missing `commondir` is left to the command-text net (an empty placeholder

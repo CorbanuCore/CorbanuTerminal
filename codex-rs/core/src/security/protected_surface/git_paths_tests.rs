@@ -84,6 +84,9 @@ fn pf_23_s02_module_walk_is_bounded_and_does_not_follow_links() {
     // A fake `objects` in an intermediate folder hides nothing below it.
     std::fs::create_dir_all(git.join("modules/libs/objects").as_path()).unwrap();
     assert!(module_paths(&git).contains(&git.join("modules/libs/b/hooks")));
+    // A submodule named like a git folder is still walked.
+    std::fs::create_dir_all(git.join("modules/hooks/hooks").as_path()).unwrap();
+    assert!(module_paths(&git).contains(&git.join("modules/hooks/hooks")));
 
     // A folder that cannot be read closes the whole of `modules`.
     {
@@ -103,4 +106,45 @@ fn pf_23_s02_module_walk_is_bounded_and_does_not_follow_links() {
         std::fs::create_dir_all(git.join(format!("modules/fake/f{n}")).as_path()).unwrap();
     }
     assert_eq!(module_paths(&git), vec![git.join("modules")]);
+}
+
+/// An unreadable workspace folder or `.git` hides nothing: the `.git` becomes
+/// read-only whole, and a `hooksPath` read before still holds.
+#[test]
+fn pf_23_s02_unreadable_repository_fails_closed() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let base = abs(&dir.path().canonicalize().unwrap());
+    let repo = base.join("repo");
+    let git = repo.join(".git");
+    std::fs::create_dir_all(git.join("hooks").as_path()).unwrap();
+    std::fs::write(
+        git.join("config").as_path(),
+        "[core]\n\thooksPath = .husky\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(repo.join(".husky").as_path()).unwrap();
+    let cwd = repo.join("src");
+    std::fs::create_dir_all(cwd.as_path()).unwrap();
+    assert!(git_persistence_paths(&cwd, None).contains(&repo.join(".husky")));
+
+    let lock = |path: &AbsolutePathBuf, mode| {
+        std::fs::set_permissions(path.as_path(), std::fs::Permissions::from_mode(mode)).unwrap()
+    };
+    lock(&git, 0o000);
+    let unreadable = std::fs::read_dir(git.as_path()).is_err();
+    let paths = git_persistence_paths(&cwd, None);
+    lock(&git, 0o755);
+    if unreadable {
+        assert!(paths.contains(&repo.join(".husky")), "{paths:?}");
+    }
+
+    lock(&repo, 0o000);
+    let hidden = std::fs::symlink_metadata(git.as_path()).is_err();
+    let paths = git_persistence_paths(&cwd, None);
+    lock(&repo, 0o755);
+    if hidden {
+        assert!(paths.contains(&git), "{paths:?}");
+        assert!(paths.contains(&base.join(".git")), "{paths:?}");
+    }
 }

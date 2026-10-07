@@ -25,13 +25,29 @@ pub(super) fn git_persistence_paths(
     root: &AbsolutePathBuf,
     user_home: Option<&Path>,
 ) -> Vec<AbsolutePathBuf> {
-    let Some(dot_git) = root
-        .as_path()
-        .ancestors()
-        .map(|folder| folder.join(".git"))
-        .find(|dot_git| std::fs::symlink_metadata(dot_git).is_ok())
-        .and_then(|dot_git| AbsolutePathBuf::from_absolute_path(dot_git).ok())
-    else {
+    let mut found = None;
+    let ancestors: Vec<&Path> = root.as_path().ancestors().collect();
+    for (at, folder) in ancestors.iter().enumerate() {
+        let dot_git = folder.join(".git");
+        match std::fs::symlink_metadata(&dot_git) {
+            Ok(_) => {
+                found = Some(dot_git);
+                break;
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            // A folder made unreadable hides nothing: the `.git` of it and of
+            // every folder above it becomes read-only whole (fail closed).
+            Err(_) => {
+                return ancestors[at..]
+                    .iter()
+                    .filter_map(|folder| {
+                        AbsolutePathBuf::from_absolute_path(folder.join(".git")).ok()
+                    })
+                    .collect();
+            }
+        }
+    }
+    let Some(Ok(dot_git)) = found.map(AbsolutePathBuf::from_absolute_path) else {
         return Vec::new();
     };
     let Some(work_tree) = dot_git.parent() else {
@@ -111,23 +127,15 @@ fn missing(path: &AbsolutePathBuf) -> bool {
         .is_err_and(|err| err.kind() == std::io::ErrorKind::NotFound)
 }
 
-/// Git's own folders inside a git folder; every other child folder is
-/// walked (a submodule `libs/b` lives at `modules/libs/b`).
-const GIT_INTERNAL: &[&str] = &[
-    "objects",
-    "refs",
-    "logs",
-    "info",
-    "hooks",
-    "branches",
-    "lfs",
-    "rr-cache",
-    "worktrees",
-];
+/// Large folders of git's own below `modules` that hold no hooks or config;
+/// every other folder is walked (a submodule `libs/b` lives at
+/// `modules/libs/b`, a submodule's worktrees at `<module>/worktrees/<name>`).
+/// Directly inside `modules` nothing is skipped: those are submodule names.
+const GIT_BULK: &[&str] = &["objects", "refs", "logs", "lfs", "rr-cache"];
 
 /// Every folder below `git_dir/modules`, without following links: its four
 /// entries, whether or not it looks like a git folder (removing `HEAD` or
-/// adding `objects` must not unprotect one). Git's own folders are not
+/// adding `objects` must not unprotect one). Git's bulk folders are not
 /// entered. Past the limits, or when a folder cannot be read, `modules` as a
 /// whole (fail closed).
 fn module_paths(git_dir: &AbsolutePathBuf) -> Vec<AbsolutePathBuf> {
@@ -150,7 +158,7 @@ fn module_paths(git_dir: &AbsolutePathBuf) -> Vec<AbsolutePathBuf> {
                 return closed();
             };
             let name = child.file_name();
-            if !kind.is_dir() || GIT_INTERNAL.iter().any(|internal| name == *internal) {
+            if !kind.is_dir() || (depth > 0 && GIT_BULK.iter().any(|bulk| name == *bulk)) {
                 continue;
             }
             visited += 1;
@@ -173,7 +181,15 @@ fn hooks_path(
     work_tree: &AbsolutePathBuf,
     home: Option<&AbsolutePathBuf>,
 ) -> Option<AbsolutePathBuf> {
-    let text = std::fs::read_to_string(config.as_path()).ok()?;
+    let text = match std::fs::read_to_string(config.as_path()) {
+        Ok(text) => text,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            remember_hooks_path(config, None);
+            return None;
+        }
+        // Made unreadable: what this session read from it before still holds.
+        Err(_) => return remembered_hooks_path(config),
+    };
     let mut in_core = false;
     let mut found = None;
     for line in text.lines() {
@@ -194,15 +210,48 @@ fn hooks_path(
             found = Some(config_value(value));
         }
     }
-    let value = found.filter(|value| !value.is_empty())?;
-    match value.strip_prefix("~/") {
-        Some(rest) => home.map(|home| home.join(rest)),
-        None if value.starts_with('~') => None,
-        None => Some(AbsolutePathBuf::resolve_path_against_base(
-            value,
-            work_tree.as_path(),
-        )),
+    let resolved =
+        found
+            .filter(|value| !value.is_empty())
+            .and_then(|value| match value.strip_prefix("~/") {
+                Some(rest) => home.map(|home| home.join(rest)),
+                None if value.starts_with('~') => None,
+                None => Some(AbsolutePathBuf::resolve_path_against_base(
+                    value,
+                    work_tree.as_path(),
+                )),
+            });
+    remember_hooks_path(config, resolved.clone());
+    resolved
+}
+
+type HooksPaths = std::collections::HashMap<AbsolutePathBuf, AbsolutePathBuf>;
+
+/// The hooks folder each config file named when it was last readable in
+/// this process.
+static HOOKS_PATHS: std::sync::LazyLock<std::sync::Mutex<HooksPaths>> =
+    std::sync::LazyLock::new(Default::default);
+
+fn remember_hooks_path(config: &AbsolutePathBuf, hooks: Option<AbsolutePathBuf>) {
+    let mut paths = HOOKS_PATHS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    match hooks {
+        Some(hooks) => {
+            paths.insert(config.clone(), hooks);
+        }
+        None => {
+            paths.remove(config);
+        }
     }
+}
+
+fn remembered_hooks_path(config: &AbsolutePathBuf) -> Option<AbsolutePathBuf> {
+    HOOKS_PATHS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .get(config)
+        .cloned()
 }
 
 /// A git config value without its comment (`#` or `;` outside quotes) and
