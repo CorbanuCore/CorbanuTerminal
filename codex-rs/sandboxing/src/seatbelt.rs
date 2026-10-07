@@ -469,14 +469,25 @@ fn sandbox_spellings(path: &Path) -> BTreeSet<PathBuf> {
 /// then write `x/fish/config.fish`, then move it back), and removing a
 /// protected symlink would let a new file take its name. Deny unlinking
 /// (which covers rename and remove) of every protected path and every folder
-/// above it, in each spelling. Creating and writing files inside those
-/// folders stays allowed.
+/// above it, in each spelling. Where part of the path does not exist yet,
+/// deny creating its first missing component too, so a folder prepared
+/// elsewhere cannot be renamed into place (`mv x ~/.config`); Linux mounts
+/// the same component read-only. Creating and writing other files inside
+/// those folders stays allowed.
 fn build_seatbelt_rename_guard_policy(
     protected: Vec<AbsolutePathBuf>,
 ) -> (String, Vec<(String, PathBuf)>) {
     let mut guarded = BTreeSet::new();
+    let mut uncreatable = BTreeSet::new();
     for path in protected {
         for spelling in sandbox_spellings(path.as_path()) {
+            if let Some(missing) = spelling
+                .ancestors()
+                .filter(|ancestor| std::fs::symlink_metadata(ancestor).is_err())
+                .last()
+            {
+                uncreatable.insert(missing.to_path_buf());
+            }
             for ancestor in spelling.ancestors() {
                 if ancestor.parent().is_none() {
                     break;
@@ -485,20 +496,30 @@ fn build_seatbelt_rename_guard_policy(
             }
         }
     }
-    let params: Vec<(String, PathBuf)> = guarded
-        .into_iter()
-        .enumerate()
-        .map(|(index, path)| (format!("RENAME_GUARD_{index}"), path))
-        .collect();
-    if params.is_empty() {
-        return (String::new(), Vec::new());
+    let mut params = Vec::new();
+    let mut literals = |prefix: &str, paths: BTreeSet<PathBuf>| {
+        paths
+            .into_iter()
+            .enumerate()
+            .map(|(index, path)| {
+                let key = format!("{prefix}_{index}");
+                let literal = format!("(literal (param \"{key}\"))");
+                params.push((key, path));
+                literal
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    let unlink = literals("RENAME_GUARD", guarded);
+    let create = literals("CREATE_GUARD", uncreatable);
+    let mut policy = Vec::new();
+    if !unlink.is_empty() {
+        policy.push(format!("(deny file-write-unlink {unlink})"));
     }
-    let literals = params
-        .iter()
-        .map(|(key, _)| format!("(literal (param \"{key}\"))"))
-        .collect::<Vec<_>>()
-        .join(" ");
-    (format!("(deny file-write-unlink {literals})"), params)
+    if !create.is_empty() {
+        policy.push(format!("(deny file-write* {create})"));
+    }
+    (policy.join("\n"), params)
 }
 
 fn build_seatbelt_unreadable_glob_policy(

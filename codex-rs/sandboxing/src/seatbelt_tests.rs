@@ -1547,9 +1547,18 @@ fn renaming_a_folder_above_a_protected_path_is_denied() {
         entry(&base.join("secret"), FileSystemAccessMode::Deny),
         entry(&config.join("fish"), FileSystemAccessMode::Read),
         entry(&base.join(".zshrc"), FileSystemAccessMode::Read),
+        // Its parent `local` does not exist yet.
+        entry(&base.join("local/bin"), FileSystemAccessMode::Read),
+        // Its parent `empty` exists and is empty.
+        entry(&base.join("empty/git"), FileSystemAccessMode::Read),
     ]);
+    fs::create_dir_all(base.join("empty")).expect("empty");
     let script = "mv config moved; echo mv=$?; rm .zshrc; echo rm=$?; \
-                  echo new > config/other.txt && echo wrote-other";
+                  echo new > config/other.txt && echo wrote-other; \
+                  mkdir -p prep/bin && echo x > prep/bin/tool; \
+                  mv prep local; echo mv-missing=$?; mkdir local; echo mkdir-missing=$?; \
+                  mkdir -p prep2/git && echo x > prep2/git/config; \
+                  perl -e 'rename(\"prep2\", \"empty\") or exit 1'; echo mv-over-empty=$?";
     let args = create_seatbelt_command_args(CreateSeatbeltCommandArgsParams {
         command: vec!["/bin/sh".to_string(), "-c".to_string(), script.to_string()],
         file_system_sandbox_policy: &policy,
@@ -1571,6 +1580,11 @@ fn renaming_a_folder_above_a_protected_path_is_denied() {
     assert!(stdout.contains("mv=1"), "{stdout}");
     assert!(stdout.contains("rm=1"), "{stdout}");
     assert!(stdout.contains("wrote-other"), "{stdout}");
+    assert!(stdout.contains("mv-missing=1"), "{stdout}");
+    assert!(stdout.contains("mkdir-missing=1"), "{stdout}");
+    assert!(stdout.contains("mv-over-empty=1"), "{stdout}");
+    assert!(!base.join("local").exists());
+    assert!(!base.join("empty/git").exists());
     assert!(config.join("fish/config.fish").exists());
     assert!(base.join(".zshrc").is_symlink());
 }

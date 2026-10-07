@@ -378,3 +378,33 @@ fn pf_23_s02_worktree_hooks_and_symlinked_dotfiles_are_protected() {
     assert!(!policy.can_write_path_with_cwd(&dotfiles.join("zshrc"), &cwd));
     assert!(policy.can_write_path_with_cwd(&cwd.join("src.rs"), &cwd));
 }
+
+/// PF-23-S02 review 2: a session in a subfolder still protects the
+/// repository's hooks and config; a link to a missing target protects the
+/// target's path.
+#[test]
+fn pf_23_s02_enclosing_repo_and_dangling_links_are_protected() {
+    let fx = fixture();
+    let repo = fx.user_home.join("repo");
+    std::fs::create_dir_all(repo.join(".git/hooks")).unwrap();
+    let cwd = repo.join("codex-rs");
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::os::unix::fs::symlink(
+        fx.user_home.join("dotfiles/zshrc"),
+        fx.user_home.join(".zshrc"),
+    )
+    .unwrap();
+    let denials = ReadDenials::collect(&fx.codex_home, Some(&fx.user_home), None, &[abs(&cwd)]);
+    let read_only: Vec<_> = denials.read_only_paths().cloned().collect();
+    for protected in [
+        repo.join(".git/hooks"),
+        repo.join(".git/config"),
+        fx.user_home.join("dotfiles/zshrc"),
+    ] {
+        assert!(
+            read_only.contains(&abs(&protected)),
+            "{}",
+            protected.display()
+        );
+    }
+}

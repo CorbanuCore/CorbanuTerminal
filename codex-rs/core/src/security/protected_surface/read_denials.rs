@@ -131,15 +131,16 @@ impl ReadDenials {
             return denials;
         };
         for entry in CORBANU_READ_ONLY {
-            denials.push_read_only(codex_home.join(entry), keep);
+            denials.push_home_read_only(codex_home.join(entry), keep);
         }
         for root in keep {
             for entry in WORKSPACE_PERSISTENCE {
                 denials.push_read_only(root.join(entry), keep);
             }
-            // A worktree or submodule keeps hooks and config in the git
-            // folder its `.git` file points to (hooks in the common one).
-            for git_dir in linked_git_dirs(root) {
+            // The repository the root is in, found the way git finds it; a
+            // worktree or submodule keeps hooks and config in the git folder
+            // its `.git` file points to (hooks in the common one).
+            for git_dir in enclosing_git_dirs(root) {
                 for entry in ["hooks", "config", "config.worktree"] {
                     denials.push_read_only(git_dir.join(entry), keep);
                 }
@@ -178,7 +179,7 @@ impl ReadDenials {
                 denials.push_fixed(home.join(credential), keep);
             }
             for file in USER_PERSISTENCE {
-                denials.push_read_only(home.join(file), keep);
+                denials.push_home_read_only(home.join(file), keep);
             }
         }
         if let Some(dir) =
@@ -242,6 +243,18 @@ impl ReadDenials {
     /// Linux sandbox cannot bind the link name. A path below a regular file
     /// (`.git` in a worktree) cannot exist and is left out. On macOS the link
     /// name is kept too, so the sandbox also refuses to remove the link.
+    /// A read-only path in a home folder. On Linux a missing one is left out:
+    /// the sandbox would put an empty placeholder at it in the real home for
+    /// as long as the command runs (an empty `~/.bash_profile` hides
+    /// `~/.profile` from the user's own login shells). The command-text net
+    /// still asks before such a file is written.
+    fn push_home_read_only(&mut self, path: AbsolutePathBuf, keep: &[AbsolutePathBuf]) {
+        if cfg!(target_os = "linux") && std::fs::symlink_metadata(path.as_path()).is_err() {
+            return;
+        }
+        self.push_read_only(path, keep);
+    }
+
     fn push_read_only(&mut self, path: AbsolutePathBuf, keep: &[AbsolutePathBuf]) {
         let Some(real) = real_location(&path) else {
             return;
@@ -339,6 +352,18 @@ impl ReadDenials {
 /// `path` with its nearest existing folder resolved, or `None` when that
 /// folder is not a folder (nothing can be created below a file).
 fn real_location(path: &AbsolutePathBuf) -> Option<AbsolutePathBuf> {
+    real_location_within(path, /*hops*/ 8)
+}
+
+fn real_location_within(path: &AbsolutePathBuf, hops: usize) -> Option<AbsolutePathBuf> {
+    // A link whose target does not exist yet: protect the target's path.
+    if let Ok(target) = std::fs::read_link(path.as_path())
+        && std::fs::metadata(path.as_path()).is_err()
+    {
+        let parent = path.as_path().parent()?;
+        let target = AbsolutePathBuf::resolve_path_against_base(target, parent);
+        return real_location_within(&target, hops.checked_sub(1)?);
+    }
     let mut existing = path.as_path();
     let mut tail = Vec::new();
     while std::fs::symlink_metadata(existing).is_err() {
@@ -355,10 +380,28 @@ fn real_location(path: &AbsolutePathBuf) -> Option<AbsolutePathBuf> {
     AbsolutePathBuf::from_absolute_path(real).ok()
 }
 
-/// The git folders a `.git` file in `root` points to: its own, and the
-/// common one holding hooks and the shared config.
-fn linked_git_dirs(root: &AbsolutePathBuf) -> Vec<AbsolutePathBuf> {
-    let Ok(text) = std::fs::read_to_string(root.join(".git").as_path()) else {
+/// The git folders of the repository `root` is in: the nearest `.git` at or
+/// above it; for a `.git` file (worktree, submodule) the folder it points to
+/// and the common one holding hooks and the shared config.
+fn enclosing_git_dirs(root: &AbsolutePathBuf) -> Vec<AbsolutePathBuf> {
+    let Some(dot_git) = root
+        .as_path()
+        .ancestors()
+        .map(|folder| folder.join(".git"))
+        .find(|dot_git| std::fs::symlink_metadata(dot_git).is_ok())
+    else {
+        return Vec::new();
+    };
+    let Ok(dot_git) = AbsolutePathBuf::from_absolute_path(dot_git) else {
+        return Vec::new();
+    };
+    if dot_git.as_path().is_dir() {
+        return vec![dot_git];
+    }
+    let Ok(text) = std::fs::read_to_string(dot_git.as_path()) else {
+        return Vec::new();
+    };
+    let Some(root) = dot_git.parent() else {
         return Vec::new();
     };
     let Some(git_dir) = text
