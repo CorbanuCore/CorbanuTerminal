@@ -1,0 +1,57 @@
+# PF-13-S07 composition test: all protection flags on together, normal task works.
+# The agent can create a file and read it back — no crash, no deadlock, all
+# credential boundary protections armed.
+# Record with:
+#   export CORBANU_TEST_NO_NATIVE_KEYRING=1
+#   python3 scripts/demo_video.py record qa/demos/specs/pf13s07-composition-hello.toml \
+#     --bin "$CARGO_TARGET_DIR/debug/corbanu" --sprint PF-13-S07 --publish
+id = "pf13s07-composition-hello"
+feature = "All credential boundary flags on together: normal coding task works without crash or deadlock"
+expected = "The agent creates hello.txt and reads it back. All flags are armed but the workflow is unaffected."
+model = "glm-5.2"
+provider = "zai"
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[sandbox_workspace_write]
+network_access = true
+
+[features]
+security_levels = true
+isolated_credential_broker = true
+secretless_agent_launch = true
+secret_output_gate = true
+url_destination_policy = true
+protected_mode_preflight = true
+source_envelopes = true
+
+[features.network_proxy]
+enabled = true
+allow_local_binding = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+timeout = 60
+
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Create a file called hello.txt with the text 'Hello from PF-13-S07', then cat it back to me."
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Hello from PF-13-S07"
+timeout = 120
+compress = 3
+
+[[steps]]
+pause = 4.0
