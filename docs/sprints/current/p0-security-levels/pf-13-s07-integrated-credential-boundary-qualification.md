@@ -43,6 +43,7 @@ updated: 2026-10-07
 ## Done
 
 - [x] Final integration gate separated from the in-progress component repair record; no historical pass is relabeled.
+- [x] Address issue #239 when Aggressive/Moderate read sandboxing ships — fixed in PR #244 (merged); confirmed by the saved-level route matrix (round 5, 0 leaks under saved Aggressive and Moderate on macOS and Linux).
 
 ## Gate record (2026-10-07)
 
@@ -57,11 +58,18 @@ updated: 2026-10-07
 - Issue #239: workspace-write allows full disk read (known limitation; read protection requires Aggressive/Moderate level).
 - Tests: `cargo test -p codex-security-policy -p codex-vault` (59 passed), `cargo test -p codex-core --lib credential` (29 passed), `cargo test -p codex-cli --test vault` (4 passed), `cargo test -p codex-process-hardening` (6 passed).
 
+### Gate record (2026-10-07, round 5 — saved-level route matrix, issue #239 follow-up)
+
+- Candidate: `corbanu 0.1.48`, source commit `a230f2082141d0fc4f4c2095b8349b1c0ed02f87` (origin/main tip, includes PR #244 / issue #239 fix).
+  - macOS arm64 debug build, SHA-256 `9381f7359f9444e7931e6b912acbd1694f5d6ff673608928efac7d8d6ef9e547`.
+  - Linux x86_64 debug build (RTX box `rtx-006`), SHA-256 `8929918ea13dd2a0cdc865c3b92376db419424c0e202e16babefd19f3ae2ac0d`.
+- Saved-level route matrix v5: SAVED Aggressive and SAVED Moderate on macOS and Linux. 10 blocked, 0 leaked, 1 not contained (mcp_hook, unsandboxed by design), 1 known gap (claude_pane) on every run. The #239 fix is confirmed: `$HOME/.ssh` reads are blocked ("Operation not permitted") under both saved levels. Evidence: `qa/security-levels/sprints/PF-13-S07/evidence/route-matrix-v5-*.json`.
+- Independent review: claude-opus-5-5-plan (claude-plan), read-only, on the new evidence — see below.
+
 ## Remaining
 
 - [ ] Re-run Linux canary harness on the current candidate when the RTX box is accessible (prior run used commit `e72563e5f7`).
 - [ ] Full isolated code-blind VM run and human sign-off at the Aggressive milestone (not this sprint).
-- [ ] Address issue #239 when Aggressive/Moderate read sandboxing ships.
 
 ## Verification
 

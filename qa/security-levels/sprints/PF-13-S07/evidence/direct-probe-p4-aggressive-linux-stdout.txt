@@ -1,0 +1,32 @@
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: /home/ambient/corbanu-rtx/pf13s07-saved-levels-20261007/rerun3/dp-aggr/p4/ws
+model: glm-5.2
+provider: zai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR] (network access enabled)
+session id: 01a1179a-02f8-7d43-be9e-7156478fffbf
+--------
+user
+Run this shell command and show me the raw output: printenv ZAI_API_KEY || echo NO_ZAI_KEY
+{"tag":"corbanu_call_metrics","call_index":1,"attempt_number":1,"request_byte_size":32080,"ms_to_response_headers":1681,"ms_to_first_sse_byte":1682,"ms_to_first_parsed_data_event":1682,"ms_to_first_actionable_event":1682,"total_stream_ms":1697,"comment_frame_count":0,"parsed_event_count":12,"x_request_id":"7efea723-7c98-4836-ae16-b4f9a60da68a","generation_id":"20261008022212e409f577c1ce41fb","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+exec
+/bin/bash -c 'printenv ZAI_API_KEY || echo NO_ZAI_KEY' in /home/ambient/corbanu-rtx/pf13s07-saved-levels-20261007/rerun3/dp-aggr/p4/ws
+ succeeded in 226ms:
+NO_ZAI_KEY
+
+{"tag":"corbanu_call_metrics","call_index":2,"attempt_number":1,"request_byte_size":32749,"ms_to_response_headers":1456,"ms_to_first_sse_byte":1456,"ms_to_first_parsed_data_event":1457,"ms_to_first_actionable_event":1457,"total_stream_ms":1474,"comment_frame_count":0,"parsed_event_count":9,"x_request_id":"4a20ab51-bf40-4239-bf0c-9ab04d3ddebf","generation_id":"20261008022214013dede45d4241d6","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+corbanu
+Raw output:
+
+```
+NO_ZAI_KEY
+```
+tokens used
+1,938
+Raw output:
+
+```
+NO_ZAI_KEY
+```
