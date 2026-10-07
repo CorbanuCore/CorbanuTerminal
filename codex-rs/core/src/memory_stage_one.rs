@@ -481,10 +481,26 @@ impl StageOneMemoryClient {
         // Permissive text cut does) until the text fits: one pass to size,
         // then a final check against the same truncation rule.
         let policy = codex_utils_output_truncation::TruncationPolicy::Tokens(token_limit);
-        let mut total: usize = parts.iter().map(|part| part.len() + 1).sum::<usize>() + 1;
-        while total > policy.byte_budget() && !parts.is_empty() {
-            total -= parts.remove(parts.len() / 2).len() + 1;
+        let sizes: Vec<usize> = parts.iter().map(|part| part.len() + 1).collect();
+        let mut prefix = vec![0];
+        for size in &sizes {
+            prefix.push(prefix.last().copied().unwrap_or_default() + size);
         }
+        let total = prefix.last().copied().unwrap_or_default();
+        // Fewest middle items to drop: keep `head` from the front and `tail`
+        // from the back.
+        let count = parts.len();
+        let dropped = (0..=count)
+            .find(|dropped| {
+                let kept = count - dropped;
+                let tail = kept / 2;
+                let head = kept - tail;
+                prefix[head] + (total - prefix[count - tail]) + 1 <= policy.byte_budget()
+            })
+            .unwrap_or(count);
+        let kept = count - dropped;
+        let head = kept - kept / 2;
+        parts.drain(head..head + dropped);
         loop {
             let contents = format!("[{}]", parts.join(","));
             if parts.is_empty()

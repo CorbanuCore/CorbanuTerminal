@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-23-S01"
 title: "Moderate ingress and disclosure enforcement"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-23"
 execution_order: 40
@@ -78,23 +78,21 @@ All behind `source_envelopes` with Moderate/Aggressive; flag off, Permissive and
 
 ## Remaining
 
-- [ ] Slices 2-3 gate (tests, Linux clippy, GLM 5.2 videos, Opus review) and merge; then archive.
-
-Moved: Aggressive grants lifting denials, write/action gaps of the command-text net and processes started before
-untrusted content (sandbox fixed at spawn; typing still judged) to PF-23-S02; consolidation, Aggressive stage one
-and the level a source session ran under to PF-23-S03. Known limits: external sandboxes and remote exec-server
-environments take no extra rules (paths are this host's); where no sandbox can start (Linux without bubblewrap,
-Windows unelevated) tainted full-access commands and file tools fail closed; extra permissions a human grants a
-command can still open a path inside a denial (Aggressive turns those grants off); pre-existing hard links; MCP servers, hooks and notify run outside the
-sandbox; the shell snapshot stays readable. Findings: Chat Completions and Anthropic wires drop namespace (MCP)
-tools; GLM 5.2 wraps stage-one JSON in a code fence, so extraction fails at every level.
+Nothing in this sprint. Moved: Aggressive grants lifting denials, write/action gaps of the command-text net,
+processes started before untrusted content, and the Codex Apps upload check-then-read race (read through the
+protected sandbox before the flag is turned on) to [PF-23-S02](../../current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md);
+consolidation, Aggressive stage one and the level a source session ran under to
+[PF-23-S03](../../current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md).
+Known limits and product findings: [slices 2-3 gate](../../../../qa/security-levels/sprints/PF-23-S01/slices-2-3-gate.md#known-limits-moved-or-open).
 
 ## Verification
 
-- [ ] Per slice: `just fix -p codex-core -p codex-memories-write`, `just fmt`, `just test -p codex-core pf_23_s01`,
-  `pf_30_s0`, `just test -p codex-memories-write`, full `just test -p codex-core`, Linux clippy on the RTX box,
-  GLM 5.2 videos, one Opus 5.5 High review.
+- [x] Per slice: `just fix -p codex-core -p codex-memories-write`, `just fmt`, focused `pf_23_s01`,
+  `memory_stage_one`, `pf_30_s0`, `just test -p codex-memories-write`, full `just test -p codex-core`, Linux clippy
+  on the RTX box, GLM 5.2 videos, Opus 5.5 High review (slices 2-3: three rounds, APPROVE).
 
 ## Exit evidence
 
-- [ ] Gates under `qa/security-levels/sprints/PF-23-S01/`, videos in `qa/demos/index/PF-23-S01.md`; archived.
+- [x] Gates under `qa/security-levels/sprints/PF-23-S01/` ([slice 1](../../../../qa/security-levels/sprints/PF-23-S01/slice-1-gate.md),
+  [slices 2-3](../../../../qa/security-levels/sprints/PF-23-S01/slices-2-3-gate.md)); videos in
+  [qa/demos/index/PF-23-S01.md](../../../../qa/demos/index/PF-23-S01.md); record archived.

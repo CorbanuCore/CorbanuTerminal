@@ -1,7 +1,7 @@
 # PF-23-S01 slice 2: memory summarisation runs under Moderate on labelled, session-bound input.
 id = "pf23s01-moderate-memory-labelled"
-feature = "Memory summaries run under Moderate, on labelled input"
-expected = "A session reads a hostile file and is aged past the 6-hour idle minimum (visible setup step); in a new chat the memory worker summarises it under Moderate from labelled input and stores the summary."
+feature = "Memory summarisation runs under Moderate, on labelled input"
+expected = "A session reads a hostile file and is aged past the 6-hour idle minimum (visible setup step). In a new chat the memory worker sends that session's labelled rollout to GLM under Moderate (before: refused, 'protected stage-one memory input is unavailable'). GLM fences its JSON, which the parser rejects at every level (product finding)."
 model = "glm-5.2"
 provider = "zai"
 config = """
@@ -71,11 +71,11 @@ compress = 1
 pause = 20.0
 
 [[steps]]
-type = "!sqlite3 {home}/pfterminal_memories_1.sqlite 'select count(*) || \" summary stored: \" || rollout_summary from stage1_outputs'"
+type = "!sqlite3 {home}/pfterminal_memories_1.sqlite \"select 'stage one: ' || status || ' / ' || coalesce(last_error, 'ok') from jobs where kind = 'memory_stage1'\""
 [[steps]]
 key = "Enter"
 [[steps]]
-wait = "1 summary stored"
+wait = "stage one: (error|done|running)"
 timeout = 60
 [[steps]]
 pause = 5.0

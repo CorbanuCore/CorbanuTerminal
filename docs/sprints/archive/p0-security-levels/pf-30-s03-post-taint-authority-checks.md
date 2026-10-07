@@ -69,7 +69,7 @@ updated: 2026-10-06
 ## Remaining
 
 Nothing. The milestone VM run and human sign-off happen when Moderate ships (program milestone). These items were
-moved to [PF-23-S01](../../current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md), which owns typed protected
+moved to [PF-23-S01](pf-23-s01-moderate-ingress-and-disclosure-enforcement.md), which owns typed protected
 surfaces:
 
 - MCP tool calls, `write_stdin` into running processes and code mode, which do not pass the shared approval seam.
