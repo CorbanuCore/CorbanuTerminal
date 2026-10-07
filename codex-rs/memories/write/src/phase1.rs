@@ -66,6 +66,29 @@ struct StageOneOutput {
     pub(crate) rollout_slug: Option<String>,
 }
 
+/// Parses the stage-one answer. Some providers (GLM) wrap the JSON in one
+/// Markdown code fence despite the output schema, so exactly one fenced block
+/// tagged `json` or untagged is also accepted. Nothing else is loosened.
+fn parse_stage_one_output(text: &str) -> serde_json::Result<StageOneOutput> {
+    match serde_json::from_str(text) {
+        Ok(output) => Ok(output),
+        Err(err) => match single_fenced_json_block(text) {
+            Some(inner) => serde_json::from_str(inner),
+            None => Err(err),
+        },
+    }
+}
+
+fn single_fenced_json_block(text: &str) -> Option<&str> {
+    let rest = text.trim().strip_prefix("```")?;
+    let (info, body) = rest.split_once('\n')?;
+    if !matches!(info.trim(), "" | "json") {
+        return None;
+    }
+    // A second block, or prose after the fence, is not JSON: serde rejects it.
+    body.trim_end().strip_suffix("```")
+}
+
 /// Runs memory phase 1 in strict step order:
 /// 1) claim eligible rollout jobs
 /// 2) build metrics context and refresh each job's host routing
@@ -404,7 +427,7 @@ mod job {
             )
             .await?;
 
-        let mut output: StageOneOutput = serde_json::from_str(&result)?;
+        let mut output = parse_stage_one_output(&result)?;
         output.raw_memory = redact_secrets(output.raw_memory);
         output.rollout_summary = redact_secrets(output.rollout_summary);
         output.rollout_slug = output.rollout_slug.map(redact_secrets);
@@ -762,6 +785,50 @@ mod tests {
     use codex_protocol::AgentPath;
     use codex_protocol::protocol::InterAgentCommunication;
     use pretty_assertions::assert_eq;
+
+    #[test]
+    fn parses_stage_one_output_plain_or_in_one_json_fence() {
+        let json = r#"{"raw_memory":"m","rollout_summary":"s","rollout_slug":"x"}"#;
+        for text in [
+            json.to_string(),
+            format!("```json\n{json}\n```"),
+            format!("```\n{json}\n```"),
+            format!("  \n```json\n{json}\n```\n"),
+            format!("```json\r\n{json}\r\n```\r\n"),
+        ] {
+            let output =
+                parse_stage_one_output(&text).unwrap_or_else(|err| panic!("{text}: {err}"));
+            assert_eq!(
+                (output.raw_memory.as_str(), output.rollout_summary.as_str()),
+                ("m", "s")
+            );
+            assert_eq!(output.rollout_slug.as_deref(), Some("x"));
+        }
+        // A Markdown code block inside a value is kept.
+        let text =
+            "```json\n{\"raw_memory\":\"a ```rust\\nx\\n``` b\",\"rollout_summary\":\"s\"}\n```";
+        let output = parse_stage_one_output(text).unwrap_or_else(|err| panic!("{text}: {err}"));
+        assert_eq!(output.raw_memory, "a ```rust\nx\n``` b");
+    }
+
+    #[test]
+    fn rejects_stage_one_output_outside_one_json_fence() {
+        let json = r#"{"raw_memory":"m","rollout_summary":"s"}"#;
+        for text in [
+            format!("Here you go:\n```json\n{json}\n```"),
+            format!("```json\n{json}\n```\nDone."),
+            format!("```rust\n{json}\n```"),
+            format!("```json {json} ```"),
+            format!("```json\n{json}\n```\n```json\n{json}\n```"),
+            format!("```json\n{json}"),
+            r#"```json
+{"raw_memory":"m","rollout_summary":"s","extra":1}
+```"#
+                .to_string(),
+        ] {
+            assert!(parse_stage_one_output(&text).is_err(), "accepted: {text}");
+        }
+    }
 
     #[test]
     fn serializes_memory_rollout_with_agents_removed_but_environment_kept() {
