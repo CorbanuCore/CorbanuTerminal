@@ -451,7 +451,8 @@ fn git_persistence_paths(root: &AbsolutePathBuf) -> Vec<AbsolutePathBuf> {
     }
     // PF-23-S02 follow-up: submodule git folders (`.git/modules/*`, nested
     // as deep as submodules go) hold their own hooks and config.
-    let mut pending: Vec<AbsolutePathBuf> = git_dirs.iter().map(|dir| dir.join("modules")).collect();
+    let mut pending: Vec<AbsolutePathBuf> =
+        git_dirs.iter().map(|dir| dir.join("modules")).collect();
     let mut found = 0;
     while let Some(modules) = pending.pop() {
         let Ok(children) = std::fs::read_dir(modules.as_path()) else {
