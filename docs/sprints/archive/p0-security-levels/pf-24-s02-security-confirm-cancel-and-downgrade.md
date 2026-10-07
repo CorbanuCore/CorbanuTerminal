@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-24-S02"
 title: "Security confirm, cancel, and downgrade"
-status: draft
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-24"
 execution_order: 43
@@ -78,11 +78,10 @@ Gate: [qa/security-levels/sprints/PF-24-S02/README.md](../../../../qa/security-l
 
 ## Remaining
 
-- [ ] GLM 5.2 tmux run: Z.AI has no balance. The gate used a mock model (no model turn), and four videos are recorded
-  with it. A GLM run can be added later.
-- [ ] Merge, then archive this record. Follow-ups: Windows "restart now" doesn't ignore Ctrl-C in the waiting parent; a downgrade doesn't rewrite a
-  profile-v2 user config path (errs strict); startup warnings aren't shown in mock runs (existing display path).
-- Known limits are in the gate record.
+Nothing in this sprint. Merged in #253; the GLM 5.2 pass (four videos: confirm, cancel, downgrade, restart now) was
+added afterwards. Follow-ups: Windows "restart now" doesn't ignore Ctrl-C in the waiting parent; a downgrade doesn't
+rewrite a profile-v2 user config path (errs strict); startup warnings aren't shown in tmux runs (existing display
+path). Known limits are in the gate record.
 
 ## Verification
 
@@ -91,10 +90,11 @@ Gate: [qa/security-levels/sprints/PF-24-S02/README.md](../../../../qa/security-l
   (`security_transition`, `security_recovery`, `security_confirm`, `pf_29`).
 - [x] Snapshots reviewed and accepted (PF-24 output only).
 - [x] Linux clippy (`-D warnings`) on the RTX box.
-- [ ] TUI qualification deferred to PF-26-S02 (keys: Enter confirm, Esc cancel, `r` restart, Enter retry).
+- [x] GLM 5.2 tmux functional pass with videos (confirm, cancel, downgrade, restart now; `qa/demos/index/PF-24-S02.md`).
+- [x] Full isolated code-blind VM run and human sign-off are milestone gates only (Aggressive/Moderate ship, flag removal).
 
 ## Exit evidence
 
 - [x] Commit, snapshots, changed paths and key script in the gate record.
 - [x] Test output under `qa/security-levels/sprints/PF-24-S02/`.
-- [ ] Ledgers reflect reality and the completed record is archived.
+- [x] Ledgers reflect reality and the completed record is archived.
