@@ -38,8 +38,12 @@ fn offer() -> GrantOffer {
 }
 
 fn request() -> ApprovalRequest {
+    request_in(thread())
+}
+
+fn request_in(thread_id: ThreadId) -> ApprovalRequest {
     ApprovalRequest::Exec(ExecApprovalRequest {
-        thread_id: thread(),
+        thread_id,
         thread_label: None,
         id: "call-1".to_string(),
         environment_id: None,
@@ -66,11 +70,19 @@ fn overlay(
     offered: Option<GrantOffer>,
     security_levels: bool,
 ) -> (ApprovalOverlay, UnboundedReceiver<AppEvent>) {
+    overlay_for(request(), offered, security_levels)
+}
+
+fn overlay_for(
+    request: ApprovalRequest,
+    offered: Option<GrantOffer>,
+    security_levels: bool,
+) -> (ApprovalOverlay, UnboundedReceiver<AppEvent>) {
     TEST_OFFER.with(|slot| *slot.borrow_mut() = offered);
     let (tx, rx) = unbounded_channel::<AppEvent>();
     let keymap = crate::keymap::RuntimeKeymap::defaults();
     let view = ApprovalOverlay::new(
-        request(),
+        request,
         AppEventSender::new(tx),
         features(security_levels),
         keymap.approval,
@@ -151,8 +163,11 @@ fn pf_25_s01_grant_review_shows_exact_scope() {
 #[test]
 fn pf_25_s01_esc_returns_to_the_approval() {
     let (mut view, mut rx) = overlay(Some(offer()), true);
+    assert!(!view.prefer_esc_to_handle_key_event());
     key(&mut view, KeyCode::Char('g'));
     key(&mut view, KeyCode::Enter);
+    // The pane hands Esc to the review instead of cancelling the request.
+    assert!(view.prefer_esc_to_handle_key_event());
     key(&mut view, KeyCode::Esc);
     assert!(view.grant_review.is_none());
     assert!(!view.is_complete());
@@ -173,6 +188,8 @@ fn pf_25_s01_unknown_offer_is_refused_visibly() {
     let (mut view, mut rx) = overlay(Some(offer()), true);
     key(&mut view, KeyCode::Char('g'));
     key(&mut view, KeyCode::Enter);
+    render(&view, 100);
+    key(&mut view, KeyCode::Down);
     key(&mut view, KeyCode::Enter);
     assert!(view.grant_review.is_some());
     assert!(!view.is_complete());
@@ -186,9 +203,188 @@ fn pf_25_s01_review_ignores_other_keys() {
     let (mut view, mut rx) = overlay(Some(offer()), true);
     key(&mut view, KeyCode::Char('g'));
     key(&mut view, KeyCode::Enter);
-    for code in [KeyCode::Char('y'), KeyCode::Char('n'), KeyCode::Down] {
+    for code in [KeyCode::Char('y'), KeyCode::Char('n'), KeyCode::Char('g')] {
         key(&mut view, code);
     }
     assert!(view.grant_review.is_some());
     assert_eq!(exec_decisions(&mut rx), Vec::new());
+}
+
+/// Through the pane, as in the terminal: Esc in the review goes back to the
+/// approval instead of declining the command.
+#[test]
+fn pf_25_s01_pane_esc_in_review_keeps_the_request() {
+    use crate::bottom_pane::BottomPane;
+    use crate::bottom_pane::BottomPaneParams;
+    TEST_OFFER.with(|slot| *slot.borrow_mut() = Some(offer()));
+    let (tx, mut rx) = unbounded_channel::<AppEvent>();
+    let mut pane = BottomPane::new(BottomPaneParams {
+        app_event_tx: AppEventSender::new(tx),
+        frame_requester: crate::tui::FrameRequester::test_dummy(),
+        has_input_focus: true,
+        enhanced_keys_supported: false,
+        placeholder_text: "Ask".to_string(),
+        disable_paste_burst: true,
+        animations_enabled: true,
+        skills: Some(Vec::new()),
+    });
+    pane.push_approval_request(request(), &features(/*security_levels*/ true));
+    for code in [KeyCode::Char('g'), KeyCode::Enter, KeyCode::Esc] {
+        pane.handle_key_event(KeyEvent::new(code, KeyModifiers::NONE));
+    }
+    assert!(pane.has_active_view());
+    assert_eq!(exec_decisions(&mut rx), Vec::new());
+    // A second Esc, on the approval itself, declines as before.
+    pane.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!(
+        exec_decisions(&mut rx),
+        vec![CommandExecutionApprovalDecision::Cancel]
+    );
+}
+
+/// A double or held Enter cannot grant: the review opens on "Back", so the
+/// second Enter goes back, and the approval then needs a fresh choice.
+#[test]
+fn pf_25_s01_double_enter_grants_nothing() {
+    let (mut view, mut rx) = overlay(Some(offer()), true);
+    key(&mut view, KeyCode::Char('g'));
+    for _ in 0..4 {
+        key(&mut view, KeyCode::Enter);
+    }
+    assert!(view.grant_review.is_none());
+    assert!(!view.is_complete());
+    assert_eq!(exec_decisions(&mut rx), Vec::new());
+}
+
+/// With Core's real offer: "Grant and run" records the choice on the offer
+/// and approves the command; u records "until it expires".
+#[test]
+fn pf_25_s01_grant_records_the_choice_and_approves() {
+    use crate::legacy_core::security_grant::GrantUses;
+    use crate::legacy_core::security_grant::open_test_offer;
+    for (toggle, uses) in [(false, GrantUses::Once), (true, GrantUses::UntilExpiry)] {
+        let thread = ThreadId::new();
+        let offer = open_test_offer(
+            thread,
+            "call-1",
+            vec!["cat".to_string(), "../home/team-notes.txt".to_string()],
+        );
+        let (mut view, mut rx) = overlay_for(
+            request_in(thread),
+            /*offered*/ None,
+            /*security_levels*/ true,
+        );
+        key(&mut view, KeyCode::Char('g'));
+        key(&mut view, KeyCode::Enter);
+        if toggle {
+            key(&mut view, KeyCode::Char('u'));
+        }
+        render(&view, 100);
+        key(&mut view, KeyCode::Down);
+        key(&mut view, KeyCode::Enter);
+        assert_eq!(offer.confirmed_uses(), Some(uses));
+        assert!(view.is_complete());
+        let mut granted = false;
+        let mut decisions = Vec::new();
+        while let Ok(event) = rx.try_recv() {
+            match event {
+                AppEvent::InsertHistoryCell(cell) => {
+                    granted |= cell
+                        .display_lines(200)
+                        .iter()
+                        .any(|line| line.to_string().contains("You granted"));
+                }
+                AppEvent::SubmitThreadOp {
+                    op: Op::ExecApproval { decision, .. },
+                    ..
+                } => decisions.push(decision),
+                _ => {}
+            }
+        }
+        assert!(granted);
+        assert_eq!(decisions, vec![CommandExecutionApprovalDecision::Accept]);
+    }
+}
+
+/// A review cut off by a short pane cannot grant.
+#[test]
+fn pf_25_s01_clipped_review_cannot_grant() {
+    let (mut view, mut rx) = overlay(Some(offer()), true);
+    key(&mut view, KeyCode::Char('g'));
+    key(&mut view, KeyCode::Enter);
+    let mut buf = Buffer::empty(Rect::new(0, 0, 100, 8));
+    view.render(Rect::new(0, 0, 100, 8), &mut buf);
+    key(&mut view, KeyCode::Down);
+    key(&mut view, KeyCode::Enter);
+    assert!(view.grant_review.is_some());
+    assert_eq!(exec_decisions(&mut rx), Vec::new());
+    assert!(render(&view, 100).contains("does not fit on screen"));
+}
+
+/// The request answered elsewhere while the review is open closes it;
+/// Ctrl+C in the review cancels the request.
+#[test]
+fn pf_25_s01_review_follows_the_request() {
+    let (mut view, mut rx) = overlay(Some(offer()), true);
+    key(&mut view, KeyCode::Char('g'));
+    key(&mut view, KeyCode::Enter);
+    assert!(
+        view.dismiss_app_server_request(&ResolvedAppServerRequest::ExecApproval {
+            id: "call-1".to_string(),
+        })
+    );
+    assert!(view.is_complete());
+    assert_eq!(exec_decisions(&mut rx), Vec::new());
+
+    let (mut view, mut rx) = overlay(Some(offer()), true);
+    key(&mut view, KeyCode::Char('g'));
+    key(&mut view, KeyCode::Enter);
+    assert_eq!(view.on_ctrl_c(), CancellationEvent::Handled);
+    assert_eq!(
+        exec_decisions(&mut rx),
+        vec![CommandExecutionApprovalDecision::Cancel]
+    );
+}
+
+/// No option when the offer is for another command, or the approval cannot
+/// be accepted.
+#[test]
+fn pf_25_s01_no_option_for_another_command_or_without_accept() {
+    let mut other = offer();
+    other.command = vec!["cat".to_string(), "../home/other.txt".to_string()];
+    let (view, _rx) = overlay(Some(other), true);
+    assert!(
+        !view
+            .options
+            .iter()
+            .any(|option| matches!(option.decision, ApprovalDecision::SecurityGrant))
+    );
+
+    let ApprovalRequest::Exec(mut no_accept) = request() else {
+        unreachable!()
+    };
+    no_accept.available_decisions = vec![CommandExecutionApprovalDecision::Cancel];
+    let (view, _rx) = overlay_for(ApprovalRequest::Exec(no_accept), Some(offer()), true);
+    assert!(
+        !view
+            .options
+            .iter()
+            .any(|option| matches!(option.decision, ApprovalDecision::SecurityGrant))
+    );
+}
+
+/// A command re-split from one string still matches Core's copy.
+#[test]
+fn pf_25_s01_same_command_accepts_the_joined_form() {
+    let command = vec![
+        "/bin/zsh".to_string(),
+        "-lc".to_string(),
+        "cat a b".to_string(),
+    ];
+    assert!(same_command(&command, &command));
+    assert!(same_command(
+        &command,
+        &["/bin/zsh -lc 'cat a b'".to_string()]
+    ));
+    assert!(!same_command(&command, &["cat".to_string()]));
 }

@@ -343,6 +343,11 @@ impl ToolOrchestrator {
             }
         }
 
+        // The approval came back approved (a refusal returned above): the
+        // grant the person confirmed for it, if any (PF-25-S01).
+        let confirmed_grant = grant_offer
+            .as_ref()
+            .and_then(crate::security::grant_offer::OfferGuard::take_confirmed);
         drop(grant_offer);
 
         // PF-23-S01 slice 3: after untrusted content the sandbox itself denies
@@ -362,6 +367,7 @@ impl ToolOrchestrator {
             grant_operation
                 .as_ref()
                 .map(|(operation, _)| operation.as_str()),
+            confirmed_grant,
             turn_cwd,
             &materialized_workspace_roots,
             permission_profile,
@@ -877,10 +883,12 @@ fn aggressive_grant_offer(
 /// this exact command (`security::aggressive`). Lifting only leaves these rules out: every
 /// denial of the profile itself stays. An external sandbox cannot take the
 /// rules and keeps its own.
+#[allow(clippy::too_many_arguments)]
 fn post_taint_read_denials(
     tool_ctx: &ToolCtx,
     human_approved_at: Option<u64>,
     grant_operation: Option<&str>,
+    confirmed_grant: Option<crate::security::grant_offer::Confirmed>,
     cwd: codex_utils_absolute_path::AbsolutePathBuf,
     workspace_roots: &[codex_utils_absolute_path::AbsolutePathBuf],
     exec_server: &codex_protocol::models::PermissionProfile,
@@ -906,6 +914,31 @@ fn post_taint_read_denials(
             "protected-path rules lifted by the human approval of this command"
         );
         return None;
+    }
+    if let (Some(operation), Some(confirmed)) = (grant_operation, confirmed_grant) {
+        match crate::security::grant_offer::apply(
+            thread,
+            &state,
+            confirmed,
+            operation,
+            aggressive::now_unix_seconds(),
+        ) {
+            Ok(grant_id) => {
+                tracing::info!(
+                    target: "codex_core::security::tainted_action",
+                    grant_id = grant_id.as_str(),
+                    call_id = %tool_ctx.call_id,
+                    "protected-path rules lifted by the grant the human confirmed for this command"
+                );
+                return None;
+            }
+            Err(reason) => tracing::warn!(
+                target: "codex_core::security::tainted_action",
+                call_id = %tool_ctx.call_id,
+                reason,
+                "the confirmed grant does not apply; the rules stay"
+            ),
+        }
     }
     if let Some(operation) = grant_operation
         && let Some(grant_id) = aggressive::admit(

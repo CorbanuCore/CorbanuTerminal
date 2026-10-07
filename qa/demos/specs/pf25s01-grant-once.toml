@@ -1,7 +1,7 @@
 # PF-25-S01: Grant one run of a denied command (GLM 5.2).
 id = "pf25s01-grant-once"
 feature = "Grant one run of a denied command"
-expected = "Under Aggressive, GLM's read of a file in the hidden Corbanu home asks for approval. g opens the grant review (agent, session, action, resource, command, folder, digest, limit, expiry, what stays denied); Enter grants one run and the read works. Asked again, the plain approval y runs it with the rules and it gets Operation not permitted."
+expected = "Under Aggressive, GLM's read of a file in the hidden Corbanu home asks for approval. g opens the grant review (agent, session, action, resource, command, folder, digest, limit, expiry, what stays denied); Down to Grant and run, then Enter, grants one run and the read works. Asked again, the plain approval y runs it with the rules and it gets Operation not permitted."
 model = "glm-5.2"
 provider = "zai"
 config = """
@@ -69,6 +69,12 @@ key = "Enter"
 wait = "Grant this command\\?[\\s\\S]*Still denied"
 [[steps]]
 pause = 4.0
+[[steps]]
+key = "Down"
+[[steps]]
+wait = "› Grant and run"
+[[steps]]
+pause = 1.5
 [[steps]]
 key = "Enter"
 [[steps]]
