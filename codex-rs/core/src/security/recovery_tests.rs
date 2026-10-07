@@ -36,7 +36,7 @@ fn revoked(kill: bool) -> RevocationState {
 
 fn save(home: &std::path::Path, state: DurableSecurityState) {
     HomeTransitionStore::new(home)
-        .update(/*lowers_level*/ false, &mut |_| Ok(state.clone()))
+        .update(TransitionWrite::Level, &mut |_| Ok(state.clone()))
         .unwrap();
 }
 
@@ -165,7 +165,7 @@ fn security_recovery_downgrade_without_config_keeps_the_stricter_level() {
         DurableSecurityState::new(SecurityLevel::Aggressive, RevocationState::new()),
     );
     let result =
-        HomeTransitionStore::new(home.path()).update(/*lowers_level*/ true, &mut |_| {
+        HomeTransitionStore::new(home.path()).update(TransitionWrite::Downgrade, &mut |_| {
             Ok(DurableSecurityState::new(
                 SecurityLevel::Permissive,
                 RevocationState::new(),
@@ -175,8 +175,37 @@ fn security_recovery_downgrade_without_config_keeps_the_stricter_level() {
         matches!(&result, Err(super::super::transition::TransitionError::Persist(reason)) if reason.contains("config.toml")),
         "{result:?}"
     );
+    // The stored Aggressive is put back: nothing changes at the next start.
     assert_eq!(
-        recover(home.path(), SecurityLevel::Aggressive).level,
+        recover(home.path(), SecurityLevel::Permissive).level,
         SecurityLevel::Aggressive
+    );
+}
+
+/// A corrupt file is repaired only by a level the human confirms, never by
+/// a revocation.
+#[test]
+fn security_recovery_only_a_confirmed_level_repairs_a_corrupt_file() {
+    let home = TempDir::new().unwrap();
+    std::fs::write(home.path().join(STATE_FILE), "{").unwrap();
+    let store = HomeTransitionStore::new(home.path());
+    let state = DurableSecurityState::new(SecurityLevel::Permissive, RevocationState::new());
+    let refused = store.update(TransitionWrite::Revocation, &mut |_| Ok(state.clone()));
+    assert!(
+        matches!(&refused, Err(super::super::transition::TransitionError::Persist(reason)) if reason.contains("confirm a level")),
+        "{refused:?}"
+    );
+    assert!(
+        recover(home.path(), SecurityLevel::Permissive)
+            .unreadable
+            .is_some()
+    );
+    store
+        .update(TransitionWrite::Level, &mut |_| Ok(state.clone()))
+        .unwrap();
+    assert!(
+        recover(home.path(), SecurityLevel::Permissive)
+            .unreadable
+            .is_none()
     );
 }

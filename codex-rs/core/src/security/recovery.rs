@@ -142,6 +142,19 @@ fn load(codex_home: &Path) -> Result<Option<DurableSecurityState>, LoadError> {
     Ok(Some(state))
 }
 
+/// What a transition writes, which decides what the store may touch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TransitionWrite {
+    /// Revocations or the kill switch: no level of its own, and a corrupt
+    /// file is left for a human to repair with a level.
+    Revocation,
+    /// A level the human chose (also repairs a corrupt file).
+    Level,
+    /// A lower level: the user's `config.toml` must follow for the next
+    /// start to see it.
+    Downgrade,
+}
+
 /// Where a transition is made durable before it takes effect.
 pub(crate) trait TransitionStore {
     /// The Corbanu home, when the store is one.
@@ -150,11 +163,10 @@ pub(crate) trait TransitionStore {
     /// Under one lock: read the stored state (`None` when absent or
     /// corrupt), let `merge` build the next one from it, and save that. A
     /// `merge` error writes nothing; a read or save error is
-    /// [`TransitionError::Persist`]. `lowers_level` also makes a confirmed
-    /// downgrade reach the configured level.
+    /// [`TransitionError::Persist`].
     fn update(
         &self,
-        lowers_level: bool,
+        write: TransitionWrite,
         merge: &mut dyn FnMut(
             Option<DurableSecurityState>,
         ) -> Result<DurableSecurityState, TransitionError>,
@@ -187,7 +199,7 @@ impl TransitionStore for HomeTransitionStore {
 
     fn update(
         &self,
-        lowers_level: bool,
+        write: TransitionWrite,
         merge: &mut dyn FnMut(
             Option<DurableSecurityState>,
         ) -> Result<DurableSecurityState, TransitionError>,
@@ -220,10 +232,16 @@ impl TransitionStore for HomeTransitionStore {
         }
         let stored = match load(&self.codex_home) {
             Ok(stored) => stored,
-            // A confirmed transition repairs a corrupt file.
+            // A level the human confirms repairs a corrupt file.
+            Err(LoadError::Corrupt(reason)) if write == TransitionWrite::Revocation => {
+                return Err(TransitionError::Persist(format!(
+                    "{reason}; confirm a level to repair it"
+                )));
+            }
             Err(LoadError::Corrupt(_)) => None,
             Err(LoadError::Io(reason)) => return Err(TransitionError::Persist(reason)),
         };
+        let previous = stored.clone();
         let next = merge(stored)?;
         let contents = serde_json::to_vec_pretty(&next)
             .map_err(|err| TransitionError::Persist(err.to_string()))?;
@@ -233,15 +251,27 @@ impl TransitionStore for HomeTransitionStore {
                 "the saved security state could not be verified".to_string(),
             ));
         }
-        if lowers_level
+        if write == TransitionWrite::Downgrade
             && let Err(err) = crate::config::edit::ConfigEditsBuilder::new(&self.codex_home)
                 .set_security_level(next.level)
                 .apply_blocking()
         {
-            return Err(TransitionError::Persist(format!(
-                "config.toml could not be updated ({err}), so the next start keeps the \
-                 stricter level"
-            )));
+            // Put the stored state back, so nothing changes at all.
+            let restored = match &previous {
+                Some(previous) => serde_json::to_vec_pretty(previous)
+                    .map_err(io::Error::other)
+                    .and_then(|contents| {
+                        write_atomically(&self.codex_home.join(STATE_FILE), &contents)
+                    }),
+                None => std::fs::remove_file(self.codex_home.join(STATE_FILE)),
+            };
+            return Err(TransitionError::Persist(match restored {
+                Ok(()) => format!("config.toml could not be updated ({err})"),
+                Err(restore) => format!(
+                    "config.toml could not be updated ({err}), and the previous security \
+                     state could not be restored ({restore})"
+                ),
+            }));
         }
         Ok(next)
     }

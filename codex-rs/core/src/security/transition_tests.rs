@@ -62,7 +62,7 @@ impl TransitionStore for MemoryStore {
 
     fn update(
         &self,
-        _lowers_level: bool,
+        _write: crate::security::recovery::TransitionWrite,
         merge: &mut dyn FnMut(
             Option<DurableSecurityState>,
         ) -> Result<DurableSecurityState, TransitionError>,
@@ -795,15 +795,38 @@ fn security_transition_kill_switch_reaches_older_trees_and_stale_release_is_refu
 
     // Another process (unreachable) released earlier; a newer kill switch is
     // stored now: the stale release is refused.
+    // A session that never showed the kill switch cannot release it.
     let other_process = fixture(SecurityLevel::Moderate);
-    let stale_release = other_process
+    assert!(matches!(
+        other_process.prepare(
+            revoke(RevocationTarget::KillSwitch { active: false }),
+            ProbeOutcome::Passed,
+        ),
+        Err(TransitionError::StoredStateChanged)
+    ));
+    // One that showed an older kill switch cannot release the newer one.
+    let stale = fixture(SecurityLevel::Moderate);
+    stale
+        .controller
+        .commit_transition(
+            stale
+                .prepare(
+                    revoke(RevocationTarget::KillSwitch { active: true }),
+                    ProbeOutcome::Passed,
+                )
+                .unwrap(),
+            &MemoryStore::default(),
+            NOW - 100,
+        )
+        .unwrap();
+    let stale_release = stale
         .prepare(
             revoke(RevocationTarget::KillSwitch { active: false }),
             ProbeOutcome::Passed,
         )
         .unwrap();
     assert!(matches!(
-        other_process.commit_with(stale_release, &store),
+        stale.commit_with(stale_release, &store),
         Err(TransitionError::StoredStateChanged)
     ));
     assert!(

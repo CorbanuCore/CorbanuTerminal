@@ -50,6 +50,7 @@ use super::TrustedSecurityController;
 use super::trusted_requests::ConfirmedSecurityRequest;
 use crate::security::recovery::DurableSecurityState;
 use crate::security::recovery::TransitionStore;
+use crate::security::recovery::TransitionWrite;
 
 /// Result of the isolation, migration and screening checks (PF-29
 /// preflight) a stricter protected level needs before it may be claimed.
@@ -166,13 +167,16 @@ impl TrustedSecurityController {
         confirmed: ConfirmedSecurityRequest,
         probes: ProbeOutcome,
     ) -> Result<PreparedTransition, TransitionError> {
-        let from = {
+        let (from, kill_switch_active) = {
             let guard = self.read_state()?;
             let state = guard
                 .as_ref()
                 .ok_or(SecurityPolicyError::RuntimeNotInitialized)?;
             super::trusted_requests::check_epoch(state, confirmed.request())?;
-            state.persisted.settings.level
+            (
+                state.persisted.settings.level,
+                state.persisted.revocations.kill_switch_active,
+            )
         };
         let (kind, to, event) = match confirmed.request().action() {
             SecurityControlAction::SetLevel { level } => {
@@ -189,6 +193,11 @@ impl TrustedSecurityController {
             }
             SecurityControlAction::Revoke { target, reason } => {
                 let kind = match target {
+                    // Only the kill switch this session shows as on can be
+                    // released, never one it has not seen.
+                    RevocationTarget::KillSwitch { active: false } if !kill_switch_active => {
+                        return Err(TransitionError::StoredStateChanged);
+                    }
                     RevocationTarget::KillSwitch { active: false } => {
                         TransitionKind::KillSwitchRelease
                     }
@@ -292,7 +301,15 @@ impl TrustedSecurityController {
             Ok(DurableSecurityState::new(level, revocations))
         };
         let mut merged = None;
-        let saved = store.update(prepared.kind == TransitionKind::Downgrade, &mut |stored| {
+        let write = match prepared.kind {
+            TransitionKind::Downgrade => TransitionWrite::Downgrade,
+            TransitionKind::Unchanged => TransitionWrite::Level,
+            TransitionKind::Restrictive if prepared.to != prepared.from => TransitionWrite::Level,
+            TransitionKind::Restrictive | TransitionKind::KillSwitchRelease => {
+                TransitionWrite::Revocation
+            }
+        };
+        let saved = store.update(write, &mut |stored| {
             let next = merge(stored)?;
             merged = Some(next.clone());
             Ok(next)
