@@ -26,6 +26,9 @@ use crate::legacy_core::security_grant::HeldGrant;
 use crate::legacy_core::security_grant::confirm;
 use crate::legacy_core::security_grant::escape_controls;
 
+/// Narrower than this, fields are cut off sideways.
+const MIN_WIDTH: usize = 40;
+
 /// What the grant review is showing.
 pub(crate) struct GrantReview {
     offer: GrantOffer,
@@ -33,8 +36,9 @@ pub(crate) struct GrantReview {
     error: Option<String>,
     /// "Grant and run" is highlighted (it starts on "Back").
     grant_selected: bool,
-    /// The last render cut the review off; granting needs all of it seen.
-    clipped: Cell<bool>,
+    /// The area of the last render (width, height); granting needs all of
+    /// the review to fit in it.
+    shown_area: Cell<Option<(u16, u16)>>,
 }
 
 impl GrantReview {
@@ -44,7 +48,7 @@ impl GrantReview {
             uses: GrantUses::Once,
             error: None,
             grant_selected: false,
-            clipped: Cell::new(true),
+            shown_area: Cell::new(None),
         }
     }
 
@@ -57,10 +61,16 @@ impl GrantReview {
         self.grant_selected
     }
 
-    /// Record whether the last render showed all `height` rows.
+    /// Record the area the review was last rendered in.
     pub(crate) fn set_visible_height(&self, width: u16, height: u16) {
-        self.clipped
-            .set(self.lines(width).len() > usize::from(height));
+        self.shown_area.set(Some((width, height)));
+    }
+
+    /// Whether the whole review, as it reads now, fits the last render.
+    fn fits(&self) -> bool {
+        self.shown_area.get().is_some_and(|(width, height)| {
+            usize::from(width) >= MIN_WIDTH && self.lines(width).len() <= usize::from(height)
+        })
     }
 
     /// `u`: one run, or any run of this exact command until it expires.
@@ -75,7 +85,7 @@ impl GrantReview {
     /// The person pressed Enter: issue exactly the grant shown. On failure
     /// the review stays open with the reason and nothing is granted.
     pub(crate) fn confirm(&mut self) -> Option<ConfirmedGrant> {
-        if self.clipped.get() {
+        if !self.fits() {
             self.error = Some(
                 "The review does not fit on screen. Make the terminal taller to see all of it before granting.".to_string(),
             );
@@ -120,10 +130,15 @@ impl GrantReview {
             .map(|line| Line::from(line.into_owned()))
             .collect()
         };
-        lines.extend(field("Agent", offer.actor_chain.join(" → ")));
+        // Every field is shown escaped: the folder and command are chosen by
+        // the model.
+        lines.extend(field(
+            "Agent",
+            escape_controls(&offer.actor_chain.join(" → ")),
+        ));
         lines.extend(field("Session", offer.thread.to_string()));
-        lines.extend(field("Action", offer.action.clone()));
-        lines.extend(field("Resource", offer.resource.clone()));
+        lines.extend(field("Action", escape_controls(&offer.action)));
+        lines.extend(field("Resource", escape_controls(&offer.resource)));
         lines.extend(field(
             "Command",
             format!(
@@ -131,8 +146,8 @@ impl GrantReview {
                 escape_controls(&strip_bash_lc_and_escape(&offer.command))
             ),
         ));
-        lines.extend(field("Folder", offer.cwd.clone()));
-        lines.extend(field("Digest", offer.operation.clone()));
+        lines.extend(field("Folder", escape_controls(&offer.cwd)));
+        lines.extend(field("Digest", escape_controls(&offer.operation)));
         lines.extend(field("Destination", "none".to_string()));
         lines.extend(field(
             "Limit",
@@ -208,9 +223,13 @@ pub(crate) fn held_lines(grants: &[HeldGrant]) -> Vec<String> {
                     || grant.expires_at_unix_seconds.to_string(),
                     |time| time.format("%H:%M").to_string(),
                 );
+            let command = if grant.command.is_empty() {
+                grant.label.clone()
+            } else {
+                escape_controls(&strip_bash_lc_and_escape(&grant.command))
+            };
             format!(
-                "Grant: `{}` without the protected-path rules · {uses} · expires {expires}",
-                grant.label
+                "Grant: `{command}` without the protected-path rules · {uses} · expires {expires}"
             )
         })
         .collect()

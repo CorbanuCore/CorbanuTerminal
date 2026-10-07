@@ -46,7 +46,7 @@ fn operation(command: &str) -> String {
 fn live(state: PostTaintState) -> (Arc<Mutex<Option<PostTaintState>>>, CurrentState) {
     let shared = Arc::new(Mutex::new(Some(state)));
     let reader = Arc::clone(&shared);
-    (shared, Box::new(move || reader.lock().unwrap().clone()))
+    (shared, Arc::new(move || reader.lock().unwrap().clone()))
 }
 
 fn offer_in(
@@ -64,6 +64,7 @@ fn offer_in(
         vec!["cat".to_string(), command.to_string()],
         "/work".to_string(),
         current,
+        /*only_if_vacant*/ false,
     );
     (guard, shared)
 }
@@ -138,7 +139,13 @@ fn pf_25_s01_one_run_applies_only_to_the_approved_run() {
         approved(&guard, thread, &state, "~/.ssh/id_rsa").is_err(),
         "adjacent command"
     );
-    confirm(&shown, GrantUses::Once).unwrap();
+    assert_eq!(
+        confirm(&shown, GrantUses::Once),
+        Err(GrantError::Ended),
+        "taken: the offer is closed"
+    );
+    let (guard, _shared) = offer_in(thread, "call-2", "~/.ssh/config", state.clone());
+    confirm(&offer(thread, "call-2").unwrap(), GrantUses::Once).unwrap();
     assert!(approved(&guard, thread, &state, "~/.ssh/config").is_ok());
     assert!(
         approved(&guard, thread, &state, "~/.ssh/config").is_err(),
@@ -327,9 +334,36 @@ fn pf_25_s01_offers_are_rate_limited_and_deduplicated() {
     assert_eq!(offer(other, "same"), None, "shared id: no offer");
 }
 
-/// Labels never span lines.
+/// A guard acts only on its own registration: after a shared id cleared
+/// the offer and a third call registered the id again, the first guard
+/// neither takes nor removes the new one. Taking closes the offer.
+#[test]
+fn pf_25_s01_guards_act_only_on_their_own_offer() {
+    let thread = ThreadId::new();
+    let state = aggressive(&["main"]);
+    let (first, _a) = offer_in(thread, "same", "x", state.clone());
+    let (_second, _b) = offer_in(thread, "same", "x", state.clone());
+    let (third, _c) = offer_in(thread, "same", "x", state);
+    let shown = offer(thread, "same").expect("the third offer");
+    confirm(&shown, GrantUses::Once).unwrap();
+    assert!(first.take_confirmed().is_none());
+    drop(first);
+    assert!(offer(thread, "same").is_some());
+    assert!(third.take_confirmed().is_some());
+    assert_eq!(
+        confirm(&shown, GrantUses::Once),
+        Err(GrantError::Ended),
+        "closed"
+    );
+}
+
+/// Labels never span lines or hide text.
 #[test]
 fn pf_25_s01_display_command_escapes_controls() {
+    assert_eq!(
+        escape_controls("a\u{202e}b\u{200b}c"),
+        "a\\u{202e}b\\u{200b}c"
+    );
     assert_eq!(
         display_command(&[
             "sh".to_string(),
