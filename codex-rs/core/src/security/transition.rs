@@ -156,8 +156,10 @@ static COMMITS: Mutex<()> = Mutex::new(());
 
 /// Policy trees of this process by Corbanu home, so a restrictive commit in
 /// one (`/new` starts another) reaches the rest.
-static TREES: LazyLock<Mutex<Vec<(PathBuf, Weak<SharedEffectivePolicy>)>>> =
-    LazyLock::new(Default::default);
+static TREES: LazyLock<Mutex<Vec<HomeTree>>> = LazyLock::new(Default::default);
+
+/// One policy tree and the Corbanu home it belongs to.
+type HomeTree = (PathBuf, Weak<SharedEffectivePolicy>);
 
 impl TrustedSecurityController {
     /// Bind a confirmed human request to the current epoch. A stricter
