@@ -45,3 +45,30 @@ the refusal under protected levels stays.
   can read it too. That is PF-27-S02's list, not this change.
 - The Claude Plan profile is covered by unit tests only: the disposable test
   profiles have no Claude Plan sign-in.
+
+## Gate evidence (part 1)
+
+- **Tests** (after `just fmt` and `just fix`): `just test -p codex-tui -E
+  'test(claude_panes)'` (115: contained plans for every profile, the bridge's
+  absolute-form and hostile targets, the profile's denials, the clean
+  environment) and the `security::` suites; `just test -p codex-core -E
+  'test(launch_contract)'` (13, including `protect_external_launch`);
+  `just test -p codex-features`. Linux: `cargo clippy -p codex-tui -p
+  codex-core --tests -D warnings` clean on the RTX box (Ubuntu, kernel 7.0).
+- **GLM 5.2 runs**, main model GLM 5.2 on Z.AI and a GLM 5.2 Z.AI Claude pane
+  (Claude Code 2.1.292), `contained_external_agents` and
+  `secretless_agent_launch` on:
+  - `tmux-run/1-macos-probes.txt` (the recorded run): writing in the pane
+    folder works; reading `config.toml`, the vault store and `panes/`, the
+    network and writing outside are denied.
+  - `tmux-run/2-macos-keychain-probe.txt`: a synthetic Keychain item readable
+    outside is denied inside; the session resumes from the state folder.
+  - `tmux-run/3-linux-probes.txt`: the same probes under bubblewrap; the
+    bridge is reached through the sandbox's Unix-socket route
+    (`HTTP_PROXY` rewritten to an in-namespace port).
+  - `tmux-run/4-macos-sibling-state.txt`, `5-linux-sibling-state.txt`: another
+    pane's Claude state is denied, the pane's own is readable.
+  - The pane environment (names only, checked by hand) holds no provider key.
+- **Review** (Opus 5.5 High): request changes, then approve with fixes; all
+  fixed or recorded in `review/disposition.md`.
+- **Video:** [contained Claude pane probes](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/claude-contained-claude-contained-probes-d2c36f09303f-2026-10-06.mp4)
