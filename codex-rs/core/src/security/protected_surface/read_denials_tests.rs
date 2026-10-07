@@ -200,20 +200,18 @@ async fn pf_23_s01_upload_reads_follow_the_denials_after_taint() {
         .with_ingress_level(codex_security_policy::SecurityLevel::Moderate)
         .with_source_envelopes(true);
     session.services.replace_model_client(client);
-    // Issue #239: under Moderate the upload read policy is active before taint.
-    let pre_policy = post_taint_read_policy(&session, &turn).expect("protected level active");
+    #[allow(deprecated)]
+    let cwd = turn.cwd.clone();
     let home = turn.config.codex_home.to_path_buf();
     std::fs::create_dir_all(&home).unwrap();
     std::fs::write(home.join("auth.json"), "x").unwrap();
-    {
-        #[allow(deprecated)]
-        let cwd = turn.cwd.clone();
-        assert!(!readable_under(
-            &pre_policy,
-            &home.join("auth.json"),
-            cwd.as_path()
-        ));
-    }
+    // Issue #239: under Moderate the upload read policy is active before taint.
+    let before = post_taint_read_policy(&session, &turn).expect("protected level active");
+    assert!(!readable_under(
+        &before,
+        &home.join("auth.json"),
+        cwd.as_path()
+    ));
     session
         .services
         .model_client()
@@ -224,8 +222,6 @@ async fn pf_23_s01_upload_reads_follow_the_denials_after_taint() {
     std::os::unix::fs::symlink(home.join("auth.json"), &link).unwrap();
     let plain = outside.path().join("plain.txt");
     std::fs::write(&plain, "x").unwrap();
-    #[allow(deprecated)]
-    let cwd = turn.cwd;
     assert!(!readable_under(
         &policy,
         &home.join("auth.json"),
