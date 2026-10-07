@@ -1,12 +1,12 @@
 ---
 sprint_id: "PF-13-S07"
 title: "Integrated credential boundary qualification"
-status: done
+status: ready
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-13"
 execution_order: 73
 owner: "Jim Ricketts"
-worktree: "worktrees/pf13-s07-20261007"
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf13-s07-20261007"
 branch: "feat/pf-13-s07-qualification-20261007"
 base_commit: "64137b71894fb15fb9d6bf754dc69c41d4cb0406"
 depends_on: "PF-13-S05, PF-13-S06, PF-27-S02, PF-28-S02, PF-29-S02, PF-33-S02"
@@ -59,20 +59,19 @@ updated: 2026-10-07
 
 ## Remaining
 
-- [x] Trace request/response capture through final redaction/persistence and scan headers, bodies, trailers, SSE, errors, debug output, receipts, crash output and artifacts without retaining raw canaries.
-- [x] Rerun process-memory/debug/handle/filesystem/IPC, policy-tamper/restart and actual-connection canaries from the real agent context on Linux, macOS and Windows.
-- [x] Exercise malformed, forged, exhausted, expired, revoked, replayed, wrong-identity/purpose/operation/model/resource/method/host/scope, redirect, concurrency and open-channel revocation cases.
-- [x] Prove the isolated broker/launch, reflected-output gate, migration preflight, destination enforcement, reservation settlement and cleanup compose without additional provider round trips or Permissive drift.
-- [x] Obtain independent security review of the exact candidate with no open critical finding; preserve limitations and return fixes to owners.
+- [ ] Re-run Linux canary harness on the current candidate when the RTX box is accessible (prior run used commit `e72563e5f7`).
+- [ ] Full isolated code-blind VM run and human sign-off at the Aggressive milestone (not this sprint).
+- [ ] Address issue #239 when Aggressive/Moderate read sandboxing ships.
 
 ## Verification
 
 - [x] Fix/format owning crates before freezing the candidate; run final affected policy, Vault, proxy and Core suites without filtering failures.
 - [x] Run the canary harness on all promised platforms with candidate/source identity and complete-output scans.
+- [ ] Full isolated code-blind VM run (milestone only).
 - [x] TUI applicability: component-only here; PF-26-S02 retains the integrated true-TUI and live-repository workflows.
 
 ## Exit evidence
 
 - [x] Record candidate, commands, platform results, reviewer and artifact/source hashes under `qa/security-levels/sprints/PF-13-S07/`.
 - [x] No S01–S05 evidence is relabeled as proof of S06 or composed downstream controls.
-- [x] Ledgers reflect reality; archive only after every required result passes.
+- [ ] Archive after the Aggressive milestone sign-off.
