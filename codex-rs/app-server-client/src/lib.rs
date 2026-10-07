@@ -87,6 +87,7 @@ pub mod legacy_core {
     pub use codex_core::load_exec_policy;
     pub use codex_core::protected_preflight;
     pub use codex_core::resolve_installation_id;
+    pub use codex_core::security_grant;
     pub use codex_core::security_level_change;
     // PF-41-S01: the read-only `/security` inspector.
     pub use codex_core::security_inspection;

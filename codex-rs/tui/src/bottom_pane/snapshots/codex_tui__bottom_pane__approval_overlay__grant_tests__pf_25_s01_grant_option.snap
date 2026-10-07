@@ -1,0 +1,14 @@
+---
+source: tui/src/bottom_pane/approval_overlay_grant_tests.rs
+expression: "render(&view, 100)"
+---
+
+  Would you like to run the following command?
+
+  $ cat ../home/team-notes.txt
+
+› 1. Yes, proceed (y)
+  2. No, and tell Corbanu Terminal what to do differently (esc)
+  3. Grant once: run without the Aggressive protected-path rules (review first) (g)
+
+  Press enter to confirm or esc to cancel

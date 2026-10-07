@@ -694,6 +694,10 @@ impl SecurityLevelPicker {
         if let Some(line) = core_status(&self.basis) {
             lines.push(line);
         }
+        // PF-25-S01: grants held now, with their scope and expiry.
+        lines.extend(crate::security::grant_view::held_lines(
+            &crate::legacy_core::security_grant::held_grants(),
+        ));
         lines
     }
 

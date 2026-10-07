@@ -165,6 +165,14 @@ impl ToolOrchestrator {
         let requirement = tool.exec_approval_requirement(req).unwrap_or_else(|| {
             default_exec_approval_requirement(approval_policy, &file_system_sandbox_policy)
         });
+        // PF-23-S02: under Aggressive, the grant digest of this exact command.
+        // PF-25-S01: while its approval is open, the human may grant it once
+        // in the TUI; the offer ends with the approval.
+        let grant_operation = aggressive_grant_operation(tool, req, tool_ctx);
+        // Registered just before the user (not an automatic reviewer) is
+        // asked. A cached approval or a permission hook may still answer
+        // without them; then no review is shown and nothing is confirmed.
+        let mut grant_offer = None;
         // PF-30-S03: a protected action after untrusted content needs fresh,
         // exact human approval, whatever the requirement above would allow.
         let post_taint = post_taint_action(tool, req, tool_ctx, &requirement).await;
@@ -196,6 +204,7 @@ impl ToolOrchestrator {
                 fresh_human_authority: true,
             };
             let asked = Instant::now();
+            grant_offer = aggressive_grant_offer(grant_operation.as_ref(), tool_ctx);
             let mut pending = crate::security::inspection::PendingProtectedAction::new(
                 tool_ctx.session.thread_id(),
                 action.kind,
@@ -325,17 +334,21 @@ impl ToolOrchestrator {
                     network_approval_context: None,
                     fresh_human_authority: false,
                 };
+                let reviewer = if strict_auto_review {
+                    ApprovalReviewer::Guardian
+                } else {
+                    ApprovalReviewer::for_turn(turn_ctx)
+                };
+                if reviewer == ApprovalReviewer::User {
+                    grant_offer = aggressive_grant_offer(grant_operation.as_ref(), tool_ctx);
+                }
                 resolve_tool_apporval(
                     tool,
                     req,
                     tool_ctx.call_id.as_str(),
                     approval_ctx,
                     tool_ctx,
-                    if strict_auto_review {
-                        ApprovalReviewer::Guardian
-                    } else {
-                        ApprovalReviewer::for_turn(turn_ctx)
-                    },
+                    reviewer,
                     &otel,
                 )
                 .await?;
@@ -343,13 +356,19 @@ impl ToolOrchestrator {
             }
         }
 
+        // The approval came back approved (a refusal returned above): the
+        // grant the person confirmed for it, if any (PF-25-S01).
+        let confirmed_grant = grant_offer
+            .as_ref()
+            .and_then(crate::security::grant_offer::OfferGuard::take_confirmed);
+        drop(grant_offer);
+
         // PF-23-S01 slice 3: after untrusted content the sandbox itself denies
         // credential and Corbanu home reads, whatever the command text says.
         // What stays readable comes from the turn, never from the command's
         // own (model-chosen) working folder.
         #[allow(deprecated)]
         let turn_cwd = turn_ctx.cwd.clone();
-        let grant_operation = aggressive_grant_operation(tool, req, tool_ctx);
         // The taint generation a human approval of this run was given under.
         let human_approved_at = match &post_taint {
             Some(action) => Some(action.state.taint_generation),
@@ -358,7 +377,10 @@ impl ToolOrchestrator {
         let denied = post_taint_read_denials(
             tool_ctx,
             human_approved_at,
-            grant_operation.as_deref(),
+            grant_operation
+                .as_ref()
+                .map(|(operation, _)| operation.as_str()),
+            confirmed_grant,
             turn_cwd,
             &materialized_workspace_roots,
             permission_profile,
@@ -779,9 +801,17 @@ where
             .is_some_and(|state| state.taint_generation == 0 && state.moderate_bound())
 }
 
+/// The command and folder a grant offer shows (PF-25-S01).
+type GrantShown = Option<(Vec<String>, String)>;
+
 /// PF-23-S02: under Aggressive, the grant operation naming this exact
-/// command or patch in its folder. `None` under any other level.
-fn aggressive_grant_operation<Rq, Out, T>(tool: &T, req: &Rq, tool_ctx: &ToolCtx) -> Option<String>
+/// command or patch in its folder, and for a command what a grant offer
+/// shows (PF-25-S01). `None` under any other level.
+fn aggressive_grant_operation<Rq, Out, T>(
+    tool: &T,
+    req: &Rq,
+    tool_ctx: &ToolCtx,
+) -> Option<(String, GrantShown)>
 where
     T: ToolRuntime<Rq, Out>,
 {
@@ -815,16 +845,43 @@ where
             additional_permissions,
             ..
         } => {
+            let shown_cwd = cwd.to_path_buf().display().to_string();
             let cwd = cwd.to_string();
             let permissions = format!("{sandbox_permissions:?} {additional_permissions:?}");
             let mut parts = vec!["command", cwd.as_str(), permissions.as_str()];
             parts.extend(command.iter().map(String::as_str));
-            command_operation(&parts)
+            let operation = command_operation(&parts);
+            (operation, Some((command, shown_cwd)))
         }
-        ApprovalAction::ApplyPatch { cwd, patch, .. } => {
-            command_operation(&["patch", &cwd.to_string(), &patch])
-        }
+        ApprovalAction::ApplyPatch { cwd, patch, .. } => (
+            command_operation(&["patch", &cwd.to_string(), &patch]),
+            None,
+        ),
     })
+}
+
+/// PF-25-S01: offer the human a grant for this exact command while its
+/// approval is open (only under a live Aggressive policy).
+fn aggressive_grant_offer(
+    operation: Option<&(String, GrantShown)>,
+    tool_ctx: &ToolCtx,
+) -> Option<crate::security::grant_offer::OfferGuard> {
+    let (operation, Some((command, cwd))) = operation? else {
+        return None;
+    };
+    let state = tool_ctx
+        .session
+        .services
+        .model_client()
+        .post_taint_state()?;
+    Some(crate::security::grant_offer::offer_for_approval(
+        &tool_ctx.session,
+        &state,
+        &tool_ctx.call_id,
+        operation.clone(),
+        command.clone(),
+        cwd.clone(),
+    ))
 }
 
 /// PF-23-S01 slice 3 / PF-23-S02 / issue #239: the exec-server and
@@ -840,10 +897,12 @@ where
 /// this exact command (`security::aggressive`). Lifting only leaves these rules out: every
 /// denial of the profile itself stays. An external sandbox cannot take the
 /// rules and keeps its own.
+#[allow(clippy::too_many_arguments)]
 fn post_taint_read_denials(
     tool_ctx: &ToolCtx,
     human_approved_at: Option<u64>,
     grant_operation: Option<&str>,
+    confirmed_grant: Option<crate::security::grant_offer::Confirmed>,
     cwd: codex_utils_absolute_path::AbsolutePathBuf,
     workspace_roots: &[codex_utils_absolute_path::AbsolutePathBuf],
     exec_server: &codex_protocol::models::PermissionProfile,
@@ -869,6 +928,31 @@ fn post_taint_read_denials(
             "protected-path rules lifted by the human approval of this command"
         );
         return None;
+    }
+    if let (Some(operation), Some(confirmed)) = (grant_operation, confirmed_grant) {
+        match crate::security::grant_offer::apply(
+            thread,
+            &state,
+            confirmed,
+            operation,
+            aggressive::now_unix_seconds(),
+        ) {
+            Ok(grant_id) => {
+                tracing::info!(
+                    target: "codex_core::security::tainted_action",
+                    grant_id = grant_id.as_str(),
+                    call_id = %tool_ctx.call_id,
+                    "protected-path rules lifted by the grant the human confirmed for this command"
+                );
+                return None;
+            }
+            Err(reason) => tracing::warn!(
+                target: "codex_core::security::tainted_action",
+                call_id = %tool_ctx.call_id,
+                reason,
+                "the confirmed grant does not apply; the rules stay"
+            ),
+        }
     }
     if let Some(operation) = grant_operation
         && let Some(grant_id) = aggressive::admit(

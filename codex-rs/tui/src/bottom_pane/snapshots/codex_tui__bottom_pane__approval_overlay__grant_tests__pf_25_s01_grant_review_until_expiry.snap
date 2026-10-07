@@ -1,0 +1,28 @@
+---
+source: tui/src/bottom_pane/approval_overlay_grant_tests.rs
+expression: "render(&view, 100)"
+---
+
+ Grant this command?
+ Under Aggressive an approval never lifts the protected-path rules (credential files, the Corbanu
+ home, shell and git startup files). This grant lets exactly this command run without them.
+
+   Agent       human:human → agent:019a0000-0000-7000-8000-000000000001
+   Session     019a0000-0000-7000-8000-000000000001
+   Action      execute
+   Resource    protected_data/sandbox_protected_paths
+   Command     $ cat ../home/team-notes.txt
+   Folder      /work/project
+   Digest      command:sha256:3f2a
+   Destination none
+   Limit       any run of this exact command until it expires (press u for 1 run)
+   Expires     10 minutes after you confirm, or at a level change, revocation, kill switch or
+               restart
+
+ Still denied: any other command or folder, its parent, sibling and child agents, other sessions,
+ and everything else Aggressive denies. /security lists the grant until it expires.
+
+ › Back to the approval (nothing granted)
+   Grant and run
+
+ ↑/↓ choose · enter confirm · u change limit · esc back to the approval

@@ -47,6 +47,7 @@ use crate::keymap::primary_binding;
 use crate::render::highlight::highlight_bash_to_lines;
 use crate::render::renderable::ColumnRenderable;
 use crate::render::renderable::Renderable;
+use crate::security::grant_view::GrantReview;
 use codex_app_server_protocol::AdditionalPermissionProfile;
 use codex_app_server_protocol::CommandExecutionApprovalDecision;
 use codex_app_server_protocol::FileChangeApprovalDecision;
@@ -59,6 +60,7 @@ use codex_app_server_protocol::NetworkApprovalContext;
 use codex_app_server_protocol::NetworkApprovalProtocol;
 use codex_app_server_protocol::NetworkPolicyRuleAction;
 use codex_app_server_protocol::RequestId;
+use codex_features::Feature;
 use codex_features::Features;
 use codex_protocol::ThreadId;
 use codex_protocol::request_permissions::PermissionGrantScope;
@@ -194,6 +196,8 @@ pub(crate) struct ApprovalOverlay {
     /// The user navigated the list since the current request appeared, so
     /// the highlighted row may be an option that lasts beyond it.
     navigated: bool,
+    /// PF-25-S01: the grant review of the current command, when open.
+    grant_review: Option<GrantReview>,
 }
 
 impl ApprovalOverlay {
@@ -217,6 +221,7 @@ impl ApprovalOverlay {
             list_keymap,
             typing_guard: TypingGuard::default(),
             navigated: false,
+            grant_review: None,
         };
         view.set_current(request);
         // The first request has not replaced anything.
@@ -255,6 +260,7 @@ impl ApprovalOverlay {
     fn set_current(&mut self, request: ApprovalRequest) {
         self.current_complete = false;
         self.navigated = false;
+        self.grant_review = None;
         self.typing_guard.on_request_changed();
         let header = build_header(&request);
         let (options, params) = Self::build_options(
@@ -273,18 +279,24 @@ impl ApprovalOverlay {
     fn build_options(
         request: &ApprovalRequest,
         header: Box<dyn Renderable>,
-        _features: &Features,
+        features: &Features,
         approval_keymap: &ApprovalKeymap,
         list_keymap: &ListKeymap,
     ) -> (Vec<ApprovalOption>, SelectionViewParams) {
         let (options, title) = match request {
             ApprovalRequest::Exec(request) => (
-                exec_options(
-                    &request.available_decisions,
-                    request.network_approval_context.as_ref(),
-                    request.additional_permissions.as_ref(),
-                    approval_keymap,
-                ),
+                {
+                    let mut options = exec_options(
+                        &request.available_decisions,
+                        request.network_approval_context.as_ref(),
+                        request.additional_permissions.as_ref(),
+                        approval_keymap,
+                    );
+                    if grant_offer(request, features).is_some() {
+                        options.push(grant_option());
+                    }
+                    options
+                },
                 request.network_approval_context.as_ref().map_or_else(
                     || "Would you like to run the following command?".to_string(),
                     |network_approval_context| {
@@ -353,6 +365,19 @@ impl ApprovalOverlay {
         };
         if let Some(request) = self.current_request.as_ref() {
             match (request, &option.decision) {
+                (ApprovalRequest::Exec(request), ApprovalDecision::SecurityGrant) => {
+                    // Open the review; the request stays open until the
+                    // person confirms there or answers here.
+                    match grant_offer(request, &self.features) {
+                        Some(offer) => self.grant_review = Some(GrantReview::new(offer)),
+                        None => self.app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
+                            history_cell::new_error_event(
+                                "This grant is no longer offered (the request ended or the security state changed). Nothing was granted.".to_string(),
+                            ),
+                        ))),
+                    }
+                    return;
+                }
                 (ApprovalRequest::Exec(request), ApprovalDecision::Command(decision)) => {
                     self.handle_exec_decision(&request.id, &request.command, decision.clone());
                 }
@@ -768,9 +793,95 @@ impl ApprovalOverlay {
     }
 }
 
+impl ApprovalOverlay {
+    /// PF-25-S01: keys while the grant review is open. Arrow keys move
+    /// between "Back" and "Grant and run"; Enter on "Grant and run" records
+    /// the grant shown and approves the command; Enter on "Back" and Esc go
+    /// back to the approval. A held key never confirms.
+    fn handle_grant_review_key(&mut self, key_event: KeyEvent) {
+        if key_event.kind != KeyEventKind::Press {
+            return;
+        }
+        if self.list_keymap.cancel.is_pressed(key_event) {
+            self.close_grant_review();
+            return;
+        }
+        let navigate = matches!(key_event.code, KeyCode::Up | KeyCode::Down)
+            && key_event.modifiers == KeyModifiers::NONE;
+        let accept = self.is_accept(key_event);
+        let Some(review) = self.grant_review.as_mut() else {
+            return;
+        };
+        if key_event.code == KeyCode::Char('u') && key_event.modifiers == KeyModifiers::NONE {
+            review.toggle_uses();
+            return;
+        }
+        if navigate {
+            review.toggle_row();
+            return;
+        }
+        if !accept {
+            return;
+        }
+        if !review.grant_selected() {
+            self.close_grant_review();
+            return;
+        }
+        // The request first: a grant is recorded only for the approval
+        // that is answered here.
+        let Some(ApprovalRequest::Exec(request)) = self.current_request.clone() else {
+            return;
+        };
+        let Some(confirmed) = review.confirm() else {
+            return;
+        };
+        let command = review.command().to_vec();
+        let expires = chrono::DateTime::from_timestamp(confirmed.expires_at_unix_seconds, 0)
+            .map(|time| {
+                time.with_timezone(&chrono::Local)
+                    .format("%H:%M")
+                    .to_string()
+            })
+            .unwrap_or_default();
+        self.app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
+            history_cell::PlainHistoryCell::new(vec![
+                vec![
+                    "✔ ".green(),
+                    "You granted ".into(),
+                    crate::legacy_core::security_grant::escape_controls(&strip_bash_lc_and_escape(
+                        &command,
+                    ))
+                    .bold(),
+                    format!(" without the Aggressive protected-path rules (expires {expires})")
+                        .into(),
+                ]
+                .into(),
+            ]),
+        )));
+        self.handle_exec_decision(
+            &request.id,
+            &request.command,
+            CommandExecutionApprovalDecision::Accept,
+        );
+        self.grant_review = None;
+        self.current_complete = true;
+        self.advance_queue();
+    }
+
+    /// Back to the approval, nothing granted; its Enter needs a fresh choice.
+    fn close_grant_review(&mut self) {
+        self.grant_review = None;
+        self.typing_guard.on_request_changed();
+    }
+}
+
 impl BottomPaneView for ApprovalOverlay {
     fn handle_key_event(&mut self, key_event: KeyEvent) {
         if key_event.kind == KeyEventKind::Release {
+            return;
+        }
+        if self.grant_review.is_some() {
+            self.handle_grant_review_key(key_event);
             return;
         }
         if self.is_accept(key_event) {
@@ -825,6 +936,12 @@ impl BottomPaneView for ApprovalOverlay {
         CancellationEvent::Handled
     }
 
+    /// Esc in the grant review goes back to the approval; it must not reach
+    /// the pane's cancel path, which would decline the command.
+    fn prefer_esc_to_handle_key_event(&self) -> bool {
+        self.grant_review.is_some()
+    }
+
     fn is_complete(&self) -> bool {
         self.done
     }
@@ -848,6 +965,10 @@ impl BottomPaneView for ApprovalOverlay {
 
 impl Renderable for ApprovalOverlay {
     fn desired_height(&self, width: u16) -> u16 {
+        if let Some(review) = &self.grant_review {
+            return u16::try_from(review.lines(width.saturating_sub(2)).len() + 1)
+                .unwrap_or(u16::MAX);
+        }
         let notice_height = u16::try_from(self.typed_text_notice(width).len()).unwrap_or(u16::MAX);
         self.list
             .desired_height(width)
@@ -855,6 +976,17 @@ impl Renderable for ApprovalOverlay {
     }
 
     fn render(&self, area: Rect, buf: &mut Buffer) {
+        if let Some(review) = &self.grant_review {
+            let area = Rect {
+                x: area.x.saturating_add(1),
+                y: area.y.saturating_add(1),
+                width: area.width.saturating_sub(2),
+                height: area.height.saturating_sub(1),
+            };
+            review.set_visible_height(area.width, area.height);
+            Widget::render(Paragraph::new(review.lines(area.width)), area, buf);
+            return;
+        }
         let notice = self.typed_text_notice(area.width);
         let notice_height = u16::try_from(notice.len())
             .unwrap_or(u16::MAX)
@@ -875,6 +1007,9 @@ impl Renderable for ApprovalOverlay {
     }
 
     fn cursor_pos(&self, area: Rect) -> Option<(u16, u16)> {
+        if self.grant_review.is_some() {
+            return None;
+        }
         self.list.cursor_pos(area)
     }
 }
@@ -1071,6 +1206,8 @@ fn build_header(request: &ApprovalRequest) -> Box<dyn Renderable> {
 #[derive(Clone)]
 enum ApprovalDecision {
     Command(CommandExecutionApprovalDecision),
+    /// PF-25-S01: open the grant review of this command.
+    SecurityGrant,
     FileChange(FileChangeApprovalDecision),
     Permissions(PermissionsDecision),
     McpElicitation(McpServerElicitationAction),
@@ -1120,6 +1257,49 @@ fn command_decision_to_review_decision(
         },
         CommandExecutionApprovalDecision::Decline => ReviewDecision::Denied,
         CommandExecutionApprovalDecision::Cancel => ReviewDecision::Abort,
+    }
+}
+
+/// PF-25-S01: the grant Core offers for this command approval, if any. Only
+/// with `security_levels` on, under a live Aggressive policy in this process.
+fn grant_offer(
+    request: &ExecApprovalRequest,
+    features: &Features,
+) -> Option<crate::legacy_core::security_grant::GrantOffer> {
+    if !features.enabled(Feature::SecurityLevels)
+        || !request
+            .available_decisions
+            .contains(&CommandExecutionApprovalDecision::Accept)
+    {
+        return None;
+    }
+    #[cfg(test)]
+    let offer = grant_tests::TEST_OFFER
+        .with(|offer| offer.borrow().clone())
+        .or_else(|| crate::legacy_core::security_grant::offer(request.thread_id, &request.id));
+    #[cfg(not(test))]
+    let offer = crate::legacy_core::security_grant::offer(request.thread_id, &request.id);
+    // The review shows Core's copy of the command; it must be the one this
+    // approval shows.
+    offer.filter(|offer| same_command(&offer.command, &request.command))
+}
+
+/// Whether `shown` (from the approval request, possibly re-split from one
+/// string) is Core's `command`.
+fn same_command(command: &[String], shown: &[String]) -> bool {
+    command == shown
+        || shown
+            == [shlex::try_join(command.iter().map(String::as_str))
+                .unwrap_or_else(|_| command.join(" "))]
+}
+
+fn grant_option() -> ApprovalOption {
+    ApprovalOption {
+        label: "Grant once: run without the Aggressive protected-path rules (review first)"
+            .to_string(),
+        decision: ApprovalDecision::SecurityGrant,
+        shortcuts: vec![key_hint::plain(KeyCode::Char('g'))],
+        persistent: false,
     }
 }
 
@@ -1416,6 +1596,10 @@ fn elicitation_options(keymap: &ApprovalKeymap) -> Vec<ApprovalOption> {
         },
     ]
 }
+
+#[cfg(test)]
+#[path = "approval_overlay_grant_tests.rs"]
+mod grant_tests;
 
 #[cfg(test)]
 mod tests {
