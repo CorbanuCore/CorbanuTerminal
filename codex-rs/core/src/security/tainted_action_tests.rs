@@ -632,25 +632,10 @@ fn issue_239_human_approval_lifts_rules_only_under_bound_moderate() {
     };
     assert!(!tainted.human_approval_lifts_rules(Some(0)));
     assert!(tainted.human_approval_lifts_rules(Some(1)));
-    let live_aggressive = PostTaintState {
-        policy: match moderate.policy.clone() {
-            PolicyBinding::Bound {
-                epoch,
-                revocation_generation,
-                kill_switch_active,
-                actor_chain,
-                ..
-            } => PolicyBinding::Bound {
-                epoch,
-                revocation_generation,
-                kill_switch_active,
-                level: SecurityLevel::Aggressive,
-                actor_chain,
-            },
-            other => other,
-        },
-        ..moderate.clone()
-    };
+    let mut live_aggressive = moderate.clone();
+    if let PolicyBinding::Bound { level, .. } = &mut live_aggressive.policy {
+        *level = SecurityLevel::Aggressive;
+    }
     for state in [
         live_aggressive,
         PostTaintState {
