@@ -58,7 +58,9 @@
   `~/.gitconfig`, `~/.config/git/config`; `~/` expanded) are read-only too (Linux: when they exist). Past 512
   folders, 8 levels, or a folder that cannot be read, all of `.git/modules` is read-only (submodule updates then
   fail under the rules); an unreadable folder on the way to `.git` makes that `.git` and those above it read-only,
-  and an unreadable config keeps the `hooksPath` this process read from it before. A module folder holding very
+  and the paths (and any config's `hooksPath`) this process found before still hold; after a restart with the
+  folder still unreadable they are not known (on Linux, a `.git` placeholder bwrap cannot create then fails
+  every command until the permissions are fixed). A module folder holding very
   many plain files slows every command. Not covered: config includes, `~user/`, `GIT_CONFIG_GLOBAL`; a module folder a command
   creates is protected from the next command on; a new nested `.git` stays with the command-text net (the profile
   cannot deny creating one name anywhere without denying the repository's own).

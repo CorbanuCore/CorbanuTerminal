@@ -25,6 +25,35 @@ pub(super) fn git_persistence_paths(
     root: &AbsolutePathBuf,
     user_home: Option<&Path>,
 ) -> Vec<AbsolutePathBuf> {
+    let home = user_home.and_then(|home| AbsolutePathBuf::from_absolute_path(home).ok());
+    let (mut paths, work_tree) = match repository_paths(root, home.as_ref()) {
+        Ok((paths, work_tree)) => {
+            remember(&REPOSITORY_PATHS, root, Some(paths.clone()));
+            (paths, work_tree)
+        }
+        // A folder made unreadable hides nothing: the `.git` paths found so
+        // far, plus what this process found for `root` before.
+        Err(closed) => {
+            let mut paths = closed;
+            paths.extend(recall(&REPOSITORY_PATHS, root).unwrap_or_default());
+            (paths, root.clone())
+        }
+    };
+    if let Some(home) = &home {
+        for config in [home.join(".gitconfig"), home.join(".config/git/config")] {
+            paths.extend(protected_hooks_path(&config, &work_tree, Some(home)));
+        }
+    }
+    paths
+}
+
+/// The repository's own paths and its work tree, or (when a folder on the
+/// way cannot be read) `Err` with the `.git` of that folder and of every
+/// folder above it that may hold one, read-only whole.
+fn repository_paths(
+    root: &AbsolutePathBuf,
+    home: Option<&AbsolutePathBuf>,
+) -> Result<(Vec<AbsolutePathBuf>, AbsolutePathBuf), Vec<AbsolutePathBuf>> {
     let mut found = None;
     let ancestors: Vec<&Path> = root.as_path().ancestors().collect();
     for (at, folder) in ancestors.iter().enumerate() {
@@ -35,23 +64,28 @@ pub(super) fn git_persistence_paths(
                 break;
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-            // A folder made unreadable hides nothing: the `.git` of it and of
-            // every folder above it becomes read-only whole (fail closed).
             Err(_) => {
-                return ancestors[at..]
+                return Err(ancestors[at..]
                     .iter()
-                    .filter_map(|folder| {
-                        AbsolutePathBuf::from_absolute_path(folder.join(".git")).ok()
+                    .map(|folder| folder.join(".git"))
+                    .enumerate()
+                    // Above the unreadable folder, a `.git` known to be
+                    // missing is left out (no placeholder on Linux).
+                    .filter(|(index, dot_git)| {
+                        *index == 0
+                            || !std::fs::symlink_metadata(dot_git)
+                                .is_err_and(|err| err.kind() == std::io::ErrorKind::NotFound)
                     })
-                    .collect();
+                    .filter_map(|(_, dot_git)| AbsolutePathBuf::from_absolute_path(dot_git).ok())
+                    .collect());
             }
         }
     }
     let Some(Ok(dot_git)) = found.map(AbsolutePathBuf::from_absolute_path) else {
-        return Vec::new();
+        return Ok((Vec::new(), root.clone()));
     };
     let Some(work_tree) = dot_git.parent() else {
-        return Vec::new();
+        return Ok((Vec::new(), root.clone()));
     };
     let (mut paths, git_dirs) = if dot_git.as_path().is_dir() {
         (Vec::new(), vec![dot_git])
@@ -84,26 +118,25 @@ pub(super) fn git_persistence_paths(
         }
         (vec![dot_git], git_dirs)
     };
-    let mut configs: Vec<AbsolutePathBuf> = Vec::new();
     for dir in &git_dirs {
         paths.extend(entries(dir, /*below_modules*/ false));
-        configs.push(dir.join("config"));
-        configs.push(dir.join("config.worktree"));
         paths.extend(module_paths(dir));
-    }
-    let home = user_home.and_then(|home| AbsolutePathBuf::from_absolute_path(home).ok());
-    if let Some(home) = &home {
-        configs.push(home.join(".gitconfig"));
-        configs.push(home.join(".config/git/config"));
-    }
-    for config in configs {
-        if let Some(hooks) = hooks_path(&config, &work_tree, home.as_ref())
-            && (!cfg!(target_os = "linux") || !missing(&hooks))
-        {
-            paths.push(hooks);
+        for config in [dir.join("config"), dir.join("config.worktree")] {
+            paths.extend(protected_hooks_path(&config, &work_tree, home));
         }
     }
-    paths
+    Ok((paths, work_tree))
+}
+
+/// The hooks folder `config` names, when it should be protected (on Linux
+/// only when it exists or cannot be checked).
+fn protected_hooks_path(
+    config: &AbsolutePathBuf,
+    work_tree: &AbsolutePathBuf,
+    home: Option<&AbsolutePathBuf>,
+) -> Option<AbsolutePathBuf> {
+    hooks_path(config, work_tree, home)
+        .filter(|hooks| !cfg!(target_os = "linux") || !missing(hooks))
 }
 
 /// The hooks, config, config.worktree and commondir of one git folder. On
@@ -184,11 +217,11 @@ fn hooks_path(
     let text = match std::fs::read_to_string(config.as_path()) {
         Ok(text) => text,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            remember_hooks_path(config, None);
+            remember(&HOOKS_PATHS, config, None);
             return None;
         }
         // Made unreadable: what this session read from it before still holds.
-        Err(_) => return remembered_hooks_path(config),
+        Err(_) => return recall(&HOOKS_PATHS, config),
     };
     let mut in_core = false;
     let mut found = None;
@@ -221,36 +254,39 @@ fn hooks_path(
                     work_tree.as_path(),
                 )),
             });
-    remember_hooks_path(config, resolved.clone());
+    remember(&HOOKS_PATHS, config, resolved.clone());
     resolved
 }
 
-type HooksPaths = std::collections::HashMap<AbsolutePathBuf, AbsolutePathBuf>;
+type Remembered<T> =
+    std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<AbsolutePathBuf, T>>>;
 
 /// The hooks folder each config file named when it was last readable in
-/// this process.
-static HOOKS_PATHS: std::sync::LazyLock<std::sync::Mutex<HooksPaths>> =
+/// this process, and the repository paths found for each root. Lost at
+/// restart: a config or folder still unreadable then is not covered.
+static HOOKS_PATHS: Remembered<AbsolutePathBuf> = std::sync::LazyLock::new(Default::default);
+static REPOSITORY_PATHS: Remembered<Vec<AbsolutePathBuf>> =
     std::sync::LazyLock::new(Default::default);
 
-fn remember_hooks_path(config: &AbsolutePathBuf, hooks: Option<AbsolutePathBuf>) {
-    let mut paths = HOOKS_PATHS
+fn remember<T>(cache: &Remembered<T>, key: &AbsolutePathBuf, value: Option<T>) {
+    let mut cache = cache
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    match hooks {
-        Some(hooks) => {
-            paths.insert(config.clone(), hooks);
+    match value {
+        Some(value) => {
+            cache.insert(key.clone(), value);
         }
         None => {
-            paths.remove(config);
+            cache.remove(key);
         }
     }
 }
 
-fn remembered_hooks_path(config: &AbsolutePathBuf) -> Option<AbsolutePathBuf> {
-    HOOKS_PATHS
+fn recall<T: Clone>(cache: &Remembered<T>, key: &AbsolutePathBuf) -> Option<T> {
+    cache
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .get(config)
+        .get(key)
         .cloned()
 }
 
