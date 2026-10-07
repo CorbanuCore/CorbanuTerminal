@@ -85,11 +85,8 @@ fn single_fenced_json_block(text: &str) -> Option<&str> {
     if !matches!(info.trim(), "" | "json") {
         return None;
     }
-    let inner = body.trim_end().strip_suffix("```")?;
-    if inner.contains("```") {
-        return None;
-    }
-    Some(inner)
+    // A second block, or prose after the fence, is not JSON: serde rejects it.
+    body.trim_end().strip_suffix("```")
 }
 
 /// Runs memory phase 1 in strict step order:
@@ -797,6 +794,7 @@ mod tests {
             format!("```json\n{json}\n```"),
             format!("```\n{json}\n```"),
             format!("  \n```json\n{json}\n```\n"),
+            format!("```json\r\n{json}\r\n```\r\n"),
         ] {
             let output =
                 parse_stage_one_output(&text).unwrap_or_else(|err| panic!("{text}: {err}"));
@@ -806,6 +804,11 @@ mod tests {
             );
             assert_eq!(output.rollout_slug.as_deref(), Some("x"));
         }
+        // A Markdown code block inside a value is kept.
+        let text =
+            "```json\n{\"raw_memory\":\"a ```rust\\nx\\n``` b\",\"rollout_summary\":\"s\"}\n```";
+        let output = parse_stage_one_output(text).unwrap_or_else(|err| panic!("{text}: {err}"));
+        assert_eq!(output.raw_memory, "a ```rust\nx\n``` b");
     }
 
     #[test]
