@@ -69,14 +69,15 @@ launch.
   command, the Corbanu home is read-only and the network is off. A nested
   `corbanu exec` starts with Aggressive enforced, then stops at
   "Operation not permitted" (tmux run, step 3). It could only work if the
-  Aggressive profile let it write a home and reach the model. That is the
-  sandbox design, which is Travis's call.
+  Aggressive profile let it write a home and reach the model. That would
+  change the sandbox design, which Travis set to decision A (the
+  `corbanu-aggressive` profile as merged in #186) on 2026-10-07.
 - **No account database** (some containers) **and Windows:** only the
   variable and the process's own home are checked.
 - **Workspace is your home folder:** an agent can then delete registry
   entries. Aggressive already warns about this workspace at launch. Closing
-  it means making the registry read-only in the Aggressive profile, which is
-  the sandbox design (Travis's call).
+  it means making the registry read-only in the Aggressive profile (done
+  later in `registry-read-only/`, within decision A).
 - **A second, Permissive launch of the same home** while an Aggressive
   session still runs removes the rule file and registry entry. This was
   already open from round 3 and fits PF-24-S02.

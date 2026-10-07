@@ -39,6 +39,42 @@ class CiTimeoutBudgetTest(unittest.TestCase):
                 )
 
 
+class PrLinuxClippyTest(unittest.TestCase):
+    def workflow(self, name: str) -> str:
+        return (REPO_ROOT / ".github" / "workflows" / name).read_text()
+
+    def test_pr_runs_linux_gnu_clippy_within_budget(self) -> None:
+        self.assertRegex(
+            self.workflow("rust-ci.yml"),
+            r"(?m)^  lint_build_linux:\n(?:    .*\n)*?"
+            r"    uses: \./\.github/workflows/rust-ci-lint-build\.yml\n"
+            r"    with:\n"
+            r"      runner: ubuntu-24\.04\n"
+            r"      target: x86_64-unknown-linux-gnu\n"
+            r"      profile: dev\n"
+            r"      timeout_minutes: 20$",
+        )
+
+    def test_pr_linux_clippy_is_required(self) -> None:
+        rust_ci = self.workflow("rust-ci.yml")
+        self.assertRegex(rust_ci, r"(?ms)^  results:\n.*?^        lint_build_linux,$")
+        self.assertIn(
+            "[[ '${{ needs.lint_build_linux.result }}' == 'success' ]]", rust_ci
+        )
+
+    def test_pr_ci_skips_linux_test_suite(self) -> None:
+        self.assertNotIn("nextest", self.workflow("rust-ci.yml"))
+
+    def test_lint_build_definition_is_shared(self) -> None:
+        full = self.workflow("rust-ci-full.yml")
+        self.assertIn("uses: ./.github/workflows/rust-ci-lint-build.yml", full)
+        self.assertRegex(full, r"(?m)^      timeout_minutes: 30$")
+        self.assertIn(
+            "timeout-minutes: ${{ inputs.timeout_minutes }}",
+            self.workflow("rust-ci-lint-build.yml"),
+        )
+
+
 class NightlyHeavyJobsTest(unittest.TestCase):
     def workflow(self, name: str) -> str:
         return (REPO_ROOT / ".github" / "workflows" / name).read_text()

@@ -27,6 +27,10 @@ wallet, tool, network, and agent policies are unchanged.” Candidate commit
 | Vault | Exec-policy rule file `rules/corbanu-security-aggressive.rules` forbids `corbanu|codex|pfterminal[-debug] vault`; deny-read on `$CODEX_HOME/secrets` and `auth.json`; `shell_environment_policy` default excludes on plus `*VAULT*`, `*PASSWORD*`, `*PASSPHRASE*`, `*CREDENTIAL*`; `features.shell_snapshot = false` and `allow_login_shell = false` so nothing re-exports removed variables. |
 | Children | Existing inheritance of the session config and turn permissions; custom roles that would change a row are refused at start. |
 
+Sandbox design: decision A, the `corbanu-aggressive` profile as merged in #186
+(Travis, 2026-10-07), not B (literal `SandboxPolicy` table) or C (`on-request`
+approvals).
+
 Remaining residuals (disclosed in the review screen or the sprint record):
 MCP servers, apps and hooks run outside the sandbox; `corbanu exec` and IDE
 sessions ignore the level; a malformed `.rules` file elsewhere drops the prefix

@@ -12,6 +12,8 @@ integration_gate: "PR to main under the per-sprint gate (sec-common decision 5):
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-33-s02-20261006"
 branch: "pf-33-s02-20261006"
 base_commit: "39c1f06213da3f15ec41cdd673a09a98cbc7d027"
+merged_behind_flag: "url_destination_policy"
+gate_evidence: "qa/security-levels/sprints/PF-33-S02/README.md"
 depends_on: "PF-33-S01"
 created: 2026-08-28
 updated: 2026-10-06
