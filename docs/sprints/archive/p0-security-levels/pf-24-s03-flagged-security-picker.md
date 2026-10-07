@@ -14,7 +14,7 @@ branch: "codex/pf-24-s03-security-picker"
 base_commit: "24242c1b0ee5388cbfbfe1b0d8f63459945b588d"
 depends_on: "PF-24-S01"
 created: 2026-10-06
-updated: 2026-10-06
+updated: 2026-10-07
 ---
 
 # PF-24-S03 — Flagged /security picker: Permissive and Aggressive
@@ -62,6 +62,9 @@ label Aggressive as active while a row is missing.
 - Env row also turns off shell snapshots and login shells (they re-export removed variables).
 - Applies at the next start (web search, env and exec policy are session-static, so not via the
   PF-83 path); every config build is verified row by row; `config.toml` is never written.
+- Sandbox design: decision A, keep the `corbanu-aggressive` profile as merged in #186 (Travis,
+  2026-10-07). Rejected: B, the literal `SandboxPolicy` table with a screen warning that approved
+  commands can leave the sandbox; C, `on-request` approvals.
 
 ## Preconditions
 

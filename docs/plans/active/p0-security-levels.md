@@ -259,6 +259,7 @@ describe only behaviour verified at a milestone, citing **P0 `/security` levels*
 | --- | --- |
 | PF-83 open items (designer packet, review count 7/5, process isolation) | Recorded in the archived [PF-83-S01](../../sprints/archive/p0-security-levels/pf-83-s01-permission-confirmation.md); not blocking the core |
 | Aggressive vault denial from existing controls | PF-24-S03 must prove it; if impossible, stop and escalate |
+| Aggressive sandbox design (A: `corbanu-aggressive` permission profile; B: literal `SandboxPolicy` table; C: `on-request` approvals) | Decided: A, the `corbanu-aggressive` profile as merged in #186 (Travis, 2026-10-07) |
 | Global reservation cap | 3 security lanes + 1 accounting + 1 Task Node = 5 (`docs/sprints/index.md`); confirmed by Travis 2026-10-06 |
 | October 8 deadline | Unchanged and not re-estimated against the 20-sprint core |
 
