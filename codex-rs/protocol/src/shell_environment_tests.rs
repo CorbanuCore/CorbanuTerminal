@@ -24,6 +24,7 @@ fn in_isolated_child(test: &str, check: impl FnOnce()) {
     );
 }
 
+#[cfg(debug_assertions)]
 #[test]
 fn keyring_isolation_survives_filtered_child_env() {
     in_isolated_child(
@@ -45,10 +46,15 @@ fn keyring_isolation_survives_filtered_child_env() {
             };
             let env = create_env(&policy, /*thread_id*/ None);
             assert_eq!(env.get(NO_NATIVE_KEYRING_ENV_VAR), expected);
-            // The secretless-launch allowlist (hooks, MCP servers) keeps it too.
+            // The secretless-launch allowlist (hooks, MCP servers) keeps it too,
+            // and so does `create_env` once that contract is armed (this child
+            // process only).
             assert!(secretless_launch::is_launch_env_name_allowed(
                 NO_NATIVE_KEYRING_ENV_VAR
             ));
+            secretless_launch::arm();
+            let env = create_env(&policy, /*thread_id*/ None);
+            assert_eq!(env.get(NO_NATIVE_KEYRING_ENV_VAR), expected);
         },
     );
 }

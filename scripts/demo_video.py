@@ -311,7 +311,9 @@ def product_commit() -> str:
     return sha + ("-dirty" if dirty else "")
 
 
-def credential_prefix(spec: Spec, overrides: dict[str, str]) -> str:
+def credential_prefix(
+    spec: Spec, overrides: dict[str, str], helper: str | None = None
+) -> str:
     """Shell assignments that resolve each credential at use time, never as literals."""
     sources = {var: f"vault:{label}" for var, label in spec.credentials.items()}
     sources.update(overrides)
@@ -321,9 +323,10 @@ def credential_prefix(spec: Spec, overrides: dict[str, str]) -> str:
             raise DemoError(f"bad credential variable {var!r}")
         kind, _, ref = source.partition(":")
         if kind == "vault":
-            helper = shutil.which("corbanu") or "corbanu"
-            # The installed corbanu reads the user's own vault (and so the OS
-            # keyring) by design; only the candidate runs keyring-isolated.
+            helper = helper or shutil.which("corbanu") or "corbanu"
+            # The installed, signed corbanu reads the user's own vault (and so
+            # the OS keyring) by design; only the candidate runs keyring-isolated.
+            # `vault_helper` refuses a helper that is the candidate or a build.
             parts.append(
                 f'{var}="$(env -u {KEYRING_ISOLATION_VAR} {shlex.quote(helper)}'
                 f' vault auth-helper {shlex.quote(ref)})"'
@@ -570,8 +573,38 @@ def require_keyring_isolation(environ: dict[str, str]) -> None:
         )
 
 
+def is_build_output(path: Path) -> bool:
+    """True for a binary inside a Cargo target directory (`target/`, `targets/`)."""
+    return any(part in ("target", "targets", "debug", "release") for part in path.parts)
+
+
+def vault_helper(explicit: str | None, candidate: Path) -> str:
+    """The installed corbanu that reads `vault:` credentials from the user's vault.
+
+    It runs outside the keyring isolation, so it must be the signed install, never
+    the candidate or another fresh build (those would reach the real keychain).
+    """
+    found = explicit or shutil.which("corbanu")
+    if not found:
+        raise DemoError(
+            "no installed corbanu for vault: credentials; pass --vault-helper"
+        )
+    real = Path(found).resolve()
+    if real == candidate.resolve() or is_build_output(real):
+        raise DemoError(
+            f"refusing vault helper {real}: it is the candidate or a build output;"
+            " pass --vault-helper <installed corbanu>"
+        )
+    return str(real)
+
+
 def record(args: argparse.Namespace) -> Path:
     require_keyring_isolation(dict(os.environ))
+    if "release" in Path(args.bin).resolve().parts:
+        raise DemoError(
+            "refusing a release-profile candidate: it ignores"
+            f" {KEYRING_ISOLATION_VAR} and would use the real keychain"
+        )
     for tool in ("tmux", "asciinema", "agg", "ffmpeg", "ffprobe"):
         if not shutil.which(tool):
             raise DemoError(f"{tool} not found; see qa/demos/README.md for setup")
@@ -580,7 +613,11 @@ def record(args: argparse.Namespace) -> Path:
     if not os.access(binary, os.X_OK):
         raise DemoError(f"candidate binary not executable: {binary}")
     overrides = dict(item.split("=", 1) for item in args.credential)
-    creds = credential_prefix(spec, overrides)
+    needs_vault = bool(spec.credentials) or any(
+        source.startswith("vault:") for source in overrides.values()
+    )
+    helper = vault_helper(args.vault_helper, binary) if needs_vault else None
+    creds = credential_prefix(spec, overrides, helper)
     sha, day = product_commit(), dt.date.today().isoformat()
     run, places = prepare_run(spec, Path(args.out) / args.sprint)
 
@@ -844,6 +881,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     rec.add_argument(
         "--credential", action="append", default=[], metavar="VAR=vault:LABEL|file:PATH"
+    )
+    rec.add_argument(
+        "--vault-helper",
+        help="installed corbanu used for vault: credentials (default: corbanu on PATH)",
     )
     rec.add_argument(
         "--publish",

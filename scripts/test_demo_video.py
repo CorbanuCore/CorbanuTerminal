@@ -117,6 +117,21 @@ class DemoVideoTest(unittest.TestCase):
         with self.assertRaises(dv.DemoError):
             dv.credential_prefix(spec, {"X": "literal:abc"})
 
+    def test_vault_helper_is_never_the_candidate_or_a_build(self):
+        installed = self.dir / "bin" / "corbanu"
+        installed.parent.mkdir()
+        installed.write_text("#!/bin/sh\n")
+        build = self.dir / "targets" / "lane" / "debug" / "corbanu"
+        build.parent.mkdir(parents=True)
+        build.write_text("#!/bin/sh\n")
+        self.assertEqual(
+            dv.vault_helper(str(installed), build), str(installed.resolve())
+        )
+        with self.assertRaises(dv.DemoError):
+            dv.vault_helper(str(build), installed)
+        with self.assertRaises(dv.DemoError):
+            dv.vault_helper(str(installed), installed)
+
     def test_refuses_without_keyring_isolation(self):
         with self.assertRaises(dv.DemoError):
             dv.require_keyring_isolation({})

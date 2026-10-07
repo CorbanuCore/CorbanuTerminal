@@ -664,6 +664,7 @@ fn pf_28_s01_revealed_values_are_registered_with_the_output_gate() {
 /// and demo run) never reach the OS keyring: the default vault keeps its key
 /// in the profile's `0600` fallback file instead. Runs in a child test process
 /// so this process's environment is not changed.
+#[cfg(debug_assertions)]
 #[test]
 fn isolated_fixture_vault_keeps_its_key_in_the_profile() {
     const CHILD_ENV: &str = "CODEX_VAULT_KEYRING_ISOLATION_CHILD";

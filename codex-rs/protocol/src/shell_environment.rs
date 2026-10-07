@@ -29,6 +29,10 @@ pub fn keyring_isolation_env_var() -> Option<(&'static str, String)> {
 /// Once a secretless launch contract is armed (PF-27-S02), the result is also
 /// reduced to the launch allowlist; names the policy sets explicitly and the
 /// thread id are kept.
+///
+/// Debug builds then re-add [`NO_NATIVE_KEYRING_ENV_VAR`] when this process
+/// has it, overriding every policy filter (`exclude`, `include_only`,
+/// `inherit = "none"`), so children stay off the OS keyring too.
 pub fn create_env(
     policy: &ShellEnvironmentPolicy,
     thread_id: Option<&str>,

@@ -210,6 +210,7 @@ mod tests {
         assert_eq!(env.get(OsStr::new(custom_var)), Some(&expected));
     }
 
+    #[cfg(debug_assertions)]
     #[test]
     #[serial(extra_rmcp_env)]
     fn create_env_keeps_keyring_isolation() {
