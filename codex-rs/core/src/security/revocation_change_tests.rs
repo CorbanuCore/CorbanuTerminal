@@ -99,15 +99,8 @@ fn hold_grant(thread: ThreadId, operation: &str) -> String {
     )
     .unwrap();
     let now = aggressive::now_unix_seconds();
-    let grant = BoundedGrant::issue(
-        human,
-        chain.clone(),
-        scope,
-        now,
-        now + 600,
-        text(operation),
-    )
-    .unwrap();
+    let grant =
+        BoundedGrant::issue(human, chain.clone(), scope, now, now + 600, text(operation)).unwrap();
     let id = grant.grant_id.as_str().to_string();
     let state = PostTaintState {
         taint_generation: 0,
@@ -245,7 +238,10 @@ fn security_revocation_refuses_a_state_changed_since_review() {
         HumanRevocation::AllActiveAuthority,
         now(),
     );
-    assert!(matches!(result, Err(LevelChangeError::Changed)), "{result:?}");
+    assert!(
+        matches!(result, Err(LevelChangeError::Changed)),
+        "{result:?}"
+    );
 }
 
 /// One grant ends; the others stay.

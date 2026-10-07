@@ -238,8 +238,14 @@ impl BottomPaneView for SecurityView {
     }
 
     fn next_frame_delay(&self) -> Option<std::time::Duration> {
-        let saving = self.picker.as_ref().is_some_and(SecurityLevelPicker::saving)
-            || self.revocations.as_ref().is_some_and(RevocationView::saving);
+        let saving = self
+            .picker
+            .as_ref()
+            .is_some_and(SecurityLevelPicker::saving)
+            || self
+                .revocations
+                .as_ref()
+                .is_some_and(RevocationView::saving);
         saving.then_some(std::time::Duration::from_millis(50))
     }
 }

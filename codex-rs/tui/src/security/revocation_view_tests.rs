@@ -190,5 +190,8 @@ fn pf_25_s02_only_this_view_revokes() {
         .filter(|path| !path.ends_with("_tests.rs") && !path.contains("/tests/"))
         .filter(|path| !path.starts_with("core/src/security/"))
         .collect();
-    assert_eq!(callers, vec!["tui/src/security/revocation_view.rs".to_string()]);
+    assert_eq!(
+        callers,
+        vec!["tui/src/security/revocation_view.rs".to_string()]
+    );
 }

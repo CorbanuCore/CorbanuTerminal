@@ -52,9 +52,14 @@ type Outcome = Result<String, String>;
 
 #[derive(Debug)]
 enum Screen {
-    List { note: Option<String> },
+    List {
+        note: Option<String>,
+    },
     /// `armed`: for a release, the person moved to "Turn it off".
-    Review { choice: Choice, armed: bool },
+    Review {
+        choice: Choice,
+        armed: bool,
+    },
     Saving(mpsc::Receiver<Outcome>),
     Done(Outcome),
 }
@@ -165,9 +170,7 @@ impl RevocationView {
                         Some(Row::KillSwitch) if self.basis.kill_switch_active => {
                             Choice::Core(HumanRevocation::KillSwitchOff)
                         }
-                        Some(Row::KillSwitch) | None => {
-                            Choice::Core(HumanRevocation::KillSwitchOn)
-                        }
+                        Some(Row::KillSwitch) | None => Choice::Core(HumanRevocation::KillSwitchOn),
                     };
                     self.screen = Screen::Review {
                         choice,
@@ -276,7 +279,11 @@ impl RevocationView {
         match &self.screen {
             Screen::List { note } => {
                 if self.grants.is_empty() {
-                    lines.extend(wrap("No grants are held now.").into_iter().map(Stylize::dim));
+                    lines.extend(
+                        wrap("No grants are held now.")
+                            .into_iter()
+                            .map(Stylize::dim),
+                    );
                 }
                 let grant_lines = held_lines(&self.grants);
                 for (index, row) in self.rows().iter().enumerate() {
@@ -332,7 +339,9 @@ impl RevocationView {
                 }
             }
             Screen::Saving(_) => lines.extend(wrap("Saving…")),
-            Screen::Done(Ok(message)) => lines.extend(wrap(message).into_iter().map(Stylize::green)),
+            Screen::Done(Ok(message)) => {
+                lines.extend(wrap(message).into_iter().map(Stylize::green))
+            }
             Screen::Done(Err(message)) => lines.extend(wrap(message).into_iter().map(Stylize::red)),
         }
         lines
