@@ -21,6 +21,7 @@ use std::path::Path;
 
 pub(crate) mod confined;
 mod gate;
+mod git_paths;
 mod read_denials;
 mod typed;
 

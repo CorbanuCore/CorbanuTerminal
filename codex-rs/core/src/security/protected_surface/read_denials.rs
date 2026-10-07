@@ -140,7 +140,7 @@ impl ReadDenials {
             // The repository the root is in, found the way git finds it; a
             // worktree or submodule keeps hooks and config in the git folder
             // its `.git` file points to (hooks in the common one).
-            for path in git_persistence_paths(root) {
+            for path in super::git_paths::git_persistence_paths(root, user_home) {
                 denials.push_read_only(path, keep);
             }
         }
@@ -380,132 +380,6 @@ fn real_location_within(path: &AbsolutePathBuf, hops: usize) -> Option<AbsoluteP
         real.push(name);
     }
     AbsolutePathBuf::from_absolute_path(real).ok()
-}
-
-/// What git reads to decide which hooks and config run for the repository
-/// `root` is in (the nearest `.git` at or above it, found the way git finds
-/// it): hooks, config, config.worktree and commondir of its git folder; for
-/// a `.git` file (worktree, submodule) the file itself and the same entries
-/// in the folder it points to and its common folder; the folder a
-/// `core.hooksPath` names; and every submodule git folder. A missing
-/// commondir or hooks folder is covered on macOS only: on Linux the sandbox
-/// would put an empty placeholder in place, which breaks git. A new nested
-/// `.git` stays with the command-text net.
-fn git_persistence_paths(root: &AbsolutePathBuf) -> Vec<AbsolutePathBuf> {
-    let Some(dot_git) = root
-        .as_path()
-        .ancestors()
-        .map(|folder| folder.join(".git"))
-        .find(|dot_git| std::fs::symlink_metadata(dot_git).is_ok())
-        .and_then(|dot_git| AbsolutePathBuf::from_absolute_path(dot_git).ok())
-    else {
-        return Vec::new();
-    };
-    let entries = |git_dir: &AbsolutePathBuf| {
-        let commondir = git_dir.join("commondir");
-        let with_commondir =
-            !cfg!(target_os = "linux") || std::fs::symlink_metadata(commondir.as_path()).is_ok();
-        ["hooks", "config", "config.worktree"]
-            .into_iter()
-            .map(|entry| git_dir.join(entry))
-            .chain(with_commondir.then_some(commondir))
-            .collect::<Vec<_>>()
-    };
-    let Some(work_tree) = dot_git.parent() else {
-        return Vec::new();
-    };
-    let (mut paths, git_dirs) = if dot_git.as_path().is_dir() {
-        (Vec::new(), vec![dot_git])
-    } else {
-        let mut git_dirs = Vec::new();
-        if let Some(git_dir) = std::fs::read_to_string(dot_git.as_path())
-            .ok()
-            .and_then(|text| {
-                text.lines()
-                    .find_map(|line| line.strip_prefix("gitdir:"))
-                    .map(|dir| dir.trim().to_string())
-            })
-        {
-            let git_dir = AbsolutePathBuf::resolve_path_against_base(git_dir, work_tree.as_path());
-            let common = std::fs::read_to_string(git_dir.join("commondir").as_path())
-                .ok()
-                .map(|dir| {
-                    AbsolutePathBuf::resolve_path_against_base(dir.trim(), git_dir.as_path())
-                });
-            git_dirs.push(git_dir);
-            git_dirs.extend(common);
-        }
-        (vec![dot_git], git_dirs)
-    };
-    for dir in &git_dirs {
-        paths.extend(entries(dir));
-        // PF-23-S02 follow-up: a `core.hooksPath` (`.husky`) runs hooks
-        // from wherever it points, usually inside the workspace.
-        for config in ["config", "config.worktree"] {
-            if let Some(hooks) = hooks_path(&dir.join(config), &work_tree)
-                && (!cfg!(target_os = "linux") || hooks.as_path().exists())
-            {
-                paths.push(hooks);
-            }
-        }
-    }
-    // PF-23-S02 follow-up: submodule git folders (`.git/modules/*`, nested
-    // as deep as submodules go) hold their own hooks and config.
-    let mut pending: Vec<AbsolutePathBuf> =
-        git_dirs.iter().map(|dir| dir.join("modules")).collect();
-    let mut found = 0;
-    while let Some(modules) = pending.pop() {
-        let Ok(children) = std::fs::read_dir(modules.as_path()) else {
-            continue;
-        };
-        for child in children.flatten() {
-            let module = modules.join(child.file_name());
-            if found >= MAX_SUBMODULE_GIT_DIRS || !module.as_path().is_dir() {
-                continue;
-            }
-            if module.join("HEAD").as_path().exists() {
-                found += 1;
-                paths.extend(entries(&module));
-                pending.push(module.join("modules"));
-            } else {
-                // A submodule path with slashes nests its git folder.
-                pending.push(module);
-            }
-        }
-    }
-    paths
-}
-
-/// Submodule git folders protected at most; more are left to the
-/// command-text net.
-const MAX_SUBMODULE_GIT_DIRS: usize = 256;
-
-/// The `core.hooksPath` a git config file sets, resolved the way git does
-/// (relative to the work tree; `~/` is not expanded and is left out).
-fn hooks_path(config: &AbsolutePathBuf, work_tree: &AbsolutePathBuf) -> Option<AbsolutePathBuf> {
-    let text = std::fs::read_to_string(config.as_path()).ok()?;
-    let mut in_core = false;
-    let mut found = None;
-    for line in text.lines() {
-        let line = line.trim();
-        if let Some(section) = line.strip_prefix('[') {
-            in_core = section
-                .trim_end_matches(']')
-                .trim()
-                .eq_ignore_ascii_case("core");
-            continue;
-        }
-        let Some((key, value)) = line.split_once('=') else {
-            continue;
-        };
-        if in_core && key.trim().eq_ignore_ascii_case("hookspath") {
-            let value = value.trim().trim_matches('"');
-            if !value.is_empty() && !value.starts_with('~') {
-                found = Some(value.to_string());
-            }
-        }
-    }
-    found.map(|value| AbsolutePathBuf::resolve_path_against_base(value, work_tree.as_path()))
 }
 
 /// In-process file tools (the patch pre-check, structured edits, image

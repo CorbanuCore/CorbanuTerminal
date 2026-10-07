@@ -476,24 +476,3 @@ fn pf_23_s02_submodules_and_hooks_path_are_protected() {
         assert!(writable(&open), "{}", open.display());
     }
 }
-
-#[test]
-fn pf_23_s02_hooks_path_resolves_like_git() {
-    let dir = tempfile::tempdir().unwrap();
-    let work_tree = abs(&dir.path().canonicalize().unwrap());
-    let config = work_tree.join("config");
-    let read = |text: &str| {
-        std::fs::write(config.as_path(), text).unwrap();
-        hooks_path(&config, &work_tree)
-    };
-    assert_eq!(
-        read("[core]\n  hookspath = tools/hooks\n"),
-        Some(work_tree.join("tools/hooks"))
-    );
-    assert_eq!(
-        read("[core]\nhooksPath = /opt/hooks\n"),
-        Some(abs(Path::new("/opt/hooks")))
-    );
-    assert_eq!(read("[user]\nhooksPath = x\n"), None);
-    assert_eq!(read("[core]\nhooksPath = ~/hooks\n"), None);
-}
