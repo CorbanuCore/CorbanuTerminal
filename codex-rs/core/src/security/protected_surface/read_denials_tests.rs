@@ -352,22 +352,30 @@ fn pf_23_s02_worktree_hooks_and_symlinked_dotfiles_are_protected() {
 
     let denials = ReadDenials::collect(&fx.codex_home, Some(&fx.user_home), None, &[abs(&cwd)]);
     let read_only: Vec<_> = denials.read_only_paths().cloned().collect();
-    for protected in [
+    let mut protected_paths = vec![
+        cwd.join(".git"),
         common.join("hooks"),
         common.join("config"),
         own.join("config.worktree"),
+        own.join("commondir"),
         dotfiles.join("zshrc"),
-    ] {
+    ];
+    if cfg!(target_os = "macos") {
+        protected_paths.push(common.join("commondir"));
+    }
+    for protected in protected_paths {
         assert!(
             read_only.contains(&abs(&protected)),
             "{}",
             protected.display()
         );
     }
+    // Nothing below the `.git` file.
     assert!(
         read_only
             .iter()
-            .all(|path| !path.as_path().starts_with(cwd.join(".git"))),
+            .all(|path| path.as_path() == cwd.join(".git")
+                || !path.as_path().starts_with(cwd.join(".git"))),
         "{read_only:?}"
     );
     let policy = denials
@@ -396,11 +404,13 @@ fn pf_23_s02_enclosing_repo_and_dangling_links_are_protected() {
     .unwrap();
     let denials = ReadDenials::collect(&fx.codex_home, Some(&fx.user_home), None, &[abs(&cwd)]);
     let read_only: Vec<_> = denials.read_only_paths().cloned().collect();
-    for protected in [
-        repo.join(".git/hooks"),
-        repo.join(".git/config"),
-        fx.user_home.join("dotfiles/zshrc"),
-    ] {
+    let mut protected_paths = vec![repo.join(".git/hooks"), repo.join(".git/config")];
+    if cfg!(target_os = "macos") {
+        // Linux leaves out a missing commondir and a dangling home link.
+        protected_paths.push(repo.join(".git/commondir"));
+        protected_paths.push(fx.user_home.join("dotfiles/zshrc"));
+    }
+    for protected in protected_paths {
         assert!(
             read_only.contains(&abs(&protected)),
             "{}",
