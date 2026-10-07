@@ -4,8 +4,8 @@
   merged in again before review round 3. Behind `security_levels`. Core's level is raised only after the
   `protected_mode_preflight` preflight passed, so with that flag off a save behaves as in PF-24-S03 and never
   touches `security_state.json`.
-- **Model:** GLM 5.2 has no Z.AI balance, so every TUI run and video uses a mock provider (`mock-model`, no
-  network, no model turn). A GLM run can be added later; nothing in this sprint needs a model turn.
+- **Model:** the gate ran with a mock provider (`mock-model`, no model turn) while Z.AI had no balance. The GLM 5.2
+  pass below was added after the merge, on main at `e4d17dbdc6` (#253).
 
 ## What a confirmation does
 
@@ -63,6 +63,19 @@ Keys: Enter confirms, Esc cancels (nothing written), `r` restarts, and Enter on 
   - Round 3: APPROVE WITH FIXES (4).
   - Round 4: **APPROVE**.
   - Each finding is fixed or recorded in `review/disposition.md`; the rounds are in `review/round1..4.md`.
+- **GLM 5.2 tmux pass (main `e4d17dbdc6`, `-m glm-5.2 -c model_provider="zai"`, disposable homes,
+  `CORBANU_TEST_NO_NATIVE_KEYRING=1`; `.codex-work/workers-20261002/sec-tui8.log`):** each case ends with GLM reading
+  a file in the hidden Corbanu home (`../home/team-notes.txt`):
+  - Confirm: read works under Permissive; after `/security` → Aggressive → Enter, "Core's level is Aggressive now in
+    this session", and the same read gets "Operation not permitted" without a restart.
+  - Cancel: Esc on the Aggressive review says "Cancelled. Nothing changed."; the read still works.
+  - Downgrade: from a confirmed and restarted Aggressive, Permissive lists the protections removed at the next start;
+    Enter keeps Core at Aggressive in this session; after `r` the read works again.
+  - Restart now: started with an initial prompt that GLM answered once; `r` restarted with the same options and the
+    prompt was not sent again; `/security` showed Aggressive active, commands now asked first (`untrusted`), and the
+    approved read got "Operation not permitted". The first take was a model slip, recorded as is: GLM rewrote the
+    command (`printf … home`, reading `../hohome/…`), so the run was repeated.
+  - Four GLM videos (below and in `qa/demos/index/PF-24-S02.md`).
 - **Videos (mock model, commit `9fda6ceb5e02`):** four, listed in `qa/demos/index/PF-24-S02.md`:
   - confirm and restart;
   - downgrade shows removed protections;

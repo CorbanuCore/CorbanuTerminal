@@ -64,7 +64,7 @@ fn pf_25_s01_only_the_grant_review_confirms() {
         .parent()
         .expect("codex-rs");
     if !workspace.join("core/src/security/grant_offer.rs").exists() {
-        eprintln!("workspace sources not available; skipped");
+        // Workspace sources are not available (Bazel runfiles): skipped.
         return;
     }
     let mut files = Vec::new();
@@ -100,7 +100,7 @@ fn pf_25_s01_only_the_grant_review_confirms() {
                 })
         })
         .filter_map(|path| path.strip_prefix(workspace).ok())
-        .map(|path| path.display().to_string())
+        .map(|path| path.display().to_string().replace('\\', "/"))
         // Tests drive Core's confirm directly; they are not product callers.
         .filter(|path| !path.ends_with("_tests.rs") && !path.contains("/tests/"))
         .collect();

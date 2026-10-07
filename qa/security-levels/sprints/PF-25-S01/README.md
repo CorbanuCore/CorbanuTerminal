@@ -19,22 +19,27 @@ command approval under Aggressive (human reviewer)
 
 ## Results
 
-- **Focused tests:**
-  - `just test -p codex-core` (`grant_offer`, `aggressive`, `pf_25_s01`, `pf_23_s02`, `transition`): see below.
-  - `just test -p codex-tui` (`pf_25_s01`, `approval_overlay`, `security`).
+- **Focused tests (final tree):**
+  - `just test -p codex-core` (`grant_offer`, `aggressive`, `pf_25_s01`, `pf_23_s02`, `transition`): 62/62.
+  - `just test -p codex-tui` (`pf_25_s01`, `approval_overlay`, `security`): 164/164.
   - Core integration (`core/tests/suite/pf_25_s01.rs`, macOS seatbelt): the offer key is the approval id the TUI
     answers and Core's command equals the approval's; the approved "1 run" reads the protected file and the next
     identical run, only approved, gets "Operation not permitted"; a declined approval leaves nothing.
 - **Wider run** (round-1 tree): `just test -p codex-tui -p codex-app-server-client` 4414/4416. The two failures are
   the known command-menu snapshot and kitty pet image tests.
-- **Linux clippy** (`-D warnings`; core, tui, app-server-client, `--tests`) on the RTX box: clean at `535350b9cf` and
-  `c5fa36b31f`.
-- **tmux (GLM 5.2, `-c model_provider="zai"`, disposable homes, `CORBANU_TEST_NO_NATIVE_KEYRING=1`):** found that Esc in
-  the review reached the pane's cancel path and declined the command; fixed (the overlay takes Esc while the review
-  is open) with a pane-level test.
+- **Linux clippy** (`-D warnings`; core, tui, app-server-client, `--tests`) on the RTX box: clean at `535350b9cf`,
+  `c5fa36b31f` and `d76c577e8c` (at `aee150e46a` it caught an `eprintln!` in a test, removed).
+- **tmux (GLM 5.2, `-c model_provider="zai"`, disposable homes, `CORBANU_TEST_NO_NATIVE_KEYRING=1`;
+  `.codex-work/workers-20261002/sec-tui8.log`):** under Aggressive (confirmed, restarted) GLM's hidden-home read asks
+  first; `g` opens the review; ↓ Enter grants one run and the file is read; the same read again, approved with `y`,
+  gets "Operation not permitted"; Esc in the review goes back and `y` runs it under the rules; `u` holds the grant and
+  `/security` lists it with its expiry. The first take found that Esc in the review reached the pane's cancel path
+  and declined the command; fixed (the overlay takes Esc while the review is open) with a pane-level test.
 - **Review (Opus 5.5 High, installed `corbanu exec`, read-only):** round 1 APPROVE WITH FIXES (9 findings), round 2
-  APPROVE WITH FIXES (8 low, 1 info). Each finding is fixed or recorded in `review/disposition.md`.
-- **Videos:** `qa/demos/index/PF-25-S01.md`.
+  APPROVE WITH FIXES (8 low), round 3 APPROVE WITH FIXES (1 medium, 5 low/info), round 4 **APPROVE**. Each finding
+  is fixed or recorded in `review/disposition.md`.
+- **Videos (GLM 5.2, commit `aee150e46a`; later commits change one test and docs only):** grant one run, Esc grants
+  nothing, a grant until expiry listed in `/security` (`qa/demos/index/PF-25-S01.md`).
 
 ## Known limits
 
