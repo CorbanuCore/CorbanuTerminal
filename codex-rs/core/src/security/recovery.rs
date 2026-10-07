@@ -68,6 +68,8 @@ pub(crate) struct Recovery {
     /// Set when the file could not be read: Aggressive and the kill switch
     /// apply until it is replaced.
     pub(crate) unreadable: Option<String>,
+    /// The Corbanu home it was read from.
+    pub(crate) home: Option<PathBuf>,
 }
 
 impl Recovery {
@@ -85,21 +87,25 @@ impl Recovery {
 /// The stricter of `configured` and the stored level, with the stored
 /// revocation state.
 pub(crate) fn recover(codex_home: &Path, configured: SecurityLevel) -> Recovery {
+    let home = Some(codex_home.to_path_buf());
     match load(codex_home) {
         Ok(None) => Recovery {
             level: configured,
             revocations: RevocationState::new(),
             unreadable: None,
+            home,
         },
         Ok(Some(state)) => Recovery {
             level: configured.max(state.level),
             revocations: state.revocations,
             unreadable: None,
+            home,
         },
         Err(LoadError::Io(reason) | LoadError::Corrupt(reason)) => Recovery {
             level: SecurityLevel::Aggressive,
             revocations: RevocationState::new(),
             unreadable: Some(reason),
+            home,
         },
     }
 }
@@ -151,6 +157,9 @@ pub(crate) enum TransitionWrite {
 
 /// Where a transition is made durable before it takes effect.
 pub(crate) trait TransitionStore {
+    /// The Corbanu home, when the store is one.
+    fn home(&self) -> Option<&Path>;
+
     /// Under one lock: read the stored state (`None` when absent or
     /// corrupt), let `merge` build the next one from it, and save that. A
     /// `merge` error writes nothing; a read or save error is
@@ -184,6 +193,10 @@ impl HomeTransitionStore {
 }
 
 impl TransitionStore for HomeTransitionStore {
+    fn home(&self) -> Option<&Path> {
+        Some(&self.codex_home)
+    }
+
     fn update(
         &self,
         write: TransitionWrite,

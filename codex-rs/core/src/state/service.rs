@@ -108,4 +108,39 @@ impl SessionServices {
     pub(crate) fn new_model_client_session(&self) -> ModelClientSession {
         self.model_client().new_session()
     }
+
+    /// The policy epoch and revocation generation "for session" approvals
+    /// are bound to (PF-23-S03).
+    pub(crate) fn authority_marker(&self) -> Option<(u64, u64)> {
+        self.agent_control
+            .effective_security_policy()
+            .authority_marker()
+    }
+
+    /// The "for session" approval cache, emptied first when a security
+    /// transition was committed since it was last used (PF-23-S03).
+    pub(crate) async fn approval_cache(&self) -> tokio::sync::MutexGuard<'_, ApprovalStore> {
+        let mut store = self.tool_approvals.lock().await;
+        store.fence(self.authority_marker());
+        store
+    }
+
+    /// Store "for session" approvals the human gave under `decided_under`.
+    /// Dropped when a transition was committed since: the answer was for
+    /// the policy shown with the question.
+    pub(crate) async fn remember_approvals<K: serde::Serialize>(
+        &self,
+        keys: impl IntoIterator<Item = K>,
+        decided_under: Option<(u64, u64)>,
+    ) {
+        let mut store = self.tool_approvals.lock().await;
+        if store.policy() == decided_under && self.authority_marker() == decided_under {
+            for key in keys {
+                store.put(
+                    key,
+                    codex_protocol::protocol::ReviewDecision::ApprovedForSession,
+                );
+            }
+        }
+    }
 }

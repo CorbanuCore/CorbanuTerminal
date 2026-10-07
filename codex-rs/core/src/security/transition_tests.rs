@@ -56,6 +56,10 @@ impl MemoryStore {
 }
 
 impl TransitionStore for MemoryStore {
+    fn home(&self) -> Option<&std::path::Path> {
+        None
+    }
+
     fn update(
         &self,
         _write: crate::security::recovery::TransitionWrite,
@@ -513,10 +517,12 @@ fn security_transition_grant_request_is_not_a_transition() {
 }
 
 #[test]
-fn security_transition_drops_grants_and_pending_approvals() {
+fn security_transition_drops_grants_cached_and_pending_approvals() {
     use crate::security::aggressive;
     use crate::security::tainted_action::PostTaintAction;
     use crate::security::tainted_action::ProtectedActionKind;
+    use crate::tools::sandboxing::ApprovalStore;
+    use codex_protocol::protocol::ReviewDecision;
 
     let fixture = fixture(SecurityLevel::Aggressive);
     let thread = fixture.root.to_string();
@@ -564,6 +570,9 @@ fn security_transition_drops_grants_and_pending_approvals() {
         kind: ProtectedActionKind::Credentials,
         state: post_taint(&fixture),
     };
+    let mut cache = ApprovalStore::default();
+    cache.fence(fixture.view.authority_marker());
+    cache.put("rm -rf build", ReviewDecision::ApprovedForSession);
 
     // Re-choosing Aggressive (undoing nothing) still moves the epoch.
     fixture
@@ -582,6 +591,8 @@ fn security_transition_drops_grants_and_pending_approvals() {
         ),
         None
     );
+    cache.fence(fixture.view.authority_marker());
+    assert_eq!(cache.get(&"rm -rf build"), None);
     assert!(pending.recheck(Some(&post_taint(&fixture))).is_err());
 }
 
@@ -601,22 +612,29 @@ fn post_taint(fixture: &Fixture) -> crate::security::tainted_action::PostTaintSt
     }
 }
 
-/// Two sessions on one Corbanu home (another process): a later commit in the
-/// one that did not see the other's kill switch merges into what is stored
-/// instead of overwriting it, and its downgrade is refused once a stricter
-/// level is stored.
+/// Two policy trees on one Corbanu home (`/new`, or another process): a
+/// later commit in the older tree merges into what is stored instead of
+/// overwriting it, and a restrictive commit reaches the other tree now.
 #[test]
-fn security_transition_sessions_on_one_home_merge_not_overwrite() {
+fn security_transition_trees_on_one_home_merge_and_propagate() {
     let home = tempfile::TempDir::new().unwrap();
     let store = crate::security::recovery::HomeTransitionStore::new(home.path());
     let first = fixture(SecurityLevel::Moderate);
     let second = fixture(SecurityLevel::Moderate);
+    first.view.register_home(home.path());
+    second.view.register_home(home.path());
+
     let kill = first.kill(/*active*/ true);
+    // The second tree confirms a change before the kill switch lands.
+    let unchanged = second.set_level(SecurityLevel::Moderate);
     first.commit_with(kill, &store).unwrap();
+    // It reached the second tree at once (and closed its channels) ...
+    assert!(second.now().4);
+    assert_eq!(second.revocations(), 1);
+    // ... so the second tree's older confirmation is stale.
+    assert!(second.commit_with(unchanged, &store).is_err());
     let unchanged = second.set_level(SecurityLevel::Moderate);
     second.commit_with(unchanged, &store).unwrap();
-    // The second session took the stored kill switch in too.
-    assert!(second.now().4);
     let recovery = crate::security::recovery::recover(home.path(), SecurityLevel::Permissive);
     assert_eq!(
         (
@@ -627,11 +645,16 @@ fn security_transition_sessions_on_one_home_merge_not_overwrite() {
         (SecurityLevel::Moderate, true, 1)
     );
 
+    // Another process (a tree this one cannot reach) at Moderate: its
+    // downgrade is refused once a stricter level is stored, rather than
+    // lowering it unseen.
+    let other_process = fixture(SecurityLevel::Moderate);
     let stricter = first.set_level(SecurityLevel::Aggressive);
     first.commit_with(stricter, &store).unwrap();
-    let downgrade = second.set_level(SecurityLevel::Permissive);
+    assert_eq!(second.now().0, SecurityLevel::Aggressive);
+    let downgrade = other_process.set_level(SecurityLevel::Permissive);
     assert!(matches!(
-        second.commit_with(downgrade, &store),
+        other_process.commit_with(downgrade, &store),
         Err(TransitionError::StoredLevelChanged(
             SecurityLevel::Aggressive
         ))
@@ -686,20 +709,42 @@ fn security_transition_unsaved_kill_switch_survives_the_next_commit() {
     assert_eq!(store.saved(), vec![(SecurityLevel::Permissive, 2, true)]);
 }
 
-/// A release is only for the kill switch the session shows: refused when it
-/// shows none, or when a newer one was stored by another session.
+/// Round 2: a tree with a longer history (the file was removed since)
+/// still takes another tree's kill switch, and a release confirmed before a
+/// newer kill switch was stored is refused.
 #[test]
-fn security_transition_release_is_for_the_shown_kill_switch() {
+fn security_transition_kill_switch_reaches_older_trees_and_stale_release_is_refused() {
     let home = tempfile::TempDir::new().unwrap();
     let store = crate::security::recovery::HomeTransitionStore::new(home.path());
-    let unaware = fixture(SecurityLevel::Moderate);
+    let older = fixture(SecurityLevel::Moderate);
+    older.view.register_home(home.path());
+    for id in ["a", "b", "c"] {
+        let target = RevocationTarget::Grant {
+            grant_id: BoundedText::new(id).unwrap(),
+        };
+        older.commit_with(older.revoking(target), &store).unwrap();
+    }
+    std::fs::remove_file(home.path().join("security_state.json")).unwrap();
+    let newer = fixture(SecurityLevel::Moderate);
+    newer.view.register_home(home.path());
+    newer
+        .commit_with(newer.kill(/*active*/ true), &store)
+        .unwrap();
+    assert!(older.now().4);
+    assert_eq!(older.now().3, 4);
+
+    // Another process (unreachable) released earlier; a newer kill switch is
+    // stored now: the stale release is refused.
+    // A session that never showed the kill switch cannot release it.
+    let other_process = fixture(SecurityLevel::Moderate);
     assert!(matches!(
-        unaware.prepare(
+        other_process.prepare(
             revoke(RevocationTarget::KillSwitch { active: false }),
             ProbeOutcome::Passed,
         ),
         Err(TransitionError::StoredStateChanged)
     ));
+    // One that showed an older kill switch cannot release the newer one.
     let stale = fixture(SecurityLevel::Moderate);
     stale
         .controller
@@ -708,10 +753,6 @@ fn security_transition_release_is_for_the_shown_kill_switch() {
             &MemoryStore::default(),
             NOW - 100,
         )
-        .unwrap();
-    let newer = fixture(SecurityLevel::Moderate);
-    newer
-        .commit_with(newer.kill(/*active*/ true), &store)
         .unwrap();
     let stale_release = stale.kill(/*active*/ false);
     assert!(matches!(

@@ -790,6 +790,13 @@ impl NetworkProxy {
         self.http_addr
     }
 
+    /// PF-23-S03: revoke every isolated-broker reference and close its open
+    /// channels (a restrictive security transition, the kill switch or run
+    /// end). Returns false when isolation is inactive.
+    pub fn revoke_brokered_credentials(&self) -> bool {
+        self.state.revoke_brokered_credentials()
+    }
+
     pub fn socks_addr(&self) -> SocketAddr {
         #[cfg(target_os = "windows")]
         if let Some(runtime) = self.windows_runtime.as_ref() {

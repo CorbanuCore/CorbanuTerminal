@@ -208,6 +208,7 @@ impl AgentControl {
                 level,
                 revocations: RevocationState::new(),
                 unreadable: None,
+                home: None,
             },
             root_thread_id,
             inherits_from_spawn_parent,
@@ -224,6 +225,7 @@ impl AgentControl {
         inherits_from_spawn_parent: bool,
     ) -> Result<Self, SecurityPolicyError> {
         let level = recovery.level;
+        let home = recovery.home.clone();
         if self.security_policy.is_initialized()? {
             // Resuming an already-bound root on the same control plane must preserve its
             // binding. Treating it as a new auxiliary agent appends the same principal to its
@@ -267,6 +269,12 @@ impl AgentControl {
                 EffectivePolicyInitialization::Root
             },
         )?;
+        if let Some(home) = home {
+            // Register, then read again: a commit saved between the first
+            // read and the registration is not missed.
+            self.security_policy.register_home(&home);
+            controller.catch_up(&crate::security::recovery::recover(&home, level));
+        }
         self.trusted_security_controller = Some(controller);
         Ok(self)
     }
