@@ -207,11 +207,12 @@ would read the login keychain.
   refusal lifting only with the feature, the armed contract and a sandbox.
 - **Real Claude Code regression:** above (`regression/`).
 - **tmux runs** (`tmux-run/7-macos-review-fixes.txt`, repeated at the
-  round-2 fixes, 9e9c63be63, with the same results): GLM 5.2 on Z.AI with
+  round-2 and round-3 fixes, 9e9c63be63 and e562055c0b, with the same
+  results; at e562055c0b `claude --version` runs in the sandbox): GLM 5.2 on Z.AI with
   Claude Code 2.1.292 under Aggressive: the popup opens on Deny; Right, Enter
   allowed `touch approved.txt`, Esc denied `touch denied.txt`. With the
   protocol stand-in `fake-claude/`: an Enter sent as the popup appeared was
   ignored, the untouched popup's Enter denied, the two-line command showed
   `⏎` and `\u{202e}`.
-- **Videos:** [approvals under Aggressive](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/claude-contained-claude-contained-approvals-9e9c63be636e-2026-10-06.mp4),
-  [popup guard and escaping](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/claude-contained-claude-contained-approval-guard-9e9c63be636e-2026-10-06.mp4)
+- **Videos:** [approvals under Aggressive](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/claude-contained-claude-contained-approvals-e562055c0b97-2026-10-06.mp4),
+  [popup guard and escaping](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/claude-contained-claude-contained-approval-guard-e562055c0b97-2026-10-06.mp4)

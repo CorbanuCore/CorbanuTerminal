@@ -73,3 +73,9 @@ complete, workspace afterwards: second.txt (first denied by the untouched
 popup's Enter after the guard ignored the Enter sent as it appeared).
 claude-contained-approvals (GLM 5.2 on Z.AI): steps complete, workspace
 afterwards: approved.txt; the pane reported touch denied.txt was denied.
+
+## 4. Both runs repeated at e562055c0b (round-3 review fixes)
+
+claude --version now runs inside the turn's sandbox (Seatbelt) first; both
+runs passed: guard demo workspace second.txt, GLM 5.2 demo workspace
+approved.txt (Right, pause, Enter allowed; Esc denied touch denied.txt).
