@@ -1,0 +1,36 @@
+
+[demo] restarting Corbanu Terminal with the same profile...
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.2   /model to change                │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/workspace │
+╰──────────────────────────────────────────────────────╯
+
+
+› Run exactly this shell command once, without changing it: R='Library/Application Support/Corbanu/aggressive-homes';
+  ls "$R" | wc -l; rm "$R"/* ; ls "$R" | wc -l; touch probe.txt && echo probe-written . Then tell me in one sentence
+  what happened.
+
+
+✔ You approved Corbanu to run R='Library/Application Support/Corbanu/aggressive-homes'; ls "$R" | wc -l; rm... this time
+
+• Ran R='Library/Application Support/Corbanu/aggressive-homes'; ls "$R" | wc -l; rm "$R"/* ; ls "$R" | wc -l; touch
+  │ probe.txt && echo probe-written .
+  └        1
+    rm: Library/Application Support/Corbanu/
+    aggressive-homes/70c5c59d32a3dabf8d25ee82ffd871bb2e5a7627a0fb52fe7a709cf35739df21: Operation not permitted
+           1
+    probe-written .
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• The directory initially contained 1 entry; rm failed with "Operation not permitted" (the directory is read-only), so
+  the count stayed at 1, then probe.txt was successfully created in the workspace.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Use /skills to list available skills
+
+  Z.AI GLM 5.2 via zai standard · /Volumes/CorbanuDrive/Corbanu/worktrees/sec-tui5-20261006/qa/demos/out/registry-read-…
