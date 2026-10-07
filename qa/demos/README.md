@@ -21,7 +21,17 @@ Build the candidate you are qualifying, for example
 
 ## Record one demo
 
+Use a debug build and export `CORBANU_TEST_NO_NATIVE_KEYRING=1` first; the
+script refuses to run without it. That keeps the candidate (and every
+`corbanu` an agent command starts) off your real login keychain: the vault
+key and login tokens stay in files inside the disposable profile. Release
+builds ignore the variable, so the script also refuses a `release/` candidate.
+Only the `vault:` credential lookup runs without it, because it reads your own
+vault: it uses the installed corbanu (`--vault-helper` to choose one) and refuses
+the candidate or any build output there.
+
 ```sh
+export CORBANU_TEST_NO_NATIVE_KEYRING=1
 python3 scripts/demo_video.py record qa/demos/specs/<demo>.toml \
   --bin "$CARGO_TARGET_DIR/debug/corbanu" --sprint PF-24-S02 --publish
 ```

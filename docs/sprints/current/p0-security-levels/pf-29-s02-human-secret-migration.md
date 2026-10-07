@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-29-S02"
 title: "Human-reviewed credential migration and recovery"
-status: in_progress
+status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-29"
 execution_order: 36
@@ -13,11 +13,15 @@ worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-29-s02-20261006"
 branch: "pf-29-s02-20261006"
 base_commit: "72d9a5dfbf01370d481630742d038c317c2dd624"
 depends_on: "PF-29-S01, PF-24-S01"
+merged_behind_flag: "protected_mode_preflight"
+gate_evidence: "qa/security-levels/sprints/PF-29-S02/README.md"
 created: 2026-08-28
 updated: 2026-10-06
 ---
 
 # PF-29-S02 — Human-reviewed credential migration and recovery
+
+**October 6:** merged (PR #235, `65d42158d7`) behind `protected_mode_preflight`; returned to `draft` for its open items.
 
 ## Execution mandate
 
@@ -74,10 +78,11 @@ updated: 2026-10-06
 
 - [x] `just fix -p codex-core -p codex-tui`, `just fmt`; final diff inspected.
 - [x] Focused `pf_29_s02`: core 6, tui 4 (with the PF-29-S01 tests: core 20, tui 12).
-- [ ] Gate: suites, GLM 5.2 tmux videos and Opus review in the [evidence](../../../../qa/security-levels/sprints/PF-29-S02/README.md).
+- [x] Suites, three GLM 5.2 videos, Opus review (changes, then approved); CI green; merged as #235 ([evidence](../../../../qa/security-levels/sprints/PF-29-S02/README.md)).
+- [ ] PF-26 final-candidate requalification (milestone gate).
 
 ## Exit evidence
 
-- [ ] Commits, commands, outcomes, videos and review under `qa/security-levels/sprints/PF-29-S02/`.
+- [x] Commits, commands, outcomes, videos and review under `qa/security-levels/sprints/PF-29-S02/`.
 - [ ] PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
 - [ ] Done/Remaining reflect reality; completed record moved to the archive and plan/navigation updated.

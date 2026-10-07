@@ -30,6 +30,15 @@ pub(crate) use codex_security_level::nested::registered_homes;
 #[cfg(test)]
 pub(crate) use codex_security_level::nested::registry_entry;
 
+/// The Aggressive-homes registry for this account, which the Aggressive
+/// profile keeps read-only. `None` when the account has no home entry.
+pub(crate) fn origin_registry_dir() -> Option<std::path::PathBuf> {
+    codex_security_level::nested::account_home()
+        .ok()
+        .flatten()
+        .map(|home| codex_security_level::nested::registry_dir(&home))
+}
+
 /// `-c` overrides for a nested `corbanu exec` held to Aggressive. Writes the
 /// Aggressive vault rule into `codex_home` when it is missing.
 pub fn prepare_nested_exec(

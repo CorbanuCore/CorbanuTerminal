@@ -25,6 +25,14 @@ The app-server test helper additionally pins **all three** profile aliases to
 its own fixture after caller environment overrides, and forces native-keyring
 denial. A fixture cannot undo this through its environment override list.
 
+Debug builds keep the denial flag (`CORBANU_TEST_NO_NATIVE_KEYRING`, value `1`) in
+every child they start: agent shell and unified-exec commands, hooks and MCP
+servers. Its name matches the `*KEY*` filters, so those filters re-add it, even
+over `inherit = "none"` or `include_only`. Without that, a `corbanu` an agent
+started inside a disposable profile reached the real login keychain. Tooling sets
+the value `1` only. Demo recording (`scripts/demo_video.py`) and its wrappers
+refuse to run without the flag.
+
 Tests that create their own profile must set all three aliases to that fixture,
 or remove the two Corbanu aliases before setting `CODEX_HOME`. Merely setting
 `CODEX_HOME` is insufficient. Never use the operator's profile as a test fixture.

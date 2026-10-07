@@ -1,0 +1,71 @@
+# Under Aggressive, with the workspace as the account home (as when working in
+# the home folder), an agent command cannot delete the Aggressive-homes
+# registry entries, while the rest of the workspace stays writable. Record with
+#   PF24_CANDIDATE=<corbanu> --bin qa/security-levels/pf24-followups/registry-read-only/restart-once.sh
+id = "registry-read-only"
+feature = "The Aggressive-homes registry is read-only to agent commands"
+expected = "With Aggressive active and the registry inside the workspace, deleting its entry fails with Operation not permitted; a new file elsewhere in the workspace is written."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Nested agents: refuse"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive \\(nested agents: refuse\\)"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "Enter"
+[[steps]]
+type = "/exit"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "restarting Corbanu Terminal.*model: +glm-5\\.2"
+timeout = 60
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run exactly this shell command once, without changing it: R='Library/Application Support/Corbanu/aggressive-homes'; ls \"$R\" | wc -l; rm \"$R\"/* ; ls \"$R\" | wc -l; touch probe.txt && echo probe-written . Then tell me in one sentence what happened."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Would you like to run"
+timeout = 120
+compress = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)• Ran R=.*\\n• \\S"
+timeout = 120
+compress = 3
+[[steps]]
+pause = 4.0
