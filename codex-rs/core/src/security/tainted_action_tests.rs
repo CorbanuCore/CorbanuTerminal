@@ -1395,6 +1395,8 @@ fn pf_23_s02_persistence_writes_are_protected() {
         "rm .git/hooks/pre-push",
         "echo x >& .git/hooks/pre-commit",
         "echo x &> ~/.bashrc",
+        "echo /tmp/evil > .git/commondir",
+        "printf x > sub/.git/info/attributes",
     ] {
         assert_eq!(script(command), Some(Persistence), "{command}");
     }
@@ -1424,6 +1426,7 @@ fn pf_23_s02_persistence_writes_are_protected() {
         "rm -rf ~/.config/gh-cache-dir/x",
         "mkdir -p build && cp out.txt ~/",
         "mv ~/.cache/x ~/.cache/y",
+        "cp pack.idx .git/objects/pack/",
     ] {
         assert_eq!(script(command), None, "{command}");
     }

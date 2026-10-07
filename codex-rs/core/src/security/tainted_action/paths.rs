@@ -239,8 +239,18 @@ impl Homes {
                         })
                     })
                 });
+                // `.git` itself, or anything in it but objects, refs and the
+                // index (`commondir`, `config`, hooks choose what git runs).
+                let in_git_dir = segments
+                    .iter()
+                    .position(|segment| *segment == ".git")
+                    .is_some_and(|at| {
+                        segments
+                            .get(at + 1)
+                            .is_none_or(|next| !matches!(*next, "objects" | "refs" | "index"))
+                    });
                 in_user_home
-                    || segments.last() == Some(&".git")
+                    || in_git_dir
                     || (0..segments.len()).any(|start| {
                         WORKSPACE_PERSISTENCE.iter().any(|entry| {
                             let entry = entry_segments(entry);

@@ -11,7 +11,7 @@
 | Surface | Moderate, before untrusted content | Moderate, after | Aggressive (from session start) |
 | --- | --- | --- | --- |
 | Reads: Corbanu home, other homes, `$HOME` credentials | unchanged | denied by the sandbox; a fresh approval of the exact protected command lifts it for that run | denied; only a matching grant lifts it for that exact command |
-| Writes: shell start-up, `~/.config/{fish,git,autostart,systemd,environment.d}`, `~/.local/bin`, `~/.claude`, `~/Library/LaunchAgents`, `.gitconfig`; the enclosing repository's hooks, config, config.worktree, commondir and `.git` file (worktree git folders too); project `.codex`/`.agents`; Corbanu `tmp`, `shell_snapshots`, skills, plugins, packages, `AGENTS.md` | unchanged | read-only where the profile allowed writes; same lift | read-only; same grant |
+| Writes: shell start-up, `~/.config/{fish,git,autostart,systemd,environment.d}`, `~/.local/bin`, `~/.claude`, `~/Library/LaunchAgents`, `.gitconfig`; the enclosing repository's hooks, config, config.worktree, commondir (Linux: when it exists) and `.git` file (worktree git folders too); project `.codex`/`.agents`; Corbanu `tmp`, `shell_snapshots`, skills, plugins, packages, `AGENTS.md` | unchanged | read-only where the profile allowed writes; same lift | read-only; same grant |
 | Renaming or removing a folder above a protected path or a protected link; creating a missing parent (`mv x ~/.config`) | unchanged | denied (macOS; Linux mounts a missing workspace part read-only and leaves missing home paths to the command-text net) | same |
 | Command text naming such a write, move or removal (`>`, `>>`, `>&file`, writer commands, `git config` run keys or `--global`, cron, launchd, `systemctl --user`, patches) | unchanged | fresh human approval (Persistence) | fresh approval; rules stay unless granted |
 | Codex Apps upload read | unchanged | through the protected sandbox; none available: refused | same |
@@ -30,7 +30,8 @@
   REQUESTED: rename onto a missing parent, Linux placeholders in the real home, the enclosing repository from a
   subfolder, dangling links, a single confinement marker; fixed in `b25eb6460b`. Round 3 CHANGES REQUESTED: git
   could be pointed elsewhere through `commondir` or a rewritten `.git` file, Linux placeholders through dangling
-  links; fixed in the next commit.
+  links; fixed in `23a1818ec8`. Round 4 CHANGES REQUESTED on Linux records only: anything below `.git` (but
+  objects, refs, index) is now Persistence for the command-text net, and the Linux limits are recorded below.
 - **Full crate:** `just test -p codex-core`: 3,897 of 3,901; the 4 failures fail the same way on main
   (`config_schema_matches_fixture` and the 3 known baselines).
 
@@ -42,7 +43,11 @@
   (`~/.bash_profile` and the like) are left to the command-text net: a sandbox placeholder would change the user's
   own login shells.
 - A writable root configured inside a protected folder keeps that folder's protection off (as PF-23-S01 reads).
-- Submodule git folders (`.git/modules/*`) and a `core.hooksPath` inside the workspace (`.husky`) stay writable;
-  only the command-text net covers them.
+- Submodule git folders (`.git/modules/*`), a `core.hooksPath` inside the workspace (`.husky`) and a new nested
+  `.git` in a subfolder stay writable; only the command-text net covers them.
+- Linux, full-write profiles only: a missing `commondir` is left to the command-text net (an empty placeholder
+  breaks git), and renaming or removing an existing folder above a protected path is not blocked (bind mounts
+  move with the folder), so `mv .git .g` and rebuilding `.git` is caught only when the path is written out.
+  macOS blocks both. A Linux sandbox test is a follow-up.
 - External sandboxes and remote environments take no extra rules; processes there count as unconfined.
 - Sandboxed upload reads load the whole file (within the 512 MiB limit).
