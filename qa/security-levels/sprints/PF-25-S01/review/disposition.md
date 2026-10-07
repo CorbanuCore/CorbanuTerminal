@@ -56,3 +56,12 @@ Round 3 (Opus 5.5 High, APPROVE WITH FIXES):
    interlinear annotation, combining grapheme joiner, fillers).
 6. Comment corrected: a cached approval or permission hook may answer after the offer is registered; then no review
    is shown and nothing is confirmed.
+
+Round 4 (Opus 5.5 High, APPROVE):
+
+1. A test offer registered first still makes a real offer with the same id get none: known limit (in-process callers
+   only, denial of an offer only; `open_test_offer` is `#[doc(hidden)]` and used by TUI tests).
+2. Escaping by range, not by category; a literal backslash is not escaped: accepted (neither adds rows or fakes
+   shell syntax; escaping `\` would double every backslash in shown commands).
+3. Scan test: paths are normalized to `/`; `{self as x}` aliasing stays a known gap.
+Linux clippy (RTX) then flagged `eprintln!` in that test (`print_stderr` is denied in the TUI); removed.
