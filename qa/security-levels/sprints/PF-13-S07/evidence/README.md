@@ -55,6 +55,23 @@ sandboxing. Read sandboxing requires the Aggressive or Moderate security level,
 which is not persisted (Permissive default). Issue #239 documents this as a
 known limitation; no code change in this sprint (qualification only).
 
+**Follow-up (2026-10-07, issue #239 fix):** Moderate now applies the
+protected-path rules from the start of the session, as Aggressive already did,
+so known credential locations (Corbanu home stores, other Corbanu homes, fixed
+`$HOME` credential paths such as `~/.ssh`, `~/.aws`) are unreadable before any
+untrusted content too. Permissive is unchanged by decision, and an arbitrary
+home file such as `$HOME/canary.txt` stays readable at every level (only known
+credential locations are denied). Under Moderate a human approval of a
+command's request to run outside the sandbox lifts the rules for that run,
+before untrusted content as after it. Under Moderate with full access every
+command now runs in a sandbox that only applies these rules from the first
+turn, and requests to run outside it that used to run unasked (full access with
+on-request approvals, exec-policy allow rules, automatic review) ask the human.
+Known gap: before untrusted content,
+typing into a shell started without the rules (under a lower level, or lifted
+by such an approval) is not asked about. Re-running the route matrix under a
+saved Aggressive and Moderate level is still open.
+
 Note: the canary value appeared unredacted in exec tool output, which means it
 was also sent to the model provider in the tool result. The `secret_output_gate`
 did not catch it because the gate only scrubs values it has been explicitly

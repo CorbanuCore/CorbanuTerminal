@@ -13,6 +13,11 @@
 //! Corbanu home entries that stay readable) become read-only wherever the
 //! sandbox would let the command write them. Under Aggressive all of this
 //! applies from the start of the session, not only after untrusted content.
+//!
+//! Issue #239 extends the same to Moderate: the read (and read-only) rules
+//! apply from the start under a protected level (Moderate or Aggressive), so
+//! a workspace-write sandbox cannot read credential files from `$HOME` before
+//! any taint. Permissive and flag-off sessions are unchanged.
 
 use crate::security::tainted_action::USER_PERSISTENCE;
 use crate::security::tainted_action::WORKSPACE_PERSISTENCE;
@@ -434,8 +439,9 @@ fn git_persistence_paths(root: &AbsolutePathBuf) -> Vec<AbsolutePathBuf> {
 }
 
 /// In-process file tools (the patch pre-check, structured edits, image
-/// viewing, extension tools) read files with the same denials after
-/// untrusted content. No approval lifts them here.
+/// viewing, extension tools) read files with the same denials after untrusted
+/// content, and from the start under a protected level (Moderate/Aggressive).
+/// No approval lifts them here.
 pub(crate) fn protect_file_tool_context(
     session: &crate::session::session::Session,
     turn: &crate::session::turn_context::TurnContext,
