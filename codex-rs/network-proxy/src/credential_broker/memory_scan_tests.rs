@@ -51,7 +51,9 @@ fn count(haystack: &[u8], masked: &[u8]) -> usize {
 
 #[cfg(target_os = "linux")]
 fn writable_regions() -> Vec<(usize, usize)> {
-    let maps = std::fs::read_to_string("/proc/self/maps").expect("read /proc/self/maps");
+    // An unreadable map yields no regions; the caller's positive control
+    // (the key must be found before hand-over) then fails the test.
+    let maps = std::fs::read_to_string("/proc/self/maps").unwrap_or_default();
     maps.lines()
         .filter_map(|line| {
             let mut fields = line.split_whitespace();
@@ -72,9 +74,13 @@ fn writable_regions() -> Vec<(usize, usize)> {
 fn read_own_memory(address: usize, buffer: &mut [u8]) -> usize {
     use std::os::unix::fs::FileExt as _;
     thread_local! {
-        static MEM: std::fs::File = std::fs::File::open("/proc/self/mem").expect("open /proc/self/mem");
+        static MEM: Option<std::fs::File> = std::fs::File::open("/proc/self/mem").ok();
     }
-    MEM.with(|mem| mem.read_at(buffer, address as u64).unwrap_or(0))
+    MEM.with(|mem| {
+        mem.as_ref()
+            .and_then(|mem| mem.read_at(buffer, address as u64).ok())
+            .unwrap_or(0)
+    })
 }
 
 #[cfg(target_os = "macos")]
