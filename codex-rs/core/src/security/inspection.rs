@@ -249,7 +249,8 @@ pub(crate) fn record_protected_action(
         "refused_kill_switch" => "refused: kill switch on",
         "refused_approvals_off" => "refused: approvals are off",
         "refused_stale" => "refused: taint or policy changed after approval",
-        "declined" => "declined by you",
+        // A permission hook can refuse on the same path.
+        "declined" => "declined (by you or a permission hook)",
         _ => return,
     };
     record(thread, kind.describe(), outcome);

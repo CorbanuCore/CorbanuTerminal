@@ -232,6 +232,39 @@ fn pf_41_s01_grants_show_expiry_and_uses_without_ids_and_end_on_expiry() {
 }
 
 #[test]
+fn pf_41_s01_grants_of_a_stopped_session_are_not_listed() {
+    let home = TempDir::new().unwrap();
+    let view = EffectivePolicyView::default();
+    let root = ThreadId::new();
+    // Unreadable state at start: Aggressive, and the session is stopped.
+    TrustedSecurityController::initialize(
+        &view,
+        PersistedHumanSecurityState::new(
+            SecuritySettings::new(SecurityLevel::Aggressive),
+            human(),
+            RevocationState::new(),
+        )
+        .unwrap(),
+        root,
+        SessionId::from(root),
+        EffectivePolicyInitialization::UnreadableState,
+    )
+    .unwrap();
+    view.register_home(home.path());
+    let (state, grant) = grant_for(root, NOW + 300);
+    aggressive::issue(root, &state, grant, NOW).unwrap();
+
+    let facts = observe(home.path(), SecurityLevel::Aggressive, Some(root), NOW);
+    assert!(
+        matches!(&facts.policy, PolicyFacts::Live(tree) if tree.agents[0].stopped),
+        "{:?}",
+        facts.policy
+    );
+    assert_eq!(facts.grants, Vec::new());
+    aggressive::revoke_all(root);
+}
+
+#[test]
 fn pf_41_s01_denials_are_fixed_text_and_correlated_to_the_session_tree() {
     let home = TempDir::new().unwrap();
     let (view, root) = live_tree(&home, SecurityLevel::Aggressive);

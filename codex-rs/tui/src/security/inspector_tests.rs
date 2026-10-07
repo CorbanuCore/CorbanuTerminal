@@ -173,6 +173,21 @@ fn pf_41_s01_stale_health_and_broker_crash_are_degraded() {
         )
     );
 
+    // An installed broker is not observed healthy, and is not required.
+    let installed = RuntimeFacts {
+        model_broker: ControlFacts::Enforcing,
+        ..facts.clone()
+    };
+    let installed_sections = sections(&input, &saved, &installed, NOW);
+    assert_eq!(
+        find(&installed_sections, "Model key broker").state,
+        State::Unobserved
+    );
+    assert_eq!(
+        badge(&input, &saved, &installed, &installed_sections, NOW),
+        Badge::Protected("Aggressive")
+    );
+
     let crashed = RuntimeFacts {
         model_broker: ControlFacts::Degraded("no broker is running; provider keys are not sent"),
         launch_contract: ContractFacts::Armed { hardened: false },
@@ -207,6 +222,11 @@ fn pf_41_s01_unsupported_platform_and_unclean_boundary_are_degraded() {
     assert_eq!(
         find(&sections, "Sandbox backend").value,
         "none on this platform: agent commands are not contained"
+    );
+    // Only the summary: blocker details (names, paths) stay in the review.
+    assert_eq!(
+        find(&sections, "Protected boundary").value,
+        "protected boundary not clean: 1 blocker; details in the Aggressive review"
     );
     assert_eq!(
         badge(&input, &saved, &facts, &sections, NOW),

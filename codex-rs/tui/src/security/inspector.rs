@@ -590,7 +590,9 @@ pub(crate) fn sections(
 }
 
 fn runtime_rows(input: &InspectorInput, facts: &RuntimeFacts) -> Vec<Row> {
-    let core_protected = core_level(facts) != SecurityLevel::Permissive;
+    // Core gates at the stricter of the session's configured level and
+    // its live policy.
+    let core_protected = input.configured.max(core_level(facts)) != SecurityLevel::Permissive;
     let control = |label: &str, facts: ControlFacts, on: &str, off: &str| match facts {
         ControlFacts::Enforcing => row(label, State::Enforcing, on, "observed: this process"),
         ControlFacts::Off => row(label, State::Off, off, "observed: this process"),
@@ -631,7 +633,7 @@ fn runtime_rows(input: &InspectorInput, facts: &RuntimeFacts) -> Vec<Row> {
                 "Model key broker",
                 State::Unobserved,
                 "installed; its health is not probed",
-                "observed: this process",
+                "installed: this process",
             ),
             other => control(
                 "Model key broker",
@@ -797,8 +799,12 @@ pub(crate) fn badge(
     // A level checked at launch whose protected-action gates Core does not
     // enforce (Core lags behind a saved Aggressive) is not protection.
     if matches!(facts.policy, PolicyFacts::Live(_)) && core_level(facts) < launch_level(input) {
+        let missing = match core_level(facts) {
+            SecurityLevel::Permissive => "protected-action gates",
+            SecurityLevel::Moderate | SecurityLevel::Aggressive => "grant and protected-path rules",
+        };
         degraded.push(format!(
-            "Core enforces {}; {}'s protected-action gates are not active",
+            "Core enforces {}; {}'s {missing} are not active",
             level_name(core_level(facts)),
             level_name(launch_level(input))
         ));
