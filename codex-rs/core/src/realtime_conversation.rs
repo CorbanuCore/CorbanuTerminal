@@ -1141,6 +1141,13 @@ async fn prepare_realtime_start(
     sess: &Arc<Session>,
     params: ConversationStartParams,
 ) -> CodexResult<PreparedRealtimeConversationStart> {
+    // PF-27-S05: realtime authenticates its websockets with the raw key,
+    // which a brokered process does not send.
+    if codex_model_provider::model_key_broker_installed() {
+        return Err(CodexErr::InvalidRequest(
+            "realtime conversations are not available under broker_model_auth".to_string(),
+        ));
+    }
     let provider = sess.provider().await;
     let auth_manager = sess
         .services

@@ -61,7 +61,22 @@ impl ReqwestTransport {
             timeout,
         } = req;
 
-        let mut builder = self.client.request(
+        // PF-27-S05: a broker-authorized request goes to the broker's socket
+        // and nowhere else; with no broker it is not sent.
+        let broker;
+        let client = if prepared
+            .headers
+            .contains_key(crate::MODEL_BROKER_FRAME_HEADER)
+            && !self.client.is_broker_socket()
+        {
+            broker = crate::model_broker_route::model_broker_client().ok_or_else(|| {
+                TransportError::Build("the credential broker is not running".to_string())
+            })?;
+            &broker
+        } else {
+            &self.client
+        };
+        let mut builder = client.request(
             Method::from_bytes(method.as_str().as_bytes()).unwrap_or(Method::GET),
             &url,
         );

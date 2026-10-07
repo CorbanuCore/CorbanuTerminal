@@ -1816,7 +1816,6 @@ impl Session {
             self.services.agent_control.effective_security_policy(),
         )
         .with_native_ingress_from(&self.services.model_client())
-        .with_broker_model_auth(crate::client::BrokerModelAuthConfig::for_config(config))
         .with_source_envelopes(config.features.enabled(Feature::SourceEnvelopes))
         .with_source_origin_key(config.codex_home.as_path())
         .with_prompt_cache_key_override(

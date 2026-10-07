@@ -7,6 +7,7 @@
 use super::protocol::BROKER_ERROR_HEADER;
 use super::protocol::BROKER_RUNTIME_DIR_ENV;
 use super::protocol::BROKER_SESSION_ID;
+use super::protocol::BROKER_STORE_HOME_ENV;
 use super::protocol::BROKER_TASK_ID;
 use super::protocol::BrokerBootstrap;
 use super::protocol::CONTROL_PROTOCOL_VERSION;
@@ -17,11 +18,13 @@ use super::protocol::FRAME_HEADER;
 use super::protocol::HostBindingWire;
 use super::protocol::MAX_CONTROL_LINE_BYTES;
 use super::protocol::MAX_CREDENTIAL_VALUE_BYTES;
+use super::protocol::MAX_STASHED_ENV;
 use super::protocol::ModelAuthHeader;
 use super::protocol::ModelBindingWire;
 use super::protocol::ProviderId;
 use super::protocol::decode_key;
 use super::protocol::encode_hex;
+use super::protocol::valid_env_name;
 use super::protocol::valid_id;
 use crate::config::NetworkProxyConfig;
 use crate::connect_policy::PinnedPeers;
@@ -91,17 +94,37 @@ const BROKER_EXIT_UNAVAILABLE: i32 = 78;
 const CONTROL_ACCEPT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 const PARENT_CHECK_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
 
+/// PF-27-S05: reads the provider key stored for `provider_key_id` under a
+/// Corbanu home (encrypted vault, then the legacy file) inside the broker, so
+/// Core never decrypts it. Supplied by the binary, which links the vault.
+pub type StoredKeyResolver = fn(&std::path::Path, &str) -> std::io::Result<Option<String>>;
+
 /// Entry point for `corbanu --codex-run-as-credential-broker`.
 pub fn run_credential_broker_main() -> ! {
+    run_credential_broker_main_with(/*resolver*/ None)
+}
+
+/// Like [`run_credential_broker_main`], resolving stored provider keys with
+/// `resolver` (PF-27-S05).
+pub fn run_credential_broker_main_with(resolver: Option<StoredKeyResolver>) -> ! {
     // Raw values and the channel key live here: refuse debugger attach and
     // core dumps, and drop loader-injection variables, before anything else.
     codex_process_hardening::pre_main_hardening();
     // PF-27-S02: confine the broker while it is still single-threaded, so
     // every runtime thread inherits it: no program execution or new
     // processes, no cross-process inspection, writes only under the runtime
-    // directory.
+    // directory (and the vault's lock file, which a vault read must lock).
     let runtime_dir = runtime_dir();
-    let containment = codex_process_hardening::contain_credential_broker(&runtime_dir);
+    let store_home = resolver.and(store_home());
+    // The lock may be created after the broker starts (a first key saved in
+    // this session); Seatbelt rules are by path, Landlock needs it to exist.
+    let vault_lock: Vec<std::path::PathBuf> = store_home
+        .iter()
+        .map(|home| home.join("secrets").join(".vault.lock"))
+        .collect();
+    let containment =
+        codex_process_hardening::contain_credential_broker_with_files(&runtime_dir, &vault_lock);
+    let stored_keys = resolver.zip(store_home);
     let Ok(runtime) = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
@@ -109,10 +132,11 @@ pub fn run_credential_broker_main() -> ! {
     else {
         std::process::exit(BROKER_EXIT_UNAVAILABLE);
     };
-    let exit_code = match runtime.block_on(run_broker(runtime_dir, containment.mechanism)) {
-        Ok(()) => 0,
-        Err(_) => BROKER_EXIT_UNAVAILABLE,
-    };
+    let exit_code =
+        match runtime.block_on(run_broker(runtime_dir, containment.mechanism, stored_keys)) {
+            Ok(()) => 0,
+            Err(_) => BROKER_EXIT_UNAVAILABLE,
+        };
     // Exit without dropping the runtime: a blocking reader may still be
     // parked on a channel the controller holds open (signal-initiated shutdown).
     std::process::exit(exit_code)
@@ -127,7 +151,18 @@ fn runtime_dir() -> std::path::PathBuf {
         .unwrap_or_else(socket_parent)
 }
 
-async fn run_broker(runtime_dir: std::path::PathBuf, containment: String) -> anyhow::Result<()> {
+/// The Corbanu home named by the controller, if it is an absolute directory.
+fn store_home() -> Option<std::path::PathBuf> {
+    std::env::var_os(BROKER_STORE_HOME_ENV)
+        .map(std::path::PathBuf::from)
+        .filter(|dir| dir.is_absolute() && dir.is_dir())
+}
+
+async fn run_broker(
+    runtime_dir: std::path::PathBuf,
+    containment: String,
+    stored_keys: Option<(StoredKeyResolver, std::path::PathBuf)>,
+) -> anyhow::Result<()> {
     // The control channel accepts exactly the process that spawned us. A
     // stale parent (reparented to init or launchd) means the controller died.
     let parent_pid = std::os::unix::process::parent_id();
@@ -214,6 +249,7 @@ async fn run_broker(runtime_dir: std::path::PathBuf, containment: String) -> any
         upstream: upstream_client(*allow_local_binding, *allow_upstream_proxy)?,
         scrub_responses: *scrub_responses,
         pin_connections: *pin_connections,
+        stored_keys,
     });
     drop(hello);
 
@@ -256,7 +292,8 @@ async fn run_broker(runtime_dir: std::path::PathBuf, containment: String) -> any
             break;
         };
         let response = match serde_json::from_slice::<ControlRequest>(&line) {
-            Ok(request) => broker.control(request),
+            // A stored-key read may block on the vault and the OS keyring.
+            Ok(request) => tokio::task::block_in_place(|| broker.control(request)),
             Err(_) => ControlResponse::Error {
                 code: ControlErrorCode::Malformed,
             },
@@ -378,11 +415,15 @@ struct Broker {
     scrub_responses: bool,
     /// PF-33-S02: provider requests must carry checked answers to dial.
     pin_connections: bool,
+    /// PF-27-S05: how stored provider keys are read, and from which home.
+    stored_keys: Option<(StoredKeyResolver, std::path::PathBuf)>,
 }
 
 struct BrokerState {
     run_generation: u64,
     credentials: HashMap<CredentialReference, BrokerCredential>,
+    /// PF-27-S05: provider-key environment variables Core handed over.
+    env_stash: HashMap<String, Zeroizing<String>>,
     replay: ReplayWindow,
     in_flight: usize,
 }
@@ -392,6 +433,7 @@ impl Default for BrokerState {
         Self {
             run_generation: 1,
             credentials: HashMap::new(),
+            env_stash: HashMap::new(),
             replay: ReplayWindow::default(),
             in_flight: 0,
         }
@@ -522,6 +564,28 @@ impl Broker {
                 let usable = binding.validate() && binding.header.value(value).is_some();
                 self.register(usable, CredentialKind::Model(binding.clone()), value)
             }
+            ControlRequest::StashEnv { name, value } => self.stash_env(name, value),
+            ControlRequest::RegisterModelStored {
+                binding,
+                provider_key_id,
+                env_names,
+            } => self.register_stored(binding, provider_key_id, env_names),
+            ControlRequest::Unregister { reference } => {
+                let Ok(reference) = CredentialReference::from_sha256_hex(reference.clone()) else {
+                    return ControlResponse::Error {
+                        code: ControlErrorCode::Malformed,
+                    };
+                };
+                match self.state.lock() {
+                    Ok(mut state) => {
+                        state.credentials.remove(&reference);
+                        ControlResponse::Unregistered
+                    }
+                    Err(_) => ControlResponse::Error {
+                        code: ControlErrorCode::Unavailable,
+                    },
+                }
+            }
             ControlRequest::Revoke => ControlResponse::Revoked {
                 run_generation: self.revoke(),
             },
@@ -574,6 +638,87 @@ impl Broker {
         }
     }
 
+    fn stash_env(&self, name: &str, value: &str) -> ControlResponse {
+        if !valid_env_name(name) || value.is_empty() || value.len() > MAX_CREDENTIAL_VALUE_BYTES {
+            return ControlResponse::Error {
+                code: ControlErrorCode::InvalidCredential,
+            };
+        }
+        let Ok(mut state) = self.state.lock() else {
+            return ControlResponse::Error {
+                code: ControlErrorCode::Unavailable,
+            };
+        };
+        if !state.env_stash.contains_key(name) && state.env_stash.len() >= MAX_STASHED_ENV {
+            return ControlResponse::Error {
+                code: ControlErrorCode::CapacityReached,
+            };
+        }
+        state
+            .env_stash
+            .insert(name.to_string(), Zeroizing::new(value.to_string()));
+        ControlResponse::Stashed
+    }
+
+    /// Registers a model key Core never held: a stashed variable, else the
+    /// stored provider key read here.
+    fn register_stored(
+        &self,
+        binding: &ModelBindingWire,
+        provider_key_id: &str,
+        env_names: &[String],
+    ) -> ControlResponse {
+        if !valid_env_name(provider_key_id)
+            || env_names.len() > MAX_STASHED_ENV
+            || !env_names.iter().all(|name| valid_env_name(name))
+        {
+            return ControlResponse::Error {
+                code: ControlErrorCode::Malformed,
+            };
+        }
+        let stashed = match self.state.lock() {
+            Ok(state) => env_names
+                .iter()
+                .find_map(|name| state.env_stash.get(name).cloned()),
+            Err(_) => {
+                return ControlResponse::Error {
+                    code: ControlErrorCode::Unavailable,
+                };
+            }
+        };
+        let value = match stashed {
+            Some(value) => value,
+            None => {
+                let Some((resolver, home)) = self.stored_keys.as_ref() else {
+                    return ControlResponse::Error {
+                        code: ControlErrorCode::NotFound,
+                    };
+                };
+                match resolver(home, provider_key_id) {
+                    Ok(Some(value)) if !value.trim().is_empty() => Zeroizing::new(value),
+                    Ok(Some(value)) => {
+                        drop(Zeroizing::new(value));
+                        return ControlResponse::Error {
+                            code: ControlErrorCode::NotFound,
+                        };
+                    }
+                    Ok(None) => {
+                        return ControlResponse::Error {
+                            code: ControlErrorCode::NotFound,
+                        };
+                    }
+                    Err(_) => {
+                        return ControlResponse::Error {
+                            code: ControlErrorCode::Unavailable,
+                        };
+                    }
+                }
+            }
+        };
+        let usable = binding.validate() && binding.header.value(&value).is_some();
+        self.register(usable, CredentialKind::Model(binding.clone()), &value)
+    }
+
     /// Advances the run generation, drops every credential and replay entry,
     /// and wakes in-flight requests so their upstream channels close.
     fn revoke(&self) -> u64 {
@@ -581,12 +726,14 @@ impl Broker {
             Ok(mut state) => {
                 state.run_generation = state.run_generation.saturating_add(1);
                 state.credentials.clear();
+                state.env_stash.clear();
                 state.replay = ReplayWindow::default();
                 state.run_generation
             }
             Err(poisoned) => {
                 let mut state = poisoned.into_inner();
                 state.credentials.clear();
+                state.env_stash.clear();
                 state.run_generation = state.run_generation.saturating_add(1);
                 state.run_generation
             }

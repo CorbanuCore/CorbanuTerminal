@@ -1,6 +1,7 @@
 mod amazon_bedrock;
 mod auth;
 mod bearer_auth_provider;
+mod model_key_broker;
 mod models_endpoint;
 mod provider;
 
@@ -19,6 +20,12 @@ pub use bearer_auth_provider::BearerAuthProvider as CoreAuthProvider;
 pub use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
 pub use codex_model_provider_info::CHATGPT_CODEX_BASE_URL;
 pub use codex_protocol::account::ProviderAccount;
+pub use model_key_broker::BROKERED_KEY_PLACEHOLDER;
+pub use model_key_broker::BrokeredAuthRequest;
+pub use model_key_broker::BrokeredKeySource;
+pub use model_key_broker::ModelKeyBroker;
+pub use model_key_broker::install_model_key_broker;
+pub use model_key_broker::model_key_broker_installed;
 pub use provider::DEFAULT_APPROVAL_REVIEW_PREFERRED_MODEL;
 pub use provider::DEFAULT_MEMORY_CONSOLIDATION_PREFERRED_MODEL;
 pub use provider::DEFAULT_MEMORY_EXTRACTION_PREFERRED_MODEL;

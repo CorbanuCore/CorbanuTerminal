@@ -559,6 +559,9 @@ impl Session {
             session_configuration.collaboration_mode.model(),
             session_configuration.provider
         );
+        // PF-27-S05: provider credentials move into the broker before anything
+        // (MCP servers, hooks, tools) starts from this process.
+        crate::model_broker_auth::install_for_config(config.as_ref()).await;
         let forked_from_id = session_configuration
             .forked_from_thread_id
             .or_else(|| initial_history.forked_from_id());
@@ -1205,9 +1208,6 @@ impl Session {
                     config.http_client_factory(),
                 )
                 .with_ingress_policy(config.security_level, ingress_policy)
-                .with_broker_model_auth(crate::client::BrokerModelAuthConfig::for_config(
-                    config.as_ref(),
-                ))
                 .with_source_envelopes(config.features.enabled(Feature::SourceEnvelopes))
                 .with_source_origin_key(config.codex_home.as_path())
                 .with_prompt_cache_key_override(

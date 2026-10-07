@@ -242,7 +242,8 @@ static NEXT_DUMMY_AUTH_ID: AtomicU64 = AtomicU64::new(1);
 static PROVIDER_API_KEY_STORAGE_REVISION: AtomicU64 = AtomicU64::new(1);
 static NEXT_PROVIDER_AUTH_TEMP_ID: AtomicU64 = AtomicU64::new(1);
 
-fn provider_api_key_storage_revision() -> u64 {
+/// In-process revision of stored provider keys; bumped by every write or delete.
+pub fn provider_api_key_storage_revision() -> u64 {
     PROVIDER_API_KEY_STORAGE_REVISION.load(Ordering::Acquire)
 }
 

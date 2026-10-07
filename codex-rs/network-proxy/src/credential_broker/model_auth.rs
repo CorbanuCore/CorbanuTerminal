@@ -5,11 +5,19 @@
 //! sent over the broker's private Unix socket with a signed frame naming its
 //! exact origin, method and path; the broker attaches the key and performs the
 //! HTTPS request. There is no API that returns the key.
+//!
+//! Keys Core never needs to read are named instead of passed: provider-key
+//! environment variables are handed over once and removed from Core's
+//! environment ([`ModelCredentialBroker::take_env_keys`]), and stored keys
+//! (encrypted vault, legacy file) are read inside the broker
+//! ([`ModelCredentialBroker::register_stored`]).
 
 use super::isolated::IsolatedBrokerClient;
 use super::isolated::IsolatedBrokerError;
 use super::isolated::IsolatedBrokerLauncher;
 use super::isolated::IsolatedBrokerOptions;
+use super::isolated::StoredRegistration;
+use super::isolated::protocol::BROKER_STORE_HOME_ENV;
 use super::isolated::protocol::FRAME_HEADER;
 pub use super::isolated::protocol::ModelAuthHeader;
 use super::isolated::protocol::ModelBindingWire;
@@ -30,6 +38,10 @@ pub enum ModelCredentialBrokerError {
     Unavailable,
     #[error("credential broker rejected the credential or request")]
     Rejected,
+    /// PF-27-S05: the broker could not read the stored provider key (the
+    /// vault or the OS keyring is unavailable).
+    #[error("credential broker could not read the stored provider key")]
+    StoreUnavailable,
 }
 
 impl From<IsolatedBrokerError> for ModelCredentialBrokerError {
@@ -70,6 +82,13 @@ pub struct ModelCredentialBrokerOptions {
     pub runtime_dir: Option<PathBuf>,
     /// Scrub the key from responses (PF-28-S02).
     pub scrub_responses: bool,
+    /// Corbanu executable to run as the broker; the current one when `None`.
+    pub program: Option<PathBuf>,
+    /// Corbanu home whose stored provider keys the broker may read.
+    pub store_home: Option<PathBuf>,
+    /// Environment variables the broker must not inherit (the provider keys
+    /// Core hands over with [`ModelCredentialBroker::take_env_keys`]).
+    pub withheld_env: Vec<String>,
 }
 
 /// A broker process holding Core's model-provider keys.
@@ -90,15 +109,23 @@ impl ModelCredentialBroker {
     pub fn spawn(
         options: ModelCredentialBrokerOptions,
     ) -> Result<Self, ModelCredentialBrokerError> {
-        Self::spawn_with_launcher(options, &IsolatedBrokerLauncher::current_exe())
+        let launcher = IsolatedBrokerLauncher::current_exe().with_program(options.program.clone());
+        Self::spawn_with_launcher(options, launcher)
     }
 
     pub(crate) fn spawn_with_launcher(
         options: ModelCredentialBrokerOptions,
-        launcher: &IsolatedBrokerLauncher,
+        launcher: IsolatedBrokerLauncher,
     ) -> Result<Self, ModelCredentialBrokerError> {
+        let mut launcher = match options.store_home.as_ref() {
+            Some(home) if home.is_absolute() => launcher.with_env(BROKER_STORE_HOME_ENV, home),
+            _ => launcher,
+        };
+        for name in &options.withheld_env {
+            launcher = launcher.without_env(name);
+        }
         let client = IsolatedBrokerClient::spawn(
-            launcher,
+            &launcher,
             IsolatedBrokerOptions {
                 // Core itself may use private-network or proxied providers.
                 allow_local_binding: true,
@@ -131,8 +158,66 @@ impl ModelCredentialBroker {
         })
     }
 
+    /// Hands each set, non-empty variable in `names` to the broker and
+    /// removes it from this process's environment, value bytes overwritten,
+    /// so neither Core nor anything that reads its environment later sees
+    /// it. Returns the names handed over. A variable the broker refuses is
+    /// left in place and reported as an error.
+    pub fn take_env_keys(
+        &self,
+        names: &[String],
+    ) -> Result<Vec<String>, ModelCredentialBrokerError> {
+        let mut taken = Vec::new();
+        for name in names {
+            let Some(value) = super::env_scrub::take_env_var(name) else {
+                continue;
+            };
+            let Ok(value) = std::str::from_utf8(&value) else {
+                // Not a usable key; it is gone from the environment either way.
+                continue;
+            };
+            self.client.stash_env(name, value)?;
+            taken.push(name.clone());
+        }
+        Ok(taken)
+    }
+
+    /// Registers the key for `provider_key_id` without Core reading it: the
+    /// first variable in `env_names` handed over with
+    /// [`Self::take_env_keys`], else the stored provider key, which the
+    /// broker reads from its store home. `Ok(None)` when there is neither.
+    pub fn register_stored(
+        &self,
+        binding: ModelCredentialBinding,
+        provider_key_id: &str,
+        env_names: &[String],
+    ) -> Result<Option<ModelCredential>, ModelCredentialBrokerError> {
+        if !self.client.is_alive() {
+            return Err(ModelCredentialBrokerError::Unavailable);
+        }
+        match self
+            .client
+            .register_model_stored(binding.wire(), provider_key_id, env_names)?
+        {
+            StoredRegistration::Registered(reference) => Ok(Some(ModelCredential {
+                client: self.client.clone(),
+                reference,
+                binding,
+            })),
+            StoredRegistration::NotFound => Ok(None),
+            StoredRegistration::StoreUnavailable => {
+                Err(ModelCredentialBrokerError::StoreUnavailable)
+            }
+        }
+    }
+
     pub fn is_alive(&self) -> bool {
         self.client.is_alive()
+    }
+
+    /// The broker's private socket (see [`ModelCredential::socket_path`]).
+    pub fn socket_path(&self) -> &Path {
+        self.client.socket_path()
     }
 
     #[cfg(test)]
@@ -171,6 +256,11 @@ impl ModelCredential {
 
     pub fn is_alive(&self) -> bool {
         self.client.is_alive()
+    }
+
+    /// Drops the broker's copy of this key (a refreshed token replaces it).
+    pub fn unregister(&self) -> Result<(), ModelCredentialBrokerError> {
+        Ok(self.client.unregister(&self.reference)?)
     }
 
     /// Signs one request (`path_and_query` in origin form) and returns the

@@ -280,49 +280,6 @@ struct ModelClientState {
     legacy_synthetic_continuation: AtomicBool,
 }
 
-/// PF-27-S05: an opaque reference to a model key held by the broker.
-#[cfg(unix)]
-type BrokeredCredential = codex_network_proxy::model_auth::ModelCredential;
-#[cfg(not(unix))]
-#[derive(Clone, Debug)]
-enum BrokeredCredential {}
-
-/// PF-27-S05 session settings for brokered model auth.
-#[derive(Clone, Debug)]
-pub(crate) struct BrokerModelAuthConfig {
-    /// Parent of the broker's private socket directory (`CODEX_HOME/run`).
-    pub(crate) runtime_dir: std::path::PathBuf,
-    /// Scrub the key from responses (`secret_output_gate`).
-    pub(crate) scrub_responses: bool,
-}
-
-impl BrokerModelAuthConfig {
-    /// Settings for `config` when `broker_model_auth` is on.
-    pub(crate) fn for_config(config: &crate::config::Config) -> Option<Self> {
-        config
-            .features
-            .enabled(codex_features::Feature::BrokerModelAuth)
-            .then(|| Self {
-                runtime_dir: config.codex_home.join("run").to_path_buf(),
-                scrub_responses: config
-                    .features
-                    .enabled(codex_features::Feature::SecretOutputGate),
-            })
-    }
-}
-
-fn broker_http_client(credential: &BrokeredCredential) -> Result<codex_http_client::HttpClient> {
-    #[cfg(unix)]
-    {
-        crate::model_broker_auth::broker_http_client(credential)
-            .map_err(|error| CodexErr::Fatal(error.to_string()))
-    }
-    #[cfg(not(unix))]
-    {
-        match *credential {}
-    }
-}
-
 /// Resolved API client setup for a single request attempt.
 ///
 /// Keeping this as a single bundle ensures prewarm and normal request paths
@@ -332,8 +289,6 @@ struct CurrentClientSetup {
     api_provider: ApiProvider,
     api_auth: SharedAuthProvider,
     agent_identity_telemetry: Option<AgentIdentityTelemetry>,
-    /// PF-27-S05: the brokered key; requests go to the broker's socket.
-    broker: Option<BrokeredCredential>,
 }
 
 #[derive(Clone, Copy)]
@@ -370,8 +325,6 @@ pub struct ModelClient {
     pub(crate) stage_one_memory_binding:
         Arc<OnceLock<Arc<crate::memory_stage_one::StageOneMemoryBinding>>>,
     ingress_items: Arc<StdMutex<crate::security::ingress::NativeIngress>>,
-    /// PF-27-S05: hold plain provider API keys in the isolated broker.
-    broker_model_auth: Option<BrokerModelAuthConfig>,
 }
 
 /// A turn-scoped streaming session created from a [`ModelClient`].
@@ -882,14 +835,7 @@ impl ModelClient {
             ingress_items: Arc::new(StdMutex::new(
                 crate::security::ingress::NativeIngress::default(),
             )),
-            broker_model_auth: None,
         }
-    }
-
-    /// PF-27-S05: serve plain provider API keys through the isolated broker.
-    pub(crate) fn with_broker_model_auth(mut self, config: Option<BrokerModelAuthConfig>) -> Self {
-        self.broker_model_auth = config;
-        self
     }
 
     /// Install a denial binding once for this client and every existing/future clone.
@@ -1397,7 +1343,6 @@ impl ModelClient {
             ingress_policy: self.ingress_policy.clone(),
             stage_one_memory_binding: self.stage_one_memory_binding.clone(),
             ingress_items: Arc::clone(&self.ingress_items),
-            broker_model_auth: self.broker_model_auth.clone(),
         }
     }
 
@@ -1505,7 +1450,6 @@ impl ModelClient {
         // approved endpoint. This endpoint needs the same rule.
         let transport = if evidence.is_some() {
             let client = self.api_client_without_redirects(
-                client_setup.broker.as_ref(),
                 &client_setup
                     .api_provider
                     .url_for_path(RESPONSES_COMPACT_ENDPOINT),
@@ -1515,11 +1459,7 @@ impl ModelClient {
                 self.stage_one_memory_binding.get().cloned(),
             )
         } else {
-            self.build_api_transport(
-                &client_setup.api_provider,
-                client_setup.broker.as_ref(),
-                RESPONSES_COMPACT_ENDPOINT,
-            )?
+            self.build_api_transport(&client_setup.api_provider, RESPONSES_COMPACT_ENDPOINT)?
         };
         let request_telemetry = Self::build_request_telemetry(
             session_telemetry,
@@ -1662,18 +1602,13 @@ impl ModelClient {
         };
         let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
         let transport = if evidence.is_some() {
-            let client =
-                self.api_client_without_redirects(client_setup.broker.as_ref(), &call_url)?;
+            let client = self.api_client_without_redirects(&call_url)?;
             crate::memory_stage_one::StageOneGuardedTransport::new(
                 ReqwestTransport::from_http_client(client),
                 self.stage_one_memory_binding.get().cloned(),
             )
         } else {
-            self.build_api_transport(
-                &api_provider,
-                client_setup.broker.as_ref(),
-                REALTIME_CALLS_ENDPOINT,
-            )?
+            self.build_api_transport(&api_provider, REALTIME_CALLS_ENDPOINT)?
         };
         let transport = transport.map_inner(|inner| {
             crate::accounting::transport::AccountingTransport::new(
@@ -1750,7 +1685,6 @@ impl ModelClient {
         // same reason every other collected route may not.
         let transport = if evidence.is_some() {
             let client = self.api_client_without_redirects(
-                client_setup.broker.as_ref(),
                 &client_setup
                     .api_provider
                     .url_for_path(MEMORIES_SUMMARIZE_ENDPOINT),
@@ -1760,11 +1694,7 @@ impl ModelClient {
                 self.stage_one_memory_binding.get().cloned(),
             )
         } else {
-            self.build_api_transport(
-                &client_setup.api_provider,
-                client_setup.broker.as_ref(),
-                MEMORIES_SUMMARIZE_ENDPOINT,
-            )?
+            self.build_api_transport(&client_setup.api_provider, MEMORIES_SUMMARIZE_ENDPOINT)?
         };
         let transport = transport.map_inner(|inner| {
             crate::accounting::transport::AccountingTransport::new(
@@ -2690,7 +2620,7 @@ impl ModelClient {
         // PF-27-S05: a websocket handshake cannot carry a signed broker frame.
         if !self.state.provider.info().supports_websockets
             || self.state.disable_websockets.load(Ordering::Relaxed)
-            || self.broker_model_auth.is_some()
+            || codex_model_provider::model_key_broker_installed()
         {
             return false;
         }
@@ -2714,88 +2644,21 @@ impl ModelClient {
                 agent_identity_session_fallback: self.state.agent_identity_session_fallback.clone(),
             })
             .await?;
-        let broker = self
-            .brokered_model_credential(auth.as_ref(), &api_provider)
-            .await?;
-        let api_auth = match broker.as_ref() {
-            #[cfg(unix)]
-            Some(credential) => {
-                crate::model_broker_auth::BrokeredModelAuthProvider::shared(credential.clone())
-            }
-            #[cfg(not(unix))]
-            Some(credential) => match *credential {},
-            None => resolved_auth.auth,
-        };
+        // PF-27-S05: with a credential broker installed, `api_auth` signs for
+        // it and the transport sends the request only to its socket.
         Ok(CurrentClientSetup {
             auth,
             api_provider,
-            api_auth,
+            api_auth: resolved_auth.auth,
             agent_identity_telemetry: resolved_auth.agent_identity_telemetry,
-            broker,
         })
     }
 
-    /// PF-27-S05: with `broker_model_auth`, a provider whose auth is one plain
-    /// API key is served by the isolated broker. Other auth is not brokered.
-    #[cfg(unix)]
-    async fn brokered_model_credential(
-        &self,
-        auth: Option<&CodexAuth>,
-        api_provider: &ApiProvider,
-    ) -> Result<Option<BrokeredCredential>> {
-        let Some(config) = self.broker_model_auth.as_ref() else {
-            return Ok(None);
-        };
-        let Some(key) = codex_model_provider::provider_api_key(auth, self.state.provider.info())?
-        else {
-            return Ok(None);
-        };
-        // No fallback: a key the broker cannot hold is not sent by Core.
-        let Some(binding) =
-            crate::model_broker_auth::binding_for_base_url(&api_provider.base_url, key.header)
-        else {
-            return Err(CodexErr::Fatal(format!(
-                "broker_model_auth: the base URL of provider `{}` cannot be brokered (it needs HTTPS \
-                 with a DNS name or IPv4 address and no query); turn broker_model_auth off to use it",
-                api_provider.name
-            )));
-        };
-        // Not retried: the broker is never restarted within this process.
-        crate::model_broker_auth::credential_for(config, binding, key)
-            .await
-            .map(Some)
-            .map_err(|error| CodexErr::Fatal(error.to_string()))
-    }
-
-    #[cfg(not(unix))]
-    async fn brokered_model_credential(
-        &self,
-        auth: Option<&CodexAuth>,
-        _api_provider: &ApiProvider,
-    ) -> Result<Option<BrokeredCredential>> {
-        if self.broker_model_auth.is_some()
-            && codex_model_provider::provider_api_key(auth, self.state.provider.info())?.is_some()
-        {
-            // No fallback: the broker does not run on this platform (PF-27-S06).
-            return Err(CodexErr::Fatal(
-                "broker_model_auth: the credential broker is not available on this platform; \
-                 turn broker_model_auth off to use API-key providers"
-                    .to_string(),
-            ));
-        }
-        Ok(None)
-    }
-
-    /// No-redirect client for one model request, through the broker when the
-    /// key is brokered.
+    /// No-redirect client for one model request.
     fn api_client_without_redirects(
         &self,
-        broker: Option<&BrokeredCredential>,
         request_url: &str,
     ) -> Result<codex_http_client::HttpClient> {
-        if let Some(credential) = broker {
-            return broker_http_client(credential);
-        }
         Ok(
             codex_login::default_client::create_client_for_route_without_redirects(
                 &self.http_client_factory,
@@ -2809,19 +2672,15 @@ impl ModelClient {
     fn build_api_transport(
         &self,
         api_provider: &ApiProvider,
-        broker: Option<&BrokeredCredential>,
         endpoint: &str,
     ) -> Result<crate::memory_stage_one::StageOneGuardedTransport> {
         let request_url = api_provider.url_for_path(endpoint);
-        let client = match broker {
-            Some(credential) => broker_http_client(credential)?,
-            None => create_client_for_route(
-                &self.http_client_factory,
-                &request_url,
-                ClientRouteClass::Api,
-            )
-            .map_err(std::io::Error::from)?,
-        };
+        let client = create_client_for_route(
+            &self.http_client_factory,
+            &request_url,
+            ClientRouteClass::Api,
+        )
+        .map_err(std::io::Error::from)?;
         Ok(crate::memory_stage_one::StageOneGuardedTransport::new(
             ReqwestTransport::from_http_client(client),
             self.stage_one_memory_binding.get().cloned(),
@@ -2856,8 +2715,8 @@ impl ModelClient {
         auth_context: AuthRequestTelemetryContext,
         request_route_telemetry: RequestRouteTelemetry,
     ) -> std::result::Result<ApiWebSocketConnection, ApiError> {
-        // PF-27-S05: a brokered key never travels over a websocket handshake.
-        if self.broker_model_auth.is_some() {
+        // PF-27-S05: a brokered credential never travels over a websocket handshake.
+        if codex_model_provider::model_key_broker_installed() {
             return Err(ApiError::InvalidRequest {
                 message: "websockets are off under broker_model_auth".to_string(),
             });
@@ -3194,7 +3053,6 @@ impl ModelClientSession {
                 .map(crate::accounting::transport::ResponseEvidence::new);
             let transport = if evidence.is_some() {
                 let client = self.client.api_client_without_redirects(
-                    client_setup.broker.as_ref(),
                     &client_setup
                         .api_provider
                         .url_for_path(ANTHROPIC_MESSAGES_ENDPOINT),
@@ -3204,11 +3062,8 @@ impl ModelClientSession {
                     self.client.stage_one_memory_binding.get().cloned(),
                 )
             } else {
-                self.client.build_api_transport(
-                    &client_setup.api_provider,
-                    client_setup.broker.as_ref(),
-                    ANTHROPIC_MESSAGES_ENDPOINT,
-                )?
+                self.client
+                    .build_api_transport(&client_setup.api_provider, ANTHROPIC_MESSAGES_ENDPOINT)?
             };
             let request_auth_context = AuthRequestTelemetryContext::new(
                 client_setup.auth.as_ref().map(CodexAuth::auth_mode),
@@ -3800,7 +3655,6 @@ impl ModelClientSession {
             let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
             let transport = if evidence.is_some() {
                 let client = self.client.api_client_without_redirects(
-                    client_setup.broker.as_ref(),
                     &client_setup
                         .api_provider
                         .url_for_path(CHAT_COMPLETIONS_ENDPOINT),
@@ -3810,11 +3664,8 @@ impl ModelClientSession {
                     self.client.stage_one_memory_binding.get().cloned(),
                 )
             } else {
-                self.client.build_api_transport(
-                    &client_setup.api_provider,
-                    client_setup.broker.as_ref(),
-                    CHAT_COMPLETIONS_ENDPOINT,
-                )?
+                self.client
+                    .build_api_transport(&client_setup.api_provider, CHAT_COMPLETIONS_ENDPOINT)?
             };
             let transport = transport.map_inner(|inner| {
                 crate::accounting::transport::AccountingTransport::new(
@@ -4014,7 +3865,6 @@ impl ModelClientSession {
             let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
             let transport = if evidence.is_some() {
                 let client = self.client.api_client_without_redirects(
-                    client_setup.broker.as_ref(),
                     &client_setup.api_provider.url_for_path(RESPONSES_ENDPOINT),
                 )?;
                 crate::memory_stage_one::StageOneGuardedTransport::new(
@@ -4022,11 +3872,8 @@ impl ModelClientSession {
                     self.client.stage_one_memory_binding.get().cloned(),
                 )
             } else {
-                self.client.build_api_transport(
-                    &client_setup.api_provider,
-                    client_setup.broker.as_ref(),
-                    RESPONSES_ENDPOINT,
-                )?
+                self.client
+                    .build_api_transport(&client_setup.api_provider, RESPONSES_ENDPOINT)?
             };
             let request_auth_context = AuthRequestTelemetryContext::new(
                 client_setup.auth.as_ref().map(CodexAuth::auth_mode),

@@ -27,6 +27,7 @@ tempfile = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 
 [target.'cfg(unix)'.dependencies]
+codex-login = { workspace = true }
 codex-network-proxy = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
