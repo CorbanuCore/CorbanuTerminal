@@ -238,6 +238,8 @@ fn pf_23_s02_persistence_files_become_read_only() {
     let fx = fixture();
     let cwd = fx.user_home.join("project");
     std::fs::create_dir_all(cwd.join(".git/hooks")).unwrap();
+    // An existing start-up file; the ones below do not exist.
+    std::fs::write(fx.user_home.join(".bashrc"), "x").unwrap();
     let denials = ReadDenials::collect(&fx.codex_home, Some(&fx.user_home), None, &[abs(&cwd)]);
     let policy = denials
         .apply(&PermissionProfile::Disabled)
@@ -245,12 +247,25 @@ fn pf_23_s02_persistence_files_become_read_only() {
         .file_system_sandbox_policy();
     let writable = |path: &Path| policy.can_write_path_with_cwd(path, &cwd);
     let readable = |path: &Path| policy.can_read_path_with_cwd(path, &cwd);
-    for protected in [
+    let missing_home_files = [
         fx.user_home.join(".zshrc"),
         fx.user_home.join(".config/fish/config.fish"),
         fx.user_home.join("Library/LaunchAgents/x.plist"),
         fx.user_home.join(".local/bin/corbanu"),
         fx.user_home.join(".claude/settings.json"),
+    ];
+    // Linux leaves missing home files to the command-text net: the sandbox
+    // would put an empty placeholder in the real home for the command's run.
+    for missing in &missing_home_files {
+        assert_eq!(
+            writable(missing),
+            cfg!(target_os = "linux"),
+            "{}",
+            missing.display()
+        );
+    }
+    for protected in [
+        fx.user_home.join(".bashrc"),
         cwd.join(".git/hooks/pre-commit"),
         cwd.join(".git/config"),
         cwd.join(".codex/config.toml"),
@@ -429,6 +444,52 @@ fn pf_23_s02_enclosing_repo_and_dangling_links_are_protected() {
             "{}",
             protected.display()
         );
+    }
+}
+
+/// PF-23-S02 follow-up: submodule git folders (nested ones and ones whose
+/// path has a slash) and a `core.hooksPath` folder inside the workspace
+/// (`.husky`) are read-only too; the rest of the workspace stays writable.
+#[test]
+fn pf_23_s02_submodules_and_hooks_path_are_protected() {
+    let fx = fixture();
+    let cwd = fx.user_home.join("project");
+    let git = cwd.join(".git");
+    for module in ["modules/a", "modules/a/modules/inner", "modules/libs/b"] {
+        for folder in ["hooks", "objects"] {
+            std::fs::create_dir_all(git.join(module).join(folder)).unwrap();
+        }
+        std::fs::write(git.join(module).join("HEAD"), "ref: refs/heads/main\n").unwrap();
+        std::fs::write(git.join(module).join("config"), "").unwrap();
+    }
+    std::fs::write(
+        git.join("config"),
+        "[core]\n\tbare = false\n[core \"x\"]\n[CORE]\n\thooksPath = \".husky\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(cwd.join(".husky")).unwrap();
+
+    let denials = ReadDenials::collect(&fx.codex_home, Some(&fx.user_home), None, &[abs(&cwd)]);
+    let policy = denials
+        .apply(&PermissionProfile::Disabled)
+        .unwrap()
+        .file_system_sandbox_policy();
+    let writable = |path: &Path| policy.can_write_path_with_cwd(path, &cwd);
+    for protected in [
+        git.join("modules/a/hooks/pre-commit"),
+        git.join("modules/a/config"),
+        git.join("modules/a/modules/inner/hooks/post-checkout"),
+        git.join("modules/libs/b/hooks/pre-push"),
+        cwd.join(".husky/pre-commit"),
+    ] {
+        assert!(!writable(&protected), "{}", protected.display());
+    }
+    for open in [
+        git.join("modules/a/objects/ab"),
+        cwd.join("src/main.rs"),
+        cwd.join(".huskyrc"),
+    ] {
+        assert!(writable(&open), "{}", open.display());
     }
 }
 

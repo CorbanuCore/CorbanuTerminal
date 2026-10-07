@@ -53,11 +53,25 @@
   (`~/.bash_profile` and the like) are left to the command-text net: a sandbox placeholder would change the user's
   own login shells.
 - A writable root configured inside a protected folder keeps that folder's protection off (as PF-23-S01 reads).
-- Submodule git folders (`.git/modules/*`), a `core.hooksPath` inside the workspace (`.husky`) and a new nested
-  `.git` in a subfolder stay writable; only the command-text net covers them.
+- Follow-up (2026-10-07): the hooks, config, config.worktree and commondir of every folder below `.git/modules`
+  (walked without following links, git's own folders skipped) and the folder `core.hooksPath` names (repository,
+  `~/.gitconfig`, `~/.config/git/config`; `~/` expanded) are read-only too (Linux: when they exist). Past 512
+  folders, 8 levels, or a folder that cannot be read, all of `.git/modules` is read-only (submodule updates then
+  fail under the rules); an unreadable folder on the way to `.git` makes that `.git` and those above it read-only,
+  and the paths (and any config's `hooksPath`) this process found before still hold; after a restart with the
+  folder still unreadable they are not known (on Linux, a `.git` placeholder bwrap cannot create then fails
+  every command until the permissions are fixed). A module folder holding very
+  many plain files slows every command. Not covered: config includes, `~user/`, `GIT_CONFIG_GLOBAL`; a module folder a command
+  creates is protected from the next command on; a new nested `.git` stays with the command-text net (the profile
+  cannot deny creating one name anywhere without denying the repository's own).
 - Linux, full-write profiles only: a missing `commondir` is left to the command-text net (an empty placeholder
   breaks git), and renaming or removing an existing folder above a protected path is not blocked (bind mounts
   move with the folder), so `mv .git .g` and rebuilding `.git` is caught only when the path is written out.
-  macOS blocks both. A Linux sandbox test is a follow-up.
+  macOS blocks both. Follow-up (2026-10-07): `linux-sandbox` test
+  `pf_23_s02_full_write_profile_keeps_protected_files_read_only` pins this on Linux (a protected file stays
+  read-only through a symlinked dotfile and after its folder is renamed; the rename, rebuild and link removal go
+  through), and `pf_23_s02_persistence_files_become_read_only` pins that missing home files leave no placeholder.
+  It found that every full-access command with these rules failed on Linux (`bwrap: Can't mkdir /.git`): the
+  filesystem root of `:root = write` no longer gets repository-metadata masks.
 - External sandboxes and remote environments take no extra rules; processes there count as unconfined.
 - Sandboxed upload reads load the whole file (within the 512 MiB limit).

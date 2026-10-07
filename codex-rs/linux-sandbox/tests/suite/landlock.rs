@@ -1179,3 +1179,79 @@ async fn sandbox_blocks_dev_tcp_redirection() {
     // all images ship bash, so we guard against 127 as well.
     assert_network_blocked(&["bash", "-c", "echo hi > /dev/tcp/127.0.0.1/80"]).await;
 }
+
+/// PF-23-S02 on Linux, full-write profiles: what the protected-path rules
+/// hold (a read-only file stays read-only, also through a symlinked dotfile
+/// and after its folder is renamed) and the limits the gate records (the
+/// link itself can be removed, the folder renamed and the path rebuilt,
+/// because bind mounts move with their folder). macOS blocks those too
+/// (`seatbelt_tests::renaming_a_folder_above_a_protected_path_is_denied`).
+#[tokio::test]
+async fn pf_23_s02_full_write_profile_keeps_protected_files_read_only() {
+    if should_skip_bwrap_tests().await {
+        eprintln!("skipping bwrap test: bwrap sandbox prerequisites are unavailable");
+        return;
+    }
+    let dir = tempfile::tempdir().expect("tempdir");
+    let base = dir.path().canonicalize().expect("canonical");
+    let config = base.join("config");
+    std::fs::create_dir_all(config.join("fish")).expect("fish");
+    std::fs::write(config.join("fish/config.fish"), "ok\n").expect("config");
+    std::fs::create_dir_all(base.join("dotfiles")).expect("dotfiles");
+    std::fs::write(base.join("dotfiles/zshrc"), "ok\n").expect("zshrc");
+    std::os::unix::fs::symlink(base.join("dotfiles/zshrc"), base.join(".zshrc")).expect("link");
+    let entry = |path: &std::path::Path, access| FileSystemSandboxEntry {
+        path: FileSystemPath::Path {
+            path: AbsolutePathBuf::from_absolute_path(path).expect("absolute"),
+        },
+        access,
+        missing_path_behavior: None,
+    };
+    // As `ReadDenials` builds it on Linux: a full-write root, a denied
+    // store, and read-only entries at real locations (a link's target).
+    let policy = FileSystemSandboxPolicy::restricted(vec![
+        FileSystemSandboxEntry {
+            path: FileSystemPath::Special {
+                value: FileSystemSpecialPath::Root,
+            },
+            access: FileSystemAccessMode::Write,
+            missing_path_behavior: None,
+        },
+        entry(&base.join("secret"), FileSystemAccessMode::Deny),
+        entry(&config.join("fish"), FileSystemAccessMode::Read),
+        entry(&base.join("dotfiles/zshrc"), FileSystemAccessMode::Read),
+    ]);
+    std::fs::create_dir_all(base.join("secret")).expect("secret");
+    let script = "echo x >> .zshrc; echo link-write=$?; \
+                  echo x > config/fish/config.fish; echo write=$?; \
+                  echo new > config/other.txt; echo other=$?; \
+                  mv config moved; echo mv=$?; \
+                  echo x > moved/fish/config.fish; echo moved-write=$?; \
+                  rm .zshrc; echo rm-link=$?";
+    let output = run_cmd_result_with_permission_profile_for_cwd(
+        &["bash", "-c", script],
+        AbsolutePathBuf::from_absolute_path(&base).expect("absolute base"),
+        PermissionProfile::from_runtime_permissions(&policy, NetworkSandboxPolicy::Restricted),
+        create_env_from_core_vars(),
+        LONG_TIMEOUT_MS,
+        /*use_legacy_landlock*/ false,
+    )
+    .await
+    .expect("full-write profile runs under bubblewrap");
+    let stdout = output.stdout.text;
+    for held in ["link-write=1", "write=1", "moved-write=1"] {
+        assert!(stdout.contains(held), "{held}: {stdout}");
+    }
+    // Recorded Linux limits: the rename and the link removal go through.
+    for limit in ["other=0", "mv=0", "rm-link=0"] {
+        assert!(stdout.contains(limit), "{limit}: {stdout}");
+    }
+    assert_eq!(
+        std::fs::read_to_string(base.join("dotfiles/zshrc")).expect("zshrc"),
+        "ok\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(base.join("moved/fish/config.fish")).expect("moved config"),
+        "ok\n"
+    );
+}

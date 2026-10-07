@@ -550,6 +550,16 @@ fn create_filesystem_args(
         append_unreadable_root_args(&mut bwrap_args, unreadable_root, &allowed_write_paths)?;
     }
 
+    // `:root = write` (full access with denials), not a project at `/`.
+    let full_write_root = file_system_sandbox_policy.entries.iter().any(|entry| {
+        entry.access == FileSystemAccessMode::Write
+            && matches!(
+                entry.path,
+                FileSystemPath::Special {
+                    value: FileSystemSpecialPath::Root
+                }
+            )
+    });
     for writable_root in &sorted_writable_roots {
         let root = writable_root.root.as_path();
         let symlink_target = canonical_target_if_symlinked_path(root);
@@ -575,8 +585,20 @@ fn create_filesystem_args(
             .map(|path| path.as_path().to_path_buf())
             .filter(|path| !unreadable_paths.contains(path))
             .filter(|path| !missing_auto_metadata_read_only_project_root_subpaths.contains(path))
+            // The filesystem root of a full-write profile with denials (PF-23
+            // protected paths under full access) is not a project root, and
+            // an unprivileged bwrap cannot create a mount point there:
+            // `mkdir /.git` or `/.codex` would fail every command.
+            .filter(|path| {
+                !(full_write_root && root.parent().is_none() && path.parent() == Some(root))
+                    || path.exists()
+            })
             .collect();
-        let protected_metadata_names = writable_root.protected_metadata_names.clone();
+        let protected_metadata_names = if root.parent().is_none() && full_write_root {
+            Vec::new()
+        } else {
+            writable_root.protected_metadata_names.clone()
+        };
         append_metadata_path_masks_for_writable_root(
             &mut read_only_subpaths,
             root,
@@ -2034,6 +2056,52 @@ mod tests {
 
         assert_empty_file_bound_without_perms(&args.args, Path::new(&dot_vscode));
         assert_empty_file_bound_without_perms(&args.args, Path::new(&dot_secrets));
+    }
+
+    /// PF-23: full access with denials (`:root = write`) masks no repository
+    /// metadata at `/`, which an unprivileged bwrap could not create, also
+    /// when the command runs in `/`.
+    #[test]
+    fn full_write_root_with_denials_creates_nothing_at_the_filesystem_root() {
+        let policy = FileSystemSandboxPolicy::restricted(vec![
+            FileSystemSandboxEntry {
+                path: FileSystemPath::Special {
+                    value: FileSystemSpecialPath::Root,
+                },
+                access: FileSystemAccessMode::Write,
+                missing_path_behavior: None,
+            },
+            FileSystemSandboxEntry {
+                path: FileSystemPath::Path {
+                    path: AbsolutePathBuf::try_from(Path::new("/tmp/pf23-nonexistent-secret"))
+                        .expect("absolute"),
+                },
+                access: FileSystemAccessMode::Deny,
+                missing_path_behavior: None,
+            },
+        ]);
+        for cwd in ["/", "/tmp"] {
+            let args =
+                create_filesystem_args(&policy, Path::new(cwd), NO_UNREADABLE_GLOB_SCAN_MAX_DEPTH)
+                    .expect("bwrap fs args");
+            let at_root: Vec<PathBuf> = synthetic_mount_target_paths(&args)
+                .into_iter()
+                .filter(|path| {
+                    [".git", ".agents", ".codex"]
+                        .iter()
+                        .any(|name| path == &Path::new("/").join(name))
+                })
+                .collect();
+            assert_eq!(at_root, Vec::<PathBuf>::new(), "cwd {cwd}");
+            assert!(
+                !args
+                    .args
+                    .iter()
+                    .any(|arg| arg == "/.git" || arg == "/.codex"),
+                "cwd {cwd}: {:?}",
+                args.args
+            );
+        }
     }
 
     #[test]
