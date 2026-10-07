@@ -17,6 +17,7 @@ pub(crate) mod ingress;
 mod integration;
 pub mod inventory;
 pub(crate) mod launch_contract;
+pub mod migration;
 pub mod preflight;
 mod protected_runtime;
 pub(crate) mod protected_surface;
@@ -55,3 +56,7 @@ mod protected_runtime_tests;
 #[cfg(test)]
 #[path = "pf_29_s01_tests.rs"]
 mod pf_29_s01_tests;
+
+#[cfg(test)]
+#[path = "pf_29_s02_tests.rs"]
+mod pf_29_s02_tests;

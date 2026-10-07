@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-29-S01"
 title: "Protected-mode inventory and activation preflight"
-status: in_progress
+status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-29"
 execution_order: 35
@@ -13,11 +13,15 @@ worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-29-s01-20261006"
 branch: "pf-29-s01-20261006"
 base_commit: "4b42012daa8e532d7ae2f9a62b6829f55b044b0b"
 depends_on: "PF-28-S02, PF-20-S02"
+merged_behind_flag: "protected_mode_preflight"
+gate_evidence: "qa/security-levels/sprints/PF-29-S01/README.md"
 created: 2026-08-28
 updated: 2026-10-06
 ---
 
 # PF-29-S01 — Protected-mode inventory and activation preflight
+
+**October 6:** merged (PR #228, `b751254169`) behind `protected_mode_preflight`; returned to `draft` for its open items.
 
 ## Execution mandate
 
@@ -38,10 +42,8 @@ updated: 2026-10-06
 
 - Core: `core/src/security/inventory.rs` (findings, classes, keyed dry-run manifest), `core/src/security/preflight.rs`
   (readiness, blockers, drift), exported as `codex_core::protected_preflight` (and `legacy_core::protected_preflight`).
-- TUI: `tui/src/security/preflight.rs` (receipt, launch isolation and re-audit, resume refusal); the `/security`
-  Aggressive review in `bottom_pane/security_level_picker.rs`; hooks in `security/launch.rs`, `lib.rs` and
-  `app/session_lifecycle.rs`.
-- Flag: `protected_mode_preflight` (default off). Without it, or without `security_levels`, nothing changes.
+- TUI: `tui/src/security/preflight.rs`, the picker, `security/launch.rs` and the resume chokepoints. Flag
+  `protected_mode_preflight` (default off); without it, or without `security_levels`, nothing changes.
 
 ## Preconditions
 
@@ -76,25 +78,23 @@ updated: 2026-10-06
 - [x] Launch re-audit: a boundary that is no longer clean (for example a new profile export) is reported as not
   clean in a startup warning and `/status`, never claimed. Conversations recorded before activation cannot be resumed
   or forked (UUIDv7 creation time against the receipt); a missing or corrupt receipt refuses every resume.
-- [x] Tests: symlinks, shadowed config and env, old memories, denied reads, locked or damaged vault, corrupt
-  snapshots, drift, keyed digests, no recursion.
 
 ## Remaining
 
 - [ ] MCP servers, hooks and notify run outside the sandbox: listed as "not contained", not blocked, pending Travis's
   PF-27-S02 decision. Claude panes are not inventoried.
-- [ ] Consent flow for exec-provider sign-in commands (today: remove `auth` or block). Migration of blocking
-  findings is PF-29-S02.
+- [ ] Consent flow for exec-provider sign-in commands (today: remove `auth` or block). Migration: PF-29-S02.
 - [ ] Launch isolation uses the start folder; a `.env` in another `-C` folder is reported not clean, not denied.
 
 ## Verification
 
 - [x] `just fix -p codex-features -p codex-core -p codex-app-server-client -p codex-tui`, `just fmt`; diff inspected.
 - [x] Focused `pf_29_s01`: core 14, tui 8. Suites, five GLM 5.2 videos, three Opus reviews (all findings handled).
-- [ ] Merge behind the flag; details in the [evidence](../../../../qa/security-levels/sprints/PF-29-S01/README.md).
+- [x] PR CI green; merged as #228. Details in the [evidence](../../../../qa/security-levels/sprints/PF-29-S01/README.md).
+- [ ] PF-26 final-candidate requalification (milestone gate).
 
 ## Exit evidence
 
-- [ ] Commits, commands, outcomes, videos and review under `qa/security-levels/sprints/PF-29-S01/`.
+- [x] Commits, commands, outcomes, videos and review under `qa/security-levels/sprints/PF-29-S01/`.
 - [ ] PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
 - [ ] Done/Remaining reflect reality; completed record moved to the archive and plan/navigation updated.

@@ -32,6 +32,8 @@ pub use super::inventory::Scope;
 pub use super::inventory::SecretClass;
 pub use super::inventory::VaultState;
 use super::inventory::take_with_key;
+/// PF-29-S02 migration of blocking findings.
+pub use super::migration;
 use crate::config::Config;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -222,6 +224,16 @@ fn readiness(inventory: &Inventory, flags: ReadinessFlags) -> Vec<ReadinessItem>
         ),
         item("vault", "Vault", vault),
     ];
+    if inventory.migration_unfinished {
+        items.push(item(
+            "migration",
+            "Credential migration",
+            ReadinessState::Incomplete(
+                "a credential migration did not finish; press r in this review to finish it"
+                    .to_string(),
+            ),
+        ));
+    }
     items.extend(inventory.exec_provider_auth.iter().map(|provider| {
         item(
             &format!("exec-provider-auth-{provider}"),
