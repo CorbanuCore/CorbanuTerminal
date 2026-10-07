@@ -970,3 +970,40 @@ mod pf_24_s02 {
         assert_eq!(saved_level(&picker), Some(ChosenLevel::Aggressive));
     }
 }
+
+/// PF-25-S02: with the kill switch saved on, the list says so and `g` asks
+/// for the grants and kill switch view; `k` still moves up.
+#[test]
+fn pf_25_s02_kill_switch_status_and_g_key() {
+    let home = tempfile::TempDir::new().unwrap();
+    // The kill switch saved on, as a confirmed /security change saves it.
+    {
+        use crate::legacy_core::security_level_change::LevelBasis;
+        use crate::legacy_core::security_level_change::SecurityLevel;
+        use crate::legacy_core::security_revocation::HumanRevocation;
+        use crate::legacy_core::security_revocation::commit_human_revocation;
+        let basis = LevelBasis::read(home.path(), SecurityLevel::Permissive, None);
+        commit_human_revocation(
+            home.path(),
+            SecurityLevel::Permissive,
+            None,
+            &basis,
+            HumanRevocation::KillSwitchOn,
+            1_000,
+        )
+        .unwrap();
+    }
+    let mut picker = SecurityLevelPicker::new(
+        &context(home.path(), ChosenLevel::Permissive),
+        current(),
+        None,
+        RuntimeKeymap::defaults().list,
+    );
+    let text = render(&picker, 120);
+    assert!(text.contains("Kill switch: on"), "{text}");
+    assert!(text.contains("g grants and kill switch"), "{text}");
+    picker.handle_key_event(key(KeyCode::Char('k')));
+    assert!(!picker.open_revocations);
+    picker.handle_key_event(key(KeyCode::Char('g')));
+    assert!(picker.open_revocations);
+}

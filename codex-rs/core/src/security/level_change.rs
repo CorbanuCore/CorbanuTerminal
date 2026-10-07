@@ -78,6 +78,9 @@ pub struct LevelBasis {
     pub live: bool,
     /// That tree's epoch: any commit since the review moves it.
     epoch: Option<AuthorityEpoch>,
+    /// The kill-switch event in force (PF-25-S02): a release is for this one
+    /// only, also when no live tree's epoch would show a change.
+    kill_switch_event: Option<String>,
 }
 
 impl LevelBasis {
@@ -101,6 +104,7 @@ impl LevelBasis {
                 stored,
                 live: true,
                 epoch: Some(epoch),
+                kill_switch_event: controller.kill_switch_event_id(),
             };
         }
         let recovered = recovery::recover(codex_home, configured);
@@ -111,6 +115,10 @@ impl LevelBasis {
             stored,
             live: false,
             epoch: None,
+            kill_switch_event: recovered
+                .revocations
+                .kill_switch_event_id()
+                .map(|id| id.as_str().to_string()),
         }
     }
 }

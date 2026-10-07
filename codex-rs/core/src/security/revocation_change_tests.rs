@@ -254,3 +254,66 @@ fn security_revocation_one_grant_ends_only_that_grant() {
     assert!(!revoke_grant(&first), "already gone");
     assert_eq!(held_by(thread), vec!["cat two".to_string()]);
 }
+
+/// Turning the switch off reaches the other sessions of the process that
+/// hold the same switch.
+#[test]
+fn security_revocation_release_reaches_the_other_sessions() {
+    let home = TempDir::new().unwrap();
+    let (_view, root) = live_tree(&home, SecurityLevel::Aggressive);
+    let (_other_view, other) = live_tree(&home, SecurityLevel::Aggressive);
+    revoke(&home, Some(root), HumanRevocation::KillSwitchOn).unwrap();
+    assert!(basis(&home, Some(other)).kill_switch_active);
+    revoke(&home, Some(root), HumanRevocation::KillSwitchOff).unwrap();
+    assert!(!basis(&home, Some(other)).kill_switch_active);
+    // And that session can turn it on again itself.
+    revoke(&home, Some(other), HumanRevocation::KillSwitchOn).unwrap();
+}
+
+/// Without a session, a release is for the switch the person saw: one
+/// turned off and on again elsewhere since the review is refused.
+#[test]
+fn security_revocation_release_is_for_the_switch_reviewed() {
+    let home = TempDir::new().unwrap();
+    revoke(&home, None, HumanRevocation::KillSwitchOn).unwrap();
+    let reviewed = basis(&home, None);
+    revoke(&home, None, HumanRevocation::KillSwitchOff).unwrap();
+    revoke(&home, None, HumanRevocation::KillSwitchOn).unwrap();
+    let result = commit_human_revocation(
+        home.path(),
+        SecurityLevel::Permissive,
+        None,
+        &reviewed,
+        HumanRevocation::KillSwitchOff,
+        now(),
+    );
+    assert!(matches!(result, Err(LevelChangeError::Changed)), "{result:?}");
+    assert_eq!(
+        stored_kill_switch(&home),
+        Some((SecurityLevel::Permissive, true))
+    );
+}
+
+/// Without a session, a kill switch that cannot be saved changed nothing
+/// and says so.
+#[test]
+fn security_revocation_unsaved_without_a_session_is_an_error() {
+    let home = TempDir::new().unwrap();
+    std::fs::create_dir(home.path().join("security_state.lock")).unwrap();
+    let result = revoke(&home, None, HumanRevocation::KillSwitchOn);
+    assert!(
+        matches!(result, Err(LevelChangeError::NotSaved(_))),
+        "{result:?}"
+    );
+}
+
+/// Revoke all also ends grants of sessions outside this home's trees.
+#[test]
+fn security_revocation_all_ends_every_grant_of_the_process() {
+    let home = TempDir::new().unwrap();
+    let (_view, root) = live_tree(&home, SecurityLevel::Aggressive);
+    let elsewhere = ThreadId::new();
+    hold_grant(elsewhere, "cat elsewhere");
+    revoke(&home, Some(root), HumanRevocation::AllActiveAuthority).unwrap();
+    assert_eq!(held_by(elsewhere), Vec::<String>::new());
+}

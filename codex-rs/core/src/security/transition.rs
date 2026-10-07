@@ -378,7 +378,19 @@ impl TrustedSecurityController {
                         /*only_if_stricter*/ true,
                     );
                 }
-                TransitionKind::Downgrade | TransitionKind::KillSwitchRelease => {}
+                // PF-25-S02: the switch is saved for the home, so the other
+                // sessions of this process that hold the same switch release
+                // it too (a newer switch there stays: the merge keeps it).
+                TransitionKind::KillSwitchRelease => {
+                    propagate(
+                        &self.shared,
+                        home,
+                        &next,
+                        /*closes_channels*/ false,
+                        /*only_if_stricter*/ false,
+                    );
+                }
+                TransitionKind::Downgrade => {}
             }
         }
         if prepared.closes_channels() {
@@ -492,6 +504,17 @@ impl TrustedSecurityController {
             state.persisted.revocations.generation,
         )
         .map_err(|_| SecurityPolicyError::AuthorityMismatch)
+    }
+
+    /// The kill-switch event in force, if any (PF-25-S02).
+    pub(crate) fn kill_switch_event_id(&self) -> Option<String> {
+        let guard = self.read_state().ok()?;
+        guard
+            .as_ref()?
+            .persisted
+            .revocations
+            .kill_switch_event_id()
+            .map(|id| id.as_str().to_string())
     }
 
     /// When the kill-switch event in force was made, if any (PF-25-S02).

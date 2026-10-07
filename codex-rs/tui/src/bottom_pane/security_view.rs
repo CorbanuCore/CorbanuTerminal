@@ -280,11 +280,11 @@ impl Renderable for SecurityView {
             height: area.height.saturating_sub(footer_height),
             ..area
         };
-        let scroll = self
-            .picker
-            .as_ref()
-            .filter(|_| self.revocations.is_none())
-            .map_or(0, |picker| picker.scroll_for(lines.len(), body.height));
+        let scroll = match (&self.revocations, &self.picker) {
+            (Some(revocations), _) => revocations.scroll_for(lines.len(), body.height),
+            (None, Some(picker)) => picker.scroll_for(lines.len(), body.height),
+            (None, None) => 0,
+        };
         Paragraph::new(lines).scroll((scroll, 0)).render(body, buf);
         Paragraph::new(footer).render(
             Rect {

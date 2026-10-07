@@ -119,6 +119,24 @@ pub fn commit_human_revocation(
         &HomeTransitionStore::new(codex_home),
         now_unix_seconds,
     )?;
+    // Without a live tree the change exists only in the saved file.
+    if !live && let Some(reason) = &committed.not_saved {
+        return Err(LevelChangeError::NotSaved(format!(
+            "the security state could not be saved, so nothing changed: {reason}"
+        )));
+    }
+    // Another process changed the switch first (a newer event wins).
+    if choice == HumanRevocation::KillSwitchOn && !committed.kill_switch_active {
+        return Err(LevelChangeError::Changed);
+    }
+    if matches!(
+        choice,
+        HumanRevocation::AllActiveAuthority | HumanRevocation::KillSwitchOn
+    ) {
+        // Grants of sessions outside this home's trees end too: the view
+        // listed every grant of the process.
+        super::aggressive::revoke_everything();
+    }
     Ok(RevocationReport {
         in_force: committed.level,
         kill_switch_active: committed.kill_switch_active,

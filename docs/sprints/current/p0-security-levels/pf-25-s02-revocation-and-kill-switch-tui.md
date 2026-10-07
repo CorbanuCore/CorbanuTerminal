@@ -51,7 +51,7 @@ updated: 2026-10-07
 Gate: [qa/security-levels/sprints/PF-25-S02/README.md](../../../../qa/security-levels/sprints/PF-25-S02/README.md).
 
 - [x] Sprint record is linked only to PF-25.
-- [x] `/security`, `k` (offered when Core enforces a protected level, the kill switch is on, or grants are held)
+- [x] `/security`, `g` (offered when Core enforces a protected level, the kill switch is on, or grants are held)
   opens "Grants and kill switch" (`tui/src/security/revocation_view.rs`): Core's level, the kill switch, each grant
   held now (command, runs left, expiry; no protected values), "Revoke all active authority", and the kill switch.
 - [x] Every choice has a review; only Enter there commits, off the UI thread. Esc changes nothing. Turning the kill

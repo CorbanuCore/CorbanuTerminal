@@ -152,6 +152,108 @@ fn pf_25_s02_restart_after_a_change() {
     assert_eq!(restart, true);
 }
 
+fn grant(id: &str, command: &str) -> HeldGrant {
+    HeldGrant {
+        thread: codex_protocol::ThreadId::from_string("019a0000-0000-7000-8000-000000000002")
+            .expect("thread"),
+        grant_id: id.to_string(),
+        label: command.to_string(),
+        command: vec!["cat".to_string(), command.to_string()],
+        uses_left: None,
+        expires_at_unix_seconds: 0,
+    }
+}
+
+/// A view whose grant list the test controls.
+fn view_with(
+    home: &TempDir,
+    grants: std::rc::Rc<std::cell::RefCell<Vec<HeldGrant>>>,
+) -> RevocationView {
+    RevocationView::with_grant_source(
+        RevocationTarget {
+            codex_home: home.path().to_path_buf(),
+            configured: SecurityLevel::Permissive,
+            thread: None,
+        },
+        crate::keymap::RuntimeKeymap::defaults().list,
+        None,
+        Box::new(move || grants.borrow().clone()),
+    )
+}
+
+/// Held grants are listed first; Enter reviews one. A grant that is no
+/// longer held (here never in Core's ledger) is reported, nothing changes,
+/// and "restart now" is not offered for it.
+#[test]
+fn pf_25_s02_grant_rows_review_and_already_ended() {
+    let home = TempDir::new().unwrap();
+    let grants = std::rc::Rc::new(std::cell::RefCell::new(vec![
+        grant("a", "one.txt"),
+        grant("b", "two.txt"),
+    ]));
+    let (tx, _rx) = unbounded_channel::<AppEvent>();
+    let mut view = view_with(&home, grants);
+    view.app_event_tx = Some(AppEventSender::new(tx));
+    let list = text(&view);
+    assert!(list.contains("> Grant: `cat one.txt`"), "{list}");
+    assert!(list.contains("  Grant: `cat two.txt`"), "{list}");
+    key(&mut view, KeyCode::Down);
+    key(&mut view, KeyCode::Enter);
+    let review = text(&view);
+    assert!(review.contains("Revoke this grant?"), "{review}");
+    assert!(review.contains("cat two.txt"), "{review}");
+    key(&mut view, KeyCode::Enter);
+    let done = text(&view);
+    assert!(done.contains("had already ended"), "{done}");
+    assert!(!view.footer().contains("restart"), "{}", view.footer());
+}
+
+/// The selection follows the grant, not the row number: a grant that ended
+/// while the list was shown is reported instead of opening another row.
+#[test]
+fn pf_25_s02_selection_follows_the_grant() {
+    let home = TempDir::new().unwrap();
+    let grants = std::rc::Rc::new(std::cell::RefCell::new(vec![
+        grant("a", "one.txt"),
+        grant("b", "two.txt"),
+    ]));
+    let mut view = view_with(&home, std::rc::Rc::clone(&grants));
+    key(&mut view, KeyCode::Down);
+    grants.borrow_mut().remove(1);
+    key(&mut view, KeyCode::Enter);
+    assert!(
+        text(&view).contains("That grant has already ended"),
+        "{}",
+        text(&view)
+    );
+    grants.borrow_mut().insert(0, grant("c", "zero.txt"));
+    // "Revoke all" stays "Revoke all" when a grant row is added above it.
+    key(&mut view, KeyCode::Down);
+    assert!(text(&view).contains("> Revoke all active authority"));
+    key(&mut view, KeyCode::Enter);
+    assert!(text(&view).contains("Revoke all active authority?"), "{}", text(&view));
+}
+
+/// Off the test thread, the commit runs in the background and its result is
+/// collected by `poll`.
+#[test]
+fn pf_25_s02_commit_runs_off_the_ui_thread() {
+    let home = TempDir::new().unwrap();
+    let mut view = view(&home, None);
+    view.commit_inline = false;
+    key(&mut view, KeyCode::Down);
+    key(&mut view, KeyCode::Enter);
+    key(&mut view, KeyCode::Enter);
+    assert!(view.saving());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while !view.poll() {
+        assert!(std::time::Instant::now() < deadline, "the commit never finished");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(kill_switch_saved(&home));
+    assert!(text(&view).contains("Kill switch on"), "{}", text(&view));
+}
+
 /// Only this view commits a revocation or the kill switch: no other product
 /// source names Core's entry points.
 #[test]

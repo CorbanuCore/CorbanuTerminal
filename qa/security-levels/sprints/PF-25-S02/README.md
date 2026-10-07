@@ -1,7 +1,7 @@
 # PF-25-S02: per-sprint gate (2026-10-07)
 
 - **Branch:** `feat/pf-25-s02-revocation-tui`, stacked on PF-25-S01 (`feat/pf-25-s01-grant-tui`). Behind
-  `security_levels`. `/security` offers `k` only when Core enforces a protected level, the kill switch is on, or grants
+  `security_levels`. `/security` offers `g` only when Core enforces a protected level, the kill switch is on, or grants
   are held, so Permissive sessions see nothing new.
 
 ## What each choice does

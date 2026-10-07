@@ -1,7 +1,7 @@
 # PF-25-S02: Kill switch applies now and holds after a restart (GLM 5.2).
 id = "pf25s02-kill-switch-restart"
 feature = "Kill switch applies now and holds after a restart"
-expected = "Under Aggressive, /security, k, the kill switch row: the review lists what it ends; Enter turns it on now and saves it. After r restart, /security, k still shows Kill switch: on, and GLM's next command approval offers no grant."
+expected = "Under Aggressive, /security, g, the kill switch row: the review lists what it ends; Enter turns it on now and saves it. After r restart, /security, g still shows Kill switch: on, and GLM's next command approval offers no grant."
 model = "glm-5.2"
 provider = "zai"
 config = """
@@ -56,9 +56,9 @@ type = "/security"
 [[steps]]
 key = "Enter"
 [[steps]]
-wait = "k grants and kill switch"
+wait = "g grants and kill switch"
 [[steps]]
-key = "k"
+key = "g"
 [[steps]]
 wait = "Grants and kill switch"
 [[steps]]
@@ -89,9 +89,9 @@ type = "/security"
 [[steps]]
 key = "Enter"
 [[steps]]
-wait = "k grants and kill switch"
+wait = "g grants and kill switch"
 [[steps]]
-key = "k"
+key = "g"
 [[steps]]
 wait = "Grants and kill switch"
 [[steps]]

@@ -1,4 +1,4 @@
-//! PF-25-S02: grants and kill switch, opened with `k` from `/security`.
+//! PF-25-S02: grants and kill switch, opened with `g` from `/security`.
 //!
 //! The list shows the grants held now (secret-free: command, runs left,
 //! expiry), "Revoke all active authority" and the kill switch. Enter on a
@@ -9,6 +9,7 @@
 //! reach "Turn it off", so a double Enter cannot release it, and it keeps the
 //! level. Nothing an agent sends reaches these keys.
 
+use std::cell::Cell;
 use std::path::PathBuf;
 use std::sync::mpsc;
 
@@ -26,6 +27,7 @@ use crate::legacy_core::security_grant::HeldGrant;
 use crate::legacy_core::security_grant::held_grants;
 use crate::legacy_core::security_level_change::LevelBasis;
 use crate::legacy_core::security_level_change::SecurityLevel;
+use crate::legacy_core::security_level_change::StoredSecurityState;
 use crate::legacy_core::security_revocation::HumanRevocation;
 use crate::legacy_core::security_revocation::RevocationReport;
 use crate::legacy_core::security_revocation::commit_human_revocation;
@@ -48,7 +50,16 @@ enum Choice {
     Core(HumanRevocation),
 }
 
-type Outcome = Result<String, String>;
+/// A finished change: what to say, and whether "restart now" makes sense
+/// (a saved Core change; not a single grant or a failure).
+#[derive(Debug)]
+struct Outcome {
+    message: Result<String, String>,
+    restartable: bool,
+}
+
+/// Where the list's grants come from (Core's ledger; tests replace it).
+type GrantSource = Box<dyn Fn() -> Vec<HeldGrant>>;
 
 #[derive(Debug)]
 enum Screen {
@@ -78,7 +89,10 @@ pub(crate) struct RevocationView {
     keymap: ListKeymap,
     basis: LevelBasis,
     grants: Vec<HeldGrant>,
+    grant_source: GrantSource,
     selected: usize,
+    /// The line of the selected row in the last `lines` (for scrolling).
+    selected_line: Cell<usize>,
     screen: Screen,
     app_event_tx: Option<AppEventSender>,
     /// Run the commit on the calling thread (tests).
@@ -92,13 +106,24 @@ impl RevocationView {
         keymap: ListKeymap,
         app_event_tx: Option<AppEventSender>,
     ) -> Self {
+        Self::with_grant_source(target, keymap, app_event_tx, Box::new(held_grants))
+    }
+
+    pub(crate) fn with_grant_source(
+        target: RevocationTarget,
+        keymap: ListKeymap,
+        app_event_tx: Option<AppEventSender>,
+        grant_source: GrantSource,
+    ) -> Self {
         let basis = LevelBasis::read(&target.codex_home, target.configured, target.thread);
         Self {
             target,
             keymap,
             basis,
-            grants: held_grants(),
+            grants: grant_source(),
+            grant_source,
             selected: 0,
+            selected_line: Cell::new(0),
             screen: Screen::List { note: None },
             app_event_tx,
             commit_inline: cfg!(test),
@@ -106,14 +131,37 @@ impl RevocationView {
         }
     }
 
-    fn refresh(&mut self) {
+    /// Read Core's state and the grants again, keeping the selected row by
+    /// what it is (a grant by id). Returns false when the selected grant is
+    /// gone.
+    fn refresh(&mut self) -> bool {
+        let selected = self.rows().get(self.selected).cloned();
         self.basis = LevelBasis::read(
             &self.target.codex_home,
             self.target.configured,
             self.target.thread,
         );
-        self.grants = held_grants();
-        self.selected = self.selected.min(self.rows().len().saturating_sub(1));
+        self.grants = (self.grant_source)();
+        let rows = self.rows();
+        let found = selected.and_then(|selected| {
+            rows.iter().position(|row| match (row, &selected) {
+                (Row::Grant(row), Row::Grant(selected)) => row.grant_id == selected.grant_id,
+                (row, selected) => row == selected,
+            })
+        });
+        self.selected = found.unwrap_or(0).min(rows.len().saturating_sub(1));
+        found.is_some()
+    }
+
+    /// How far to scroll `total` lines into `height` rows: the selected row
+    /// stays visible in the list, and a review shows its end (its choices).
+    pub(crate) fn scroll_for(&self, total: usize, height: u16) -> u16 {
+        let height = usize::from(height.max(1));
+        let scroll = match self.screen {
+            Screen::List { .. } => (self.selected_line.get() + 1).saturating_sub(height),
+            _ => total.saturating_sub(height),
+        };
+        u16::try_from(scroll).unwrap_or(u16::MAX)
     }
 
     fn rows(&self) -> Vec<Row> {
@@ -135,9 +183,10 @@ impl RevocationView {
         let outcome = match receiver.try_recv() {
             Ok(outcome) => outcome,
             Err(mpsc::TryRecvError::Empty) => return false,
-            Err(mpsc::TryRecvError::Disconnected) => {
-                Err("The change stopped unexpectedly; check /security again.".to_string())
-            }
+            Err(mpsc::TryRecvError::Disconnected) => Outcome {
+                message: Err("The change stopped unexpectedly; check /security again.".to_string()),
+                restartable: false,
+            },
         };
         self.refresh();
         self.screen = Screen::Done(outcome);
@@ -160,7 +209,15 @@ impl RevocationView {
                     self.selected = (self.selected + 1) % rows.len();
                     self.screen = Screen::List { note: None };
                 } else if accept {
-                    self.refresh();
+                    if !self.refresh() {
+                        self.screen = Screen::List {
+                            note: Some(
+                                "That grant has already ended (used up, expired or revoked)."
+                                    .to_string(),
+                            ),
+                        };
+                        return;
+                    }
                     let rows = self.rows();
                     let choice = match rows.get(self.selected) {
                         Some(Row::Grant(grant)) => Choice::Grant(grant.clone()),
@@ -197,8 +254,9 @@ impl RevocationView {
                 }
             }
             Screen::Saving(_) => {}
-            Screen::Done(_) => {
+            Screen::Done(outcome) => {
                 if key_hint::plain(KeyCode::Char('r')).is_press(key)
+                    && outcome.restartable
                     && let Some(tx) = &self.app_event_tx
                 {
                     tx.send(AppEvent::RestartForSecurityLevel);
@@ -213,7 +271,7 @@ impl RevocationView {
     fn commit(&mut self, choice: Choice) {
         match choice {
             Choice::Grant(grant) => {
-                let outcome = if revoke_grant(&grant.grant_id) {
+                let message = if revoke_grant(&grant.grant_id) {
                     Ok(format!(
                         "Grant revoked: `{}` now runs with the protected-path rules again.",
                         grant.label
@@ -222,7 +280,10 @@ impl RevocationView {
                     Err("That grant had already ended (used up, expired or revoked). Nothing changed.".to_string())
                 };
                 self.refresh();
-                self.screen = Screen::Done(outcome);
+                self.screen = Screen::Done(Outcome {
+                    message,
+                    restartable: false,
+                });
             }
             Choice::Core(revocation) => {
                 let target = self.target.clone();
@@ -239,8 +300,16 @@ impl RevocationView {
                         revocation,
                         now,
                     )
-                    .map(|report| outcome_line(revocation, &report))
-                    .map_err(|error| format!("Not changed: {error}."))
+                    .map_or_else(
+                        |error| Outcome {
+                            message: Err(format!("Not changed: {error}.")),
+                            restartable: false,
+                        },
+                        |report| Outcome {
+                            restartable: report.not_saved.is_none(),
+                            message: outcome_line(revocation, &report),
+                        },
+                    )
                 };
                 if self.commit_inline {
                     let outcome = run();
@@ -275,6 +344,13 @@ impl RevocationView {
             "Core's level: {} · Kill switch: {kill}",
             profile_name(self.basis.in_force)
         )));
+        if matches!(self.basis.stored, StoredSecurityState::Unreadable(_)) {
+            lines.extend(
+                wrap("Core's saved security state is unreadable: Aggressive and the kill switch are enforced until you choose a level in /security.")
+                    .into_iter()
+                    .map(Stylize::red),
+            );
+        }
         lines.push(Line::default());
         match &self.screen {
             Screen::List { note } => {
@@ -296,6 +372,9 @@ impl RevocationView {
                         Row::KillSwitch => "Turn the kill switch on".to_string(),
                     };
                     let selected = index == self.selected;
+                    if selected {
+                        self.selected_line.set(lines.len());
+                    }
                     let marker = if selected { "> " } else { "  " };
                     for (line_index, line) in textwrap::wrap(
                         &text,
@@ -339,10 +418,14 @@ impl RevocationView {
                 }
             }
             Screen::Saving(_) => lines.extend(wrap("Saving…")),
-            Screen::Done(Ok(message)) => {
-                lines.extend(wrap(message).into_iter().map(Stylize::green))
-            }
-            Screen::Done(Err(message)) => lines.extend(wrap(message).into_iter().map(Stylize::red)),
+            Screen::Done(Outcome {
+                message: Ok(message),
+                ..
+            }) => lines.extend(wrap(message).into_iter().map(Stylize::green)),
+            Screen::Done(Outcome {
+                message: Err(message),
+                ..
+            }) => lines.extend(wrap(message).into_iter().map(Stylize::red)),
         }
         lines
     }
@@ -356,7 +439,9 @@ impl RevocationView {
             } => "↑/↓ choose · enter confirm · esc cancel, nothing changes".to_string(),
             Screen::Review { .. } => "enter confirm · esc cancel, nothing changes".to_string(),
             Screen::Saving(_) => "saving…".to_string(),
-            Screen::Done(_) if self.app_event_tx.is_some() => {
+            Screen::Done(Outcome {
+                restartable: true, ..
+            }) if self.app_event_tx.is_some() => {
                 "r restart now to check it holds · enter or esc back".to_string()
             }
             Screen::Done(_) => "enter or esc back".to_string(),
@@ -399,9 +484,9 @@ fn review_text(choice: &Choice, level: SecurityLevel) -> (String, Vec<String>) {
     }
 }
 
-fn outcome_line(choice: HumanRevocation, report: &RevocationReport) -> String {
+fn outcome_line(choice: HumanRevocation, report: &RevocationReport) -> Result<String, String> {
     if choice == HumanRevocation::KillSwitchOff && report.kill_switch_active {
-        return "The kill switch is still on (another session turned it on again). Review it again.".to_string();
+        return Err("The kill switch is still on (another session turned it on again). Review it again.".to_string());
     }
     let what = match choice {
         HumanRevocation::AllActiveAuthority => "All active authority revoked",
@@ -414,12 +499,12 @@ fn outcome_line(choice: HumanRevocation, report: &RevocationReport) -> String {
     } else {
         "for the next start"
     };
-    match &report.not_saved {
+    Ok(match &report.not_saved {
         None => format!("{what} {scope}. Saved: it holds after a restart. Level: {level}."),
         Some(reason) => format!(
             "{what} {scope}, but it could not be saved ({reason}): it holds until Corbanu Terminal exits. Level: {level}."
         ),
-    }
+    })
 }
 
 #[cfg(test)]

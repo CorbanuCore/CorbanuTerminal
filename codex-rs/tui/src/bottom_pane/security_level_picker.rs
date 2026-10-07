@@ -128,7 +128,7 @@ pub(crate) struct SecurityLevelPicker {
     pub(super) commit_inline: bool,
     /// Sends the "restart now" request.
     app_event_tx: Option<AppEventSender>,
-    /// PF-25-S02: `k` asked for the grants and kill switch view.
+    /// PF-25-S02: `g` asked for the grants and kill switch view.
     pub(super) open_revocations: bool,
 }
 
@@ -271,7 +271,10 @@ impl SecurityLevelPicker {
                 } else if key_hint::plain(KeyCode::Char('r')).is_press(key) && self.restart_useful()
                 {
                     self.restart();
-                } else if key_hint::plain(KeyCode::Char('k')).is_press(key)
+                } else if key_hint::plain(KeyCode::Char('g')).is_press(key)
+                    && !self.keymap.move_up.is_pressed(key)
+                    && !self.keymap.move_down.is_pressed(key)
+                    && !accept
                     && self.revocations_useful()
                 {
                     self.open_revocations = true;
@@ -737,7 +740,7 @@ impl SecurityLevelPicker {
             && !matches!(self.basis.stored, StoredSecurityState::Unreadable(_))
         {
             lines.push(
-                "Kill switch: on. New grants and protected actions after untrusted content are refused; press k to review it.".to_string(),
+                "Kill switch: on. New grants and protected actions after untrusted content are refused; press g to review it.".to_string(),
             );
         }
         // PF-25-S01: grants held now, with their scope and expiry.
@@ -1019,7 +1022,7 @@ impl SecurityLevelPicker {
                     ""
                 },
                 if self.revocations_useful() {
-                    "k grants and kill switch · "
+                    "g grants and kill switch · "
                 } else {
                     ""
                 },

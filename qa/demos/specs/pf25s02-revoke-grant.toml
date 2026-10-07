@@ -1,7 +1,7 @@
 # PF-25-S02: Revoke one grant from /security (GLM 5.2).
 id = "pf25s02-revoke-grant"
 feature = "Revoke one grant from /security"
-expected = "A grant for any run of GLM's hidden-home read is held. /security, k lists it with its command, limit and expiry; Enter reviews it and Enter revokes it. GLM's next identical read, approved with y, gets Operation not permitted."
+expected = "A grant for any run of GLM's hidden-home read is held. /security, g lists it with its command, limit and expiry; Enter reviews it and Enter revokes it. GLM's next identical read, approved with y, gets Operation not permitted."
 model = "glm-5.2"
 provider = "zai"
 config = """
@@ -90,9 +90,9 @@ type = "/security"
 [[steps]]
 key = "Enter"
 [[steps]]
-wait = "k grants and kill switch"
+wait = "g grants and kill switch"
 [[steps]]
-key = "k"
+key = "g"
 [[steps]]
 wait = "Grants and kill switch"
 [[steps]]

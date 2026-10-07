@@ -316,14 +316,32 @@ pub(crate) fn admit(
 /// whether one was.
 pub(crate) fn revoke_grant(grant_id: &str) -> bool {
     let mut ledger = LEDGER.lock().unwrap_or_else(PoisonError::into_inner);
-    let mut found = false;
-    for entries in ledger.values_mut() {
+    let mut found = None;
+    for (thread, entries) in ledger.iter_mut() {
         let before = entries.len();
         entries.retain(|entry| entry.grant.grant_id.as_str() != grant_id);
-        found |= entries.len() != before;
+        if entries.len() != before {
+            found = Some(*thread);
+        }
     }
     ledger.retain(|_, entries| !entries.is_empty());
-    found
+    if let Some(thread) = found {
+        tracing::info!(
+            target: "codex_core::security::aggressive",
+            %thread,
+            grant_id,
+            "aggressive grant revoked by the human"
+        );
+    }
+    found.is_some()
+}
+
+/// PF-25-S02: drop every grant of this process (revoke all, kill switch).
+pub(crate) fn revoke_everything() {
+    LEDGER
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clear();
 }
 
 /// Drop every grant `thread` holds (also a committed transition, PF-23-S03,

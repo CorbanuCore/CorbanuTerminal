@@ -1,7 +1,7 @@
 # PF-25-S02: Turning the kill switch off keeps the level (GLM 5.2).
 id = "pf25s02-kill-switch-off"
 feature = "Turning the kill switch off keeps the level"
-expected = "With the kill switch on, /security, k: Turn the kill switch off opens on Back; Enter alone goes back. Down and Enter turn it off: Core's level stays Aggressive and GLM's next approval offers a grant again."
+expected = "With the kill switch on, /security, g: Turn the kill switch off opens on Back; Enter alone goes back. Down and Enter turn it off: Core's level stays Aggressive and GLM's next approval offers a grant again."
 model = "glm-5.2"
 provider = "zai"
 config = """
@@ -56,9 +56,9 @@ type = "/security"
 [[steps]]
 key = "Enter"
 [[steps]]
-wait = "k grants and kill switch"
+wait = "g grants and kill switch"
 [[steps]]
-key = "k"
+key = "g"
 [[steps]]
 wait = "Grants and kill switch"
 [[steps]]

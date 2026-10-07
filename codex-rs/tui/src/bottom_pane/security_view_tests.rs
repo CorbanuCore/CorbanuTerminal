@@ -124,3 +124,56 @@ fn security_view_short_terminal_keeps_escape_visible() {
         .collect::<String>();
     assert!(text.contains("esc close"));
 }
+
+/// PF-25-S02: `g` opens the grants and kill switch view inside /security,
+/// Esc returns to the levels.
+#[test]
+fn pf_25_s02_grants_view_opens_and_returns() {
+    let home = tempfile::TempDir::new().unwrap();
+    // The kill switch saved on, as a confirmed /security change saves it.
+    {
+        use crate::legacy_core::security_level_change::LevelBasis;
+        use crate::legacy_core::security_level_change::SecurityLevel;
+        use crate::legacy_core::security_revocation::HumanRevocation;
+        use crate::legacy_core::security_revocation::commit_human_revocation;
+        let basis = LevelBasis::read(home.path(), SecurityLevel::Permissive, None);
+        commit_human_revocation(
+            home.path(),
+            SecurityLevel::Permissive,
+            None,
+            &basis,
+            HumanRevocation::KillSwitchOn,
+            1_000,
+        )
+        .unwrap();
+    }
+    let context = crate::security::level::LevelContext {
+        codex_home: home.path().to_path_buf(),
+        picker_enabled: true,
+        active: crate::security::level::ChosenLevel::Permissive,
+        preflight_enabled: false,
+        boundary: None,
+    };
+    let mut view = SecurityView {
+        requested: None,
+        selected: 0,
+        keymap: RuntimeKeymap::defaults().list,
+        cancelled: false,
+        inspected: false,
+        picker: Some(SecurityLevelPicker::new(
+            &context,
+            current(),
+            None,
+            RuntimeKeymap::defaults().list,
+        )),
+        revocations: None,
+    };
+    view.handle_key_event(key(KeyCode::Char('g')));
+    let text = snapshot(&view, 90);
+    assert!(text.contains("Grants and kill switch"), "{text}");
+    assert!(text.contains("Kill switch: on"), "{text}");
+    view.handle_key_event(key(KeyCode::Esc));
+    assert!(view.revocations.is_none());
+    assert!(!view.is_complete());
+    assert!(snapshot(&view, 90).contains("Security level"));
+}
