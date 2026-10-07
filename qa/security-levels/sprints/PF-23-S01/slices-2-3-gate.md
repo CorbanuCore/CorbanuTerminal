@@ -15,14 +15,15 @@
 
 - **Lint:** `just fmt`, `just fix -p codex-core -p codex-memories-write` clean. Linux clippy
   (`cargo clippy --locked -p codex-core -p codex-memories-write --all-targets -- -D warnings`) on the RTX box: clean
-  at the final commit (see PR). An earlier run caught a macOS-only test helper and an `is_none_or(<= 0)` comparison.
+  at `eeb096de1` (merged with main). An earlier run caught a macOS-only test helper and an `is_none_or(<= 0)` comparison.
 - **Focused:** `just test -p codex-core pf_23_s01 memory_stage_one pf_30_s0 mcp_openai_file` (145 pass) and
   `just test -p codex-memories-write` (45 pass). New: read-denial unit tests (home default-deny, full access, keep
   roots, Claude dir, file tools after taint, upload reads through symlinks), stage-one lineage/foreign key/long
   rollout/redaction/exact-message tests, a Moderate worker test that sends only labelled text and refuses another
   session's file, and macOS suite tests where the sandbox (not the text check) denies a run-time-built home path,
   a model-chosen working folder inside a denied path keeps the denial, and approval lifts it under Moderate only.
-- **Full crate:** `just test -p codex-core`: 3,855 of 3,858 at `18365ca3c5`; the 3 failures are the known baselines
+- **Full crate:** `just test -p codex-core`: 3,855 of 3,858 at `18365ca3c5` and 3,881 of 3,884 at `eeb096de1`
+  (merged with main); the 3 failures are the known baselines
   (`skills_append_to_developer_message`, `skills_use_aliases_in_developer_message_under_budget_pressure`,
   `remote_compact_trim_estimate_uses_session_base_instructions`).
 - **Review:** Opus 5.5 High through `corbanu exec`, `.codex-work/workers-20261002/pf23s01-review{7,8,9}/`. Round 1
