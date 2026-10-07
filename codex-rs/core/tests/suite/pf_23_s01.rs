@@ -433,7 +433,7 @@ text(JSON.stringify(await tools.exec_command({ cmd: next })));
     Ok(())
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(unix)]
 const CANARY: &str = "PF23_SLICE3_CANARY";
 
 /// A Corbanu home holding a non-standard file with the canary, and the two
@@ -485,7 +485,9 @@ async fn pf_23_s01_sandbox_denies_home_reads_the_command_text_hides() -> anyhow:
     for (level, tainted, readable) in [
         (SecurityLevel::Moderate, true, false),
         (SecurityLevel::Aggressive, true, false),
-        (SecurityLevel::Moderate, false, true),
+        // Issue #239: under Moderate the read denials apply before taint too,
+        // so the home canary is unreadable even without untrusted content.
+        (SecurityLevel::Moderate, false, false),
         (SecurityLevel::Permissive, true, true),
     ] {
         let (home, evading, _) = canary_home()?;
@@ -557,6 +559,84 @@ async fn pf_23_s01_human_approval_lifts_read_denials_only_under_moderate() -> an
             !readable,
             "{level:?}: {output}"
         );
+    }
+    Ok(())
+}
+
+/// Issue #239: under Moderate before untrusted content, a command that asks
+/// to run outside the sandbox needs the human; approving lifts the rules for
+/// that run, declining refuses it. Under full access it asks too, where it
+/// would otherwise run unasked inside the rules. With approvals off it is
+/// refused; without the request the sandbox denies the read.
+#[cfg(target_os = "macos")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn issue_239_moderate_escalation_before_untrusted_content_needs_the_human()
+-> anyhow::Result<()> {
+    use codex_protocol::models::PermissionProfile;
+    use codex_protocol::protocol::ReviewDecision;
+    skip_if_no_network!(Ok(()));
+    skip_if_sandbox!(Ok(()));
+    let ask = AskForApproval::OnRequest;
+    let approve = || Some(ReviewDecision::Approved);
+    for (escalate, full_access, approval, decision, readable) in [
+        (true, false, ask, approve(), true),
+        (true, false, ask, Some(ReviewDecision::denied("no")), false),
+        (true, true, ask, approve(), true),
+        (true, true, ask, Some(ReviewDecision::denied("no")), false),
+        (true, false, AskForApproval::Never, None, false),
+        (false, false, ask, None, false),
+        (false, true, ask, None, false),
+    ] {
+        let (home, evading, _) = canary_home()?;
+        let mut arguments = json!({ "command": evading });
+        if escalate {
+            arguments["sandbox_permissions"] = json!("require_escalated");
+            arguments["justification"] = json!("read the notes");
+        }
+        let (test, captured) = start_turn_in(
+            Some(home),
+            SecurityLevel::Moderate,
+            approval,
+            vec![call("call-read", "shell_command", arguments), done_step()],
+            move |config| {
+                if full_access {
+                    config
+                        .permissions
+                        .set_permission_profile(PermissionProfile::Disabled)
+                        .expect("full access");
+                }
+            },
+        )
+        .await?;
+        if let Some(decision) = decision {
+            let approval = next_exec_approval(&test)
+                .await
+                .expect("the escalation asks");
+            let reason = approval.reason.clone().unwrap_or_default();
+            assert!(reason.contains("read the notes"), "{reason}");
+            assert!(
+                reason.contains("Moderate credential protection"),
+                "{reason}"
+            );
+            test.codex
+                .submit(Op::ExecApproval {
+                    id: approval.effective_approval_id(),
+                    turn_id: None,
+                    decision,
+                })
+                .await?;
+        }
+        assert!(next_exec_approval(&test).await.is_none());
+        let requests = captured.requests();
+        let output = output_text(&requests[requests.len() - 1], "call-read");
+        assert_eq!(
+            output.contains(CANARY),
+            readable,
+            "{escalate} {full_access} {approval:?}: {output}"
+        );
+        if !escalate {
+            assert!(output.contains("Operation not permitted"), "{output}");
+        }
     }
     Ok(())
 }
@@ -673,7 +753,9 @@ async fn pf_23_s02_sandbox_makes_persistence_files_read_only_under_full_access()
     for (level, tainted, hook_written) in [
         (SecurityLevel::Aggressive, false, false),
         (SecurityLevel::Moderate, true, false),
-        (SecurityLevel::Moderate, false, true),
+        // Issue #239: under Moderate the rules also apply before taint, so
+        // the git hook is read-only even without untrusted content.
+        (SecurityLevel::Moderate, false, false),
         (SecurityLevel::Permissive, true, true),
     ] {
         let mut steps = vec![shell_step("call-write", write), done_step()];
@@ -709,16 +791,21 @@ async fn pf_23_s02_sandbox_makes_persistence_files_read_only_under_full_access()
     Ok(())
 }
 
-/// PF-23-S02: a shell started before untrusted content keeps a sandbox
-/// without the protected-path rules. Typing into it afterwards needs the
-/// human once under Moderate (refused with approvals off).
+/// PF-23-S02 / issue #239: under Moderate a shell started before untrusted
+/// content already runs with the protected-path rules, so typing into it
+/// afterwards neither asks nor is refused with approvals off. (A shell
+/// started without the rules still asks once: `confined_tests`.)
 #[cfg(unix)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn pf_23_s02_typing_into_a_shell_started_before_untrusted_content_needs_the_human()
+async fn pf_23_s02_typing_into_a_shell_started_before_untrusted_content_is_confined()
 -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
-    let steps = || {
+    // The shell proves it is confined: it cannot read a Corbanu home store
+    // (named at run time, so only the sandbox can stop it).
+    let steps = |home: &str| {
+        let (head, tail) = home.split_at(home.len() - 2);
+        let read = format!("echo typed-one; cat \"$(printf '{head}%s/au%s' {tail} th.json)\"\n");
         vec![
             call(
                 "call-open",
@@ -728,7 +815,7 @@ async fn pf_23_s02_typing_into_a_shell_started_before_untrusted_content_needs_th
             call(
                 "call-stdin",
                 "write_stdin",
-                json!({ "session_id": 1000, "chars": "echo typed-one\n", "yield_time_ms": 500 }),
+                json!({ "session_id": 1000, "chars": read, "yield_time_ms": 500 }),
             ),
             call(
                 "call-again",
@@ -745,34 +832,25 @@ async fn pf_23_s02_typing_into_a_shell_started_before_untrusted_content_needs_th
             .enable(Feature::UnifiedExec)
             .expect("unified exec");
     };
-    let (test, captured) = start_turn(
-        SecurityLevel::Moderate,
-        AskForApproval::OnRequest,
-        steps(),
-        unified_exec,
-    )
-    .await?;
-    let question = next_question(&test)
-        .await
-        .expect("typing into the older shell asks");
-    let text = &question.questions[0].question;
-    assert!(text.contains("process started before"), "{text}");
-    answer(&test, &question, "Allow once").await;
-    // Allowed for this process: the next ordinary line does not ask again.
-    assert!(next_question(&test).await.is_none());
-    let requests = captured.requests();
-    assert!(output_text(&requests[2], "call-stdin").contains("typed-one"));
-    assert!(output_text(&requests[3], "call-again").contains("typed-two"));
-
-    let (test, captured) = start_turn(
-        SecurityLevel::Moderate,
-        AskForApproval::Never,
-        steps(),
-        unified_exec,
-    )
-    .await?;
-    assert!(next_question(&test).await.is_none());
-    let output = output_text(&captured.requests()[2], "call-stdin");
-    assert!(output.contains("approvals are off"), "{output}");
+    for approval in [AskForApproval::OnRequest, AskForApproval::Never] {
+        let home = Arc::new(TempDir::new()?);
+        let folder = home.path().canonicalize()?;
+        std::fs::write(folder.join("auth.json"), CANARY)?;
+        let steps = steps(&folder.to_string_lossy());
+        let (test, captured) = start_turn_in(
+            Some(home),
+            SecurityLevel::Moderate,
+            approval,
+            steps,
+            unified_exec,
+        )
+        .await?;
+        assert!(next_question(&test).await.is_none(), "{approval:?}");
+        let requests = captured.requests();
+        let typed = output_text(&requests[2], "call-stdin");
+        assert!(typed.contains("typed-one"), "{typed}");
+        assert!(!typed.contains(CANARY), "{approval:?}: {typed}");
+        assert!(output_text(&requests[3], "call-again").contains("typed-two"));
+    }
     Ok(())
 }
