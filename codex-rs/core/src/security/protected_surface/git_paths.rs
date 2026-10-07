@@ -225,7 +225,7 @@ fn hooks_path(
     let text = match std::fs::read_to_string(config.as_path()) {
         Ok(text) => text,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            remember(&HOOKS_PATHS, config, None);
+            remember(&HOOKS_PATHS, config, /*value*/ None);
             return None;
         }
         // Made unreadable: what this session read from it before still holds.
