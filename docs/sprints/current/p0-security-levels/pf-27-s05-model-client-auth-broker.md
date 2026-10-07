@@ -93,6 +93,8 @@ proxy, and it needs PF-27-S02's containment before the broker is a real boundary
 - [x] `just fix -p` and `just fmt`; focused `pf_27_s05` tests and the affected crates (577 + 910 passed); Linux
   clippy clean on the RTX box.
 - [x] GLM 5.2 tmux runs as two SOP videos ([index](../../../../qa/demos/index/PF-27-S05.md)); Opus 5.5 High review.
+- [ ] Gate for the remaining slices (vault labels in the broker, the other key paths), then milestone qualification
+  (isolated code-blind VM run, human sign-off) when Moderate ships.
 
 ## Exit evidence
 
