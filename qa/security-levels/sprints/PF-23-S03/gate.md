@@ -47,10 +47,13 @@ releases), and reaches the other trees of this process on the same home.
   of merged, unbounded lock wait, a repository's raise persisted for the user); round 3 APPROVE. Its follow-ups M1
   (release of an unseen kill switch), L1 (failed downgrade mirror) and L3 (repair only by a level) are fixed with
   tests; the rest are handed to PF-24-S02 (sprint record).
-- **Videos:** GLM 5.2 runs are blocked: Z.AI answers "Insufficient balance or no resource package" (code 1113).
-  One model-free video on the final candidate: [unreadable state warns](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-23-s03-pf23s03-unreadable-state-warns-c60857fc5d47-2026-10-07.mp4).
-  Specs for the model runs are ready: `pf23s03-stored-level-next-session`, `pf23s03-unreadable-state`,
-  `pf23s03-project-cannot-lower`.
+- **Videos:** four GLM 5.2 (`zai`) runs on candidate `a230f2082141` (origin/main after the merge), each under 90 s
+  with clean leak scans (no credential value, no key-shaped string in any published cast):
+  [stored level enforced at next start](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-23-s03-pf23s03-stored-level-next-session-a230f2082141-2026-10-07.mp4) (46 s),
+  [unreadable state fails closed](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-23-s03-pf23s03-unreadable-state-a230f2082141-2026-10-07.mp4) (44 s),
+  [a repository cannot lower the level](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-23-s03-pf23s03-project-cannot-lower-a230f2082141-2026-10-07.mp4) (31 s),
+  and the earlier model-free [unreadable state warns](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-23-s03-pf23s03-unreadable-state-warns-c60857fc5d47-2026-10-07.mp4) (26 s).
+  Every final frame shows the expected denial (`Operation not permitted`); index in `qa/demos/index/PF-23-S03.md`.
 
 ## Merging step and summaries under Aggressive
 
