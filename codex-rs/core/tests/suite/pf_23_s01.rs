@@ -485,7 +485,9 @@ async fn pf_23_s01_sandbox_denies_home_reads_the_command_text_hides() -> anyhow:
     for (level, tainted, readable) in [
         (SecurityLevel::Moderate, true, false),
         (SecurityLevel::Aggressive, true, false),
-        (SecurityLevel::Moderate, false, true),
+        // Issue #239: under Moderate the read denials apply before taint too,
+        // so the home canary is unreadable even without untrusted content.
+        (SecurityLevel::Moderate, false, false),
         (SecurityLevel::Permissive, true, true),
     ] {
         let (home, evading, _) = canary_home()?;
@@ -645,7 +647,9 @@ async fn pf_23_s02_sandbox_makes_persistence_files_read_only_under_full_access()
     for (level, tainted, hook_written) in [
         (SecurityLevel::Aggressive, false, false),
         (SecurityLevel::Moderate, true, false),
-        (SecurityLevel::Moderate, false, true),
+        // Issue #239: under Moderate the rules also apply before taint, so
+        // the git hook is read-only even without untrusted content.
+        (SecurityLevel::Moderate, false, false),
         (SecurityLevel::Permissive, true, true),
     ] {
         let mut steps = vec![shell_step("call-write", write), done_step()];
@@ -681,12 +685,13 @@ async fn pf_23_s02_sandbox_makes_persistence_files_read_only_under_full_access()
     Ok(())
 }
 
-/// PF-23-S02: a shell started before untrusted content keeps a sandbox
-/// without the protected-path rules. Typing into it afterwards needs the
-/// human once under Moderate (refused with approvals off).
+/// PF-23-S02 / issue #239: under Moderate a shell started before untrusted
+/// content already runs with the protected-path rules, so typing into it
+/// afterwards neither asks nor is refused with approvals off. (A shell
+/// started without the rules still asks once: `confined_tests`.)
 #[cfg(unix)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn pf_23_s02_typing_into_a_shell_started_before_untrusted_content_needs_the_human()
+async fn pf_23_s02_typing_into_a_shell_started_before_untrusted_content_is_confined()
 -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
@@ -717,34 +722,13 @@ async fn pf_23_s02_typing_into_a_shell_started_before_untrusted_content_needs_th
             .enable(Feature::UnifiedExec)
             .expect("unified exec");
     };
-    let (test, captured) = start_turn(
-        SecurityLevel::Moderate,
-        AskForApproval::OnRequest,
-        steps(),
-        unified_exec,
-    )
-    .await?;
-    let question = next_question(&test)
-        .await
-        .expect("typing into the older shell asks");
-    let text = &question.questions[0].question;
-    assert!(text.contains("process started before"), "{text}");
-    answer(&test, &question, "Allow once").await;
-    // Allowed for this process: the next ordinary line does not ask again.
-    assert!(next_question(&test).await.is_none());
-    let requests = captured.requests();
-    assert!(output_text(&requests[2], "call-stdin").contains("typed-one"));
-    assert!(output_text(&requests[3], "call-again").contains("typed-two"));
-
-    let (test, captured) = start_turn(
-        SecurityLevel::Moderate,
-        AskForApproval::Never,
-        steps(),
-        unified_exec,
-    )
-    .await?;
-    assert!(next_question(&test).await.is_none());
-    let output = output_text(&captured.requests()[2], "call-stdin");
-    assert!(output.contains("approvals are off"), "{output}");
+    for approval in [AskForApproval::OnRequest, AskForApproval::Never] {
+        let (test, captured) =
+            start_turn(SecurityLevel::Moderate, approval, steps(), unified_exec).await?;
+        assert!(next_question(&test).await.is_none(), "{approval:?}");
+        let requests = captured.requests();
+        assert!(output_text(&requests[2], "call-stdin").contains("typed-one"));
+        assert!(output_text(&requests[3], "call-again").contains("typed-two"));
+    }
     Ok(())
 }

@@ -588,6 +588,33 @@ fn bound_state(taint_generation: u64, epoch: u64, kill_switch_active: bool) -> P
     }
 }
 
+/// Issue #239: protected-path rules apply under a protected level (Moderate
+/// or Aggressive) even before taint, not only after it or under Aggressive.
+#[test]
+fn issue_239_protected_paths_apply_under_protected_level_before_taint() {
+    let state = |taint_generation, level| PostTaintState {
+        level,
+        ..bound_state(
+            taint_generation,
+            /*epoch*/ 0,
+            /*kill_switch_active*/ false,
+        )
+    };
+    for (taint_generation, level, applies) in [
+        (0, SecurityLevel::Permissive, false),
+        // The issue #239 gap: Moderate before any untrusted content.
+        (0, SecurityLevel::Moderate, true),
+        (0, SecurityLevel::Aggressive, true),
+        (1, SecurityLevel::Moderate, true),
+    ] {
+        assert_eq!(
+            state(taint_generation, level).protected_paths_apply(),
+            applies,
+            "{level:?} taint {taint_generation}"
+        );
+    }
+}
+
 /// Slice 2: an approval covers the taint and policy the human saw. New
 /// taint, a policy epoch change (level change, grant or revocation), a
 /// lineage change or the checks no longer applying all refuse; the kill

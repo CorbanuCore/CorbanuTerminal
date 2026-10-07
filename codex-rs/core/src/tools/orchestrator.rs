@@ -744,11 +744,12 @@ where
     })
 }
 
-/// PF-23-S01 slice 3 / PF-23-S02: the exec-server and materialized profiles
-/// with credential and Corbanu home reads denied and persistence files made
-/// read-only, once this session holds content without standing under
-/// Moderate or Aggressive, and under Aggressive from the start
-/// (`PostTaintState::protected_paths_apply`).
+/// PF-23-S01 slice 3 / PF-23-S02 / issue #239: the exec-server and
+/// materialized profiles with credential and Corbanu home reads denied and
+/// persistence files made read-only, once this session holds content without
+/// standing under Moderate or Aggressive, and from the start under a
+/// protected level (`PostTaintState::protected_paths_apply`). Applying them
+/// before taint under Moderate closes the files-route read gap (#239).
 ///
 /// Under Moderate a fresh human approval of this exact protected command is
 /// its grant and lifts the rules for this run. Under Aggressive an approval

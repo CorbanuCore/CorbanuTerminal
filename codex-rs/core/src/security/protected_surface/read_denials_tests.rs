@@ -149,8 +149,9 @@ fn pf_23_s01_claude_config_dir_credentials_are_denied() {
 }
 
 /// Review 1: in-process file tools (patch pre-check, structured edits, image
-/// view, extension tools) get the same denials once the session is tainted,
-/// and nothing changes before that.
+/// view, extension tools) get the same denials once the session is tainted.
+/// Under a protected level (here Moderate) the denials also apply before taint
+/// (issue #239): a workspace-write sandbox otherwise reads `$HOME` credentials.
 #[tokio::test]
 async fn pf_23_s01_file_tools_get_the_denials_after_taint() {
     let (session, turn) = crate::session::tests::make_session_and_context().await;
@@ -174,8 +175,10 @@ async fn pf_23_s01_file_tools_get_the_denials_after_taint() {
             .can_read_path_with_cwd(auth.as_path(), cwd.as_path())
     };
     let context = || turn.file_system_sandbox_context(None, &environment);
+    // Issue #239: under Moderate the denials apply before taint too.
     let before = protect_file_tool_context(&session, &turn, context());
-    assert_eq!(before, context());
+    assert!(readable(context()));
+    assert!(!readable(before));
 
     session
         .services
@@ -187,7 +190,8 @@ async fn pf_23_s01_file_tools_get_the_denials_after_taint() {
 }
 
 /// Review 2: host reads of model-named files (Codex Apps uploads) follow the
-/// same denials after taint, through symlinks too.
+/// same denials after taint, through symlinks too. Under a protected level
+/// the policy is also active before taint (issue #239).
 #[tokio::test]
 async fn pf_23_s01_upload_reads_follow_the_denials_after_taint() {
     let (session, turn) = crate::session::tests::make_session_and_context().await;
@@ -196,15 +200,25 @@ async fn pf_23_s01_upload_reads_follow_the_denials_after_taint() {
         .with_ingress_level(codex_security_policy::SecurityLevel::Moderate)
         .with_source_envelopes(true);
     session.services.replace_model_client(client);
-    assert_eq!(post_taint_read_policy(&session, &turn), None);
+    // Issue #239: under Moderate the upload read policy is active before taint.
+    let pre_policy = post_taint_read_policy(&session, &turn).expect("protected level active");
+    let home = turn.config.codex_home.to_path_buf();
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::write(home.join("auth.json"), "x").unwrap();
+    {
+        #[allow(deprecated)]
+        let cwd = turn.cwd.clone();
+        assert!(!readable_under(
+            &pre_policy,
+            &home.join("auth.json"),
+            cwd.as_path()
+        ));
+    }
     session
         .services
         .model_client()
         .note_unrecorded_input_for_taint();
     let policy = post_taint_read_policy(&session, &turn).expect("tainted");
-    let home = turn.config.codex_home.to_path_buf();
-    std::fs::create_dir_all(&home).unwrap();
-    std::fs::write(home.join("auth.json"), "x").unwrap();
     let outside = tempfile::tempdir().unwrap();
     let link = outside.path().join("innocent.txt");
     std::os::unix::fs::symlink(home.join("auth.json"), &link).unwrap();
@@ -291,10 +305,11 @@ fn pf_23_s02_rules_never_widen_and_keep_existing_denials() {
     assert!(!policy.can_write_path_with_cwd(&cwd.join(".codex/config.toml"), &cwd));
 }
 
-/// PF-23-S02: under Aggressive the rules apply from the start of the
-/// session, before any untrusted content; under Moderate they wait for it.
+/// PF-23-S02 / issue #239: under Aggressive and Moderate the rules apply
+/// from the start of the session, before any untrusted content; Permissive
+/// never gets them.
 #[tokio::test]
-async fn pf_23_s02_aggressive_applies_the_rules_from_the_start() {
+async fn pf_23_s02_protected_levels_apply_the_rules_from_the_start() {
     let (session, turn) = crate::session::tests::make_session_and_context().await;
     let environment = turn
         .environments
@@ -310,8 +325,10 @@ async fn pf_23_s02_aggressive_applies_the_rules_from_the_start() {
             .file_system_sandbox_policy()
             .can_read_path_with_cwd(auth.as_path(), cwd.as_path())
     };
+    // Issue #239: Moderate too, not only Aggressive.
     for (level, protected) in [
-        (codex_security_policy::SecurityLevel::Moderate, false),
+        (codex_security_policy::SecurityLevel::Permissive, false),
+        (codex_security_policy::SecurityLevel::Moderate, true),
         (codex_security_policy::SecurityLevel::Aggressive, true),
     ] {
         let client = (*session.services.model_client())
@@ -417,4 +434,76 @@ fn pf_23_s02_enclosing_repo_and_dangling_links_are_protected() {
             protected.display()
         );
     }
+}
+
+/// Issue #239 regression: under a protected level (Moderate or Aggressive)
+/// with a live policy and `source_envelopes` on, the read denials apply
+/// *before* any untrusted content. A workspace-write sandbox otherwise lets
+/// an agent read credential files from `$HOME` before the session is tainted.
+#[tokio::test]
+async fn issue_239_read_denials_apply_under_protected_level_before_taint() {
+    use codex_security_policy::SecurityLevel;
+    let (session, turn) = crate::session::tests::make_session_and_context().await;
+    // Bind the effective security policy so the level is live (as the real
+    // session does), not just an ingress-level hint.
+    let control = session
+        .services
+        .agent_control
+        .clone()
+        .with_effective_security_policy(
+            SecurityLevel::Moderate,
+            session.thread_id,
+            /*inherits_from_spawn_parent*/ false,
+        )
+        .expect("policy");
+    let client = (*session.services.model_client())
+        .clone()
+        .with_ingress_policy(SecurityLevel::Moderate, control.effective_security_policy())
+        .with_source_envelopes(true);
+    session.services.replace_model_client(client);
+
+    let environment = turn
+        .environments
+        .primary()
+        .expect("a primary environment")
+        .clone();
+    let auth = turn.config.codex_home.join("auth.json");
+    let readable = |context: codex_file_system::FileSystemSandboxContext| {
+        let profile = PermissionProfile::try_from(context.permissions).unwrap();
+        #[allow(deprecated)]
+        let cwd = turn.cwd.clone();
+        profile
+            .file_system_sandbox_policy()
+            .can_read_path_with_cwd(auth.as_path(), cwd.as_path())
+    };
+    let context = || turn.file_system_sandbox_context(None, &environment);
+
+    // No taint has occurred yet, but the level is Moderate: denials apply.
+    assert_eq!(
+        session
+            .services
+            .model_client()
+            .post_taint_state()
+            .expect("source envelopes on")
+            .taint_generation,
+        0
+    );
+    let before_taint = protect_file_tool_context(&session, &turn, context());
+    assert!(
+        readable(context()),
+        "baseline workspace-write reads the credential file"
+    );
+    assert!(
+        !readable(before_taint),
+        "issue #239: read denials must apply under a protected level before taint"
+    );
+
+    // The host upload read policy is also active before taint under a level.
+    let policy = post_taint_read_policy(&session, &turn).expect("protected level active");
+    #[allow(deprecated)]
+    let cwd = turn.cwd.clone();
+    assert!(
+        !readable_under(&policy, &auth, cwd.as_path()),
+        "issue #239: upload read policy must deny credentials before taint"
+    );
 }

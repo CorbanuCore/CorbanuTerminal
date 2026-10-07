@@ -123,9 +123,13 @@ pub(crate) struct PostTaintState {
 
 impl PostTaintState {
     /// Whether the sandbox's protected-path rules apply: after untrusted
-    /// content, and under Aggressive from the start (PF-23-S02).
+    /// content, and under a protected level (Moderate or Aggressive) from the
+    /// start. Applying them before taint under Moderate closes the files-route
+    /// read gap (issue #239): a workspace-write sandbox otherwise lets an
+    /// agent read credential files from `$HOME` before any untrusted content
+    /// arrives.
     pub(crate) fn protected_paths_apply(&self) -> bool {
-        self.taint_generation > 0 || self.level == SecurityLevel::Aggressive
+        self.taint_generation > 0 || self.level != SecurityLevel::Permissive
     }
 }
 
