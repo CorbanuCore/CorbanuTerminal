@@ -19,14 +19,14 @@
   │ probe.txt && echo probe-written .
   └        1
     rm: Library/Application Support/Corbanu/
-    aggressive-homes/70c5c59d32a3dabf8d25ee82ffd871bb2e5a7627a0fb52fe7a709cf35739df21: Operation not permitted
+    aggressive-homes/25936f5437c9ac0fa3b5643f99722ce0ce0c7af741afc1a25ca0fcec9c127b77: Operation not permitted
            1
     probe-written .
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-• The directory initially contained 1 entry; rm failed with "Operation not permitted" (the directory is read-only), so
-  the count stayed at 1, then probe.txt was successfully created in the workspace.
+• The directory initially contained one file; the rm was blocked with "Operation not permitted" (the writable root only
+  grants read access to that path), so the file remained, but probe.txt was successfully written in the workspace.
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 

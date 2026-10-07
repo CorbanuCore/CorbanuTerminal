@@ -37,3 +37,17 @@ workspace was the home folder, an agent command could delete those entries.
 - Plain `cargo test` without `CORBANU_TEST_ACCOUNT_HOME` (not `just test`)
   makes the launch tests create the registry folder in the real home, as an
   Aggressive launch does.
+
+## Gate evidence
+
+- **Tests** (after `just fmt` and `just fix`): `just test -p codex-tui -E
+  'test(security::) | test(security_level_picker)'` (51), including the new
+  registry tests (read-only subpath handed to the platform sandboxes, missing
+  registry, glob path, nested-exec overrides).
+- **GLM 5.2 tmux runs** (macOS): `tmux-run/1-delete-refused.txt` (recorded
+  run: under Aggressive with the workspace as the account home, deleting the
+  registry entry fails with "Operation not permitted" and a file elsewhere in
+  the workspace is written); `tmux-run/2-ancestor-rename.txt` (the limit
+  above).
+- **Review** (Opus 5.5 High): approve with fixes; see `review/`.
+- **Video:** [registry read-only](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/registry-read-only-registry-read-only-a51850d908b9-2026-10-06.mp4)
