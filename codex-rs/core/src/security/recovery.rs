@@ -37,6 +37,9 @@ pub(crate) const STATE_FILE: &str = "security_state.json";
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) const LOCK_FILE: &str = "security_state.lock";
 const STATE_VERSION: u32 = 1;
+/// How long a transition waits for [`LOCK_FILE`].
+#[cfg_attr(not(test), allow(dead_code))]
+const LOCK_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// What the next start enforces.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -98,7 +101,7 @@ pub(crate) fn recover(codex_home: &Path, configured: SecurityLevel) -> Recovery 
             unreadable: None,
             home,
         },
-        Err(reason) => Recovery {
+        Err(LoadError::Io(reason) | LoadError::Corrupt(reason)) => Recovery {
             level: SecurityLevel::Aggressive,
             revocations: RevocationState::new(),
             unreadable: Some(reason),
@@ -107,26 +110,35 @@ pub(crate) fn recover(codex_home: &Path, configured: SecurityLevel) -> Recovery 
     }
 }
 
-fn load(codex_home: &Path) -> Result<Option<DurableSecurityState>, String> {
+enum LoadError {
+    /// The file could not be read now (a transient error is possible).
+    Io(String),
+    /// Its content is not a valid state.
+    Corrupt(String),
+}
+
+fn load(codex_home: &Path) -> Result<Option<DurableSecurityState>, LoadError> {
     let path = codex_home.join(STATE_FILE);
     let contents = match std::fs::read(&path) {
         Ok(contents) => contents,
         Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(err) => return Err(format!("cannot read {}: {err}", path.display())),
+        Err(err) => {
+            return Err(LoadError::Io(format!(
+                "cannot read {}: {err}",
+                path.display()
+            )));
+        }
     };
+    let corrupt = |reason: String| LoadError::Corrupt(format!("{}: {reason}", path.display()));
     let state: DurableSecurityState =
-        serde_json::from_slice(&contents).map_err(|err| format!("{}: {err}", path.display()))?;
+        serde_json::from_slice(&contents).map_err(|err| corrupt(err.to_string()))?;
     if state.version != STATE_VERSION {
-        return Err(format!(
-            "{}: unsupported version {}",
-            path.display(),
-            state.version
-        ));
+        return Err(corrupt(format!("unsupported version {}", state.version)));
     }
     state
         .revocations
         .validate()
-        .map_err(|err| format!("{}: {err}", path.display()))?;
+        .map_err(|err| corrupt(err.to_string()))?;
     Ok(Some(state))
 }
 
@@ -136,21 +148,23 @@ pub(crate) trait TransitionStore {
     fn home(&self) -> Option<&Path>;
 
     /// Under one lock: read the stored state (`None` when absent or
-    /// unreadable), let `merge` build the next one from it, and save that.
-    /// A `merge` error writes nothing; a save error is
-    /// [`TransitionError::Persist`].
+    /// corrupt), let `merge` build the next one from it, and save that. A
+    /// `merge` error writes nothing; a read or save error is
+    /// [`TransitionError::Persist`]. `lowers_level` also makes a confirmed
+    /// downgrade reach the configured level.
     fn update(
         &self,
+        lowers_level: bool,
         merge: &mut dyn FnMut(
             Option<DurableSecurityState>,
         ) -> Result<DurableSecurityState, TransitionError>,
     ) -> Result<DurableSecurityState, TransitionError>;
 }
 
-/// The Corbanu home's state file, then the user's `[security]` level in
-/// `config.toml` when the level changed, so the stricter-of rule at start
-/// sees a confirmed downgrade. The file is written first: a crash or a failed
-/// `config.toml` write leaves the stricter level for the next start.
+/// The Corbanu home's state file, then for a downgrade the user's
+/// `[security]` level in `config.toml`, so the stricter-of rule at start sees
+/// it. The file is written first: a crash or a failed `config.toml` write
+/// leaves the stricter level for the next start.
 // The trusted `/security` confirmation (PF-24-S02) is the production caller.
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) struct HomeTransitionStore {
@@ -173,6 +187,7 @@ impl TransitionStore for HomeTransitionStore {
 
     fn update(
         &self,
+        lowers_level: bool,
         merge: &mut dyn FnMut(
             Option<DurableSecurityState>,
         ) -> Result<DurableSecurityState, TransitionError>,
@@ -185,9 +200,30 @@ impl TransitionStore for HomeTransitionStore {
             .write(true)
             .open(self.codex_home.join(LOCK_FILE))
             .map_err(persist)?;
-        lock.lock().map_err(persist)?;
-        let stored = load(&self.codex_home).ok().flatten();
-        let previous_level = stored.as_ref().map(|state| state.level);
+        // Never wait without limit: a lock held by another process (or by a
+        // command) makes the save fail, and a restrictive transition then
+        // applies in memory anyway.
+        let deadline = std::time::Instant::now() + LOCK_WAIT;
+        loop {
+            match lock.try_lock() {
+                Ok(()) => break,
+                Err(std::fs::TryLockError::WouldBlock) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(std::time::Duration::from_millis(25));
+                }
+                Err(std::fs::TryLockError::WouldBlock) => {
+                    return Err(TransitionError::Persist(
+                        "the security state is locked by another process".to_string(),
+                    ));
+                }
+                Err(std::fs::TryLockError::Error(err)) => return Err(persist(err)),
+            }
+        }
+        let stored = match load(&self.codex_home) {
+            Ok(stored) => stored,
+            // A confirmed transition repairs a corrupt file.
+            Err(LoadError::Corrupt(_)) => None,
+            Err(LoadError::Io(reason)) => return Err(TransitionError::Persist(reason)),
+        };
         let next = merge(stored)?;
         let contents = serde_json::to_vec_pretty(&next)
             .map_err(|err| TransitionError::Persist(err.to_string()))?;
@@ -197,20 +233,15 @@ impl TransitionStore for HomeTransitionStore {
                 "the saved security state could not be verified".to_string(),
             ));
         }
-        if previous_level != Some(next.level)
+        if lowers_level
             && let Err(err) = crate::config::edit::ConfigEditsBuilder::new(&self.codex_home)
                 .set_security_level(next.level)
                 .apply_blocking()
         {
-            // Only a lower level depends on `config.toml`; a stricter one is
-            // already the floor through the state file.
-            if previous_level.is_some_and(|previous| next.level < previous) {
-                return Err(TransitionError::Persist(format!(
-                    "config.toml could not be updated ({err}), so the next start keeps the \
-                     stricter level"
-                )));
-            }
-            tracing::warn!("security level saved, but config.toml could not be updated: {err}");
+            return Err(TransitionError::Persist(format!(
+                "config.toml could not be updated ({err}), so the next start keeps the \
+                 stricter level"
+            )));
         }
         Ok(next)
     }

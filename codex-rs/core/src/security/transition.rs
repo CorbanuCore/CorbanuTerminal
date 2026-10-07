@@ -140,6 +140,8 @@ pub(crate) enum TransitionError {
         "another session stored a stricter level ({0}) since this one was shown; review it again"
     )]
     StoredLevelChanged(SecurityLevel),
+    #[error("the kill switch was changed in another session since this was shown; review it again")]
+    StoredStateChanged,
     #[error("the security state could not be saved, so nothing changed: {0}")]
     Persist(String),
     #[error(transparent)]
@@ -230,7 +232,7 @@ impl TrustedSecurityController {
         now_unix_seconds: i64,
     ) -> Result<CommittedTransition, TransitionError> {
         let _commit = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
-        let (memory, memory_next_start, authority) = {
+        let (memory, authority) = {
             let guard = self.read_state()?;
             let state = guard
                 .as_ref()
@@ -241,7 +243,6 @@ impl TrustedSecurityController {
             }
             (
                 state.persisted.revocations.clone(),
-                state.next_start_level,
                 state.persisted.human_authority.clone(),
             )
         };
@@ -252,16 +253,30 @@ impl TrustedSecurityController {
                 RevocationEvent::new(authority, target, reason, now_unix_seconds)
             })
             .transpose()?;
+        // What this tree holds, what is stored, and this event: nothing either
+        // side revoked comes back. A stored level is a floor; a revocation
+        // never stores a level of its own (one raised by a repository's
+        // config stays with that repository).
         let merge = |stored: Option<DurableSecurityState>| {
-            let (mut revocations, stored_level) = match stored {
-                Some(stored) => (stored.revocations, stored.level),
-                None => (memory.clone(), memory_next_start),
+            let mut revocations = memory.clone();
+            let stored_level = match &stored {
+                Some(stored) => {
+                    revocations.merge(&stored.revocations)?;
+                    // A release is for the kill switch the human saw, not a
+                    // newer one another session turned on.
+                    if prepared.kind == TransitionKind::KillSwitchRelease
+                        && revocations.kill_switch_event_id() != memory.kill_switch_event_id()
+                    {
+                        return Err(TransitionError::StoredStateChanged);
+                    }
+                    stored.level
+                }
+                None => SecurityLevel::Permissive,
             };
             if let Some(event) = &event {
                 revocations.apply(event)?;
             }
             let level = match prepared.kind {
-                // A revocation keeps the stored level (and a pending downgrade).
                 TransitionKind::Restrictive if prepared.to == prepared.from => stored_level,
                 TransitionKind::Restrictive | TransitionKind::Unchanged => {
                     stored_level.max(prepared.to)
@@ -277,7 +292,7 @@ impl TrustedSecurityController {
             Ok(DurableSecurityState::new(level, revocations))
         };
         let mut merged = None;
-        let saved = store.update(&mut |stored| {
+        let saved = store.update(prepared.kind == TransitionKind::Downgrade, &mut |stored| {
             let next = merge(stored)?;
             merged = Some(next.clone());
             Ok(next)
@@ -348,16 +363,46 @@ impl TrustedSecurityController {
                 }
             }
         }
-        state.next_start_level = next.level;
+        // A revocation or kill-switch change leaves what the next start
+        // enforces as it was.
+        if prepared.to != prepared.from || prepared.kind == TransitionKind::Unchanged {
+            state.next_start_level = next.level;
+        }
         Ok(CommittedTransition {
             kind: prepared.kind,
             epoch: state.epoch,
             revocation_generation: state.persisted.revocations.generation,
             level: in_force,
-            next_start_level: next.level,
+            next_start_level: state.next_start_level,
             kill_switch_active: state.persisted.revocations.kill_switch_active,
             not_saved,
         })
+    }
+
+    /// A session that read the stored state just before another tree's
+    /// commit was saved and propagated catches up here, after it registered
+    /// its home: the stricter level and every stored revocation apply.
+    pub(crate) fn catch_up(&self, stored: &crate::security::recovery::Recovery) {
+        if stored.unreadable.is_some() {
+            return;
+        }
+        let Ok(mut guard) = self.write_state() else {
+            return;
+        };
+        let Some(state) = guard.as_mut() else {
+            return;
+        };
+        let level = state.persisted.settings.level.max(stored.level);
+        let mut revocations = state.persisted.revocations.clone();
+        if revocations.merge(&stored.revocations).is_err()
+            || (level == state.persisted.settings.level
+                && revocations == state.persisted.revocations)
+        {
+            return;
+        }
+        if adopt(state, level, revocations).is_ok() {
+            state.next_start_level = state.next_start_level.max(stored.level);
+        }
     }
 
     /// Run end: every sink revokes, whatever the level.
@@ -398,12 +443,13 @@ fn propagate(
     next: &DurableSecurityState,
     closes_channels: bool,
 ) {
+    let home = canonical(home);
     let trees: Vec<Arc<SharedEffectivePolicy>> = {
         let mut trees = TREES.lock().unwrap_or_else(PoisonError::into_inner);
         trees.retain(|(_, tree)| tree.strong_count() > 0);
         trees
             .iter()
-            .filter(|(tree_home, _)| tree_home == home)
+            .filter(|(tree_home, _)| *tree_home == home)
             .filter_map(|(_, tree)| tree.upgrade())
             .filter(|tree| !Arc::ptr_eq(tree, origin))
             .collect()
@@ -415,13 +461,11 @@ fn propagate(
                 continue;
             };
             let level = state.persisted.settings.level.max(next.level);
-            let revocations =
-                if next.revocations.generation >= state.persisted.revocations.generation {
-                    next.revocations.clone()
-                } else {
-                    state.persisted.revocations.clone()
-                };
-            if let Err(error) = adopt(state, level, revocations) {
+            let mut revocations = state.persisted.revocations.clone();
+            let merged = revocations
+                .merge(&next.revocations)
+                .map_err(TransitionError::from);
+            if let Err(error) = merged.and_then(|()| adopt(state, level, revocations)) {
                 tracing::warn!(
                     target: "codex_core::security::transition",
                     %error,
@@ -429,7 +473,7 @@ fn propagate(
                 );
                 continue;
             }
-            state.next_start_level = next.level;
+            state.next_start_level = state.next_start_level.max(next.level);
         }
         if closes_channels {
             notify(&tree);
@@ -462,13 +506,14 @@ impl super::EffectivePolicyView {
     /// Record which Corbanu home this tree belongs to, so restrictive
     /// commits of other trees on it reach this one.
     pub(crate) fn register_home(&self, home: &Path) {
+        let home = canonical(home);
         let mut trees = TREES.lock().unwrap_or_else(PoisonError::into_inner);
         trees.retain(|(_, tree)| tree.strong_count() > 0);
         if !trees
             .iter()
             .any(|(_, tree)| std::ptr::eq(tree.as_ptr(), Arc::as_ptr(&self.shared)))
         {
-            trees.push((home.to_path_buf(), Arc::downgrade(&self.shared)));
+            trees.push((home, Arc::downgrade(&self.shared)));
         }
     }
 }
@@ -489,6 +534,10 @@ impl RevocationSink for crate::session::session::Session {
             );
         }
     }
+}
+
+fn canonical(home: &Path) -> PathBuf {
+    std::fs::canonicalize(home).unwrap_or_else(|_| home.to_path_buf())
 }
 
 fn notify(shared: &SharedEffectivePolicy) {

@@ -28,13 +28,13 @@ const NOW: i64 = 1_000;
 #[derive(Default)]
 struct MemoryStore {
     saved: Mutex<Vec<DurableSecurityState>>,
-    fail: bool,
+    fail: std::sync::atomic::AtomicBool,
 }
 
 impl MemoryStore {
     fn failing() -> Self {
         Self {
-            fail: true,
+            fail: true.into(),
             ..Default::default()
         }
     }
@@ -62,11 +62,12 @@ impl TransitionStore for MemoryStore {
 
     fn update(
         &self,
+        _lowers_level: bool,
         merge: &mut dyn FnMut(
             Option<DurableSecurityState>,
         ) -> Result<DurableSecurityState, TransitionError>,
     ) -> Result<DurableSecurityState, TransitionError> {
-        if self.fail {
+        if self.fail.load(Ordering::SeqCst) {
             return Err(TransitionError::Persist("disk full".to_string()));
         }
         let mut saved = self.saved.lock().unwrap();
@@ -474,9 +475,10 @@ fn security_transition_kill_switch_and_release() {
     );
     assert_eq!(
         store.saved(),
+        // A revocation stores no level of its own: the floor stays empty.
         vec![
-            (SecurityLevel::Moderate, 1, true),
-            (SecurityLevel::Moderate, 2, false),
+            (SecurityLevel::Permissive, 1, true),
+            (SecurityLevel::Permissive, 2, false),
         ]
     );
     // Releasing opens nothing up again on the broker side.
@@ -721,4 +723,121 @@ fn security_transition_revoking_an_actor_stops_its_agents() {
             .kill_switch_active
     };
     assert_eq!((snapshot(fixture.root), snapshot(child)), (false, true));
+}
+
+/// Round 2: an emergency stop applied while the disk failed is kept by the
+/// next commit that does save (and it is saved then), and a commit with no
+/// stored state does not store this tree's level as a floor for the user.
+#[test]
+fn security_transition_unsaved_kill_switch_survives_the_next_commit() {
+    let fixture = fixture(SecurityLevel::Aggressive);
+    let store = MemoryStore::failing();
+    let kill = fixture
+        .prepare(
+            revoke(RevocationTarget::KillSwitch { active: true }),
+            ProbeOutcome::Passed,
+        )
+        .unwrap();
+    assert!(fixture.commit(kill, &store).unwrap().not_saved.is_some());
+    store.fail.store(false, Ordering::SeqCst);
+    let grant = RevocationTarget::Grant {
+        grant_id: BoundedText::new("grant-1").unwrap(),
+    };
+    fixture
+        .commit(
+            fixture
+                .prepare(revoke(grant), ProbeOutcome::Passed)
+                .unwrap(),
+            &store,
+        )
+        .unwrap();
+    assert!(fixture.now().4);
+    // Saved with the kill switch, and with no level of its own.
+    assert_eq!(store.saved(), vec![(SecurityLevel::Permissive, 2, true)]);
+}
+
+/// Round 2: a tree with a longer history (the file was removed since)
+/// still takes another tree's kill switch, and a release confirmed before a
+/// newer kill switch was stored is refused.
+#[test]
+fn security_transition_kill_switch_reaches_older_trees_and_stale_release_is_refused() {
+    let home = tempfile::TempDir::new().unwrap();
+    let store = crate::security::recovery::HomeTransitionStore::new(home.path());
+    let older = fixture(SecurityLevel::Moderate);
+    older.view.register_home(home.path());
+    for id in ["a", "b", "c"] {
+        let target = RevocationTarget::Grant {
+            grant_id: BoundedText::new(id).unwrap(),
+        };
+        older
+            .commit_with(
+                older.prepare(revoke(target), ProbeOutcome::Passed).unwrap(),
+                &store,
+            )
+            .unwrap();
+    }
+    std::fs::remove_file(home.path().join("security_state.json")).unwrap();
+    let newer = fixture(SecurityLevel::Moderate);
+    newer.view.register_home(home.path());
+    newer
+        .commit_with(
+            newer
+                .prepare(
+                    revoke(RevocationTarget::KillSwitch { active: true }),
+                    ProbeOutcome::Passed,
+                )
+                .unwrap(),
+            &store,
+        )
+        .unwrap();
+    assert!(older.now().4);
+    assert_eq!(older.now().3, 4);
+
+    // Another process (unreachable) released earlier; a newer kill switch is
+    // stored now: the stale release is refused.
+    let other_process = fixture(SecurityLevel::Moderate);
+    let stale_release = other_process
+        .prepare(
+            revoke(RevocationTarget::KillSwitch { active: false }),
+            ProbeOutcome::Passed,
+        )
+        .unwrap();
+    assert!(matches!(
+        other_process.commit_with(stale_release, &store),
+        Err(TransitionError::StoredStateChanged)
+    ));
+    assert!(
+        crate::security::recovery::recover(home.path(), SecurityLevel::Permissive)
+            .revocations
+            .kill_switch_active
+    );
+}
+
+/// Round 2: a held state lock never blocks the kill switch: it applies in
+/// memory and says it was not saved.
+#[test]
+fn security_transition_kill_switch_does_not_wait_for_a_held_lock() {
+    let home = tempfile::TempDir::new().unwrap();
+    let holder = std::fs::File::create(home.path().join("security_state.lock")).unwrap();
+    holder.lock().unwrap();
+    let fixture = fixture(SecurityLevel::Moderate);
+    let started = std::time::Instant::now();
+    let committed = fixture
+        .commit_with(
+            fixture
+                .prepare(
+                    revoke(RevocationTarget::KillSwitch { active: true }),
+                    ProbeOutcome::Passed,
+                )
+                .unwrap(),
+            &crate::security::recovery::HomeTransitionStore::new(home.path()),
+        )
+        .unwrap();
+    assert!(started.elapsed() < std::time::Duration::from_secs(10));
+    assert!(
+        committed
+            .not_saved
+            .is_some_and(|reason| reason.contains("locked")),
+    );
+    assert!(fixture.now().4);
 }

@@ -36,7 +36,7 @@ fn revoked(kill: bool) -> RevocationState {
 
 fn save(home: &std::path::Path, state: DurableSecurityState) {
     HomeTransitionStore::new(home)
-        .update(&mut |_| Ok(state.clone()))
+        .update(/*lowers_level*/ false, &mut |_| Ok(state.clone()))
         .unwrap();
 }
 
@@ -90,8 +90,8 @@ fn security_recovery_restart_keeps_the_stricter_level_and_generation() {
         }
     );
     assert_eq!(started(recovery), (SecurityLevel::Aggressive, false, 1));
-    let config = std::fs::read_to_string(home.path().join("config.toml")).unwrap();
-    assert!(config.contains("level = \"aggressive\""), "{config}");
+    // Only a downgrade touches the user's config.toml.
+    assert!(!home.path().join("config.toml").exists());
 }
 
 #[test]
@@ -164,12 +164,13 @@ fn security_recovery_downgrade_without_config_keeps_the_stricter_level() {
         home.path(),
         DurableSecurityState::new(SecurityLevel::Aggressive, RevocationState::new()),
     );
-    let result = HomeTransitionStore::new(home.path()).update(&mut |_| {
-        Ok(DurableSecurityState::new(
-            SecurityLevel::Permissive,
-            RevocationState::new(),
-        ))
-    });
+    let result =
+        HomeTransitionStore::new(home.path()).update(/*lowers_level*/ true, &mut |_| {
+            Ok(DurableSecurityState::new(
+                SecurityLevel::Permissive,
+                RevocationState::new(),
+            ))
+        });
     assert!(
         matches!(&result, Err(super::super::transition::TransitionError::Persist(reason)) if reason.contains("config.toml")),
         "{result:?}"

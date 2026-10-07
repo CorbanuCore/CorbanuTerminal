@@ -4277,7 +4277,16 @@ impl Session {
             turn_context_item.security_level =
                 turn_context_item.security_level.max(Some(policy.level));
         }
-        let turn_context_changed = reference_context_item.as_ref() != Some(&turn_context_item);
+        // The recorded level is not model-visible context: a change in it
+        // (or its absence in older rollouts) alone does not re-inject.
+        let turn_context_changed = reference_context_item.as_ref().is_none_or(|reference| {
+            let mut reference = reference.clone();
+            reference.security_level = turn_context_item.security_level;
+            reference != turn_context_item
+        });
+        let security_level_changed = reference_context_item
+            .as_ref()
+            .is_some_and(|reference| reference.security_level != turn_context_item.security_level);
         let world_state = Arc::new(self.build_world_state_for_step(step_context).await?);
         let reinject_host_context = self.services.model_client().take_host_context_reinjection();
         let should_inject_full_context = reference_context_item.is_none() || reinject_host_context;
@@ -4315,7 +4324,8 @@ impl Session {
             );
         }
         // A snapshot can change without producing model-visible or TurnContext updates.
-        let only_world_state_changed = !turn_context_changed && context_items.is_empty();
+        let only_world_state_changed =
+            !turn_context_changed && !security_level_changed && context_items.is_empty();
         if only_world_state_changed && world_state_item.is_none() {
             return Ok(world_state);
         }

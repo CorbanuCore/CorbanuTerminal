@@ -270,7 +270,10 @@ impl AgentControl {
             },
         )?;
         if let Some(home) = home {
+            // Register, then read again: a commit saved between the first
+            // read and the registration is not missed.
             self.security_policy.register_home(&home);
+            controller.catch_up(&crate::security::recovery::recover(&home, level));
         }
         self.trusted_security_controller = Some(controller);
         Ok(self)

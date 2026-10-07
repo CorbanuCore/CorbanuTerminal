@@ -409,6 +409,9 @@ impl NetworkApprovalService {
             runtime.spawn(async move {
                 service.session_approved_hosts.lock().await.clear();
             });
+        } else {
+            // Outside a runtime blocking is allowed.
+            self.session_approved_hosts.blocking_lock().clear();
         }
     }
 
