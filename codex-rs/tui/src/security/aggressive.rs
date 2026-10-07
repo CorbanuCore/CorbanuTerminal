@@ -39,7 +39,7 @@ const SECRET_ENV_PATTERNS: [&str; 4] = ["*VAULT*", "*PASSWORD*", "*PASSPHRASE*",
 pub(crate) const ROWS: [(&str, &str); 5] = [
     (
         "Sandbox",
-        "write only in the current folder: no extra writable folders, no /tmp or $TMPDIR; approved commands stay inside it too; escalation and permission-request tools are off",
+        "write only in the current folder (where the Corbanu home and the nested-launch registry stay read-only): no extra writable folders, no /tmp or $TMPDIR; approved commands stay inside it too; escalation and permission-request tools are off",
     ),
     (
         "Approvals",
@@ -101,6 +101,28 @@ fn string(value: &str) -> toml::Value {
 /// Both paths must be valid UTF-8 (checked by the launch path) so the
 /// profile's path keys are exact.
 pub(crate) fn base_overrides(codex_home: &Path, origin: &Path) -> Vec<(String, toml::Value)> {
+    base_overrides_with_registry(
+        codex_home,
+        origin,
+        super::nested::origin_registry_dir().as_deref(),
+    )
+}
+
+/// The registry path as a profile key: valid UTF-8 and no glob characters,
+/// which only `deny` entries may use. `None` leaves it out of the profile;
+/// verification then reports it if the workspace contains it.
+fn registry_profile_key(registry: &Path) -> Option<&str> {
+    registry
+        .to_str()
+        .filter(|path| !path.contains(['*', '?', '[', ']', '{', '}']))
+}
+
+/// [`base_overrides`] with the Aggressive-homes registry given explicitly.
+pub(crate) fn base_overrides_with_registry(
+    codex_home: &Path,
+    origin: &Path,
+    registry: Option<&Path>,
+) -> Vec<(String, toml::Value)> {
     let profile = toml::toml! {
         extends = ":workspace"
         [filesystem]
@@ -125,9 +147,7 @@ pub(crate) fn base_overrides(codex_home: &Path, origin: &Path) -> Vec<(String, t
         // The Aggressive-homes registry that nested-launch detection reads
         // (`super::nested`) is read-only too, so an agent whose workspace
         // contains it (the home folder) cannot delete its entries.
-        if let Some(registry) = super::nested::origin_registry_dir()
-            && let Some(registry) = registry.to_str()
-        {
+        if let Some(registry) = registry.and_then(registry_profile_key) {
             filesystem.insert(registry.to_string(), string("read"));
         }
     }
@@ -260,8 +280,26 @@ pub(crate) fn apply_launch_overrides(overrides: &mut ConfigOverrides) -> Vec<&'s
 /// Every row must be observed in the loaded config; otherwise the failing
 /// rows are returned and Aggressive must not be shown as active.
 pub(crate) fn verify(config: &Config, rules_present: bool, origin: &Path) -> Vec<String> {
+    verify_with_registry(
+        config,
+        rules_present,
+        origin,
+        super::nested::origin_registry_dir().as_deref(),
+    )
+}
+
+/// [`verify`] with the Aggressive-homes registry given explicitly.
+pub(crate) fn verify_with_registry(
+    config: &Config,
+    rules_present: bool,
+    origin: &Path,
+    registry: Option<&Path>,
+) -> Vec<String> {
     let mut failures = Vec::new();
     verify_sandbox(config, &mut failures);
+    if let Some(registry) = registry {
+        verify_registry(config, registry, &mut failures);
+    }
     let marker = config
         .permissions
         .shell_environment_policy
@@ -346,19 +384,39 @@ fn verify_sandbox(config: &Config, failures: &mut Vec<String>) {
     if file_system.can_write_path_with_cwd(&state_file, cwd) {
         failures.push(format!("Sandbox: {} is writable", state_file.display()));
     }
-    if let Some(registry) = super::nested::origin_registry_dir() {
-        let entry = registry.join("corbanu-aggressive-probe");
-        if file_system.can_write_path_with_cwd(&entry, cwd) {
-            failures.push(format!(
-                "Sandbox: the Aggressive-homes registry {} is writable",
-                registry.display()
-            ));
-        }
-    }
     for outside in outside_paths(config) {
         if !outside.starts_with(cwd) && file_system.can_write_path_with_cwd(&outside, cwd) {
             failures.push(format!("Sandbox: {} is writable", outside.display()));
         }
+    }
+}
+
+/// The registry nested-launch detection reads must be read-only to agent
+/// commands, and must exist when the workspace contains it: on Linux a
+/// missing one would be created by the sandbox as a placeholder.
+fn verify_registry(config: &Config, registry: &Path, failures: &mut Vec<String>) {
+    let cwd = config.cwd.as_path();
+    let file_system = config.permissions.file_system_sandbox_policy();
+    if registry_profile_key(registry).is_none() {
+        if registry.starts_with(cwd) {
+            failures.push(format!(
+                "Sandbox: the Aggressive-homes registry path {} cannot be written into the profile (not UTF-8, or it contains glob characters)",
+                registry.display()
+            ));
+        }
+        return;
+    }
+    if registry.starts_with(cwd) && !registry.is_dir() {
+        failures.push(format!(
+            "Sandbox: the Aggressive-homes registry {} is missing",
+            registry.display()
+        ));
+    }
+    if file_system.can_write_path_with_cwd(&registry.join("corbanu-aggressive-probe"), cwd) {
+        failures.push(format!(
+            "Sandbox: the Aggressive-homes registry {} is writable",
+            registry.display()
+        ));
     }
 }
 

@@ -13,7 +13,11 @@ workspace was the home folder, an agent command could delete those entries.
 - An Aggressive launch creates the folder before the first agent command, so
   a command cannot create it first.
 - Verification gains a row: Aggressive is not shown as active if the
-  registry would be writable by agent commands.
+  registry would be writable by agent commands, if the workspace contains it
+  but it is missing (bubblewrap would put a placeholder there), or if its
+  path cannot be written into the profile (not UTF-8, or glob characters).
+- The `/security` review's Sandbox row now says the Corbanu home and the
+  registry stay read-only inside the current folder.
 - The path comes from the account database, as in detection; debug builds
   honour `CORBANU_TEST_ACCOUNT_HOME`. With no account entry (some
   containers) there is no registry and nothing to protect.
@@ -23,11 +27,13 @@ workspace was the home folder, an agent command could delete those entries.
 - **Renaming a parent folder still moves the registry away** when the
   workspace is the home folder: `mv Library moved-library` (macOS) or
   `mv .local x` works, because Seatbelt and bind mounts check the renamed
-  path, not what is under it (`tmux-run/2-ancestor-rename.txt`). Closing
+  path, not what is under it (`tmux-run/2-ancestor-rename.txt`, macOS;
+  Linux is not verified). Closing
   that means making `~/Library` or `~/.local` read-only for agent commands
   when the workspace is the home folder, or keeping the registry somewhere
   the workspace cannot contain. Both change the sandbox design or the
   detection design, so they are left for Travis. Aggressive already warns
   when the workspace is the home folder.
-- A non-UTF-8 registry path cannot be written as a profile key; if the
-  workspace contains it, verification fails and Aggressive is not activated.
+- Plain `cargo test` without `CORBANU_TEST_ACCOUNT_HOME` (not `just test`)
+  makes the launch tests create the registry folder in the real home, as an
+  Aggressive launch does.
