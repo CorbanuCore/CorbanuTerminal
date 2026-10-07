@@ -146,14 +146,14 @@ pub(crate) fn selection_view(request: ClaudeApprovalRequest) -> SelectionViewPar
             SelectionItem {
                 name: "Allow once".to_string(),
                 description: Some("Claude Code runs it inside the pane's sandbox".to_string()),
-                actions: vec![Box::new(move |_| allow.respond(true))],
+                actions: vec![Box::new(move |_| allow.respond(/*allow*/ true))],
                 dismiss_on_select: true,
                 ..Default::default()
             },
             SelectionItem {
                 name: "Deny".to_string(),
                 description: Some("Claude Code is told you denied it".to_string()),
-                actions: vec![Box::new(move |_| deny.respond(false))],
+                actions: vec![Box::new(move |_| deny.respond(/*allow*/ false))],
                 dismiss_on_select: true,
                 ..Default::default()
             },
@@ -161,7 +161,7 @@ pub(crate) fn selection_view(request: ClaudeApprovalRequest) -> SelectionViewPar
         // A stray digit must not approve a tool.
         allow_number_shortcuts: false,
         allow_cancel: true,
-        on_cancel: Some(Box::new(move |_| cancel.respond(false))),
+        on_cancel: Some(Box::new(move |_| cancel.respond(/*allow*/ false))),
         ..Default::default()
     }
 }
