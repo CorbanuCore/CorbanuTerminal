@@ -5,6 +5,24 @@ use std::collections::HashMap;
 
 pub const CODEX_THREAD_ID_ENV_VAR: &str = "CODEX_THREAD_ID";
 
+/// Debug builds only: keeps a test or demo profile off the OS keyring (see
+/// `codex-keyring-store`). The name matches the default `*KEY*` exclude and
+/// the secretless-launch deny rules, so filtered child environments re-add it
+/// explicitly: without it, a `corbanu` started by an agent command in a
+/// disposable profile would reach the user's real keyring.
+pub const NO_NATIVE_KEYRING_ENV_VAR: &str = "CORBANU_TEST_NO_NATIVE_KEYRING";
+
+/// [`NO_NATIVE_KEYRING_ENV_VAR`] and its value when this debug-build process
+/// has it set. Always `None` in release builds, which ignore the variable.
+pub fn keyring_isolation_env_var() -> Option<(&'static str, String)> {
+    if !cfg!(debug_assertions) {
+        return None;
+    }
+    std::env::var(NO_NATIVE_KEYRING_ENV_VAR)
+        .ok()
+        .map(|value| (NO_NATIVE_KEYRING_ENV_VAR, value))
+}
+
 /// Construct a shell environment from the supplied process environment and
 /// shell-environment policy.
 ///
@@ -20,6 +38,9 @@ pub fn create_env(
         crate::secretless_launch::retain_launch_env(&mut env, |name| {
             name == CODEX_THREAD_ID_ENV_VAR || policy.r#set.contains_key(name)
         });
+    }
+    if let Some((name, value)) = keyring_isolation_env_var() {
+        env.insert(name.to_string(), value);
     }
     env
 }
@@ -157,6 +178,10 @@ pub const WINDOWS_CORE_ENV_VARS: &[&str] = &[
     "POWERSHELL",
     "PWSH",
 ];
+
+#[cfg(test)]
+#[path = "shell_environment_tests.rs"]
+mod tests;
 
 #[cfg(all(test, target_os = "windows"))]
 mod windows_tests {

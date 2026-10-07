@@ -322,8 +322,11 @@ def credential_prefix(spec: Spec, overrides: dict[str, str]) -> str:
         kind, _, ref = source.partition(":")
         if kind == "vault":
             helper = shutil.which("corbanu") or "corbanu"
+            # The installed corbanu reads the user's own vault (and so the OS
+            # keyring) by design; only the candidate runs keyring-isolated.
             parts.append(
-                f'{var}="$({shlex.quote(helper)} vault auth-helper {shlex.quote(ref)})"'
+                f'{var}="$(env -u {KEYRING_ISOLATION_VAR} {shlex.quote(helper)}'
+                f' vault auth-helper {shlex.quote(ref)})"'
             )
         elif kind == "file":
             parts.append(f'{var}="$(cat {shlex.quote(ref)})"')
@@ -549,7 +552,26 @@ def private_files(places: dict[str, str]) -> list[Path]:
     return [p for root in roots for p in sorted(Path(places[root]).rglob("*"))]
 
 
+KEYRING_ISOLATION_VAR = "CORBANU_TEST_NO_NATIVE_KEYRING"
+
+
+def require_keyring_isolation(environ: dict[str, str]) -> None:
+    """Refuse to drive a candidate unless keyring isolation is on.
+
+    Debug builds with this variable set keep the vault key, login tokens and
+    broker-read keys in files inside the disposable profile; without it a
+    candidate reaches the user's real login keychain (password prompts on
+    every rebuild). Release builds ignore it, so record with a debug build.
+    """
+    if not environ.get(KEYRING_ISOLATION_VAR):
+        raise DemoError(
+            f"refusing to run: export {KEYRING_ISOLATION_VAR}=1 so the candidate"
+            " never touches the real OS keyring (and use a debug build)"
+        )
+
+
 def record(args: argparse.Namespace) -> Path:
+    require_keyring_isolation(dict(os.environ))
     for tool in ("tmux", "asciinema", "agg", "ffmpeg", "ffprobe"):
         if not shutil.which(tool):
             raise DemoError(f"{tool} not found; see qa/demos/README.md for setup")

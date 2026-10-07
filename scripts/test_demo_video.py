@@ -111,9 +111,18 @@ class DemoVideoTest(unittest.TestCase):
         prefix = dv.credential_prefix(spec, {"OTHER_KEY": "file:/tmp/k"})
         self.assertIn('ZAI_API_KEY="$(', prefix)
         self.assertIn("vault auth-helper provider/zai_api_key)", prefix)
+        # The user's own vault is read outside the keyring isolation.
+        self.assertIn("$(env -u CORBANU_TEST_NO_NATIVE_KEYRING ", prefix)
         self.assertIn('OTHER_KEY="$(cat /tmp/k)"', prefix)
         with self.assertRaises(dv.DemoError):
             dv.credential_prefix(spec, {"X": "literal:abc"})
+
+    def test_refuses_without_keyring_isolation(self):
+        with self.assertRaises(dv.DemoError):
+            dv.require_keyring_isolation({})
+        with self.assertRaises(dv.DemoError):
+            dv.require_keyring_isolation({"CORBANU_TEST_NO_NATIVE_KEYRING": ""})
+        dv.require_keyring_isolation({"CORBANU_TEST_NO_NATIVE_KEYRING": "1"})
 
     def test_prepare_run_and_launcher(self):
         spec = dv.load_spec(self.spec_path)
@@ -131,6 +140,7 @@ class DemoVideoTest(unittest.TestCase):
         self.assertIn("-m glm-5.2", script)
         self.assertIn("model_provider=", script)
         self.assertIn(f"CORBANU_HOME={places['home']}", script)
+        self.assertIn("CORBANU_TEST_NO_NATIVE_KEYRING=1", script)
 
     def test_scan_blocks_published_and_redacts_private(self):
         cast = self.dir / "cast"

@@ -27,6 +27,10 @@ pub(crate) fn create_env_for_mcp_server(
         .filter(|var| !armed || codex_protocol::secretless_launch::is_launch_env_name_allowed(var))
         .filter_map(|var| env::var_os(var).map(|value| (OsString::from(var), value)))
         .chain(extra_env.unwrap_or_default())
+        .chain(
+            codex_protocol::shell_environment::keyring_isolation_env_var()
+                .map(|(name, value)| (OsString::from(name), OsString::from(value))),
+        )
         .collect();
     Ok(env)
 }
@@ -204,6 +208,16 @@ mod tests {
         let env = create_env_for_mcp_server(/*extra_env*/ None, &[custom_var.into()])
             .expect("local MCP env should build");
         assert_eq!(env.get(OsStr::new(custom_var)), Some(&expected));
+    }
+
+    #[test]
+    #[serial(extra_rmcp_env)]
+    fn create_env_keeps_keyring_isolation() {
+        let name = codex_protocol::shell_environment::NO_NATIVE_KEYRING_ENV_VAR;
+        let _guard = EnvVarGuard::set(name, "1");
+        let env =
+            create_env_for_mcp_server(/*extra_env*/ None, &[]).expect("local MCP env should build");
+        assert_eq!(env.get(OsStr::new(name)), Some(&OsString::from("1")));
     }
 
     #[test]

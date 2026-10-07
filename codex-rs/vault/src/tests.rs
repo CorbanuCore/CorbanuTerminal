@@ -659,3 +659,41 @@ fn pf_28_s01_revealed_values_are_registered_with_the_output_gate() {
             .is_some_and(|text| text.starts_with("[WITHHELD:"))
     );
 }
+
+/// Debug builds with `CORBANU_TEST_NO_NATIVE_KEYRING` set (every test, tmux
+/// and demo run) never reach the OS keyring: the default vault keeps its key
+/// in the profile's `0600` fallback file instead. Runs in a child test process
+/// so this process's environment is not changed.
+#[test]
+fn isolated_fixture_vault_keeps_its_key_in_the_profile() {
+    const CHILD_ENV: &str = "CODEX_VAULT_KEYRING_ISOLATION_CHILD";
+    const TEST: &str = "tests::isolated_fixture_vault_keeps_its_key_in_the_profile";
+    if std::env::var_os(CHILD_ENV).is_none() {
+        let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
+            .args(["--exact", TEST, "--nocapture"])
+            .env(CHILD_ENV, "1")
+            .env("CORBANU_TEST_NO_NATIVE_KEYRING", "1")
+            .output()
+            .expect("run child test");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return;
+    }
+    let dir = tempfile::tempdir().expect("tempdir");
+    let vault = Vault::new(dir.path().to_path_buf());
+    vault
+        .add(api_key_entry("isolated", "synthetic-isolated-value"))
+        .expect("add credential without the OS keyring");
+    assert_eq!(
+        vault.reveal("isolated").expect("reveal"),
+        "synthetic-isolated-value"
+    );
+    assert_eq!(vault.key_storage(), VaultKeyStorage::LocalFileFallback);
+    let fallback = std::fs::read_dir(dir.path().join("secrets").join("keyring-fallback"))
+        .expect("fallback dir in the profile")
+        .count();
+    assert_eq!(fallback, 1);
+}
