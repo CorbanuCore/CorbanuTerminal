@@ -545,6 +545,8 @@ struct Assignment<'a> {
     content: &'a str,
     name: &'a str,
     value_start: usize,
+    /// Fish syntax (`set`), where `\\` escapes inside single quotes.
+    fish: bool,
 }
 
 /// `[export |declare -x ]NAME=value` or fish `set [-flags] NAME value`,
@@ -579,6 +581,7 @@ fn parse_line(line: &str) -> Option<Assignment<'_>> {
                 content,
                 name: token,
                 value_start: base + start + token.len() + skipped,
+                fish: true,
             });
         }
         return None;
@@ -594,6 +597,7 @@ fn parse_line(line: &str) -> Option<Assignment<'_>> {
         content,
         name,
         value_start: indent + prefix + skipped + name.len() + 1,
+        fish: false,
     })
 }
 
@@ -615,7 +619,12 @@ impl Assignment<'_> {
             quote @ ('"' | '\'') => {
                 let close = value[1..].find(quote)? + 1;
                 let inner = &value[1..close];
-                if quote == '"' && inner.contains(['$', '`', '\\']) {
+                let escapes = if quote == '"' {
+                    inner.contains(['$', '`', '\\'])
+                } else {
+                    self.fish && inner.contains('\\')
+                };
+                if escapes {
                     return None;
                 }
                 (close + 1, inner)
@@ -623,7 +632,11 @@ impl Assignment<'_> {
             _ => {
                 let end = value.find(char::is_whitespace).unwrap_or(value.len());
                 let word = &value[..end];
-                if word.contains([';', '&', '|', '`', '$', '\\', '"', '\'', '(', ')', '<', '>']) {
+                // Shell syntax, globs, braces and `~` would change the value.
+                if word.contains([
+                    ';', '&', '|', '`', '$', '\\', '"', '\'', '(', ')', '<', '>', '~', '{', '}',
+                    '*', '?', '[',
+                ]) {
                     return None;
                 }
                 (end, word)
@@ -685,6 +698,7 @@ fn rewrite_file(
     store: &dyn CredentialStore,
 ) -> Result<Vec<EntryState>, String> {
     let (text, read_identity) = read_profile(path)?;
+    let read_stamp = file_stamp(path);
     let mut lines: Vec<String> = text.split_inclusive('\n').map(str::to_string).collect();
     let mut states = Vec::with_capacity(indices.len());
     let mut changed = false;
@@ -727,15 +741,20 @@ fn rewrite_file(
             None => states.push(EntryState::Skipped),
         }
     }
+    // The file must still be the one that was read: same identity, no new
+    // hard link, no edit since.
+    let current = std::fs::symlink_metadata(path).map_err(|err| err.to_string())?;
+    if identity(&current) != read_identity
+        || !current.is_file()
+        || hard_linked(&current)
+        || file_stamp(path) != read_stamp
+    {
+        return Err(format!(
+            "{} changed while it was being rewritten",
+            path.display()
+        ));
+    }
     if changed {
-        // The file must still be the one that was read.
-        let current = std::fs::symlink_metadata(path).map_err(|err| err.to_string())?;
-        if identity(&current) != read_identity || !current.is_file() {
-            return Err(format!(
-                "{} was replaced while it was being rewritten",
-                path.display()
-            ));
-        }
         replace_file(path, &Zeroizing::new(lines.concat()))?;
     } else {
         restrict(path)?;
@@ -788,7 +807,7 @@ fn sync_dir(dir: &Path) -> Result<(), String> {
 fn create_journal(codex_home: &Path, journal: &mut Journal) -> Result<(), MigrationError> {
     let path = journal_path(codex_home);
     let contents =
-        toml::to_string(journal).map_err(|err| MigrationError::Journal(err.to_string()))?;
+        toml::to_string(journal).map_err(|err| interrupted("prepare")(err.to_string()))?;
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]
@@ -801,17 +820,12 @@ fn create_journal(codex_home: &Path, journal: &mut Journal) -> Result<(), Migrat
         Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
             return Err(MigrationError::InProgress);
         }
-        Err(err) => {
-            return Err(MigrationError::Journal(format!(
-                "{}: {err}",
-                path.display()
-            )));
-        }
+        Err(err) => return Err(interrupted("prepare")(format!("{}: {err}", path.display()))),
     };
     file.write_all(contents.as_bytes())
         .and_then(|()| file.sync_all())
-        .map_err(|err| MigrationError::Journal(format!("{}: {err}", path.display())))?;
-    sync_dir(codex_home).map_err(MigrationError::Journal)
+        .map_err(|err| interrupted("prepare")(format!("{}: {err}", path.display())))?;
+    sync_dir(codex_home).map_err(interrupted("prepare"))
 }
 
 fn write_journal(codex_home: &Path, journal: &mut Journal) -> Result<(), String> {

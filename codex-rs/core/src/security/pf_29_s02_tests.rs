@@ -375,7 +375,11 @@ fn pf_29_s02_only_plain_single_assignments_are_rewritten() {
         .unwrap_or_else(|err| panic!("{err}"));
     machine.write(
         &fish,
-        "set -gx x_TOKEN fake-i-0007\nset -gx WORDS_TOKEN fake-j fake-k\n",
+        "set -gx x_TOKEN fake-i-0007\nset -gx WORDS_TOKEN fake-j fake-k\nset -gx ESC_TOKEN 'fake\\\\l'\n",
+    );
+    machine.write(
+        &machine.home().join(".bashrc"),
+        "export TILDE_TOKEN=~fake-m\nexport BRACE_TOKEN=fake{n,o}\n",
     );
     let plan = machine.plan();
     let mut moved = plan
@@ -393,7 +397,7 @@ fn pf_29_s02_only_plain_single_assignments_are_rewritten() {
         ]
     );
     // One finding per line: the second command on line 3 is not listed separately.
-    assert_eq!(plan.unsupported.len(), 4, "{:?}", plan.unsupported);
+    assert_eq!(plan.unsupported.len(), 7, "{:?}", plan.unsupported);
 
     let vault = FakeVault::default();
     run(&machine.corbanu(), &plan, &vault, None).unwrap_or_else(|err| panic!("{err}"));
@@ -413,7 +417,7 @@ fn pf_29_s02_only_plain_single_assignments_are_rewritten() {
     assert!(text.contains("FIRST_TOKEN=fake-e-0003; export SECOND_TOKEN=fake-f-0004"));
     assert_eq!(
         machine.read(&fish),
-        "set -gx x_TOKEN (corbanu vault auth-helper migrated/x_token)\nset -gx WORDS_TOKEN fake-j fake-k\n"
+        "set -gx x_TOKEN (corbanu vault auth-helper migrated/x_token)\nset -gx WORDS_TOKEN fake-j fake-k\nset -gx ESC_TOKEN 'fake\\\\l'\n"
     );
 
     #[cfg(unix)]
