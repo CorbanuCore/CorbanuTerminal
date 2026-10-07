@@ -17,6 +17,7 @@ use crate::app_command::AppCommand;
 use crate::internal_cli_helper::internal_cli_helper_executable;
 use crate::spawn_orchestration::SpawnRole;
 
+use super::containment::ClaudeContainment;
 use super::pane::ClaudeCommandMode;
 use super::pane::ClaudePane;
 use super::provider::ClaudeProviderProfile;
@@ -91,9 +92,20 @@ pub(crate) fn build_claude_command_plan(
     let audit_path = pane
         .artifact_dir
         .join(format!("turn-{turn_index:04}.audit.json"));
+    // #218: a contained pane reaches every provider through the bridge, so
+    // Claude Code never holds a provider key.
+    let containment = super::containment::enabled()
+        .map(|settings| -> Result<ClaudeContainment> {
+            Ok(ClaudeContainment {
+                state_dir: super::containment::state_dir(codex_home, &pane.id)?,
+                linux_sandbox_exe: settings.linux_sandbox_exe,
+            })
+        })
+        .transpose()?;
     let mut bridge = None;
     let mut base_url_override = None;
-    if matches!(profile.kind, ClaudeProviderProfileKind::ClaudePlan)
+    if containment.is_some()
+        || matches!(profile.kind, ClaudeProviderProfileKind::ClaudePlan)
         || matches!(
             profile.transport,
             ClaudeProviderTransport::AmbientChatBridge
@@ -159,9 +171,24 @@ pub(crate) fn build_claude_command_plan(
                     }),
                 )
             }
-            _ => {
-                unreachable!("direct non-Claude-Plan providers do not use a bridge")
-            }
+            // Direct providers, bridged only when contained: the bridge sends
+            // the key in both headers, as Claude Code's `apiKeyHelper` did.
+            _ => (
+                ClaudeBridgeKind::AnthropicApiKeyPassthrough,
+                profile
+                    .base_url
+                    .ok_or_else(|| anyhow!("Claude bridge requires a provider base URL"))?
+                    .trim_end_matches('/')
+                    .to_string(),
+                profile.provider_model.to_string(),
+                Some(DeferredVaultSecret {
+                    codex_home: codex_home.to_path_buf(),
+                    label: profile
+                        .vault_label
+                        .ok_or_else(|| anyhow!("Claude bridge requires a provider vault label"))?
+                        .to_string(),
+                }),
+            ),
         };
         base_url_override = Some(format!("http://{bind_addr}"));
         bridge = Some(ClaudeBridgePlan {
@@ -223,6 +250,30 @@ pub(crate) fn build_claude_command_plan(
     } else if profile.vault_label.is_some() {
         env_remove.extend(ANTHROPIC_AUTH_ENV_KEYS.map(ToString::to_string));
         env.insert("ANTHROPIC_API_KEY".to_string(), String::new());
+    }
+    if let Some(containment) = containment.as_ref() {
+        // The sandbox lets Claude Code reach only the bridge, as its HTTP
+        // proxy (see `containment`); everything else it might call fails.
+        if let Some(base_url) = base_url_override.as_deref() {
+            env.insert("HTTP_PROXY".to_string(), base_url.to_string());
+        }
+        env.insert(
+            "CLAUDE_CONFIG_DIR".to_string(),
+            containment.config_dir().to_string_lossy().into_owned(),
+        );
+        // Claude Code keeps its own temporary files (the Bash tool's working
+        // folder) under `CLAUDE_CODE_TMPDIR`, not `TMPDIR`.
+        for name in ["TMPDIR", "CLAUDE_CODE_TMPDIR"] {
+            env.insert(
+                name.to_string(),
+                containment.tmp_dir().to_string_lossy().into_owned(),
+            );
+        }
+        env.insert(
+            "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC".to_string(),
+            "1".to_string(),
+        );
+        env.insert("DISABLE_AUTOUPDATER".to_string(), "1".to_string());
     }
     if profile.uses_bare_mode {
         env.insert(
@@ -337,6 +388,7 @@ pub(crate) fn build_claude_command_plan(
         deferred_claude_plan_auth,
         bridge,
         direct_accounting,
+        containment,
     })
 }
 

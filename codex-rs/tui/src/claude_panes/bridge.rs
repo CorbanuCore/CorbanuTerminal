@@ -73,7 +73,8 @@ pub(crate) async fn run_claude_bridge(
                     )
                     .await
                 }
-                ClaudeBridgeKind::AnthropicPassthrough => {
+                ClaudeBridgeKind::AnthropicPassthrough
+                | ClaudeBridgeKind::AnthropicApiKeyPassthrough => {
                     handle_anthropic_passthrough_bridge_connection(
                         stream,
                         client_auth_token,
@@ -81,6 +82,8 @@ pub(crate) async fn run_claude_bridge(
                         upstream_base_url,
                         http,
                         /*proxy_count_tokens*/ false,
+                        /*send_api_key_header*/
+                        kind == ClaudeBridgeKind::AnthropicApiKeyPassthrough,
                         accounting_tx,
                         accounting_provider_id,
                     )
@@ -94,6 +97,7 @@ pub(crate) async fn run_claude_bridge(
                         upstream_base_url,
                         http,
                         /*proxy_count_tokens*/ true,
+                        /*send_api_key_header*/ false,
                         accounting_tx,
                         accounting_provider_id,
                     )
@@ -393,6 +397,7 @@ pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
     upstream_base_url: Arc<String>,
     http: reqwest::Client,
     proxy_count_tokens: bool,
+    send_api_key_header: bool,
     accounting_tx: Option<AppEventSender>,
     accounting_provider_id: Arc<Option<String>>,
 ) -> Result<()> {
@@ -476,6 +481,9 @@ pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
             "anthropic-version",
             request_header_value(&headers, "anthropic-version").unwrap_or("2023-06-01"),
         );
+    if send_api_key_header {
+        upstream_request = upstream_request.header("x-api-key", api_key.as_str());
+    }
     if proxy_count_tokens {
         upstream_request = upstream_request.header(
             "anthropic-beta",
@@ -711,10 +719,20 @@ pub(crate) fn find_header_end(buffer: &[u8]) -> Option<usize> {
     buffer.windows(4).position(|window| window == b"\r\n\r\n")
 }
 
+/// The request target in origin form. A contained pane reaches the bridge as
+/// its HTTP proxy (#218), so targets may arrive in absolute form
+/// (`http://127.0.0.1:port/v1/messages`); only the path and query are kept.
 pub(crate) fn request_target_from_request_line(request_line: &str) -> Option<&str> {
     let mut parts = request_line.split_whitespace();
     let _method = parts.next()?;
-    parts.next()
+    let target = parts.next()?;
+    let Some(rest) = ["http://", "https://"]
+        .iter()
+        .find_map(|scheme| target.strip_prefix(scheme))
+    else {
+        return Some(target);
+    };
+    Some(rest.find('/').map_or("/", |index| &rest[index..]))
 }
 
 fn request_header_value<'a>(headers: &'a str, expected_name: &str) -> Option<&'a str> {

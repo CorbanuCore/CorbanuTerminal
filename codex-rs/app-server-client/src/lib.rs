@@ -86,6 +86,10 @@ pub mod legacy_core {
     pub use codex_core::format_exec_policy_error_with_source;
     pub use codex_core::load_exec_policy;
     pub use codex_core::resolve_installation_id;
+    // Contained Claude panes (#218) launch Claude Code from the TUI process,
+    // under the secretless launch contract armed there.
+    pub use codex_core::external_agent_contract_armed;
+    pub use codex_core::protect_external_agent_launch;
 
     pub mod config {
         pub use codex_core::config::*;

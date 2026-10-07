@@ -145,25 +145,57 @@ pub(crate) async fn run_claude_command_plan(
         )),
     );
     let redactor = ClaudeSecretRedactor::from_plan(&plan, /*additional_secret*/ None);
+    // #218: a contained turn is wrapped in the OS sandbox before the bridge
+    // starts, so a launch the contract refuses never reaches the provider.
+    let mut command = match plan.containment.as_ref() {
+        Some(containment) => {
+            let bridge_port = plan
+                .bridge
+                .as_ref()
+                .map(|bridge| bridge.bind_addr.port())
+                .ok_or_else(|| anyhow!("a contained Claude pane needs its bridge"))?;
+            let contained = super::containment::contain(
+                containment,
+                &plan.executable,
+                &plan.args,
+                &plan.env,
+                &plan.cwd,
+                bridge_port,
+            )?;
+            let (program, args) = contained
+                .argv
+                .split_first()
+                .ok_or_else(|| anyhow!("the sandboxed Claude command is empty"))?;
+            let mut command = Command::new(program);
+            command.args(args).env_clear().envs(&contained.env);
+            #[cfg(unix)]
+            if let Some(arg0) = contained.arg0.as_deref() {
+                command.arg0(arg0);
+            }
+            command
+        }
+        None => {
+            let mut command = Command::new(&plan.executable);
+            for key in &plan.env_remove {
+                command.env_remove(key);
+            }
+            if let Some(config_dir) = claude_config_dir_override {
+                command.env("CLAUDE_CONFIG_DIR", config_dir);
+            }
+            command.args(&plan.args).envs(&plan.env);
+            command
+        }
+    };
     let bridge_handle = plan
         .bridge
         .take()
         .map(|bridge| tokio::spawn(run_claude_bridge(bridge, progress_tx.clone())));
-    let mut command = Command::new(&plan.executable);
     command.kill_on_drop(true);
     #[cfg(unix)]
     {
         command.process_group(0);
     }
-    for key in &plan.env_remove {
-        command.env_remove(key);
-    }
-    if let Some(config_dir) = claude_config_dir_override {
-        command.env("CLAUDE_CONFIG_DIR", config_dir);
-    }
     let mut child = command
-        .args(&plan.args)
-        .envs(&plan.env)
         .current_dir(&plan.cwd)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())

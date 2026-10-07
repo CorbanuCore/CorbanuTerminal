@@ -87,6 +87,8 @@ pub(crate) mod mentions {
 mod sandbox_tags;
 pub mod sandboxing;
 pub(crate) mod security;
+pub use security::launch_contract::external_agent_contract_armed;
+pub use security::launch_contract::protect_external_agent_launch;
 mod session_prefix;
 mod session_startup_prewarm;
 pub mod skills;

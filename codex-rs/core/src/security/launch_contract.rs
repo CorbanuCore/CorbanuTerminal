@@ -210,6 +210,32 @@ pub(crate) fn active() -> Option<&'static LaunchContract> {
     ACTIVE.get()
 }
 
+/// Issue #218: applies the armed contract to an external agent CLI that
+/// Corbanu launches itself (contained Claude panes): the platform, process
+/// hardening and sandbox checks, the argv and environment checks, and
+/// `profile` with the protected reads denied and `CODEX_HOME` read-only.
+/// Fails when the contract is not armed (`secretless_agent_launch` off).
+pub fn protect_external_agent_launch(
+    sandbox: SandboxType,
+    argv: &[String],
+    env: &mut HashMap<String, String>,
+    profile: &PermissionProfile,
+    cwd: &Path,
+) -> Result<PermissionProfile, String> {
+    let contract = active().ok_or_else(|| {
+        "contained external agents need the secretless agent launch contract (feature `secretless_agent_launch`)"
+            .to_string()
+    })?;
+    contract
+        .protect_external_launch(sandbox, argv, env, profile, cwd)
+        .map_err(|err| err.to_string())
+}
+
+/// True once the secretless launch contract is armed in this process.
+pub fn external_agent_contract_armed() -> bool {
+    active().is_some()
+}
+
 impl LaunchContract {
     pub(crate) fn capture<I>(codex_home: &AbsolutePathBuf, vars: I, hardened: bool) -> Self
     where
@@ -281,6 +307,22 @@ impl LaunchContract {
             effective_permission_profile(&protected, command.additional_permissions.as_ref());
         self.verify_permissions(&merged, cwd)?;
         Ok(protected)
+    }
+
+    /// [`protect_external_agent_launch`] with this contract.
+    pub(crate) fn protect_external_launch(
+        &self,
+        sandbox: SandboxType,
+        argv: &[String],
+        env: &mut HashMap<String, String>,
+        profile: &PermissionProfile,
+        cwd: &Path,
+    ) -> Result<PermissionProfile, LaunchDenied> {
+        self.check_sandbox(
+            sandbox, /*sandbox_requested*/ true, /*exec_server*/ false,
+        )?;
+        self.check_command(argv, env)?;
+        self.protect_permissions(profile, cwd)
     }
 
     /// Platform, process-hardening and sandbox checks for one launch attempt.
