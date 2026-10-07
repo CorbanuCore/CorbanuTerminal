@@ -45,7 +45,7 @@ CANARY_DIGEST=$(printf '%s' "$CANARY_VALUE" | SHA256_STDIN | cut -d' ' -f1)
 RESULTS="$RUNDIR/results.jsonl"
 MATRIX="$RUNDIR/route-matrix-v5.json"
 
-export PATH="$RUNTIME/rustup/toolchains/1.95.0-aarch64-apple-darwin/bin:$RUNTIME/cargo/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+export PATH="${RUNTIME_PATH:-$RUNTIME/rustup/toolchains/1.95.0-aarch64-apple-darwin/bin:$RUNTIME/cargo/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin}"
 export CARGO_HOME="$RUNTIME/cargo"
 export CORBANU_TEST_NO_NATIVE_KEYRING=1
 
@@ -321,9 +321,9 @@ emit "{\"route\":\"claude_pane\",\"result\":\"KNOWN_GAP\",\"detail\":\"PF-27-S02
 # ---- Build matrix JSON ----
 echo
 echo "=== Building matrix JSON ==="
-python3 - "$RESULTS" "$MATRIX" "$CANARY_DIGEST" "$CANDIDATE_SHA" "$CANDIDATE_VERSION" "$SOURCE_COMMIT" "$LEVEL" "$PLATFORM" <<'PY'
+python3 - "$RESULTS" "$MATRIX" "$CANARY_DIGEST" "$CANDIDATE_SHA" "$CANDIDATE_VERSION" "$SOURCE_COMMIT" "$LEVEL" "$PLATFORM" "$SCRIPT_SHA" <<'PY'
 import json, pathlib, sys
-results_path, matrix_path, digest, cand_sha, cand_ver, src_commit, level, platform = sys.argv[1:9]
+results_path, matrix_path, digest, cand_sha, cand_ver, src_commit, level, platform, script_sha = sys.argv[1:10]
 results = [json.loads(l) for l in pathlib.Path(results_path).read_text().splitlines() if l.strip()]
 matrix = {
     "sprint": "PF-13-S07",
@@ -333,6 +333,7 @@ matrix = {
     "candidate_sha256": cand_sha,
     "candidate_version": cand_ver,
     "source_commit": src_commit,
+    "script_sha256": script_sha,
     "canary_digest_prefix": digest[:16],
     "flags": {
         "isolated_credential_broker": True,
