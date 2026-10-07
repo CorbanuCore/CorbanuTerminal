@@ -44,3 +44,15 @@ Round 2 (Opus 5.5 High, APPROVE WITH FIXES, all low):
 8. Scan test: now flags glob, alias and module imports too, and skips where the workspace sources are not present
    (Bazel runfiles). A type-level token is not added.
 9. macOS-only end-to-end test: recorded as a known limit.
+
+Round 3 (Opus 5.5 High, APPROVE WITH FIXES):
+
+1. Folder shown decoded and unescaped: fixed. Every field of the review is shown escaped (folder, actor chain,
+   resource, digest, command); a test puts a newline and U+202E in the folder.
+2. Scan test: fixed. It asserts that it still finds the review's own call, and catches `confirm as …` in braces.
+3. `open_test_offer` race: fixed. The vacancy check is inside `register`, under the same lock.
+4. Label collisions in the actor chain: fixed. The offer keeps the structured chain and `confirm` compares it.
+5. More invisible characters: escaped (separators U+2028/2029, U+2060–206F, variation selectors, tag characters,
+   interlinear annotation, combining grapheme joiner, fillers).
+6. Comment corrected: a cached approval or permission hook may answer after the offer is registered; then no review
+   is shown and nothing is confirmed.

@@ -388,3 +388,23 @@ fn pf_25_s01_same_command_accepts_the_joined_form() {
     ));
     assert!(!same_command(&command, &["cat".to_string()]));
 }
+
+/// Model-chosen text cannot add rows or reorder the review: the folder and
+/// command are shown escaped.
+#[test]
+fn pf_25_s01_review_escapes_model_text() {
+    let mut offered = offer();
+    offered.cwd = "/work\nFolder      /safe\u{202e}".to_string();
+    let (mut view, _rx) = overlay(Some(offered), true);
+    key(&mut view, KeyCode::Char('g'));
+    key(&mut view, KeyCode::Enter);
+    let rendered = render(&view, 100);
+    assert!(rendered.contains("/work\\nFolder"), "{rendered}");
+    assert!(rendered.contains("\\u{202e}"), "{rendered}");
+    assert!(
+        !rendered
+            .lines()
+            .any(|line| line.trim_start().starts_with("Folder      /safe")),
+        "{rendered}"
+    );
+}

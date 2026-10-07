@@ -91,9 +91,11 @@ fn pf_25_s01_only_the_grant_review_confirms() {
                         || text.contains(&format!("{module}as"))
                         || text.contains(&format!("{module};"))
                         || text.split(&format!("{module}::{{")).skip(1).any(|rest| {
-                            rest.split('}')
-                                .next()
-                                .is_some_and(|names| names.split(',').any(|name| name == "confirm"))
+                            rest.split('}').next().is_some_and(|names| {
+                                names
+                                    .split(',')
+                                    .any(|name| name == "confirm" || name.starts_with("confirmas"))
+                            })
                         })
                 })
         })
@@ -101,7 +103,15 @@ fn pf_25_s01_only_the_grant_review_confirms() {
         .map(|path| path.display().to_string())
         // Tests drive Core's confirm directly; they are not product callers.
         .filter(|path| !path.ends_with("_tests.rs") && !path.contains("/tests/"))
+        .collect();
+    // The detector still finds the one real caller.
+    assert!(
+        callers.contains(&"tui/src/security/grant_view.rs".to_string()),
+        "{callers:?}"
+    );
+    let callers: Vec<&String> = callers
+        .iter()
         .filter(|path| !allowed.contains(&path.as_str()))
         .collect();
-    assert_eq!(callers, Vec::<String>::new());
+    assert_eq!(callers, Vec::<&String>::new());
 }

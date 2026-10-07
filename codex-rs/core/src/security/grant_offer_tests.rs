@@ -64,6 +64,7 @@ fn offer_in(
         vec!["cat".to_string(), command.to_string()],
         "/work".to_string(),
         current,
+        /*only_if_vacant*/ false,
     );
     (guard, shared)
 }

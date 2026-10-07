@@ -130,10 +130,15 @@ impl GrantReview {
             .map(|line| Line::from(line.into_owned()))
             .collect()
         };
-        lines.extend(field("Agent", offer.actor_chain.join(" → ")));
+        // Every field is shown escaped: the folder and command are chosen by
+        // the model.
+        lines.extend(field(
+            "Agent",
+            escape_controls(&offer.actor_chain.join(" → ")),
+        ));
         lines.extend(field("Session", offer.thread.to_string()));
-        lines.extend(field("Action", offer.action.clone()));
-        lines.extend(field("Resource", offer.resource.clone()));
+        lines.extend(field("Action", escape_controls(&offer.action)));
+        lines.extend(field("Resource", escape_controls(&offer.resource)));
         lines.extend(field(
             "Command",
             format!(
@@ -141,8 +146,8 @@ impl GrantReview {
                 escape_controls(&strip_bash_lc_and_escape(&offer.command))
             ),
         ));
-        lines.extend(field("Folder", offer.cwd.clone()));
-        lines.extend(field("Digest", offer.operation.clone()));
+        lines.extend(field("Folder", escape_controls(&offer.cwd)));
+        lines.extend(field("Digest", escape_controls(&offer.operation)));
         lines.extend(field("Destination", "none".to_string()));
         lines.extend(field(
             "Limit",

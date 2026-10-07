@@ -109,6 +109,8 @@ type CurrentState = Arc<dyn Fn() -> Option<PostTaintState> + Send + Sync>;
 
 struct Pending {
     offer: GrantOffer,
+    /// The actor chain the offer was made for (the offer shows labels).
+    actor_chain: codex_security_policy::ActorChain,
     current: CurrentState,
     /// Which registration this is: a guard acts only on its own.
     nonce: u64,
@@ -226,9 +228,11 @@ pub(crate) fn offer_for_approval(
         command,
         cwd,
         Arc::new(move || weak.upgrade()?.services.model_client().post_taint_state()),
+        /*only_if_vacant*/ false,
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn register(
     thread: ThreadId,
     state: &PostTaintState,
@@ -237,6 +241,7 @@ fn register(
     command: Vec<String>,
     cwd: String,
     current: CurrentState,
+    only_if_vacant: bool,
 ) -> OfferGuard {
     let Some((epoch, revocation_generation, actor_chain)) = binding(state) else {
         return OfferGuard(None);
@@ -257,6 +262,9 @@ fn register(
     };
     let key = (thread, approval_id.to_string());
     let mut offers = offers();
+    if only_if_vacant && offers.contains_key(&key) {
+        return OfferGuard(None);
+    }
     // Two open approvals with one id (a provider reusing call ids): the
     // review could show one command under the other's approval. Offer
     // nothing for either.
@@ -282,6 +290,7 @@ fn register(
         key.clone(),
         Pending {
             offer,
+            actor_chain: actor_chain.clone(),
             current,
             nonce,
             confirmed: None,
@@ -305,7 +314,7 @@ pub fn offer(thread: ThreadId, approval_id: &str) -> Option<GrantOffer> {
 /// from the TUI's confirm key.
 pub fn confirm(shown: &GrantOffer, uses: GrantUses) -> Result<ConfirmedGrant, GrantError> {
     let key = (shown.thread, shown.approval_id.clone());
-    let (current, nonce) = {
+    let (current, nonce, offered_chain) = {
         let offers = offers();
         let pending = offers
             .get(&key)
@@ -314,12 +323,16 @@ pub fn confirm(shown: &GrantOffer, uses: GrantUses) -> Result<ConfirmedGrant, Gr
         if pending.offer != *shown {
             return Err(GrantError::Changed);
         }
-        (Arc::clone(&pending.current), pending.nonce)
+        (
+            Arc::clone(&pending.current),
+            pending.nonce,
+            pending.actor_chain.clone(),
+        )
     };
     let state = current().ok_or(GrantError::Ended)?;
     let (epoch, revocation_generation, actor_chain) = binding(&state).ok_or(GrantError::Changed)?;
     if (epoch, revocation_generation) != (shown.epoch, shown.revocation_generation)
-        || chain_labels(actor_chain) != shown.actor_chain
+        || *actor_chain != offered_chain
     {
         return Err(GrantError::Changed);
     }
@@ -433,17 +446,26 @@ pub(crate) fn apply(
     }
 }
 
+/// Format, separator and filler characters that render as nothing or
+/// change how the text around them is shown.
 fn is_invisible_format(character: char) -> bool {
     matches!(
         character,
         '\u{00ad}'
+            | '\u{034f}'
             | '\u{061c}'
-            | '\u{180e}'
+            | '\u{115f}'..='\u{1160}'
+            | '\u{17b4}'..='\u{17b5}'
+            | '\u{180b}'..='\u{180f}'
             | '\u{200b}'..='\u{200f}'
-            | '\u{202a}'..='\u{202e}'
-            | '\u{2060}'..='\u{2064}'
-            | '\u{2066}'..='\u{2069}'
+            | '\u{2028}'..='\u{202e}'
+            | '\u{2060}'..='\u{206f}'
+            | '\u{3164}'
+            | '\u{fe00}'..='\u{fe0f}'
             | '\u{feff}'
+            | '\u{ffa0}'
+            | '\u{fff9}'..='\u{fffb}'
+            | '\u{e0000}'..='\u{e0fff}'
     )
 }
 
@@ -503,10 +525,6 @@ pub fn open_test_offer(thread: ThreadId, approval_id: &str, command: Vec<String>
         },
         level: SecurityLevel::Aggressive,
     };
-    if offers().contains_key(&(thread, approval_id.to_string())) {
-        // Never touches a real offer.
-        return TestOffer(OfferGuard(None));
-    }
     let current = state.clone();
     TestOffer(register(
         thread,
@@ -516,6 +534,8 @@ pub fn open_test_offer(thread: ThreadId, approval_id: &str, command: Vec<String>
         command,
         "/work".to_string(),
         Arc::new(move || Some(current.clone())),
+        // Never touches a real offer.
+        /*only_if_vacant*/ true,
     ))
 }
 

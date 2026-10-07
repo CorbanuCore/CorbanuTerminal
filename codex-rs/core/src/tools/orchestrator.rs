@@ -169,8 +169,9 @@ impl ToolOrchestrator {
         // PF-25-S01: while its approval is open, the human may grant it once
         // in the TUI; the offer ends with the approval.
         let grant_operation = aggressive_grant_operation(tool, req, tool_ctx);
-        // Registered just before a human (not a cache, hook or automatic
-        // reviewer) is asked.
+        // Registered just before the user (not an automatic reviewer) is
+        // asked. A cached approval or a permission hook may still answer
+        // without them; then no review is shown and nothing is confirmed.
         let mut grant_offer = None;
         // PF-30-S03: a protected action after untrusted content needs fresh,
         // exact human approval, whatever the requirement above would allow.
