@@ -65,3 +65,11 @@ Driver log:
     [23:11:16] step 28: pause 3.0
     [23:11:19] steps complete; exiting through /exit
     [23:11:22] rendered <runs>/claude-contained-approval-guard-20261007T061054Z/claude-contained-claude-contained-approval-guard-3611045bbe3e-2026-10-06.mp4 (26.2s); frames in <runs>/claude-contained-approval-guard-20261007T061054Z/frames
+
+## 3. Both runs repeated at 9e9c63be63 (round-2 review fixes)
+
+Same specs, same candidate setup. claude-contained-approval-guard: steps
+complete, workspace afterwards: second.txt (first denied by the untouched
+popup's Enter after the guard ignored the Enter sent as it appeared).
+claude-contained-approvals (GLM 5.2 on Z.AI): steps complete, workspace
+afterwards: approved.txt; the pane reported touch denied.txt was denied.
