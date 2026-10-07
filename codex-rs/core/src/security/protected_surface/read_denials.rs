@@ -147,7 +147,7 @@ impl ReadDenials {
             // The repository the root is in, found the way git finds it; a
             // worktree or submodule keeps hooks and config in the git folder
             // its `.git` file points to (hooks in the common one).
-            for path in git_persistence_paths(root) {
+            for path in super::git_paths::git_persistence_paths(root, user_home) {
                 denials.push_read_only(path, keep);
             }
         }
@@ -387,56 +387,6 @@ fn real_location_within(path: &AbsolutePathBuf, hops: usize) -> Option<AbsoluteP
         real.push(name);
     }
     AbsolutePathBuf::from_absolute_path(real).ok()
-}
-
-/// What git reads to decide which hooks and config run for the repository
-/// `root` is in (the nearest `.git` at or above it, found the way git finds
-/// it): hooks, config, config.worktree and commondir of its git folder; for
-/// a `.git` file (worktree, submodule) the file itself and the same entries
-/// in the folder it points to and its common folder. A missing commondir is
-/// covered on macOS only: on Linux the sandbox would put an empty one in
-/// place, which breaks git.
-fn git_persistence_paths(root: &AbsolutePathBuf) -> Vec<AbsolutePathBuf> {
-    let Some(dot_git) = root
-        .as_path()
-        .ancestors()
-        .map(|folder| folder.join(".git"))
-        .find(|dot_git| std::fs::symlink_metadata(dot_git).is_ok())
-        .and_then(|dot_git| AbsolutePathBuf::from_absolute_path(dot_git).ok())
-    else {
-        return Vec::new();
-    };
-    let entries = |git_dir: &AbsolutePathBuf| {
-        let commondir = git_dir.join("commondir");
-        let with_commondir =
-            !cfg!(target_os = "linux") || std::fs::symlink_metadata(commondir.as_path()).is_ok();
-        ["hooks", "config", "config.worktree"]
-            .into_iter()
-            .map(|entry| git_dir.join(entry))
-            .chain(with_commondir.then_some(commondir))
-            .collect::<Vec<_>>()
-    };
-    if dot_git.as_path().is_dir() {
-        return entries(&dot_git);
-    }
-    let mut paths = vec![dot_git.clone()];
-    let Ok(text) = std::fs::read_to_string(dot_git.as_path()) else {
-        return paths;
-    };
-    let (Some(folder), Some(git_dir)) = (
-        dot_git.parent(),
-        text.lines().find_map(|line| line.strip_prefix("gitdir:")),
-    ) else {
-        return paths;
-    };
-    let git_dir = AbsolutePathBuf::resolve_path_against_base(git_dir.trim(), folder.as_path());
-    let common = std::fs::read_to_string(git_dir.join("commondir").as_path())
-        .ok()
-        .map(|dir| AbsolutePathBuf::resolve_path_against_base(dir.trim(), git_dir.as_path()));
-    for dir in std::iter::once(git_dir).chain(common) {
-        paths.extend(entries(&dir));
-    }
-    paths
 }
 
 /// In-process file tools (the patch pre-check, structured edits, image
