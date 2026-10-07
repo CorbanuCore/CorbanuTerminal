@@ -22,7 +22,7 @@ ZAI_API_KEY = "provider/zai_api_key"
 printf "alias ll='ls -l'\nexport OPENAI_API_KEY=fake-key-0001-pf29-demo\n" > "$HOME/.zshrc" && echo seeded fake profile export
 '''
 "check.sh" = '''
-printf 'plain-text values left: '; grep -c 'fake-key-0001' "$HOME/.zshrc"; ls -l "$HOME/.zshrc" | cut -c1-10; grep OPENAI "$HOME/.zshrc"
+printf 'plain-text values left: '; grep -c 'fake-key-0001' "$HOME/.zshrc"; ls -l "$HOME/.zshrc" | cut -c1-10; grep OPENAI "$HOME/.zshrc" | sed -E 's/=fake-[^ ]*/=<the synthetic plain-text value>/' 
 '''
 
 [[steps]]
