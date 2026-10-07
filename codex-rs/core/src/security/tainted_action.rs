@@ -257,7 +257,7 @@ const RECURSIVE_READERS: &[(&str, &[&str])] = &[
 /// file to one of them, or redirecting output to it, is a write.
 const WRITERS: &[&str] = &[
     "tee", "cp", "mv", "install", "ln", "rsync", "dd", "truncate", "touch", "ditto", "sed", "perl",
-    "ed", "ex", "patch", "chmod", "unzip", "tar", "curl", "wget",
+    "ed", "ex", "patch", "chmod", "unzip", "tar", "curl", "wget", "rm", "rmdir", "unlink", "mkdir",
 ];
 /// `git config` keys that make git run a program (PF-23-S02).
 const GIT_RUN_KEYS: &[&str] = &[

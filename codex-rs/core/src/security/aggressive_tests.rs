@@ -119,21 +119,12 @@ fn pf_23_s02_grant_opens_only_its_surface_operation_and_uses() {
 }
 
 /// Expiry, a policy epoch change, the kill switch, another level and a
-/// revocation each end a grant.
+/// revocation each end a grant, and an ended grant never comes back.
 #[test]
 fn pf_23_s02_grant_ends_with_expiry_policy_change_and_revocation() {
-    let thread = ThreadId::new();
     let lineage = chain(&["main"]);
     let operation = command();
-    let held = || {
-        grant(
-            lineage.clone(),
-            scope(thread, Surface::UnprotectedCommand, &operation, None),
-            NOW + 60,
-        )
-    };
     let live = aggressive(lineage.clone());
-    issue(thread, &live, held(), NOW).unwrap();
     let ended = [
         (live.clone(), NOW + 60),
         (
@@ -148,26 +139,57 @@ fn pf_23_s02_grant_ends_with_expiry_policy_change_and_revocation() {
             state(SecurityLevel::Moderate, lineage.clone(), 0, false),
             NOW,
         ),
+        (
+            PostTaintState {
+                taint_generation: 1,
+                policy: PolicyBinding::Unavailable,
+                level: SecurityLevel::Aggressive,
+            },
+            NOW,
+        ),
     ];
-    for (state, now) in ended {
+    for (ending, now) in ended {
+        // A fresh session and a live grant for each case.
+        let thread = ThreadId::new();
+        let held = grant(
+            lineage.clone(),
+            scope(thread, Surface::UnprotectedCommand, &operation, None),
+            NOW + 60,
+        );
+        issue(thread, &live, held, NOW).unwrap();
         assert_eq!(
-            admit(thread, &state, Surface::UnprotectedCommand, &operation, now),
-            None
+            admit(
+                thread,
+                &ending,
+                Surface::UnprotectedCommand,
+                &operation,
+                now
+            ),
+            None,
+            "{ending:?}"
+        );
+        // Back to the live policy: the grant stays gone.
+        assert_eq!(
+            admit(thread, &live, Surface::UnprotectedCommand, &operation, NOW),
+            None,
+            "{ending:?}"
         );
     }
-    // The epoch-1 check above dropped it: it does not come back.
-    assert_eq!(
-        admit(thread, &live, Surface::UnprotectedCommand, &operation, NOW),
-        None
-    );
 
+    let thread = ThreadId::new();
+    let held = || {
+        grant(
+            lineage.clone(),
+            scope(thread, Surface::UnprotectedCommand, &operation, None),
+            NOW + 60,
+        )
+    };
     issue(thread, &live, held(), NOW).unwrap();
     revoke_all(thread);
     assert_eq!(
         admit(thread, &live, Surface::UnprotectedCommand, &operation, NOW),
         None
     );
-
     assert_eq!(
         issue(thread, &live, held(), NOW + 60),
         Err(GrantRefusal::Expired)

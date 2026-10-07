@@ -137,6 +137,13 @@ impl ReadDenials {
             for entry in WORKSPACE_PERSISTENCE {
                 denials.push_read_only(root.join(entry), keep);
             }
+            // A worktree or submodule keeps hooks and config in the git
+            // folder its `.git` file points to (hooks in the common one).
+            for git_dir in linked_git_dirs(root) {
+                for entry in ["hooks", "config", "config.worktree"] {
+                    denials.push_read_only(git_dir.join(entry), keep);
+                }
+            }
         }
         if let Ok(entries) = std::fs::read_dir(codex_home.as_path()) {
             for entry in entries.flatten() {
@@ -231,11 +238,24 @@ impl ReadDenials {
         }
     }
 
+    /// A read-only path, by its real location: below a symlinked folder the
+    /// Linux sandbox cannot bind the link name. A path below a regular file
+    /// (`.git` in a worktree) cannot exist and is left out. On macOS the link
+    /// name is kept too, so the sandbox also refuses to remove the link.
     fn push_read_only(&mut self, path: AbsolutePathBuf, keep: &[AbsolutePathBuf]) {
-        if Self::holds_kept(&path, keep) {
-            self.skipped.push(path);
-        } else if !self.read_only.contains(&path) {
-            self.read_only.push(path);
+        let Some(real) = real_location(&path) else {
+            return;
+        };
+        let mut spellings = vec![real];
+        if cfg!(target_os = "macos") && !spellings.contains(&path) {
+            spellings.push(path);
+        }
+        for path in spellings {
+            if Self::holds_kept(&path, keep) {
+                self.skipped.push(path);
+            } else if !self.read_only.contains(&path) {
+                self.read_only.push(path);
+            }
         }
     }
 
@@ -314,6 +334,44 @@ impl ReadDenials {
             network,
         ))
     }
+}
+
+/// `path` with its nearest existing folder resolved, or `None` when that
+/// folder is not a folder (nothing can be created below a file).
+fn real_location(path: &AbsolutePathBuf) -> Option<AbsolutePathBuf> {
+    let mut existing = path.as_path();
+    let mut tail = Vec::new();
+    while std::fs::symlink_metadata(existing).is_err() {
+        tail.push(existing.file_name()?);
+        existing = existing.parent()?;
+    }
+    if !tail.is_empty() && !existing.is_dir() {
+        return None;
+    }
+    let mut real = std::fs::canonicalize(existing).ok()?;
+    for name in tail.iter().rev() {
+        real.push(name);
+    }
+    AbsolutePathBuf::from_absolute_path(real).ok()
+}
+
+/// The git folders a `.git` file in `root` points to: its own, and the
+/// common one holding hooks and the shared config.
+fn linked_git_dirs(root: &AbsolutePathBuf) -> Vec<AbsolutePathBuf> {
+    let Ok(text) = std::fs::read_to_string(root.join(".git").as_path()) else {
+        return Vec::new();
+    };
+    let Some(git_dir) = text
+        .lines()
+        .find_map(|line| line.strip_prefix("gitdir:"))
+        .map(|dir| AbsolutePathBuf::resolve_path_against_base(dir.trim(), root.as_path()))
+    else {
+        return Vec::new();
+    };
+    let common = std::fs::read_to_string(git_dir.join("commondir").as_path())
+        .ok()
+        .map(|dir| AbsolutePathBuf::resolve_path_against_base(dir.trim(), git_dir.as_path()));
+    std::iter::once(git_dir).chain(common).collect()
 }
 
 /// In-process file tools (the patch pre-check, structured edits, image

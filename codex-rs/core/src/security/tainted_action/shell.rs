@@ -470,9 +470,16 @@ impl Lexer {
                     self.flush();
                     self.redirect = Redirect::Stdin;
                 }
-                // `>&2`, `2>&1`: a descriptor, not a file.
+                // `>&2`, `2>&1`, `>&-`: a descriptor, not a file; `>&file`
+                // writes the file.
                 '>' if next == Some('&') => {
                     self.flush();
+                    let descriptor = chars
+                        .get(index + 2)
+                        .is_some_and(|after| after.is_ascii_digit() || *after == '-');
+                    if !descriptor {
+                        self.redirect = Redirect::Stdout;
+                    }
                     index += 2;
                     continue;
                 }

@@ -56,6 +56,12 @@ pub(crate) async fn rewrite_mcp_tool_arguments_for_openai_files(
             )
         })
     });
+    if read_policy.is_some() && read_sandbox.is_none() {
+        return Err(
+            "failed to upload files: no protected file sandbox is available for this session"
+                .to_string(),
+        );
+    }
     let mut rewritten_arguments = arguments.clone();
 
     for (field_name, optional_fields) in openai_file_input_optional_fields {
@@ -86,6 +92,7 @@ pub(crate) async fn rewrite_mcp_tool_arguments_for_openai_files(
     Ok(Some(JsonValue::Object(rewritten_arguments)))
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn rewrite_argument_value_for_openai_files(
     step_context: &StepContext,
     read_policy: Option<&codex_protocol::permissions::FileSystemSandboxPolicy>,
@@ -176,6 +183,7 @@ fn check_upload_readable(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn build_uploaded_argument_value(
     step_context: &StepContext,
     read_sandbox: Option<&FileSystemSandboxContext>,

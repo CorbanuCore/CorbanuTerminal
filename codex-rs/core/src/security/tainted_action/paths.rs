@@ -213,34 +213,40 @@ impl Homes {
         })
     }
 
-    /// Whether writing `path` changes what runs later outside the sandbox
-    /// (PF-23-S02): a user persistence file, or a workspace's git hooks,
-    /// git config, `.codex` or `.agents`, also through its canonical form.
+    /// Whether writing, moving or removing `path` changes what runs later
+    /// outside the sandbox (PF-23-S02): a user persistence file or a folder
+    /// above one below the home (moving `~/.config` moves the files out from
+    /// under their rule), or a workspace's `.git` (hooks, config), `.codex` or
+    /// `.agents`, also through its canonical form.
     pub(super) fn is_persistence(&self, path: &str) -> bool {
         let lexical = normalize_path(&path.to_lowercase());
         let canonical = self.canonical(path);
+        let entry_segments =
+            |entry: &str| -> Vec<String> { entry.split('/').map(str::to_lowercase).collect() };
+        let prefix =
+            |short: &[&str], long: &[String]| short.iter().zip(long).all(|(got, want)| got == want);
         [Some(lexical), canonical]
             .into_iter()
             .flatten()
             .any(|path| {
                 let segments = segments(&path);
-                let starts_with = |rest: &[&str], entry: &str| {
-                    let entry: Vec<String> = entry.split('/').map(str::to_lowercase).collect();
-                    rest.len() >= entry.len()
-                        && rest.iter().zip(&entry).all(|(got, want)| got == want)
-                };
                 let in_user_home = self.user_homes.iter().any(|home| {
                     below(&segments, home).is_some_and(|rest| {
-                        USER_PERSISTENCE
-                            .iter()
-                            .any(|entry| starts_with(rest, entry))
+                        USER_PERSISTENCE.iter().any(|entry| {
+                            let entry = entry_segments(entry);
+                            // The file or below it, or a folder above it.
+                            prefix(&rest[..rest.len().min(entry.len())], &entry)
+                        })
                     })
                 });
                 in_user_home
+                    || segments.last() == Some(&".git")
                     || (0..segments.len()).any(|start| {
-                        WORKSPACE_PERSISTENCE
-                            .iter()
-                            .any(|entry| starts_with(&segments[start..], entry))
+                        WORKSPACE_PERSISTENCE.iter().any(|entry| {
+                            let entry = entry_segments(entry);
+                            segments.len() - start >= entry.len()
+                                && prefix(&segments[start..], &entry)
+                        })
                     })
             })
     }

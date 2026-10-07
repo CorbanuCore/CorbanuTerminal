@@ -1389,6 +1389,12 @@ fn pf_23_s02_persistence_writes_are_protected() {
         "crontab job.txt",
         "launchctl load ~/x.plist",
         "systemctl --user enable x.service",
+        "mv ~/.config ~/.c",
+        "rm -rf ~/.local",
+        "mv .git g2",
+        "rm .git/hooks/pre-push",
+        "echo x >& .git/hooks/pre-commit",
+        "echo x &> ~/.bashrc",
     ] {
         assert_eq!(script(command), Some(Persistence), "{command}");
     }
@@ -1414,6 +1420,10 @@ fn pf_23_s02_persistence_writes_are_protected() {
         "git config --global --get user.name",
         "crontab -l",
         "git status >/dev/null 2>&1",
+        "echo x >&2",
+        "rm -rf ~/.config/gh-cache-dir/x",
+        "mkdir -p build && cp out.txt ~/",
+        "mv ~/.cache/x ~/.cache/y",
     ] {
         assert_eq!(script(command), None, "{command}");
     }

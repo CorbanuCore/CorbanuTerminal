@@ -755,8 +755,7 @@ where
 /// never does; only a matching human grant for this exact command
 /// (`security::aggressive`). Lifting only leaves these rules out: every
 /// denial of the profile itself stays. An external sandbox cannot take the
-/// rules and keeps its own. Each run is recorded as confined or not, for
-/// typing into the process later.
+/// rules and keeps its own.
 fn post_taint_read_denials(
     tool_ctx: &ToolCtx,
     post_taint: &Option<crate::security::tainted_action::PostTaintAction>,
@@ -771,23 +770,15 @@ fn post_taint_read_denials(
 )> {
     use crate::security::aggressive;
     use crate::security::protected_surface::ReadDenials;
-    use crate::security::protected_surface::confined;
     use crate::security::tainted_action::PolicyBinding;
     use codex_security_policy::SecurityLevel;
     let thread = tool_ctx.session.thread_id();
-    let unconfined = || {
-        confined::note_unconfined(thread, &tool_ctx.call_id);
-        None
-    };
-    let Some(state) = tool_ctx
+    let state = tool_ctx
         .session
         .services
         .model_client()
         .post_taint_state()
-        .filter(crate::security::tainted_action::PostTaintState::protected_paths_apply)
-    else {
-        return unconfined();
-    };
+        .filter(crate::security::tainted_action::PostTaintState::protected_paths_apply)?;
     if post_taint.is_some()
         && state.level == SecurityLevel::Moderate
         && matches!(
@@ -804,7 +795,7 @@ fn post_taint_read_denials(
             call_id = %tool_ctx.call_id,
             "post-taint read denials lifted by the human approval of this command"
         );
-        return unconfined();
+        return None;
     }
     if let Some(operation) = grant_operation
         && let Some(grant_id) = aggressive::admit(
@@ -821,7 +812,7 @@ fn post_taint_read_denials(
             call_id = %tool_ctx.call_id,
             "protected-path rules lifted by an Aggressive grant for this command"
         );
-        return unconfined();
+        return None;
     }
     let denials = ReadDenials::for_turn(
         tool_ctx.turn.config.codex_home.as_path(),
@@ -837,9 +828,8 @@ fn post_taint_read_denials(
             call_id = %tool_ctx.call_id,
             "post-taint read denials cannot be added to an external sandbox"
         );
-        return unconfined();
+        return None;
     };
-    confined::note_confined(thread, &tool_ctx.call_id);
     tracing::info!(
         target: "codex_core::security::tainted_action",
         taint_generation = state.taint_generation,

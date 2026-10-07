@@ -640,7 +640,7 @@ async fn pf_23_s02_sandbox_makes_persistence_files_read_only_under_full_access()
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
     // The hook path is built at run time, so the command-text net cannot see it.
-    let write = "mkdir -p .git/hooks; echo x > \"$(printf .gi%s t)/hooks/pre-commit\" \
+    let write = "h=\"$(printf .gi%s t)/hooks\"; mkdir -p \"$h\"; echo x > \"$h/pre-commit\" \
                  && echo hook-written; echo ok > ok.txt && cat ok.txt";
     for (level, tainted, hook_written) in [
         (SecurityLevel::Aggressive, false, false),

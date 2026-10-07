@@ -93,9 +93,9 @@ pub(crate) fn command_operation(parts: &[&str]) -> String {
     format!("command:sha256:{:x}", hasher.finalize())
 }
 
-/// The operation for typing into one process (the call that started it).
-pub(crate) fn process_operation(call_id: &str) -> String {
-    format!("process:{call_id}")
+/// The operation for typing into one start of one process.
+pub(crate) fn process_operation(process_id: i32, start: u64) -> String {
+    format!("process:{process_id}:{start}")
 }
 
 /// Why a grant was not taken.
@@ -238,7 +238,12 @@ pub(crate) fn admit(
     operation: &str,
     now_unix_seconds: i64,
 ) -> Option<BoundedText> {
-    let (epoch, revocation_generation, actor_chain) = aggressive_binding(state).ok()?;
+    let Ok((epoch, revocation_generation, actor_chain)) = aggressive_binding(state) else {
+        // Another level, the kill switch or no live policy ends every grant:
+        // they never come back when Aggressive or the switch returns.
+        revoke_all(thread);
+        return None;
+    };
     let request = AuthorizationRequest::new(
         actor_chain.clone(),
         surface.resource(),
@@ -272,8 +277,7 @@ pub(crate) fn admit(
     Some(grant_id)
 }
 
-/// Drop every grant `thread` holds (revocation, PF-25-S02).
-#[cfg_attr(not(test), allow(dead_code))]
+/// Drop every grant `thread` holds (also revocation, PF-25-S02).
 pub(crate) fn revoke_all(thread: ThreadId) {
     LEDGER
         .lock()

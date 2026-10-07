@@ -329,3 +329,52 @@ async fn pf_23_s02_aggressive_applies_the_rules_from_the_start() {
         );
     }
 }
+
+/// PF-23-S02: worktrees keep hooks in the git folder their `.git` file
+/// points to; a path below a regular file is left out (the Linux sandbox
+/// cannot mount there); a symlinked dotfile is protected where it really is.
+#[test]
+fn pf_23_s02_worktree_hooks_and_symlinked_dotfiles_are_protected() {
+    let fx = fixture();
+    let main = fx.user_home.join("main");
+    let common = main.join(".git");
+    let own = common.join("worktrees/w");
+    std::fs::create_dir_all(own.as_path()).unwrap();
+    std::fs::create_dir_all(common.join("hooks")).unwrap();
+    std::fs::write(own.join("commondir"), "../..\n").unwrap();
+    let cwd = fx.user_home.join("w");
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::write(cwd.join(".git"), format!("gitdir: {}\n", own.display())).unwrap();
+    let dotfiles = fx.user_home.join("dotfiles");
+    std::fs::create_dir_all(&dotfiles).unwrap();
+    std::fs::write(dotfiles.join("zshrc"), "x").unwrap();
+    std::os::unix::fs::symlink(dotfiles.join("zshrc"), fx.user_home.join(".zshrc")).unwrap();
+
+    let denials = ReadDenials::collect(&fx.codex_home, Some(&fx.user_home), None, &[abs(&cwd)]);
+    let read_only: Vec<_> = denials.read_only_paths().cloned().collect();
+    for protected in [
+        common.join("hooks"),
+        common.join("config"),
+        own.join("config.worktree"),
+        dotfiles.join("zshrc"),
+    ] {
+        assert!(
+            read_only.contains(&abs(&protected)),
+            "{}",
+            protected.display()
+        );
+    }
+    assert!(
+        read_only
+            .iter()
+            .all(|path| !path.as_path().starts_with(cwd.join(".git"))),
+        "{read_only:?}"
+    );
+    let policy = denials
+        .apply(&PermissionProfile::Disabled)
+        .unwrap()
+        .file_system_sandbox_policy();
+    assert!(!policy.can_write_path_with_cwd(&common.join("hooks/pre-commit"), &cwd));
+    assert!(!policy.can_write_path_with_cwd(&dotfiles.join("zshrc"), &cwd));
+    assert!(policy.can_write_path_with_cwd(&cwd.join("src.rs"), &cwd));
+}
