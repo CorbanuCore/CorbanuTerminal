@@ -429,11 +429,13 @@ text(JSON.stringify(await tools.exec_command({ cmd: next })));
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
 const CANARY: &str = "PF23_SLICE3_CANARY";
 
 /// A Corbanu home holding a non-standard file with the canary, and the two
 /// ways to read it: a run-time string the command-text net cannot resolve,
 /// and the literal path it does.
+#[cfg(target_os = "macos")]
 fn canary_home() -> anyhow::Result<(Arc<TempDir>, String, String)> {
     let home = Arc::new(TempDir::new()?);
     let path = home.path().canonicalize()?.join("pf23-notes.txt");
@@ -444,10 +446,12 @@ fn canary_home() -> anyhow::Result<(Arc<TempDir>, String, String)> {
     Ok((home, evading, format!("cat '{path}'")))
 }
 
+#[cfg(target_os = "macos")]
 fn shell_step(call_id: &str, command: &str) -> Step {
     call(call_id, "shell_command", json!({ "command": command }))
 }
 
+#[cfg(target_os = "macos")]
 async fn next_exec_approval(
     test: &TestCodex,
 ) -> Option<codex_protocol::protocol::ExecApprovalRequestEvent> {
