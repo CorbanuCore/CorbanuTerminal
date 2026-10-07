@@ -29,7 +29,9 @@ use crate::legacy_core::protected_preflight::InventorySources;
 use crate::legacy_core::protected_preflight::Preflight;
 use crate::legacy_core::protected_preflight::ReadinessFlags;
 use crate::legacy_core::protected_preflight::database_glob;
+use crate::legacy_core::protected_preflight::database_siblings;
 use crate::legacy_core::protected_preflight::file_sources;
+use crate::legacy_core::protected_preflight::has_glob_chars;
 use crate::legacy_core::protected_preflight::is_database_file;
 
 pub(crate) const RECEIPT_FILE: &str = "security_preflight.toml";
@@ -166,18 +168,48 @@ pub(crate) fn isolation_paths(
     if !receipt_path(codex_home).exists() {
         return Vec::new();
     }
-    let mut paths = Preflight::run(
+    // Folders for Corbanu's stores exist from the start, so a sandbox that
+    // can only mask existing paths (bubblewrap) covers them too.
+    for name in [
+        "sessions",
+        "archived_sessions",
+        "shell_snapshots",
+        "log",
+        "wallet",
+    ] {
+        if let Err(err) = std::fs::create_dir_all(codex_home.join(name)) {
+            tracing::warn!("could not create {name} in the Corbanu home: {err}");
+        }
+    }
+    let found = Preflight::run(
         &file_sources(codex_home, home, cwd),
         ReadinessFlags::default(),
     )
     .inventory
-    .isolation_paths()
-    .into_iter()
-    // Databases are covered by the glob, including files created later.
-    .filter(|path| !is_database_file(codex_home, path))
-    .chain(CORBANU_HOME_STORES.iter().map(|name| codex_home.join(name)))
-    .chain([database_glob(codex_home)])
-    .collect::<Vec<_>>();
+    .isolation_paths();
+    let mut paths = CORBANU_HOME_STORES
+        .iter()
+        .map(|name| codex_home.join(name))
+        .collect::<Vec<_>>();
+    if has_glob_chars(codex_home) {
+        // The home cannot prefix a glob: deny each database and its
+        // siblings by exact path instead.
+        paths.extend(found.into_iter().flat_map(|path| {
+            if is_database_file(codex_home, &path) {
+                database_siblings(&path)
+            } else {
+                vec![path]
+            }
+        }));
+    } else {
+        // One glob covers every database, including files created later.
+        paths.extend(
+            found
+                .into_iter()
+                .filter(|path| !is_database_file(codex_home, path)),
+        );
+        paths.push(database_glob(codex_home));
+    }
     paths.sort();
     paths.dedup();
     paths
@@ -198,12 +230,11 @@ pub(crate) fn verify_isolation(config: &Config, paths: &[PathBuf]) -> Vec<String
     paths
         .iter()
         .filter(|path| {
-            let covered = if path.as_os_str().to_string_lossy() == glob
-                || is_database_file(codex_home, path)
-            {
+            let covered = if path.as_os_str().to_string_lossy() == glob {
                 databases_denied
             } else {
-                !policy.can_read_path_with_cwd(path, cwd)
+                (databases_denied && is_database_file(codex_home, path))
+                    || !policy.can_read_path_with_cwd(path, cwd)
             };
             !covered
         })

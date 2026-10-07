@@ -431,6 +431,31 @@ mod pf_29_s01 {
         assert_eq!(picker.screen, Screen::Saved(Ok(ChosenLevel::Aggressive)));
     }
 
+    /// Toggling nested agents on a saved Aggressive skips the preflight only
+    /// while a receipt is on record (review 3).
+    #[test]
+    fn pf_29_s01_saved_aggressive_without_receipt_needs_a_preflight() {
+        let machine = Machine::new();
+        level::save(
+            &machine.corbanu(),
+            ChosenLevel::Aggressive,
+            NestedAgents::Refuse,
+        )
+        .unwrap();
+        let mut picker = machine.picker(/*flags_on*/ true, ChosenLevel::Aggressive);
+        picker.handle_key_event(key(KeyCode::Enter));
+        assert_eq!(picker.screen, Screen::Review(ChosenLevel::Aggressive));
+        picker.handle_key_event(key(KeyCode::Char('n')));
+        picker.handle_key_event(key(KeyCode::Enter));
+        assert_eq!(picker.screen, Screen::Review(ChosenLevel::Aggressive));
+        assert!(text(&picker).contains("no preflight on record"));
+        assert!(!preflight::receipt_path(&machine.corbanu()).exists());
+
+        picker.handle_key_event(key(KeyCode::Enter));
+        assert_eq!(picker.screen, Screen::Saved(Ok(ChosenLevel::Aggressive)));
+        assert!(preflight::receipt_path(&machine.corbanu()).exists());
+    }
+
     #[test]
     fn pf_29_s01_returning_to_permissive_removes_the_receipt() {
         let machine = Machine::new();

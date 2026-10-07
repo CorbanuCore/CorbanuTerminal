@@ -194,10 +194,22 @@ impl SecurityLevelPicker {
         let (Some(input), ChosenLevel::Aggressive) = (&self.preflight_input, target) else {
             return true;
         };
-        // No preflight: Aggressive is already saved and only the nested
-        // setting changes, which is not a transition.
+        // No preflight: Aggressive was saved with a receipt and only the
+        // nested setting changes, which is not a transition. Read both again:
+        // another Corbanu process may have changed them since this opened.
         let Some(reviewed) = &self.preflight else {
-            return self.stored == StoredLevel::Chosen(ChosenLevel::Aggressive);
+            let (stored, _) = level::load_state(&self.codex_home);
+            if stored == StoredLevel::Chosen(ChosenLevel::Aggressive)
+                && preflight::receipt_path(&self.codex_home).exists()
+            {
+                return true;
+            }
+            self.preflight = Some(Preflight::run(&input.sources, input.flags));
+            self.preflight_note = Some(
+                "Not saved: Aggressive has no preflight on record. Review the preflight above."
+                    .to_string(),
+            );
+            return false;
         };
         let (next, drift) = reviewed.recheck(&input.sources, input.flags);
         let note = if !drift.is_empty() {

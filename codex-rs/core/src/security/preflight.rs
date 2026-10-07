@@ -282,6 +282,25 @@ pub fn database_glob(codex_home: &std::path::Path) -> std::path::PathBuf {
     codex_home.join("*.sqlite*")
 }
 
+/// Whether `path` contains glob syntax, so it cannot prefix a glob pattern.
+pub fn has_glob_chars(path: &std::path::Path) -> bool {
+    path.to_string_lossy()
+        .contains(['*', '?', '[', ']', '{', '}'])
+}
+
+/// The `-wal`, `-shm` and `-journal` files that come and go beside a
+/// database, whether or not they exist now.
+pub fn database_siblings(path: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let name = path.to_string_lossy();
+    let base = name
+        .split_once(".sqlite")
+        .map_or(name.as_ref(), |(base, _)| base);
+    ["", "-wal", "-shm", "-journal"]
+        .iter()
+        .map(|suffix| std::path::PathBuf::from(format!("{base}.sqlite{suffix}")))
+        .collect()
+}
+
 /// Whether `path` is one of the files [`database_glob`] denies.
 pub fn is_database_file(codex_home: &std::path::Path, path: &std::path::Path) -> bool {
     path.parent() == Some(codex_home)
