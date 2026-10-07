@@ -174,7 +174,11 @@ impl SecurityLevelPicker {
             migration: None,
             store: None,
             core: CoreLevels::default(),
-            basis: LevelBasis::read(&context.codex_home, SecurityLevel::Permissive, None),
+            basis: LevelBasis::read(
+                &context.codex_home,
+                SecurityLevel::Permissive,
+                /*thread*/ None,
+            ),
             pending: None,
             commit_inline: cfg!(test),
             app_event_tx: None,
@@ -199,7 +203,11 @@ impl SecurityLevelPicker {
     fn core_behind(&self) -> bool {
         self.preflight_input.is_some()
             && self.stored == StoredLevel::Chosen(ChosenLevel::Aggressive)
-            && confirm::core_commit_needed(&self.basis, ChosenLevel::Aggressive, true)
+            && confirm::core_commit_needed(
+                &self.basis,
+                ChosenLevel::Aggressive,
+                /*raise*/ true,
+            )
     }
 
     /// Collect a finished commit. Returns whether the screen changed.
@@ -1023,7 +1031,7 @@ impl SecurityLevelPicker {
                 name(self.basis.in_force)
             )];
         }
-        if !confirm::core_commit_needed(&self.basis, ChosenLevel::Aggressive, true) {
+        if !confirm::core_commit_needed(&self.basis, ChosenLevel::Aggressive, /*raise*/ true) {
             return Vec::new();
         }
         let effects = "agent commands cannot open protected paths, sensitive surfaces need a grant, external content reaches the model labelled untrusted, and memory summaries stop";
@@ -1044,7 +1052,7 @@ impl SecurityLevelPicker {
 
     /// What confirming Permissive does to Core's level.
     fn core_lines_for_permissive(&self) -> Vec<String> {
-        if !confirm::core_commit_needed(&self.basis, ChosenLevel::Permissive, false) {
+        if !confirm::core_commit_needed(&self.basis, ChosenLevel::Permissive, /*raise*/ false) {
             return Vec::new();
         }
         let saved_above = match self.basis.stored {

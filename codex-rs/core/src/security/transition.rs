@@ -359,12 +359,24 @@ impl TrustedSecurityController {
         if let Some(home) = store.home() {
             match prepared.kind {
                 TransitionKind::Restrictive => {
-                    propagate(&self.shared, home, &next, prepared.closes_channels(), false);
+                    propagate(
+                        &self.shared,
+                        home,
+                        &next,
+                        prepared.closes_channels(),
+                        /*only_if_stricter*/ false,
+                    );
                 }
                 // The level in force is chosen again (PF-24-S02): sessions of
                 // this process below it rise to it.
                 TransitionKind::Unchanged => {
-                    propagate(&self.shared, home, &next, false, true);
+                    propagate(
+                        &self.shared,
+                        home,
+                        &next,
+                        /*closes_channels*/ false,
+                        /*only_if_stricter*/ true,
+                    );
                 }
                 TransitionKind::Downgrade | TransitionKind::KillSwitchRelease => {}
             }
