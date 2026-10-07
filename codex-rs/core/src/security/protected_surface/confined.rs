@@ -1,8 +1,8 @@
 //! PF-23-S02: whether a running process can read credentials. A process
-//! keeps the sandbox it started with, so one started before the
-//! protected-path rules applied (before untrusted content under Moderate,
-//! or with the rules lifted by an approval or a grant) still can. Typing
-//! into it after untrusted content is a protected action of its own
+//! keeps the sandbox it started with, so one started without the
+//! protected-path rules (under a lower level, with the rules lifted by an
+//! approval or a grant, or in a sandbox that cannot take them) still can.
+//! Typing into it after untrusted content is a protected action of its own
 //! (`write_stdin`).
 //!
 //! Recorded when the process is spawned, from the sandbox that really ran,
