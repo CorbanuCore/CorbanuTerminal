@@ -3444,6 +3444,11 @@ pub struct TurnContextItem {
     pub realtime_active: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub effort: Option<ReasoningEffortConfig>,
+    /// The security level this turn ran under (PF-23-S03). Memory work on
+    /// this rollout later treats it as a floor; absent in older rollouts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(skip)]
+    pub security_level: Option<codex_security_policy::SecurityLevel>,
     // Compatibility-only field written with a default value so older Codex
     // versions can deserialize turn-context rollout items. It is no longer
     // read by context reconstruction and should be removed in a future schema
@@ -6352,6 +6357,7 @@ mod tests {
             multi_agent_mode: None,
             realtime_active: None,
             effort: None,
+            security_level: None,
             summary: ReasoningSummaryConfig::Auto,
         };
 
