@@ -28,8 +28,18 @@ pub(super) fn git_persistence_paths(
     let home = user_home.and_then(|home| AbsolutePathBuf::from_absolute_path(home).ok());
     let (mut paths, work_tree) = match repository_paths(root, home.as_ref()) {
         Ok((paths, work_tree)) => {
-            remember(&REPOSITORY_PATHS, root, Some(paths.clone()));
-            (paths, work_tree)
+            // Added to, never replaced: a `.git` a command creates below the
+            // repository cannot make the earlier paths unprotected.
+            let mut known = recall(&REPOSITORY_PATHS, root).unwrap_or_default();
+            known.extend(
+                paths
+                    .iter()
+                    .filter(|path| !known.contains(path))
+                    .cloned()
+                    .collect::<Vec<_>>(),
+            );
+            remember(&REPOSITORY_PATHS, root, Some(known.clone()));
+            (known, work_tree)
         }
         // A folder made unreadable hides nothing: the `.git` paths found so
         // far, plus what this process found for `root` before.
