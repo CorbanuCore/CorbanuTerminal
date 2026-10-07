@@ -311,19 +311,31 @@ def product_commit() -> str:
     return sha + ("-dirty" if dirty else "")
 
 
-def credential_prefix(spec: Spec, overrides: dict[str, str]) -> str:
-    """Shell assignments that resolve each credential at use time, never as literals."""
+def credential_sources(spec: Spec, overrides: dict[str, str]) -> dict[str, str]:
     sources = {var: f"vault:{label}" for var, label in spec.credentials.items()}
     sources.update(overrides)
+    return sources
+
+
+def credential_prefix(
+    spec: Spec, overrides: dict[str, str], helper: str | None = None
+) -> str:
+    """Shell assignments that resolve each credential at use time, never as literals."""
+    sources = credential_sources(spec, overrides)
     parts = []
     for var, source in sources.items():
         if not re.fullmatch(r"[A-Z_][A-Z0-9_]*", var):
             raise DemoError(f"bad credential variable {var!r}")
         kind, _, ref = source.partition(":")
         if kind == "vault":
-            helper = shutil.which("corbanu") or "corbanu"
+            if not helper:
+                raise DemoError("vault: credentials need a checked vault helper")
+            # The installed, signed corbanu reads the user's own vault (and so
+            # the OS keyring) by design; only the candidate runs keyring-isolated.
+            # `vault_helper` refuses a helper that is the candidate or a build.
             parts.append(
-                f'{var}="$({shlex.quote(helper)} vault auth-helper {shlex.quote(ref)})"'
+                f'{var}="$(env -u {KEYRING_ISOLATION_VAR} {shlex.quote(helper)}'
+                f' vault auth-helper {shlex.quote(ref)})"'
             )
         elif kind == "file":
             parts.append(f'{var}="$(cat {shlex.quote(ref)})"')
@@ -549,7 +561,65 @@ def private_files(places: dict[str, str]) -> list[Path]:
     return [p for root in roots for p in sorted(Path(places[root]).rglob("*"))]
 
 
+KEYRING_ISOLATION_VAR = "CORBANU_TEST_NO_NATIVE_KEYRING"
+
+
+def require_keyring_isolation(environ: dict[str, str]) -> None:
+    """Refuse to drive a candidate unless keyring isolation is on.
+
+    Debug builds with this variable set keep the vault key, login tokens and
+    broker-read keys in files inside the disposable profile; without it a
+    candidate reaches the user's real login keychain (password prompts on
+    every rebuild). Release builds ignore it, so record with a debug build.
+    """
+    if not environ.get(KEYRING_ISOLATION_VAR):
+        raise DemoError(
+            f"refusing to run: export {KEYRING_ISOLATION_VAR}=1 so the candidate"
+            " never touches the real OS keyring (and use a debug build)"
+        )
+
+
+def is_build_output(path: Path) -> bool:
+    """True for a binary inside a Cargo target directory (`target/`, `targets/`)."""
+    return any(part in ("target", "targets", "debug", "release") for part in path.parts)
+
+
+def candidates(bin_path: str, environ: dict[str, str]) -> list[Path]:
+    """`--bin` plus the real candidate a demo wrapper runs (`*_CANDIDATE`)."""
+    found = [Path(bin_path)]
+    found += [Path(v) for k, v in environ.items() if k.endswith("_CANDIDATE") and v]
+    return [path.resolve() for path in found]
+
+
+def vault_helper(explicit: str | None, candidate: Path | list[Path]) -> str:
+    """The installed corbanu that reads `vault:` credentials from the user's vault.
+
+    It runs outside the keyring isolation, so it must be the signed install, never
+    the candidate or another fresh build (those would reach the real keychain).
+    """
+    found = explicit or shutil.which("corbanu")
+    if not found:
+        raise DemoError(
+            "no installed corbanu for vault: credentials; pass --vault-helper"
+        )
+    real = Path(found).resolve()
+    others = candidate if isinstance(candidate, list) else [candidate]
+    if any(real == other.resolve() for other in others) or is_build_output(real):
+        raise DemoError(
+            f"refusing vault helper {real}: it is the candidate or a build output;"
+            " pass --vault-helper <installed corbanu>"
+        )
+    return str(real)
+
+
 def record(args: argparse.Namespace) -> Path:
+    require_keyring_isolation(dict(os.environ))
+    runs = candidates(args.bin, dict(os.environ))
+    if any("release" in path.parts for path in runs):
+        raise DemoError(
+            "refusing a release-profile candidate: it ignores"
+            f" {KEYRING_ISOLATION_VAR} and would use the real keychain"
+        )
     for tool in ("tmux", "asciinema", "agg", "ffmpeg", "ffprobe"):
         if not shutil.which(tool):
             raise DemoError(f"{tool} not found; see qa/demos/README.md for setup")
@@ -558,7 +628,12 @@ def record(args: argparse.Namespace) -> Path:
     if not os.access(binary, os.X_OK):
         raise DemoError(f"candidate binary not executable: {binary}")
     overrides = dict(item.split("=", 1) for item in args.credential)
-    creds = credential_prefix(spec, overrides)
+    needs_vault = any(
+        source.startswith("vault:")
+        for source in credential_sources(spec, overrides).values()
+    )
+    helper = vault_helper(args.vault_helper, runs) if needs_vault else None
+    creds = credential_prefix(spec, overrides, helper)
     sha, day = product_commit(), dt.date.today().isoformat()
     run, places = prepare_run(spec, Path(args.out) / args.sprint)
 
@@ -822,6 +897,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     rec.add_argument(
         "--credential", action="append", default=[], metavar="VAR=vault:LABEL|file:PATH"
+    )
+    rec.add_argument(
+        "--vault-helper",
+        help="installed corbanu used for vault: credentials (default: corbanu on PATH)",
     )
     rec.add_argument(
         "--publish",
