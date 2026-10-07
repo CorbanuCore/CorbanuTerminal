@@ -49,8 +49,10 @@ pub struct RevocationReport {
     /// Level in force in this process's sessions now (unchanged).
     pub in_force: SecurityLevel,
     pub kill_switch_active: bool,
-    /// Whether running sessions of this process took it.
+    /// Whether this session's policy tree took it.
     pub live: bool,
+    /// Whether other sessions of this process on the home took it.
+    pub other_sessions: bool,
     /// It applied now but could not be saved: it holds until this process
     /// ends, not across a restart.
     pub not_saved: Option<String>,
@@ -134,13 +136,14 @@ pub fn commit_human_revocation(
         && let Some(reason) = &committed.not_saved
     {
         return Err(LevelChangeError::NotSaved(format!(
-            "the security state could not be saved, so nothing changed: {reason}"
+            "the security state could not be saved ({reason}); grants held in this process were ended, nothing else changed"
         )));
     }
     Ok(RevocationReport {
         in_force: committed.level,
         kill_switch_active: committed.kill_switch_active,
-        live: live || committed.reached_other_trees,
+        live,
+        other_sessions: committed.reached_other_trees,
         not_saved: committed.not_saved,
     })
 }

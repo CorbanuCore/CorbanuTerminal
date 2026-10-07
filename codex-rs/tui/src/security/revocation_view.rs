@@ -503,10 +503,11 @@ fn outcome_line(choice: HumanRevocation, report: &RevocationReport) -> Result<St
         HumanRevocation::KillSwitchOff => "Kill switch off",
     };
     let level = profile_name(report.in_force);
-    let scope = if report.live {
-        "in this session and the others of this process"
-    } else {
-        "for the next start"
+    let scope = match (report.live, report.other_sessions) {
+        (true, true) => "in this session and the others of this process",
+        (true, false) => "in this session",
+        (false, true) => "in the other running sessions of this process",
+        (false, false) => "for the next start",
     };
     Ok(match &report.not_saved {
         None => format!("{what} {scope}. Saved: it holds after a restart. Level: {level}."),

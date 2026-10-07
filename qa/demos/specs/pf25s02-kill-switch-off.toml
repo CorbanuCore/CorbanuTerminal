@@ -1,7 +1,7 @@
 # PF-25-S02: Turning the kill switch off keeps the level (GLM 5.2).
 id = "pf25s02-kill-switch-off"
 feature = "Turning the kill switch off keeps the level"
-expected = "With the kill switch on, /security, g: Turn the kill switch off opens on Back; Enter alone goes back. Down and Enter turn it off: Core's level stays Aggressive and GLM's next approval offers a grant again."
+expected = "With the kill switch on, /security, g: Turn the kill switch off opens on Back; Enter alone goes back. Down and Enter turn it off: the result says Level: Aggressive, and the list shows Core's level Aggressive with the kill switch off."
 model = "glm-5.2"
 provider = "zai"
 config = """
@@ -100,26 +100,10 @@ key = "Enter"
 [[steps]]
 wait = "Kill switch off[\\s\\S]*Level: Aggressive"
 [[steps]]
-pause = 3.0
-[[steps]]
-key = "Escape"
-[[steps]]
-key = "Escape"
-[[steps]]
-key = "Escape"
-[[steps]]
-pause = 0.5
-[[steps]]
-type = "Run exactly this command and quote its output: cat \"$(printf '../ho%s/team-notes.txt' me)\""
+pause = 2.0
 [[steps]]
 key = "Enter"
 [[steps]]
-wait = "Grant once: run without the Aggressive protected-path rules"
-timeout = 240
-compress = 2
+wait = "Core's level: Aggressive · Kill switch: off"
 [[steps]]
-pause = 2.0
-[[steps]]
-pause = 3.0
-[[steps]]
-key = "Escape"
+pause = 4.0

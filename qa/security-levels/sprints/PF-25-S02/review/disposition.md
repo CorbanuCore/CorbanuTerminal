@@ -35,3 +35,13 @@ Round 2 (Opus 5.5 High, APPROVE WITH FIXES):
 4. Restart offered next to an error: fixed (`restartable` needs an Ok message and a save).
 5. `i` (PF-41-S01) now has the same keymap guard as `g`.
 6. A tall review starts at its end: known limit (the choices stay visible; panes are normally tall enough).
+
+Round 3 (Opus 5.5 High, **APPROVE**):
+
+1. "Nothing changed" after grants were cleared: the message now says the grants held in this process were ended and
+   nothing else changed.
+2. Lost-race test: added (`outcome_line` for a superseded kill switch; restart not offered).
+3. Wording when only other sessions took it: the report says whether this session and other sessions took it, and
+   the view names them.
+Open for product (unchanged): with `security_levels` off a saved kill switch cannot be turned off from the TUI; a
+tall review starts at its end.

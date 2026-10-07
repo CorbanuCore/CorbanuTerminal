@@ -143,6 +143,7 @@ fn security_revocation_kill_switch_applies_now_saves_and_releases_without_loweri
             in_force: SecurityLevel::Aggressive,
             kill_switch_active: true,
             live: true,
+            other_sessions: true,
             not_saved: None,
         }
     );
@@ -346,6 +347,9 @@ fn security_revocation_unsaved_but_taken_by_another_session_is_reported() {
     let (_view, other) = live_tree(&home, SecurityLevel::Aggressive);
     std::fs::create_dir(home.path().join("security_state.lock")).unwrap();
     let report = revoke(&home, None, HumanRevocation::KillSwitchOn).unwrap();
-    assert!(report.live && report.not_saved.is_some(), "{report:?}");
+    assert!(
+        !report.live && report.other_sessions && report.not_saved.is_some(),
+        "{report:?}"
+    );
     assert!(basis(&home, Some(other)).kill_switch_active);
 }

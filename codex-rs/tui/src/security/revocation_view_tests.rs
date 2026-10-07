@@ -304,3 +304,34 @@ fn pf_25_s02_only_this_view_revokes() {
         vec!["tui/src/security/revocation_view.rs".to_string()]
     );
 }
+
+/// A kill switch that lost a race to another session: authority was revoked,
+/// the switch is off, and "restart now" is not offered.
+#[test]
+fn pf_25_s02_lost_race_is_reported() {
+    let report = RevocationReport {
+        in_force: SecurityLevel::Aggressive,
+        kill_switch_active: false,
+        live: true,
+        other_sessions: false,
+        not_saved: None,
+    };
+    let message = outcome_line(HumanRevocation::KillSwitchOn, &report);
+    assert!(
+        matches!(&message, Err(text) if text.contains("another session changed the kill switch first")),
+        "{message:?}"
+    );
+    let message = outcome_line(
+        HumanRevocation::KillSwitchOn,
+        &RevocationReport {
+            kill_switch_active: true,
+            live: false,
+            other_sessions: true,
+            ..report
+        },
+    );
+    assert_eq!(
+        message,
+        Ok("Kill switch on in the other running sessions of this process. Saved: it holds after a restart. Level: Aggressive.".to_string())
+    );
+}
