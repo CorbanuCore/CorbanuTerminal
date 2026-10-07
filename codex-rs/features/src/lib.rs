@@ -157,6 +157,8 @@ pub enum Feature {
     IsolatedCredentialBroker,
     /// Launch agent commands without raw secrets and refuse launches the OS cannot contain (PF-27-S02).
     SecretlessAgentLaunch,
+    /// Run Claude panes under the secretless launch contract, in the OS sandbox and behind the bridge (#218).
+    ContainedExternalAgents,
     /// Gate managed secrets out of model, tool, transcript, trace and diagnostic output (PF-28-S01).
     SecretOutputGate,
     /// Enforce URL, DNS and redirect destination policy in the managed proxy (PF-33-S01).
@@ -883,6 +885,12 @@ pub const FEATURES: &[FeatureSpec] = &[
     FeatureSpec {
         id: Feature::SecretlessAgentLaunch,
         key: "secretless_agent_launch",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
+    },
+    FeatureSpec {
+        id: Feature::ContainedExternalAgents,
+        key: "contained_external_agents",
         stage: Stage::UnderDevelopment,
         default_enabled: false,
     },

@@ -37,6 +37,10 @@ pub(crate) async fn rewrite_mcp_tool_arguments_for_openai_files(
         return Ok(Some(arguments_value));
     };
     let auth = sess.services.auth_manager.auth().await;
+    // PF-23-S01: after untrusted content these host-side reads honour the
+    // same read denials as agent commands.
+    let read_policy =
+        crate::security::protected_surface::post_taint_read_policy(sess, &step_context.turn);
     let mut rewritten_arguments = arguments.clone();
 
     for (field_name, optional_fields) in openai_file_input_optional_fields {
@@ -45,6 +49,7 @@ pub(crate) async fn rewrite_mcp_tool_arguments_for_openai_files(
         };
         let Some(uploaded_value) = rewrite_argument_value_for_openai_files(
             step_context,
+            read_policy.as_ref(),
             &sess.services.openai_file_upload_client_pool,
             auth.as_ref(),
             field_name,
@@ -67,6 +72,7 @@ pub(crate) async fn rewrite_mcp_tool_arguments_for_openai_files(
 
 async fn rewrite_argument_value_for_openai_files(
     step_context: &StepContext,
+    read_policy: Option<&codex_protocol::permissions::FileSystemSandboxPolicy>,
     client_pool: &RouteAwareClientPool,
     auth: Option<&CodexAuth>,
     field_name: &str,
@@ -75,6 +81,7 @@ async fn rewrite_argument_value_for_openai_files(
 ) -> Result<Option<JsonValue>, String> {
     match value {
         JsonValue::String(file_path) => {
+            check_upload_readable(step_context, read_policy, file_path)?;
             let rewritten = build_uploaded_argument_value(
                 step_context,
                 client_pool,
@@ -93,6 +100,7 @@ async fn rewrite_argument_value_for_openai_files(
                 let Some(file_path) = item.as_str() else {
                     return Ok(None);
                 };
+                check_upload_readable(step_context, read_policy, file_path)?;
                 let rewritten = build_uploaded_argument_value(
                     step_context,
                     client_pool,
@@ -108,6 +116,44 @@ async fn rewrite_argument_value_for_openai_files(
             Ok(Some(JsonValue::Array(rewritten_values)))
         }
         _ => Ok(None),
+    }
+}
+
+/// PF-23-S01: after untrusted content, a file the host reads for upload
+/// must be readable under the same read denials as agent commands.
+fn check_upload_readable(
+    step_context: &StepContext,
+    read_policy: Option<&codex_protocol::permissions::FileSystemSandboxPolicy>,
+    file_path: &str,
+) -> Result<(), String> {
+    let Some(policy) = read_policy else {
+        return Ok(());
+    };
+    let Some(turn_environment) = step_context.environments.primary() else {
+        return Err("no primary turn environment is available".to_string());
+    };
+    #[allow(deprecated)]
+    let cwd = step_context.turn.cwd.clone();
+    // A path this host cannot check (a remote environment) is refused.
+    let readable = !turn_environment.environment.is_remote()
+        && turn_environment
+            .cwd()
+            .join(file_path)
+            .ok()
+            .and_then(|uri| uri.to_abs_path().ok())
+            .is_some_and(|path| {
+                crate::security::protected_surface::readable_under(
+                    policy,
+                    path.as_path(),
+                    cwd.as_path(),
+                )
+            });
+    if readable {
+        Ok(())
+    } else {
+        Err(format!(
+            "failed to upload `{file_path}`: reading this file is blocked after untrusted content entered the session"
+        ))
     }
 }
 
@@ -458,6 +504,7 @@ mod tests {
         let step_context = StepContext::for_test(Arc::new(turn_context));
         let rewritten = rewrite_argument_value_for_openai_files(
             &step_context,
+            /*read_policy*/ None,
             &session.services.openai_file_upload_client_pool,
             Some(&auth),
             "file",
@@ -571,6 +618,7 @@ mod tests {
         let step_context = StepContext::for_test(Arc::new(turn_context));
         let rewritten = rewrite_argument_value_for_openai_files(
             &step_context,
+            /*read_policy*/ None,
             &session.services.openai_file_upload_client_pool,
             Some(&auth),
             "files",

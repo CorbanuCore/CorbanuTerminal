@@ -281,6 +281,29 @@ impl ToolOrchestrator {
             }
         }
 
+        // PF-23-S01 slice 3: after untrusted content the sandbox itself denies
+        // credential and Corbanu home reads, whatever the command text says.
+        // What stays readable comes from the turn, never from the command's
+        // own (model-chosen) working folder.
+        #[allow(deprecated)]
+        let turn_cwd = turn_ctx.cwd.clone();
+        let denied = post_taint_read_denials(
+            tool_ctx,
+            &post_taint,
+            turn_cwd,
+            &materialized_workspace_roots,
+            permission_profile,
+            &permissions,
+        );
+        let (denied_exec_server_permissions, permissions) = match denied {
+            Some((exec_server, materialized)) => (Some(exec_server), materialized),
+            None => (None, permissions),
+        };
+        let permission_profile = denied_exec_server_permissions
+            .as_ref()
+            .unwrap_or(permission_profile);
+        let file_system_sandbox_policy = permissions.file_system_sandbox_policy();
+
         // 2) First attempt under the selected sandbox.
         let sandbox_override = sandbox_override_for_first_attempt(
             tool.sandbox_permissions(req),
@@ -668,6 +691,77 @@ where
         "post-taint protected action needs fresh human approval"
     );
     Some(crate::security::tainted_action::PostTaintAction { kind, state })
+}
+
+/// PF-23-S01 slice 3: the exec-server and materialized profiles with
+/// credential and Corbanu home reads denied, when this session holds content
+/// without standing under Moderate or Aggressive (`post_taint_state`).
+///
+/// Under Moderate a fresh human approval of this exact protected command is
+/// its grant and lifts the denials for this run; under Aggressive nothing
+/// does (narrow grants are PF-23-S02). An external sandbox cannot take the
+/// rules and keeps its own.
+fn post_taint_read_denials(
+    tool_ctx: &ToolCtx,
+    post_taint: &Option<crate::security::tainted_action::PostTaintAction>,
+    cwd: codex_utils_absolute_path::AbsolutePathBuf,
+    workspace_roots: &[codex_utils_absolute_path::AbsolutePathBuf],
+    exec_server: &codex_protocol::models::PermissionProfile,
+    materialized: &codex_protocol::models::PermissionProfile,
+) -> Option<(
+    codex_protocol::models::PermissionProfile,
+    codex_protocol::models::PermissionProfile,
+)> {
+    use crate::security::protected_surface::ReadDenials;
+    use crate::security::tainted_action::PolicyBinding;
+    let state = tool_ctx
+        .session
+        .services
+        .model_client()
+        .post_taint_state()
+        .filter(|state| state.taint_generation > 0)?;
+    if post_taint.is_some()
+        && matches!(
+            state.policy,
+            PolicyBinding::Bound {
+                level: codex_security_policy::SecurityLevel::Moderate,
+                ..
+            }
+        )
+    {
+        tracing::info!(
+            target: "codex_core::security::tainted_action",
+            taint_generation = state.taint_generation,
+            call_id = %tool_ctx.call_id,
+            "post-taint read denials lifted by the human approval of this command"
+        );
+        return None;
+    }
+    let denials = ReadDenials::for_turn(
+        tool_ctx.turn.config.codex_home.as_path(),
+        &cwd,
+        workspace_roots,
+        materialized,
+    );
+    let (Some(exec_server), Some(materialized)) =
+        (denials.apply(exec_server), denials.apply(materialized))
+    else {
+        tracing::warn!(
+            target: "codex_core::security::tainted_action",
+            call_id = %tool_ctx.call_id,
+            "post-taint read denials cannot be added to an external sandbox"
+        );
+        return None;
+    };
+    tracing::info!(
+        target: "codex_core::security::tainted_action",
+        taint_generation = state.taint_generation,
+        denied = denials.paths().count(),
+        skipped = denials.skipped.len(),
+        call_id = %tool_ctx.call_id,
+        "post-taint read denials applied"
+    );
+    Some((exec_server, materialized))
 }
 
 /// PF-30-S03: refuse when the taint or the effective policy changed while

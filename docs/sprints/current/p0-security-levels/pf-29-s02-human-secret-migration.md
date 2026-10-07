@@ -86,3 +86,9 @@ updated: 2026-10-06
 - [x] Commits, commands, outcomes, videos and review under `qa/security-levels/sprints/PF-29-S02/`.
 - [ ] PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
 - [ ] Done/Remaining reflect reality; completed record moved to the archive and plan/navigation updated.
+
+## Split with PF-23-S01 (2026-10-06)
+
+PF-23-S01 slice 3 (archived; `core/src/security/protected_surface/read_denials.rs`, `core/src/tools/orchestrator.rs`)
+denies, at runtime after untrusted content, reads of the Corbanu home and fixed `$HOME` credentials such as `~/.ssh`.
+PF-29 keeps launch inventory/isolation (S01) and moving secrets out of shell profiles and config (S02); no shared files.

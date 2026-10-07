@@ -60,6 +60,13 @@ impl LaunchPlan {
             if let Err(err) = std::fs::create_dir_all(codex_home.join("secrets")) {
                 tracing::warn!("could not create the vault store folder: {err}");
             }
+            // The profile keeps the registry read-only; it must exist before
+            // the first agent command so a command cannot create it first.
+            if let Some(registry) = super::nested::origin_registry_dir()
+                && let Err(err) = std::fs::create_dir_all(&registry)
+            {
+                tracing::warn!("could not create the Aggressive-homes registry: {err}");
+            }
             // Only after a preflight (its receipt exists, even if unreadable);
             // denying more paths never weakens Aggressive.
             let cwd = std::env::current_dir().ok();
@@ -169,6 +176,13 @@ impl LaunchPlan {
                 ));
             }
         }
+        crate::claude_panes::containment::install(
+            crate::claude_panes::containment::ContainmentSettings {
+                enabled: config.features.enabled(Feature::ContainedExternalAgents),
+                linux_sandbox_exe: config.codex_linux_sandbox_exe.clone(),
+                state_root: None,
+            },
+        );
         level::install_context(LevelContext {
             codex_home: self.codex_home,
             picker_enabled: config.features.enabled(Feature::SecurityLevels)

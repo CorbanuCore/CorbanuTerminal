@@ -20,6 +20,7 @@ use serde_json::Value;
 use std::path::Path;
 
 mod gate;
+mod read_denials;
 mod typed;
 
 pub(crate) use gate::Admission;
@@ -27,6 +28,10 @@ pub(crate) use gate::Route;
 pub(crate) use gate::admit;
 pub(crate) use gate::ask_human;
 pub(crate) use gate::check_dispatch;
+pub(crate) use read_denials::ReadDenials;
+pub(crate) use read_denials::post_taint_read_policy;
+pub(crate) use read_denials::protect_file_tool_context;
+pub(crate) use read_denials::readable_under;
 pub(crate) use typed::TypedWindow;
 pub(crate) use typed::lock as lock_typed_input;
 pub(crate) use typed::note_interrupt;

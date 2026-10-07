@@ -1,4 +1,7 @@
-//! Thread-owned, denial-only dispatch for unscreened stage-one memory input.
+//! Thread-owned dispatch for stage-one memory input. Unscreened rollout text
+//! reaches a provider only under Permissive; under Moderate with
+//! `source_envelopes` (PF-23-S01) only rollout text Core labelled from the
+//! source session's own rollout does. Aggressive denies.
 
 #[cfg(test)]
 #[path = "memory_stage_one_tests.rs"]
@@ -12,6 +15,8 @@ use crate::client::ModelClient;
 use crate::client_common::Prompt;
 use crate::client_common::ResponseEvent;
 use crate::responses_metadata::CodexResponsesMetadata;
+use crate::security::ingress::NativeIngress;
+use crate::security::ingress::OriginKey;
 use crate::session::SessionLoopTermination;
 use crate::session::session::Session;
 use codex_features::Feature;
@@ -27,8 +32,11 @@ use codex_otel::SessionTelemetry;
 use codex_protocol::ThreadId;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::error::CodexErr;
+use codex_protocol::models::ContentItem;
+use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ReasoningEffort;
+use codex_protocol::protocol::RolloutItem;
 use codex_protocol::protocol::TokenUsage;
 use codex_rollout_trace::InferenceTraceContext;
 use codex_security_policy::SecurityLevel;
@@ -37,6 +45,8 @@ use futures::StreamExt;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::Weak;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use thiserror::Error;
 
 /// Stable reasons that never contain rollout text or provider credentials.
@@ -56,6 +66,8 @@ pub enum StageOneMemoryDenial {
     KillSwitchActive,
     #[error("stage-one memory was cancelled")]
     Cancelled,
+    #[error("stage-one memory input is not tied to its source session")]
+    SourceLineageMismatch,
 }
 
 #[derive(Debug, Error)]
@@ -75,6 +87,75 @@ pub struct StageOneMemoryRequest<'a> {
     pub reasoning_summary: ReasoningSummary,
     pub service_tier: Option<String>,
     pub responses_metadata: &'a CodexResponsesMetadata,
+    /// Required whenever the effective level is above Permissive: the prompt
+    /// must be exactly this Core-built message.
+    pub labelled_input: Option<&'a LabelledStageOneInput>,
+}
+
+/// The stage-one message for one source session, built by Core from that
+/// session's own rollout file. Content without verified human, host or model
+/// standing is labelled untrusted data. Only Core constructs it.
+pub struct LabelledStageOneInput {
+    source_thread: ThreadId,
+    message: String,
+}
+
+impl LabelledStageOneInput {
+    pub fn source_thread(&self) -> ThreadId {
+        self.source_thread
+    }
+
+    /// The whole user message the request must carry.
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+}
+
+/// Fixed stage-one filter (mirrors the memories worker's Permissive one):
+/// developer messages and AGENTS.md / skill fragments are dropped; nothing is
+/// added or rewritten.
+fn keep_for_stage_one(item: &ResponseItem) -> Option<ResponseItem> {
+    let ResponseItem::Message {
+        id,
+        role,
+        content,
+        phase,
+        internal_chat_message_metadata_passthrough: metadata,
+    } = item
+    else {
+        return codex_rollout::should_persist_response_item_for_memories(item)
+            .then(|| item.clone());
+    };
+    if role == "developer" {
+        return None;
+    }
+    if role != "user" {
+        return Some(item.clone());
+    }
+    let marked = |text: &str, start: &str, end: &str| {
+        let text = text.trim();
+        text.get(..start.len())
+            .is_some_and(|head| head.eq_ignore_ascii_case(start))
+            && text
+                .get(text.len().saturating_sub(end.len())..)
+                .is_some_and(|tail| tail.eq_ignore_ascii_case(end))
+    };
+    let content: Vec<ContentItem> = content
+        .iter()
+        .filter(|part| {
+            !matches!(part, ContentItem::InputText { text }
+                if marked(text, "# AGENTS.md instructions", "</INSTRUCTIONS>")
+                    || marked(text, "<skill>", "</skill>"))
+        })
+        .cloned()
+        .collect();
+    (!content.is_empty()).then(|| ResponseItem::Message {
+        id: id.clone(),
+        role: role.clone(),
+        content,
+        phase: phase.clone(),
+        internal_chat_message_metadata_passthrough: metadata.clone(),
+    })
 }
 
 pub struct StageOneMemoryOutput {
@@ -92,6 +173,9 @@ pub struct StageOneMemoryClient {
     /// a second read would answer the same question again.
     accounting: crate::config::AccountingMode,
     accounting_provider_id: String,
+    codex_home: std::path::PathBuf,
+    /// The level was above Permissive when this client was admitted.
+    requires_labelled_input: bool,
 }
 
 pub(crate) struct StageOneMemoryBinding {
@@ -103,6 +187,9 @@ pub(crate) struct StageOneMemoryBinding {
     runtime_nonce: [u8; 16],
     session_id: String,
     denial: Mutex<Option<StageOneMemoryDenial>>,
+    /// PF-23-S01: the request in flight carries no labelled input, so only
+    /// Permissive may send it. Set by `extract` before any dispatch.
+    unlabelled_request: AtomicBool,
 }
 
 impl std::fmt::Debug for StageOneMemoryBinding {
@@ -129,15 +216,30 @@ impl StageOneMemoryBinding {
         if policy.kill_switch_active {
             return Err(StageOneMemoryDenial::KillSwitchActive);
         }
-        if self
-            .floor
-            .max(policy.config.security_level)
-            .max(policy.level)
-            != SecurityLevel::Permissive
-        {
-            return Err(StageOneMemoryDenial::ProtectedInputUnavailable);
+        self.admits(
+            self.floor
+                .max(policy.config.security_level)
+                .max(policy.level),
+            owner.services.model_client().source_envelopes_enabled(),
+        )
+    }
+
+    /// Permissive sends anything; Moderate with `source_envelopes` only a
+    /// labelled request; Aggressive nothing.
+    fn admits(
+        &self,
+        effective: SecurityLevel,
+        labelled_mode: bool,
+    ) -> Result<(), StageOneMemoryDenial> {
+        match effective {
+            SecurityLevel::Permissive => Ok(()),
+            SecurityLevel::Moderate
+                if labelled_mode && !self.unlabelled_request.load(Ordering::SeqCst) =>
+            {
+                Ok(())
+            }
+            _ => Err(StageOneMemoryDenial::ProtectedInputUnavailable),
         }
-        Ok(())
     }
 
     pub(crate) async fn check(&self) -> Result<(), StageOneMemoryDenial> {
@@ -197,10 +299,10 @@ impl StageOneMemoryBinding {
             if policy.kill_switch_active {
                 return Err(StageOneMemoryDenial::KillSwitchActive);
             }
-            if self.floor.max(policy.level) != SecurityLevel::Permissive {
-                return Err(StageOneMemoryDenial::ProtectedInputUnavailable);
-            }
-            Ok(())
+            self.admits(
+                self.floor.max(policy.level),
+                owner.services.model_client().source_envelopes_enabled(),
+            )
         })();
         if let Err(reason) = result {
             *denial = Some(reason);
@@ -254,7 +356,11 @@ impl StageOneMemoryClient {
             runtime_nonce: policy.runtime_nonce,
             session_id: policy.session_id,
             denial: Mutex::new(None),
+            unlabelled_request: AtomicBool::new(false),
         });
+        // The same level `evaluate` checks at dispatch.
+        let requires_labelled_input =
+            binding.floor.max(config.security_level).max(policy.level) != SecurityLevel::Permissive;
         binding.check().await?;
         let client = ModelClient::new(
             Some(Arc::clone(&session.services.auth_manager)),
@@ -277,7 +383,133 @@ impl StageOneMemoryClient {
             binding,
             accounting: config.accounting.clone(),
             accounting_provider_id: config.model_provider_id.clone(),
+            codex_home: config.codex_home.to_path_buf(),
+            requires_labelled_input,
         })
+    }
+
+    /// Whether requests must carry a [`LabelledStageOneInput`]. Checked again
+    /// at dispatch: a level raised later denies an unlabelled request.
+    pub fn requires_labelled_input(&self) -> bool {
+        self.requires_labelled_input
+    }
+
+    /// PF-23-S01: the stage-one message for one source session.
+    ///
+    /// Core reads the rollout itself. Its opening record must be
+    /// `source_thread`'s own session record; only origin records this home
+    /// signed restore standing, everything else (tool, MCP, agent, memory or
+    /// unattributed text) is labelled data. Whole items are dropped from the
+    /// middle until the text fits `token_limit`, so no label is ever cut.
+    /// The host supplies only its secret redaction and its prompt template.
+    pub async fn label_rollout(
+        &self,
+        source_thread: ThreadId,
+        rollout_path: &std::path::Path,
+        token_limit: usize,
+        redact: fn(String) -> String,
+        render: impl FnOnce(&str) -> anyhow::Result<String>,
+    ) -> Result<LabelledStageOneInput, StageOneMemoryError> {
+        let (items, _, _) = crate::RolloutRecorder::load_rollout_items(rollout_path)
+            .await
+            .map_err(|err| CodexErr::InvalidRequest(format!("failed to read rollout: {err}")))?;
+        let contents = self.label_items(source_thread, &items, token_limit, redact)?;
+        let message = render(&contents)
+            .map_err(|err| CodexErr::InvalidRequest(format!("stage-one prompt: {err}")))?;
+        if !message.contains(&contents) {
+            return Err(StageOneMemoryDenial::ProtectedInputUnavailable.into());
+        }
+        Ok(LabelledStageOneInput {
+            source_thread,
+            message,
+        })
+    }
+
+    fn label_items(
+        &self,
+        source_thread: ThreadId,
+        items: &[RolloutItem],
+        token_limit: usize,
+        redact: fn(String) -> String,
+    ) -> Result<String, StageOneMemoryError> {
+        match items.first() {
+            Some(RolloutItem::SessionMeta(line)) if line.meta.id == source_thread => {}
+            _ => return Err(StageOneMemoryDenial::SourceLineageMismatch.into()),
+        }
+        let mut ingress = NativeIngress::default();
+        ingress.set_labelled_mode(/*enabled*/ true);
+        // Without this home's key nothing restores: all of it stays labelled.
+        if let Ok(key) = OriginKey::load_or_create(&self.codex_home) {
+            ingress.set_origin_key(key);
+        }
+        // Redact before labelling, item by item: an item the redaction changes
+        // no longer matches its origin record and is labelled; one it breaks
+        // is dropped. Labels are never touched afterwards.
+        let conversation: Vec<ResponseItem> = items
+            .iter()
+            .filter_map(|item| match item {
+                RolloutItem::ResponseItem(item) => Some(item.clone()),
+                RolloutItem::InterAgentCommunication(communication) => {
+                    Some(communication.to_model_input_item())
+                }
+                _ => None,
+            })
+            .filter_map(|item| {
+                let json = serde_json::to_string(&item).ok()?;
+                let redacted = redact(json.clone());
+                if redacted == json {
+                    Some(item)
+                } else {
+                    serde_json::from_str(&redacted).ok()
+                }
+            })
+            .collect();
+        ingress.note_restored_history(
+            &conversation,
+            items.iter().filter_map(|item| match item {
+                RolloutItem::SourceOrigin(record) => Some(record),
+                _ => None,
+            }),
+        );
+        let mut parts: Vec<String> = ingress
+            .project_labelled(&conversation)
+            .iter()
+            .filter_map(keep_for_stage_one)
+            .filter_map(|item| serde_json::to_string(&item).ok())
+            .collect();
+        // Drop whole items from the middle (keeping head and tail, as the
+        // Permissive text cut does) until the text fits: one pass to size,
+        // then a final check against the same truncation rule.
+        let policy = codex_utils_output_truncation::TruncationPolicy::Tokens(token_limit);
+        let sizes: Vec<usize> = parts.iter().map(|part| part.len() + 1).collect();
+        let mut prefix = vec![0];
+        for size in &sizes {
+            prefix.push(prefix.last().copied().unwrap_or_default() + size);
+        }
+        let total = prefix.last().copied().unwrap_or_default();
+        // Fewest middle items to drop: keep `head` from the front and `tail`
+        // from the back.
+        let count = parts.len();
+        let dropped = (0..=count)
+            .find(|dropped| {
+                let kept = count - dropped;
+                let tail = kept / 2;
+                let head = kept - tail;
+                prefix[head] + (total - prefix[count - tail]) < policy.byte_budget()
+            })
+            .unwrap_or(count);
+        let kept = count - dropped;
+        let head = kept - kept / 2;
+        parts.drain(head..head + dropped);
+        loop {
+            let contents = format!("[{}]", parts.join(","));
+            if parts.is_empty()
+                || codex_utils_output_truncation::truncate_text(&contents, policy) == contents
+            {
+                return Ok(contents);
+            }
+            parts.remove(parts.len() / 2);
+        }
     }
 
     pub async fn check_completion(&self) -> Result<(), StageOneMemoryError> {
@@ -332,6 +564,22 @@ impl StageOneMemoryClient {
         &mut self,
         request: StageOneMemoryRequest<'_>,
     ) -> Result<StageOneMemoryOutput, StageOneMemoryError> {
+        // The prompt must be exactly the Core-built message (one user
+        // message). Anything else is an unlabelled request.
+        let labelled = request.labelled_input.is_some_and(|input| {
+            matches!(
+                request.prompt.input.as_slice(),
+                [ResponseItem::Message { role, content, .. }]
+                    if role == "user"
+                        && matches!(
+                            content.as_slice(),
+                            [ContentItem::InputText { text }] if text == input.message()
+                        )
+            )
+        });
+        self.binding
+            .unlabelled_request
+            .store(!labelled, Ordering::SeqCst);
         self.check_completion().await?;
         let mut session = self.client.new_session();
         // Extraction is a model request the operator paid for, on a session of

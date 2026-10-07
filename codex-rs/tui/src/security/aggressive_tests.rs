@@ -11,8 +11,16 @@ use crate::legacy_core::config::ConfigBuilder;
 use codex_config::LoaderOverrides;
 
 async fn load(home: &Path, cwd: &Path, user_config: &str) -> Config {
+    load_with(home, cwd, user_config, base_overrides(home, home)).await
+}
+
+async fn load_with(
+    home: &Path,
+    cwd: &Path,
+    user_config: &str,
+    mut cli: Vec<(String, toml::Value)>,
+) -> Config {
     std::fs::write(home.join("config.toml"), user_config).unwrap();
-    let mut cli = base_overrides(home, home);
     cli.extend(env_overrides(&ShellEnvironmentPolicyToml::default()));
     let mut harness = ConfigOverrides {
         cwd: Some(cwd.to_path_buf()),
@@ -207,6 +215,142 @@ async fn codex_home_inside_the_workspace_stays_read_only() {
             config.codex_home.as_path()
         ),
         Vec::<String>::new()
+    );
+}
+
+/// A workspace that is the account home cannot delete the Aggressive-homes
+/// registry's entries, and a profile that would let it fails verification.
+#[tokio::test]
+async fn registry_inside_the_workspace_stays_read_only() {
+    let account = tempfile::tempdir().unwrap();
+    let cwd = account.path();
+    let registry = cwd.join("Library/Application Support/Corbanu/aggressive-homes");
+    std::fs::create_dir_all(&registry).unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let entry = registry.join("entry");
+    let cli = base_overrides_with_registry(home.path(), home.path(), Some(&registry));
+
+    let config = load_with(home.path(), cwd, "", cli.clone()).await;
+    let file_system = config.permissions.file_system_sandbox_policy();
+    assert!(!file_system.can_write_path_with_cwd(&entry, cwd));
+    assert!(!file_system.can_write_path_with_cwd(&registry, cwd));
+    assert!(file_system.can_read_path_with_cwd(&entry, cwd));
+    assert!(file_system.can_write_path_with_cwd(&cwd.join("other"), cwd));
+    let writable_roots = file_system.get_writable_roots_with_cwd(cwd);
+    assert!(
+        writable_roots.iter().any(|root| root
+            .read_only_subpaths
+            .iter()
+            .any(|path| path.as_path() == registry)),
+        "{writable_roots:?}"
+    );
+    let origin = config.codex_home.to_path_buf();
+    assert_eq!(
+        verify_with_registry(
+            &config,
+            /*rules_present*/ true,
+            &origin,
+            Some(&registry)
+        ),
+        Vec::<String>::new()
+    );
+
+    // Without the entry, verification names the registry.
+    let registry_key = registry.to_str().unwrap().to_string();
+    let mut without = cli;
+    for (key, value) in &mut without {
+        if key == &format!("permissions.{PROFILE_ID}") {
+            value
+                .get_mut("filesystem")
+                .and_then(toml::Value::as_table_mut)
+                .unwrap()
+                .remove(&registry_key)
+                .unwrap();
+        }
+    }
+    let config = load_with(home.path(), cwd, "", without).await;
+    assert_eq!(
+        verify_with_registry(
+            &config,
+            /*rules_present*/ true,
+            &origin,
+            Some(&registry)
+        ),
+        vec![format!(
+            "Sandbox: the Aggressive-homes registry {} is writable",
+            registry.display()
+        )]
+    );
+}
+
+/// A registry the workspace contains must exist (Linux would put a
+/// placeholder there), and a path the profile cannot express is reported.
+#[tokio::test]
+async fn missing_or_unexpressible_registry_fails_verification() {
+    let account = tempfile::tempdir().unwrap();
+    let cwd = account.path();
+    let home = tempfile::tempdir().unwrap();
+    let missing = cwd.join("Library/Application Support/Corbanu/aggressive-homes");
+    let config = load_with(
+        home.path(),
+        cwd,
+        "",
+        base_overrides_with_registry(home.path(), home.path(), Some(&missing)),
+    )
+    .await;
+    let origin = config.codex_home.to_path_buf();
+    assert_eq!(
+        verify_with_registry(
+            &config,
+            /*rules_present*/ true,
+            &origin,
+            Some(&missing)
+        ),
+        vec![format!(
+            "Sandbox: the Aggressive-homes registry {} is missing",
+            missing.display()
+        )]
+    );
+
+    let globbed = cwd.join("glob[1]/aggressive-homes");
+    std::fs::create_dir_all(&globbed).unwrap();
+    let cli = base_overrides_with_registry(home.path(), home.path(), Some(&globbed));
+    assert!(
+        !cli.iter()
+            .any(|(_, value)| value.to_string().contains("glob[1]")),
+        "a glob path must not become a profile key"
+    );
+    let config = load_with(home.path(), cwd, "", cli).await;
+    assert_eq!(
+        verify_with_registry(
+            &config,
+            /*rules_present*/ true,
+            &origin,
+            Some(&globbed)
+        ),
+        vec![format!(
+            "Sandbox: the Aggressive-homes registry path {} cannot be written into the profile (not UTF-8, or it contains glob characters)",
+            globbed.display()
+        )]
+    );
+}
+
+/// A nested `corbanu exec` held to Aggressive protects the registry too.
+#[test]
+fn nested_exec_overrides_keep_the_registry_read_only() {
+    let home = tempfile::tempdir().unwrap();
+    let registry = home.path().join("registry");
+    let cli = base_overrides_with_registry(home.path(), home.path(), Some(&registry));
+    let profile = cli
+        .iter()
+        .find(|(key, _)| key == &format!("permissions.{PROFILE_ID}"))
+        .map(|(_, value)| value.clone())
+        .unwrap();
+    assert_eq!(
+        profile
+            .get("filesystem")
+            .and_then(|filesystem| filesystem.get(registry.to_str().unwrap())),
+        Some(&toml::Value::String("read".to_string()))
     );
 }
 

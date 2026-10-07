@@ -389,8 +389,11 @@ async fn handle_structured_edit(
         ));
     };
     let fs = turn_environment.environment.get_filesystem();
-    let sandbox =
-        turn.file_system_sandbox_context(/*additional_permissions*/ None, &turn_environment);
+    let sandbox = crate::security::protected_surface::protect_file_tool_context(
+        &session,
+        &turn,
+        turn.file_system_sandbox_context(/*additional_permissions*/ None, &turn_environment),
+    );
     let path_uri = turn_environment
         .cwd()
         .join(&args.path)
@@ -519,8 +522,11 @@ async fn handle_structured_write(
         ));
     };
     let fs = turn_environment.environment.get_filesystem();
-    let sandbox =
-        turn.file_system_sandbox_context(/*additional_permissions*/ None, &turn_environment);
+    let sandbox = crate::security::protected_surface::protect_file_tool_context(
+        &session,
+        &turn,
+        turn.file_system_sandbox_context(/*additional_permissions*/ None, &turn_environment),
+    );
     let path_uri = turn_environment
         .cwd()
         .join(&args.path)

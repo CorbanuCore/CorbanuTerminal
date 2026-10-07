@@ -10,6 +10,7 @@
 //! - Disk persistence and restoration ([`persistence`])
 //! - Turn types (output, progress, audit, command plan) ([`turn_types`])
 //! - Command plan building and vault integration ([`command_plan`])
+//! - Contained launches under the secretless launch contract ([`containment`])
 //! - Turn execution and process management ([`execution`])
 //! - Local HTTP bridge for provider routing ([`bridge`], [`bridge_translate`])
 //! - Output parsing from stream-json ([`output_parse`])
@@ -21,6 +22,7 @@ pub(crate) mod app_integration;
 pub(crate) mod bridge;
 pub(crate) mod bridge_translate;
 pub(crate) mod command_plan;
+pub(crate) mod containment;
 pub(crate) mod execution;
 pub(crate) mod output_parse;
 pub(crate) mod pane;
