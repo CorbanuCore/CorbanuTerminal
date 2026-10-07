@@ -76,6 +76,18 @@ fn main() -> anyhow::Result<()> {
             disable_plugin_startup_tasks_for_tests,
             remote_control,
         } = AppServerArgs::parse();
+        // An agent command under security level Aggressive must not start
+        // this binary to get around `corbanu`'s nested-launch check.
+        if let Some(message) = codex_security_level::nested::standalone_nested_refusal(
+            "codex-app-server",
+            codex_security_level::nested::NestedKind::Host,
+        ) {
+            #[allow(clippy::print_stderr)]
+            {
+                eprintln!("{message}");
+            }
+            std::process::exit(1);
+        }
         let loader_overrides = if disable_managed_config_from_debug_env() {
             LoaderOverrides::without_managed_config_for_tests()
         } else {

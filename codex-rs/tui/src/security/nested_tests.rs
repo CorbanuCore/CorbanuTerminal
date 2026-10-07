@@ -1,5 +1,8 @@
+use std::path::PathBuf;
+
 use pretty_assertions::assert_eq;
 
+use super::level::NestedAgents;
 use super::*;
 
 fn home_with(level: ChosenLevel, nested: NestedAgents) -> tempfile::TempDir {
