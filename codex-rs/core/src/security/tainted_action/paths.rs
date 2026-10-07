@@ -28,6 +28,36 @@ const CREDENTIAL_FILES: &[&str] = &[
     "id_ed25519",
     "id_dsa",
 ];
+/// Files in the user's home that run code or set policy in later sessions,
+/// outside any sandbox (PF-23-S02). The sandbox makes them read-only.
+pub(crate) const USER_PERSISTENCE: &[&str] = &[
+    ".zshrc",
+    ".zshenv",
+    ".zprofile",
+    ".zlogin",
+    ".zlogout",
+    ".bashrc",
+    ".bash_profile",
+    ".bash_login",
+    ".bash_logout",
+    ".profile",
+    ".kshrc",
+    ".cshrc",
+    ".tcshrc",
+    ".config/fish",
+    ".gitconfig",
+    ".config/git",
+    ".claude",
+    ".config/autostart",
+    ".config/systemd",
+    ".config/environment.d",
+    ".local/bin",
+    "Library/LaunchAgents",
+];
+/// The same inside a workspace: git runs hooks and reads config outside the
+/// sandbox; project `.codex` and `.agents` set agent policy.
+pub(crate) const WORKSPACE_PERSISTENCE: &[&str] =
+    &[".git/hooks", ".git/config", ".codex", ".agents"];
 /// Corbanu home folder names (besides the configured `CODEX_HOME`).
 const HOME_SEGMENTS: &[&str] = &[".corbanu", ".codex", ".pfterminal"];
 /// Uncached filesystem lookups one classification may make. Past it the
@@ -181,6 +211,38 @@ impl Homes {
             self.canonical(path)
                 .and_then(|canonical| self.classify_path(&canonical))
         })
+    }
+
+    /// Whether writing `path` changes what runs later outside the sandbox
+    /// (PF-23-S02): a user persistence file, or a workspace's git hooks,
+    /// git config, `.codex` or `.agents`, also through its canonical form.
+    pub(super) fn is_persistence(&self, path: &str) -> bool {
+        let lexical = normalize_path(&path.to_lowercase());
+        let canonical = self.canonical(path);
+        [Some(lexical), canonical]
+            .into_iter()
+            .flatten()
+            .any(|path| {
+                let segments = segments(&path);
+                let starts_with = |rest: &[&str], entry: &str| {
+                    let entry: Vec<String> = entry.split('/').map(str::to_lowercase).collect();
+                    rest.len() >= entry.len()
+                        && rest.iter().zip(&entry).all(|(got, want)| got == want)
+                };
+                let in_user_home = self.user_homes.iter().any(|home| {
+                    below(&segments, home).is_some_and(|rest| {
+                        USER_PERSISTENCE
+                            .iter()
+                            .any(|entry| starts_with(rest, entry))
+                    })
+                });
+                in_user_home
+                    || (0..segments.len()).any(|start| {
+                        WORKSPACE_PERSISTENCE
+                            .iter()
+                            .any(|entry| starts_with(&segments[start..], entry))
+                    })
+            })
     }
 
     /// Whether `path` (globs allowed) is the user's home, or a folder holding

@@ -220,3 +220,112 @@ async fn pf_23_s01_upload_reads_follow_the_denials_after_taint() {
     assert!(!readable_under(&policy, &link, cwd.as_path()));
     assert!(readable_under(&policy, &plain, cwd.as_path()));
 }
+
+/// PF-23-S02: files that run code later become read-only wherever the
+/// command could write them; ordinary files stay writable.
+#[test]
+fn pf_23_s02_persistence_files_become_read_only() {
+    let fx = fixture();
+    let cwd = fx.user_home.join("project");
+    std::fs::create_dir_all(cwd.join(".git/hooks")).unwrap();
+    let denials = ReadDenials::collect(&fx.codex_home, Some(&fx.user_home), None, &[abs(&cwd)]);
+    let policy = denials
+        .apply(&PermissionProfile::Disabled)
+        .unwrap()
+        .file_system_sandbox_policy();
+    let writable = |path: &Path| policy.can_write_path_with_cwd(path, &cwd);
+    let readable = |path: &Path| policy.can_read_path_with_cwd(path, &cwd);
+    for protected in [
+        fx.user_home.join(".zshrc"),
+        fx.user_home.join(".config/fish/config.fish"),
+        fx.user_home.join("Library/LaunchAgents/x.plist"),
+        fx.user_home.join(".local/bin/corbanu"),
+        fx.user_home.join(".claude/settings.json"),
+        cwd.join(".git/hooks/pre-commit"),
+        cwd.join(".git/config"),
+        cwd.join(".codex/config.toml"),
+        fx.codex_home.join("skills/x/SKILL.md"),
+        fx.codex_home.join("shell_snapshots/s.sh"),
+        fx.codex_home.join("tmp/arg0/apply_patch"),
+    ] {
+        assert!(!writable(&protected), "{}", protected.display());
+        assert!(readable(&protected), "{}", protected.display());
+    }
+    for open in [
+        cwd.join("src/main.rs"),
+        cwd.join(".git/objects/ab"),
+        fx.user_home.join("notes.txt"),
+        fx.codex_home.join("worktrees/w/file"),
+    ] {
+        assert!(writable(&open), "{}", open.display());
+    }
+    // A credential stays unreadable inside a read-only folder.
+    assert!(!readable(&fx.user_home.join(".claude/.credentials.json")));
+}
+
+/// PF-23-S02: the rules only narrow. A read-only entry never makes a path
+/// readable that the profile did not let the command read, and every
+/// denial of the profile itself stays.
+#[test]
+fn pf_23_s02_rules_never_widen_and_keep_existing_denials() {
+    let fx = fixture();
+    let cwd = fx.user_home.join("project");
+    let secret = fx.user_home.join("private");
+    let entry = |path: &Path, access| {
+        FileSystemSandboxEntry::new(FileSystemPath::Path { path: abs(path) }, access)
+    };
+    let base = PermissionProfile::from_runtime_permissions(
+        &FileSystemSandboxPolicy::restricted(vec![
+            entry(&cwd, FileSystemAccessMode::Write),
+            entry(&secret, FileSystemAccessMode::Deny),
+        ]),
+        NetworkSandboxPolicy::Restricted,
+    );
+    let denials = ReadDenials::collect(&fx.codex_home, Some(&fx.user_home), None, &[abs(&cwd)]);
+    let policy = denials.apply(&base).unwrap().file_system_sandbox_policy();
+    for unreadable in [fx.user_home.join(".zshrc"), fx.codex_home.join("skills")] {
+        assert!(!policy.can_read_path_with_cwd(&unreadable, &cwd));
+    }
+    assert!(!policy.can_read_path_with_cwd(&secret, &cwd));
+    assert!(policy.can_write_path_with_cwd(&cwd.join("a.txt"), &cwd));
+    assert!(!policy.can_write_path_with_cwd(&cwd.join(".codex/config.toml"), &cwd));
+}
+
+/// PF-23-S02: under Aggressive the rules apply from the start of the
+/// session, before any untrusted content; under Moderate they wait for it.
+#[tokio::test]
+async fn pf_23_s02_aggressive_applies_the_rules_from_the_start() {
+    let (session, turn) = crate::session::tests::make_session_and_context().await;
+    let environment = turn
+        .environments
+        .primary()
+        .expect("a primary environment")
+        .clone();
+    let auth = turn.config.codex_home.join("auth.json");
+    #[allow(deprecated)]
+    let cwd = turn.cwd.clone();
+    let readable = |context: codex_file_system::FileSystemSandboxContext| {
+        PermissionProfile::try_from(context.permissions)
+            .unwrap()
+            .file_system_sandbox_policy()
+            .can_read_path_with_cwd(auth.as_path(), cwd.as_path())
+    };
+    for (level, protected) in [
+        (codex_security_policy::SecurityLevel::Moderate, false),
+        (codex_security_policy::SecurityLevel::Aggressive, true),
+    ] {
+        let client = (*session.services.model_client())
+            .clone()
+            .with_ingress_level(level)
+            .with_source_envelopes(true);
+        session.services.replace_model_client(client);
+        let context = turn.file_system_sandbox_context(None, &environment);
+        let protected_context = protect_file_tool_context(&session, &turn, context.clone());
+        assert_eq!(readable(protected_context), !protected, "{level:?}");
+        assert_eq!(
+            post_taint_read_policy(&session, &turn).is_some(),
+            protected,
+            "{level:?}"
+        );
+    }
+}

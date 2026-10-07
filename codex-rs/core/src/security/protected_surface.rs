@@ -19,6 +19,7 @@ use codex_utils_path_uri::PathUri;
 use serde_json::Value;
 use std::path::Path;
 
+pub(crate) mod confined;
 mod gate;
 mod read_denials;
 mod typed;

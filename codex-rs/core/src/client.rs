@@ -1119,9 +1119,13 @@ impl ModelClient {
                 Err(_) => PolicyBinding::Unavailable,
             },
         };
+        let level = self
+            .source_admission_level()
+            .unwrap_or(codex_security_policy::SecurityLevel::Aggressive);
         Some(crate::security::tainted_action::PostTaintState {
             taint_generation,
             policy,
+            level,
         })
     }
 

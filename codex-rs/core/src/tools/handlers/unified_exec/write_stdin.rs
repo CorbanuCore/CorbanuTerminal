@@ -1,13 +1,17 @@
 use crate::function_tool::FunctionCallError;
+use crate::security::aggressive;
 use crate::security::protected_surface::Admission;
 use crate::security::protected_surface::Route;
 use crate::security::protected_surface::TypedWindow;
 use crate::security::protected_surface::admit;
 use crate::security::protected_surface::ask_human;
 use crate::security::protected_surface::classify_typed_input;
+use crate::security::protected_surface::confined;
 use crate::security::protected_surface::is_interrupt;
 use crate::security::protected_surface::lock_typed_input;
 use crate::security::protected_surface::note_interrupt;
+use crate::security::tainted_action::PolicyBinding;
+use crate::security::tainted_action::PostTaintState;
 use crate::security::tainted_action::ProtectedActionKind;
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
@@ -21,6 +25,7 @@ use crate::tools::registry::PreToolUsePayload;
 use crate::tools::registry::ToolExecutor;
 use crate::unified_exec::WriteStdinInteractionEvent;
 use crate::unified_exec::WriteStdinRequest;
+use codex_security_policy::SecurityLevel;
 use codex_tools::ToolName;
 use codex_tools::ToolSpec;
 use serde::Deserialize;
@@ -150,17 +155,45 @@ async fn post_taint_check(
         // No such running process: the write fails on its own.
         return Ok(());
     };
-    let tainted = session
-        .services
-        .model_client()
-        .post_taint_state()
+    let state = session.services.model_client().post_taint_state();
+    let tainted = state
+        .as_ref()
         .is_some_and(|state| state.taint_generation > 0);
+    // PF-23-S02: a process keeps the sandbox it started with. One started
+    // without the protected-path rules (before untrusted content, or with
+    // them lifted) can still read credentials: typing into it needs the
+    // human once under Moderate, and a grant under Aggressive.
+    let thread = session.thread_id();
+    let mut ask_unconfined = false;
+    if let Some(state) = state.as_ref().filter(|_| tainted)
+        && !confined::is_confined(thread, &process.item_id)
+    {
+        if state.level == SecurityLevel::Aggressive {
+            let granted = aggressive::admit(
+                thread,
+                state,
+                aggressive::Surface::UnconfinedProcess,
+                &aggressive::process_operation(&process.item_id),
+                aggressive::now_unix_seconds(),
+            );
+            if granted.is_none() {
+                return Err(FunctionCallError::RespondToModel(format!(
+                    "Not run: this is {} under security level Aggressive, which needs a grant \
+                     from the human. Start a new process instead; it gets the protected rules.",
+                    ProtectedActionKind::UnconfinedProcess.describe()
+                )));
+            }
+        } else {
+            ask_unconfined = !confined::is_allowed(thread, &process.item_id, policy_epoch(state));
+        }
+    }
     // Judged with what was typed since untrusted content arrived, so a
     // command split across calls is seen whole.
     let window = TypedWindow::open(session.thread_id(), args.session_id, &args.chars, &live);
     let codex_home = turn.config.codex_home.to_path_buf();
     let (texts, unreadable) = (window.texts(), window.unreadable());
     let command = process.command.clone();
+    let item_id = process.item_id.clone();
     let admission = admit(
         session,
         turn.approval_policy.value(),
@@ -174,6 +207,7 @@ async fn post_taint_check(
             texts
                 .iter()
                 .filter_map(|text| classify_typed_input(&command, text, &process.cwd, &codex_home))
+                .chain(ask_unconfined.then_some(ProtectedActionKind::UnconfinedProcess))
                 .reduce(ProtectedActionKind::strongest)
         },
     )
@@ -215,8 +249,19 @@ async fn post_taint_check(
     check
         .resolve(session, approved)
         .map_err(FunctionCallError::RespondToModel)?;
+    if ask_unconfined && let Some(state) = &state {
+        confined::note_allowed(thread, &item_id, policy_epoch(state));
+    }
     window.clear();
     Ok(())
+}
+
+/// The policy epoch an allowance for an unconfined process is bound to.
+fn policy_epoch(state: &PostTaintState) -> u64 {
+    match state.policy {
+        PolicyBinding::Bound { epoch, .. } => epoch,
+        PolicyBinding::Unbound | PolicyBinding::Unavailable => u64::MAX,
+    }
 }
 
 /// Characters of typed text shown from each end in the approval question.

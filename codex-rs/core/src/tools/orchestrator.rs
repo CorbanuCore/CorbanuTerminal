@@ -16,6 +16,7 @@ use crate::tools::network_approval::NetworkApprovalMode;
 use crate::tools::network_approval::begin_network_approval;
 use crate::tools::network_approval::finish_deferred_network_approval;
 use crate::tools::network_approval::finish_immediate_network_approval;
+use crate::tools::sandboxing::ApprovalAction;
 use crate::tools::sandboxing::ApprovalCtx;
 use crate::tools::sandboxing::ExecApprovalRequirement;
 use crate::tools::sandboxing::SandboxAttempt;
@@ -287,9 +288,11 @@ impl ToolOrchestrator {
         // own (model-chosen) working folder.
         #[allow(deprecated)]
         let turn_cwd = turn_ctx.cwd.clone();
+        let grant_operation = aggressive_grant_operation(tool, req, tool_ctx);
         let denied = post_taint_read_denials(
             tool_ctx,
             &post_taint,
+            grant_operation.as_deref(),
             turn_cwd,
             &materialized_workspace_roots,
             permission_profile,
@@ -693,17 +696,71 @@ where
     Some(crate::security::tainted_action::PostTaintAction { kind, state })
 }
 
-/// PF-23-S01 slice 3: the exec-server and materialized profiles with
-/// credential and Corbanu home reads denied, when this session holds content
-/// without standing under Moderate or Aggressive (`post_taint_state`).
+/// PF-23-S02: under Aggressive, the grant operation naming this exact
+/// command or patch in its folder. `None` under any other level.
+fn aggressive_grant_operation<Rq, Out, T>(tool: &T, req: &Rq, tool_ctx: &ToolCtx) -> Option<String>
+where
+    T: ToolRuntime<Rq, Out>,
+{
+    use crate::security::aggressive::command_operation;
+    tool_ctx
+        .session
+        .services
+        .model_client()
+        .post_taint_state()
+        .filter(|state| state.level == codex_security_policy::SecurityLevel::Aggressive)?;
+    let ctx = ApprovalCtx {
+        session: &tool_ctx.session,
+        turn: &tool_ctx.turn,
+        call_id: &tool_ctx.call_id,
+        retry_reason: None,
+        network_approval_context: None,
+        fresh_human_authority: true,
+    };
+    Some(match tool.approval_action(req, &ctx).ok()? {
+        ApprovalAction::Shell {
+            command,
+            cwd,
+            sandbox_permissions,
+            additional_permissions,
+            ..
+        }
+        | ApprovalAction::ExecCommand {
+            command,
+            cwd,
+            sandbox_permissions,
+            additional_permissions,
+            ..
+        } => {
+            let cwd = cwd.to_string();
+            let permissions = format!("{sandbox_permissions:?} {additional_permissions:?}");
+            let mut parts = vec!["command", cwd.as_str(), permissions.as_str()];
+            parts.extend(command.iter().map(String::as_str));
+            command_operation(&parts)
+        }
+        ApprovalAction::ApplyPatch { cwd, patch, .. } => {
+            command_operation(&["patch", &cwd.to_string(), &patch])
+        }
+    })
+}
+
+/// PF-23-S01 slice 3 / PF-23-S02: the exec-server and materialized profiles
+/// with credential and Corbanu home reads denied and persistence files made
+/// read-only, once this session holds content without standing under
+/// Moderate or Aggressive, and under Aggressive from the start
+/// (`PostTaintState::protected_paths_apply`).
 ///
 /// Under Moderate a fresh human approval of this exact protected command is
-/// its grant and lifts the denials for this run; under Aggressive nothing
-/// does (narrow grants are PF-23-S02). An external sandbox cannot take the
-/// rules and keeps its own.
+/// its grant and lifts the rules for this run. Under Aggressive an approval
+/// never does; only a matching human grant for this exact command
+/// (`security::aggressive`). Lifting only leaves these rules out: every
+/// denial of the profile itself stays. An external sandbox cannot take the
+/// rules and keeps its own. Each run is recorded as confined or not, for
+/// typing into the process later.
 fn post_taint_read_denials(
     tool_ctx: &ToolCtx,
     post_taint: &Option<crate::security::tainted_action::PostTaintAction>,
+    grant_operation: Option<&str>,
     cwd: codex_utils_absolute_path::AbsolutePathBuf,
     workspace_roots: &[codex_utils_absolute_path::AbsolutePathBuf],
     exec_server: &codex_protocol::models::PermissionProfile,
@@ -712,19 +769,31 @@ fn post_taint_read_denials(
     codex_protocol::models::PermissionProfile,
     codex_protocol::models::PermissionProfile,
 )> {
+    use crate::security::aggressive;
     use crate::security::protected_surface::ReadDenials;
+    use crate::security::protected_surface::confined;
     use crate::security::tainted_action::PolicyBinding;
-    let state = tool_ctx
+    use codex_security_policy::SecurityLevel;
+    let thread = tool_ctx.session.thread_id();
+    let unconfined = || {
+        confined::note_unconfined(thread, &tool_ctx.call_id);
+        None
+    };
+    let Some(state) = tool_ctx
         .session
         .services
         .model_client()
         .post_taint_state()
-        .filter(|state| state.taint_generation > 0)?;
+        .filter(crate::security::tainted_action::PostTaintState::protected_paths_apply)
+    else {
+        return unconfined();
+    };
     if post_taint.is_some()
+        && state.level == SecurityLevel::Moderate
         && matches!(
             state.policy,
             PolicyBinding::Bound {
-                level: codex_security_policy::SecurityLevel::Moderate,
+                level: SecurityLevel::Moderate,
                 ..
             }
         )
@@ -735,7 +804,24 @@ fn post_taint_read_denials(
             call_id = %tool_ctx.call_id,
             "post-taint read denials lifted by the human approval of this command"
         );
-        return None;
+        return unconfined();
+    }
+    if let Some(operation) = grant_operation
+        && let Some(grant_id) = aggressive::admit(
+            thread,
+            &state,
+            aggressive::Surface::UnprotectedCommand,
+            operation,
+            aggressive::now_unix_seconds(),
+        )
+    {
+        tracing::info!(
+            target: "codex_core::security::tainted_action",
+            grant_id = grant_id.as_str(),
+            call_id = %tool_ctx.call_id,
+            "protected-path rules lifted by an Aggressive grant for this command"
+        );
+        return unconfined();
     }
     let denials = ReadDenials::for_turn(
         tool_ctx.turn.config.codex_home.as_path(),
@@ -751,12 +837,14 @@ fn post_taint_read_denials(
             call_id = %tool_ctx.call_id,
             "post-taint read denials cannot be added to an external sandbox"
         );
-        return None;
+        return unconfined();
     };
+    confined::note_confined(thread, &tool_ctx.call_id);
     tracing::info!(
         target: "codex_core::security::tainted_action",
         taint_generation = state.taint_generation,
         denied = denials.paths().count(),
+        read_only = denials.read_only_paths().count(),
         skipped = denials.skipped.len(),
         call_id = %tool_ctx.call_id,
         "post-taint read denials applied"

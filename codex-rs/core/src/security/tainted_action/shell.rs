@@ -32,6 +32,8 @@ pub(super) struct SimpleCommand {
     pub(super) stdin_from: Option<usize>,
     /// Index of its here-string word (`<<< word`).
     pub(super) here_string: Option<usize>,
+    /// Indexes of the words its output is redirected to (`> file`, `>> file`).
+    pub(super) writes_to: Vec<usize>,
 }
 
 /// Lexed simple commands, in the order they finish (a substitution comes
@@ -227,6 +229,7 @@ enum Redirect {
     None,
     Stdin,
     HereString,
+    Stdout,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -256,6 +259,7 @@ impl Lexer {
             match std::mem::take(&mut self.redirect) {
                 Redirect::Stdin => self.current.stdin_from = index,
                 Redirect::HereString => self.current.here_string = index,
+                Redirect::Stdout => self.current.writes_to.extend(index),
                 Redirect::None => {}
             }
             let word = std::mem::take(&mut self.word);
@@ -465,6 +469,16 @@ impl Lexer {
                 '<' => {
                     self.flush();
                     self.redirect = Redirect::Stdin;
+                }
+                // `>&2`, `2>&1`: a descriptor, not a file.
+                '>' if next == Some('&') => {
+                    self.flush();
+                    index += 2;
+                    continue;
+                }
+                '>' => {
+                    self.flush();
+                    self.redirect = Redirect::Stdout;
                 }
                 '(' => self.open_bracket(),
                 ')' => self.close_bracket(),

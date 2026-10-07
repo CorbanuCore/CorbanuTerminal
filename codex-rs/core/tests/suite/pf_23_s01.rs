@@ -289,6 +289,8 @@ async fn pf_23_s01_protected_mcp_call_after_untrusted_content_needs_the_human() 
 
 /// Typing a vault command into a running shell after untrusted content asks
 /// the human; with approvals off it is refused; ordinary typing is unchanged.
+/// The shell starts after the untrusted content, inside the protected-path
+/// rules (PF-23-S02 covers one started before).
 #[cfg(unix)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn pf_23_s01_typing_a_protected_command_into_a_running_shell_needs_the_human()
@@ -300,6 +302,7 @@ async fn pf_23_s01_typing_a_protected_command_into_a_running_shell_needs_the_hum
             SecurityLevel::Moderate,
             approval,
             vec![
+                injected_step(),
                 call(
                     "call-open",
                     "exec_command",
@@ -334,12 +337,12 @@ async fn pf_23_s01_typing_a_protected_command_into_a_running_shell_needs_the_hum
     );
     answer(&test, &question, "Cancel").await;
     assert!(next_question(&test).await.is_none());
-    let output = output_text(&captured.requests()[2], "call-stdin");
+    let output = output_text(&captured.requests()[3], "call-stdin");
     assert!(output.contains("you declined vault access"), "{output}");
 
     let (test, captured) = stdin_turn(AskForApproval::Never, "corbanu vault list\n").await?;
     assert!(next_question(&test).await.is_none());
-    let output = output_text(&captured.requests()[2], "call-stdin");
+    let output = output_text(&captured.requests()[3], "call-stdin");
     assert!(output.contains("approvals are off"), "{output}");
 
     // Split across two writes: the second completes the vault command.
@@ -347,6 +350,7 @@ async fn pf_23_s01_typing_a_protected_command_into_a_running_shell_needs_the_hum
         SecurityLevel::Moderate,
         AskForApproval::Never,
         vec![
+            injected_step(),
             call(
                 "call-open",
                 "exec_command",
@@ -375,13 +379,13 @@ async fn pf_23_s01_typing_a_protected_command_into_a_running_shell_needs_the_hum
     .await?;
     assert!(next_question(&test).await.is_none());
     let requests = captured.requests();
-    assert!(!output_text(&requests[2], "call-half").contains("approvals are off"));
-    let output = output_text(&requests[3], "call-stdin");
+    assert!(!output_text(&requests[3], "call-half").contains("approvals are off"));
+    let output = output_text(&requests[4], "call-stdin");
     assert!(output.contains("approvals are off"), "{output}");
 
     let (test, captured) = stdin_turn(AskForApproval::Never, "echo typed-ok\n").await?;
     assert!(next_question(&test).await.is_none());
-    let output = output_text(&captured.requests()[2], "call-stdin");
+    let output = output_text(&captured.requests()[3], "call-stdin");
     assert!(!output.contains("approvals are off"), "{output}");
     Ok(())
 }
@@ -598,5 +602,149 @@ async fn pf_23_s01_working_folder_inside_a_denied_path_keeps_the_denial() -> any
     let output = output_text(&requests[requests.len() - 1], "call-read");
     assert!(!output.contains(CANARY), "{output}");
     assert!(output.contains("Operation not permitted"), "{output}");
+    Ok(())
+}
+
+/// PF-23-S02: under Aggressive the sandbox denies home reads from the start
+/// of the session, before any untrusted content.
+#[cfg(target_os = "macos")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pf_23_s02_aggressive_denies_home_reads_before_untrusted_content() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    skip_if_sandbox!(Ok(()));
+    let (home, evading, _) = canary_home()?;
+    let (test, captured) = start_turn_in(
+        Some(home),
+        SecurityLevel::Aggressive,
+        AskForApproval::Never,
+        vec![shell_step("call-read", &evading), done_step()],
+        |_| {},
+    )
+    .await?;
+    assert!(next_exec_approval(&test).await.is_none());
+    let requests = captured.requests();
+    let output = output_text(&requests[requests.len() - 1], "call-read");
+    assert!(!output.contains(CANARY), "{output}");
+    assert!(output.contains("Operation not permitted"), "{output}");
+    Ok(())
+}
+
+/// PF-23-S02: with full access, the sandbox still makes git hooks and the
+/// project's `.codex` read-only once the rules apply, whatever the command
+/// text says; other workspace writes go through.
+#[cfg(target_os = "macos")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pf_23_s02_sandbox_makes_persistence_files_read_only_under_full_access()
+-> anyhow::Result<()> {
+    use codex_protocol::models::PermissionProfile;
+    skip_if_no_network!(Ok(()));
+    skip_if_sandbox!(Ok(()));
+    // The hook path is built at run time, so the command-text net cannot see it.
+    let write = "mkdir -p .git/hooks; echo x > \"$(printf .gi%s t)/hooks/pre-commit\" \
+                 && echo hook-written; echo ok > ok.txt && cat ok.txt";
+    for (level, tainted, hook_written) in [
+        (SecurityLevel::Aggressive, false, false),
+        (SecurityLevel::Moderate, true, false),
+        (SecurityLevel::Moderate, false, true),
+        (SecurityLevel::Permissive, true, true),
+    ] {
+        let mut steps = vec![shell_step("call-write", write), done_step()];
+        if tainted {
+            steps.insert(0, injected_step());
+        }
+        let (test, captured) = start_turn(level, AskForApproval::Never, steps, |config| {
+            config
+                .permissions
+                .set_permission_profile(PermissionProfile::Disabled)
+                .expect("full access");
+        })
+        .await?;
+        assert!(next_exec_approval(&test).await.is_none());
+        let requests = captured.requests();
+        let output = output_text(&requests[requests.len() - 1], "call-write");
+        assert_eq!(
+            output.contains("hook-written"),
+            hook_written,
+            "{level:?} tainted={tainted}: {output}"
+        );
+        assert!(
+            output.contains("ok"),
+            "{level:?} tainted={tainted}: {output}"
+        );
+        if !hook_written {
+            assert!(
+                output.contains("Operation not permitted"),
+                "{level:?} tainted={tainted}: {output}"
+            );
+        }
+    }
+    Ok(())
+}
+
+/// PF-23-S02: a shell started before untrusted content keeps a sandbox
+/// without the protected-path rules. Typing into it afterwards needs the
+/// human once under Moderate (refused with approvals off).
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pf_23_s02_typing_into_a_shell_started_before_untrusted_content_needs_the_human()
+-> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    skip_if_sandbox!(Ok(()));
+    let steps = || {
+        vec![
+            call(
+                "call-open",
+                "exec_command",
+                json!({ "cmd": "/bin/bash --noprofile --norc -i", "yield_time_ms": 200, "tty": true }),
+            ),
+            call(
+                "call-stdin",
+                "write_stdin",
+                json!({ "session_id": 1000, "chars": "echo typed-one\n", "yield_time_ms": 500 }),
+            ),
+            call(
+                "call-again",
+                "write_stdin",
+                json!({ "session_id": 1000, "chars": "echo typed-two\n", "yield_time_ms": 500 }),
+            ),
+            done_step(),
+        ]
+    };
+    let unified_exec = |config: &mut Config| {
+        config.use_experimental_unified_exec_tool = true;
+        config
+            .features
+            .enable(Feature::UnifiedExec)
+            .expect("unified exec");
+    };
+    let (test, captured) = start_turn(
+        SecurityLevel::Moderate,
+        AskForApproval::OnRequest,
+        steps(),
+        unified_exec,
+    )
+    .await?;
+    let question = next_question(&test)
+        .await
+        .expect("typing into the older shell asks");
+    let text = &question.questions[0].question;
+    assert!(text.contains("process started before"), "{text}");
+    answer(&test, &question, "Allow once").await;
+    // Allowed for this process: the next ordinary line does not ask again.
+    assert!(next_question(&test).await.is_none());
+    let requests = captured.requests();
+    assert!(output_text(&requests[2], "call-stdin").contains("typed-one"));
+    assert!(output_text(&requests[3], "call-again").contains("typed-two"));
+
+    let (test, captured) = start_turn(
+        SecurityLevel::Moderate,
+        AskForApproval::Never,
+        steps(),
+        unified_exec,
+    )
+    .await?;
+    assert!(next_question(&test).await.is_none());
+    let output = output_text(&captured.requests()[2], "call-stdin");
+    assert!(output.contains("approvals are off"), "{output}");
     Ok(())
 }

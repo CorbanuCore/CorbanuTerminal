@@ -7,7 +7,15 @@
 //! The Corbanu home is denied by default: every existing entry except what
 //! agent commands need to run (`tmp` holds the arg0 helpers, `shell_snapshots`
 //! is sourced by every command) or read as instructions (skills, plugins).
+//!
+//! PF-23-S02 adds writes: files that run code or set policy later (shell
+//! start-up files, login items, git hooks and config, project `.codex`, the
+//! Corbanu home entries that stay readable) become read-only wherever the
+//! sandbox would let the command write them. Under Aggressive all of this
+//! applies from the start of the session, not only after untrusted content.
 
+use crate::security::tainted_action::USER_PERSISTENCE;
+use crate::security::tainted_action::WORKSPACE_PERSISTENCE;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::permissions::FileSystemAccessMode;
 use codex_protocol::permissions::FileSystemPath;
@@ -49,6 +57,18 @@ const CORBANU_STORES: &[&str] = &[
     "memories",
 ];
 
+/// Corbanu home entries that stay readable but never writable: they run, or
+/// are read as instructions, in later commands and sessions.
+const CORBANU_READ_ONLY: &[&str] = &[
+    "tmp",
+    ".tmp",
+    "shell_snapshots",
+    "skills",
+    "plugins",
+    "packages",
+    "AGENTS.md",
+];
+
 /// State and log databases, created after launch.
 const CORBANU_DATABASES: &str = "*.sqlite*";
 
@@ -77,7 +97,7 @@ const USER_CREDENTIALS: &[&str] = &[
     "Library/Keychains",
 ];
 
-/// The paths one tainted command may not read.
+/// The paths one protected command may not read, and those it may not write.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct ReadDenials {
     /// Existing paths: enforced as they are.
@@ -85,6 +105,10 @@ pub(crate) struct ReadDenials {
     /// Fixed locations that may not exist yet.
     fixed: Vec<AbsolutePathBuf>,
     globs: Vec<String>,
+    /// Readable but never writable (PF-23-S02), even before they exist.
+    read_only: Vec<AbsolutePathBuf>,
+    /// Where the profile's relative entries resolve (the turn's folder).
+    cwd: Option<AbsolutePathBuf>,
     /// Denials dropped because they hold the command's folder or a writable
     /// root (denying them would deny the workspace itself).
     pub(crate) skipped: Vec<AbsolutePathBuf>,
@@ -99,10 +123,21 @@ impl ReadDenials {
         claude_config_dir: Option<&Path>,
         keep: &[AbsolutePathBuf],
     ) -> Self {
-        let mut denials = Self::default();
+        let mut denials = Self {
+            cwd: keep.first().cloned(),
+            ..Self::default()
+        };
         let Ok(codex_home) = AbsolutePathBuf::from_absolute_path(codex_home) else {
             return denials;
         };
+        for entry in CORBANU_READ_ONLY {
+            denials.push_read_only(codex_home.join(entry), keep);
+        }
+        for root in keep {
+            for entry in WORKSPACE_PERSISTENCE {
+                denials.push_read_only(root.join(entry), keep);
+            }
+        }
         if let Ok(entries) = std::fs::read_dir(codex_home.as_path()) {
             for entry in entries.flatten() {
                 let name = entry.file_name();
@@ -134,6 +169,9 @@ impl ReadDenials {
             }
             for credential in USER_CREDENTIALS {
                 denials.push_fixed(home.join(credential), keep);
+            }
+            for file in USER_PERSISTENCE {
+                denials.push_read_only(home.join(file), keep);
             }
         }
         if let Some(dir) =
@@ -193,6 +231,19 @@ impl ReadDenials {
         }
     }
 
+    fn push_read_only(&mut self, path: AbsolutePathBuf, keep: &[AbsolutePathBuf]) {
+        if Self::holds_kept(&path, keep) {
+            self.skipped.push(path);
+        } else if !self.read_only.contains(&path) {
+            self.read_only.push(path);
+        }
+    }
+
+    /// Every path made read-only.
+    pub(crate) fn read_only_paths(&self) -> impl Iterator<Item = &AbsolutePathBuf> {
+        self.read_only.iter()
+    }
+
     /// Every denied path, existing first.
     pub(crate) fn paths(&self) -> impl Iterator<Item = &AbsolutePathBuf> {
         self.existing.iter().chain(&self.fixed)
@@ -230,15 +281,38 @@ impl ReadDenials {
                 )
             }))
             .collect();
-        if entries.is_empty() {
+        if entries.is_empty() && self.read_only.is_empty() {
             return Some(profile.clone());
         }
         // Turns an unrestricted policy into full write access plus the
         // denials, and appends them to a restricted one.
         file_system
             .preserve_deny_read_restrictions_from(&FileSystemSandboxPolicy::restricted(entries));
-        (file_system.kind == FileSystemSandboxKind::Restricted)
-            .then(|| PermissionProfile::from_runtime_permissions(&file_system, network))
+        if file_system.kind != FileSystemSandboxKind::Restricted {
+            return None;
+        }
+        // Only narrows: a path becomes read-only where the profile would let
+        // the command write it, never readable where it was not.
+        let cwd = self
+            .cwd
+            .as_ref()
+            .map_or_else(|| Path::new("/"), AbsolutePathBuf::as_path);
+        let read_only: Vec<FileSystemSandboxEntry> = self
+            .read_only
+            .iter()
+            .filter(|path| file_system.can_write_path_with_cwd(path.as_path(), cwd))
+            .map(|path| {
+                FileSystemSandboxEntry::skip_missing_path(
+                    FileSystemPath::Path { path: path.clone() },
+                    FileSystemAccessMode::Read,
+                )
+            })
+            .collect();
+        file_system.entries.extend(read_only);
+        Some(PermissionProfile::from_runtime_permissions(
+            &file_system,
+            network,
+        ))
     }
 }
 
@@ -254,7 +328,7 @@ pub(crate) fn protect_file_tool_context(
         .services
         .model_client()
         .post_taint_state()
-        .is_none_or(|state| state.taint_generation == 0)
+        .is_none_or(|state| !state.protected_paths_apply())
     {
         return context;
     }
@@ -288,9 +362,9 @@ pub(crate) fn protect_file_tool_context(
     context
 }
 
-/// The read policy for host code that reads a model-named file outside any
-/// sandbox (Codex Apps uploads), once the session is tainted: `None` before
-/// untrusted content. A profile that cannot take the rules reads nothing.
+/// The read policy for host code that reads a model-named file (Codex Apps
+/// uploads) once the protected-path rules apply: `None` before that. A
+/// profile that cannot take the rules reads nothing.
 pub(crate) fn post_taint_read_policy(
     session: &crate::session::session::Session,
     turn: &crate::session::turn_context::TurnContext,
@@ -299,7 +373,7 @@ pub(crate) fn post_taint_read_policy(
         .services
         .model_client()
         .post_taint_state()
-        .filter(|state| state.taint_generation > 0)?;
+        .filter(crate::security::tainted_action::PostTaintState::protected_paths_apply)?;
     #[allow(deprecated)]
     let turn_cwd = turn.cwd.clone();
     let workspace_roots: Vec<AbsolutePathBuf> = turn

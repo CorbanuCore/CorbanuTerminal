@@ -1,1 +1,292 @@
-//! PF-23-S02 registration seam. No additional enforcement is implemented here.
+//! PF-23-S02: Aggressive grants, the one enforcement point for opening a
+//! sensitive surface under Aggressive.
+//!
+//! Under Aggressive the sandbox's protected-path rules (PF-23-S01 slice 3)
+//! apply from the start of the session, and a human approval never lifts
+//! them. Only a [`BoundedGrant`] can, and only when it matches exactly:
+//! the agent lineage it was issued to, one known surface, one exact
+//! operation (a command digest or one process), the session, its expiry and
+//! its use limit, under the policy epoch it was issued in. A kill switch, a
+//! level change, a revocation or a restart (grants are never stored) ends it.
+//! Grants are never inherited: a child agent has its own lineage and ledger,
+//! and a grant for it must be derived narrower ([`BoundedGrant::derive_child`]).
+//!
+//! Issuing is host-only (the grant TUI, PF-25-S01); nothing a model can call
+//! reaches [`issue`].
+
+use crate::security::tainted_action::PolicyBinding;
+use crate::security::tainted_action::PostTaintState;
+use codex_protocol::ThreadId;
+use codex_security_policy::ActorChain;
+use codex_security_policy::AuthorizationContext;
+use codex_security_policy::AuthorizationRequest;
+use codex_security_policy::BoundedGrant;
+use codex_security_policy::BoundedText;
+use codex_security_policy::PolicyAction;
+use codex_security_policy::ProtectedResource;
+use codex_security_policy::QuantitativeLimit;
+use codex_security_policy::ResourceKind;
+use codex_security_policy::SecurityLevel;
+use sha2::Digest;
+use sha2::Sha256;
+use std::collections::HashMap;
+use std::sync::LazyLock;
+use std::sync::Mutex;
+use std::sync::PoisonError;
+
+/// The purpose every Aggressive grant names.
+pub(crate) const PURPOSE: &str = "aggressive_grant";
+/// The quantitative limit a grant uses to cap how often it is used.
+pub(crate) const USES: &str = "uses";
+/// Grants one session holds at most; more are refused.
+const MAX_GRANTS: usize = 64;
+
+/// Sensitive surfaces a grant can open. Everything else has no grant.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Surface {
+    /// Run one exact command, or patch, without the protected-path rules.
+    UnprotectedCommand,
+    /// Type into one process whose sandbox does not have them.
+    UnconfinedProcess,
+}
+
+impl Surface {
+    #[cfg_attr(not(test), allow(dead_code))]
+    const ALL: [Self; 2] = [Self::UnprotectedCommand, Self::UnconfinedProcess];
+
+    fn resource_id(self) -> &'static str {
+        match self {
+            Self::UnprotectedCommand => "sandbox_protected_paths",
+            Self::UnconfinedProcess => "unconfined_process",
+        }
+    }
+
+    pub(crate) fn action(self) -> PolicyAction {
+        match self {
+            Self::UnprotectedCommand => PolicyAction::Execute,
+            Self::UnconfinedProcess => PolicyAction::Use,
+        }
+    }
+
+    pub(crate) fn resource(self) -> ProtectedResource {
+        ProtectedResource {
+            kind: ResourceKind::ProtectedData,
+            id: bounded(self.resource_id()),
+        }
+    }
+
+    #[cfg_attr(not(test), allow(dead_code))]
+    fn of(resource: &ProtectedResource) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|surface| surface.resource() == *resource)
+    }
+}
+
+/// The operation for one exact command or patch in one folder.
+pub(crate) fn command_operation(parts: &[&str]) -> String {
+    let mut hasher = Sha256::new();
+    for part in parts {
+        hasher.update((part.len() as u64).to_le_bytes());
+        hasher.update(part.as_bytes());
+    }
+    format!("command:sha256:{:x}", hasher.finalize())
+}
+
+/// The operation for typing into one process (the call that started it).
+pub(crate) fn process_operation(call_id: &str) -> String {
+    format!("process:{call_id}")
+}
+
+/// Why a grant was not taken.
+#[cfg_attr(not(test), allow(dead_code))] // issued by the grant TUI (PF-25-S01)
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum GrantRefusal {
+    #[error("grants apply only under Aggressive with a live security policy")]
+    NotAggressive,
+    #[error("the security kill switch is on")]
+    KillSwitch,
+    #[error("the grant is invalid: {0}")]
+    Invalid(String),
+    #[error("the grant is for another session")]
+    OtherSession,
+    #[error("the grant is for another agent")]
+    OtherAgent,
+    #[error("the grant names no surface Aggressive can open")]
+    UnknownSurface,
+    #[error("the grant has already expired")]
+    Expired,
+    #[error("this session already holds {MAX_GRANTS} grants")]
+    TooMany,
+}
+
+struct Entry {
+    grant: BoundedGrant,
+    epoch: u64,
+    revocation_generation: u64,
+    used: u64,
+}
+
+impl Entry {
+    fn use_limit(&self) -> Option<u64> {
+        self.grant
+            .scope
+            .quantitative_limits
+            .get(&bounded(USES))
+            .copied()
+    }
+
+    fn live(&self, epoch: u64, revocation_generation: u64, now: i64) -> bool {
+        self.epoch == epoch
+            && self.revocation_generation == revocation_generation
+            && !self.grant.is_expired_at(now)
+            && self.use_limit().is_none_or(|limit| self.used < limit)
+    }
+}
+
+static LEDGER: LazyLock<Mutex<HashMap<ThreadId, Vec<Entry>>>> = LazyLock::new(Default::default);
+
+fn bounded(text: &str) -> BoundedText {
+    #[allow(clippy::expect_used)]
+    BoundedText::new(text).expect("fixed policy text is bounded")
+}
+
+/// The policy a grant is bound to, if grants can apply at all.
+fn aggressive_binding(state: &PostTaintState) -> Result<(u64, u64, &ActorChain), GrantRefusal> {
+    match &state.policy {
+        PolicyBinding::Bound {
+            epoch,
+            revocation_generation,
+            kill_switch_active,
+            actor_chain,
+            ..
+        } if state.level == SecurityLevel::Aggressive => {
+            if *kill_switch_active {
+                return Err(GrantRefusal::KillSwitch);
+            }
+            Ok((*epoch, *revocation_generation, actor_chain))
+        }
+        _ => Err(GrantRefusal::NotAggressive),
+    }
+}
+
+/// Host-only: hold `grant` for `thread` under the policy in `state`. The
+/// grant TUI (PF-25-S01) is the one caller; no model-reachable path is.
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn issue(
+    thread: ThreadId,
+    state: &PostTaintState,
+    grant: BoundedGrant,
+    now_unix_seconds: i64,
+) -> Result<(), GrantRefusal> {
+    let (epoch, revocation_generation, actor_chain) = aggressive_binding(state)?;
+    grant
+        .validate()
+        .map_err(|error| GrantRefusal::Invalid(error.to_string()))?;
+    let thread_text = thread.to_string();
+    let context = &grant.scope.context;
+    if context.session_id.as_str() != thread_text
+        || context.task_id.as_str() != thread_text
+        || context.purpose.as_str() != PURPOSE
+    {
+        return Err(GrantRefusal::OtherSession);
+    }
+    if grant.actor_chain != *actor_chain {
+        return Err(GrantRefusal::OtherAgent);
+    }
+    let Some(surface) = Surface::of(&grant.scope.resource) else {
+        return Err(GrantRefusal::UnknownSurface);
+    };
+    if grant
+        .scope
+        .actions
+        .iter()
+        .any(|action| *action != surface.action())
+        || grant.scope.destination.is_some()
+        || grant
+            .scope
+            .quantitative_limits
+            .keys()
+            .any(|asset| asset.as_str() != USES)
+    {
+        return Err(GrantRefusal::UnknownSurface);
+    }
+    if grant.is_expired_at(now_unix_seconds) {
+        return Err(GrantRefusal::Expired);
+    }
+    let mut ledger = LEDGER.lock().unwrap_or_else(PoisonError::into_inner);
+    let entries = ledger.entry(thread).or_default();
+    entries.retain(|entry| entry.live(epoch, revocation_generation, now_unix_seconds));
+    if entries.len() >= MAX_GRANTS {
+        return Err(GrantRefusal::TooMany);
+    }
+    entries.push(Entry {
+        grant,
+        epoch,
+        revocation_generation,
+        used: 0,
+    });
+    Ok(())
+}
+
+/// The grant that opens `surface` for `operation` now, if one matches; a
+/// match uses it once. `None` whenever grants cannot apply.
+pub(crate) fn admit(
+    thread: ThreadId,
+    state: &PostTaintState,
+    surface: Surface,
+    operation: &str,
+    now_unix_seconds: i64,
+) -> Option<BoundedText> {
+    let (epoch, revocation_generation, actor_chain) = aggressive_binding(state).ok()?;
+    let request = AuthorizationRequest::new(
+        actor_chain.clone(),
+        surface.resource(),
+        surface.action(),
+        AuthorizationContext {
+            now_unix_seconds,
+            session_id: BoundedText::new(thread.to_string()).ok()?,
+            task_id: BoundedText::new(thread.to_string()).ok()?,
+            purpose: bounded(PURPOSE),
+            operation: BoundedText::new(operation).ok()?,
+            destination: None,
+            quantity: QuantitativeLimit::new(USES, 1).ok(),
+            grant_id: None,
+        },
+    )
+    .ok()?;
+    let mut ledger = LEDGER.lock().unwrap_or_else(PoisonError::into_inner);
+    let entries = ledger.get_mut(&thread)?;
+    entries.retain(|entry| entry.live(epoch, revocation_generation, now_unix_seconds));
+    let entry = entries
+        .iter_mut()
+        .find(|entry| entry.grant.matches_request(&request).unwrap_or(false))?;
+    entry.used += 1;
+    let grant_id = entry.grant.grant_id.clone();
+    tracing::info!(
+        target: "codex_core::security::aggressive",
+        surface = ?surface,
+        grant_id = grant_id.as_str(),
+        "aggressive grant used"
+    );
+    Some(grant_id)
+}
+
+/// Drop every grant `thread` holds (revocation, PF-25-S02).
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn revoke_all(thread: ThreadId) {
+    LEDGER
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .remove(&thread);
+}
+
+pub(crate) fn now_unix_seconds() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs() as i64)
+}
+
+#[cfg(test)]
+#[path = "aggressive_tests.rs"]
+mod tests;
