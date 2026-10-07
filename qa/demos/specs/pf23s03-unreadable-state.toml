@@ -1,0 +1,55 @@
+# PF-23-S03: unreadable security state enforces Aggressive and the kill switch, visibly; never Permissive.
+id = "pf23s03-unreadable-state"
+feature = "Unreadable security state fails closed and says so"
+expected = "config.toml says Permissive. With security_state.json corrupted, the next session warns that Aggressive and the kill switch are enforced, and a hidden Corbanu home read gets Operation not permitted."
+model = "glm-5.2"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "permissive"
+
+[features]
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "!printf 'shipped-%s\\n' v2-canary > {home}/team-notes.txt && echo '{\"level\": \"permissive\"' > {home}/security_state.json && echo corrupted"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "corrupted"
+[[steps]]
+pause = 1.5
+[[steps]]
+type = "/new"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Security state is unreadable"
+timeout = 30
+[[steps]]
+pause = 3.0
+
+[[steps]]
+type = "Run exactly this command and quote its output: cat \"$(printf '../ho%s/team-notes.txt' me)\""
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "[Oo]peration not permitted"
+timeout = 240
+compress = 3
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+[[steps]]
+pause = 4.0
