@@ -441,8 +441,10 @@ fn canary_home() -> anyhow::Result<(Arc<TempDir>, String, String)> {
     let path = home.path().canonicalize()?.join("pf23-notes.txt");
     std::fs::write(&path, CANARY)?;
     let path = path.to_string_lossy().into_owned();
-    let (head, tail) = path.split_at(path.len() - "notes.txt".len());
-    let evading = format!("cat \"$(printf '{head}%s' '{tail}')\"");
+    // Split inside the home folder's own name: neither part names the home.
+    let folder = path.len() - "/pf23-notes.txt".len();
+    let (head, tail) = (&path[..folder - 2], &path[folder - 2..folder]);
+    let evading = format!("cat \"$(printf '{head}%s/pf23-notes.txt' {tail})\"");
     Ok((home, evading, format!("cat '{path}'")))
 }
 
@@ -497,6 +499,12 @@ async fn pf_23_s01_sandbox_denies_home_reads_the_command_text_hides() -> anyhow:
             readable,
             "{level:?} tainted={tainted}: {output}"
         );
+        // Denied by the sandbox, not by the command-text check.
+        assert_eq!(
+            output.contains("Operation not permitted"),
+            !readable,
+            "{level:?} tainted={tainted}: {output}"
+        );
     }
     Ok(())
 }
@@ -540,6 +548,11 @@ async fn pf_23_s01_human_approval_lifts_read_denials_only_under_moderate() -> an
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-read");
         assert_eq!(output.contains(CANARY), readable, "{level:?}: {output}");
+        assert_eq!(
+            output.contains("Operation not permitted"),
+            !readable,
+            "{level:?}: {output}"
+        );
     }
     Ok(())
 }
