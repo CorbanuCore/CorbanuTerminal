@@ -90,7 +90,7 @@ updated: 2026-10-06
 ## Verification
 
 - [x] `just fix -p codex-features -p codex-core -p codex-app-server-client -p codex-tui`, `just fmt`; diff inspected.
-- [x] Focused `pf_29_s01`: core 14, tui 7. Suites, five GLM 5.2 videos, Opus review (changes, then approve with nits).
+- [x] Focused `pf_29_s01`: core 14, tui 8. Suites, five GLM 5.2 videos, three Opus reviews (all findings handled).
 - [ ] Merge behind the flag; details in the [evidence](../../../../qa/security-levels/sprints/PF-29-S01/README.md).
 
 ## Exit evidence
