@@ -97,7 +97,12 @@ pub(crate) fn build_claude_command_plan(
     let containment = super::containment::enabled()
         .map(|settings| -> Result<ClaudeContainment> {
             Ok(ClaudeContainment {
-                state_dir: super::containment::state_dir(codex_home, &pane.id)?,
+                state_dir: super::containment::state_dir(
+                    codex_home,
+                    &pane.id,
+                    settings.state_root.as_deref(),
+                )?,
+                panes_dir: codex_home.join("panes"),
                 linux_sandbox_exe: settings.linux_sandbox_exe,
             })
         })
@@ -218,6 +223,24 @@ pub(crate) fn build_claude_command_plan(
             settings_path.display()
         )
     })?;
+    // A contained pane cannot read `CODEX_HOME/panes`; it gets the same
+    // settings from its state folder, read-only there.
+    let settings_path = match containment.as_ref() {
+        Some(containment) => {
+            let path = containment.settings_path();
+            std::fs::create_dir_all(&containment.state_dir).with_context(|| {
+                format!(
+                    "failed to create the Claude pane state folder `{}`",
+                    containment.state_dir.display()
+                )
+            })?;
+            std::fs::write(&path, settings.to_string()).with_context(|| {
+                format!("failed to write Claude pane settings `{}`", path.display())
+            })?;
+            path
+        }
+        None => settings_path,
+    };
 
     let mut env = BTreeMap::new();
     // Claude Code gives its own OAuth variables precedence over provider-specific

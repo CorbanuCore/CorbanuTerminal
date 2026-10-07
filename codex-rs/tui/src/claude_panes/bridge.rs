@@ -452,12 +452,12 @@ pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
     }
     let body = &buffer[body_start..buffer.len().min(body_start + content_length)];
 
-    if !proxy_count_tokens && request_line.contains("/v1/messages/count_tokens") {
-        write_json_response(&mut stream, serde_json::json!({ "input_tokens": 1 })).await?;
-        return Ok(());
-    }
-
-    if !request_line.contains("/v1/messages") {
+    // Only the two Messages routes are forwarded, to the provider's own
+    // host: the key is attached upstream, so a crafted target must never
+    // choose where it goes.
+    let Some((upstream_path, upstream_url)) =
+        passthrough_upstream(&request_line, upstream_base_url.as_str())
+    else {
         write_json_status_response(
             &mut stream,
             /*status*/ 404,
@@ -465,14 +465,11 @@ pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
         )
         .await?;
         return Ok(());
+    };
+    if !proxy_count_tokens && upstream_path.starts_with("/v1/messages/count_tokens") {
+        write_json_response(&mut stream, serde_json::json!({ "input_tokens": 1 })).await?;
+        return Ok(());
     }
-
-    let upstream_path = request_target_from_request_line(&request_line).unwrap_or("/v1/messages");
-    let upstream_url = format!(
-        "{}{}",
-        upstream_base_url.trim_end_matches('/'),
-        upstream_path
-    );
     let mut upstream_request = http
         .post(upstream_url)
         .bearer_auth(api_key.as_str())
@@ -719,6 +716,41 @@ pub(crate) fn find_header_end(buffer: &[u8]) -> Option<usize> {
     buffer.windows(4).position(|window| window == b"\r\n\r\n")
 }
 
+/// The upstream path and URL for a passthrough request: only
+/// `/v1/messages` and `/v1/messages/count_tokens`, with an optional plain
+/// query, on exactly the base URL's scheme, host and port. `None` refuses it.
+pub(crate) fn passthrough_upstream<'a>(
+    request_line: &'a str,
+    upstream_base_url: &str,
+) -> Option<(&'a str, reqwest::Url)> {
+    let target = request_target_from_request_line(request_line)?;
+    let (path, query) = target
+        .split_once('?')
+        .map_or((target, None), |(path, query)| (path, Some(query)));
+    if !matches!(path, "/v1/messages" | "/v1/messages/count_tokens") {
+        return None;
+    }
+    if query.is_some_and(|query| {
+        !query
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"=&_.-".contains(&byte))
+    }) {
+        return None;
+    }
+    let base = reqwest::Url::parse(upstream_base_url).ok()?;
+    let url = reqwest::Url::parse(&format!(
+        "{}{target}",
+        upstream_base_url.trim_end_matches('/')
+    ))
+    .ok()?;
+    let same_origin = url.scheme() == base.scheme()
+        && url.host_str() == base.host_str()
+        && url.port_or_known_default() == base.port_or_known_default()
+        && url.username().is_empty()
+        && url.password().is_none();
+    same_origin.then_some((target, url))
+}
+
 /// The request target in origin form. A contained pane reaches the bridge as
 /// its HTTP proxy (#218), so targets may arrive in absolute form
 /// (`http://127.0.0.1:port/v1/messages`); only the path and query are kept.
@@ -730,7 +762,7 @@ pub(crate) fn request_target_from_request_line(request_line: &str) -> Option<&st
         .iter()
         .find_map(|scheme| target.strip_prefix(scheme))
     else {
-        return Some(target);
+        return target.starts_with('/').then_some(target);
     };
     Some(rest.find('/').map_or("/", |index| &rest[index..]))
 }

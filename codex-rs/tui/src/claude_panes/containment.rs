@@ -24,6 +24,9 @@ use anyhow::anyhow;
 use codex_network_proxy::ManagedNetworkSandboxContext;
 use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::models::PermissionProfile;
+use codex_protocol::permissions::FileSystemAccessMode;
+use codex_protocol::permissions::FileSystemPath;
+use codex_protocol::permissions::FileSystemSandboxEntry;
 use codex_protocol::permissions::FileSystemSandboxPolicy;
 use codex_protocol::permissions::NetworkSandboxPolicy;
 use codex_protocol::secretless_launch;
@@ -43,6 +46,9 @@ pub(crate) struct ContainmentSettings {
     pub(crate) enabled: bool,
     /// The Linux sandbox helper (`codex-linux-sandbox`), from the launch.
     pub(crate) linux_sandbox_exe: Option<PathBuf>,
+    /// Where pane state folders go instead of the account's application
+    /// state (tests).
+    pub(crate) state_root: Option<PathBuf>,
 }
 
 static SETTINGS: OnceLock<ContainmentSettings> = OnceLock::new();
@@ -93,10 +99,18 @@ pub(crate) struct ClaudeContainment {
     /// The pane's own Claude state (`CLAUDE_CONFIG_DIR` and `TMPDIR`), the
     /// only writable place besides the pane's folder.
     pub(crate) state_dir: PathBuf,
+    /// `CODEX_HOME/panes`: every pane's transcripts and audits, unreadable
+    /// to a contained pane, like the contract's `sessions`.
+    pub(crate) panes_dir: PathBuf,
     pub(crate) linux_sandbox_exe: Option<PathBuf>,
 }
 
 impl ClaudeContainment {
+    /// Corbanu's settings for the turn, read-only to Claude Code.
+    pub(crate) fn settings_path(&self) -> PathBuf {
+        self.state_dir.join("settings.json")
+    }
+
     pub(crate) fn config_dir(&self) -> PathBuf {
         self.state_dir.join("config")
     }
@@ -109,12 +123,18 @@ impl ClaudeContainment {
 /// The pane's Claude state folder. It must sit outside `CODEX_HOME`, which
 /// the contract never lets a launch write, so it lives in the account's
 /// application state, keyed by the Corbanu home and the pane.
-pub(crate) fn state_dir(codex_home: &Path, pane_id: &str) -> Result<PathBuf> {
+pub(crate) fn state_dir(
+    codex_home: &Path,
+    pane_id: &str,
+    state_root: Option<&Path>,
+) -> Result<PathBuf> {
     let home = std::env::var_os("HOME")
         .map(PathBuf::from)
         .filter(|home| home.is_absolute())
         .ok_or_else(|| anyhow!("contained Claude panes need an absolute HOME"))?;
-    let base = if cfg!(target_os = "macos") {
+    let base = if let Some(root) = state_root {
+        root.to_path_buf()
+    } else if cfg!(target_os = "macos") {
         home.join("Library/Application Support/Corbanu/claude-panes")
     } else {
         std::env::var_os("XDG_STATE_HOME")
@@ -156,13 +176,29 @@ pub(crate) fn launch_env(
 /// Writes only in the pane's folder and its Claude state folder, network off
 /// except the bridge. The contract adds its protected-read denials.
 pub(crate) fn base_profile(containment: &ClaudeContainment) -> Result<PermissionProfile> {
-    let state_dir = AbsolutePathBuf::from_absolute_path(&containment.state_dir)
-        .context("Claude pane state folder is not absolute")?;
-    let file_system = FileSystemSandboxPolicy::workspace_write(
-        &[state_dir],
+    let absolute = |path: &Path| {
+        AbsolutePathBuf::from_absolute_path(path)
+            .with_context(|| format!("`{}` is not absolute", path.display()))
+    };
+    let mut file_system = FileSystemSandboxPolicy::workspace_write(
+        &[absolute(&containment.state_dir)?],
         /*exclude_tmpdir_env_var*/ true,
         /*exclude_slash_tmp*/ true,
     );
+    file_system.entries.extend([
+        FileSystemSandboxEntry::new(
+            FileSystemPath::Path {
+                path: absolute(&containment.settings_path())?,
+            },
+            FileSystemAccessMode::Read,
+        ),
+        FileSystemSandboxEntry::new(
+            FileSystemPath::Path {
+                path: absolute(&containment.panes_dir)?,
+            },
+            FileSystemAccessMode::Deny,
+        ),
+    ]);
     Ok(PermissionProfile::from_runtime_permissions(
         &file_system,
         NetworkSandboxPolicy::Restricted,
@@ -193,7 +229,9 @@ pub(crate) fn contain(
     }
     let sandbox = get_platform_sandbox(/*windows_sandbox_enabled*/ false)
         .ok_or_else(|| anyhow!("contained Claude panes need macOS or Linux"))?;
-    let mut env = launch_env(std::env::vars(), pane_env);
+    let inherited = std::env::vars_os()
+        .filter_map(|(name, value)| Some((name.into_string().ok()?, value.into_string().ok()?)));
+    let mut env = launch_env(inherited, pane_env);
     let mut argv = vec![executable.to_string()];
     argv.extend(args.iter().cloned());
     let profile = crate::legacy_core::protect_external_agent_launch(

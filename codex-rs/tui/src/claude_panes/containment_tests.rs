@@ -52,14 +52,14 @@ fn launch_env_keeps_only_the_allowlist_without_proxies_then_adds_the_pane() {
 #[test]
 fn state_dir_is_outside_codex_home_and_keyed_by_home_and_pane() {
     let codex_home = Path::new("/tmp/corbanu-home-a");
-    let first = state_dir(codex_home, "claude-1").unwrap();
+    let first = state_dir(codex_home, "claude-1", None).unwrap();
     assert!(first.is_absolute());
     assert!(!first.starts_with(codex_home));
     assert!(first.ends_with("claude-1"));
-    assert_ne!(first, state_dir(codex_home, "claude-2").unwrap());
+    assert_ne!(first, state_dir(codex_home, "claude-2", None).unwrap());
     assert_ne!(
         first,
-        state_dir(Path::new("/tmp/corbanu-home-b"), "claude-1").unwrap()
+        state_dir(Path::new("/tmp/corbanu-home-b"), "claude-1", None).unwrap()
     );
 }
 
@@ -69,6 +69,7 @@ fn base_profile_writes_only_the_pane_folder_and_its_state_with_network_off() {
     let state = tempfile::tempdir().unwrap();
     let containment = ClaudeContainment {
         state_dir: state.path().to_path_buf(),
+        panes_dir: cwd.path().join("panes"),
         linux_sandbox_exe: None,
     };
     let profile = base_profile(&containment).unwrap();
@@ -77,6 +78,15 @@ fn base_profile_writes_only_the_pane_folder_and_its_state_with_network_off() {
     assert!(!network.is_enabled());
     assert!(file_system.can_write_path_with_cwd(&cwd.join("file"), cwd));
     assert!(file_system.can_write_path_with_cwd(&state.path().join("config/x"), cwd));
+    // Corbanu's settings for the turn are read-only; other panes' records
+    // are unreadable.
+    let settings = containment.settings_path();
+    assert!(file_system.can_read_path_with_cwd(&settings, cwd));
+    assert!(!file_system.can_write_path_with_cwd(&settings, cwd));
+    assert!(
+        !file_system
+            .can_read_path_with_cwd(&containment.panes_dir.join("other/turn-0001.jsonl"), cwd)
+    );
     assert!(file_system.can_read_path_with_cwd(Path::new("/usr/bin/env"), cwd));
     for outside in ["/tmp/corbanu-contained-probe", "/usr/local/corbanu-probe"] {
         assert!(
@@ -97,6 +107,7 @@ fn contained_launch_is_refused_without_the_secretless_contract() {
     let state = tempfile::tempdir().unwrap();
     let containment = ClaudeContainment {
         state_dir: state.path().to_path_buf(),
+        panes_dir: cwd.path().join("panes"),
         linux_sandbox_exe: None,
     };
     let err = contain(

@@ -4671,10 +4671,12 @@ async fn aggressive_refuses_to_start_a_claude_process() {
 /// HTTP proxy, with its own Claude state folder and no key helper.
 #[test]
 fn contained_plan_bridges_every_provider_without_a_key_helper() {
+    let state_root = tempfile::tempdir().expect("state root");
     let _settings =
         super::containment::test_settings::set(super::containment::ContainmentSettings {
             enabled: true,
             linux_sandbox_exe: None,
+            state_root: Some(state_root.path().to_path_buf()),
         });
     for kind in ClaudeProviderProfileKind::restoration_options() {
         let (dir, pane) = pane(kind);
@@ -4704,9 +4706,16 @@ fn contained_plan_bridges_every_provider_without_a_key_helper() {
             "{kind:?}"
         );
         assert!(plan.direct_accounting.is_none(), "{kind:?}");
-        let settings = std::fs::read_to_string(pane.artifact_dir.join("settings.json"))
-            .expect("settings should be written");
+        let settings = std::fs::read_to_string(containment.settings_path())
+            .expect("settings should be written to the state folder");
         assert!(!settings.contains("apiKeyHelper"), "{kind:?}: {settings}");
+        let settings_arg = plan
+            .args
+            .iter()
+            .position(|arg| arg == "--settings")
+            .and_then(|index| plan.args.get(index + 1))
+            .map(PathBuf::from);
+        assert_eq!(settings_arg, Some(containment.settings_path()), "{kind:?}");
         assert!(!settings.contains("vault auth-helper"), "{kind:?}");
         let profile = kind.profile();
         if kind != ClaudeProviderProfileKind::ClaudePlan
@@ -4801,4 +4810,51 @@ async fn bridge_accepts_absolute_form_targets_and_sends_the_api_key_header() {
     assert!(upstream_request.contains("x-api-key: bridge-upstream-secret-not-real"));
     assert!(!upstream_request.contains("local-bridge-capability"));
     assert!(String::from_utf8_lossy(&response).starts_with("HTTP/1.1 200 OK"));
+}
+
+/// #218 review: the bridge attaches the provider key upstream, so a crafted
+/// target must never choose the host, port or path it goes to.
+#[test]
+fn passthrough_bridge_forwards_only_messages_routes_to_its_own_host() {
+    use super::bridge::passthrough_upstream;
+    let base = "https://inference.baseten.co";
+    for line in [
+        "POST @attacker.example/v1/messages HTTP/1.1",
+        "POST .attacker.example/v1/messages HTTP/1.1",
+        "POST :8443/v1/messages HTTP/1.1",
+        "POST //attacker.example/v1/messages HTTP/1.1",
+        "POST /v1/messages/../../v1/keys HTTP/1.1",
+        "POST /v1/messages/count_tokens/../x HTTP/1.1",
+        "POST /v1/messages?x=@attacker.example HTTP/1.1",
+        "POST /v1/messages#frag HTTP/1.1",
+        "POST /v1/models HTTP/1.1",
+        "POST http://user:pass@127.0.0.1:1/v1/models HTTP/1.1",
+        "POST",
+    ] {
+        assert_eq!(passthrough_upstream(line, base), None, "{line}");
+    }
+    for (line, path, url) in [
+        (
+            "POST /v1/messages?beta=true HTTP/1.1",
+            "/v1/messages?beta=true",
+            "https://inference.baseten.co/v1/messages?beta=true",
+        ),
+        (
+            "POST http://user:pass@127.0.0.1:1/v1/messages/count_tokens HTTP/1.1",
+            "/v1/messages/count_tokens",
+            "https://inference.baseten.co/v1/messages/count_tokens",
+        ),
+    ] {
+        let (forwarded, upstream) = passthrough_upstream(line, base).expect(line);
+        assert_eq!((forwarded, upstream.as_str()), (path, url), "{line}");
+    }
+    let (_, upstream) = passthrough_upstream(
+        "POST /v1/messages HTTP/1.1",
+        "https://api.z.ai/api/anthropic/",
+    )
+    .expect("base path");
+    assert_eq!(
+        upstream.as_str(),
+        "https://api.z.ai/api/anthropic/v1/messages"
+    );
 }

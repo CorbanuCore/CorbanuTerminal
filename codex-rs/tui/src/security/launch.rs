@@ -130,6 +130,7 @@ impl LaunchPlan {
             crate::claude_panes::containment::ContainmentSettings {
                 enabled: config.features.enabled(Feature::ContainedExternalAgents),
                 linux_sandbox_exe: config.codex_linux_sandbox_exe.clone(),
+                state_root: None,
             },
         );
         level::install_context(LevelContext {

@@ -72,6 +72,27 @@ pub(crate) async fn run_claude_command_plan(
     if let Some(reason) = crate::security::level::external_agent_block_reason() {
         return Err(anyhow!(reason));
     }
+    // #218: a contained turn is checked and wrapped in the OS sandbox before
+    // any credential is read or the bridge starts, so a launch the contract
+    // refuses never touches the vault or the provider.
+    let contained = match plan.containment.as_ref() {
+        Some(containment) => {
+            let bridge_port = plan
+                .bridge
+                .as_ref()
+                .map(|bridge| bridge.bind_addr.port())
+                .ok_or_else(|| anyhow!("a contained Claude pane needs its bridge"))?;
+            Some(super::containment::contain(
+                containment,
+                &plan.executable,
+                &plan.args,
+                &plan.env,
+                &plan.cwd,
+                bridge_port,
+            )?)
+        }
+        None => None,
+    };
     let started_at = Instant::now();
     let started_at_unix_ms = unix_epoch_ms();
     let mut last_progress_elapsed_ms = Some(0);
@@ -145,23 +166,8 @@ pub(crate) async fn run_claude_command_plan(
         )),
     );
     let redactor = ClaudeSecretRedactor::from_plan(&plan, /*additional_secret*/ None);
-    // #218: a contained turn is wrapped in the OS sandbox before the bridge
-    // starts, so a launch the contract refuses never reaches the provider.
-    let mut command = match plan.containment.as_ref() {
-        Some(containment) => {
-            let bridge_port = plan
-                .bridge
-                .as_ref()
-                .map(|bridge| bridge.bind_addr.port())
-                .ok_or_else(|| anyhow!("a contained Claude pane needs its bridge"))?;
-            let contained = super::containment::contain(
-                containment,
-                &plan.executable,
-                &plan.args,
-                &plan.env,
-                &plan.cwd,
-                bridge_port,
-            )?;
+    let mut command = match contained {
+        Some(contained) => {
             let (program, args) = contained
                 .argv
                 .split_first()

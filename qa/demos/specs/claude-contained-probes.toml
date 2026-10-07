@@ -5,7 +5,7 @@
 #   --bin qa/security-levels/pf24-followups/claude-contained/demo-launch.sh
 id = "claude-contained-probes"
 feature = "Contained Claude pane: sandboxed, behind the bridge"
-expected = "The Z.AI Claude pane answers through the bridge; writing in its folder works, while reading config.toml or the vault store, the network and writing outside are denied."
+expected = "The Z.AI Claude pane answers through the bridge; writing in its folder works, while reading config.toml, the vault store or other panes' records, the network and writing outside are denied."
 model = "glm-5.2"
 provider = "zai"
 config = """
@@ -44,11 +44,11 @@ wait = "Name Claude pane"
 [[steps]]
 key = "Enter"
 [[steps]]
-wait = "Claude Code - GLM 5.2 Z.AI pane"
+wait = "GLM 5.2 Z.AI · "
 [[steps]]
 pause = 1.0
 [[steps]]
-type = "Run each shell command separately and give a one-line result for each: (1) touch inside.txt (2) head -1 {home}/config.toml (3) ls {home}/secrets (4) curl -sS -m 5 https://example.com (5) touch ../outside/probe.txt"
+type = "Run each shell command separately and give a one-line result for each: (1) touch inside.txt (2) head -1 {home}/config.toml (3) ls {home}/secrets (4) curl -sS -m 5 https://example.com (5) touch ../outside/probe.txt (6) ls {home}/panes"
 [[steps]]
 key = "Enter"
 [[steps]]
