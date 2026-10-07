@@ -1217,6 +1217,7 @@ mod pf_27_s05 {
             .enable_all()
             .build()
             .expect("runtime");
+        let scan_masked = masked.clone();
         let hits = runtime.block_on(async move {
             let broker = ModelCredentialBroker::spawn_with_launcher(
                 ModelCredentialBrokerOptions {
@@ -1242,7 +1243,7 @@ mod pf_27_s05 {
                 assert_eq!(response.try_into_string().await.expect("body"), "ok");
             }
             // Scan while Core still holds its live handles.
-            let hits = memory_scan_tests::count_in_writable_memory(&masked);
+            let hits = memory_scan_tests::count_in_writable_memory(&scan_masked);
             drop((credential, broker));
             hits
         });
