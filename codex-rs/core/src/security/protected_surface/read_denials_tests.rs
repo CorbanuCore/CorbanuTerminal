@@ -1,3 +1,5 @@
+#![cfg(unix)]
+
 use super::*;
 use codex_protocol::permissions::NetworkSandboxPolicy;
 use pretty_assertions::assert_eq;

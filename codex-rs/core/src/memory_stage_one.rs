@@ -437,7 +437,7 @@ impl StageOneMemoryClient {
             _ => return Err(StageOneMemoryDenial::SourceLineageMismatch.into()),
         }
         let mut ingress = NativeIngress::default();
-        ingress.set_labelled_mode(true);
+        ingress.set_labelled_mode(/*enabled*/ true);
         // Without this home's key nothing restores: all of it stays labelled.
         if let Ok(key) = OriginKey::load_or_create(&self.codex_home) {
             ingress.set_origin_key(key);
