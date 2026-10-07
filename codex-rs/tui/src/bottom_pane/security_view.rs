@@ -28,6 +28,7 @@ use super::CancellationEvent;
 use super::bottom_pane_view::BottomPaneView;
 use super::bottom_pane_view::ViewCompletion;
 use super::security_level_picker::SecurityLevelPicker;
+use crate::security::revocation_view::RevocationView;
 
 pub(crate) struct SecurityView {
     requested: Option<SecurityLevel>,
@@ -36,6 +37,8 @@ pub(crate) struct SecurityView {
     cancelled: bool,
     inspected: bool,
     picker: Option<SecurityLevelPicker>,
+    /// PF-25-S02: the grants and kill switch view, opened from the picker.
+    revocations: Option<RevocationView>,
 }
 
 impl SecurityView {
@@ -61,6 +64,7 @@ impl SecurityView {
             keymap,
             cancelled: false,
             inspected: false,
+            revocations: None,
         }
     }
 
@@ -140,6 +144,9 @@ impl SecurityView {
 
 impl SecurityView {
     fn body(&self, width: u16) -> Vec<Line<'static>> {
+        if let Some(revocations) = &self.revocations {
+            return revocations.lines(width);
+        }
         match &self.picker {
             Some(picker) => picker.lines(width),
             None => self.lines(width),
@@ -147,6 +154,9 @@ impl SecurityView {
     }
 
     fn footer_text(&self) -> String {
+        if let Some(revocations) = &self.revocations {
+            return revocations.footer();
+        }
         match &self.picker {
             Some(picker) => picker.footer(),
             None => self.footer(),
@@ -156,9 +166,27 @@ impl SecurityView {
 
 impl BottomPaneView for SecurityView {
     fn handle_key_event(&mut self, key: KeyEvent) {
+        if let Some(revocations) = self.revocations.as_mut() {
+            revocations.handle_key_event(key);
+            if revocations.closed {
+                self.revocations = None;
+                if let Some(picker) = self.picker.as_mut() {
+                    picker.revocations_closed();
+                }
+            }
+            return;
+        }
         if let Some(picker) = self.picker.as_mut() {
             picker.handle_key_event(key);
             self.cancelled = picker.closed;
+            if picker.open_revocations {
+                let (target, app_event_tx) = picker.revocation_target();
+                self.revocations = Some(RevocationView::new(
+                    target,
+                    self.keymap.clone(),
+                    app_event_tx,
+                ));
+            }
             return;
         }
         if key_hint::plain(KeyCode::Esc).is_press(key) || self.keymap.cancel.is_pressed(key) {
@@ -188,6 +216,10 @@ impl BottomPaneView for SecurityView {
             .picker
             .as_ref()
             .is_some_and(SecurityLevelPicker::saving)
+            && !self
+                .revocations
+                .as_ref()
+                .is_some_and(RevocationView::saving)
         {
             self.cancelled = true;
         }
@@ -199,14 +231,16 @@ impl BottomPaneView for SecurityView {
     }
 
     fn pre_draw_tick(&mut self, _now: std::time::Instant) -> bool {
+        if let Some(revocations) = self.revocations.as_mut() {
+            return revocations.poll();
+        }
         self.picker.as_mut().is_some_and(SecurityLevelPicker::poll)
     }
 
     fn next_frame_delay(&self) -> Option<std::time::Duration> {
-        self.picker
-            .as_ref()
-            .filter(|picker| picker.saving())
-            .map(|_| std::time::Duration::from_millis(50))
+        let saving = self.picker.as_ref().is_some_and(SecurityLevelPicker::saving)
+            || self.revocations.as_ref().is_some_and(RevocationView::saving);
+        saving.then_some(std::time::Duration::from_millis(50))
     }
 }
 
@@ -227,7 +261,9 @@ impl Renderable for SecurityView {
         };
         let lines = self.body(area.width);
         let mut footer = footer_lines(self.footer_text());
-        if let Some(picker) = self.picker.as_ref() {
+        if self.revocations.is_none()
+            && let Some(picker) = self.picker.as_ref()
+        {
             // A review taller than the pane scrolls, and its footer says so.
             let body_height = area.height.saturating_sub(footer.len() as u16);
             picker.scroll_for(lines.len(), body_height);
@@ -241,6 +277,7 @@ impl Renderable for SecurityView {
         let scroll = self
             .picker
             .as_ref()
+            .filter(|_| self.revocations.is_none())
             .map_or(0, |picker| picker.scroll_for(lines.len(), body.height));
         Paragraph::new(lines).scroll((scroll, 0)).render(body, buf);
         Paragraph::new(footer).render(

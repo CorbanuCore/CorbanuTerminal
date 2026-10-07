@@ -12,6 +12,7 @@ pub(crate) mod migration;
 pub(crate) mod nested;
 pub(crate) mod preflight;
 pub mod restart;
+pub(crate) mod revocation_view;
 pub(crate) mod view;
 
 use codex_protocol::security::SecurityControlAction;

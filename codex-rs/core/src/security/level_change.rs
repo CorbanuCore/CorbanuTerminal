@@ -81,6 +81,11 @@ pub struct LevelBasis {
 }
 
 impl LevelBasis {
+    /// The live tree's epoch the review was shown under.
+    pub(super) fn epoch(&self) -> Option<AuthorityEpoch> {
+        self.epoch
+    }
+
     /// `configured` is [`configured_level`] of the session's config;
     /// `thread` the session's thread, when it has started.
     pub fn read(codex_home: &Path, configured: SecurityLevel, thread: Option<ThreadId>) -> Self {
@@ -274,7 +279,7 @@ pub fn commit_human_level_change(
 
 /// A policy tree built from the stored state, for a commit made while no
 /// session of this process uses the home. It saves; nothing else holds it.
-fn stored_controller(
+pub(super) fn stored_controller(
     codex_home: &Path,
     configured: SecurityLevel,
 ) -> Result<TrustedSecurityController, LevelChangeError> {

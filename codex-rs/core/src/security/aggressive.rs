@@ -298,6 +298,20 @@ pub(crate) fn admit(
     Some(grant_id)
 }
 
+/// PF-25-S02: drop the grant `grant_id`, wherever it is held. Returns
+/// whether one was.
+pub(crate) fn revoke_grant(grant_id: &str) -> bool {
+    let mut ledger = LEDGER.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut found = false;
+    for entries in ledger.values_mut() {
+        let before = entries.len();
+        entries.retain(|entry| entry.grant.grant_id.as_str() != grant_id);
+        found |= entries.len() != before;
+    }
+    ledger.retain(|_, entries| !entries.is_empty());
+    found
+}
+
 /// Drop every grant `thread` holds (also a committed transition, PF-23-S03,
 /// and revocation, PF-25-S02).
 pub(crate) fn revoke_all(thread: ThreadId) {

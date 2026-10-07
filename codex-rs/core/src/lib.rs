@@ -92,6 +92,7 @@ pub use security::grant_offer as security_grant;
 pub use security::launch_contract::external_agent_contract_armed;
 pub use security::launch_contract::protect_external_agent_launch;
 pub use security::level_change as security_level_change;
+pub use security::revocation_change as security_revocation;
 pub use security::preflight as protected_preflight;
 mod session_prefix;
 mod session_startup_prewarm;
