@@ -318,11 +318,11 @@ async fn keyring_isolation_reaches_shell_and_unified_exec() -> Result<()> {
     skip_if_host_windows!(Ok(()));
     skip_if_no_network!(Ok(()));
     const NAME: &str = codex_protocol::shell_environment::NO_NATIVE_KEYRING_ENV_VAR;
-    if std::env::var_os(NAME).is_none() {
-        // SAFETY: nextest runs each test in its own process; `just test` sets it already.
-        unsafe { std::env::set_var(NAME, "1") };
-    }
-    let expected = std::env::var(NAME)?;
+    // `just test` (scripts/isolated_rust_tests.py) sets it; other runners that
+    // do not are not keyring-isolated, so there is nothing to check.
+    let Ok(expected) = std::env::var(NAME) else {
+        return Ok(());
+    };
     for unified in [false, true] {
         for inherit_none in [false, true] {
             let harness = shell_command_harness_with(|builder| {

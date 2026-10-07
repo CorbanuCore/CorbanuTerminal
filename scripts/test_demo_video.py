@@ -108,14 +108,16 @@ class DemoVideoTest(unittest.TestCase):
 
     def test_credentials_are_resolved_in_the_shell_not_inlined(self):
         spec = dv.load_spec(self.spec_path)
-        prefix = dv.credential_prefix(spec, {"OTHER_KEY": "file:/tmp/k"})
+        prefix = dv.credential_prefix(
+            spec, {"OTHER_KEY": "file:/tmp/k"}, "/opt/corbanu/bin/corbanu"
+        )
         self.assertIn('ZAI_API_KEY="$(', prefix)
         self.assertIn("vault auth-helper provider/zai_api_key)", prefix)
         # The user's own vault is read outside the keyring isolation.
         self.assertIn("$(env -u CORBANU_TEST_NO_NATIVE_KEYRING ", prefix)
         self.assertIn('OTHER_KEY="$(cat /tmp/k)"', prefix)
         with self.assertRaises(dv.DemoError):
-            dv.credential_prefix(spec, {"X": "literal:abc"})
+            dv.credential_prefix(spec, {"X": "literal:abc"}, "/opt/corbanu/bin/corbanu")
 
     def test_vault_helper_is_never_the_candidate_or_a_build(self):
         installed = self.dir / "bin" / "corbanu"
@@ -131,6 +133,19 @@ class DemoVideoTest(unittest.TestCase):
             dv.vault_helper(str(build), installed)
         with self.assertRaises(dv.DemoError):
             dv.vault_helper(str(installed), installed)
+        # A wrapper's real candidate counts too.
+        self.assertEqual(
+            dv.candidates("/bin/sh", {"PF24_CANDIDATE": str(installed), "X": "y"}),
+            [Path("/bin/sh").resolve(), installed.resolve()],
+        )
+        with self.assertRaises(dv.DemoError):
+            dv.vault_helper(
+                str(installed),
+                dv.candidates("/bin/sh", {"PF24_CANDIDATE": str(installed)}),
+            )
+        # No checked helper, no vault lookup.
+        with self.assertRaises(dv.DemoError):
+            dv.credential_prefix(dv.load_spec(self.spec_path), {})
 
     def test_refuses_without_keyring_isolation(self):
         with self.assertRaises(dv.DemoError):

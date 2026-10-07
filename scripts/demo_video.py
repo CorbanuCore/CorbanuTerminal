@@ -311,19 +311,25 @@ def product_commit() -> str:
     return sha + ("-dirty" if dirty else "")
 
 
+def credential_sources(spec: Spec, overrides: dict[str, str]) -> dict[str, str]:
+    sources = {var: f"vault:{label}" for var, label in spec.credentials.items()}
+    sources.update(overrides)
+    return sources
+
+
 def credential_prefix(
     spec: Spec, overrides: dict[str, str], helper: str | None = None
 ) -> str:
     """Shell assignments that resolve each credential at use time, never as literals."""
-    sources = {var: f"vault:{label}" for var, label in spec.credentials.items()}
-    sources.update(overrides)
+    sources = credential_sources(spec, overrides)
     parts = []
     for var, source in sources.items():
         if not re.fullmatch(r"[A-Z_][A-Z0-9_]*", var):
             raise DemoError(f"bad credential variable {var!r}")
         kind, _, ref = source.partition(":")
         if kind == "vault":
-            helper = helper or shutil.which("corbanu") or "corbanu"
+            if not helper:
+                raise DemoError("vault: credentials need a checked vault helper")
             # The installed, signed corbanu reads the user's own vault (and so
             # the OS keyring) by design; only the candidate runs keyring-isolated.
             # `vault_helper` refuses a helper that is the candidate or a build.
@@ -578,7 +584,14 @@ def is_build_output(path: Path) -> bool:
     return any(part in ("target", "targets", "debug", "release") for part in path.parts)
 
 
-def vault_helper(explicit: str | None, candidate: Path) -> str:
+def candidates(bin_path: str, environ: dict[str, str]) -> list[Path]:
+    """`--bin` plus the real candidate a demo wrapper runs (`*_CANDIDATE`)."""
+    found = [Path(bin_path)]
+    found += [Path(v) for k, v in environ.items() if k.endswith("_CANDIDATE") and v]
+    return [path.resolve() for path in found]
+
+
+def vault_helper(explicit: str | None, candidate: Path | list[Path]) -> str:
     """The installed corbanu that reads `vault:` credentials from the user's vault.
 
     It runs outside the keyring isolation, so it must be the signed install, never
@@ -590,7 +603,8 @@ def vault_helper(explicit: str | None, candidate: Path) -> str:
             "no installed corbanu for vault: credentials; pass --vault-helper"
         )
     real = Path(found).resolve()
-    if real == candidate.resolve() or is_build_output(real):
+    others = candidate if isinstance(candidate, list) else [candidate]
+    if any(real == other.resolve() for other in others) or is_build_output(real):
         raise DemoError(
             f"refusing vault helper {real}: it is the candidate or a build output;"
             " pass --vault-helper <installed corbanu>"
@@ -600,7 +614,8 @@ def vault_helper(explicit: str | None, candidate: Path) -> str:
 
 def record(args: argparse.Namespace) -> Path:
     require_keyring_isolation(dict(os.environ))
-    if "release" in Path(args.bin).resolve().parts:
+    runs = candidates(args.bin, dict(os.environ))
+    if any("release" in path.parts for path in runs):
         raise DemoError(
             "refusing a release-profile candidate: it ignores"
             f" {KEYRING_ISOLATION_VAR} and would use the real keychain"
@@ -613,10 +628,11 @@ def record(args: argparse.Namespace) -> Path:
     if not os.access(binary, os.X_OK):
         raise DemoError(f"candidate binary not executable: {binary}")
     overrides = dict(item.split("=", 1) for item in args.credential)
-    needs_vault = bool(spec.credentials) or any(
-        source.startswith("vault:") for source in overrides.values()
+    needs_vault = any(
+        source.startswith("vault:")
+        for source in credential_sources(spec, overrides).values()
     )
-    helper = vault_helper(args.vault_helper, binary) if needs_vault else None
+    helper = vault_helper(args.vault_helper, runs) if needs_vault else None
     creds = credential_prefix(spec, overrides, helper)
     sha, day = product_commit(), dt.date.today().isoformat()
     run, places = prepare_run(spec, Path(args.out) / args.sprint)
