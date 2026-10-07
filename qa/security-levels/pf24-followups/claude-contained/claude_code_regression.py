@@ -36,7 +36,8 @@ import tempfile
 import threading
 import time
 
-# Must match `CONTAINED_DISALLOWED_TOOLS` and `CONTAINED_ASK_TOOLS` in
+# Must match `CONTAINED_TOOLS`, `CONTAINED_DISALLOWED_TOOLS` and
+# `CONTAINED_ASK_TOOLS` in
 # codex-rs/tui/src/claude_panes/command_plan.rs.
 DISALLOWED = [
     "Agent",
@@ -48,6 +49,19 @@ DISALLOWED = [
     "ScheduleWakeup",
     "SendMessage",
     "EnterWorktree",
+]
+TOOLS = [
+    "Bash",
+    "Read",
+    "Edit",
+    "Write",
+    "MultiEdit",
+    "NotebookEdit",
+    "Glob",
+    "Grep",
+    "WebFetch",
+    "WebSearch",
+    "TodoWrite",
 ]
 ASK = [
     "Bash",
@@ -95,7 +109,13 @@ def corbanu_flags(settings_path, which, mode):
         "--strict-mcp-config",
     ]
     if which == "new":
-        flags += ["--safe-mode", "--disallowedTools", ",".join(DISALLOWED)]
+        flags += [
+            "--safe-mode",
+            "--tools",
+            ",".join(TOOLS),
+            "--disallowedTools",
+            ",".join(DISALLOWED),
+        ]
     return flags
 
 
@@ -259,7 +279,7 @@ class MockModel(http.server.BaseHTTPRequestHandler):
         self.wfile.flush()
 
 
-def run(claude, which, mode, keep):
+def run(claude, which, mode, keep, prompt_text):
     root = tempfile.mkdtemp(prefix="claude-regression-")
     cwd = os.path.join(root, "pane")
     state = os.path.join(root, "state")
@@ -303,7 +323,7 @@ def run(claude, which, mode, keep):
         argv, cwd=cwd, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         stderr=subprocess.PIPE, text=True,
     )
-    prompt = {"type": "user", "message": {"role": "user", "content": "go"}}
+    prompt = {"type": "user", "message": {"role": "user", "content": prompt_text}}
     proc.stdin.write(json.dumps(prompt) + "\n")
     proc.stdin.flush()
     init, asked, results, tool_errors = None, [], [], {}
@@ -362,6 +382,7 @@ def run(claude, which, mode, keep):
     tools = (init or {}).get("tools") or []
     report = {
         "flags": which,
+        "prompt": prompt_text,
         "mode": mode,
         "seconds": round(time.monotonic() - started, 1),
         "claude_version": subprocess.run(
@@ -383,7 +404,7 @@ def run(claude, which, mode, keep):
     }
     checks = {
         "init message seen": init is not None,
-        "one result": results == ["success"],
+        "one result": len(results) == 1,
         "Bash asked the person": "Bash" in asked_tools,
         "Edit asked the person": "Edit" in asked_tools,
         "Write asked the person or unavailable": "Write" in asked_tools or "Write" not in tools,
@@ -410,9 +431,10 @@ def main():
     parser.add_argument("--claude", default="claude")
     parser.add_argument("--flags", choices=["new", "old"], default="new")
     parser.add_argument("--mode", choices=["bare", "full"], default="bare")
+    parser.add_argument("--prompt", default="go", help="e.g. a /command")
     parser.add_argument("--keep", action="store_true")
     args = parser.parse_args()
-    sys.exit(0 if run(args.claude, args.flags, args.mode, args.keep) else 1)
+    sys.exit(0 if run(args.claude, args.flags, args.mode, args.keep, args.prompt) else 1)
 
 
 if __name__ == "__main__":

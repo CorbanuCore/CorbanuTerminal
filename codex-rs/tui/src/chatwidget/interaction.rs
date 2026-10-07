@@ -241,10 +241,7 @@ impl ChatWidget {
         if request.responder.is_settled() {
             return;
         }
-        self.bottom_pane
-            .show_view(Box::new(crate::bottom_pane::ClaudeApprovalView::new(
-                request,
-            )));
+        self.bottom_pane.show_claude_approval(request);
         self.request_redraw();
     }
 

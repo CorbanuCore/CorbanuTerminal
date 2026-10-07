@@ -234,11 +234,9 @@ pub(crate) fn details(
                 out.value("file_path", &Value::String(path.to_string()));
                 shown.push("file_path");
             }
-            if fields.contains_key("old_string") || fields.contains_key("new_string") {
-                out.diff(
-                    text("old_string").unwrap_or_default(),
-                    text("new_string").unwrap_or_default(),
-                );
+            // Only text is shown as a diff; anything else shows as a field.
+            if let (Some(old), Some(new)) = (text("old_string"), text("new_string")) {
+                out.diff(old, new);
                 shown.extend(["old_string", "new_string"]);
             }
         }
@@ -252,16 +250,22 @@ pub(crate) fn details(
                 for (index, edit) in edits.iter().enumerate() {
                     out.label(format!("edit {}:", index + 1));
                     let edit_text = |name: &str| edit.get(name).and_then(Value::as_str);
-                    out.diff(
-                        edit_text("old_string").unwrap_or_default(),
-                        edit_text("new_string").unwrap_or_default(),
-                    );
-                    if let Some(rest) = edit.as_object() {
-                        for (name, value) in rest {
-                            if name != "old_string" && name != "new_string" {
-                                out.value(name, value);
+                    let diffed = match (edit_text("old_string"), edit_text("new_string")) {
+                        (Some(old), Some(new)) => {
+                            out.diff(old, new);
+                            true
+                        }
+                        _ => false,
+                    };
+                    match edit.as_object() {
+                        Some(rest) => {
+                            for (name, value) in rest {
+                                if !diffed || (name != "old_string" && name != "new_string") {
+                                    out.value(name, value);
+                                }
                             }
                         }
+                        None => out.value("edit", edit),
                     }
                 }
             }
@@ -286,8 +290,18 @@ struct DetailsBuilder<'a> {
 }
 
 impl DetailsBuilder<'_> {
+    /// Counts `chars` against the limit; past it they are hidden.
+    fn spend(&mut self, chars: usize) -> bool {
+        if self.details.hidden_chars > 0 || chars > self.budget {
+            self.details.hidden_chars += chars;
+            return false;
+        }
+        self.budget -= chars;
+        true
+    }
+
     fn label(&mut self, label: String) {
-        if self.details.hidden_chars == 0 {
+        if self.spend(label.chars().count()) {
             self.details.lines.push(Line::from(label.bold()));
         }
     }
@@ -302,13 +316,22 @@ impl DetailsBuilder<'_> {
             }
             other => other.to_string(),
         };
-        let text = (self.redact)(&text);
+        let mut text = (self.redact)(&text);
+        // A string that reads as another JSON value is quoted, so `"true"`
+        // does not look like `true`.
+        if value.is_string() && serde_json::from_str::<Value>(&text).is_ok_and(|v| !v.is_string()) {
+            text = format!("\"{text}\"");
+        }
         let name = escape_plain(name);
         if !text.contains('\n') && text.chars().count() <= 200 {
-            self.text(&text, vec![format!("{name}: ").bold()], Style::Plain);
+            if self.spend(name.chars().count() + 2) {
+                self.text(&text, vec![format!("{name}: ").bold()], Style::Plain);
+            } else {
+                self.text(&text, Vec::new(), Style::Plain);
+            }
         } else {
             self.label(format!("{name}:"));
-            self.text(&text, Vec::new(), Style::Plain);
+            self.text(&text, Vec::new(), Style::Block);
         }
     }
 
@@ -339,8 +362,12 @@ impl DetailsBuilder<'_> {
             (text, 0)
         };
         self.budget -= total - hidden;
+        // Each line costs one more, so many empty lines are not free.
+        let breaks = text.matches('\n').count();
+        self.budget = self.budget.saturating_sub(breaks);
         let marker = match style {
             Style::Plain => None,
+            Style::Block => Some("  ".into()),
             Style::Removed => Some("- ".red()),
             Style::Added => Some("+ ".green()),
         };
@@ -353,7 +380,7 @@ impl DetailsBuilder<'_> {
                 let span = Span::from(text);
                 match (is_special, style) {
                     (true, _) => span.magenta().reversed(),
-                    (false, Style::Plain) => span,
+                    (false, Style::Plain | Style::Block) => span,
                     (false, Style::Removed) => span.red(),
                     (false, Style::Added) => span.green(),
                 }
@@ -370,6 +397,8 @@ impl DetailsBuilder<'_> {
 #[derive(Clone, Copy)]
 enum Style {
     Plain,
+    /// A multi-line value under its name, indented.
+    Block,
     Removed,
     Added,
 }
@@ -379,6 +408,10 @@ enum Style {
 /// blank fillers.
 fn is_hidden(c: char) -> bool {
     c.is_control()
+        // Anything that takes no room on screen (zero-width, combining and
+        // variation characters), and private-use characters.
+        || unicode_width::UnicodeWidthChar::width(c) == Some(0)
+        || matches!(c, '\u{E000}'..='\u{F8FF}' | '\u{F0000}'..='\u{10FFFF}')
         || matches!(
             c,
             '\u{00AD}'
@@ -392,7 +425,8 @@ fn is_hidden(c: char) -> bool {
                 | '\u{1160}'
                 | '\u{17B4}'
                 | '\u{17B5}'
-                | '\u{180E}'
+                | '\u{180B}'..='\u{180F}'
+                | '\u{1BCA0}'..='\u{1BCA3}'
                 | '\u{2000}'..='\u{200F}'
                 | '\u{2028}'..='\u{202F}'
                 | '\u{205F}'..='\u{206F}'

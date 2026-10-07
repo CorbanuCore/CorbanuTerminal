@@ -1,20 +1,14 @@
 {
   "flags": "new",
-  "prompt": "go",
-  "mode": "full",
+  "prompt": "/loop 1m touch x",
+  "mode": "bare",
   "seconds": 0.7,
   "claude_version": "2.1.292 (Claude Code)",
   "permission_mode": "default",
   "tools": [
     "Bash",
     "Edit",
-    "Glob",
-    "Grep",
-    "NotebookEdit",
-    "Read",
-    "WebFetch",
-    "WebSearch",
-    "Write"
+    "Read"
   ],
   "agents": [
     "claude",
@@ -99,26 +93,18 @@
     {
       "tool_name": "Edit",
       "input": {
-        "file_path": "/tmp/claude-regression-_a7l3476/pane/seed.txt",
+        "file_path": "/tmp/claude-regression-2n1w694m/pane/seed.txt",
         "old_string": "seed",
         "new_string": "edited",
         "replace_all": false
       },
       "tool_use_id": "toolu_01"
-    },
-    {
-      "tool_name": "Write",
-      "input": {
-        "file_path": "/tmp/claude-regression-_a7l3476/pane/WRITTEN.txt",
-        "content": "should never be written\n"
-      },
-      "tool_use_id": "toolu_02"
     }
   ],
   "tool_results": {
     "toolu_00": "denied by regression",
     "toolu_01": "denied by regression",
-    "toolu_02": "denied by regression",
+    "toolu_02": "<tool_use_error>Error: No such tool available: Write. Write is disabled for this session, in subagents as well as here.</tool_use_error>",
     "toolu_03": "<tool_use_error>Error: No such tool available: Agent. Agent is disabled for this session, in subagents as well as here.</tool_use_error>",
     "toolu_04": "<tool_use_error>Error: No such tool available: Task. Task is disabled for this session, in subagents as well as here.</tool_use_error>",
     "toolu_05": "<tool_use_error>Error: No such tool available: Skill. Skill is disabled for this session, in subagents as well as here.</tool_use_error>",

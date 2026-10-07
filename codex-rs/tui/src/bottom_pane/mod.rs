@@ -567,6 +567,7 @@ impl BottomPane {
                 }
                 None => {}
             }
+            self.on_top_view_removed();
             self.on_view_stack_depth_decreased();
         }
     }
@@ -1312,15 +1313,54 @@ impl BottomPane {
         true
     }
 
-    /// Remove every view settled elsewhere (see
-    /// [`BottomPaneView::is_settled_elsewhere`]), leaving the rest in order.
+    /// A contained Claude pane's tool request (#218): queued in the open
+    /// Claude approval popup if there is one, so requests never cover each
+    /// other, otherwise shown in a new one.
+    pub(crate) fn show_claude_approval(
+        &mut self,
+        request: crate::claude_panes::approval::ClaudeApprovalRequest,
+    ) {
+        let mut request = Some(request);
+        for view in self.view_stack.iter_mut().rev() {
+            if let Some(pending) = request.take() {
+                request = view.try_consume_claude_approval(pending);
+            }
+        }
+        if let Some(request) = request {
+            self.push_view(Box::new(ClaudeApprovalView::new(
+                request,
+                self.last_composer_activity_at,
+            )));
+        }
+        self.request_redraw();
+    }
+
+    /// Drop requests settled elsewhere (see
+    /// [`BottomPaneView::remove_settled_requests`]) and remove views left
+    /// with none, keeping the rest in order.
     pub(crate) fn remove_views_settled_elsewhere(&mut self) {
         let before = self.view_stack.len();
-        self.view_stack.retain(|view| !view.is_settled_elsewhere());
+        let mut emptied = Vec::new();
+        for (index, view) in self.view_stack.iter_mut().enumerate() {
+            if view.remove_settled_requests() {
+                emptied.push(index);
+            }
+        }
+        for index in emptied.into_iter().rev() {
+            self.view_stack.remove(index);
+        }
         if self.view_stack.len() != before {
+            self.on_top_view_removed();
             self.on_view_stack_depth_decreased();
             self.schedule_active_view_frame();
-            self.request_redraw();
+        }
+        self.request_redraw();
+    }
+
+    /// Tell the view that is now on top that it is active again.
+    fn on_top_view_removed(&mut self) {
+        if let Some(view) = self.view_stack.last_mut() {
+            view.on_uncovered();
         }
     }
 
@@ -1337,6 +1377,7 @@ impl BottomPane {
         let removed_active_view = index + 1 == self.view_stack.len();
         self.view_stack.remove(index);
         if removed_active_view {
+            self.on_top_view_removed();
             self.schedule_active_view_frame();
         }
         self.request_redraw();
@@ -2347,6 +2388,45 @@ mod tests {
             approval_decision,
             Some(CommandExecutionApprovalDecision::Accept)
         );
+    }
+
+    /// #218: contained Claude pane requests queue in one popup, under other
+    /// views too, and leave when their turn stops waiting.
+    #[test]
+    fn claude_approvals_queue_in_one_popup_and_leave_when_settled() {
+        use crate::claude_panes::approval::ApprovalResponder;
+        use crate::claude_panes::approval::ClaudeApprovalRequest;
+        let request = || {
+            let (responder, rx) = ApprovalResponder::new();
+            let request = ClaudeApprovalRequest {
+                pane_id: "claude-1234abcd".to_string(),
+                pane_title: "Claude".to_string(),
+                cwd: PathBuf::from("/w"),
+                tool_name: "Bash".to_string(),
+                tool_use_id: None,
+                details: crate::claude_panes::approval::details(
+                    "Bash",
+                    &serde_json::json!({ "command": "touch x" }),
+                    str::to_string,
+                ),
+                responder,
+            };
+            (request, rx)
+        };
+        let (tx_raw, _rx) = unbounded_channel::<AppEvent>();
+        let mut pane = test_pane(AppEventSender::new(tx_raw));
+        let (first, first_rx) = request();
+        let (second, second_rx) = request();
+        pane.show_claude_approval(first);
+        pane.show_claude_approval(second);
+        assert_eq!(pane.view_stack.len(), 1);
+
+        drop(first_rx);
+        pane.remove_views_settled_elsewhere();
+        assert_eq!(pane.view_stack.len(), 1);
+        drop(second_rx);
+        pane.remove_views_settled_elsewhere();
+        assert!(pane.view_stack.is_empty());
     }
 
     #[test]

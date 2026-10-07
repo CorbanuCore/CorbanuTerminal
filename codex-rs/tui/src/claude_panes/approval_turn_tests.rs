@@ -11,6 +11,7 @@ use crate::app_event_sender::AppEventSender;
 use crate::claude_panes::approval::ApprovalResponder;
 use crate::claude_panes::approval::Denial;
 use crate::claude_panes::execution::parse_claude_version;
+use crate::claude_panes::execution::resolve_contained_claude;
 use crate::claude_panes::execution::wait_for_decision;
 
 const RESULT: &str = r#"{"type":"result","subtype":"success","is_error":false,"result":"done","session_id":"33333333-3333-4333-8333-333333333333"}"#;
@@ -432,4 +433,47 @@ fn claude_versions_parse() {
     assert_eq!(parse_claude_version("claude"), None);
     assert_eq!(parse_claude_version("2.1"), None);
     assert_eq!(parse_claude_version(""), None);
+}
+
+/// Review round 2, finding 3: the Claude Code that is checked and launched is
+/// one file, never inside a folder the pane can write.
+#[test]
+fn contained_claude_is_never_taken_from_a_writable_folder() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let bin = root.path().join("bin");
+    let pane = root.path().join("pane");
+    std::fs::create_dir_all(&bin).expect("bin");
+    std::fs::create_dir_all(&pane).expect("pane");
+    let install = |dir: &std::path::Path| {
+        let path = dir.join("claude");
+        std::fs::write(&path, "#!/bin/sh\necho 2.1.292\n").expect("write");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        path
+    };
+    let installed = install(&bin);
+    let resolved = resolve_contained_claude(installed.to_str().expect("utf-8"), &[&pane])
+        .expect("an installed claude");
+    assert_eq!(
+        resolved,
+        std::fs::canonicalize(&installed).expect("canonical")
+    );
+
+    let planted = install(&pane);
+    let err = resolve_contained_claude(planted.to_str().expect("utf-8"), &[&pane])
+        .expect_err("planted in the pane folder");
+    assert!(
+        err.to_string().contains("which the pane can write"),
+        "{err}"
+    );
+
+    // A symlink out of a safe folder into the pane folder is refused too.
+    let link = bin.join("claude-link");
+    std::os::unix::fs::symlink(&planted, &link).expect("symlink");
+    assert!(resolve_contained_claude(link.to_str().expect("utf-8"), &[&pane]).is_err());
+
+    // Not executable, or a relative path: refused.
+    let plain = bin.join("claude-plain");
+    std::fs::write(&plain, "x").expect("write");
+    assert!(resolve_contained_claude(plain.to_str().expect("utf-8"), &[&pane]).is_err());
+    assert!(resolve_contained_claude("./claude", &[&pane]).is_err());
 }

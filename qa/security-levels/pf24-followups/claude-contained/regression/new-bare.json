@@ -1,5 +1,6 @@
 {
   "flags": "new",
+  "prompt": "go",
   "mode": "bare",
   "seconds": 0.7,
   "claude_version": "2.1.292 (Claude Code)",
@@ -92,7 +93,7 @@
     {
       "tool_name": "Edit",
       "input": {
-        "file_path": "/tmp/claude-regression-dwsr42a5/pane/seed.txt",
+        "file_path": "/tmp/claude-regression-3qaee50a/pane/seed.txt",
         "old_string": "seed",
         "new_string": "edited",
         "replace_all": false

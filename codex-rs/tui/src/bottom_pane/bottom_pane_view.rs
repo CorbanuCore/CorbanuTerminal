@@ -26,11 +26,24 @@ pub(crate) trait BottomPaneView: Renderable {
         false
     }
 
-    /// Return `true` once something other than this view's own input settled
-    /// what it was asking (a contained Claude pane's request that its turn
-    /// stopped waiting for); it is then removed wherever it is in the stack.
-    fn is_settled_elsewhere(&self) -> bool {
+    /// Drop requests that something other than this view's input settled
+    /// (contained Claude pane requests whose turn stopped waiting). Return
+    /// `true` when nothing is left, so the view is removed wherever it is in
+    /// the stack.
+    fn remove_settled_requests(&mut self) -> bool {
         false
+    }
+
+    /// The view is the active one again after the view above it closed.
+    fn on_uncovered(&mut self) {}
+
+    /// Try to queue a contained Claude pane's tool request; return it if not
+    /// consumed.
+    fn try_consume_claude_approval(
+        &mut self,
+        request: crate::claude_panes::approval::ClaudeApprovalRequest,
+    ) -> Option<crate::claude_panes::approval::ClaudeApprovalRequest> {
+        Some(request)
     }
 
     /// Return the completion reason once the view has finished.

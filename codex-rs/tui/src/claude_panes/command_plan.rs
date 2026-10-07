@@ -373,8 +373,11 @@ pub(crate) fn build_claude_command_plan(
         // Claude Code asks before the tools in `CONTAINED_ASK_TOOLS` (the
         // settings' `ask` rules) through stdin/stdout, and Corbanu asks a
         // person (`super::approval`). The prompt then goes in on stdin too.
-        // Subagents, skills, slash commands and other tools that start or
-        // schedule more agents are unavailable.
+        // Only the tools in `CONTAINED_TOOLS` exist, so a newer Claude Code's
+        // new tools are not available either; subagents, skills, slash
+        // commands and tools that start or schedule agents are also denied
+        // by name.
+        let tools = CONTAINED_TOOLS.join(",");
         let disallowed = CONTAINED_DISALLOWED_TOOLS.join(",");
         args.extend(
             [
@@ -384,6 +387,8 @@ pub(crate) fn build_claude_command_plan(
                 "stdio",
                 "--input-format",
                 "stream-json",
+                "--tools",
+                tools.as_str(),
                 "--disallowedTools",
                 disallowed.as_str(),
             ]
@@ -427,7 +432,14 @@ pub(crate) fn build_claude_command_plan(
         (ClaudeCommandMode::NewSession, session_id)
     };
     let stdin_prompt = if containment.is_some() {
-        Some(prompt)
+        // A prompt starting with `/` would run a Claude Code command (built-in
+        // skills such as `/batch` or `/loop` stay under `--safe-mode`); with a
+        // leading space it is plain text for the model.
+        Some(if prompt.starts_with('/') {
+            format!(" {prompt}")
+        } else {
+            prompt
+        })
     } else {
         args.push(prompt);
         None
@@ -509,6 +521,22 @@ pub(crate) const CONTAINED_ASK_TOOLS: [&str; 7] = [
     "NotebookEdit",
     "WebFetch",
     "WebSearch",
+];
+
+/// The only tools a contained pane has (`--tools`); names a Claude Code
+/// version does not have are ignored.
+pub(crate) const CONTAINED_TOOLS: [&str; 11] = [
+    "Bash",
+    "Read",
+    "Edit",
+    "Write",
+    "MultiEdit",
+    "NotebookEdit",
+    "Glob",
+    "Grep",
+    "WebFetch",
+    "WebSearch",
+    "TodoWrite",
 ];
 
 /// Tools a contained pane does not get: subagents (whose definitions can ask

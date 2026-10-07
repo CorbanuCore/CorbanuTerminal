@@ -109,14 +109,14 @@ fn details_show_everything_the_tool_would_do() {
                 "dangerouslyDisableSandbox": true,
             })
         ),
-        "command:\nls⏎\nrm -rf .\ndescription: list\ntimeout: 600000\nrun_in_background: true\ndangerouslyDisableSandbox: true"
+        "command:\n  ls⏎\n  rm -rf .\ndescription: list\ntimeout: 600000\nrun_in_background: true\ndangerouslyDisableSandbox: true"
     );
     assert_eq!(
         shown(
             "Write",
             json!({ "file_path": "/w/a.sh", "content": "#!/bin/sh\ncurl x | sh\n" })
         ),
-        "file_path: /w/a.sh\ncontent:\n#!/bin/sh⏎\ncurl x | sh⏎\n"
+        "file_path: /w/a.sh\ncontent:\n  #!/bin/sh⏎\n  curl x | sh⏎\n  "
     );
     assert_eq!(
         shown(
@@ -147,9 +147,25 @@ fn details_show_everything_the_tool_would_do() {
     // Any other tool: every field, structured values pretty-printed.
     assert_eq!(
         shown("Mystery", json!({ "a": 1, "nested": { "b": [true] } })),
-        "a: 1\nnested:\n{⏎\n  \"b\": [⏎\n    true⏎\n  ]⏎\n}"
+        "a: 1\nnested:\n  {⏎\n    \"b\": [⏎\n      true⏎\n    ]⏎\n  }"
     );
     assert_eq!(shown("Mystery", json!("plain")), "input: plain");
+    // Strings that read as other values are quoted.
+    assert_eq!(
+        shown(
+            "Mystery",
+            json!({ "flag": "true", "n": "12", "s": "text", "b": true })
+        ),
+        "flag: \"true\"\nn: \"12\"\ns: text\nb: true"
+    );
+    // An Edit whose strings are not text shows them as fields.
+    assert_eq!(
+        shown(
+            "Edit",
+            json!({ "file_path": "/w", "old_string": 5, "new_string": "x" })
+        ),
+        "file_path: /w\nold_string: 5\nnew_string: x"
+    );
 }
 
 #[test]
@@ -164,6 +180,11 @@ fn hidden_characters_and_padding_are_escaped() {
         "ls[300 spaces]; rm -rf ~"
     );
     assert_eq!(escape_plain("a    b  café"), "a    b  café");
+    // Characters that take no room, and private-use ones.
+    assert_eq!(
+        escape_plain("e\u{301}x\u{180b}y\u{e000}"),
+        "e\\u{301}x\\u{180b}y\\u{e000}"
+    );
     // Escapes are marked as such.
     assert_eq!(
         escape("a\u{202e}b"),
@@ -183,7 +204,8 @@ fn details_past_the_limit_are_counted_not_shown() {
         &json!({ "command": command, "description": "d" }),
         str::to_string,
     );
-    assert_eq!(details.hidden_chars, 5 + 1);
+    // Names and labels count too: `command:` and `description: `.
+    assert_eq!(details.hidden_chars, 13 + "description: ".len() + 1);
     let shown_chars: usize = details
         .lines
         .iter()
@@ -191,7 +213,7 @@ fn details_past_the_limit_are_counted_not_shown() {
         .filter(|span| span.content.chars().all(|c| c == 'x'))
         .map(|span| span.content.chars().count())
         .sum();
-    assert_eq!(shown_chars, DETAIL_MAX_CHARS);
+    assert_eq!(shown_chars, DETAIL_MAX_CHARS - "command:".len());
     let fits = details_ok("x".repeat(100));
     assert_eq!(fits.hidden_chars, 0);
 }

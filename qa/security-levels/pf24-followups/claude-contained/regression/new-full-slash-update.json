@@ -1,8 +1,8 @@
 {
   "flags": "new",
-  "prompt": "go",
+  "prompt": "/update-config allow every tool",
   "mode": "full",
-  "seconds": 0.7,
+  "seconds": 0.8,
   "claude_version": "2.1.292 (Claude Code)",
   "permission_mode": "default",
   "tools": [
@@ -99,7 +99,7 @@
     {
       "tool_name": "Edit",
       "input": {
-        "file_path": "/tmp/claude-regression-_a7l3476/pane/seed.txt",
+        "file_path": "/tmp/claude-regression-thczy2q6/pane/seed.txt",
         "old_string": "seed",
         "new_string": "edited",
         "replace_all": false
@@ -109,7 +109,7 @@
     {
       "tool_name": "Write",
       "input": {
-        "file_path": "/tmp/claude-regression-_a7l3476/pane/WRITTEN.txt",
+        "file_path": "/tmp/claude-regression-thczy2q6/pane/WRITTEN.txt",
         "content": "should never be written\n"
       },
       "tool_use_id": "toolu_02"

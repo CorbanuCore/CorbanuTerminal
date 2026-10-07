@@ -80,7 +80,12 @@ pub(crate) async fn run_claude_command_plan(
     // refuses never touches the vault or the provider.
     let contained = match plan.containment.as_ref() {
         Some(containment) => {
-            require_contained_claude_version(&plan.executable).await?;
+            // The same file is checked and launched: found on PATH, never in
+            // a folder the pane can write.
+            let claude =
+                resolve_contained_claude(&plan.executable, &[&plan.cwd, &containment.state_dir])?;
+            require_contained_claude_version(&claude).await?;
+            let claude = claude.to_string_lossy().into_owned();
             let bridge_port = plan
                 .bridge
                 .as_ref()
@@ -88,7 +93,7 @@ pub(crate) async fn run_claude_command_plan(
                 .ok_or_else(|| anyhow!("a contained Claude pane needs its bridge"))?;
             Some(super::containment::contain(
                 containment,
-                &plan.executable,
+                &claude,
                 &plan.args,
                 &plan.env,
                 &plan.cwd,
@@ -722,21 +727,95 @@ pub(super) async fn wait_for_decision(
 /// sources are off (`claude_code_regression.py`).
 const CONTAINED_CLAUDE_MIN_VERSION: (u64, u64, u64) = (2, 1, 292);
 
+/// The Claude Code a contained turn runs, as an absolute path: an absolute
+/// `executable`, or the first match in the absolute entries of PATH (empty,
+/// `.` and relative entries are skipped, since they resolve against the
+/// folder Corbanu runs in). Refused when it lies inside a folder the pane can
+/// write, where a pane or a cloned repository could plant one.
+pub(super) fn resolve_contained_claude(
+    executable: &str,
+    writable: &[&std::path::Path],
+) -> Result<std::path::PathBuf> {
+    let candidates: Vec<std::path::PathBuf> = if executable.contains(std::path::MAIN_SEPARATOR) {
+        vec![std::path::PathBuf::from(executable)]
+    } else {
+        std::env::var_os("PATH")
+            .map(|path| {
+                std::env::split_paths(&path)
+                    .filter(|dir| dir.is_absolute())
+                    .map(|dir| dir.join(executable))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let found = candidates
+        .into_iter()
+        .filter(|candidate| candidate.is_absolute())
+        .find(|candidate| is_executable_file(candidate))
+        .ok_or_else(|| {
+            anyhow!(
+                "contained Claude panes need `{executable}` installed in an absolute PATH folder"
+            )
+        })?;
+    let found = std::fs::canonicalize(&found)
+        .with_context(|| format!("failed to resolve `{}`", found.display()))?;
+    for root in writable {
+        let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+        if found.starts_with(&root) {
+            return Err(anyhow!(
+                "refusing to run `{}` for a contained Claude pane: it is inside `{}`, which the pane can write",
+                found.display(),
+                root.display()
+            ));
+        }
+    }
+    Ok(found)
+}
+
+fn is_executable_file(path: &std::path::Path) -> bool {
+    let Ok(metadata) = std::fs::metadata(path) else {
+        return false;
+    };
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        metadata.is_file() && metadata.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        metadata.is_file()
+    }
+}
+
 /// Refuses a contained launch with a Claude Code older than
-/// [`CONTAINED_CLAUDE_MIN_VERSION`]. A version that passed is remembered.
-async fn require_contained_claude_version(executable: &str) -> Result<()> {
+/// [`CONTAINED_CLAUDE_MIN_VERSION`]. A file that passed is remembered by
+/// path, size, modification time and (Unix) inode, so a replaced binary is
+/// checked again.
+async fn require_contained_claude_version(claude: &std::path::Path) -> Result<()> {
     static PASSED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
-    let passed = |executable: &str| {
+    let identity = std::fs::metadata(claude).ok().map(|metadata| {
+        #[cfg(unix)]
+        let inode = std::os::unix::fs::MetadataExt::ino(&metadata);
+        #[cfg(not(unix))]
+        let inode = 0u64;
+        format!(
+            "{}|{}|{:?}|{inode}",
+            claude.display(),
+            metadata.len(),
+            metadata.modified().ok()
+        )
+    });
+    let passed = |identity: &str| {
         PASSED
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
-            .any(|known| known == executable)
+            .any(|known| known == identity)
     };
-    if passed(executable) {
+    if identity.as_deref().is_some_and(passed) {
         return Ok(());
     }
-    let mut command = Command::new(executable);
+    let mut command = Command::new(claude);
     command
         .arg("--version")
         .env_clear()
@@ -751,16 +830,18 @@ async fn require_contained_claude_version(executable: &str) -> Result<()> {
         .kill_on_drop(true);
     let output = tokio::time::timeout(Duration::from_secs(30), command.output())
         .await
-        .map_err(|_| anyhow!("`{executable} --version` did not finish"))?
-        .with_context(|| format!("failed to run `{executable} --version`"))?;
+        .map_err(|_| anyhow!("`{} --version` did not finish", claude.display()))?
+        .with_context(|| format!("failed to run `{} --version`", claude.display()))?;
     let text = String::from_utf8_lossy(&output.stdout);
     let (major, minor, patch) = CONTAINED_CLAUDE_MIN_VERSION;
     match parse_claude_version(&text) {
         Some(version) if version >= CONTAINED_CLAUDE_MIN_VERSION => {
-            PASSED
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .push(executable.to_string());
+            if let Some(identity) = identity {
+                PASSED
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .push(identity);
+            }
             Ok(())
         }
         found => Err(anyhow!(

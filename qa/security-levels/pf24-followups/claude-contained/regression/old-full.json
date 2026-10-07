@@ -1,5 +1,6 @@
 {
   "flags": "old",
+  "prompt": "go",
   "mode": "full",
   "seconds": 0.8,
   "claude_version": "2.1.292 (Claude Code)",
@@ -105,7 +106,7 @@
     {
       "tool_name": "Edit",
       "input": {
-        "file_path": "/tmp/claude-regression-i8mgk23w/pane/seed.txt",
+        "file_path": "/tmp/claude-regression-llttl9vh/pane/seed.txt",
         "old_string": "seed",
         "new_string": "edited",
         "replace_all": false
@@ -115,7 +116,7 @@
     {
       "tool_name": "Write",
       "input": {
-        "file_path": "/tmp/claude-regression-i8mgk23w/pane/WRITTEN.txt",
+        "file_path": "/tmp/claude-regression-llttl9vh/pane/WRITTEN.txt",
         "content": "should never be written\n"
       },
       "tool_use_id": "toolu_02"

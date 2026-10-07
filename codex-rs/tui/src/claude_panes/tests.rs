@@ -4894,7 +4894,11 @@ fn contained_plan_routes_tool_approvals_to_corbanu() {
     assert_eq!(flag("--setting-sources"), Some(""));
     assert!(plan.args.iter().any(|arg| arg == "--strict-mcp-config"));
     assert!(plan.args.iter().any(|arg| arg == "--safe-mode"));
-    // No subagents, skills or slash commands.
+    // Only these tools; no subagents, skills or slash commands.
+    assert_eq!(
+        flag("--tools"),
+        Some("Bash,Read,Edit,Write,MultiEdit,NotebookEdit,Glob,Grep,WebFetch,WebSearch,TodoWrite")
+    );
     assert_eq!(
         flag("--disallowedTools"),
         Some(
@@ -4919,6 +4923,12 @@ fn contained_plan_routes_tool_approvals_to_corbanu() {
             "disableBypassPermissionsMode": "disable",
         })
     );
+
+    // A prompt starting with `/` reaches the model as text, not a command.
+    let plan =
+        build_claude_command_plan(&contained_pane, "/loop 1m rm -rf .".to_string(), dir.path())
+            .expect("plan");
+    assert_eq!(plan.stdin_prompt.as_deref(), Some(" /loop 1m rm -rf ."));
 
     // Without the feature nothing changes.
     drop(_settings);
