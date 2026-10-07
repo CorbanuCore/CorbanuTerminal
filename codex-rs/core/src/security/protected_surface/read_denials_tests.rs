@@ -220,3 +220,201 @@ async fn pf_23_s01_upload_reads_follow_the_denials_after_taint() {
     assert!(!readable_under(&policy, &link, cwd.as_path()));
     assert!(readable_under(&policy, &plain, cwd.as_path()));
 }
+
+/// PF-23-S02: files that run code later become read-only wherever the
+/// command could write them; ordinary files stay writable.
+#[test]
+fn pf_23_s02_persistence_files_become_read_only() {
+    let fx = fixture();
+    let cwd = fx.user_home.join("project");
+    std::fs::create_dir_all(cwd.join(".git/hooks")).unwrap();
+    let denials = ReadDenials::collect(&fx.codex_home, Some(&fx.user_home), None, &[abs(&cwd)]);
+    let policy = denials
+        .apply(&PermissionProfile::Disabled)
+        .unwrap()
+        .file_system_sandbox_policy();
+    let writable = |path: &Path| policy.can_write_path_with_cwd(path, &cwd);
+    let readable = |path: &Path| policy.can_read_path_with_cwd(path, &cwd);
+    for protected in [
+        fx.user_home.join(".zshrc"),
+        fx.user_home.join(".config/fish/config.fish"),
+        fx.user_home.join("Library/LaunchAgents/x.plist"),
+        fx.user_home.join(".local/bin/corbanu"),
+        fx.user_home.join(".claude/settings.json"),
+        cwd.join(".git/hooks/pre-commit"),
+        cwd.join(".git/config"),
+        cwd.join(".codex/config.toml"),
+        fx.codex_home.join("skills/x/SKILL.md"),
+        fx.codex_home.join("shell_snapshots/s.sh"),
+        fx.codex_home.join("tmp/arg0/apply_patch"),
+    ] {
+        assert!(!writable(&protected), "{}", protected.display());
+        assert!(readable(&protected), "{}", protected.display());
+    }
+    for open in [
+        cwd.join("src/main.rs"),
+        cwd.join(".git/objects/ab"),
+        fx.user_home.join("notes.txt"),
+        fx.codex_home.join("worktrees/w/file"),
+    ] {
+        assert!(writable(&open), "{}", open.display());
+    }
+    // A credential stays unreadable inside a read-only folder.
+    assert!(!readable(&fx.user_home.join(".claude/.credentials.json")));
+}
+
+/// PF-23-S02: the rules only narrow. A read-only entry never makes a path
+/// readable that the profile did not let the command read, and every
+/// denial of the profile itself stays.
+#[test]
+fn pf_23_s02_rules_never_widen_and_keep_existing_denials() {
+    let fx = fixture();
+    let cwd = fx.user_home.join("project");
+    let secret = fx.user_home.join("private");
+    let entry = |path: &Path, access| {
+        FileSystemSandboxEntry::new(FileSystemPath::Path { path: abs(path) }, access)
+    };
+    let base = PermissionProfile::from_runtime_permissions(
+        &FileSystemSandboxPolicy::restricted(vec![
+            entry(&cwd, FileSystemAccessMode::Write),
+            entry(&secret, FileSystemAccessMode::Deny),
+        ]),
+        NetworkSandboxPolicy::Restricted,
+    );
+    let denials = ReadDenials::collect(&fx.codex_home, Some(&fx.user_home), None, &[abs(&cwd)]);
+    let policy = denials.apply(&base).unwrap().file_system_sandbox_policy();
+    for unreadable in [fx.user_home.join(".zshrc"), fx.codex_home.join("skills")] {
+        assert!(!policy.can_read_path_with_cwd(&unreadable, &cwd));
+    }
+    assert!(!policy.can_read_path_with_cwd(&secret, &cwd));
+    assert!(policy.can_write_path_with_cwd(&cwd.join("a.txt"), &cwd));
+    assert!(!policy.can_write_path_with_cwd(&cwd.join(".codex/config.toml"), &cwd));
+}
+
+/// PF-23-S02: under Aggressive the rules apply from the start of the
+/// session, before any untrusted content; under Moderate they wait for it.
+#[tokio::test]
+async fn pf_23_s02_aggressive_applies_the_rules_from_the_start() {
+    let (session, turn) = crate::session::tests::make_session_and_context().await;
+    let environment = turn
+        .environments
+        .primary()
+        .expect("a primary environment")
+        .clone();
+    let auth = turn.config.codex_home.join("auth.json");
+    #[allow(deprecated)]
+    let cwd = turn.cwd.clone();
+    let readable = |context: codex_file_system::FileSystemSandboxContext| {
+        PermissionProfile::try_from(context.permissions)
+            .unwrap()
+            .file_system_sandbox_policy()
+            .can_read_path_with_cwd(auth.as_path(), cwd.as_path())
+    };
+    for (level, protected) in [
+        (codex_security_policy::SecurityLevel::Moderate, false),
+        (codex_security_policy::SecurityLevel::Aggressive, true),
+    ] {
+        let client = (*session.services.model_client())
+            .clone()
+            .with_ingress_level(level)
+            .with_source_envelopes(true);
+        session.services.replace_model_client(client);
+        let context = turn.file_system_sandbox_context(None, &environment);
+        let protected_context = protect_file_tool_context(&session, &turn, context.clone());
+        assert_eq!(readable(protected_context), !protected, "{level:?}");
+        assert_eq!(
+            post_taint_read_policy(&session, &turn).is_some(),
+            protected,
+            "{level:?}"
+        );
+    }
+}
+
+/// PF-23-S02: worktrees keep hooks in the git folder their `.git` file
+/// points to; a path below a regular file is left out (the Linux sandbox
+/// cannot mount there); a symlinked dotfile is protected where it really is.
+#[test]
+fn pf_23_s02_worktree_hooks_and_symlinked_dotfiles_are_protected() {
+    let fx = fixture();
+    let main = fx.user_home.join("main");
+    let common = main.join(".git");
+    let own = common.join("worktrees/w");
+    std::fs::create_dir_all(own.as_path()).unwrap();
+    std::fs::create_dir_all(common.join("hooks")).unwrap();
+    std::fs::write(own.join("commondir"), "../..\n").unwrap();
+    let cwd = fx.user_home.join("w");
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::write(cwd.join(".git"), format!("gitdir: {}\n", own.display())).unwrap();
+    let dotfiles = fx.user_home.join("dotfiles");
+    std::fs::create_dir_all(&dotfiles).unwrap();
+    std::fs::write(dotfiles.join("zshrc"), "x").unwrap();
+    std::os::unix::fs::symlink(dotfiles.join("zshrc"), fx.user_home.join(".zshrc")).unwrap();
+
+    let denials = ReadDenials::collect(&fx.codex_home, Some(&fx.user_home), None, &[abs(&cwd)]);
+    let read_only: Vec<_> = denials.read_only_paths().cloned().collect();
+    let mut protected_paths = vec![
+        cwd.join(".git"),
+        common.join("hooks"),
+        common.join("config"),
+        own.join("config.worktree"),
+        own.join("commondir"),
+        dotfiles.join("zshrc"),
+    ];
+    if cfg!(target_os = "macos") {
+        protected_paths.push(common.join("commondir"));
+    }
+    for protected in protected_paths {
+        assert!(
+            read_only.contains(&abs(&protected)),
+            "{}",
+            protected.display()
+        );
+    }
+    // Nothing below the `.git` file.
+    assert!(
+        read_only
+            .iter()
+            .all(|path| path.as_path() == cwd.join(".git")
+                || !path.as_path().starts_with(cwd.join(".git"))),
+        "{read_only:?}"
+    );
+    let policy = denials
+        .apply(&PermissionProfile::Disabled)
+        .unwrap()
+        .file_system_sandbox_policy();
+    assert!(!policy.can_write_path_with_cwd(&common.join("hooks/pre-commit"), &cwd));
+    assert!(!policy.can_write_path_with_cwd(&dotfiles.join("zshrc"), &cwd));
+    assert!(policy.can_write_path_with_cwd(&cwd.join("src.rs"), &cwd));
+}
+
+/// PF-23-S02 review 2: a session in a subfolder still protects the
+/// repository's hooks and config; a link to a missing target protects the
+/// target's path.
+#[test]
+fn pf_23_s02_enclosing_repo_and_dangling_links_are_protected() {
+    let fx = fixture();
+    let repo = fx.user_home.join("repo");
+    std::fs::create_dir_all(repo.join(".git/hooks")).unwrap();
+    let cwd = repo.join("codex-rs");
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::os::unix::fs::symlink(
+        fx.user_home.join("dotfiles/zshrc"),
+        fx.user_home.join(".zshrc"),
+    )
+    .unwrap();
+    let denials = ReadDenials::collect(&fx.codex_home, Some(&fx.user_home), None, &[abs(&cwd)]);
+    let read_only: Vec<_> = denials.read_only_paths().cloned().collect();
+    let mut protected_paths = vec![repo.join(".git/hooks"), repo.join(".git/config")];
+    if cfg!(target_os = "macos") {
+        // Linux leaves out a missing commondir and a dangling home link.
+        protected_paths.push(repo.join(".git/commondir"));
+        protected_paths.push(fx.user_home.join("dotfiles/zshrc"));
+    }
+    for protected in protected_paths {
+        assert!(
+            read_only.contains(&abs(&protected)),
+            "{}",
+            protected.display()
+        );
+    }
+}

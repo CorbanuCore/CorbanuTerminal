@@ -5,6 +5,7 @@ use crate::security::protected_surface::TypedWindow;
 use crate::security::protected_surface::admit;
 use crate::security::protected_surface::ask_human;
 use crate::security::protected_surface::classify_typed_input;
+use crate::security::protected_surface::confined;
 use crate::security::protected_surface::is_interrupt;
 use crate::security::protected_surface::lock_typed_input;
 use crate::security::protected_surface::note_interrupt;
@@ -150,11 +151,25 @@ async fn post_taint_check(
         // No such running process: the write fails on its own.
         return Ok(());
     };
-    let tainted = session
-        .services
-        .model_client()
-        .post_taint_state()
+    let state = session.services.model_client().post_taint_state();
+    let tainted = state
+        .as_ref()
         .is_some_and(|state| state.taint_generation > 0);
+    // PF-23-S02: a process keeps the sandbox it started with. One started
+    // without the protected-path rules (before untrusted content, or with
+    // them lifted) can still read credentials: typing into it needs the
+    // human once under Moderate, and a grant under Aggressive.
+    let thread = session.thread_id();
+    let ask_unconfined = match state.as_ref() {
+        Some(state) => match confined::typing(thread, args.session_id, state) {
+            confined::Typing::Clear => false,
+            confined::Typing::AskOnce => true,
+            confined::Typing::Refused(refusal) => {
+                return Err(FunctionCallError::RespondToModel(refusal));
+            }
+        },
+        None => false,
+    };
     // Judged with what was typed since untrusted content arrived, so a
     // command split across calls is seen whole.
     let window = TypedWindow::open(session.thread_id(), args.session_id, &args.chars, &live);
@@ -174,6 +189,7 @@ async fn post_taint_check(
             texts
                 .iter()
                 .filter_map(|text| classify_typed_input(&command, text, &process.cwd, &codex_home))
+                .chain(ask_unconfined.then_some(ProtectedActionKind::UnconfinedProcess))
                 .reduce(ProtectedActionKind::strongest)
         },
     )
@@ -215,6 +231,9 @@ async fn post_taint_check(
     check
         .resolve(session, approved)
         .map_err(FunctionCallError::RespondToModel)?;
+    if ask_unconfined && let Some(state) = &state {
+        confined::note_allowed(thread, args.session_id, state);
+    }
     window.clear();
     Ok(())
 }

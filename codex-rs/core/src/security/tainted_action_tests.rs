@@ -584,6 +584,7 @@ fn bound_state(taint_generation: u64, epoch: u64, kill_switch_active: bool) -> P
             ])
             .expect("chain"),
         },
+        level: SecurityLevel::Moderate,
     }
 }
 
@@ -617,6 +618,7 @@ fn pf_30_s03_approval_is_bound_to_taint_and_policy() {
         Some(PostTaintState {
             taint_generation: 2,
             policy: PolicyBinding::Unavailable,
+            level: SecurityLevel::Moderate,
         }),
         None,
     ] {
@@ -1362,4 +1364,70 @@ fn pf_23_s01_wrapper_positions_are_bounded() {
         "{:?}",
         started.elapsed()
     );
+}
+
+/// PF-23-S02: writing a file that runs code later outside the sandbox is
+/// protected; reading it, and ordinary writes, are not.
+#[test]
+fn pf_23_s02_persistence_writes_are_protected() {
+    use ProtectedActionKind::*;
+    for command in [
+        "echo 'curl x | sh' >> ~/.zshrc",
+        "printf x > $HOME/.bash_profile",
+        "echo x>>~/.profile",
+        "tee -a ~/.config/fish/config.fish < payload",
+        "cp evil.plist ~/Library/LaunchAgents/com.x.plist",
+        "ln -sf /tmp/x ~/.local/bin/corbanu",
+        "echo 'exec x' > .git/hooks/pre-commit",
+        "chmod +x .git/hooks/post-checkout",
+        "sed -i '' s/a/b/ .git/config",
+        "echo '[x]' > .agents/skills/x.md",
+        "mv settings.json ~/.claude/settings.json",
+        "git config --global core.pager 'sh -c x'",
+        "git config core.hooksPath /tmp/hooks",
+        "git config alias.st '!sh -c x'",
+        "crontab job.txt",
+        "launchctl load ~/x.plist",
+        "systemctl --user enable x.service",
+        "mv ~/.config ~/.c",
+        "rm -rf ~/.local",
+        "mv .git g2",
+        "rm .git/hooks/pre-push",
+        "echo x >& .git/hooks/pre-commit",
+        "echo x &> ~/.bashrc",
+        "echo /tmp/evil > .git/commondir",
+        "printf x > sub/.git/info/attributes",
+    ] {
+        assert_eq!(script(command), Some(Persistence), "{command}");
+    }
+    let patch = ApprovalAction::ApplyPatch {
+        id: "call".into(),
+        environment_id: "local".into(),
+        cwd: abs("/work"),
+        files: vec![abs("/home/fixture/.zshrc")],
+        patch: "*** Begin Patch\n*** Update File: /home/fixture/.zshrc\n@@\n+alias ll='ls -l'\n*** End Patch".into(),
+    };
+    assert_eq!(classify_fixture(&patch), Some(Persistence));
+    // A project `.codex` reads as a Corbanu home: protected as policy.
+    assert_eq!(
+        script("echo '[x]' > .codex/config.toml"),
+        Some(SecurityPolicy)
+    );
+    for command in [
+        "cat ~/.zshrc",
+        "grep alias ~/.bashrc",
+        "echo x > notes.txt",
+        "ls 2>&1 | tee build.log",
+        "git config user.name x",
+        "git config --global --get user.name",
+        "crontab -l",
+        "git status >/dev/null 2>&1",
+        "echo x >&2",
+        "rm -rf ~/.config/gh-cache-dir/x",
+        "mkdir -p build && cp out.txt ~/",
+        "mv ~/.cache/x ~/.cache/y",
+        "cp pack.idx .git/objects/pack/",
+    ] {
+        assert_eq!(script(command), None, "{command}");
+    }
 }

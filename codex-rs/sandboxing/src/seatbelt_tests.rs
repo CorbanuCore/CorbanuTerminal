@@ -1514,3 +1514,77 @@ async fn pf_33_s02_guard_limits_seatbelt_egress_to_proxy_ports() -> anyhow::Resu
     );
     Ok(())
 }
+
+/// PF-23-S02: once a policy denies reads, a protected path's folders cannot
+/// be renamed (which would move it out from under its rule), and a
+/// protected symlink cannot be removed; writing elsewhere in those folders
+/// still works.
+#[test]
+fn renaming_a_folder_above_a_protected_path_is_denied() {
+    let dir = TempDir::new().expect("tempdir");
+    let base = dir.path().canonicalize().expect("canonical");
+    let config = base.join("config");
+    fs::create_dir_all(config.join("fish")).expect("fish");
+    fs::write(config.join("fish/config.fish"), "ok\n").expect("config");
+    fs::create_dir_all(base.join("dotfiles")).expect("dotfiles");
+    fs::write(base.join("dotfiles/zshrc"), "ok\n").expect("zshrc");
+    std::os::unix::fs::symlink(base.join("dotfiles/zshrc"), base.join(".zshrc")).expect("link");
+    let entry = |path: &Path, access| FileSystemSandboxEntry {
+        path: FileSystemPath::Path {
+            path: AbsolutePathBuf::from_absolute_path(path).expect("absolute"),
+        },
+        access,
+        missing_path_behavior: None,
+    };
+    let policy = FileSystemSandboxPolicy::restricted(vec![
+        FileSystemSandboxEntry {
+            path: FileSystemPath::Special {
+                value: FileSystemSpecialPath::Root,
+            },
+            access: FileSystemAccessMode::Write,
+            missing_path_behavior: None,
+        },
+        entry(&base.join("secret"), FileSystemAccessMode::Deny),
+        entry(&config.join("fish"), FileSystemAccessMode::Read),
+        entry(&base.join(".zshrc"), FileSystemAccessMode::Read),
+        // Its parent `local` does not exist yet.
+        entry(&base.join("local/bin"), FileSystemAccessMode::Read),
+        // Its parent `empty` exists and is empty.
+        entry(&base.join("empty/git"), FileSystemAccessMode::Read),
+    ]);
+    fs::create_dir_all(base.join("empty")).expect("empty");
+    let script = "mv config moved; echo mv=$?; rm .zshrc; echo rm=$?; \
+                  echo new > config/other.txt && echo wrote-other; \
+                  mkdir -p prep/bin && echo x > prep/bin/tool; \
+                  mv prep local; echo mv-missing=$?; mkdir local; echo mkdir-missing=$?; \
+                  mkdir -p prep2/git && echo x > prep2/git/config; \
+                  perl -e 'rename(\"prep2\", \"empty\") or exit 1'; echo mv-over-empty=$?";
+    let args = create_seatbelt_command_args(CreateSeatbeltCommandArgsParams {
+        command: vec!["/bin/sh".to_string(), "-c".to_string(), script.to_string()],
+        file_system_sandbox_policy: &policy,
+        network_sandbox_policy: NetworkSandboxPolicy::Restricted,
+        sandbox_policy_cwd: &base,
+        enforce_managed_network: false,
+        managed_network: None,
+        environment_id: None,
+        network: None,
+        extra_allow_unix_sockets: &[],
+    })
+    .expect("args");
+    let output = Command::new(MACOS_PATH_TO_SEATBELT_EXECUTABLE)
+        .args(&args)
+        .current_dir(&base)
+        .output()
+        .expect("run seatbelt");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("mv=1"), "{stdout}");
+    assert!(stdout.contains("rm=1"), "{stdout}");
+    assert!(stdout.contains("wrote-other"), "{stdout}");
+    assert!(stdout.contains("mv-missing=1"), "{stdout}");
+    assert!(stdout.contains("mkdir-missing=1"), "{stdout}");
+    assert!(stdout.contains("mv-over-empty=1"), "{stdout}");
+    assert!(!base.join("local").exists());
+    assert!(!base.join("empty/git").exists());
+    assert!(config.join("fish/config.fish").exists());
+    assert!(base.join(".zshrc").is_symlink());
+}

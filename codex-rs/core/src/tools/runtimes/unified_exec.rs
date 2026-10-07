@@ -337,6 +337,32 @@ impl<'a> ToolRuntime<UnifiedExecRequest, UnifiedExecProcess> for UnifiedExecRunt
             req.turn_environment.shell_snapshot(&native_cwd)
         };
         let (file_system_sandbox_policy, _) = attempt.permissions.to_runtime_permissions();
+        // PF-23-S02: remember whether this process can read credentials, from
+        // the sandbox that really runs it, for typing into it later.
+        {
+            // Both a Corbanu store and a user credential folder must be
+            // unreadable (a profile may deny one on its own).
+            let markers = [
+                Some(ctx.turn.config.codex_home.join("auth.json").into_path_buf()),
+                dirs::home_dir().map(|home| home.join(".ssh")),
+            ];
+            let cwd = attempt.sandbox_cwd.to_abs_path().ok();
+            let confined = !environment_is_remote
+                && attempt.sandbox != codex_sandboxing::SandboxType::None
+                && cwd.is_some_and(|cwd| {
+                    markers.iter().all(|marker| {
+                        marker.as_ref().is_some_and(|marker| {
+                            !file_system_sandbox_policy
+                                .can_read_path_with_cwd(marker, cwd.as_path())
+                        })
+                    })
+                });
+            crate::security::protected_surface::confined::note_start(
+                ctx.session.thread_id(),
+                req.process_id,
+                confined,
+            );
+        }
         let launch_sandbox_permissions = sandbox_permissions_preserving_denied_reads(
             req.sandbox_permissions,
             &file_system_sandbox_policy,

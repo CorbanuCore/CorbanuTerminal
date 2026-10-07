@@ -188,8 +188,7 @@ zstd = { workspace = true }
 ignored = ["openssl-sys"]
 ignored-paths = [
     "tests/remote_env_windows/*.rs",
-    # PF-23-S02 registration seams: declared modules that intentionally hold only docs.
-    "src/security/aggressive.rs",
+    # Registration seams: declared modules that intentionally hold only docs.
     "src/security/confidentiality/mod.rs",
     "src/security/recovery.rs",
     "src/security/taint/mod.rs",

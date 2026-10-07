@@ -438,6 +438,90 @@ fn protected_metadata_names_for_writable_root(
     names
 }
 
+/// Spellings of `path` Seatbelt may see: as written, fully resolved, and
+/// with its nearest existing folder resolved (a path that does not exist yet
+/// under a symlinked folder such as `/tmp`).
+fn sandbox_spellings(path: &Path) -> BTreeSet<PathBuf> {
+    let mut spellings = BTreeSet::from([path.to_path_buf()]);
+    if let Some(normalized) = normalize_path_for_sandbox(path) {
+        spellings.insert(normalized.into_path_buf());
+    }
+    let mut existing = path;
+    let mut tail = Vec::new();
+    while !existing.exists() {
+        let (Some(parent), Some(name)) = (existing.parent(), existing.file_name()) else {
+            break;
+        };
+        tail.push(name);
+        existing = parent;
+    }
+    if let Ok(mut resolved) = existing.canonicalize() {
+        for name in tail.iter().rev() {
+            resolved.push(name);
+        }
+        spellings.insert(resolved);
+    }
+    spellings
+}
+
+/// Seatbelt rules match paths, not files: renaming a protected path, or any
+/// folder above it, would move it out from under its rule (`mv ~/.config x`,
+/// then write `x/fish/config.fish`, then move it back), and removing a
+/// protected symlink would let a new file take its name. Deny unlinking
+/// (which covers rename and remove) of every protected path and every folder
+/// above it, in each spelling. Where part of the path does not exist yet,
+/// deny creating its first missing component too, so a folder prepared
+/// elsewhere cannot be renamed into place (`mv x ~/.config`); Linux mounts
+/// the same component read-only. Creating and writing other files inside
+/// those folders stays allowed.
+fn build_seatbelt_rename_guard_policy(
+    protected: Vec<AbsolutePathBuf>,
+) -> (String, Vec<(String, PathBuf)>) {
+    let mut guarded = BTreeSet::new();
+    let mut uncreatable = BTreeSet::new();
+    for path in protected {
+        for spelling in sandbox_spellings(path.as_path()) {
+            if let Some(missing) = spelling
+                .ancestors()
+                .filter(|ancestor| std::fs::symlink_metadata(ancestor).is_err())
+                .last()
+            {
+                uncreatable.insert(missing.to_path_buf());
+            }
+            for ancestor in spelling.ancestors() {
+                if ancestor.parent().is_none() {
+                    break;
+                }
+                guarded.insert(ancestor.to_path_buf());
+            }
+        }
+    }
+    let mut params = Vec::new();
+    let mut literals = |prefix: &str, paths: BTreeSet<PathBuf>| {
+        paths
+            .into_iter()
+            .enumerate()
+            .map(|(index, path)| {
+                let key = format!("{prefix}_{index}");
+                let literal = format!("(literal (param \"{key}\"))");
+                params.push((key, path));
+                literal
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    let unlink = literals("RENAME_GUARD", guarded);
+    let create = literals("CREATE_GUARD", uncreatable);
+    let mut policy = Vec::new();
+    if !unlink.is_empty() {
+        policy.push(format!("(deny file-write-unlink {unlink})"));
+    }
+    if !create.is_empty() {
+        policy.push(format!("(deny file-write* {create})"));
+    }
+    (policy.join("\n"), params)
+}
+
 fn build_seatbelt_unreadable_glob_policy(
     file_system_sandbox_policy: &FileSystemSandboxPolicy,
     cwd: &Path,
@@ -637,6 +721,25 @@ pub fn create_seatbelt_command_args(
 
     let unreadable_roots =
         file_system_sandbox_policy.get_unreadable_roots_with_cwd(sandbox_policy_cwd);
+    // Protected paths whose folders may not be renamed, once a policy denies
+    // reads (a policy without denied paths keeps today's rules): every denied
+    // path and every read-only path inside a writable root except the default
+    // `.git`/`.codex`/`.agents` carve-outs at the root itself.
+    let mut rename_guarded = unreadable_roots.clone();
+    if !unreadable_roots.is_empty() && !file_system_sandbox_policy.has_full_disk_write_access() {
+        for root in file_system_sandbox_policy.get_writable_roots_with_cwd(sandbox_policy_cwd) {
+            rename_guarded.extend(root.read_only_subpaths.into_iter().filter(|subpath| {
+                !(subpath.as_path().parent() == Some(root.root.as_path())
+                    && subpath
+                        .as_path()
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|name| PROTECTED_METADATA_PATH_NAMES.contains(&name)))
+            }));
+        }
+    }
+    let (rename_guard_policy, rename_guard_params) =
+        build_seatbelt_rename_guard_policy(rename_guarded);
     let (file_write_policy, file_write_dir_params) =
         if file_system_sandbox_policy.has_full_disk_write_access() {
             if unreadable_roots.is_empty() {
@@ -743,6 +846,7 @@ pub fn create_seatbelt_command_args(
         file_read_policy,
         file_write_policy,
         deny_read_policy,
+        rename_guard_policy,
         network_policy,
     ];
     if include_platform_defaults {
@@ -754,6 +858,7 @@ pub fn create_seatbelt_command_args(
     let dir_params = [
         file_read_dir_params,
         file_write_dir_params,
+        rename_guard_params,
         unix_socket_dir_params(&proxy),
     ]
     .concat();

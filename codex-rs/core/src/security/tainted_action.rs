@@ -33,6 +33,9 @@ mod outbound;
 mod paths;
 mod shell;
 
+pub(crate) use paths::USER_PERSISTENCE;
+pub(crate) use paths::WORKSPACE_PERSISTENCE;
+
 /// Protected surfaces a tainted session may not reach on model authority.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ProtectedActionKind {
@@ -53,6 +56,12 @@ pub(crate) enum ProtectedActionKind {
     ValueTransfer,
     /// A tool route the security level has not classified (PF-23-S01).
     UnclassifiedTool,
+    /// Writing a file that runs code or sets policy later, outside the
+    /// sandbox: shell start-up files, login items, git hooks (PF-23-S02).
+    Persistence,
+    /// Typing into a process whose sandbox was set before the protected-path
+    /// rules applied, so it can still read credentials (PF-23-S02).
+    UnconfinedProcess,
 }
 
 impl ProtectedActionKind {
@@ -74,6 +83,12 @@ impl ProtectedActionKind {
             Self::Disclosure => "sending local data to another machine or service",
             Self::ValueTransfer => "a value transfer",
             Self::UnclassifiedTool => "a tool the security level has not classified",
+            Self::Persistence => {
+                "changing a file that runs code later (shell start-up, login items, git hooks)"
+            }
+            Self::UnconfinedProcess => {
+                "typing into a process started before the session's protected-path rules applied"
+            }
         }
     }
 }
@@ -101,6 +116,17 @@ pub(crate) struct PostTaintState {
     /// Count of recorded batches without standing.
     pub(crate) taint_generation: u64,
     pub(crate) policy: PolicyBinding,
+    /// The effective level: the stricter of the configured level and the
+    /// live policy's (Aggressive when the policy cannot be read).
+    pub(crate) level: SecurityLevel,
+}
+
+impl PostTaintState {
+    /// Whether the sandbox's protected-path rules apply: after untrusted
+    /// content, and under Aggressive from the start (PF-23-S02).
+    pub(crate) fn protected_paths_apply(&self) -> bool {
+        self.taint_generation > 0 || self.level == SecurityLevel::Aggressive
+    }
 }
 
 /// Host-held state for one protected action, captured before approval and
@@ -227,6 +253,22 @@ const RECURSIVE_READERS: &[(&str, &[&str])] = &[
     ("rg", &["--hidden", "-u", "-.", "--no-ignore"]),
     ("find", &["-exec", "-execdir", "-ok"]),
 ];
+/// Commands that write the paths they name (PF-23-S02): naming a persistence
+/// file to one of them, or redirecting output to it, is a write.
+const WRITERS: &[&str] = &[
+    "tee", "cp", "mv", "install", "ln", "rsync", "dd", "truncate", "touch", "ditto", "sed", "perl",
+    "ed", "ex", "patch", "chmod", "unzip", "tar", "curl", "wget", "rm", "rmdir", "unlink", "mkdir",
+];
+/// `git config` keys that make git run a program (PF-23-S02).
+const GIT_RUN_KEYS: &[&str] = &[
+    "core.hookspath",
+    "core.fsmonitor",
+    "core.sshcommand",
+    "core.pager",
+    "core.editor",
+    "core.askpass",
+    "credential.helper",
+];
 /// Flags whose value is the folder later relative words resolve against.
 const FOLDER_FLAGS: &[&str] = &["-C", "--directory", "--cwd", "--cd", "--chdir"];
 /// Nesting limit for scripts, payloads and literals classified inside an
@@ -279,7 +321,11 @@ pub(super) fn classify_with(
             let cwd = path_text(cwd);
             classifier.homes.allow_lookups_under(&cwd);
             for file in files {
-                classifier.path(&path_text(file));
+                let file = path_text(file);
+                classifier.path(&file);
+                if classifier.homes.is_persistence(&file) {
+                    classifier.note(ProtectedActionKind::Persistence);
+                }
             }
             // Commands written into a file that is run later are judged now,
             // whether the file looks runnable by name or by where it leads.
@@ -313,11 +359,47 @@ fn rank(kind: ProtectedActionKind) -> u8 {
     match kind {
         ProtectedActionKind::UnclassifiedTool => 0,
         ProtectedActionKind::UnseenCode => 1,
-        ProtectedActionKind::Disclosure => 2,
-        ProtectedActionKind::SecurityPolicy => 3,
-        ProtectedActionKind::Credentials => 4,
-        ProtectedActionKind::ValueTransfer => 5,
-        ProtectedActionKind::Vault => 6,
+        ProtectedActionKind::UnconfinedProcess => 2,
+        ProtectedActionKind::Disclosure => 3,
+        ProtectedActionKind::Persistence => 4,
+        ProtectedActionKind::SecurityPolicy => 5,
+        ProtectedActionKind::Credentials => 6,
+        ProtectedActionKind::ValueTransfer => 7,
+        ProtectedActionKind::Vault => 8,
+    }
+}
+
+/// Commands that install something to run later outside the sandbox:
+/// global git config or a git key that runs a program, cron, launchd and
+/// systemd user units (PF-23-S02). `args` are lowercase.
+fn persistence_command(name: &str, args: &[String]) -> bool {
+    let has = |word: &str| args.iter().any(|arg| arg == word);
+    match name {
+        "git" => {
+            let Some(at) = args.iter().position(|arg| arg == "config") else {
+                return false;
+            };
+            let config = &args[at + 1..];
+            let reading = config.iter().any(|arg| {
+                matches!(
+                    arg.as_str(),
+                    "--get" | "--get-all" | "--get-regexp" | "--list" | "-l" | "get" | "list"
+                )
+            });
+            !reading
+                && (config
+                    .iter()
+                    .any(|arg| matches!(arg.as_str(), "--global" | "--system"))
+                    || config.iter().any(|arg| {
+                        GIT_RUN_KEYS.contains(&arg.as_str()) || arg.starts_with("alias.")
+                    }))
+        }
+        "crontab" => !has("-l"),
+        "launchctl" => ["load", "bootstrap", "submit", "enable"]
+            .iter()
+            .any(|verb| has(verb)),
+        "systemctl" => has("--user") && ["enable", "link", "edit"].iter().any(|verb| has(verb)),
+        _ => false,
     }
 }
 
@@ -564,6 +646,9 @@ impl Classifier {
             if CLI_NAMES.contains(&name) && !imported {
                 self.cli(args);
             }
+            if persistence_command(name, args) {
+                self.note(ProtectedActionKind::Persistence);
+            }
             for (credential_command, verbs) in CREDENTIAL_COMMANDS {
                 if name == *credential_command
                     && args.iter().any(|word| verbs.contains(&word.as_str()))
@@ -596,12 +681,17 @@ impl Classifier {
                             .any(|word| flags.iter().any(|flag| has_flag(word, flag))))
             })
         });
+        let writer = command
+            .as_ref()
+            .map(|(index, name)| (*index, WRITERS.contains(&name.as_str())));
         let cwd = folders.cwd.clone();
         // Words resolve against the folder of a `-C`/`--directory` flag
         // (`tar -C ~ ...`, `git -C ~/.codex ...`) once one has been given.
         let mut folder = cwd.clone();
         let mut previous: Option<&str> = None;
-        for word in words {
+        for (position, word) in words.iter().enumerate() {
+            let written = simple.writes_to.contains(&position)
+                || writer.is_some_and(|(index, writes)| writes && position > index);
             // A folder flag's value is where the command runs, not what it reads.
             let mut folder_value = false;
             if let Some(flag) = previous
@@ -641,6 +731,9 @@ impl Classifier {
                 for base in bases {
                     let resolved = self.homes.resolve(candidate, &base);
                     self.word_path(&resolved, candidate, depth);
+                    if written && self.homes.is_persistence(&resolved) {
+                        self.note(ProtectedActionKind::Persistence);
+                    }
                     if recursive && !folder_value && self.homes.holds_a_home(&resolved) {
                         self.note(ProtectedActionKind::Credentials);
                     }
