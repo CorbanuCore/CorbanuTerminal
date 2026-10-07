@@ -8,6 +8,7 @@ use super::protocol::BROKER_SESSION_ID;
 use super::protocol::BROKER_TASK_ID;
 use super::protocol::BrokerBootstrap;
 use super::protocol::CONTROL_PROTOCOL_VERSION;
+use super::protocol::ControlErrorCode;
 use super::protocol::ControlRequest;
 use super::protocol::ControlResponse;
 use super::protocol::FRAME_HEADER;
@@ -86,6 +87,8 @@ pub(crate) struct IsolatedBrokerLauncher {
     program: Option<PathBuf>,
     args: Vec<OsString>,
     envs: Vec<(OsString, OsString)>,
+    /// PF-27-S05: variables the broker must not inherit.
+    removed_envs: Vec<OsString>,
     skip_harness_preamble: bool,
     controller_pid_override: Option<u32>,
 }
@@ -96,9 +99,30 @@ impl IsolatedBrokerLauncher {
             program: None,
             args: vec![OsString::from(CODEX_CREDENTIAL_BROKER_ARG1)],
             envs: Vec::new(),
+            removed_envs: Vec::new(),
             skip_harness_preamble: false,
             controller_pid_override: None,
         }
+    }
+
+    /// Runs `program` (a Corbanu executable) instead of the current one.
+    pub(crate) fn with_program(mut self, program: Option<PathBuf>) -> Self {
+        if program.is_some() {
+            self.program = program;
+        }
+        self
+    }
+
+    pub(crate) fn with_env(mut self, key: &str, value: impl Into<OsString>) -> Self {
+        self.envs.push((OsString::from(key), value.into()));
+        self
+    }
+
+    /// The broker's launch environment must not carry `key` either: a
+    /// same-user process can read another process's launch environment.
+    pub(crate) fn without_env(mut self, key: &str) -> Self {
+        self.removed_envs.push(OsString::from(key));
+        self
     }
 
     /// Re-executes a libtest binary filtered to one child-entry test. The test
@@ -114,6 +138,7 @@ impl IsolatedBrokerLauncher {
             program,
             args,
             envs,
+            removed_envs: Vec::new(),
             skip_harness_preamble: true,
             controller_pid_override,
         }
@@ -194,6 +219,9 @@ impl IsolatedBrokerClient {
             Some(dir) => command.env(BROKER_RUNTIME_DIR_ENV, dir),
             None => command.env_remove(BROKER_RUNTIME_DIR_ENV),
         };
+        for key in &launcher.removed_envs {
+            command.env_remove(key);
+        }
         for (key, value) in &launcher.envs {
             command.env(key, value);
         }
@@ -343,6 +371,57 @@ impl IsolatedBrokerClient {
             value: value.to_string(),
         })?;
         self.registered(response)
+    }
+
+    /// PF-27-S05: hands one environment variable's value to the broker.
+    pub(crate) fn stash_env(&self, name: &str, value: &str) -> Result<(), IsolatedBrokerError> {
+        match self.call(&ControlRequest::StashEnv {
+            name: name.to_string(),
+            value: value.to_string(),
+        })? {
+            ControlResponse::Stashed => Ok(()),
+            ControlResponse::Error { .. } => Err(IsolatedBrokerError::Rejected),
+            _ => Err(self.fail(IsolatedBrokerError::Control)),
+        }
+    }
+
+    /// PF-27-S05: registers a model key the broker reads itself.
+    pub(crate) fn register_model_stored(
+        &self,
+        binding: ModelBindingWire,
+        provider_key_id: &str,
+        env_names: &[String],
+    ) -> Result<StoredRegistration, IsolatedBrokerError> {
+        let response = self.call(&ControlRequest::RegisterModelStored {
+            binding,
+            provider_key_id: provider_key_id.to_string(),
+            env_names: env_names.to_vec(),
+        })?;
+        match response {
+            ControlResponse::Error {
+                code: ControlErrorCode::NotFound,
+            } => Ok(StoredRegistration::NotFound),
+            ControlResponse::Error {
+                code: ControlErrorCode::Unavailable,
+            } => Ok(StoredRegistration::StoreUnavailable),
+            response => self
+                .registered(response)
+                .map(StoredRegistration::Registered),
+        }
+    }
+
+    /// PF-27-S05: drops one reference.
+    pub(crate) fn unregister(
+        &self,
+        reference: &CredentialReference,
+    ) -> Result<(), IsolatedBrokerError> {
+        match self.call(&ControlRequest::Unregister {
+            reference: reference.as_str().to_string(),
+        })? {
+            ControlResponse::Unregistered => Ok(()),
+            ControlResponse::Error { .. } => Err(IsolatedBrokerError::Rejected),
+            _ => Err(self.fail(IsolatedBrokerError::Control)),
+        }
     }
 
     fn registered(
@@ -571,8 +650,12 @@ impl Drop for IsolatedBrokerClient {
 impl ControlChannel {
     fn send(&mut self, request: &ControlRequest) -> Result<(), IsolatedBrokerError> {
         let writer = self.writer.as_mut().ok_or(IsolatedBrokerError::Control)?;
-        let mut line =
-            Zeroizing::new(serde_json::to_vec(request).map_err(|_| IsolatedBrokerError::Control)?);
+        // PF-27-S05: the line may carry a raw value. Reserve it once so a
+        // growing buffer never leaves an unzeroed copy behind; a request that
+        // would outgrow it is refused.
+        let mut line = Zeroizing::new(Vec::with_capacity(MAX_CONTROL_LINE_BYTES + 1));
+        let mut bounded = BoundedWriter(&mut line);
+        serde_json::to_writer(&mut bounded, request).map_err(|_| IsolatedBrokerError::Rejected)?;
         if line.len() > MAX_CONTROL_LINE_BYTES {
             return Err(IsolatedBrokerError::Rejected);
         }
@@ -593,6 +676,33 @@ impl ControlChannel {
         if let Some(writer) = self.writer.take() {
             let _ = writer.shutdown(std::net::Shutdown::Both);
         }
+    }
+}
+
+/// PF-27-S05: outcome of a stored-key registration.
+pub(crate) enum StoredRegistration {
+    Registered(CredentialReference),
+    /// No stashed variable and no stored key.
+    NotFound,
+    /// The store (vault or OS keyring) could not be read.
+    StoreUnavailable,
+}
+
+/// Appends to a vector without letting it grow past its reserved capacity.
+struct BoundedWriter<'a>(&'a mut Vec<u8>);
+
+impl std::io::Write for BoundedWriter<'_> {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        // Keep one byte for the newline.
+        if self.0.len() + bytes.len() >= self.0.capacity() {
+            return Err(std::io::ErrorKind::OutOfMemory.into());
+        }
+        self.0.extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }
 

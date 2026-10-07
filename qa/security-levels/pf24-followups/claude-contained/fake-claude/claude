@@ -1,0 +1,45 @@
+#!/bin/sh
+# A stand-in for Claude Code 2.1.292 for the contained-pane approval demo when
+# no model can be reached (Z.AI out of balance). It speaks Claude Code's
+# stream-json control protocol: it reads the prompt from stdin, asks to run
+# two Bash commands with `can_use_tool` requests, runs each one only if it
+# was allowed, and reports. It runs inside the pane's sandbox like the real
+# one. Put this folder first on PATH (CLAUDE_BIN_DIR).
+case "$1" in
+--version) echo "2.1.292 (Claude Code)"; exit 0 ;;
+esac
+session=00000000-0000-4000-8000-000000000000
+prev=
+for arg in "$@"; do
+  if [ "$prev" = "--session-id" ] || [ "$prev" = "--resume" ]; then session=$arg; fi
+  prev=$arg
+done
+IFS= read -r prompt
+printf '%s\n' "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"$session\",\"model\":\"fake-claude\",\"permissionMode\":\"default\",\"tools\":[\"Bash\",\"Edit\",\"Read\"]}"
+
+# ask ID COMMAND_JSON DESCRIPTION: prints the request, reads the answer.
+ask() {
+  printf '%s\n' "{\"type\":\"control_request\",\"request_id\":\"$1\",\"request\":{\"subtype\":\"can_use_tool\",\"tool_name\":\"Bash\",\"tool_use_id\":\"toolu_$1\",\"input\":{\"command\":$2,\"description\":\"$3\",\"dangerouslyDisableSandbox\":false}}}"
+  IFS= read -r answer
+  case "$answer" in
+  *'"behavior":"allow"'*) return 0 ;;
+  *) return 1 ;;
+  esac
+}
+
+# The first command spans two lines and hides a right-to-left override; the
+# popup shows both.
+if ask req-1 '"touch first.txt\nls first.txt # \u202etxt.hs"' "Create first.txt"; then
+  touch first.txt && first=allowed
+else
+  first=denied
+fi
+if ask req-2 '"touch second.txt"' "Create second.txt"; then
+  touch second.txt && second=allowed
+else
+  second=denied
+fi
+text="touch first.txt was $first; touch second.txt was $second."
+printf '%s\n' "{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"$text\"}]},\"session_id\":\"$session\"}"
+printf '%s\n' "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"$text\",\"session_id\":\"$session\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}"
+cat > /dev/null

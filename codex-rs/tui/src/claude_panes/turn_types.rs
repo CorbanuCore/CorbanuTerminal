@@ -133,6 +133,9 @@ pub(crate) struct ClaudeCommandPlan {
     pub(crate) direct_accounting: Option<PaneDirectAccounting>,
     /// Set when the turn runs contained (#218): sandboxed, clean environment.
     pub(crate) containment: Option<ClaudeContainment>,
+    /// The prompt, sent as Claude Code's first stream-json input message
+    /// rather than in argv, when tool approvals go through Corbanu.
+    pub(crate) stdin_prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

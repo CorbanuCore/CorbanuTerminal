@@ -27,33 +27,48 @@ impl BrokerContainment {
 /// `writable_dir` (and `/dev/null`); process creation and cross-process
 /// inspection are denied.
 pub fn contain_credential_broker(writable_dir: &Path) -> BrokerContainment {
+    contain_credential_broker_with_files(writable_dir, &[])
+}
+
+/// Like [`contain_credential_broker`], also leaving each existing file in
+/// `writable_files` writable (PF-27-S05: the vault's lock file).
+pub fn contain_credential_broker_with_files(
+    writable_dir: &Path,
+    writable_files: &[std::path::PathBuf],
+) -> BrokerContainment {
     #[cfg(target_os = "macos")]
     {
-        macos::contain(writable_dir)
+        macos::contain(writable_dir, writable_files)
     }
     #[cfg(target_os = "linux")]
     {
-        linux::contain(writable_dir)
+        linux::contain(writable_dir, writable_files)
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
-        let _ = writable_dir;
+        let _ = (writable_dir, writable_files);
         BrokerContainment::none()
     }
 }
 
 /// The Seatbelt profile used on macOS, exposed for tests.
 pub fn broker_seatbelt_profile(writable_dir: &Path) -> Option<String> {
-    let dir = writable_dir.to_str()?;
-    if dir.contains(['"', '\\']) || !writable_dir.is_absolute() {
-        return None;
+    broker_seatbelt_profile_with_files(writable_dir, &[])
+}
+
+/// The Seatbelt profile with extra writable files.
+pub fn broker_seatbelt_profile_with_files(
+    writable_dir: &Path,
+    writable_files: &[std::path::PathBuf],
+) -> Option<String> {
+    let (dir, canonical) = quotable(writable_dir)?;
+    let mut extra = String::new();
+    for file in writable_files {
+        let (file, canonical) = quotable(file)?;
+        extra.push_str(&format!(
+            "\n    (require-not (literal \"{file}\"))\n    (require-not (literal \"{canonical}\"))"
+        ));
     }
-    // Seatbelt matches canonical paths (`/tmp` is `/private/tmp`).
-    let canonical = std::fs::canonicalize(writable_dir)
-        .ok()
-        .and_then(|path| path.to_str().map(str::to_string))
-        .filter(|path| !path.contains(['"', '\\']))
-        .unwrap_or_else(|| dir.to_string());
     Some(format!(
         r#"(version 1)
 (allow default)
@@ -66,9 +81,29 @@ pub fn broker_seatbelt_profile(writable_dir: &Path) -> Option<String> {
     (require-not (subpath "{dir}"))
     (require-not (subpath "{canonical}"))
     (require-not (literal "/dev/null"))
-    (require-not (literal "/private/var/run/syslog"))))
+    (require-not (literal "/private/var/run/syslog")){extra}))
 "#
     ))
+}
+
+/// `path` and its canonical form, when both can be quoted in a profile.
+fn quotable(path: &Path) -> Option<(String, String)> {
+    let raw = path.to_str()?;
+    if raw.contains(['"', '\\']) || !path.is_absolute() {
+        return None;
+    }
+    // Seatbelt matches canonical paths (`/tmp` is `/private/tmp`). A file that
+    // does not exist yet is matched through its canonical parent.
+    let canonical = std::fs::canonicalize(path)
+        .ok()
+        .or_else(|| {
+            let parent = std::fs::canonicalize(path.parent()?).ok()?;
+            Some(parent.join(path.file_name()?))
+        })
+        .and_then(|path| path.to_str().map(str::to_string))
+        .filter(|path| !path.contains(['"', '\\']))
+        .unwrap_or_else(|| raw.to_string());
+    Some((raw.to_string(), canonical))
 }
 
 #[cfg(target_os = "macos")]
@@ -84,8 +119,12 @@ mod macos {
         fn sandbox_free_error(errorbuf: *mut c_char);
     }
 
-    pub(super) fn contain(writable_dir: &Path) -> BrokerContainment {
-        let Some(profile) = super::broker_seatbelt_profile(writable_dir) else {
+    pub(super) fn contain(
+        writable_dir: &Path,
+        writable_files: &[std::path::PathBuf],
+    ) -> BrokerContainment {
+        let Some(profile) = super::broker_seatbelt_profile_with_files(writable_dir, writable_files)
+        else {
             return BrokerContainment::none();
         };
         let Ok(profile) = CString::new(profile) else {
@@ -132,13 +171,16 @@ mod linux {
     use std::collections::BTreeMap;
     use std::path::Path;
 
-    pub(super) fn contain(writable_dir: &Path) -> BrokerContainment {
+    pub(super) fn contain(
+        writable_dir: &Path,
+        writable_files: &[std::path::PathBuf],
+    ) -> BrokerContainment {
         // SAFETY: prctl only changes flags of this process.
         if unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) } != 0 {
             return BrokerContainment::none();
         }
         let mut mechanisms = Vec::new();
-        if landlock_writes(writable_dir) {
+        if landlock_writes(writable_dir, writable_files) {
             mechanisms.push("landlock");
         }
         if seccomp_no_exec().is_ok() {
@@ -152,7 +194,7 @@ mod linux {
         }
     }
 
-    fn landlock_writes(writable_dir: &Path) -> bool {
+    fn landlock_writes(writable_dir: &Path, writable_files: &[std::path::PathBuf]) -> bool {
         let abi = ABI::V5;
         let access_rw = AccessFs::from_all(abi);
         let access_ro = AccessFs::from_read(abi);
@@ -166,6 +208,12 @@ mod linux {
             })
             .and_then(|ruleset| {
                 ruleset.add_rules(landlock::path_beneath_rules([writable_dir], access_rw))
+            })
+            .and_then(|ruleset| {
+                // File rules keep only the file-compatible rights; a rule
+                // needs the file to exist.
+                let existing = writable_files.iter().filter(|file| file.is_file());
+                ruleset.add_rules(landlock::path_beneath_rules(existing, access_rw))
             });
         match ruleset.and_then(landlock::RulesetCreated::restrict_self) {
             Ok(status) => status.ruleset != RulesetStatus::NotEnforced,

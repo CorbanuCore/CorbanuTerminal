@@ -1,0 +1,81 @@
+# #218 part 2, review fixes (rev-232): macOS tmux runs at 3611045bbe
+
+Candidate: debug corbanu built from 3611045bbe; disposable HOME/CODEX_HOME,
+CORBANU_TEST_NO_NATIVE_KEYRING=1; features security_levels, secretless_agent_launch,
+contained_external_agents. Driven by scripts/demo_video.py.
+
+## 1. GLM 5.2 on Z.AI, Claude Code 2.1.292, under Aggressive (claude-contained-approvals)
+
+Z.AI answered (HTTP 200) at the time of the run, so no mock was needed.
+Popup for the first request, as shown (frame from the video):
+
+    Claude pane claude-81ee5512 (Claude Code - GLM 5.2 Z.AI) wants to use Bash
+    folder <run>/workspace
+    tool use call_0e62e85e13d0465197d60986
+    command: touch approved.txt
+    description: Create an empty file named approved.txt
+    › Deny      Allow once
+    ←/→ choose · Enter confirms · Esc denies
+
+Right, Enter allowed it; Esc denied the second (touch denied.txt).
+Workspace afterwards: approved.txt 
+
+Driver log:
+    [23:08:53] step 28: type 'Make two separate Bash tool calls, one after the other: first run touch approved.txt , then run touch denied.txt . Then report what happened with each.'
+    [23:09:00] step 29: key 'Enter'
+    [23:09:01] step 30: wait 'wants to use Bash'
+    [23:09:04] step 31: pause 2.5
+    [23:09:06] step 32: key 'Right'
+    [23:09:06] step 33: pause 1.0
+    [23:09:07] step 34: key 'Enter'
+    [23:09:08] step 35: wait '(?s)wants to use Bash.*touch denied\\.txt'
+    [23:09:10] step 36: pause 2.5
+    [23:09:12] step 37: key 'Escape'
+    [23:09:12] step 38: wait 'Claude pane turn complete'
+    [23:09:15] step 39: pause 4.0
+    [23:09:19] steps complete; exiting through /exit
+    [23:09:25] rendered <runs>/claude-contained-approvals-20261007T060831Z/claude-contained-claude-contained-approvals-3611045bbe3e-2026-10-06.mp4 (43.9s); frames in <runs>/claude-contained-approvals-20261007T060831Z/frames
+
+## 2. Protocol stand-in (fake-claude/), no model (claude-contained-approval-guard)
+
+    command:
+    touch first.txt⏎
+    ls first.txt # \u{202e}txt.hs
+    description: Create first.txt
+    dangerouslyDisableSandbox: false
+    › Deny      Allow once
+
+An Enter sent as soon as the popup appeared (step 18) was ignored: the popup
+stayed. The next Enter on the untouched popup denied; Right, Enter allowed the
+second request. Pane result: "touch first.txt was denied; touch second.txt was allowed."
+Workspace afterwards: second.txt 
+
+Driver log:
+    [23:11:08] step 17: wait 'wants to use Bash'
+    [23:11:08] step 18: key 'Enter'
+    [23:11:08] step 19: wait '(?s)u\\{202e\\}txt\\.hs.*Deny.*choose · Enter confirms'
+    [23:11:08] step 20: pause 3.0
+    [23:11:11] step 21: key 'Enter'
+    [23:11:12] step 22: wait '(?s)wants to use Bash.*touch second\\.txt'
+    [23:11:12] step 23: pause 1.5
+    [23:11:13] step 24: key 'Right'
+    [23:11:14] step 25: pause 1.5
+    [23:11:15] step 26: key 'Enter'
+    [23:11:15] step 27: wait 'touch first\\.txt was denied; touch second\\.txt was allowed'
+    [23:11:16] step 28: pause 3.0
+    [23:11:19] steps complete; exiting through /exit
+    [23:11:22] rendered <runs>/claude-contained-approval-guard-20261007T061054Z/claude-contained-claude-contained-approval-guard-3611045bbe3e-2026-10-06.mp4 (26.2s); frames in <runs>/claude-contained-approval-guard-20261007T061054Z/frames
+
+## 3. Both runs repeated at 9e9c63be63 (round-2 review fixes)
+
+Same specs, same candidate setup. claude-contained-approval-guard: steps
+complete, workspace afterwards: second.txt (first denied by the untouched
+popup's Enter after the guard ignored the Enter sent as it appeared).
+claude-contained-approvals (GLM 5.2 on Z.AI): steps complete, workspace
+afterwards: approved.txt; the pane reported touch denied.txt was denied.
+
+## 4. Both runs repeated at e562055c0b (round-3 review fixes)
+
+claude --version now runs inside the turn's sandbox (Seatbelt) first; both
+runs passed: guard demo workspace second.txt, GLM 5.2 demo workspace
+approved.txt (Right, pause, Enter allowed; Esc denied touch denied.txt).

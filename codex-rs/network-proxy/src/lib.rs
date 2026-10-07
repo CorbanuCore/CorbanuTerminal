@@ -59,6 +59,8 @@ pub use credential_broker::ScopedCredentialResolverError;
 pub use credential_broker::ScopedCredentialRoute;
 pub use credential_broker::ScopedCredentialRouteError;
 pub use credential_broker::ScopedCredentialUse;
+#[cfg(unix)]
+pub use credential_broker::StoredKeyResolver;
 pub use credential_broker::brokered_credential_dummy_env_keys;
 pub use credential_broker::brokered_credential_env_keys;
 pub use credential_broker::credential_broker_env_var_names;
@@ -67,6 +69,8 @@ pub use credential_broker::credential_broker_user_runtime_dir;
 pub use credential_broker::model_auth;
 #[cfg(unix)]
 pub use credential_broker::run_credential_broker_main;
+#[cfg(unix)]
+pub use credential_broker::run_credential_broker_main_with;
 pub use mitm_hook::InjectedHeaderConfig;
 pub use mitm_hook::MitmHookActionsConfig;
 pub use mitm_hook::MitmHookBodyConfig;

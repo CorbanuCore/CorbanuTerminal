@@ -28,7 +28,7 @@ open items out, so nothing below is claimed as done here:
 
 | Carried forward | To |
 | --- | --- |
-| Core's own model-client auth through the broker; vault-label credentials resolved inside the broker | [PF-27-S05](../../current/p0-security-levels/pf-27-s05-model-client-auth-broker.md) (new, after PF-27-S02) |
+| Core's own model-client auth through the broker; vault-label credentials resolved inside the broker | [PF-27-S05](pf-27-s05-model-client-auth-broker.md) (completed 2026-10-07) |
 | Broker same-uid and unsandboxed; agent access to controller memory/environ; broker socket in an agent-writable directory; macOS setup-pipe inheritance window | [PF-27-S02](pf-27-s02-secretless-agent-launch.md) |
 | Windows broker (today Windows fails closed: dummies, no injection) | [PF-27-S06](../../current/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md) (new) |
 | Production revocation trigger (`revoke_brokered_credentials` has no product caller) | [PF-23-S03](../../current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) |

@@ -12,9 +12,13 @@ use serde::Serialize;
 use std::fmt;
 use zeroize::Zeroize;
 
-pub(crate) const CONTROL_PROTOCOL_VERSION: u32 = 3;
+pub(crate) const CONTROL_PROTOCOL_VERSION: u32 = 4;
 /// Environment variable naming the broker's runtime parent directory.
 pub(crate) const BROKER_RUNTIME_DIR_ENV: &str = "CODEX_CREDENTIAL_BROKER_RUNTIME_DIR";
+/// PF-27-S05: the Corbanu home whose stored provider keys the broker reads.
+pub(crate) const BROKER_STORE_HOME_ENV: &str = "CODEX_CREDENTIAL_BROKER_STORE_HOME";
+/// Most environment variables Core may hand over (PF-27-S05).
+pub(crate) const MAX_STASHED_ENV: usize = 64;
 pub(crate) const MAX_CONTROL_LINE_BYTES: usize = 16 * 1024;
 pub(crate) const MAX_CREDENTIAL_VALUE_BYTES: usize = 8 * 1024;
 pub(crate) const MAX_BINDING_ENTRIES: usize = 16;
@@ -175,6 +179,24 @@ pub(crate) enum ControlRequest {
         binding: ModelBindingWire,
         value: String,
     },
+    /// PF-27-S05: a provider-key environment variable Core removed from its
+    /// own environment. Held by name until a binding asks for it.
+    StashEnv {
+        name: String,
+        value: String,
+    },
+    /// PF-27-S05: a model key Core never reads: the first stashed variable in
+    /// `env_names`, else the provider key stored in the broker's store home
+    /// (encrypted vault, then legacy file), resolved inside the broker.
+    RegisterModelStored {
+        binding: ModelBindingWire,
+        provider_key_id: String,
+        env_names: Vec<String>,
+    },
+    /// PF-27-S05: drop one reference (a refreshed sign-in token replaces it).
+    Unregister {
+        reference: String,
+    },
     Revoke,
 }
 
@@ -194,6 +216,18 @@ impl fmt::Debug for ControlRequest {
                     "ControlRequest::RegisterModel({binding:?}, <redacted>)"
                 )
             }
+            Self::StashEnv { name, .. } => {
+                write!(formatter, "ControlRequest::StashEnv({name}, <redacted>)")
+            }
+            Self::RegisterModelStored {
+                binding,
+                provider_key_id,
+                ..
+            } => write!(
+                formatter,
+                "ControlRequest::RegisterModelStored({binding:?}, {provider_key_id})"
+            ),
+            Self::Unregister { .. } => formatter.write_str("ControlRequest::Unregister"),
             Self::Revoke => formatter.write_str("ControlRequest::Revoke"),
         }
     }
@@ -203,8 +237,10 @@ impl Drop for ControlRequest {
     fn drop(&mut self) {
         match self {
             Self::Hello { channel_key, .. } => channel_key.zeroize(),
-            Self::Register { value, .. } | Self::RegisterModel { value, .. } => value.zeroize(),
-            Self::Revoke => {}
+            Self::Register { value, .. }
+            | Self::RegisterModel { value, .. }
+            | Self::StashEnv { value, .. } => value.zeroize(),
+            Self::RegisterModelStored { .. } | Self::Unregister { .. } | Self::Revoke => {}
         }
     }
 }
@@ -235,6 +271,8 @@ pub(crate) enum ControlResponse {
     Revoked {
         run_generation: u64,
     },
+    Stashed,
+    Unregistered,
     Error {
         code: ControlErrorCode,
     },
@@ -248,6 +286,17 @@ pub(crate) enum ControlErrorCode {
     InvalidCredential,
     CapacityReached,
     Unavailable,
+    /// PF-27-S05: no stashed variable or stored key for the request.
+    NotFound,
+}
+
+/// PF-27-S05: a provider-key id or environment variable name.
+pub(crate) fn valid_env_name(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= MAX_ID_BYTES
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
 }
 
 pub(crate) fn valid_host(host: &str) -> bool {

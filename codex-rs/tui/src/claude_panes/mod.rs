@@ -11,6 +11,7 @@
 //! - Turn types (output, progress, audit, command plan) ([`turn_types`])
 //! - Command plan building and vault integration ([`command_plan`])
 //! - Contained launches under the secretless launch contract ([`containment`])
+//!   and their tool approvals ([`approval`])
 //! - Turn execution and process management ([`execution`])
 //! - Local HTTP bridge for provider routing ([`bridge`], [`bridge_translate`])
 //! - Output parsing from stream-json ([`output_parse`])
@@ -19,6 +20,7 @@
 //! - App integration (pickers, turn submission, display sync) ([`app_integration`])
 
 pub(crate) mod app_integration;
+pub(crate) mod approval;
 pub(crate) mod bridge;
 pub(crate) mod bridge_translate;
 pub(crate) mod command_plan;

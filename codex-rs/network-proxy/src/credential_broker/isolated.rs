@@ -13,8 +13,11 @@ pub(crate) use client::IsolatedBrokerClient;
 pub(crate) use client::IsolatedBrokerError;
 pub(crate) use client::IsolatedBrokerLauncher;
 pub(crate) use client::IsolatedBrokerOptions;
+pub(crate) use client::StoredRegistration;
 pub(crate) use client::user_runtime_dir;
+pub use server::StoredKeyResolver;
 pub use server::run_credential_broker_main;
+pub use server::run_credential_broker_main_with;
 
 #[cfg(test)]
 #[path = "isolated_tests.rs"]
