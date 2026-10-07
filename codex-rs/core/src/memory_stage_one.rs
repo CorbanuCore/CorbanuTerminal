@@ -1,4 +1,7 @@
-//! Thread-owned, denial-only dispatch for unscreened stage-one memory input.
+//! Thread-owned dispatch for stage-one memory input. Unscreened rollout text
+//! reaches a provider only under Permissive; under Moderate with
+//! `source_envelopes` (PF-23-S01) only rollout text Core labelled from the
+//! source session's own rollout does. Aggressive denies.
 
 #[cfg(test)]
 #[path = "memory_stage_one_tests.rs"]
@@ -12,6 +15,8 @@ use crate::client::ModelClient;
 use crate::client_common::Prompt;
 use crate::client_common::ResponseEvent;
 use crate::responses_metadata::CodexResponsesMetadata;
+use crate::security::ingress::NativeIngress;
+use crate::security::ingress::OriginKey;
 use crate::session::SessionLoopTermination;
 use crate::session::session::Session;
 use codex_features::Feature;
@@ -27,8 +32,11 @@ use codex_otel::SessionTelemetry;
 use codex_protocol::ThreadId;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::error::CodexErr;
+use codex_protocol::models::ContentItem;
+use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ReasoningEffort;
+use codex_protocol::protocol::RolloutItem;
 use codex_protocol::protocol::TokenUsage;
 use codex_rollout_trace::InferenceTraceContext;
 use codex_security_policy::SecurityLevel;
@@ -37,6 +45,8 @@ use futures::StreamExt;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::Weak;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use thiserror::Error;
 
 /// Stable reasons that never contain rollout text or provider credentials.
@@ -56,6 +66,8 @@ pub enum StageOneMemoryDenial {
     KillSwitchActive,
     #[error("stage-one memory was cancelled")]
     Cancelled,
+    #[error("stage-one memory input is not tied to its source session")]
+    SourceLineageMismatch,
 }
 
 #[derive(Debug, Error)]
@@ -75,6 +87,27 @@ pub struct StageOneMemoryRequest<'a> {
     pub reasoning_summary: ReasoningSummary,
     pub service_tier: Option<String>,
     pub responses_metadata: &'a CodexResponsesMetadata,
+    /// Required whenever the effective level is above Permissive: the prompt
+    /// must embed exactly this Core-built text.
+    pub labelled_input: Option<&'a LabelledStageOneInput>,
+}
+
+/// Rollout text for one stage-one request, built by Core from one source
+/// session's own rollout. Content without verified human, host or model
+/// standing is labelled untrusted data. Only Core constructs it.
+pub struct LabelledStageOneInput {
+    source_thread: ThreadId,
+    contents: String,
+}
+
+impl LabelledStageOneInput {
+    pub fn source_thread(&self) -> ThreadId {
+        self.source_thread
+    }
+
+    pub fn contents(&self) -> &str {
+        &self.contents
+    }
 }
 
 pub struct StageOneMemoryOutput {
@@ -92,6 +125,9 @@ pub struct StageOneMemoryClient {
     /// a second read would answer the same question again.
     accounting: crate::config::AccountingMode,
     accounting_provider_id: String,
+    codex_home: std::path::PathBuf,
+    /// The level was above Permissive when this client was admitted.
+    requires_labelled_input: bool,
 }
 
 pub(crate) struct StageOneMemoryBinding {
@@ -103,6 +139,9 @@ pub(crate) struct StageOneMemoryBinding {
     runtime_nonce: [u8; 16],
     session_id: String,
     denial: Mutex<Option<StageOneMemoryDenial>>,
+    /// PF-23-S01: the request in flight carries no labelled input, so only
+    /// Permissive may send it. Set by `extract` before any dispatch.
+    unlabelled_request: AtomicBool,
 }
 
 impl std::fmt::Debug for StageOneMemoryBinding {
@@ -129,15 +168,30 @@ impl StageOneMemoryBinding {
         if policy.kill_switch_active {
             return Err(StageOneMemoryDenial::KillSwitchActive);
         }
-        if self
-            .floor
-            .max(policy.config.security_level)
-            .max(policy.level)
-            != SecurityLevel::Permissive
-        {
-            return Err(StageOneMemoryDenial::ProtectedInputUnavailable);
+        self.admits(
+            self.floor
+                .max(policy.config.security_level)
+                .max(policy.level),
+            owner.services.model_client().source_envelopes_enabled(),
+        )
+    }
+
+    /// Permissive sends anything; Moderate with `source_envelopes` only a
+    /// labelled request; Aggressive nothing.
+    fn admits(
+        &self,
+        effective: SecurityLevel,
+        labelled_mode: bool,
+    ) -> Result<(), StageOneMemoryDenial> {
+        match effective {
+            SecurityLevel::Permissive => Ok(()),
+            SecurityLevel::Moderate
+                if labelled_mode && !self.unlabelled_request.load(Ordering::SeqCst) =>
+            {
+                Ok(())
+            }
+            _ => Err(StageOneMemoryDenial::ProtectedInputUnavailable),
         }
-        Ok(())
     }
 
     pub(crate) async fn check(&self) -> Result<(), StageOneMemoryDenial> {
@@ -197,10 +251,10 @@ impl StageOneMemoryBinding {
             if policy.kill_switch_active {
                 return Err(StageOneMemoryDenial::KillSwitchActive);
             }
-            if self.floor.max(policy.level) != SecurityLevel::Permissive {
-                return Err(StageOneMemoryDenial::ProtectedInputUnavailable);
-            }
-            Ok(())
+            self.admits(
+                self.floor.max(policy.level),
+                owner.services.model_client().source_envelopes_enabled(),
+            )
         })();
         if let Err(reason) = result {
             *denial = Some(reason);
@@ -254,7 +308,9 @@ impl StageOneMemoryClient {
             runtime_nonce: policy.runtime_nonce,
             session_id: policy.session_id,
             denial: Mutex::new(None),
+            unlabelled_request: AtomicBool::new(false),
         });
+        let requires_labelled_input = binding.floor.max(policy.level) != SecurityLevel::Permissive;
         binding.check().await?;
         let client = ModelClient::new(
             Some(Arc::clone(&session.services.auth_manager)),
@@ -277,6 +333,72 @@ impl StageOneMemoryClient {
             binding,
             accounting: config.accounting.clone(),
             accounting_provider_id: config.model_provider_id.clone(),
+            codex_home: config.codex_home.to_path_buf(),
+            requires_labelled_input,
+        })
+    }
+
+    /// Whether requests must carry a [`LabelledStageOneInput`]. Checked again
+    /// at dispatch: a level raised later denies an unlabelled request.
+    pub fn requires_labelled_input(&self) -> bool {
+        self.requires_labelled_input
+    }
+
+    /// PF-23-S01: label one source session's rollout for stage one.
+    ///
+    /// The rollout must open with `source_thread`'s own session record, and
+    /// only origin records this home signed restore standing; everything else
+    /// (tool, MCP, agent, memory or unattributed text) becomes labelled data.
+    /// `keep` filters the projected items; `finish` post-processes the
+    /// serialized text (secret redaction) before it is fixed.
+    pub fn label_rollout(
+        &self,
+        source_thread: ThreadId,
+        items: &[RolloutItem],
+        keep: impl Fn(&ResponseItem) -> Option<ResponseItem>,
+        finish: impl FnOnce(String) -> String,
+    ) -> Result<LabelledStageOneInput, StageOneMemoryError> {
+        let opened_by = items.iter().find_map(|item| match item {
+            RolloutItem::SessionMeta(line) => Some(line.meta.id),
+            _ => None,
+        });
+        if opened_by != Some(source_thread) {
+            return Err(StageOneMemoryDenial::SourceLineageMismatch.into());
+        }
+        let mut ingress = NativeIngress::default();
+        ingress.set_labelled_mode(true);
+        // Without this home's key nothing restores: all of it stays labelled.
+        if let Ok(key) = OriginKey::load_or_create(&self.codex_home) {
+            ingress.set_origin_key(key);
+        }
+        let conversation: Vec<ResponseItem> = items
+            .iter()
+            .filter_map(|item| match item {
+                RolloutItem::ResponseItem(item) => Some(item.clone()),
+                RolloutItem::InterAgentCommunication(communication) => {
+                    Some(communication.to_model_input_item())
+                }
+                _ => None,
+            })
+            .collect();
+        ingress.note_restored_history(
+            &conversation,
+            items.iter().filter_map(|item| match item {
+                RolloutItem::SourceOrigin(record) => Some(record),
+                _ => None,
+            }),
+        );
+        let kept: Vec<ResponseItem> = ingress
+            .project_labelled(&conversation)
+            .iter()
+            .filter_map(keep)
+            .collect();
+        let contents = serde_json::to_string(&kept).map_err(|err| {
+            CodexErr::InvalidRequest(format!("failed to serialize rollout memory: {err}"))
+        })?;
+        Ok(LabelledStageOneInput {
+            source_thread,
+            contents: finish(contents),
         })
     }
 
@@ -332,6 +454,22 @@ impl StageOneMemoryClient {
         &mut self,
         request: StageOneMemoryRequest<'_>,
     ) -> Result<StageOneMemoryOutput, StageOneMemoryError> {
+        // The labelled text must be the rollout this prompt carries: one user
+        // message embedding it. Anything else is an unlabelled request.
+        let labelled = request.labelled_input.is_some_and(|input| {
+            matches!(
+                request.prompt.input.as_slice(),
+                [ResponseItem::Message { role, content, .. }]
+                    if role == "user"
+                        && matches!(
+                            content.as_slice(),
+                            [ContentItem::InputText { text }] if text.contains(input.contents())
+                        )
+            )
+        });
+        self.binding
+            .unlabelled_request
+            .store(!labelled, Ordering::SeqCst);
         self.check_completion().await?;
         let mut session = self.client.new_session();
         // Extraction is a model request the operator paid for, on a session of

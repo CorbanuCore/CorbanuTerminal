@@ -261,6 +261,7 @@ mod job {
         let (stage_one_output, token_usage, client) = match sample(
             context,
             config,
+            claimed_thread.id,
             &claimed_thread.rollout_path,
             &claimed_thread.cwd,
             stage_one_context,
@@ -333,12 +334,29 @@ mod job {
     async fn sample(
         context: &MemoryStartupContext,
         config: &Config,
+        source_thread: codex_protocol::ThreadId,
         rollout_path: &Path,
         rollout_cwd: &Path,
         stage_one_context: &StageOneRequestContext,
     ) -> anyhow::Result<(StageOneOutput, Option<TokenUsage>, StageOneMemoryClient)> {
+        let client = context.stage_one_client(config).await?;
         let (rollout_items, _, _) = RolloutRecorder::load_rollout_items(rollout_path).await?;
-        let rollout_contents = serialize_filtered_rollout_response_items(&rollout_items)?;
+        // PF-23-S01: above Permissive only Core-labelled text from the source
+        // session's own rollout may leave; Permissive is unchanged.
+        let labelled = if client.requires_labelled_input() {
+            Some(client.label_rollout(
+                source_thread,
+                &rollout_items,
+                sanitize_response_item_for_memories,
+                redact_secrets,
+            )?)
+        } else {
+            None
+        };
+        let rollout_contents = match &labelled {
+            Some(labelled) => labelled.contents().to_string(),
+            None => serialize_filtered_rollout_response_items(&rollout_items)?,
+        };
 
         let mut prompt = Prompt::default();
         prompt.input = vec![ResponseItem::Message {
@@ -362,7 +380,13 @@ mod job {
         prompt.output_schema_strict = true;
 
         let (result, token_usage, client) = context
-            .stream_stage_one_prompt(config, &prompt, stage_one_context)
+            .stream_stage_one_prompt(
+                config,
+                &prompt,
+                stage_one_context,
+                client,
+                labelled.as_ref(),
+            )
             .await?;
 
         let mut output: StageOneOutput = serde_json::from_str(&result)?;

@@ -715,6 +715,7 @@ async fn accounting_guard_denial_precedes_admission_and_never_sends() -> anyhow:
         runtime_nonce: [0; 16],
         session_id: "fixture".into(),
         denial: Mutex::new(None),
+        unlabelled_request: std::sync::atomic::AtomicBool::new(false),
     });
     let transport = StageOneGuardedTransport::new(
         AccountingTransport::new(
