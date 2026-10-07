@@ -1,0 +1,59 @@
+# A Claude pane with contained_external_agents on runs in the sandbox, behind
+# the bridge: it reaches its model, writes in its folder, and cannot read the
+# Corbanu config or vault store, reach the network or write outside. Record with
+#   PF24_CANDIDATE=<corbanu> CLAUDE_BIN_DIR=<claude 2.1.29x bin> DEMO_VAULT_FROM=<test secrets>
+#   --bin qa/security-levels/pf24-followups/claude-contained/demo-launch.sh
+id = "claude-contained-probes"
+feature = "Contained Claude pane: sandboxed, behind the bridge"
+expected = "The Z.AI Claude pane answers through the bridge; writing in its folder works, while reading config.toml or the vault store, the network and writing outside are denied."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+secretless_agent_launch = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/panes"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "\\+ Claude Pane"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "GLM 5.2 Z.AI"
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Name Claude pane"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Claude Code - GLM 5.2 Z.AI pane"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run each shell command separately and give a one-line result for each: (1) touch inside.txt (2) head -1 {home}/config.toml (3) ls {home}/secrets (4) curl -sS -m 5 https://example.com (5) touch ../outside/probe.txt"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Claude pane turn complete"
+timeout = 180
+compress = 4
+[[steps]]
+pause = 4.0
