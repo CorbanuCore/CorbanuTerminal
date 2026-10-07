@@ -1,7 +1,7 @@
 # PF-23-S03: per-sprint gate (2026-10-07)
 
-- **Branches:** four stacked PRs off main at `6b1c8b8873`: `feat/pf-23-s03-recovery` → `-transition` → `-fanout` →
-  `-memory`. With no `security_state.json` and no `[security]` anywhere, behaviour is today's. `commit_transition`
+- **Branches:** four stacked PRs off main at `6b1c8b8873`, merged in order: #246 `feat/pf-23-s03-recovery`
+  (`95b5f34a55`), #247 `-transition` (`242f4d3bde`), #248 `-fanout` (`7fc064e593`), #249 `-memory` (`4f09d7af99`). With no `security_state.json` and no `[security]` anywhere, behaviour is today's. `commit_transition`
   has no production caller yet: PF-24-S02 (TUI confirmation) is the first.
 
 ## Transition states

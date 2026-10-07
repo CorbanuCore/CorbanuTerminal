@@ -47,7 +47,8 @@ updated: 2026-10-07
 
 ## Done
 
-Gate: [qa/security-levels/sprints/PF-23-S03/gate.md](../../../../qa/security-levels/sprints/PF-23-S03/gate.md).
+Merged 2026-10-07: #246 (recovery), #247 (transitions), #248 (fan-out), #249 (memory). Gate:
+[qa/security-levels/sprints/PF-23-S03/gate.md](../../../../qa/security-levels/sprints/PF-23-S03/gate.md).
 
 - [x] Prepare/commit/cancel: a confirmed human request is bound to the policy epoch; stricter protected levels need
   the PF-29 probes (`ProbeOutcome`); grant requests are refused; cancel changes nothing.
@@ -70,7 +71,6 @@ Gate: [qa/security-levels/sprints/PF-23-S03/gate.md](../../../../qa/security-lev
 ## Remaining
 
 - [ ] GLM 5.2 tmux run and videos: blocked, Z.AI reports insufficient balance (specs ready in `qa/demos/specs/pf23s03-*`).
-- [ ] Merge PRs in order (recovery → transition → fan-out → memory).
 - Handed to PF-24-S02 (first production caller of `commit_transition`): call it off the async runtime (up to 2 s
   lock wait); reconcile `security_level.toml` with `security_state.json`; a way out after `StoredLevelChanged` /
   `StoredStateChanged` and for `UnreadableState`'s session-long kill switch; warn when a project or managed layer
