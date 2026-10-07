@@ -109,6 +109,7 @@ use codex_protocol::protocol::W3cTraceContext;
 use codex_rollout_trace::CompactionTraceContext;
 use codex_rollout_trace::InferenceTraceAttempt;
 use codex_rollout_trace::InferenceTraceContext;
+use codex_tools::ResponsesApiNamespaceTool;
 use codex_tools::ToolSpec;
 use codex_tools::create_tools_json_for_responses_api;
 use codex_tools::create_tools_raw_json_for_responses_api;
@@ -5818,17 +5819,17 @@ fn create_tools_json_for_anthropic_messages(
     cache_control: &Value,
     web_search_max_uses: Option<u32>,
 ) -> Result<Vec<Value>> {
-    let mut tools = tools
-        .iter()
-        .filter_map(|tool| tool_spec_to_anthropic_tool(tool, web_search_max_uses))
-        .collect::<Result<Vec<_>>>()?;
-    tools.sort_by_key(|tool| {
+    let mut converted_tools = Vec::new();
+    for tool in tools {
+        converted_tools.extend(tool_spec_to_anthropic_tools(tool, web_search_max_uses)?);
+    }
+    converted_tools.sort_by_key(|tool| {
         usize::from(
             tool.get("type").and_then(Value::as_str) != Some(ANTHROPIC_WEB_SEARCH_TOOL_TYPE),
         )
     });
-    mark_last_anthropic_tool_cache_control(&mut tools, cache_control);
-    Ok(tools)
+    mark_last_anthropic_tool_cache_control(&mut converted_tools, cache_control);
+    Ok(converted_tools)
 }
 
 fn mark_last_anthropic_tool_cache_control(tools: &mut [Value], cache_control: &Value) {
@@ -5847,26 +5848,40 @@ fn mark_last_anthropic_tool_cache_control(tools: &mut [Value], cache_control: &V
     }
 }
 
-fn tool_spec_to_anthropic_tool(
+fn tool_spec_to_anthropic_tools(
     tool: &ToolSpec,
     web_search_max_uses: Option<u32>,
-) -> Option<Result<Value>> {
+) -> Result<Vec<Value>> {
     match tool {
-        ToolSpec::Function(_) => Some(serde_json::to_value(tool).map_err(Into::into).and_then(
-            |value| {
-                responses_tool_to_anthropic_tool(value).ok_or_else(|| {
-                    CodexErr::Fatal("failed to convert function tool for Anthropic".to_string())
-                })
-            },
-        )),
-        ToolSpec::Freeform(tool) => Some(Ok(freeform_tool_to_anthropic_tool(tool))),
-        ToolSpec::WebSearch { .. } => Some(Ok(anthropic_web_search_tool_with_type(
+        ToolSpec::Function(function_tool) => {
+            Ok(vec![responses_api_tool_to_anthropic_tool(function_tool)?])
+        }
+        ToolSpec::Namespace(namespace) => namespace
+            .tools
+            .iter()
+            .map(anthropic_namespace_tool_to_tool)
+            .collect(),
+        ToolSpec::Freeform(tool) => Ok(vec![freeform_tool_to_anthropic_tool(tool)]),
+        ToolSpec::WebSearch { .. } => Ok(vec![anthropic_web_search_tool_with_type(
             tool,
             ANTHROPIC_WEB_SEARCH_TOOL_TYPE,
             web_search_max_uses,
-        ))),
-        ToolSpec::Namespace(_) | ToolSpec::ToolSearch { .. } => None,
+        )]),
+        ToolSpec::ToolSearch { .. } => Ok(Vec::new()),
     }
+}
+
+fn anthropic_namespace_tool_to_tool(tool: &ResponsesApiNamespaceTool) -> Result<Value> {
+    match tool {
+        ResponsesApiNamespaceTool::Function(tool) => responses_api_tool_to_anthropic_tool(tool),
+    }
+}
+
+fn responses_api_tool_to_anthropic_tool(tool: &codex_tools::ResponsesApiTool) -> Result<Value> {
+    let value = serde_json::to_value(ToolSpec::Function(tool.clone()))?;
+    responses_tool_to_anthropic_tool(value).ok_or_else(|| {
+        CodexErr::Fatal("failed to convert function tool for Anthropic".to_string())
+    })
 }
 
 fn anthropic_web_search_tool_with_type(
@@ -5951,29 +5966,56 @@ fn create_tools_json_for_chat_completions(
     strip_strict: bool,
     zai_native_web_search: bool,
 ) -> Result<Vec<Value>> {
-    tools
-        .iter()
-        .filter_map(|tool| tool_spec_to_chat_tool(tool, strip_strict, zai_native_web_search))
-        .collect::<Result<Vec<_>>>()
+    let mut chat_tools = Vec::new();
+    for tool in tools {
+        chat_tools.extend(tool_spec_to_chat_tools(
+            tool,
+            strip_strict,
+            zai_native_web_search,
+        )?);
+    }
+    Ok(chat_tools)
 }
 
-fn tool_spec_to_chat_tool(
+fn tool_spec_to_chat_tools(
     tool: &ToolSpec,
     strip_strict: bool,
     zai_native_web_search: bool,
-) -> Option<Result<Value>> {
+) -> Result<Vec<Value>> {
     match tool {
-        ToolSpec::Function(_) => Some(serde_json::to_value(tool).map_err(Into::into).and_then(
-            |value| {
-                responses_tool_to_chat_tool(value, strip_strict).ok_or_else(|| {
-                    CodexErr::Fatal("failed to convert function tool for chat".to_string())
-                })
-            },
-        )),
-        ToolSpec::Freeform(tool) => Some(Ok(freeform_tool_to_chat_tool(tool))),
-        ToolSpec::WebSearch { .. } if zai_native_web_search => Some(Ok(zai_web_search_tool())),
-        ToolSpec::Namespace(_) | ToolSpec::ToolSearch { .. } | ToolSpec::WebSearch { .. } => None,
+        ToolSpec::Function(function_tool) => Ok(vec![responses_api_tool_to_chat_tool(
+            function_tool,
+            strip_strict,
+        )?]),
+        ToolSpec::Namespace(namespace) => namespace
+            .tools
+            .iter()
+            .map(|tool| chat_namespace_tool_to_tool(tool, strip_strict))
+            .collect(),
+        ToolSpec::Freeform(tool) => Ok(vec![freeform_tool_to_chat_tool(tool)]),
+        ToolSpec::WebSearch { .. } if zai_native_web_search => Ok(vec![zai_web_search_tool()]),
+        ToolSpec::ToolSearch { .. } | ToolSpec::WebSearch { .. } => Ok(Vec::new()),
     }
+}
+
+fn chat_namespace_tool_to_tool(
+    tool: &ResponsesApiNamespaceTool,
+    strip_strict: bool,
+) -> Result<Value> {
+    match tool {
+        ResponsesApiNamespaceTool::Function(tool) => {
+            responses_api_tool_to_chat_tool(tool, strip_strict)
+        }
+    }
+}
+
+fn responses_api_tool_to_chat_tool(
+    tool: &codex_tools::ResponsesApiTool,
+    strip_strict: bool,
+) -> Result<Value> {
+    let value = serde_json::to_value(ToolSpec::Function(tool.clone()))?;
+    responses_tool_to_chat_tool(value, strip_strict)
+        .ok_or_else(|| CodexErr::Fatal("failed to convert function tool for chat".to_string()))
 }
 
 fn zai_web_search_tool() -> Value {
