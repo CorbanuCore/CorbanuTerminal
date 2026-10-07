@@ -269,6 +269,10 @@ pub(crate) fn resolve_provider_auth(
     }
 
     Ok(match auth {
+        // Command and AWS auth are not brokered: sent as before.
+        Some(auth) if provider.auth.is_some() || provider.aws.is_some() => {
+            direct_auth_provider_from_auth(auth)
+        }
         Some(auth) => auth_provider_from_auth(auth),
         None => unauthenticated_auth_provider(),
     })
@@ -976,6 +980,39 @@ mod tests {
             panic!("a credential must not be attached before the broker runs");
         };
         assert!(error.to_string().contains("not running yet"), "{error}");
+    }
+
+    /// Command-backed provider auth is not brokered: with the broker
+    /// required it is still sent, unchanged.
+    #[test]
+    fn pf_27_s05_command_auth_is_sent_as_before() {
+        with_recording_broker(|broker| {
+            let provider = ModelProviderInfo {
+                auth: Some(codex_protocol::config_types::ModelProviderAuthInfo {
+                    command: "print-token".to_string(),
+                    args: Vec::new(),
+                    timeout_ms: std::num::NonZeroU64::new(5_000).expect("timeout"),
+                    refresh_interval_ms: 300_000,
+                    cwd: std::env::current_dir()
+                        .expect("cwd")
+                        .try_into()
+                        .expect("absolute cwd"),
+                }),
+                requires_openai_auth: false,
+                ..ModelProviderInfo::create_openai_provider(/*base_url*/ None)
+            };
+            let token = CodexAuth::from_api_key("pf27s05-command-token");
+            let headers = resolve_provider_auth(Some(&token), &provider)
+                .expect("command auth")
+                .to_auth_headers();
+            assert_eq!(
+                headers
+                    .get(AUTHORIZATION)
+                    .and_then(|value| value.to_str().ok()),
+                Some("Bearer pf27s05-command-token")
+            );
+            assert!(broker.uses.lock().expect("uses").is_empty());
+        });
     }
 
     /// Flag off (no broker, not required): direct auth is unchanged.

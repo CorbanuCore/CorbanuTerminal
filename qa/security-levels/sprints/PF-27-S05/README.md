@@ -1,4 +1,4 @@
-# PF-27-S05 evidence: model-client auth in the broker (slice 1)
+# PF-27-S05 evidence: model-client auth in the broker
 
 Feature flag: `broker_model_auth` (UnderDevelopment, default off). With the flag off nothing changes.
 
@@ -55,3 +55,59 @@ Opus 5.5 High via `corbanu exec -m claude-opus-5-5-plan`, run read-only.
   the realtime conversation websocket and other users of `auth_provider_from_auth`.
 
 [Review 2](review-opus-2.md): **APPROVE**. Its nits have been applied or recorded.
+
+## Round 6: the rest of the sprint (PR from `feat/pf27-s05-broker-finish-20261006`)
+
+What changed is listed under Done in the [sprint record](../../../../docs/sprints/current/p0-security-levels/pf-27-s05-model-client-auth-broker.md),
+together with the known limits.
+
+### New tests
+
+| Crate | Tests |
+| --- | --- |
+| network-proxy | `pf_27_s05_stored_key_is_read_inside_the_broker`, `pf_27_s05_env_keys_are_handed_over_removed_and_unregistered`, `pf_27_s05_raw_key_is_not_left_in_core_memory` (best-effort scan of writable memory with a positive control; Linux also checks `/proc/self/environ`), `pf_27_s05_vault_lock_is_created_and_never_a_symlink`, `pf_27_s05_take_env_var_*` |
+| model-provider | `pf_27_s05_brokered_provider_keys_are_named_not_read`, `..._held_values_and_sign_in_tokens_go_to_the_broker`, `..._sign_in_for_an_env_key_provider_is_brokered`, `..._required_broker_not_running_fails_closed`, `..._command_auth_is_sent_as_before`, `..._flag_off_direct_auth_is_unchanged`, `..._header_only_first_party_auth_gets_no_credential`, `..._brokered_provider_hands_out_a_placeholder_not_the_key` |
+| http-client | `pf_27_s05_broker_frame_requests_go_only_to_the_broker_socket` |
+| core | `pf_27_s05_non_unix_start_is_the_refusing_broker`, `pf_27_s05_platform_without_broker_refuses_every_credential` |
+| secrets | `already_private_permissions_are_not_rewritten` (a read needs no chmod, so the sandboxed broker can open the vault) |
+
+### Results
+
+- Affected crates: 1312 passed.
+- Core subsets: 1099 passed. Two `suite::client::skills_*` tests fail because the real `~/.agents/skills` leaks into
+  them; this is unrelated to the sprint.
+- Linux, RTX box: clippy `-D warnings` is clean on the changed crates, and the `pf_27_s05` tests pass (10).
+
+### Live runs
+
+All runs used GLM 5.2 via Z.AI with keyring isolation (`CORBANU_TEST_NO_NATIVE_KEYRING=1`) in a disposable profile.
+The vault key for each demo profile stayed in the profile's `keyring-fallback` file, never the login keychain.
+
+| Demo | Observed |
+| --- | --- |
+| `pf27s05-env-key-handed-over` | The session answers through the broker. `ps -E` on Core shows `ZAI_API_KEY` overwritten, and the log reads "provider keys handed to the credential broker and removed from the environment: ZAI_API_KEY". |
+| `pf27s05-vault-key-in-broker` | The key exists only in the disposable profile's vault, and Core's launch environment has no `ZAI_API_KEY`. The session answers, with `containment=seatbelt` and "credential held by the credential broker (host=api.z.ai, …)". |
+
+During the first vault run the broker could not read the vault: the secrets layer chmods `local.age` on every read,
+and the broker's sandbox denies that. Fixed in `secrets/src/local.rs`.
+
+### Independent review
+
+Opus 5.5 High via OpenRouter, run read-only in a keyring-isolated profile.
+
+- [Review 3](review-opus-3.md): **CHANGES REQUESTED**. Fixed:
+  - fail closed before the broker runs;
+  - a sign-in used for an env-key provider is brokered;
+  - the vault lock is created before containment, and never through a symlink;
+  - a refused hand-over now fails closed;
+  - registration happens outside the lock;
+  - slots are stable;
+  - the tests were fixed.
+
+  Scrub thread-safety and the scope of the memory test are recorded as known limits.
+- [Review 4](review-opus-4.md): **CHANGES REQUESTED**. Fixed:
+  - command auth is sent as before;
+  - the broker is installed whenever the process requires one;
+  - keys are scrubbed when the broker fails to start;
+  - stale snapshots no longer replace a newer registration;
+  - the record and claims are corrected.

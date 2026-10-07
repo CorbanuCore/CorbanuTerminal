@@ -308,3 +308,12 @@ impl ModelCredential {
             .expect("test frame")
     }
 }
+
+/// Removes each variable in `names` from this process's environment, value
+/// bytes overwritten, without handing it anywhere (a broker that did not
+/// start: Core no longer uses these keys, and children must not inherit them).
+pub fn scrub_env_keys(names: &[String]) {
+    for name in names {
+        drop(super::env_scrub::take_env_var(name));
+    }
+}

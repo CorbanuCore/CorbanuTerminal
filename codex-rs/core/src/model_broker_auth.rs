@@ -43,9 +43,11 @@ enum Credential {}
 /// Installs the process's broker when `config` enables `broker_model_auth`.
 /// Idempotent; the first enabled configuration's settings win.
 pub async fn install_for_config(config: &Config) {
-    if !config
+    // Also when an earlier configuration made this process brokered.
+    if !(config
         .features
         .enabled(codex_features::Feature::BrokerModelAuth)
+        || codex_model_provider::model_key_broker_required())
         || codex_model_provider::model_key_broker_installed()
     {
         return;
@@ -230,6 +232,9 @@ impl CoreModelKeyBroker {
             Ok(broker) => broker,
             Err(error) => {
                 tracing::warn!("model credential broker did not start: {error}");
+                // Core no longer uses these keys; child processes must not
+                // inherit them either.
+                codex_network_proxy::model_auth::scrub_env_keys(&settings.env_names);
                 return Self::new(BrokerHandle::Failed);
             }
         };
@@ -341,7 +346,7 @@ fn credential_for(
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     };
-    let (key, version, handle) = {
+    let (key, version, seen, handle) = {
         let state = lock();
         let (slot, version) = match source {
             Source::ProviderKey {
@@ -368,6 +373,10 @@ fn credential_for(
             }
         };
         let key = (binding, slot);
+        let seen = state
+            .credentials
+            .get(&key)
+            .map(|registered| registered.version);
         if let Some(registered) = state.credentials.get(&key)
             && registered.version == version
         {
@@ -377,7 +386,7 @@ fn credential_for(
                 Err(BrokerModelAuthError::Unavailable)
             };
         }
-        (key, version, state.handle.clone())
+        (key, version, seen, state.handle.clone())
     };
     let credential = match register(&handle, &key.0, source) {
         Ok(credential) => credential,
@@ -392,11 +401,15 @@ fn credential_for(
         }
     };
     let mut state = lock();
-    if let Some(current) = state.credentials.get(&key)
-        && current.version == version
+    let current = state
+        .credentials
+        .get(&key)
+        .map(|registered| (registered.version, registered.credential.clone()));
+    if let Some((current_version, current)) = current
+        && Some(current_version) != seen
     {
-        // Another request registered the same version meanwhile.
-        let current = current.credential.clone();
+        // Another request registered meanwhile (the same value, or a newer
+        // one): keep it, drop ours, so stale snapshots never undo a refresh.
         drop(state);
         unregister(&credential);
         return Ok(current);

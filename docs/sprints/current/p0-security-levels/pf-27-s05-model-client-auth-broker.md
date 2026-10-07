@@ -1,100 +1,100 @@
 ---
 sprint_id: "PF-27-S05"
 title: "Core model-client auth and vault labels through the broker"
-status: draft
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-27"
 execution_order: 46
-owner: "broker lane worker round 5 (2026-10-06)"
+owner: "broker lane worker round 6 (2026-10-06)"
 parallel_lane: "broker"
-write_scope: "codex-rs/network-proxy/src/credential_broker/model_auth.rs, codex-rs/network-proxy/src/credential_broker/isolated/, codex-rs/network-proxy/src/credential_broker/isolated_tests.rs, codex-rs/network-proxy/src/credential_broker.rs, codex-rs/network-proxy/src/credential_broker/providers.rs, codex-rs/network-proxy/src/lib.rs, codex-rs/model-provider/src/auth.rs, codex-rs/model-provider/src/lib.rs, codex-rs/http-client/src/client.rs, codex-rs/features/src/lib.rs, codex-rs/core/src/model_broker_auth.rs, codex-rs/core/src/model_broker_auth_tests.rs, codex-rs/core/src/client.rs, codex-rs/core/src/lib.rs, codex-rs/core/src/session/mod.rs, codex-rs/core/src/session/session.rs, codex-rs/core/src/memory_stage_one.rs, codex-rs/core/config.schema.json, qa/security-levels/sprints/PF-27-S05/, qa/demos/specs/, qa/demos/index/PF-27-S05.md, docs/sprints/current/p0-security-levels/pf-27-s05-model-client-auth-broker.md"
-integration_gate: "PR to main under the per-sprint gate (sec-common decision 5); merged behind the new default-off broker_model_auth flag. Shared files kept to small hunks: one builder call per ModelClient construction site, transport selection in core/src/client.rs, one feature entry."
-worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/sec-broker5-20261006"
-branch: "feat/pf27-s05-model-auth-broker-20261006"
-base_commit: "00376a1fb00cd3fd3bc085373f3466038b861ec2"
+write_scope: "codex-rs/network-proxy/src/credential_broker/model_auth.rs, codex-rs/network-proxy/src/credential_broker/isolated/, codex-rs/network-proxy/src/credential_broker/isolated_tests.rs, codex-rs/network-proxy/src/credential_broker/env_scrub.rs, codex-rs/network-proxy/src/credential_broker/env_scrub_tests.rs, codex-rs/network-proxy/src/credential_broker/memory_scan_tests.rs, codex-rs/network-proxy/src/credential_broker.rs, codex-rs/network-proxy/src/credential_broker/providers.rs, codex-rs/network-proxy/src/lib.rs, codex-rs/model-provider/src/auth.rs, codex-rs/model-provider/src/lib.rs, codex-rs/model-provider/src/provider.rs, codex-rs/model-provider/src/model_key_broker.rs, codex-rs/http-client/, codex-rs/login/src/auth/manager.rs, codex-rs/login/src/lib.rs, codex-rs/secrets/src/local.rs, codex-rs/process-hardening/, codex-rs/arg0/, codex-rs/features/src/lib.rs, codex-rs/core/src/model_broker_auth.rs, codex-rs/core/src/model_broker_auth_tests.rs, codex-rs/core/src/client_tests.rs, codex-rs/core/src/lib.rs, codex-rs/core/src/session/mod.rs, codex-rs/core/src/session/session.rs, codex-rs/core/src/memory_stage_one.rs, codex-rs/core/src/realtime_conversation.rs, codex-rs/core/config.schema.json, codex-rs/Cargo.lock, qa/security-levels/sprints/PF-27-S05/, qa/demos/index/PF-27-S05.md, docs/sprints/current/p0-security-levels/pf-27-s05-model-client-auth-broker.md"
+integration_gate: "PR to main under the per-sprint gate (sec-common decision 5); merged behind the default-off broker_model_auth flag. Shared files serialized by the integration owner, not reserved here: small hunks in codex-rs/core/src/client.rs (transport and websocket selection; PF-23-S01 reserves it) and codex-rs/core/src/config/mod.rs (marks the process brokered, as PF-27-S02 arms its contract; PF-60-S03 reserves the file) and two new demo specs qa/demos/specs/pf27s05-*.toml (new files only, in the directory PF-23-S01 reserves)."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/sec-broker6-20261006"
+branch: "feat/pf27-s05-broker-finish-20261006"
+base_commit: "c5bdadd322d266d4961479ca5fa34c70c9486e11"
 depends_on: "PF-27-S02"
 created: 2026-10-06
-updated: 2026-10-06
+updated: 2026-10-07
 ---
 
 # PF-27-S05 — Core model-client auth and vault labels through the broker
 
-Coordinator decision 2026-10-06: Core's own model-client auth moves into the broker in its own sprint, after
-PF-27-S02 (whose containment makes the broker a real boundary), touching the model clients rather than the proxy.
+Coordinator decision 2026-10-06: Core's model-client auth moves into the broker, behind `broker_model_auth` (off).
 
 ## Execution mandate
 
-- Deliver: Core's own model-provider requests are authorized by the isolated broker; Core holds opaque references,
-  not raw provider keys, and vault-label credentials are resolved only inside the broker.
+- Deliver: Core's model-provider requests authorized by the broker; Core holds references, not raw keys.
 - Excludes: agent launch containment (PF-27-S02), output gates (PF-28), Windows (PF-27-S06), Permissive changes.
 
 ## Plan linkage
 
-- Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md#pf-27).
-- Feature: `PF-27`.
+- Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md#pf-27); feature `PF-27`.
 - Product citation: **Required trust boundaries** — “Credentials are referenced by label and resolved only inside a trusted execution boundary.”
 - Acceptance advanced: raw credentials exist only in the trusted broker, including the ones Core uses itself.
 
 ## Code boundaries
 
-- Existing: `codex-rs/model-provider/src/auth.rs`; `codex-rs/login/` (API-key auth); `codex-rs/core/src/client.rs`;
-  `codex-rs/network-proxy/src/credential_broker/isolated/`; `codex-rs/vault/src/`.
-- Planned: a broker route for model-provider requests; a vault-label resolver inside the broker process.
-- Tests: colocated `pf_27_s05` modules; synthetic keys and fake providers only.
+- Process switch and broker use: `model-provider/src/model_key_broker.rs`, `auth.rs`, `provider.rs`; Core side
+  `core/src/model_broker_auth.rs` (set up by `core/src/config/mod.rs` and the session).
+- Frame routing: `http-client/src/model_broker_route.rs`, `transport.rs`. Broker: `network-proxy/src/credential_broker/`
+  (`model_auth.rs`, `env_scrub.rs`, `isolated/`), stored-key reader in `arg0`, containment in `process-hardening`.
+- Tests: `pf_27_s05` in network-proxy, model-provider, http-client, process-hardening, secrets, core.
 
 ## Preconditions
 
-- [x] PF-27-S02 completed and archived (#214); plan active. The record stays `draft` until the plan worker records this
-  worktree in the plan (the checker requires it for `in_progress`); the slice merges behind its flag meanwhile.
+- [x] PF-27-S02 archived (#214); worktree in the plan front matter.
 
 ## Done
 
-- [x] Record created from the PF-27-S04 closure with scope and dependencies.
-- [x] Inventory (first slice): Core reads model keys from the provider `env_key` (environment, then the vault label
-  `provider/<ENV_KEY>` or legacy `provider_auth.json` through `AuthManager::provider_api_key`), the OpenAI API-key login
-  in `auth.json`, `experimental_bearer_token`, sign-in tokens (ChatGPT, agent identity), command-backed bearer auth and
-  AWS SigV4. All model requests are signed in `codex-api` `apply_auth` and sent by `core/src/client.rs` transports.
-- [x] Slice 1, behind `broker_model_auth` (default off): when a provider's auth is one plain API key (env or vault
-  provider key, OpenAI API-key login, `experimental_bearer_token`; `Authorization: Bearer` or `x-api-key`), Core registers
-  it once per process with a contained broker (Seatbelt / seccomp; refused if it cannot confine itself) bound to the
-  base URL's HTTPS origin and path prefix, and keeps an opaque reference. Every model request (Responses, Chat,
-  Anthropic Messages, compact, memories, realtime call) goes as plain HTTP over the broker's private Unix socket with
-  a single-use signed frame for its exact origin, method and path; the broker attaches the key and makes the HTTPS
-  request. No raw-key fallback: a broker that fails to start or dies, a provider URL the broker cannot bind (plain
-  HTTP, IPv6 literal, query) and non-Unix platforms all fail the request with a non-retried error. The broker is never
-  respawned in-process (as PF-27-S04). Responses websockets are off under the flag; redirects come back unfollowed.
-  Sign-in tokens, agent identity, command, header and AWS auth are not brokered (sent as before).
-- [x] `pf_27_s05` tests: broker-only key use for both header styles, single-use frames, origin and path-prefix binding
-  enforced by Core and again by the broker, malformed bindings refused, broker death fails closed (network-proxy);
-  key extraction matches direct auth and sign-in auth is not extracted (model-provider); base-URL binding and request
-  rewrite, unbrokerable key fails closed with a flag-off control (core). Live check: GLM 5.2 via Z.AI answered through
-  the broker (`containment=seatbelt`). [Evidence](../../../../qa/security-levels/sprints/PF-27-S05/README.md).
-- [x] Opus 5.5 High: review 1 CHANGES REQUESTED (H3 fixed; H1/H2/M1/M2 moved to Remaining), review 2 APPROVE.
+- [x] Slice 1 (#229): `ModelClient` API keys held by a contained broker; every model request is signed for it.
+- [x] A loaded config that enables the flag makes the whole process brokered (one-way). From then on Core reads no
+  provider key (it holds a placeholder). It attaches no plain key or sign-in token itself. Before the broker runs,
+  such uses fail instead of going direct. Header-only users of a first-party login get no credential. Websockets
+  and realtime conversations are off.
+- [x] Brokered through `resolve_provider_auth`: the model client, web search, image generation and the model
+  catalog. This covers env and vault provider keys, the OpenAI API-key login, `experimental_bearer_token` and
+  ChatGPT sign-in access tokens. A refreshed token replaces the broker's copy, and a sign-in used for an env-key
+  provider goes with that provider's header. Not brokered (sent as before): command, AWS, header and
+  agent-identity auth.
+- [x] A frame-bearing request goes only to the broker's socket (refused with no broker installed).
+- [x] Stored provider keys are decrypted inside the broker:
+  - the broker creates the vault lock before containment, and never through a symlink;
+  - the secrets layer no longer chmods files that are already private, so a read needs no write.
+- [x] Env provider keys are handed to the broker and overwritten in Core's environment (`ps -E` shows zeros). If
+  the broker refuses one or fails to start, the keys are still scrubbed and the broker is marked failed.
+- [x] Tests:
+  - memory scan: Core's writable memory has no raw key after hand-over (positive control first; Linux also
+    checks `/proc/self/environ`);
+  - the non-Unix branch refuses;
+  - fail closed before the broker runs; flag-off direct auth unchanged; command auth sent as before;
+  - the vault lock is never a symlink; registrations race safely.
 
 ## Remaining
 
-- [ ] Core still reads the key to register it (and on each setup to detect a changed key): resolve vault labels inside
-  the broker so Core never decrypts them, and read env keys once.
-- [ ] Other Core paths that still attach the key directly with the flag on (review 1 H1, H2, M1, M2): web search
-  (`ext/web-search/src/tool.rs`) and image generation (`ext/image-generation/src/backend.rs`) via `provider.api_auth()`;
-  the model catalog refresh (`model-provider/src/models_endpoint.rs`); the realtime conversation websocket
-  (`core/src/realtime_conversation.rs`); OpenAI API-key users of `auth_provider_from_auth` (`core/src/mcp_openai_file.rs`,
-  `codex-mcp`, `core-plugins`, `core-skills`, `analytics`). Broker them or refuse them under the flag.
-- [ ] Remove env-sourced provider keys from Core's process environment once the broker holds them, so unsandboxed same-user processes (MCP servers, hooks) cannot read them from Core's launch environment (the macOS limit PF-27-S02 records).
-- [ ] Resolve vault-label credentials inside the broker only; the agent and Core see labels and dummies.
-- [ ] ChatGPT sign-in (refreshing tokens) and Responses websockets: decision recorded for slice 1 (not brokered;
-  websockets off under the flag); a later slice needs a broker-side token holder and a websocket upgrade route.
-- [ ] Memory-dump check (no raw key in Core's memory) once Core no longer reads the key; a direct test of the
-  non-Unix fail-closed branch with PF-27-S06 (Windows, P1).
+- [ ] Final Opus re-review approves; merge; archive this record.
+
+## Known limits (follow-ups for the plan worker)
+
+- Other Core/TUI features (provider status, `/vault`, Task Node, Telegram, wallet, campaign tracker) still open the
+  encrypted vault in-process, which decrypts the file in Core memory; only the provider key *for requests* is read
+  by the broker alone. Follow-up: split the vault index from values or serve metadata through the broker. These
+  features no longer see an env-only provider key.
+- Env scrubbing runs at session start (races C-level `getenv`; a launch value `.env` replaced keeps its bytes);
+  moving it before `main` needs the flag decided at process start. Only the first enabling config's key variables
+  are handed over; pre-session uses (first catalog refresh, `corbanu doctor`) fail closed.
+- Core still holds and refreshes ChatGPT sign-in tokens; agent-identity registration sends the access token
+  directly; a request signed with a replaced reference fails once. Windows: PF-27-S06 (P1).
 
 ## Verification
 
-- [x] `just fix -p` and `just fmt`; focused `pf_27_s05` tests and the affected crates (577 + 910 passed); Linux
-  clippy clean on the RTX box.
-- [x] GLM 5.2 tmux runs as two SOP videos ([index](../../../../qa/demos/index/PF-27-S05.md)); Opus 5.5 High review.
-- [ ] Gate for the remaining slices (vault labels in the broker, the other key paths), then milestone qualification
-  (isolated code-blind VM run, human sign-off) when Moderate ships.
+- [x] `just fix -p` and `just fmt`. Affected crates: 1312 passed; core subsets: 1099 passed. The 2 `suite::client::skills_*`
+  failures are unrelated: real `~/.agents/skills` leak into the test. Linux clippy `-D warnings` is clean on the RTX box,
+  and the Linux `pf_27_s05` tests pass.
+- [x] GLM 5.2 tmux runs as SOP videos, keyring-isolated ([index](../../../../qa/demos/index/PF-27-S05.md)).
+- [x] Opus 5.5 High reviews 3 and 4 (changes requested, fixed); see [evidence](../../../../qa/security-levels/sprints/PF-27-S05/README.md).
+- [ ] Final re-review verdict.
 
 ## Exit evidence
 
-- [ ] Outputs under `qa/security-levels/sprints/PF-27-S05/`; Done/Remaining reflect reality; record archived.
+- [x] Outputs under `qa/security-levels/sprints/PF-27-S05/`; Done and Known limits reflect reality.
+- [ ] Record archived after merge.
