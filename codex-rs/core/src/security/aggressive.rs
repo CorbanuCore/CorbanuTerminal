@@ -255,7 +255,7 @@ pub(crate) fn admit(
             purpose: bounded(PURPOSE),
             operation: BoundedText::new(operation).ok()?,
             destination: None,
-            quantity: QuantitativeLimit::new(USES, 1).ok(),
+            quantity: QuantitativeLimit::new(USES, /*max_units*/ 1).ok(),
             grant_id: None,
         },
     )
