@@ -34,8 +34,6 @@ use zeroize::Zeroizing;
 
 use super::inventory::Disposition;
 use super::inventory::FindingKind;
-use super::inventory::assignment_span;
-use super::inventory::literal_value;
 use super::preflight::Preflight;
 
 pub const JOURNAL_FILE: &str = "security_migration.toml";
@@ -99,15 +97,23 @@ impl MigrationPlan {
         let mut moves = Vec::new();
         let mut unsupported = Vec::new();
         for finding in preflight.inventory.blocking() {
-            let symlinked = finding.paths.first().is_some_and(|path| {
-                std::fs::symlink_metadata(path).is_ok_and(|meta| meta.file_type().is_symlink())
-            });
+            let check = match (finding.kind, &finding.source_line, finding.paths.first()) {
+                (FindingKind::ShellProfileExport, Some((line, name)), Some(path)) => {
+                    Some(migratable(path, *line, name))
+                }
+                _ => None,
+            };
             match (finding.kind, &finding.source_line, finding.paths.first()) {
-                (FindingKind::ShellProfileExport, Some(_), Some(_)) if symlinked => {
+                (FindingKind::ShellProfileExport, Some(_), Some(_))
+                    if matches!(check, Some(Err(_))) =>
+                {
                     unsupported.push(UnsupportedItem {
                         finding_id: finding.id.clone(),
                         location: finding.location.clone(),
-                        action: "this profile is a link (for example into a dotfiles folder); move the value into the vault in the file it points to",
+                        action: match check {
+                            Some(Err(action)) => action,
+                            _ => "edit it by hand",
+                        },
                     });
                 }
                 (FindingKind::ShellProfileExport, Some((line, name)), Some(path)) => {
@@ -273,7 +279,9 @@ pub enum MigrationError {
         "the migration stopped at {stage}: {reason}. Values already moved are in the vault; nothing was rolled back. Open /security to finish it"
     )]
     Interrupted { stage: &'static str, reason: String },
-    #[error("the migration record {0} cannot be read")]
+    #[error(
+        "the migration record {0} cannot be read. Check the profiles it names by hand (each line should hold a vault reference or its original value), then delete that file"
+    )]
     Journal(String),
 }
 
@@ -428,10 +436,18 @@ fn outcome(journal: &Journal) -> MigrationOutcome {
                     .push((entry.location.clone(), entry.label.clone()));
                 result.rotate.push(entry.name.clone());
             }
-            EntryState::Skipped | EntryState::Planned | EntryState::Stored => {
+            EntryState::Skipped => {
                 result.skipped.push((
                     entry.location.clone(),
                     "the line changed after the preview; it was left as it is".to_string(),
+                ));
+                result.rotate.push(entry.name.clone());
+            }
+            // Not reached after a full roll-forward; reported, never hidden.
+            EntryState::Planned | EntryState::Stored => {
+                result.skipped.push((
+                    entry.location.clone(),
+                    "the migration did not reach this line".to_string(),
                 ));
                 result.rotate.push(entry.name.clone());
             }
@@ -461,28 +477,201 @@ fn file_stamp(path: &Path) -> String {
     format!("{}:{modified}:{inode}", metadata.len())
 }
 
-fn read_profile(path: &Path) -> Result<String, String> {
-    let metadata = std::fs::symlink_metadata(path).map_err(|err| err.to_string())?;
-    if !metadata.is_file() {
-        return Err(format!("{} is not a regular file", path.display()));
+/// `(device, inode)`, to notice a file swapped in before a rename.
+type FileIdentity = Option<(u64, u64)>;
+
+fn identity(metadata: &std::fs::Metadata) -> FileIdentity {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt as _;
+        Some((metadata.dev(), metadata.ino()))
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = metadata;
+        None
+    }
+}
+
+/// More than one name for the file: replacing it by rename would leave the
+/// plain text behind under the other names.
+fn hard_linked(metadata: &std::fs::Metadata) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt as _;
+        metadata.nlink() > 1
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = metadata;
+        false
+    }
+}
+
+/// Reads a profile without following a link, refusing anything but a small,
+/// singly linked regular file.
+fn read_profile(path: &Path) -> Result<(Zeroizing<String>, FileIdentity), String> {
+    use std::io::Read as _;
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    let file = options
+        .open(path)
+        .map_err(|err| format!("{}: {err}", path.display()))?;
+    let metadata = file.metadata().map_err(|err| err.to_string())?;
+    if !metadata.is_file() || hard_linked(&metadata) {
+        return Err(format!(
+            "{} is not a singly linked regular file",
+            path.display()
+        ));
     }
     if metadata.len() > MAX_PROFILE_BYTES {
         return Err(format!("{} is too large to rewrite", path.display()));
     }
-    std::fs::read_to_string(path).map_err(|err| err.to_string())
+    let mut text = Zeroizing::new(String::new());
+    file.take(MAX_PROFILE_BYTES)
+        .read_to_string(&mut text)
+        .map_err(|err| err.to_string())?;
+    Ok((text, identity(&metadata)))
+}
+
+/// One shell assignment as migration understands it.
+struct Assignment<'a> {
+    /// The line without its line ending.
+    content: &'a str,
+    name: &'a str,
+    value_start: usize,
+}
+
+/// `[export |declare -x ]NAME=value` or fish `set [-flags] NAME value`,
+/// optionally indented. Byte offsets are valid in the original line.
+fn parse_line(line: &str) -> Option<Assignment<'_>> {
+    let content = line.trim_end_matches(['\n', '\r']);
+    let indent = content.len() - content.trim_start().len();
+    let rest = &content[indent..];
+    let valid_name = |name: &str| {
+        name.chars()
+            .next()
+            .is_some_and(|ch| ch.is_ascii_alphabetic() || ch == '_')
+            && name
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    };
+    if let Some(after) = rest.strip_prefix("set ") {
+        let base = indent + 4;
+        let mut offset = 0;
+        for token in after.split(' ') {
+            let start = offset;
+            offset += token.len() + 1;
+            if token.is_empty() || token.starts_with('-') {
+                continue;
+            }
+            if !valid_name(token) {
+                return None;
+            }
+            let value = after.get(start + token.len()..)?;
+            let skipped = value.len() - value.trim_start().len();
+            return Some(Assignment {
+                content,
+                name: token,
+                value_start: base + start + token.len() + skipped,
+            });
+        }
+        return None;
+    }
+    let (prefix, after) = ["export ", "declare -x "]
+        .iter()
+        .find_map(|prefix| rest.strip_prefix(prefix).map(|after| (prefix.len(), after)))
+        .unwrap_or((0, rest));
+    let skipped = after.len() - after.trim_start().len();
+    let after = &after[skipped..];
+    let (name, _) = after.split_once('=')?;
+    valid_name(name).then_some(Assignment {
+        content,
+        name,
+        value_start: indent + prefix + skipped + name.len() + 1,
+    })
+}
+
+impl Assignment<'_> {
+    /// What follows a value token: nothing, or whitespace and a comment.
+    fn ends_cleanly(&self, end: usize) -> bool {
+        let tail = &self.content[end..];
+        let trimmed = tail.trim_start();
+        trimmed.is_empty() || (trimmed.starts_with('#') && trimmed.len() < tail.len())
+    }
+
+    /// The value token's range and its literal when it is one plain value:
+    /// `'…'`, `"…"` without `$`, `` ` `` or `\`, or an unquoted word without
+    /// shell syntax, followed by nothing but a comment. Anything else (a
+    /// second command, several words, a substitution) is not migrated.
+    fn literal(&self) -> Option<(std::ops::Range<usize>, &str)> {
+        let value = &self.content[self.value_start..];
+        let (len, literal) = match value.chars().next()? {
+            quote @ ('"' | '\'') => {
+                let close = value[1..].find(quote)? + 1;
+                let inner = &value[1..close];
+                if quote == '"' && inner.contains(['$', '`', '\\']) {
+                    return None;
+                }
+                (close + 1, inner)
+            }
+            _ => {
+                let end = value.find(char::is_whitespace).unwrap_or(value.len());
+                let word = &value[..end];
+                if word.contains([';', '&', '|', '`', '$', '\\', '"', '\'', '(', ')', '<', '>']) {
+                    return None;
+                }
+                (end, word)
+            }
+        };
+        let end = self.value_start + len;
+        (!literal.is_empty() && self.ends_cleanly(end)).then_some((self.value_start..end, literal))
+    }
+
+    /// Whether the value is exactly `reference` (a rewrite that finished).
+    fn holds(&self, reference: &str) -> bool {
+        self.content[self.value_start..]
+            .strip_prefix(reference)
+            .is_some_and(|_| self.ends_cleanly(self.value_start + reference.len()))
+    }
+}
+
+/// Whether a planned line can be migrated as it is now.
+fn migratable(path: &Path, line: usize, name: &str) -> Result<(), &'static str> {
+    let Ok((text, _)) = read_profile(path) else {
+        return Err(
+            "this profile cannot be rewritten safely (a link, several hard links, or unreadable); move the value into the vault yourself",
+        );
+    };
+    let parsed = text
+        .lines()
+        .nth(line.saturating_sub(1))
+        .and_then(parse_line);
+    match parsed {
+        Some(assignment) if assignment.name == name && assignment.literal().is_some() => Ok(()),
+        _ => Err(
+            "the line is not a single plain NAME=value (quoting, a second command or several words); edit it by hand",
+        ),
+    }
 }
 
 /// The literal value on the entry's line if it is still the same variable.
 fn read_line_value(entry: &JournalEntry) -> Result<Option<Zeroizing<String>>, String> {
-    let text = Zeroizing::new(read_profile(&entry.path)?);
+    let (text, _) = read_profile(&entry.path)?;
     Ok(text
         .lines()
         .nth(entry.line.saturating_sub(1))
-        .and_then(assignment_span)
-        .filter(|(name, _)| *name == entry.name)
-        .and_then(|(_, span)| {
-            let line = text.lines().nth(entry.line.saturating_sub(1))?;
-            literal_value(line.get(span)?).map(|value| Zeroizing::new(value.to_string()))
+        .and_then(parse_line)
+        .filter(|assignment| assignment.name == entry.name)
+        .and_then(|assignment| {
+            assignment
+                .literal()
+                .map(|(_, value)| Zeroizing::new(value.to_string()))
         }))
 }
 
@@ -495,7 +684,7 @@ fn rewrite_file(
     indices: &[usize],
     store: &dyn CredentialStore,
 ) -> Result<Vec<EntryState>, String> {
-    let text = Zeroizing::new(read_profile(path)?);
+    let (text, read_identity) = read_profile(path)?;
     let mut lines: Vec<String> = text.split_inclusive('\n').map(str::to_string).collect();
     let mut states = Vec::with_capacity(indices.len());
     let mut changed = false;
@@ -514,32 +703,39 @@ fn rewrite_file(
             states.push(EntryState::Skipped);
             continue;
         };
-        let Some((name, span)) = assignment_span(line).map(|(name, span)| (name.to_string(), span))
-        else {
+        let Some(assignment) = parse_line(line).filter(|parsed| parsed.name == entry.name) else {
             states.push(EntryState::Skipped);
             continue;
         };
-        let current = line.get(span.clone()).unwrap_or_default().to_string();
-        if name != entry.name {
-            states.push(EntryState::Skipped);
-        } else if current == reference {
+        if assignment.holds(&reference) {
             states.push(EntryState::Rewritten);
-        } else {
-            let stored = store.get(&entry.label)?;
-            let matches = matches!(
-                (literal_value(&current), stored.as_deref()),
-                (Some(value), Some(stored)) if value == stored.as_str()
-            );
-            if matches {
+            continue;
+        }
+        let stored = store.get(&entry.label)?;
+        let span = assignment.literal().and_then(|(span, value)| {
+            stored
+                .as_deref()
+                .is_some_and(|stored| stored.as_str() == value)
+                .then_some(span)
+        });
+        match span {
+            Some(span) => {
                 line.replace_range(span, &reference);
                 changed = true;
                 states.push(EntryState::Rewritten);
-            } else {
-                states.push(EntryState::Skipped);
             }
+            None => states.push(EntryState::Skipped),
         }
     }
     if changed {
+        // The file must still be the one that was read.
+        let current = std::fs::symlink_metadata(path).map_err(|err| err.to_string())?;
+        if identity(&current) != read_identity || !current.is_file() {
+            return Err(format!(
+                "{} was replaced while it was being rewritten",
+                path.display()
+            ));
+        }
         replace_file(path, &Zeroizing::new(lines.concat()))?;
     } else {
         restrict(path)?;
@@ -593,11 +789,14 @@ fn create_journal(codex_home: &Path, journal: &mut Journal) -> Result<(), Migrat
     let path = journal_path(codex_home);
     let contents =
         toml::to_string(journal).map_err(|err| MigrationError::Journal(err.to_string()))?;
-    let mut file = match std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&path)
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
     {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        options.mode(0o600);
+    }
+    let mut file = match options.open(&path) {
         Ok(file) => file,
         Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
             return Err(MigrationError::InProgress);

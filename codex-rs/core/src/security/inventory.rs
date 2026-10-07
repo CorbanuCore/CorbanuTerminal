@@ -1382,12 +1382,18 @@ fn parse_assignment(line: &str) -> Option<(&str, &str)> {
         return None;
     }
     if let Some(rest) = line.strip_prefix("set ") {
-        let mut parts = rest
-            .split_whitespace()
-            .filter(|part| !part.starts_with('-'));
-        let name = parts.next()?;
-        let start = rest.find(name)? + name.len();
-        return Some((name, rest[start..].trim()));
+        // Walk the tokens: the name is the first one that is not a flag
+        // (searching for it could match inside a flag such as `-gx`).
+        let mut offset = 0;
+        for token in rest.split(' ') {
+            let start = offset;
+            offset += token.len() + 1;
+            if token.is_empty() || token.starts_with('-') {
+                continue;
+            }
+            return Some((token, rest.get(start + token.len()..)?.trim()));
+        }
+        return None;
     }
     let line = line
         .strip_prefix("export ")
@@ -1400,26 +1406,6 @@ fn parse_assignment(line: &str) -> Option<(&str, &str)> {
             .chars()
             .all(|ch| ch.is_ascii_alphanumeric() || ch == '_');
     valid.then_some((name, value.trim()))
-}
-
-/// The variable name and the byte range of its value (without a trailing
-/// ` #` comment) in an assignment line, for rewriting it in place.
-pub(crate) fn assignment_span(line: &str) -> Option<(&str, std::ops::Range<usize>)> {
-    let (name, value) = parse_assignment(line)?;
-    // `value` is a suffix of the line without trailing whitespace.
-    let start = line.trim_end().len().checked_sub(value.len())?;
-    let end = start
-        + value
-            .find(" #")
-            .map_or(value.len(), |comment| value[..comment].trim_end().len());
-    Some((name, start..end))
-}
-
-/// The literal a value holds after quotes are removed, or `None` when it is
-/// empty or resolved elsewhere (a substitution or reference).
-pub(crate) fn literal_value(value: &str) -> Option<&str> {
-    let value = unquote(value);
-    (!value.is_empty() && !is_reference(value)).then_some(value)
 }
 
 fn unquote(value: &str) -> &str {

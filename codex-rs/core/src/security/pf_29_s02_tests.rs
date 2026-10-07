@@ -351,7 +351,7 @@ fn pf_29_s02_fish_and_linked_profiles() {
     assert!(
         plan.unsupported
             .iter()
-            .any(|item| item.action.contains("is a link"))
+            .any(|item| item.action.contains("a link"))
     );
 
     let vault = FakeVault::default();
@@ -360,4 +360,73 @@ fn pf_29_s02_fish_and_linked_profiles() {
         machine.read(&fish),
         "set -gx ANTHROPIC_API_KEY (corbanu vault auth-helper migrated/anthropic_api_key)\n"
     );
+}
+
+/// Review 1: quoting, second commands, several words and hard links.
+#[test]
+fn pf_29_s02_only_plain_single_assignments_are_rewritten() {
+    let machine = Machine::new();
+    machine.write(
+        &machine.zshrc(),
+        "export QUOTED_TOKEN=\"fake-a #b-0001\"\nexport SINGLE_TOKEN='fake-c #d-0002'\nexport FIRST_TOKEN=fake-e-0003; export SECOND_TOKEN=fake-f-0004\nESCAPED_TOKEN=fake\\ #g-0005\nGLUED_TOKEN=\"fake-h-0006\"#x\n",
+    );
+    let fish = machine.home().join(".config/fish/config.fish");
+    std::fs::create_dir_all(fish.parent().unwrap_or_else(|| panic!("parent")))
+        .unwrap_or_else(|err| panic!("{err}"));
+    machine.write(
+        &fish,
+        "set -gx x_TOKEN fake-i-0007\nset -gx WORDS_TOKEN fake-j fake-k\n",
+    );
+    let plan = machine.plan();
+    let mut moved = plan
+        .moves
+        .iter()
+        .map(|planned| planned.name.clone())
+        .collect::<Vec<_>>();
+    moved.sort();
+    assert_eq!(
+        moved,
+        vec![
+            "QUOTED_TOKEN".to_string(),
+            "SINGLE_TOKEN".to_string(),
+            "x_TOKEN".to_string()
+        ]
+    );
+    // One finding per line: the second command on line 3 is not listed separately.
+    assert_eq!(plan.unsupported.len(), 4, "{:?}", plan.unsupported);
+
+    let vault = FakeVault::default();
+    run(&machine.corbanu(), &plan, &vault, None).unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(
+        vault
+            .values
+            .borrow()
+            .get("migrated/quoted_token")
+            .map(String::as_str),
+        Some("fake-a #b-0001")
+    );
+    let text = machine.read(&machine.zshrc());
+    assert!(
+        !text.contains("fake-a") && !text.contains("fake-c"),
+        "{text}"
+    );
+    assert!(text.contains("FIRST_TOKEN=fake-e-0003; export SECOND_TOKEN=fake-f-0004"));
+    assert_eq!(
+        machine.read(&fish),
+        "set -gx x_TOKEN (corbanu vault auth-helper migrated/x_token)\nset -gx WORDS_TOKEN fake-j fake-k\n"
+    );
+
+    #[cfg(unix)]
+    {
+        let linked = Machine::new();
+        std::fs::hard_link(linked.zshrc(), linked.root.path().join("other-name"))
+            .unwrap_or_else(|err| panic!("{err}"));
+        let plan = linked.plan();
+        assert!(plan.moves.is_empty());
+        assert!(
+            plan.unsupported
+                .iter()
+                .all(|item| item.action.contains("hard links"))
+        );
+    }
 }
