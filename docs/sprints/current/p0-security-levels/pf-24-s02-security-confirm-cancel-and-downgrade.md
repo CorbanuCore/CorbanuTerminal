@@ -69,7 +69,7 @@ Gate: [qa/security-levels/sprints/PF-24-S02/README.md](../../../../qa/security-l
   Core state (repaired by a confirmed level), agent rewrite of the level file, restart.
 - [x] PF-24-S03 follow-ups: tamper check (a level file weaker than Core's confirmed record reads as invalid, so
   Aggressive stays enforced, also for nested-launch checks); "restart now" (`r` after a save; same program,
-  arguments and folder, minus an initial prompt); a second Permissive launch no longer removes the rule file or
+  arguments and folder, with a marker so the initial prompt and images aren't sent again); a second Permissive launch no longer removes the rule file or
   registry entry while an Aggressive process of the same home holds `security_level.lock`.
 - [x] PF-23-S03 hand-offs: the commit runs off the async runtime; `security_level.toml` and `security_state.json`
   are reconciled (above); `StoredLevelChanged`/`StoredStateChanged` lead back to a fresh review; an unreadable
@@ -78,8 +78,11 @@ Gate: [qa/security-levels/sprints/PF-24-S02/README.md](../../../../qa/security-l
 
 ## Remaining
 
-- [ ] GLM 5.2 tmux run and model videos: Z.AI has no balance; the gate used model-free runs (no model turn).
+- [ ] GLM 5.2 tmux run: Z.AI has no balance. The gate used a mock model (no model turn), and four videos are recorded
+  with it. A GLM run can be added later.
 - [ ] Merge, then archive this record.
+- Follow-ups: Windows "restart now" doesn't ignore Ctrl-C in the waiting parent; a downgrade doesn't rewrite a
+  profile-v2 user config path (errs strict); startup warnings aren't shown in mock runs (existing display path).
 - Known limits are in the gate record.
 
 ## Verification

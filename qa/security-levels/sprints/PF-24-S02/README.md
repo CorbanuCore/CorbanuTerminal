@@ -34,31 +34,40 @@ Keys: Enter confirms, Esc cancels (nothing written), `r` restarts, and Enter on 
 
 ## Results
 
-- **Focused tests:**
+- **Focused tests (final tree):**
   - `just test -p codex-core -p codex-security-level` (`security_transition`, `security_recovery`,
-    `security_confirm`, `pf_29`): see the final run below.
-  - `just test -p codex-tui` (`security`, `pf_24`, `pf_29`, `slash_command`): 273/273 at round 1.
-- **Wider run:** `just test -p codex-tui -p codex-security-level -p codex-cli` at round 1. Three tests failed, none in
-  code this sprint touches:
+    `security_confirm`, `pf_29`, `pf_23`): 111/111.
+  - `just test -p codex-tui` (`security`, `pf_24`, `pf_29`, `slash_command`): 273/273.
+  - New: `core/src/security/level_change_tests.rs` (11), `security-level/src/level_tests.rs` (5),
+    `tui/src/security/confirm_tests.rs` (6), picker `pf_24_s02` (7), and the launch and restart tests.
+- **Wider run** (`just test -p codex-tui -p codex-security-level -p codex-cli`, round-1 tree): 5920/5923. The three
+  failures are in code this sprint doesn't touch:
   - the command-menu snapshot (known drift);
   - a kitty pet image test;
-  - `nested_launch::pass_mode_runs_exec_with_aggressive_enforced`, where the exec path finds the test's
+  - `nested_launch::pass_mode_runs_exec_with_aggressive_enforced`, where the exec path reports the test's
     account-home registry missing. It wasn't compared on main.
 - **Linux clippy** (`-D warnings`; core, tui, cli, security-level, app-server-client) on the RTX box: clean at
-  `9b776a204b` and `ff0e076d90`; see below for the final tree.
-- **tmux runs (mock model):** in `.codex-work/workers-20261002/sec-tui7.log`:
-  - confirm Aggressive: Core is Aggressive now in the session, and `r` restarts with `-c` options kept and the
-    initial prompt not sent again. `/status` then shows `corbanu-aggressive` and "protected boundary checked at
-    launch".
-  - downgrade review, then Esc, then confirm;
-  - a second Permissive launch while an Aggressive one runs: the rule file stays;
-  - a blocked lock on an upgrade: Core applies now and reports it wasn't saved;
-  - the level file rewritten by `!printf`.
-  - Startup warnings weren't shown in these mock runs; an unrelated theme warning wasn't shown either, so this is a
-    pre-existing display path. The warnings are covered by tests and `/security`.
-- **Review (Opus 5.5 High):** round 1 and round 2 asked for changes; every finding is fixed or recorded in
-  `review/disposition.md`.
-- **Videos:** see `qa/demos/index/PF-24-S02.md`.
+  `9b776a204b`, `ff0e076d90`, `3e1ba16e13` and `9fda6ceb5e` (the last change after it only edits a message).
+- **tmux runs (mock model; `.codex-work/workers-20261002/sec-tui7.log`):**
+  - Confirm Aggressive: Core is Aggressive now in this session. `r` restarts with the `-c` options kept and doesn't send
+    the initial prompt again. `/status` then shows `corbanu-aggressive` and "protected boundary checked at launch".
+  - Downgrade: review, Esc, then confirm.
+  - A second Permissive launch while an Aggressive one runs: the rule file stays.
+  - A blocked lock on an upgrade: Core applies now and reports that the save failed.
+  - The level file rewritten by `!printf`: caught.
+  - Startup warnings weren't shown in these mock runs. An unrelated theme warning wasn't shown either, so this is the
+    existing display path; the warnings are covered by tests and `/security`.
+- **Review (Opus 5.5 High, installed `corbanu exec`, read-only):**
+  - Round 1: REQUEST CHANGES (10 findings).
+  - Round 2: REQUEST CHANGES (5).
+  - Round 3: APPROVE WITH FIXES (4).
+  - Round 4: **APPROVE**.
+  - Each finding is fixed or recorded in `review/disposition.md`; the rounds are in `review/round1..4.md`.
+- **Videos (mock model, commit `9fda6ceb5e02`):** four, listed in `qa/demos/index/PF-24-S02.md`:
+  - confirm and restart;
+  - downgrade shows removed protections;
+  - a failed save stays open;
+  - level-file tamper.
 
 ## Known limits
 
@@ -67,6 +76,5 @@ Keys: Enter confirms, Esc cancels (nothing written), `r` restarts, and Enter on 
 - Another process sees a commit at its next session start (as in PF-23-S03).
 - A downgrade's revocation ends grants in the confirming session only.
 - On Windows the parent doesn't ignore Ctrl-C while it waits for the restarted child.
-- Agent commands inherit the restart marker.
 - A profile-v2 user config path isn't rewritten by a downgrade. This errs strict.
 - Startup warnings depend on the existing display path (see above).
