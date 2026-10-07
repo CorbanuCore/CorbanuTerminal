@@ -1,11 +1,17 @@
-# PF-24-S02: a level file rewritten to Permissive outside /security, while Core's confirmed level is Aggressive, is caught and Aggressive stays enforced. No model turn (Z.AI balance was empty when recorded).
+# PF-24-S02: a level file rewritten to Permissive outside /security, while Core's confirmed level is Aggressive, is caught and Aggressive stays enforced. Mock model, no model turn (Z.AI balance was empty when recorded).
 id = "pf24s02-level-file-tamper"
 feature = "Level file changed outside /security is caught"
 expected = "After Aggressive is confirmed, security_level.toml is overwritten with Permissive by a shell command; /security reports the stored level as changed outside /security and says Aggressive is enforced."
-model = "glm-5.2"
-provider = "zai"
+model = "mock-model"
+provider = "mock"
 config = """
 suppress_unstable_features_warning = true
+
+[model_providers.mock]
+name = "mock"
+base_url = "http://127.0.0.1:9/v1"
+env_key = "MOCK_KEY"
+wire_api = "responses"
 
 [features]
 security_levels = true
@@ -15,9 +21,6 @@ isolated_credential_broker = true
 secret_output_gate = true
 source_envelopes = true
 """
-
-[credentials]
-ZAI_API_KEY = "provider/zai_api_key"
 
 [[steps]]
 wait = "Corbanu Terminal \\(v"

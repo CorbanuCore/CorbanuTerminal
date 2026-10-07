@@ -191,9 +191,9 @@ impl From<TransitionError> for LevelChangeError {
                 Self::Changed
             }
             TransitionError::Persist(_) => Self::NotSaved(error.to_string()),
+            TransitionError::Policy(error) => error.into(),
             TransitionError::Blocked(_)
             | TransitionError::NotATransition
-            | TransitionError::Policy(_)
             | TransitionError::Revocation(_) => Self::Refused(error.to_string()),
         }
     }
@@ -201,7 +201,11 @@ impl From<TransitionError> for LevelChangeError {
 
 impl From<super::SecurityPolicyError> for LevelChangeError {
     fn from(error: super::SecurityPolicyError) -> Self {
-        Self::Refused(error.to_string())
+        match error {
+            // The epoch moved since the review.
+            super::SecurityPolicyError::AuthorityMismatch => Self::Changed,
+            error => Self::Refused(error.to_string()),
+        }
     }
 }
 
@@ -223,27 +227,29 @@ pub fn commit_human_level_change(
         Some(controller) => (controller, true),
         None => (stored_controller(codex_home, configured)?, false),
     };
-    // A level saved by another session that is stricter than this tree's:
-    // the tree takes it first (as its next start would), so choosing a lower
-    // level is a downgrade that lowers the saved record too.
-    if let StoredSecurityState::Level(stored) = reviewed.stored
-        && stored > reviewed.in_force
-        && target < stored
-    {
-        controller.catch_up(&recovery::recover(codex_home, reviewed.in_force));
-    }
-    let request = SecurityControlRequest::new(
-        controller.authority_epoch()?,
-        SecurityControlAction::SetLevel { level: target },
-    )
-    .map_err(|error| LevelChangeError::Refused(error.to_string()))?;
+    // Bound to the epoch the person reviewed: any commit since refuses.
+    let epoch = match reviewed.epoch {
+        Some(epoch) if live => epoch,
+        Some(_) | None => controller.authority_epoch()?,
+    };
+    let request = SecurityControlRequest::new(epoch, SecurityControlAction::SetLevel { level: target })
+        .map_err(|error| LevelChangeError::Refused(error.to_string()))?;
     let confirmed = controller.confirm_security_request(request, now_unix_seconds)?;
-    let prepared = controller.prepare_transition(
+    // A stricter level saved by another session, which the person saw: a
+    // lower choice lowers it, without raising this session first.
+    let reviewed_stored = match reviewed.stored {
+        StoredSecurityState::Level(level) => level,
+        StoredSecurityState::Absent | StoredSecurityState::Unreadable(_) => {
+            SecurityLevel::Permissive
+        }
+    };
+    let prepared = controller.prepare_reviewed_transition(
         confirmed,
         match probes {
             Probes::Passed => ProbeOutcome::Passed,
             Probes::Blocked(blockers) => ProbeOutcome::Blocked(blockers),
         },
+        reviewed_stored,
     )?;
     let committed = controller.commit_transition(
         prepared,

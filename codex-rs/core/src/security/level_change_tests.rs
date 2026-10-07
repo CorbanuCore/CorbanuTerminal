@@ -42,6 +42,19 @@ fn commit_in(
     )
 }
 
+/// `security_state.json` as another process saves it.
+fn saved_elsewhere(home: &TempDir, level: SecurityLevel) {
+    std::fs::write(
+        home.path().join(recovery::STATE_FILE),
+        serde_json::to_vec(&recovery::DurableSecurityState::new(
+            level,
+            RevocationState::new(),
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+}
+
 /// A live session tree on `home`, as a session start registers it, and its
 /// root thread.
 fn live_tree(home: &TempDir, level: SecurityLevel) -> (EffectivePolicyView, ThreadId) {
@@ -220,16 +233,48 @@ fn security_transition_a_confirmed_level_repairs_an_unreadable_state() {
 fn security_transition_permissive_lowers_a_stricter_record_saved_elsewhere() {
     let home = TempDir::new().unwrap();
     let (_view, root) = live_tree(&home, SecurityLevel::Permissive);
-    commit(&home, SecurityLevel::Aggressive, Probes::Passed).unwrap();
+    // Another process saved Aggressive (it does not reach this tree).
+    saved_elsewhere(&home, SecurityLevel::Aggressive);
     let report = commit_in(&home, Some(root), SecurityLevel::Permissive, Probes::Passed).unwrap();
+    // The session is not raised first (review 2, finding 2).
     assert_eq!(
-        (report.kind, report.next_start),
-        (LevelChangeKind::Downgrade, SecurityLevel::Permissive)
+        (report.kind, report.in_force, report.next_start),
+        (
+            LevelChangeKind::Downgrade,
+            SecurityLevel::Permissive,
+            SecurityLevel::Permissive
+        )
     );
     assert_eq!(
         stored(&home),
         StoredSecurityState::Level(SecurityLevel::Permissive)
     );
+}
+
+/// Review 2, finding 3: a level chosen again that raises the saved record
+/// raises the other sessions below it and ends their "for session"
+/// approvals (their sinks are told).
+#[test]
+fn security_transition_unchanged_raise_notifies_the_other_sessions() {
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::atomic::Ordering;
+
+    struct Sink(AtomicUsize);
+    impl super::super::transition::RevocationSink for Sink {
+        fn revoke(&self) {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    let home = TempDir::new().unwrap();
+    let (_view, root) = live_tree(&home, SecurityLevel::Aggressive);
+    let (other, _) = live_tree(&home, SecurityLevel::Permissive);
+    let sink = std::sync::Arc::new(Sink(AtomicUsize::new(0)));
+    other.register_revocation_sink(std::sync::Arc::downgrade(&sink) as _);
+    let report = commit_in(&home, Some(root), SecurityLevel::Aggressive, Probes::Passed).unwrap();
+    assert_eq!(report.kind, LevelChangeKind::Unchanged);
+    assert_eq!(sink.0.load(Ordering::SeqCst), 1);
+    assert_eq!(other.authority_marker().unwrap().0, 1);
 }
 
 /// Review 1, finding 7: a commit in this tree after the review was shown

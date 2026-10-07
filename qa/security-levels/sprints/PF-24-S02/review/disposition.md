@@ -12,5 +12,15 @@
 | 6 | Low | Fixed. `security_confirm.lock` is held across snapshot, save, commit and restore, with a 2 s wait. |
 | 7 | Low | Fixed. `LevelBasis` carries the tree's `AuthorityEpoch`, so any commit after the review makes the review stale. Test: `security_transition_review_is_bound_to_the_tree_epoch`. |
 | 8 | Low | Fixed. Both paths read the kill switch from the revocation state. |
-| 9 | Low | Fixed. Restart arguments drop exactly the values clap parsed as the prompt, at any subcommand level. The TUI has no image argument. |
+| 9 | Low | Fixed in round 2 (see below). The round-1 fix, and its claim that the TUI has no image argument, were wrong. |
 | 10 | Low | Partly fixed. The Permissive review says when `config.toml` will be rewritten. Still open: a profile-v2 user config path is neither read nor edited. This errs strict: the next start keeps the stricter level, and the next-start line can be wrong in that direction. |
+
+## Round 2: request changes
+
+| # | Severity | Disposition |
+| - | -------- | ----------- |
+| 1 | Medium | Fixed. Restart arguments are no longer edited. The new process gets every argument unchanged and `CORBANU_RESTARTED_FOR_SECURITY=1`, so the TUI drops its initial prompt and images (`run_main`). Test: `security_confirm_restart_keeps_every_argument_and_marks_the_process`. Limit: agent commands inherit the marker, so a TUI an agent command starts would not send its own initial prompt. |
+| 2 | Low/Medium | Fixed with the reviewer's better fix. `catch_up` is gone. `prepare_reviewed_transition` takes the stored level the person reviewed: a choice below it is a downgrade of the saved record, and only a stored level above it counts as `StoredLevelChanged`. The session isn't raised. The review says "the Core level saved for the next start becomes Permissive … this session stays Permissive". |
+| 3 | Low/Medium | Fixed. `propagate` tells a tree's sinks whenever its level rose, including on `Unchanged`. When the session is already Aggressive, the review says so and makes no promise about this session's approvals. Test: `security_transition_unchanged_raise_notifies_the_other_sessions`. |
+| 4 | Low | Fixed. A live session's request uses the reviewed `AuthorityEpoch`, and a moved epoch maps to "review it again". |
+| 5 | Process | `origin/main` was merged into the branch and the tests were run again. |

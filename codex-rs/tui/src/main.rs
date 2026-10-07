@@ -1,4 +1,3 @@
-use clap::CommandFactory;
 use clap::Parser;
 use codex_arg0::Arg0DispatchPaths;
 use codex_arg0::arg0_dispatch_or_else;
@@ -83,7 +82,7 @@ fn main() -> anyhow::Result<()> {
             ExitReason::Restart => {
                 println!("Restarting to apply the saved security level…");
                 std::io::stdout().flush()?;
-                let err = codex_tui::restart_process(TopCli::command());
+                let err = codex_tui::restart_process();
                 eprintln!("ERROR: could not restart ({err}); start it again yourself");
                 std::process::exit(1);
             }

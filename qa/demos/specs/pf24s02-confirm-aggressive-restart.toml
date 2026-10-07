@@ -1,11 +1,17 @@
-# PF-24-S02: confirming Aggressive in /security raises Core's level now, and "restart now" activates the rest. No model turn (Z.AI balance was empty when recorded).
+# PF-24-S02: confirming Aggressive in /security raises Core's level now, and "restart now" activates the rest. Mock model, no model turn (Z.AI balance was empty when recorded).
 id = "pf24s02-confirm-aggressive-restart"
 feature = "Confirm Aggressive, then restart now"
 expected = "After the preflight passes, Enter saves Aggressive and Core's level becomes Aggressive in this session at once; r restarts Corbanu Terminal with the same options and /security then shows Aggressive active."
-model = "glm-5.2"
-provider = "zai"
+model = "mock-model"
+provider = "mock"
 config = """
 suppress_unstable_features_warning = true
+
+[model_providers.mock]
+name = "mock"
+base_url = "http://127.0.0.1:9/v1"
+env_key = "MOCK_KEY"
+wire_api = "responses"
 
 [features]
 security_levels = true
@@ -15,9 +21,6 @@ isolated_credential_broker = true
 secret_output_gate = true
 source_envelopes = true
 """
-
-[credentials]
-ZAI_API_KEY = "provider/zai_api_key"
 
 [[steps]]
 wait = "Corbanu Terminal \\(v"

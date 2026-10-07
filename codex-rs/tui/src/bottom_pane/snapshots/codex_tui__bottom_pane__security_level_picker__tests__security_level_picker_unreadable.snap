@@ -5,7 +5,7 @@ expression: rendered
 ---
 Security level
 Active in this session: Aggressive
-Stored level is unreadable (<home>/security_level.toml: unknown level `max`); Aggressive is enforced. Choose a level to repair it.
+Stored level is unreadable or was changed outside /security (<home>/security_level.toml: unknown level `max`); Aggressive is enforced. Choose a level to repair it.
 
   Permissive
   Moderate  not available yet

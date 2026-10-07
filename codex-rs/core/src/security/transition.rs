@@ -82,6 +82,10 @@ pub(crate) struct PreparedTransition {
     kind: TransitionKind,
     from: SecurityLevel,
     to: SecurityLevel,
+    /// The stricter of `from` and the stored level the human reviewed: a
+    /// level the human chose below it is a downgrade of the saved record,
+    /// and a stored level above it was saved since (PF-24-S02).
+    floor: SecurityLevel,
     event: Option<(RevocationTarget, RevocationReason)>,
 }
 
@@ -171,6 +175,18 @@ impl TrustedSecurityController {
         confirmed: ConfirmedSecurityRequest,
         probes: ProbeOutcome,
     ) -> Result<PreparedTransition, TransitionError> {
+        self.prepare_reviewed_transition(confirmed, probes, SecurityLevel::Permissive)
+    }
+
+    /// [`Self::prepare_transition`] for a human who reviewed
+    /// `reviewed_stored` as the saved level (PF-24-S02). Choosing a level
+    /// below it lowers the saved record without first raising this tree.
+    pub(crate) fn prepare_reviewed_transition(
+        &self,
+        confirmed: ConfirmedSecurityRequest,
+        probes: ProbeOutcome,
+        reviewed_stored: SecurityLevel,
+    ) -> Result<PreparedTransition, TransitionError> {
         let (from, kill_switch_active) = {
             let guard = self.read_state()?;
             let state = guard
@@ -184,10 +200,12 @@ impl TrustedSecurityController {
         };
         let (kind, to, event) = match confirmed.request().action() {
             SecurityControlAction::SetLevel { level } => {
-                let kind = match level.cmp(&from) {
-                    std::cmp::Ordering::Greater => TransitionKind::Restrictive,
-                    std::cmp::Ordering::Less => TransitionKind::Downgrade,
-                    std::cmp::Ordering::Equal => TransitionKind::Unchanged,
+                let kind = if *level > from {
+                    TransitionKind::Restrictive
+                } else if *level < from.max(reviewed_stored) {
+                    TransitionKind::Downgrade
+                } else {
+                    TransitionKind::Unchanged
                 };
                 let event = (kind != TransitionKind::Unchanged).then_some((
                     RevocationTarget::AllActiveAuthority,
@@ -227,6 +245,7 @@ impl TrustedSecurityController {
             kind,
             from,
             to,
+            floor: from.max(reviewed_stored),
             event,
         })
     }
@@ -296,7 +315,7 @@ impl TrustedSecurityController {
                 }
                 // A level stored by another session after this one was shown
                 // is not lowered without the human seeing it.
-                TransitionKind::Downgrade if stored_level > prepared.from => {
+                TransitionKind::Downgrade if stored_level > prepared.floor => {
                     return Err(TransitionError::StoredLevelChanged(stored_level));
                 }
                 TransitionKind::Downgrade => prepared.to,
@@ -541,7 +560,7 @@ fn propagate(
             .collect()
     };
     for tree in trees {
-        {
+        let rose = {
             let mut guard = tree.state.write().unwrap_or_else(PoisonError::into_inner);
             let Some(state) = guard.as_mut() else {
                 continue;
@@ -550,6 +569,7 @@ fn propagate(
             if only_if_stricter && level == state.persisted.settings.level {
                 continue;
             }
+            let rose = level > state.persisted.settings.level;
             let mut revocations = state.persisted.revocations.clone();
             let merged = revocations
                 .merge(&next.revocations)
@@ -563,8 +583,11 @@ fn propagate(
                 continue;
             }
             state.next_start_level = state.next_start_level.max(next.level);
-        }
-        if closes_channels {
+            rose
+        };
+        // A raised level ends the tree's "for session" approvals and
+        // brokered channels too.
+        if closes_channels || rose {
             notify(&tree);
         }
     }

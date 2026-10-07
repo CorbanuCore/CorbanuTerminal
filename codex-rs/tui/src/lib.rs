@@ -996,6 +996,12 @@ pub async fn run_main(
     loader_overrides: LoaderOverrides,
     explicit_remote_endpoint: Option<RemoteAppServerEndpoint>,
 ) -> std::io::Result<AppExitInfo> {
+    // PF-24-S02 "restart now": the same arguments, without sending the
+    // initial prompt and images a second time.
+    if security::restart::restarted() {
+        cli.prompt = None;
+        cli.images.clear();
+    }
     let strict_config = cli.strict_config;
     let (sandbox_mode, approval_policy) = if cli.dangerously_bypass_approvals_and_sandbox {
         (

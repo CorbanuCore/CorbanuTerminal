@@ -1,11 +1,17 @@
-# PF-24-S02: when Core's record cannot be written, a downgrade changes nothing and /security stays open to try again. No model turn (Z.AI balance was empty when recorded).
+# PF-24-S02: when Core's record cannot be written, a downgrade changes nothing and /security stays open to try again. Mock model, no model turn (Z.AI balance was empty when recorded).
 id = "pf24s02-save-failure-stays-open"
 feature = "A failed save changes nothing and stays open"
 expected = "Aggressive is saved; then Core's lock path is blocked. Confirming Permissive reports Security level not saved and Nothing changed, the view stays open, and Esc returns to the list where Aggressive is still saved for the next start."
-model = "glm-5.2"
-provider = "zai"
+model = "mock-model"
+provider = "mock"
 config = """
 suppress_unstable_features_warning = true
+
+[model_providers.mock]
+name = "mock"
+base_url = "http://127.0.0.1:9/v1"
+env_key = "MOCK_KEY"
+wire_api = "responses"
 
 [features]
 security_levels = true
@@ -15,9 +21,6 @@ isolated_credential_broker = true
 secret_output_gate = true
 source_envelopes = true
 """
-
-[credentials]
-ZAI_API_KEY = "provider/zai_api_key"
 
 [[steps]]
 wait = "Corbanu Terminal \\(v"

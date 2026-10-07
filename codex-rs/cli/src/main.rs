@@ -868,7 +868,7 @@ fn handle_app_exit(exit_info: AppExitInfo) -> anyhow::Result<()> {
         ExitReason::Restart => {
             println!("Restarting Corbanu Terminal to apply the saved security level…");
             std::io::stdout().flush()?;
-            let err = codex_tui::restart_process(MultitoolCli::command());
+            let err = codex_tui::restart_process();
             anyhow::bail!("could not restart Corbanu Terminal ({err}); start it again yourself");
         }
         ExitReason::UserRequested => false,

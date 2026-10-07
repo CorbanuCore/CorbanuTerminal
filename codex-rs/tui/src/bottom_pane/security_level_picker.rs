@@ -673,7 +673,7 @@ impl SecurityLevelPicker {
         let mut lines = vec![format!("Active in this session: {}", self.active.name())];
         match &self.stored {
             StoredLevel::Invalid(reason) => lines.push(format!(
-                "Stored level is unreadable ({reason}); Aggressive is enforced. Choose a level to repair it."
+                "Stored level is unreadable or was changed outside /security ({reason}); Aggressive is enforced. Choose a level to repair it."
             )),
             StoredLevel::Absent | StoredLevel::Chosen(_) if saved != self.active => lines.push(
                 format!(
@@ -1027,7 +1027,9 @@ impl SecurityLevelPicker {
             return Vec::new();
         }
         let effects = "agent commands cannot open protected paths, sensitive surfaces need a grant, external content reaches the model labelled untrusted, and memory summaries stop";
-        vec![if self.basis.live {
+        vec![if self.basis.live && self.basis.in_force == SecurityLevel::Aggressive {
+            "Core's level is already Aggressive in this session; confirming saves it for every start and raises the other sessions of this Corbanu Terminal that are below it.".to_string()
+        } else if self.basis.live {
             format!(
                 "Core's level becomes Aggressive as soon as you confirm, in this session and the others of this Corbanu Terminal: {effects}; grants and \"for session\" approvals end."
             )
@@ -1043,15 +1045,20 @@ impl SecurityLevelPicker {
         if !confirm::core_commit_needed(&self.basis, ChosenLevel::Permissive, false) {
             return Vec::new();
         }
-        // A stricter level saved by another session applies here first.
-        let now = match self.basis.stored {
-            StoredSecurityState::Level(stored) => stored.max(self.basis.in_force),
-            StoredSecurityState::Absent | StoredSecurityState::Unreadable(_) => self.basis.in_force,
-        };
-        let mut lines = vec![if self.basis.live {
+        let mut lines = vec![if self.basis.live && self.basis.in_force == SecurityLevel::Permissive {
+            format!(
+                "The Core level saved for the next start becomes Permissive (it is {} now, saved by another session); this session stays Permissive. Grants and \"for session\" approvals in this session end as soon as you confirm.",
+                match self.basis.stored {
+                    StoredSecurityState::Level(stored) => name(stored),
+                    StoredSecurityState::Absent | StoredSecurityState::Unreadable(_) => {
+                        "unreadable"
+                    }
+                }
+            )
+        } else if self.basis.live {
             format!(
                 "Core's level stays {} in this session and becomes Permissive from the next start. Grants, \"for session\" approvals and child agents' authority in this session end as soon as you confirm.",
-                name(now)
+                name(self.basis.in_force)
             )
         } else {
             "Core's level becomes Permissive from the next start.".to_string()
