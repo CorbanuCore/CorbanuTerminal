@@ -196,6 +196,10 @@ impl ToolOrchestrator {
                 fresh_human_authority: true,
             };
             let asked = Instant::now();
+            let mut pending = crate::security::inspection::PendingProtectedAction::new(
+                tool_ctx.session.thread_id(),
+                action.kind,
+            );
             let decision = resolve_tool_apporval(
                 tool,
                 req,
@@ -206,6 +210,7 @@ impl ToolOrchestrator {
                 &otel,
             )
             .await;
+            pending.answered();
             post_taint_outcome(
                 action,
                 tool_ctx,
@@ -931,6 +936,11 @@ fn post_taint_outcome(
     outcome: &'static str,
     waited: Option<std::time::Duration>,
 ) {
+    crate::security::inspection::record_protected_action(
+        Some(tool_ctx.session.thread_id()),
+        action.kind,
+        outcome,
+    );
     tracing::info!(
         target: "codex_core::security::tainted_action",
         kind = ?action.kind,

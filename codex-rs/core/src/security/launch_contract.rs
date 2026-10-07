@@ -298,15 +298,18 @@ impl LaunchContract {
         permissions: &PermissionProfile,
         cwd: &Path,
     ) -> Result<PermissionProfile, LaunchDenied> {
-        self.check_sandbox(sandbox, sandbox_requested, exec_server)?;
-        let mut argv = vec![command.program.to_string_lossy().into_owned()];
-        argv.extend(command.args.iter().cloned());
-        self.check_command(&argv, &mut command.env)?;
-        let protected = self.protect_permissions(permissions, cwd)?;
-        let merged =
-            effective_permission_profile(&protected, command.additional_permissions.as_ref());
-        self.verify_permissions(&merged, cwd)?;
-        Ok(protected)
+        let mut protect = || -> Result<PermissionProfile, LaunchDenied> {
+            self.check_sandbox(sandbox, sandbox_requested, exec_server)?;
+            let mut argv = vec![command.program.to_string_lossy().into_owned()];
+            argv.extend(command.args.iter().cloned());
+            self.check_command(&argv, &mut command.env)?;
+            let protected = self.protect_permissions(permissions, cwd)?;
+            let merged =
+                effective_permission_profile(&protected, command.additional_permissions.as_ref());
+            self.verify_permissions(&merged, cwd)?;
+            Ok(protected)
+        };
+        protect().inspect_err(super::inspection::record_launch_denial)
     }
 
     /// [`protect_external_agent_launch`] with this contract.
@@ -318,11 +321,19 @@ impl LaunchContract {
         profile: &PermissionProfile,
         cwd: &Path,
     ) -> Result<PermissionProfile, LaunchDenied> {
-        self.check_sandbox(
-            sandbox, /*sandbox_requested*/ true, /*exec_server*/ false,
-        )?;
-        self.check_command(argv, env)?;
-        self.protect_permissions(profile, cwd)
+        let mut protect = || -> Result<PermissionProfile, LaunchDenied> {
+            self.check_sandbox(
+                sandbox, /*sandbox_requested*/ true, /*exec_server*/ false,
+            )?;
+            self.check_command(argv, env)?;
+            self.protect_permissions(profile, cwd)
+        };
+        protect().inspect_err(super::inspection::record_launch_denial)
+    }
+
+    /// Whether Core's own process hardening succeeded when it was armed.
+    pub(crate) fn hardened(&self) -> bool {
+        self.hardened
     }
 
     /// Platform, process-hardening and sandbox checks for one launch attempt.
@@ -497,6 +508,7 @@ impl LaunchContract {
     pub(crate) fn check_stdin(&self, input: &[u8]) -> Result<(), LaunchDenied> {
         let input = String::from_utf8_lossy(input);
         if self.contains_managed_value(&input) {
+            super::inspection::record_launch_denial(&LaunchDenied::RawSecretInStdin);
             return Err(LaunchDenied::RawSecretInStdin);
         }
         Ok(())

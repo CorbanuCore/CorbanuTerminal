@@ -939,6 +939,8 @@ impl ModelClient {
         if let Ok(mut ingress) = self.ingress_items.lock() {
             ingress.set_labelled_mode(enabled);
         }
+        // PF-41-S01: the inspector reads this thread's taint from here.
+        crate::security::inspection::register_ingress(self.state.thread_id, &self.ingress_items);
         self
     }
 

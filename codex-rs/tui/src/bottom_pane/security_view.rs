@@ -27,6 +27,7 @@ use crate::security::view::requested_summary;
 use super::CancellationEvent;
 use super::bottom_pane_view::BottomPaneView;
 use super::bottom_pane_view::ViewCompletion;
+use super::security_inspector::SecurityInspector;
 use super::security_level_picker::SecurityLevelPicker;
 
 pub(crate) struct SecurityView {
@@ -36,6 +37,9 @@ pub(crate) struct SecurityView {
     cancelled: bool,
     inspected: bool,
     picker: Option<SecurityLevelPicker>,
+    /// PF-41-S01: what the inspector reads; `i` opens it over the picker.
+    inspector_input: Option<crate::security::inspector::InspectorInput>,
+    inspector: Option<SecurityInspector>,
 }
 
 impl SecurityView {
@@ -61,7 +65,21 @@ impl SecurityView {
             keymap,
             cancelled: false,
             inspected: false,
+            inspector_input: None,
+            inspector: None,
         }
+    }
+
+    /// PF-41-S01: offer the read-only inspector (only with the picker; the
+    /// flag-off view is unchanged).
+    pub(crate) fn with_inspector(
+        mut self,
+        input: impl FnOnce() -> crate::security::inspector::InspectorInput,
+    ) -> Self {
+        if self.picker.is_some() {
+            self.inspector_input = Some(input());
+        }
+        self
     }
 
     /// PF-24-S02: Core's configured levels, and where "restart now" goes.
@@ -140,22 +158,48 @@ impl SecurityView {
 
 impl SecurityView {
     fn body(&self, width: u16) -> Vec<Line<'static>> {
-        match &self.picker {
-            Some(picker) => picker.lines(width),
-            None => self.lines(width),
+        match (&self.inspector, &self.picker) {
+            (Some(inspector), _) => inspector.lines(width),
+            (None, Some(picker)) => picker.lines(width),
+            (None, None) => self.lines(width),
         }
     }
 
     fn footer_text(&self) -> String {
-        match &self.picker {
-            Some(picker) => picker.footer(),
-            None => self.footer(),
+        match (&self.inspector, &self.picker) {
+            (Some(inspector), _) => inspector.footer(),
+            (None, Some(picker)) if self.inspector_input.is_some() => {
+                format!("{} · i inspect", picker.footer())
+            }
+            (None, Some(picker)) => picker.footer(),
+            (None, None) => self.footer(),
+        }
+    }
+
+    fn scroll_for(&self, lines: usize, height: u16) -> u16 {
+        match (&self.inspector, &self.picker) {
+            (Some(inspector), _) => inspector.scroll_for(lines, height),
+            (None, Some(picker)) => picker.scroll_for(lines, height),
+            (None, None) => 0,
         }
     }
 }
 
 impl BottomPaneView for SecurityView {
     fn handle_key_event(&mut self, key: KeyEvent) {
+        if let Some(inspector) = self.inspector.as_mut() {
+            inspector.handle_key_event(key);
+            if inspector.closed {
+                self.inspector = None;
+            }
+            return;
+        }
+        if let Some(input) = &self.inspector_input
+            && key_hint::plain(KeyCode::Char('i')).is_press(key)
+        {
+            self.inspector = Some(SecurityInspector::new(input.clone(), self.keymap.clone()));
+            return;
+        }
         if let Some(picker) = self.picker.as_mut() {
             picker.handle_key_event(key);
             self.cancelled = picker.closed;
@@ -227,10 +271,10 @@ impl Renderable for SecurityView {
         };
         let lines = self.body(area.width);
         let mut footer = footer_lines(self.footer_text());
-        if let Some(picker) = self.picker.as_ref() {
+        if self.picker.is_some() {
             // A review taller than the pane scrolls, and its footer says so.
             let body_height = area.height.saturating_sub(footer.len() as u16);
-            picker.scroll_for(lines.len(), body_height);
+            self.scroll_for(lines.len(), body_height);
             footer = footer_lines(self.footer_text());
         }
         let footer_height = (footer.len() as u16).min(area.height);
@@ -238,10 +282,7 @@ impl Renderable for SecurityView {
             height: area.height.saturating_sub(footer_height),
             ..area
         };
-        let scroll = self
-            .picker
-            .as_ref()
-            .map_or(0, |picker| picker.scroll_for(lines.len(), body.height));
+        let scroll = self.scroll_for(lines.len(), body.height);
         Paragraph::new(lines).scroll((scroll, 0)).render(body, buf);
         Paragraph::new(footer).render(
             Rect {

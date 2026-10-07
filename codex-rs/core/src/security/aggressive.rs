@@ -286,6 +286,35 @@ pub(crate) fn revoke_all(thread: ThreadId) {
         .remove(&thread);
 }
 
+/// PF-41-S01: the grants `thread` holds now under the policy `epoch`, for
+/// the read-only inspector. Neither the grant id nor the operation is given.
+pub(crate) fn held(
+    thread: ThreadId,
+    epoch: u64,
+    revocation_generation: u64,
+    now_unix_seconds: i64,
+) -> Vec<crate::security::inspection::GrantFacts> {
+    let ledger = LEDGER.lock().unwrap_or_else(PoisonError::into_inner);
+    ledger
+        .get(&thread)
+        .into_iter()
+        .flatten()
+        .filter(|entry| entry.live(epoch, revocation_generation, now_unix_seconds))
+        .map(|entry| crate::security::inspection::GrantFacts {
+            thread,
+            surface: Surface::of(&entry.grant.scope.resource).map_or("unknown", |surface| {
+                match surface {
+                    Surface::UnprotectedCommand => "one command without the protected-path rules",
+                    Surface::UnconfinedProcess => "typing into one unconfined process",
+                }
+            }),
+            expires_at: entry.grant.expires_at_unix_seconds,
+            used: entry.used,
+            limit: entry.use_limit(),
+        })
+        .collect()
+}
+
 pub(crate) fn now_unix_seconds() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

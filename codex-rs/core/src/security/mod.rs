@@ -14,6 +14,7 @@ pub(crate) mod confidentiality;
 pub(crate) mod disclosure_gate;
 mod effective_policy;
 pub(crate) mod ingress;
+pub mod inspection;
 mod integration;
 pub mod inventory;
 pub(crate) mod launch_contract;

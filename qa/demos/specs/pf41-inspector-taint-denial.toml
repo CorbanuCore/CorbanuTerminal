@@ -1,0 +1,72 @@
+# PF-41-S01: with Core at Moderate from config, untrusted content taints the session, a git-hook write then
+# needs fresh approval, and declining it shows up in the inspector with the session's taint.
+id = "pf41-inspector-taint-denial"
+feature = "Inspector shows taint and recent denials"
+expected = "After the model reads a file, writing .git/hooks/pre-commit asks for fresh approval; Esc declines it. i in /security then shows the config conflict (Core config Moderate, nothing saved), the session as tainted, and the declined action under Recent denials."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+
+[security]
+level = "moderate"
+
+[features]
+security_levels = true
+secretless_agent_launch = true
+secret_output_gate = true
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"notes.txt" = "notes for the demo\n"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "Read notes.txt with cat, then tell me its first word."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "notes"
+timeout = 90
+compress = 3
+[[steps]]
+wait = "› "
+timeout = 90
+[[steps]]
+type = "Append the line 'echo hi' to .git/hooks/pre-commit with a shell command (create it if needed)."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "after\\s+untrusted content entered the session"
+timeout = 120
+compress = 3
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Escape"
+[[steps]]
+pause = 2.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "i inspect"
+[[steps]]
+key = "i"
+[[steps]]
+wait = "Core config: Moderate"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Down"
+repeat = 60
+[[steps]]
+wait = "declined by you"
+[[steps]]
+pause = 4.0
