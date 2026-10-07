@@ -15,8 +15,13 @@ use crate::key_hint;
 use crate::key_hint::KeyBindingListExt;
 use crate::keymap::ListKeymap;
 use crate::legacy_core::protected_preflight::Disposition;
+use crate::legacy_core::protected_preflight::FindingKind;
 use crate::legacy_core::protected_preflight::LIMITS;
 use crate::legacy_core::protected_preflight::Preflight;
+use crate::legacy_core::protected_preflight::migration;
+use crate::legacy_core::protected_preflight::migration::CredentialStore;
+use crate::legacy_core::protected_preflight::migration::MigrationOutcome;
+use crate::legacy_core::protected_preflight::migration::MigrationPlan;
 use crate::security::aggressive;
 use crate::security::current::CurrentValues;
 use crate::security::level;
@@ -24,10 +29,12 @@ use crate::security::level::ChosenLevel;
 use crate::security::level::LevelContext;
 use crate::security::level::NestedAgents;
 use crate::security::level::StoredLevel;
+use crate::security::migration::VaultStore;
 use crate::security::preflight;
 use crate::security::preflight::PreflightInput;
 use crate::wrapping::RtOptions;
 use crate::wrapping::word_wrap_lines;
+use std::rc::Rc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Row {
@@ -58,9 +65,14 @@ impl Row {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Screen {
-    List { note: Option<String> },
+    List {
+        note: Option<String>,
+    },
     Review(ChosenLevel),
     Saved(Result<ChosenLevel, String>),
+    /// PF-29-S02: what a credential migration would do.
+    MigrationPreview,
+    MigrationResult(Result<MigrationOutcome, String>),
 }
 
 pub(crate) struct SecurityLevelPicker {
@@ -84,6 +96,9 @@ pub(crate) struct SecurityLevelPicker {
     preflight_input: Option<PreflightInput>,
     preflight: Option<Preflight>,
     preflight_note: Option<String>,
+    /// PF-29-S02: the previewed plan, and a store tests can replace.
+    migration: Option<MigrationPlan>,
+    pub(super) store: Option<Rc<dyn CredentialStore>>,
 }
 
 impl SecurityLevelPicker {
@@ -114,6 +129,8 @@ impl SecurityLevelPicker {
             preflight_input,
             preflight: None,
             preflight_note: None,
+            migration: None,
+            store: None,
         }
     }
 
@@ -161,6 +178,19 @@ impl SecurityLevelPicker {
                     && key_hint::plain(KeyCode::Char('n')).is_press(key)
                 {
                     self.nested_choice = self.nested_choice.toggled();
+                } else if target == ChosenLevel::Aggressive
+                    && key_hint::plain(KeyCode::Char('m')).is_press(key)
+                    && self.migration_available()
+                {
+                    self.open_migration();
+                } else if target == ChosenLevel::Aggressive
+                    && key_hint::plain(KeyCode::Char('r')).is_press(key)
+                    && self.migration_unfinished()
+                {
+                    let result = migration::recover(&self.codex_home, &*self.store())
+                        .map(Option::unwrap_or_default)
+                        .map_err(|err| err.to_string());
+                    self.screen = Screen::MigrationResult(result);
                 } else if accept
                     && self.stored == StoredLevel::Chosen(target)
                     && self.nested_choice == self.nested
@@ -185,7 +215,123 @@ impl SecurityLevelPicker {
                     self.closed = true;
                 }
             }
+            Screen::MigrationPreview => {
+                if self.keymap.move_up.is_pressed(key) {
+                    self.scroll = self.scroll.min(self.max_scroll.get()).saturating_sub(1);
+                } else if self.keymap.move_down.is_pressed(key) {
+                    self.scroll = (self.scroll + 1).min(self.max_scroll.get());
+                } else if cancel {
+                    self.migration = None;
+                    self.preflight_note = Some("Migration cancelled. Nothing changed.".to_string());
+                    self.screen = Screen::Review(ChosenLevel::Aggressive);
+                    self.scroll = 0;
+                } else if accept {
+                    self.confirm_migration();
+                }
+            }
+            Screen::MigrationResult(_) => {
+                if cancel || accept {
+                    self.back_to_review_after_migration();
+                }
+            }
         }
+    }
+
+    fn store(&self) -> Rc<dyn CredentialStore> {
+        self.store
+            .clone()
+            .unwrap_or_else(|| Rc::new(VaultStore::new(&self.codex_home)))
+    }
+
+    /// A blocker this build can move into the vault.
+    fn migration_available(&self) -> bool {
+        self.preflight.as_ref().is_some_and(|preflight| {
+            !preflight.inventory.migration_unfinished
+                && preflight
+                    .inventory
+                    .blocking()
+                    .any(|finding| finding.kind == FindingKind::ShellProfileExport)
+        })
+    }
+
+    fn migration_unfinished(&self) -> bool {
+        self.preflight
+            .as_ref()
+            .is_some_and(|preflight| preflight.inventory.migration_unfinished)
+    }
+
+    fn open_migration(&mut self) {
+        let Some(preflight) = &self.preflight else {
+            return;
+        };
+        match self.store().labels() {
+            Ok(taken) => {
+                self.migration = Some(MigrationPlan::from_preflight(preflight, &taken));
+                self.screen = Screen::MigrationPreview;
+                self.scroll = 0;
+            }
+            Err(err) => {
+                self.preflight_note = Some(format!(
+                    "The vault cannot be read ({err}). Nothing changed."
+                ));
+            }
+        }
+    }
+
+    /// Confirm: recheck the reviewed preflight, then move the values.
+    fn confirm_migration(&mut self) {
+        let (Some(input), Some(reviewed), Some(plan)) = (
+            &self.preflight_input,
+            &self.preflight,
+            self.migration.clone(),
+        ) else {
+            return;
+        };
+        let (next, drift) = reviewed.recheck(&input.sources, input.flags);
+        if !drift.is_empty() {
+            self.preflight = Some(next);
+            self.migration = None;
+            self.preflight_note = Some(
+                "Not moved: something changed since the preview. Review it again; nothing changed."
+                    .to_string(),
+            );
+            self.screen = Screen::Review(ChosenLevel::Aggressive);
+            self.scroll = 0;
+            return;
+        }
+        let result = migration::run(
+            &self.codex_home,
+            &plan,
+            &*self.store(),
+            crate::security::migration::injected_failure(),
+        )
+        .map_err(|err| err.to_string());
+        self.screen = Screen::MigrationResult(result);
+    }
+
+    /// Back to the review with a fresh preflight (the re-audit).
+    fn back_to_review_after_migration(&mut self) {
+        let note = match &self.screen {
+            Screen::MigrationResult(Ok(outcome)) if outcome.moved.is_empty() => {
+                "Nothing was moved.".to_string()
+            }
+            Screen::MigrationResult(Ok(outcome)) => format!(
+                "Moved {} credential{} into the vault. Rotate {} at the provider. Check the preflight below before saving Aggressive.",
+                outcome.moved.len(),
+                if outcome.moved.len() == 1 { "" } else { "s" },
+                outcome.rotate.join(", ")
+            ),
+            _ => {
+                "The migration stopped; Aggressive stays unsaved. Press r to finish it.".to_string()
+            }
+        };
+        if let Some(input) = &self.preflight_input {
+            self.preflight = Some(Preflight::run(&input.sources, input.flags));
+        }
+        self.migration = None;
+        self.preflight_note = Some(note);
+        self.screen = Screen::Review(ChosenLevel::Aggressive);
+        self.scroll = 0;
     }
 
     /// Aggressive under the preflight flag: the review must have been clean
@@ -521,6 +667,29 @@ impl SecurityLevelPicker {
                     self.stored.enforced().name()
                 )));
             }
+            Screen::MigrationPreview => {
+                if let Some(plan) = &self.migration {
+                    let mut text = super::security_migration::preview_lines(plan).into_iter();
+                    if let Some(title) = text.next() {
+                        lines.push(title.bold().into());
+                    }
+                    for line in text {
+                        lines.extend(wrap(&line));
+                    }
+                }
+            }
+            Screen::MigrationResult(result) => {
+                let mut text = super::security_migration::result_lines(result).into_iter();
+                if let Some(title) = text.next() {
+                    lines.push(match result {
+                        Ok(_) => title.bold().into(),
+                        Err(_) => title.bold().red().into(),
+                    });
+                }
+                for line in text {
+                    lines.extend(wrap(&line));
+                }
+            }
         }
         lines
     }
@@ -531,7 +700,7 @@ impl SecurityLevelPicker {
         let max = u16::try_from(line_count)
             .unwrap_or(u16::MAX)
             .saturating_sub(body_height);
-        let max = if matches!(self.screen, Screen::Review(_)) {
+        let max = if matches!(self.screen, Screen::Review(_) | Screen::MigrationPreview) {
             max
         } else {
             0
@@ -569,18 +738,35 @@ impl SecurityLevelPicker {
                 } else {
                     ""
                 };
+                let migrate = if self.migration_unfinished() {
+                    "r finish the migration · ".to_string()
+                } else if self.migration_available() {
+                    "m move credentials to the vault · ".to_string()
+                } else {
+                    String::new()
+                };
                 if target == ChosenLevel::Aggressive
                     && self
                         .preflight
                         .as_ref()
                         .is_some_and(|preflight| !preflight.is_clean())
                 {
-                    format!("{scroll}esc back, nothing changes")
+                    format!("{scroll}{migrate}esc back, nothing changes")
                 } else {
                     format!("{scroll}{nested}{accept} confirm and save · esc back, nothing changes")
                 }
             }
             Screen::Saved(_) => format!("{accept} or esc close"),
+            Screen::MigrationPreview => {
+                let count = self.migration.as_ref().map_or(0, |plan| plan.moves.len());
+                format!(
+                    "{}/{} scroll · {accept} move {count} credential{} · esc back, nothing changes",
+                    label(&self.keymap.move_up),
+                    label(&self.keymap.move_down),
+                    if count == 1 { "" } else { "s" }
+                )
+            }
+            Screen::MigrationResult(_) => format!("{accept} or esc back to the review"),
         }
     }
 }

@@ -473,3 +473,205 @@ mod pf_29_s01 {
         assert!(!preflight::receipt_path(&machine.corbanu()).exists());
     }
 }
+
+mod pf_29_s02 {
+    use std::cell::Cell;
+    use std::cell::RefCell;
+    use std::collections::BTreeMap;
+
+    use pretty_assertions::assert_eq;
+    use zeroize::Zeroizing;
+
+    use super::*;
+    use crate::legacy_core::protected_preflight::InventorySources;
+    use crate::legacy_core::protected_preflight::ReadinessFlags;
+    use crate::legacy_core::protected_preflight::migration::journal_path;
+
+    const VALUE: &str = "fake-openai-value-0001";
+
+    #[derive(Default)]
+    struct FakeStore {
+        values: RefCell<BTreeMap<String, String>>,
+        locked: Cell<bool>,
+    }
+
+    impl CredentialStore for FakeStore {
+        fn put(&self, label: &str, _name: &str, _origin: &str, value: &str) -> Result<(), String> {
+            if self.locked.get() {
+                return Err("the vault is locked".to_string());
+            }
+            self.values
+                .borrow_mut()
+                .insert(label.to_string(), value.to_string());
+            Ok(())
+        }
+
+        fn get(&self, label: &str) -> Result<Option<Zeroizing<String>>, String> {
+            Ok(self.values.borrow().get(label).cloned().map(Zeroizing::new))
+        }
+    }
+
+    struct Machine {
+        root: tempfile::TempDir,
+        store: Rc<FakeStore>,
+    }
+
+    impl Machine {
+        fn new() -> Self {
+            let root = tempfile::tempdir().unwrap();
+            for dir in ["corbanu", "home", "work"] {
+                std::fs::create_dir_all(root.path().join(dir)).unwrap();
+            }
+            std::fs::write(
+                root.path().join("home/.zshrc"),
+                format!("alias ll='ls -l'\nexport OPENAI_API_KEY={VALUE}\n"),
+            )
+            .unwrap();
+            Self {
+                root,
+                store: Rc::new(FakeStore::default()),
+            }
+        }
+
+        fn path(&self, name: &str) -> std::path::PathBuf {
+            self.root.path().join(name)
+        }
+
+        fn zshrc(&self) -> String {
+            std::fs::read_to_string(self.path("home/.zshrc")).unwrap()
+        }
+
+        fn picker(&self) -> SecurityLevelPicker {
+            let input = PreflightInput {
+                sources: InventorySources {
+                    codex_home: self.path("corbanu"),
+                    home: Some(self.path("home")),
+                    cwd: self.path("work"),
+                    env: Vec::new(),
+                    config_layers: Vec::new(),
+                },
+                flags: ReadinessFlags {
+                    secretless_launch: true,
+                    credential_broker: true,
+                    output_gate: true,
+                },
+            };
+            let mut context = context(&self.path("corbanu"), ChosenLevel::Permissive);
+            context.preflight_enabled = true;
+            let mut picker = SecurityLevelPicker::new(
+                &context,
+                current(),
+                Some(input),
+                RuntimeKeymap::defaults().list,
+            );
+            picker.store = Some(self.store.clone());
+            picker.handle_key_event(key(KeyCode::Up));
+            picker.handle_key_event(key(KeyCode::Enter));
+            assert_eq!(picker.screen, Screen::Review(ChosenLevel::Aggressive));
+            picker
+        }
+    }
+
+    fn text(picker: &SecurityLevelPicker) -> String {
+        render(picker, 400)
+    }
+
+    #[test]
+    fn pf_29_s02_preview_then_esc_changes_nothing() {
+        let machine = Machine::new();
+        let before = machine.zshrc();
+        let mut picker = machine.picker();
+        assert!(picker.footer().contains("m move credentials to the vault"));
+        picker.handle_key_event(key(KeyCode::Char('m')));
+        assert_eq!(picker.screen, Screen::MigrationPreview);
+        let preview = text(&picker);
+        assert!(
+            preview.contains("~/.zshrc:2 OPENAI_API_KEY → vault label migrated/openai_api_key")
+        );
+        assert!(preview.contains("readable only by you (0600)"));
+        assert!(preview.contains("Rotate every value"));
+        assert!(!preview.contains(VALUE));
+
+        picker.handle_key_event(key(KeyCode::Esc));
+        assert_eq!(picker.screen, Screen::Review(ChosenLevel::Aggressive));
+        assert!(text(&picker).contains("Migration cancelled. Nothing changed."));
+        assert_eq!(machine.zshrc(), before);
+        assert!(machine.store.values.borrow().is_empty());
+        assert!(!journal_path(&machine.path("corbanu")).exists());
+    }
+
+    #[test]
+    fn pf_29_s02_confirm_moves_reaudits_and_then_saves() {
+        let machine = Machine::new();
+        let mut picker = machine.picker();
+        picker.handle_key_event(key(KeyCode::Char('m')));
+        picker.handle_key_event(key(KeyCode::Enter));
+        let result = text(&picker);
+        assert!(
+            result.contains("Moved 1 credential into the vault"),
+            "{result}"
+        );
+        assert!(result.contains("Rotate at the provider: OPENAI_API_KEY"));
+        assert!(!result.contains(VALUE));
+        assert_eq!(
+            machine.zshrc(),
+            "alias ll='ls -l'\nexport OPENAI_API_KEY=\"$(corbanu vault auth-helper migrated/openai_api_key)\"\n"
+        );
+
+        picker.handle_key_event(key(KeyCode::Enter));
+        let review = text(&picker);
+        assert!(review.contains("Preflight passed"), "{review}");
+        assert!(review.contains("Moved 1 credential into the vault. Rotate OPENAI_API_KEY"));
+        picker.handle_key_event(key(KeyCode::Enter));
+        assert_eq!(picker.screen, Screen::Saved(Ok(ChosenLevel::Aggressive)));
+        assert!(preflight::receipt_path(&machine.path("corbanu")).exists());
+    }
+
+    #[test]
+    fn pf_29_s02_failure_locks_aggressive_until_recovery() {
+        let machine = Machine::new();
+        machine.store.locked.set(true);
+        let mut picker = machine.picker();
+        picker.handle_key_event(key(KeyCode::Char('m')));
+        picker.handle_key_event(key(KeyCode::Enter));
+        assert!(text(&picker).contains("Migration stopped"));
+        picker.handle_key_event(key(KeyCode::Enter));
+        let review = text(&picker);
+        assert!(
+            review.contains("a credential migration did not finish"),
+            "{review}"
+        );
+        assert!(picker.footer().contains("r finish the migration"));
+        // Saving stays refused while the migration is unfinished.
+        picker.handle_key_event(key(KeyCode::Enter));
+        assert_eq!(picker.screen, Screen::Review(ChosenLevel::Aggressive));
+        assert_eq!(level::load(&machine.path("corbanu")), StoredLevel::Absent);
+
+        machine.store.locked.set(false);
+        picker.handle_key_event(key(KeyCode::Char('r')));
+        assert!(text(&picker).contains("Moved 1 credential into the vault"));
+        picker.handle_key_event(key(KeyCode::Enter));
+        assert!(text(&picker).contains("Preflight passed"));
+        assert!(!journal_path(&machine.path("corbanu")).exists());
+    }
+
+    #[test]
+    fn pf_29_s02_change_after_preview_moves_nothing() {
+        let machine = Machine::new();
+        let mut picker = machine.picker();
+        picker.handle_key_event(key(KeyCode::Char('m')));
+        std::fs::write(
+            machine.path("home/.zshrc"),
+            "export OPENAI_API_KEY=fake-other-value-0002\n",
+        )
+        .unwrap();
+        picker.handle_key_event(key(KeyCode::Enter));
+        assert_eq!(picker.screen, Screen::Review(ChosenLevel::Aggressive));
+        assert!(text(&picker).contains("Not moved: something changed since the preview"));
+        assert!(machine.store.values.borrow().is_empty());
+        assert_eq!(
+            machine.zshrc(),
+            "export OPENAI_API_KEY=fake-other-value-0002\n"
+        );
+    }
+}

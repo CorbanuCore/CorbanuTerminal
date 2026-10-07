@@ -169,6 +169,9 @@ pub struct Finding {
     pub disposition: Disposition,
     /// What [`Disposition::Isolate`] denies: the path and, for a symlink, its target.
     pub paths: Vec<PathBuf>,
+    /// For a shell-profile export: the 1-based line and variable name, which
+    /// PF-29-S02 migration rewrites.
+    pub source_line: Option<(usize, String)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -315,6 +318,8 @@ pub struct Inventory {
     /// Providers whose auth runs a command; preflight never runs it.
     pub exec_provider_auth: Vec<String>,
     pub vault: VaultState,
+    /// A PF-29-S02 migration journal exists: a migration was interrupted.
+    pub migration_unfinished: bool,
 }
 
 impl Inventory {
@@ -577,6 +582,7 @@ impl<'a> Collector<'a> {
             location,
             disposition,
             paths,
+            source_line: None,
         });
         Some(id)
     }
@@ -1013,6 +1019,7 @@ impl<'a> Collector<'a> {
                     continue;
                 }
                 if is_secret_name(name) || self.detector.secret(value) {
+                    let before = self.findings.len();
                     self.path_finding(PathFinding {
                         kind: FindingKind::ShellProfileExport,
                         class: SecretClass::UnmanagedSecret,
@@ -1022,6 +1029,11 @@ impl<'a> Collector<'a> {
                         detail: Some(detail),
                         unsupported: None,
                     });
+                    if self.findings.len() > before
+                        && let Some(finding) = self.findings.last_mut()
+                    {
+                        finding.source_line = Some((index + 1, name.to_string()));
+                    }
                 }
             }
         }
@@ -1354,6 +1366,10 @@ impl<'a> Collector<'a> {
             ordinary_env_count: self.ordinary_env_count,
             exec_provider_auth: self.exec_provider_auth.into_iter().collect(),
             vault,
+            migration_unfinished: std::fs::symlink_metadata(super::migration::journal_path(
+                &self.sources.codex_home,
+            ))
+            .is_ok(),
         }
     }
 }
@@ -1384,6 +1400,26 @@ fn parse_assignment(line: &str) -> Option<(&str, &str)> {
             .chars()
             .all(|ch| ch.is_ascii_alphanumeric() || ch == '_');
     valid.then_some((name, value.trim()))
+}
+
+/// The variable name and the byte range of its value (without a trailing
+/// ` #` comment) in an assignment line, for rewriting it in place.
+pub(crate) fn assignment_span(line: &str) -> Option<(&str, std::ops::Range<usize>)> {
+    let (name, value) = parse_assignment(line)?;
+    // `value` is a suffix of the line without trailing whitespace.
+    let start = line.trim_end().len().checked_sub(value.len())?;
+    let end = start
+        + value
+            .find(" #")
+            .map_or(value.len(), |comment| value[..comment].trim_end().len());
+    Some((name, start..end))
+}
+
+/// The literal a value holds after quotes are removed, or `None` when it is
+/// empty or resolved elsewhere (a substitution or reference).
+pub(crate) fn literal_value(value: &str) -> Option<&str> {
+    let value = unquote(value);
+    (!value.is_empty() && !is_reference(value)).then_some(value)
 }
 
 fn unquote(value: &str) -> &str {
