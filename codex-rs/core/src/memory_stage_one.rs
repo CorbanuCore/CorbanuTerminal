@@ -495,7 +495,7 @@ impl StageOneMemoryClient {
                 let kept = count - dropped;
                 let tail = kept / 2;
                 let head = kept - tail;
-                prefix[head] + (total - prefix[count - tail]) + 1 <= policy.byte_budget()
+                prefix[head] + (total - prefix[count - tail]) < policy.byte_budget()
             })
             .unwrap_or(count);
         let kept = count - dropped;
