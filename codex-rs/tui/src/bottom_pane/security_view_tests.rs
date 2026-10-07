@@ -30,7 +30,12 @@ fn snapshot(view: &SecurityView, width: u16) -> String {
 #[test]
 fn security_view_profiles_never_claim_healthy_protection() {
     for level in PROFILES {
-        let view = SecurityView::new(Some(level), current, RuntimeKeymap::defaults().list);
+        let view = SecurityView::new(
+            Some(level),
+            current,
+            || None,
+            RuntimeKeymap::defaults().list,
+        );
         insta::assert_snapshot!(
             format!("security_view_{}", profile_name(level).to_lowercase()),
             snapshot(&view, /*width*/ 80)
@@ -43,6 +48,7 @@ fn security_view_narrow_and_unknown_state() {
     let mut view = SecurityView::new(
         /*requested*/ None,
         current,
+        || None,
         RuntimeKeymap::defaults().list,
     );
     view.handle_key_event(key(KeyCode::Down));
@@ -58,6 +64,7 @@ fn security_view_navigation_enter_and_cancel_do_not_change_request() {
     let mut view = SecurityView::new(
         Some(SecurityLevel::Moderate),
         current,
+        || None,
         RuntimeKeymap::defaults().list,
     );
     view.handle_key_event(key(KeyCode::Down));
@@ -91,7 +98,7 @@ fn security_view_uses_configured_navigation_and_cancellation() {
     keymap.move_down = vec![key_hint::plain(KeyCode::Char('j'))];
     keymap.accept = vec![key_hint::plain(KeyCode::Char('i'))];
     keymap.cancel = vec![key_hint::plain(KeyCode::Char('q'))];
-    let mut view = SecurityView::new(Some(SecurityLevel::Permissive), current, keymap);
+    let mut view = SecurityView::new(Some(SecurityLevel::Permissive), current, || None, keymap);
     view.handle_key_event(key(KeyCode::Char('j')));
     view.handle_key_event(key(KeyCode::Char('i')));
     assert_eq!((view.selected, view.inspected), (1, true));
@@ -104,6 +111,7 @@ fn security_view_short_terminal_keeps_escape_visible() {
     let view = SecurityView::new(
         /*requested*/ None,
         current,
+        || None,
         RuntimeKeymap::defaults().list,
     );
     let area = Rect::new(0, 0, 40, 8);

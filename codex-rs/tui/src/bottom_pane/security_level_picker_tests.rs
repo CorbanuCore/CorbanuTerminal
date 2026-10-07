@@ -17,6 +17,8 @@ fn context(home: &std::path::Path, active: ChosenLevel) -> LevelContext {
         codex_home: home.to_path_buf(),
         picker_enabled: true,
         active,
+        preflight_enabled: false,
+        boundary: None,
     }
 }
 
@@ -80,6 +82,7 @@ fn list_review_and_saved_screens() {
     let mut picker = SecurityLevelPicker::new(
         &context(home.path(), ChosenLevel::Permissive),
         current(),
+        /*preflight_input*/ None,
         RuntimeKeymap::defaults().list,
     );
     insta::assert_snapshot!("security_level_picker_list", render(&picker, 80));
@@ -114,6 +117,7 @@ fn escape_and_typed_text_change_nothing() {
     let mut picker = SecurityLevelPicker::new(
         &context(home.path(), ChosenLevel::Permissive),
         current(),
+        /*preflight_input*/ None,
         RuntimeKeymap::defaults().list,
     );
     picker.handle_key_event(key(KeyCode::Up));
@@ -144,6 +148,7 @@ fn return_to_permissive_while_aggressive_is_active() {
     let mut picker = SecurityLevelPicker::new(
         &context(home.path(), ChosenLevel::Aggressive),
         current(),
+        /*preflight_input*/ None,
         RuntimeKeymap::defaults().list,
     );
     assert_eq!(picker.selected, 2);
@@ -180,6 +185,7 @@ fn unreadable_state_is_reported_and_aggressive_selected() {
     let picker = SecurityLevelPicker::new(
         &context(home.path(), ChosenLevel::Aggressive),
         current(),
+        /*preflight_input*/ None,
         RuntimeKeymap::defaults().list,
     );
     let rendered = render(&picker, 400).replace(&home.path().display().to_string(), "<home>");
@@ -192,6 +198,7 @@ fn choosing_the_saved_level_is_a_no_op() {
     let mut picker = SecurityLevelPicker::new(
         &context(home.path(), ChosenLevel::Permissive),
         current(),
+        /*preflight_input*/ None,
         RuntimeKeymap::defaults().list,
     );
     picker.handle_key_event(key(KeyCode::Enter));
@@ -214,6 +221,7 @@ fn tall_review_scrolls_to_its_last_line() {
     let mut picker = SecurityLevelPicker::new(
         &context(home.path(), ChosenLevel::Permissive),
         current(),
+        /*preflight_input*/ None,
         RuntimeKeymap::defaults().list,
     );
     picker.handle_key_event(key(KeyCode::Up));
@@ -259,6 +267,7 @@ fn nested_agents_switch_from_the_aggressive_review() {
     let mut picker = SecurityLevelPicker::new(
         &context(home.path(), ChosenLevel::Aggressive),
         current(),
+        /*preflight_input*/ None,
         RuntimeKeymap::defaults().list,
     );
     picker.handle_key_event(key(KeyCode::Enter));
@@ -290,4 +299,177 @@ fn nested_agents_switch_from_the_aggressive_review() {
             NestedAgents::Pass
         )
     );
+}
+
+mod pf_29_s01 {
+    use super::*;
+    use crate::legacy_core::protected_preflight::InventorySources;
+    use crate::legacy_core::protected_preflight::ReadinessFlags;
+    use pretty_assertions::assert_eq;
+
+    struct Machine {
+        root: tempfile::TempDir,
+    }
+
+    impl Machine {
+        fn new() -> Self {
+            let root = tempfile::tempdir().unwrap();
+            for dir in ["corbanu", "home", "work"] {
+                std::fs::create_dir_all(root.path().join(dir)).unwrap();
+            }
+            Self { root }
+        }
+
+        fn corbanu(&self) -> std::path::PathBuf {
+            self.root.path().join("corbanu")
+        }
+
+        fn home(&self) -> std::path::PathBuf {
+            self.root.path().join("home")
+        }
+
+        fn picker(&self, flags_on: bool, active: ChosenLevel) -> SecurityLevelPicker {
+            let input = PreflightInput {
+                sources: InventorySources {
+                    codex_home: self.corbanu(),
+                    home: Some(self.home()),
+                    cwd: self.root.path().join("work"),
+                    env: Vec::new(),
+                    config_layers: Vec::new(),
+                },
+                flags: ReadinessFlags {
+                    secretless_launch: flags_on,
+                    credential_broker: flags_on,
+                    output_gate: flags_on,
+                },
+            };
+            let mut context = context(&self.corbanu(), active);
+            context.preflight_enabled = true;
+            SecurityLevelPicker::new(
+                &context,
+                current(),
+                Some(input),
+                RuntimeKeymap::defaults().list,
+            )
+        }
+    }
+
+    fn review_aggressive(picker: &mut SecurityLevelPicker) {
+        picker.handle_key_event(key(KeyCode::Up));
+        picker.handle_key_event(key(KeyCode::Enter));
+        assert_eq!(picker.screen, Screen::Review(ChosenLevel::Aggressive));
+    }
+
+    fn text(picker: &SecurityLevelPicker) -> String {
+        render(picker, 400)
+    }
+
+    #[test]
+    fn pf_29_s01_blockers_keep_aggressive_unsaved() {
+        let machine = Machine::new();
+        let mut picker = machine.picker(/*flags_on*/ false, ChosenLevel::Permissive);
+        review_aggressive(&mut picker);
+        let review = text(&picker);
+        assert!(review.contains("Preflight blocked"), "{review}");
+        assert!(review.contains("turn on the `secretless_agent_launch` feature"));
+        assert!(!review.contains("confirm and save"));
+
+        picker.handle_key_event(key(KeyCode::Enter));
+        assert_eq!(picker.screen, Screen::Review(ChosenLevel::Aggressive));
+        assert!(text(&picker).contains("Not saved: resolve the blockers above first."));
+        assert_eq!(files(&machine.corbanu()), Vec::<String>::new());
+
+        picker.handle_key_event(key(KeyCode::Esc));
+        assert_eq!(files(&machine.corbanu()), Vec::<String>::new());
+    }
+
+    #[test]
+    fn pf_29_s01_clean_preflight_saves_level_and_receipt() {
+        let machine = Machine::new();
+        std::fs::write(machine.home().join(".netrc"), "machine x password fake").unwrap();
+        let mut picker = machine.picker(/*flags_on*/ true, ChosenLevel::Permissive);
+        review_aggressive(&mut picker);
+        let review = text(&picker);
+        assert!(review.contains("Preflight passed"), "{review}");
+        assert!(
+            review.contains("Credential files denied to agent commands after restart: ~/.netrc")
+        );
+        assert!(!review.contains("fake"));
+
+        picker.handle_key_event(key(KeyCode::Enter));
+        assert_eq!(picker.screen, Screen::Saved(Ok(ChosenLevel::Aggressive)));
+        assert_eq!(
+            level::load(&machine.corbanu()),
+            StoredLevel::Chosen(ChosenLevel::Aggressive)
+        );
+        let receipt = preflight::load_receipt(&machine.corbanu())
+            .unwrap()
+            .unwrap();
+        assert_eq!(receipt.findings.len(), 1);
+        assert!(
+            !std::fs::read_to_string(preflight::receipt_path(&machine.corbanu()))
+                .unwrap()
+                .contains("netrc"),
+            "receipt holds IDs, not paths"
+        );
+    }
+
+    #[test]
+    fn pf_29_s01_drift_after_review_refuses_save() {
+        let machine = Machine::new();
+        std::fs::write(machine.home().join(".netrc"), "one").unwrap();
+        let mut picker = machine.picker(/*flags_on*/ true, ChosenLevel::Permissive);
+        review_aggressive(&mut picker);
+        std::fs::write(machine.home().join(".netrc"), "two").unwrap();
+        picker.handle_key_event(key(KeyCode::Enter));
+        assert_eq!(picker.screen, Screen::Review(ChosenLevel::Aggressive));
+        assert!(text(&picker).contains("Not saved: 1 item changed since you reviewed this."));
+        assert_eq!(level::load(&machine.corbanu()), StoredLevel::Absent);
+
+        // The refreshed review can now be confirmed.
+        picker.handle_key_event(key(KeyCode::Enter));
+        assert_eq!(picker.screen, Screen::Saved(Ok(ChosenLevel::Aggressive)));
+    }
+
+    /// Toggling nested agents on a saved Aggressive skips the preflight only
+    /// while a receipt is on record (review 3).
+    #[test]
+    fn pf_29_s01_saved_aggressive_without_receipt_needs_a_preflight() {
+        let machine = Machine::new();
+        level::save(
+            &machine.corbanu(),
+            ChosenLevel::Aggressive,
+            NestedAgents::Refuse,
+        )
+        .unwrap();
+        let mut picker = machine.picker(/*flags_on*/ true, ChosenLevel::Aggressive);
+        picker.handle_key_event(key(KeyCode::Enter));
+        assert_eq!(picker.screen, Screen::Review(ChosenLevel::Aggressive));
+        picker.handle_key_event(key(KeyCode::Char('n')));
+        picker.handle_key_event(key(KeyCode::Enter));
+        assert_eq!(picker.screen, Screen::Review(ChosenLevel::Aggressive));
+        assert!(text(&picker).contains("no preflight on record"));
+        assert!(!preflight::receipt_path(&machine.corbanu()).exists());
+
+        picker.handle_key_event(key(KeyCode::Enter));
+        assert_eq!(picker.screen, Screen::Saved(Ok(ChosenLevel::Aggressive)));
+        assert!(preflight::receipt_path(&machine.corbanu()).exists());
+    }
+
+    #[test]
+    fn pf_29_s01_returning_to_permissive_removes_the_receipt() {
+        let machine = Machine::new();
+        let mut picker = machine.picker(/*flags_on*/ true, ChosenLevel::Permissive);
+        review_aggressive(&mut picker);
+        picker.handle_key_event(key(KeyCode::Enter));
+        assert!(preflight::receipt_path(&machine.corbanu()).exists());
+
+        let mut picker = machine.picker(/*flags_on*/ true, ChosenLevel::Aggressive);
+        picker.handle_key_event(key(KeyCode::Down));
+        picker.handle_key_event(key(KeyCode::Enter));
+        assert_eq!(picker.screen, Screen::Review(ChosenLevel::Permissive));
+        picker.handle_key_event(key(KeyCode::Enter));
+        assert_eq!(picker.screen, Screen::Saved(Ok(ChosenLevel::Permissive)));
+        assert!(!preflight::receipt_path(&machine.corbanu()).exists());
+    }
 }

@@ -15,7 +15,9 @@ pub(crate) mod disclosure_gate;
 mod effective_policy;
 pub(crate) mod ingress;
 mod integration;
+pub mod inventory;
 pub(crate) mod launch_contract;
+pub mod preflight;
 mod protected_runtime;
 pub(crate) mod protected_surface;
 pub(crate) mod recovery;
@@ -49,3 +51,7 @@ mod authoritative_state_anchor_tests;
 #[cfg(test)]
 #[path = "protected_runtime_tests.rs"]
 mod protected_runtime_tests;
+
+#[cfg(test)]
+#[path = "pf_29_s01_tests.rs"]
+mod pf_29_s01_tests;

@@ -646,6 +646,9 @@
             "prevent_idle_sleep": {
               "type": "boolean"
             },
+            "protected_mode_preflight": {
+              "type": "boolean"
+            },
             "realtime_conversation": {
               "type": "boolean"
             },
@@ -5356,6 +5359,9 @@
           "type": "boolean"
         },
         "prevent_idle_sleep": {
+          "type": "boolean"
+        },
+        "protected_mode_preflight": {
           "type": "boolean"
         },
         "realtime_conversation": {
