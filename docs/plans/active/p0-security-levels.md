@@ -51,6 +51,9 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-33-s02-20261006"
     branch: "pf-33-s02-20261006"
     base_commit: "39c1f06213da3f15ec41cdd673a09a98cbc7d027"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/sec-broker6-20261006"
+    branch: "feat/pf27-s05-broker-finish-20261006"
+    base_commit: "c5bdadd322d266d4961479ca5fa34c70c9486e11"
 ---
 
 # P0 `/security` levels
