@@ -4866,10 +4866,12 @@ fn passthrough_bridge_forwards_only_messages_routes_to_its_own_host() {
 /// on stdin rather than in argv.
 #[test]
 fn contained_plan_routes_tool_approvals_to_corbanu() {
+    let state_root = tempfile::tempdir().expect("state root");
     let _settings =
         super::containment::test_settings::set(super::containment::ContainmentSettings {
             enabled: true,
             linux_sandbox_exe: None,
+            state_root: Some(state_root.path().to_path_buf()),
         });
     let (dir, contained_pane) = pane(ClaudeProviderProfileKind::ZaiGlm52);
     let plan = build_claude_command_plan(&contained_pane, "do the thing".to_string(), dir.path())
@@ -4887,6 +4889,9 @@ fn contained_plan_routes_tool_approvals_to_corbanu() {
     assert_eq!(flag("--permission-mode"), Some("default"));
     assert_eq!(flag("--permission-prompt-tool"), Some("stdio"));
     assert_eq!(flag("--input-format"), Some("stream-json"));
+    // Project settings (hooks, allow rules) and MCP servers are not loaded.
+    assert_eq!(flag("--setting-sources"), Some(""));
+    assert!(plan.args.iter().any(|arg| arg == "--strict-mcp-config"));
 
     // Without the feature nothing changes.
     drop(_settings);

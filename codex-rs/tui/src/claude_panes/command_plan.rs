@@ -390,7 +390,16 @@ pub(crate) fn build_claude_command_plan(
     if matches!(profile.kind, ClaudeProviderProfileKind::ClaudePlan) {
         args.extend(["--effort".to_string(), "high".to_string()]);
     }
-    args.extend(["--setting-sources".to_string(), "project".to_string()]);
+    if containment.is_some() {
+        // Settings, hooks and MCP servers a pane could write into its own
+        // folder must not run or allow anything without a person: only
+        // Corbanu's settings file applies.
+        args.extend(
+            ["--setting-sources", "", "--strict-mcp-config"].map(str::to_string),
+        );
+    } else {
+        args.extend(["--setting-sources".to_string(), "project".to_string()]);
+    }
     let (command_mode, command_session_id) = if let Some(session_id) = &pane.claude_session_id {
         args.push("--resume".to_string());
         args.push(session_id.clone());
