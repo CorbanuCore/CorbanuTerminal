@@ -73,6 +73,9 @@ const PROJECT_LOCAL_CONFIG_DENYLIST: &[&str] = &[
     "experimental_realtime_webrtc_call_base_url",
     "experimental_realtime_ws_base_url",
     "otel",
+    // PF-23-S03: only a human, through /security or their own config, sets
+    // the security level; a repository cannot lower it.
+    "security",
 ];
 
 async fn first_layer_config_error_from_entries(layers: &[ConfigLayerEntry]) -> Option<ConfigError> {

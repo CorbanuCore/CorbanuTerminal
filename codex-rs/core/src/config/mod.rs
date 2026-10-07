@@ -3547,7 +3547,13 @@ impl Config {
                 format!("invalid [security] configuration: {err}"),
             )
         })?;
-        let security_level = security_settings.level;
+        // PF-23-S03: a confirmed level stored by the trusted controller is a
+        // floor; an unreadable store enforces Aggressive and says so.
+        let recovery = crate::security::recovery::recover(codex_home.as_path(), security_settings.level);
+        if let Some(warning) = recovery.warning() {
+            startup_warnings.push(warning);
+        }
+        let security_level = recovery.level;
 
         // Destructure every field to ensure ConfigRequirements additions are
         // either applied above or handled while constructing the final Config.

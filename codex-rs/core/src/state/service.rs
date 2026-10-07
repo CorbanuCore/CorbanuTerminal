@@ -108,4 +108,16 @@ impl SessionServices {
     pub(crate) fn new_model_client_session(&self) -> ModelClientSession {
         self.model_client().new_session()
     }
+
+    /// The "for session" approval cache, emptied first when a security
+    /// transition was committed since it was last used (PF-23-S03).
+    pub(crate) async fn approval_cache(&self) -> tokio::sync::MutexGuard<'_, ApprovalStore> {
+        let mut store = self.tool_approvals.lock().await;
+        store.fence(
+            self.agent_control
+                .effective_security_policy()
+                .authority_marker(),
+        );
+        store
+    }
 }

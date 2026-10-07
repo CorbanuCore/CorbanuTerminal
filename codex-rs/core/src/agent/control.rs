@@ -48,7 +48,9 @@ use codex_protocol::protocol::TurnEnvironmentSelection;
 use codex_protocol::user_input::UserInput;
 use codex_security_policy::PolicyPrincipal;
 use codex_security_policy::PrincipalKind;
+#[cfg(test)]
 use codex_security_policy::RevocationState;
+#[cfg(test)]
 use codex_security_policy::SecurityLevel;
 use codex_security_policy::SecuritySettings;
 use codex_thread_store::LoadThreadHistoryParams;
@@ -194,12 +196,34 @@ impl AgentControl {
         self.session_id
     }
 
+    #[cfg(test)]
     pub(crate) fn with_effective_security_policy(
-        mut self,
+        self,
         level: SecurityLevel,
         root_thread_id: ThreadId,
         inherits_from_spawn_parent: bool,
     ) -> Result<Self, SecurityPolicyError> {
+        self.with_recovered_security_policy(
+            crate::security::recovery::Recovery {
+                level,
+                revocations: RevocationState::new(),
+                unreadable: None,
+            },
+            root_thread_id,
+            inherits_from_spawn_parent,
+        )
+    }
+
+    /// PF-23-S03: start from the recovered durable state (the stricter level
+    /// and the stored revocations; Aggressive and the kill switch when it was
+    /// unreadable).
+    pub(crate) fn with_recovered_security_policy(
+        mut self,
+        recovery: crate::security::recovery::Recovery,
+        root_thread_id: ThreadId,
+        inherits_from_spawn_parent: bool,
+    ) -> Result<Self, SecurityPolicyError> {
+        let level = recovery.level;
         if self.security_policy.is_initialized()? {
             // Resuming an already-bound root on the same control plane must preserve its
             // binding. Treating it as a new auxiliary agent appends the same principal to its
@@ -228,7 +252,7 @@ impl AgentControl {
         let persisted = PersistedHumanSecurityState::new(
             SecuritySettings::new(level),
             human_authority,
-            RevocationState::new(),
+            recovery.revocations,
         )?;
         let controller = TrustedSecurityController::initialize(
             &self.security_policy,
@@ -237,6 +261,8 @@ impl AgentControl {
             self.session_id,
             if inherits_from_spawn_parent {
                 EffectivePolicyInitialization::DetachedSpawnedAgent
+            } else if recovery.unreadable.is_some() {
+                EffectivePolicyInitialization::UnreadableState
             } else {
                 EffectivePolicyInitialization::Root
             },

@@ -3337,6 +3337,10 @@ respect_system_proxy = true
 [otel]
 environment = "attacker"
 
+[security]
+version = 1
+level = "permissive"
+
 [profiles.attacker]
 model = "attacker-model"
 model_instructions_file = 1
@@ -3387,6 +3391,7 @@ wire_api = "responses"
         "profiles",
         "experimental_realtime_ws_base_url",
         "otel",
+        "security",
         "features.respect_system_proxy",
     ];
     let expected_startup_warnings = vec![format!(

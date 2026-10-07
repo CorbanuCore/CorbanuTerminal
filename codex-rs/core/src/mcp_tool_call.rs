@@ -2061,12 +2061,12 @@ fn normalize_approval_decision_for_mode(
 }
 
 async fn mcp_tool_approval_is_remembered(sess: &Session, key: &McpToolApprovalKey) -> bool {
-    let store = sess.services.tool_approvals.lock().await;
+    let store = sess.services.approval_cache().await;
     matches!(store.get(key), Some(ReviewDecision::ApprovedForSession))
 }
 
 async fn remember_mcp_tool_approval(sess: &Session, key: McpToolApprovalKey) {
-    let mut store = sess.services.tool_approvals.lock().await;
+    let mut store = sess.services.approval_cache().await;
     store.put(key, ReviewDecision::ApprovedForSession);
 }
 

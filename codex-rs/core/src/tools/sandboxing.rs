@@ -41,9 +41,20 @@ use tokio_util::sync::CancellationToken;
 pub(crate) struct ApprovalStore {
     // Store serialized keys for generic caching across requests.
     map: HashMap<String, ReviewDecision>,
+    /// Policy epoch and revocation generation the entries were made under.
+    policy: Option<(u64, u64)>,
 }
 
 impl ApprovalStore {
+    /// PF-23-S03: a committed security transition drops every cached
+    /// decision.
+    pub(crate) fn fence(&mut self, policy: Option<(u64, u64)>) {
+        if self.policy != policy {
+            self.map.clear();
+            self.policy = policy;
+        }
+    }
+
     pub fn get<K>(&self, key: &K) -> Option<ReviewDecision>
     where
         K: Serialize,
@@ -97,7 +108,7 @@ where
     }
 
     let already_approved = {
-        let store = services.tool_approvals.lock().await;
+        let store = services.approval_cache().await;
         keys.iter()
             .all(|key| matches!(store.get(key), Some(ReviewDecision::ApprovedForSession)))
     };
@@ -118,7 +129,7 @@ where
     );
 
     if matches!(decision, ReviewDecision::ApprovedForSession) {
-        let mut store = services.tool_approvals.lock().await;
+        let mut store = services.approval_cache().await;
         for key in keys {
             store.put(key, ReviewDecision::ApprovedForSession);
         }
