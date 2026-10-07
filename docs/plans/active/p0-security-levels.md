@@ -18,6 +18,9 @@ product_spec:
   heading: "P0 /security levels"
   requirement_excerpt: "Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged."
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/sec-pf23s03"
+    branch: "feat/pf-23-s03-memory"
+    base_commit: "6b1c8b8873b7c35ba5f030f56bcf519c1948e216"
   - path: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
     branch: "feat/p0-security-levels"
     base_commit: "7cc15ae0762664d6d01765de407329887da9f876"

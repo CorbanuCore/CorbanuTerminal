@@ -7,11 +7,11 @@ plan_feature: "PF-23"
 execution_order: 42
 owner: "untrusted-content lane"
 parallel_lane: "untrusted-content"
-write_scope: "codex-rs/core/src/security/{transition,recovery,effective_policy,trusted_requests,aggressive}.rs and their tests, codex-rs/core/src/agent/control.rs, codex-rs/core/src/config/mod.rs, codex-rs/core/src/session/{session,mod,handlers,turn_context}.rs, codex-rs/core/src/state/service.rs, codex-rs/core/src/tools/{sandboxing,network_approval}.rs, codex-rs/core/src/mcp_tool_call.rs, codex-rs/core/src/memory_stage_one.rs, codex-rs/memories/write/src/phase1.rs, codex-rs/security-policy/src/revocation.rs, codex-rs/protocol/src/protocol.rs (TurnContextItem), codex-rs/network-proxy/src/proxy.rs, qa/security-levels/sprints/PF-23-S03/, qa/demos/specs/pf23s03-*"
-integration_gate: "Per-sprint gate of 2026-10-06: focused tests, GLM 5.2 tmux demos, one independent Opus 5.5 High review, Linux clippy on the RTX box."
+write_scope: "codex-rs/core/src/security/transition.rs, codex-rs/core/src/security/transition_tests.rs, codex-rs/core/src/security/recovery.rs, codex-rs/core/src/security/recovery_tests.rs, codex-rs/core/src/security/effective_policy.rs, codex-rs/core/src/security/trusted_requests.rs, codex-rs/core/src/security/aggressive.rs, codex-rs/core/src/agent/control.rs, codex-rs/core/src/session/session.rs, codex-rs/core/src/session/mod.rs, codex-rs/core/src/session/handlers.rs, codex-rs/core/src/session/turn_context.rs, codex-rs/core/src/state/service.rs, codex-rs/core/src/tools/sandboxing.rs, codex-rs/core/src/tools/network_approval.rs, codex-rs/core/src/mcp_tool_call.rs, codex-rs/core/src/memory_stage_one.rs, codex-rs/memories/write/src/phase1.rs, codex-rs/security-policy/src/revocation.rs, codex-rs/protocol/src/protocol.rs, codex-rs/network-proxy/src/proxy.rs, qa/security-levels/sprints/PF-23-S03/, qa/demos/index/PF-23-S03.md"
+integration_gate: "Per-sprint gate of 2026-10-06: focused tests, GLM 5.2 tmux demos, one independent Opus 5.5 High review, Linux clippy on the RTX box. Not reserved: codex-rs/core/src/config/mod.rs."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/sec-pf23s03"
-branch: "feat/pf-23-s03-recovery, feat/pf-23-s03-transition, feat/pf-23-s03-fanout, feat/pf-23-s03-memory"
-base_commit: "6b1c8b8873"
+branch: "feat/pf-23-s03-memory"
+base_commit: "6b1c8b8873b7c35ba5f030f56bcf519c1948e216"
 depends_on: "PF-19-S02, PF-20-S02, PF-23-S02"
 created: 2026-08-24
 updated: 2026-10-07
@@ -81,6 +81,7 @@ Gate: [qa/security-levels/sprints/PF-23-S03/gate.md](../../../../qa/security-lev
 - [x] `just fix -p codex-core`, `just fmt`; `just test -p codex-core security_transition security_recovery` and
   the wider affected sets per PR; full `just test` of core and touched crates (gate record).
 - [x] Linux clippy (`-D warnings`) on the RTX box; Opus 5.5 High review (three rounds, APPROVE).
+- [ ] GLM 5.2 tmux functional run and videos (blocked: Z.AI balance).
 
 ## Exit evidence
 
