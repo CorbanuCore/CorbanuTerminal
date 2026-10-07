@@ -443,8 +443,11 @@ fn pf_23_s02_submodules_and_hooks_path_are_protected() {
     let cwd = fx.user_home.join("project");
     let git = cwd.join(".git");
     for module in ["modules/a", "modules/a/modules/inner", "modules/libs/b"] {
-        std::fs::create_dir_all(git.join(module).join("hooks")).unwrap();
+        for folder in ["hooks", "objects"] {
+            std::fs::create_dir_all(git.join(module).join(folder)).unwrap();
+        }
         std::fs::write(git.join(module).join("HEAD"), "ref: refs/heads/main\n").unwrap();
+        std::fs::write(git.join(module).join("config"), "").unwrap();
     }
     std::fs::write(
         git.join("config"),

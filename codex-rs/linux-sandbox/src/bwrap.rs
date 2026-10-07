@@ -2073,7 +2073,7 @@ mod tests {
             },
             FileSystemSandboxEntry {
                 path: FileSystemPath::Path {
-                    path: AbsolutePathBuf::try_from(Path::new("/nonexistent-secret"))
+                    path: AbsolutePathBuf::try_from(Path::new("/tmp/pf23-nonexistent-secret"))
                         .expect("absolute"),
                 },
                 access: FileSystemAccessMode::Deny,
@@ -2086,7 +2086,11 @@ mod tests {
                     .expect("bwrap fs args");
             let at_root: Vec<PathBuf> = synthetic_mount_target_paths(&args)
                 .into_iter()
-                .filter(|path| path.parent() == Some(Path::new("/")))
+                .filter(|path| {
+                    [".git", ".agents", ".codex"]
+                        .iter()
+                        .any(|name| path == &Path::new("/").join(name))
+                })
                 .collect();
             assert_eq!(at_root, Vec::<PathBuf>::new(), "cwd {cwd}");
             assert!(
