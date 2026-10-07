@@ -26,6 +26,13 @@ pub(crate) trait BottomPaneView: Renderable {
         false
     }
 
+    /// Return `true` once something other than this view's own input settled
+    /// what it was asking (a contained Claude pane's request that its turn
+    /// stopped waiting for); it is then removed wherever it is in the stack.
+    fn is_settled_elsewhere(&self) -> bool {
+        false
+    }
+
     /// Return the completion reason once the view has finished.
     fn completion(&self) -> Option<ViewCompletion> {
         None

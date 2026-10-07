@@ -626,6 +626,10 @@ pub(crate) enum AppEvent {
     },
     /// A contained Claude pane (#218) asks to use a tool; a person answers.
     ClaudePaneApprovalRequested(Box<crate::claude_panes::approval::ClaudeApprovalRequest>),
+    /// Some contained Claude pane requests stopped waiting (the turn ended,
+    /// was interrupted, timed out, or Claude Code cancelled them); their
+    /// popups close.
+    ClaudePaneApprovalsSettled,
     /// A Claude Code headless pane emitted bounded live progress.
     ClaudePaneTurnProgress {
         progress: crate::claude_panes::ClaudePaneTurnProgress,

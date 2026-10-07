@@ -208,7 +208,7 @@ pub(crate) fn build_claude_command_plan(
             accounting_provider_id: profile.accounting_provider_id.map(str::to_string),
         });
     }
-    let settings = settings_json_with_base_url(
+    let mut settings = settings_json_with_base_url(
         profile,
         if bridge.is_some() {
             None
@@ -217,6 +217,9 @@ pub(crate) fn build_claude_command_plan(
         },
         base_url_override.as_deref(),
     );
+    if containment.is_some() {
+        add_contained_settings(&mut settings);
+    }
     std::fs::write(&settings_path, settings.to_string()).with_context(|| {
         format!(
             "failed to write Claude pane settings `{}`",
@@ -367,9 +370,12 @@ pub(crate) fn build_claude_command_plan(
         profile.claude_model.to_string(),
     ]);
     if containment.is_some() {
-        // Claude Code asks before every tool that is not read-only, through
-        // stdin/stdout, and Corbanu asks a person (`super::approval`). The
-        // prompt then goes in on stdin as well.
+        // Claude Code asks before the tools in `CONTAINED_ASK_TOOLS` (the
+        // settings' `ask` rules) through stdin/stdout, and Corbanu asks a
+        // person (`super::approval`). The prompt then goes in on stdin too.
+        // Subagents, skills, slash commands and other tools that start or
+        // schedule more agents are unavailable.
+        let disallowed = CONTAINED_DISALLOWED_TOOLS.join(",");
         args.extend(
             [
                 "--permission-mode",
@@ -378,6 +384,8 @@ pub(crate) fn build_claude_command_plan(
                 "stdio",
                 "--input-format",
                 "stream-json",
+                "--disallowedTools",
+                disallowed.as_str(),
             ]
             .map(str::to_string),
         );
@@ -394,7 +402,17 @@ pub(crate) fn build_claude_command_plan(
         // Settings, hooks and MCP servers a pane could write into its own
         // folder must not run or allow anything without a person: only
         // Corbanu's settings file applies.
-        args.extend(["--setting-sources", "", "--strict-mcp-config"].map(str::to_string));
+        // `--safe-mode` also leaves out CLAUDE.md, skills, plugins, custom
+        // commands and agents; Corbanu's `--settings` still apply.
+        args.extend(
+            [
+                "--setting-sources",
+                "",
+                "--strict-mcp-config",
+                "--safe-mode",
+            ]
+            .map(str::to_string),
+        );
     } else {
         args.extend(["--setting-sources".to_string(), "project".to_string()]);
     }
@@ -477,6 +495,52 @@ pub(crate) fn absolute_claude_config_dir_override_against(
                 .context("failed to resolve the exact Claude Code configuration profile")
         })
         .transpose()
+}
+
+/// Tools a contained pane always asks a person about, even when Claude Code
+/// would consider the call read-only (its read-only Bash classifier has had
+/// bypasses). Reading and searching files inside the sandbox stays automatic.
+/// Kept in step with `claude_code_regression.py` (qa/security-levels).
+pub(crate) const CONTAINED_ASK_TOOLS: [&str; 7] = [
+    "Bash",
+    "Edit",
+    "Write",
+    "MultiEdit",
+    "NotebookEdit",
+    "WebFetch",
+    "WebSearch",
+];
+
+/// Tools a contained pane does not get: subagents (whose definitions can ask
+/// for other permission modes, hooks and MCP servers), skills and slash
+/// commands (`allowed-tools`), and tools that start or schedule more agents.
+pub(crate) const CONTAINED_DISALLOWED_TOOLS: [&str; 9] = [
+    "Agent",
+    "Task",
+    "Skill",
+    "SlashCommand",
+    "Workflow",
+    "CronCreate",
+    "ScheduleWakeup",
+    "SendMessage",
+    "EnterWorktree",
+];
+
+/// Corbanu's settings for a contained pane: no hooks at all, the ask and deny
+/// rules above, and no way into `bypassPermissions`. Checked against the real
+/// Claude Code by `claude_code_regression.py`.
+fn add_contained_settings(settings: &mut Value) {
+    if let Some(settings) = settings.as_object_mut() {
+        settings.insert("disableAllHooks".to_string(), Value::Bool(true));
+        settings.insert(
+            "permissions".to_string(),
+            serde_json::json!({
+                "ask": CONTAINED_ASK_TOOLS,
+                "deny": CONTAINED_DISALLOWED_TOOLS,
+                "disableBypassPermissionsMode": "disable",
+            }),
+        );
+    }
 }
 
 pub(crate) fn settings_json_with_base_url(

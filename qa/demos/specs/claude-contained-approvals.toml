@@ -1,11 +1,11 @@
 # Under Aggressive, with contained_external_agents on, a Claude pane opens and
-# asks a person before each tool: the first Bash command is allowed, the second
-# denied with Esc. Record with
+# asks a person before each command: the popup opens on Deny, the first Bash
+# command is allowed (Right, Enter), the second denied with Esc. Record with
 #   DEMO_RESTART=1 PF24_CANDIDATE=<corbanu> CLAUDE_BIN_DIR=<claude 2.1.29x bin>
 #   --bin qa/security-levels/pf24-followups/claude-contained/demo-launch.sh
 id = "claude-contained-approvals"
 feature = "Contained Claude pane under Aggressive asks before each tool"
-expected = "With Aggressive active the Z.AI Claude pane opens; each Bash command shows an approval popup; the allowed one creates approved.txt, the denied one (Esc) does not run."
+expected = "With Aggressive active the Z.AI Claude pane opens; each Bash command shows an approval popup that opens on Deny; the allowed one (Right, Enter) creates approved.txt, the denied one (Esc) does not run."
 model = "glm-5.2"
 provider = "zai"
 config = """
@@ -85,6 +85,11 @@ timeout = 120
 compress = 2
 [[steps]]
 pause = 2.5
+# The popup opens on Deny; Allow takes a move, then Enter.
+[[steps]]
+key = "Right"
+[[steps]]
+pause = 1.0
 [[steps]]
 key = "Enter"
 [[steps]]

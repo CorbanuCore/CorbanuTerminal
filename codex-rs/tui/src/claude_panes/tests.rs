@@ -4889,9 +4889,36 @@ fn contained_plan_routes_tool_approvals_to_corbanu() {
     assert_eq!(flag("--permission-mode"), Some("default"));
     assert_eq!(flag("--permission-prompt-tool"), Some("stdio"));
     assert_eq!(flag("--input-format"), Some("stream-json"));
-    // Project settings (hooks, allow rules) and MCP servers are not loaded.
+    // Project settings (hooks, allow rules), MCP servers, CLAUDE.md, skills,
+    // plugins, custom commands and agents are not loaded.
     assert_eq!(flag("--setting-sources"), Some(""));
     assert!(plan.args.iter().any(|arg| arg == "--strict-mcp-config"));
+    assert!(plan.args.iter().any(|arg| arg == "--safe-mode"));
+    // No subagents, skills or slash commands.
+    assert_eq!(
+        flag("--disallowedTools"),
+        Some(
+            "Agent,Task,Skill,SlashCommand,Workflow,CronCreate,ScheduleWakeup,SendMessage,EnterWorktree"
+        )
+    );
+    // Corbanu's settings: no hooks, ask before every command, edit and web
+    // request, no bypass.
+    let settings: Value = serde_json::from_str(
+        &std::fs::read_to_string(flag("--settings").expect("settings")).expect("settings file"),
+    )
+    .expect("settings json");
+    assert_eq!(settings["disableAllHooks"], json!(true));
+    assert_eq!(
+        settings["permissions"],
+        json!({
+            "ask": ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch"],
+            "deny": [
+                "Agent", "Task", "Skill", "SlashCommand", "Workflow", "CronCreate",
+                "ScheduleWakeup", "SendMessage", "EnterWorktree"
+            ],
+            "disableBypassPermissionsMode": "disable",
+        })
+    );
 
     // Without the feature nothing changes.
     drop(_settings);
@@ -4899,66 +4926,16 @@ fn contained_plan_routes_tool_approvals_to_corbanu() {
     let plan =
         build_claude_command_plan(&pane, "do the thing".to_string(), dir.path()).expect("plan");
     assert!(plan.args.iter().any(|arg| arg == "bypassPermissions"));
+    assert!(
+        !plan
+            .args
+            .iter()
+            .any(|arg| arg == "--safe-mode" || arg == "--disallowedTools")
+    );
     assert_eq!(plan.args.last().map(String::as_str), Some("do the thing"));
     assert_eq!(plan.stdin_prompt, None);
 }
 
-/// #218: the prompt goes in on stdin, each `can_use_tool` request reaches a
-/// person as an approval popup, the answer goes back on stdin, and stdin
-/// closes after the result. With nobody to ask, tools are denied.
 #[cfg(unix)]
-#[tokio::test]
-async fn contained_turn_asks_a_person_before_each_tool() {
-    for (ask_a_person, expected) in [(true, "allow"), (false, "deny")] {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let script = r#"IFS= read -r first; printf '%s\n' "$first" > prompt.json
-printf '%s\n' '{"type":"control_request","request_id":"req-1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"touch approved.txt"}}}'
-IFS= read -r answer; printf '%s\n' "$answer" > answer.json
-printf '%s\n' '{"type":"control_request","request_id":"req-2","request":{"subtype":"mcp_message","server_name":"x"}}'
-IFS= read -r other; printf '%s\n' "$other" > other.json
-printf '%s\n' '{"type":"result","subtype":"success","is_error":false,"result":"done","session_id":"33333333-3333-4333-8333-333333333333"}'
-cat > /dev/null; echo closed > closed.txt"#;
-        let mut plan =
-            bridge_redaction_plan(&dir, script.to_string(), "bridge-secret-for-approvals");
-        plan.stdin_prompt = Some("please touch it".to_string());
-
-        let progress_tx = ask_a_person.then(|| {
-            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-            tokio::spawn(async move {
-                while let Some(event) = rx.recv().await {
-                    if let crate::app_event::AppEvent::ClaudePaneApprovalRequested(request) = event
-                    {
-                        assert_eq!(request.tool_name, "Bash");
-                        assert_eq!(request.summary, "touch approved.txt");
-                        assert_eq!(request.pane_title, "Claude Redaction Test");
-                        request.responder.respond(/*allow*/ true);
-                    }
-                }
-            });
-            crate::app_event_sender::AppEventSender::new(tx)
-        });
-        let output = run_claude_command_plan(plan, CancellationToken::new(), progress_tx)
-            .await
-            .expect("turn output");
-
-        assert_eq!(output.status, ClaudePaneTurnStatus::Success, "{output:?}");
-        let read = |name: &str| {
-            serde_json::from_str::<Value>(
-                &std::fs::read_to_string(dir.path().join(name)).expect(name),
-            )
-            .expect("json")
-        };
-        assert_eq!(
-            read("prompt.json"),
-            json!({ "type": "user", "message": { "role": "user", "content": "please touch it" } })
-        );
-        let answer = read("answer.json");
-        assert_eq!(answer["response"]["request_id"], json!("req-1"));
-        assert_eq!(answer["response"]["response"]["behavior"], json!(expected));
-        assert_eq!(read("other.json")["response"]["subtype"], json!("error"));
-        assert_eq!(
-            std::fs::read_to_string(dir.path().join("closed.txt")).expect("stdin closed"),
-            "closed\n"
-        );
-    }
-}
+#[path = "approval_turn_tests.rs"]
+mod approval_turn;

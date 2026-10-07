@@ -1,0 +1,18 @@
+---
+source: tui/src/bottom_pane/claude_approval_view_tests.rs
+expression: "render(&view, 72)"
+---
+
+  Claude pane claude-1234abcd (Claude Code - GLM 5.2 Z.AI) wants to
+  use Bash
+  folder /work/repo
+  tool use toolu_01
+
+  command:
+  ls \u{202e}gpj.sh⏎
+  rm -rf .
+  description: List files
+  dangerouslyDisableSandbox: true
+
+  › Deny      Allow once
+  ←/→ choose · Enter confirms · Esc denies

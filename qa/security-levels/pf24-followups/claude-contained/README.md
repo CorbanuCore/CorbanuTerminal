@@ -32,43 +32,102 @@ the refusal under protected levels stays.
 
 - **No permission bypass:** a contained turn runs Claude Code with
   `--permission-mode default --permission-prompt-tool stdio
-  --input-format stream-json`. Claude Code still allows its own read-only
-  tools; for anything else it writes a `can_use_tool` request to stdout.
-- **A person decides:** each request opens a popup naming the pane, the tool
-  and what it would do (the command, path or URL, redacted and shortened):
-  "Allow once" or "Deny"; Esc denies, and digits do nothing. The answer goes
-  back on Claude Code's stdin. With nobody to ask (the smoke commands), every
-  request is denied. Other control requests are refused.
+  --input-format stream-json`; Claude Code writes a `can_use_tool` request
+  to stdout before each tool that needs permission.
+- **What asks:** Corbanu's settings for the turn add `ask` rules for Bash,
+  Edit, Write, MultiEdit, NotebookEdit, WebFetch and WebSearch, so every
+  command, file edit and web request asks, including the Bash commands
+  Claude Code would consider read-only (`ls` ran without asking before).
+  Reading and searching files (Read, Glob, Grep) stays automatic, inside the
+  sandbox.
+- **A person decides:** each request opens a popup naming the pane (short ID
+  and title), its folder, the tool and its `tool_use_id`, and showing every
+  input field in full: the whole command, wrapped and scrollable, the content
+  of a Write, the old and new text of an Edit, and fields such as
+  `run_in_background`, `timeout` or `dangerouslyDisableSandbox`. Line breaks
+  show as `⏎`; control, format and bidi characters are escaped
+  (`\u{202e}`); runs of 8 or more spaces show as a count. Past 60,000
+  characters the rest is counted, not shown, and the request can only be
+  denied.
+- **No accidental allow:** the popup opens on Deny. Allow needs ←/→ (or Tab)
+  then Enter. For 600 ms after it first shows, every key but Esc and Ctrl-C
+  (both deny) is ignored, so an Enter meant for the composer, a held Enter or
+  a double Enter on the next request does nothing. Held keys never confirm,
+  digits and pasted text do nothing, and a popup that is dropped denies.
+- **Requests end cleanly:** when a turn ends, is interrupted, or Claude Code
+  cancels a request (`control_cancel_request`), its popups close and nothing
+  is answered. A request nobody answers in 15 minutes is denied. A request id
+  seen before in the turn is dropped (no popup, no answer), so nothing else
+  writing to Claude Code's stdout can take over a pending request's answer.
+  A control request without an id, or a second `result`, ends the turn with
+  an error instead of hanging it. Other control requests get an error reply.
+  With nobody to ask (no TUI), every request is denied.
 - **Prompt on stdin:** the prompt is Claude Code's first stream-json input,
-  not an argv entry; stdin closes once the turn's result arrives.
-- **Nothing a pane writes can allow tools:** contained panes load no setting
-  sources (`--setting-sources ""`, so no project hooks or allow rules from
-  the pane's folder) and no MCP servers (`--strict-mcp-config`); only
-  Corbanu's read-only settings file applies. Without this, a hook the pane
-  wrote into `.claude/settings.json` ran on the next turn without approval
-  (checked with Claude Code 2.1.292).
+  not an argv entry; stdin closes once the turn's result arrives. One task
+  writes stdin, so large prompts and approvals never block reading stdout.
+- **Nothing a pane or repository plants can allow tools:** contained panes
+  load no setting sources (`--setting-sources ""`), no MCP servers
+  (`--strict-mcp-config`) and no CLAUDE.md, skills, plugins, custom commands
+  or agents (`--safe-mode`). Corbanu's read-only settings file sets
+  `disableAllHooks`, the `ask` rules, `deny` rules for the tools below and
+  `disableBypassPermissionsMode`. Subagents, skills, slash commands and tools
+  that start or schedule agents (Agent, Task, Skill, SlashCommand, Workflow,
+  CronCreate, ScheduleWakeup, SendMessage, EnterWorktree) are unavailable
+  (`--disallowedTools`): a subagent definition can ask for other permission
+  modes, hooks and MCP servers, and skills and commands carry
+  `allowed-tools`.
+- **Claude Code version floor:** a contained launch runs `claude --version`
+  first and is refused below 2.1.292, the version these checks were made with
+  (it also ignores `bypassPermissions` in subagent definitions).
 - **Allowed under Aggressive:** with `contained_external_agents` on and the
-  secretless launch contract armed, Claude panes are no longer refused under
-  protected levels. Otherwise the refusal stays, and its message names the
-  two features. The `/security` review's Child agents row says so.
+  secretless launch contract armed (`secretless_agent_launch`), Claude panes
+  are no longer refused under protected levels. Otherwise the refusal stays,
+  and its message names the two features. The `/security` review's Child
+  agents row says so.
+
+### Real Claude Code regression
+
+`claude_code_regression.py` runs the real `claude` with the flags and
+settings above (`--flags new`) or part 2's first version (`--flags old`), in
+a pane folder and config folder seeded with everything a cloned repository
+or an earlier turn could plant: `.claude/settings*.json` with allow rules,
+`bypassPermissions` and hooks; project and user subagents asking for
+`bypassPermissions`/`acceptEdits` with hooks and MCP servers; skills and
+commands with `allowed-tools`; `.mcp.json`; and a `.claude.json` with
+`allowedTools` and MCP servers. A mock Anthropic API plays the model and asks
+for `ls`, an Edit, a Write, a subagent, a skill and a slash command; the
+script denies every request. Results with Claude Code 2.1.292 on Linux, in
+`regression/` (`bare` = API-key profiles, `full` = Claude Plan):
+
+| Flags | Asked the person | Planted hooks, MCP, agents, skills, commands | Agent/Task/Skill tools |
+| --- | --- | --- | --- |
+| old, bare | Edit only; `ls` ran without asking | none loaded or ran | not in bare mode |
+| old, full | Edit, Write; `ls` ran without asking | none loaded or ran | available (built-ins only) |
+| new, bare | Bash, Edit | none loaded or ran | unavailable |
+| new, full | Bash, Edit, Write | none loaded or ran | unavailable |
+
+It ran on Linux only: on macOS a real `claude` outside a disposable account
+would read the login keychain.
 
 ### Limits (part 2)
 
-- A popup still open when its turn ends (interrupt) stays on screen;
-  answering it does nothing.
-- Projects' own Claude Code settings, hooks and MCP servers are not used by
-  contained panes.
+- Projects' own Claude Code settings, hooks, MCP servers, CLAUDE.md, skills,
+  commands and subagents are not used by contained panes.
+- The Bash tool's own sandbox flag `dangerouslyDisableSandbox` is shown, not
+  refused; the command still runs inside Corbanu's OS sandbox.
+- The input a tool runs with is the redacted one the person saw; a command
+  that contained a known secret runs with `[REDACTED_SECRET]` in its place.
 
 ## Limits
 
 - Both features take effect when Corbanu Terminal starts.
 - Other panes' state folders are denied as they exist at launch; one created
   during a turn is not denied to that turn.
-- `claude-pane-smoke` and the workflow suite stay uncontained and refused
-  under protected levels.
-- Contained panes need Claude Code with `--bare`,
-  `--exclude-dynamic-system-prompt-sections` and stdio permission prompts
-  (tested with 2.1.292).
+- `claude-pane-smoke` and the workflow suite are never contained, even with
+  the feature on: they run Claude Code as before
+  (`--permission-mode bypassPermissions`, no sandbox) and are refused under
+  protected levels.
+- Contained panes need Claude Code 2.1.292 or later (checked at launch).
 - A Bash tool command inside the pane can use the bridge token from its
   environment, so it can spend on the pane's provider. It cannot read the
   provider key.

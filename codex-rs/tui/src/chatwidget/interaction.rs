@@ -233,6 +233,27 @@ impl ChatWidget {
         self.request_redraw();
     }
 
+    /// A contained Claude pane's tool request (#218).
+    pub(crate) fn show_claude_approval(
+        &mut self,
+        request: crate::claude_panes::approval::ClaudeApprovalRequest,
+    ) {
+        if request.responder.is_settled() {
+            return;
+        }
+        self.bottom_pane
+            .show_view(Box::new(crate::bottom_pane::ClaudeApprovalView::new(
+                request,
+            )));
+        self.request_redraw();
+    }
+
+    /// Remove popups for Claude pane requests that are no longer waiting.
+    pub(crate) fn remove_settled_claude_approvals(&mut self) {
+        self.bottom_pane.remove_views_settled_elsewhere();
+        self.request_redraw();
+    }
+
     pub(crate) fn show_custom_prompt_view(&mut self, view: CustomPromptView) {
         self.bottom_pane.show_view(Box::new(view));
         self.refresh_plan_mode_nudge();

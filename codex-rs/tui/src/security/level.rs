@@ -89,15 +89,15 @@ pub(crate) fn permission_change_block_reason() -> Option<String> {
 /// active or saved: a pane could otherwise rewrite the saved level before the
 /// restart that activates it. Contained panes (#218, feature
 /// `contained_external_agents` with the secretless launch contract armed)
-/// run sandboxed, behind the bridge and with a person's approval for each
-/// tool, so they are allowed.
+/// run sandboxed, behind the bridge and with a person's approval for every
+/// command, file edit and web request, so they are allowed.
 pub(crate) fn external_agent_block_reason() -> Option<String> {
+    if crate::claude_panes::containment::contained_launch_ready() {
+        return None;
+    }
     #[cfg(test)]
     if let Some((active, stored)) = test_levels::LEVELS.get() {
         return external_agent_block_reason_in(active, stored);
-    }
-    if crate::claude_panes::containment::contained_launch_ready() {
-        return None;
     }
     let context = context()?;
     external_agent_block_reason_in(context.active, load(&context.codex_home).enforced())
@@ -142,7 +142,7 @@ pub(crate) mod test_levels {
 fn external_agent_block_reason_in(active: ChosenLevel, stored: ChosenLevel) -> Option<String> {
     (active != ChosenLevel::Permissive || stored != ChosenLevel::Permissive).then(|| {
         format!(
-            "Claude panes are off under security level {}: Claude Code would run outside Corbanu's sandbox with your environment and network. Choose Permissive in /security and restart to use them, or turn on the contained_external_agents and secretless_agent_launch features to run them in the sandbox, asking you before each tool; /panes switches back to Main.",
+            "Claude panes are off under security level {}: Claude Code would run outside Corbanu's sandbox with your environment and network. Choose Permissive in /security and restart to use them, or turn on the contained_external_agents and secretless_agent_launch features to run them in the sandbox, asking you before every command, file edit and web request; /panes switches back to Main.",
             if active != ChosenLevel::Permissive { active } else { stored }.name()
         )
     })

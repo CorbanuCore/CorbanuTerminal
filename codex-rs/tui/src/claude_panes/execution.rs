@@ -80,6 +80,7 @@ pub(crate) async fn run_claude_command_plan(
     // refuses never touches the vault or the provider.
     let contained = match plan.containment.as_ref() {
         Some(containment) => {
+            require_contained_claude_version(&plan.executable).await?;
             let bridge_port = plan
                 .bridge
                 .as_ref()
@@ -229,6 +230,12 @@ pub(crate) async fn run_claude_command_plan(
     if let Some(prompt) = plan.stdin_prompt.as_deref() {
         stdin.send(approval::user_message(prompt));
     }
+    // Requests still waiting for a person stop waiting, and their popups
+    // close, when the turn ends however it ends.
+    let mut approvals = TurnApprovals::new(cancel_token.child_token());
+    let _approvals_end = approvals.turn.clone().drop_guard();
+    let mut protocol_error: Option<String> = None;
+    let mut results = 0usize;
     let stderr_task = tokio::spawn(async move {
         let mut stderr_reader = BufReader::new(stderr);
         let mut stderr_text = String::new();
@@ -280,18 +287,33 @@ pub(crate) async fn run_claude_command_plan(
                     )
                 })?;
                 if let Ok(value) = serde_json::from_str::<Value>(&line) {
-                    if approval::is_control_request(&value) {
-                        answer_control_request(
-                            &value,
-                            &plan,
-                            &stdin,
-                            progress_tx.as_ref(),
-                            &redactor,
-                        );
-                        continue;
-                    }
-                    if value.get("type").and_then(Value::as_str) == Some("result") {
+                    // The line was redacted before parsing, so a tool runs
+                    // with the redacted input, which is also what the person
+                    // was shown.
+                    let message = approval::control_message(&value);
+                    let is_control = message.is_some();
+                    if let Some(message) = message {
+                        if let Err(err) =
+                            approvals.handle(message, &plan, &stdin, progress_tx.as_ref(), &redactor)
+                        {
+                            protocol_error = Some(err);
+                        }
+                    } else if value.get("type").and_then(Value::as_str) == Some("result") {
+                        results += 1;
+                        if results > 1 {
+                            protocol_error =
+                                Some("Claude Code reported a second result for one turn".to_string());
+                        }
                         stdin.close();
+                    }
+                    if protocol_error.is_some() {
+                        if let Err(err) = stop_claude_child(&mut child).await {
+                            cleanup_error = Some(err.to_string());
+                        }
+                        break;
+                    }
+                    if is_control {
+                        continue;
                     }
                     for progress in progresses_from_claude_value(&plan, &started_at, &value) {
                         last_progress_elapsed_ms = Some(progress.elapsed_ms);
@@ -321,6 +343,7 @@ pub(crate) async fn run_claude_command_plan(
             }
         }
     }
+    approvals.turn.cancel();
     artifact.flush().with_context(|| {
         format!(
             "failed to flush Claude pane artifact `{}`",
@@ -328,7 +351,7 @@ pub(crate) async fn run_claude_command_plan(
         )
     })?;
 
-    let wait_result = if timed_out || interrupted {
+    let wait_result = if timed_out || interrupted || protocol_error.is_some() {
         None
     } else {
         Some(
@@ -346,7 +369,7 @@ pub(crate) async fn run_claude_command_plan(
     if timed_out && let Err(err) = stop_claude_child(&mut child).await {
         cleanup_error = Some(err.to_string());
     }
-    let stderr = if timed_out || interrupted {
+    let stderr = if timed_out || interrupted || protocol_error.is_some() {
         stderr_task.abort();
         String::new()
     } else {
@@ -367,6 +390,26 @@ pub(crate) async fn run_claude_command_plan(
             format!(
                 "Claude pane process cleanup failed after interrupt/timeout; the turn is not considered safely stopped: {err}"
             ),
+            &stdout_text,
+        );
+        report_direct_turn(progress_tx.as_ref(), &output);
+        write_turn_audit(
+            &plan,
+            &output,
+            started_at_unix_ms,
+            ended_at_unix_ms,
+            last_progress_elapsed_ms,
+        )?;
+        return Ok(output);
+    }
+
+    if let Some(err) = protocol_error {
+        let output = partial_failed_turn_output(
+            &plan,
+            duration_ms,
+            ClaudePaneTurnStatus::ProviderError,
+            Some("protocol_error".to_string()),
+            format!("Claude pane turn stopped: {err}"),
             &stdout_text,
         );
         report_direct_turn(progress_tx.as_ref(), &output);
@@ -552,44 +595,194 @@ async fn write_claude_input(writer: &mut ChildStdin, value: &Value) -> Result<()
     writer.flush().await.context("failed to flush Claude input")
 }
 
-/// Ask a person about one `can_use_tool` request and answer it on stdin;
-/// refuse every other control request. With nobody to ask, deny.
-fn answer_control_request(
-    value: &Value,
-    plan: &ClaudeCommandPlan,
-    stdin: &ClaudeStdin,
-    progress_tx: Option<&AppEventSender>,
-    redactor: &ClaudeSecretRedactor,
-) {
-    let stdin = stdin.clone();
-    let Some((request_id, tool_name, input)) = approval::tool_request(value) else {
-        if let Some(response) = approval::unsupported_response(value) {
-            stdin.send(response);
+/// How long a tool request waits for a person before it is denied.
+const APPROVAL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+
+/// The control requests of one turn. Each request id is answered at most
+/// once: a repeated id (Claude Code never repeats one; anything else writing
+/// to its stdout might) is dropped, so it cannot take over a pending
+/// request's answer.
+struct TurnApprovals {
+    /// Cancelled when the turn ends; every waiting request stops.
+    turn: CancellationToken,
+    seen: std::collections::HashSet<String>,
+    /// Pending requests, to stop on `control_cancel_request`.
+    pending: std::collections::HashMap<String, CancellationToken>,
+}
+
+impl TurnApprovals {
+    fn new(turn: CancellationToken) -> Self {
+        Self {
+            turn,
+            seen: std::collections::HashSet::new(),
+            pending: std::collections::HashMap::new(),
         }
-        return;
-    };
-    let request_id = request_id.to_string();
-    let input = input.clone();
-    let decision = progress_tx.map(|tx| {
+    }
+
+    /// Ask a person about a `can_use_tool` request and answer it on stdin;
+    /// refuse every other request. With nobody to ask, deny. `Err` means the
+    /// turn must end: a request nothing can answer.
+    fn handle(
+        &mut self,
+        message: approval::ControlMessage<'_>,
+        plan: &ClaudeCommandPlan,
+        stdin: &ClaudeStdin,
+        progress_tx: Option<&AppEventSender>,
+        redactor: &ClaudeSecretRedactor,
+    ) -> Result<(), String> {
+        let (request_id, tool) = match message {
+            approval::ControlMessage::Malformed => {
+                return Err("Claude Code sent a control request without a request id".to_string());
+            }
+            approval::ControlMessage::Cancel { request_id } => {
+                if let Some(cancel) = self.pending.get(request_id) {
+                    cancel.cancel();
+                }
+                return Ok(());
+            }
+            approval::ControlMessage::Unsupported { request_id } => (request_id, None),
+            approval::ControlMessage::ToolRequest {
+                request_id,
+                tool_name,
+                tool_use_id,
+                input,
+            } => (request_id, Some((tool_name, tool_use_id, input))),
+        };
+        if !self.seen.insert(request_id.to_string()) {
+            tracing::warn!(
+                request_id,
+                "dropped a repeated Claude Code control request id"
+            );
+            return Ok(());
+        }
+        let Some((tool_name, tool_use_id, input)) = tool else {
+            stdin.send(approval::unsupported_response(request_id));
+            return Ok(());
+        };
+        let request_id = request_id.to_string();
+        let input = input.clone();
+        let Some(tx) = progress_tx.cloned() else {
+            stdin.send(approval::tool_response(
+                &request_id,
+                Err(approval::Denial::Person),
+                &input,
+            ));
+            return Ok(());
+        };
         let (responder, decision) = approval::ApprovalResponder::new();
         tx.send(AppEvent::ClaudePaneApprovalRequested(Box::new(
             approval::ClaudeApprovalRequest {
+                pane_id: plan.pane_id.clone(),
                 pane_title: plan.pane_title.clone(),
+                cwd: plan.cwd.clone(),
                 tool_name: tool_name.to_string(),
-                summary: redactor.redact(&approval::summary(tool_name, &input)),
+                tool_use_id: tool_use_id.map(str::to_string),
+                details: approval::details(tool_name, &input, |text| redactor.redact(text)),
                 responder,
             },
         )));
-        decision
-    });
-    tokio::spawn(async move {
-        let allow = match decision {
-            Some(decision) => decision.await.unwrap_or(false),
-            None => false,
-        };
-        let response = approval::tool_response(&request_id, allow, &input);
-        stdin.send(response);
-    });
+        let cancel = self.turn.child_token();
+        self.pending.insert(request_id.clone(), cancel.clone());
+        let stdin = stdin.clone();
+        tokio::spawn(async move {
+            let answer = wait_for_decision(decision, &cancel, APPROVAL_TIMEOUT).await;
+            if let Some(answer) = answer {
+                stdin.send(approval::tool_response(&request_id, answer, &input));
+            }
+            if !matches!(answer, Some(Ok(()) | Err(approval::Denial::Person))) {
+                // Nobody answered: close the popup.
+                tx.send(AppEvent::ClaudePaneApprovalsSettled);
+            }
+        });
+        Ok(())
+    }
+}
+
+/// A person's answer; a dropped popup denies. `None` when the request
+/// stopped waiting (cancelled, or the turn ended) and needs no answer.
+pub(super) async fn wait_for_decision(
+    decision: tokio::sync::oneshot::Receiver<bool>,
+    cancel: &CancellationToken,
+    timeout: Duration,
+) -> Option<Result<(), approval::Denial>> {
+    tokio::select! {
+        allow = decision => Some(if allow.unwrap_or(false) {
+            Ok(())
+        } else {
+            Err(approval::Denial::Person)
+        }),
+        () = tokio::time::sleep(timeout) => Some(Err(approval::Denial::TimedOut)),
+        () = cancel.cancelled() => None,
+    }
+}
+
+/// The oldest Claude Code contained panes were checked with: it has stdio
+/// permission prompts, `--safe-mode`, ignores `bypassPermissions` in
+/// subagent definitions, and loads nothing a pane can plant once setting
+/// sources are off (`claude_code_regression.py`).
+const CONTAINED_CLAUDE_MIN_VERSION: (u64, u64, u64) = (2, 1, 292);
+
+/// Refuses a contained launch with a Claude Code older than
+/// [`CONTAINED_CLAUDE_MIN_VERSION`]. A version that passed is remembered.
+async fn require_contained_claude_version(executable: &str) -> Result<()> {
+    static PASSED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+    let passed = |executable: &str| {
+        PASSED
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .iter()
+            .any(|known| known == executable)
+    };
+    if passed(executable) {
+        return Ok(());
+    }
+    let mut command = Command::new(executable);
+    command
+        .arg("--version")
+        .env_clear()
+        .envs(
+            ["PATH", "HOME"]
+                .into_iter()
+                .filter_map(|name| Some((name, std::env::var_os(name)?))),
+        )
+        .env("DISABLE_AUTOUPDATER", "1")
+        .env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
+        .stdin(Stdio::null())
+        .kill_on_drop(true);
+    let output = tokio::time::timeout(Duration::from_secs(30), command.output())
+        .await
+        .map_err(|_| anyhow!("`{executable} --version` did not finish"))?
+        .with_context(|| format!("failed to run `{executable} --version`"))?;
+    let text = String::from_utf8_lossy(&output.stdout);
+    let (major, minor, patch) = CONTAINED_CLAUDE_MIN_VERSION;
+    match parse_claude_version(&text) {
+        Some(version) if version >= CONTAINED_CLAUDE_MIN_VERSION => {
+            PASSED
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(executable.to_string());
+            Ok(())
+        }
+        found => Err(anyhow!(
+            "contained Claude panes need Claude Code {major}.{minor}.{patch} or later; found {}. Update Claude Code and try again.",
+            found.map_or_else(
+                || "an unknown version".to_string(),
+                |(a, b, c)| format!("{a}.{b}.{c}")
+            )
+        )),
+    }
+}
+
+/// `2.1.292` from `2.1.292 (Claude Code)`.
+pub(super) fn parse_claude_version(text: &str) -> Option<(u64, u64, u64)> {
+    let token = text.split_whitespace().next()?;
+    let mut parts = token.split('.').map(str::parse::<u64>);
+    let version = (
+        parts.next()?.ok()?,
+        parts.next()?.ok()?,
+        parts.next()?.ok()?,
+    );
+    parts.next().is_none().then_some(version)
 }
 
 async fn resolve_deferred_claude_plan_token(

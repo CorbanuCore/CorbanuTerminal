@@ -1,0 +1,157 @@
+{
+  "flags": "new",
+  "mode": "full",
+  "seconds": 0.7,
+  "claude_version": "2.1.292 (Claude Code)",
+  "permission_mode": "default",
+  "tools": [
+    "AskUserQuestion",
+    "Bash",
+    "CronDelete",
+    "CronList",
+    "Edit",
+    "EnterPlanMode",
+    "ExitPlanMode",
+    "ExitWorktree",
+    "ListAgents",
+    "NotebookEdit",
+    "Read",
+    "ReportFindings",
+    "TaskStop",
+    "WebFetch",
+    "WebSearch",
+    "Write"
+  ],
+  "agents": [
+    "claude",
+    "Explore",
+    "general-purpose",
+    "Plan"
+  ],
+  "skills": [
+    "deep-research",
+    "dataviz",
+    "update-config",
+    "verify",
+    "debug",
+    "code-review",
+    "simplify",
+    "batch",
+    "fewer-permission-prompts",
+    "doctor",
+    "loop",
+    "claude-api",
+    "workflow-authoring",
+    "run",
+    "run-skill-generator",
+    "plugin-authoring"
+  ],
+  "slash_commands": [
+    "deep-research",
+    "dataviz",
+    "update-config",
+    "verify",
+    "debug",
+    "code-review",
+    "simplify",
+    "batch",
+    "fewer-permission-prompts",
+    "doctor",
+    "loop",
+    "claude-api",
+    "workflow-authoring",
+    "run",
+    "run-skill-generator",
+    "plugin-authoring",
+    "agents",
+    "auto-mode-setup",
+    "autocompact",
+    "clear",
+    "color",
+    "compact",
+    "config",
+    "output-style",
+    "context",
+    "effort",
+    "fast",
+    "focus",
+    "heapdump",
+    "init",
+    "mcp",
+    "model",
+    "__remote-workflow",
+    "workflow-launch-exec",
+    "reload-plugins",
+    "reload-skills",
+    "rename",
+    "security-review",
+    "usage",
+    "insights",
+    "recap",
+    "goal",
+    "list-agents",
+    "team-onboarding"
+  ],
+  "mcp_servers": [],
+  "can_use_tool_requests": [
+    {
+      "tool_name": "Bash",
+      "input": {
+        "command": "ls",
+        "description": "list files"
+      },
+      "tool_use_id": "toolu_00"
+    },
+    {
+      "tool_name": "Edit",
+      "input": {
+        "file_path": "/tmp/claude-regression-7n8c8h3h/pane/seed.txt",
+        "old_string": "seed",
+        "new_string": "edited",
+        "replace_all": false
+      },
+      "tool_use_id": "toolu_01"
+    },
+    {
+      "tool_name": "Write",
+      "input": {
+        "file_path": "/tmp/claude-regression-7n8c8h3h/pane/WRITTEN.txt",
+        "content": "should never be written\n"
+      },
+      "tool_use_id": "toolu_02"
+    }
+  ],
+  "tool_results": {
+    "toolu_00": "denied by regression",
+    "toolu_01": "denied by regression",
+    "toolu_02": "denied by regression",
+    "toolu_03": "<tool_use_error>Error: No such tool available: Agent. Agent is disabled for this session, in subagents as well as here.</tool_use_error>",
+    "toolu_04": "<tool_use_error>Error: No such tool available: Task. Task is disabled for this session, in subagents as well as here.</tool_use_error>",
+    "toolu_05": "<tool_use_error>Error: No such tool available: Skill. Skill is disabled for this session, in subagents as well as here.</tool_use_error>",
+    "toolu_06": "<tool_use_error>Error: No such tool available: SlashCommand</tool_use_error>"
+  },
+  "results": [
+    "success"
+  ],
+  "hook_or_mcp_markers": [],
+  "files_written": [
+    "seed.txt"
+  ],
+  "exit_code": 0,
+  "stderr_tail": "[claude-code:unrecognized_model] {\"model\":\"glm-5.2\",\"query_source\":\"sdk\"}\n",
+  "checks": {
+    "init message seen": true,
+    "one result": true,
+    "Bash asked the person": true,
+    "Edit asked the person": true,
+    "Write asked the person or unavailable": true,
+    "no hook or MCP server ran": true,
+    "nothing written": true,
+    "no MCP servers": true,
+    "planted agents not listed": true,
+    "planted skills not listed": true,
+    "planted commands not listed": true,
+    "subagent/skill tools unavailable": true,
+    "subagent/skill tools never asked": true
+  }
+}

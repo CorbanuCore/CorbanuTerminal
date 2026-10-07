@@ -85,6 +85,8 @@ pub(crate) use mcp_server_elicitation::McpServerElicitationOverlay;
 pub(crate) use request_user_input::RequestUserInputOverlay;
 pub(crate) use status_line_style::status_line_from_segments;
 mod bottom_pane_view;
+mod claude_approval_view;
+pub(crate) use claude_approval_view::ClaudeApprovalView;
 mod effort_ignition;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1308,6 +1310,18 @@ impl BottomPane {
         self.view_stack.pop();
         self.request_redraw();
         true
+    }
+
+    /// Remove every view settled elsewhere (see
+    /// [`BottomPaneView::is_settled_elsewhere`]), leaving the rest in order.
+    pub(crate) fn remove_views_settled_elsewhere(&mut self) {
+        let before = self.view_stack.len();
+        self.view_stack.retain(|view| !view.is_settled_elsewhere());
+        if self.view_stack.len() != before {
+            self.on_view_stack_depth_decreased();
+            self.schedule_active_view_frame();
+            self.request_redraw();
+        }
     }
 
     /// Dismiss the newest matching view without disturbing views stacked above it.

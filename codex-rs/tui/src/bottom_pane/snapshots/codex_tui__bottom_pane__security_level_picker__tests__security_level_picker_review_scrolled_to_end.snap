@@ -2,7 +2,7 @@
 source: tui/src/bottom_pane/security_level_picker_tests.rs
 expression: rendered
 ---
-    asking you before each tool (Claude Code sign-in still runs)
+    in still runs)
 • Nested agents: refuse. An agent command that starts another agent (`corbanu
     exec`, `review`, `resume`, `fork`, a new session, `app-server` or `mcp-
     server`) is refused.
