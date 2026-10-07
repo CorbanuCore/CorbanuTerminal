@@ -47,7 +47,7 @@ Keys: Enter confirms, Esc cancels (nothing written), `r` restarts, and Enter on 
   - `nested_launch::pass_mode_runs_exec_with_aggressive_enforced`, where the exec path reports the test's
     account-home registry missing. It wasn't compared on main.
 - **Linux clippy** (`-D warnings`; core, tui, cli, security-level, app-server-client) on the RTX box: clean at
-  `9b776a204b`, `ff0e076d90`, `3e1ba16e13` and `9fda6ceb5e` (the last change after it only edits a message).
+  `9b776a204b`, `ff0e076d90`, `3e1ba16e13` and `9fda6ceb5e`; later commits only change messages, comments and argument comments.
 - **tmux runs (mock model; `.codex-work/workers-20261002/sec-tui7.log`):**
   - Confirm Aggressive: Core is Aggressive now in this session. `r` restarts with the `-c` options kept and doesn't send
     the initial prompt again. `/status` then shows `corbanu-aggressive` and "protected boundary checked at launch".
