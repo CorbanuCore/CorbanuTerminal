@@ -299,3 +299,39 @@ fn security_transition_review_is_bound_to_the_tree_epoch() {
         "{result:?}"
     );
 }
+
+/// Review 3, finding 1: a downgrade of the saved record that keeps the
+/// level in force still sets what the next start enforces.
+#[test]
+fn security_transition_downgrade_of_the_record_sets_the_next_start() {
+    let home = TempDir::new().unwrap();
+    let (_view, root) = live_tree(&home, SecurityLevel::Permissive);
+    saved_elsewhere(&home, SecurityLevel::Aggressive);
+    // An unchanged commit that merges the stricter saved record (as in a
+    // race with the other process): the next start becomes Aggressive while
+    // Permissive stays in force.
+    let controller = live_controller(home.path(), root).unwrap();
+    let request = SecurityControlRequest::new(
+        controller.authority_epoch().unwrap(),
+        SecurityControlAction::SetLevel {
+            level: SecurityLevel::Permissive,
+        },
+    )
+    .unwrap();
+    let confirmed = controller.confirm_security_request(request, NOW).unwrap();
+    let prepared = controller
+        .prepare_transition(confirmed, ProbeOutcome::Passed)
+        .unwrap();
+    let committed = controller
+        .commit_transition(prepared, &HomeTransitionStore::new(home.path()), NOW)
+        .unwrap();
+    assert_eq!(
+        (committed.level, committed.next_start_level),
+        (SecurityLevel::Permissive, SecurityLevel::Aggressive)
+    );
+    let report = commit_in(&home, Some(root), SecurityLevel::Permissive, Probes::Passed).unwrap();
+    assert_eq!(
+        (report.kind, report.next_start),
+        (LevelChangeKind::Downgrade, SecurityLevel::Permissive)
+    );
+}

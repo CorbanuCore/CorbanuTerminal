@@ -232,8 +232,9 @@ pub fn commit_human_level_change(
         Some(epoch) if live => epoch,
         Some(_) | None => controller.authority_epoch()?,
     };
-    let request = SecurityControlRequest::new(epoch, SecurityControlAction::SetLevel { level: target })
-        .map_err(|error| LevelChangeError::Refused(error.to_string()))?;
+    let request =
+        SecurityControlRequest::new(epoch, SecurityControlAction::SetLevel { level: target })
+            .map_err(|error| LevelChangeError::Refused(error.to_string()))?;
     let confirmed = controller.confirm_security_request(request, now_unix_seconds)?;
     // A stricter level saved by another session, which the person saw: a
     // lower choice lowers it, without raising this session first.
@@ -249,7 +250,7 @@ pub fn commit_human_level_change(
             Probes::Passed => ProbeOutcome::Passed,
             Probes::Blocked(blockers) => ProbeOutcome::Blocked(blockers),
         },
-        reviewed_stored,
+        Some(reviewed_stored),
     )?;
     let committed = controller.commit_transition(
         prepared,

@@ -175,17 +175,20 @@ impl TrustedSecurityController {
         confirmed: ConfirmedSecurityRequest,
         probes: ProbeOutcome,
     ) -> Result<PreparedTransition, TransitionError> {
-        self.prepare_reviewed_transition(confirmed, probes, SecurityLevel::Permissive)
+        self.prepare_reviewed_transition(confirmed, probes, /*reviewed_stored*/ None)
     }
 
     /// [`Self::prepare_transition`] for a human who reviewed
-    /// `reviewed_stored` as the saved level (PF-24-S02). Choosing a level
-    /// below it lowers the saved record without first raising this tree.
+    /// `reviewed_stored` as the saved level (PF-24-S02; Permissive when
+    /// absent). Choosing a level below it lowers the saved record without
+    /// first raising this tree, and only a stored level above it is refused
+    /// as changed since. `None` keeps [`Self::prepare_transition`]'s rule:
+    /// the level in force is the floor.
     pub(crate) fn prepare_reviewed_transition(
         &self,
         confirmed: ConfirmedSecurityRequest,
         probes: ProbeOutcome,
-        reviewed_stored: SecurityLevel,
+        reviewed_stored: Option<SecurityLevel>,
     ) -> Result<PreparedTransition, TransitionError> {
         let (from, kill_switch_active) = {
             let guard = self.read_state()?;
@@ -202,7 +205,7 @@ impl TrustedSecurityController {
             SecurityControlAction::SetLevel { level } => {
                 let kind = if *level > from {
                     TransitionKind::Restrictive
-                } else if *level < from.max(reviewed_stored) {
+                } else if *level < from.max(reviewed_stored.unwrap_or_default()) {
                     TransitionKind::Downgrade
                 } else {
                     TransitionKind::Unchanged
@@ -245,7 +248,7 @@ impl TrustedSecurityController {
             kind,
             from,
             to,
-            floor: from.max(reviewed_stored),
+            floor: reviewed_stored.unwrap_or(from),
             event,
         })
     }
@@ -413,8 +416,14 @@ impl TrustedSecurityController {
             }
         }
         // A revocation or kill-switch change leaves what the next start
-        // enforces as it was.
-        if prepared.to != prepared.from || prepared.kind == TransitionKind::Unchanged {
+        // enforces as it was. A downgrade of the saved record can keep the
+        // level in force (PF-24-S02), and still sets the next start.
+        if prepared.to != prepared.from
+            || matches!(
+                prepared.kind,
+                TransitionKind::Unchanged | TransitionKind::Downgrade
+            )
+        {
             state.next_start_level = next.level;
         }
         Ok(CommittedTransition {

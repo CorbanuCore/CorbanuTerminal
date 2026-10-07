@@ -10,15 +10,30 @@ use std::ffi::OsString;
 /// Set on the restarted process; its initial prompt and images are dropped.
 pub const RESTARTED_ENV: &str = "CORBANU_RESTARTED_FOR_SECURITY";
 
+static RESTARTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+
+/// Read and remove [`RESTARTED_ENV`] at process entry, before any thread
+/// starts, so agent commands and other children never inherit it.
+pub fn take_restart_marker() {
+    let restarted = std::env::var_os(RESTARTED_ENV).is_some_and(|value| value == "1");
+    // Safe: called at process entry, while the process is single-threaded.
+    unsafe {
+        std::env::remove_var(RESTARTED_ENV);
+    }
+    let _ = RESTARTED.set(restarted);
+}
+
 /// Whether this process was started by "restart now".
 pub fn restarted() -> bool {
-    std::env::var_os(RESTARTED_ENV).is_some_and(|value| value == "1")
+    RESTARTED.get().copied().unwrap_or(false)
 }
 
 /// The program and arguments to start again with.
 fn restart_command(args: Vec<OsString>) -> std::io::Result<std::process::Command> {
     let mut command = std::process::Command::new(std::env::current_exe()?);
-    command.args(args.into_iter().skip(1)).env(RESTARTED_ENV, "1");
+    command
+        .args(args.into_iter().skip(1))
+        .env(RESTARTED_ENV, "1");
     Ok(command)
 }
 
@@ -54,9 +69,16 @@ mod tests {
 
     #[test]
     fn security_confirm_restart_keeps_every_argument_and_marks_the_process() {
-        let args = ["corbanu", "--model=x", "do it", "--sandbox=read-only", "-i", "a,b"]
-            .map(OsString::from)
-            .to_vec();
+        let args = [
+            "corbanu",
+            "--model=x",
+            "do it",
+            "--sandbox=read-only",
+            "-i",
+            "a,b",
+        ]
+        .map(OsString::from)
+        .to_vec();
         let command = restart_command(args).unwrap();
         assert_eq!(
             command.get_args().collect::<Vec<_>>(),
@@ -64,7 +86,10 @@ mod tests {
         );
         assert_eq!(
             command.get_envs().collect::<Vec<_>>(),
-            [(std::ffi::OsStr::new(RESTARTED_ENV), Some(std::ffi::OsStr::new("1")))]
+            [(
+                std::ffi::OsStr::new(RESTARTED_ENV),
+                Some(std::ffi::OsStr::new("1"))
+            )]
         );
     }
 }

@@ -268,6 +268,7 @@ pub use security::nested::nested_launch;
 pub use security::nested::prepare_nested_exec;
 pub use security::nested::verify_aggressive_config;
 pub use security::restart::restart_process;
+pub use security::restart::take_restart_marker;
 // (tests access modules directly within the crate)
 
 const TUI_LOG_FILE_NAME: &str = "codex-tui.log";

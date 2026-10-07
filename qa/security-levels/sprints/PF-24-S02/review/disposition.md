@@ -19,8 +19,17 @@
 
 | # | Severity | Disposition |
 | - | -------- | ----------- |
-| 1 | Medium | Fixed. Restart arguments are no longer edited. The new process gets every argument unchanged and `CORBANU_RESTARTED_FOR_SECURITY=1`, so the TUI drops its initial prompt and images (`run_main`). Test: `security_confirm_restart_keeps_every_argument_and_marks_the_process`. Limit: agent commands inherit the marker, so a TUI an agent command starts would not send its own initial prompt. |
+| 1 | Medium | Fixed. Restart arguments are no longer edited. The new process gets every argument unchanged and `CORBANU_RESTARTED_FOR_SECURITY=1`, so the TUI drops its initial prompt and images (`run_main`). Test: `security_confirm_restart_keeps_every_argument_and_marks_the_process`. Since round 3 the marker is removed at process entry, so no child process inherits it. |
 | 2 | Low/Medium | Fixed with the reviewer's better fix. `catch_up` is gone. `prepare_reviewed_transition` takes the stored level the person reviewed: a choice below it is a downgrade of the saved record, and only a stored level above it counts as `StoredLevelChanged`. The session isn't raised. The review says "the Core level saved for the next start becomes Permissive … this session stays Permissive". |
 | 3 | Low/Medium | Fixed. `propagate` tells a tree's sinks whenever its level rose, including on `Unchanged`. When the session is already Aggressive, the review says so and makes no promise about this session's approvals. Test: `security_transition_unchanged_raise_notifies_the_other_sessions`. |
 | 4 | Low | Fixed. A live session's request uses the reviewed `AuthorityEpoch`, and a moved epoch maps to "review it again". |
 | 5 | Process | `origin/main` was merged into the branch and the tests were run again. |
+
+## Round 3: approve with fixes
+
+| # | Severity | Disposition |
+| - | -------- | ----------- |
+| 1 | Low/Medium | Fixed. A `Downgrade` always sets the next-start level. The mismatch message says what Core saved instead of "Nothing changed". Test: `security_transition_downgrade_of_the_record_sets_the_next_start`. |
+| 2 | Low | Fixed. The downgrade wording (grants end, "saved by another session") appears only when the saved record is stricter than Permissive. Otherwise the review says the record is set or repaired to Permissive and makes no promise about grants. |
+| 3 | Low | Fixed. `take_restart_marker()` reads and removes the variable at process entry, in both `corbanu` and `codex-tui`, before any thread starts. |
+| 4 | Info | Fixed. For a reviewed transition the floor is the stored level that was reviewed (Permissive when absent or unreadable). `prepare_transition` keeps "the level in force" as its floor. |

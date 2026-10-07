@@ -48,6 +48,7 @@ struct TopCli {
 }
 
 fn main() -> anyhow::Result<()> {
+    codex_tui::take_restart_marker();
     arg0_dispatch_or_else(|arg0_paths: Arg0DispatchPaths| async move {
         let top_cli = TopCli::parse();
         // An agent command under security level Aggressive must not start
