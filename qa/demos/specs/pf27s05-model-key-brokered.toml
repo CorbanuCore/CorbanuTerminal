@@ -1,0 +1,54 @@
+# PF-27-S05: Core's own model-provider key held by the isolated broker (feature broker_model_auth).
+id = "pf27s05-model-key-brokered"
+feature = "Model-client auth in the broker: Core's Z.AI key is held by the isolated broker, which signs every model request"
+expected = "The session answers normally. Core's log shows the broker started under Seatbelt and that the Z.AI key is held by the broker for api.z.ai; the model request went over the broker's private socket."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[features]
+broker_model_auth = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Reply with exactly one line: model request answered through the broker"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "(?m)^. model request answered through the broker"
+timeout = 240
+compress = 3
+
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+
+[[steps]]
+type = '!grep -hoE "isolated credential broker started c[o]ntainment=[a-z]+|model provider key held by the credential broker \\(h[o]st=[^,]*, port=[0-9]+, path=[^,]*, header=[A-Za-z]+\\)" {logs}/*.log | sort | uniq -c'
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "header=Bearer"
+timeout = 30
+
+[[steps]]
+pause = 4.0

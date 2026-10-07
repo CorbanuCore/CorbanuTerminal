@@ -32,7 +32,7 @@ Earlier allocation notes are in the [plan history](../../../plans/history/p0-sec
 | 43 | [PF-24-S02](pf-24-s02-security-confirm-cancel-and-downgrade.md) | Security confirm, cancel, and downgrade | tui | PF-24-S03, PF-23-S03, PF-24-S01, PF-29-S02 |
 | 44 | [PF-25-S01](pf-25-s01-temporary-grant-tui.md) | Temporary grant TUI | tui | PF-17-S01, PF-23-S02, PF-24-S02 |
 | 45 | [PF-25-S02](pf-25-s02-revocation-and-kill-switch-tui.md) | Revocation and kill-switch TUI | tui | PF-19-S02, PF-23-S03, PF-25-S01 |
-| 46 | [PF-27-S05](pf-27-s05-model-client-auth-broker.md) | Core model-client auth and vault labels through the broker | broker | PF-27-S02 (archived) |
+| 46 | [PF-27-S05](pf-27-s05-model-client-auth-broker.md) | Core model-client auth and vault labels through the broker (slice 1 behind `broker_model_auth`: `ModelClient` API keys; vault labels and other paths open) | broker | PF-27-S02 (archived) |
 | 71 | [PF-41-S01](pf-41-s01-effective-security-inspector.md) | Effective security inspector and degradation state | convergence | PF-23-S03, PF-29-S02, PF-24-S02 |
 | 73 | [PF-13-S07](pf-13-s07-integrated-credential-boundary-qualification.md) | Integrated credential boundary qualification | convergence | PF-13-S05, PF-13-S06, PF-27-S02, PF-28-S02, PF-29-S02, PF-33-S02 |
 | 79 | [PF-77-S01](pf-77-s01-tasknode-reliability.md) | Task Node durable command and transport recovery | hosted, not security | none |
