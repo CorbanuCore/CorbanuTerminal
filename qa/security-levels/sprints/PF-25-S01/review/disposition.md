@@ -25,3 +25,22 @@ Round 1 (Opus 5.5 High, APPROVE WITH FIXES):
    tests in `core/tests/suite/pf_25_s01.rs` (offer key is the approval id the TUI answers, the offered digest is the
    one admitted, the approved run reads the file and the next identical run gets the rules, a declined approval
    leaves nothing); unit tests for epoch moved between confirm and run, shared ids.
+
+Round 2 (Opus 5.5 High, APPROVE WITH FIXES, all low):
+
+1. Guard acting on a later offer: fixed. Each registration has a nonce; a guard takes or removes only its own.
+2. Test-only offer API in production: kept public (TUI tests need Core's real offer), but it never touches an
+   existing offer, and a confirmed choice on it is never applied (no orchestrator waits on it).
+3. Stale clipped flag, narrow panes: fixed. The review keeps the last rendered area and rechecks the current text
+   against it on Enter; below 40 columns it cannot grant.
+4. Invisible format characters: fixed. Bidi overrides and isolates, zero-width and similar characters are escaped
+   like control characters.
+5. "You granted" when nothing applied: fixed for the race (taking the choice closes the offer, so a later confirm
+   fails). If the grant no longer applies at the run (state changed), the command runs with the rules and Core logs
+   why; the history line stays (known limit).
+6. Offers taking slots before a human is asked: fixed. Core registers the offer only right before a human is asked
+   (post-taint approval, or a command approval whose reviewer is the user).
+7. Session callback under the global lock: fixed. The state reader is cloned under the lock and called after.
+8. Scan test: now flags glob, alias and module imports too, and skips where the workspace sources are not present
+   (Bazel runfiles). A type-level token is not added.
+9. macOS-only end-to-end test: recorded as a known limit.

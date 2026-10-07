@@ -121,8 +121,8 @@ pub(crate) enum GrantRefusal {
 
 struct Entry {
     grant: BoundedGrant,
-    /// What the human saw, e.g. the command (PF-25-S01); shown in `/security`.
-    label: String,
+    /// The command the human granted (PF-25-S01); shown in `/security`.
+    command: Vec<String>,
     epoch: u64,
     revocation_generation: u64,
     used: u64,
@@ -179,7 +179,7 @@ pub(crate) fn issue(
     grant: BoundedGrant,
     now_unix_seconds: i64,
 ) -> Result<(), GrantRefusal> {
-    issue_labelled(thread, state, grant, String::new(), now_unix_seconds)
+    issue_labelled(thread, state, grant, Vec::new(), now_unix_seconds)
 }
 
 /// Whether `grant` may apply to `thread` under the policy in `state` now:
@@ -231,13 +231,13 @@ pub(crate) fn check(
 
 /// Host-only: hold `grant` for `thread` under the policy in `state`. Only
 /// a grant the human confirmed in the grant review reaches it
-/// (`grant_offer`, PF-25-S01); no model-reachable path does. `label` is
+/// (`grant_offer`, PF-25-S01); no model-reachable path does. `command` is
 /// what the human saw.
 pub(crate) fn issue_labelled(
     thread: ThreadId,
     state: &PostTaintState,
     grant: BoundedGrant,
-    label: String,
+    command: Vec<String>,
     now_unix_seconds: i64,
 ) -> Result<(), GrantRefusal> {
     let (epoch, revocation_generation) = check(thread, state, &grant, now_unix_seconds)?;
@@ -256,7 +256,7 @@ pub(crate) fn issue_labelled(
     }
     entries.push(Entry {
         grant,
-        label,
+        command,
         epoch,
         revocation_generation,
         used: 0,
@@ -326,7 +326,9 @@ pub(crate) fn revoke_all(thread: ThreadId) {
 pub struct HeldGrant {
     pub thread: ThreadId,
     pub grant_id: String,
+    /// The command, as one escaped line.
     pub label: String,
+    pub command: Vec<String>,
     pub uses_left: Option<u64>,
     pub expires_at_unix_seconds: i64,
 }
@@ -347,7 +349,8 @@ pub(crate) fn held(now_unix_seconds: i64) -> Vec<HeldGrant> {
                     HeldGrant {
                         thread: *thread,
                         grant_id: entry.grant.grant_id.as_str().to_string(),
-                        label: entry.label.clone(),
+                        label: super::grant_offer::display_command(&entry.command),
+                        command: entry.command.clone(),
                         uses_left,
                         expires_at_unix_seconds: entry.grant.expires_at_unix_seconds,
                     }

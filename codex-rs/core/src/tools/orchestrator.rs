@@ -169,7 +169,9 @@ impl ToolOrchestrator {
         // PF-25-S01: while its approval is open, the human may grant it once
         // in the TUI; the offer ends with the approval.
         let grant_operation = aggressive_grant_operation(tool, req, tool_ctx);
-        let grant_offer = aggressive_grant_offer(grant_operation.as_ref(), tool_ctx);
+        // Registered just before a human (not a cache, hook or automatic
+        // reviewer) is asked.
+        let mut grant_offer = None;
         // PF-30-S03: a protected action after untrusted content needs fresh,
         // exact human approval, whatever the requirement above would allow.
         let post_taint = post_taint_action(tool, req, tool_ctx, &requirement).await;
@@ -201,6 +203,7 @@ impl ToolOrchestrator {
                 fresh_human_authority: true,
             };
             let asked = Instant::now();
+            grant_offer = aggressive_grant_offer(grant_operation.as_ref(), tool_ctx);
             let decision = resolve_tool_apporval(
                 tool,
                 req,
@@ -325,17 +328,21 @@ impl ToolOrchestrator {
                     network_approval_context: None,
                     fresh_human_authority: false,
                 };
+                let reviewer = if strict_auto_review {
+                    ApprovalReviewer::Guardian
+                } else {
+                    ApprovalReviewer::for_turn(turn_ctx)
+                };
+                if reviewer == ApprovalReviewer::User {
+                    grant_offer = aggressive_grant_offer(grant_operation.as_ref(), tool_ctx);
+                }
                 resolve_tool_apporval(
                     tool,
                     req,
                     tool_ctx.call_id.as_str(),
                     approval_ctx,
                     tool_ctx,
-                    if strict_auto_review {
-                        ApprovalReviewer::Guardian
-                    } else {
-                        ApprovalReviewer::for_turn(turn_ctx)
-                    },
+                    reviewer,
                     &otel,
                 )
                 .await?;
@@ -832,12 +839,13 @@ where
             additional_permissions,
             ..
         } => {
+            let shown_cwd = cwd.to_path_buf().display().to_string();
             let cwd = cwd.to_string();
             let permissions = format!("{sandbox_permissions:?} {additional_permissions:?}");
             let mut parts = vec!["command", cwd.as_str(), permissions.as_str()];
             parts.extend(command.iter().map(String::as_str));
             let operation = command_operation(&parts);
-            (operation, Some((command, cwd)))
+            (operation, Some((command, shown_cwd)))
         }
         ApprovalAction::ApplyPatch { cwd, patch, .. } => (
             command_operation(&["patch", &cwd.to_string(), &patch]),

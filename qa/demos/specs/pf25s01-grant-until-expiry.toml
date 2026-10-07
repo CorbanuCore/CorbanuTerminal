@@ -96,6 +96,6 @@ type = "/security"
 [[steps]]
 key = "Enter"
 [[steps]]
-wait = "Grant: `[^`]*team-notes[^`]*` without the protected-path rules · any run · expires"
+wait = "Grant: `[^`]*team-notes[^`]*`[\\s\\S]*any run ·\\s+expires"
 [[steps]]
 pause = 4.0

@@ -27,6 +27,8 @@ use std::sync::LazyLock;
 use std::sync::Mutex;
 use std::sync::PoisonError;
 use std::sync::Weak;
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering;
 
 use codex_protocol::ThreadId;
 use codex_security_policy::BoundedGrant;
@@ -102,21 +104,28 @@ pub enum GrantError {
 }
 
 /// Reads the session's policy state now; `None` once the session ended.
-type CurrentState = Box<dyn Fn() -> Option<PostTaintState> + Send>;
+/// Called outside the offers lock.
+type CurrentState = Arc<dyn Fn() -> Option<PostTaintState> + Send + Sync>;
 
 struct Pending {
     offer: GrantOffer,
     current: CurrentState,
+    /// Which registration this is: a guard acts only on its own.
+    nonce: u64,
     /// The person's confirmed choice, applied only if this approval is
     /// approved.
     confirmed: Option<Confirmed>,
+    /// The orchestrator took the choice: a later confirmation is too late.
+    closed: bool,
 }
+
+static NEXT_NONCE: AtomicU64 = AtomicU64::new(1);
 
 /// A grant the person confirmed, waiting for its approval to be approved.
 pub(crate) struct Confirmed {
     grant: BoundedGrant,
     uses: GrantUses,
-    label: String,
+    command: Vec<String>,
     /// The policy it was confirmed under; any commit since voids it.
     epoch: u64,
     revocation_generation: u64,
@@ -133,20 +142,32 @@ fn offers() -> std::sync::MutexGuard<'static, HashMap<OfferKey, Pending>> {
 /// Removes its offer (and any confirmed choice) when the approval it belongs
 /// to is answered.
 #[must_use]
-pub(crate) struct OfferGuard(Option<OfferKey>);
+pub(crate) struct OfferGuard(Option<(OfferKey, u64)>);
 
 impl OfferGuard {
-    /// The approval was approved: the person's confirmed grant, if any.
+    /// The approval was approved: the person's confirmed grant, if any. The
+    /// offer is closed from now on.
     pub(crate) fn take_confirmed(&self) -> Option<Confirmed> {
-        let key = self.0.as_ref()?;
-        offers().get_mut(key)?.confirmed.take()
+        let (key, nonce) = self.0.as_ref()?;
+        let mut offers = offers();
+        let pending = offers
+            .get_mut(key)
+            .filter(|pending| pending.nonce == *nonce)?;
+        pending.closed = true;
+        pending.confirmed.take()
     }
 }
 
 impl Drop for OfferGuard {
     fn drop(&mut self) {
-        if let Some(key) = self.0.take() {
-            offers().remove(&key);
+        if let Some((key, nonce)) = self.0.take() {
+            let mut offers = offers();
+            if offers
+                .get(&key)
+                .is_some_and(|pending| pending.nonce == nonce)
+            {
+                offers.remove(&key);
+            }
         }
     }
 }
@@ -176,7 +197,12 @@ fn principal_label(kind: PrincipalKind, id: &str) -> String {
         PrincipalKind::Tool => "tool",
         PrincipalKind::Service => "service",
     };
-    format!("{kind}:{id}")
+    // Ids such as `human:session:…` already name their kind.
+    if id.starts_with(&format!("{kind}:")) {
+        id.to_string()
+    } else {
+        format!("{kind}:{id}")
+    }
 }
 
 /// Offer a grant for the approval `approval_id` of `session`, which is
@@ -199,7 +225,7 @@ pub(crate) fn offer_for_approval(
         operation,
         command,
         cwd,
-        Box::new(move || weak.upgrade()?.services.model_client().post_taint_state()),
+        Arc::new(move || weak.upgrade()?.services.model_client().post_taint_state()),
     )
 }
 
@@ -251,15 +277,18 @@ fn register(
         );
         return OfferGuard(None);
     }
+    let nonce = NEXT_NONCE.fetch_add(1, Ordering::Relaxed);
     offers.insert(
         key.clone(),
         Pending {
             offer,
             current,
+            nonce,
             confirmed: None,
+            closed: false,
         },
     );
-    OfferGuard(Some(key))
+    OfferGuard(Some((key, nonce)))
 }
 
 /// The open offer for approval `approval_id` of `thread`, if Core made one.
@@ -276,14 +305,18 @@ pub fn offer(thread: ThreadId, approval_id: &str) -> Option<GrantOffer> {
 /// from the TUI's confirm key.
 pub fn confirm(shown: &GrantOffer, uses: GrantUses) -> Result<ConfirmedGrant, GrantError> {
     let key = (shown.thread, shown.approval_id.clone());
-    let state = {
+    let (current, nonce) = {
         let offers = offers();
-        let pending = offers.get(&key).ok_or(GrantError::Ended)?;
+        let pending = offers
+            .get(&key)
+            .filter(|pending| !pending.closed)
+            .ok_or(GrantError::Ended)?;
         if pending.offer != *shown {
             return Err(GrantError::Changed);
         }
-        (pending.current)().ok_or(GrantError::Ended)?
+        (Arc::clone(&pending.current), pending.nonce)
     };
+    let state = current().ok_or(GrantError::Ended)?;
     let (epoch, revocation_generation, actor_chain) = binding(&state).ok_or(GrantError::Changed)?;
     if (epoch, revocation_generation) != (shown.epoch, shown.revocation_generation)
         || chain_labels(actor_chain) != shown.actor_chain
@@ -329,16 +362,18 @@ pub fn confirm(shown: &GrantOffer, uses: GrantUses) -> Result<ConfirmedGrant, Gr
     .map_err(|error| refused(&error))?;
     aggressive::check(shown.thread, &state, &grant, now).map_err(|error| refused(&error))?;
     let grant_id = grant.grant_id.as_str().to_string();
-    let label = display_command(&shown.command);
     let mut offers = offers();
-    let pending = offers.get_mut(&key).ok_or(GrantError::Ended)?;
+    let pending = offers
+        .get_mut(&key)
+        .filter(|pending| pending.nonce == nonce && !pending.closed)
+        .ok_or(GrantError::Ended)?;
     if pending.offer != *shown {
         return Err(GrantError::Changed);
     }
     pending.confirmed = Some(Confirmed {
         grant,
         uses,
-        label,
+        command: shown.command.clone(),
         epoch,
         revocation_generation,
     });
@@ -369,7 +404,7 @@ pub(crate) fn apply(
     let Confirmed {
         grant,
         uses,
-        label,
+        command,
         epoch,
         revocation_generation,
     } = confirmed;
@@ -384,7 +419,7 @@ pub(crate) fn apply(
     match uses {
         GrantUses::Once => Ok(grant.grant_id),
         GrantUses::UntilExpiry => {
-            aggressive::issue_labelled(thread, state, grant, label, now_unix_seconds)
+            aggressive::issue_labelled(thread, state, grant, command, now_unix_seconds)
                 .map_err(|error| error.to_string())?;
             aggressive::admit(
                 thread,
@@ -396,6 +431,20 @@ pub(crate) fn apply(
             .ok_or_else(|| "the held grant does not match this run".to_string())
         }
     }
+}
+
+fn is_invisible_format(character: char) -> bool {
+    matches!(
+        character,
+        '\u{00ad}'
+            | '\u{061c}'
+            | '\u{180e}'
+            | '\u{200b}'..='\u{200f}'
+            | '\u{202a}'..='\u{202e}'
+            | '\u{2060}'..='\u{2064}'
+            | '\u{2066}'..='\u{2069}'
+            | '\u{feff}'
+    )
 }
 
 fn chain_labels(actor_chain: &codex_security_policy::ActorChain) -> Vec<String> {
@@ -414,11 +463,13 @@ pub fn display_command(command: &[String]) -> String {
     escape_controls(&joined)
 }
 
-/// `text` with control characters shown as escapes (`\n`, `\u{1b}`).
+/// `text` with control characters and invisible format characters (bidi
+/// overrides and isolates, zero-width characters) shown as escapes (`\n`,
+/// `\u{1b}`, `\u{202e}`), so what is shown is what runs.
 pub fn escape_controls(text: &str) -> String {
     text.chars()
         .flat_map(|character| {
-            if character.is_control() {
+            if character.is_control() || is_invisible_format(character) {
                 character.escape_default().collect::<Vec<_>>()
             } else {
                 vec![character]
@@ -452,6 +503,10 @@ pub fn open_test_offer(thread: ThreadId, approval_id: &str, command: Vec<String>
         },
         level: SecurityLevel::Aggressive,
     };
+    if offers().contains_key(&(thread, approval_id.to_string())) {
+        // Never touches a real offer.
+        return TestOffer(OfferGuard(None));
+    }
     let current = state.clone();
     TestOffer(register(
         thread,
@@ -460,7 +515,7 @@ pub fn open_test_offer(thread: ThreadId, approval_id: &str, command: Vec<String>
         aggressive::command_operation(&["test", &command.join(" ")]),
         command,
         "/work".to_string(),
-        Box::new(move || Some(current.clone())),
+        Arc::new(move || Some(current.clone())),
     ))
 }
 
@@ -471,9 +526,10 @@ pub struct TestOffer(OfferGuard);
 impl TestOffer {
     /// The choice the person confirmed on it, if any.
     pub fn confirmed_uses(&self) -> Option<GrantUses> {
-        let key = self.0.0.as_ref()?;
+        let (key, nonce) = self.0.0.as_ref()?;
         offers()
-            .get(key)?
+            .get(key)
+            .filter(|pending| pending.nonce == *nonce)?
             .confirmed
             .as_ref()
             .map(|confirmed| confirmed.uses)
