@@ -6,6 +6,7 @@ pub(crate) mod aggressive;
 pub(crate) mod confirm;
 pub(crate) mod current;
 pub(crate) mod grant_view;
+pub(crate) mod inspector;
 pub(crate) mod launch;
 pub(crate) mod level;
 pub(crate) mod migration;

@@ -27,6 +27,7 @@ use crate::security::view::requested_summary;
 use super::CancellationEvent;
 use super::bottom_pane_view::BottomPaneView;
 use super::bottom_pane_view::ViewCompletion;
+use super::security_inspector::SecurityInspector;
 use super::security_level_picker::SecurityLevelPicker;
 use crate::security::revocation_view::RevocationView;
 
@@ -39,6 +40,9 @@ pub(crate) struct SecurityView {
     picker: Option<SecurityLevelPicker>,
     /// PF-25-S02: the grants and kill switch view, opened from the picker.
     revocations: Option<RevocationView>,
+    /// PF-41-S01: what the inspector reads; `i` opens it over the picker.
+    inspector_input: Option<crate::security::inspector::InspectorInput>,
+    inspector: Option<SecurityInspector>,
 }
 
 impl SecurityView {
@@ -65,7 +69,21 @@ impl SecurityView {
             cancelled: false,
             inspected: false,
             revocations: None,
+            inspector_input: None,
+            inspector: None,
         }
+    }
+
+    /// PF-41-S01: offer the read-only inspector (only with the picker; the
+    /// flag-off view is unchanged).
+    pub(crate) fn with_inspector(
+        mut self,
+        input: impl FnOnce() -> crate::security::inspector::InspectorInput,
+    ) -> Self {
+        if self.picker.is_some() {
+            self.inspector_input = Some(input());
+        }
+        self
     }
 
     /// PF-24-S02: Core's configured levels, and where "restart now" goes.
@@ -158,6 +176,9 @@ impl SecurityView {
             return revocations.footer();
         }
         match &self.picker {
+            Some(picker) if self.inspector_input.is_some() => {
+                format!("{} · i inspect", picker.footer())
+            }
             Some(picker) => picker.footer(),
             None => self.footer(),
         }
@@ -166,6 +187,13 @@ impl SecurityView {
 
 impl BottomPaneView for SecurityView {
     fn handle_key_event(&mut self, key: KeyEvent) {
+        if let Some(inspector) = self.inspector.as_mut() {
+            inspector.handle_key_event(key);
+            if inspector.closed {
+                self.inspector = None;
+            }
+            return;
+        }
         if let Some(revocations) = self.revocations.as_mut() {
             revocations.handle_key_event(key);
             if revocations.closed {
@@ -174,6 +202,12 @@ impl BottomPaneView for SecurityView {
                     picker.revocations_closed();
                 }
             }
+            return;
+        }
+        if let Some(input) = &self.inspector_input
+            && key_hint::plain(KeyCode::Char('i')).is_press(key)
+        {
+            self.inspector = Some(SecurityInspector::new(input.clone(), self.keymap.clone()));
             return;
         }
         if let Some(picker) = self.picker.as_mut() {
@@ -238,6 +272,11 @@ impl BottomPaneView for SecurityView {
     }
 
     fn next_frame_delay(&self) -> Option<std::time::Duration> {
+        // The inspector's observation age (and staleness) must keep moving
+        // even when nothing else redraws.
+        if self.inspector.is_some() {
+            return Some(std::time::Duration::from_secs(1));
+        }
         let saving = self
             .picker
             .as_ref()
@@ -252,6 +291,9 @@ impl BottomPaneView for SecurityView {
 
 impl Renderable for SecurityView {
     fn desired_height(&self, width: u16) -> u16 {
+        if let Some(inspector) = &self.inspector {
+            return inspector.desired_height(width);
+        }
         self.body(width).len() as u16
             + textwrap::wrap(&self.footer_text(), usize::from(width.max(1))).len() as u16
             + 1
@@ -259,6 +301,10 @@ impl Renderable for SecurityView {
 
     fn render(&self, area: Rect, buf: &mut Buffer) {
         Clear.render(area, buf);
+        if let Some(inspector) = &self.inspector {
+            inspector.render(area, buf);
+            return;
+        }
         let footer_lines = |text: String| -> Vec<Line<'static>> {
             textwrap::wrap(&text, usize::from(area.width.max(1)))
                 .into_iter()

@@ -87,6 +87,8 @@ pub(crate) mod mentions {
 mod sandbox_tags;
 pub mod sandboxing;
 pub(crate) mod security;
+/// PF-41-S01 read-only runtime facts for the `/security` inspector.
+pub use security::inspection as security_inspection;
 pub use security::launch_contract::external_agent_contract_armed;
 pub use security::launch_contract::protect_external_agent_launch;
 /// PF-29-S01 protected-mode inventory and activation preflight.

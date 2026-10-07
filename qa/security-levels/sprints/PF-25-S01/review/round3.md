@@ -23,7 +23,7 @@ I read the code only and did not run any tests or builds. All six round-2 fixes 
 2. **Low: the source-scan test lost its positive control and has a new gap.** `tui/src/security/grant_view_tests.rs:~82-105`
    - **No positive control:** `grant_view.rs` is now on the allowed list and the test asserts an empty result. If the detector silently stops matching, the test still passes.
    - **New gap:** removing whitespace turns `security_grant::{confirm as c}` into `confirmasc`, which no longer equals `confirm`. The round-2 version, which split on spaces, caught this.
-   - **Fix:** before filtering, assert that the raw matches include `tui/src/security/grant_view.rs`. Inside braces, also match names that start with `confirmas`.
+   - **Fix:** before filtering, assert that the raw matches include `tui/src/security/grant_view.rs`. Inside braces, also match names that start with `confirm` followed by `as` (whitespace is stripped).
 
 3. **Low: `open_test_offer` checks and then registers in two steps, and can still block a real offer.** `core/src/security/grant_offer.rs:506-519`
    - **Race:** `contains_key` and `register` take the lock separately. A real offer registered in between is removed as a "shared id".
