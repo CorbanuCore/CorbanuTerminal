@@ -3,8 +3,6 @@ use crossterm::event::KeyModifiers;
 use pretty_assertions::assert_eq;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::widgets::Paragraph;
-use ratatui::widgets::Widget;
 
 use super::*;
 use crate::keymap::RuntimeKeymap;
@@ -41,11 +39,18 @@ fn inspector(facts: RuntimeFacts, clock: fn() -> i64) -> SecurityInspector {
     inspector
 }
 
+/// The whole inspector, in a pane tall enough not to scroll.
 fn render(inspector: &SecurityInspector, width: u16) -> String {
-    let lines = inspector.lines(width);
-    let area = Rect::new(0, 0, width, lines.len() as u16);
+    let (header, body) = inspector.content(width);
+    let footer = inspector.footer(width);
+    let area = Rect::new(
+        0,
+        0,
+        width,
+        (header.len() + body.len() + footer.len()) as u16,
+    );
     let mut buffer = Buffer::empty(area);
-    Paragraph::new(lines).render(area, &mut buffer);
+    inspector.render(area, &mut buffer);
     (0..area.height)
         .map(|y| {
             (0..area.width)
@@ -134,4 +139,31 @@ fn pf_41_s01_inspector_keys_only_read() {
     assert_eq!(std::fs::read_dir(home.path()).unwrap().count(), 0);
     inspector.handle_key_event(key(KeyCode::Esc));
     assert!(inspector.closed);
+}
+
+#[test]
+fn pf_41_s01_inspector_scrolls_under_a_pinned_header() {
+    let mut inspector = inspector(healthy(ThreadId::new()), at_now);
+    let height = inspector.desired_height(/*width*/ 100);
+    let area = Rect::new(0, 0, 100, height);
+    let screen = |inspector: &SecurityInspector| {
+        let mut buffer = Buffer::empty(area);
+        inspector.render(area, &mut buffer);
+        (0..area.height)
+            .map(|y| {
+                (0..area.width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+    };
+    for _ in 0..200 {
+        inspector.handle_key_event(key(KeyCode::Down));
+        screen(&inspector);
+    }
+    let bottom = screen(&inspector);
+    assert!(bottom[0].starts_with("Security inspector (read only)"));
+    assert!(bottom[1].starts_with("● Protected: Aggressive"));
+    assert!(bottom.iter().any(|line| line.contains("Recent denials")));
+    assert!(bottom[bottom.len() - 1].contains("esc back to /security"));
 }

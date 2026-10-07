@@ -14,6 +14,7 @@ protected_mode_preflight = true
 secretless_agent_launch = true
 secret_output_gate = true
 source_envelopes = true
+isolated_credential_broker = true
 """
 
 [credentials]

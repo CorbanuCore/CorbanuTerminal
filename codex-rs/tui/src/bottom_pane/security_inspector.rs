@@ -7,9 +7,13 @@ use std::cell::Cell;
 
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect;
 use ratatui::style::Stylize;
 use ratatui::text::Line;
 use ratatui::text::Span;
+use ratatui::widgets::Paragraph;
+use ratatui::widgets::Widget;
 
 use crate::key_hint;
 use crate::key_hint::KeyBindingListExt;
@@ -24,6 +28,9 @@ use crate::security::inspector::Saved;
 use crate::security::inspector::State;
 use crate::wrapping::RtOptions;
 use crate::wrapping::word_wrap_lines;
+
+/// Section rows shown at once; the rest scrolls.
+const MAX_BODY_ROWS: u16 = 20;
 
 pub(crate) struct SecurityInspector {
     input: InspectorInput,
@@ -80,7 +87,8 @@ impl SecurityInspector {
         }
     }
 
-    pub(crate) fn lines(&self, width: u16) -> Vec<Line<'static>> {
+    /// The pinned header (title, badge, observation age) and the sections.
+    fn content(&self, width: u16) -> (Vec<Line<'static>>, Vec<Line<'static>>) {
         let width = usize::from(width.max(1));
         let now = (self.now)();
         let sections = inspector::sections(&self.input, &self.saved, &self.facts, now);
@@ -127,45 +135,86 @@ impl SecurityInspector {
             Line::from(format!("Observed {age}s ago{generation}").dim())
         };
         lines.extend(word_wrap_lines([observed], width));
+        let mut body = Vec::new();
         for section in sections {
-            lines.push(Line::default());
-            lines.push(Line::from(section.title.bold()));
+            body.push(Line::default());
+            body.push(Line::from(section.title.bold()));
             for row in section.rows {
                 let mut spans: Vec<Span<'static>> = vec!["  ".into()];
                 spans.extend(tag(row.state));
                 spans.push(format!("{}: ", row.label).bold());
                 spans.push(row.value.into());
                 spans.push(format!(" [{}]", row.source).dim());
-                lines.extend(word_wrap_lines(
+                body.extend(word_wrap_lines(
                     [Line::from(spans)],
                     RtOptions::new(width).subsequent_indent("      ".into()),
                 ));
             }
         }
-        lines
+        (lines, body)
     }
 
-    pub(crate) fn footer(&self) -> String {
+    fn footer(&self, width: u16) -> Vec<Line<'static>> {
         let label = |bindings: &[key_hint::KeyBinding]| {
             bindings
                 .first()
                 .map(key_hint::KeyBinding::display_label)
                 .unwrap_or_else(|| "unbound".into())
         };
-        format!(
+        let text = format!(
             "{}/{} scroll · r refresh · esc back to /security",
             label(&self.keymap.move_up),
             label(&self.keymap.move_down)
-        )
+        );
+        textwrap::wrap(&text, usize::from(width.max(1)))
+            .into_iter()
+            .map(|line| Line::from(line.into_owned()).dim())
+            .collect()
     }
 
-    /// Clamp the scroll to the rendered body and return it.
-    pub(crate) fn scroll_for(&self, lines: usize, height: u16) -> u16 {
-        let max = u16::try_from(lines)
+    /// The sections scroll inside a bounded pane, under a pinned header.
+    pub(crate) fn desired_height(&self, width: u16) -> u16 {
+        let (header, body) = self.content(width);
+        header.len() as u16
+            + (body.len() as u16).min(MAX_BODY_ROWS)
+            + self.footer(width).len() as u16
+    }
+
+    pub(crate) fn render(&self, area: Rect, buf: &mut Buffer) {
+        let (header, body) = self.content(area.width);
+        let footer = self.footer(area.width);
+        let header_height = (header.len() as u16).min(area.height);
+        let footer_height = (footer.len() as u16).min(area.height - header_height);
+        let body_height = area.height - header_height - footer_height;
+        let max = u16::try_from(body.len())
             .unwrap_or(u16::MAX)
-            .saturating_sub(height);
+            .saturating_sub(body_height);
         self.max_scroll.set(max);
-        self.scroll.min(max)
+        Paragraph::new(header).render(
+            Rect {
+                height: header_height,
+                ..area
+            },
+            buf,
+        );
+        Paragraph::new(body)
+            .scroll((self.scroll.min(max), 0))
+            .render(
+                Rect {
+                    y: area.y + header_height,
+                    height: body_height,
+                    ..area
+                },
+                buf,
+            );
+        Paragraph::new(footer).render(
+            Rect {
+                y: area.bottom() - footer_height,
+                height: footer_height,
+                ..area
+            },
+            buf,
+        );
     }
 }
 

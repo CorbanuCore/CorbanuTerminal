@@ -237,11 +237,15 @@ fn pf_41_s01_conflicting_config_and_saved_level_are_shown_not_hidden() {
             "Aggressive; a project, profile, -c or managed layer sets Aggressive"
         )
     );
-    // Core enforces Aggressive, so the badge follows Core, not the picker.
-    assert!(matches!(
+    // Core enforces Aggressive, so the badge follows Core, not the picker,
+    // but this session's own values were not checked against it.
+    assert_eq!(
         badge(&input, &saved, &facts, &sections, NOW),
-        Badge::Partial("Aggressive", _) | Badge::Protected("Aggressive")
-    ));
+        Badge::Partial(
+            "Aggressive",
+            vec!["session controls not checked at launch".to_string()]
+        )
+    );
 
     // Core already Aggressive, Aggressive saved, but this run started
     // Permissive: the session's own controls are not active yet.

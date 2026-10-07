@@ -9,6 +9,7 @@ config = """
 suppress_unstable_features_warning = true
 
 [security]
+version = 1
 level = "moderate"
 
 [features]

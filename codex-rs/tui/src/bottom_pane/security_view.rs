@@ -158,29 +158,19 @@ impl SecurityView {
 
 impl SecurityView {
     fn body(&self, width: u16) -> Vec<Line<'static>> {
-        match (&self.inspector, &self.picker) {
-            (Some(inspector), _) => inspector.lines(width),
-            (None, Some(picker)) => picker.lines(width),
-            (None, None) => self.lines(width),
+        match &self.picker {
+            Some(picker) => picker.lines(width),
+            None => self.lines(width),
         }
     }
 
     fn footer_text(&self) -> String {
-        match (&self.inspector, &self.picker) {
-            (Some(inspector), _) => inspector.footer(),
-            (None, Some(picker)) if self.inspector_input.is_some() => {
+        match &self.picker {
+            Some(picker) if self.inspector_input.is_some() => {
                 format!("{} · i inspect", picker.footer())
             }
-            (None, Some(picker)) => picker.footer(),
-            (None, None) => self.footer(),
-        }
-    }
-
-    fn scroll_for(&self, lines: usize, height: u16) -> u16 {
-        match (&self.inspector, &self.picker) {
-            (Some(inspector), _) => inspector.scroll_for(lines, height),
-            (None, Some(picker)) => picker.scroll_for(lines, height),
-            (None, None) => 0,
+            Some(picker) => picker.footer(),
+            None => self.footer(),
         }
     }
 }
@@ -256,6 +246,9 @@ impl BottomPaneView for SecurityView {
 
 impl Renderable for SecurityView {
     fn desired_height(&self, width: u16) -> u16 {
+        if let Some(inspector) = &self.inspector {
+            return inspector.desired_height(width);
+        }
         self.body(width).len() as u16
             + textwrap::wrap(&self.footer_text(), usize::from(width.max(1))).len() as u16
             + 1
@@ -263,6 +256,10 @@ impl Renderable for SecurityView {
 
     fn render(&self, area: Rect, buf: &mut Buffer) {
         Clear.render(area, buf);
+        if let Some(inspector) = &self.inspector {
+            inspector.render(area, buf);
+            return;
+        }
         let footer_lines = |text: String| -> Vec<Line<'static>> {
             textwrap::wrap(&text, usize::from(area.width.max(1)))
                 .into_iter()
@@ -271,10 +268,10 @@ impl Renderable for SecurityView {
         };
         let lines = self.body(area.width);
         let mut footer = footer_lines(self.footer_text());
-        if self.picker.is_some() {
+        if let Some(picker) = self.picker.as_ref() {
             // A review taller than the pane scrolls, and its footer says so.
             let body_height = area.height.saturating_sub(footer.len() as u16);
-            self.scroll_for(lines.len(), body_height);
+            picker.scroll_for(lines.len(), body_height);
             footer = footer_lines(self.footer_text());
         }
         let footer_height = (footer.len() as u16).min(area.height);
@@ -282,7 +279,10 @@ impl Renderable for SecurityView {
             height: area.height.saturating_sub(footer_height),
             ..area
         };
-        let scroll = self.scroll_for(lines.len(), body.height);
+        let scroll = self
+            .picker
+            .as_ref()
+            .map_or(0, |picker| picker.scroll_for(lines.len(), body.height));
         Paragraph::new(lines).scroll((scroll, 0)).render(body, buf);
         Paragraph::new(footer).render(
             Rect {

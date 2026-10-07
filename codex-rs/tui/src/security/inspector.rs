@@ -760,9 +760,14 @@ pub(crate) fn badge(
     let mut partial = Vec::new();
     // Core's level can rise at once, but Aggressive's sandbox, approval,
     // network and vault rows apply only from the next start.
-    if saved.level.enforced() == ChosenLevel::Aggressive && input.active == ChosenLevel::Permissive
-    {
-        degraded.push("Aggressive's session controls apply after restart".to_string());
+    if input.active == ChosenLevel::Permissive {
+        if saved.level.enforced() == ChosenLevel::Aggressive {
+            degraded.push("Aggressive's session controls apply after restart".to_string());
+        } else {
+            // Core's level comes from config: this session's sandbox,
+            // approval and network values were not checked against it.
+            partial.push("session controls not checked at launch".to_string());
+        }
     }
     if now - facts.observed_at > STALE_AFTER_SECONDS {
         degraded.push(format!(
