@@ -1546,6 +1546,7 @@ async fn anthropic_passthrough_bridge_replaces_client_auth_and_forwards_oauth_be
                 Arc::new(format!("http://{upstream_addr}")),
                 reqwest::Client::new(),
                 /*proxy_count_tokens*/ true,
+                /*send_api_key_header*/ false,
                 /*accounting_tx*/ None,
                 /*accounting_provider_id*/ Arc::new(None),
             )
@@ -1614,6 +1615,7 @@ async fn anthropic_compatibility_bridge_keeps_authorized_synthetic_token_counts(
                 Arc::new("http://127.0.0.1:1".to_string()),
                 reqwest::Client::new(),
                 /*proxy_count_tokens*/ false,
+                /*send_api_key_header*/ false,
                 /*accounting_tx*/ None,
                 /*accounting_provider_id*/ Arc::new(None),
             )
@@ -2480,6 +2482,7 @@ fn bridge_redaction_plan(
         turn_index: 1,
         command_mode: ClaudeCommandMode::NewSession,
         direct_accounting: None,
+        containment: None,
         command_session_id: "11111111-1111-4111-8111-111111111111".to_string(),
         max_turns: None,
         artifact_path: dir.path().join("turn-0001.jsonl"),
@@ -3131,6 +3134,7 @@ async fn cancelling_running_command_returns_interrupted_output() {
             turn_index: 1,
             command_mode: ClaudeCommandMode::NewSession,
             direct_accounting: None,
+            containment: None,
             command_session_id: "55555555-5555-4555-8555-555555555555".to_string(),
             max_turns: None,
             artifact_path: artifact_path.clone(),
@@ -4167,6 +4171,7 @@ async fn passthrough_bridge_reports_inference_and_not_token_counting() {
                 Arc::new(bridge_upstream_base.clone()),
                 reqwest::Client::new(),
                 /*proxy_count_tokens*/ true,
+                /*send_api_key_header*/ false,
                 /*accounting_tx*/ Some(accounting_tx.clone()),
                 /*accounting_provider_id*/ Arc::new(Some("vercel-anthropic".to_string())),
             )
@@ -4339,6 +4344,7 @@ async fn passthrough_bridge_reports_the_numbers_a_streamed_turn_stated() {
             Arc::new(upstream_base),
             reqwest::Client::new(),
             /*proxy_count_tokens*/ true,
+            /*send_api_key_header*/ false,
             /*accounting_tx*/ Some(accounting_tx),
             /*accounting_provider_id*/ Arc::new(Some("claude-plan".to_string())),
         )
@@ -4659,4 +4665,196 @@ async fn aggressive_refuses_to_start_a_claude_process() {
     );
     assert!(!marker.exists());
     assert!(!dir.path().join("turn-0001.audit.json").exists());
+}
+
+/// #218: a contained pane reaches every provider through the bridge, as its
+/// HTTP proxy, with its own Claude state folder and no key helper.
+#[test]
+fn contained_plan_bridges_every_provider_without_a_key_helper() {
+    let state_root = tempfile::tempdir().expect("state root");
+    let _settings =
+        super::containment::test_settings::set(super::containment::ContainmentSettings {
+            enabled: true,
+            linux_sandbox_exe: None,
+            state_root: Some(state_root.path().to_path_buf()),
+        });
+    for kind in ClaudeProviderProfileKind::restoration_options() {
+        let (dir, pane) = pane(kind);
+        let plan = build_claude_command_plan(&pane, "hello".to_string(), dir.path())
+            .unwrap_or_else(|err| panic!("{kind:?}: {err:#}"));
+        let bridge = plan
+            .bridge
+            .as_ref()
+            .expect("every contained pane is bridged");
+        let base_url = format!("http://{}", bridge.bind_addr);
+        assert_eq!(plan.env.get("HTTP_PROXY"), Some(&base_url), "{kind:?}");
+        assert_eq!(
+            plan.env.get("ANTHROPIC_BASE_URL"),
+            Some(&base_url),
+            "{kind:?}"
+        );
+        assert_eq!(
+            plan.env.get("ANTHROPIC_AUTH_TOKEN"),
+            Some(&bridge.client_auth_token),
+            "{kind:?}"
+        );
+        let containment = plan.containment.as_ref().expect("contained");
+        assert!(!containment.state_dir.starts_with(dir.path()), "{kind:?}");
+        assert_eq!(
+            plan.env.get("CLAUDE_CONFIG_DIR").map(String::as_str),
+            containment.config_dir().to_str(),
+            "{kind:?}"
+        );
+        assert!(plan.direct_accounting.is_none(), "{kind:?}");
+        let settings = std::fs::read_to_string(containment.settings_path())
+            .expect("settings should be written to the state folder");
+        assert!(!settings.contains("apiKeyHelper"), "{kind:?}: {settings}");
+        let settings_arg = plan
+            .args
+            .iter()
+            .position(|arg| arg == "--settings")
+            .and_then(|index| plan.args.get(index + 1))
+            .map(PathBuf::from);
+        assert_eq!(settings_arg, Some(containment.settings_path()), "{kind:?}");
+        assert!(!settings.contains("vault auth-helper"), "{kind:?}");
+        let profile = kind.profile();
+        if kind != ClaudeProviderProfileKind::ClaudePlan
+            && profile.transport == super::provider::ClaudeProviderTransport::DirectAnthropic
+        {
+            assert_eq!(
+                bridge.kind,
+                ClaudeBridgeKind::AnthropicApiKeyPassthrough,
+                "{kind:?}"
+            );
+            assert_eq!(
+                Some(bridge.upstream_base_url.as_str()),
+                profile.base_url.map(|url| url.trim_end_matches('/')),
+                "{kind:?}"
+            );
+            assert_eq!(
+                bridge
+                    .deferred_vault_secret
+                    .as_ref()
+                    .map(|secret| secret.label.as_str()),
+                profile.vault_label,
+                "{kind:?}"
+            );
+        }
+    }
+}
+
+/// #218: requests from a contained pane arrive in absolute form through the
+/// proxy setting; the bridge forwards only the path, with the key in both
+/// headers for bridged direct providers.
+#[tokio::test]
+async fn bridge_accepts_absolute_form_targets_and_sends_the_api_key_header() {
+    let upstream_listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind fake upstream");
+    let upstream_addr = upstream_listener.local_addr().expect("upstream address");
+    let upstream = tokio::spawn(async move {
+        let (mut stream, _) = upstream_listener.accept().await.expect("accept upstream");
+        let request = read_http_request(&mut stream).await;
+        stream
+            .write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+            )
+            .await
+            .expect("write fake upstream response");
+        request
+    });
+    let bridge_listener = TcpListener::bind("127.0.0.1:0").await.expect("bind bridge");
+    let bridge_addr = bridge_listener.local_addr().expect("bridge address");
+    let bridge = tokio::spawn(async move {
+        let (stream, _) = bridge_listener.accept().await.expect("accept bridge");
+        handle_anthropic_passthrough_bridge_connection(
+            stream,
+            Arc::new("local-bridge-capability".to_string()),
+            Arc::new("bridge-upstream-secret-not-real".to_string()),
+            Arc::new(format!("http://{upstream_addr}/api/anthropic")),
+            reqwest::Client::new(),
+            /*proxy_count_tokens*/ false,
+            /*send_api_key_header*/ true,
+            /*accounting_tx*/ None,
+            /*accounting_provider_id*/ Arc::new(None),
+        )
+        .await
+        .expect("proxy request");
+    });
+
+    let mut client = TcpStream::connect(bridge_addr).await.expect("connect");
+    client
+        .write_all(
+            format!(
+                "POST http://{bridge_addr}/v1/messages?beta=true HTTP/1.1\r\nHost: {bridge_addr}\r\nAuthorization: Bearer local-bridge-capability\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}"
+            )
+            .as_bytes(),
+        )
+        .await
+        .expect("write bridge request");
+    let mut response = Vec::new();
+    client
+        .read_to_end(&mut response)
+        .await
+        .expect("read response");
+
+    bridge.await.expect("bridge task");
+    let upstream_request = String::from_utf8(upstream.await.expect("upstream task"))
+        .expect("UTF-8 upstream request")
+        .to_ascii_lowercase();
+    assert!(
+        upstream_request.starts_with("post /api/anthropic/v1/messages?beta=true http/1.1"),
+        "{upstream_request}"
+    );
+    assert!(upstream_request.contains("authorization: bearer bridge-upstream-secret-not-real"));
+    assert!(upstream_request.contains("x-api-key: bridge-upstream-secret-not-real"));
+    assert!(!upstream_request.contains("local-bridge-capability"));
+    assert!(String::from_utf8_lossy(&response).starts_with("HTTP/1.1 200 OK"));
+}
+
+/// #218 review: the bridge attaches the provider key upstream, so a crafted
+/// target must never choose the host, port or path it goes to.
+#[test]
+fn passthrough_bridge_forwards_only_messages_routes_to_its_own_host() {
+    use super::bridge::passthrough_upstream;
+    let base = "https://inference.baseten.co";
+    for line in [
+        "POST @attacker.example/v1/messages HTTP/1.1",
+        "POST .attacker.example/v1/messages HTTP/1.1",
+        "POST :8443/v1/messages HTTP/1.1",
+        "POST //attacker.example/v1/messages HTTP/1.1",
+        "POST /v1/messages/../../v1/keys HTTP/1.1",
+        "POST /v1/messages/count_tokens/../x HTTP/1.1",
+        "POST /v1/messages?x=@attacker.example HTTP/1.1",
+        "POST /v1/messages#frag HTTP/1.1",
+        "POST /v1/models HTTP/1.1",
+        "POST http://user:pass@127.0.0.1:1/v1/models HTTP/1.1",
+        "POST",
+    ] {
+        assert_eq!(passthrough_upstream(line, base), None, "{line}");
+    }
+    for (line, path, url) in [
+        (
+            "POST /v1/messages?beta=true HTTP/1.1",
+            "/v1/messages?beta=true",
+            "https://inference.baseten.co/v1/messages?beta=true",
+        ),
+        (
+            "POST http://user:pass@127.0.0.1:1/v1/messages/count_tokens HTTP/1.1",
+            "/v1/messages/count_tokens",
+            "https://inference.baseten.co/v1/messages/count_tokens",
+        ),
+    ] {
+        let (forwarded, upstream) = passthrough_upstream(line, base).expect(line);
+        assert_eq!((forwarded, upstream.as_str()), (path, url), "{line}");
+    }
+    let (_, upstream) = passthrough_upstream(
+        "POST /v1/messages HTTP/1.1",
+        "https://api.z.ai/api/anthropic/",
+    )
+    .expect("base path");
+    assert_eq!(
+        upstream.as_str(),
+        "https://api.z.ai/api/anthropic/v1/messages"
+    );
 }

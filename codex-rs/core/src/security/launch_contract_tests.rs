@@ -341,3 +341,47 @@ fn pf_27_s02_only_policy_permitted_broker_keys_are_sourced() {
         Vec::<String>::new()
     );
 }
+
+/// #218: an external agent CLI launch (contained Claude panes) gets the same
+/// checks: sandbox required, raw managed values refused in argv and removed
+/// from the environment, protected reads denied.
+#[test]
+fn contained_external_agent_launch_gets_the_whole_contract() {
+    if !cfg!(any(target_os = "macos", target_os = "linux")) {
+        return;
+    }
+    let fixture = fixture();
+    let contract = &fixture.contract;
+    let cwd = fixture.workspace.as_path();
+    let profile = workspace_profile(&fixture.workspace);
+    let sandbox = if cfg!(target_os = "macos") {
+        SandboxType::MacosSeatbelt
+    } else {
+        SandboxType::LinuxSeccomp
+    };
+    let argv = ["claude".to_string(), "-p".to_string()];
+    let mut env = HashMap::from([
+        ("PATH".to_string(), "/usr/bin".to_string()),
+        ("LEAKED".to_string(), format!("prefix-{RAW}")),
+    ]);
+
+    assert_eq!(
+        contract.protect_external_launch(SandboxType::None, &argv, &mut env, &profile, cwd),
+        Err(LaunchDenied::Unsandboxed)
+    );
+    let raw_argv = ["claude".to_string(), RAW.to_string()];
+    assert_eq!(
+        contract.protect_external_launch(sandbox, &raw_argv, &mut env, &profile, cwd),
+        Err(LaunchDenied::RawSecretInArgv)
+    );
+
+    let protected = contract
+        .protect_external_launch(sandbox, &argv, &mut env, &profile, cwd)
+        .expect("protectable");
+    assert!(!env.contains_key("LEAKED"));
+    assert_eq!(env.get("PATH").map(String::as_str), Some("/usr/bin"));
+    let file_system = protected.file_system_sandbox_policy();
+    assert!(!file_system.can_read_path_with_cwd(fixture.codex_home.join("secrets").as_path(), cwd));
+    assert!(!file_system.can_write_path_with_cwd(fixture.codex_home.as_path(), cwd));
+    assert!(file_system.can_write_path_with_cwd(&fixture.workspace.join("src.rs"), cwd));
+}

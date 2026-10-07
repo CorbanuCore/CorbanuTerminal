@@ -508,6 +508,9 @@
             "concurrent_reasoning_summaries": {
               "type": "boolean"
             },
+            "contained_external_agents": {
+              "type": "boolean"
+            },
             "connectors": {
               "type": "boolean"
             },
@@ -5221,6 +5224,9 @@
           "type": "boolean"
         },
         "concurrent_reasoning_summaries": {
+          "type": "boolean"
+        },
+        "contained_external_agents": {
           "type": "boolean"
         },
         "connectors": {

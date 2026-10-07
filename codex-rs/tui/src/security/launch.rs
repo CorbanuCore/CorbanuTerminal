@@ -176,6 +176,13 @@ impl LaunchPlan {
                 ));
             }
         }
+        crate::claude_panes::containment::install(
+            crate::claude_panes::containment::ContainmentSettings {
+                enabled: config.features.enabled(Feature::ContainedExternalAgents),
+                linux_sandbox_exe: config.codex_linux_sandbox_exe.clone(),
+                state_root: None,
+            },
+        );
         level::install_context(LevelContext {
             codex_home: self.codex_home,
             picker_enabled: config.features.enabled(Feature::SecurityLevels)
