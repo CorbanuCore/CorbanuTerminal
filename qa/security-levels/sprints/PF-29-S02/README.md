@@ -27,6 +27,9 @@ at that point. This is the hook the recovery video uses.
 - `cargo test -p codex-tui pf_29_s0`: 12 passed (S02: preview then Esc changes nothing; confirm, re-audit, save;
   failure locks until `r`; change after the preview moves nothing).
 - `just fix -p codex-core -p codex-tui`, `just fmt`; clippy is clean on the changed code. No Linux-only code.
+- Suites after merging main: `cargo test -p codex-core --lib security::` 176 passed; `just test -p codex-tui`
+  4288 passed, 21 failed. The failures are the same as PF-29-S01's: Unix-socket paths too long for this worktree
+  (SUN_LEN) and an upstream-branding snapshot, all unrelated.
 
 ## Functional run (GLM 5.2, real TUI in tmux, demo SOP)
 
