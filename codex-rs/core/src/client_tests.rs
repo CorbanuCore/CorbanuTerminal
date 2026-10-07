@@ -3419,38 +3419,3 @@ fn transient_rate_limit_delay_backs_off_and_honors_retry_after() {
         5
     );
 }
-
-/// PF-27-S05: a key the broker cannot hold is never sent by Core.
-#[tokio::test]
-async fn pf_27_s05_unbrokerable_provider_key_fails_closed_under_the_flag() {
-    let mut provider =
-        create_oss_provider_with_base_url("http://localhost:11434/v1", WireApi::Responses);
-    provider.experimental_bearer_token = Some("pf27s05-local-key".to_string());
-    let config = super::BrokerModelAuthConfig {
-        runtime_dir: std::env::temp_dir(),
-        scrub_responses: false,
-    };
-
-    let flagged =
-        test_model_client_with_provider(ThreadId::new(), SessionSource::Cli, provider.clone())
-            .with_broker_model_auth(Some(config));
-    let Err(error) = flagged.current_client_setup().await else {
-        panic!("an unbrokerable key must not be sent directly");
-    };
-    assert!(error.to_string().contains("cannot be brokered"), "{error}");
-    assert!(!error.is_retryable());
-    assert!(!flagged.responses_websocket_enabled());
-
-    // Flag off: unchanged direct auth.
-    let direct = test_model_client_with_provider(ThreadId::new(), SessionSource::Cli, provider);
-    let setup = direct.current_client_setup().await.expect("direct setup");
-    assert!(setup.broker.is_none());
-    assert_eq!(
-        setup
-            .api_auth
-            .to_auth_headers()
-            .get(http::header::AUTHORIZATION)
-            .and_then(|value| value.to_str().ok()),
-        Some("Bearer pf27s05-local-key")
-    );
-}

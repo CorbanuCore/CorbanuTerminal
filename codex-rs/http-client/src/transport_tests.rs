@@ -169,3 +169,64 @@ impl Write for TestLogWriter {
         Ok(())
     }
 }
+
+/// PF-27-S05: a request carrying the broker's frame never leaves over the
+/// caller's network client: with no broker it is refused, and with one it
+/// goes to the broker's socket.
+#[cfg(unix)]
+#[tokio::test]
+async fn pf_27_s05_broker_frame_requests_go_only_to_the_broker_socket() {
+    use tokio::io::AsyncReadExt as _;
+    use tokio::io::AsyncWriteExt as _;
+
+    let network = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    network.set_nonblocking(true).expect("nonblocking");
+    let url = format!(
+        "http://127.0.0.1:{}/v1/responses",
+        network.local_addr().expect("addr").port()
+    );
+    let transport = ReqwestTransport::new(test_reqwest_client());
+    let mut framed = Request::new(Method::POST, url.clone());
+    framed.headers.insert(
+        crate::MODEL_BROKER_FRAME_HEADER,
+        http::HeaderValue::from_static("signed-frame"),
+    );
+
+    let refused = transport.execute(framed.clone()).await;
+    assert!(
+        matches!(&refused, Err(TransportError::Build(message)) if message.contains("credential broker")),
+        "{refused:?}"
+    );
+    assert!(network.accept().is_err(), "nothing may reach the network");
+
+    // Socket paths are short; the test temp directory may not be.
+    let dir = tempfile::Builder::new()
+        .prefix("pf27")
+        .tempdir_in("/tmp")
+        .expect("dir");
+    let socket = dir.path().join("b.sock");
+    let listener = tokio::net::UnixListener::bind(&socket).expect("bind socket");
+    crate::install_model_broker_client(
+        HttpClient::unix_socket(&socket, http::HeaderMap::new()).expect("broker client"),
+    );
+    let server = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.expect("accept");
+        let mut request = vec![0_u8; 4096];
+        let read = stream.read(&mut request).await.expect("read");
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\nok")
+            .await
+            .expect("write");
+        String::from_utf8_lossy(&request[..read]).into_owned()
+    });
+    let response = transport.execute(framed).await.expect("brokered response");
+    assert_eq!(response.body.as_ref(), b"ok");
+    let seen = server.await.expect("server");
+    assert!(seen.starts_with("POST /v1/responses"), "{seen}");
+    assert!(
+        seen.contains("x-corbanu-broker-frame: signed-frame"),
+        "{seen}"
+    );
+    assert!(network.accept().is_err(), "nothing may reach the network");
+    crate::model_broker_route::uninstall_model_broker_client();
+}

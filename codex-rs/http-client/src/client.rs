@@ -25,6 +25,8 @@ pub type HttpResponse = reqwest::Response;
 pub struct HttpClient {
     inner: reqwest::Client,
     request_logging: RequestLogging,
+    /// PF-27-S05: every connection goes to the credential broker's socket.
+    broker_socket: bool,
 }
 
 impl HttpClient {
@@ -53,13 +55,22 @@ impl HttpClient {
             .redirect(reqwest::redirect::Policy::none())
             .unix_socket(path.to_path_buf())
             .build()
-            .map(Self::new)
+            .map(|inner| Self {
+                broker_socket: true,
+                ..Self::new(inner)
+            })
+    }
+
+    /// Whether this client connects only to the credential broker's socket.
+    pub(crate) const fn is_broker_socket(&self) -> bool {
+        self.broker_socket
     }
 
     pub(crate) fn from_parts(inner: reqwest::Client, request_logging: RequestLogging) -> Self {
         Self {
             inner,
             request_logging,
+            broker_socket: false,
         }
     }
 

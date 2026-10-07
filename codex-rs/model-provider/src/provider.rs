@@ -338,6 +338,12 @@ impl ConfiguredModelProvider {
     }
 
     fn provider_env_auth(&self, provider_key_id: &str) -> Option<CodexAuth> {
+        // PF-27-S05: the broker reads this key; Core holds only a placeholder.
+        if crate::model_key_broker::model_key_broker_required() {
+            return Some(CodexAuth::from_api_key(
+                crate::model_key_broker::BROKERED_KEY_PLACEHOLDER,
+            ));
+        }
         if let Ok(api_key) = std::env::var(provider_key_id)
             && !api_key.trim().is_empty()
         {
@@ -456,7 +462,13 @@ impl ModelProvider for ConfiguredModelProvider {
     }
 
     fn account_state(&self) -> ProviderAccountResult {
-        let account = if let Some(provider_key_id) = self.info.env_key.as_deref() {
+        let account = if self.info.env_key.is_some()
+            && crate::model_key_broker::model_key_broker_required()
+        {
+            // PF-27-S05: Core does not read the key to check for it; a missing
+            // key is reported when a request is made.
+            Some(ProviderAccount::ApiKey)
+        } else if let Some(provider_key_id) = self.info.env_key.as_deref() {
             let stored_key = self
                 .auth_manager
                 .as_ref()
@@ -1295,6 +1307,52 @@ mod tests {
                 .and_then(|value| value.to_str().ok()),
             Some("Bearer env-provider-key")
         );
+    }
+
+    #[tokio::test]
+    async fn pf_27_s05_brokered_provider_hands_out_a_placeholder_not_the_key() {
+        let env_key = format!("PFT_PROVIDER_BROKERED_{}", std::process::id());
+        let codex_home = test_codex_home().join(&env_key);
+        std::fs::create_dir_all(&codex_home).expect("temp codex home should be created");
+        let _guard = EnvVarGuard::set(env_key.clone(), "env-provider-key");
+        login_with_provider_api_key(
+            &codex_home,
+            &env_key,
+            "stored-provider-key",
+            AuthCredentialsStoreMode::File,
+            AuthKeyringBackendKind::default(),
+        )
+        .expect("stored provider key should be written");
+        let provider = create_model_provider(
+            ModelProviderInfo {
+                env_key: Some(env_key.clone()),
+                ..provider_for("https://example.test/v1".to_string())
+            },
+            Some(AuthManager::from_auth_for_testing_with_home(
+                CodexAuth::create_dummy_chatgpt_auth_for_testing(),
+                codex_home,
+            )),
+        );
+        let broker =
+            std::sync::Arc::new(crate::model_key_broker::test_support::RecordingBroker::default());
+        crate::model_key_broker::set_test_model_key_broker(Some(broker.clone()));
+
+        let auth = provider.auth().await.expect("placeholder auth");
+        let api_auth = provider.api_auth().await.expect("brokered auth");
+        let account = provider.account_state().expect("account state");
+        crate::model_key_broker::set_test_model_key_broker(None);
+
+        assert_eq!(auth.api_key(), Some(crate::BROKERED_KEY_PLACEHOLDER));
+        assert!(api_auth.to_auth_headers().is_empty());
+        assert_eq!(account.account, Some(ProviderAccount::ApiKey));
+        let uses = broker.uses.lock().expect("uses");
+        assert_eq!(uses.len(), 1);
+        assert!(matches!(
+            &uses[0].source,
+            crate::BrokeredKeySource::ProviderKey { provider_key_id, .. } if *provider_key_id == env_key
+        ));
+        let debug = format!("{uses:?}");
+        assert!(!debug.contains("env-provider-key") && !debug.contains("stored-provider-key"));
     }
 
     #[tokio::test]

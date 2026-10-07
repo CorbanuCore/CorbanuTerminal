@@ -1,5 +1,9 @@
 #[cfg(unix)]
+mod env_scrub;
+#[cfg(unix)]
 pub(crate) mod isolated;
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+mod memory_scan_tests;
 #[cfg(unix)]
 pub mod model_auth;
 mod providers;
@@ -9,7 +13,11 @@ pub(crate) mod response_scrub;
 #[cfg(unix)]
 pub use isolated::CODEX_CREDENTIAL_BROKER_ARG1;
 #[cfg(unix)]
+pub use isolated::StoredKeyResolver;
+#[cfg(unix)]
 pub use isolated::run_credential_broker_main;
+#[cfg(unix)]
+pub use isolated::run_credential_broker_main_with;
 
 pub use resolver::IsolatedCredentialDispatchError;
 pub use resolver::IsolatedCredentialDispatcher;

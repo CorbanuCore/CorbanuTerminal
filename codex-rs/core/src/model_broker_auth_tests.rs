@@ -1,13 +1,10 @@
 use super::*;
 use pretty_assertions::assert_eq;
 
-fn binding(
-    host: &str,
-    port: u16,
-    path_prefix: &str,
-    header: ModelAuthHeader,
-) -> ModelCredentialBinding {
-    ModelCredentialBinding {
+use ProviderApiKeyHeader as ModelAuthHeader;
+
+fn binding(host: &str, port: u16, path_prefix: &str, header: ModelAuthHeader) -> Binding {
+    Binding {
         host: host.to_string(),
         port,
         path_prefix: path_prefix.to_string(),
@@ -88,5 +85,83 @@ fn pf_27_s05_requests_are_rewritten_to_plain_http_for_the_broker() {
         "https://a.example/v1#x",
     ] {
         assert_eq!(BrokerRewrite::for_url(url), None, "{url}");
+    }
+}
+
+fn brokered_request(base_url: &str, source: BrokeredKeySource) -> BrokeredAuthRequest {
+    BrokeredAuthRequest {
+        base_url: base_url.to_string(),
+        header: ProviderApiKeyHeader::Bearer,
+        source,
+        extra_headers: HeaderMap::new(),
+    }
+}
+
+fn provider_key() -> BrokeredKeySource {
+    BrokeredKeySource::ProviderKey {
+        provider_key_id: "ZAI_API_KEY".to_string(),
+        env_vars: vec!["ZAI_API_KEY".to_string()],
+    }
+}
+
+fn held_value() -> BrokeredKeySource {
+    BrokeredKeySource::Value {
+        key: codex_model_provider::ProviderApiKey {
+            value: "sk-pf27s05-held".to_string(),
+            header: ProviderApiKeyHeader::Bearer,
+        },
+        slot: None,
+    }
+}
+
+/// The error a brokered credential use fails with; it ends the turn.
+fn refusal(broker: &CoreModelKeyBroker, base_url: &str, source: BrokeredKeySource) -> String {
+    match broker.auth(brokered_request(base_url, source)) {
+        Ok(_) => panic!("no auth may be produced"),
+        Err(error) => {
+            assert!(!error.is_retryable(), "{error:?}");
+            let message = error.to_string();
+            assert!(message.starts_with("Fatal error: "), "{message}");
+            message
+        }
+    }
+}
+
+/// PF-27-S05 / PF-27-S06: the branch platforms without the broker take
+/// (`start` returns this broker off Unix). Every credential use fails; none
+/// is attached directly.
+#[test]
+fn pf_27_s05_platform_without_broker_refuses_every_credential() {
+    let broker = CoreModelKeyBroker::unsupported();
+    for source in [provider_key(), held_value()] {
+        let error = refusal(&broker, "https://api.z.ai/api/paas/v4", source);
+        assert!(error.contains("not available on this platform"), "{error}");
+    }
+}
+
+#[cfg(not(unix))]
+#[test]
+fn pf_27_s05_non_unix_start_is_the_refusing_broker() {
+    let broker = CoreModelKeyBroker::start(BrokerSettings {
+        runtime_dir: std::env::temp_dir(),
+        scrub_responses: false,
+        program: None,
+        store_home: std::env::temp_dir(),
+        env_names: Vec::new(),
+    });
+    let error = refusal(&broker, "https://api.z.ai/api/paas/v4", held_value());
+    assert!(error.contains("not available on this platform"), "{error}");
+}
+
+#[test]
+fn pf_27_s05_failed_broker_and_unbindable_urls_fail_closed() {
+    let failed = CoreModelKeyBroker::new(BrokerHandle::Failed);
+    let error = refusal(&failed, "https://api.z.ai/api/paas/v4", provider_key());
+    assert!(error.contains("unavailable"), "{error}");
+
+    // A URL the broker cannot bind is refused before any broker call.
+    for base_url in ["http://localhost:11434/v1", "https://[::1]/v1"] {
+        let error = refusal(&CoreModelKeyBroker::unsupported(), base_url, held_value());
+        assert!(error.contains("cannot be brokered"), "{base_url}: {error}");
     }
 }

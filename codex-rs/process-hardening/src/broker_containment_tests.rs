@@ -12,6 +12,23 @@ fn pf_27_s02_broker_profile_denies_exec_and_confines_writes() {
 }
 
 #[test]
+fn pf_27_s05_broker_profile_leaves_only_the_named_files_writable() {
+    let dir = tempfile_dir();
+    let lock = dir.join("missing").join(".vault.lock");
+    let profile =
+        broker_seatbelt_profile_with_files(&dir, std::slice::from_ref(&lock)).expect("profile");
+    assert!(profile.contains(&format!("(require-not (literal \"{}\"))", lock.display())));
+    assert_eq!(
+        broker_seatbelt_profile_with_files(&dir, &[std::path::PathBuf::from("/tmp/q\"x")]),
+        None
+    );
+    assert_eq!(
+        broker_seatbelt_profile_with_files(&dir, &[]),
+        broker_seatbelt_profile(&dir)
+    );
+}
+
+#[test]
 fn pf_27_s02_broker_profile_rejects_unquotable_paths() {
     assert_eq!(broker_seatbelt_profile(Path::new("/tmp/with\"quote")), None);
     assert_eq!(broker_seatbelt_profile(Path::new("relative/dir")), None);

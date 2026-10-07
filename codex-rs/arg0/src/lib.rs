@@ -103,8 +103,9 @@ pub fn arg0_dispatch() -> Option<Arg0PathEntryGuard> {
     let argv1 = args.next().unwrap_or_default();
     #[cfg(unix)]
     if argv1 == codex_network_proxy::CODEX_CREDENTIAL_BROKER_ARG1 {
-        // PF-27-S04 isolated credential broker; never returns.
-        codex_network_proxy::run_credential_broker_main();
+        // PF-27-S04 isolated credential broker; never returns. PF-27-S05:
+        // stored provider keys are decrypted here, never in Core.
+        codex_network_proxy::run_credential_broker_main_with(Some(broker_stored_provider_key));
     }
     #[cfg(unix)]
     if argv1 == CODEX_ARG0_EXEC_HELPER_ARG1 {
@@ -296,6 +297,22 @@ fn build_runtime() -> anyhow::Result<tokio::runtime::Runtime> {
 }
 
 const ILLEGAL_ENV_VAR_PREFIX: &str = "CODEX_";
+
+/// PF-27-S05: the broker's reader for stored provider keys (encrypted vault,
+/// then the legacy file), with the same precedence and deletion rules Core
+/// used before.
+#[cfg(unix)]
+fn broker_stored_provider_key(
+    codex_home: &Path,
+    provider_key_id: &str,
+) -> std::io::Result<Option<String>> {
+    codex_login::provider_api_key_from_auth_storage(
+        codex_home,
+        provider_key_id,
+        codex_login::AuthCredentialsStoreMode::default(),
+        codex_login::AuthKeyringBackendKind::default(),
+    )
+}
 
 /// Load env vars from ~/.codex/.env.
 ///

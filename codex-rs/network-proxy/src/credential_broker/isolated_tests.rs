@@ -9,7 +9,7 @@ use super::IsolatedBrokerOptions;
 use super::protocol::BROKER_ERROR_HEADER;
 use super::protocol::HostBindingWire;
 use super::protocol::ProviderId;
-use super::run_credential_broker_main;
+use super::run_credential_broker_main_with;
 use crate::connect_policy::PinnedPeers;
 use crate::credential_broker::CredentialBroker;
 use crate::credential_broker::CredentialRouting;
@@ -49,9 +49,27 @@ const STREAM_PATH: &str = "/stream";
 #[test]
 fn pf_27_s04_pf_27_s01_isolated_broker_child_entry() {
     if std::env::var_os(CHILD_ENV).is_some() {
-        run_credential_broker_main();
+        run_credential_broker_main_with(Some(test_stored_key));
     }
 }
+
+/// PF-27-S05 stand-in for the vault resolver the binary supplies: reads
+/// `<home>/pf27-store/<id>`; an `<id>.fail` file reports the store as
+/// unavailable.
+fn test_stored_key(home: &std::path::Path, id: &str) -> std::io::Result<Option<String>> {
+    let dir = home.join("pf27-store");
+    if dir.join(format!("{id}.fail")).exists() {
+        return Err(std::io::Error::other("store unavailable"));
+    }
+    match std::fs::read_to_string(dir.join(id)) {
+        Ok(value) => Ok(Some(value)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+/// PF-27-S05: the key the upstream's `/check` path expects.
+static CHECK_KEY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
 struct Upstream {
     port: u16,
@@ -88,6 +106,16 @@ async fn start_upstream_for(tls_host: &str) -> Upstream {
                 .and_then(|value| value.to_str().ok())
                 .unwrap_or("<none>")
                 .to_string();
+            if request.uri().path().ends_with("/check") {
+                // PF-27-S05: confirm the key arrived without echoing it.
+                let expected = CHECK_KEY.get().map(|key| format!("Bearer {key}"));
+                let verdict = if expected.as_deref() == Some(authorization.as_str()) {
+                    "ok"
+                } else {
+                    "mismatch"
+                };
+                return Ok::<_, Infallible>(Response::new(Body::from(verdict)));
+            }
             if request.uri().path().ends_with("/redirect") {
                 let mut response = Response::new(Body::empty());
                 *response.status_mut() = rama_http::StatusCode::FOUND;
@@ -120,6 +148,13 @@ async fn start_upstream_for(tls_host: &str) -> Upstream {
 }
 
 fn launcher(upstream: &Upstream, controller_pid_override: Option<u32>) -> IsolatedBrokerLauncher {
+    launcher_with_ca(upstream.ca_path.clone(), controller_pid_override)
+}
+
+fn launcher_with_ca(
+    ca_path: PathBuf,
+    controller_pid_override: Option<u32>,
+) -> IsolatedBrokerLauncher {
     IsolatedBrokerLauncher::test_harness(
         /*program*/ None,
         [CHILD_TEST, "--exact", "--nocapture", "--test-threads=1"]
@@ -128,10 +163,7 @@ fn launcher(upstream: &Upstream, controller_pid_override: Option<u32>) -> Isolat
             .collect(),
         vec![
             (OsString::from(CHILD_ENV), OsString::from("1")),
-            (
-                OsString::from("SSL_CERT_FILE"),
-                upstream.ca_path.clone().into_os_string(),
-            ),
+            (OsString::from("SSL_CERT_FILE"), ca_path.into_os_string()),
         ],
         controller_pid_override,
     )
@@ -838,14 +870,19 @@ async fn pf_33_s02_unpinned_broker_resolves_and_pins_keep_the_private_peer_check
 
 mod pf_27_s05 {
     use super::Body;
+    use super::CHECK_KEY;
+    use super::CHILD_ENV;
     use super::Duration;
+    use super::PathBuf;
     use super::Request;
     use super::Response;
     use super::UPSTREAM_HOST;
     use super::Upstream;
     use super::denial;
     use super::launcher;
+    use super::launcher_with_ca;
     use super::start_upstream;
+    use crate::credential_broker::memory_scan_tests;
     use crate::credential_broker::model_auth::MODEL_BROKER_FRAME_HEADER;
     use crate::credential_broker::model_auth::ModelAuthHeader;
     use crate::credential_broker::model_auth::ModelCredential;
@@ -863,7 +900,7 @@ mod pf_27_s05 {
     fn model_broker(upstream: &Upstream) -> ModelCredentialBroker {
         ModelCredentialBroker::spawn_with_launcher(
             ModelCredentialBrokerOptions::default(),
-            &launcher(upstream, /*controller_pid_override*/ None),
+            launcher(upstream, /*controller_pid_override*/ None),
         )
         .expect("model broker")
     }
@@ -1048,5 +1085,261 @@ mod pf_27_s05 {
                 .err(),
             Some(ModelCredentialBrokerError::Unavailable)
         );
+    }
+
+    fn store_broker(upstream: &Upstream, home: &std::path::Path) -> ModelCredentialBroker {
+        ModelCredentialBroker::spawn_with_launcher(
+            ModelCredentialBrokerOptions {
+                store_home: Some(home.to_path_buf()),
+                ..ModelCredentialBrokerOptions::default()
+            },
+            launcher(upstream, /*controller_pid_override*/ None),
+        )
+        .expect("model broker")
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn pf_27_s05_stored_key_is_read_inside_the_broker() {
+        let upstream = start_upstream().await;
+        let home = tempfile::tempdir().expect("home");
+        let store = home.path().join("pf27-store");
+        std::fs::create_dir(&store).expect("store");
+        std::fs::write(store.join("ZAI_API_KEY"), MODEL_KEY).expect("stored key");
+        std::fs::write(store.join("BROKEN_API_KEY.fail"), "").expect("broken store");
+        let broker = store_broker(&upstream, home.path());
+        let bound = binding(upstream.port, "/v1", ModelAuthHeader::Bearer);
+
+        let credential = broker
+            .register_stored(bound.clone(), "ZAI_API_KEY", &[])
+            .expect("register")
+            .expect("stored key");
+        let response = signed(&credential, upstream.port, "/v1/responses").await;
+        assert_eq!(
+            response.try_into_string().await.expect("body"),
+            format!("Bearer {MODEL_KEY}")
+        );
+
+        // Nothing stored, an unreadable store, a malformed id.
+        assert!(
+            broker
+                .register_stored(bound.clone(), "MISSING_API_KEY", &[])
+                .expect("register")
+                .is_none()
+        );
+        assert_eq!(
+            broker
+                .register_stored(bound.clone(), "BROKEN_API_KEY", &[])
+                .err(),
+            Some(ModelCredentialBrokerError::StoreUnavailable)
+        );
+        assert_eq!(
+            broker
+                .register_stored(bound.clone(), "../ZAI_API_KEY", &[])
+                .err(),
+            Some(ModelCredentialBrokerError::Rejected)
+        );
+        // A broker started without a store home reads no stored keys.
+        assert!(
+            model_broker(&upstream)
+                .register_stored(bound, "ZAI_API_KEY", &[])
+                .expect("register")
+                .is_none()
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn pf_27_s05_env_keys_are_handed_over_removed_and_unregistered() {
+        let upstream = start_upstream().await;
+        let name = format!("PF27_S05_ENV_KEY_{}", std::process::id());
+        // SAFETY: a unique variable no other test reads.
+        unsafe { std::env::set_var(&name, MODEL_KEY) };
+        let broker = model_broker(&upstream);
+        let taken = broker
+            .take_env_keys(&[name.clone(), "PF27_S05_NEVER_SET_KEY".to_string()])
+            .expect("take env keys");
+        assert_eq!(taken, vec![name.clone()]);
+        assert_eq!(std::env::var_os(&name), None);
+
+        let credential = broker
+            .register_stored(
+                binding(upstream.port, "/v1", ModelAuthHeader::Bearer),
+                "PF27_S05_NEVER_SET_KEY",
+                &taken,
+            )
+            .expect("register")
+            .expect("stashed key");
+        let response = signed(&credential, upstream.port, "/v1/responses").await;
+        assert_eq!(
+            response.try_into_string().await.expect("body"),
+            format!("Bearer {MODEL_KEY}")
+        );
+
+        // A replaced sign-in token drops the broker's copy.
+        credential.unregister().expect("unregister");
+        let response = signed(&credential, upstream.port, "/v1/responses").await;
+        assert_eq!(denial(&response), Some("unknown_credential"));
+    }
+
+    /// The vault lock is created before containment (so a vault first
+    /// created later in the session is still usable) and is never reached
+    /// through a symlink.
+    #[test]
+    fn pf_27_s05_vault_lock_is_created_and_never_a_symlink() {
+        use crate::credential_broker::isolated::server::prepare_vault_lock;
+        let home = tempfile::tempdir().expect("home");
+        let lock = prepare_vault_lock(home.path()).expect("lock created");
+        assert_eq!(lock, home.path().join("secrets").join(".vault.lock"));
+        assert!(lock.is_file());
+
+        let elsewhere = tempfile::tempdir().expect("elsewhere");
+        let target = elsewhere.path().join("target");
+        std::fs::write(&target, b"").expect("target");
+        let linked = tempfile::tempdir().expect("linked home");
+        std::fs::create_dir(linked.path().join("secrets")).expect("secrets");
+        std::os::unix::fs::symlink(&target, linked.path().join("secrets").join(".vault.lock"))
+            .expect("symlink");
+        assert_eq!(prepare_vault_lock(linked.path()), None);
+
+        let linked_dir = tempfile::tempdir().expect("linked dir home");
+        std::os::unix::fs::symlink(elsewhere.path(), linked_dir.path().join("secrets"))
+            .expect("dir symlink");
+        assert_eq!(prepare_vault_lock(linked_dir.path()), None);
+    }
+
+    const MEMORY_CHILD_ENV: &str = "CODEX_PF27_S05_MEMORY_CHILD";
+    const MEMORY_KEY_ENV: &str = "PF27_S05_MEMORY_KEY";
+    const MEMORY_MASKED_ENV: &str = "PF27_S05_MEMORY_MASKED";
+    const MEMORY_CHILD_TEST: &str =
+        "credential_broker::isolated::tests::pf_27_s05::pf_27_s05_core_memory_child_entry";
+
+    fn decode_hex(value: &str) -> Vec<u8> {
+        (0..value.len())
+            .step_by(2)
+            .map(|index| u8::from_str_radix(&value[index..index + 2], 16).expect("hex"))
+            .collect()
+    }
+
+    /// Plays Core in a fresh process whose launch environment holds the key,
+    /// as Core's does: hands the key to the broker, uses it, then scans its
+    /// own writable memory (heap, stacks, launch environment) for it.
+    ///
+    /// Scope: the broker hand-over path (`take_env_keys`, `register_stored`,
+    /// signed requests). It does not run Core's config loading, `.env`
+    /// handling or telemetry, which could copy the key before hand-over.
+    #[test]
+    #[expect(clippy::print_stdout, reason = "the parent test reads the hit counts")]
+    fn pf_27_s05_core_memory_child_entry() {
+        let Some(port) = std::env::var_os(MEMORY_CHILD_ENV) else {
+            return;
+        };
+        let port: u16 = port
+            .to_str()
+            .and_then(|port| port.parse().ok())
+            .expect("port");
+        let masked = decode_hex(&std::env::var(MEMORY_MASKED_ENV).expect("masked key"));
+        let ca_path = PathBuf::from(std::env::var_os("SSL_CERT_FILE").expect("ca"));
+        // Positive control: the launch environment still holds the key.
+        let before = memory_scan_tests::count_in_writable_memory(&masked);
+        println!("PF27S05 memory hits_before={before}");
+        assert!(before > 0, "the scanner must find the key before hand-over");
+        #[cfg(target_os = "linux")]
+        let environ_holds_key = || {
+            // Compared masked and the copy wiped, so this check leaves no
+            // plain key behind for the memory scan.
+            let environ =
+                zeroize::Zeroizing::new(std::fs::read("/proc/self/environ").unwrap_or_default());
+            environ.windows(masked.len()).any(|window| {
+                window
+                    .iter()
+                    .zip(&masked)
+                    .all(|(byte, masked)| byte ^ memory_scan_tests::MASK == *masked)
+            })
+        };
+        #[cfg(target_os = "linux")]
+        assert!(environ_holds_key(), "positive control: /proc/self/environ");
+
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        // Borrowed: the Linux environment check below still needs `masked`.
+        let scan_masked = masked.as_slice();
+        let hits = runtime.block_on(async move {
+            let broker = ModelCredentialBroker::spawn_with_launcher(
+                ModelCredentialBrokerOptions {
+                    withheld_env: vec![MEMORY_KEY_ENV.to_string()],
+                    ..ModelCredentialBrokerOptions::default()
+                },
+                launcher_with_ca(ca_path, /*controller_pid_override*/ None),
+            )
+            .expect("model broker");
+            let taken = broker
+                .take_env_keys(&[MEMORY_KEY_ENV.to_string()])
+                .expect("take env key");
+            let credential = broker
+                .register_stored(
+                    binding(port, "/v1", ModelAuthHeader::Bearer),
+                    MEMORY_KEY_ENV,
+                    &taken,
+                )
+                .expect("register")
+                .expect("stashed key");
+            for _ in 0..3 {
+                let response = signed(&credential, port, "/v1/check").await;
+                assert_eq!(response.try_into_string().await.expect("body"), "ok");
+            }
+            // Scan while Core still holds its live handles.
+            let hits = memory_scan_tests::count_in_writable_memory(scan_masked);
+            drop((credential, broker));
+            hits
+        });
+        // What another same-user process reads as Core's environment.
+        #[cfg(target_os = "linux")]
+        assert!(
+            !environ_holds_key(),
+            "/proc/self/environ still holds the key"
+        );
+        println!("PF27S05 memory hits_after={hits}");
+        assert_eq!(hits, 0, "the raw key is still in Core's memory");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn pf_27_s05_raw_key_is_not_left_in_core_memory() {
+        let key = format!(
+            "sk-pf27mem-{:016x}{:016x}",
+            rand::random::<u64>(),
+            rand::random::<u64>()
+        );
+        CHECK_KEY.set(key.clone()).expect("check key set once");
+        let upstream = start_upstream().await;
+        let masked = super::super::protocol::encode_hex(&memory_scan_tests::mask(key.as_bytes()));
+        let program = std::env::current_exe().expect("test binary");
+        let port = upstream.port.to_string();
+        let ca_path = upstream.ca_path.clone();
+        let output = tokio::task::spawn_blocking(move || {
+            std::process::Command::new(program)
+                .args([
+                    MEMORY_CHILD_TEST,
+                    "--exact",
+                    "--nocapture",
+                    "--test-threads=1",
+                ])
+                .env(MEMORY_CHILD_ENV, port)
+                .env(MEMORY_KEY_ENV, key)
+                .env(MEMORY_MASKED_ENV, masked)
+                .env("SSL_CERT_FILE", ca_path)
+                .env_remove(CHILD_ENV)
+                .output()
+        })
+        .await
+        .expect("join")
+        .expect("run Core stand-in");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            output.status.success() && stdout.contains("PF27S05 memory hits_after=0"),
+            "{stdout}\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(stdout.contains("1 passed"), "{stdout}");
     }
 }
