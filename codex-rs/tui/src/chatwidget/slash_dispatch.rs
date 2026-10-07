@@ -362,6 +362,16 @@ impl ChatWidget {
                 self.defer_input_until_settings_applied();
             }
             SlashCommand::Security => {
+                let core = crate::bottom_pane::security_level_picker::CoreLevels {
+                    thread: self.thread_id(),
+                    configured: crate::legacy_core::security_level_change::configured_level(
+                        &self.config,
+                    ),
+                    outside_user_config:
+                        crate::legacy_core::security_level_change::non_user_level_floor(
+                            &self.config,
+                        ),
+                };
                 self.bottom_pane.show_view(Box::new(
                     crate::bottom_pane::security_view::SecurityView::new(
                         Some(self.config.security_level),
@@ -378,19 +388,15 @@ impl ChatWidget {
                         },
                         self.bottom_pane.list_keymap(),
                     )
-                    .with_confirmation(
-                        crate::bottom_pane::security_level_picker::CoreLevels {
-                            thread: self.thread_id(),
-                            configured: crate::legacy_core::security_level_change::configured_level(
-                                &self.config,
-                            ),
-                            outside_user_config:
-                                crate::legacy_core::security_level_change::non_user_level_floor(
-                                    &self.config,
-                                ),
-                        },
-                        self.app_event_tx.clone(),
-                    ),
+                    .with_confirmation(core, self.app_event_tx.clone())
+                    .with_inspector(|| {
+                        crate::security::inspector::InspectorInput::from_config(
+                            &self.config,
+                            core.thread,
+                            core.configured,
+                            core.outside_user_config,
+                        )
+                    }),
                 ));
             }
             SlashCommand::Vim => {

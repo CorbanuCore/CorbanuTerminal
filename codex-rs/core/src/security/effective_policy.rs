@@ -415,6 +415,39 @@ impl TrustedSecurityController {
     }
 }
 
+impl TrustedSecurityController {
+    /// PF-41-S01: what the tree enforces now, for the read-only inspector.
+    pub(crate) fn tree_facts(&self) -> Result<super::inspection::TreeFacts, SecurityPolicyError> {
+        let guard = self.read_state()?;
+        let state = guard
+            .as_ref()
+            .ok_or(SecurityPolicyError::RuntimeNotInitialized)?;
+        let mut agents = state
+            .agents
+            .iter()
+            .map(|(thread, binding)| {
+                let snapshot = snapshot(state, binding);
+                super::inspection::AgentFacts {
+                    thread: *thread,
+                    depth: binding.actor_chain.as_slice().len().saturating_sub(2),
+                    level: snapshot.level,
+                    stricter_than_session: snapshot.level > state.persisted.settings.level,
+                    stopped: snapshot.kill_switch_active,
+                }
+            })
+            .collect::<Vec<_>>();
+        agents.sort_by_key(|agent| (agent.depth, agent.thread.to_string()));
+        Ok(super::inspection::TreeFacts {
+            in_force: state.persisted.settings.level,
+            next_start: state.next_start_level,
+            kill_switch: state.persisted.revocations.kill_switch_active,
+            epoch: state.epoch,
+            revocation_generation: state.persisted.revocations.generation,
+            agents,
+        })
+    }
+}
+
 fn snapshot(
     state: &EffectivePolicyState,
     binding: &AgentSecurityBinding,
