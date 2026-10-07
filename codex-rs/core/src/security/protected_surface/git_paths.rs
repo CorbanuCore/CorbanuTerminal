@@ -50,11 +50,19 @@ pub(super) fn git_persistence_paths(
             })
         {
             let git_dir = AbsolutePathBuf::resolve_path_against_base(git_dir, work_tree.as_path());
-            let common = std::fs::read_to_string(git_dir.join("commondir").as_path())
-                .ok()
-                .map(|dir| {
-                    AbsolutePathBuf::resolve_path_against_base(dir.trim(), git_dir.as_path())
-                });
+            let common = match std::fs::read_to_string(git_dir.join("commondir").as_path()) {
+                Ok(dir) => Some(AbsolutePathBuf::resolve_path_against_base(
+                    dir.trim(),
+                    git_dir.as_path(),
+                )),
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
+                // Unreadable (an agent can make it so): assume the usual
+                // `<common>/worktrees/<name>` layout rather than lose it.
+                Err(_) => git_dir
+                    .parent()
+                    .filter(|worktrees| worktrees.as_path().ends_with("worktrees"))
+                    .and_then(|worktrees| worktrees.parent()),
+            };
             git_dirs.push(git_dir);
             git_dirs.extend(common);
         }
@@ -74,7 +82,7 @@ pub(super) fn git_persistence_paths(
     }
     for config in configs {
         if let Some(hooks) = hooks_path(&config, &work_tree, home.as_ref())
-            && (!cfg!(target_os = "linux") || hooks.as_path().exists())
+            && (!cfg!(target_os = "linux") || !missing(&hooks))
         {
             paths.push(hooks);
         }
@@ -91,42 +99,67 @@ fn entries(git_dir: &AbsolutePathBuf, below_modules: bool) -> Vec<AbsolutePathBu
         .map(|entry| git_dir.join(entry))
         .filter(|path| {
             let may_be_missing = below_modules || path.as_path().ends_with("commondir");
-            !cfg!(target_os = "linux")
-                || !may_be_missing
-                || std::fs::symlink_metadata(path.as_path()).is_ok()
+            !cfg!(target_os = "linux") || !may_be_missing || !missing(path)
         })
         .collect()
 }
 
+/// Only "not found" counts as missing: a path made unreadable keeps its
+/// protection.
+fn missing(path: &AbsolutePathBuf) -> bool {
+    std::fs::symlink_metadata(path.as_path())
+        .is_err_and(|err| err.kind() == std::io::ErrorKind::NotFound)
+}
+
+/// Git's own folders inside a git folder; every other child folder is
+/// walked (a submodule `libs/b` lives at `modules/libs/b`).
+const GIT_INTERNAL: &[&str] = &[
+    "objects",
+    "refs",
+    "logs",
+    "info",
+    "hooks",
+    "branches",
+    "lfs",
+    "rr-cache",
+    "worktrees",
+];
+
 /// Every folder below `git_dir/modules`, without following links: its four
-/// entries, whether or not it looks like a git folder (removing `HEAD` must
-/// not unprotect one). A git folder (one with `objects`) is entered only at
-/// its own `modules`. Past the limits, `modules` as a whole.
+/// entries, whether or not it looks like a git folder (removing `HEAD` or
+/// adding `objects` must not unprotect one). Git's own folders are not
+/// entered. Past the limits, or when a folder cannot be read, `modules` as a
+/// whole (fail closed).
 fn module_paths(git_dir: &AbsolutePathBuf) -> Vec<AbsolutePathBuf> {
     let modules = git_dir.join("modules");
+    let closed = || vec![modules.clone()];
     let mut paths = Vec::new();
     let mut pending = vec![(modules.clone(), 0)];
     let mut visited = 0;
     while let Some((folder, depth)) = pending.pop() {
-        let Ok(children) = std::fs::read_dir(folder.as_path()) else {
-            continue;
+        let children = match std::fs::read_dir(folder.as_path()) {
+            Ok(children) => children,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(_) => return closed(),
         };
-        for child in children.flatten() {
-            if !child.file_type().is_ok_and(|kind| kind.is_dir()) {
+        for child in children {
+            let Ok(child) = child else {
+                return closed();
+            };
+            let Ok(kind) = child.file_type() else {
+                return closed();
+            };
+            let name = child.file_name();
+            if !kind.is_dir() || GIT_INTERNAL.iter().any(|internal| name == *internal) {
                 continue;
             }
             visited += 1;
             if visited > MAX_MODULE_DIRS || depth >= MAX_MODULE_DEPTH {
-                return vec![modules];
+                return closed();
             }
-            let module = folder.join(child.file_name());
+            let module = folder.join(name);
             paths.extend(entries(&module, /*below_modules*/ true));
-            if module.join("objects").as_path().is_dir() {
-                pending.push((module.join("modules"), depth + 1));
-            } else {
-                // A submodule path with slashes nests its git folder.
-                pending.push((module, depth + 1));
-            }
+            pending.push((module, depth + 1));
         }
     }
     paths

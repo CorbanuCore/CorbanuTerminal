@@ -53,9 +53,13 @@
   (`~/.bash_profile` and the like) are left to the command-text net: a sandbox placeholder would change the user's
   own login shells.
 - A writable root configured inside a protected folder keeps that folder's protection off (as PF-23-S01 reads).
-- Follow-up (2026-10-07): submodule git folders (`.git/modules/*`, nested) and the folder a `core.hooksPath` names
-  (`.husky`) are now read-only too (Linux: when they exist). A new nested `.git` in a subfolder stays with the
-  command-text net: the profile has no way to deny creating one name anywhere without denying the repository's own.
+- Follow-up (2026-10-07): the hooks, config, config.worktree and commondir of every folder below `.git/modules`
+  (walked without following links, git's own folders skipped) and the folder `core.hooksPath` names (repository,
+  `~/.gitconfig`, `~/.config/git/config`; `~/` expanded) are read-only too (Linux: when they exist). Past 512
+  folders, 8 levels, or a folder that cannot be read, all of `.git/modules` is read-only (submodule updates then
+  fail under the rules). Not covered: config includes, `~user/`, `GIT_CONFIG_GLOBAL`; a module folder a command
+  creates is protected from the next command on; a new nested `.git` stays with the command-text net (the profile
+  cannot deny creating one name anywhere without denying the repository's own).
 - Linux, full-write profiles only: a missing `commondir` is left to the command-text net (an empty placeholder
   breaks git), and renaming or removing an existing folder above a protected path is not blocked (bind mounts
   move with the folder), so `mv .git .g` and rebuilding `.git` is caught only when the path is written out.

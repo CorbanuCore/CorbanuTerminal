@@ -81,6 +81,24 @@ fn pf_23_s02_module_walk_is_bounded_and_does_not_follow_links() {
         "{paths:?}"
     );
 
+    // A fake `objects` in an intermediate folder hides nothing below it.
+    std::fs::create_dir_all(git.join("modules/libs/objects").as_path()).unwrap();
+    assert!(module_paths(&git).contains(&git.join("modules/libs/b/hooks")));
+
+    // A folder that cannot be read closes the whole of `modules`.
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let libs = git.join("modules/libs");
+        std::fs::set_permissions(libs.as_path(), std::fs::Permissions::from_mode(0o000)).unwrap();
+        // Root reads it anyway; there is nothing to check then.
+        let unreadable = std::fs::read_dir(libs.as_path()).is_err();
+        let paths = module_paths(&git);
+        std::fs::set_permissions(libs.as_path(), std::fs::Permissions::from_mode(0o755)).unwrap();
+        if unreadable {
+            assert_eq!(paths, vec![git.join("modules")]);
+        }
+    }
+
     for n in 0..=MAX_MODULE_DIRS {
         std::fs::create_dir_all(git.join(format!("modules/fake/f{n}")).as_path()).unwrap();
     }
