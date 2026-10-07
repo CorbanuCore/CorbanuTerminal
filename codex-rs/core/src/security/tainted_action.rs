@@ -127,9 +127,23 @@ impl PostTaintState {
     /// start. Applying them before taint under Moderate closes the files-route
     /// read gap (issue #239): a workspace-write sandbox otherwise lets an
     /// agent read credential files from `$HOME` before any untrusted content
-    /// arrives.
+    /// arrives. Sessions without a protected level carry no state today; the
+    /// taint arm stays as defense in depth.
     pub(crate) fn protected_paths_apply(&self) -> bool {
         self.taint_generation > 0 || self.level != SecurityLevel::Permissive
+    }
+
+    /// Moderate, both configured and in the live policy: a human approval
+    /// may lift the protected-path rules for one command.
+    pub(crate) fn moderate_bound(&self) -> bool {
+        self.level == SecurityLevel::Moderate
+            && matches!(
+                self.policy,
+                PolicyBinding::Bound {
+                    level: SecurityLevel::Moderate,
+                    ..
+                }
+            )
     }
 }
 

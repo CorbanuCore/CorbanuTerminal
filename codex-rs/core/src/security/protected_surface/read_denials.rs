@@ -17,7 +17,7 @@
 //! Issue #239 extends the same to Moderate: the read (and read-only) rules
 //! apply from the start under a protected level (Moderate or Aggressive), so
 //! a workspace-write sandbox cannot read credential files from `$HOME` before
-//! any taint. Permissive and untainted sessions are unchanged.
+//! any taint. Permissive and flag-off sessions are unchanged.
 
 use crate::security::tainted_action::USER_PERSISTENCE;
 use crate::security::tainted_action::WORKSPACE_PERSISTENCE;

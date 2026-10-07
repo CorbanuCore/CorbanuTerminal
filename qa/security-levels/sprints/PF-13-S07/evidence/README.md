@@ -61,8 +61,12 @@ so known credential locations (Corbanu home stores, other Corbanu homes, fixed
 `$HOME` credential paths such as `~/.ssh`, `~/.aws`) are unreadable before any
 untrusted content too. Permissive is unchanged by decision, and an arbitrary
 home file such as `$HOME/canary.txt` stays readable at every level (only known
-credential locations are denied). Re-running the route matrix under a saved
-Aggressive and Moderate level is still open.
+credential locations are denied). Under Moderate a human approval of a
+command's request to run outside the sandbox lifts the rules for that run,
+before untrusted content as after it. Known gap: before untrusted content,
+typing into a shell started without the rules (under a lower level, or lifted
+by such an approval) is not asked about. Re-running the route matrix under a
+saved Aggressive and Moderate level is still open.
 
 Note: the canary value appeared unredacted in exec tool output, which means it
 was also sent to the model provider in the tool result. The `secret_output_gate`

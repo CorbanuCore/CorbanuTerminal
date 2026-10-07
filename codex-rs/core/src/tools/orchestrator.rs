@@ -220,6 +220,12 @@ impl ToolOrchestrator {
             post_taint_recheck(action, tool_ctx)?;
             already_approved = true;
         }
+        // Issue #239: under Moderate before untrusted content, a command that
+        // asks to run outside the sandbox needs the human (no cache, hook or
+        // automatic reviewer); that answer lifts the protected-path rules.
+        let pre_taint_escalation =
+            post_taint.is_none() && moderate_escalation_before_taint(tool, req, tool_ctx);
+        let mut escalation_approved_by_human = false;
         match &requirement {
             _ if post_taint.is_some() => {}
             ExecApprovalRequirement::Skip { .. } => {
@@ -262,7 +268,7 @@ impl ToolOrchestrator {
                     call_id: &tool_ctx.call_id,
                     retry_reason: reason.clone(),
                     network_approval_context: None,
-                    fresh_human_authority: false,
+                    fresh_human_authority: pre_taint_escalation,
                 };
                 resolve_tool_apporval(
                     tool,
@@ -279,6 +285,7 @@ impl ToolOrchestrator {
                 )
                 .await?;
                 already_approved = true;
+                escalation_approved_by_human = pre_taint_escalation;
             }
         }
 
@@ -292,6 +299,7 @@ impl ToolOrchestrator {
         let denied = post_taint_read_denials(
             tool_ctx,
             &post_taint,
+            escalation_approved_by_human,
             grant_operation.as_deref(),
             turn_cwd,
             &materialized_workspace_roots,
@@ -696,6 +704,23 @@ where
     Some(crate::security::tainted_action::PostTaintAction { kind, state })
 }
 
+/// Issue #239: under Moderate before untrusted content, whether this command
+/// asks to run outside the sandbox (a human approval then lifts the
+/// protected-path rules for it, as after untrusted content).
+fn moderate_escalation_before_taint<Rq, Out, T>(tool: &T, req: &Rq, tool_ctx: &ToolCtx) -> bool
+where
+    T: ToolRuntime<Rq, Out>,
+{
+    tool.sandbox_permissions(req)
+        .requires_escalated_permissions()
+        && tool_ctx
+            .session
+            .services
+            .model_client()
+            .post_taint_state()
+            .is_some_and(|state| state.taint_generation == 0 && state.moderate_bound())
+}
+
 /// PF-23-S02: under Aggressive, the grant operation naming this exact
 /// command or patch in its folder. `None` under any other level.
 fn aggressive_grant_operation<Rq, Out, T>(tool: &T, req: &Rq, tool_ctx: &ToolCtx) -> Option<String>
@@ -746,13 +771,13 @@ where
 
 /// PF-23-S01 slice 3 / PF-23-S02 / issue #239: the exec-server and
 /// materialized profiles with credential and Corbanu home reads denied and
-/// persistence files made read-only, once this session holds content without
-/// standing under Moderate or Aggressive, and from the start under a
-/// protected level (`PostTaintState::protected_paths_apply`). Applying them
-/// before taint under Moderate closes the files-route read gap (#239).
+/// persistence files made read-only under Moderate or Aggressive, from the
+/// start of the session (`PostTaintState::protected_paths_apply`).
 ///
-/// Under Moderate a fresh human approval of this exact protected command is
-/// its grant and lifts the rules for this run. Under Aggressive an approval
+/// Under Moderate a fresh human approval lifts the rules for this run: after
+/// untrusted content, of this exact protected command; before it, of this
+/// command's request to run outside the sandbox (`escalation_approved`, still
+/// checked against the state after the approval). Under Aggressive an approval
 /// never does; only a matching human grant for this exact command
 /// (`security::aggressive`). Lifting only leaves these rules out: every
 /// denial of the profile itself stays. An external sandbox cannot take the
@@ -760,6 +785,7 @@ where
 fn post_taint_read_denials(
     tool_ctx: &ToolCtx,
     post_taint: &Option<crate::security::tainted_action::PostTaintAction>,
+    escalation_approved: bool,
     grant_operation: Option<&str>,
     cwd: codex_utils_absolute_path::AbsolutePathBuf,
     workspace_roots: &[codex_utils_absolute_path::AbsolutePathBuf],
@@ -771,8 +797,6 @@ fn post_taint_read_denials(
 )> {
     use crate::security::aggressive;
     use crate::security::protected_surface::ReadDenials;
-    use crate::security::tainted_action::PolicyBinding;
-    use codex_security_policy::SecurityLevel;
     let thread = tool_ctx.session.thread_id();
     let state = tool_ctx
         .session
@@ -780,21 +804,14 @@ fn post_taint_read_denials(
         .model_client()
         .post_taint_state()
         .filter(crate::security::tainted_action::PostTaintState::protected_paths_apply)?;
-    if post_taint.is_some()
-        && state.level == SecurityLevel::Moderate
-        && matches!(
-            state.policy,
-            PolicyBinding::Bound {
-                level: SecurityLevel::Moderate,
-                ..
-            }
-        )
+    if state.moderate_bound()
+        && (post_taint.is_some() || (escalation_approved && state.taint_generation == 0))
     {
         tracing::info!(
             target: "codex_core::security::tainted_action",
             taint_generation = state.taint_generation,
             call_id = %tool_ctx.call_id,
-            "post-taint read denials lifted by the human approval of this command"
+            "protected-path rules lifted by the human approval of this command"
         );
         return None;
     }
@@ -827,7 +844,7 @@ fn post_taint_read_denials(
         tracing::warn!(
             target: "codex_core::security::tainted_action",
             call_id = %tool_ctx.call_id,
-            "post-taint read denials cannot be added to an external sandbox"
+            "protected-path rules cannot be added to an external sandbox"
         );
         return None;
     };
@@ -838,7 +855,7 @@ fn post_taint_read_denials(
         read_only = denials.read_only_paths().count(),
         skipped = denials.skipped.len(),
         call_id = %tool_ctx.call_id,
-        "post-taint read denials applied"
+        "protected-path rules applied"
     );
     Some((exec_server, materialized))
 }
