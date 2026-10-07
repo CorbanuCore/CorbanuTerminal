@@ -19,9 +19,8 @@ updated: 2026-10-06
 
 # PF-27-S05 — Core model-client auth and vault labels through the broker
 
-Created by the coordinator's 2026-10-06 decision (Travis may revisit): moving Core's own model-client auth into
-the broker is its own sprint, after PF-27-S02 in the broker lane. It touches the model clients rather than the
-proxy, and it needs PF-27-S02's containment before the broker is a real boundary.
+Coordinator decision 2026-10-06: Core's own model-client auth moves into the broker in its own sprint, after
+PF-27-S02 (whose containment makes the broker a real boundary), touching the model clients rather than the proxy.
 
 ## Execution mandate
 
