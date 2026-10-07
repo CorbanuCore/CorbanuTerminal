@@ -576,7 +576,15 @@ fn create_filesystem_args(
             .filter(|path| !unreadable_paths.contains(path))
             .filter(|path| !missing_auto_metadata_read_only_project_root_subpaths.contains(path))
             .collect();
-        let protected_metadata_names = writable_root.protected_metadata_names.clone();
+        // The filesystem root of a full-write profile with denials (PF-23
+        // protected paths under full access) holds no repository metadata,
+        // and an unprivileged bwrap cannot create a mount point there:
+        // `mkdir /.git` would fail every command.
+        let protected_metadata_names = if root.parent().is_none() {
+            Vec::new()
+        } else {
+            writable_root.protected_metadata_names.clone()
+        };
         append_metadata_path_masks_for_writable_root(
             &mut read_only_subpaths,
             root,

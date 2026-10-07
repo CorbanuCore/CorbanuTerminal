@@ -418,3 +418,67 @@ fn pf_23_s02_enclosing_repo_and_dangling_links_are_protected() {
         );
     }
 }
+
+/// PF-23-S02 follow-up: submodule git folders (nested ones and ones whose
+/// path has a slash) and a `core.hooksPath` folder inside the workspace
+/// (`.husky`) are read-only too; the rest of the workspace stays writable.
+#[test]
+fn pf_23_s02_submodules_and_hooks_path_are_protected() {
+    let fx = fixture();
+    let cwd = fx.user_home.join("project");
+    let git = cwd.join(".git");
+    for module in ["modules/a", "modules/a/modules/inner", "modules/libs/b"] {
+        std::fs::create_dir_all(git.join(module).join("hooks")).unwrap();
+        std::fs::write(git.join(module).join("HEAD"), "ref: refs/heads/main\n").unwrap();
+    }
+    std::fs::write(
+        git.join("config"),
+        "[core]\n\tbare = false\n[core \"x\"]\n[CORE]\n\thooksPath = \".husky\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(cwd.join(".husky")).unwrap();
+
+    let denials = ReadDenials::collect(&fx.codex_home, Some(&fx.user_home), None, &[abs(&cwd)]);
+    let policy = denials
+        .apply(&PermissionProfile::Disabled)
+        .unwrap()
+        .file_system_sandbox_policy();
+    let writable = |path: &Path| policy.can_write_path_with_cwd(path, &cwd);
+    for protected in [
+        git.join("modules/a/hooks/pre-commit"),
+        git.join("modules/a/config"),
+        git.join("modules/a/modules/inner/hooks/post-checkout"),
+        git.join("modules/libs/b/hooks/pre-push"),
+        cwd.join(".husky/pre-commit"),
+    ] {
+        assert!(!writable(&protected), "{}", protected.display());
+    }
+    for open in [
+        git.join("modules/a/objects/ab"),
+        cwd.join("src/main.rs"),
+        cwd.join(".huskyrc"),
+    ] {
+        assert!(writable(&open), "{}", open.display());
+    }
+}
+
+#[test]
+fn pf_23_s02_hooks_path_resolves_like_git() {
+    let dir = tempfile::tempdir().unwrap();
+    let work_tree = abs(&dir.path().canonicalize().unwrap());
+    let config = work_tree.join("config");
+    let read = |text: &str| {
+        std::fs::write(config.as_path(), text).unwrap();
+        hooks_path(&config, &work_tree)
+    };
+    assert_eq!(
+        read("[core]\n  hookspath = tools/hooks\n"),
+        Some(work_tree.join("tools/hooks"))
+    );
+    assert_eq!(
+        read("[core]\nhooksPath = /opt/hooks\n"),
+        Some(abs(Path::new("/opt/hooks")))
+    );
+    assert_eq!(read("[user]\nhooksPath = x\n"), None);
+    assert_eq!(read("[core]\nhooksPath = ~/hooks\n"), None);
+}
