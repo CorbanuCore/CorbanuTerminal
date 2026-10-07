@@ -220,8 +220,64 @@ impl ToolOrchestrator {
             post_taint_recheck(action, tool_ctx)?;
             already_approved = true;
         }
+        // Issue #239: under Moderate before untrusted content, a command that
+        // asks to run outside the sandbox needs the human (no cache, hook or
+        // automatic reviewer), also where it would run unasked; that answer
+        // lifts the protected-path rules. With approvals off it stays refused.
+        let ask_human_to_escalate = post_taint.is_none()
+            && !matches!(requirement, ExecApprovalRequirement::Forbidden { .. })
+            && match approval_policy {
+                AskForApproval::Never => false,
+                AskForApproval::Granular(granular) => granular.allows_sandbox_approval(),
+                AskForApproval::UnlessTrusted | AskForApproval::OnRequest => true,
+            }
+            && moderate_escalation_before_taint(tool, req, tool_ctx);
+        let mut escalation_approved_by_human = false;
         match &requirement {
             _ if post_taint.is_some() => {}
+            _ if ask_human_to_escalate => {
+                let note =
+                    "Approving also lifts the Moderate credential protection for this command.";
+                let mut approval_ctx = ApprovalCtx {
+                    session: &tool_ctx.session,
+                    turn: &tool_ctx.turn,
+                    call_id: &tool_ctx.call_id,
+                    retry_reason: None,
+                    network_approval_context: None,
+                    fresh_human_authority: true,
+                };
+                // Keep why the command runs (the requirement's reason, else the
+                // model's justification) ahead of the note.
+                let why = match &requirement {
+                    ExecApprovalRequirement::NeedsApproval {
+                        reason: Some(reason),
+                        ..
+                    } => Some(reason.clone()),
+                    _ => match tool.approval_action(req, &approval_ctx) {
+                        Ok(
+                            ApprovalAction::Shell { justification, .. }
+                            | ApprovalAction::ExecCommand { justification, .. },
+                        ) => justification,
+                        _ => None,
+                    },
+                };
+                approval_ctx.retry_reason = Some(match why {
+                    Some(why) => format!("{why} {note}"),
+                    None => note.to_string(),
+                });
+                resolve_tool_apporval(
+                    tool,
+                    req,
+                    tool_ctx.call_id.as_str(),
+                    approval_ctx,
+                    tool_ctx,
+                    ApprovalReviewer::User,
+                    &otel,
+                )
+                .await?;
+                already_approved = true;
+                escalation_approved_by_human = true;
+            }
             ExecApprovalRequirement::Skip { .. } => {
                 if strict_auto_review {
                     let approval_ctx = ApprovalCtx {
@@ -289,9 +345,14 @@ impl ToolOrchestrator {
         #[allow(deprecated)]
         let turn_cwd = turn_ctx.cwd.clone();
         let grant_operation = aggressive_grant_operation(tool, req, tool_ctx);
+        // The taint generation a human approval of this run was given under.
+        let human_approved_at = match &post_taint {
+            Some(action) => Some(action.state.taint_generation),
+            None => escalation_approved_by_human.then_some(0),
+        };
         let denied = post_taint_read_denials(
             tool_ctx,
-            &post_taint,
+            human_approved_at,
             grant_operation.as_deref(),
             turn_cwd,
             &materialized_workspace_roots,
@@ -696,6 +757,23 @@ where
     Some(crate::security::tainted_action::PostTaintAction { kind, state })
 }
 
+/// Issue #239: under Moderate before untrusted content, whether this command
+/// asks to run outside the sandbox (a human approval then lifts the
+/// protected-path rules for it, as after untrusted content).
+fn moderate_escalation_before_taint<Rq, Out, T>(tool: &T, req: &Rq, tool_ctx: &ToolCtx) -> bool
+where
+    T: ToolRuntime<Rq, Out>,
+{
+    tool.sandbox_permissions(req)
+        .requires_escalated_permissions()
+        && tool_ctx
+            .session
+            .services
+            .model_client()
+            .post_taint_state()
+            .is_some_and(|state| state.taint_generation == 0 && state.moderate_bound())
+}
+
 /// PF-23-S02: under Aggressive, the grant operation naming this exact
 /// command or patch in its folder. `None` under any other level.
 fn aggressive_grant_operation<Rq, Out, T>(tool: &T, req: &Rq, tool_ctx: &ToolCtx) -> Option<String>
@@ -744,21 +822,22 @@ where
     })
 }
 
-/// PF-23-S01 slice 3 / PF-23-S02: the exec-server and materialized profiles
-/// with credential and Corbanu home reads denied and persistence files made
-/// read-only, once this session holds content without standing under
-/// Moderate or Aggressive, and under Aggressive from the start
-/// (`PostTaintState::protected_paths_apply`).
+/// PF-23-S01 slice 3 / PF-23-S02 / issue #239: the exec-server and
+/// materialized profiles with credential and Corbanu home reads denied and
+/// persistence files made read-only under Moderate or Aggressive, from the
+/// start of the session (`PostTaintState::protected_paths_apply`).
 ///
-/// Under Moderate a fresh human approval of this exact protected command is
-/// its grant and lifts the rules for this run. Under Aggressive an approval
-/// never does; only a matching human grant for this exact command
-/// (`security::aggressive`). Lifting only leaves these rules out: every
+/// Under Moderate a fresh human approval lifts the rules for this run: after
+/// untrusted content, of this exact protected command; before it, of this
+/// command's request to run outside the sandbox. `human_approved_at` is the
+/// taint generation that approval was given under; new taint since voids it.
+/// Under Aggressive an approval never does; only a matching human grant for
+/// this exact command (`security::aggressive`). Lifting only leaves these rules out: every
 /// denial of the profile itself stays. An external sandbox cannot take the
 /// rules and keeps its own.
 fn post_taint_read_denials(
     tool_ctx: &ToolCtx,
-    post_taint: &Option<crate::security::tainted_action::PostTaintAction>,
+    human_approved_at: Option<u64>,
     grant_operation: Option<&str>,
     cwd: codex_utils_absolute_path::AbsolutePathBuf,
     workspace_roots: &[codex_utils_absolute_path::AbsolutePathBuf],
@@ -770,8 +849,6 @@ fn post_taint_read_denials(
 )> {
     use crate::security::aggressive;
     use crate::security::protected_surface::ReadDenials;
-    use crate::security::tainted_action::PolicyBinding;
-    use codex_security_policy::SecurityLevel;
     let thread = tool_ctx.session.thread_id();
     let state = tool_ctx
         .session
@@ -779,21 +856,12 @@ fn post_taint_read_denials(
         .model_client()
         .post_taint_state()
         .filter(crate::security::tainted_action::PostTaintState::protected_paths_apply)?;
-    if post_taint.is_some()
-        && state.level == SecurityLevel::Moderate
-        && matches!(
-            state.policy,
-            PolicyBinding::Bound {
-                level: SecurityLevel::Moderate,
-                ..
-            }
-        )
-    {
+    if state.human_approval_lifts_rules(human_approved_at) {
         tracing::info!(
             target: "codex_core::security::tainted_action",
             taint_generation = state.taint_generation,
             call_id = %tool_ctx.call_id,
-            "post-taint read denials lifted by the human approval of this command"
+            "protected-path rules lifted by the human approval of this command"
         );
         return None;
     }
@@ -826,7 +894,7 @@ fn post_taint_read_denials(
         tracing::warn!(
             target: "codex_core::security::tainted_action",
             call_id = %tool_ctx.call_id,
-            "post-taint read denials cannot be added to an external sandbox"
+            "protected-path rules cannot be added to an external sandbox"
         );
         return None;
     };
@@ -837,7 +905,7 @@ fn post_taint_read_denials(
         read_only = denials.read_only_paths().count(),
         skipped = denials.skipped.len(),
         call_id = %tool_ctx.call_id,
-        "post-taint read denials applied"
+        "protected-path rules applied"
     );
     Some((exec_server, materialized))
 }
