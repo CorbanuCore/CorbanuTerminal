@@ -20,6 +20,9 @@ const CREDENTIAL_FILES: &[&str] = &[
     ".git-credentials",
     ".npmrc",
     ".pypirc",
+    // Network tool settings: may hold credentials or upload directives.
+    ".curlrc",
+    ".wgetrc",
     "id_rsa",
     "id_ecdsa",
     "id_ed25519",
