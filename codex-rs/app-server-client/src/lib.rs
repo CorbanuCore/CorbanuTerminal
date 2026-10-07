@@ -88,6 +88,8 @@ pub mod legacy_core {
     pub use codex_core::protected_preflight;
     pub use codex_core::resolve_installation_id;
     pub use codex_core::security_level_change;
+    // PF-41-S01: the read-only `/security` inspector.
+    pub use codex_core::security_inspection;
     // Contained Claude panes (#218) launch Claude Code from the TUI process,
     // under the secretless launch contract armed there.
     pub use codex_core::external_agent_contract_armed;

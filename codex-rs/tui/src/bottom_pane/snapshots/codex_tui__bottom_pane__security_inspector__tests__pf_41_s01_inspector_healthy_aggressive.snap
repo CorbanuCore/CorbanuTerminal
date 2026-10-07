@@ -1,0 +1,62 @@
+---
+source: tui/src/bottom_pane/security_inspector_tests.rs
+expression: "render(&inspector, 100)"
+---
+Security inspector (read only)
+● Protected: Aggressive; every required control observed or checked at launch
+Observed 0s ago, policy generation 2.1
+
+Level
+  Saved: Aggressive [configured: /security]
+  Core config: Permissive [configured: config layers]
+  [set] Active this run: Aggressive, every row verified at launch [resolved: launch check]
+  [on] Live policy: Aggressive in force; next start Aggressive; kill switch off; generation 2.1
+      [observed: Core policy]
+
+This session
+  [set] Sandbox: session value 0 [resolved: session config, checked at launch]
+  [set] Approvals: session value 1 [resolved: session config, checked at launch]
+  [set] Network: session value 2 [resolved: session config, checked at launch]
+  [set] Vault: session value 3 [resolved: session config, checked at launch]
+  [set] Child agents: session value 4 [resolved: session config, checked at launch]
+  [set] Sandbox backend: macOS Seatbelt [resolved: platform]
+  [set] Egress destinations: proxy destination policy on (url_destination_policy) [resolved:
+      features]
+
+Runtime controls
+  [on] Secretless launch: environment allowlist and launch checks armed [observed: this process]
+  [on] Output gate: managed secrets are removed from output [observed: this process]
+  [off] Model key broker: off: Core reads provider keys itself (broker_model_auth) [observed: this
+      process]
+  [off] Credential broker: off (isolated_credential_broker) [resolved: features]
+  [on] Untrusted content: labelled; none in this session yet [observed: session]
+  [set] Protected boundary: preflight clean at launch; earlier conversations are not resumed
+      [resolved: launch preflight]
+
+Grants
+  Held: none. Grants are never saved: a restart, level change, revocation or the kill switch ends
+      them [observed: Core policy]
+
+Agents
+  [on] main session: Aggressive [observed: Core policy]
+  [set] Nested agents: refuse (default): agent commands that start `corbanu exec` or `review` are
+      refused while Aggressive is enforced [configured: /security]
+
+Not contained
+  [not contained] MCP servers: docs run outside the OS sandbox with the environment allowlist;
+      allowed because you configured or started it [resolved: config]
+  [off] Hooks: off (codex_hooks) [resolved: features]
+  [not contained] `!` shell commands: run outside the OS sandbox with the environment allowlist;
+      allowed because you configured or started it [fixed]
+  [not contained] App-server command/exec: runs outside the OS sandbox with the environment
+      allowlist; allowed because you configured or started it [fixed]
+
+Not available
+  [not available] Screened search routing: not available in this build (PF-32) [fixed]
+  [not available] Brokered browser login: not available in this build (PF-37) [fixed]
+  [not available] Quarantine: not available in this build (PF-34) [fixed]
+  [not available] Agent Sweep: not available in this build (PF-40) [fixed]
+
+Recent denials
+  None: nothing refused in this process [observed: this process]
+↑/↓ scroll · r refresh · esc back to /security

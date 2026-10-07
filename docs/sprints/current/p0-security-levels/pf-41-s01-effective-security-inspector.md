@@ -5,13 +5,18 @@ status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-41"
 execution_order: 71
-owner: "Jim Ricketts"
-worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
-branch: "feat/p0-security-levels"
-base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
+owner: "convergence lane worker (2026-10-07)"
+parallel_lane: "tui"
+write_scope: "codex-rs/core/src/security/inspection.rs, codex-rs/core/src/security/inspection_tests.rs, codex-rs/core/src/security/effective_policy.rs, codex-rs/core/src/security/aggressive.rs, codex-rs/core/src/security/launch_contract.rs, codex-rs/core/src/security/protected_surface/gate.rs, codex-rs/core/src/security/mod.rs, codex-rs/core/src/tools/orchestrator.rs, codex-rs/core/src/client.rs, codex-rs/core/src/lib.rs, codex-rs/app-server-client/src/lib.rs, codex-rs/tui/src/security/inspector.rs, codex-rs/tui/src/security/inspector_tests.rs, codex-rs/tui/src/security/mod.rs, codex-rs/tui/src/bottom_pane/security_inspector.rs, codex-rs/tui/src/bottom_pane/security_inspector_tests.rs, codex-rs/tui/src/bottom_pane/security_view.rs, codex-rs/tui/src/bottom_pane/security_view_tests.rs, codex-rs/tui/src/bottom_pane/mod.rs, codex-rs/tui/src/bottom_pane/snapshots/, codex-rs/tui/src/chatwidget/slash_dispatch.rs, qa/security-levels/sprints/PF-41-S01/, qa/demos/specs/pf41-inspector-live-aggressive.toml, qa/demos/specs/pf41-inspector-taint-denial.toml, qa/demos/specs/pf41-inspector-failure-recovery.toml, qa/demos/index/PF-41-S01.md"
+integration_gate: "Per-sprint gate of 2026-10-06 behind security_levels: focused tests, GLM 5.2 tmux run, one Opus 5.5 High review, SOP videos, Linux clippy on the RTX box. Not touched: bottom_pane/security_level_picker* (PF-25 lane)."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-41-s01-20261007"
+branch: "pf-41-s01-inspector"
+base_commit: "e4d17dbdc6f0d6a4c460d9005fd7cc73aebc2566"
 depends_on: "PF-23-S03, PF-29-S02, PF-24-S02"
+merged_behind_flag: "security_levels"
+gate_evidence: "qa/security-levels/sprints/PF-41-S01/README.md"
 created: 2026-08-28
-updated: 2026-10-06
+updated: 2026-10-07
 ---
 
 # PF-41-S01 — Effective security inspector and degradation state
@@ -39,38 +44,56 @@ updated: 2026-10-06
 
 ## Preconditions
 
-- [ ] Active plan; PF-23-S03, PF-29-S02, PF-24-S02 completed and archived. Decision 3 (2026-10-06) dropped PF-32-S06, PF-37-S02 and PF-40-S03; those controls belong to the P1 hardening plan.
-- [ ] Read root and nearest implementation-path AGENTS.md; verify exact plan/worktree coordinates.
-- [ ] Confirm source pins, declared crate/module paths, and backend/API availability; unresolved security prerequisites block readiness.
+- [x] Active plan; PF-23-S03 archived, PF-29-S02 (#235) and PF-24-S02 (#253) merged behind their flags. Decision 3 (2026-10-06) dropped PF-32-S06, PF-37-S02 and PF-40-S03; those controls belong to the P1 hardening plan.
+- [x] Read root and nearest implementation-path AGENTS.md; worktree coordinates above.
+- [x] Source pins, crate/module paths and APIs confirmed on `e4d17dbdc6`.
 
 ## Done
 
-- [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
+Gate: [qa/security-levels/sprints/PF-41-S01/README.md](../../../../qa/security-levels/sprints/PF-41-S01/README.md).
+
+- [x] New single-feature record reconciled with current ownership and archived design input.
+- [x] `i` in `/security` (picker only; flag-off view unchanged) opens a read-only inspector. Esc returns, `r` reads
+  again, arrows scroll under a pinned header; no key changes level, grants, revocations or a stop.
+- [x] Configured (saved level, Core config layers), resolved (launch check, session config, platform backend) and
+  observed (Core's live policy with its generation, runtime controls, taint, grants, denials) facts are shown
+  separately, each with its source. Observation age is shown and redrawn every second; after 30 s it is stale.
+- [x] Badge: green only when nothing is degraded, every required control was observed or checked at launch, and the
+  facts are fresh. Config-only levels, no live policy, an unobserved broker, Core behind the launch level, a saved
+  level waiting for restart, stale facts, a missing sandbox, an unclean boundary or a degraded control all prevent it.
+  Kill switch, unreadable state or a stopped session read Blocked.
+- [x] Core snapshot (`core/src/security/inspection.rs`): live tree, every agent with its level, stricter-than-session
+  and stopped flags; held grants (surface, expiry, uses; never ids or operations); taint from the session's registry;
+  launch contract and hardening, output gate, model key broker; recent denials (post-taint refusals and declines,
+  including interrupted ones, and launch-contract refusals) as fixed text only.
+- [x] MCP servers, hooks, `!` commands and app-server `command/exec` read "not contained" (with or without the
+  environment allowlist); PF-32, PF-37, PF-34 and PF-40 read "not available". Nested agents shows refuse or pass.
+- [x] Tests: conflicting config, unsupported platform, stale health, broker crash, expired grant, tainted session,
+  inherited stricter child, kill switch and unreadable state, read-only keys; 6 core and 14 TUI `pf_41_s01` tests.
 
 ## Remaining
 
-- [ ] Display configured, resolved and observed protection separately, including broker/engine health, snapshot generation, incomplete inventory and stale probes. sandboxExplain-style policy resolution alone cannot produce a green live-protection claim.
-
-- [ ] Expose a read-only snapshot of requested/effective level, actual sandbox/backend, egress path, broker/classifier health, active references/grants and expiry, taint, retention and recent denial reasons.
-- [ ] Show resolved runtime facts and their source/generation, not just configuration intent; label unsupported or degraded components and prevent a misleading healthy protected-mode badge.
-- [ ] Correlate session/task/child policy and recent decisions without returning secret values, opaque authorization tokens or raw financial records.
-- [ ] Offer trusted navigation from /security to grants and migration; inspector reading cannot mutate authority or clear a stop.
-- [ ] Show MCP servers, hooks, the `!` user shell and app-server `command/exec` as "not contained" in protected levels: they get the PF-27-S02 environment allowlist but run outside the OS sandbox, allowed as user-configured/user-started (Travis, 2026-10-06).
-- [ ] Show screened search routing (PF-32), brokered browser login (PF-37), quarantine (PF-34) and Agent Sweep (PF-40) as "not available" until their P1 sprints land; never as healthy or enabled.
-- [ ] Test conflicting config, unsupported platform, stale health, broker crash, expired grant, tainted memory and inherited stricter child policy.
-- [ ] Add named `pf_41_s01` regression tests; update affected Cargo/Bazel/lock/schema edges together without broadening this feature.
+- [ ] Full `just test -p codex-core` / `-p codex-tui` suites run in post-merge CI (only focused and security filters
+  ran here); one pre-existing TMPDIR-length flake in a picker test is noted in the gate record.
+- [ ] Code-blind functional design/execution and human sign-off are milestone work (flag removal), not this gate.
+- [ ] Not observed here, so never green: the network credential broker's health and the model key broker's health.
+  Launch-contract denials carry no thread (shown as "this process").
 
 ## Verification
 
-- [ ] Run `cd codex-rs && just fix -p <affected-crate>` for each listed crate, then `just fmt`; inspect the final diff.
-- [ ] Focused: `cd codex-rs && just test -p codex-core pf_41_s01 && just test -p codex-tui pf_41_s01`; confirm tests actually ran.
-- [ ] Integration: full affected crate suites via `just test -p <affected-crate>`; update Bazel locks when manifests change.
-- [ ] TUI applicability: required: open /security inspector → inspect backend/taint/grant → inject failure → visible blocked state → recover/restart.
-- [ ] Record candidate/commit, commands, expected/actual outcomes and safe artifact digests; no production credentials or funds.
+- [x] `just fix -p codex-core -p codex-tui -p codex-app-server-client`, then `just fmt`; diff inspected.
+- [x] Focused: `just test -p codex-core pf_41_s01` (6/6) and `just test -p codex-tui pf_41_s01` (14/14) on the final tree.
+- [x] Security filters: core `security tainted orchestrator` and `taint aggressive launch protected pf_23 pf_30`;
+  TUI `security slash_command` (see the gate record). No manifest or lock changes.
+- [x] TUI: GLM 5.2 tmux run and three videos: open `/security` inspector → inspect backend, taint, grants and denials →
+  inject failure (`security_state.json` overwritten) → Blocked → confirm a level → restart → recovered.
+- [x] Commits, commands, outcomes and video links recorded in the gate record; no production credentials.
+- [x] Linux clippy (`-D warnings`; core, tui, app-server-client) on the RTX box.
+- [ ] Full crate suites in post-merge CI; code-blind run at the flag-removal milestone.
 
 ## Exit evidence
 
-- [ ] Implementation commit and final-tree outputs under `qa/security-levels/sprints/PF-41-S01/`.
-- [ ] Acceptance and source-mapping assertions proven; applicable true-TUI keys/checkpoints captured after formatting.
+- [x] Implementation commits and final-tree outputs under `qa/security-levels/sprints/PF-41-S01/`.
+- [x] Acceptance assertions proven in tests and true-TUI keys after formatting.
 - [ ] PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
-- [ ] Done/Remaining reflect reality; completed record moved to the archive and plan/navigation updated.
+- [ ] Record stays current until the milestone gate (flag removal) closes the remaining items above.

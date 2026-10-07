@@ -1,0 +1,12 @@
+---
+source: tui/src/bottom_pane/security_inspector_tests.rs
+expression: "rendered.lines().take(8).collect::<Vec<_>>().join(\"\\n\")"
+---
+Security inspector (read only)
+■ Blocked: security state unreadable: Aggressive and the kill switch apply
+Observed 0s ago
+
+Level
+  Saved: Aggressive [configured: /security]
+  Core config: Permissive [configured: config layers]
+  [set] Active this run: Aggressive, every row verified at launch [resolved: launch check]

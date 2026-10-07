@@ -33,7 +33,7 @@ Earlier allocation notes are in the [plan history](../../../plans/history/p0-sec
 | 36 | [PF-29-S02](pf-29-s02-human-secret-migration.md) | Human-reviewed credential migration and recovery (merged behind `protected_mode_preflight`, #235; open items recorded) | first free | PF-29-S01 (merged behind flag), PF-24-S01 (archived) |
 | 44 | [PF-25-S01](pf-25-s01-temporary-grant-tui.md) | Temporary grant TUI | tui | PF-17-S01, PF-23-S02, PF-24-S02 |
 | 45 | [PF-25-S02](pf-25-s02-revocation-and-kill-switch-tui.md) | Revocation and kill-switch TUI | tui | PF-19-S02, PF-23-S03, PF-25-S01 |
-| 71 | [PF-41-S01](pf-41-s01-effective-security-inspector.md) | Effective security inspector and degradation state | convergence | PF-23-S03, PF-29-S02, PF-24-S02 |
+| 71 | [PF-41-S01](pf-41-s01-effective-security-inspector.md) | Effective security inspector and degradation state (merged behind `security_levels`, #259; open items recorded) | convergence | PF-23-S03, PF-29-S02, PF-24-S02 |
 | 73 | [PF-13-S07](pf-13-s07-integrated-credential-boundary-qualification.md) | Integrated credential boundary qualification | convergence | PF-13-S05, PF-13-S06, PF-27-S02, PF-28-S02, PF-29-S02, PF-33-S02 |
 | 79 | [PF-77-S01](pf-77-s01-tasknode-reliability.md) | Task Node durable command and transport recovery | hosted, not security | none |
 | 83 | [PF-76-S01](pf-76-s01-provider-profile-persistence.md) | Provider profile persistence | hosted, not security | none |
