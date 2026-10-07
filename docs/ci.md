@@ -9,6 +9,14 @@ red status noise without testing the code.
 
 - Formatting, spelling, manifest, and dependency checks.
 - Rust cargo checks on Linux x64.
+- Linux clippy (`rust-ci / Lint/Build — ubuntu-24.04 - x86_64-unknown-linux-gnu`):
+  `cargo clippy --tests -D warnings` for the gnu dev target, so Linux-only
+  lint errors fail the PR instead of landing on `main`. It runs when
+  `codex-rs/` or `.github/` changes, is part of `CI results (required)`, uses
+  the shared sccache/cargo-home caches (typically 6-10 minutes) and has a
+  20-minute timeout. The job is `rust-ci-lint-build.yml`, shared with
+  postmerge `rust-ci-full`, which also runs the musl dev and musl release legs.
+  The full Linux test suite stays postmerge only.
 - Rust nextest on Linux x64.
 - SDK checks on hosted Linux x64.
 - V8 canary coverage on hosted Linux x64 only.
