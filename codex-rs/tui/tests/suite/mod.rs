@@ -11,6 +11,7 @@ mod memory_human_fixture;
 mod memory_stage_one_policy;
 #[cfg(unix)]
 mod multi_provider_onboarding;
+mod nested_launch;
 #[cfg(unix)]
 mod output_text_stream;
 #[cfg(unix)]
