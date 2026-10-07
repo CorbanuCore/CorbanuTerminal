@@ -237,9 +237,7 @@ impl RevocationView {
                         now,
                     )
                     .map(|report| outcome_line(revocation, &report))
-                    .map_err(|error| {
-                        format!("Not changed: {error}. Nothing changed; review it again.")
-                    })
+                    .map_err(|error| format!("Not changed: {error}."))
                 };
                 if self.commit_inline {
                     let outcome = run();
@@ -393,6 +391,9 @@ fn review_text(choice: &Choice, level: SecurityLevel) -> (String, Vec<String>) {
 }
 
 fn outcome_line(choice: HumanRevocation, report: &RevocationReport) -> String {
+    if choice == HumanRevocation::KillSwitchOff && report.kill_switch_active {
+        return "The kill switch is still on (another session turned it on again). Review it again.".to_string();
+    }
     let what = match choice {
         HumanRevocation::AllActiveAuthority => "All active authority revoked",
         HumanRevocation::KillSwitchOn => "Kill switch on",

@@ -399,6 +399,14 @@ impl RevocationState {
         self.validate()
     }
 
+    /// When the kill-switch event in force was made, if any. A later change
+    /// of the switch must be newer to take effect.
+    pub fn kill_switch_event_at_unix_seconds(&self) -> Option<i64> {
+        self.last_kill_switch_event
+            .as_ref()
+            .map(|event| event.created_at_unix_seconds)
+    }
+
     /// The kill-switch event in force, if any. A release is only valid
     /// against the one the human saw.
     pub fn kill_switch_event_id(&self) -> Option<&BoundedText> {

@@ -91,6 +91,24 @@ pub fn commit_human_revocation(
         Some(epoch) if live => epoch,
         Some(_) | None => controller.authority_epoch()?,
     };
+    // Kill-switch events are ordered by time: a change within the same
+    // second as the one in force would be ignored, so it is made a second
+    // later.
+    let now_unix_seconds = match choice {
+        HumanRevocation::KillSwitchOn | HumanRevocation::KillSwitchOff => {
+            let stored = super::recovery::load(codex_home)
+                .ok()
+                .flatten()
+                .and_then(|state| state.revocations.kill_switch_event_at_unix_seconds());
+            controller
+                .kill_switch_event_at()
+                .max(stored)
+                .map_or(now_unix_seconds, |last| {
+                    now_unix_seconds.max(last.saturating_add(1))
+                })
+        }
+        HumanRevocation::AllActiveAuthority => now_unix_seconds,
+    };
     let request =
         SecurityControlRequest::new(epoch, SecurityControlAction::Revoke { target, reason })
             .map_err(|error| LevelChangeError::Refused(error.to_string()))?;

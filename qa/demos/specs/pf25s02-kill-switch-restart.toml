@@ -1,0 +1,134 @@
+# PF-25-S02: Kill switch applies now and holds after a restart (GLM 5.2).
+id = "pf25s02-kill-switch-restart"
+feature = "Kill switch applies now and holds after a restart"
+expected = "Under Aggressive, /security, k, the kill switch row: the review lists what it ends; Enter turns it on now and saves it. After r restart, /security, k still shows Kill switch: on, and GLM's next command approval offers no grant."
+model = "glm-5.2"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "!printf 'shipped-%s\\n' v2-canary > {home}/team-notes.txt && echo seeded"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "seeded"
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Preflight passed"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "r restart now"
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Restarting Corbanu Terminal[\\s\\S]*Corbanu Terminal \\(v[\\s\\S]*› "
+timeout = 60
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "k grants and kill switch"
+[[steps]]
+key = "k"
+[[steps]]
+wait = "Grants and kill switch"
+[[steps]]
+pause = 2.5
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Turn the kill switch on\\?"
+[[steps]]
+pause = 4.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Kill switch on in this session[\\s\\S]*Saved"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Restarting Corbanu Terminal[\\s\\S]*Corbanu Terminal \\(v[\\s\\S]*› "
+timeout = 60
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "k grants and kill switch"
+[[steps]]
+key = "k"
+[[steps]]
+wait = "Grants and kill switch"
+[[steps]]
+pause = 2.5
+[[steps]]
+wait = "Kill switch: on"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Escape"
+[[steps]]
+key = "Escape"
+[[steps]]
+pause = 0.5
+[[steps]]
+type = "Run exactly this command and quote its output: cat \"$(printf '../ho%s/team-notes.txt' me)\""
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Would you like to run the following command"
+timeout = 240
+compress = 2
+[[steps]]
+pause = 2.0
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "y"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "[Oo]peration not permitted"
+timeout = 240
+compress = 2
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+[[steps]]
+pause = 4.0

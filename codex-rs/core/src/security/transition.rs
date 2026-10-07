@@ -494,6 +494,16 @@ impl TrustedSecurityController {
         .map_err(|_| SecurityPolicyError::AuthorityMismatch)
     }
 
+    /// When the kill-switch event in force was made, if any (PF-25-S02).
+    pub(crate) fn kill_switch_event_at(&self) -> Option<i64> {
+        let guard = self.read_state().ok()?;
+        guard
+            .as_ref()?
+            .persisted
+            .revocations
+            .kill_switch_event_at_unix_seconds()
+    }
+
     /// The level in force, the level the next start enforces, and whether
     /// the kill switch is on.
     pub(crate) fn in_force(

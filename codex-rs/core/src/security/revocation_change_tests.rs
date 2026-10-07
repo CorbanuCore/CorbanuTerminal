@@ -21,7 +21,16 @@ use super::super::tainted_action::PolicyBinding;
 use super::super::tainted_action::PostTaintState;
 use super::*;
 
-const NOW: i64 = 1_000;
+use std::sync::atomic::AtomicI64;
+use std::sync::atomic::Ordering;
+
+/// The same second for every commit: Core orders kill-switch changes made
+/// within one second itself.
+static NOW: AtomicI64 = AtomicI64::new(1_000);
+
+fn now() -> i64 {
+    NOW.load(Ordering::Relaxed)
+}
 
 fn live_tree(home: &TempDir, level: SecurityLevel) -> (EffectivePolicyView, ThreadId) {
     let view = EffectivePolicyView::default();
@@ -58,7 +67,7 @@ fn revoke(
         thread,
         &basis(home, thread),
         choice,
-        NOW,
+        now(),
     )
 }
 
@@ -150,9 +159,11 @@ fn security_revocation_kill_switch_applies_now_saves_and_releases_without_loweri
         "the other session took it"
     );
     assert_eq!(held_by(root), Vec::<String>::new(), "{grant} ended");
+    // A revocation never stores a level of its own: this tree's Aggressive
+    // came from its configuration, not from a saved level.
     assert_eq!(
         stored_kill_switch(&home),
-        Some((SecurityLevel::Aggressive, true))
+        Some((SecurityLevel::Permissive, true))
     );
     // The next start reads it.
     assert!(basis(&home, /*thread*/ None).kill_switch_active);
@@ -164,7 +175,7 @@ fn security_revocation_kill_switch_applies_now_saves_and_releases_without_loweri
     );
     assert_eq!(
         stored_kill_switch(&home),
-        Some((SecurityLevel::Aggressive, false))
+        Some((SecurityLevel::Permissive, false))
     );
 }
 
@@ -213,7 +224,7 @@ fn security_revocation_all_active_authority_ends_grants() {
     assert_ne!(view.authority_marker().unwrap(), before, "epoch moved");
     assert_eq!(
         stored_kill_switch(&home),
-        Some((SecurityLevel::Aggressive, false))
+        Some((SecurityLevel::Permissive, false))
     );
 }
 
@@ -231,7 +242,7 @@ fn security_revocation_refuses_a_state_changed_since_review() {
         Some(root),
         &reviewed,
         HumanRevocation::AllActiveAuthority,
-        NOW,
+        now(),
     );
     assert!(matches!(result, Err(LevelChangeError::Changed)), "{result:?}");
 }

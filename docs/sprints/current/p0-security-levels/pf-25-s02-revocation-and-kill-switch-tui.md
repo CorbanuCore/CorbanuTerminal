@@ -5,13 +5,18 @@ status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-25"
 execution_order: 45
-owner: "Jim Ricketts"
-worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
-branch: "feat/p0-security-levels"
-base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
+owner: "tui lane worker (round 8, 2026-10-07)"
+parallel_lane: "tui"
+write_scope: "codex-rs/core/src/security/revocation_change.rs, codex-rs/core/src/security/revocation_change_tests.rs, codex-rs/core/src/security/level_change.rs, codex-rs/core/src/security/aggressive.rs, codex-rs/core/src/security/mod.rs, codex-rs/core/src/lib.rs, codex-rs/app-server-client/src/lib.rs, codex-rs/tui/src/security/revocation_view.rs, codex-rs/tui/src/security/revocation_view_tests.rs, codex-rs/tui/src/security/mod.rs, codex-rs/tui/src/security/snapshots/, codex-rs/tui/src/bottom_pane/security_view.rs, codex-rs/tui/src/bottom_pane/security_level_picker.rs, qa/security-levels/sprints/PF-25-S02/, qa/demos/specs/, qa/demos/index/PF-25-S02.md"
+integration_gate: "Per-sprint gate of 2026-10-06 behind security_levels; the view is offered when Core enforces a protected level, the kill switch is on, or grants are held."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-25-s02-20261007"
+branch: "feat/pf-25-s02-revocation-tui"
+base_commit: "c5fa36b31f"
 depends_on: "PF-19-S02, PF-23-S03, PF-25-S01"
+merged_behind_flag: "security_levels"
+gate_evidence: "qa/security-levels/sprints/PF-25-S02/README.md"
 created: 2026-08-24
-updated: 2026-08-28
+updated: 2026-10-07
 ---
 
 # PF-25-S02 — Revocation and kill-switch TUI
@@ -37,31 +42,44 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] PF-19-S02, PF-23-S03, and PF-25-S01 are completed and archived.
-- [ ] Read root, Rust, Core, TUI, and TUI style instructions.
-- [ ] Exact worktree coordinates match the active plan.
+- [x] PF-19-S02, PF-23-S03 archived; PF-25-S01 (grant TUI) is this branch's base.
+- [x] Read root, Rust, Core, TUI, and TUI style instructions.
+- [x] Worktree coordinates above.
 
 ## Done
 
+Gate: [qa/security-levels/sprints/PF-25-S02/README.md](../../../../qa/security-levels/sprints/PF-25-S02/README.md).
+
 - [x] Sprint record is linked only to PF-25.
+- [x] `/security`, `k` (offered when Core enforces a protected level, the kill switch is on, or grants are held)
+  opens "Grants and kill switch" (`tui/src/security/revocation_view.rs`): Core's level, the kill switch, each grant
+  held now (command, runs left, expiry; no protected values), "Revoke all active authority", and the kill switch.
+- [x] Every choice has a review; only Enter there commits, off the UI thread. Esc changes nothing. Turning the kill
+  switch off (the one choice that removes protection) opens on "Back" and needs an arrow key first.
+- [x] One grant ends now (`security_revocation::revoke_grant`; grants are memory-only). Revoke all and the kill
+  switch go through PF-23-S03's transition (`core/src/security/revocation_change.rs`): they apply now to this
+  session's policy tree and the others of the process on the home (grants, "for session" approvals, broker
+  channels end) and are saved in `security_state.json`, so they hold after a restart; `r` restarts to check.
+  Only the kill switch the person saw can be released, and releasing keeps the level.
+- [x] A state changed since the review is refused with "review it again"; a save failure is reported.
+- [x] Tests: Core (kill switch now, other trees, saved, next start, release keeps the level, release of an off switch
+  refused, no session, revoke all ends grants and moves the epoch, changed state refused, one grant); TUI (list and
+  review snapshots, Esc, on then off with the Back guard, revoke all, changed state, restart key, scan that only
+  this view calls Core's revocation entry points).
 
 ## Remaining
 
-- [ ] Exercise immediate kill while a fake financial effect is submitted/unknown; show future authority revoked and the prior effect still uncertain. Full financial integration is repeated in PF-38-S03/PF-26, not claimed from a UI fixture.
-
-- [ ] List active secret-free grants/mandates and their exact scopes without protected values.
-- [ ] Require trusted human confirmation for revoke-all, scoped revoke, and kill-switch activation.
-- [ ] Apply and persist revocation before another protected operation can start; show durable active state after restart.
-- [ ] Provide an explicit human recovery path that cannot silently weaken the selected level.
-- [ ] Add race, cancel, persistence-failure, restart/resume, child, cached-decision, and agent-attempt tests with snapshots.
+- [ ] Gate: Opus review, Linux clippy, GLM videos, merge, archive.
+- Not here: a fake financial effect under the kill switch (PF-38-S03/PF-26); mandates (none are issued yet, so none
+  are listed); scoped revocation of one agent (Core supports `Actor`, no UI yet).
 
 ## Verification
 
-- [ ] Fix: `cd codex-rs && just fix -p codex-tui && just fix -p codex-core`.
-- [ ] Format: `cd codex-rs && just fmt`; then inspect the final diff.
-- [ ] Tests: `cd codex-rs && just test -p codex-tui security_revocation && just test -p codex-core security_recovery`.
-- [ ] Snapshot review: inspect and intentionally accept only PF-25 revocation output.
-- [ ] TUI qualification deferred to PF-26-S02 with revoke/kill/restart/recovery keys.
+- [x] `just fix -p codex-core -p codex-tui -p codex-app-server-client`; `just fmt`.
+- [x] `just test -p codex-core` (`security_revocation`, `transition`, `level_change`, `grant_offer`);
+  `just test -p codex-tui` (`pf_25_s02`, `security`).
+- [x] Snapshots reviewed and accepted (PF-25 revocation output only).
+- [ ] GLM 5.2 tmux run and videos with revoke/kill/restart/recovery keys; Linux clippy on the RTX box.
 
 ## Exit evidence
 

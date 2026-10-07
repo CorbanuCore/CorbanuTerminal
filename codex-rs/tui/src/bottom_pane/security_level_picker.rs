@@ -732,6 +732,14 @@ impl SecurityLevelPicker {
         if let Some(line) = core_status(&self.basis) {
             lines.push(line);
         }
+        // PF-25-S02: the kill switch holds across restarts until turned off.
+        if self.basis.kill_switch_active
+            && !matches!(self.basis.stored, StoredSecurityState::Unreadable(_))
+        {
+            lines.push(
+                "Kill switch: on. New grants and protected actions after untrusted content are refused; press k to review it.".to_string(),
+            );
+        }
         // PF-25-S01: grants held now, with their scope and expiry.
         lines.extend(crate::security::grant_view::held_lines(
             &crate::legacy_core::security_grant::held_grants(),

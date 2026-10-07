@@ -1,0 +1,145 @@
+# PF-25-S02: Revoke one grant from /security (GLM 5.2).
+id = "pf25s02-revoke-grant"
+feature = "Revoke one grant from /security"
+expected = "A grant for any run of GLM's hidden-home read is held. /security, k lists it with its command, limit and expiry; Enter reviews it and Enter revokes it. GLM's next identical read, approved with y, gets Operation not permitted."
+model = "glm-5.2"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "!printf 'shipped-%s\\n' v2-canary > {home}/team-notes.txt && echo seeded"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "seeded"
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Preflight passed"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "r restart now"
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Restarting Corbanu Terminal[\\s\\S]*Corbanu Terminal \\(v[\\s\\S]*› "
+timeout = 60
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run exactly this command and quote its output: cat \"$(printf '../ho%s/team-notes.txt' me)\""
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Would you like to run the following command"
+timeout = 240
+compress = 2
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "g"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Grant this command\\?[\\s\\S]*Still denied"
+[[steps]]
+key = "u"
+[[steps]]
+key = "Down"
+[[steps]]
+wait = "› Grant and run"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "shipped-v2-canary"
+timeout = 240
+compress = 2
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "k grants and kill switch"
+[[steps]]
+key = "k"
+[[steps]]
+wait = "Grants and kill switch"
+[[steps]]
+pause = 2.5
+[[steps]]
+wait = "> Grant: `"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Revoke this grant\\?"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Grant revoked"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Escape"
+[[steps]]
+key = "Escape"
+[[steps]]
+key = "Escape"
+[[steps]]
+pause = 0.5
+[[steps]]
+type = "Run exactly this command and quote its output: cat \"$(printf '../ho%s/team-notes.txt' me)\""
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Would you like to run the following command"
+timeout = 240
+compress = 2
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "y"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "[Oo]peration not permitted"
+timeout = 240
+compress = 2
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+[[steps]]
+pause = 4.0

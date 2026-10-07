@@ -128,7 +128,7 @@ fn pf_25_s02_changed_state_is_refused() {
     assert!(kill_switch_saved(&home));
     key(&mut view, KeyCode::Enter);
     assert!(
-        text(&view).contains("Nothing changed; review it again."),
+        text(&view).contains("Not changed: the security state changed since you reviewed it"),
         "{}",
         text(&view)
     );
@@ -150,4 +150,45 @@ fn pf_25_s02_restart_after_a_change() {
         restart |= matches!(event, AppEvent::RestartForSecurityLevel);
     }
     assert_eq!(restart, true);
+}
+
+/// Only this view commits a revocation or the kill switch: no other product
+/// source names Core's entry points.
+#[test]
+fn pf_25_s02_only_this_view_revokes() {
+    fn walk(dir: &std::path::Path, found: &mut Vec<std::path::PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name();
+            if path.is_dir() {
+                if name != "target" && name != "node_modules" && name != ".git" {
+                    walk(&path, found);
+                }
+            } else if path.extension().is_some_and(|extension| extension == "rs") {
+                found.push(path);
+            }
+        }
+    }
+    let workspace = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("codex-rs");
+    let mut files = Vec::new();
+    walk(workspace, &mut files);
+    let callers: Vec<String> = files
+        .iter()
+        .filter(|path| {
+            let text = std::fs::read_to_string(path).unwrap_or_default();
+            ["commit_human_revocation", "revoke_grant("]
+                .iter()
+                .any(|name| text.contains(name))
+        })
+        .filter_map(|path| path.strip_prefix(workspace).ok())
+        .map(|path| path.display().to_string())
+        .filter(|path| !path.ends_with("_tests.rs") && !path.contains("/tests/"))
+        .filter(|path| !path.starts_with("core/src/security/"))
+        .collect();
+    assert_eq!(callers, vec!["tui/src/security/revocation_view.rs".to_string()]);
 }
