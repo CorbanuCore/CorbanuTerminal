@@ -3547,9 +3547,15 @@ impl Config {
                 format!("invalid [security] configuration: {err}"),
             )
         })?;
-        // PF-23-S03: a confirmed level stored by the trusted controller is a
-        // floor; an unreadable store enforces Aggressive and says so.
-        let recovery = crate::security::recovery::recover(codex_home.as_path(), security_settings.level);
+        // PF-23-S03: the level of every layer and a confirmed level stored by
+        // the trusted controller are floors; an unreadable store enforces
+        // Aggressive and says so.
+        let recovery = crate::security::recovery::recover(
+            codex_home.as_path(),
+            security_settings
+                .level
+                .max(layered_security_floor(&config_layer_stack)),
+        );
         if let Some(warning) = recovery.warning() {
             startup_warnings.push(warning);
         }
@@ -5313,6 +5319,26 @@ pub async fn apply_agent_role_to_config(
     role_name: Option<&str>,
 ) -> Result<(), String> {
     crate::agent::role::apply_role_to_config(config, role_name).await
+}
+
+/// PF-23-S03: the strictest security level any enabled config layer sets.
+/// A later layer (a repository's `.codex/config.toml`, a profile, a `-c`
+/// override) can raise the level but never lower it.
+pub(crate) fn layered_security_floor(stack: &ConfigLayerStack) -> SecurityLevel {
+    stack
+        .layers_high_to_low()
+        .into_iter()
+        .filter_map(|layer| {
+            layer
+                .config
+                .get("security")?
+                .get("level")?
+                .clone()
+                .try_into::<SecurityLevel>()
+                .ok()
+        })
+        .max()
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
