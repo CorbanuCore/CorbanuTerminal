@@ -4227,3 +4227,50 @@ async fn home_dot_codex_is_not_a_project_layer_inside_a_repository() -> std::io:
     assert_eq!(layers.effective_config().get("model"), None);
     Ok(())
 }
+
+/// PF-23-S03: the security level of every enabled layer is a floor. A
+/// repository's `.codex/config.toml` can raise the user's level, never lower
+/// it.
+#[tokio::test]
+async fn security_recovery_project_layer_only_raises_the_level() -> std::io::Result<()> {
+    for (project, expected) in [
+        ("permissive", codex_security_policy::SecurityLevel::Moderate),
+        (
+            "aggressive",
+            codex_security_policy::SecurityLevel::Aggressive,
+        ),
+    ] {
+        let tmp = tempdir()?;
+        let project_root = tmp.path().join("project");
+        let dot_codex = project_root.join(".codex");
+        tokio::fs::create_dir_all(&dot_codex).await?;
+        tokio::fs::write(
+            dot_codex.join(CONFIG_TOML_FILE),
+            format!("[security]\nversion = 1\nlevel = \"{project}\"\n"),
+        )
+        .await?;
+        let codex_home = tmp.path().join("home");
+        tokio::fs::create_dir_all(&codex_home).await?;
+        make_config_for_test(
+            &codex_home,
+            &project_root,
+            TrustLevel::Trusted,
+            /*project_root_markers*/ None,
+        )
+        .await?;
+        let mut user = tokio::fs::read_to_string(codex_home.join(CONFIG_TOML_FILE)).await?;
+        user.insert_str(0, "[security]\nversion = 1\nlevel = \"moderate\"\n\n");
+        tokio::fs::write(codex_home.join(CONFIG_TOML_FILE), user).await?;
+        let layers = load_config_layers_state(
+            LOCAL_FS.as_ref(),
+            &codex_home,
+            Some(AbsolutePathBuf::from_absolute_path(&project_root)?),
+            &[] as &[(String, TomlValue)],
+            LoaderOverrides::default(),
+            &codex_config::NoopThreadConfigLoader,
+        )
+        .await?;
+        assert_eq!(crate::config::layered_security_floor(&layers), expected);
+    }
+    Ok(())
+}
