@@ -68,6 +68,7 @@ fn security_recovery_without_a_file_is_the_configured_level() {
             level: SecurityLevel::Moderate,
             revocations: RevocationState::new(),
             unreadable: None,
+            home: Some(home.path().to_path_buf()),
         }
     );
 }
@@ -85,6 +86,7 @@ fn security_recovery_restart_keeps_the_stricter_level_and_generation() {
             level: SecurityLevel::Aggressive,
             revocations: revoked(/*kill*/ false),
             unreadable: None,
+            home: Some(home.path().to_path_buf()),
         }
     );
     assert_eq!(started(recovery), (SecurityLevel::Aggressive, false, 1));

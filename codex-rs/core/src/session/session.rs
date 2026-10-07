@@ -1267,6 +1267,12 @@ impl Session {
                 let mut guard = network_policy_decider_session.write().await;
                 *guard = Arc::downgrade(&sess);
             }
+            // PF-23-S03: a restrictive security transition or the kill switch
+            // revokes this session's brokered credentials.
+            sess.services
+                .agent_control
+                .effective_security_policy()
+                .register_revocation_sink(Arc::downgrade(&sess) as _);
             // Extensions own their own model clients - image generation ships on
             // by default - and those requests are billed to the operator like
             // any other inference. This is how they record. It is inserted once

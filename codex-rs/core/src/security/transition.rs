@@ -13,20 +13,24 @@
 //! A commit merges into the stored state under the store's lock (other
 //! sessions and processes on the same home may have committed since), makes
 //! it durable ([`super::super::recovery`]), then swaps it in, advancing the
-//! epoch and the revocation generation. Grants, pending post-taint approvals
-//! and child snapshots are bound to those, so none survives. New protected work reads the policy under its lock, so it
+//! epoch and the revocation generation. Grants, pending post-taint approvals,
+//! "for session" approval caches and child snapshots are bound to those, so
+//! none survives. New protected work reads the policy under its lock, so it
 //! is fenced the moment the commit returns; work already running is neither
 //! cancelled nor relabeled.
 //!
-//! A stricter level, a revocation and the kill switch apply now, and still
-//! apply when the save fails (the result says they will not survive a
-//! restart). A
+//! A stricter level, a revocation and the kill switch apply now, also to the
+//! other policy trees of this process on the same home, and still apply when
+//! the save fails (the result says they will not survive a restart). A
 //! downgrade applies at the next start (the launch-time controls of this
 //! process cannot be widened in place; a new session in this process is such
 //! a start), while its revocation applies now. A downgrade or kill-switch
 //! release that cannot be saved changes nothing.
 
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::LazyLock;
 use std::sync::Mutex;
 use std::sync::PoisonError;
 use std::sync::Weak;
@@ -149,6 +153,13 @@ pub(crate) enum TransitionError {
 
 /// One commit at a time in this process; the store's lock orders processes.
 static COMMITS: Mutex<()> = Mutex::new(());
+
+/// Policy trees of this process by Corbanu home, so a restrictive commit in
+/// one (`/new` starts another) reaches the rest.
+static TREES: LazyLock<Mutex<Vec<HomeTree>>> = LazyLock::new(Default::default);
+
+/// One policy tree and the Corbanu home it belongs to.
+type HomeTree = (PathBuf, Weak<SharedEffectivePolicy>);
 
 impl TrustedSecurityController {
     /// Bind a confirmed human request to the current epoch. A stricter
@@ -320,6 +331,11 @@ impl TrustedSecurityController {
             Err(error) => return Err(error),
         };
         let committed = self.apply(&prepared, next.clone(), not_saved)?;
+        if prepared.kind == TransitionKind::Restrictive
+            && let Some(home) = store.home()
+        {
+            propagate(&self.shared, home, &next, prepared.closes_channels());
+        }
         if prepared.closes_channels() {
             self.notify_revocation_sinks();
         }
@@ -382,6 +398,32 @@ impl TrustedSecurityController {
         })
     }
 
+    /// A session that read the stored state just before another tree's
+    /// commit was saved and propagated catches up here, after it registered
+    /// its home: the stricter level and every stored revocation apply.
+    pub(crate) fn catch_up(&self, stored: &crate::security::recovery::Recovery) {
+        if stored.unreadable.is_some() {
+            return;
+        }
+        let Ok(mut guard) = self.write_state() else {
+            return;
+        };
+        let Some(state) = guard.as_mut() else {
+            return;
+        };
+        let level = state.persisted.settings.level.max(stored.level);
+        let mut revocations = state.persisted.revocations.clone();
+        if revocations.merge(&stored.revocations).is_err()
+            || (level == state.persisted.settings.level
+                && revocations == state.persisted.revocations)
+        {
+            return;
+        }
+        if adopt(state, level, revocations).is_ok() {
+            state.next_start_level = state.next_start_level.max(stored.level);
+        }
+    }
+
     /// Run end: every sink revokes, whatever the level.
     pub(crate) fn notify_revocation_sinks(&self) {
         notify(&self.shared);
@@ -411,7 +453,63 @@ fn adopt(
     Ok(())
 }
 
+/// A restrictive commit reaches the other trees of this process on `home`:
+/// their level rises to it, they take the merged revocations (the kill
+/// switch included) when those are newer, and their sinks revoke.
+fn propagate(
+    origin: &Arc<SharedEffectivePolicy>,
+    home: &Path,
+    next: &DurableSecurityState,
+    closes_channels: bool,
+) {
+    let home = canonical(home);
+    let trees: Vec<Arc<SharedEffectivePolicy>> = {
+        let mut trees = TREES.lock().unwrap_or_else(PoisonError::into_inner);
+        trees.retain(|(_, tree)| tree.strong_count() > 0);
+        trees
+            .iter()
+            .filter(|(tree_home, _)| *tree_home == home)
+            .filter_map(|(_, tree)| tree.upgrade())
+            .filter(|tree| !Arc::ptr_eq(tree, origin))
+            .collect()
+    };
+    for tree in trees {
+        {
+            let mut guard = tree.state.write().unwrap_or_else(PoisonError::into_inner);
+            let Some(state) = guard.as_mut() else {
+                continue;
+            };
+            let level = state.persisted.settings.level.max(next.level);
+            let mut revocations = state.persisted.revocations.clone();
+            let merged = revocations
+                .merge(&next.revocations)
+                .map_err(TransitionError::from);
+            if let Err(error) = merged.and_then(|()| adopt(state, level, revocations)) {
+                tracing::warn!(
+                    target: "codex_core::security::transition",
+                    %error,
+                    "could not apply a restrictive transition to another session"
+                );
+                continue;
+            }
+            state.next_start_level = state.next_start_level.max(next.level);
+        }
+        if closes_channels {
+            notify(&tree);
+        }
+    }
+}
+
 impl super::EffectivePolicyView {
+    /// The tree-wide policy epoch and revocation generation; `None` before
+    /// the policy is initialized. "For session" approval caches are bound to
+    /// it.
+    pub(crate) fn authority_marker(&self) -> Option<(u64, u64)> {
+        let guard = self.read_state().ok()?;
+        let state = guard.as_ref()?;
+        Some((state.epoch, state.persisted.revocations.generation))
+    }
+
     /// Register a sink for restrictive transitions, the kill switch and run
     /// end. Held weakly: a dropped sink is skipped.
     pub(crate) fn register_revocation_sink(&self, sink: Weak<dyn RevocationSink>) {
@@ -423,6 +521,42 @@ impl super::EffectivePolicyView {
         sinks.retain(|sink| sink.strong_count() > 0);
         sinks.push(sink);
     }
+
+    /// Record which Corbanu home this tree belongs to, so restrictive
+    /// commits of other trees on it reach this one.
+    pub(crate) fn register_home(&self, home: &Path) {
+        let home = canonical(home);
+        let mut trees = TREES.lock().unwrap_or_else(PoisonError::into_inner);
+        trees.retain(|(_, tree)| tree.strong_count() > 0);
+        if !trees
+            .iter()
+            .any(|(_, tree)| std::ptr::eq(tree.as_ptr(), Arc::as_ptr(&self.shared)))
+        {
+            trees.push((home, Arc::downgrade(&self.shared)));
+        }
+    }
+}
+
+/// The production trigger the isolated broker had none of (PF-27-S04).
+/// It also drops the hosts approved "for session".
+impl RevocationSink for crate::session::session::Session {
+    fn revoke(&self) {
+        self.services
+            .network_approval
+            .forget_session_approved_hosts();
+        if let Some(proxy) = self.services.network_proxy.load_full() {
+            let revoked = proxy.revoke_brokered_credentials();
+            tracing::info!(
+                target: "codex_core::security::transition",
+                revoked,
+                "brokered credentials revoked"
+            );
+        }
+    }
+}
+
+fn canonical(home: &Path) -> PathBuf {
+    std::fs::canonicalize(home).unwrap_or_else(|_| home.to_path_buf())
 }
 
 fn notify(shared: &SharedEffectivePolicy) {

@@ -751,6 +751,8 @@ async fn shutdown_session_runtime(sess: &Arc<Session>) {
         sess.services.mcp_runtime.shutdown().await;
     }
     sess.guardian_review_session.shutdown().await;
+    // PF-23-S03: run end revokes this session's brokered credentials.
+    crate::security::transition::RevocationSink::revoke(sess.as_ref());
 
     crate::hook_runtime::run_session_end_hooks(sess).await;
 }
