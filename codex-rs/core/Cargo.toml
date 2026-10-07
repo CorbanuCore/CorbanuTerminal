@@ -190,7 +190,6 @@ ignored-paths = [
     "tests/remote_env_windows/*.rs",
     # Registration seams: declared modules that intentionally hold only docs.
     "src/security/confidentiality/mod.rs",
-    "src/security/recovery.rs",
     "src/security/taint/mod.rs",
     "src/security/transition.rs",
     "src/security/ui_events.rs",
