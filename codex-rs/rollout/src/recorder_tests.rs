@@ -1636,6 +1636,7 @@ async fn resume_candidate_matches_cwd_reads_latest_turn_context() -> std::io::Re
             multi_agent_mode: None,
             realtime_active: None,
             effort: None,
+            security_level: None,
             summary: codex_protocol::config_types::ReasoningSummary::Auto,
         }),
     };

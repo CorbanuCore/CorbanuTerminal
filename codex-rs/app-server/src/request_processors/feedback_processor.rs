@@ -476,6 +476,7 @@ mod tests {
                     multi_agent_mode: None,
                     realtime_active: None,
                     effort: effort.clone(),
+                    security_level: None,
                     summary: ReasoningSummary::Auto,
                 }),
             }
