@@ -60,6 +60,8 @@ pub(crate) fn nested_launch_kind(
         Subcommand::Unarchive(_) => ("unarchive", Host),
         Subcommand::ClaudePaneSmoke(_) => ("claude-pane-smoke", Host),
         Subcommand::ClaudePaneWorkflowSuite(_) => ("claude-pane-workflow-suite", Host),
+        // Reaches a running app server or daemon socket, as a host would.
+        Subcommand::StdioToUds(_) => ("stdio-to-uds", Host),
         Subcommand::Vault(_) => ("vault", Credentials),
         Subcommand::InternalClaudeOauthToken => ("internal-claude-oauth-token", Credentials),
         Subcommand::InternalGpuEndpointToken { .. } => ("internal-gpu-endpoint-token", Credentials),
@@ -81,7 +83,6 @@ pub(crate) fn nested_launch_kind(
         | Subcommand::Execpolicy(_)
         | Subcommand::Apply(_)
         | Subcommand::ResponsesApiProxy(_)
-        | Subcommand::StdioToUds(_)
         | Subcommand::Features(_) => return None,
     })
 }

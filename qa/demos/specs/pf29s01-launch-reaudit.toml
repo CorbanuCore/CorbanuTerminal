@@ -1,0 +1,104 @@
+# PF-29-S01. Record with
+#   PF29_CANDIDATE=<corbanu> --bin qa/security-levels/sprints/PF-29-S01/demos/restart-once.sh
+id = "pf29s01-launch-reaudit"
+feature = "Launch re-audits the boundary instead of claiming it"
+expected = "Aggressive is saved after a clean preflight, then a secret export is added to ~/.zshrc; after restart Corbanu still enforces Aggressive but warns the boundary is not clean, names ~/.zshrc:1 OPENAI_API_KEY (no value), and /status says so."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"add-export.sh" = '''
+printf 'export OPENAI_API_KEY=fake-key-0001-pf29-demo\n' >> "$HOME/.zshrc" && echo added fake export to zshrc
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+type = "/security"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Active in this session: Permissive"
+
+[[steps]]
+key = "Up"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Switch to Aggressive\\?"
+
+[[steps]]
+key = "Down"
+repeat = 20
+
+[[steps]]
+wait = "Preflight passed"
+
+[[steps]]
+pause = 2.0
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Saved: Aggressive"
+
+[[steps]]
+pause = 1.0
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+type = "!sh add-export.sh"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "added fake export to zshrc"
+
+[[steps]]
+type = "/exit"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "restarting Corbanu Terminal[\\s\\S]*protected boundary is not clean"
+timeout = 60
+
+[[steps]]
+wait = "zshrc:1 OPENAI_API_KEY"
+
+[[steps]]
+pause = 3.0
+
+[[steps]]
+type = "/status"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "protected boundary not clean: 1 blocker"
+
+[[steps]]
+pause = 4.0

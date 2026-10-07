@@ -1,0 +1,71 @@
+# Under Aggressive an agent command that starts the standalone `codex-exec` or
+# `codex-tui` binary is refused, as `corbanu exec` is. Record with
+#   PF24_CANDIDATE=<corbanu> --bin qa/security-levels/pf24-followups/standalone-nested/restart-once.sh
+# (`codex-exec` and `codex-tui` built next to the candidate).
+id = "standalone-nested-refused"
+feature = "Standalone codex-exec and codex-tui refuse nested launches"
+expected = "With Aggressive active, the agent's `codex-exec` and `codex-tui` launches are both refused with the nested-launch reason."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Nested agents: refuse"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive \\(nested agents: refuse\\)"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "Enter"
+[[steps]]
+type = "/exit"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "restarting Corbanu Terminal.*model: +glm-5\\.2"
+timeout = 60
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run exactly this shell command once, without changing it: codex-exec 'say hi' 2>&1 | tail -1; codex-tui 2>&1 | tail -1 . Then tell me in one sentence what happened."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Would you like to run"
+timeout = 120
+compress = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)• Ran codex-exec.*\\n• \\S"
+timeout = 120
+compress = 3
+[[steps]]
+pause = 4.0

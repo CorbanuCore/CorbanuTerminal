@@ -13,6 +13,8 @@ worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf28-s02-reflected-scrub-2026
 branch: "feat/pf28-s02-reflected-scrub-20261006"
 base_commit: "24a57e38c4572928d4a618bc9b4624528ac29677"
 depends_on: "PF-28-S01"
+merged_behind_flag: "secret_output_gate"
+gate_evidence: "qa/security-levels/sprints/PF-28-S02/README.md"
 created: 2026-08-28
 updated: 2026-10-06
 ---

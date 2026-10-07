@@ -175,6 +175,9 @@ pub fn is_startup_or_helper_name(name: &str) -> bool {
 
 /// True when an agent command may inherit a variable with this name.
 pub fn is_launch_env_name_allowed(name: &str) -> bool {
+    if cfg!(debug_assertions) && name == crate::shell_environment::NO_NATIVE_KEYRING_ENV_VAR {
+        return true;
+    }
     if is_secret_looking_name(name) || is_startup_or_helper_name(name) {
         return false;
     }

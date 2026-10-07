@@ -28,6 +28,18 @@ struct TopCli {
 fn main() -> anyhow::Result<()> {
     arg0_dispatch_or_else(|arg0_paths: Arg0DispatchPaths| async move {
         let top_cli = TopCli::parse();
+        // An agent command under security level Aggressive must not start
+        // this binary to get around `corbanu`'s nested-launch check.
+        if let Some(message) = codex_security_level::nested::standalone_nested_refusal(
+            "codex-exec",
+            codex_security_level::nested::NestedKind::Agent,
+        ) {
+            #[allow(clippy::print_stderr)]
+            {
+                eprintln!("{message}");
+            }
+            std::process::exit(1);
+        }
         // Merge root-level overrides into inner CLI struct so downstream logic remains unchanged.
         let mut inner = top_cli.inner;
         inner

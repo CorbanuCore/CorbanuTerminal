@@ -61,6 +61,7 @@ mod mcp_server_elicitation;
 mod multi_select_picker;
 mod request_user_input;
 mod security_level_picker;
+mod security_migration;
 pub(crate) mod security_view;
 mod status_line_setup;
 mod status_line_style;
