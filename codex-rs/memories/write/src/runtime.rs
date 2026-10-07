@@ -5,6 +5,7 @@ use codex_core::StartThreadOptions;
 use codex_core::ThreadManager;
 use codex_core::config::Config;
 use codex_core::detached_memory_responses_metadata;
+use codex_core::memory_stage_one::LabelledStageOneInput;
 use codex_core::memory_stage_one::StageOneMemoryClient;
 use codex_core::memory_stage_one::StageOneMemoryDenial;
 use codex_core::memory_stage_one::StageOneMemoryError;
@@ -282,8 +283,9 @@ impl MemoryStartupContext {
         config: &Config,
         prompt: &Prompt,
         context: &StageOneRequestContext,
+        mut client: StageOneMemoryClient,
+        labelled_input: Option<&LabelledStageOneInput>,
     ) -> anyhow::Result<(String, Option<TokenUsage>, StageOneMemoryClient)> {
-        let mut client = self.stage_one_client(config).await?;
         let installation_id = resolve_installation_id(&config.codex_home).await?;
         let config_snapshot = self.thread.config_snapshot().await;
         let session_source = config_snapshot.session_source;
@@ -309,6 +311,7 @@ impl MemoryStartupContext {
                 reasoning_summary: context.reasoning_summary,
                 service_tier: context.service_tier.clone(),
                 responses_metadata: &responses_metadata,
+                labelled_input,
             })
             .await?;
         Ok((output.text, output.token_usage, client))

@@ -261,6 +261,7 @@ mod job {
         let (stage_one_output, token_usage, client) = match sample(
             context,
             config,
+            claimed_thread.id,
             &claimed_thread.rollout_path,
             &claimed_thread.cwd,
             stage_one_context,
@@ -333,25 +334,57 @@ mod job {
     async fn sample(
         context: &MemoryStartupContext,
         config: &Config,
+        source_thread: codex_protocol::ThreadId,
         rollout_path: &Path,
         rollout_cwd: &Path,
         stage_one_context: &StageOneRequestContext,
     ) -> anyhow::Result<(StageOneOutput, Option<TokenUsage>, StageOneMemoryClient)> {
-        let (rollout_items, _, _) = RolloutRecorder::load_rollout_items(rollout_path).await?;
-        let rollout_contents = serialize_filtered_rollout_response_items(&rollout_items)?;
+        let client = context.stage_one_client(config).await?;
+        // PF-23-S01: above Permissive Core builds the whole message from the
+        // source session's own rollout; Permissive is unchanged.
+        let labelled = if client.requires_labelled_input() {
+            let model_info = &stage_one_context.model_info;
+            Some(
+                client
+                    .label_rollout(
+                        source_thread,
+                        rollout_path,
+                        crate::prompts::stage_one_rollout_token_limit(model_info),
+                        redact_secrets,
+                        |contents| {
+                            build_stage_one_input_message(
+                                model_info,
+                                rollout_path,
+                                rollout_cwd,
+                                contents,
+                            )
+                        },
+                    )
+                    .await?,
+            )
+        } else {
+            None
+        };
+        let text = match &labelled {
+            Some(labelled) => labelled.message().to_string(),
+            None => {
+                let (rollout_items, _, _) =
+                    RolloutRecorder::load_rollout_items(rollout_path).await?;
+                let rollout_contents = serialize_filtered_rollout_response_items(&rollout_items)?;
+                build_stage_one_input_message(
+                    &stage_one_context.model_info,
+                    rollout_path,
+                    rollout_cwd,
+                    &rollout_contents,
+                )?
+            }
+        };
 
         let mut prompt = Prompt::default();
         prompt.input = vec![ResponseItem::Message {
             id: None,
             role: "user".to_string(),
-            content: vec![ContentItem::InputText {
-                text: build_stage_one_input_message(
-                    &stage_one_context.model_info,
-                    rollout_path,
-                    rollout_cwd,
-                    &rollout_contents,
-                )?,
-            }],
+            content: vec![ContentItem::InputText { text }],
             phase: None,
             internal_chat_message_metadata_passthrough: None,
         }];
@@ -362,7 +395,13 @@ mod job {
         prompt.output_schema_strict = true;
 
         let (result, token_usage, client) = context
-            .stream_stage_one_prompt(config, &prompt, stage_one_context)
+            .stream_stage_one_prompt(
+                config,
+                &prompt,
+                stage_one_context,
+                client,
+                labelled.as_ref(),
+            )
             .await?;
 
         let mut output: StageOneOutput = serde_json::from_str(&result)?;

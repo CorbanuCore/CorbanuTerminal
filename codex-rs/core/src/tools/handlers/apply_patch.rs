@@ -433,8 +433,14 @@ impl ApplyPatchHandler {
             ));
         };
         let fs = turn_environment.environment.get_filesystem();
-        let sandbox = turn
-            .file_system_sandbox_context(/*additional_permissions*/ None, turn_environment);
+        let sandbox = crate::security::protected_surface::protect_file_tool_context(
+            &session,
+            &turn,
+            turn.file_system_sandbox_context(
+                /*additional_permissions*/ None,
+                turn_environment,
+            ),
+        );
         match codex_apply_patch::verify_apply_patch_args(
             args,
             turn_environment.cwd(),
@@ -637,8 +643,11 @@ pub(crate) async fn intercept_apply_patch(
     tool_name: &str,
     source: InterceptedPatchSource,
 ) -> Result<Option<FunctionToolOutput>, FunctionCallError> {
-    let sandbox =
-        turn.file_system_sandbox_context(/*additional_permissions*/ None, &turn_environment);
+    let sandbox = crate::security::protected_surface::protect_file_tool_context(
+        &session,
+        &turn,
+        turn.file_system_sandbox_context(/*additional_permissions*/ None, &turn_environment),
+    );
     match codex_apply_patch::maybe_parse_apply_patch_verified(command, cwd, fs, Some(&sandbox))
         .await
     {
