@@ -1,0 +1,55 @@
+# PF-24-S02: when Core's record cannot be written, nothing changes and /security stays open to try again. No model turn (Z.AI balance was empty when recorded).
+id = "pf24s02-save-failure-stays-open"
+feature = "A failed save changes nothing and stays open"
+expected = "With Core's lock path blocked, confirming Aggressive reports Security level not saved and Nothing changed, the view stays open, and Esc returns to the list with Active Permissive and nothing saved."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "!mkdir {home}/security_state.lock && echo blocked"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "blocked"
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Preflight passed"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Security level not saved"
+[[steps]]
+wait = "Nothing changed\\."
+[[steps]]
+pause = 4.0
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+pause = 3.0

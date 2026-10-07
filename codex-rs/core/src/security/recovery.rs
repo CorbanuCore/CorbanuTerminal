@@ -110,14 +110,14 @@ pub(crate) fn recover(codex_home: &Path, configured: SecurityLevel) -> Recovery 
     }
 }
 
-enum LoadError {
+pub(crate) enum LoadError {
     /// The file could not be read now (a transient error is possible).
     Io(String),
     /// Its content is not a valid state.
     Corrupt(String),
 }
 
-fn load(codex_home: &Path) -> Result<Option<DurableSecurityState>, LoadError> {
+pub(crate) fn load(codex_home: &Path) -> Result<Option<DurableSecurityState>, LoadError> {
     let path = codex_home.join(STATE_FILE);
     let contents = match std::fs::read(&path) {
         Ok(contents) => contents,
@@ -252,6 +252,7 @@ impl TransitionStore for HomeTransitionStore {
             ));
         }
         if write == TransitionWrite::Downgrade
+            && user_config_needs_level(&self.codex_home, next.level)
             && let Err(err) = crate::config::edit::ConfigEditsBuilder::new(&self.codex_home)
                 .set_security_level(next.level)
                 .apply_blocking()
@@ -274,6 +275,28 @@ impl TransitionStore for HomeTransitionStore {
             }));
         }
         Ok(next)
+    }
+}
+
+/// Whether the user's `config.toml` must be rewritten for the next start to
+/// see `level`: it sets a stricter `[security]` level, or it cannot be read
+/// (then the edit is tried and its failure reported). A file that sets no
+/// level, or one no stricter, is left exactly as it is.
+fn user_config_needs_level(codex_home: &Path, level: SecurityLevel) -> bool {
+    let contents = match std::fs::read_to_string(codex_home.join(crate::config::CONFIG_TOML_FILE))
+    {
+        Ok(contents) => contents,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return false,
+        Err(_) => return true,
+    };
+    let Ok(table) = toml::from_str::<toml::Table>(&contents) else {
+        return true;
+    };
+    match table.get("security").and_then(|security| security.get("level")) {
+        None => false,
+        Some(configured) => {
+            !matches!(configured.clone().try_into::<SecurityLevel>(), Ok(configured) if configured <= level)
+        }
     }
 }
 

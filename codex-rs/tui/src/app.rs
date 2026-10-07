@@ -644,6 +644,9 @@ pub(crate) enum AppRunControl {
 pub enum ExitReason {
     UserRequested,
     Fatal(String),
+    /// `/security` "restart now" (PF-24-S02): start again with the same
+    /// options so a saved level takes effect.
+    Restart,
 }
 
 fn session_summary(

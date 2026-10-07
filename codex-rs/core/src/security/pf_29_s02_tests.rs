@@ -31,6 +31,7 @@ const FLAGS: ReadinessFlags = ReadinessFlags {
     secretless_launch: true,
     credential_broker: true,
     output_gate: true,
+    untrusted_content: true,
 };
 
 #[derive(Default)]

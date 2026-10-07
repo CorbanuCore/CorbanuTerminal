@@ -1,0 +1,69 @@
+# PF-24-S02: confirming Aggressive in /security raises Core's level now, and "restart now" activates the rest. No model turn (Z.AI balance was empty when recorded).
+id = "pf24s02-confirm-aggressive-restart"
+feature = "Confirm Aggressive, then restart now"
+expected = "After the preflight passes, Enter saves Aggressive and Core's level becomes Aggressive in this session at once; r restarts Corbanu Terminal with the same options and /security then shows Aggressive active."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Preflight passed"
+[[steps]]
+key = "Down"
+repeat = 40
+[[steps]]
+wait = "Core's level becomes Aggressive as soon as you confirm"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Core's level is Aggressive now in this session"
+[[steps]]
+wait = "r restart now"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+timeout = 60
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Aggressive"
+[[steps]]
+wait = "Core's level: Aggressive"
+[[steps]]
+pause = 3.0

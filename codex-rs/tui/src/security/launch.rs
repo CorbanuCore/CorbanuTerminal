@@ -22,7 +22,14 @@ pub(crate) struct LaunchPlan {
     replaced_flags: Vec<&'static str>,
     /// PF-29-S01: credential paths denied to agent commands.
     isolated: Vec<PathBuf>,
+    /// PF-24-S02: another process enforcing Aggressive runs on this home, so
+    /// this Permissive launch left its rule file and registry entry alone.
+    shared_with_aggressive: bool,
 }
+
+/// Held while this process enforces Aggressive (see
+/// [`level::hold_aggressive_lock`]); released when it exits.
+static AGGRESSIVE_LOCK: std::sync::OnceLock<std::fs::File> = std::sync::OnceLock::new();
 
 impl LaunchPlan {
     /// Read the stored level before any config is loaded, keep the vault rule
@@ -32,7 +39,20 @@ impl LaunchPlan {
         cli_kv_overrides: &mut Vec<(String, toml::Value)>,
     ) -> Result<Self, String> {
         let stored = level::load(codex_home);
-        if stored != StoredLevel::Absent {
+        // A Permissive launch must not remove the rule file (or the registry
+        // entry) another process on this home still enforces Aggressive with.
+        let shared_with_aggressive = stored.enforced() == ChosenLevel::Permissive
+            && stored != StoredLevel::Absent
+            && level::aggressive_running(codex_home);
+        if stored.enforced() == ChosenLevel::Aggressive {
+            match level::hold_aggressive_lock(codex_home) {
+                Ok(lock) => {
+                    let _ = AGGRESSIVE_LOCK.set(lock);
+                }
+                Err(err) => tracing::warn!("could not hold the Aggressive lock: {err}"),
+            }
+        }
+        if stored != StoredLevel::Absent && !shared_with_aggressive {
             level::sync_rules(codex_home, stored.enforced()).map_err(|err| {
                 format!(
                     "Could not apply the stored security level ({}): {err}",
@@ -45,6 +65,7 @@ impl LaunchPlan {
             stored,
             replaced_flags: Vec::new(),
             isolated: Vec::new(),
+            shared_with_aggressive,
         };
         if plan.aggressive() && codex_home.to_str().is_none() {
             return Err(format!(
@@ -84,7 +105,8 @@ impl LaunchPlan {
     /// nested-launch detection (`Some(true)`), forgotten (`Some(false)`), or
     /// left alone because the level was never chosen.
     pub(crate) fn origin_registry_update(&self) -> Option<bool> {
-        (self.stored != StoredLevel::Absent).then(|| self.aggressive())
+        (self.stored != StoredLevel::Absent && !self.shared_with_aggressive)
+            .then(|| self.aggressive())
     }
 
     fn aggressive(&self) -> bool {
@@ -166,8 +188,19 @@ impl LaunchPlan {
             }
             if let Some(reason) = &launch_warning {
                 config.startup_warnings.push(format!(
-                    "Stored security level is unreadable ({reason}). Aggressive is enforced; choose a level in /security to repair it."
+                    "Stored security level is unreadable or was changed outside /security ({reason}). Aggressive is enforced; choose a level in /security to repair it."
                 ));
+            }
+            // PF-24-S02: a save that raised Core's level writes both records;
+            // one missing means it did not finish. Nothing weaker applies.
+            if preflight_enabled
+                && preflight::receipt_path(&self.codex_home).exists()
+                && level::load_confirmed(&self.codex_home)
+                    != level::ConfirmedLevel::Level("aggressive".to_string())
+            {
+                config.startup_warnings.push(
+                    "Security level Aggressive was saved, but Core's level was not confirmed with it, so Core's protections are not on. Choose Aggressive again in /security.".to_string(),
+                );
             }
             if !self.replaced_flags.is_empty() {
                 config.startup_warnings.push(format!(
@@ -175,6 +208,11 @@ impl LaunchPlan {
                     self.replaced_flags.join(", ")
                 ));
             }
+        }
+        if self.shared_with_aggressive {
+            config.startup_warnings.push(
+                "Another Corbanu Terminal using this Corbanu home still enforces Aggressive; its vault rule file stays until it exits.".to_string(),
+            );
         }
         crate::claude_panes::containment::install(
             crate::claude_panes::containment::ContainmentSettings {

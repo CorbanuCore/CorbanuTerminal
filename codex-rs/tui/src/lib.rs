@@ -261,6 +261,7 @@ pub use markdown_render::render_markdown_text;
 pub use public_widgets::composer_input::ComposerAction;
 pub use public_widgets::composer_input::ComposerInput;
 pub use security::nested::NestedKind;
+pub use security::restart::restart_process;
 pub use security::nested::NestedLaunch;
 pub use security::nested::aggressive_env_overrides;
 pub use security::nested::apply_aggressive_launch_overrides;

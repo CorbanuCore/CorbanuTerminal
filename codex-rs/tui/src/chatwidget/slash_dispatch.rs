@@ -377,6 +377,18 @@ impl ChatWidget {
                                 })
                         },
                         self.bottom_pane.list_keymap(),
+                    )
+                    .with_confirmation(
+                        crate::bottom_pane::security_level_picker::CoreLevels {
+                            configured: crate::legacy_core::security_level_change::configured_level(
+                                &self.config,
+                            ),
+                            outside_user_config:
+                                crate::legacy_core::security_level_change::non_user_level_floor(
+                                    &self.config,
+                                ),
+                        },
+                        self.app_event_tx.clone(),
                     ),
                 ));
             }

@@ -407,6 +407,9 @@ pub(crate) enum AppEvent {
     SelectAgentThread(ThreadId),
     /// Open the user-pane picker for switching Codex/Claude panes.
     OpenPanePicker,
+    /// `/security` "restart now" (PF-24-S02): shut down like `/quit`, then
+    /// start Corbanu Terminal again so a saved level takes effect.
+    RestartForSecurityLevel,
     /// Open the `/spawn` role picker.
     OpenSpawnRolePicker,
     /// Open the `/spawn` Nazgul pane-binding picker.

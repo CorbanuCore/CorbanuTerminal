@@ -63,6 +63,7 @@ fn main() -> anyhow::Result<()> {
             std::process::exit(1);
         }
         let mut inner = top_cli.inner;
+        let prompt = inner.prompt.clone();
         inner
             .config_overrides
             .raw_overrides
@@ -78,6 +79,13 @@ fn main() -> anyhow::Result<()> {
             ExitReason::Fatal(message) => {
                 eprintln!("ERROR: {message}");
                 true
+            }
+            ExitReason::Restart => {
+                println!("Restarting to apply the saved security level…");
+                std::io::stdout().flush()?;
+                let err = codex_tui::restart_process(prompt.as_deref());
+                eprintln!("ERROR: could not restart ({err}); start it again yourself");
+                std::process::exit(1);
             }
             ExitReason::UserRequested => false,
         };

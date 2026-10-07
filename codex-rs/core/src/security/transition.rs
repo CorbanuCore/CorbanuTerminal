@@ -36,6 +36,7 @@ use std::sync::PoisonError;
 use std::sync::Weak;
 
 use codex_protocol::security::SecurityControlAction;
+use codex_security_policy::AuthorityEpoch;
 use codex_security_policy::RevocationEvent;
 use codex_security_policy::RevocationReason;
 use codex_security_policy::RevocationState;
@@ -428,6 +429,61 @@ impl TrustedSecurityController {
     pub(crate) fn notify_revocation_sinks(&self) {
         notify(&self.shared);
     }
+
+    /// The epoch a request confirmed now must name.
+    pub(crate) fn authority_epoch(&self) -> Result<AuthorityEpoch, SecurityPolicyError> {
+        let guard = self.read_state()?;
+        let state = guard
+            .as_ref()
+            .ok_or(SecurityPolicyError::RuntimeNotInitialized)?;
+        AuthorityEpoch::new(
+            state.runtime_nonce,
+            state.epoch,
+            state.persisted.revocations.generation,
+        )
+        .map_err(|_| SecurityPolicyError::AuthorityMismatch)
+    }
+
+    /// The level in force, the level the next start enforces, and whether
+    /// the kill switch is on.
+    pub(crate) fn in_force(
+        &self,
+    ) -> Result<(SecurityLevel, SecurityLevel, bool), SecurityPolicyError> {
+        let guard = self.read_state()?;
+        let state = guard
+            .as_ref()
+            .ok_or(SecurityPolicyError::RuntimeNotInitialized)?;
+        Ok((
+            state.persisted.settings.level,
+            state.next_start_level,
+            state.persisted.revocations.kill_switch_active,
+        ))
+    }
+}
+
+/// PF-24-S02: the trusted controller of this process's live policy tree on
+/// `home` with the strictest level in force, for the human `/security`
+/// confirmation. A commit through it reaches the other trees on `home`.
+/// `None` when no session of this process uses `home`.
+pub(crate) fn live_controller(home: &Path) -> Option<TrustedSecurityController> {
+    let home = canonical(home);
+    let mut trees = TREES.lock().unwrap_or_else(PoisonError::into_inner);
+    trees.retain(|(_, tree)| tree.strong_count() > 0);
+    trees
+        .iter()
+        .filter(|(tree_home, _)| *tree_home == home)
+        .filter_map(|(_, tree)| tree.upgrade())
+        .filter_map(|shared| {
+            let level = shared
+                .state
+                .read()
+                .unwrap_or_else(PoisonError::into_inner)
+                .as_ref()
+                .map(|state| state.persisted.settings.level)?;
+            Some((level, shared))
+        })
+        .max_by_key(|(level, _)| *level)
+        .map(|(_, shared)| TrustedSecurityController { shared })
 }
 
 /// Swap in a level and revocation state: the epoch moves and every grant of

@@ -12,13 +12,17 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 
 pub(crate) use codex_security_level::level::ChosenLevel;
+pub(crate) use codex_security_level::level::ConfirmedLevel;
 pub use codex_security_level::level::NestedAgents;
 #[cfg(test)]
 pub(crate) use codex_security_level::level::RULES_DIR;
 pub(crate) use codex_security_level::level::STATE_FILE;
 pub(crate) use codex_security_level::level::StoredLevel;
 pub(crate) use codex_security_level::level::VAULT_PROGRAMS;
+pub(crate) use codex_security_level::level::aggressive_running;
+pub(crate) use codex_security_level::level::hold_aggressive_lock;
 pub(crate) use codex_security_level::level::load;
+pub(crate) use codex_security_level::level::load_confirmed;
 pub(crate) use codex_security_level::level::load_state;
 pub(crate) use codex_security_level::level::rules_contents;
 pub(crate) use codex_security_level::level::rules_path;
