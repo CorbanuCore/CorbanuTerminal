@@ -39,7 +39,7 @@ Wider runs:
 | Demo | Observed |
 | --- | --- |
 | `pf27s05-model-key-brokered` | The answer streams back normally. The log shows `isolated credential broker started containment=seatbelt` and `model provider key held by the credential broker (host=api.z.ai, port=443, path=/api/paas/v4, header=Bearer)`. |
-| `pf27s05-broker-death-fails-closed` | The first prompt is answered. After the broker process is killed, the next prompt fails with "The isolated credential broker is unavailable; restart Corbanu to start a new one" and nothing is sent with the key. |
+| `pf27s05-broker-death-fails-closed` | The first prompt is answered. After the broker process is killed, the next prompt fails at once (not retried) with "Fatal error: the isolated credential broker is unavailable; restart Corbanu to start a new one", and nothing is sent with the key. |
 
 Videos are listed in [`qa/demos/index/PF-27-S05.md`](../../../demos/index/PF-27-S05.md).
 

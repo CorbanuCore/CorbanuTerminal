@@ -85,8 +85,8 @@ proxy, and it needs PF-27-S02's containment before the broker is a real boundary
 - [ ] Resolve vault-label credentials inside the broker only; the agent and Core see labels and dummies.
 - [ ] ChatGPT sign-in (refreshing tokens) and Responses websockets: decision recorded for slice 1 (not brokered;
   websockets off under the flag); a later slice needs a broker-side token holder and a websocket upgrade route.
-- [ ] Memory-dump check (no raw key in Core's address space) once Core no longer reads the key.
-- [ ] Windows: the non-Unix branch fails closed but has no direct test (PF-27-S06, P1).
+- [ ] Memory-dump check (no raw key in Core's memory) once Core no longer reads the key; a direct test of the
+  non-Unix fail-closed branch with PF-27-S06 (Windows, P1).
 
 ## Verification
 
