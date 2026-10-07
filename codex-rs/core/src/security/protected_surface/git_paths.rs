@@ -31,13 +31,11 @@ pub(super) fn git_persistence_paths(
             // Added to, never replaced: a `.git` a command creates below the
             // repository cannot make the earlier paths unprotected.
             let mut known = recall(&REPOSITORY_PATHS, root).unwrap_or_default();
-            known.extend(
-                paths
-                    .iter()
-                    .filter(|path| !known.contains(path))
-                    .cloned()
-                    .collect::<Vec<_>>(),
-            );
+            for path in paths {
+                if !known.contains(&path) {
+                    known.push(path);
+                }
+            }
             remember(&REPOSITORY_PATHS, root, Some(known.clone()));
             (known, work_tree)
         }
