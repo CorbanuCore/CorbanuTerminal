@@ -1,0 +1,36 @@
+╰──────────────────────────────────────────────────────╯
+To continue this session, run corbanu resume 01a113a7-fe1e-73d3-a046-1fbb977c1049
+
+[demo] restarting Corbanu Terminal with the same profile...
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.2   /model to change                │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/workspace │
+╰──────────────────────────────────────────────────────╯
+
+
+› Run exactly this shell command once, without changing it: codex-exec 'say hi' 2>&1 | tail -1; codex-tui 2>&1 | tail
+  -1 . Then tell me in one sentence what happened.
+
+
+✔ You approved Corbanu to run codex-exec 'say hi' 2>&1 | tail -1; codex-tui 2>&1 | tail -1 this time
+
+• Ran codex-exec 'say hi' 2>&1 | tail -1; codex-tui 2>&1 | tail -1
+  └ `codex-exec` was started by an agent command while security level Aggressive is enforced (/Volumes/CorbanuDrive/
+    Corbanu/worktrees/sec-tui5-20261006/qa/demos/out/standalone-nested/standalone-nested-refused-20261006T235855Z/home/
+    … +4 lines (ctrl + t to view transcript)
+    security_level.toml). Interactive sessions are never allowed there: the agent that started one would answer its
+    approval prompts.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Both codex-exec and codex-tui were refused because nested agent launches and interactive sessions are blocked while
+  the Aggressive security level is enforced.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Use /skills to list available skills
+
+  Z.AI GLM 5.2 via zai standard · /Volumes/CorbanuDrive/Corbanu/worktrees/sec-tui5-20261006/qa/demos/out/standalone-nes…

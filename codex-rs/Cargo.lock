@@ -4343,6 +4343,7 @@ version = "0.1.48"
 dependencies = [
  "codex-utils-home-dir",
  "libc",
+ "pretty_assertions",
  "serde",
  "sha2 0.10.9",
  "tempfile",

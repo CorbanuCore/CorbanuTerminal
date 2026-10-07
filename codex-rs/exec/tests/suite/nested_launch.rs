@@ -32,6 +32,10 @@ impl Origin {
         fs::set_permissions(home.path(), fs::Permissions::from_mode(0o555))?;
         let origin = Self(home);
         if fs::write(origin.0.path().join("probe"), "").is_ok() {
+            #[allow(clippy::print_stderr)]
+            {
+                eprintln!("skipped: this user can write a read-only directory (root)");
+            }
             return Ok(None);
         }
         Ok(Some(origin))

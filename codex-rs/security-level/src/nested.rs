@@ -64,11 +64,19 @@ pub fn nested_launch(name: &str, kind: NestedKind) -> NestedLaunch {
 /// started it. These binaries cannot hold a run to Aggressive, so a launch
 /// that `corbanu exec` could run with Aggressive enforced is refused too.
 pub fn standalone_nested_refusal(binary: &str, kind: NestedKind) -> Option<String> {
-    let origins = match candidate_homes() {
-        Ok(homes) => nested_origins(homes),
-        Err(message) => return Some(message),
-    };
-    match describe(&format!("`{binary}`"), kind, &origins) {
+    match candidate_homes() {
+        Ok(homes) => standalone_refusal_for(binary, kind, &nested_origins(homes)),
+        Err(message) => Some(message),
+    }
+}
+
+/// [`standalone_nested_refusal`] for known origins.
+pub fn standalone_refusal_for(
+    binary: &str,
+    kind: NestedKind,
+    origins: &[(PathBuf, NestedAgents)],
+) -> Option<String> {
+    match describe(&format!("`{binary}`"), kind, origins) {
         NestedLaunch::NotNested => None,
         NestedLaunch::Refuse(message) => Some(message),
         NestedLaunch::EnforceAggressive(origin) => Some(format!(
@@ -327,3 +335,7 @@ pub fn account_home() -> io::Result<Option<PathBuf>> {
         Ok(None)
     }
 }
+
+#[cfg(test)]
+#[path = "nested_tests.rs"]
+mod tests;
