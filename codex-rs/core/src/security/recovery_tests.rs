@@ -34,6 +34,12 @@ fn revoked(kill: bool) -> RevocationState {
     revocations
 }
 
+fn save(home: &std::path::Path, state: DurableSecurityState) {
+    HomeTransitionStore::new(home)
+        .update(&mut |_| Ok(state.clone()))
+        .unwrap();
+}
+
 /// (level in force, kill switch, revocation generation) of a session started
 /// from `recovery`.
 fn started(recovery: Recovery) -> (SecurityLevel, bool, u64) {
@@ -62,6 +68,7 @@ fn security_recovery_without_a_file_is_the_configured_level() {
             level: SecurityLevel::Moderate,
             revocations: RevocationState::new(),
             unreadable: None,
+            home: Some(home.path().to_path_buf()),
         }
     );
 }
@@ -70,9 +77,7 @@ fn security_recovery_without_a_file_is_the_configured_level() {
 fn security_recovery_restart_keeps_the_stricter_level_and_generation() {
     let home = TempDir::new().unwrap();
     let state = DurableSecurityState::new(SecurityLevel::Aggressive, revoked(/*kill*/ false));
-    HomeTransitionStore::new(home.path())
-        .persist(&state)
-        .unwrap();
+    save(home.path(), state);
     // The configured level is lowered offline: the stored one still wins.
     let recovery = recover(home.path(), SecurityLevel::Permissive);
     assert_eq!(
@@ -81,6 +86,7 @@ fn security_recovery_restart_keeps_the_stricter_level_and_generation() {
             level: SecurityLevel::Aggressive,
             revocations: revoked(/*kill*/ false),
             unreadable: None,
+            home: Some(home.path().to_path_buf()),
         }
     );
     assert_eq!(started(recovery), (SecurityLevel::Aggressive, false, 1));
@@ -91,12 +97,10 @@ fn security_recovery_restart_keeps_the_stricter_level_and_generation() {
 #[test]
 fn security_recovery_kill_switch_survives_restart() {
     let home = TempDir::new().unwrap();
-    HomeTransitionStore::new(home.path())
-        .persist(&DurableSecurityState::new(
-            SecurityLevel::Moderate,
-            revoked(/*kill*/ true),
-        ))
-        .unwrap();
+    save(
+        home.path(),
+        DurableSecurityState::new(SecurityLevel::Moderate, revoked(/*kill*/ true)),
+    );
     let recovery = recover(home.path(), SecurityLevel::Moderate);
     assert_eq!(started(recovery), (SecurityLevel::Moderate, true, 1));
 }
@@ -146,4 +150,32 @@ fn security_recovery_tampered_state_enforces_aggressive_and_the_kill_switch() {
         );
         assert_eq!(started(recovery), (SecurityLevel::Aggressive, true, 0));
     }
+}
+
+/// A downgrade whose `config.toml` mirror cannot be written reports that the
+/// next start keeps the stricter level (`config.toml` still says it), and it
+/// does.
+#[test]
+fn security_recovery_downgrade_without_config_keeps_the_stricter_level() {
+    let home = TempDir::new().unwrap();
+    // `config.toml` cannot be edited when it is a folder.
+    std::fs::create_dir(home.path().join("config.toml")).unwrap();
+    save(
+        home.path(),
+        DurableSecurityState::new(SecurityLevel::Aggressive, RevocationState::new()),
+    );
+    let result = HomeTransitionStore::new(home.path()).update(&mut |_| {
+        Ok(DurableSecurityState::new(
+            SecurityLevel::Permissive,
+            RevocationState::new(),
+        ))
+    });
+    assert!(
+        matches!(&result, Err(super::super::transition::TransitionError::Persist(reason)) if reason.contains("config.toml")),
+        "{result:?}"
+    );
+    assert_eq!(
+        recover(home.path(), SecurityLevel::Aggressive).level,
+        SecurityLevel::Aggressive
+    );
 }

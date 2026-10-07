@@ -49,6 +49,7 @@ const CORBANU_STORES: &[&str] = &[
     "source-origin.key",
     "security_level.toml",
     "security_state.json",
+    "security_state.lock",
     "wallet",
     "run",
     "log",

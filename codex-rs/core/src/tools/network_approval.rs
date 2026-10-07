@@ -398,6 +398,20 @@ impl NetworkApprovalService {
         other_approved_hosts.extend(approved_hosts.iter().cloned());
     }
 
+    /// PF-23-S03: a committed security transition drops every host approved
+    /// "for session". Called from a synchronous revocation sink, so it never
+    /// waits: a busy set is cleared by a task on the current runtime.
+    pub(crate) fn forget_session_approved_hosts(self: &Arc<Self>) {
+        if let Ok(mut hosts) = self.session_approved_hosts.try_lock() {
+            hosts.clear();
+        } else if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+            let service = Arc::clone(self);
+            runtime.spawn(async move {
+                service.session_approved_hosts.lock().await.clear();
+            });
+        }
+    }
+
     async fn register_call(
         &self,
         registration_id: String,

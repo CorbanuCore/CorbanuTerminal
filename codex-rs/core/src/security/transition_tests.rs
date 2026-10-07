@@ -1,4 +1,3 @@
-use std::io;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicUsize;
@@ -57,12 +56,23 @@ impl MemoryStore {
 }
 
 impl TransitionStore for MemoryStore {
-    fn persist(&self, state: &DurableSecurityState) -> io::Result<()> {
+    fn home(&self) -> Option<&std::path::Path> {
+        None
+    }
+
+    fn update(
+        &self,
+        merge: &mut dyn FnMut(
+            Option<DurableSecurityState>,
+        ) -> Result<DurableSecurityState, TransitionError>,
+    ) -> Result<DurableSecurityState, TransitionError> {
         if self.fail {
-            return Err(io::Error::other("disk full"));
+            return Err(TransitionError::Persist("disk full".to_string()));
         }
-        self.saved.lock().unwrap().push(state.clone());
-        Ok(())
+        let mut saved = self.saved.lock().unwrap();
+        let next = merge(saved.last().cloned())?;
+        saved.push(next.clone());
+        Ok(next)
     }
 }
 
@@ -142,6 +152,14 @@ impl Fixture {
         prepared: PreparedTransition,
         store: &MemoryStore,
     ) -> Result<CommittedTransition, TransitionError> {
+        self.commit_with(prepared, store)
+    }
+
+    fn commit_with(
+        &self,
+        prepared: PreparedTransition,
+        store: &dyn TransitionStore,
+    ) -> Result<CommittedTransition, TransitionError> {
         self.controller.commit_transition(prepared, store, NOW)
     }
 
@@ -185,6 +203,7 @@ fn security_transition_restrictive_persists_first_and_applies_now() {
             level: SecurityLevel::Aggressive,
             next_start_level: SecurityLevel::Aggressive,
             kill_switch_active: false,
+            not_saved: None,
         }
     );
     assert_eq!(store.saved(), vec![(SecurityLevel::Aggressive, 1, false)]);
@@ -213,23 +232,55 @@ fn security_transition_cancel_changes_nothing() {
     assert_eq!(fixture.revocations(), 0);
 }
 
+/// A downgrade or kill-switch release that cannot be saved changes nothing;
+/// an emergency stop applies anyway and says it will not survive a restart.
 #[test]
-fn security_transition_persistence_failure_changes_nothing() {
-    let fixture = fixture(SecurityLevel::Permissive);
+fn security_transition_save_failure_blocks_only_widening_changes() {
+    let fixture = fixture(SecurityLevel::Aggressive);
     let before = fixture.now();
-    let prepared = fixture.set_level(SecurityLevel::Aggressive);
     let error = fixture
-        .commit(prepared, &MemoryStore::failing())
+        .commit(
+            fixture.set_level(SecurityLevel::Permissive),
+            &MemoryStore::failing(),
+        )
         .unwrap_err();
     assert!(matches!(error, TransitionError::Persist(_)), "{error}");
     assert_eq!(fixture.now(), before);
     assert_eq!(fixture.revocations(), 0);
-    // A fresh confirmation still works afterwards.
-    let store = MemoryStore::default();
-    fixture
-        .commit(fixture.set_level(SecurityLevel::Aggressive), &store)
+
+    let kill = fixture
+        .prepare(
+            revoke(RevocationTarget::KillSwitch { active: true }),
+            ProbeOutcome::Passed,
+        )
         .unwrap();
-    assert_eq!(store.saved(), vec![(SecurityLevel::Aggressive, 1, false)]);
+    let committed = fixture.commit(kill, &MemoryStore::failing()).unwrap();
+    assert!(
+        committed
+            .not_saved
+            .as_deref()
+            .is_some_and(|reason| reason.contains("disk full")),
+        "{committed:?}"
+    );
+    assert_eq!(
+        fixture.now(),
+        (
+            SecurityLevel::Aggressive,
+            SecurityLevel::Aggressive,
+            1,
+            1,
+            true
+        )
+    );
+    assert_eq!(fixture.revocations(), 1);
+    let release = fixture
+        .prepare(
+            revoke(RevocationTarget::KillSwitch { active: false }),
+            ProbeOutcome::Passed,
+        )
+        .unwrap();
+    assert!(fixture.commit(release, &MemoryStore::failing()).is_err());
+    assert!(fixture.now().4);
 }
 
 #[test]
@@ -276,8 +327,8 @@ fn security_transition_downgrade_applies_at_next_start_and_revokes_now() {
             (SecurityLevel::Aggressive, 1, false),
         ]
     );
-    // Neither closes the broker's channels.
-    assert_eq!(fixture.revocations(), 0);
+    // The downgrade's revocation closes the broker's channels now.
+    assert_eq!(fixture.revocations(), 1);
 }
 
 #[test]
@@ -294,6 +345,18 @@ fn security_transition_blocked_until_probes_pass() {
     };
     assert_eq!(blockers, vec!["isolated credential broker is off"]);
     assert_eq!(fixture.now().0, SecurityLevel::Permissive);
+    // Leaving a level never waits for them.
+    let strict = self::fixture(SecurityLevel::Aggressive);
+    assert!(
+        strict
+            .prepare(
+                SecurityControlAction::SetLevel {
+                    level: SecurityLevel::Permissive,
+                },
+                blocked.clone(),
+            )
+            .is_ok()
+    );
     // The kill switch never waits for probes.
     let kill = fixture
         .prepare(
@@ -570,4 +633,92 @@ fn post_taint(fixture: &Fixture) -> crate::security::tainted_action::PostTaintSt
         },
         level: snapshot.level,
     }
+}
+
+/// Two policy trees on one Corbanu home (`/new`, or another process): a
+/// later commit in the older tree merges into what is stored instead of
+/// overwriting it, and a restrictive commit reaches the other tree now.
+#[test]
+fn security_transition_trees_on_one_home_merge_and_propagate() {
+    let home = tempfile::TempDir::new().unwrap();
+    let store = crate::security::recovery::HomeTransitionStore::new(home.path());
+    let first = fixture(SecurityLevel::Moderate);
+    let second = fixture(SecurityLevel::Moderate);
+    first.view.register_home(home.path());
+    second.view.register_home(home.path());
+
+    let kill = first
+        .prepare(
+            revoke(RevocationTarget::KillSwitch { active: true }),
+            ProbeOutcome::Passed,
+        )
+        .unwrap();
+    // The second tree confirms a change before the kill switch lands.
+    let unchanged = second.set_level(SecurityLevel::Moderate);
+    first.commit_with(kill, &store).unwrap();
+    // It reached the second tree at once (and closed its channels) ...
+    assert!(second.now().4);
+    assert_eq!(second.revocations(), 1);
+    // ... so the second tree's older confirmation is stale.
+    assert!(second.commit_with(unchanged, &store).is_err());
+    let unchanged = second.set_level(SecurityLevel::Moderate);
+    second.commit_with(unchanged, &store).unwrap();
+    let recovery = crate::security::recovery::recover(home.path(), SecurityLevel::Permissive);
+    assert_eq!(
+        (
+            recovery.level,
+            recovery.revocations.kill_switch_active,
+            recovery.revocations.generation
+        ),
+        (SecurityLevel::Moderate, true, 1)
+    );
+
+    // Another process (a tree this one cannot reach) at Moderate: its
+    // downgrade is refused once a stricter level is stored, rather than
+    // lowering it unseen.
+    let other_process = fixture(SecurityLevel::Moderate);
+    let stricter = first.set_level(SecurityLevel::Aggressive);
+    first.commit_with(stricter, &store).unwrap();
+    assert_eq!(second.now().0, SecurityLevel::Aggressive);
+    let downgrade = other_process.set_level(SecurityLevel::Permissive);
+    assert!(matches!(
+        other_process.commit_with(downgrade, &store),
+        Err(TransitionError::StoredLevelChanged(
+            SecurityLevel::Aggressive
+        ))
+    ));
+    assert_eq!(
+        crate::security::recovery::recover(home.path(), SecurityLevel::Permissive).level,
+        SecurityLevel::Aggressive
+    );
+}
+
+#[test]
+fn security_transition_revoking_an_actor_stops_its_agents() {
+    let fixture = fixture(SecurityLevel::Aggressive);
+    let child = ThreadId::new();
+    fixture
+        .view
+        .inherit_child(fixture.root, child, "task:child", SecurityLevel::Aggressive)
+        .unwrap();
+    let actor_id = BoundedText::new(format!("agent:{child}")).unwrap();
+    fixture
+        .commit(
+            fixture
+                .prepare(
+                    revoke(RevocationTarget::Actor { actor_id }),
+                    ProbeOutcome::Passed,
+                )
+                .unwrap(),
+            &MemoryStore::default(),
+        )
+        .unwrap();
+    let snapshot = |thread| {
+        fixture
+            .view
+            .snapshot_for_agent(thread)
+            .unwrap()
+            .kill_switch_active
+    };
+    assert_eq!((snapshot(fixture.root), snapshot(child)), (false, true));
 }

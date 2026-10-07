@@ -117,6 +117,7 @@ pub(crate) enum EffectivePolicyInitialization {
     UnreadableState,
 }
 
+#[cfg(test)]
 #[derive(Clone, Debug)]
 pub(crate) struct ConfirmedSecurityLevelChange {
     expected_epoch: u64,
@@ -328,6 +329,9 @@ impl TrustedSecurityController {
         })
     }
 
+    /// Test fixture only: an in-memory change without persistence. The
+    /// product path is `commit_transition` (PF-23-S03).
+    #[cfg(test)]
     pub(crate) fn confirm_level_change(
         &self,
         next_level: SecurityLevel,
@@ -355,6 +359,7 @@ impl TrustedSecurityController {
 
     /// Validate the complete replacement before taking the write lock, then
     /// replace the state in one critical section. Readers see either snapshot.
+    #[cfg(test)]
     pub(crate) fn apply_confirmed_change(
         &self,
         confirmation: ConfirmedSecurityLevelChange,

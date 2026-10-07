@@ -2065,9 +2065,11 @@ async fn mcp_tool_approval_is_remembered(sess: &Session, key: &McpToolApprovalKe
     matches!(store.get(key), Some(ReviewDecision::ApprovedForSession))
 }
 
+/// PF-23-S03: under the policy the cache was last checked under; dropped
+/// when a security transition was committed since.
 async fn remember_mcp_tool_approval(sess: &Session, key: McpToolApprovalKey) {
-    let mut store = sess.services.approval_cache().await;
-    store.put(key, ReviewDecision::ApprovedForSession);
+    let decided_under = sess.services.tool_approvals.lock().await.policy();
+    sess.services.remember_approvals([key], decided_under).await;
 }
 
 async fn apply_mcp_tool_approval_decision(

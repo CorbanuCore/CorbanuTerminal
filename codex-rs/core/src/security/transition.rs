@@ -4,45 +4,55 @@
 //! ```text
 //!            prepare(request, probes)            commit(store)
 //!   current ------------------------> Prepared -------------> committed
-//!      ^                                 |  persist fails, stale epoch:
-//!      +------------- cancel ------------+  nothing changes
+//!      ^                                 |  stale epoch, refused merge,
+//!      +------------- cancel ------------+  failed save: nothing changes
 //! ```
 //!
 //! Only the trusted human-confirmation path holds the controller, and a
-//! prepared transition is bound to the policy epoch it was confirmed under:
-//! any other change in between makes it stale. A commit makes the new state
-//! durable first ([`super::super::recovery`]), then swaps it in under the
-//! policy write lock, advancing the epoch and the revocation generation. Every
-//! cached decision, grant, pending approval and child snapshot is bound to
-//! those, so none survives. Protected work reads the policy under the same
-//! lock, so new work is fenced the moment the commit returns; work already
-//! running is not relabeled as cancelled.
+//! prepared transition is bound to the policy epoch it was confirmed under.
+//! A commit merges into the stored state under the store's lock (other
+//! sessions and processes on the same home may have committed since), makes
+//! it durable ([`super::super::recovery`]), then swaps it in, advancing the
+//! epoch and the revocation generation. Grants, pending post-taint approvals,
+//! "for session" approval caches and child snapshots are bound to those, so
+//! none survives. New protected work reads the policy under its lock, so it
+//! is fenced the moment the commit returns; work already running is neither
+//! cancelled nor relabeled.
 //!
-//! A restrictive change applies now. A downgrade applies at the next start
-//! (the launch-time controls of this process cannot be widened in place),
-//! while its revocation still applies now.
+//! A stricter level, a revocation and the kill switch apply now, also to the
+//! other policy trees of this process on the same home, and still apply when
+//! the save fails (the result says they will not survive a restart). A
+//! downgrade applies at the next start (the launch-time controls of this
+//! process cannot be widened in place; a new session in this process is such
+//! a start), while its revocation applies now. A downgrade or kill-switch
+//! release that cannot be saved changes nothing.
 
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::LazyLock;
+use std::sync::Mutex;
 use std::sync::PoisonError;
 use std::sync::Weak;
 
 use codex_protocol::security::SecurityControlAction;
 use codex_security_policy::RevocationEvent;
 use codex_security_policy::RevocationReason;
+use codex_security_policy::RevocationState;
 use codex_security_policy::RevocationTarget;
 use codex_security_policy::SecurityLevel;
-use codex_security_policy::SecuritySettings;
 use thiserror::Error;
 
-use super::PersistedHumanSecurityState;
+use super::EffectivePolicyState;
 use super::SecurityPolicyError;
+use super::SharedEffectivePolicy;
 use super::TrustedSecurityController;
 use super::trusted_requests::ConfirmedSecurityRequest;
 use crate::security::recovery::DurableSecurityState;
 use crate::security::recovery::TransitionStore;
 
 /// Result of the isolation, migration and screening checks (PF-29
-/// preflight) a protected level needs before it may be claimed.
+/// preflight) a stricter protected level needs before it may be claimed.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum ProbeOutcome {
     Passed,
@@ -81,6 +91,22 @@ impl PreparedTransition {
     pub(crate) fn levels(&self) -> (SecurityLevel, SecurityLevel) {
         (self.from, self.to)
     }
+
+    /// Whether the broker's channels close: every revocation except of one
+    /// grant or mandate, and every level change.
+    fn closes_channels(&self) -> bool {
+        match &self.event {
+            None
+            | Some((RevocationTarget::Grant { .. } | RevocationTarget::Mandate { .. }, _))
+            | Some((RevocationTarget::KillSwitch { active: false }, _)) => false,
+            Some((
+                RevocationTarget::KillSwitch { active: true }
+                | RevocationTarget::Actor { .. }
+                | RevocationTarget::AllActiveAuthority,
+                _,
+            )) => true,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -92,6 +118,9 @@ pub(crate) struct CommittedTransition {
     pub(crate) level: SecurityLevel,
     pub(crate) next_start_level: SecurityLevel,
     pub(crate) kill_switch_active: bool,
+    /// Set when a restrictive transition applied but could not be saved: it
+    /// holds until this process ends, not across a restart.
+    pub(crate) not_saved: Option<String>,
 }
 
 /// Told after a committed restrictive transition, kill switch or run end,
@@ -107,6 +136,10 @@ pub(crate) enum TransitionError {
     Blocked(Vec<String>),
     #[error("grants are issued in the grant screen, not as a transition")]
     NotATransition,
+    #[error(
+        "another session stored a stricter level ({0}) since this one was shown; review it again"
+    )]
+    StoredLevelChanged(SecurityLevel),
     #[error("the security state could not be saved, so nothing changed: {0}")]
     Persist(String),
     #[error(transparent)]
@@ -114,6 +147,14 @@ pub(crate) enum TransitionError {
     #[error(transparent)]
     Revocation(#[from] codex_security_policy::RevocationError),
 }
+
+/// One commit at a time in this process; the store's lock orders processes.
+static COMMITS: Mutex<()> = Mutex::new(());
+
+/// Policy trees of this process by Corbanu home, so a restrictive commit in
+/// one (`/new` starts another) reaches the rest.
+static TREES: LazyLock<Mutex<Vec<(PathBuf, Weak<SharedEffectivePolicy>)>>> =
+    LazyLock::new(Default::default);
 
 impl TrustedSecurityController {
     /// Bind a confirmed human request to the current epoch. A stricter
@@ -161,7 +202,7 @@ impl TrustedSecurityController {
                 return Err(TransitionError::NotATransition);
             }
         };
-        if to != from
+        if to > from
             && let ProbeOutcome::Blocked(blockers) = probes
         {
             return Err(TransitionError::Blocked(blockers));
@@ -180,96 +221,88 @@ impl TrustedSecurityController {
         drop(prepared);
     }
 
-    /// Persist, then apply in one critical section. On any error the state
-    /// in force, the epoch and the stored state are as before (a failed
-    /// `config.toml` write after the state file can only leave the next start
-    /// stricter).
+    /// Merge into the stored state and save it, then apply. See the module
+    /// documentation for what applies when.
     pub(crate) fn commit_transition(
         &self,
         prepared: PreparedTransition,
         store: &dyn TransitionStore,
         now_unix_seconds: i64,
     ) -> Result<CommittedTransition, TransitionError> {
-        let PreparedTransition {
-            confirmed,
-            kind,
-            from,
-            to,
-            event,
-        } = prepared;
-        // A single grant or mandate leaves the broker's channels open.
-        let closes_channels = kind == TransitionKind::Restrictive
-            && (to != from
-                || !matches!(
-                    event,
-                    Some((
-                        RevocationTarget::Grant { .. } | RevocationTarget::Mandate { .. },
-                        _
-                    ))
-                ));
-        let committed = {
-            let mut guard = self.write_state()?;
+        let _commit = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
+        let (memory, memory_next_start, authority) = {
+            let guard = self.read_state()?;
             let state = guard
-                .as_mut()
+                .as_ref()
                 .ok_or(SecurityPolicyError::RuntimeNotInitialized)?;
-            super::trusted_requests::check_epoch(state, confirmed.request())?;
-            if state.persisted.human_authority != *confirmed.authority() {
+            super::trusted_requests::check_epoch(state, prepared.confirmed.request())?;
+            if state.persisted.human_authority != *prepared.confirmed.authority() {
                 return Err(SecurityPolicyError::AuthorityMismatch.into());
             }
-            let mut revocations = state.persisted.revocations.clone();
-            if let Some((target, reason)) = event {
-                revocations.apply(&RevocationEvent::new(
-                    state.persisted.human_authority.clone(),
-                    target,
-                    reason,
-                    now_unix_seconds,
-                )?)?;
-            }
-            let in_force = match kind {
-                TransitionKind::Restrictive => to,
-                TransitionKind::Downgrade
-                | TransitionKind::KillSwitchRelease
-                | TransitionKind::Unchanged => state.persisted.settings.level,
-            };
-            let next_start = match kind {
-                TransitionKind::KillSwitchRelease => state.next_start_level,
-                TransitionKind::Restrictive
-                | TransitionKind::Downgrade
-                | TransitionKind::Unchanged => to,
-            };
-            let next = PersistedHumanSecurityState::new(
-                SecuritySettings::new(in_force),
+            (
+                state.persisted.revocations.clone(),
+                state.next_start_level,
                 state.persisted.human_authority.clone(),
-                revocations,
-            )?;
-            let next_epoch = state
-                .epoch
-                .checked_add(1)
-                .ok_or(SecurityPolicyError::EpochOverflow)?;
-            store
-                .persist(&DurableSecurityState::new(
-                    next_start,
-                    next.revocations.clone(),
-                ))
-                .map_err(|err| TransitionError::Persist(err.to_string()))?;
-            state.persisted = next;
-            state.next_start_level = next_start;
-            state.epoch = next_epoch;
-            // Grants are bound to the epoch and generation that just moved;
-            // drop them from the ledger of every agent in this tree as well.
-            for thread in state.agents.keys() {
-                crate::security::aggressive::revoke_all(*thread);
-            }
-            CommittedTransition {
-                kind,
-                epoch: next_epoch,
-                revocation_generation: state.persisted.revocations.generation,
-                level: in_force,
-                next_start_level: next_start,
-                kill_switch_active: state.persisted.revocations.kill_switch_active,
-            }
+            )
         };
-        if closes_channels {
+        let event = prepared
+            .event
+            .clone()
+            .map(|(target, reason)| {
+                RevocationEvent::new(authority, target, reason, now_unix_seconds)
+            })
+            .transpose()?;
+        let merge = |stored: Option<DurableSecurityState>| {
+            let (mut revocations, stored_level) = match stored {
+                Some(stored) => (stored.revocations, stored.level),
+                None => (memory.clone(), memory_next_start),
+            };
+            if let Some(event) = &event {
+                revocations.apply(event)?;
+            }
+            let level = match prepared.kind {
+                // A revocation keeps the stored level (and a pending downgrade).
+                TransitionKind::Restrictive if prepared.to == prepared.from => stored_level,
+                TransitionKind::Restrictive | TransitionKind::Unchanged => {
+                    stored_level.max(prepared.to)
+                }
+                // A level stored by another session after this one was shown
+                // is not lowered without the human seeing it.
+                TransitionKind::Downgrade if stored_level > prepared.from => {
+                    return Err(TransitionError::StoredLevelChanged(stored_level));
+                }
+                TransitionKind::Downgrade => prepared.to,
+                TransitionKind::KillSwitchRelease => stored_level,
+            };
+            Ok(DurableSecurityState::new(level, revocations))
+        };
+        let mut merged = None;
+        let saved = store.update(&mut |stored| {
+            let next = merge(stored)?;
+            merged = Some(next.clone());
+            Ok(next)
+        });
+        let (next, not_saved) = match saved {
+            Ok(next) => (next, None),
+            Err(error @ TransitionError::Persist(_))
+                if prepared.kind == TransitionKind::Restrictive =>
+            {
+                // An emergency stop never waits for the disk.
+                let next = match merged {
+                    Some(next) => next,
+                    None => merge(None)?,
+                };
+                (next, Some(error.to_string()))
+            }
+            Err(error) => return Err(error),
+        };
+        let committed = self.apply(&prepared, next.clone(), not_saved)?;
+        if prepared.kind == TransitionKind::Restrictive
+            && let Some(home) = store.home()
+        {
+            propagate(&self.shared, home, &next, prepared.closes_channels());
+        }
+        if prepared.closes_channels() {
             self.notify_revocation_sinks();
         }
         tracing::info!(
@@ -279,20 +312,135 @@ impl TrustedSecurityController {
             next_start_level = %committed.next_start_level,
             epoch = committed.epoch,
             revocation_generation = committed.revocation_generation,
+            saved = committed.not_saved.is_none(),
             "security transition committed"
         );
         Ok(committed)
     }
 
+    fn apply(
+        &self,
+        prepared: &PreparedTransition,
+        next: DurableSecurityState,
+        not_saved: Option<String>,
+    ) -> Result<CommittedTransition, TransitionError> {
+        let mut guard = self.write_state()?;
+        let state = guard
+            .as_mut()
+            .ok_or(SecurityPolicyError::RuntimeNotInitialized)?;
+        super::trusted_requests::check_epoch(state, prepared.confirmed.request())?;
+        let in_force = match prepared.kind {
+            TransitionKind::Restrictive => state.persisted.settings.level.max(prepared.to),
+            TransitionKind::Downgrade
+            | TransitionKind::KillSwitchRelease
+            | TransitionKind::Unchanged => state.persisted.settings.level,
+        };
+        adopt(state, in_force, next.revocations)?;
+        if let Some((RevocationTarget::Actor { actor_id }, _)) = &prepared.event {
+            for binding in state.agents.values_mut() {
+                if binding
+                    .actor_chain
+                    .as_slice()
+                    .iter()
+                    .any(|actor| actor.id == *actor_id)
+                {
+                    binding.force_deny = true;
+                }
+            }
+        }
+        state.next_start_level = next.level;
+        Ok(CommittedTransition {
+            kind: prepared.kind,
+            epoch: state.epoch,
+            revocation_generation: state.persisted.revocations.generation,
+            level: in_force,
+            next_start_level: next.level,
+            kill_switch_active: state.persisted.revocations.kill_switch_active,
+            not_saved,
+        })
+    }
+
     /// Run end: every sink revokes, whatever the level.
     pub(crate) fn notify_revocation_sinks(&self) {
-        notify(&self.shared.sinks);
+        notify(&self.shared);
+    }
+}
+
+/// Swap in a level and revocation state: the epoch moves and every grant of
+/// the tree is dropped.
+fn adopt(
+    state: &mut EffectivePolicyState,
+    level: SecurityLevel,
+    revocations: RevocationState,
+) -> Result<(), TransitionError> {
+    let next = super::PersistedHumanSecurityState::new(
+        codex_security_policy::SecuritySettings::new(level),
+        state.persisted.human_authority.clone(),
+        revocations,
+    )?;
+    state.epoch = state
+        .epoch
+        .checked_add(1)
+        .ok_or(SecurityPolicyError::EpochOverflow)?;
+    state.persisted = next;
+    for thread in state.agents.keys() {
+        crate::security::aggressive::revoke_all(*thread);
+    }
+    Ok(())
+}
+
+/// A restrictive commit reaches the other trees of this process on `home`:
+/// their level rises to it, they take the merged revocations (the kill
+/// switch included) when those are newer, and their sinks revoke.
+fn propagate(
+    origin: &Arc<SharedEffectivePolicy>,
+    home: &Path,
+    next: &DurableSecurityState,
+    closes_channels: bool,
+) {
+    let trees: Vec<Arc<SharedEffectivePolicy>> = {
+        let mut trees = TREES.lock().unwrap_or_else(PoisonError::into_inner);
+        trees.retain(|(_, tree)| tree.strong_count() > 0);
+        trees
+            .iter()
+            .filter(|(tree_home, _)| tree_home == home)
+            .filter_map(|(_, tree)| tree.upgrade())
+            .filter(|tree| !Arc::ptr_eq(tree, origin))
+            .collect()
+    };
+    for tree in trees {
+        {
+            let mut guard = tree.state.write().unwrap_or_else(PoisonError::into_inner);
+            let Some(state) = guard.as_mut() else {
+                continue;
+            };
+            let level = state.persisted.settings.level.max(next.level);
+            let revocations =
+                if next.revocations.generation >= state.persisted.revocations.generation {
+                    next.revocations.clone()
+                } else {
+                    state.persisted.revocations.clone()
+                };
+            if let Err(error) = adopt(state, level, revocations) {
+                tracing::warn!(
+                    target: "codex_core::security::transition",
+                    %error,
+                    "could not apply a restrictive transition to another session"
+                );
+                continue;
+            }
+            state.next_start_level = next.level;
+        }
+        if closes_channels {
+            notify(&tree);
+        }
     }
 }
 
 impl super::EffectivePolicyView {
     /// The tree-wide policy epoch and revocation generation; `None` before
-    /// the policy is initialized. Cached decisions are bound to it.
+    /// the policy is initialized. "For session" approval caches are bound to
+    /// it.
     pub(crate) fn authority_marker(&self) -> Option<(u64, u64)> {
         let guard = self.read_state().ok()?;
         let state = guard.as_ref()?;
@@ -310,11 +458,28 @@ impl super::EffectivePolicyView {
         sinks.retain(|sink| sink.strong_count() > 0);
         sinks.push(sink);
     }
+
+    /// Record which Corbanu home this tree belongs to, so restrictive
+    /// commits of other trees on it reach this one.
+    pub(crate) fn register_home(&self, home: &Path) {
+        let mut trees = TREES.lock().unwrap_or_else(PoisonError::into_inner);
+        trees.retain(|(_, tree)| tree.strong_count() > 0);
+        if !trees
+            .iter()
+            .any(|(_, tree)| std::ptr::eq(tree.as_ptr(), Arc::as_ptr(&self.shared)))
+        {
+            trees.push((home.to_path_buf(), Arc::downgrade(&self.shared)));
+        }
+    }
 }
 
 /// The production trigger the isolated broker had none of (PF-27-S04).
+/// It also drops the hosts approved "for session".
 impl RevocationSink for crate::session::session::Session {
     fn revoke(&self) {
+        self.services
+            .network_approval
+            .forget_session_approved_hosts();
         if let Some(proxy) = self.services.network_proxy.load_full() {
             let revoked = proxy.revoke_brokered_credentials();
             tracing::info!(
@@ -326,8 +491,9 @@ impl RevocationSink for crate::session::session::Session {
     }
 }
 
-fn notify(sinks: &std::sync::Mutex<Vec<Weak<dyn RevocationSink>>>) {
-    let live: Vec<Arc<dyn RevocationSink>> = sinks
+fn notify(shared: &SharedEffectivePolicy) {
+    let live: Vec<Arc<dyn RevocationSink>> = shared
+        .sinks
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .iter()

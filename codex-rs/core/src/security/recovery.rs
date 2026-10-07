@@ -1,29 +1,41 @@
 //! PF-23-S03: the durable security state and its recovery at start.
 //!
 //! A confirmed transition (see `effective_policy::transition`) writes
-//! `security_state.json` in the Corbanu home before anything changes in
-//! memory: the level the next start enforces and the revocation state (its
-//! generation and the kill switch). At start the stricter of that level and
-//! the configured one applies, and the revocation state comes back, so a
-//! restart never runs a weaker interval and never brings back a revoked
-//! generation. Unreadable or unknown content enforces Aggressive with the
-//! kill switch on and says so; it is never read as Permissive.
+//! `security_state.json` in the Corbanu home before it takes effect: the
+//! level the next start enforces and the revocation state (its generation,
+//! revoked ids and the kill switch). At config load and at every session
+//! start the stricter of that level and the configured one applies, and the
+//! revocation state comes back, so a restart never runs a weaker interval.
+//! Unreadable or unknown content (also a transient read error) enforces
+//! Aggressive with the kill switch on and says so; it is never read as
+//! Permissive. A confirmed transition replaces such a file; the revocations
+//! it held are then lost, which only matters for authority that is itself
+//! never stored (grants live in memory).
 //!
-//! Same-user rollback of the file to an older copy needs the external anchor
-//! of the authoritative store (PF-20); until that is active, agent commands
-//! cannot read or write the file once the protected-path rules apply.
+//! Limits: same-user rollback or deletion of the file needs the external
+//! anchor of the authoritative store (PF-20); agent commands cannot read or
+//! write the file once the protected-path rules apply, but under Permissive
+//! before untrusted content they can. A transition in one process reaches
+//! another process on the same home at its next session start.
 
+use std::fs::OpenOptions;
 use std::io;
 use std::io::Write;
 use std::path::Path;
+use std::path::PathBuf;
 
 use codex_security_policy::RevocationState;
 use codex_security_policy::SecurityLevel;
 use serde::Deserialize;
 use serde::Serialize;
 
+use super::transition::TransitionError;
+
 /// The durable state file inside a Corbanu home.
 pub(crate) const STATE_FILE: &str = "security_state.json";
+/// Held while a transition reads, merges and writes [`STATE_FILE`].
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) const LOCK_FILE: &str = "security_state.lock";
 const STATE_VERSION: u32 = 1;
 
 /// What the next start enforces.
@@ -51,8 +63,10 @@ pub(crate) struct Recovery {
     pub(crate) level: SecurityLevel,
     pub(crate) revocations: RevocationState,
     /// Set when the file could not be read: Aggressive and the kill switch
-    /// apply until a human confirms a new level.
+    /// apply until it is replaced.
     pub(crate) unreadable: Option<String>,
+    /// The Corbanu home it was read from.
+    pub(crate) home: Option<PathBuf>,
 }
 
 impl Recovery {
@@ -61,7 +75,7 @@ impl Recovery {
         self.unreadable.as_ref().map(|reason| {
             format!(
                 "Security state is unreadable ({reason}). Aggressive and the kill switch are \
-                 enforced; confirm a level in /security and restart to repair it."
+                 enforced until the file is repaired or removed."
             )
         })
     }
@@ -70,21 +84,25 @@ impl Recovery {
 /// The stricter of `configured` and the stored level, with the stored
 /// revocation state.
 pub(crate) fn recover(codex_home: &Path, configured: SecurityLevel) -> Recovery {
+    let home = Some(codex_home.to_path_buf());
     match load(codex_home) {
         Ok(None) => Recovery {
             level: configured,
             revocations: RevocationState::new(),
             unreadable: None,
+            home,
         },
         Ok(Some(state)) => Recovery {
             level: configured.max(state.level),
             revocations: state.revocations,
             unreadable: None,
+            home,
         },
         Err(reason) => Recovery {
             level: SecurityLevel::Aggressive,
             revocations: RevocationState::new(),
             unreadable: Some(reason),
+            home,
         },
     }
 }
@@ -114,17 +132,29 @@ fn load(codex_home: &Path) -> Result<Option<DurableSecurityState>, String> {
 
 /// Where a transition is made durable before it takes effect.
 pub(crate) trait TransitionStore {
-    fn persist(&self, state: &DurableSecurityState) -> io::Result<()>;
+    /// The Corbanu home, when the store is one.
+    fn home(&self) -> Option<&Path>;
+
+    /// Under one lock: read the stored state (`None` when absent or
+    /// unreadable), let `merge` build the next one from it, and save that.
+    /// A `merge` error writes nothing; a save error is
+    /// [`TransitionError::Persist`].
+    fn update(
+        &self,
+        merge: &mut dyn FnMut(
+            Option<DurableSecurityState>,
+        ) -> Result<DurableSecurityState, TransitionError>,
+    ) -> Result<DurableSecurityState, TransitionError>;
 }
 
 /// The Corbanu home's state file, then the user's `[security]` level in
-/// `config.toml`, so the stricter-of rule at start sees the confirmed level.
-/// Either order of a crash leaves the stricter level for the next start: the
-/// file is written first, and only a downgrade lowers `config.toml`.
+/// `config.toml` when the level changed, so the stricter-of rule at start
+/// sees a confirmed downgrade. The file is written first: a crash or a failed
+/// `config.toml` write leaves the stricter level for the next start.
 // The trusted `/security` confirmation (PF-24-S02) is the production caller.
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) struct HomeTransitionStore {
-    codex_home: std::path::PathBuf,
+    codex_home: PathBuf,
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -137,18 +167,52 @@ impl HomeTransitionStore {
 }
 
 impl TransitionStore for HomeTransitionStore {
-    fn persist(&self, state: &DurableSecurityState) -> io::Result<()> {
-        let contents = serde_json::to_vec_pretty(state).map_err(io::Error::other)?;
-        write_atomically(&self.codex_home.join(STATE_FILE), &contents)?;
-        if load(&self.codex_home).map_err(io::Error::other)?.as_ref() != Some(state) {
-            return Err(io::Error::other(
-                "saved security state could not be verified",
+    fn home(&self) -> Option<&Path> {
+        Some(&self.codex_home)
+    }
+
+    fn update(
+        &self,
+        merge: &mut dyn FnMut(
+            Option<DurableSecurityState>,
+        ) -> Result<DurableSecurityState, TransitionError>,
+    ) -> Result<DurableSecurityState, TransitionError> {
+        let persist = |err: io::Error| TransitionError::Persist(err.to_string());
+        std::fs::create_dir_all(&self.codex_home).map_err(persist)?;
+        let lock = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(self.codex_home.join(LOCK_FILE))
+            .map_err(persist)?;
+        lock.lock().map_err(persist)?;
+        let stored = load(&self.codex_home).ok().flatten();
+        let previous_level = stored.as_ref().map(|state| state.level);
+        let next = merge(stored)?;
+        let contents = serde_json::to_vec_pretty(&next)
+            .map_err(|err| TransitionError::Persist(err.to_string()))?;
+        write_atomically(&self.codex_home.join(STATE_FILE), &contents).map_err(persist)?;
+        if load(&self.codex_home).ok().flatten().as_ref() != Some(&next) {
+            return Err(TransitionError::Persist(
+                "the saved security state could not be verified".to_string(),
             ));
         }
-        crate::config::edit::ConfigEditsBuilder::new(&self.codex_home)
-            .set_security_level(state.level)
-            .apply_blocking()
-            .map_err(io::Error::other)
+        if previous_level != Some(next.level)
+            && let Err(err) = crate::config::edit::ConfigEditsBuilder::new(&self.codex_home)
+                .set_security_level(next.level)
+                .apply_blocking()
+        {
+            // Only a lower level depends on `config.toml`; a stricter one is
+            // already the floor through the state file.
+            if previous_level.is_some_and(|previous| next.level < previous) {
+                return Err(TransitionError::Persist(format!(
+                    "config.toml could not be updated ({err}), so the next start keeps the \
+                     stricter level"
+                )));
+            }
+            tracing::warn!("security level saved, but config.toml could not be updated: {err}");
+        }
+        Ok(next)
     }
 }
 
@@ -157,7 +221,6 @@ fn write_atomically(path: &Path, contents: &[u8]) -> io::Result<()> {
     let parent = path
         .parent()
         .ok_or_else(|| io::Error::other("state path has no parent"))?;
-    std::fs::create_dir_all(parent)?;
     let mut file = tempfile::NamedTempFile::new_in(parent)?;
     file.write_all(contents)?;
     file.as_file().sync_all()?;
