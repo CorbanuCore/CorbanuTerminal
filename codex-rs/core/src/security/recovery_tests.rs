@@ -35,7 +35,9 @@ fn revoked(kill: bool) -> RevocationState {
 }
 
 fn save(home: &std::path::Path, state: DurableSecurityState) {
-    std::fs::write(home.join(STATE_FILE), serde_json::to_vec(&state).unwrap()).unwrap();
+    HomeTransitionStore::new(home)
+        .update(TransitionWrite::Level, &mut |_| Ok(state.clone()))
+        .unwrap();
 }
 
 /// (level in force, kill switch, revocation generation) of a session started
@@ -86,6 +88,8 @@ fn security_recovery_restart_keeps_the_stricter_level_and_generation() {
         }
     );
     assert_eq!(started(recovery), (SecurityLevel::Aggressive, false, 1));
+    // Only a downgrade touches the user's config.toml.
+    assert!(!home.path().join("config.toml").exists());
 }
 
 #[test]
@@ -99,8 +103,8 @@ fn security_recovery_kill_switch_survives_restart() {
     assert_eq!(started(recovery), (SecurityLevel::Moderate, true, 1));
 }
 
-/// A lower stored level never lowers the configured one (a downgrade writes
-/// the state file, then `config.toml`: a crash between them stays strict).
+/// A downgrade writes the state file, then `config.toml`. A crash between
+/// them leaves the stricter configured level for the next start.
 #[test]
 fn security_recovery_crash_between_downgrade_writes_stays_strict() {
     let home = TempDir::new().unwrap();
@@ -144,4 +148,62 @@ fn security_recovery_tampered_state_enforces_aggressive_and_the_kill_switch() {
         );
         assert_eq!(started(recovery), (SecurityLevel::Aggressive, true, 0));
     }
+}
+
+/// A downgrade whose `config.toml` mirror cannot be written reports that the
+/// next start keeps the stricter level (`config.toml` still says it), and it
+/// does.
+#[test]
+fn security_recovery_downgrade_without_config_keeps_the_stricter_level() {
+    let home = TempDir::new().unwrap();
+    // `config.toml` cannot be edited when it is a folder.
+    std::fs::create_dir(home.path().join("config.toml")).unwrap();
+    save(
+        home.path(),
+        DurableSecurityState::new(SecurityLevel::Aggressive, RevocationState::new()),
+    );
+    let result =
+        HomeTransitionStore::new(home.path()).update(TransitionWrite::Downgrade, &mut |_| {
+            Ok(DurableSecurityState::new(
+                SecurityLevel::Permissive,
+                RevocationState::new(),
+            ))
+        });
+    assert!(
+        matches!(&result, Err(super::super::transition::TransitionError::Persist(reason)) if reason.contains("config.toml")),
+        "{result:?}"
+    );
+    // The stored Aggressive is put back: nothing changes at the next start.
+    assert_eq!(
+        recover(home.path(), SecurityLevel::Permissive).level,
+        SecurityLevel::Aggressive
+    );
+}
+
+/// A corrupt file is repaired only by a level the human confirms, never by
+/// a revocation.
+#[test]
+fn security_recovery_only_a_confirmed_level_repairs_a_corrupt_file() {
+    let home = TempDir::new().unwrap();
+    std::fs::write(home.path().join(STATE_FILE), "{").unwrap();
+    let store = HomeTransitionStore::new(home.path());
+    let state = DurableSecurityState::new(SecurityLevel::Permissive, RevocationState::new());
+    let refused = store.update(TransitionWrite::Revocation, &mut |_| Ok(state.clone()));
+    assert!(
+        matches!(&refused, Err(super::super::transition::TransitionError::Persist(reason)) if reason.contains("confirm a level")),
+        "{refused:?}"
+    );
+    assert!(
+        recover(home.path(), SecurityLevel::Permissive)
+            .unreadable
+            .is_some()
+    );
+    store
+        .update(TransitionWrite::Level, &mut |_| Ok(state.clone()))
+        .unwrap();
+    assert!(
+        recover(home.path(), SecurityLevel::Permissive)
+            .unreadable
+            .is_none()
+    );
 }

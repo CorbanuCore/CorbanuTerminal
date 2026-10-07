@@ -277,7 +277,8 @@ pub(crate) fn admit(
     Some(grant_id)
 }
 
-/// Drop every grant `thread` holds (also revocation, PF-25-S02).
+/// Drop every grant `thread` holds (also a committed transition, PF-23-S03,
+/// and revocation, PF-25-S02).
 pub(crate) fn revoke_all(thread: ThreadId) {
     LEDGER
         .lock()

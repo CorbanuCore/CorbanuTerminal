@@ -18,6 +18,8 @@ use codex_security_policy::SecuritySettings;
 use thiserror::Error;
 use uuid::Uuid;
 
+#[path = "transition.rs"]
+pub(crate) mod transition;
 #[path = "trusted_requests.rs"]
 mod trusted_requests;
 
@@ -84,6 +86,8 @@ struct EffectivePolicyState {
 #[derive(Default)]
 struct SharedEffectivePolicy {
     state: RwLock<Option<EffectivePolicyState>>,
+    /// PF-23-S03: told after restrictive transitions and at run end.
+    sinks: std::sync::Mutex<Vec<std::sync::Weak<dyn transition::RevocationSink>>>,
 }
 
 /// Read/inheritance capability shared with agent runtimes.
