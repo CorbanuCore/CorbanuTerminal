@@ -463,6 +463,9 @@
             "auth_elicitation": {
               "type": "boolean"
             },
+            "broker_model_auth": {
+              "type": "boolean"
+            },
             "browser_use": {
               "type": "boolean"
             },
@@ -5170,6 +5173,9 @@
           ]
         },
         "auth_elicitation": {
+          "type": "boolean"
+        },
+        "broker_model_auth": {
           "type": "boolean"
         },
         "browser_use": {
