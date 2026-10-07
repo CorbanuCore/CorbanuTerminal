@@ -565,21 +565,26 @@ async fn pf_23_s01_human_approval_lifts_read_denials_only_under_moderate() -> an
 
 /// Issue #239: under Moderate before untrusted content, a command that asks
 /// to run outside the sandbox needs the human; approving lifts the rules for
-/// that run, declining refuses it. With approvals off it is refused; without
-/// the request the sandbox denies the read.
+/// that run, declining refuses it. Under full access it asks too, where it
+/// would otherwise run unasked inside the rules. With approvals off it is
+/// refused; without the request the sandbox denies the read.
 #[cfg(target_os = "macos")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn issue_239_moderate_escalation_before_untrusted_content_needs_the_human()
 -> anyhow::Result<()> {
+    use codex_protocol::models::PermissionProfile;
     use codex_protocol::protocol::ReviewDecision;
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
     let ask = AskForApproval::OnRequest;
-    for (escalate, approval, decision, readable) in [
-        (true, ask, Some(ReviewDecision::Approved), true),
-        (true, ask, Some(ReviewDecision::denied("no")), false),
-        (true, AskForApproval::Never, None, false),
-        (false, ask, None, false),
+    let approve = || Some(ReviewDecision::Approved);
+    for (escalate, full_access, approval, decision, readable) in [
+        (true, false, ask, approve(), true),
+        (true, false, ask, Some(ReviewDecision::denied("no")), false),
+        (true, true, ask, approve(), true),
+        (true, false, AskForApproval::Never, None, false),
+        (false, false, ask, None, false),
+        (false, true, ask, None, false),
     ] {
         let (home, evading, _) = canary_home()?;
         let mut arguments = json!({ "command": evading });
@@ -592,7 +597,14 @@ async fn issue_239_moderate_escalation_before_untrusted_content_needs_the_human(
             SecurityLevel::Moderate,
             approval,
             vec![call("call-read", "shell_command", arguments), done_step()],
-            |_| {},
+            move |config| {
+                if full_access {
+                    config
+                        .permissions
+                        .set_permission_profile(PermissionProfile::Disabled)
+                        .expect("full access");
+                }
+            },
         )
         .await?;
         if let Some(decision) = decision {
@@ -613,7 +625,7 @@ async fn issue_239_moderate_escalation_before_untrusted_content_needs_the_human(
         assert_eq!(
             output.contains(CANARY),
             readable,
-            "{escalate} {approval:?}: {output}"
+            "{escalate} {full_access} {approval:?}: {output}"
         );
         if !escalate {
             assert!(output.contains("Operation not permitted"), "{output}");

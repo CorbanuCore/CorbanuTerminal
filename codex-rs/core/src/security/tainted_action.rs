@@ -133,6 +133,13 @@ impl PostTaintState {
         self.taint_generation > 0 || self.level != SecurityLevel::Permissive
     }
 
+    /// Under Moderate (configured and live), a human approval given at taint
+    /// generation `approved_at` lifts the protected-path rules for its command
+    /// while no new untrusted content has arrived since (issue #239).
+    pub(crate) fn human_approval_lifts_rules(&self, approved_at: Option<u64>) -> bool {
+        self.moderate_bound() && approved_at == Some(self.taint_generation)
+    }
+
     /// Moderate, both configured and in the live policy: a human approval
     /// may lift the protected-path rules for one command.
     pub(crate) fn moderate_bound(&self) -> bool {

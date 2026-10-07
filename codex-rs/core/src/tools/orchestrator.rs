@@ -222,12 +222,50 @@ impl ToolOrchestrator {
         }
         // Issue #239: under Moderate before untrusted content, a command that
         // asks to run outside the sandbox needs the human (no cache, hook or
-        // automatic reviewer); that answer lifts the protected-path rules.
-        let pre_taint_escalation =
-            post_taint.is_none() && moderate_escalation_before_taint(tool, req, tool_ctx);
+        // automatic reviewer), also where it would run unasked; that answer
+        // lifts the protected-path rules. With approvals off it stays refused.
+        let ask_human_to_escalate = post_taint.is_none()
+            && !matches!(requirement, ExecApprovalRequirement::Forbidden { .. })
+            && match approval_policy {
+                AskForApproval::Never => false,
+                AskForApproval::Granular(granular) => granular.allows_sandbox_approval(),
+                AskForApproval::UnlessTrusted | AskForApproval::OnRequest => true,
+            }
+            && moderate_escalation_before_taint(tool, req, tool_ctx);
         let mut escalation_approved_by_human = false;
         match &requirement {
             _ if post_taint.is_some() => {}
+            _ if ask_human_to_escalate => {
+                let note =
+                    "Approving also lifts the Moderate credential protection for this command.";
+                let reason = match &requirement {
+                    ExecApprovalRequirement::NeedsApproval {
+                        reason: Some(reason),
+                        ..
+                    } => format!("{reason} {note}"),
+                    _ => note.to_string(),
+                };
+                let approval_ctx = ApprovalCtx {
+                    session: &tool_ctx.session,
+                    turn: &tool_ctx.turn,
+                    call_id: &tool_ctx.call_id,
+                    retry_reason: Some(reason),
+                    network_approval_context: None,
+                    fresh_human_authority: true,
+                };
+                resolve_tool_apporval(
+                    tool,
+                    req,
+                    tool_ctx.call_id.as_str(),
+                    approval_ctx,
+                    tool_ctx,
+                    ApprovalReviewer::User,
+                    &otel,
+                )
+                .await?;
+                already_approved = true;
+                escalation_approved_by_human = true;
+            }
             ExecApprovalRequirement::Skip { .. } => {
                 if strict_auto_review {
                     let approval_ctx = ApprovalCtx {
@@ -268,7 +306,7 @@ impl ToolOrchestrator {
                     call_id: &tool_ctx.call_id,
                     retry_reason: reason.clone(),
                     network_approval_context: None,
-                    fresh_human_authority: pre_taint_escalation,
+                    fresh_human_authority: false,
                 };
                 resolve_tool_apporval(
                     tool,
@@ -285,7 +323,6 @@ impl ToolOrchestrator {
                 )
                 .await?;
                 already_approved = true;
-                escalation_approved_by_human = pre_taint_escalation;
             }
         }
 
@@ -807,7 +844,7 @@ fn post_taint_read_denials(
         .model_client()
         .post_taint_state()
         .filter(crate::security::tainted_action::PostTaintState::protected_paths_apply)?;
-    if state.moderate_bound() && human_approved_at == Some(state.taint_generation) {
+    if state.human_approval_lifts_rules(human_approved_at) {
         tracing::info!(
             target: "codex_core::security::tainted_action",
             taint_generation = state.taint_generation,
