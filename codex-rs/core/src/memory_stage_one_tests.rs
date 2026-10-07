@@ -834,3 +834,51 @@ async fn pf_23_s01_prompt_must_be_the_labelled_message() {
         ))
     ));
 }
+
+/// Review 2: redaction runs per item before labelling, so it can never cut a
+/// label, and a human message it changes loses standing (labelled).
+#[tokio::test]
+async fn pf_23_s01_redaction_runs_before_labelling() {
+    let owner = owner(SecurityLevel::Moderate).await;
+    let _ = (*owner.services.model_client())
+        .clone()
+        .with_source_envelopes(true);
+    let client = client(&owner).await.unwrap();
+    let source = ThreadId::new();
+    let human = rollout_message("user", "my token=SECRET_VALUE_123 please");
+    let mut recorder = NativeIngress::default();
+    recorder.set_labelled_mode(true);
+    recorder.set_origin_key(OriginKey::load_or_create(&client.codex_home).unwrap());
+    recorder.register_messages(
+        std::slice::from_ref(&human),
+        crate::security::ingress::MessageOrigin::Human,
+    );
+    let items = vec![
+        opened_by(source),
+        RolloutItem::ResponseItem(human),
+        RolloutItem::SourceOrigin(recorder.take_origin_record().unwrap()),
+        RolloutItem::ResponseItem(ResponseItem::FunctionCallOutput {
+            id: None,
+            call_id: "call-1".into(),
+            output: codex_protocol::models::FunctionCallOutputPayload::from_text(
+                "token=SECRET_VALUE_456 end".into(),
+            ),
+            internal_chat_message_metadata_passthrough: None,
+        }),
+    ];
+    fn redact(text: String) -> String {
+        text.replace("SECRET_VALUE_123", "[REDACTED]")
+            .replace("SECRET_VALUE_456", "[REDACTED]")
+    }
+    let contents = client
+        .label_items(source, &items, /*token_limit*/ 100_000, redact)
+        .unwrap();
+    assert!(!contents.contains("SECRET_VALUE"));
+    for text in texts(&contents) {
+        // Both are labelled whole: the changed human message lost standing.
+        assert!(text.contains("authority=none"), "{text}");
+        assert!(text.contains("[REDACTED]"), "{text}");
+        assert!(text.contains("<corbanu_untrusted_data>"), "{text}");
+        assert!(text.contains("</corbanu_untrusted_data>"), "{text}");
+    }
+}

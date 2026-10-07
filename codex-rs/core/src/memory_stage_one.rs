@@ -442,6 +442,9 @@ impl StageOneMemoryClient {
         if let Ok(key) = OriginKey::load_or_create(&self.codex_home) {
             ingress.set_origin_key(key);
         }
+        // Redact before labelling, item by item: an item the redaction changes
+        // no longer matches its origin record and is labelled; one it breaks
+        // is dropped. Labels are never touched afterwards.
         let conversation: Vec<ResponseItem> = items
             .iter()
             .filter_map(|item| match item {
@@ -451,6 +454,15 @@ impl StageOneMemoryClient {
                 }
                 _ => None,
             })
+            .filter_map(|item| {
+                let json = serde_json::to_string(&item).ok()?;
+                let redacted = redact(json.clone());
+                if redacted == json {
+                    Some(item)
+                } else {
+                    serde_json::from_str(&redacted).ok()
+                }
+            })
             .collect();
         ingress.note_restored_history(
             &conversation,
@@ -459,23 +471,28 @@ impl StageOneMemoryClient {
                 _ => None,
             }),
         );
-        let mut kept: Vec<ResponseItem> = ingress
+        let mut parts: Vec<String> = ingress
             .project_labelled(&conversation)
             .iter()
             .filter_map(keep_for_stage_one)
+            .filter_map(|item| serde_json::to_string(&item).ok())
             .collect();
+        // Drop whole items from the middle (keeping head and tail, as the
+        // Permissive text cut does) until the text fits: one pass to size,
+        // then a final check against the same truncation rule.
         let policy = codex_utils_output_truncation::TruncationPolicy::Tokens(token_limit);
+        let mut total: usize = parts.iter().map(|part| part.len() + 1).sum::<usize>() + 1;
+        while total > policy.byte_budget() && !parts.is_empty() {
+            total -= parts.remove(parts.len() / 2).len() + 1;
+        }
         loop {
-            let contents = serde_json::to_string(&kept)
-                .map(redact)
-                .map_err(|err| CodexErr::InvalidRequest(format!("serialize rollout: {err}")))?;
-            if kept.is_empty()
+            let contents = format!("[{}]", parts.join(","));
+            if parts.is_empty()
                 || codex_utils_output_truncation::truncate_text(&contents, policy) == contents
             {
                 return Ok(contents);
             }
-            // Keep the head and the tail, as the Permissive text cut does.
-            kept.remove(kept.len() / 2);
+            parts.remove(parts.len() / 2);
         }
     }
 

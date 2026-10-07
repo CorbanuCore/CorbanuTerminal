@@ -64,17 +64,17 @@ All behind `source_envelopes` with Moderate/Aggressive; flag off, Permissive and
   process is judged as one command since taint; code-mode nested results raise the taint generation;
   Disclosure and value-transfer kinds; decisions logged without arguments.
 - [x] Slice 2: stage one under Moderate. Core reads the claimed session's rollout (its opening record must be
-  that session's), restores only origin records this home signed, labels the rest, drops whole items from the
-  middle to fit the budget, and builds the message; the host gives only secret redaction and its template. The
-  request must be exactly that message or it is refused before dispatch, also when the level rises mid-job.
+  that session's), redacts each item, restores only origin records this home signed, labels the rest, drops whole
+  items from the middle to fit the budget, and builds the message; the host gives only its redaction function and
+  prompt template. The request must be exactly that message or it is refused before dispatch, also mid-job.
   Aggressive, and Moderate without the flag, deny; consolidation is skipped above Permissive.
-- [x] Slice 3: after taint every agent command's sandbox, and in-process file tools (patch pre-check, structured
-  edits, image view, extension tools), deny reads of the Corbanu home (all entries but `tmp`, `shell_snapshots`,
-  skills, plugins, packages, worktrees, `AGENTS.md`; fixed stores and `*.sqlite*` even before they exist), other
-  Corbanu homes and `$HOME` credentials. Only the turn's folder, workspace and writable roots stay readable, never
-  a command's own working folder. Full access gets a sandbox that only denies those reads; denials block
-  unsandboxed retries. Under Moderate a fresh human approval of the exact protected command lifts them for that
-  run. [Readiness matrix](../../../../qa/security-levels/sprints/PF-23-S01/activation-readiness.md).
+- [x] Slice 3: after taint, agent command sandboxes, in-process file tools (patch pre-check, edits, image view,
+  extension tools) and Codex Apps uploads deny reads of the Corbanu home (all but `tmp`, `shell_snapshots`, skills,
+  plugins, packages, worktrees, `AGENTS.md`; fixed stores and `*.sqlite*` even before they exist), other Corbanu
+  homes and `$HOME` credentials. Only the turn's folder, workspace and writable roots stay readable, never a
+  command's own folder. Full access gets a sandbox that only denies those reads; no unsandboxed retries. Under
+  Moderate a fresh human approval of the exact protected shell/exec command lifts them for that run (never for
+  file tools). [Readiness matrix](../../../../qa/security-levels/sprints/PF-23-S01/activation-readiness.md).
 
 ## Remaining
 
@@ -84,7 +84,8 @@ Moved: Aggressive grants lifting denials, write/action gaps of the command-text 
 untrusted content (sandbox fixed at spawn; typing still judged) to PF-23-S02; consolidation, Aggressive stage one
 and the level a source session ran under to PF-23-S03. Known limits: external sandboxes and remote exec-server
 environments take no extra rules (paths are this host's); where no sandbox can start (Linux without bubblewrap,
-Windows unelevated) tainted full-access commands fail closed; MCP servers, hooks and notify run outside the
+Windows unelevated) tainted full-access commands and file tools fail closed; extra permissions a human grants a
+command can still open a path inside a denial (Aggressive turns those grants off); pre-existing hard links; MCP servers, hooks and notify run outside the
 sandbox; the shell snapshot stays readable. Findings: Chat Completions and Anthropic wires drop namespace (MCP)
 tools; GLM 5.2 wraps stage-one JSON in a code fence, so extraction fails at every level.
 
@@ -96,5 +97,4 @@ tools; GLM 5.2 wraps stage-one JSON in a code fence, so extraction fails at ever
 
 ## Exit evidence
 
-- [ ] Gates under `qa/security-levels/sprints/PF-23-S01/`; videos in `qa/demos/index/PF-23-S01.md`.
-- [ ] Ledgers reflect reality and the completed record is archived.
+- [ ] Gates under `qa/security-levels/sprints/PF-23-S01/`, videos in `qa/demos/index/PF-23-S01.md`; archived.

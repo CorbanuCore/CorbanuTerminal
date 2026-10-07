@@ -183,3 +183,38 @@ async fn pf_23_s01_file_tools_get_the_denials_after_taint() {
     assert!(readable(context()));
     assert!(!readable(after));
 }
+
+/// Review 2: host reads of model-named files (Codex Apps uploads) follow the
+/// same denials after taint, through symlinks too.
+#[tokio::test]
+async fn pf_23_s01_upload_reads_follow_the_denials_after_taint() {
+    let (session, turn) = crate::session::tests::make_session_and_context().await;
+    let client = (*session.services.model_client())
+        .clone()
+        .with_ingress_level(codex_security_policy::SecurityLevel::Moderate)
+        .with_source_envelopes(true);
+    session.services.replace_model_client(client);
+    assert_eq!(post_taint_read_policy(&session, &turn), None);
+    session
+        .services
+        .model_client()
+        .note_unrecorded_input_for_taint();
+    let policy = post_taint_read_policy(&session, &turn).expect("tainted");
+    let home = turn.config.codex_home.to_path_buf();
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::write(home.join("auth.json"), "x").unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    let link = outside.path().join("innocent.txt");
+    std::os::unix::fs::symlink(home.join("auth.json"), &link).unwrap();
+    let plain = outside.path().join("plain.txt");
+    std::fs::write(&plain, "x").unwrap();
+    #[allow(deprecated)]
+    let cwd = turn.cwd;
+    assert!(!readable_under(
+        &policy,
+        &home.join("auth.json"),
+        cwd.as_path()
+    ));
+    assert!(!readable_under(&policy, &link, cwd.as_path()));
+    assert!(readable_under(&policy, &plain, cwd.as_path()));
+}

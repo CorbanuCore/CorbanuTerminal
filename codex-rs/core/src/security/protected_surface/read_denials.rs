@@ -253,7 +253,8 @@ pub(crate) fn protect_file_tool_context(
     if session
         .services
         .model_client()
-        .post_taint_state().is_none_or(|state| state.taint_generation <= 0)
+        .post_taint_state()
+        .is_none_or(|state| state.taint_generation == 0)
     {
         return context;
     }
@@ -273,16 +274,66 @@ pub(crate) fn protect_file_tool_context(
         .iter()
         .filter_map(|root| root.to_abs_path().ok())
         .collect();
+    // Keep roots come from the turn's own profile: extra permissions granted
+    // to this call never make a denied folder readable.
     let denials = ReadDenials::for_turn(
         turn.config.codex_home.as_path(),
         &turn_cwd,
         &workspace_roots,
-        &profile,
+        turn.config.permissions.permission_profile(),
     );
     if let Some(protected) = denials.apply(&profile) {
         context.permissions = protected.into();
     }
     context
+}
+
+/// The read policy for host code that reads a model-named file outside any
+/// sandbox (Codex Apps uploads), once the session is tainted: `None` before
+/// untrusted content. A profile that cannot take the rules reads nothing.
+pub(crate) fn post_taint_read_policy(
+    session: &crate::session::session::Session,
+    turn: &crate::session::turn_context::TurnContext,
+) -> Option<FileSystemSandboxPolicy> {
+    session
+        .services
+        .model_client()
+        .post_taint_state()
+        .filter(|state| state.taint_generation > 0)?;
+    #[allow(deprecated)]
+    let turn_cwd = turn.cwd.clone();
+    let workspace_roots: Vec<AbsolutePathBuf> = turn
+        .environments
+        .primary()
+        .map(|environment| {
+            environment
+                .workspace_roots()
+                .iter()
+                .filter_map(|root| root.to_abs_path().ok())
+                .collect()
+        })
+        .unwrap_or_default();
+    let profile = turn.config.permissions.permission_profile();
+    let denials = ReadDenials::for_turn(
+        turn.config.codex_home.as_path(),
+        &turn_cwd,
+        &workspace_roots,
+        profile,
+    );
+    Some(
+        denials
+            .apply(profile)
+            .map(|protected| protected.file_system_sandbox_policy())
+            .unwrap_or_else(|| FileSystemSandboxPolicy::restricted(Vec::new())),
+    )
+}
+
+/// Whether `path` (and what it resolves to) may be read under `policy`.
+pub(crate) fn readable_under(policy: &FileSystemSandboxPolicy, path: &Path, cwd: &Path) -> bool {
+    policy.can_read_path_with_cwd(path, cwd)
+        && std::fs::canonicalize(path).map_or(true, |canonical| {
+            policy.can_read_path_with_cwd(&canonical, cwd)
+        })
 }
 
 #[cfg(test)]
