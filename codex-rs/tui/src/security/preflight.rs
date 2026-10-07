@@ -223,10 +223,7 @@ pub(crate) fn verify_isolation(config: &Config, paths: &[PathBuf]) -> Vec<String
     // The path check does not evaluate globs; the database glob must be in
     // the policy for the files it covers to count as denied.
     let glob = database_glob(codex_home).to_string_lossy().into_owned();
-    let databases_denied = policy
-        .get_unreadable_globs_with_cwd(cwd)
-        .iter()
-        .any(|pattern| *pattern == glob);
+    let databases_denied = policy.get_unreadable_globs_with_cwd(cwd).contains(&glob);
     paths
         .iter()
         .filter(|path| {
