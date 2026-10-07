@@ -2620,7 +2620,7 @@ impl ModelClient {
         // PF-27-S05: a websocket handshake cannot carry a signed broker frame.
         if !self.state.provider.info().supports_websockets
             || self.state.disable_websockets.load(Ordering::Relaxed)
-            || codex_model_provider::model_key_broker_installed()
+            || codex_model_provider::model_key_broker_required()
         {
             return false;
         }
@@ -2716,7 +2716,7 @@ impl ModelClient {
         request_route_telemetry: RequestRouteTelemetry,
     ) -> std::result::Result<ApiWebSocketConnection, ApiError> {
         // PF-27-S05: a brokered credential never travels over a websocket handshake.
-        if codex_model_provider::model_key_broker_installed() {
+        if codex_model_provider::model_key_broker_required() {
             return Err(ApiError::InvalidRequest {
                 message: "websockets are off under broker_model_auth".to_string(),
             });

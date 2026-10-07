@@ -339,7 +339,7 @@ impl ConfiguredModelProvider {
 
     fn provider_env_auth(&self, provider_key_id: &str) -> Option<CodexAuth> {
         // PF-27-S05: the broker reads this key; Core holds only a placeholder.
-        if crate::model_key_broker::model_key_broker_installed() {
+        if crate::model_key_broker::model_key_broker_required() {
             return Some(CodexAuth::from_api_key(
                 crate::model_key_broker::BROKERED_KEY_PLACEHOLDER,
             ));
@@ -463,7 +463,7 @@ impl ModelProvider for ConfiguredModelProvider {
 
     fn account_state(&self) -> ProviderAccountResult {
         let account = if self.info.env_key.is_some()
-            && crate::model_key_broker::model_key_broker_installed()
+            && crate::model_key_broker::model_key_broker_required()
         {
             // PF-27-S05: Core does not read the key to check for it; a missing
             // key is reported when a request is made.

@@ -29,3 +29,11 @@ pub(crate) fn model_broker_client() -> Option<HttpClient> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .clone()
 }
+
+/// Removes the installed broker client (tests only: the route is process-wide).
+#[cfg(test)]
+pub(crate) fn uninstall_model_broker_client() {
+    *BROKER_CLIENT
+        .write()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+}

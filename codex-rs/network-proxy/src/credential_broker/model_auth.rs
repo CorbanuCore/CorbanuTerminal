@@ -161,13 +161,15 @@ impl ModelCredentialBroker {
     /// Hands each set, non-empty variable in `names` to the broker and
     /// removes it from this process's environment, value bytes overwritten,
     /// so neither Core nor anything that reads its environment later sees
-    /// it. Returns the names handed over. A variable the broker refuses is
-    /// left in place and reported as an error.
+    /// it. Every variable is removed, even when the broker refuses one; the
+    /// first refusal is returned after all of them are processed. Returns the
+    /// names handed over.
     pub fn take_env_keys(
         &self,
         names: &[String],
     ) -> Result<Vec<String>, ModelCredentialBrokerError> {
         let mut taken = Vec::new();
+        let mut refused = None;
         for name in names {
             let Some(value) = super::env_scrub::take_env_var(name) else {
                 continue;
@@ -176,10 +178,17 @@ impl ModelCredentialBroker {
                 // Not a usable key; it is gone from the environment either way.
                 continue;
             };
-            self.client.stash_env(name, value)?;
-            taken.push(name.clone());
+            match self.client.stash_env(name, value) {
+                Ok(()) => taken.push(name.clone()),
+                Err(error) => {
+                    refused.get_or_insert(error);
+                }
+            }
         }
-        Ok(taken)
+        match refused {
+            Some(error) => Err(error.into()),
+            None => Ok(taken),
+        }
     }
 
     /// Registers the key for `provider_key_id` without Core reading it: the

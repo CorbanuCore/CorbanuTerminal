@@ -3678,6 +3678,11 @@ impl Config {
                 );
             }
         }
+        if features.enabled(Feature::BrokerModelAuth) {
+            // PF-27-S05: this process brokers provider credentials from now on;
+            // until its broker runs, they are not sent at all.
+            codex_model_provider::require_model_key_broker();
+        }
         if features.enabled(Feature::SecretOutputGate) {
             // PF-28-S01: gate managed secrets out of every output sink. Shell
             // snapshots persist the environment, so they are off too; if

@@ -28,6 +28,8 @@ use codex_api::SharedAuthProvider;
 use http::HeaderMap;
 use std::sync::Arc;
 use std::sync::OnceLock;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 
 /// What `CodexAuth::ApiKey` holds for a provider key Core did not read. It is
 /// never sent: requests for such a provider are brokered.
@@ -91,6 +93,40 @@ pub trait ModelKeyBroker: Send + Sync {
 }
 
 static MODEL_KEY_BROKER: OnceLock<Arc<dyn ModelKeyBroker>> = OnceLock::new();
+static REQUIRED: AtomicBool = AtomicBool::new(false);
+
+/// The error for a credential use before the process's broker is running.
+pub const BROKER_NOT_RUNNING: &str = "broker_model_auth: the credential broker is not running yet; \
+     the credential is not sent until it is";
+
+/// Marks this process as brokered (a loaded configuration enables
+/// `broker_model_auth`). One-way and process-wide: from now on Core reads no
+/// provider key and attaches no plain key or sign-in token itself, and until
+/// a broker is installed such credential uses fail.
+pub fn require_model_key_broker() {
+    REQUIRED.store(true, Ordering::SeqCst);
+}
+
+/// Whether provider credentials in this process are brokered (required, or a
+/// broker is installed).
+pub fn model_key_broker_required() -> bool {
+    #[cfg(test)]
+    if TEST_REQUIRED.with(std::cell::Cell::get) {
+        return true;
+    }
+    REQUIRED.load(Ordering::SeqCst) || model_key_broker().is_some()
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEST_REQUIRED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Marks the current test thread as brokered without a broker installed.
+#[cfg(test)]
+pub(crate) fn set_test_broker_required(required: bool) {
+    TEST_REQUIRED.with(|slot| slot.set(required));
+}
 
 /// Installs the process's broker. The first installation wins and stays for
 /// the life of the process; returns whether this call installed it.

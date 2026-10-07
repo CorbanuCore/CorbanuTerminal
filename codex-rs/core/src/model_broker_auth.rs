@@ -96,6 +96,7 @@ impl BrokerSettings {
     }
 }
 
+#[derive(Clone)]
 enum BrokerHandle {
     #[cfg(unix)]
     Running(codex_network_proxy::model_auth::ModelCredentialBroker),
@@ -238,7 +239,12 @@ impl CoreModelKeyBroker {
                 taken.join(", ")
             ),
             Ok(_) => {}
-            Err(error) => tracing::warn!("credential broker refused an environment key: {error}"),
+            Err(error) => {
+                // The keys are gone from the environment either way; a
+                // broker that refused one is not trusted with any.
+                tracing::warn!("credential broker refused an environment key: {error}");
+                return Self::new(BrokerHandle::Failed);
+            }
         }
         match codex_http_client::HttpClient::unix_socket(
             broker.socket_path(),
@@ -322,49 +328,79 @@ impl AuthProvider for BrokeredAuth {
 }
 
 /// The registered credential for `binding` and `source`, registering it (or
-/// its refreshed value) when needed.
+/// its refreshed value) when needed. The state lock is not held while the
+/// broker registers (a blocking control-channel call), so other requests are
+/// not serialized behind it.
 fn credential_for(
     state: &Mutex<BrokerState>,
     binding: Binding,
     source: &Source,
 ) -> Result<Credential, BrokerModelAuthError> {
-    let mut state = state
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let (slot, version) = match source {
-        Source::ProviderKey {
-            provider_key_id, ..
-        } => {
-            // A key saved or deleted in this process takes effect.
-            let mut version = [0_u8; 32];
-            version[..8]
-                .copy_from_slice(&codex_login::provider_api_key_storage_revision().to_le_bytes());
-            (format!("provider:{provider_key_id}"), version)
+    let lock = || {
+        state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    };
+    let (key, version, handle) = {
+        let state = lock();
+        let (slot, version) = match source {
+            Source::ProviderKey {
+                provider_key_id, ..
+            } => {
+                // A key saved or deleted in this process takes effect.
+                let mut version = [0_u8; 32];
+                version[..8].copy_from_slice(
+                    &codex_login::provider_api_key_storage_revision().to_le_bytes(),
+                );
+                (format!("provider:{provider_key_id}"), version)
+            }
+            Source::Value { value, slot } => {
+                use sha2::Digest as _;
+                let fingerprint: [u8; 32] = sha2::Sha256::new()
+                    .chain_update(state.fingerprint_salt)
+                    .chain_update(value.as_bytes())
+                    .finalize()
+                    .into();
+                let slot = slot
+                    .clone()
+                    .unwrap_or_else(|| format!("value:{}", hex(&fingerprint)));
+                (slot, fingerprint)
+            }
+        };
+        let key = (binding, slot);
+        if let Some(registered) = state.credentials.get(&key)
+            && registered.version == version
+        {
+            return if alive(&registered.credential) {
+                Ok(registered.credential.clone())
+            } else {
+                Err(BrokerModelAuthError::Unavailable)
+            };
         }
-        Source::Value { value, slot } => {
-            use sha2::Digest as _;
-            let fingerprint: [u8; 32] = sha2::Sha256::new()
-                .chain_update(state.fingerprint_salt)
-                .chain_update(value.as_bytes())
-                .finalize()
-                .into();
-            let slot = slot
-                .clone()
-                .unwrap_or_else(|| format!("value:{}", hex(&fingerprint)));
-            (slot, fingerprint)
+        (key, version, state.handle.clone())
+    };
+    let credential = match register(&handle, &key.0, source) {
+        Ok(credential) => credential,
+        Err(error) => {
+            if matches!(error, BrokerModelAuthError::MissingKey { .. })
+                && let Some(stale) = lock().credentials.remove(&key)
+            {
+                // The key was deleted: drop the broker's old copy too.
+                unregister(&stale.credential);
+            }
+            return Err(error);
         }
     };
-    let key = (binding, slot);
-    if let Some(registered) = state.credentials.get(&key)
-        && registered.version == version
+    let mut state = lock();
+    if let Some(current) = state.credentials.get(&key)
+        && current.version == version
     {
-        return if alive(&registered.credential) {
-            Ok(registered.credential.clone())
-        } else {
-            Err(BrokerModelAuthError::Unavailable)
-        };
+        // Another request registered the same version meanwhile.
+        let current = current.credential.clone();
+        drop(state);
+        unregister(&credential);
+        return Ok(current);
     }
-    let credential = register(&state.handle, &key.0, source)?;
     let binding = &key.0;
     tracing::info!(
         "model provider credential held by the credential broker (host={}, port={}, path={}, header={:?})",
@@ -373,14 +409,17 @@ fn credential_for(
         binding.path_prefix,
         binding.header
     );
-    if let Some(replaced) = state.credentials.insert(
+    let replaced = state.credentials.insert(
         key,
         Registered {
             credential: credential.clone(),
             version,
         },
-    ) {
-        // A refreshed token or re-saved key: drop the broker's old copy.
+    );
+    drop(state);
+    if let Some(replaced) = replaced {
+        // A refreshed token or re-saved key: drop the broker's old copy. A
+        // request already signed with it fails once (not retried with a key).
         unregister(&replaced.credential);
     }
     Ok(credential)

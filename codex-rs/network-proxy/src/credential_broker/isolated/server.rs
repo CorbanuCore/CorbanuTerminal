@@ -116,11 +116,12 @@ pub fn run_credential_broker_main_with(resolver: Option<StoredKeyResolver>) -> !
     // directory (and the vault's lock file, which a vault read must lock).
     let runtime_dir = runtime_dir();
     let store_home = resolver.and(store_home());
-    // The lock may be created after the broker starts (a first key saved in
-    // this session); Seatbelt rules are by path, Landlock needs it to exist.
+    // Landlock rules need the file to exist (the vault may be created later
+    // in the session), so the lock is created here, before containment. Only
+    // a regular file reached without symlinks is made writable.
     let vault_lock: Vec<std::path::PathBuf> = store_home
         .iter()
-        .map(|home| home.join("secrets").join(".vault.lock"))
+        .filter_map(|home| prepare_vault_lock(home))
         .collect();
     let containment =
         codex_process_hardening::contain_credential_broker_with_files(&runtime_dir, &vault_lock);
@@ -149,6 +150,32 @@ fn runtime_dir() -> std::path::PathBuf {
         .map(std::path::PathBuf::from)
         .filter(|dir| dir.is_absolute() && dir.is_dir())
         .unwrap_or_else(socket_parent)
+}
+
+/// Creates `<home>/secrets/.vault.lock` if needed (never through a symlink)
+/// and returns its path when it is a regular file in a real directory.
+pub(crate) fn prepare_vault_lock(home: &std::path::Path) -> Option<std::path::PathBuf> {
+    use std::os::unix::fs::OpenOptionsExt as _;
+    let dir = home.join("secrets");
+    if !std::fs::symlink_metadata(&dir).is_ok_and(|meta| meta.is_dir()) {
+        use std::os::unix::fs::DirBuilderExt as _;
+        std::fs::DirBuilder::new().mode(0o700).create(&dir).ok()?;
+    }
+    if !std::fs::symlink_metadata(&dir).is_ok_and(|meta| meta.is_dir()) {
+        return None;
+    }
+    let lock = dir.join(".vault.lock");
+    std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(&lock)
+        .ok()?;
+    std::fs::symlink_metadata(&lock)
+        .is_ok_and(|meta| meta.is_file())
+        .then_some(lock)
 }
 
 /// The Corbanu home named by the controller, if it is an absolute directory.

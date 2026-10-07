@@ -1180,6 +1180,32 @@ mod pf_27_s05 {
         assert_eq!(denial(&response), Some("unknown_credential"));
     }
 
+    /// The vault lock is created before containment (so a vault first
+    /// created later in the session is still usable) and is never reached
+    /// through a symlink.
+    #[test]
+    fn pf_27_s05_vault_lock_is_created_and_never_a_symlink() {
+        use crate::credential_broker::isolated::server::prepare_vault_lock;
+        let home = tempfile::tempdir().expect("home");
+        let lock = prepare_vault_lock(home.path()).expect("lock created");
+        assert_eq!(lock, home.path().join("secrets").join(".vault.lock"));
+        assert!(lock.is_file());
+
+        let elsewhere = tempfile::tempdir().expect("elsewhere");
+        let target = elsewhere.path().join("target");
+        std::fs::write(&target, b"").expect("target");
+        let linked = tempfile::tempdir().expect("linked home");
+        std::fs::create_dir(linked.path().join("secrets")).expect("secrets");
+        std::os::unix::fs::symlink(&target, linked.path().join("secrets").join(".vault.lock"))
+            .expect("symlink");
+        assert_eq!(prepare_vault_lock(linked.path()), None);
+
+        let linked_dir = tempfile::tempdir().expect("linked dir home");
+        std::os::unix::fs::symlink(elsewhere.path(), linked_dir.path().join("secrets"))
+            .expect("dir symlink");
+        assert_eq!(prepare_vault_lock(linked_dir.path()), None);
+    }
+
     const MEMORY_CHILD_ENV: &str = "CODEX_PF27_S05_MEMORY_CHILD";
     const MEMORY_KEY_ENV: &str = "PF27_S05_MEMORY_KEY";
     const MEMORY_MASKED_ENV: &str = "PF27_S05_MEMORY_MASKED";
@@ -1196,6 +1222,10 @@ mod pf_27_s05 {
     /// Plays Core in a fresh process whose launch environment holds the key,
     /// as Core's does: hands the key to the broker, uses it, then scans its
     /// own writable memory (heap, stacks, launch environment) for it.
+    ///
+    /// Scope: the broker hand-over path (`take_env_keys`, `register_stored`,
+    /// signed requests). It does not run Core's config loading, `.env`
+    /// handling or telemetry, which could copy the key before hand-over.
     #[test]
     #[expect(clippy::print_stdout, reason = "the parent test reads the hit counts")]
     fn pf_27_s05_core_memory_child_entry() {
@@ -1212,12 +1242,27 @@ mod pf_27_s05 {
         let before = memory_scan_tests::count_in_writable_memory(&masked);
         println!("PF27S05 memory hits_before={before}");
         assert!(before > 0, "the scanner must find the key before hand-over");
+        #[cfg(target_os = "linux")]
+        let environ_holds_key = || {
+            // Compared masked and the copy wiped, so this check leaves no
+            // plain key behind for the memory scan.
+            let environ =
+                zeroize::Zeroizing::new(std::fs::read("/proc/self/environ").unwrap_or_default());
+            environ.windows(masked.len()).any(|window| {
+                window
+                    .iter()
+                    .zip(&masked)
+                    .all(|(byte, masked)| byte ^ memory_scan_tests::MASK == *masked)
+            })
+        };
+        #[cfg(target_os = "linux")]
+        assert!(environ_holds_key(), "positive control: /proc/self/environ");
 
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
             .expect("runtime");
-        let scan_masked = masked.clone();
+        let scan_masked = masked;
         let hits = runtime.block_on(async move {
             let broker = ModelCredentialBroker::spawn_with_launcher(
                 ModelCredentialBrokerOptions {
@@ -1247,16 +1292,12 @@ mod pf_27_s05 {
             drop((credential, broker));
             hits
         });
+        // What another same-user process reads as Core's environment.
         #[cfg(target_os = "linux")]
-        {
-            // What another same-user process reads as Core's environment.
-            let environ = std::fs::read("/proc/self/environ").expect("environ");
-            let plain: Vec<u8> = masked
-                .iter()
-                .map(|byte| byte ^ memory_scan_tests::MASK)
-                .collect();
-            assert!(!environ.windows(plain.len()).any(|window| window == plain));
-        }
+        assert!(
+            !environ_holds_key(),
+            "/proc/self/environ still holds the key"
+        );
         println!("PF27S05 memory hits_after={hits}");
         assert_eq!(hits, 0, "the raw key is still in Core's memory");
     }

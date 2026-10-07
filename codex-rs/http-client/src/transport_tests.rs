@@ -228,4 +228,5 @@ async fn pf_27_s05_broker_frame_requests_go_only_to_the_broker_socket() {
         "{seen}"
     );
     assert!(network.accept().is_err(), "nothing may reach the network");
+    crate::model_broker_route::uninstall_model_broker_client();
 }

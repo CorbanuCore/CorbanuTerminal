@@ -5,6 +5,16 @@
 //! stack, which `ps -E` and `/proc/<pid>/environ` read, or a `setenv` heap
 //! string). The value bytes of every live entry are overwritten in place
 //! before the variable is removed.
+//!
+//! Known limits (recorded in the PF-27-S05 sprint record):
+//! - This runs once a session config enables the broker, when Core already
+//!   has other threads. The walk of `environ` and `unsetenv` are not
+//!   serialized with C-level `getenv` callers (resolver, TLS setup), or with
+//!   a concurrent `setenv` that reallocates the array. Doing it before
+//!   `main` (in `arg0`) needs the flag decided at process start.
+//! - A launch-environment value that `.env` loading already replaced is no
+//!   longer reachable through `environ`; its original bytes stay in the
+//!   launch block.
 
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt as _;
@@ -22,10 +32,8 @@ pub(crate) fn take_env_var(name: &str) -> Option<Zeroizing<Vec<u8>>> {
         return None;
     }
     overwrite_in_place(OsStr::new(name).as_bytes());
-    // SAFETY: Rust's own environment accessors serialize with this call.
-    // A C library reading the variable concurrently, without that lock, sees
-    // the overwritten bytes above or no variable; Core starts no such reader
-    // for provider-key variables.
+    // SAFETY: Rust's own environment accessors serialize with this call. A
+    // C-level reader racing it is the known limit in the module docs.
     unsafe { std::env::remove_var(name) };
     Some(value)
 }
