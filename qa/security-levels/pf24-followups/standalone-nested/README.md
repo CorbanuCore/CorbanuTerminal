@@ -35,3 +35,17 @@ Aggressive that could run one of them got an agent outside that check.
   Aggressive, so a launch from them is not detected as nested.
 - The detection limits in [nested-launch](../nested-launch/README.md) still
   apply.
+
+## Gate evidence
+
+- **Tests** (after `just fmt` and `just fix`): `just test -p codex-security-level`
+  (3: standalone refusals for every kind in both modes, `decide` unchanged);
+  `just test -p codex-exec -p codex-tui -E 'test(nested)'` (39, including the
+  new `codex-exec` and `codex-tui` integration tests);
+  `just test -p codex-cli --test nested_launch` (6, now with `stdio-to-uds`);
+  the TUI `security::` suites. `just bazel-lock-check` passes.
+- **GLM 5.2 tmux run** (`tmux-run/1-refused.txt`, the recorded run): under
+  Aggressive, GLM ran `codex-exec 'say hi'; codex-tui` after a person approved
+  it; both were refused with the nested-launch reason.
+- **Review** (Opus 5.5 High): approve with fixes; see `review/`.
+- **Video:** [standalone binaries refuse nested launches](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/standalone-nested-standalone-nested-refused-61a34c73eab1-2026-10-06.mp4)
