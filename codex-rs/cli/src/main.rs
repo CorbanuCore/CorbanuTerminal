@@ -859,8 +859,7 @@ fn format_exit_messages(exit_info: AppExitInfo, color_enabled: bool) -> Vec<Stri
 }
 
 /// Handle the app exit and print the results. Optionally run the update action.
-/// `prompt` is the initial prompt, left out when `/security` restarts.
-fn handle_app_exit(exit_info: AppExitInfo, prompt: Option<&str>) -> anyhow::Result<()> {
+fn handle_app_exit(exit_info: AppExitInfo) -> anyhow::Result<()> {
     let is_fatal = match &exit_info.exit_reason {
         ExitReason::Fatal(message) => {
             eprintln!("ERROR: {message}");
@@ -869,7 +868,7 @@ fn handle_app_exit(exit_info: AppExitInfo, prompt: Option<&str>) -> anyhow::Resu
         ExitReason::Restart => {
             println!("Restarting Corbanu Terminal to apply the saved security level…");
             std::io::stdout().flush()?;
-            let err = codex_tui::restart_process(prompt);
+            let err = codex_tui::restart_process(MultitoolCli::command());
             anyhow::bail!("could not restart Corbanu Terminal ({err}); start it again yourself");
         }
         ExitReason::UserRequested => false,
@@ -1156,7 +1155,6 @@ async fn cli_main(
                 &mut interactive.config_overrides,
                 root_config_overrides.clone(),
             );
-            let prompt = interactive.prompt.clone();
             let exit_info = run_interactive_tui(
                 interactive,
                 root_remote.clone(),
@@ -1164,7 +1162,7 @@ async fn cli_main(
                 arg0_paths.clone(),
             )
             .await?;
-            handle_app_exit(exit_info, prompt.as_deref())?;
+            handle_app_exit(exit_info)?;
         }
         Some(Subcommand::Exec(mut exec_cli)) => {
             reject_remote_mode_for_subcommand(
@@ -1455,7 +1453,6 @@ async fn cli_main(
                 include_non_interactive,
                 config_overrides,
             );
-            let prompt = interactive.prompt.clone();
             let exit_info = run_interactive_tui(
                 interactive,
                 remote.remote.or(root_remote.clone()),
@@ -1465,7 +1462,7 @@ async fn cli_main(
                 arg0_paths.clone(),
             )
             .await?;
-            handle_app_exit(exit_info, prompt.as_deref())?;
+            handle_app_exit(exit_info)?;
         }
         Some(Subcommand::Archive(cmd)) => {
             let output = run_session_archive_cli_command(
@@ -1523,7 +1520,6 @@ async fn cli_main(
                 all,
                 config_overrides,
             );
-            let prompt = interactive.prompt.clone();
             let exit_info = run_interactive_tui(
                 interactive,
                 remote.remote.or(root_remote.clone()),
@@ -1533,7 +1529,7 @@ async fn cli_main(
                 arg0_paths.clone(),
             )
             .await?;
-            handle_app_exit(exit_info, prompt.as_deref())?;
+            handle_app_exit(exit_info)?;
         }
         Some(Subcommand::Login(mut login_cli)) => {
             reject_remote_mode_for_subcommand(

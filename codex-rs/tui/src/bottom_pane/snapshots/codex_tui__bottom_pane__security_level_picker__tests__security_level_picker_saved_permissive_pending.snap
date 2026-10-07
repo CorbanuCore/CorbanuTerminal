@@ -1,9 +1,11 @@
 ---
 source: tui/src/bottom_pane/security_level_picker_tests.rs
-assertion_line: 130
 expression: "render(&picker, 80)"
 ---
 Saved: Permissive
 Restart Corbanu Terminal to activate Permissive. Until then this session stays
-Aggressive. Resume this conversation with /resume after restarting.
-enter or esc close
+Aggressive.
+Press r to restart now: Corbanu Terminal closes this session and starts again
+in this folder with the same options. Resume this conversation with /resume
+afterwards.
+r restart now · enter or esc close

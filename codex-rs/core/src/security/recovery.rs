@@ -282,9 +282,8 @@ impl TransitionStore for HomeTransitionStore {
 /// see `level`: it sets a stricter `[security]` level, or it cannot be read
 /// (then the edit is tried and its failure reported). A file that sets no
 /// level, or one no stricter, is left exactly as it is.
-fn user_config_needs_level(codex_home: &Path, level: SecurityLevel) -> bool {
-    let contents = match std::fs::read_to_string(codex_home.join(crate::config::CONFIG_TOML_FILE))
-    {
+pub(crate) fn user_config_needs_level(codex_home: &Path, level: SecurityLevel) -> bool {
+    let contents = match std::fs::read_to_string(codex_home.join(crate::config::CONFIG_TOML_FILE)) {
         Ok(contents) => contents,
         Err(err) if err.kind() == io::ErrorKind::NotFound => return false,
         Err(_) => return true,
@@ -292,7 +291,10 @@ fn user_config_needs_level(codex_home: &Path, level: SecurityLevel) -> bool {
     let Ok(table) = toml::from_str::<toml::Table>(&contents) else {
         return true;
     };
-    match table.get("security").and_then(|security| security.get("level")) {
+    match table
+        .get("security")
+        .and_then(|security| security.get("level"))
+    {
         None => false,
         Some(configured) => {
             !matches!(configured.clone().try_into::<SecurityLevel>(), Ok(configured) if configured <= level)

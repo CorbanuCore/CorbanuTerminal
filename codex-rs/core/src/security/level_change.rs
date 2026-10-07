@@ -6,11 +6,11 @@
 //! reaches this module: a request cannot arrive over the wire, and the
 //! controller it uses is never handed to agent runtimes.
 //!
-//! A commit goes through the live policy tree of this process on the Corbanu
-//! home (the strictest one), so a stricter level and its revocation apply to
-//! running sessions now and reach the other trees on that home. Without a
-//! live tree it goes through a tree built from the stored state, which only
-//! saves. Either way the result is durable in `security_state.json` before it
+//! A commit goes through the policy tree of the session the person confirmed
+//! in, so a stricter level and its revocation apply to it now and reach the
+//! other trees of this process on that home. Without such a tree (no session
+//! yet, or a remote app server) it goes through a tree built from the stored
+//! state, which only saves. Either way the result is durable in `security_state.json` before it
 //! is reported, except a stricter level whose save failed (it applies now and
 //! says it will not survive a restart).
 //!
@@ -24,6 +24,7 @@ use codex_protocol::SessionId;
 use codex_protocol::ThreadId;
 use codex_protocol::security::SecurityControlAction;
 use codex_protocol::security::SecurityControlRequest;
+use codex_security_policy::AuthorityEpoch;
 use codex_security_policy::PolicyPrincipal;
 use codex_security_policy::PrincipalKind;
 pub use codex_security_policy::SecurityLevel;
@@ -72,31 +73,47 @@ pub struct LevelBasis {
     pub next_start: SecurityLevel,
     pub kill_switch_active: bool,
     pub stored: StoredSecurityState,
+    /// Whether the session's own policy tree runs in this process, so a
+    /// stricter level applies to it now.
+    pub live: bool,
+    /// That tree's epoch: any commit since the review moves it.
+    epoch: Option<AuthorityEpoch>,
 }
 
 impl LevelBasis {
-    /// `configured` is [`configured_level`] of the session's config.
-    pub fn read(codex_home: &Path, configured: SecurityLevel) -> Self {
+    /// `configured` is [`configured_level`] of the session's config;
+    /// `thread` the session's thread, when it has started.
+    pub fn read(codex_home: &Path, configured: SecurityLevel, thread: Option<ThreadId>) -> Self {
         let stored = StoredSecurityState::load(codex_home);
-        if let Some(Ok((in_force, next_start, kill_switch_active))) =
-            live_controller(codex_home).map(|controller| controller.in_force())
+        if let Some(controller) = thread.and_then(|thread| live_controller(codex_home, thread))
+            && let (Ok((in_force, next_start, kill_switch_active)), Ok(epoch)) =
+                (controller.in_force(), controller.authority_epoch())
         {
             return Self {
                 in_force,
                 next_start,
                 kill_switch_active,
                 stored,
+                live: true,
+                epoch: Some(epoch),
             };
         }
         let recovered = recovery::recover(codex_home, configured);
         Self {
             in_force: recovered.level,
             next_start: recovered.level,
-            kill_switch_active: recovered.unreadable.is_some()
-                || recovered.revocations.kill_switch_active,
+            kill_switch_active: recovered.revocations.kill_switch_active,
             stored,
+            live: false,
+            epoch: None,
         }
     }
+}
+
+/// Whether a downgrade to `target` rewrites `[security] level` in the user's
+/// `config.toml` (it sets a stricter level there).
+pub fn downgrade_rewrites_user_config(codex_home: &Path, target: SecurityLevel) -> bool {
+    recovery::user_config_needs_level(codex_home, target)
 }
 
 /// The strictest `[security] level` any config layer sets, without the
@@ -193,18 +210,28 @@ impl From<super::SecurityPolicyError> for LevelChangeError {
 pub fn commit_human_level_change(
     codex_home: &Path,
     configured: SecurityLevel,
+    thread: Option<ThreadId>,
     reviewed: &LevelBasis,
     target: SecurityLevel,
     probes: Probes,
     now_unix_seconds: i64,
 ) -> Result<LevelChangeReport, LevelChangeError> {
-    if LevelBasis::read(codex_home, configured) != *reviewed {
+    if LevelBasis::read(codex_home, configured, thread) != *reviewed {
         return Err(LevelChangeError::Changed);
     }
-    let (controller, live) = match live_controller(codex_home) {
+    let (controller, live) = match thread.and_then(|thread| live_controller(codex_home, thread)) {
         Some(controller) => (controller, true),
         None => (stored_controller(codex_home, configured)?, false),
     };
+    // A level saved by another session that is stricter than this tree's:
+    // the tree takes it first (as its next start would), so choosing a lower
+    // level is a downgrade that lowers the saved record too.
+    if let StoredSecurityState::Level(stored) = reviewed.stored
+        && stored > reviewed.in_force
+        && target < stored
+    {
+        controller.catch_up(&recovery::recover(codex_home, reviewed.in_force));
+    }
     let request = SecurityControlRequest::new(
         controller.authority_epoch()?,
         SecurityControlAction::SetLevel { level: target },

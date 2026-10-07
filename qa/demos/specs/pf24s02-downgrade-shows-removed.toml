@@ -40,7 +40,7 @@ wait = "r restart now"
 [[steps]]
 key = "r"
 [[steps]]
-wait = "Corbanu Terminal \\(v"
+wait = "Restarting Corbanu Terminal[\\s\\S]*Corbanu Terminal \\(v[\\s\\S]*› "
 timeout = 60
 [[steps]]
 pause = 1.0
@@ -71,6 +71,6 @@ wait = "Return to Permissive\\?"
 [[steps]]
 key = "Enter"
 [[steps]]
-wait = "Core's level stays Aggressive in this session and is Permissive from the next start"
+wait = "Core.s level stays Aggressive in this session[\\s\\S]*is Permissive from the next start"
 [[steps]]
 pause = 4.0

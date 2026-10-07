@@ -138,3 +138,31 @@ async fn finish_refuses_a_broken_rules_file() {
     );
     assert_eq!(level::context(), None);
 }
+
+/// PF-24-S02: a Permissive launch of a home another process still enforces
+/// Aggressive on leaves that process's rule file and registry entry alone.
+#[test]
+fn security_confirm_second_permissive_launch_keeps_the_running_aggressive_rules() {
+    let home = tempfile::tempdir().unwrap();
+    level::save(home.path(), ChosenLevel::Aggressive, NestedAgents::Refuse).unwrap();
+    level::save(home.path(), ChosenLevel::Permissive, NestedAgents::Refuse).unwrap();
+    let running = level::hold_aggressive_lock(home.path()).unwrap();
+    let plan = LaunchPlan::prepare(home.path(), &mut Vec::new()).unwrap();
+    assert_eq!(
+        (
+            level::rules_path(home.path()).exists(),
+            plan.origin_registry_update()
+        ),
+        (true, None)
+    );
+
+    drop(running);
+    let plan = LaunchPlan::prepare(home.path(), &mut Vec::new()).unwrap();
+    assert_eq!(
+        (
+            level::rules_path(home.path()).exists(),
+            plan.origin_registry_update()
+        ),
+        (false, Some(false))
+    );
+}

@@ -21,10 +21,20 @@ fn commit(
     target: SecurityLevel,
     probes: Probes,
 ) -> Result<LevelChangeReport, LevelChangeError> {
-    let basis = LevelBasis::read(home.path(), SecurityLevel::Permissive);
+    commit_in(home, None, target, probes)
+}
+
+fn commit_in(
+    home: &TempDir,
+    thread: Option<ThreadId>,
+    target: SecurityLevel,
+    probes: Probes,
+) -> Result<LevelChangeReport, LevelChangeError> {
+    let basis = LevelBasis::read(home.path(), SecurityLevel::Permissive, thread);
     commit_human_level_change(
         home.path(),
         SecurityLevel::Permissive,
+        thread,
         &basis,
         target,
         probes,
@@ -32,8 +42,9 @@ fn commit(
     )
 }
 
-/// A live session tree on `home`, as a session start registers it.
-fn live_tree(home: &TempDir, level: SecurityLevel) -> EffectivePolicyView {
+/// A live session tree on `home`, as a session start registers it, and its
+/// root thread.
+fn live_tree(home: &TempDir, level: SecurityLevel) -> (EffectivePolicyView, ThreadId) {
     let view = EffectivePolicyView::default();
     let root = ThreadId::new();
     TrustedSecurityController::initialize(
@@ -50,7 +61,7 @@ fn live_tree(home: &TempDir, level: SecurityLevel) -> EffectivePolicyView {
     )
     .unwrap();
     view.register_home(home.path());
-    view
+    (view, root)
 }
 
 #[test]
@@ -58,7 +69,12 @@ fn security_transition_confirmed_stricter_level_is_saved_without_a_session() {
     let home = TempDir::new().unwrap();
     let report = commit(&home, SecurityLevel::Aggressive, Probes::Passed).unwrap();
     assert_eq!(
-        (report.kind, report.next_start, report.live, report.not_saved),
+        (
+            report.kind,
+            report.next_start,
+            report.live,
+            report.not_saved
+        ),
         (
             LevelChangeKind::Stricter,
             SecurityLevel::Aggressive,
@@ -66,7 +82,10 @@ fn security_transition_confirmed_stricter_level_is_saved_without_a_session() {
             None
         )
     );
-    assert_eq!(stored(&home), StoredSecurityState::Level(SecurityLevel::Aggressive));
+    assert_eq!(
+        stored(&home),
+        StoredSecurityState::Level(SecurityLevel::Aggressive)
+    );
 }
 
 #[test]
@@ -87,14 +106,21 @@ fn security_transition_blocked_preflight_changes_nothing() {
 #[test]
 fn security_transition_stricter_level_applies_to_the_live_session_now() {
     let home = TempDir::new().unwrap();
-    let view = live_tree(&home, SecurityLevel::Permissive);
-    let report = commit(&home, SecurityLevel::Aggressive, Probes::Passed).unwrap();
+    let (view, root) = live_tree(&home, SecurityLevel::Permissive);
+    // Another session of this process on the same home.
+    let (other, _) = live_tree(&home, SecurityLevel::Permissive);
+    let report = commit_in(&home, Some(root), SecurityLevel::Aggressive, Probes::Passed).unwrap();
     assert!(report.live);
     assert_eq!(report.in_force, SecurityLevel::Aggressive);
     let marker = view.authority_marker().unwrap();
     assert_eq!(marker.0, 1, "the commit moved the live tree's epoch");
     assert_eq!(
-        LevelBasis::read(home.path(), SecurityLevel::Permissive).in_force,
+        other.authority_marker().unwrap().0,
+        1,
+        "and reached the other tree"
+    );
+    assert_eq!(
+        LevelBasis::read(home.path(), SecurityLevel::Permissive, Some(root)).in_force,
         SecurityLevel::Aggressive
     );
 }
@@ -104,9 +130,9 @@ fn security_transition_stricter_level_applies_to_the_live_session_now() {
 #[test]
 fn security_transition_downgrade_waits_for_the_next_start() {
     let home = TempDir::new().unwrap();
-    let _view = live_tree(&home, SecurityLevel::Permissive);
-    commit(&home, SecurityLevel::Aggressive, Probes::Passed).unwrap();
-    let report = commit(&home, SecurityLevel::Permissive, Probes::Passed).unwrap();
+    let (_view, root) = live_tree(&home, SecurityLevel::Permissive);
+    commit_in(&home, Some(root), SecurityLevel::Aggressive, Probes::Passed).unwrap();
+    let report = commit_in(&home, Some(root), SecurityLevel::Permissive, Probes::Passed).unwrap();
     assert_eq!(
         (report.kind, report.in_force, report.next_start),
         (
@@ -115,7 +141,10 @@ fn security_transition_downgrade_waits_for_the_next_start() {
             SecurityLevel::Permissive
         )
     );
-    assert_eq!(stored(&home), StoredSecurityState::Level(SecurityLevel::Permissive));
+    assert_eq!(
+        stored(&home),
+        StoredSecurityState::Level(SecurityLevel::Permissive)
+    );
     // A config.toml that sets no level is left alone.
     assert!(!home.path().join("config.toml").exists());
 }
@@ -124,13 +153,17 @@ fn security_transition_downgrade_waits_for_the_next_start() {
 fn security_transition_downgrade_rewrites_a_stricter_user_config_level_only() {
     let home = TempDir::new().unwrap();
     let config = home.path().join("config.toml");
-    std::fs::write(&config, "model = \"m\"\n\n[security]\nversion = 1\nlevel = \"aggressive\"\n")
-        .unwrap();
+    std::fs::write(
+        &config,
+        "model = \"m\"\n\n[security]\nversion = 1\nlevel = \"aggressive\"\n",
+    )
+    .unwrap();
     commit(&home, SecurityLevel::Aggressive, Probes::Passed).unwrap();
-    let basis = LevelBasis::read(home.path(), SecurityLevel::Aggressive);
+    let basis = LevelBasis::read(home.path(), SecurityLevel::Aggressive, None);
     commit_human_level_change(
         home.path(),
         SecurityLevel::Aggressive,
+        None,
         &basis,
         SecurityLevel::Permissive,
         Probes::Passed,
@@ -145,19 +178,26 @@ fn security_transition_downgrade_rewrites_a_stricter_user_config_level_only() {
 #[test]
 fn security_transition_refuses_a_state_that_changed_after_review() {
     let home = TempDir::new().unwrap();
-    let basis = LevelBasis::read(home.path(), SecurityLevel::Permissive);
+    let basis = LevelBasis::read(home.path(), SecurityLevel::Permissive, None);
     // Another process stores Aggressive after the review was shown.
     commit(&home, SecurityLevel::Aggressive, Probes::Passed).unwrap();
     let result = commit_human_level_change(
         home.path(),
         SecurityLevel::Permissive,
+        None,
         &basis,
         SecurityLevel::Permissive,
         Probes::Passed,
         NOW,
     );
-    assert!(matches!(result, Err(LevelChangeError::Changed)), "{result:?}");
-    assert_eq!(stored(&home), StoredSecurityState::Level(SecurityLevel::Aggressive));
+    assert!(
+        matches!(result, Err(LevelChangeError::Changed)),
+        "{result:?}"
+    );
+    assert_eq!(
+        stored(&home),
+        StoredSecurityState::Level(SecurityLevel::Aggressive)
+    );
 }
 
 #[test]
@@ -167,5 +207,50 @@ fn security_transition_a_confirmed_level_repairs_an_unreadable_state() {
     assert!(matches!(stored(&home), StoredSecurityState::Unreadable(_)));
     let report = commit(&home, SecurityLevel::Permissive, Probes::Passed).unwrap();
     assert_eq!(report.next_start, SecurityLevel::Permissive);
-    assert_eq!(stored(&home), StoredSecurityState::Level(SecurityLevel::Permissive));
+    assert_eq!(
+        stored(&home),
+        StoredSecurityState::Level(SecurityLevel::Permissive)
+    );
+}
+
+/// Review 1, finding 2: this session is Permissive but another process saved
+/// Aggressive. Choosing Permissive lowers the saved record (a downgrade), so
+/// the level file and Core's record agree at the next start.
+#[test]
+fn security_transition_permissive_lowers_a_stricter_record_saved_elsewhere() {
+    let home = TempDir::new().unwrap();
+    let (_view, root) = live_tree(&home, SecurityLevel::Permissive);
+    commit(&home, SecurityLevel::Aggressive, Probes::Passed).unwrap();
+    let report = commit_in(&home, Some(root), SecurityLevel::Permissive, Probes::Passed).unwrap();
+    assert_eq!(
+        (report.kind, report.next_start),
+        (LevelChangeKind::Downgrade, SecurityLevel::Permissive)
+    );
+    assert_eq!(
+        stored(&home),
+        StoredSecurityState::Level(SecurityLevel::Permissive)
+    );
+}
+
+/// Review 1, finding 7: a commit in this tree after the review was shown
+/// (another confirmation in this process) makes the review stale.
+#[test]
+fn security_transition_review_is_bound_to_the_tree_epoch() {
+    let home = TempDir::new().unwrap();
+    let (_view, root) = live_tree(&home, SecurityLevel::Permissive);
+    let basis = LevelBasis::read(home.path(), SecurityLevel::Permissive, Some(root));
+    commit_in(&home, Some(root), SecurityLevel::Permissive, Probes::Passed).unwrap();
+    let result = commit_human_level_change(
+        home.path(),
+        SecurityLevel::Permissive,
+        Some(root),
+        &basis,
+        SecurityLevel::Aggressive,
+        Probes::Passed,
+        NOW,
+    );
+    assert!(
+        matches!(result, Err(LevelChangeError::Changed)),
+        "{result:?}"
+    );
 }

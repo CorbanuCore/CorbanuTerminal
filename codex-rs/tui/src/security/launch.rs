@@ -28,8 +28,16 @@ pub(crate) struct LaunchPlan {
 }
 
 /// Held while this process enforces Aggressive (see
-/// [`level::hold_aggressive_lock`]); released when it exits.
-static AGGRESSIVE_LOCK: std::sync::OnceLock<std::fs::File> = std::sync::OnceLock::new();
+/// [`level::hold_aggressive_lock`]); released when it exits or restarts.
+static AGGRESSIVE_LOCK: std::sync::Mutex<Option<std::fs::File>> = std::sync::Mutex::new(None);
+
+/// Before "restart now" starts the next process.
+pub(crate) fn release_aggressive_lock() {
+    AGGRESSIVE_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .take();
+}
 
 impl LaunchPlan {
     /// Read the stored level before any config is loaded, keep the vault rule
@@ -47,7 +55,9 @@ impl LaunchPlan {
         if stored.enforced() == ChosenLevel::Aggressive {
             match level::hold_aggressive_lock(codex_home) {
                 Ok(lock) => {
-                    let _ = AGGRESSIVE_LOCK.set(lock);
+                    *AGGRESSIVE_LOCK
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(lock);
                 }
                 Err(err) => tracing::warn!("could not hold the Aggressive lock: {err}"),
             }

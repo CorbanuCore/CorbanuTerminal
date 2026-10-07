@@ -32,6 +32,8 @@ use crate::legacy_core::security_level_change::SecurityLevel;
 use crate::legacy_core::security_level_change::StoredSecurityState;
 use crate::legacy_core::security_level_change::commit_human_level_change;
 
+const CHANGED: &str = "Not saved: the security state changed since you reviewed it (another session may have changed it). Nothing changed; review it again";
+
 /// Core's level for a picker level.
 pub(crate) fn core_level(level: ChosenLevel) -> SecurityLevel {
     match level {
@@ -47,6 +49,8 @@ pub(crate) struct TransitionRequest {
     pub(crate) nested: NestedAgents,
     /// The session's configured `[security]` level (without the stored one).
     pub(crate) configured: SecurityLevel,
+    /// The session the confirmation was made in.
+    pub(crate) thread: Option<codex_protocol::ThreadId>,
     /// What the review showed.
     pub(crate) reviewed: LevelBasis,
     /// The preflight that passed review and its recheck; its receipt is
@@ -139,6 +143,43 @@ pub(crate) fn start(request: TransitionRequest, inline: bool) -> Pending {
     }
 }
 
+/// `security_confirm.lock` in the Corbanu home, held exclusively while a
+/// confirmation saves (not Core's `security_state.lock`, which the commit
+/// takes itself).
+struct ConfirmLock {
+    /// Unlocked when dropped.
+    _file: std::fs::File,
+}
+
+impl ConfirmLock {
+    const FILE: &str = "security_confirm.lock";
+    const WAIT: std::time::Duration = std::time::Duration::from_secs(2);
+
+    fn acquire(codex_home: &Path) -> Result<Self, String> {
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(codex_home.join(Self::FILE))
+            .map_err(|err| format!("cannot open {}: {err}", Self::FILE))?;
+        let deadline = std::time::Instant::now() + Self::WAIT;
+        loop {
+            match file.try_lock() {
+                Ok(()) => return Ok(Self { _file: file }),
+                Err(std::fs::TryLockError::WouldBlock) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(std::time::Duration::from_millis(25));
+                }
+                Err(std::fs::TryLockError::WouldBlock) => {
+                    return Err("another /security confirmation is saving".to_string());
+                }
+                Err(std::fs::TryLockError::Error(err)) => {
+                    return Err(format!("cannot lock {}: {err}", Self::FILE));
+                }
+            }
+        }
+    }
+}
+
 /// Files the picker writes, as they were before the save.
 struct Snapshot(Vec<(PathBuf, Option<Vec<u8>>)>);
 
@@ -197,11 +238,24 @@ fn write_atomically(path: &Path, contents: &[u8]) -> std::io::Result<()> {
 /// Save, then commit; on failure put the files back. Blocking.
 pub(crate) fn run(request: TransitionRequest) -> TransitionResult {
     let home = request.codex_home.as_path();
-    let snapshot = Snapshot::take(home);
     let failed = |message: String, review_again: bool| TransitionFailure {
         message,
         review_again,
     };
+    // Nothing is written unless Core's state is still what was reviewed
+    // (Core checks again under its lock).
+    // One confirmation at a time per home, across processes: a restore must
+    // never undo another confirmation's files.
+    let _lock = match ConfirmLock::acquire(home) {
+        Ok(lock) => lock,
+        Err(err) => {
+            return Err(failed(format!("Not saved: {err}. Nothing changed"), false));
+        }
+    };
+    if LevelBasis::read(home, request.configured, request.thread) != request.reviewed {
+        return Err(failed(CHANGED.to_string(), true));
+    }
+    let snapshot = Snapshot::take(home);
     let saved = match (request.target, &request.passed_preflight) {
         (ChosenLevel::Aggressive, Some(passed)) => preflight::save_receipt(home, passed),
         (ChosenLevel::Aggressive, None) => Ok(()),
@@ -213,7 +267,9 @@ pub(crate) fn run(request: TransitionRequest) -> TransitionResult {
         return Err(failed(
             match restored {
                 Ok(()) => format!("{err}. Nothing changed"),
-                Err(restore) => format!("{err}, and the previous files could not be put back ({restore})"),
+                Err(restore) => {
+                    format!("{err}, and the previous files could not be put back ({restore})")
+                }
             },
             false,
         ));
@@ -232,19 +288,38 @@ pub(crate) fn run(request: TransitionRequest) -> TransitionResult {
     match commit_human_level_change(
         home,
         request.configured,
+        request.thread,
         &request.reviewed,
         core_level(request.target),
         Probes::Passed,
         now,
     ) {
-        Ok(report) => Ok(TransitionOutcome {
+        Ok(report) if report.next_start == core_level(request.target) => Ok(TransitionOutcome {
             level: request.target,
             core: Some(report),
         }),
+        // Core kept another level for the next start: the level file must
+        // not disagree with it.
+        Ok(report) => {
+            let restored = snapshot.restore();
+            Err(failed(
+                match restored {
+                    Ok(()) => format!(
+                        "Not saved: Core keeps {} for the next start. Nothing changed",
+                        report.next_start
+                    ),
+                    Err(restore) => format!(
+                        "Not saved: Core keeps {} for the next start, and the previous files could not be put back ({restore})",
+                        report.next_start
+                    ),
+                },
+                true,
+            ))
+        }
         Err(error) => {
             let review_again = matches!(error, LevelChangeError::Changed);
             let message = match snapshot.restore() {
-                Ok(()) if review_again => "Not saved: the security state changed since you reviewed it (another session may have changed it). Nothing changed; review it again".to_string(),
+                Ok(()) if review_again => CHANGED.to_string(),
                 Ok(()) => format!("Not saved: {error}. Nothing changed"),
                 Err(restore) => format!(
                     "Not saved: {error}. The previous files could not be put back ({restore}); the next start enforces Aggressive until you choose a level again"

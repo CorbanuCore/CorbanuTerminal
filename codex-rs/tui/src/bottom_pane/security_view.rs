@@ -184,7 +184,11 @@ impl BottomPaneView for SecurityView {
 
     fn on_ctrl_c(&mut self) -> CancellationEvent {
         // A confirmation being saved finishes first; its result is shown.
-        if !self.picker.as_ref().is_some_and(SecurityLevelPicker::saving) {
+        if !self
+            .picker
+            .as_ref()
+            .is_some_and(SecurityLevelPicker::saving)
+        {
             self.cancelled = true;
         }
         CancellationEvent::Handled

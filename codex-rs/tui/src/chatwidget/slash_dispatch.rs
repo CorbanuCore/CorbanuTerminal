@@ -380,6 +380,7 @@ impl ChatWidget {
                     )
                     .with_confirmation(
                         crate::bottom_pane::security_level_picker::CoreLevels {
+                            thread: self.thread_id(),
                             configured: crate::legacy_core::security_level_change::configured_level(
                                 &self.config,
                             ),

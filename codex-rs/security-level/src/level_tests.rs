@@ -24,7 +24,10 @@ fn security_confirm_level_file_weaker_than_the_confirmed_record_is_invalid() {
     confirm(home.path(), "aggressive");
     assert_eq!(
         load_state(home.path()),
-        (StoredLevel::Chosen(ChosenLevel::Aggressive), NestedAgents::Pass)
+        (
+            StoredLevel::Chosen(ChosenLevel::Aggressive),
+            NestedAgents::Pass
+        )
     );
 
     // Edited to Permissive outside /security.
@@ -52,11 +55,17 @@ fn security_confirm_record_no_stricter_than_the_file_changes_nothing() {
     confirm(home.path(), "permissive");
     assert_eq!(load(home.path()), StoredLevel::Absent);
     save(home.path(), ChosenLevel::Permissive, NestedAgents::Refuse).unwrap();
-    assert_eq!(load(home.path()), StoredLevel::Chosen(ChosenLevel::Permissive));
+    assert_eq!(
+        load(home.path()),
+        StoredLevel::Chosen(ChosenLevel::Permissive)
+    );
     // A file stricter than the record (Aggressive saved without the Core
     // record, or before it is committed) stays as saved.
     save(home.path(), ChosenLevel::Aggressive, NestedAgents::Refuse).unwrap();
-    assert_eq!(load(home.path()), StoredLevel::Chosen(ChosenLevel::Aggressive));
+    assert_eq!(
+        load(home.path()),
+        StoredLevel::Chosen(ChosenLevel::Aggressive)
+    );
 }
 
 #[test]
@@ -81,7 +90,10 @@ fn security_confirm_save_verifies_the_file_while_the_record_is_stricter() {
     save(home.path(), ChosenLevel::Permissive, NestedAgents::Refuse).unwrap();
     assert!(invalid(&load(home.path())));
     confirm(home.path(), "permissive");
-    assert_eq!(load(home.path()), StoredLevel::Chosen(ChosenLevel::Permissive));
+    assert_eq!(
+        load(home.path()),
+        StoredLevel::Chosen(ChosenLevel::Permissive)
+    );
 }
 
 #[test]

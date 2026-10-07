@@ -35,6 +35,7 @@ use std::sync::Mutex;
 use std::sync::PoisonError;
 use std::sync::Weak;
 
+use codex_protocol::ThreadId;
 use codex_protocol::security::SecurityControlAction;
 use codex_security_policy::AuthorityEpoch;
 use codex_security_policy::RevocationEvent;
@@ -319,23 +320,32 @@ impl TrustedSecurityController {
         });
         let (next, not_saved) = match saved {
             Ok(next) => (next, None),
-            Err(error @ TransitionError::Persist(_))
+            Err(TransitionError::Persist(reason))
                 if prepared.kind == TransitionKind::Restrictive =>
             {
-                // An emergency stop never waits for the disk.
+                // An emergency stop never waits for the disk. Only the cause
+                // is kept: this change did apply.
                 let next = match merged {
                     Some(next) => next,
                     None => merge(None)?,
                 };
-                (next, Some(error.to_string()))
+                (next, Some(reason))
             }
             Err(error) => return Err(error),
         };
         let committed = self.apply(&prepared, next.clone(), not_saved)?;
-        if prepared.kind == TransitionKind::Restrictive
-            && let Some(home) = store.home()
-        {
-            propagate(&self.shared, home, &next, prepared.closes_channels());
+        if let Some(home) = store.home() {
+            match prepared.kind {
+                TransitionKind::Restrictive => {
+                    propagate(&self.shared, home, &next, prepared.closes_channels(), false);
+                }
+                // The level in force is chosen again (PF-24-S02): sessions of
+                // this process below it rise to it.
+                TransitionKind::Unchanged => {
+                    propagate(&self.shared, home, &next, false, true);
+                }
+                TransitionKind::Downgrade | TransitionKind::KillSwitchRelease => {}
+            }
         }
         if prepared.closes_channels() {
             self.notify_revocation_sinks();
@@ -461,11 +471,11 @@ impl TrustedSecurityController {
     }
 }
 
-/// PF-24-S02: the trusted controller of this process's live policy tree on
-/// `home` with the strictest level in force, for the human `/security`
-/// confirmation. A commit through it reaches the other trees on `home`.
-/// `None` when no session of this process uses `home`.
-pub(crate) fn live_controller(home: &Path) -> Option<TrustedSecurityController> {
+/// PF-24-S02: the trusted controller of the live policy tree on `home` that
+/// holds `thread` (the session the human confirmation was made in). A
+/// commit through it reaches the other trees on `home`. `None` when no tree
+/// of this process holds it.
+pub(crate) fn live_controller(home: &Path, thread: ThreadId) -> Option<TrustedSecurityController> {
     let home = canonical(home);
     let mut trees = TREES.lock().unwrap_or_else(PoisonError::into_inner);
     trees.retain(|(_, tree)| tree.strong_count() > 0);
@@ -473,17 +483,17 @@ pub(crate) fn live_controller(home: &Path) -> Option<TrustedSecurityController> 
         .iter()
         .filter(|(tree_home, _)| *tree_home == home)
         .filter_map(|(_, tree)| tree.upgrade())
-        .filter_map(|shared| {
-            let level = shared
+        .find(|shared| {
+            shared
                 .state
                 .read()
                 .unwrap_or_else(PoisonError::into_inner)
                 .as_ref()
-                .map(|state| state.persisted.settings.level)?;
-            Some((level, shared))
+                .is_some_and(|state| {
+                    state.root_agent_id == thread || state.agents.contains_key(&thread)
+                })
         })
-        .max_by_key(|(level, _)| *level)
-        .map(|(_, shared)| TrustedSecurityController { shared })
+        .map(|shared| TrustedSecurityController { shared })
 }
 
 /// Swap in a level and revocation state: the epoch moves and every grant of
@@ -517,6 +527,7 @@ fn propagate(
     home: &Path,
     next: &DurableSecurityState,
     closes_channels: bool,
+    only_if_stricter: bool,
 ) {
     let home = canonical(home);
     let trees: Vec<Arc<SharedEffectivePolicy>> = {
@@ -536,6 +547,9 @@ fn propagate(
                 continue;
             };
             let level = state.persisted.settings.level.max(next.level);
+            if only_if_stricter && level == state.persisted.settings.level {
+                continue;
+            }
             let mut revocations = state.persisted.revocations.clone();
             let merged = revocations
                 .merge(&next.revocations)

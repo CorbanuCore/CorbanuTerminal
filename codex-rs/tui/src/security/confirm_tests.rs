@@ -10,7 +10,8 @@ fn request(home: &Path, target: ChosenLevel, raise_core: bool) -> TransitionRequ
         target,
         nested: NestedAgents::Refuse,
         configured: SecurityLevel::Permissive,
-        reviewed: LevelBasis::read(home, SecurityLevel::Permissive),
+        thread: None,
+        reviewed: LevelBasis::read(home, SecurityLevel::Permissive, None),
         passed_preflight: raise_core.then(|| {
             Preflight::run(
                 &file_sources(home, /*home*/ None, /*cwd*/ None),
@@ -96,11 +97,15 @@ fn security_confirm_write_failure_changes_nothing() {
     run(request(home.path(), ChosenLevel::Aggressive, true)).unwrap();
     let before = std::fs::read(level::state_path(home.path())).unwrap();
     // The state file's lock cannot be created when it is a folder.
+    std::fs::remove_file(home.path().join("security_state.lock")).unwrap();
     std::fs::create_dir(home.path().join("security_state.lock")).unwrap();
     let failure = run(request(home.path(), ChosenLevel::Permissive, false)).unwrap_err();
     assert!(failure.message.starts_with("Not saved:"), "{failure:?}");
     assert!(failure.message.ends_with("Nothing changed"), "{failure:?}");
-    assert_eq!(std::fs::read(level::state_path(home.path())).unwrap(), before);
+    assert_eq!(
+        std::fs::read(level::state_path(home.path())).unwrap(),
+        before
+    );
     assert_eq!(
         state(home.path()),
         (
@@ -142,7 +147,10 @@ fn security_confirm_runs_off_the_calling_thread() {
         if let Some(result) = pending.poll() {
             break result;
         }
-        assert!(std::time::Instant::now() < deadline, "the commit did not finish");
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the commit did not finish"
+        );
         std::thread::sleep(std::time::Duration::from_millis(10));
     };
     assert_eq!(result.unwrap().level, ChosenLevel::Aggressive);

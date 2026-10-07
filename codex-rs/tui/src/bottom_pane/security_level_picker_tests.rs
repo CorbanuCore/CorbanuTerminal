@@ -453,10 +453,10 @@ mod pf_29_s01 {
         let mut picker = machine.picker(/*flags_on*/ true, ChosenLevel::Aggressive);
         picker.handle_key_event(key(KeyCode::Enter));
         assert_eq!(picker.screen, Screen::Review(ChosenLevel::Aggressive));
+        // PF-24-S02: Core's record was never confirmed either, so the review
+        // runs the preflight before anything can be saved.
+        assert!(text(&picker).contains("Preflight passed"));
         picker.handle_key_event(key(KeyCode::Char('n')));
-        picker.handle_key_event(key(KeyCode::Enter));
-        assert_eq!(picker.screen, Screen::Review(ChosenLevel::Aggressive));
-        assert!(text(&picker).contains("no preflight on record"));
         assert!(!preflight::receipt_path(&machine.corbanu()).exists());
 
         picker.handle_key_event(key(KeyCode::Enter));
@@ -713,7 +713,10 @@ mod pf_24_s02 {
             self.root.path().join("corbanu")
         }
 
-        fn picker(&self, active: ChosenLevel) -> (SecurityLevelPicker, UnboundedReceiver<AppEvent>) {
+        fn picker(
+            &self,
+            active: ChosenLevel,
+        ) -> (SecurityLevelPicker, UnboundedReceiver<AppEvent>) {
             let input = PreflightInput {
                 sources: InventorySources {
                     codex_home: self.corbanu(),
@@ -771,7 +774,7 @@ mod pf_24_s02 {
         picker.handle_key_event(key(KeyCode::Enter));
         let review = machine.text(&picker);
         assert!(
-            review.contains("Core's level becomes Aggressive as soon as you confirm"),
+            review.contains("Core's level becomes Aggressive from the next start"),
             "{review}"
         );
         picker.handle_key_event(key(KeyCode::Enter));
@@ -788,7 +791,10 @@ mod pf_24_s02 {
         );
         picker.handle_key_event(key(KeyCode::Char('r')));
         assert!(picker.closed);
-        assert!(matches!(rx.try_recv(), Ok(AppEvent::RestartForSecurityLevel)));
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AppEvent::RestartForSecurityLevel)
+        ));
     }
 
     #[test]
@@ -798,10 +804,7 @@ mod pf_24_s02 {
         let (mut picker, _rx) = machine.picker(ChosenLevel::Aggressive);
         picker.handle_key_event(key(KeyCode::Down));
         picker.handle_key_event(key(KeyCode::Enter));
-        insta::assert_snapshot!(
-            "security_confirm_review_downgrade",
-            render(&picker, 80)
-        );
+        insta::assert_snapshot!("security_confirm_review_downgrade", render(&picker, 80));
         // Esc restores the prior state: nothing was written.
         picker.handle_key_event(key(KeyCode::Esc));
         assert_eq!(
@@ -814,7 +817,11 @@ mod pf_24_s02 {
         picker.handle_key_event(key(KeyCode::Enter));
         picker.handle_key_event(key(KeyCode::Enter));
         assert_eq!(saved_level(&picker), Some(ChosenLevel::Permissive));
-        assert!(machine.text(&picker).contains("Core's level is Permissive from the next start"));
+        assert!(
+            machine
+                .text(&picker)
+                .contains("Core's level is Permissive from the next start")
+        );
         assert_eq!(
             machine.stored(),
             (
@@ -822,6 +829,20 @@ mod pf_24_s02 {
                 StoredSecurityState::Level(SecurityLevel::Permissive)
             )
         );
+
+        // Reopened before restarting: the list offers the restart too.
+        let (mut picker, mut rx) = machine.picker(ChosenLevel::Aggressive);
+        assert!(
+            picker.footer().contains("r restart now"),
+            "{}",
+            picker.footer()
+        );
+        picker.handle_key_event(key(KeyCode::Char('r')));
+        assert!(picker.closed);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AppEvent::RestartForSecurityLevel)
+        ));
     }
 
     #[test]
@@ -829,6 +850,7 @@ mod pf_24_s02 {
         let machine = Machine::new();
         machine.confirmed_aggressive();
         let before = machine.stored();
+        std::fs::remove_file(machine.corbanu().join("security_state.lock")).unwrap();
         std::fs::create_dir(machine.corbanu().join("security_state.lock")).unwrap();
         let (mut picker, _rx) = machine.picker(ChosenLevel::Aggressive);
         picker.handle_key_event(key(KeyCode::Down));
@@ -837,7 +859,10 @@ mod pf_24_s02 {
         let failed = machine.text(&picker);
         assert!(failed.contains("Security level not saved"), "{failed}");
         assert!(failed.contains("Nothing changed."), "{failed}");
-        assert!(failed.contains("Active in this session: Aggressive."), "{failed}");
+        assert!(
+            failed.contains("Active in this session: Aggressive."),
+            "{failed}"
+        );
         assert!(!picker.closed);
         assert_eq!(machine.stored(), before);
         // Enter goes back to the review to try again; it works once the
@@ -859,13 +884,19 @@ mod pf_24_s02 {
         machine.confirmed_aggressive();
         picker.handle_key_event(key(KeyCode::Enter));
         assert!(
-            machine.text(&picker).contains("the security state changed since you reviewed it"),
+            machine
+                .text(&picker)
+                .contains("the security state changed since you reviewed it"),
             "{}",
             machine.text(&picker)
         );
         picker.handle_key_event(key(KeyCode::Enter));
         assert_eq!(picker.screen, Screen::Review(ChosenLevel::Aggressive));
-        assert!(machine.text(&picker).contains("The state changed; this review shows it now."));
+        assert!(
+            machine
+                .text(&picker)
+                .contains("The state changed; this review shows it now.")
+        );
     }
 
     /// An agent command (or anything else) that rewrites the level file to
@@ -885,7 +916,10 @@ mod pf_24_s02 {
         );
         let (picker, _rx) = machine.picker(ChosenLevel::Aggressive);
         let list = machine.text(&picker);
-        assert!(list.contains("may have been changed outside /security"), "{list}");
+        assert!(
+            list.contains("may have been changed outside /security"),
+            "{list}"
+        );
     }
 
     #[test]
@@ -894,7 +928,10 @@ mod pf_24_s02 {
         std::fs::write(machine.corbanu().join("security_state.json"), "{").unwrap();
         let (mut picker, _rx) = machine.picker(ChosenLevel::Aggressive);
         let list = machine.text(&picker);
-        assert!(list.contains("Core's security state is unreadable"), "{list}");
+        assert!(
+            list.contains("Core's security state is unreadable"),
+            "{list}"
+        );
         picker.handle_key_event(key(KeyCode::Down));
         picker.handle_key_event(key(KeyCode::Enter));
         assert_eq!(picker.screen, Screen::Review(ChosenLevel::Permissive));
@@ -923,7 +960,10 @@ mod pf_24_s02 {
         while picker.saving() {
             picker.handle_key_event(key(KeyCode::Esc));
             assert!(!picker.closed);
-            assert!(std::time::Instant::now() < deadline, "the commit did not finish");
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the commit did not finish"
+            );
             std::thread::sleep(std::time::Duration::from_millis(5));
             picker.poll();
         }

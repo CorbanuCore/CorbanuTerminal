@@ -261,13 +261,13 @@ pub use markdown_render::render_markdown_text;
 pub use public_widgets::composer_input::ComposerAction;
 pub use public_widgets::composer_input::ComposerInput;
 pub use security::nested::NestedKind;
-pub use security::restart::restart_process;
 pub use security::nested::NestedLaunch;
 pub use security::nested::aggressive_env_overrides;
 pub use security::nested::apply_aggressive_launch_overrides;
 pub use security::nested::nested_launch;
 pub use security::nested::prepare_nested_exec;
 pub use security::nested::verify_aggressive_config;
+pub use security::restart::restart_process;
 // (tests access modules directly within the crate)
 
 const TUI_LOG_FILE_NAME: &str = "codex-tui.log";

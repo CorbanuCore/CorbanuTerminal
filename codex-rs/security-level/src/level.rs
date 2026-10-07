@@ -150,7 +150,12 @@ pub enum ConfirmedLevel {
     Absent,
     /// `permissive`, `moderate` or `aggressive`.
     Level(String),
+    /// Present with content that is not a valid record.
     Unreadable(String),
+    /// Present but cannot be read now (for example inside a sandbox that
+    /// denies it). Not evidence of tampering: deleting the file is not
+    /// detected either.
+    Inaccessible(String),
 }
 
 #[derive(Deserialize)]
@@ -170,20 +175,22 @@ pub fn load_confirmed(codex_home: &Path) -> ConfirmedLevel {
         Ok(contents) => contents,
         Err(err) if err.kind() == io::ErrorKind::NotFound => return ConfirmedLevel::Absent,
         Err(err) => {
-            return ConfirmedLevel::Unreadable(format!("cannot read {}: {err}", path.display()));
+            return ConfirmedLevel::Inaccessible(format!("cannot read {}: {err}", path.display()));
         }
     };
     match serde_json::from_slice::<ConfirmedFile>(&contents) {
         Ok(file)
             if file.version == 1
-                && matches!(file.level.as_str(), "permissive" | "moderate" | "aggressive") =>
+                && matches!(
+                    file.level.as_str(),
+                    "permissive" | "moderate" | "aggressive"
+                ) =>
         {
             ConfirmedLevel::Level(file.level)
         }
-        Ok(_) => ConfirmedLevel::Unreadable(format!(
-            "{}: unknown version or level",
-            path.display()
-        )),
+        Ok(_) => {
+            ConfirmedLevel::Unreadable(format!("{}: unknown version or level", path.display()))
+        }
         Err(err) => ConfirmedLevel::Unreadable(format!("{}: {err}", path.display())),
     }
 }
@@ -193,7 +200,7 @@ fn reconcile(codex_home: &Path, stored: StoredLevel) -> StoredLevel {
         return stored;
     }
     match load_confirmed(codex_home) {
-        ConfirmedLevel::Absent => stored,
+        ConfirmedLevel::Absent | ConfirmedLevel::Inaccessible(_) => stored,
         ConfirmedLevel::Level(level) if level != "aggressive" => stored,
         ConfirmedLevel::Level(_) => StoredLevel::Invalid(format!(
             "{} says {} but the confirmed level in {} is Aggressive; it may have been changed outside /security",

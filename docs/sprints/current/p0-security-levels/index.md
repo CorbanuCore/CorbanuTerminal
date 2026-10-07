@@ -30,7 +30,7 @@ Earlier allocation notes are in the [plan history](../../../plans/history/p0-sec
 | 35 | [PF-29-S01](pf-29-s01-protected-mode-inventory.md) | Protected-mode inventory and activation preflight (merged behind `protected_mode_preflight`, #228; open items recorded) | first free | PF-28-S02 (merged behind flag), PF-20-S02 (archived) |
 | 36 | [PF-29-S02](pf-29-s02-human-secret-migration.md) | Human-reviewed credential migration and recovery (merged behind `protected_mode_preflight`, #235; open items recorded) | first free | PF-29-S01 (merged behind flag), PF-24-S01 (archived) |
 | 42 | [PF-23-S03](pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) | Downgrade, restart, and inheritance enforcement (four stacked PRs; GLM videos blocked on Z.AI balance) | untrusted content | PF-19-S02, PF-20-S02, PF-23-S02 (archived) |
-| 43 | [PF-24-S02](pf-24-s02-security-confirm-cancel-and-downgrade.md) | Security confirm, cancel, and downgrade | tui | PF-24-S03, PF-23-S03, PF-24-S01, PF-29-S02 |
+| 43 | [PF-24-S02](pf-24-s02-security-confirm-cancel-and-downgrade.md) | Security confirm, cancel, and downgrade (behind `security_levels`; GLM videos blocked on Z.AI balance) | tui | PF-24-S03, PF-23-S03, PF-24-S01, PF-29-S02 |
 | 44 | [PF-25-S01](pf-25-s01-temporary-grant-tui.md) | Temporary grant TUI | tui | PF-17-S01, PF-23-S02, PF-24-S02 |
 | 45 | [PF-25-S02](pf-25-s02-revocation-and-kill-switch-tui.md) | Revocation and kill-switch TUI | tui | PF-19-S02, PF-23-S03, PF-25-S01 |
 | 71 | [PF-41-S01](pf-41-s01-effective-security-inspector.md) | Effective security inspector and degradation state | convergence | PF-23-S03, PF-29-S02, PF-24-S02 |

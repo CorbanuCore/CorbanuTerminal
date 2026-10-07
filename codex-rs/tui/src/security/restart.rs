@@ -5,36 +5,61 @@
 
 use std::ffi::OsString;
 
-/// The arguments to start again with: these, minus the last one equal to
-/// the initial `prompt`.
-pub fn restart_args(args: Vec<OsString>, prompt: Option<&str>) -> Vec<OsString> {
-    let mut args = args;
-    if let Some(prompt) = prompt
-        && let Some(index) = args.iter().rposition(|arg| arg.to_str() == Some(prompt))
-    {
-        args.remove(index);
+/// `argv` (program first) without the values clap parsed as the initial
+/// `prompt`, at any subcommand level; the program is left out. Unparseable
+/// arguments are kept as they are.
+pub fn restart_args(command: clap::Command, argv: Vec<OsString>) -> Vec<OsString> {
+    let mut drop = Vec::new();
+    if let Ok(matches) = command.try_get_matches_from(argv.clone()) {
+        // A subcommand's indices count from its own name.
+        let mut level = Some((&matches, 0));
+        while let Some((current, offset)) = level {
+            if let Ok(Some(_)) = current.try_get_raw("prompt")
+                && let Some(indices) = current.indices_of("prompt")
+            {
+                drop.extend(indices.map(|index| offset + index));
+            }
+            level = current.subcommand().and_then(|(name, sub)| {
+                let position = argv
+                    .iter()
+                    .enumerate()
+                    .skip(offset + 1)
+                    .find(|(_, arg)| arg.to_str() == Some(name))?
+                    .0;
+                Some((sub, position))
+            });
+        }
     }
-    args
+    argv.into_iter()
+        .enumerate()
+        .skip(1)
+        .filter(|(index, _)| !drop.contains(index))
+        .map(|(_, arg)| arg)
+        .collect()
 }
 
 /// Replace this process with a fresh start (on Windows: run it and exit
-/// with its status). Returns only on failure.
-pub fn restart_process(prompt: Option<&str>) -> std::io::Error {
+/// with its status). `command` is the program's argument parser. Returns
+/// only on failure.
+pub fn restart_process(command: clap::Command) -> std::io::Error {
+    // The new process must not see this one's Aggressive lock (Windows keeps
+    // this process alive while the new one runs).
+    super::launch::release_aggressive_lock();
     let program = match std::env::current_exe() {
         Ok(program) => program,
         Err(err) => return err,
     };
-    let args = restart_args(std::env::args_os().skip(1).collect(), prompt);
-    let mut command = std::process::Command::new(program);
-    command.args(args);
+    let args = restart_args(command, std::env::args_os().collect());
+    let mut process = std::process::Command::new(program);
+    process.args(args);
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
-        command.exec()
+        process.exec()
     }
     #[cfg(not(unix))]
     {
-        match command.status() {
+        match process.status() {
             Ok(status) => std::process::exit(status.code().unwrap_or(1)),
             Err(err) => err,
         }
@@ -43,6 +68,8 @@ pub fn restart_process(prompt: Option<&str>) -> std::io::Error {
 
 #[cfg(test)]
 mod tests {
+    use clap::Arg;
+    use clap::Command;
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -51,18 +78,39 @@ mod tests {
         values.iter().map(OsString::from).collect()
     }
 
+    fn command() -> Command {
+        Command::new("corbanu")
+            .arg(Arg::new("model").short('m').long("model"))
+            .arg(
+                Arg::new("config")
+                    .short('c')
+                    .action(clap::ArgAction::Append),
+            )
+            .arg(Arg::new("prompt"))
+            .subcommand(
+                Command::new("resume")
+                    .arg(Arg::new("session_id"))
+                    .arg(Arg::new("prompt")),
+            )
+    }
+
     #[test]
     fn security_confirm_restart_keeps_options_and_drops_the_prompt() {
+        // The prompt equals an option value: only the prompt goes.
         assert_eq!(
             restart_args(
-                args(&["-c", "model=\"m\"", "--enable", "security_levels", "fix it"]),
-                Some("fix it")
+                command(),
+                args(&["corbanu", "-c", "x=1", "fix", "-m", "fix"])
             ),
-            args(&["-c", "model=\"m\"", "--enable", "security_levels"])
+            args(&["-c", "x=1", "-m", "fix"])
         );
         assert_eq!(
-            restart_args(args(&["resume", "--last"]), None),
-            args(&["resume", "--last"])
+            restart_args(command(), args(&["corbanu", "resume", "abc", "go on"])),
+            args(&["resume", "abc"])
+        );
+        assert_eq!(
+            restart_args(command(), args(&["corbanu", "-m", "m"])),
+            args(&["-m", "m"])
         );
     }
 }
