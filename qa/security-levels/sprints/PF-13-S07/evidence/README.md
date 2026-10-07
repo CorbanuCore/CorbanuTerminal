@@ -63,7 +63,11 @@ untrusted content too. Permissive is unchanged by decision, and an arbitrary
 home file such as `$HOME/canary.txt` stays readable at every level (only known
 credential locations are denied). Under Moderate a human approval of a
 command's request to run outside the sandbox lifts the rules for that run,
-before untrusted content as after it. Known gap: before untrusted content,
+before untrusted content as after it. Under Moderate with full access every
+command now runs in a sandbox that only applies these rules from the first
+turn, and requests to run outside it that used to run unasked (full access with
+on-request approvals, exec-policy allow rules, automatic review) ask the human.
+Known gap: before untrusted content,
 typing into a shell started without the rules (under a lower level, or lifted
 by such an approval) is not asked about. Re-running the route matrix under a
 saved Aggressive and Moderate level is still open.

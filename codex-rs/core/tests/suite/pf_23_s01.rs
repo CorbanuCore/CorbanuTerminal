@@ -582,6 +582,7 @@ async fn issue_239_moderate_escalation_before_untrusted_content_needs_the_human(
         (true, false, ask, approve(), true),
         (true, false, ask, Some(ReviewDecision::denied("no")), false),
         (true, true, ask, approve(), true),
+        (true, true, ask, Some(ReviewDecision::denied("no")), false),
         (true, false, AskForApproval::Never, None, false),
         (false, false, ask, None, false),
         (false, true, ask, None, false),
@@ -611,6 +612,12 @@ async fn issue_239_moderate_escalation_before_untrusted_content_needs_the_human(
             let approval = next_exec_approval(&test)
                 .await
                 .expect("the escalation asks");
+            let reason = approval.reason.clone().unwrap_or_default();
+            assert!(reason.contains("read the notes"), "{reason}");
+            assert!(
+                reason.contains("Moderate credential protection"),
+                "{reason}"
+            );
             test.codex
                 .submit(Op::ExecApproval {
                     id: approval.effective_approval_id(),

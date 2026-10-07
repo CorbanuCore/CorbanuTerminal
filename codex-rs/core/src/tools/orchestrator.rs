@@ -238,21 +238,33 @@ impl ToolOrchestrator {
             _ if ask_human_to_escalate => {
                 let note =
                     "Approving also lifts the Moderate credential protection for this command.";
-                let reason = match &requirement {
-                    ExecApprovalRequirement::NeedsApproval {
-                        reason: Some(reason),
-                        ..
-                    } => format!("{reason} {note}"),
-                    _ => note.to_string(),
-                };
-                let approval_ctx = ApprovalCtx {
+                let mut approval_ctx = ApprovalCtx {
                     session: &tool_ctx.session,
                     turn: &tool_ctx.turn,
                     call_id: &tool_ctx.call_id,
-                    retry_reason: Some(reason),
+                    retry_reason: None,
                     network_approval_context: None,
                     fresh_human_authority: true,
                 };
+                // Keep why the command runs (the requirement's reason, else the
+                // model's justification) ahead of the note.
+                let why = match &requirement {
+                    ExecApprovalRequirement::NeedsApproval {
+                        reason: Some(reason),
+                        ..
+                    } => Some(reason.clone()),
+                    _ => match tool.approval_action(req, &approval_ctx) {
+                        Ok(
+                            ApprovalAction::Shell { justification, .. }
+                            | ApprovalAction::ExecCommand { justification, .. },
+                        ) => justification,
+                        _ => None,
+                    },
+                };
+                approval_ctx.retry_reason = Some(match why {
+                    Some(why) => format!("{why} {note}"),
+                    None => note.to_string(),
+                });
                 resolve_tool_apporval(
                     tool,
                     req,
