@@ -120,7 +120,8 @@ fn hold_grant(thread: ThreadId, operation: &str) -> String {
         },
         level: SecurityLevel::Aggressive,
     };
-    aggressive::issue_labelled(thread, &state, grant, operation.to_string(), now).unwrap();
+    let command = operation.split(' ').map(str::to_string).collect();
+    aggressive::issue_labelled(thread, &state, grant, command, now).unwrap();
     id
 }
 
