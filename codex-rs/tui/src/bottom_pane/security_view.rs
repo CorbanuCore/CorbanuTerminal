@@ -237,6 +237,11 @@ impl BottomPaneView for SecurityView {
     }
 
     fn next_frame_delay(&self) -> Option<std::time::Duration> {
+        // The inspector's observation age (and staleness) must keep moving
+        // even when nothing else redraws.
+        if self.inspector.is_some() {
+            return Some(std::time::Duration::from_secs(1));
+        }
         self.picker
             .as_ref()
             .filter(|picker| picker.saving())

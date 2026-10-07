@@ -590,6 +590,7 @@ pub(crate) fn sections(
 }
 
 fn runtime_rows(input: &InspectorInput, facts: &RuntimeFacts) -> Vec<Row> {
+    let core_protected = core_level(facts) != SecurityLevel::Permissive;
     let control = |label: &str, facts: ControlFacts, on: &str, off: &str| match facts {
         ControlFacts::Enforcing => row(label, State::Enforcing, on, "observed: this process"),
         ControlFacts::Off => row(label, State::Off, off, "observed: this process"),
@@ -624,12 +625,21 @@ fn runtime_rows(input: &InspectorInput, facts: &RuntimeFacts) -> Vec<Row> {
             "managed secrets are removed from output",
             "off (secret_output_gate)",
         )),
-        control(
-            "Model key broker",
-            facts.model_broker,
-            "provider keys are brokered",
-            "off: Core reads provider keys itself (broker_model_auth)",
-        ),
+        match facts.model_broker {
+            // Installed is not the same as healthy: the broker is not probed.
+            ControlFacts::Enforcing => row(
+                "Model key broker",
+                State::Unobserved,
+                "installed; its health is not probed",
+                "observed: this process",
+            ),
+            other => control(
+                "Model key broker",
+                other,
+                "provider keys are brokered",
+                "off: Core reads provider keys itself (broker_model_auth)",
+            ),
+        },
         if input.network_broker {
             required(row(
                 "Credential broker",
@@ -652,10 +662,23 @@ fn runtime_rows(input: &InspectorInput, facts: &RuntimeFacts) -> Vec<Row> {
                 "labels off (source_envelopes)",
                 "observed: session",
             ),
+            TaintFacts::Unreadable => row(
+                "Untrusted content",
+                State::Degraded,
+                "the session's registry cannot be read; it is treated as tainted",
+                "observed: session",
+            ),
             TaintFacts::NotObserved => row(
                 "Untrusted content",
                 State::Unobserved,
                 "no session reports here yet",
+                "observed: session",
+            ),
+            // Post-taint checks run only under a protected Core level.
+            TaintFacts::Generation(_) if !core_protected => row(
+                "Untrusted content",
+                State::Off,
+                "labelled, but Core is Permissive: protected actions are not gated",
                 "observed: session",
             ),
             TaintFacts::Generation(0) => row(
@@ -681,16 +704,11 @@ fn runtime_rows(input: &InspectorInput, facts: &RuntimeFacts) -> Vec<Row> {
             "preflight clean at launch; earlier conversations are not resumed",
             "resolved: launch preflight",
         )),
-        Some(Boundary::NotClean { blockers }) => required(row(
+        // The summary only: blocker details (paths) stay in the review.
+        Some(boundary @ (Boundary::NotClean { .. } | Boundary::Unverified(_))) => required(row(
             "Protected boundary",
             State::Degraded,
-            format!("not clean: {}", blockers.first().map_or("", String::as_str)),
-            "resolved: launch preflight",
-        )),
-        Some(Boundary::Unverified(reason)) => required(row(
-            "Protected boundary",
-            State::Degraded,
-            format!("unverified: {reason}"),
+            format!("{}; details in the Aggressive review", boundary.summary()),
             "resolved: launch preflight",
         )),
         None => row(
@@ -703,17 +721,24 @@ fn runtime_rows(input: &InspectorInput, facts: &RuntimeFacts) -> Vec<Row> {
     rows
 }
 
-fn in_force(input: &InspectorInput, facts: &RuntimeFacts) -> SecurityLevel {
-    let tui = match input.active {
+fn launch_level(input: &InspectorInput) -> SecurityLevel {
+    match input.active {
         ChosenLevel::Permissive => SecurityLevel::Permissive,
         ChosenLevel::Aggressive => SecurityLevel::Aggressive,
-    };
-    let core = match &facts.policy {
-        PolicyFacts::Live(tree) => tree.in_force,
+    }
+}
+
+/// Core's level for the session: its root agent's when the tree is live.
+fn core_level(facts: &RuntimeFacts) -> SecurityLevel {
+    match &facts.policy {
+        PolicyFacts::Live(tree) => tree.agents.first().map_or(tree.in_force, |root| root.level),
         PolicyFacts::Stored { level, .. } => *level,
         PolicyFacts::Unreadable => SecurityLevel::Aggressive,
-    };
-    tui.max(core)
+    }
+}
+
+fn in_force(input: &InspectorInput, facts: &RuntimeFacts) -> SecurityLevel {
+    launch_level(input).max(core_level(facts))
 }
 
 /// The one-line verdict. Green only when nothing is degraded, every required
@@ -768,6 +793,15 @@ pub(crate) fn badge(
             // approval and network values were not checked against it.
             partial.push("session controls not checked at launch".to_string());
         }
+    }
+    // A level checked at launch whose protected-action gates Core does not
+    // enforce (Core lags behind a saved Aggressive) is not protection.
+    if matches!(facts.policy, PolicyFacts::Live(_)) && core_level(facts) < launch_level(input) {
+        degraded.push(format!(
+            "Core enforces {}; {}'s protected-action gates are not active",
+            level_name(core_level(facts)),
+            level_name(launch_level(input))
+        ));
     }
     if now - facts.observed_at > STALE_AFTER_SECONDS {
         degraded.push(format!(

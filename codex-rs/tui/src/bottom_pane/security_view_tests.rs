@@ -124,3 +124,28 @@ fn security_view_short_terminal_keeps_escape_visible() {
         .collect::<String>();
     assert!(text.contains("esc close"));
 }
+
+/// PF-41-S01: an open inspector keeps redrawing, so its observation age and
+/// staleness move even in an idle session; Esc returns to the view.
+#[test]
+fn pf_41_s01_open_inspector_requests_frames() {
+    let mut view = SecurityView::new(
+        Some(SecurityLevel::Permissive),
+        current,
+        || None,
+        RuntimeKeymap::defaults().list,
+    );
+    assert_eq!(view.next_frame_delay(), None);
+    view.inspector = Some(SecurityInspector::new(
+        crate::security::inspector::tests::input(crate::security::level::ChosenLevel::Aggressive),
+        RuntimeKeymap::defaults().list,
+    ));
+    assert_eq!(
+        view.next_frame_delay(),
+        Some(std::time::Duration::from_secs(1))
+    );
+    view.handle_key_event(key(KeyCode::Esc));
+    assert!(view.inspector.is_none());
+    assert!(!view.is_complete());
+    assert_eq!(view.next_frame_delay(), None);
+}

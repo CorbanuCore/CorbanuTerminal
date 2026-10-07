@@ -262,18 +262,19 @@ fn pf_41_s01_denials_are_fixed_text_and_correlated_to_the_session_tree() {
         .iter()
         .map(|denial| (denial.thread, denial.reason, denial.outcome))
         .collect::<Vec<_>>();
-    assert!(
-        shown.starts_with(&[
-            (None, "a protected path was readable", "launch refused"),
-            (
-                Some(root),
-                ProtectedActionKind::Persistence.describe(),
-                "declined by you (turn interrupted)"
-            ),
-            (Some(child), "vault access", "refused: kill switch on"),
-        ]),
-        "{shown:?}"
-    );
+    // Other tests record into the same process-wide list, so check
+    // presence, not position.
+    for expected in [
+        (None, "a protected path was readable", "launch refused"),
+        (
+            Some(root),
+            ProtectedActionKind::Persistence.describe(),
+            "declined by you (turn interrupted)",
+        ),
+        (Some(child), "vault access", "refused: kill switch on"),
+    ] {
+        assert!(shown.contains(&expected), "{expected:?} in {shown:?}");
+    }
     // Approvals (and answered checks) are not denials; other sessions'
     // denials are not shown.
     assert_eq!(

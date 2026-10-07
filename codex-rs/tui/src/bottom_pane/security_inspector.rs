@@ -104,12 +104,11 @@ impl SecurityInspector {
             .green()
             .bold()
             .into(),
-            Badge::Partial(level, off) => format!(
-                "◐ {level} enforced; off or not observed: {}",
-                off.join(", ")
-            )
-            .cyan()
-            .into(),
+            Badge::Partial(level, off) => {
+                format!("◐ {level} set; off or not observed: {}", off.join(", "))
+                    .cyan()
+                    .into()
+            }
             Badge::Degraded(level, reasons) => {
                 format!("▲ {level} degraded: {}", reasons.join(", "))
                     .red()

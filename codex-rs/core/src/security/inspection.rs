@@ -101,6 +101,8 @@ pub enum TaintFacts {
     NotObserved,
     /// Count of recorded batches of content without standing; 0 is clean.
     Generation(u64),
+    /// The registry cannot be read; the session is treated as tainted.
+    Unreadable,
 }
 
 /// One process-wide control, as observed in this process.
@@ -157,11 +159,18 @@ pub fn observe(
             }
         };
     let grants = match &policy {
+        // A stopped agent cannot use its grants.
         PolicyFacts::Live(tree) if !tree.kill_switch => tree
             .agents
             .iter()
+            .filter(|agent| !agent.stopped)
             .flat_map(|agent| {
-                super::aggressive::held(agent.thread, tree.epoch, tree.revocation_generation, now)
+                super::aggressive::held_for_inspector(
+                    agent.thread,
+                    tree.epoch,
+                    tree.revocation_generation,
+                    now,
+                )
             })
             .collect(),
         // Grants are never stored and end with the kill switch.
@@ -226,7 +235,7 @@ fn taint_for(thread: ThreadId) -> TaintFacts {
         }
         Ok(_) => TaintFacts::Off,
         // A poisoned registry counts as tainted, as the post-taint checks do.
-        Err(_) => TaintFacts::Generation(u64::MAX),
+        Err(_) => TaintFacts::Unreadable,
     }
 }
 

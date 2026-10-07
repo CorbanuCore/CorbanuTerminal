@@ -124,6 +124,43 @@ fn pf_41_s01_green_only_when_every_required_control_is_observed() {
 }
 
 #[test]
+fn pf_41_s01_core_lagging_behind_the_launch_level_is_degraded() {
+    let input = input(ChosenLevel::Aggressive);
+    let saved = saved(ChosenLevel::Aggressive);
+    let mut facts = healthy(ThreadId::new());
+    if let PolicyFacts::Live(tree) = &mut facts.policy {
+        tree.in_force = SecurityLevel::Permissive;
+        tree.agents[0].level = SecurityLevel::Permissive;
+    }
+    let sections = sections(&input, &saved, &facts, NOW);
+    assert_eq!(
+        find(&sections, "Untrusted content").value,
+        "labelled, but Core is Permissive: protected actions are not gated"
+    );
+    assert_eq!(
+        badge(&input, &saved, &facts, &sections, NOW),
+        Badge::Degraded(
+            "Aggressive",
+            vec![
+                "Core enforces Permissive; Aggressive's protected-action gates are not active"
+                    .to_string(),
+                "Untrusted content".to_string(),
+            ]
+        )
+    );
+
+    facts.taint = TaintFacts::Unreadable;
+    if let PolicyFacts::Live(tree) = &mut facts.policy {
+        tree.in_force = SecurityLevel::Aggressive;
+        tree.agents[0].level = SecurityLevel::Aggressive;
+    }
+    assert_eq!(
+        verdict(&input, &saved, &facts, NOW),
+        Badge::Degraded("Aggressive", vec!["Untrusted content".to_string()])
+    );
+}
+
+#[test]
 fn pf_41_s01_stale_health_and_broker_crash_are_degraded() {
     let input = input(ChosenLevel::Aggressive);
     let saved = saved(ChosenLevel::Aggressive);
