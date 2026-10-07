@@ -163,6 +163,22 @@ pub(crate) fn base_overrides(codex_home: &Path, origin: &Path) -> Vec<(String, t
     ]
 }
 
+/// PF-29-S01: deny agent reads of `paths` in the Aggressive profile that
+/// [`base_overrides`] defined.
+pub(crate) fn deny_reads(overrides: &mut [(String, toml::Value)], paths: &[std::path::PathBuf]) {
+    let key = format!("permissions.{PROFILE_ID}");
+    for (_, profile) in overrides.iter_mut().filter(|(name, _)| *name == key) {
+        if let Some(filesystem) = profile
+            .get_mut("filesystem")
+            .and_then(toml::Value::as_table_mut)
+        {
+            for path in paths {
+                filesystem.insert(path.to_string_lossy().into_owned(), string("deny"));
+            }
+        }
+    }
+}
+
 /// Environment overrides that extend, never replace, the user's own policy.
 pub(crate) fn env_overrides(user_env: &ShellEnvironmentPolicyToml) -> Vec<(String, toml::Value)> {
     let mut overrides = Vec::new();

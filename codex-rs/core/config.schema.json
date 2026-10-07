@@ -463,6 +463,9 @@
             "auth_elicitation": {
               "type": "boolean"
             },
+            "broker_model_auth": {
+              "type": "boolean"
+            },
             "browser_use": {
               "type": "boolean"
             },
@@ -644,6 +647,9 @@
               "type": "boolean"
             },
             "prevent_idle_sleep": {
+              "type": "boolean"
+            },
+            "protected_mode_preflight": {
               "type": "boolean"
             },
             "realtime_conversation": {
@@ -5175,6 +5181,9 @@
         "auth_elicitation": {
           "type": "boolean"
         },
+        "broker_model_auth": {
+          "type": "boolean"
+        },
         "browser_use": {
           "type": "boolean"
         },
@@ -5356,6 +5365,9 @@
           "type": "boolean"
         },
         "prevent_idle_sleep": {
+          "type": "boolean"
+        },
+        "protected_mode_preflight": {
           "type": "boolean"
         },
         "realtime_conversation": {

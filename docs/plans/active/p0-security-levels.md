@@ -33,9 +33,12 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf30-s02-20261006"
     branch: "feat/pf-30-s02-persistent-taint"
     base_commit: "b96b23344ba68e8a484b5e68834b6a62e392e007"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf30-s03-20261006"
-    branch: "feat/pf-30-s03-post-taint"
-    base_commit: "743a7c22dabba6a0368e8390dcd9dd7b2ecdd9e8"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf30-s03b-20261006"
+    branch: "feat/pf-30-s03-finish"
+    base_commit: "38516a5b22e96336ae712e1a39889cc3818db466"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf23-s01-20261006"
+    branch: "feat/pf-23-s01-moderate-ingress"
+    base_commit: "55339d5b24d955cf245efa7b8af9243eac66254a"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-round5-provenance"
     branch: "feat/security-round5-provenance"
     base_commit: "07791288b6feeccfaee5a57c12452359cc666957"
@@ -48,6 +51,12 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-33-s02-20261006"
     branch: "pf-33-s02-20261006"
     base_commit: "39c1f06213da3f15ec41cdd673a09a98cbc7d027"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-29-s01-20261006"
+    branch: "pf-29-s01-20261006"
+    base_commit: "4b42012daa8e532d7ae2f9a62b6829f55b044b0b"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-29-s02-20261006"
+    branch: "pf-29-s02-20261006"
+    base_commit: "72d9a5dfbf01370d481630742d038c317c2dd624"
 ---
 
 # P0 `/security` levels

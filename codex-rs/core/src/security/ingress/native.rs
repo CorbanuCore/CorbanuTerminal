@@ -434,6 +434,14 @@ impl NativeIngress {
         }
     }
 
+    /// PF-23-S01: content without standing reached the model's code without
+    /// being recorded (a nested tool result inside a code-mode cell).
+    pub(crate) fn note_unrecorded_input(&mut self) {
+        if self.labelled_mode {
+            self.taint_generation = self.taint_generation.saturating_add(1);
+        }
+    }
+
     pub(crate) fn taint_generation(&self) -> u64 {
         self.taint_generation
     }

@@ -1,17 +1,20 @@
 ---
 sprint_id: "PF-29-S02"
 title: "Human-reviewed credential migration and recovery"
-status: draft
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-29"
 execution_order: 36
-owner: "Jim Ricketts"
-worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
-branch: "feat/p0-security-levels"
-base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
+owner: "first-free lane worker (codex, 2026-10-06)"
+parallel_lane: "tui"
+write_scope: "codex-rs/core/src/security/migration.rs, codex-rs/core/src/security/pf_29_s02_tests.rs, codex-rs/tui/src/security/migration.rs, codex-rs/tui/src/bottom_pane/security_migration.rs, qa/security-levels/sprints/PF-29-S02/, qa/demos/index/PF-29-S02.md, docs/sprints/current/p0-security-levels/pf-29-s02-human-secret-migration.md"
+integration_gate: "PR to main under the per-sprint gate (sec-common decision 5): focused tests, GLM 5.2 tmux run, one Opus 5.5 High review, SOP videos; behind protected_mode_preflight (PF-29-S01, default off). Builds on PF-29-S01's files (inventory.rs source lines and assignment span, preflight.rs readiness, the picker and its tests, security/mod.rs and bottom_pane/mod.rs module lines), owned by PF-29-S01 in the same lane; new demo specs qa/demos/specs/pf29s02-*.toml under the directory PF-23-S01 reserves (new files only); the plan worktree coordinates and the index row."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-29-s02-20261006"
+branch: "pf-29-s02-20261006"
+base_commit: "72d9a5dfbf01370d481630742d038c317c2dd624"
 depends_on: "PF-29-S01, PF-24-S01"
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-10-06
 ---
 
 # PF-29-S02 — Human-reviewed credential migration and recovery
@@ -33,44 +36,48 @@ updated: 2026-08-28
 
 - OpenClaw adoption reference: [OC-6](../../../plans/openclaw-source-review-2026-08-28.md#oc-6) at `13adff02ca3897768d80d2bca18f5acf08c55d91`; see the review for named functions, callers, tests and limits. Reference tests are not candidate evidence.
 
-- Existing/foundation: codex-rs/tui/src/app/config_persistence.rs; codex-rs/tui/src/bottom_pane/approval_overlay.rs; PF-29 inventory.
-- Planned: codex-rs/core/src/security/migration.rs; codex-rs/tui/src/bottom_pane/security_migration.rs.
-- Tests: planned colocated Rust test modules prefixed `pf_29_s02`; fixtures use synthetic secrets and fake services only.
+- Core: `core/src/security/migration.rs` (plan, journal, run, recover), exported as `protected_preflight::migration`.
+- TUI: `tui/src/security/migration.rs` (vault store, debug-only failure hook); screens in
+  `bottom_pane/security_migration.rs` and the `/security` picker (PF-29-S01).
+- Flag: `protected_mode_preflight` (PF-29-S01). Tests: `pf_29_s02` in codex-core (6) and codex-tui (4).
 
 ## Preconditions
 
-- [ ] Active plan; PF-29-S01, PF-24-S01 completed and archived.
-- [ ] Read root and nearest implementation-path AGENTS.md; verify exact plan/worktree coordinates.
-- [ ] Confirm source pins, declared crate/module paths, and backend/API availability; unresolved security prerequisites block readiness.
+- [x] Active plan; PF-24-S01 archived. PF-29-S01 merged behind `protected_mode_preflight` (#228) with gate evidence,
+  not archived; started on that basis (PF-28-S01 precedent), same lane and worktree lineage.
+- [x] Read root and nearest AGENTS.md; coordinates recorded above and in the plan.
+- [x] Module paths as planned. Migration is offered from the Aggressive review; Moderate is not offered yet.
 
 ## Done
 
-- [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
+- [x] New single-feature record reconciled with current ownership and archived design input.
+- [x] Preview (`m` in a blocked Aggressive review): source IDs and locations, vault labels, the reference each line
+  becomes, owner-only access, restart, unsupported items with what to do, rotation. No values. Esc changes nothing.
+- [x] Confirm rechecks the reviewed preflight; any drift moves nothing. Values go to the encrypted vault first
+  (`ManualSecret`, existing labels never replaced), then each line is replaced atomically by
+  `"$(corbanu vault auth-helper LABEL)"` (fish: `(…)`), `0600`, synced. No plaintext backup or rollback copy.
+- [x] Journal `security_migration.toml`: created exclusively (one owner), labels and stages only, generation per
+  write. A line is rewritten only while it still holds the stored value; an unstored entry is skipped if its file
+  changed after confirmation, so a later owner is never overwritten. Linked profiles are not rewritten.
+- [x] Interruption at any stage (prepared, stored, rewritten, committed; store failure) keeps the level, reports
+  "Migration stopped" and locks Aggressive (preflight readiness) until `r` recovers. Recovery only rolls forward,
+  converges on the uninterrupted result, never restores plain text and never writes the level.
+- [x] After a move or recovery the review reruns the preflight (re-audit) before Aggressive can be saved; saving
+  resets activation, so earlier conversations stay unresumable (PF-29-S01). Rotation is listed; nothing is rotated.
 
 ## Remaining
 
-- [ ] Crash at each ownership transfer/commit/cleanup point; stale rollback cannot overwrite a later owner or restore a revoked level. No plaintext backup/recovery copy; contaminated resume requires a genuinely clean context.
-
-- [ ] Port preflight/consent and post-commit-publication-failure cases; add power-loss, encrypted recovery, stale preview and concurrent owner changes. Prove whole-migration recovery rather than inferring it from atomic individual file replacement or best-effort rollback.
-
-- [ ] Present source IDs, destinations, access restrictions, restart requirements and unsupported items without secret values; require human confirmation and recheck manifest hashes before writes.
-- [ ] Move supported credentials to encrypted vault-backed storage, replace configuration values with references and restrict originals; never make plaintext rollback copies.
-- [ ] Journal an atomic migration with encrypted recovery data and durable stage markers; crash/partial failure retains the prior level but locks affected unsafe routes, never announces protected-mode success.
-- [ ] Re-audit before activation, invalidate old sessions/capabilities and require clean context when historic secret exposure cannot be excluded; retain recovery material only for a bounded approved period.
-- [ ] Cancel changes nothing; recovery does not restore agent-readable plaintext. Tell the human which external credentials require rotation/revocation; do not silently rotate or delete unrelated data.
-- [ ] Add named `pf_29_s02` regression tests; update affected Cargo/Bazel/lock/schema edges together without broadening this feature.
+- [ ] Only shell-profile exports are migrated; config literals, env variables and memories are listed with actions.
+- [ ] Broker leases and other live capabilities are not revoked on migration (restart covers this session).
 
 ## Verification
 
-- [ ] Run `cd codex-rs && just fix -p <affected-crate>` for each listed crate, then `just fmt`; inspect the final diff.
-- [ ] Focused: `cd codex-rs && just test -p codex-core pf_29_s02 && just test -p codex-tui pf_29_s02`; confirm tests actually ran.
-- [ ] Integration: full affected crate suites via `just test -p <affected-crate>`; update Bazel locks when manifests change.
-- [ ] TUI applicability: required: /security preflight → preview → Esc unchanged → confirm → injected failure → recovery → restart; actual keys and sanitized artifacts.
-- [ ] Record candidate/commit, commands, expected/actual outcomes and safe artifact digests; no production credentials or funds.
+- [x] `just fix -p codex-core -p codex-tui`, `just fmt`; final diff inspected.
+- [x] Focused `pf_29_s02`: core 6, tui 4 (with the PF-29-S01 tests: core 20, tui 12).
+- [ ] Gate: suites, GLM 5.2 tmux videos and Opus review in the [evidence](../../../../qa/security-levels/sprints/PF-29-S02/README.md).
 
 ## Exit evidence
 
-- [ ] Implementation commit and final-tree outputs under `qa/security-levels/sprints/PF-29-S02/`.
-- [ ] Acceptance and source-mapping assertions proven; applicable true-TUI keys/checkpoints captured after formatting.
+- [ ] Commits, commands, outcomes, videos and review under `qa/security-levels/sprints/PF-29-S02/`.
 - [ ] PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
 - [ ] Done/Remaining reflect reality; completed record moved to the archive and plan/navigation updated.

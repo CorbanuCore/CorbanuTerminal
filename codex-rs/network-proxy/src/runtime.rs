@@ -1119,11 +1119,15 @@ fn credential_broker_for_config(config: &crate::config::NetworkProxyConfig) -> C
         CredentialBroker::new_isolated(
             config.credential_broker,
             IsolatedBrokerOptions {
-                allow_local_binding: config.allow_local_binding,
+                // PF-33-S02: under the destination guard local binding is no
+                // private-network grant, and the broker dials only the
+                // answers the guard checked.
+                allow_local_binding: config.allow_local_binding && !config.url_destination_policy,
                 allow_upstream_proxy: config.allow_upstream_proxy,
                 runtime_dir: config.credential_broker_runtime_dir.clone(),
                 require_containment: config.secretless_agent_launch.is_some(),
                 scrub_responses: config.credential_response_gate,
+                pin_connections: config.url_destination_policy,
             },
         )
     } else {

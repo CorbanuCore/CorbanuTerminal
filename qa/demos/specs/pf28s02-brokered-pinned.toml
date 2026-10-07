@@ -1,0 +1,79 @@
+# PF-28-S02 (PF-33-S02 follow-up): a brokered credential request under the destination guard. Export
+# GH_HOST=httpbin.org and pass the synthetic token with --credential GH_ENTERPRISE_TOKEN=file:<token file>.
+# Synthetic credential only; its sha256 prefix is 946ae98e9fbe.
+id = "pf28s02-brokered-pinned"
+feature = "Brokered credentials are pinned: the broker connects only to the DNS answers Core's guard checked"
+expected = "The brokered request to httpbin.org returns 200 with the credential redacted, and Core's log shows the request was handed to the broker pinned to the checked answers (host, port, number of answers)."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[sandbox_workspace_write]
+network_access = true
+
+[features]
+isolated_credential_broker = true
+secret_output_gate = true
+url_destination_policy = true
+
+[features.network_proxy]
+enabled = true
+
+[features.network_proxy.domains]
+"httpbin.org" = "allow"
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"brokered.sh" = '''
+export TMPDIR="$PWD/.tmp"; mkdir -p "$TMPDIR"
+curl -sS -o echo.json -w 'HTTP %{http_code}\n' https://httpbin.org/anything/o/r.git/info/refs \
+  -H "Authorization: Bearer $GH_ENTERPRISE_TOKEN"
+python3 - <<'PY'
+import json
+auth = json.load(open("echo.json"))["headers"].get("Authorization", "")
+print("echoed header:", auth if "REDACTED" in auth else "<raw value, not shown>")
+PY
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run sh brokered.sh once and show me its two output lines exactly, then stop."
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "echoed header:[\\s\\S]*echoed header:"
+timeout = 240
+compress = 3
+
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+
+[[steps]]
+type = '!grep -ho "brokered request pinned (h[o]st=[^)]*)" {logs}/*.log | sort | uniq -c'
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "answers="
+timeout = 30
+
+[[steps]]
+pause = 4.0

@@ -50,6 +50,7 @@ use the real isolated broker and httpbin.org as the permitted host (`GH_HOST=htt
 | `pf28s02-reflected-baseline-flag-off` | Flag off: the echoed token hashes to `946ae98e9fbe`; the scan found the raw token in the agent's `echo.json` (the expected control finding). |
 | `pf28s02-credential-path-bound` | `/anything/o/r.git/info/refs` 200; `/anything/settings/tokens` and `/anything/o/%2e%2e/x/info/refs` 403. |
 | `pf28s02-wrapped-encodings` | `base64 -b 76`, `xxd -p` and base64 of hex of a credentials file: each block shows `[REDACTED:env:PF28_CANARY_API_KEY]` on screen and to the model. The scan found the canary only in `creds.txt`, which the agent wrote from its own environment (secretless launch off in this demo). |
+| `pf28s02-brokered-pinned` (round 5, `ea006ee308`) | Guard, isolated broker and output gate on: `HTTP 200`, echoed header `Bearer [REDACTED:broker:credential]`; Core log `brokered request pinned (host=httpbin.org, port=443, answers=8)`. |
 
 The `python3: couldn't create cache file … xcrun_db` line is the macOS python shim inside the sandbox, not product
 output.

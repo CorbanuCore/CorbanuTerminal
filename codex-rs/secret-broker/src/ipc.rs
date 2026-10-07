@@ -19,6 +19,8 @@ const MAC_BYTES: usize = 32;
 const MAX_ID_BYTES: usize = 128;
 const MAX_PATH_BYTES: usize = 1_024;
 const MAX_HOST_BYTES: usize = 253;
+/// Bound on the checked DNS answers one provider request may pin.
+pub const MAX_PINNED_ADDRS: usize = 16;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -221,6 +223,10 @@ pub struct ProviderRequestOperation {
     port: u16,
     method: String,
     path: String,
+    /// The DNS answers Core's destination guard checked for `host`. When
+    /// present, the broker dials only these and never resolves `host` itself.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pinned_addrs: Vec<std::net::IpAddr>,
 }
 
 impl ProviderRequestOperation {
@@ -235,9 +241,29 @@ impl ProviderRequestOperation {
             port,
             method: method.into(),
             path: path.into(),
+            pinned_addrs: Vec::new(),
         };
         operation.validate()?;
         Ok(operation)
+    }
+
+    /// Pins the connection to these checked answers (at most
+    /// [`MAX_PINNED_ADDRS`], at least one).
+    pub fn with_pinned_addrs(
+        mut self,
+        addrs: impl IntoIterator<Item = std::net::IpAddr>,
+    ) -> Result<Self, BrokerFrameError> {
+        self.pinned_addrs = addrs.into_iter().collect();
+        if self.pinned_addrs.is_empty() {
+            return Err(BrokerFrameError::UnsupportedOperation);
+        }
+        self.validate()?;
+        Ok(self)
+    }
+
+    /// Checked answers to dial instead of resolving `host`; empty when unpinned.
+    pub fn pinned_addrs(&self) -> &[std::net::IpAddr] {
+        &self.pinned_addrs
     }
 
     pub const fn scheme(&self) -> &'static str {
@@ -274,7 +300,8 @@ impl ProviderRequestOperation {
             && self.path.starts_with('/')
             && self.path.bytes().all(|byte| byte.is_ascii_graphic())
             && !self.path.contains('#');
-        if !host_valid || self.port == 0 || !method_valid || !path_valid {
+        let pins_valid = self.pinned_addrs.len() <= MAX_PINNED_ADDRS;
+        if !host_valid || self.port == 0 || !method_valid || !path_valid || !pins_valid {
             return Err(BrokerFrameError::UnsupportedOperation);
         }
         Ok(())

@@ -1,4 +1,16 @@
 use crate::function_tool::FunctionCallError;
+use crate::security::protected_surface::Admission;
+use crate::security::protected_surface::Route;
+use crate::security::protected_surface::TypedWindow;
+use crate::security::protected_surface::admit;
+use crate::security::protected_surface::ask_human;
+use crate::security::protected_surface::classify_typed_input;
+use crate::security::protected_surface::is_interrupt;
+use crate::security::protected_surface::lock_typed_input;
+use crate::security::protected_surface::note_interrupt;
+use crate::security::tainted_action::ProtectedActionKind;
+use crate::session::session::Session;
+use crate::session::turn_context::TurnContext;
 use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolPayload;
 use crate::tools::context::boxed_tool_output;
@@ -64,6 +76,7 @@ impl WriteStdinHandler {
             session,
             turn,
             payload,
+            call_id,
             ..
         } = invocation;
 
@@ -77,6 +90,22 @@ impl WriteStdinHandler {
         };
 
         let args: WriteStdinArgs = parse_arguments_for_tool("write_stdin", &arguments)?;
+        // PF-23-S01: writes to one process, interrupts included, are judged
+        // and sent one at a time.
+        let post_taint = session.services.model_client().post_taint_state();
+        let _typing = if args.chars.is_empty() || post_taint.is_none() {
+            None
+        } else {
+            let guard = lock_typed_input(session.thread_id(), args.session_id).await;
+            if is_interrupt(&args.chars) {
+                if post_taint.is_some_and(|state| state.taint_generation > 0) {
+                    note_interrupt(session.thread_id(), args.session_id);
+                }
+            } else {
+                post_taint_check(&session, &turn, &call_id, &args).await?;
+            }
+            Some(guard)
+        };
         let response = session
             .services
             .unified_exec_manager
@@ -99,6 +128,99 @@ impl WriteStdinHandler {
         Ok(boxed_tool_output(response))
     }
 }
+
+/// PF-23-S01: typing into a running process after untrusted content is
+/// judged like the command it amounts to, and like the process it goes to.
+async fn post_taint_check(
+    session: &Session,
+    turn: &TurnContext,
+    call_id: &str,
+    args: &WriteStdinArgs,
+) -> Result<(), FunctionCallError> {
+    let process_id = args.session_id.to_string();
+    let processes = session.services.unified_exec_manager.list_processes().await;
+    let live: Vec<i32> = processes
+        .iter()
+        .filter_map(|process| process.process_id.parse().ok())
+        .collect();
+    let Some(process) = processes
+        .into_iter()
+        .find(|process| process.process_id == process_id)
+    else {
+        // No such running process: the write fails on its own.
+        return Ok(());
+    };
+    let tainted = session
+        .services
+        .model_client()
+        .post_taint_state()
+        .is_some_and(|state| state.taint_generation > 0);
+    // Judged with what was typed since untrusted content arrived, so a
+    // command split across calls is seen whole.
+    let window = TypedWindow::open(session.thread_id(), args.session_id, &args.chars, &live);
+    let codex_home = turn.config.codex_home.to_path_buf();
+    let (texts, unreadable) = (window.texts(), window.unreadable());
+    let command = process.command.clone();
+    let admission = admit(
+        session,
+        turn.approval_policy.value(),
+        Route::WriteStdin,
+        call_id,
+        move || {
+            if unreadable {
+                return Some(ProtectedActionKind::UnseenCode);
+            }
+            // The whole text, and after an interrupt the text from it on.
+            texts
+                .iter()
+                .filter_map(|text| classify_typed_input(&command, text, &process.cwd, &codex_home))
+                .reduce(ProtectedActionKind::strongest)
+        },
+    )
+    .await;
+    let check = match admission {
+        Admission::Clear => {
+            if tainted {
+                window.keep();
+            }
+            return Ok(());
+        }
+        Admission::Refused(refusal) => return Err(FunctionCallError::RespondToModel(refusal)),
+        Admission::AskHuman(check) => check,
+    };
+    let shown = |text: &str| {
+        let count = text.chars().count();
+        if count <= TYPED_TEXT_SHOWN * 2 {
+            return format!("{text:?}");
+        }
+        let head: String = text.chars().take(TYPED_TEXT_SHOWN).collect();
+        let tail: String = text.chars().skip(count - TYPED_TEXT_SHOWN).collect();
+        format!("{head:?} … {tail:?} ({count} characters)")
+    };
+    let earlier = if window.text() == args.chars {
+        String::new()
+    } else {
+        format!(
+            " (with what was typed before, it reads {})",
+            shown(window.text())
+        )
+    };
+    let question = format!(
+        "Type {}{earlier} into the running `{}` (session {process_id})? {}",
+        shown(&args.chars),
+        process.command,
+        check.reason()
+    );
+    let approved = ask_human(session, turn, call_id, question).await;
+    check
+        .resolve(session, approved)
+        .map_err(FunctionCallError::RespondToModel)?;
+    window.clear();
+    Ok(())
+}
+
+/// Characters of typed text shown from each end in the approval question.
+const TYPED_TEXT_SHOWN: usize = 300;
 
 impl CoreToolRuntime for WriteStdinHandler {
     fn repeated_identical_calls_are_polling(&self) -> bool {

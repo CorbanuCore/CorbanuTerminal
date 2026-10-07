@@ -52,6 +52,12 @@ pub use codex_tools::ToolExposure;
 /// Implementers provide the shared `ToolExecutor` behavior plus optional
 /// core-owned metadata for hooks, telemetry, tool search, and argument diffs.
 pub(crate) trait CoreToolRuntime: ToolExecutor<ToolInvocation> {
+    /// Who provides this tool, for the PF-23-S01 protected-surface matrix.
+    /// Tools from MCP servers, the client or extension crates override it.
+    fn tool_origin(&self) -> crate::security::protected_surface::ToolOrigin {
+        crate::security::protected_surface::ToolOrigin::Builtin
+    }
+
     /// Returns a readiness wait for this exact tool before taking the execution gate.
     fn wait_until_ready<'a>(&'a self, _session: &'a Arc<Session>) -> Option<BoxFuture<'a, ()>> {
         None
@@ -293,6 +299,10 @@ impl ToolExecutor<ToolInvocation> for ExposureOverride {
 }
 
 impl CoreToolRuntime for ExposureOverride {
+    fn tool_origin(&self) -> crate::security::protected_surface::ToolOrigin {
+        self.handler.tool_origin()
+    }
+
     fn repeated_identical_calls_are_polling(&self) -> bool {
         self.handler.repeated_identical_calls_are_polling()
     }
@@ -637,6 +647,18 @@ impl ToolRegistry {
                     return Err(err);
                 }
             }
+        }
+
+        // PF-23-S01: after untrusted content, a route the security level has
+        // not classified (or a policy request an automatic reviewer would
+        // answer) needs the human.
+        if let Err(refusal) =
+            crate::security::protected_surface::check_dispatch(&invocation, tool.tool_origin())
+                .await
+        {
+            let err = FunctionCallError::RespondToModel(refusal);
+            dispatch_trace.record_failed(&err);
+            return Err(err);
         }
 
         notify_tool_start(&invocation).await;

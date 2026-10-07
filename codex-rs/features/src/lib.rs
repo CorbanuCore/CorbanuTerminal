@@ -163,6 +163,10 @@ pub enum Feature {
     SecretOutputGate,
     /// Enforce URL, DNS and redirect destination policy in the managed proxy (PF-33-S01).
     UrlDestinationPolicy,
+    /// Inventory secrets and check readiness before a protected `/security` level activates (PF-29-S01).
+    ProtectedModePreflight,
+    /// Hold Core's own model-provider API keys in the isolated credential broker (PF-27-S05).
+    BrokerModelAuth,
     /// Respect host system proxy settings for Codex-owned network clients.
     RespectSystemProxy,
     /// Enable collab tools.
@@ -899,6 +903,18 @@ pub const FEATURES: &[FeatureSpec] = &[
     FeatureSpec {
         id: Feature::UrlDestinationPolicy,
         key: "url_destination_policy",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
+    },
+    FeatureSpec {
+        id: Feature::ProtectedModePreflight,
+        key: "protected_mode_preflight",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
+    },
+    FeatureSpec {
+        id: Feature::BrokerModelAuth,
+        key: "broker_model_auth",
         stage: Stage::UnderDevelopment,
         default_enabled: false,
     },
