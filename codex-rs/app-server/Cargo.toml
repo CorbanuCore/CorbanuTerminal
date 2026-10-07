@@ -56,6 +56,7 @@ codex-hooks = { workspace = true }
 codex-http-client = { workspace = true }
 codex-otel = { workspace = true }
 codex-plugin = { workspace = true }
+codex-security-level = { workspace = true }
 codex-shell-command = { workspace = true }
 codex-skills = { workspace = true }
 codex-skills-extension = { workspace = true }

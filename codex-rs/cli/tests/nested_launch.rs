@@ -110,6 +110,7 @@ fn refuse_mode_refuses_every_agent_launch_and_credential_helper() -> Result<()> 
         vec!["hi"],
         vec!["app-server"],
         vec!["mcp-server"],
+        vec!["stdio-to-uds", "/nonexistent/corbanu.sock"],
         vec!["vault", "auth-helper", "provider/zai_api_key"],
         vec!["internal-claude-oauth-token"],
         vec!["tasknode", "status"],

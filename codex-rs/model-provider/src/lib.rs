@@ -6,10 +6,13 @@ mod provider;
 
 pub use amazon_bedrock::is_supported_amazon_bedrock_region;
 pub use auth::AgentIdentitySessionFallback;
+pub use auth::ProviderApiKey;
+pub use auth::ProviderApiKeyHeader;
 pub use auth::ProviderAuthScope;
 pub use auth::ResolvedProviderAuth;
 pub use auth::auth_provider_from_auth;
 pub use auth::auth_provider_from_auth_manager;
+pub use auth::provider_api_key;
 pub use auth::unauthenticated_auth_provider;
 pub use bearer_auth_provider::BearerAuthProvider;
 pub use bearer_auth_provider::BearerAuthProvider as CoreAuthProvider;

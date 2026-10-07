@@ -48,6 +48,7 @@ Slice 3 is the runtime net: after untrusted content under Moderate/Aggressive, C
 agent command's sandbox (Corbanu home, other Corbanu homes, fixed `$HOME` credentials such as `~/.ssh`). PF-29
 owns launch and user data: S01 inventory and launch isolation (every credential file found, from launch), S02
 migration of secrets out of shell profiles and config. Slice 3 never denies shell profiles; no shared files.
+Also recorded in [PF-29-S02](../../current/p0-security-levels/pf-29-s02-human-secret-migration.md#split-with-pf-23-s01-2026-10-06).
 
 ## Preconditions
 

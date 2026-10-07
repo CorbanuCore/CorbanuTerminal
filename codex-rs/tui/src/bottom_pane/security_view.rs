@@ -18,6 +18,7 @@ use crate::key_hint::KeyBindingListExt;
 use crate::keymap::ListKeymap;
 use crate::render::renderable::Renderable;
 use crate::security::current::CurrentValues;
+use crate::security::preflight::PreflightInput;
 use crate::security::view::PROFILES;
 use crate::security::view::profile_name;
 use crate::security::view::profile_summary;
@@ -43,6 +44,7 @@ impl SecurityView {
     pub(crate) fn new(
         requested: Option<SecurityLevel>,
         current: impl FnOnce() -> CurrentValues,
+        preflight: impl FnOnce() -> Option<PreflightInput>,
         keymap: ListKeymap,
     ) -> Self {
         Self {
@@ -53,7 +55,9 @@ impl SecurityView {
                 .unwrap_or(0),
             picker: crate::security::level::context()
                 .filter(|context| context.picker_enabled)
-                .map(|context| SecurityLevelPicker::new(context, current(), keymap.clone())),
+                .map(|context| {
+                    SecurityLevelPicker::new(context, current(), preflight(), keymap.clone())
+                }),
             keymap,
             cancelled: false,
             inspected: false,

@@ -320,6 +320,80 @@ pub(crate) async fn resolve_provider_auth_for_scope(
     }
 }
 
+/// PF-27-S05: header a plain provider API key is sent in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ProviderApiKeyHeader {
+    /// `Authorization: Bearer <key>`.
+    Bearer,
+    /// `x-api-key: <key>`.
+    XApiKey,
+}
+
+/// PF-27-S05: a plain API key that [`resolve_provider_auth`] would attach as
+/// a single request header, so it can be handed to a credential broker.
+pub struct ProviderApiKey {
+    pub value: String,
+    pub header: ProviderApiKeyHeader,
+}
+
+impl std::fmt::Debug for ProviderApiKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProviderApiKey")
+            .field("value", &"<redacted>")
+            .field("header", &self.header)
+            .finish()
+    }
+}
+
+/// Returns the provider's API key when its auth is exactly one key in one
+/// header (environment or stored provider key, `experimental_bearer_token`,
+/// or an OpenAI API-key login). Sign-in tokens, agent identity, command or
+/// header auth and AWS auth return `None`: they are not brokered.
+pub fn provider_api_key(
+    auth: Option<&CodexAuth>,
+    provider: &ModelProviderInfo,
+) -> codex_protocol::error::Result<Option<ProviderApiKey>> {
+    if provider.aws.is_some()
+        || provider.auth.is_some()
+        || matches!(auth, Some(CodexAuth::BedrockApiKey(_)))
+    {
+        return Ok(None);
+    }
+    let header = if provider.api_key_header_name().is_some() {
+        ProviderApiKeyHeader::XApiKey
+    } else {
+        ProviderApiKeyHeader::Bearer
+    };
+    let key = |value: String| ProviderApiKey { value, header };
+    if provider.env_key.is_some()
+        && let Some(auth) = auth
+    {
+        return Ok(match auth {
+            CodexAuth::ApiKey(_) => auth.get_token().ok().map(key),
+            _ => None,
+        });
+    }
+    if let Some(api_key) = provider.api_key()? {
+        return Ok(Some(key(api_key)));
+    }
+    if let Some(token) = provider.experimental_bearer_token.clone() {
+        return Ok(Some(ProviderApiKey {
+            value: token,
+            header: ProviderApiKeyHeader::Bearer,
+        }));
+    }
+    Ok(match auth {
+        Some(CodexAuth::ApiKey(_)) => {
+            auth.and_then(|auth| auth.get_token().ok())
+                .map(|value| ProviderApiKey {
+                    value,
+                    header: ProviderApiKeyHeader::Bearer,
+                })
+        }
+        _ => None,
+    })
+}
+
 fn should_bootstrap_chatgpt_agent_identity(
     agent_identity_policy: AgentIdentityAuthPolicy,
     auth: Option<&CodexAuth>,
@@ -580,6 +654,72 @@ mod tests {
         let actual = auth_provider_from_auth(&auth).to_auth_headers();
 
         assert_eq!(actual, expected);
+    }
+
+    /// The brokered key and header must match what direct auth would send.
+    fn assert_brokered_matches_direct(
+        auth: Option<&CodexAuth>,
+        provider: &ModelProviderInfo,
+        expected_header: ProviderApiKeyHeader,
+    ) {
+        let key = provider_api_key(auth, provider)
+            .expect("resolve key")
+            .expect("plain API key");
+        assert_eq!(key.header, expected_header);
+        let direct = resolve_provider_auth(auth, provider)
+            .expect("direct auth")
+            .to_auth_headers();
+        let (name, value) = match expected_header {
+            ProviderApiKeyHeader::Bearer => ("authorization", format!("Bearer {}", key.value)),
+            ProviderApiKeyHeader::XApiKey => ("x-api-key", key.value.clone()),
+        };
+        assert_eq!(
+            direct.get(name).and_then(|value| value.to_str().ok()),
+            Some(value.as_str())
+        );
+        assert!(!format!("{key:?}").contains(&key.value));
+    }
+
+    #[test]
+    fn pf_27_s05_plain_api_keys_are_extracted_with_their_header() {
+        let api_key = CodexAuth::from_api_key("sk-pf27s05-openai");
+        assert_brokered_matches_direct(
+            Some(&api_key),
+            &ModelProviderInfo::create_openai_provider(/*base_url*/ None),
+            ProviderApiKeyHeader::Bearer,
+        );
+        assert_brokered_matches_direct(
+            Some(&CodexAuth::from_api_key("sk-ant-pf27s05")),
+            &ModelProviderInfo::create_anthropic_provider(),
+            ProviderApiKeyHeader::XApiKey,
+        );
+        assert_brokered_matches_direct(
+            Some(&CodexAuth::from_api_key("zai-pf27s05")),
+            &ModelProviderInfo::create_zai_provider(),
+            ProviderApiKeyHeader::Bearer,
+        );
+        let mut bearer =
+            create_oss_provider_with_base_url("https://llm.example/v1", WireApi::Responses);
+        bearer.experimental_bearer_token = Some("bearer-pf27s05".to_string());
+        assert_brokered_matches_direct(None, &bearer, ProviderApiKeyHeader::Bearer);
+    }
+
+    #[test]
+    fn pf_27_s05_sign_in_and_other_auth_are_not_brokered() {
+        let openai = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
+        let chatgpt = CodexAuth::create_dummy_chatgpt_auth_for_testing();
+        let headers = CodexAuth::Headers(AuthHeaders::new(HeaderMap::new()));
+        let bedrock = CodexAuth::BedrockApiKey(BedrockApiKeyAuth {
+            api_key: "bedrock-api-key-test".to_string(),
+            region: "us-east-1".to_string(),
+        });
+        for auth in [None, Some(&chatgpt), Some(&headers), Some(&bedrock)] {
+            assert!(
+                provider_api_key(auth, &openai)
+                    .expect("resolve key")
+                    .is_none()
+            );
+        }
     }
 
     #[test]
