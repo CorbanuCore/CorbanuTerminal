@@ -412,7 +412,7 @@ impl Renderable for ClaudeApprovalView {
         let inner = width.saturating_sub(4).max(1);
         let (shown, total) = Self::detail_layout(request, inner);
         let header_rows = Self::rows(self.header_lines(request), inner);
-        let footer_rows = Self::rows(self.footer_lines(total, shown, 0), inner);
+        let footer_rows = Self::rows(self.footer_lines(total, shown, /*scroll*/ 0), inner);
         header_rows
             .saturating_add(footer_rows)
             .saturating_add(1)
@@ -434,7 +434,7 @@ impl Renderable for ClaudeApprovalView {
         let (shown, total) = Self::detail_layout(request, inner.width);
         let header = Paragraph::new(self.header_lines(request)).wrap(Wrap { trim: false });
         let header_rows = u16::try_from(header.line_count(inner.width)).unwrap_or(u16::MAX);
-        let footer_rows = Self::rows(self.footer_lines(total, shown, 0), inner.width);
+        let footer_rows = Self::rows(self.footer_lines(total, shown, /*scroll*/ 0), inner.width);
         // When space is short, the options and hint stay; details shrink.
         let detail_rows = inner
             .height
