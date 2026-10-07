@@ -92,9 +92,12 @@ fn pf_25_s01_only_the_grant_review_confirms() {
                         || text.contains(&format!("{module};"))
                         || text.split(&format!("{module}::{{")).skip(1).any(|rest| {
                             rest.split('}').next().is_some_and(|names| {
-                                names
-                                    .split(',')
-                                    .any(|name| name == "confirm" || name.starts_with("confirmas"))
+                                names.split(',').any(|name| {
+                                    name == "confirm"
+                                        || name
+                                            .strip_prefix("confirm")
+                                            .is_some_and(|rest| rest.starts_with("as"))
+                                })
                             })
                         })
                 })
