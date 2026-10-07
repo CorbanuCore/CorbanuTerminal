@@ -78,6 +78,10 @@ pause = 4.0
 key = "Escape"
 
 [[steps]]
+key = "Down"
+repeat = 20
+
+[[steps]]
 wait = "Migration cancelled. Nothing changed."
 
 [[steps]]
