@@ -3,7 +3,7 @@
 //! The picker builds one [`TransitionRequest`] when a person presses the
 //! confirm key on a review screen; nothing else constructs one, and no model,
 //! tool or app-server request reaches [`run`]. It saves the picker's level
-//! file and commits Core's transition (`codex_core::security_level_change`)
+//! file and commits Core's transition (`legacy_core::security_level_change`)
 //! off the async runtime (the Core store may wait up to 2 s for its lock).
 //!
 //! Order, so a crash or failure never leaves a weaker state than reviewed:
