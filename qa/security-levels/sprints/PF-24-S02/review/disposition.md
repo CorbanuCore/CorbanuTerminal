@@ -33,3 +33,10 @@
 | 2 | Low | Fixed. The downgrade wording (grants end, "saved by another session") appears only when the saved record is stricter than Permissive. Otherwise the review says the record is set or repaired to Permissive and makes no promise about grants. |
 | 3 | Low | Fixed. `take_restart_marker()` reads and removes the variable at process entry, in both `corbanu` and `codex-tui`, before any thread starts. |
 | 4 | Info | Fixed. For a reviewed transition the floor is the stored level that was reviewed (Permissive when absent or unreadable). `prepare_transition` keeps "the level in force" as its floor. |
+
+## Round 4: approve
+
+| # | Severity | Disposition |
+| - | -------- | ----------- |
+| 1 | Info | Fixed: the message now says "the previous level file was put back". |
+| 2 | Info | Not added. The two branches need a live policy tree, which TUI tests cannot build (`LevelBasis` can only be read from Core). Core covers the commit kinds behind them: `..._permissive_lowers_a_stricter_record_saved_elsewhere` (downgrade, saved by another session) and `..._a_confirmed_level_repairs_an_unreadable_state`. |

@@ -305,7 +305,7 @@ pub(crate) fn run(request: TransitionRequest) -> TransitionResult {
             Err(failed(
                 match restored {
                     Ok(()) => format!(
-                        "Not saved as chosen: Core saved {} for the next start, so the level file was put back to match it. Review it again",
+                        "Not saved as chosen: Core saved {} for the next start, and the previous level file was put back. Review it again",
                         report.next_start
                     ),
                     Err(restore) => format!(
