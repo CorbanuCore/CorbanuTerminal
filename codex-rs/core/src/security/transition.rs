@@ -319,7 +319,7 @@ impl TrustedSecurityController {
             }
             Err(error) => return Err(error),
         };
-        let committed = self.apply(&prepared, next.clone(), not_saved)?;
+        let committed = self.apply(&prepared, next, not_saved)?;
         if prepared.closes_channels() {
             self.notify_revocation_sinks();
         }
