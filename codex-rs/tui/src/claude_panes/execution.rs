@@ -82,15 +82,27 @@ pub(crate) async fn run_claude_command_plan(
         Some(containment) => {
             // The same file is checked and launched: found on PATH, never in
             // a folder the pane can write.
-            let claude =
-                resolve_contained_claude(&plan.executable, &[&plan.cwd, &containment.state_dir])?;
-            require_contained_claude_version(&claude).await?;
-            let claude = claude.to_string_lossy().into_owned();
+            let claude_path = resolve_contained_claude(
+                &plan.executable,
+                &[&plan.cwd, &containment.state_dir, &containment.panes_dir],
+            )?;
+            let claude = claude_path.to_string_lossy().into_owned();
             let bridge_port = plan
                 .bridge
                 .as_ref()
                 .map(|bridge| bridge.bind_addr.port())
                 .ok_or_else(|| anyhow!("a contained Claude pane needs its bridge"))?;
+            // `--version` runs in the same sandbox as the turn, so nothing it
+            // starts (an interpreter found on PATH) runs outside it.
+            let version = super::containment::contain(
+                containment,
+                &claude,
+                &["--version".to_string()],
+                &plan.env,
+                &plan.cwd,
+                bridge_port,
+            )?;
+            require_contained_claude_version(&claude_path, version, &plan.cwd).await?;
             Some(super::containment::contain(
                 containment,
                 &claude,
@@ -788,10 +800,15 @@ fn is_executable_file(path: &std::path::Path) -> bool {
 }
 
 /// Refuses a contained launch with a Claude Code older than
-/// [`CONTAINED_CLAUDE_MIN_VERSION`]. A file that passed is remembered by
+/// [`CONTAINED_CLAUDE_MIN_VERSION`], running `version` (`claude --version`
+/// in the turn's sandbox). A file that passed is remembered by
 /// path, size, modification time and (Unix) inode, so a replaced binary is
 /// checked again.
-async fn require_contained_claude_version(claude: &std::path::Path) -> Result<()> {
+async fn require_contained_claude_version(
+    claude: &std::path::Path,
+    version: super::containment::ContainedCommand,
+    cwd: &std::path::Path,
+) -> Result<()> {
     static PASSED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
     let identity = std::fs::metadata(claude).ok().map(|metadata| {
         #[cfg(unix)]
@@ -815,19 +832,22 @@ async fn require_contained_claude_version(claude: &std::path::Path) -> Result<()
     if identity.as_deref().is_some_and(passed) {
         return Ok(());
     }
-    let mut command = Command::new(claude);
+    let (program, args) = version
+        .argv
+        .split_first()
+        .ok_or_else(|| anyhow!("the sandboxed version check is empty"))?;
+    let mut command = Command::new(program);
     command
-        .arg("--version")
+        .args(args)
         .env_clear()
-        .envs(
-            ["PATH", "HOME"]
-                .into_iter()
-                .filter_map(|name| Some((name, std::env::var_os(name)?))),
-        )
-        .env("DISABLE_AUTOUPDATER", "1")
-        .env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
+        .envs(&version.env)
+        .current_dir(cwd)
         .stdin(Stdio::null())
         .kill_on_drop(true);
+    #[cfg(unix)]
+    if let Some(arg0) = version.arg0.as_deref() {
+        command.arg0(arg0);
+    }
     let output = tokio::time::timeout(Duration::from_secs(30), command.output())
         .await
         .map_err(|_| anyhow!("`{} --version` did not finish", claude.display()))?

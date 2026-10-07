@@ -2,8 +2,8 @@
 //! (#218).
 //!
 //! A stray key must never allow a tool:
-//! - each request opens on Deny, and Allow is chosen only with ←/→, then
-//!   Enter;
+//! - each request opens on Deny, and Allow is chosen only with ←/→, then,
+//!   after a pause, Enter;
 //! - every key but Esc and Ctrl-C (both deny) is ignored until [`INPUT_GUARD`]
 //!   has passed since the request first showed, since the last ignored key,
 //!   and since the person last typed in the composer; so an Enter meant for
@@ -173,7 +173,13 @@ impl ClaudeApprovalView {
         match key.code {
             KeyCode::Left | KeyCode::Right if self.can_allow() => {
                 self.choice = match self.choice {
-                    Choice::Deny => Choice::Allow,
+                    Choice::Deny => {
+                        // An Enter right after (a cursor move then send in
+                        // the composer) must not confirm it.
+                        self.quiet_until = Some(now + INPUT_GUARD);
+                        self.guard_over_drawn = false;
+                        Choice::Allow
+                    }
                     Choice::Allow => Choice::Deny,
                 };
             }
@@ -215,8 +221,23 @@ impl ClaudeApprovalView {
         lines
     }
 
-    fn details(request: &ClaudeApprovalRequest) -> Paragraph<'static> {
-        Paragraph::new(request.details.lines.clone()).wrap(Wrap { trim: false })
+    /// The details wrapped to `width`. Rows continuing a wrapped line are
+    /// indented, so only a real field name or label starts at the margin.
+    fn wrapped_details(request: &ClaudeApprovalRequest, width: u16) -> Vec<Line<'static>> {
+        let mut rows = Vec::new();
+        for line in &request.details.lines {
+            let options = crate::wrapping::RtOptions::new(usize::from(width.max(3)))
+                .subsequent_indent(Line::from("  "));
+            for row in crate::wrapping::word_wrap_line(line, options) {
+                let spans = row
+                    .spans
+                    .into_iter()
+                    .map(|span| Span::styled(span.content.into_owned(), span.style))
+                    .collect::<Vec<_>>();
+                rows.push(Line::from(spans).style(row.style));
+            }
+        }
+        rows
     }
 
     fn footer_lines(&self, total_rows: usize, shown_rows: u16, scroll: u16) -> Vec<Line<'static>> {
@@ -281,7 +302,7 @@ impl ClaudeApprovalView {
 
     /// `(detail rows shown, detail rows in total)` at `width`.
     fn detail_layout(request: &ClaudeApprovalRequest, width: u16) -> (u16, usize) {
-        let total = Self::details(request).line_count(width);
+        let total = Self::wrapped_details(request, width).len();
         let shown = u16::try_from(total)
             .unwrap_or(u16::MAX)
             .min(MAX_DETAIL_ROWS);
@@ -365,7 +386,11 @@ impl BottomPaneView for ClaudeApprovalView {
 
     fn next_frame_delay(&self) -> Option<Duration> {
         let now = Instant::now();
-        let shown_until = self.shown_at.get()? + INPUT_GUARD;
+        // Not drawn yet: it will be shortly, and the guard ends after that.
+        let Some(shown_at) = self.shown_at.get() else {
+            return Some(INPUT_GUARD);
+        };
+        let shown_until = shown_at + INPUT_GUARD;
         let until = self
             .quiet_until
             .map_or(shown_until, |quiet| quiet.max(shown_until));
@@ -439,7 +464,7 @@ impl Renderable for ClaudeApprovalView {
         };
         header.render(place(header_rows), buf);
         place(1);
-        Self::details(request)
+        Paragraph::new(Self::wrapped_details(request, inner.width))
             .scroll((scroll, 0))
             .render(place(detail_rows), buf);
         footer.render(place(footer_rows), buf);

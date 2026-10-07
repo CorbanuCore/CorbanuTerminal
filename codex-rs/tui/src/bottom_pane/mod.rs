@@ -235,6 +235,11 @@ pub(crate) struct BottomPane {
     view_stack: Vec<Box<dyn BottomPaneView>>,
     delayed_approval_requests: VecDeque<DelayedApprovalRequest>,
     last_composer_activity_at: Option<Instant>,
+    /// Any key the composer handled last (arrows too): a contained Claude
+    /// pane's approval popup stays guarded after it (#218).
+    last_composer_key_at: Option<Instant>,
+    /// The view on top at the last check, to tell it when it is uncovered.
+    last_top_view: Option<usize>,
 
     app_event_tx: AppEventSender,
     frame_requester: FrameRequester,
@@ -302,6 +307,8 @@ impl BottomPane {
             view_stack: Vec::new(),
             delayed_approval_requests: VecDeque::new(),
             last_composer_activity_at: None,
+            last_composer_key_at: None,
+            last_top_view: None,
             app_event_tx,
             frame_requester,
             thread_id: None,
@@ -634,6 +641,7 @@ impl BottomPane {
             if key_event.kind == KeyEventKind::Release {
                 return InputResult::None;
             }
+            self.sync_top_view();
 
             // We need three pieces of information after routing the key:
             // whether Esc completed the view, whether the view finished for any
@@ -700,6 +708,9 @@ impl BottomPane {
                             | KeyCode::Tab
                     );
             let (input_result, needs_redraw) = self.composer.handle_key_event(key_event);
+            if matches!(key_event.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
+                self.last_composer_key_at = Some(Instant::now());
+            }
             if records_composer_activity {
                 self.record_composer_activity_at(Instant::now());
             }
@@ -782,6 +793,7 @@ impl BottomPane {
     }
 
     fn pre_draw_tick_at(&mut self, now: Instant) {
+        self.sync_top_view();
         self.composer.sync_popups();
         self.maybe_show_delayed_approval_requests_at(now);
         self.tick_active_view(now);
@@ -1327,10 +1339,10 @@ impl BottomPane {
             }
         }
         if let Some(request) = request {
-            self.push_view(Box::new(ClaudeApprovalView::new(
-                request,
-                self.last_composer_activity_at,
-            )));
+            let typed_at = self
+                .last_composer_key_at
+                .max(self.last_composer_activity_at);
+            self.push_view(Box::new(ClaudeApprovalView::new(request, typed_at)));
         }
         self.request_redraw();
     }
@@ -1357,11 +1369,23 @@ impl BottomPane {
         self.request_redraw();
     }
 
-    /// Tell the view that is now on top that it is active again.
-    fn on_top_view_removed(&mut self) {
-        if let Some(view) = self.view_stack.last_mut() {
-            view.on_uncovered();
+    /// Tell the view now on top that it is active again whenever the top
+    /// view changed, however the view above it went away. Runs before each
+    /// draw and each key, so no key reaches an uncovered view first.
+    fn sync_top_view(&mut self) {
+        let top = self.view_stack.last().map(|view| {
+            std::ptr::from_ref::<dyn BottomPaneView>(view.as_ref()).cast::<()>() as usize
+        });
+        if top != self.last_top_view {
+            self.last_top_view = top;
+            if let Some(view) = self.view_stack.last_mut() {
+                view.on_uncovered();
+            }
         }
+    }
+
+    fn on_top_view_removed(&mut self) {
+        self.sync_top_view();
     }
 
     /// Dismiss the newest matching view without disturbing views stacked above it.
@@ -3179,6 +3203,38 @@ mod tests {
 
         assert_eq!(on_ctrl_c_calls.get(), 0);
         assert_eq!(handle_calls.get(), 1);
+    }
+
+    /// #218 round 3: however the view above goes away, the view below is
+    /// told it is uncovered before the next draw or key reaches it.
+    #[test]
+    fn uncovered_views_are_told_on_any_removal_path() {
+        struct UncoverView(Rc<Cell<usize>>);
+        impl Renderable for UncoverView {
+            fn render(&self, _area: Rect, _buf: &mut Buffer) {}
+            fn desired_height(&self, _width: u16) -> u16 {
+                1
+            }
+        }
+        impl BottomPaneView for UncoverView {
+            fn on_uncovered(&mut self) {
+                self.0.set(self.0.get() + 1);
+            }
+        }
+        let (tx_raw, _rx) = unbounded_channel::<AppEvent>();
+        let mut pane = test_pane(AppEventSender::new(tx_raw));
+        let below = Rc::new(Cell::new(0));
+        pane.push_view(Box::new(UncoverView(Rc::clone(&below))));
+        pane.pre_draw_tick_at(Instant::now());
+        let shown = below.get();
+        pane.push_view(Box::new(UncoverView(Rc::new(Cell::new(0)))));
+        pane.pre_draw_tick_at(Instant::now());
+        // Removed without any of the usual pop paths.
+        pane.view_stack.pop();
+        pane.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(below.get(), shown + 1);
+        pane.pre_draw_tick_at(Instant::now());
+        assert_eq!(below.get(), shown + 1);
     }
 
     #[test]

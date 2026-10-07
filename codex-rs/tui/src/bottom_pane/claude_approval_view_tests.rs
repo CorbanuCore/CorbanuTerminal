@@ -126,10 +126,14 @@ fn allowing_takes_a_choice_then_enter() {
     let (mut view, mut rx, shown_at) = view_for(json!({ "command": "touch x" }));
     let later = shown_at + INPUT_GUARD;
     view.handle_key_at(key(KeyCode::Right), later);
-    // A held (repeated) Enter never confirms.
-    view.handle_key_at(repeat(KeyCode::Enter), later);
+    // An Enter right after choosing Allow (a cursor move, then send) is
+    // ignored and restarts the guard; a held (repeated) Enter never confirms.
+    view.handle_key_at(key(KeyCode::Enter), later + INPUT_GUARD / 10);
     assert!(!view.is_complete());
-    view.handle_key_at(key(KeyCode::Enter), later);
+    let quiet = later + INPUT_GUARD / 10 + INPUT_GUARD;
+    view.handle_key_at(repeat(KeyCode::Enter), quiet);
+    assert!(!view.is_complete());
+    view.handle_key_at(key(KeyCode::Enter), quiet);
     assert!(view.is_complete());
     assert_eq!(rx.try_recv(), Ok(true));
 }
@@ -165,7 +169,7 @@ fn requests_queue_and_each_starts_on_deny_with_a_fresh_guard() {
 
     let later = shown_at + INPUT_GUARD;
     view.handle_key_at(key(KeyCode::Right), later);
-    view.handle_key_at(key(KeyCode::Enter), later);
+    view.handle_key_at(key(KeyCode::Enter), later + INPUT_GUARD);
     assert_eq!(first_rx.try_recv(), Ok(true));
     assert!(!view.is_complete());
     // A quick second Enter lands on a request not drawn yet: ignored.
@@ -175,7 +179,11 @@ fn requests_queue_and_each_starts_on_deny_with_a_fresh_guard() {
     let screen = render(&view, 80);
     assert!(screen.contains("touch second"), "{screen}");
     let shown_again = view.shown_at.get().expect("drawn");
-    view.handle_key_at(key(KeyCode::Enter), shown_again + INPUT_GUARD);
+    // Past its own guard and the quiet time the first answer started.
+    view.handle_key_at(
+        key(KeyCode::Enter),
+        shown_again.max(later + INPUT_GUARD) + INPUT_GUARD,
+    );
     assert_eq!(second_rx.try_recv(), Ok(false));
     assert!(view.is_complete());
 }
@@ -249,7 +257,7 @@ fn long_commands_are_fully_visible_and_allow_needs_the_end_seen() {
         "{screen}"
     );
     view.handle_key_at(key(KeyCode::Right), later);
-    view.handle_key_at(key(KeyCode::Enter), later);
+    view.handle_key_at(key(KeyCode::Enter), later + INPUT_GUARD);
     assert_eq!(rx.try_recv(), Ok(true));
 }
 

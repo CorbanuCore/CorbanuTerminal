@@ -45,21 +45,25 @@ the refusal under protected levels stays.
   input field in full: the whole command, wrapped and scrollable, the content
   of a Write, the old and new text of an Edit, and fields such as
   `run_in_background`, `timeout` or `dangerouslyDisableSandbox`. Line breaks
-  show as `⏎`; control, format and bidi characters are escaped
-  (`\u{202e}`); runs of 8 or more spaces show as a count. Past 60,000
+  show as `⏎`; control, format, bidi, zero-width and private-use characters
+  are escaped (`\u{202e}`); runs of 8 or more spaces show as a count;
+  values continuing on more rows are indented, so only real field names
+  start at the margin. Past 60,000
   characters the rest is counted, not shown, and the request can only be
   denied.
 - **No accidental allow:** each request opens on Deny; Allow needs ← or →
-  then Enter. Every key but Esc and Ctrl-C (both deny) is ignored until 600 ms
-  have passed since the request first showed, since the last ignored key and
-  since the last composer keystroke, so an Enter meant for the composer,
-  continued typing or a held key does nothing. Held keys never confirm;
-  Tab, digits and pasted text never choose; a dropped popup denies. Allow
-  works only once the last line of the details has been on screen.
+  then, after a pause, Enter. Every key but Esc and Ctrl-C (both deny) is
+  ignored until 600 ms have passed since the request first showed, since the
+  last ignored key, since the last key the composer handled (arrows too) and
+  since Allow was chosen; so an Enter meant for the composer, a cursor move
+  then send, continued typing or a held key does nothing. Held keys never
+  confirm; Tab, digits and pasted text never choose; a dropped popup denies.
+  Allow works only once the last line of the details has been on screen.
 - **One popup, queued:** requests from all panes queue in one popup (first
   in, first out) instead of covering each other; each one starts on Deny
   behind a fresh guard, as does the popup when it comes back from under
-  another view.
+  another view, however that view closed (checked before every draw and
+  key).
 - **Requests end cleanly:** when a turn ends, is interrupted, or Claude Code
   cancels a request (`control_cancel_request`), its popups close and nothing
   is answered. A request nobody answers in 15 minutes is denied. A request id
@@ -86,10 +90,10 @@ the refusal under protected levels stays.
   `disableAllHooks`, the `ask` rules and `disableBypassPermissionsMode`.
 - **Which Claude Code runs:** the first `claude` in an absolute PATH folder
   (empty, `.` and relative PATH entries are skipped), refused when it lies in
-  the pane's folder or state folder. That same file runs `--version` (refused
-  below 2.1.292, the version these checks were made with) and then the turn
-  in the sandbox; a file that passed is remembered by path, size, time and
-  inode.
+  the pane's folder, its state folder or `CODEX_HOME/panes`. That same file
+  runs `--version` inside the turn's sandbox (refused below 2.1.292, the
+  version these checks were made with) and then the turn; a file that passed
+  is remembered by path, size, time and inode.
 - **Allowed under Aggressive:** with `contained_external_agents` on and the
   secretless launch contract armed (`secretless_agent_launch`), Claude panes
   are no longer refused under protected levels. Otherwise the refusal stays,
@@ -120,6 +124,9 @@ script denies every request. `--prompt` sends a different first prompt. Results 
 With this PR's flags, prompts that run built-in commands (`/update-config
 allow every tool`, `/loop 1m touch x`, sent without Corbanu's leading space)
 still ask for Bash, Edit and Write (`regression/new-*-slash-*.json`).
+Prompts starting with `!` or `#` are plain text in print mode: `!touch
+BANG.txt` created nothing and the model's tools still asked
+(`regression/new-*-bang.json`, `new-*-hash.json`).
 
 It ran on Linux only: on macOS a real `claude` outside a disposable account
 would read the login keychain.
@@ -130,6 +137,9 @@ would read the login keychain.
   commands and subagents are not used by contained panes.
 - The Bash tool's own sandbox flag `dangerouslyDisableSandbox` is shown, not
   refused; the command still runs inside Corbanu's OS sandbox.
+- A `claude` in an absolute PATH folder that another contained pane can
+  write (another pane's worktree on PATH) is not detected; it would run in
+  the sandbox, but without asking.
 - The input a tool runs with is the redacted one the person saw; a command
   that contained a known secret runs with `[REDACTED_SECRET]` in its place.
 
