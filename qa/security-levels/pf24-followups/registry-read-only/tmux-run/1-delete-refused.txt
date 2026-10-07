@@ -1,0 +1,36 @@
+
+[demo] restarting Corbanu Terminal with the same profile...
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.2   /model to change                │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/workspace │
+╰──────────────────────────────────────────────────────╯
+
+
+› Run exactly this shell command once, without changing it: R='Library/Application Support/Corbanu/aggressive-homes';
+  ls "$R" | wc -l; rm "$R"/* ; ls "$R" | wc -l; touch probe.txt && echo probe-written . Then tell me in one sentence
+  what happened.
+
+
+✔ You approved Corbanu to run R='Library/Application Support/Corbanu/aggressive-homes'; ls "$R" | wc -l; rm... this time
+
+• Ran R='Library/Application Support/Corbanu/aggressive-homes'; ls "$R" | wc -l; rm "$R"/* ; ls "$R" | wc -l; touch
+  │ probe.txt && echo probe-written .
+  └        1
+    rm: Library/Application Support/Corbanu/
+    aggressive-homes/25936f5437c9ac0fa3b5643f99722ce0ce0c7af741afc1a25ca0fcec9c127b77: Operation not permitted
+           1
+    probe-written .
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• The directory initially contained one file; the rm was blocked with "Operation not permitted" (the writable root only
+  grants read access to that path), so the file remained, but probe.txt was successfully written in the workspace.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Use /skills to list available skills
+
+  Z.AI GLM 5.2 via zai standard · /Volumes/CorbanuDrive/Corbanu/worktrees/sec-tui5-20261006/qa/demos/out/registry-read-…
