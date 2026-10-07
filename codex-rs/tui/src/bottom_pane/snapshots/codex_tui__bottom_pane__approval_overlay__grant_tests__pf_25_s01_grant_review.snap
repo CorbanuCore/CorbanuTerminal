@@ -22,4 +22,7 @@ expression: "render(&view, 100)"
  Still denied: any other command or folder, this command a second time, its parent, sibling and
  child agents, other sessions, and everything else Aggressive denies.
 
- enter grant and run · u change limit · esc back to the approval, nothing granted
+ › Back to the approval (nothing granted)
+   Grant and run
+
+ ↑/↓ choose · enter confirm · u change limit · esc back to the approval

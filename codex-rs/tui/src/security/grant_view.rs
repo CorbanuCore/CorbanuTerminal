@@ -3,10 +3,15 @@
 //!
 //! Core offers a grant while it waits for the answer to one exact command
 //! (`legacy_core::security_grant`). The review shows every field of that
-//! offer and what stays denied. Only Enter here confirms it, through
-//! [`GrantReview::confirm`]; Esc goes back to the approval with nothing
-//! granted. The offer is Core's data: an agent's reason or command text is
+//! offer and what stays denied. It opens on "Back"; the person moves to
+//! "Grant and run" with an arrow key and presses Enter, so a double or held
+//! Enter cannot grant. Only then [`GrantReview::confirm`] records the grant,
+//! and it applies only when the approval is approved. Esc goes back to the
+//! approval with nothing granted, and so does a review that does not fit on
+//! screen. The offer is Core's data: an agent's reason or command text is
 //! shown, never trusted, and nothing an agent sends reaches the confirm key.
+
+use std::cell::Cell;
 
 use chrono::Local;
 use chrono::TimeZone;
@@ -19,12 +24,17 @@ use crate::legacy_core::security_grant::GrantOffer;
 use crate::legacy_core::security_grant::GrantUses;
 use crate::legacy_core::security_grant::HeldGrant;
 use crate::legacy_core::security_grant::confirm;
+use crate::legacy_core::security_grant::escape_controls;
 
 /// What the grant review is showing.
 pub(crate) struct GrantReview {
     offer: GrantOffer,
     uses: GrantUses,
     error: Option<String>,
+    /// "Grant and run" is highlighted (it starts on "Back").
+    grant_selected: bool,
+    /// The last render cut the review off; granting needs all of it seen.
+    clipped: Cell<bool>,
 }
 
 impl GrantReview {
@@ -33,7 +43,24 @@ impl GrantReview {
             offer,
             uses: GrantUses::Once,
             error: None,
+            grant_selected: false,
+            clipped: Cell::new(true),
         }
+    }
+
+    /// An arrow key: move between "Back" and "Grant and run".
+    pub(crate) fn toggle_row(&mut self) {
+        self.grant_selected = !self.grant_selected;
+    }
+
+    pub(crate) fn grant_selected(&self) -> bool {
+        self.grant_selected
+    }
+
+    /// Record whether the last render showed all `height` rows.
+    pub(crate) fn set_visible_height(&self, width: u16, height: u16) {
+        self.clipped
+            .set(self.lines(width).len() > usize::from(height));
     }
 
     /// `u`: one run, or any run of this exact command until it expires.
@@ -48,6 +75,12 @@ impl GrantReview {
     /// The person pressed Enter: issue exactly the grant shown. On failure
     /// the review stays open with the reason and nothing is granted.
     pub(crate) fn confirm(&mut self) -> Option<ConfirmedGrant> {
+        if self.clipped.get() {
+            self.error = Some(
+                "The review does not fit on screen. Make the terminal taller to see all of it before granting.".to_string(),
+            );
+            return None;
+        }
         match confirm(&self.offer, self.uses) {
             Ok(confirmed) => Some(confirmed),
             Err(error) => {
@@ -93,7 +126,10 @@ impl GrantReview {
         lines.extend(field("Resource", offer.resource.clone()));
         lines.extend(field(
             "Command",
-            format!("$ {}", strip_bash_lc_and_escape(&offer.command)),
+            format!(
+                "$ {}",
+                escape_controls(&strip_bash_lc_and_escape(&offer.command))
+            ),
         ));
         lines.extend(field("Folder", offer.cwd.clone()));
         lines.extend(field("Digest", offer.operation.clone()));
@@ -126,8 +162,21 @@ impl GrantReview {
             lines.extend(wrap(error).into_iter().map(Stylize::red));
         }
         lines.push(Line::default());
+        let row = |selected: bool, text: &str| -> Line<'static> {
+            if selected {
+                format!("› {text}").cyan().bold().into()
+            } else {
+                format!("  {text}").into()
+            }
+        };
+        lines.push(row(
+            !self.grant_selected,
+            "Back to the approval (nothing granted)",
+        ));
+        lines.push(row(self.grant_selected, "Grant and run"));
+        lines.push(Line::default());
         lines.push(
-            "enter grant and run · u change limit · esc back to the approval, nothing granted"
+            "↑/↓ choose · enter confirm · u change limit · esc back to the approval"
                 .dim()
                 .into(),
         );

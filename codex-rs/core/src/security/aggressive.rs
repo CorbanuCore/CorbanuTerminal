@@ -182,16 +182,15 @@ pub(crate) fn issue(
     issue_labelled(thread, state, grant, String::new(), now_unix_seconds)
 }
 
-/// Host-only: hold `grant` for `thread` under the policy in `state`. The
-/// grant TUI (PF-25-S01, `grant_offer::confirm`) is the one caller; no
-/// model-reachable path is. `label` is what the human saw.
-pub(crate) fn issue_labelled(
+/// Whether `grant` may apply to `thread` under the policy in `state` now:
+/// Aggressive and live, this session and agent, a known surface, unexpired.
+/// Returns the policy epoch and revocation generation it binds to.
+pub(crate) fn check(
     thread: ThreadId,
     state: &PostTaintState,
-    grant: BoundedGrant,
-    label: String,
+    grant: &BoundedGrant,
     now_unix_seconds: i64,
-) -> Result<(), GrantRefusal> {
+) -> Result<(u64, u64), GrantRefusal> {
     let (epoch, revocation_generation, actor_chain) = aggressive_binding(state)?;
     grant
         .validate()
@@ -227,6 +226,21 @@ pub(crate) fn issue_labelled(
     if grant.is_expired_at(now_unix_seconds) {
         return Err(GrantRefusal::Expired);
     }
+    Ok((epoch, revocation_generation))
+}
+
+/// Host-only: hold `grant` for `thread` under the policy in `state`. Only
+/// a grant the human confirmed in the grant review reaches it
+/// (`grant_offer`, PF-25-S01); no model-reachable path does. `label` is
+/// what the human saw.
+pub(crate) fn issue_labelled(
+    thread: ThreadId,
+    state: &PostTaintState,
+    grant: BoundedGrant,
+    label: String,
+    now_unix_seconds: i64,
+) -> Result<(), GrantRefusal> {
+    let (epoch, revocation_generation) = check(thread, state, &grant, now_unix_seconds)?;
     let mut ledger = LEDGER.lock().unwrap_or_else(PoisonError::into_inner);
     let entries = ledger.entry(thread).or_default();
     entries.retain(|entry| entry.live(epoch, revocation_generation, now_unix_seconds));

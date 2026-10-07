@@ -794,35 +794,48 @@ impl ApprovalOverlay {
 }
 
 impl ApprovalOverlay {
-    /// PF-25-S01: keys while the grant review is open. Enter confirms the
-    /// grant shown and approves the command; Esc goes back to the approval.
+    /// PF-25-S01: keys while the grant review is open. Arrow keys move
+    /// between "Back" and "Grant and run"; Enter on "Grant and run" records
+    /// the grant shown and approves the command; Enter on "Back" and Esc go
+    /// back to the approval. A held key never confirms.
     fn handle_grant_review_key(&mut self, key_event: KeyEvent) {
         if key_event.kind != KeyEventKind::Press {
             return;
         }
         if self.list_keymap.cancel.is_pressed(key_event) {
-            self.grant_review = None;
+            self.close_grant_review();
             return;
         }
-        if key_event.code == KeyCode::Char('u') && key_event.modifiers == KeyModifiers::NONE {
-            if let Some(review) = self.grant_review.as_mut() {
-                review.toggle_uses();
-            }
-            return;
-        }
-        if !self.is_accept(key_event) {
-            return;
-        }
+        let navigate = matches!(key_event.code, KeyCode::Up | KeyCode::Down)
+            && key_event.modifiers == KeyModifiers::NONE;
+        let accept = self.is_accept(key_event);
         let Some(review) = self.grant_review.as_mut() else {
+            return;
+        };
+        if key_event.code == KeyCode::Char('u') && key_event.modifiers == KeyModifiers::NONE {
+            review.toggle_uses();
+            return;
+        }
+        if navigate {
+            review.toggle_row();
+            return;
+        }
+        if !accept {
+            return;
+        }
+        if !review.grant_selected() {
+            self.close_grant_review();
+            return;
+        }
+        // The request first: a grant is recorded only for the approval
+        // that is answered here.
+        let Some(ApprovalRequest::Exec(request)) = self.current_request.clone() else {
             return;
         };
         let Some(confirmed) = review.confirm() else {
             return;
         };
         let command = review.command().to_vec();
-        let Some(ApprovalRequest::Exec(request)) = self.current_request.clone() else {
-            return;
-        };
         let expires = chrono::DateTime::from_timestamp(confirmed.expires_at_unix_seconds, 0)
             .map(|time| {
                 time.with_timezone(&chrono::Local)
@@ -835,7 +848,10 @@ impl ApprovalOverlay {
                 vec![
                     "✔ ".green(),
                     "You granted ".into(),
-                    strip_bash_lc_and_escape(&command).bold(),
+                    crate::legacy_core::security_grant::escape_controls(&strip_bash_lc_and_escape(
+                        &command,
+                    ))
+                    .bold(),
                     format!(" without the Aggressive protected-path rules (expires {expires})")
                         .into(),
                 ]
@@ -850,6 +866,12 @@ impl ApprovalOverlay {
         self.grant_review = None;
         self.current_complete = true;
         self.advance_queue();
+    }
+
+    /// Back to the approval, nothing granted; its Enter needs a fresh choice.
+    fn close_grant_review(&mut self) {
+        self.grant_review = None;
+        self.typing_guard.on_request_changed();
     }
 }
 
@@ -914,6 +936,12 @@ impl BottomPaneView for ApprovalOverlay {
         CancellationEvent::Handled
     }
 
+    /// Esc in the grant review goes back to the approval; it must not reach
+    /// the pane's cancel path, which would decline the command.
+    fn prefer_esc_to_handle_key_event(&self) -> bool {
+        self.grant_review.is_some()
+    }
+
     fn is_complete(&self) -> bool {
         self.done
     }
@@ -955,6 +983,7 @@ impl Renderable for ApprovalOverlay {
                 width: area.width.saturating_sub(2),
                 height: area.height.saturating_sub(1),
             };
+            review.set_visible_height(area.width, area.height);
             Widget::render(Paragraph::new(review.lines(area.width)), area, buf);
             return;
         }
@@ -1237,14 +1266,31 @@ fn grant_offer(
     request: &ExecApprovalRequest,
     features: &Features,
 ) -> Option<crate::legacy_core::security_grant::GrantOffer> {
-    if !features.enabled(Feature::SecurityLevels) {
+    if !features.enabled(Feature::SecurityLevels)
+        || !request
+            .available_decisions
+            .contains(&CommandExecutionApprovalDecision::Accept)
+    {
         return None;
     }
     #[cfg(test)]
-    if let Some(offer) = grant_tests::TEST_OFFER.with(|offer| offer.borrow().clone()) {
-        return Some(offer);
-    }
-    crate::legacy_core::security_grant::offer(request.thread_id, &request.id)
+    let offer = grant_tests::TEST_OFFER
+        .with(|offer| offer.borrow().clone())
+        .or_else(|| crate::legacy_core::security_grant::offer(request.thread_id, &request.id));
+    #[cfg(not(test))]
+    let offer = crate::legacy_core::security_grant::offer(request.thread_id, &request.id);
+    // The review shows Core's copy of the command; it must be the one this
+    // approval shows.
+    offer.filter(|offer| same_command(&offer.command, &request.command))
+}
+
+/// Whether `shown` (from the approval request, possibly re-split from one
+/// string) is Core's `command`.
+fn same_command(command: &[String], shown: &[String]) -> bool {
+    command == shown
+        || shown
+            == [shlex::try_join(command.iter().map(String::as_str))
+                .unwrap_or_else(|_| command.join(" "))]
 }
 
 fn grant_option() -> ApprovalOption {

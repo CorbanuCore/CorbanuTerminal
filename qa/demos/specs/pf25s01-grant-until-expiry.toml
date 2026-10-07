@@ -1,7 +1,7 @@
 # PF-25-S01: A grant until expiry is listed in /security (GLM 5.2).
 id = "pf25s01-grant-until-expiry"
 feature = "A grant until expiry is listed in /security"
-expected = "In the grant review, u changes the limit to any run of this exact command until it expires; Enter grants it and GLM's read works. /security then lists the grant with its command, limit and expiry time."
+expected = "In the grant review, u changes the limit to any run of this exact command until it expires; Down and Enter grant it and GLM's read works. /security then lists the grant with its command, limit and expiry time."
 model = "glm-5.2"
 provider = "zai"
 config = """
@@ -75,6 +75,12 @@ key = "u"
 wait = "any run of this exact command until it expires"
 [[steps]]
 pause = 3.0
+[[steps]]
+key = "Down"
+[[steps]]
+wait = "› Grant and run"
+[[steps]]
+pause = 1.5
 [[steps]]
 key = "Enter"
 [[steps]]
