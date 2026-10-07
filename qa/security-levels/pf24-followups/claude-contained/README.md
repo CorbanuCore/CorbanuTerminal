@@ -162,3 +162,30 @@ would read the login keychain.
 - **Review** (Opus 5.5 High): request changes, then approve with fixes; all
   fixed or recorded in `review/disposition.md`.
 - **Video:** [contained Claude pane probes](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/claude-contained-claude-contained-probes-d2c36f09303f-2026-10-06.mp4)
+
+## Gate evidence (part 2, after review rev-232)
+
+- **Tests** (after `just fmt` and `just fix -p codex-tui`): `just test -p
+  codex-tui -E 'test(claude_panes) | test(bottom_pane) | test(security) |
+  test(app::) | test(chatwidget)'`: 2639 of 2641 pass. The two failures
+  touch nothing changed here: `default_command_popup_items_snapshot` (the
+  slash-command list differs from its snapshot) and a wallet test whose Unix
+  socket path is too long under this checkout. Linux: `cargo clippy -p
+  codex-tui --tests -D warnings` clean on the RTX box. New:
+  the popup (`claude_approval_view`: Enter on a fresh popup, the guard, held
+  keys, a dropped popup, a long multi-line command, a request too long to
+  show, a snapshot), the details (`approval`: every field, escapes,
+  redaction, the limit), the turn (`approval_turn`: repeated and missing
+  request ids, a second result, interrupt and `control_cancel_request` close
+  popups, Claude Code exiting before the prompt, a 300 KB prompt, the
+  timeout, version parsing), the contained flags and settings, and the
+  refusal lifting only with the feature, the armed contract and a sandbox.
+- **Real Claude Code regression:** above (`regression/`).
+- **tmux runs** (`tmux-run/7-macos-review-fixes.txt`): GLM 5.2 on Z.AI with
+  Claude Code 2.1.292 under Aggressive: the popup opens on Deny; Right, Enter
+  allowed `touch approved.txt`, Esc denied `touch denied.txt`. With the
+  protocol stand-in `fake-claude/`: an Enter sent as the popup appeared was
+  ignored, the untouched popup's Enter denied, the two-line command showed
+  `⏎` and `\u{202e}`.
+- **Videos:** [approvals under Aggressive](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/claude-contained-claude-contained-approvals-3611045bbe3e-2026-10-06.mp4),
+  [popup guard and escaping](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/claude-contained-claude-contained-approval-guard-3611045bbe3e-2026-10-06.mp4)

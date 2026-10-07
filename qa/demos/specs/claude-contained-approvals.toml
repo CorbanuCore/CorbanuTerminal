@@ -4,7 +4,7 @@
 #   DEMO_RESTART=1 PF24_CANDIDATE=<corbanu> CLAUDE_BIN_DIR=<claude 2.1.29x bin>
 #   --bin qa/security-levels/pf24-followups/claude-contained/demo-launch.sh
 id = "claude-contained-approvals"
-feature = "Contained Claude pane under Aggressive asks before each tool"
+feature = "Contained Claude pane under Aggressive asks before each command (popup opens on Deny)"
 expected = "With Aggressive active the Z.AI Claude pane opens; each Bash command shows an approval popup that opens on Deny; the allowed one (Right, Enter) creates approved.txt, the denied one (Esc) does not run."
 model = "glm-5.2"
 provider = "zai"

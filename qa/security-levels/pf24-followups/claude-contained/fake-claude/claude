@@ -27,17 +27,19 @@ ask() {
   esac
 }
 
-if ask req-1 '"touch approved.txt\nls -l approved.txt"' "Create approved.txt"; then
-  touch approved.txt && ls -l approved.txt >/dev/null && first=allowed
+# The first command spans two lines and hides a right-to-left override; the
+# popup shows both.
+if ask req-1 '"touch first.txt\nls first.txt # \u202etxt.hs"' "Create first.txt"; then
+  touch first.txt && first=allowed
 else
   first=denied
 fi
-if ask req-2 '"touch denied.txt"' "Create denied.txt"; then
-  touch denied.txt && second=allowed
+if ask req-2 '"touch second.txt"' "Create second.txt"; then
+  touch second.txt && second=allowed
 else
   second=denied
 fi
-text="touch approved.txt was $first; touch denied.txt was $second."
+text="touch first.txt was $first; touch second.txt was $second."
 printf '%s\n' "{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"$text\"}]},\"session_id\":\"$session\"}"
 printf '%s\n' "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"$text\",\"session_id\":\"$session\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}"
 cat > /dev/null
