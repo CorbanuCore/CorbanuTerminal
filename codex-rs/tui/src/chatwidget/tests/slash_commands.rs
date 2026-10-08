@@ -1436,9 +1436,11 @@ async fn signed_out_usage_command_reports_chatgpt_login_requirement() {
         .map(|cell| lines_to_single_string(cell))
         .collect::<Vec<_>>()
         .join("\n");
+    // The hint names the build's cost command; pin the shipped wording, which
+    // the developer-accounting build replaces with `/cost`.
     assert_chatwidget_snapshot!(
         "signed_out_usage_command_reports_chatgpt_login_requirement",
-        rendered
+        rendered.replace("`/cost`", "`/usage requests`")
     );
     assert_eq!(recall_latest_after_clearing(&mut chat), "/usage");
 }
@@ -1462,9 +1464,35 @@ async fn signed_out_usage_command_with_args_reports_chatgpt_login_requirement() 
     // The account view needs that sign-in; what a turn cost does not, and an
     // operator on another provider must be told where to look instead of being
     // left to conclude the feature does not exist.
+    // Named by the command this build resolves: `/cost` only exists where
+    // costs are recorded.
+    let command = crate::chatwidget::cost_command();
     assert!(
-        rendered.contains("run `/cost`"),
-        "expected the recorded-cost view to be named by its current command, got: {rendered:?}"
+        rendered.contains(&format!("run `{command}`")),
+        "expected the recorded-cost view to be named, got: {rendered:?}"
+    );
+    let name = command
+        .trim_start_matches('/')
+        .split_whitespace()
+        .next()
+        .unwrap();
+    assert!(
+        crate::bottom_pane::slash_commands::find_builtin_command(
+            name,
+            crate::bottom_pane::slash_commands::BuiltinCommandFlags {
+                collaboration_modes_enabled: true,
+                connectors_enabled: true,
+                plugins_command_enabled: true,
+                token_activity_command_enabled: false,
+                service_tier_commands_enabled: true,
+                goal_command_enabled: true,
+                personality_command_enabled: true,
+                allow_elevate_sandbox: true,
+                side_conversation_active: false,
+            },
+        )
+        .is_some(),
+        "the hint names `{command}`, which this build does not resolve"
     );
     assert_eq!(recall_latest_after_clearing(&mut chat), "/usage weekly");
 }

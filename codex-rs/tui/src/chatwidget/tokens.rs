@@ -736,28 +736,45 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
     inspection_pages_for(result, /*period*/ None)
 }
 
+/// The command that opens this view in this build: `/cost` exists only where
+/// costs are recorded; elsewhere the view is reached as `/usage requests`.
+pub(crate) fn cost_command() -> &'static str {
+    if cfg!(feature = "developer-accounting") {
+        "/cost"
+    } else {
+        "/usage requests"
+    }
+}
+
 /// What the user can do when a view has no figures to show. `None` where the
 /// state line already says it (a `Ready` view, or a range).
-fn unavailable_next_step(state: &InspectionDay) -> Option<&'static str> {
+fn unavailable_next_step(state: &InspectionDay) -> Option<String> {
+    let cost = cost_command();
     Some(match state {
+        InspectionDay::Absent if cfg!(feature = "developer-accounting") => format!(
+            "Next step: send a turn in this conversation, then run {cost} again. If it stays unavailable, check your provider's bill."
+        ),
         InspectionDay::Absent => {
-            "Next step: send a turn in this conversation, then run /cost again. If it stays unavailable, this build does not record costs; check your provider's bill."
+            "Next step: this build does not record costs; check your provider's bill.".into()
         }
         InspectionDay::MissingThread => {
-            "Next step: open a saved conversation with /resume, then run /cost there."
+            format!("Next step: open a saved conversation with /resume, then run {cost} there.")
         }
+        // The ledger's checkpoint advances only when a request is recorded,
+        // so waiting alone never clears this.
         InspectionDay::CheckpointLag => {
-            "Next step: wait a moment for the ledger to catch up, then select Refresh."
+            "Next step: send a turn in this conversation to bring the ledger up to date, then select Refresh.".into()
         }
         InspectionDay::NeedsRefresh => {
-            "Next step: select Refresh. If it stays unavailable, the recorded totals cannot be checked here; check your provider's bill."
+            "Next step: select Refresh. If it stays unavailable, the recorded totals cannot be checked here; check your provider's bill.".into()
         }
-        InspectionDay::TooLarge => {
-            "Next step: open a shorter span, such as one UTC day with /cost YYYY-MM-DD. If one day is still refused, the ledger is too large to inspect here; check your provider's bill."
-        }
-        InspectionDay::DetailUnavailable { .. } => {
-            "Next step: request detail is kept for recent days only; open a more recent day with /cost YYYY-MM-DD, or check your provider's bill for this one."
-        }
+        // The limit is per window, so a few hours of a refused day can open.
+        InspectionDay::TooLarge => format!(
+            "Next step: open a shorter span, such as a few hours with {cost} START END hour (UTC timestamps ending Z). If that is refused too, check your provider's bill."
+        ),
+        InspectionDay::DetailUnavailable { .. } => format!(
+            "Next step: request detail is kept for recent days only; open a more recent day with {cost} YYYY-MM-DD, or check your provider's bill for this one."
+        ),
         InspectionDay::Ready(_) | InspectionDay::Range { .. } => return None,
     })
 }
@@ -786,8 +803,20 @@ fn inspection_pages_for(
         Ok(InspectionDay::Ready(view)) => view,
         other => {
             if let Some(step) = other.as_ref().ok().and_then(unavailable_next_step) {
-                pages[0].text.insert(0, step.into());
+                pages[0].text.insert(0, step);
             }
+            // A load error carries its next step in the same message; it gets
+            // its own line, as the states above do.
+            let other = match other {
+                Err(message) => match message.split_once(" Next step: ") {
+                    Some((reason, step)) => {
+                        pages[0].text.insert(0, format!("Next step: {step}"));
+                        Err(reason.to_string())
+                    }
+                    None => Err(message),
+                },
+                other => other,
+            };
             pages[0].text.insert(0, match other {
                 Ok(InspectionDay::Absent) => "Unavailable — accounting ledger not installed. Collection remains off.".into(),
                 Ok(InspectionDay::MissingThread) => "Unavailable — native thread no longer exists.".into(),
@@ -1102,10 +1131,16 @@ fn inspection_pages_for(
                 .flat_map(|others| others.requests.values().flatten()),
         ),
     );
+    let outside_per_use = ready
+        .other_conversations
+        .iter()
+        .flat_map(|others| others.requests.values().flatten())
+        .any(|quote| !quote.is_plan());
     let overview = plain_overview(
         heading,
         ready.requests.values().flatten(),
         outside,
+        outside_per_use,
         next_step,
     );
     pages[0].text.splice(0..0, overview);
@@ -1433,9 +1468,11 @@ fn short_cost(quotes: &[&ObservationQuote]) -> String {
         ) {
             ((COVERED, _), _) => "covered by subscription".to_string(),
             (_, Some(billed)) => format!("billed {}", billed.text()),
-            ((_, cost), None) if cost == NO_PRICE => "no price available".to_string(),
-            ((_, cost), None) if cost == NO_USAGE => "usage incomplete".to_string(),
+            // Only the leading per-use figure is reworded; a subscription part
+            // after it keeps its own words.
             ((_, cost), None) => cost
+                .replacen(NO_PRICE, "no price available", 1)
+                .replacen(NO_USAGE, "usage incomplete", 1)
                 .replacen("Estimated cost: not available", "cost not available", 1)
                 .replacen("Estimated cost: ", "estimated ", 1),
         },
@@ -1568,6 +1605,7 @@ fn plain_overview<'a>(
     heading: String,
     quotes: impl IntoIterator<Item = &'a ObservationQuote>,
     outside: Vec<String>,
+    outside_per_use: bool,
     next_step: Option<String>,
 ) -> Vec<String> {
     let groups = by_route(quotes);
@@ -1612,9 +1650,10 @@ fn plain_overview<'a>(
     lines.push(
         if billed_figure(&all).is_some() {
             "Estimates use published prices; billed figures are what the provider stated with each response."
-        } else if !all.is_empty() && all.iter().all(|quote| quote.is_plan()) {
+        } else if !outside_per_use && !all.is_empty() && all.iter().all(|quote| quote.is_plan()) {
             // No bill exists for subscription work; pointing at one would
-            // suggest a charge the plan never makes.
+            // suggest a charge the plan never makes. Pay-per-use figures from
+            // other conversations on the screen keep the bill caveat.
             "Subscription work is not billed per request; any figure here is what it would cost at API prices."
         } else {
             "Costs are estimates from published prices; your provider's bill is the final amount."

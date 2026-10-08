@@ -38,8 +38,13 @@ const GOAL_USAGE_HINT: &str = "Example: /goal improve benchmark coverage";
 const RAW_USAGE: &str = "Usage: /raw [on|off]";
 /// Account usage is an OpenAI account API and needs that sign-in. What a turn
 /// cost is recorded locally for whatever provider served it, so the message
-/// points at the view that does work here rather than dead-ending.
-const USAGE_CHATGPT_LOGIN_REQUIRED: &str = "Sign in with ChatGPT to view OpenAI account usage. For what your turns cost on this provider, run `/cost`.";
+/// points at the view that does work here rather than dead-ending, by the name
+/// this build resolves (`/cost` is only a command where costs are recorded).
+const USAGE_CHATGPT_LOGIN_REQUIRED: &str = if cfg!(feature = "developer-accounting") {
+    "Sign in with ChatGPT to view OpenAI account usage. For what your turns cost on this provider, run `/cost`."
+} else {
+    "Sign in with ChatGPT to view OpenAI account usage. For what your turns cost on this provider, run `/usage requests`."
+};
 
 fn tasknode_new_chat_id() -> String {
     format!("chat_{}", uuid::Uuid::new_v4().simple())

@@ -707,5 +707,44 @@ fn every_unavailable_state_names_a_next_step() {
             !pages[0].text.iter().any(|line| line.contains('$')),
             "{label}"
         );
-    }
+    } // A load error's next step gets its own line too.
+    let pages = inspection_pages(Err(
+        "Unavailable — inspection timed out. Next step: select Refresh.".into(),
+    ));
+    assert_eq!(
+        pages[0].text[..2].to_vec(),
+        vec![
+            "Unavailable — inspection timed out.",
+            "Next step: select Refresh.",
+        ]
+    );
+}
+
+/// The priced OpenAI attempt, run on subscription capacity: no money spent.
+fn plan_work(id: u128, owner: ThreadId) -> ObservationQuote {
+    let mut quote = priced(id, owner);
+    quote.plan_burn_millis = Some(1000);
+    quote.known_equivalent = quote.known_subtotal;
+    quote.all_buckets_equivalent = Some(quote.known_subtotal);
+    quote.known_subtotal = Decimal::default();
+    quote.all_buckets_priced = None;
+    quote.subtotal_display = quote.known_subtotal.display();
+    quote
+}
+
+// A day of only subscription work points at no bill, unless pay-per-use
+// figures from other conversations share the screen.
+#[test]
+fn subscription_only_day_points_at_no_bill() {
+    const BILL: &str =
+        "Costs are estimates from published prices; your provider's bill is the final amount.";
+    const PLAN: &str = "Subscription work is not billed per request; any figure here is what it would cost at API prices.";
+    let own = || vec![plan_work(/*id*/ 1, thread(/*n*/ 1))];
+    let alone = first_screen(&own_day(own())[0]);
+    assert!(alone.contains(&PLAN.to_string()), "{alone:#?}");
+    assert!(!alone.contains(&BILL.to_string()), "{alone:#?}");
+    let beside =
+        first_screen(&inspection_pages(Ok(day(own(), Some(two_other_conversations()))))[0]);
+    assert!(beside.contains(&BILL.to_string()), "{beside:#?}");
+    assert!(!beside.contains(&PLAN.to_string()), "{beside:#?}");
 }
