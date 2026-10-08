@@ -1,0 +1,12 @@
+$ /usage requests 2026-10-09
+  Z.AI GLM 5.2 via zai standard · <rtx-dir>/repos/ansi-regex · Corbanu Terminal · TPS: -- tok/s
+--- last screen:
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.2   /model to change       │
+│ directory: <rtx-dir>/…/repos/ansi-regex │
+╰─────────────────────────────────────────────╯
+■ 2026-10-09 is after today (2026-10-08, UTC); there is nothing recorded for it yet. Run /usage requests for today.
+› Implement {feature}
+  Z.AI GLM 5.2 via zai standard · <rtx-dir>/repos/ansi-regex · Corbanu Terminal · TPS: -- tok/s

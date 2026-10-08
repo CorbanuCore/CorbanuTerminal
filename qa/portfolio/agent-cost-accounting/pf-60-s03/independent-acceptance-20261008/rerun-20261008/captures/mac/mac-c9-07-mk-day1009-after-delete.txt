@@ -1,0 +1,42 @@
+$ /usage requests 2026-10-09
+  Cost — this conversation
+  Requested UTC day: 2026-10-09
+  This conversation on 2026-10-09 (UTC): no recorded requests.
+  No other saved conversation has recorded requests on this day.
+  Deleted conversations or subagents sent 5 request attempts on this day. Their recorded cost was deleted with them, so it is not included here; any cost they incurred is on your provider's bill.
+  Costs are estimates from published prices; your provider's bill is the final amount.
+  —— Details ——
+  No recorded attempts in this conversation or its subagents; collection coverage unknown.
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Billed cost: unavailable — no settlement evidence
+  ↑↓ scroll · Enter open · Esc back/close
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+  Day covered (UTC): [2026-10-09T00:00:00.000Z, 2026-10-10T00:00:00.000Z)
+  Read at: 2026-10-10T12:50:07.361Z; ledger current to: 2026-10-10T12:45:00.689Z (306672 ms behind)
+  Retention: request detail kept since 2026-07-12T12:50:07.361Z; daily totals kept since 2025-10-11; oldest recorded day in this conversation 2026-10-10
+  Known subtotal exact USD: none — no recorded attempts in this conversation
+  Input: 0
+  Noncached input (derived for inclusive input): 0
+  Cache read: 0
+  Cache write: 0
+  Output: 0
+  Reasoning (subset, not separately billed): 0
+  Total (not separately billed): 0
+  Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+  Unknown parent population: 0 attempts, excluded from root total
+  Estimate versus billed difference: unknown — no settlement evidence
+  —— Open ——
+  → Root's own attempts (none)
+  → Descendant attempts (none)
+  → Unknown provider/model attribution (none)
+  → Unknown parent population (none)
+  Refresh
+  Close
+--- last screen:
+  Day covered (UTC): [2026-10-09T00:00:00.000Z, 2026-10-10T00:00:00.000Z)
+  Read at: 2026-10-10T12:50:07.361Z; ledger current to: 2026-10-10T12:45:00.689Z (306672 ms behind)
+  Retention: request detail kept since 2026-07-12T12:50:07.361Z; daily totals kept since 2025-10-11; oldest recorded day in this conversation 2026-10-10
+  Known subtotal exact USD: none — no recorded attempts in this conversation
+› Input: 0
+  ↑↓ scroll · Enter open · Esc back/close
