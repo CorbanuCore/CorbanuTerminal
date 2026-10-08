@@ -263,7 +263,7 @@
       "supports_parallel_tool_calls": true,
       "context_window": 1048576,
       "max_context_window": 1048576,
-      "max_output_tokens": 943718,
+      "max_output_tokens": 128000,
       "auto_compact_token_limit": null,
       "default_reasoning_summary": "none",
       "slug": "z-ai/glm-5.3-flash",
