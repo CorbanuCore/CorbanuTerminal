@@ -147,7 +147,8 @@ pub fn create_process_with_logon(
     match create_process_with_logon_here(request) {
         // Only an absolute path to the installed runner: a bare name would be
         // looked up in the working directory (the workspace), and the launcher
-        // runs as the real user.
+        // runs as the real user. A runner next to Core's own executable is
+        // trusted like Core itself.
         Err(LogonError {
             code: ERROR_ACCESS_DENIED,
         }) if current_process_dacl_is_protected()
@@ -201,6 +202,8 @@ impl Drop for OwnedHandle {
 }
 
 /// A pipe whose `child` end the launcher inherits.
+// TODO(#307): the end is inheritable until the launcher starts, so a process
+// Core starts on another thread meanwhile without a handle list inherits it.
 fn launcher_pipe(child_reads: bool) -> anyhow::Result<(OwnedHandle, File)> {
     let (mut read, mut write) = (0, 0);
     // SAFETY: creates an anonymous pipe; both ends are owned below.
