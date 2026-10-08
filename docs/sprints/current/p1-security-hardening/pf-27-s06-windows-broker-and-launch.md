@@ -4,7 +4,7 @@ title: "Windows broker and secretless launch"
 status: draft
 plan_file: "docs/plans/proposed/p1-security-hardening.md"
 plan_feature: "PF-27"
-execution_order: 45
+execution_order: 42
 owner: "broker lane worker (2026-10-08)"
 parallel_lane: "broker"
 write_scope: "codex-rs/process-hardening/, codex-rs/network-proxy/src/credential_broker/isolated/, codex-rs/network-proxy/src/credential_broker/isolated.rs, codex-rs/network-proxy/src/credential_broker/isolated_tests.rs, codex-rs/network-proxy/src/credential_broker.rs, codex-rs/network-proxy/src/credential_broker/providers.rs, codex-rs/network-proxy/src/upstream.rs, codex-rs/network-proxy/src/lib.rs, codex-rs/network-proxy/Cargo.toml, codex-rs/arg0/src/lib.rs, codex-rs/core/src/security/launch_contract.rs, codex-rs/core/src/security/launch_contract_tests.rs, codex-rs/core/src/security/launch_contract_windows_tests.rs, codex-rs/core/src/security/inspection.rs, codex-rs/core/src/tools/sandboxing.rs, codex-rs/core/src/tools/sandboxing_tests.rs, codex-rs/core/src/tools/runtimes/apply_patch.rs, codex-rs/windows-sandbox-rs/src/acl.rs, codex-rs/windows-sandbox-rs/src/lib.rs, codex-rs/core/src/tools/runtimes/shell/unix_escalation.rs, codex-rs/core/Cargo.toml, codex-rs/network-proxy/src/mitm.rs, codex-rs/network-proxy/src/certs.rs, codex-rs/network-proxy/src/credential_broker_tests.rs, codex-rs/arg0/Cargo.toml, codex-rs/core/tests/suite/windows_sandbox.rs, codex-rs/Cargo.lock, MODULE.bazel.lock, .github/workflows/windows-security-probes.yml, qa/security-levels/sprints/PF-27-S06/, docs/sprints/current/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md"
@@ -75,13 +75,15 @@ workflow); the tmux run and videos wait for a Windows machine. One PR per slice,
   replaced during a run denied (an inherit-only, files-only deny on `CODEX_HOME`), Core stand-ins unopenable.
 - [x] `pf_27_s06` tests run on every PR touching this code (`windows-security-probes` workflow); Linux clippy clean
   on the RTX box; Opus 5.5 High reviews per slice, all approved (2-3 rounds each).
+- [x] Travis approved fixing the four documented limits (2026-10-08): new threads and the `CODEX_HOME` deny in
+  [PF-27-S07](pf-27-s07-windows-hardening-follow-ups.md), the broker's own token in
+  [PF-27-S08](pf-27-s08-windows-broker-restricted-token.md), Windows model auth in
+  [PF-27-S09](pf-27-s09-windows-model-client-auth.md).
 
 ## Remaining
 
 - [ ] Decision 5 tmux run (GLM 5.2 driving the TUI) and SOP videos on a real Windows machine ([requirements](../../../../qa/security-levels/sprints/PF-27-S06/README.md#windows-machine-needed-for-the-remaining-gate)).
-- [ ] Travis's acceptance of the documented limits (evidence README), including the new-thread DACL window.
-- [ ] Follow-ups for the plan worker: a restricted or AppContainer token for the broker; Windows model auth
-  (PF-27-S05); file tools other than patches under the contract on Windows; the elevated sandbox's read of
+- [ ] Follow-ups for the plan worker: file tools other than patches under the contract on Windows; the elevated sandbox's read of
   `~/.git-credentials`, `.ssh`, `.npmrc`, `.config/gh` if profile reads are ever granted (setup excludes most).
 
 ## Verification

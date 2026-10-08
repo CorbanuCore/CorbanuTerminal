@@ -11,7 +11,7 @@ activation_basis: "Travis Good's 2026-10-06 decision 3: deferred security featur
 target_release: "TBD"
 deadline: "TBD"
 created: 2026-10-06
-updated: 2026-10-06
+updated: 2026-10-08
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "P0 /security levels"
@@ -38,7 +38,7 @@ The full contracts and their history are in the
 
 | Feature | Contract (one line) |
 | --- | --- |
-| PF-27 | S06 only: Windows broker and secretless launch (moved from P0 on 2026-10-06; depends on the archived PF-27-S02). |
+| PF-27 | Windows only: broker and secretless launch (S06, moved from P0 on 2026-10-06), its hardening follow-ups (S07), the broker's own token (S08) and model-client auth through the broker (S09), added 2026-10-08 when Travis approved fixing S06's four documented limits. |
 | PF-26 | Final whole-program qualification: automated (S04), true-TUI and live repositories (S02), human acceptance and finished docs (S03). The P0 milestone gates replace it for the core. |
 | PF-31 | Isolated public retrieval with no host-browser fallback; sealed downloads until exact human promotion. |
 | PF-32 | Screened web facade: existing search, Exa, Brave and SearXNG adapters, private routing and bounded failover. |
@@ -61,7 +61,10 @@ must complete there first.
 | ---: | --- | --- | --- |
 | 20 | [PF-35-S01](../../sprints/current/p1-security-hardening/pf-35-s01-classifier-corpus-and-evaluation.md) | Classifier corpus and leakage-free evaluation | PF-34-S04 |
 | 21 | [PF-35-S02](../../sprints/current/p1-security-hardening/pf-35-s02-local-cpu-detector-artifact.md) | Reproducible local CPU detector artifact | PF-35-S01 |
-| 45 | [PF-27-S06](../../sprints/current/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md) | Windows broker and secretless launch | PF-27-S02 |
+| 42 | [PF-27-S06](../../sprints/current/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md) | Windows broker and secretless launch | PF-27-S02 |
+| 43 | [PF-27-S07](../../sprints/current/p1-security-hardening/pf-27-s07-windows-hardening-follow-ups.md) | Windows hardening follow-ups: new threads protected at creation, `CODEX_HOME` deny removed on flag-off | PF-27-S06 |
+| 44 | [PF-27-S08](../../sprints/current/p1-security-hardening/pf-27-s08-windows-broker-restricted-token.md) | Windows broker confined by its own restricted token or AppContainer | PF-27-S07 |
+| 45 | [PF-27-S09](../../sprints/current/p1-security-hardening/pf-27-s09-windows-model-client-auth.md) | Windows model-client auth through the broker | PF-27-S05, PF-27-S07 |
 | 46 | [PF-31-S01](../../sprints/current/p1-security-hardening/pf-31-s01-pinned-retriever-isolation.md) | Pinned retriever artifact and sandbox | PF-33-S02, PF-27-S02, PF-31-S04 |
 | 47 | [PF-31-S02](../../sprints/current/p1-security-hardening/pf-31-s02-bounded-fetch-no-fallback.md) | Bounded fetch adapter with no host fallback | PF-31-S01, PF-30-S01 |
 | 48 | [PF-31-S03](../../sprints/current/p1-security-hardening/pf-31-s03-download-quarantine-promotion.md) | Download quarantine and human file promotion | PF-31-S02, PF-24-S01 |
