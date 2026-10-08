@@ -1636,6 +1636,25 @@ def installation_domain(receipt):
     return domain
 
 
+def launch_agents():
+    import pwd
+    return Path(pwd.getpwuid(os.getuid()).pw_dir) / "Library" / "LaunchAgents"
+
+
+def plist_path(root, receipt):
+    """The job's plist: the schedule root's own copy, or for a reboot-safe install the
+    per-user LaunchAgents file named after the label, which launchd loads again at login."""
+    default = Path(os.path.abspath(root)) / "owner.plist"
+    if not receipt or "plist" not in receipt:
+        return default
+    path = Path(receipt["plist"])
+    # launchd reloads ~/Library/LaunchAgents only into the GUI domain.
+    agent = launch_agents() / (receipt["label"] + ".plist")
+    f.require(path == default or (path == agent and installation_domain(receipt).startswith("gui/")),
+              "invalid_plist_path")
+    return f.no_links(path)
+
+
 def service(label, domain=None):
     import re
     domain = installation_domain({"domain": domain} if domain is not None else {})
@@ -1670,9 +1689,9 @@ def firing_source(root, receipt):
         if (presence != "present" or f"\tpid = {os.getpid()}" not in lines
                 or "\tstate = running" not in lines):
             return "manual"
-        f.require(f"path = {root / 'owner.plist'}\n" in output and
-                  f.file_digest(private_file(root / "owner.plist")) == receipt["plist_sha256"],
-                  "unowned_service")
+        plist = plist_path(root, receipt)
+        f.require(f"path = {plist}\n" in output and
+                  f.file_digest(private_file(plist)) == receipt["plist_sha256"], "unowned_service")
         return "interval" if "\timmediate reason = interval" in lines else "other"
     except Exception:
         return "unknown"
@@ -1690,11 +1709,13 @@ def observe_schedule(root, label="com.corbanu.initiative-owner"):
         f.require(receipt is not None or not os.path.lexists(root / "tick.json"), "installation_receipt_missing")
         if receipt:
             label = receipt["label"]
-        result["installed"] = receipt is not None and receipt["phase"] != "uninstalled"
+            # An interrupted install or uninstall needs reconciling; never report it as absent.
+            f.require(receipt["phase"] in ("installed", "uninstalled"), "installation_reconciliation_required")
+        result["installed"] = receipt is not None and receipt["phase"] == "installed"
         result["service"], output = service(label, installation_domain(receipt or {}))
         f.require(result["service"] != "domain_absent", "service_observation_unavailable")
         if receipt and result["service"] == "present":
-            plist = root / "owner.plist"
+            plist = plist_path(root, receipt)
             f.require(f"path = {plist}\n" in output and
                       f.file_digest(private_file(plist)) == receipt["plist_sha256"], "unowned_service")
         if receipt:
