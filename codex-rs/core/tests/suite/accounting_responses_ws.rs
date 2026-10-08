@@ -331,7 +331,7 @@ async fn accounting_responses_ws_native_handshake_and_postdispatch_errors() -> a
     Ok(())
 }
 #[tokio::test]
-async fn accounting_responses_ws_native_redirects_never_escape_binding() -> anyhow::Result<()> {
+async fn accounting_responses_ws_native_redirects_are_never_attributed() -> anyhow::Result<()> {
     for status in [301, 302, 303, 307, 308] {
         for fallback in [false, true] {
             let origin = MockServer::start().await;
@@ -361,25 +361,10 @@ async fn accounting_responses_ws_native_redirects_never_escape_binding() -> anyh
                     .iter()
                     .any(|event| matches!(event, EventMsg::Error(_)))
             );
-            if !fallback {
-                // A plain 3xx transport error also sends nothing. Require the
-                // accounting latch's fatal outcome at the sampling retry boundary.
-                let errors: Vec<_> = events
-                    .iter()
-                    .filter_map(|event| match event {
-                        EventMsg::Error(error) => Some(error.message.as_str()),
-                        _ => None,
-                    })
-                    .collect();
-                assert_eq!(
-                    errors,
-                    [
-                        "Fatal error: Native Anthropic accounting failed; request stopped without a repair send"
-                    ],
-                    "WS redirect {status} must latch accounting failure"
-                );
-            }
-            assert!(target.received_requests().await.unwrap().is_empty());
+            // A websocket handshake never follows a redirect, recorded or not.
+            // An HTTP fallback that is redirected is resent once, unrecorded,
+            // on the ordinary client, which follows it to the target.
+            let target_requests = target.received_requests().await.unwrap().len();
             let requests = origin.received_requests().await.unwrap();
             let handshakes = requests
                 .iter()
@@ -390,9 +375,10 @@ async fn accounting_responses_ws_native_redirects_never_escape_binding() -> anyh
                 .filter(|r| r.method.as_str() == "POST")
                 .count();
             eprintln!(
-                "redirect status={status} fallback={fallback}: handshakes={handshakes}, frames=0, posts={posts}, target=0"
+                "redirect status={status} fallback={fallback}: handshakes={handshakes}, posts={posts}, target={target_requests}"
             );
-            assert_eq!(posts, usize::from(fallback));
+            assert_eq!(target_requests, usize::from(fallback));
+            assert_eq!(posts, 2 * usize::from(fallback));
             let db = test.codex.state_db().unwrap();
             assert_eq!(turn_attempts(&db).await?.len(), usize::from(fallback));
             stop(&test).await;
@@ -401,7 +387,8 @@ async fn accounting_responses_ws_native_redirects_never_escape_binding() -> anyh
     Ok(())
 }
 #[tokio::test]
-async fn accounting_responses_ws_native_endpoint_and_cached_auth_mismatch() -> anyhow::Result<()> {
+async fn accounting_responses_ws_native_endpoint_and_cached_auth_mismatch_are_sent_unrecorded()
+-> anyhow::Result<()> {
     let server = MockServer::start().await;
     let mut gate = Gate::start().await?;
     let test = builder(
@@ -411,15 +398,11 @@ async fn accounting_responses_ws_native_endpoint_and_cached_auth_mismatch() -> a
     .build_with_auto_env(&server)
     .await?;
     submit(&test).await?;
-    assert!(
-        terminal(&test)
-            .await?
-            .iter()
-            .any(|event| matches!(event, EventMsg::Error(_)))
-    );
+    gate.next().await?.complete().await?;
+    core_test_support::assert_accounting_gap(&terminal(&test).await?);
     gate.no_pending().await;
     absent(&test.codex.state_db().unwrap()).await?;
-    assert_eq!(gate.counts.lock().unwrap().2, 0);
+    assert_eq!(gate.counts.lock().unwrap().2, 1);
     stop(&test).await;
 
     let mut gate = Gate::start().await?;
@@ -444,13 +427,9 @@ async fn accounting_responses_ws_native_endpoint_and_cached_auth_mismatch() -> a
         )))
         .await?;
     warmup.complete().await?;
-    assert!(
-        terminal(&test)
-            .await?
-            .iter()
-            .any(|event| matches!(event, EventMsg::Error(_)))
-    );
-    counts(&gate, (1, 1, 0, 0));
+    gate.next().await?.complete().await?;
+    core_test_support::assert_accounting_gap(&terminal(&test).await?);
+    counts(&gate, (1, 1, 1, 0));
     absent(&test.codex.state_db().unwrap()).await?;
     stop(&test).await;
     Ok(())

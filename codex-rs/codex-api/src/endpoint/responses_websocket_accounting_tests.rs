@@ -314,7 +314,8 @@ async fn responses_websocket_accounting_usage_and_terminal_containers() -> anyho
     }
     let sink = Arc::new(Sink::default());
     let mut evidence = accounting::Evidence::new(sink.clone());
-    assert!(evidence.text(&json!({"type":"response.usage","usage":{"input_tokens":1},"response":{"usage":{"input_tokens":2}}}).to_string()).await.is_err());
+    // Ambiguous usage is reported as invalid; the stream itself is not ended.
+    evidence.text(&json!({"type":"response.usage","usage":{"input_tokens":1},"response":{"usage":{"input_tokens":2}}}).to_string()).await?;
     assert_eq!(
         sink.records.lock().unwrap()[0].1,
         Err(InvalidResponsesUsage)
@@ -322,7 +323,8 @@ async fn responses_websocket_accounting_usage_and_terminal_containers() -> anyho
     Ok(())
 }
 #[tokio::test]
-async fn responses_websocket_accounting_invalid_evidence_stops() -> anyhow::Result<()> {
+async fn responses_websocket_accounting_invalid_evidence_stops_observing_not_the_stream()
+-> anyhow::Result<()> {
     for value in [
         json!(-1),
         json!(1.5),
@@ -351,12 +353,13 @@ async fn responses_websocket_accounting_invalid_evidence_stops() -> anyhow::Resu
                 _ => patch[field] = value.clone(),
             }
             send(&mut server, json!({"type":"response.usage","usage":patch})).await;
-            assert!(completed(&mut stream).await.is_err());
+            send(&mut server, done()).await;
+            assert!(completed(&mut stream).await.is_ok());
             assert_eq!(
-                admit.sink.records.lock().unwrap()[0].1,
-                Err(InvalidResponsesUsage)
+                *admit.sink.records.lock().unwrap(),
+                vec![(1, Err(InvalidResponsesUsage))],
+                "nothing is observed after rejected evidence"
             );
-            assert!(conn.is_closed().await);
         }
     }
     for text in [
@@ -365,7 +368,14 @@ async fn responses_websocket_accounting_invalid_evidence_stops() -> anyhow::Resu
         r#"{"type":"response.usage","usage":{"input_tokens_details":[]}}"#,
     ] {
         let sink = Arc::new(Sink::default());
-        assert!(accounting::Evidence::new(sink).text(text).await.is_err());
+        let mut evidence = accounting::Evidence::new(sink.clone());
+        evidence.text(text).await?;
+        evidence.text(&usage(json!(7)).to_string()).await?;
+        assert_eq!(
+            *sink.records.lock().unwrap(),
+            vec![(1, Err(InvalidResponsesUsage))],
+            "{text}: nothing is observed after rejected evidence"
+        );
     }
     Ok(())
 }
@@ -393,7 +403,8 @@ async fn responses_websocket_accounting_observation_barrier() -> anyhow::Result<
         );
         admit.sink.reject.store(rejected, Ordering::SeqCst);
         admit.sink.gate.as_ref().unwrap().add_permits(1);
-        assert_eq!(completion.await.is_err(), rejected);
+        // A rejected observation never ends the stream.
+        assert!(completion.await.is_ok(), "rejected={rejected}");
     }
     Ok(())
 }

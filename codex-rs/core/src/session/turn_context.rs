@@ -346,6 +346,8 @@ pub struct TurnContext {
     pub(crate) server_model_warning_emitted: AtomicBool,
     pub(crate) provider_cache_pressure_warning_emitted: AtomicBool,
     pub(crate) model_verification_emitted: AtomicBool,
+    /// The turn already warned that developer accounting stopped recording it.
+    pub(crate) accounting_gap_warning_emitted: AtomicBool,
 }
 
 enum TurnMultiAgentRuntime {
@@ -614,6 +616,9 @@ impl TurnContext {
             ),
             model_verification_emitted: AtomicBool::new(
                 self.model_verification_emitted.load(Ordering::Relaxed),
+            ),
+            accounting_gap_warning_emitted: AtomicBool::new(
+                self.accounting_gap_warning_emitted.load(Ordering::Relaxed),
             ),
         }
     }
@@ -920,6 +925,7 @@ impl Session {
             server_model_warning_emitted: AtomicBool::new(false),
             provider_cache_pressure_warning_emitted: AtomicBool::new(false),
             model_verification_emitted: AtomicBool::new(false),
+            accounting_gap_warning_emitted: AtomicBool::new(false),
         }
     }
 

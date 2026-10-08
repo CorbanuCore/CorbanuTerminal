@@ -2709,6 +2709,55 @@ async fn contention_is_named_and_nothing_else_is() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// A wall clock that stepped back behind the checkpoint (58 s and 6 days in the
+/// PF-60-S03 acceptance run) used to fail every `Now` write as a backward
+/// checkpoint, and with it every model request. The ledger now holds its time
+/// at the checkpoint; the attempt keeps the dispatch time the clock read.
+#[tokio::test]
+async fn now_writes_hold_at_the_checkpoint_when_the_clock_is_behind_it() -> anyhow::Result<()> {
+    for behind in [58_000, 6 * 86_400_000] {
+        let path = home();
+        let runtime = open(&path).await?;
+        seed(&runtime).await?;
+        let now = chrono::Utc::now().timestamp_millis();
+        let ahead = now + behind;
+        AccountingStore::open(&runtime, ahead).await?;
+        let store = AccountingStore::open(&runtime, AsOf::Now).await?;
+        let mut a = serde_json::to_value(attempt(/*id*/ 1))?;
+        a["dispatched_at_ms"] = json!(now);
+        let a: Attempt = serde_json::from_value(a)?;
+        store.admit(a.thread_id, &a, &[], AsOf::Now).await?;
+        store
+            .observe(a.thread_id, &a, &[row(/*revision*/ 1)], AsOf::Now)
+            .await?;
+        let checkpoint: i64 = sqlx::query_scalar(
+            "SELECT completed_as_of_ms FROM draft_accounting_retention_checkpoint",
+        )
+        .fetch_one(runtime.pool.as_ref())
+        .await?;
+        assert!(checkpoint >= ahead, "the checkpoint never moves backward");
+        let stored: Vec<String> =
+            sqlx::query_scalar("SELECT payload FROM draft_accounting_attempts")
+                .fetch_all(runtime.pool.as_ref())
+                .await?;
+        let stored: Vec<Attempt> = stored
+            .iter()
+            .map(|payload| serde_json::from_str(payload))
+            .collect::<Result<_, _>>()?;
+        assert_eq!(stored, vec![a]);
+        // Explicit times stay strict.
+        marker(
+            AccountingStore::open(&runtime, now)
+                .await
+                .err()
+                .expect("stale time"),
+            "backward",
+        );
+        runtime.close().await;
+    }
+    Ok(())
+}
+
 #[tokio::test]
 async fn writes_read_their_clock_after_another_process_advanced_the_checkpoint()
 -> anyhow::Result<()> {

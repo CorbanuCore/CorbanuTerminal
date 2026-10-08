@@ -1454,6 +1454,17 @@ impl ModelClient {
         // streaming paths build a no-redirect client whenever evidence exists,
         // so that a response from somewhere else can never be attributed to the
         // approved endpoint. This endpoint needs the same rule.
+        let follow = if evidence.is_some() {
+            Some(
+                self.redirect_fallback(
+                    &client_setup
+                        .api_provider
+                        .url_for_path(RESPONSES_COMPACT_ENDPOINT),
+                )?,
+            )
+        } else {
+            None
+        };
         let transport = if evidence.is_some() {
             let client = self.api_client_without_redirects(
                 &client_setup
@@ -1543,6 +1554,7 @@ impl ModelClient {
                 evidence.clone(),
                 model.clone(),
             )
+            .with_redirect_fallback(follow)
             .with_tier(service_tier.clone())
         });
         let client =
@@ -1607,6 +1619,11 @@ impl ModelClient {
             None => None,
         };
         let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
+        let follow = if evidence.is_some() {
+            Some(self.redirect_fallback(&call_url)?)
+        } else {
+            None
+        };
         let transport = if evidence.is_some() {
             let client = self.api_client_without_redirects(&call_url)?;
             crate::memory_stage_one::StageOneGuardedTransport::new(
@@ -1622,6 +1639,7 @@ impl ModelClient {
                 evidence.clone(),
                 session_config.model.clone().unwrap_or_default(),
             )
+            .with_redirect_fallback(follow)
         });
         let response = ApiRealtimeCallClient::new(transport, api_provider, client_setup.api_auth)
             .create_with_session_and_headers(sdp, session_config, extra_headers)
@@ -1689,6 +1707,17 @@ impl ModelClient {
         let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
         // A collected request must not be able to follow a redirect, for the
         // same reason every other collected route may not.
+        let follow = if evidence.is_some() {
+            Some(
+                self.redirect_fallback(
+                    &client_setup
+                        .api_provider
+                        .url_for_path(MEMORIES_SUMMARIZE_ENDPOINT),
+                )?,
+            )
+        } else {
+            None
+        };
         let transport = if evidence.is_some() {
             let client = self.api_client_without_redirects(
                 &client_setup
@@ -1708,6 +1737,7 @@ impl ModelClient {
                 evidence.clone(),
                 model_info.slug.clone(),
             )
+            .with_redirect_fallback(follow)
         });
         let request_telemetry = Self::build_request_telemetry(
             session_telemetry,
@@ -2660,6 +2690,19 @@ impl ModelClient {
         })
     }
 
+    /// The ordinary, redirect-following transport a recorded request is
+    /// resent on when its provider redirects it (see
+    /// `AccountingTransport::with_redirect_fallback`).
+    fn redirect_fallback(&self, request_url: &str) -> Result<ReqwestTransport> {
+        let client = create_client_for_route(
+            &self.http_client_factory,
+            request_url,
+            ClientRouteClass::Api,
+        )
+        .map_err(std::io::Error::from)?;
+        Ok(ReqwestTransport::from_http_client(client))
+    }
+
     /// No-redirect client for one model request.
     fn api_client_without_redirects(
         &self,
@@ -3057,6 +3100,17 @@ impl ModelClientSession {
             );
             let evidence = crate::accounting::read_slot(&self.accounting)?
                 .map(crate::accounting::transport::ResponseEvidence::new);
+            let follow = if evidence.is_some() {
+                Some(
+                    self.client.redirect_fallback(
+                        &client_setup
+                            .api_provider
+                            .url_for_path(ANTHROPIC_MESSAGES_ENDPOINT),
+                    )?,
+                )
+            } else {
+                None
+            };
             let transport = if evidence.is_some() {
                 let client = self.client.api_client_without_redirects(
                     &client_setup
@@ -3129,6 +3183,7 @@ impl ModelClientSession {
                     evidence.clone(),
                     accounting_model_identity(&model_info.slug),
                 )
+                .with_redirect_fallback(follow)
                 .with_configured_routing(
                     self.client
                         .state
@@ -3659,6 +3714,17 @@ impl ModelClientSession {
                 None => None,
             };
             let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
+            let follow = if evidence.is_some() {
+                Some(
+                    self.client.redirect_fallback(
+                        &client_setup
+                            .api_provider
+                            .url_for_path(CHAT_COMPLETIONS_ENDPOINT),
+                    )?,
+                )
+            } else {
+                None
+            };
             let transport = if evidence.is_some() {
                 let client = self.client.api_client_without_redirects(
                     &client_setup
@@ -3679,6 +3745,7 @@ impl ModelClientSession {
                     evidence.clone(),
                     accounting_model_identity(&model_info.slug),
                 )
+                .with_redirect_fallback(follow)
                 .with_configured_routing(
                     self.client
                         .state
@@ -3869,6 +3936,13 @@ impl ModelClientSession {
                 None => None,
             };
             let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
+            let follow = if evidence.is_some() {
+                Some(self.client.redirect_fallback(
+                    &client_setup.api_provider.url_for_path(RESPONSES_ENDPOINT),
+                )?)
+            } else {
+                None
+            };
             let transport = if evidence.is_some() {
                 let client = self.client.api_client_without_redirects(
                     &client_setup.api_provider.url_for_path(RESPONSES_ENDPOINT),
@@ -3949,6 +4023,7 @@ impl ModelClientSession {
                     evidence.clone(),
                     accounting_model_identity(&model_info.slug),
                 )
+                .with_redirect_fallback(follow)
                 .with_configured_routing(
                     self.client
                         .state
@@ -4187,21 +4262,17 @@ impl ModelClientSession {
                 &client_setup.api_provider,
             );
             let sampling = if let Some(deferred) = &deferred {
-                let cached = if self.websocket_session.connection.is_some() {
-                    Some(self.websocket_session.provenance.as_ref().ok_or_else(|| {
-                        deferred.reject();
-                        CodexErr::Fatal(
-                            crate::accounting::failure(
-                                "websocket admission",
-                                "open connection has no recorded provenance",
-                            )
-                            .into(),
-                        )
-                    })?)
-                } else {
+                let open = self.websocket_session.connection.is_some();
+                let cached = self.websocket_session.provenance.as_ref().filter(|_| open);
+                if open && cached.is_none() {
+                    // Not attributable: send it unrecorded.
+                    deferred.reject();
+                    crate::accounting::gap(
+                        "websocket admission",
+                        "open connection has no recorded provenance",
+                    );
                     None
-                };
-                if provenance.validate(deferred, cached)? {
+                } else if provenance.validate(deferred, cached)? {
                     deferred
                         .resolve(
                             self.client.state.provider.info(),
@@ -4242,19 +4313,19 @@ impl ModelClientSession {
                 .await
             {
                 Ok(_) => {}
-                Err(ApiError::Transport(TransportError::Http { status, .. }))
+                // A websocket connection never follows a redirect, recorded
+                // or not; accounting only stops recording this turn.
+                Err(err @ ApiError::Transport(TransportError::Http { status, .. }))
                     if status.is_redirection() && sampling.is_some() =>
                 {
                     if let Some(deferred) = &deferred {
                         deferred.reject();
                     }
-                    return Err(CodexErr::Fatal(
-                        crate::accounting::failure(
-                            "websocket connect",
-                            format_args!("provider redirected the connection ({status})"),
-                        )
-                        .into(),
-                    ));
+                    crate::accounting::gap(
+                        "websocket connect",
+                        format_args!("provider redirected the connection ({status})"),
+                    );
+                    return Err(self.client.state.provider.map_api_error(err));
                 }
                 Err(ApiError::Transport(TransportError::Http { status, .. }))
                     if status == StatusCode::UPGRADE_REQUIRED =>
@@ -4342,33 +4413,32 @@ impl ModelClientSession {
             }
             let admission = match (sampling, deferred.as_ref()) {
                 (Some(sampling), Some(deferred)) => {
-                    let established =
-                        self.websocket_session.provenance.clone().ok_or_else(|| {
+                    match (
+                        self.websocket_session.provenance.clone(),
+                        deferred.websocket_endpoint()?,
+                    ) {
+                        (Some(established), Some(expected)) => {
+                            Some(crate::accounting::websocket::Admission::new(
+                                sampling,
+                                established,
+                                expected,
+                                self.client.stage_one_memory_binding.clone(),
+                            ))
+                        }
+                        // Not attributable: send it unrecorded.
+                        (established, _) => {
                             deferred.reject();
-                            CodexErr::Fatal(
-                                crate::accounting::failure(
-                                    "websocket admission",
-                                    "connection has no recorded provenance",
-                                )
-                                .into(),
-                            )
-                        })?;
-                    let expected = deferred.websocket_endpoint()?.ok_or_else(|| {
-                        deferred.reject();
-                        CodexErr::Fatal(
-                            crate::accounting::failure(
+                            crate::accounting::gap(
                                 "websocket admission",
-                                "turn has no approved websocket endpoint",
-                            )
-                            .into(),
-                        )
-                    })?;
-                    Some(crate::accounting::websocket::Admission::new(
-                        sampling,
-                        established,
-                        expected,
-                        self.client.stage_one_memory_binding.clone(),
-                    ))
+                                if established.is_none() {
+                                    "connection has no recorded provenance"
+                                } else {
+                                    "turn has no approved websocket endpoint"
+                                },
+                            );
+                            None
+                        }
+                    }
                 }
                 _ => None,
             };

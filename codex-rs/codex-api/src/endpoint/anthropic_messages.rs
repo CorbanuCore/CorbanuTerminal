@@ -1080,7 +1080,7 @@ async fn process_accounted_anthropic_sse(
     idle_timeout: Duration,
     telemetry: Option<Arc<dyn SseTelemetry>>,
     response_id_hint: Option<String>,
-    usage_observer: Option<Arc<dyn AnthropicUsageObserver>>,
+    mut usage_observer: Option<Arc<dyn AnthropicUsageObserver>>,
 ) {
     let mut stream = stream.eventsource();
     let mut state = AnthropicStreamState::new(response_id_hint);
@@ -1133,13 +1133,10 @@ async fn process_accounted_anthropic_sse(
             if let Some(evidence) = evidence {
                 let invalid = evidence.is_err();
                 let result = observer.observe(position, evidence).await;
+                // Accounting observes the stream; it never ends it. Rejected
+                // evidence stops observation for the rest of this response.
                 if invalid || result.is_err() {
-                    let _ = tx_event
-                        .send(Err(ApiError::Stream(
-                            "Anthropic accounting evidence could not be persisted".into(),
-                        )))
-                        .await;
-                    return;
+                    usage_observer = None;
                 }
             }
         }

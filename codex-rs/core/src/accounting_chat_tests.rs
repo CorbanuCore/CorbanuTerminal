@@ -180,6 +180,7 @@ async fn accounting_chat_direct_auth_and_gateway_eligibility() -> anyhow::Result
     }
     let fixture = Fixture::new().await?;
     fixture.resolve().await?;
+    // Eligibility lost mid-turn closes collection; the request is still served.
     assert!(
         fixture
             .deferred
@@ -189,8 +190,8 @@ async fn accounting_chat_direct_auth_and_gateway_eligibility() -> anyhow::Result
                 &format!("{ENDPOINT}/chat/completions"),
                 &body()
             )
-            .await
-            .is_err()
+            .await?
+            .is_none()
     );
     assert!(fixture.deferred.check().is_err());
     Ok(())
@@ -478,6 +479,7 @@ async fn accounting_chat_bootstrap_cancel_scope_and_latch() -> anyhow::Result<()
     let (mut session, _) = crate::session::tests::make_session_and_context().await;
     session.services.state_db = None;
     let deferred = DeferredChatSampling::new(Arc::new(session), "missing-state".into(), mode());
+    // No state database: the request goes unrecorded rather than failing.
     assert!(
         deferred
             .resolve(
@@ -486,8 +488,8 @@ async fn accounting_chat_bootstrap_cancel_scope_and_latch() -> anyhow::Result<()
                 &format!("{ENDPOINT}/chat/completions"),
                 &body()
             )
-            .await
-            .is_err()
+            .await?
+            .is_none()
     );
     assert!(deferred.check().is_err());
     let fixture = Fixture::new().await?;
@@ -505,11 +507,12 @@ async fn accounting_chat_bootstrap_cancel_scope_and_latch() -> anyhow::Result<()
     let scope = Scope::attach(slot.clone(), Some(fixture.deferred.clone()))?;
     assert!(read(&slot)?.is_some());
     let evidence = ResponseEvidence::new(fixture.resolve().await?);
+    // Invalid usage closes collection without failing the stream.
     assert!(
         evidence
             .observe(/*position*/ 1, Err(codex_api::InvalidChatUsage))
             .await
-            .is_err()
+            .is_ok()
     );
     assert!(fixture.deferred.check().is_err());
     drop(scope);
@@ -708,17 +711,14 @@ async fn accounting_chat_exact_final_endpoint_binding() -> anyhow::Result<()> {
             provider().to_api_provider(Some(codex_protocol::auth::AuthMode::ApiKey))?,
             Arc::new(Mutate(endpoint)),
         );
-        assert!(
-            api.stream_request(body(), Default::default())
-                .await
-                .is_err()
-        );
+        // A final route other than the approved one is sent, but not recorded.
+        assert!(api.stream_request(body(), Default::default()).await.is_ok());
         assert_eq!(
             (
                 sends.load(Ordering::SeqCst),
                 fixture.rows::<Attempt>(ATTEMPTS).await?.len()
             ),
-            (0, 0)
+            (1, 0)
         );
         assert!(fixture.deferred.check().is_err());
     }
