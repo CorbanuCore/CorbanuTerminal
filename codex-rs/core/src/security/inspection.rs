@@ -296,6 +296,8 @@ impl Drop for PendingProtectedAction {
 pub(crate) fn record_launch_denial(denied: &LaunchDenied) {
     let reason = match denied {
         LaunchDenied::UnsupportedPlatform => "unsupported platform",
+        LaunchDenied::WindowsUnelevatedSandbox => "unelevated Windows sandbox",
+        LaunchDenied::WindowsSandboxNotSetUp => "Windows sandbox not set up",
         LaunchDenied::ProcessHardening => "process hardening failed",
         LaunchDenied::Unsandboxed => "command would run outside the OS sandbox",
         LaunchDenied::RemoteEnvironment => "remote environment cannot be checked",

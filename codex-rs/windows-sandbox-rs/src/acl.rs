@@ -345,6 +345,43 @@ pub unsafe fn dacl_has_read_deny_for_sid(p_dacl: *mut ACL, psid: *mut c_void) ->
     false
 }
 
+/// True when the DACL already has an inherit-only, files-only read deny for
+/// `psid` (see [`add_deny_read_ace_for_new_files`]).
+unsafe fn dacl_has_new_file_read_deny_for_sid(p_dacl: *mut ACL, psid: *mut c_void) -> bool {
+    if p_dacl.is_null() {
+        return false;
+    }
+    let mut info: ACL_SIZE_INFORMATION = std::mem::zeroed();
+    let ok = GetAclInformation(
+        p_dacl as *const ACL,
+        &mut info as *mut _ as *mut c_void,
+        std::mem::size_of::<ACL_SIZE_INFORMATION>() as u32,
+        AclSizeInformation,
+    );
+    if ok == 0 {
+        return false;
+    }
+    let wanted = OBJECT_INHERIT_ACE | u32::from(INHERIT_ONLY_ACE) | NO_PROPAGATE_INHERIT_ACE;
+    for i in 0..info.AceCount {
+        let mut p_ace: *mut c_void = std::ptr::null_mut();
+        if GetAce(p_dacl as *const ACL, i, &mut p_ace) == 0 {
+            continue;
+        }
+        let hdr = &*(p_ace as *const ACE_HEADER);
+        if hdr.AceType != ACCESS_DENIED_ACE_TYPE || (u32::from(hdr.AceFlags) & wanted) != wanted {
+            continue;
+        }
+        let ace = &*(p_ace as *const ACCESS_DENIED_ACE);
+        let base = p_ace as usize;
+        let sid_ptr =
+            (base + std::mem::size_of::<ACE_HEADER>() + std::mem::size_of::<u32>()) as *mut c_void;
+        if EqualSid(sid_ptr, psid) != 0 && (ace.Mask & FILE_GENERIC_READ) != 0 {
+            return true;
+        }
+    }
+    false
+}
+
 // Grant DELETE on each inheriting descendant instead of FILE_DELETE_CHILD on
 // its parent. A parent delete-child grant would bypass a direct deny-write ACE
 // on protected children such as `.git` or an explicit read-only subpath.
@@ -602,18 +639,54 @@ pub unsafe fn add_deny_delete_child_ace(
     add_deny_ace(path, psid, DenyAceKind::DeleteChild { inherit_to_subdirs })
 }
 
+/// PF-27-S06: denies `psid` reads of every file created directly in `path`
+/// from now on (inherit-only, files only, not propagated below the first
+/// level), so a file replaced by rename does not lose the deny. Existing
+/// files get the inherited entry as well; subdirectories are unaffected.
+///
+/// # Safety
+/// Caller must ensure `psid` points to a valid SID and `path` is a directory.
+pub unsafe fn add_deny_read_ace_for_new_files(path: &Path, psid: *mut c_void) -> Result<bool> {
+    add_deny_ace(path, psid, DenyAceKind::ReadNewFiles)?;
+    // `add_deny_ace` reports a failed write as "not added"; confirm instead.
+    let mut p_sd: *mut c_void = std::ptr::null_mut();
+    let mut p_dacl: *mut ACL = std::ptr::null_mut();
+    let code = GetNamedSecurityInfoW(
+        to_wide(path).as_ptr(),
+        1,
+        DACL_SECURITY_INFORMATION,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        &mut p_dacl,
+        std::ptr::null_mut(),
+        &mut p_sd,
+    );
+    if code != ERROR_SUCCESS {
+        return Err(anyhow!("GetNamedSecurityInfoW failed: {code}"));
+    }
+    let present = dacl_has_new_file_read_deny_for_sid(p_dacl, psid);
+    if !p_sd.is_null() {
+        LocalFree(p_sd as HLOCAL);
+    }
+    Ok(present)
+}
+
 #[derive(Clone, Copy)]
 enum DenyAceKind {
     Read,
+    /// Read, inherited by files directly in the directory only.
+    ReadNewFiles,
     Write,
-    DeleteChild { inherit_to_subdirs: bool },
+    DeleteChild {
+        inherit_to_subdirs: bool,
+    },
 }
 
 impl DenyAceKind {
     fn mask(self) -> u32 {
         match self {
             Self::DeleteChild { .. } => FILE_DELETE_CHILD,
-            Self::Read => FILE_GENERIC_READ | GENERIC_READ_MASK,
+            Self::Read | Self::ReadNewFiles => FILE_GENERIC_READ | GENERIC_READ_MASK,
             Self::Write => {
                 FILE_GENERIC_WRITE
                     | FILE_WRITE_DATA
@@ -630,6 +703,9 @@ impl DenyAceKind {
     fn inheritance(self) -> u32 {
         match self {
             Self::Read | Self::Write => CONTAINER_INHERIT_ACE | OBJECT_INHERIT_ACE,
+            Self::ReadNewFiles => {
+                OBJECT_INHERIT_ACE | u32::from(INHERIT_ONLY_ACE) | NO_PROPAGATE_INHERIT_ACE
+            }
             Self::DeleteChild {
                 inherit_to_subdirs: true,
             } => CONTAINER_INHERIT_ACE,
@@ -642,6 +718,7 @@ impl DenyAceKind {
     unsafe fn already_present(self, p_dacl: *mut ACL, psid: *mut c_void) -> bool {
         match self {
             Self::Read => dacl_has_read_deny_for_sid(p_dacl, psid),
+            Self::ReadNewFiles => dacl_has_new_file_read_deny_for_sid(p_dacl, psid),
             Self::Write => dacl_has_write_deny_for_sid(p_dacl, psid),
             Self::DeleteChild { inherit_to_subdirs } => {
                 dacl_has_delete_child_deny_for_sid(p_dacl, psid, inherit_to_subdirs)
@@ -882,4 +959,5 @@ pub unsafe fn allow_null_device(psid: *mut c_void) {
     CloseHandle(h);
 }
 const CONTAINER_INHERIT_ACE: u32 = 0x2;
+const NO_PROPAGATE_INHERIT_ACE: u32 = 0x4;
 const OBJECT_INHERIT_ACE: u32 = 0x1;

@@ -988,6 +988,7 @@ impl CoreShellCommandExecutor {
                 sandbox,
                 sandbox != SandboxType::None,
                 /*exec_server*/ false,
+                /*windows_elevated*/ false,
                 &mut command,
                 permission_profile,
                 self.sandbox_policy_cwd.as_path(),
