@@ -12,7 +12,12 @@
 //! makes the call, and duplicates the new process's handle out of it.
 //!
 //! The launcher inherits only its own two pipes and an environment holding
-//! just `SystemRoot`. It receives the sandbox user's password, which is not a
+//! just `SystemRoot`. The pipe ends are never inheritable in Core's own
+//! handle table (#307), where any process Core started on another thread
+//! (`std::process::Command` always inherits) would also get them: they are
+//! duplicated, inheritable, into a holder process that never runs, and the
+//! launcher is started as that holder's child. It receives the sandbox
+//! user's password, which is not a
 //! secret from this user (it is stored under `.sandbox-secrets`, which this
 //! user can read). Its binary is in the sandbox's helper directory, which the
 //! sandbox's users can only read and execute. Core checks that the returned
@@ -43,10 +48,8 @@ use windows_sys::Win32::Foundation::ERROR_ACCESS_DENIED;
 use windows_sys::Win32::Foundation::ERROR_SUCCESS;
 use windows_sys::Win32::Foundation::GetLastError;
 use windows_sys::Win32::Foundation::HANDLE;
-use windows_sys::Win32::Foundation::HANDLE_FLAG_INHERIT;
 use windows_sys::Win32::Foundation::HLOCAL;
 use windows_sys::Win32::Foundation::LocalFree;
-use windows_sys::Win32::Foundation::SetHandleInformation;
 use windows_sys::Win32::Security::Authorization::GetSecurityInfo;
 use windows_sys::Win32::Security::Authorization::SE_KERNEL_OBJECT;
 use windows_sys::Win32::Security::DACL_SECURITY_INFORMATION;
@@ -56,6 +59,7 @@ use windows_sys::Win32::Security::SE_DACL_PROTECTED;
 use windows_sys::Win32::System::Diagnostics::Debug::SetErrorMode;
 use windows_sys::Win32::System::Pipes::CreatePipe;
 use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
+use windows_sys::Win32::System::Threading::CREATE_SUSPENDED;
 use windows_sys::Win32::System::Threading::CREATE_UNICODE_ENVIRONMENT;
 use windows_sys::Win32::System::Threading::CreateProcessW;
 use windows_sys::Win32::System::Threading::CreateProcessWithLogonW;
@@ -201,9 +205,8 @@ impl Drop for OwnedHandle {
     }
 }
 
-/// A pipe whose `child` end the launcher inherits.
-// TODO(#307): the end is inheritable until the launcher starts, so a process
-// Core starts on another thread meanwhile without a handle list inherits it.
+/// A pipe whose `child` end the launcher gets. Neither end is inheritable
+/// here.
 fn launcher_pipe(child_reads: bool) -> anyhow::Result<(OwnedHandle, File)> {
     let (mut read, mut write) = (0, 0);
     // SAFETY: creates an anonymous pipe; both ends are owned below.
@@ -218,28 +221,80 @@ fn launcher_pipe(child_reads: bool) -> anyhow::Result<(OwnedHandle, File)> {
     let child = OwnedHandle(child);
     // SAFETY: `parent` is a fresh pipe end owned by the returned File.
     let parent = unsafe { File::from_raw_handle(parent as _) };
-    // SAFETY: `child.0` is a live pipe end.
-    if unsafe { SetHandleInformation(child.0, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT) } == 0 {
-        return Err(std::io::Error::last_os_error()).context("mark launcher pipe inheritable");
-    }
     Ok((child, parent))
+}
+
+/// #307: a process of Core's that never runs: created suspended, inheriting
+/// nothing, and ended on drop. The launcher's pipe ends are inheritable only
+/// in its handle table, and the launcher is started as its child, so no
+/// other process can inherit them.
+struct HandleHolder(OwnedHandle);
+
+impl HandleHolder {
+    fn start(exe: &[u16], command_line: &[u16], environment: &[u16]) -> anyhow::Result<Self> {
+        let mut command_line = command_line.to_vec();
+        // SAFETY: zeroed POD with its size set, as the API requires.
+        let mut startup: STARTUPINFOW = unsafe { std::mem::zeroed() };
+        startup.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
+        // SAFETY: zeroed POD filled in by the call.
+        let mut info: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
+        // SAFETY: every pointer refers to a live, NUL-terminated buffer.
+        let ok = unsafe {
+            CreateProcessW(
+                exe.as_ptr(),
+                command_line.as_mut_ptr(),
+                ptr::null(),
+                ptr::null(),
+                /*binherithandles*/ 0,
+                CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
+                environment.as_ptr().cast(),
+                ptr::null(),
+                &startup,
+                &mut info,
+            )
+        };
+        if ok == 0 {
+            return Err(std::io::Error::last_os_error()).context("start the launcher's handle holder");
+        }
+        // SAFETY: returned by the call above and not used again.
+        unsafe { CloseHandle(info.hThread) };
+        Ok(Self(OwnedHandle(info.hProcess)))
+    }
+
+    /// An inheritable copy of `handle` in the holder's table.
+    fn hold(&self, handle: HANDLE) -> anyhow::Result<HANDLE> {
+        let mut held: HANDLE = 0;
+        // SAFETY: `handle` is ours and live; the holder's handle has full
+        // access (Core created it).
+        let ok = unsafe {
+            DuplicateHandle(
+                GetCurrentProcess(),
+                handle,
+                self.0.0,
+                &mut held,
+                /*dwdesiredaccess*/ 0,
+                /*binherithandle*/ 1,
+                DUPLICATE_SAME_ACCESS,
+            )
+        };
+        if ok == 0 {
+            return Err(std::io::Error::last_os_error()).context("hand a launcher pipe to the holder");
+        }
+        Ok(held)
+    }
+}
+
+impl Drop for HandleHolder {
+    fn drop(&mut self) {
+        // SAFETY: the holder never ran; ending it closes the copies it holds.
+        unsafe { TerminateProcess(self.0.0, 1) };
+    }
 }
 
 /// Starts the launcher with only its two pipe ends inherited.
 fn spawn_launcher(launcher_exe: &Path) -> anyhow::Result<(OwnedHandle, File, BufReader<File>)> {
     let (child_stdin, stdin) = launcher_pipe(/*child_reads*/ true)?;
     let (child_stdout, stdout) = launcher_pipe(/*child_reads*/ false)?;
-    let mut attributes = ProcThreadAttributeList::new(/*attr_count*/ 1)?;
-    attributes.set_handle_list(vec![child_stdin.0, child_stdout.0])?;
-    // SAFETY: zeroed POD with its size set, as the API requires.
-    let mut startup: STARTUPINFOEXW = unsafe { std::mem::zeroed() };
-    startup.StartupInfo.cb = std::mem::size_of::<STARTUPINFOEXW>() as u32;
-    startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
-    startup.StartupInfo.hStdInput = child_stdin.0;
-    startup.StartupInfo.hStdOutput = child_stdout.0;
-    // No stderr: nothing but the reply may reach the reply pipe.
-    startup.StartupInfo.hStdError = 0;
-    startup.lpAttributeList = attributes.as_mut_ptr();
     let mut environment = Vec::new();
     if let Some(system_root) = std::env::var_os("SystemRoot") {
         let mut entry = std::ffi::OsString::from("SystemRoot=");
@@ -252,12 +307,30 @@ fn spawn_launcher(launcher_exe: &Path) -> anyhow::Result<(OwnedHandle, File, Buf
         quote_windows_arg(&launcher_exe.to_string_lossy())
     ));
     let application = to_wide(launcher_exe);
+    // Never given Core's environment: the holder's would be readable.
+    let holder = HandleHolder::start(&application, &command_line, &environment)?;
+    let held_stdin = holder.hold(child_stdin.0)?;
+    let held_stdout = holder.hold(child_stdout.0)?;
+    drop((child_stdin, child_stdout));
+    let mut attributes = ProcThreadAttributeList::new(/*attr_count*/ 2)?;
+    attributes.set_parent_process(holder.0.0)?;
+    attributes.set_handle_list(vec![held_stdin, held_stdout])?;
+    // SAFETY: zeroed POD with its size set, as the API requires.
+    let mut startup: STARTUPINFOEXW = unsafe { std::mem::zeroed() };
+    startup.StartupInfo.cb = std::mem::size_of::<STARTUPINFOEXW>() as u32;
+    startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    // Values in the holder's table, as the parent-process attribute requires.
+    startup.StartupInfo.hStdInput = held_stdin;
+    startup.StartupInfo.hStdOutput = held_stdout;
+    // No stderr: nothing but the reply may reach the reply pipe.
+    startup.StartupInfo.hStdError = 0;
+    startup.lpAttributeList = attributes.as_mut_ptr();
     // Never the workspace: the launcher runs in its own directory.
     let cwd = launcher_exe.parent().map(to_wide);
     // SAFETY: zeroed POD filled in by the call.
     let mut info: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
-    // SAFETY: every pointer refers to a live buffer above; the handle list
-    // limits inheritance to the two pipe ends.
+    // SAFETY: every pointer refers to a live buffer above; the launcher
+    // inherits from the holder, and only the two pipe ends in the list.
     let ok = unsafe {
         CreateProcessW(
             application.as_ptr(),
@@ -276,6 +349,7 @@ fn spawn_launcher(launcher_exe: &Path) -> anyhow::Result<(OwnedHandle, File, Buf
         return Err(std::io::Error::last_os_error())
             .with_context(|| format!("start logon launcher {}", launcher_exe.display()));
     }
+    drop(holder);
     // SAFETY: returned by the call above and not used again.
     unsafe { CloseHandle(info.hThread) };
     Ok((OwnedHandle(info.hProcess), stdin, BufReader::new(stdout)))
@@ -455,3 +529,7 @@ fn create_process_with_logon_here(
         via_launcher: false,
     })
 }
+
+#[cfg(test)]
+#[path = "logon_launch_tests.rs"]
+mod tests;
