@@ -83,7 +83,13 @@ fn assert_posix_snapshot_sections(snapshot: &str) {
 async fn get_snapshot(shell_type: ShellType) -> Result<String> {
     let dir = tempdir()?;
     let path = dir.path().join("snapshot.sh");
-    write_shell_snapshot(shell_type, &path.abs(), &dir.path().abs()).await?;
+    write_shell_snapshot(
+        shell_type,
+        &path.abs(),
+        &dir.path().abs(),
+        /*removed_env_vars*/ &[],
+    )
+    .await?;
     let content = fs::read_to_string(&path).await?;
     Ok(content)
 }
@@ -332,6 +338,7 @@ async fn try_create_creates_and_deletes_snapshot_file() -> Result<()> {
         &dir.path().abs(),
         &shell,
         /*state_db*/ None,
+        /*removed_env_vars*/ &[],
     )
     .await
     .expect("snapshot should be created");
@@ -361,6 +368,7 @@ async fn try_create_uses_distinct_generation_paths() -> Result<()> {
         &dir.path().abs(),
         &shell,
         /*state_db*/ None,
+        /*removed_env_vars*/ &[],
     )
     .await
     .expect("initial snapshot should be created");
@@ -370,6 +378,7 @@ async fn try_create_uses_distinct_generation_paths() -> Result<()> {
         &dir.path().abs(),
         &shell,
         /*state_db*/ None,
+        /*removed_env_vars*/ &[],
     )
     .await
     .expect("refreshed snapshot should be created");
@@ -421,6 +430,7 @@ async fn snapshot_shell_does_not_inherit_stdin() -> Result<()> {
         Duration::from_secs(2),
         /*use_login_shell*/ true,
         &home,
+        /*removed_env_vars*/ &[],
     )
     .await
     .context("run snapshot command")?;
@@ -464,6 +474,7 @@ async fn timed_out_snapshot_shell_is_terminated() -> Result<()> {
         Duration::from_secs(1),
         /*use_login_shell*/ true,
         &dir.path().abs(),
+        /*removed_env_vars*/ &[],
     )
     .await
     .expect_err("snapshot shell should time out");

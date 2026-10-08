@@ -995,6 +995,7 @@ impl Session {
                     thread_id,
                     session_telemetry.clone(),
                     state_db_ctx.clone(),
+                    crate::exec_env::all_provider_auth_env_vars(&config),
                 )
             } else {
                 ShellSnapshot::disabled()

@@ -14,14 +14,18 @@ use core_test_support::test_codex_exec::test_codex_exec;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 
-const ZAI_KEY: &str = "zai-test-key-310";
+/// The mock provider's own `env_key`. Unlike the built-in names it doesn't
+/// look like a secret, so only the provider-key filter can catch it.
+const PROVIDER_ENV_KEY: &str = "CORP_LLM_CRED";
+const PROVIDER_KEY: &str = "corp-test-key-310";
 const CALL_ID: &str = "env-probe";
-const PROBE: &str = "for v in ZAI_API_KEY OPENROUTER_API_KEY CODEX_API_KEY CORBANU_310_CONTROL; do \
+const PROBE: &str = "for v in CORP_LLM_CRED ZAI_API_KEY OPENROUTER_API_KEY CODEX_API_KEY CORBANU_310_CONTROL; do \
 if printenv \"$v\" >/dev/null; then echo \"$v=PRESENT\"; else echo \"$v=ABSENT\"; fi; done";
 
 /// Runs one `corbanu exec` turn whose model calls `tool_name` with the env
-/// probe, using a provider authenticated by `ZAI_API_KEY`. Returns the probe
-/// output and the `Authorization` header of every model request.
+/// probe, using a configured provider authenticated by [`PROVIDER_ENV_KEY`].
+/// Returns the probe output and the `Authorization` header of every model
+/// request.
 async fn probe_tool_env(
     tool_name: &str,
     arguments: serde_json::Value,
@@ -47,7 +51,8 @@ async fn probe_tool_env(
 
     let test = test_codex_exec();
     let mut cmd = test.cmd();
-    cmd.env("ZAI_API_KEY", ZAI_KEY)
+    cmd.env(PROVIDER_ENV_KEY, PROVIDER_KEY)
+        .env("ZAI_API_KEY", "zai-test-key-310")
         .env("OPENROUTER_API_KEY", "openrouter-test-key-310")
         .env("CORBANU_310_CONTROL", "1")
         .arg("--skip-git-repo-check")
@@ -55,11 +60,11 @@ async fn probe_tool_env(
         .arg("danger-full-access")
         .arg("-c")
         .arg(format!(
-            "model_providers.zai_mock={{name=\"zai mock\",base_url={:?},wire_api=\"responses\",env_key=\"ZAI_API_KEY\",supports_websockets=false}}",
+            "model_providers.corp_mock={{name=\"corp mock\",base_url={:?},wire_api=\"responses\",env_key=\"{PROVIDER_ENV_KEY}\",supports_websockets=false}}",
             format!("{}/v1", server.uri())
         ))
         .arg("-c")
-        .arg("model_provider=\"zai_mock\"");
+        .arg("model_provider=\"corp_mock\"");
     for config in extra_config {
         cmd.arg("-c").arg(config);
     }
@@ -81,12 +86,13 @@ async fn probe_tool_env(
 }
 
 fn assert_provider_authenticated(auth: Vec<Option<String>>) {
-    let expected = Some(format!("Bearer {ZAI_KEY}"));
+    let expected = Some(format!("Bearer {PROVIDER_KEY}"));
     assert_eq!(auth, vec![expected.clone(), expected]);
 }
 
 fn assert_probe(output: &str, zai: &str) {
     for line in [
+        "CORP_LLM_CRED=ABSENT".to_string(),
         format!("ZAI_API_KEY={zai}"),
         "OPENROUTER_API_KEY=ABSENT".to_string(),
         "CODEX_API_KEY=ABSENT".to_string(),
@@ -96,37 +102,48 @@ fn assert_probe(output: &str, zai: &str) {
     }
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn shell_command_does_not_inherit_provider_keys() -> anyhow::Result<()> {
-    let (output, auth) = probe_tool_env(
-        "shell_command",
-        json!({ "command": PROBE, "login": false }),
-        &["features.unified_exec=false"],
-    )
-    .await?;
+async fn assert_tool_hides_provider_keys(tool_name: &str, login: bool) -> anyhow::Result<()> {
+    let (arguments, unified_exec) = match tool_name {
+        "shell_command" => (json!({ "command": PROBE, "login": login }), false),
+        _ => (
+            json!({ "cmd": PROBE, "login": login, "yield_time_ms": 5_000 }),
+            true,
+        ),
+    };
+    let feature = format!("features.unified_exec={unified_exec}");
+    let (output, auth) = probe_tool_env(tool_name, arguments, &[feature.as_str()]).await?;
     assert_probe(&output, "ABSENT");
     assert_provider_authenticated(auth);
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn shell_command_does_not_inherit_provider_keys() -> anyhow::Result<()> {
+    assert_tool_hides_provider_keys("shell_command", /*login*/ false).await
+}
+
+/// Login shells source the session's shell snapshot, which must not
+/// re-export the keys either.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn login_shell_command_does_not_inherit_provider_keys() -> anyhow::Result<()> {
+    assert_tool_hides_provider_keys("shell_command", /*login*/ true).await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn unified_exec_does_not_inherit_provider_keys() -> anyhow::Result<()> {
-    let (output, auth) = probe_tool_env(
-        "exec_command",
-        json!({ "cmd": PROBE, "login": false, "yield_time_ms": 5_000 }),
-        &["features.unified_exec=true"],
-    )
-    .await?;
-    assert_probe(&output, "ABSENT");
-    assert_provider_authenticated(auth);
-    Ok(())
+    assert_tool_hides_provider_keys("exec_command", /*login*/ false).await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn login_unified_exec_does_not_inherit_provider_keys() -> anyhow::Result<()> {
+    assert_tool_hides_provider_keys("exec_command", /*login*/ true).await
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn exact_include_only_entry_passes_a_provider_key_through() -> anyhow::Result<()> {
     let (output, auth) = probe_tool_env(
         "exec_command",
-        json!({ "cmd": PROBE, "login": false, "yield_time_ms": 5_000 }),
+        json!({ "cmd": PROBE, "login": true, "yield_time_ms": 5_000 }),
         &[
             "features.unified_exec=true",
             "shell_environment_policy.include_only=[\"*\",\"ZAI_API_KEY\"]",

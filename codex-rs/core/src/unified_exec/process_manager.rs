@@ -119,7 +119,9 @@ fn apply_unified_exec_env(mut env: HashMap<String, String>) -> HashMap<String, S
 }
 
 /// `blocked_env_vars` are provider credential names the executor must drop
-/// from its own environment too (issue #310).
+/// from its own environment too (issue #310). `exclude` runs before `set`, so
+/// a `set` entry still supplies its own value. A name containing `*` or `?`
+/// would act as a pattern here and remove more, never less.
 fn exec_env_policy_from_shell_policy(
     policy: &ShellEnvironmentPolicy,
     blocked_env_vars: Vec<String>,

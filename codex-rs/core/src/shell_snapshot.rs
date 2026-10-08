@@ -34,6 +34,9 @@ struct ShellSnapshotConfig {
     session_id: ThreadId,
     session_telemetry: SessionTelemetry,
     state_db: Option<StateDbHandle>,
+    /// Provider credential variables kept out of the snapshot shell, so a
+    /// snapshot never re-exports them into model-run commands (issue #310).
+    removed_env_vars: Vec<String>,
 }
 
 pub(crate) struct ShellSnapshotFile {
@@ -57,6 +60,7 @@ impl ShellSnapshot {
         session_id: ThreadId,
         session_telemetry: SessionTelemetry,
         state_db: Option<StateDbHandle>,
+        removed_env_vars: Vec<String>,
     ) -> Self {
         Self {
             config: Some(Arc::new(ShellSnapshotConfig {
@@ -64,6 +68,7 @@ impl ShellSnapshot {
                 session_id,
                 session_telemetry,
                 state_db,
+                removed_env_vars,
             })),
         }
     }
@@ -104,6 +109,7 @@ impl ShellSnapshot {
                 &cwd,
                 &shell,
                 config.state_db.clone(),
+                &config.removed_env_vars,
             )
             .await;
             let success_tag = if snapshot.is_ok() { "true" } else { "false" };
@@ -127,6 +133,7 @@ impl ShellSnapshot {
         session_cwd: &AbsolutePathBuf,
         shell: &Shell,
         state_db: Option<StateDbHandle>,
+        removed_env_vars: &[String],
     ) -> std::result::Result<ShellSnapshotFile, &'static str> {
         // File to store the snapshot
         let extension = match shell.shell_type {
@@ -156,7 +163,9 @@ impl ShellSnapshot {
         });
 
         // Make the new snapshot.
-        if let Err(err) = write_shell_snapshot(shell.shell_type, &temp_path, session_cwd).await {
+        if let Err(err) =
+            write_shell_snapshot(shell.shell_type, &temp_path, session_cwd, removed_env_vars).await
+        {
             tracing::warn!(
                 "Failed to create shell snapshot for {}: {err:?}",
                 shell.name()
@@ -205,6 +214,7 @@ async fn write_shell_snapshot(
     shell_type: ShellType,
     output_path: &AbsolutePathBuf,
     cwd: &AbsolutePathBuf,
+    removed_env_vars: &[String],
 ) -> Result<()> {
     if shell_type == ShellType::PowerShell || shell_type == ShellType::Cmd {
         bail!("Shell snapshot not supported yet for {shell_type:?}");
@@ -212,7 +222,7 @@ async fn write_shell_snapshot(
     let shell = get_shell(shell_type, /*path*/ None)
         .with_context(|| format!("No available shell for {shell_type:?}"))?;
 
-    let raw_snapshot = capture_snapshot(&shell, cwd).await?;
+    let raw_snapshot = capture_snapshot(&shell, cwd, removed_env_vars).await?;
     let snapshot = strip_snapshot_preamble(&raw_snapshot)?;
 
     if let Some(parent) = output_path.parent() {
@@ -230,15 +240,28 @@ async fn write_shell_snapshot(
     Ok(())
 }
 
-async fn capture_snapshot(shell: &Shell, cwd: &AbsolutePathBuf) -> Result<String> {
+async fn capture_snapshot(
+    shell: &Shell,
+    cwd: &AbsolutePathBuf,
+    removed_env_vars: &[String],
+) -> Result<String> {
     let shell_type = shell.shell_type;
-    match shell_type {
-        ShellType::Zsh => run_shell_script(shell, &zsh_snapshot_script(), cwd).await,
-        ShellType::Bash => run_shell_script(shell, &bash_snapshot_script(), cwd).await,
-        ShellType::Sh => run_shell_script(shell, &sh_snapshot_script(), cwd).await,
-        ShellType::PowerShell => run_shell_script(shell, &powershell_snapshot_script(), cwd).await,
+    let script = match shell_type {
+        ShellType::Zsh => zsh_snapshot_script(),
+        ShellType::Bash => bash_snapshot_script(),
+        ShellType::Sh => sh_snapshot_script(),
+        ShellType::PowerShell => powershell_snapshot_script(),
         ShellType::Cmd => bail!("Shell snapshotting is not yet supported for {shell_type:?}"),
-    }
+    };
+    run_script_with_timeout(
+        shell,
+        &script,
+        SNAPSHOT_TIMEOUT,
+        /*use_login_shell*/ true,
+        cwd,
+        removed_env_vars,
+    )
+    .await
 }
 
 fn strip_snapshot_preamble(snapshot: &str) -> Result<String> {
@@ -263,20 +286,10 @@ async fn validate_snapshot(
         SNAPSHOT_TIMEOUT,
         /*use_login_shell*/ false,
         cwd,
+        /*removed_env_vars*/ &[],
     )
     .await
     .map(|_| ())
-}
-
-async fn run_shell_script(shell: &Shell, script: &str, cwd: &AbsolutePathBuf) -> Result<String> {
-    run_script_with_timeout(
-        shell,
-        script,
-        SNAPSHOT_TIMEOUT,
-        /*use_login_shell*/ true,
-        cwd,
-    )
-    .await
 }
 
 async fn run_script_with_timeout(
@@ -285,6 +298,7 @@ async fn run_script_with_timeout(
     snapshot_timeout: Duration,
     use_login_shell: bool,
     cwd: &AbsolutePathBuf,
+    removed_env_vars: &[String],
 ) -> Result<String> {
     let args = shell.derive_exec_args(script, use_login_shell);
     let shell_name = shell.name();
@@ -295,6 +309,15 @@ async fn run_script_with_timeout(
     handler.args(&args[1..]);
     handler.stdin(Stdio::null());
     handler.current_dir(cwd);
+    for (name, _) in std::env::vars_os() {
+        if name.to_str().is_some_and(|name| {
+            removed_env_vars
+                .iter()
+                .any(|removed| removed.eq_ignore_ascii_case(name))
+        }) {
+            handler.env_remove(&name);
+        }
+    }
     #[cfg(unix)]
     unsafe {
         handler.pre_exec(|| {

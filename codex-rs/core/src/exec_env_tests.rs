@@ -113,7 +113,7 @@ fn test_core_inherit_with_default_excludes_enabled() {
 }
 
 #[test]
-fn shell_tool_env_removes_provider_auth_vars_even_when_policy_keeps_sensitive_vars() {
+fn remove_provider_auth_env_vars_ignores_policy_opt_ins() {
     let mut env: HashMap<String, String> = hashmap! {
         "PATH".to_string() => "/usr/bin".to_string(),
         "OPENAI_API_KEY".to_string() => "openai-secret".to_string(),
@@ -145,6 +145,9 @@ fn built_in_provider_auth_names_come_from_the_provider_table() {
         "CORBANU_PLAN_API_KEY",
         "OPENAI_API_KEY",
         "CODEX_API_KEY",
+        "CODEX_ACCESS_TOKEN",
+        "CLAUDE_CODE_OAUTH_TOKEN",
+        "AWS_BEARER_TOKEN_BEDROCK",
     ] {
         assert!(is_provider_auth_env_var(name), "{name} should be blocked");
     }
@@ -152,12 +155,12 @@ fn built_in_provider_auth_names_come_from_the_provider_table() {
 }
 
 #[test]
-fn blocked_provider_auth_vars_honor_explicit_set_and_exact_include_only() {
+fn blocked_provider_auth_vars_honor_only_exact_include_only_entries() {
     let blocked_for = |policy: &ShellEnvironmentPolicy| {
-        blocked_provider_auth_env_vars(policy, ["CORP_MODEL_TOKEN"])
+        blocked_provider_auth_env_vars(policy, ["CORP_MODEL_CRED"])
     };
     let default_blocked = blocked_for(&ShellEnvironmentPolicy::default());
-    for name in ["ZAI_API_KEY", "OPENROUTER_API_KEY", "CORP_MODEL_TOKEN"] {
+    for name in ["ZAI_API_KEY", "OPENROUTER_API_KEY", "CORP_MODEL_CRED"] {
         assert!(default_blocked.iter().any(|blocked| blocked == name));
     }
 
@@ -172,10 +175,40 @@ fn blocked_provider_auth_vars_honor_explicit_set_and_exact_include_only() {
     };
     let blocked = blocked_for(&opted_in);
     assert!(!blocked.iter().any(|name| name == "ZAI_API_KEY"));
-    assert!(!blocked.iter().any(|name| name == "OPENROUTER_API_KEY"));
-    // Wildcards never opt a credential in.
-    assert!(blocked.iter().any(|name| name == "CORP_MODEL_TOKEN"));
+    // `set` never passes the inherited value; wildcards never opt in.
+    assert!(blocked.iter().any(|name| name == "OPENROUTER_API_KEY"));
+    assert!(blocked.iter().any(|name| name == "CORP_MODEL_CRED"));
     assert!(blocked.iter().any(|name| name == "DEEPSEEK_API_KEY"));
+}
+
+#[test]
+fn strip_provider_auth_env_keeps_only_the_value_set_supplies() {
+    let policy = ShellEnvironmentPolicy {
+        r#set: hashmap! {
+            "zai_api_key".to_string() => "explicit".to_string(),
+            "OPENROUTER_API_KEY".to_string() => "explicit-openrouter".to_string(),
+        },
+        ..Default::default()
+    };
+    let mut env = populate_env(
+        make_vars(&[
+            ("PATH", "/usr/bin"),
+            ("ZAI_API_KEY", "inherited-secret"),
+            ("OPENROUTER_API_KEY", "inherited-openrouter"),
+            ("CORP_MODEL_CRED", "inherited-custom"),
+        ]),
+        &policy,
+        /*thread_id*/ None,
+    );
+
+    strip_provider_auth_env_vars(&mut env, &policy, ["CORP_MODEL_CRED"]);
+
+    let expected: HashMap<String, String> = hashmap! {
+        "PATH".to_string() => "/usr/bin".to_string(),
+        "zai_api_key".to_string() => "explicit".to_string(),
+        "OPENROUTER_API_KEY".to_string() => "explicit-openrouter".to_string(),
+    };
+    assert_eq!(env, expected);
 }
 
 #[test]
