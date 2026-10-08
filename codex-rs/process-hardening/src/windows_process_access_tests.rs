@@ -225,6 +225,21 @@ fn pf_27_s07_protected_spawn_is_never_openable() {
     }
 }
 
+/// PF-27-S07: the broker's own containment still succeeds in a process
+/// started protected (it cannot rewrite its own DACL there, and need not).
+#[test]
+fn pf_27_s07_protected_spawn_then_broker_hardening_succeeds() {
+    let target = Target::spawn_with(TargetOptions {
+        harden: true,
+        default_dacl: true,
+        new_threads: true,
+        protected_spawn: true,
+    });
+    let report = probe_as_same_user(&target);
+    assert_new_threads(&report, "imported", "denied");
+    assert_new_threads(&report, "direct", "denied");
+}
+
 fn assert_new_threads(report: &Report, thread: &str, expected: &str) {
     for (name, _) in THREAD_RIGHTS {
         let key = format!("new_{thread}_{name}");
@@ -380,7 +395,11 @@ fn run_target() {
         crate::protect_new_objects_by_default().expect("protect new objects");
     }
     if std::env::var_os(HARDEN_ENV).is_some() {
-        restrict_current_process_access().expect("restrict process access");
+        if let Err(err) = restrict_current_process_access() {
+            // Visible even when stderr is closed (protected spawn).
+            println!("\nrestrict_current_process_access failed: {err}");
+            panic!("restrict process access: {err}");
+        }
         assert!(
             crate::thread_creation_protected(),
             "CreateThread imports were not redirected"

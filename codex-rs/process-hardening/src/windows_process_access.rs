@@ -38,6 +38,7 @@ use std::ptr;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use windows_sys::Win32::Foundation::CloseHandle;
+use windows_sys::Win32::Foundation::ERROR_ACCESS_DENIED;
 use windows_sys::Win32::Foundation::ERROR_SUCCESS;
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::Foundation::HLOCAL;
@@ -115,10 +116,92 @@ pub fn restrict_current_process_access() -> io::Result<()> {
             ptr::null(),
         )
     };
-    if status != ERROR_SUCCESS {
+    // A process started by `spawn_protected` already has this DACL and, its
+    // own handle being computed from it, may not rewrite it.
+    if status != ERROR_SUCCESS
+        && !(status == ERROR_ACCESS_DENIED && current_process_dacl_is_protected())
+    {
         return Err(io::Error::from_raw_os_error(status as i32));
     }
     threads
+}
+
+/// True when this process's DACL grants nothing beyond query-limited,
+/// synchronize and read-control to anyone but `SYSTEM`.
+fn current_process_dacl_is_protected() -> bool {
+    use windows_sys::Win32::Security::ACCESS_ALLOWED_ACE;
+    use windows_sys::Win32::Security::ACE_HEADER;
+    use windows_sys::Win32::Security::ACL_SIZE_INFORMATION;
+    use windows_sys::Win32::Security::AclSizeInformation;
+    use windows_sys::Win32::Security::Authorization::GetSecurityInfo;
+    use windows_sys::Win32::Security::GetAce;
+    use windows_sys::Win32::Security::GetAclInformation;
+    use windows_sys::Win32::Security::IsWellKnownSid;
+    use windows_sys::Win32::Security::WinLocalSystemSid;
+    const ACCESS_ALLOWED_ACE_TYPE: u8 = 0;
+    const ACCESS_DENIED_ACE_TYPE: u8 = 1;
+    const READ_CONTROL: u32 = 0x0002_0000;
+    let allowed = PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE | READ_CONTROL;
+    let mut dacl: *mut ACL = ptr::null_mut();
+    let mut descriptor: PSECURITY_DESCRIPTOR = ptr::null_mut();
+    // SAFETY: the pseudo-handle is valid; `descriptor` is freed below.
+    let status = unsafe {
+        GetSecurityInfo(
+            GetCurrentProcess(),
+            SE_KERNEL_OBJECT,
+            DACL_SECURITY_INFORMATION,
+            ptr::null_mut(),
+            ptr::null_mut(),
+            &mut dacl,
+            ptr::null_mut(),
+            &mut descriptor,
+        )
+    };
+    if status != ERROR_SUCCESS {
+        return false;
+    }
+    let mut protected = !dacl.is_null();
+    // SAFETY: zeroed out-structure; `dacl` points into `descriptor`.
+    let mut info: ACL_SIZE_INFORMATION = unsafe { std::mem::zeroed() };
+    protected = protected
+        && unsafe {
+            GetAclInformation(
+                dacl,
+                (&mut info as *mut ACL_SIZE_INFORMATION).cast(),
+                std::mem::size_of::<ACL_SIZE_INFORMATION>() as u32,
+                AclSizeInformation,
+            )
+        } != 0;
+    for index in 0..if protected { info.AceCount } else { 0 } {
+        let mut ace: *mut c_void = ptr::null_mut();
+        // SAFETY: `index` is below the ACE count of a valid ACL.
+        if unsafe { GetAce(dacl, index, &mut ace) } == 0 {
+            protected = false;
+            break;
+        }
+        // SAFETY: every ACE starts with a header.
+        let kind = unsafe { (*(ace as *const ACE_HEADER)).AceType };
+        if kind == ACCESS_DENIED_ACE_TYPE {
+            continue;
+        }
+        if kind != ACCESS_ALLOWED_ACE_TYPE {
+            protected = false;
+            break;
+        }
+        // SAFETY: an access-allowed ACE: header, mask, then the SID.
+        let mask = unsafe { (*(ace as *const ACCESS_ALLOWED_ACE)).Mask };
+        let sid = (ace as usize + std::mem::size_of::<ACE_HEADER>() + std::mem::size_of::<u32>())
+            as *mut c_void;
+        // SAFETY: `sid` points to the ACE's SID.
+        let system = unsafe { IsWellKnownSid(sid, WinLocalSystemSid) } != 0;
+        if !system && mask & !allowed != 0 {
+            protected = false;
+            break;
+        }
+    }
+    // SAFETY: allocated by GetSecurityInfo.
+    unsafe { LocalFree(descriptor as HLOCAL) };
+    protected
 }
 
 /// The protected DACL applied by [`restrict_current_process_access`].
