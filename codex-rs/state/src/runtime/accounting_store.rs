@@ -155,7 +155,9 @@ pub struct InspectionBucket {
 pub enum InspectionDay {
     Range {
         requested: InspectionRange,
-        oldest_aggregate_day: Option<i64>,
+        /// First UTC day whose daily totals are kept; `None` while the ledger
+        /// has no completed checkpoint.
+        aggregate_day_floor: Option<i64>,
         read_at_ms: i64,
         buckets: Vec<InspectionBucket>,
     },
@@ -903,10 +905,12 @@ async fn inspect_buckets(
     if !work.scans(/*count*/ 1) {
         return Ok(InspectionDay::TooLarge);
     }
-    let oldest_aggregate_day =
-        sqlx::query_scalar("SELECT min(utc_day) FROM draft_accounting_compact_days")
-            .fetch_one(&mut *conn)
-            .await?;
+    // The same floor the day pages state, not the oldest compacted day: a
+    // ledger that has compacted nothing yet still keeps a year of totals.
+    let aggregate_day_floor = match super::retention_fixture_on_connection(conn).await? {
+        super::RetentionFixture::Active(checkpoint) => Some(super::aggregate_day_floor(checkpoint)),
+        super::RetentionFixture::Staging | super::RetentionFixture::Absent => None,
+    };
     let mut buckets = Vec::new();
     let mut cursor = requested.start_ms;
     let mut attempts = 0;
@@ -981,7 +985,7 @@ async fn inspect_buckets(
     }
     Ok(InspectionDay::Range {
         requested,
-        oldest_aggregate_day,
+        aggregate_day_floor,
         read_at_ms,
         buckets,
     })

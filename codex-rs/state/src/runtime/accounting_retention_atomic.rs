@@ -460,11 +460,7 @@ pub(in crate::runtime::accounting::pricing::storage::lifecycle) async fn read_re
     let coverage = RetentionCoverage {
         completed_as_of_ms: checkpoint,
         detail_expired_through_ms: (checkpoint >= DETAIL_MS).then(|| checkpoint - DETAIL_MS),
-        aggregate_day_floor: if checkpoint < REPLAY_MS {
-            0
-        } else {
-            (checkpoint - REPLAY_MS) / DAY_MS + 1
-        },
+        aggregate_day_floor: crate::runtime::accounting::aggregate_day_floor(checkpoint),
         oldest_recorded_day: plan
             .compact_days
             .keys()
