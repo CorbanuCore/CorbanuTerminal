@@ -28,14 +28,32 @@ earlier owner grants were (`authority:security-ownership-fable-20260914`): a mea
   2026-09-14, deadline long passed, stall already reported, session ended. No duplicate launch, no
   replacement and no Slack message.
 - It has been archived to `action_history`. No action is in flight now, and the `slack-receiver` resource is free.
+  Its allocation was compacted afterwards (see Follow-up).
 
 ## Manager reaction (standby, as designed)
 
 The two meaningful events triggered one manager cycle, `0528f17a…`, at 02:16Z. It was **accepted with no
 action**, prepared nothing and gave no verdicts. Its reason now reads: security is resumed but hand-coordinated
 with no manager allocation, and the receiver claim is settled. It no longer says "security stays paused".
-Afterwards the coordinator is at revision 2988, `manager: null`, and has no pending meaningful events.
-Both jobs tick with no hold and no errors. The owner is armed at generation 11 with no unresolved holds.
+
+### Follow-up (02:18–02:25Z)
+
+- **Second cycle.** Settling the claim left the `slack-receiver-02` allocation idle (its only action had failed,
+  none accepted). The owner sent `owner-wake:no_prepared_work`, which started cycle `609a4fce…` at 02:18Z.
+  That cycle was also no-action. It said "security and product continuation remain paused" again: the
+  authority event had already been consumed, and every briefing still carries the workstream's stored 2026-09-13
+  `pause` text.
+- **Allocation compacted (2988 → 2989).** `compact_allocation` turned `slack-receiver-02` into the consumed stub.
+  This is the same audited call routine compaction makes. The event is not meaningful, the original allocation
+  stays in the audit table, and evidence is recorded. Without it, routine compaction would only run after the
+  7-day failed-work grace. Until then the owner would send this wake every 12 hours.
+  After compaction: no further wakes, both jobs idle with no hold or errors, owner armed at generation 11.
+
+**Still open:** the stored security workstream text (`pause`, "Owner paused" history) cannot be changed through
+any CLI operation. A raw SQLite edit was not made. So until that text is corrected, a manager briefing can
+still conclude that security is paused. Fixing it needs either a small owner operation, for example to update a
+workstream's text fields with evidence, or Travis's approval for a one-off audited state edit. The fix doesn't
+affect dispatch: the stream is `mode: enabled`, and the manager has no security allocations.
 
 ## Dashboard
 
