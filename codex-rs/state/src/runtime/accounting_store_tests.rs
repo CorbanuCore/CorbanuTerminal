@@ -1079,6 +1079,43 @@ async fn range_read(
     .await
 }
 
+/// #289: a week or month bucket that reaches past the ledger reports the
+/// interval it covers, as a day bucket containing today does, not
+/// "unavailable".
+#[tokio::test]
+async fn accounting_inspect_range_bucket_reaching_past_the_ledger_states_its_coverage()
+-> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    seed(&runtime).await?;
+    // The ledger is current to 12:00 on day 6 (a Wednesday); the read is at
+    // the same time. Day 4 (1970-01-05) is a Monday, so one ISO week and one
+    // month bucket cover the range.
+    let now = 6 * DAY + DAY / 2;
+    AccountingStore::open(&runtime, now).await?;
+    for grouping in [InspectionGrouping::Week, InspectionGrouping::Month] {
+        let buckets = range_buckets(
+            range_read(
+                &runtime,
+                /*start*/ 4 * DAY,
+                /*end*/ 11 * DAY,
+                grouping,
+                now,
+            )
+            .await?,
+        );
+        assert_eq!(buckets.len(), 1, "{grouping:?}");
+        assert!(buckets[0].partial);
+        assert_eq!(
+            buckets[0].effective,
+            Some((4 * DAY, now + 1)),
+            "{grouping:?}"
+        );
+    }
+    runtime.close().await;
+    Ok(())
+}
+
 #[tokio::test]
 async fn accounting_inspect_range_invalid_empty_reversed_and_unavailable() -> anyhow::Result<()> {
     let path = home();

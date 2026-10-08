@@ -588,6 +588,31 @@ const METRICS: [&str; 7] = [
 ];
 const BUCKETS: [&str; 4] = ["Noncached input", "Cache read", "Cache write", "Output"];
 
+/// Why an unreported cache-write count still yields exact costs: the price
+/// bound at dispatch charges nothing for cache writes, so input is exactly
+/// cache hits plus misses.
+const WRITES_FREE: &str = "this price charges nothing for cache writes";
+
+/// How many attempts were priced from a cache-write count they never
+/// reported (see `WRITES_FREE`).
+fn resolved_cache_writes<'a>(quotes: impl IntoIterator<Item = &'a ObservationQuote>) -> i64 {
+    quotes
+        .into_iter()
+        .filter(|q| q.usage.write.is_none() && q.priced_counts()[2].is_some())
+        .count() as i64
+}
+
+/// The state line for a home with no ledger. A build that records costs
+/// creates the ledger with the first request it records, so collection is
+/// not "off" there; other builds may never create one.
+fn absent_state() -> &'static str {
+    if cfg!(feature = "developer-accounting") {
+        "Unavailable — no requests recorded in this home yet; the accounting ledger is created when the first one is."
+    } else {
+        "Unavailable — accounting ledger not installed."
+    }
+}
+
 fn attempt_text(q: &ObservationQuote) -> Vec<String> {
     let a = &q.attempt;
     let mut lines = vec![
@@ -635,6 +660,7 @@ fn attempt_text(q: &ObservationQuote) -> Vec<String> {
         lines.push(billed_detail(&billed));
     }
     let u = &q.usage;
+    let priced = q.priced_counts();
     for (index, (label, value)) in METRICS
         .iter()
         .zip([
@@ -653,6 +679,24 @@ fn attempt_text(q: &ObservationQuote) -> Vec<String> {
             codex_state::accounting::Dialect::NativeAnthropic => index == 0 || index == 6,
             codex_state::accounting::Dialect::UnknownCompatible => false,
         };
+        // Where pricing resolved an unreported cache-write count, say what
+        // each cost was computed from instead of calling it unknown.
+        let resolved = match index {
+            1 => priced[0].filter(|_| value.is_none()).map(|n| {
+                format!(
+                    "{} (derived as input − cache read: cache writes were not reported, and {WRITES_FREE})",
+                    grouped(n)
+                )
+            }),
+            3 => priced[2]
+                .filter(|_| value.is_none())
+                .map(|_| format!("not reported — {WRITES_FREE}")),
+            _ => None,
+        };
+        if let Some(resolved) = resolved {
+            lines.push(format!("{label}: {resolved}"));
+            continue;
+        }
         lines.push(format!(
             "{label}: {}",
             value.map_or("unknown — no retained numeric evidence".into(), |n| {
@@ -820,7 +864,7 @@ fn inspection_pages_for(
                 other => other,
             };
             pages[0].text.insert(0, match other {
-                Ok(InspectionDay::Absent) => "Unavailable — accounting ledger not installed. Collection remains off.".into(),
+                Ok(InspectionDay::Absent) => absent_state().into(),
                 Ok(InspectionDay::MissingThread) => "Unavailable — native thread no longer exists.".into(),
                 Ok(InspectionDay::CheckpointLag) => "Snapshot is not current; newer activity is unverified".into(),
                 Ok(InspectionDay::NeedsRefresh) => "Recorded totals unavailable — stored contributions need refresh. Retry rereads only; no repair performed.".into(),
@@ -877,12 +921,36 @@ fn inspection_pages_for(
             known_exact(t, EstimateGaps::of(ready.requests.values().flatten()))
         ),
     ]);
-    for (label, m) in METRICS.iter().zip(&t.measured) {
-        pages[0].text.push(format!("{label}: {}", metric_text(m)));
+    let resolved = resolved_cache_writes(ready.requests.values().flatten());
+    for (index, (label, m)) in METRICS.iter().zip(&t.measured).enumerate() {
+        let n = resolved.min(m.unknown);
+        let attempts = format!("{n} {}", if n == 1 { "attempt" } else { "attempts" });
+        let note = match index {
+            1 => format!(
+                "costed as input − cache read for {attempts}, whose price charges nothing for cache writes"
+            ),
+            _ => format!("free at the price of {attempts}, so nothing was charged"),
+        };
+        pages[0].text.push(if matches!(index, 1 | 3) && n > 0 {
+            format!("{label}: {} — {note}", metric_text(m))
+        } else {
+            format!("{label}: {}", metric_text(m))
+        });
     }
     let context = pages[0].text.clone();
     let mut request_pages = std::collections::BTreeMap::new();
-    for (request, quotes) in &ready.requests {
+    // Number requests in the order they were sent, not by their ids.
+    let mut ordered: Vec<_> = ready.requests.iter().collect();
+    ordered.sort_by_key(|(request, quotes)| {
+        (
+            quotes
+                .iter()
+                .map(|quote| i64::from(quote.attempt.dispatched_at_ms))
+                .min(),
+            **request,
+        )
+    });
+    for (request, quotes) in ordered {
         let request_page = pages.len();
         request_pages.insert(*request, request_page);
         let number = pages[0].links.len() + 1;
@@ -2147,6 +2215,11 @@ impl ChatWidget {
             && time.and_utc().timestamp() >= 0
         {
             self.open_accounting_inspector(time.and_utc().timestamp() / 86_400);
+        } else if let Some(date) = date.filter(|d| *d > today) {
+            // Valid syntax: say what is wrong with it, not how to type it.
+            self.add_error_message(format!(
+                "{date} is after today ({today}, UTC); there is nothing recorded for it yet. Run {command} for today."
+            ));
         } else {
             self.add_error_message(
                 format!("Usage: {command} [YYYY-MM-DD] (UTC, no future dates). Custom: {command} START END hour|day|week|month; dates or UTC timestamps ending Z; end exclusive."),
