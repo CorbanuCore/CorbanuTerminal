@@ -7,7 +7,8 @@
 //! it up itself; a normal (medium-integrity) session cannot answer the setup's
 //! UAC prompt, so set `CODEX_PF27S06_SETUP_SEED` to a directory holding the
 //! `setup_marker.json` and `sandbox_users.json` of an earlier elevated setup
-//! on the same machine and user (the sandbox's users are machine-wide).
+//! on the same machine and user (the sandbox's users are machine-wide). An
+//! elevated run with that variable set to an empty directory fills it.
 
 use super::LaunchContract;
 use crate::exec::ExecCapturePolicy;
@@ -159,6 +160,7 @@ async fn pf_27_s06_d2_vault_unreadable_through_tool_launch_under_workspace_write
 
     // Positive control: without the contract the sandbox user reads them.
     let control = run(tool_launch(&base, &cwd, command())).await;
+    record_elevated_setup(&codex_home);
     eprintln!("pf27s06 d2 workspace-write, no contract: {control}");
     for readable in ["VAULT", "AUTH", "NOTES"] {
         assert!(
@@ -203,19 +205,38 @@ async fn run(request: crate::sandboxing::ExecRequest) -> String {
     format!("{}{}", output.stdout.text, output.stderr.text)
 }
 
+const SETUP_FILES: [(&str, &str); 2] = [
+    ("setup_marker.json", ".sandbox"),
+    ("sandbox_users.json", ".sandbox-secrets"),
+];
+
 /// See the module docs: seeds the elevated setup for a normal session.
 fn seed_elevated_setup(codex_home: &AbsolutePathBuf) {
     let Some(seed) = std::env::var_os(SETUP_SEED_ENV) else {
         return;
     };
     let seed = Path::new(&seed);
-    for (file, dir) in [
-        ("setup_marker.json", ".sandbox"),
-        ("sandbox_users.json", ".sandbox-secrets"),
-    ] {
+    for (file, dir) in SETUP_FILES {
+        if !seed.join(file).exists() {
+            continue;
+        }
         let dir = codex_home.join(dir);
         std::fs::create_dir_all(&dir).expect("seed dir");
         std::fs::copy(seed.join(file), dir.join(file)).expect("seed elevated setup");
+    }
+}
+
+/// Fills an empty seed directory from the setup this run did.
+fn record_elevated_setup(codex_home: &AbsolutePathBuf) {
+    let Some(seed) = std::env::var_os(SETUP_SEED_ENV) else {
+        return;
+    };
+    let seed = Path::new(&seed);
+    for (file, dir) in SETUP_FILES {
+        if !seed.join(file).exists() {
+            std::fs::copy(codex_home.join(dir).join(file), seed.join(file))
+                .expect("record elevated setup");
+        }
     }
 }
 
