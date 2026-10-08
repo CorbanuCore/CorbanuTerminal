@@ -4,7 +4,7 @@ title: "Windows broker and secretless launch"
 status: blocked
 plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-27"
-execution_order: 45
+execution_order: 42
 owner: "Windows-host gate owner (Jim Ricketts; code by the broker lane worker, 2026-10-08)"
 parallel_lane: "windows-host"
 write_scope: "qa/security-levels/sprints/PF-27-S06/, qa/demos/index/PF-27-S06.md, docs/sprints/current/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md"
@@ -75,10 +75,10 @@ build worktree was removed, so reallocate coordinates on the Windows host before
   (separate sandbox user) and a stated refusal for the unelevated one. Measured: vault, sign-in, policy store and
   state databases unreadable (readable in the base-profile control), `CODEX_HOME` unwritable, files created or
   replaced during a run denied (an inherit-only, files-only deny on `CODEX_HOME`), Core stand-ins unopenable.
-- [x] Documented limits: Travis chose to fix all four (2026-10-08): new-thread window and leftover `CODEX_HOME` deny
-  in PF-27-S07, broker restricted token/AppContainer in PF-27-S08, Windows model auth in PF-27-S09.
 - [x] `pf_27_s06` tests run on every PR touching this code (`windows-security-probes` workflow); Linux clippy clean
   on the RTX box; Opus 5.5 High reviews per slice, all approved (2-3 rounds each).
+- [x] Travis approved fixing the four documented limits (2026-10-08): [PF-27-S07](pf-27-s07-windows-hardening-follow-ups.md)
+  (new threads, `CODEX_HOME` deny), [S08](pf-27-s08-windows-broker-restricted-token.md) (broker token), [S09](pf-27-s09-windows-model-client-auth.md) (model auth).
 
 ## Remaining
 

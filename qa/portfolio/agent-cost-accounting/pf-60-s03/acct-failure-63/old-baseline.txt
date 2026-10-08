@@ -1,0 +1,22 @@
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: /Volumes/CorbanuDrive/Corbanu/.codex-work/acct63/work
+model: Qwen3.8-Flash-Next-Uncensored-MLX-Serve-mixed-4-8bit
+provider: localmlx
+approval: never
+sandbox: read-only
+session id: 01a103e2-b298-7493-9bd8-d3ad0327f20d
+--------
+user
+Reply with the single word OK.
+warning: Model metadata for `Qwen3.8-Flash-Next-Uncensored-MLX-Serve-mixed-4-8bit` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.
+{"tag":"corbanu_call_metrics","call_index":1,"attempt_number":1,"request_byte_size":50207,"ms_to_response_headers":92,"ms_to_first_sse_byte":93,"ms_to_first_parsed_data_event":93,"ms_to_first_actionable_event":115778,"total_stream_ms":115855,"comment_frame_count":23,"parsed_event_count":6,"x_request_id":null,"generation_id":"chatcmpl-1791066551327","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+corbanu
+OK
+
+tokens used
+13,035
+OK
+
+EXIT:0

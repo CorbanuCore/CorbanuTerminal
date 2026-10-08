@@ -111,6 +111,9 @@ nav:
               - "PF-26-S03 — Human acceptance, finished docs, and release evidence": sprints/current/p1-security-hardening/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md
               - "PF-26-S04 — Final integrated automated security qualification": sprints/current/p1-security-hardening/pf-26-s04-final-automated-qualification.md
               - "PF-27-S06 — Windows broker and secretless launch": sprints/current/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md
+              - "PF-27-S07 — Windows hardening follow-ups": sprints/current/p1-security-hardening/pf-27-s07-windows-hardening-follow-ups.md
+              - "PF-27-S08 — Windows broker restricted token": sprints/current/p1-security-hardening/pf-27-s08-windows-broker-restricted-token.md
+              - "PF-27-S09 — Windows model-client auth through the broker": sprints/current/p1-security-hardening/pf-27-s09-windows-model-client-auth.md
               - "PF-31-S01 — Pinned retriever artifact and sandbox": sprints/current/p1-security-hardening/pf-31-s01-pinned-retriever-isolation.md
               - "PF-31-S02 — Bounded fetch adapter with no host fallback": sprints/current/p1-security-hardening/pf-31-s02-bounded-fetch-no-fallback.md
               - "PF-31-S03 — Download quarantine and human file promotion": sprints/current/p1-security-hardening/pf-31-s03-download-quarantine-promotion.md
