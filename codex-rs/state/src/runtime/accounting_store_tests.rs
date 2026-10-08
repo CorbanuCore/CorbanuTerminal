@@ -846,6 +846,7 @@ async fn accounting_inspect_other_conversations_are_read_beside_the_tree() -> an
             conversations: 1,
             unavailable: 0,
             requests: alone.requests,
+            deleted_attempts: DeletedAttempts::Counted(0),
         })
     );
     assert_eq!(
@@ -859,6 +860,7 @@ async fn accounting_inspect_other_conversations_are_read_beside_the_tree() -> an
         conversations: 1,
         unavailable: 1,
         requests: Default::default(),
+        deleted_attempts: DeletedAttempts::Counted(0),
     });
     sqlx::query("DELETE FROM draft_accounting_contributions WHERE attempt_id = ?")
         .bind(Uuid::from_u128(5).to_string())
@@ -870,6 +872,33 @@ async fn accounting_inspect_other_conversations_are_read_beside_the_tree() -> an
         InspectionDay::Ready(expected)
     );
     assert_eq!(rows(&runtime).await?, before);
+    runtime.close().await;
+    Ok(())
+}
+
+// #286: deleting a conversation removes its attempts and their cost. The day
+// must still say that deleted conversations spent on it, never read as empty.
+#[tokio::test]
+async fn accounting_inspect_counts_deleted_conversations_attempts() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    tree_fixture(&runtime).await?;
+    let other = ThreadId::from_string(&Uuid::from_u128(11).to_string())?;
+    let before = inspection(inspected(&runtime, /*day*/ 0, /*time*/ 0).await?)
+        .other_conversations
+        .expect("day view reads other conversations");
+    let attempts: usize = before.requests.values().map(Vec::len).sum();
+    assert_eq!((before.conversations, attempts), (1, 1));
+    runtime.delete_threads_at(&[other], /*as_of_ms*/ 0).await?;
+    assert_eq!(
+        inspection(inspected(&runtime, /*day*/ 0, /*time*/ 0).await?).other_conversations,
+        Some(OtherConversations {
+            conversations: 0,
+            unavailable: 0,
+            requests: Default::default(),
+            deleted_attempts: DeletedAttempts::Counted(attempts),
+        })
+    );
     runtime.close().await;
     Ok(())
 }

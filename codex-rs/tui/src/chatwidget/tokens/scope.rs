@@ -8,6 +8,7 @@
 //! second with the step that finds the real amount.
 
 use codex_state::accounting::DayTotals;
+use codex_state::accounting::DeletedAttempts;
 use codex_state::accounting::ObservationQuote;
 use codex_state::accounting::OtherConversations;
 
@@ -35,8 +36,16 @@ pub(super) fn other_conversations_lines(others: Option<&OtherConversations>) -> 
             "Other conversations are not included in this view; /cost covers only the open conversation.".into(),
         ];
     };
+    let deleted = deleted_line(others.deleted_attempts);
     if others.conversations == 0 {
-        return vec!["No other conversation recorded requests on this day.".into()];
+        // Only a day with nothing deleted on it is known to be empty.
+        return match deleted {
+            None => vec!["No other conversation recorded requests on this day.".into()],
+            Some(deleted) => vec![
+                "No other open conversation has recorded requests on this day.".into(),
+                deleted,
+            ],
+        };
     }
     let quotes: Vec<&ObservationQuote> = others.requests.values().flatten().collect();
     let conversations = counted(others.conversations, "conversation");
@@ -68,8 +77,25 @@ pub(super) fn other_conversations_lines(others: Option<&OtherConversations>) -> 
             counted(others.unavailable, "conversation")
         ));
     }
+    lines.extend(deleted);
     lines.push(RESUME_STEP.into());
     lines
+}
+
+/// Deleted conversations' spend on this day. Deletion removes their recorded
+/// requests and cost, but the provider billed them; say so rather than let the
+/// day look emptier or cheaper than it was. `None` means none were deleted.
+fn deleted_line(deleted_attempts: DeletedAttempts) -> Option<String> {
+    match deleted_attempts {
+        DeletedAttempts::Counted(0) => None,
+        DeletedAttempts::Counted(n) => Some(format!(
+            "Deleted conversations sent {} on this day. Their recorded cost was deleted with them, so it is not included here; the provider still billed it.",
+            counted(n, "request attempt")
+        )),
+        DeletedAttempts::Uncountable => Some(
+            "Requests from deleted conversations cannot be counted for this day; any they made are not included here.".into(),
+        ),
+    }
 }
 
 /// What to do about requests whose recorded tokens no published price covers:

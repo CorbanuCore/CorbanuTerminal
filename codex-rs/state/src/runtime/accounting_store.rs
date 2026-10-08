@@ -28,6 +28,7 @@ pub use super::types::Observation;
 pub use super::types::Patch;
 pub use super::types::Presence;
 pub use super::types::Usage;
+pub use scope::DeletedAttempts;
 pub use scope::OtherConversations;
 
 #[path = "accounting_scope.rs"]
