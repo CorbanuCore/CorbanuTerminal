@@ -7,8 +7,9 @@
 //! it up itself; a normal (medium-integrity) session cannot answer the setup's
 //! UAC prompt, so set `CODEX_PF27S06_SETUP_SEED` to a directory holding the
 //! `setup_marker.json` and `sandbox_users.json` of an earlier elevated setup
-//! on the same machine and user (the sandbox's users are machine-wide). An
-//! elevated run with that variable set to an empty directory fills it.
+//! on the same machine and user (the sandbox's users are machine-wide). Every
+//! elevated setup resets the sandbox users' passwords, so record the seed with
+//! an elevated run of this test (it writes the directory) right before.
 
 use super::LaunchContract;
 use crate::exec::ExecCapturePolicy;
@@ -229,17 +230,15 @@ fn seed_elevated_setup(codex_home: &AbsolutePathBuf) {
     }
 }
 
-/// Fills an empty seed directory from the setup this run did.
+/// Records the setup this run used into the seed directory.
 fn record_elevated_setup(codex_home: &AbsolutePathBuf) {
     let Some(seed) = std::env::var_os(SETUP_SEED_ENV) else {
         return;
     };
     let seed = Path::new(&seed);
     for (file, dir) in SETUP_FILES {
-        if !seed.join(file).exists() {
-            std::fs::copy(codex_home.join(dir).join(file), seed.join(file))
-                .expect("record elevated setup");
-        }
+        std::fs::copy(codex_home.join(dir).join(file), seed.join(file))
+            .expect("record elevated setup");
     }
 }
 
