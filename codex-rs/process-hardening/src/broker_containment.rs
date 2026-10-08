@@ -282,13 +282,15 @@ mod linux {
 }
 
 /// PF-27-S06: Windows has no per-process file sandbox the broker can apply
-/// to itself, so it applies what it can: a process and thread DACL that keeps
-/// other processes out of its memory (`dacl`), and a job (`job`) that allows
+/// to itself, so it applies what it can: a process and thread DACL, and a
+/// token default DACL that protects every thread it starts from creation
+/// (PF-27-S07), that keep other processes out of its memory (`dacl`), and a
+/// job (`job`) that allows
 /// no child processes and denies the desktop, clipboard, global atoms, other
 /// processes' USER handles and system settings. Not confined on Windows: file
 /// writes, opening other processes of the user, and asking another process
 /// to run something (WMI, Task Scheduler, out-of-process COM). A restricted
-/// or AppContainer token for the broker is the follow-up.
+/// or AppContainer token for the broker is PF-27-S08.
 #[cfg(windows)]
 mod windows {
     use super::BrokerContainment;
@@ -315,7 +317,12 @@ mod windows {
 
     pub(super) fn contain() -> BrokerContainment {
         let mut mechanisms = Vec::new();
-        if crate::restrict_current_process_access().is_ok() {
+        // PF-27-S07: every object the broker creates from now on, threads
+        // included, is protected at creation (a no-op when Core started it
+        // with `spawn_protected`, which already set this).
+        if crate::protect_new_objects_by_default().is_ok()
+            && crate::restrict_current_process_access().is_ok()
+        {
             mechanisms.push("dacl");
         }
         if forbid_child_processes().is_ok() {
