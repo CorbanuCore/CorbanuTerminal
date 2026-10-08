@@ -76,6 +76,8 @@ const SYNCHRONIZE: u32 = 0x0010_0000;
 
 /// `WRITE_DAC`: needed to replace an existing thread's DACL.
 const WRITE_DAC: u32 = 0x0004_0000;
+/// `READ_CONTROL`: needed to read an object's DACL.
+const READ_CONTROL: u32 = 0x0002_0000;
 /// `DLL_THREAD_ATTACH`, the TLS callback reason for a new thread.
 const DLL_THREAD_ATTACH: u32 = 2;
 
@@ -119,16 +121,21 @@ pub fn restrict_current_process_access() -> io::Result<()> {
     // A process started by `spawn_protected` already has this DACL and, its
     // own handle being computed from it, may not rewrite it.
     if status != ERROR_SUCCESS
-        && !(status == ERROR_ACCESS_DENIED && current_process_dacl_is_protected())
+        && !(status == ERROR_ACCESS_DENIED
+            // SAFETY: the pseudo-handle is always valid.
+            && dacl_is_protected(
+                unsafe { GetCurrentProcess() },
+                PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE,
+            ))
     {
         return Err(io::Error::from_raw_os_error(status as i32));
     }
     threads
 }
 
-/// True when this process's DACL grants nothing beyond query-limited,
-/// synchronize and read-control to anyone but `SYSTEM`.
-fn current_process_dacl_is_protected() -> bool {
+/// True when `object`'s DACL grants nothing beyond `allowed` and
+/// read-control to anyone but `SYSTEM` (`object` needs `READ_CONTROL`).
+fn dacl_is_protected(object: HANDLE, allowed: u32) -> bool {
     use windows_sys::Win32::Security::ACCESS_ALLOWED_ACE;
     use windows_sys::Win32::Security::ACE_HEADER;
     use windows_sys::Win32::Security::ACL_SIZE_INFORMATION;
@@ -140,14 +147,13 @@ fn current_process_dacl_is_protected() -> bool {
     use windows_sys::Win32::Security::WinLocalSystemSid;
     const ACCESS_ALLOWED_ACE_TYPE: u8 = 0;
     const ACCESS_DENIED_ACE_TYPE: u8 = 1;
-    const READ_CONTROL: u32 = 0x0002_0000;
-    let allowed = PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE | READ_CONTROL;
+    let allowed = allowed | READ_CONTROL;
     let mut dacl: *mut ACL = ptr::null_mut();
     let mut descriptor: PSECURITY_DESCRIPTOR = ptr::null_mut();
-    // SAFETY: the pseudo-handle is valid; `descriptor` is freed below.
+    // SAFETY: `object` is open; `descriptor` is freed below.
     let status = unsafe {
         GetSecurityInfo(
-            GetCurrentProcess(),
+            object,
             SE_KERNEL_OBJECT,
             DACL_SECURITY_INFORMATION,
             ptr::null_mut(),
@@ -261,16 +267,25 @@ fn protect_threads(user_sid: &str) -> io::Result<()> {
     let mut more = unsafe { Thread32First(snapshot, &mut entry) } != 0;
     while more {
         if entry.th32OwnerProcessID == own_pid {
-            // SAFETY: opens one of our own threads for WRITE_DAC; closed below.
-            let thread = unsafe { OpenThread(WRITE_DAC, 0, entry.th32ThreadID) };
-            // A thread that exited since the snapshot cannot be opened.
+            // SAFETY: opens one of our own threads; closed below.
+            let thread = unsafe { OpenThread(WRITE_DAC | READ_CONTROL, 0, entry.th32ThreadID) };
+            // A thread that exited since the snapshot, or one created with a
+            // restrictive DACL (PF-27-S07), cannot be opened.
             if thread != 0 {
                 // SAFETY: `thread` is open; `descriptor` is a live descriptor.
                 let status =
                     unsafe { NtSetSecurityObject(thread, DACL_SECURITY_INFORMATION, descriptor) };
+                // Denied: created protected (an enabled debug privilege still
+                // opens it); fine if its DACL is already as strict.
+                let protected = status >= 0
+                    || (status == STATUS_ACCESS_DENIED
+                        && dacl_is_protected(
+                            thread,
+                            THREAD_QUERY_LIMITED_INFORMATION | SYNCHRONIZE,
+                        ));
                 // SAFETY: opened above.
                 unsafe { CloseHandle(thread) };
-                if status < 0 && result.is_ok() {
+                if !protected && result.is_ok() {
                     result = Err(io::Error::other(format!(
                         "NtSetSecurityObject(thread) failed: {status:#x}"
                     )));
