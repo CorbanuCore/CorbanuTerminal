@@ -46,7 +46,9 @@ workflow); the tmux run and videos wait for a Windows machine. One PR per slice,
 
 - Existing: `codex-rs/network-proxy/src/credential_broker/isolated/` (Unix only); `codex-rs/core/src/security/launch_contract.rs`;
   `codex-rs/windows-sandbox-rs/`.
-- Planned: named-pipe broker transport with peer-process checks; restricted-token/AppContainer containment probes.
+- Shipped: `process-hardening/src/windows_process_access.rs`, `network-proxy/src/credential_broker/isolated/pipe.rs`
+  (and the Windows `transport` in `server.rs`), `core/src/security/launch_contract_windows_tests.rs`,
+  `windows-sandbox-rs/src/acl.rs` (`add_deny_read_ace_for_new_files`).
 - Tests: `pf_27_s06` modules, run on Windows CI.
 
 ## Preconditions
@@ -56,18 +58,40 @@ workflow); the tmux run and videos wait for a Windows machine. One PR per slice,
 ## Done
 
 - [x] Record created as the explicit Windows follow-up.
+- [x] Process containment (slice 1, PR #267): Core and the broker replace their process and thread DACLs (user:
+  query-limited and synchronize only; OWNER RIGHTS: read-control), new threads included through a TLS callback that
+  hardening verifies is linked. Measured on `windows-2022`: a command under the unelevated sandbox's restricted token
+  and a same-user process without privileges cannot open them for `PROCESS_VM_READ`, read their environment,
+  duplicate their handles, inject, re-ACL, or open any thread for its context; unhardened targets are the positive
+  controls.
+- [x] Broker transport on Windows (slices 2a/2b, PRs #269/#270): named pipes with random first-instance names, a
+  DACL for the user, remote clients refused, no inheritable handles (measured by a handle scan with a positive
+  control), the client process id checked before any byte, the server process id checked by Core, an overlapped
+  control pipe. The broker runs contained (`dacl+job`: no child processes, no desktop/clipboard/atoms), holds its
+  controller's handle and exits with it. The PF-27-S04/S28/S33 broker suite passes over the pipes.
+- [x] Launch contract (slice 3, PR #272): the Windows refusal is now a measured pass under the elevated sandbox
+  (separate sandbox user) and a stated refusal for the unelevated one. Measured: vault, sign-in, policy store and
+  state databases unreadable (readable in the base-profile control), `CODEX_HOME` unwritable, files created or
+  replaced during a run denied (an inherit-only, files-only deny on `CODEX_HOME`), Core stand-ins unopenable.
+- [x] `pf_27_s06` tests run on every PR touching this code (`windows-security-probes` workflow); Linux clippy clean
+  on the RTX box; Opus 5.5 High reviews per slice, all approved (2-3 rounds each).
 
 ## Remaining
 
-- [ ] Broker transport on Windows (named pipe, DACL to the controller, client process id check, no inheritable handles).
-- [ ] Process containment probes: agent cannot open Core or broker with `PROCESS_VM_READ`, read their environment, or inherit their handles.
-- [ ] Turn the launch contract's Windows refusal into a measured pass, or keep it with the reason.
-- [ ] `pf_27_s06` tests and the decision 5 gate (tests, tmux run, review, videos).
+- [ ] Decision 5 tmux run (GLM 5.2 driving the TUI) and SOP videos on a real Windows machine ([requirements](../../../../qa/security-levels/sprints/PF-27-S06/README.md#windows-machine-needed-for-the-remaining-gate)).
+- [ ] Travis's acceptance of the documented limits (evidence README), including the new-thread DACL window.
+- [ ] Follow-ups for the plan worker: a restricted or AppContainer token for the broker; Windows model auth
+  (PF-27-S05); file tools other than patches under the contract on Windows; the elevated sandbox's read of
+  `~/.git-credentials`, `.ssh`, `.npmrc`, `.config/gh` if profile reads are ever granted (setup excludes most).
 
 ## Verification
 
-- [ ] `just test -p codex-network-proxy pf_27_s06` and `just test -p codex-core pf_27_s06` on Windows.
+- [x] On `windows-2022` (job 113190329753, the merged slice 3 head): process-hardening 9, network-proxy broker and
+  pipe suite 24, core 5 `pf_27_s06` tests pass. Linux (RTX box): clippy `-D warnings` clean; broker 55,
+  process-hardening 7, core 12 + 23 tests pass. macOS: the same suites pass.
+- [ ] GLM 5.2 tmux run and SOP videos on a Windows host.
 
 ## Exit evidence
 
-- [ ] Outputs under `qa/security-levels/sprints/PF-27-S06/`; record archived.
+- [x] Outputs under `qa/security-levels/sprints/PF-27-S06/` ([evidence](../../../../qa/security-levels/sprints/PF-27-S06/README.md)).
+- [ ] Record archived (after the Windows-host gate items).
