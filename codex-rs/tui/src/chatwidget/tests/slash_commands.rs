@@ -1440,7 +1440,10 @@ async fn signed_out_usage_command_reports_chatgpt_login_requirement() {
     // the developer-accounting build replaces with `/cost`.
     assert_chatwidget_snapshot!(
         "signed_out_usage_command_reports_chatgpt_login_requirement",
-        rendered.replace("`/cost`", "`/usage requests`")
+        rendered.replace(
+            &format!("`{}`", crate::chatwidget::cost_command()),
+            "`/usage requests`"
+        )
     );
     assert_eq!(recall_latest_after_clearing(&mut chat), "/usage");
 }

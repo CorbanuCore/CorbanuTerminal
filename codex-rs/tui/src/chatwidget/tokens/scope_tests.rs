@@ -707,7 +707,21 @@ fn every_unavailable_state_names_a_next_step() {
             !pages[0].text.iter().any(|line| line.contains('$')),
             "{label}"
         );
-    } // A load error's next step gets its own line too.
+        // A build without `/cost` never tells the user to run it.
+        if !cfg!(feature = "developer-accounting") {
+            assert!(
+                !pages[0].text.iter().any(|line| line.contains("/cost")),
+                "{label}: {:#?}",
+                pages[0].text
+            );
+        }
+    }
+    assert_eq!(
+        inspection_pages(Ok(InspectionDay::CheckpointLag))[0].text[1],
+        "Next step: send a turn in this conversation to bring the ledger up to date, then select Refresh."
+    );
+
+    // A load error's next step gets its own line too.
     let pages = inspection_pages(Err(
         "Unavailable — inspection timed out. Next step: select Refresh.".into(),
     ));
@@ -747,4 +761,16 @@ fn subscription_only_day_points_at_no_bill() {
         first_screen(&inspection_pages(Ok(day(own(), Some(two_other_conversations()))))[0]);
     assert!(beside.contains(&BILL.to_string()), "{beside:#?}");
     assert!(!beside.contains(&PLAN.to_string()), "{beside:#?}");
+
+    // A route with both kinds of work rewords only its pay-per-use figure.
+    let mixed = own_day(vec![
+        plan_work(/*id*/ 1, thread(/*n*/ 1)),
+        unpriced(/*id*/ 2, thread(/*n*/ 1), "openai", "gpt-5.4"),
+    ]);
+    let labels = link_labels(&mixed);
+    assert!(
+        labels.iter().any(|label| label
+            .starts_with("OpenAI · gpt-5.4 — no price available; subscription part — ")),
+        "{labels:#?}"
+    );
 }

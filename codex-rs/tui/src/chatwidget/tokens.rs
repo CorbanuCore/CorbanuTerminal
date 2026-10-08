@@ -754,9 +754,11 @@ fn unavailable_next_step(state: &InspectionDay) -> Option<String> {
         InspectionDay::Absent if cfg!(feature = "developer-accounting") => format!(
             "Next step: send a turn in this conversation, then run {cost} again. If it stays unavailable, check your provider's bill."
         ),
-        InspectionDay::Absent => {
-            "Next step: this build does not record costs; check your provider's bill.".into()
-        }
+        // The core half of developer accounting can be built without this
+        // crate's, so a build here may still record.
+        InspectionDay::Absent => format!(
+            "Next step: if this build records costs, send a turn and run {cost} again; otherwise check your provider's bill."
+        ),
         InspectionDay::MissingThread => {
             format!("Next step: open a saved conversation with /resume, then run {cost} there.")
         }
