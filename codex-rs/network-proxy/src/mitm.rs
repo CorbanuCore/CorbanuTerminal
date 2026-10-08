@@ -400,7 +400,7 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
             return Ok(blocked_text_response(REASON_POLICY_DENIED));
         }
     };
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     if matches!(routing, CredentialRouting::Brokered(_))
         && hook_actions_touch_authorization(hook_actions.as_ref())
     {
@@ -413,7 +413,7 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
     let reflection = if app_state.credential_response_gate() {
         let injected = match &routing {
             CredentialRouting::Direct(gate) => gate.clone(),
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             CredentialRouting::Brokered(_) => None,
         };
         match response_scrub::with_hook_values(injected, hook_actions.as_ref()) {
@@ -453,7 +453,7 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
     let upstream_req = Request::from_parts(parts, body);
     let mut upstream_resp = match routing {
         CredentialRouting::Direct(_) => request_ctx.upstream.serve(upstream_req).await?,
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         CredentialRouting::Brokered(route) => match route.forward(upstream_req).await {
             Ok(response) => response,
             Err(error) => {

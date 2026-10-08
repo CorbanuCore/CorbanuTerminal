@@ -44,7 +44,7 @@ pub use config::NetworkUnixSocketPermission;
 pub use config::NetworkUnixSocketPermissions;
 pub use config::host_and_port_from_network_addr;
 pub use config::managed_proxy_ports;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub use credential_broker::CODEX_CREDENTIAL_BROKER_ARG1;
 pub use credential_broker::CREDENTIAL_BROKER_ACTIVE_ENV_KEY;
 pub use credential_broker::IsolatedCredentialDispatchError;
@@ -59,7 +59,7 @@ pub use credential_broker::ScopedCredentialResolverError;
 pub use credential_broker::ScopedCredentialRoute;
 pub use credential_broker::ScopedCredentialRouteError;
 pub use credential_broker::ScopedCredentialUse;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub use credential_broker::StoredKeyResolver;
 pub use credential_broker::brokered_credential_dummy_env_keys;
 pub use credential_broker::brokered_credential_env_keys;
@@ -67,9 +67,9 @@ pub use credential_broker::credential_broker_env_var_names;
 pub use credential_broker::credential_broker_user_runtime_dir;
 #[cfg(unix)]
 pub use credential_broker::model_auth;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub use credential_broker::run_credential_broker_main;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub use credential_broker::run_credential_broker_main_with;
 pub use mitm_hook::InjectedHeaderConfig;
 pub use mitm_hook::MitmHookActionsConfig;

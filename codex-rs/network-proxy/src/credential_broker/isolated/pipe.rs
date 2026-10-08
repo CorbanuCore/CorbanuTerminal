@@ -47,6 +47,7 @@ use tokio::net::windows::named_pipe::ServerOptions;
 use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::Foundation::ERROR_BROKEN_PIPE;
 use windows_sys::Win32::Foundation::ERROR_IO_PENDING;
+use windows_sys::Win32::Foundation::FILETIME;
 use windows_sys::Win32::Foundation::GetLastError;
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::Foundation::HLOCAL;
@@ -64,6 +65,13 @@ use windows_sys::Win32::System::IO::OVERLAPPED;
 use windows_sys::Win32::System::Pipes::GetNamedPipeClientProcessId;
 use windows_sys::Win32::System::Pipes::GetNamedPipeServerProcessId;
 use windows_sys::Win32::System::Threading::CreateEventW;
+use windows_sys::Win32::System::Threading::GetCurrentProcess;
+use windows_sys::Win32::System::Threading::GetProcessTimes;
+use windows_sys::Win32::System::Threading::INFINITE;
+use windows_sys::Win32::System::Threading::OpenProcess;
+use windows_sys::Win32::System::Threading::PROCESS_QUERY_LIMITED_INFORMATION;
+use windows_sys::Win32::System::Threading::PROCESS_SYNCHRONIZE;
+use windows_sys::Win32::System::Threading::WaitForSingleObject;
 
 /// Every broker pipe name starts with this.
 pub(crate) const PIPE_PREFIX: &str = r"\\.\pipe\corbanu-cbk-";
@@ -388,6 +396,115 @@ pub(crate) async fn connect_data(name: &str, broker_pid: u32) -> io::Result<Name
             "credential broker pipe is served by another process",
         ))
     }
+}
+
+/// The process id of this process's parent (the controller that spawned
+/// the broker).
+fn parent_pid() -> Option<u32> {
+    #[link(name = "ntdll")]
+    unsafe extern "system" {
+        fn NtQueryInformationProcess(
+            process: HANDLE,
+            class: u32,
+            information: *mut c_void,
+            length: u32,
+            return_length: *mut u32,
+        ) -> i32;
+    }
+    // PROCESS_BASIC_INFORMATION (x64/x86 layout of pointer-sized fields).
+    #[repr(C)]
+    struct BasicInformation {
+        exit_status: i32,
+        peb: usize,
+        affinity: usize,
+        priority: i32,
+        pid: usize,
+        parent_pid: usize,
+    }
+    // SAFETY: zeroed POD out-structure.
+    let mut info: BasicInformation = unsafe { std::mem::zeroed() };
+    let mut returned = 0_u32;
+    // SAFETY: the pseudo-handle is valid; `info` matches the size passed.
+    let status = unsafe {
+        NtQueryInformationProcess(
+            GetCurrentProcess(),
+            /*class*/ 0,
+            (&mut info as *mut BasicInformation).cast(),
+            std::mem::size_of::<BasicInformation>() as u32,
+            &mut returned,
+        )
+    };
+    (status >= 0)
+        .then(|| u32::try_from(info.parent_pid).ok())
+        .flatten()
+}
+
+/// The controller process, held open from broker start so its process id
+/// cannot be reused while the broker serves it.
+pub(crate) struct ParentProcess {
+    pub(crate) pid: u32,
+    handle: isize,
+}
+
+impl ParentProcess {
+    /// Opens this process's parent, refusing one created after this process
+    /// (its id was reused after the real parent exited).
+    pub(crate) fn open() -> io::Result<Self> {
+        let pid = parent_pid().ok_or_else(|| io::Error::other("no parent process"))?;
+        // SAFETY: wait and query-limited access only; closed on drop.
+        let handle = unsafe {
+            OpenProcess(
+                PROCESS_SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
+                0,
+                pid,
+            )
+        };
+        if handle == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let parent = Self { pid, handle };
+        // SAFETY: the pseudo-handle is always valid.
+        let own = creation_time(unsafe { GetCurrentProcess() })?;
+        if creation_time(parent.handle)? > own {
+            return Err(io::Error::other("parent process id was reused"));
+        }
+        Ok(parent)
+    }
+
+    /// Resolves once the controller exits.
+    pub(crate) fn exited(self) -> tokio::task::JoinHandle<()> {
+        let handle = self.handle;
+        // The blocking task now owns the handle.
+        std::mem::forget(self);
+        tokio::task::spawn_blocking(move || {
+            // SAFETY: a valid process handle owned by this task.
+            unsafe {
+                WaitForSingleObject(handle as HANDLE, INFINITE);
+                CloseHandle(handle as HANDLE);
+            }
+        })
+    }
+}
+
+impl Drop for ParentProcess {
+    fn drop(&mut self) {
+        // SAFETY: opened in `open` and closed once.
+        unsafe { CloseHandle(self.handle as HANDLE) };
+    }
+}
+
+fn creation_time(process: HANDLE) -> io::Result<u64> {
+    let zero = FILETIME {
+        dwLowDateTime: 0,
+        dwHighDateTime: 0,
+    };
+    let (mut created, mut exited, mut kernel, mut user) = (zero, zero, zero, zero);
+    // SAFETY: valid out pointers; `process` has query-limited access.
+    let ok = unsafe { GetProcessTimes(process, &mut created, &mut exited, &mut kernel, &mut user) };
+    if ok == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok((u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime))
 }
 
 /// A pipe end carrying rama connection extensions.

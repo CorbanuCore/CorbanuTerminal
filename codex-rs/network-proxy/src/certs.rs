@@ -123,7 +123,7 @@ fn acceptor_data_for_pem(cert_pem: &str, key_pem: &str) -> Result<TlsAcceptorDat
 
 /// Throwaway CA plus an HTTP/1.1-only (no ALPN) acceptor for local TLS test
 /// upstreams, matching simple origin servers.
-#[cfg(all(test, unix))]
+#[cfg(test)]
 pub(crate) fn test_ca_and_host_acceptor(host: &str) -> Result<(String, TlsAcceptorData)> {
     codex_utils_rustls_provider::ensure_rustls_crypto_provider();
     let (ca_pem, ca_key) = generate_ca()?;
@@ -270,7 +270,7 @@ pub(crate) fn upstream_tls_root_store_for_cert_path(
 
 /// Upstream trust for the isolated credential broker: platform roots plus the
 /// startup CA environment, without the controller's managed MITM CA.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub(crate) fn broker_upstream_root_store(
     env: &HashMap<&'static str, String>,
 ) -> Result<Arc<rustls::RootCertStore>> {

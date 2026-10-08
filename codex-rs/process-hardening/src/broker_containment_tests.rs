@@ -40,6 +40,19 @@ fn tempfile_dir() -> std::path::PathBuf {
     dir
 }
 
+/// A harmless program that succeeds when process creation is allowed.
+fn echo_command() -> std::process::Command {
+    if cfg!(windows) {
+        let mut command = std::process::Command::new("cmd.exe");
+        command.args(["/D", "/C", "echo escaped"]);
+        command
+    } else {
+        let mut command = std::process::Command::new("/bin/echo");
+        command.arg("escaped");
+        command
+    }
+}
+
 const CHILD_ENV: &str = "CODEX_PF27_S02_CONTAINMENT_CHILD";
 const CHILD_TEST: &str = "broker_containment::tests::pf_27_s02_containment_child_entry";
 
@@ -51,10 +64,7 @@ fn pf_27_s02_containment_child_entry() {
     };
     let dir = std::path::PathBuf::from(dir);
     let containment = contain_credential_broker(&dir);
-    let exec = match std::process::Command::new("/bin/echo")
-        .arg("escaped")
-        .output()
-    {
+    let exec = match echo_command().output() {
         Ok(output) if output.status.success() => "allowed",
         _ => "denied",
     };
@@ -108,4 +118,31 @@ fn pf_27_s02_contained_broker_cannot_exec_or_write_outside_its_dir() {
         return;
     }
     assert!(!root.join("outside-pf27-s02").exists());
+}
+
+/// PF-27-S06: on Windows the contained broker cannot start processes (job)
+/// and has applied its process DACL; file writes are not confined there.
+#[cfg(windows)]
+#[test]
+fn pf_27_s06_contained_broker_cannot_start_processes() {
+    let control = echo_command().output().expect("uncontained echo");
+    assert!(control.status.success(), "positive control: echo runs");
+    let dir = std::env::temp_dir().join(format!("pf27-s06-contain-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("dir");
+    let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
+        .args([CHILD_TEST, "--exact", "--nocapture", "--test-threads=1"])
+        .env(CHILD_ENV, &dir)
+        .output()
+        .expect("child");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let line = stdout
+        .lines()
+        .find_map(|line| line.find("PF27S02 ").map(|start| &line[start..]))
+        .unwrap_or_else(|| panic!("no probe line: {stdout}"));
+    assert_eq!(
+        line,
+        "PF27S02 mechanism=dacl+job exec=denied inside=ok outside=allowed"
+    );
+    let _ = std::fs::remove_file(std::env::temp_dir().join("outside-pf27-s02"));
+    let _ = std::fs::remove_dir_all(&dir);
 }

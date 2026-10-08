@@ -68,6 +68,28 @@ fn test_stored_key(home: &std::path::Path, id: &str) -> std::io::Result<Option<S
     }
 }
 
+/// Whether the broker's data endpoint still exists: its socket file, or on
+/// Windows its named pipe (probed without connecting).
+fn endpoint_exists(path: &std::path::Path) -> bool {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::System::Pipes::WaitNamedPipeW;
+        const ERROR_FILE_NOT_FOUND: i32 = 2;
+        let wide: Vec<u16> = path
+            .to_string_lossy()
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        // SAFETY: `wide` is NUL-terminated; waits at most 1 ms.
+        let ready = unsafe { WaitNamedPipeW(wide.as_ptr(), 1) } != 0;
+        ready || std::io::Error::last_os_error().raw_os_error() != Some(ERROR_FILE_NOT_FOUND)
+    }
+    #[cfg(unix)]
+    {
+        path.exists()
+    }
+}
+
 /// PF-27-S05: the key the upstream's `/check` path expects.
 static CHECK_KEY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
@@ -304,6 +326,189 @@ async fn pf_27_s04_pf_27_s01_raw_credential_is_substituted_only_inside_the_broke
     assert_eq!(headers, bearer(&dummy));
 }
 
+const CONTROLLER_ENV: &str = "CODEX_PF27S06_CONTROLLER_CHILD";
+#[cfg(windows)]
+const CONTROLLER_TEST: &str =
+    "credential_broker::isolated::tests::pf_27_s06_controller_child_entry";
+
+/// Stands in for Core: starts a broker, prints its process id, then waits to
+/// be killed.
+#[test]
+fn pf_27_s06_controller_child_entry() {
+    if std::env::var_os(CONTROLLER_ENV).is_none() {
+        return;
+    }
+    let runtime = tokio::runtime::Runtime::new().expect("runtime");
+    runtime.block_on(async {
+        let upstream = start_upstream().await;
+        let broker = isolated_broker(launcher(&upstream, /*controller_pid_override*/ None));
+        let _ = virtualized_dummy(&broker);
+        let pid = broker
+            .current_isolated_client()
+            .and_then(|client| client.pid_for_test())
+            .expect("broker pid");
+        use std::io::Write as _;
+        let mut stdout = std::io::stdout();
+        let _ = writeln!(stdout, "\npf27s06-broker-pid:{pid}");
+        let _ = stdout.flush();
+        std::future::pending::<()>().await;
+    });
+}
+
+/// PF-27-S06: a broker whose controller is killed outright (no graceful
+/// close) exits by itself instead of lingering with credentials.
+#[cfg(windows)]
+#[test]
+fn pf_27_s06_broker_exits_when_its_controller_is_killed() {
+    use std::io::BufRead as _;
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::OpenProcess;
+    use windows_sys::Win32::System::Threading::PROCESS_SYNCHRONIZE;
+    use windows_sys::Win32::System::Threading::WaitForSingleObject;
+    let mut controller = std::process::Command::new(std::env::current_exe().expect("test binary"))
+        .args([
+            CONTROLLER_TEST,
+            "--exact",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(CONTROLLER_ENV, "1")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::inherit())
+        .spawn()
+        .expect("controller");
+    let stdout = controller.stdout.take().expect("controller stdout");
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for line in std::io::BufReader::new(stdout)
+            .lines()
+            .map_while(Result::ok)
+        {
+            if let Some(pid) = line
+                .split("pf27s06-broker-pid:")
+                .nth(1)
+                .and_then(|pid| pid.trim().parse::<u32>().ok())
+            {
+                let _ = sender.send(pid);
+                break;
+            }
+        }
+    });
+    let broker_pid = receiver
+        .recv_timeout(Duration::from_secs(60))
+        .expect("controller reported its broker");
+    // SAFETY: wait-only access; closed below.
+    let broker = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, broker_pid) };
+    assert_ne!(broker, 0, "the broker is running");
+    controller.kill().expect("kill controller");
+    let _ = controller.wait();
+    // SAFETY: `broker` is open.
+    let waited = unsafe { WaitForSingleObject(broker, 10_000) };
+    // SAFETY: opened above.
+    unsafe { CloseHandle(broker) };
+    assert_eq!(
+        waited, /*WAIT_OBJECT_0*/ 0,
+        "broker outlived its controller"
+    );
+}
+
+/// Disables `SeDebugPrivilege` in this process's token, if it is enabled.
+#[cfg(windows)]
+fn disable_debug_privilege() {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::Foundation::LUID;
+    use windows_sys::Win32::Security::AdjustTokenPrivileges;
+    use windows_sys::Win32::Security::LUID_AND_ATTRIBUTES;
+    use windows_sys::Win32::Security::LookupPrivilegeValueW;
+    use windows_sys::Win32::Security::TOKEN_ADJUST_PRIVILEGES;
+    use windows_sys::Win32::Security::TOKEN_PRIVILEGES;
+    use windows_sys::Win32::System::Threading::GetCurrentProcess;
+    use windows_sys::Win32::System::Threading::OpenProcessToken;
+    let name: Vec<u16> = "SeDebugPrivilege"
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let mut luid = LUID {
+        LowPart: 0,
+        HighPart: 0,
+    };
+    let mut token = 0;
+    // SAFETY: valid pointers; the token is closed below.
+    unsafe {
+        if LookupPrivilegeValueW(std::ptr::null(), name.as_ptr(), &mut luid) == 0
+            || OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, &mut token) == 0
+        {
+            return;
+        }
+        let disabled = TOKEN_PRIVILEGES {
+            PrivilegeCount: 1,
+            Privileges: [LUID_AND_ATTRIBUTES {
+                Luid: luid,
+                Attributes: 0,
+            }],
+        };
+        AdjustTokenPrivileges(
+            token,
+            0,
+            &disabled,
+            0,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        );
+        CloseHandle(token);
+    }
+}
+
+/// PF-27-S06: on Windows the broker runs over its named pipes, reports both
+/// containment layers, and no other process of the user can open it to read
+/// its memory or environment (opening this test process is the control).
+#[cfg(windows)]
+#[tokio::test(flavor = "multi_thread")]
+async fn pf_27_s06_windows_broker_uses_pipes_and_cannot_be_read() {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::Foundation::GetLastError;
+    use windows_sys::Win32::System::Threading::OpenProcess;
+    use windows_sys::Win32::System::Threading::PROCESS_QUERY_INFORMATION;
+    use windows_sys::Win32::System::Threading::PROCESS_VM_READ;
+    let open_for_reading = |pid: u32| -> Result<(), u32> {
+        // SAFETY: plain OpenProcess; the handle is closed at once.
+        unsafe {
+            let handle = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, 0, pid);
+            if handle == 0 {
+                Err(GetLastError())
+            } else {
+                CloseHandle(handle);
+                Ok(())
+            }
+        }
+    };
+
+    let upstream = start_upstream().await;
+    let broker = isolated_broker(launcher(&upstream, /*controller_pid_override*/ None));
+    let dummy = virtualized_dummy(&broker);
+    let client = broker.current_isolated_client().expect("broker client");
+    assert_eq!(client.containment(), "dacl+job");
+    let pipe = client.socket_path().to_string_lossy().into_owned();
+    assert!(
+        super::pipe::valid_pipe_name(&pipe, /*control*/ false),
+        "{pipe}"
+    );
+
+    let response = forward(&broker, upstream.port, "/echo", &dummy).await;
+    assert_eq!(
+        response.try_into_string().await.expect("body"),
+        format!("Bearer {SYNTHETIC_TOKEN}")
+    );
+
+    assert_eq!(open_for_reading(std::process::id()), Ok(()));
+    // CI runners run elevated with SeDebugPrivilege enabled, which opens any
+    // process whatever its DACL; an ordinary process of the user has it off.
+    disable_debug_privilege();
+    let broker_pid = client.pid_for_test().expect("broker pid");
+    assert_eq!(open_for_reading(broker_pid), Err(/*ERROR_ACCESS_DENIED*/ 5));
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn pf_27_s04_pf_27_s01_wrong_os_peer_is_disconnected_before_any_request() {
     let upstream = start_upstream().await;
@@ -471,7 +676,7 @@ async fn pf_27_s04_pf_27_s01_broker_crash_fails_closed_and_restart_rejects_old_h
         route(&broker, upstream.port, "/echo", &old_dummy).err(),
         Some(ScopedCredentialInjectionError::IsolatedBrokerUnavailable)
     );
-    assert!(!old_client.socket_path().exists());
+    assert!(!endpoint_exists(old_client.socket_path()));
 
     // A dead broker is not replaced: later children still get only dummies and
     // nothing is injected until Core restarts.
@@ -566,14 +771,14 @@ async fn pf_27_s04_pf_27_s01_controller_exit_stops_the_broker() {
         .expect("broker client")
         .socket_path()
         .to_path_buf();
-    assert!(socket_path.exists());
+    assert!(endpoint_exists(&socket_path));
 
     drop(broker);
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
-    while socket_path.exists() && tokio::time::Instant::now() < deadline {
+    while endpoint_exists(&socket_path) && tokio::time::Instant::now() < deadline {
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
-    assert!(!socket_path.exists());
+    assert!(!endpoint_exists(&socket_path));
 }
 
 #[test]
@@ -593,6 +798,7 @@ fn pf_27_s04_pf_27_s01_unavailable_broker_never_exposes_or_injects_raw_values() 
     );
 }
 
+#[cfg(unix)]
 #[tokio::test(flavor = "multi_thread")]
 async fn pf_27_s04_pf_27_s01_externally_terminated_broker_is_detected_and_cleaned_up() {
     let upstream = start_upstream().await;
@@ -619,6 +825,7 @@ async fn pf_27_s04_pf_27_s01_externally_terminated_broker_is_detected_and_cleane
     );
 }
 
+#[cfg(unix)]
 #[tokio::test(flavor = "multi_thread")]
 async fn pf_27_s02_broker_sockets_live_in_the_private_runtime_dir() {
     let upstream = start_upstream().await;
@@ -666,6 +873,7 @@ async fn pf_27_s02_broker_sockets_live_in_the_private_runtime_dir() {
     );
 }
 
+#[cfg(unix)]
 #[tokio::test(flavor = "multi_thread")]
 async fn pf_27_s02_a_spoofed_bootstrap_path_is_never_trusted() {
     // A "broker" that prints a control socket owned by someone else: the
@@ -868,6 +1076,8 @@ async fn pf_33_s02_unpinned_broker_resolves_and_pins_keep_the_private_peer_check
     assert_eq!(denial(&response), Some("upstream_failed"));
 }
 
+// PF-27-S05 model auth is Unix-only.
+#[cfg(unix)]
 mod pf_27_s05 {
     use super::Body;
     use super::CHECK_KEY;

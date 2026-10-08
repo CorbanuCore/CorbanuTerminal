@@ -166,6 +166,18 @@ impl UpstreamClient {
         }
     }
 
+    /// PF-27-S06: HTTP over the credential broker's data pipe, one fresh
+    /// connection per request, each checked to be served by `broker_pid`.
+    #[cfg(windows)]
+    pub(crate) fn named_pipe(name: &str, broker_pid: u32) -> Self {
+        let transport =
+            crate::credential_broker::isolated::pipe::PipeConnector::new(name, broker_pid);
+        Self {
+            connector: HttpConnector::new(transport).boxed(),
+            proxy_config: ProxyConfig::default(),
+        }
+    }
+
     fn new(
         proxy_config: ProxyConfig,
         transport: TargetCheckedTcpConnector,

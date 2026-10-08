@@ -10,13 +10,13 @@ mod providers;
 mod resolver;
 pub(crate) mod response_scrub;
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub use isolated::CODEX_CREDENTIAL_BROKER_ARG1;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub use isolated::StoredKeyResolver;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub use isolated::run_credential_broker_main;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub use isolated::run_credential_broker_main_with;
 
 pub use resolver::IsolatedCredentialDispatchError;
@@ -40,21 +40,21 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use zeroize::Zeroizing;
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use codex_secret_broker::CredentialReference as BrokerCredentialReference;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use codex_secret_broker::ProviderRequestOperation;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use isolated::IsolatedBrokerClient;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use isolated::IsolatedBrokerError;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use isolated::IsolatedBrokerLauncher;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub(crate) use isolated::IsolatedBrokerOptions;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use isolated::protocol::HostBindingWire;
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 #[allow(dead_code)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct IsolatedBrokerOptions {
@@ -103,15 +103,15 @@ enum Isolation {
     /// Legacy in-process injection: the proxy state holds raw values.
     InProcess,
     /// PF-27-S04: raw values live only in a separate broker process.
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     Process(Arc<IsolatedMode>),
     /// Isolation was requested on a platform without the broker process.
     /// Credentials are virtualized but never injected (fail closed).
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     Unsupported,
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 struct IsolatedMode {
     client: Option<Arc<IsolatedBrokerClient>>,
     fingerprint_key: Zeroizing<[u8; 32]>,
@@ -123,18 +123,18 @@ pub(crate) enum CredentialRouting {
     /// PF-28-S02: the gate for the value injected here, if armed.
     Direct(Option<ResponseGate>),
     /// Send through the broker, which substitutes the credential itself.
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     Brokered(BrokeredCredentialRoute),
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub(crate) struct BrokeredCredentialRoute {
     client: Arc<IsolatedBrokerClient>,
     reference: BrokerCredentialReference,
     operation: ProviderRequestOperation,
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 impl BrokeredCredentialRoute {
     pub(crate) async fn forward(
         &self,
@@ -165,7 +165,7 @@ struct CredentialRecord {
 enum RecordSecret {
     Raw(Zeroizing<String>),
     /// Opaque broker reference; the raw value is not retained in this process.
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     Brokered {
         fingerprint: [u8; 32],
         reference: BrokerCredentialReference,
@@ -195,7 +195,7 @@ impl CredentialBroker {
     }
 
     pub(crate) fn new_isolated(enabled: bool, options: IsolatedBrokerOptions) -> Self {
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         {
             Self::new_isolated_with_launcher(
                 enabled,
@@ -203,14 +203,14 @@ impl CredentialBroker {
                 IsolatedBrokerLauncher::current_exe(),
             )
         }
-        #[cfg(not(unix))]
+        #[cfg(not(any(unix, windows)))]
         {
             let _ = options;
             Self::with_isolation(enabled, Isolation::Unsupported)
         }
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub(crate) fn new_isolated_with_launcher(
         enabled: bool,
         options: IsolatedBrokerOptions,
@@ -293,7 +293,7 @@ impl CredentialBroker {
         state
             .credentials
             .retain(|credential| matches!(credential.secret, RecordSecret::Raw(_)));
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         if let Isolation::Process(mode) = &self.isolation
             && let Some(client) = mode.live_client()
         {
@@ -518,7 +518,7 @@ impl CredentialBroker {
                 }
                 Ok(CredentialRouting::Direct(gate))
             }
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             RecordSecret::Brokered {
                 reference, client, ..
             } => {
@@ -628,11 +628,11 @@ fn virtualize_env_var(
 
     let dummy_value = match isolation {
         Isolation::InProcess => state.register(env_var, provider, host_binding, real_value),
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         Isolation::Process(mode) => {
             state.register_isolated(mode, env_var, provider, host_binding, real_value)
         }
-        #[cfg(not(unix))]
+        #[cfg(not(any(unix, windows)))]
         Isolation::Unsupported => state.register_unavailable(
             fingerprint(&[0; 32], env_var, real_value),
             env_var,
@@ -654,7 +654,7 @@ fn fingerprint(key: &[u8; 32], env_var: &str, value: &str) -> [u8; 32] {
     hasher.finalize().into()
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 impl IsolatedMode {
     /// Returns the broker while it is alive. A dead broker is not replaced.
     fn live_client(&self) -> Option<Arc<IsolatedBrokerClient>> {
@@ -706,7 +706,7 @@ impl CredentialBrokerState {
         dummy_value
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     fn register_isolated(
         &mut self,
         mode: &IsolatedMode,
@@ -833,11 +833,11 @@ impl CredentialRecord {
         self.host_binding.matches_host(host)
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     fn fingerprint(&self) -> Option<[u8; 32]> {
         match &self.secret {
             RecordSecret::Raw(_) => None,
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             RecordSecret::Brokered { fingerprint, .. } => Some(*fingerprint),
             RecordSecret::Unavailable { fingerprint } => Some(*fingerprint),
         }
@@ -1035,11 +1035,11 @@ pub fn credential_broker_env_var_names() -> Vec<&'static str> {
 /// PF-27-S02: the per-user directory the isolated broker falls back to when
 /// `CODEX_HOME/run` is too long for a socket path.
 pub fn credential_broker_user_runtime_dir() -> Option<std::path::PathBuf> {
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         isolated::user_runtime_dir()
     }
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         None
     }
@@ -1065,7 +1065,7 @@ impl CredentialBroker {
             .any(|credential| matches!(&credential.secret, RecordSecret::Raw(raw) if raw.as_str() == value))
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub(crate) fn current_isolated_client(&self) -> Option<Arc<IsolatedBrokerClient>> {
         match &self.isolation {
             Isolation::Process(mode) => mode.client.clone(),
