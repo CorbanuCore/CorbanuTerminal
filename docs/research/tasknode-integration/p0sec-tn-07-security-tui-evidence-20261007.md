@@ -11,9 +11,16 @@ human sign-off, flag removal and the P1 hardening plan. Carried-forward items ar
 
 | Sprint | PRs (merge commit on main) | Flag | Record status |
 | --- | --- | --- | --- |
-| [PF-24-S03](../../sprints/archive/p0-security-levels/pf-24-s03-flagged-security-picker.md) Flagged /security picker | [#186](https://github.com/CorbanuCore/CorbanuTerminal/pull/186) (`023355670a`) | `security_levels` | completed (archived) |
-| [PF-24-S02](../../sprints/archive/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) /security confirm, cancel and downgrade | [#253](https://github.com/CorbanuCore/CorbanuTerminal/pull/253) (`e4d17dbdc6`), [#258](https://github.com/CorbanuCore/CorbanuTerminal/pull/258) (`b2d2583e0f`) | `security_levels` | completed (archived) |
-| [PF-25-S01](../../sprints/archive/p0-security-levels/pf-25-s01-temporary-grant-tui.md) Temporary grant TUI | [#260](https://github.com/CorbanuCore/CorbanuTerminal/pull/260) (`bb609b449a`) | `security_levels` | completed (archived) |
+| [PF-24-S03](../../sprints/archive/p0-security-levels/pf-24-s03-flagged-security-picker.md) Flagged /security picker | #186 (`023355670a`) | `security_levels` | completed (archived) |
+| [PF-24-S02](../../sprints/archive/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) /security confirm, cancel and downgrade | #253 (`e4d17dbdc6`), #258 (`b2d2583e0f`) | `security_levels` | completed (archived) |
+| [PF-25-S01](../../sprints/archive/p0-security-levels/pf-25-s01-temporary-grant-tui.md) Temporary grant TUI | #260 (`bb609b449a`) | `security_levels` | completed (archived) |
+
+PR links:
+
+- #186: https://github.com/CorbanuCore/CorbanuTerminal/pull/186
+- #253: https://github.com/CorbanuCore/CorbanuTerminal/pull/253
+- #258: https://github.com/CorbanuCore/CorbanuTerminal/pull/258
+- #260: https://github.com/CorbanuCore/CorbanuTerminal/pull/260
 
 ## PF-24-S03: Flagged /security picker
 
@@ -160,4 +167,4 @@ Demo videos (3, index [qa/demos/index/PF-25-S01.md](../../../qa/demos/index/PF-2
 - `pf25s01-grant-esc`: Esc in the grant review grants nothing: https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-25-s01-pf25s01-grant-esc-aee150e46ae7-2026-10-07.mp4
 - `pf25s01-grant-until-expiry`: A grant until expiry is listed in /security: https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf-25-s01-pf25s01-grant-until-expiry-aee150e46ae7-2026-10-07.mp4
 
-Carried forward (open, not claimed): Revocation and kill switch to PF-25-S02 (PR #261, not merged).
+Carried forward (open, not claimed): Revocation and kill switch to PF-25-S02 (PR #261, merged 2026-10-08; task P0SEC-TN-09).

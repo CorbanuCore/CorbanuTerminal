@@ -11,8 +11,13 @@ human sign-off, flag removal and the P1 hardening plan. Carried-forward items ar
 
 | Sprint | PRs (merge commit on main) | Flag | Record status |
 | --- | --- | --- | --- |
-| [PF-29-S01](../../sprints/current/p0-security-levels/pf-29-s01-protected-mode-inventory.md) Protected-mode inventory and activation preflight | [#228](https://github.com/CorbanuCore/CorbanuTerminal/pull/228) (`b751254169`) | `protected_mode_preflight` | merged behind flag; record current (milestone items open) |
-| [PF-29-S02](../../sprints/current/p0-security-levels/pf-29-s02-human-secret-migration.md) Human-reviewed credential migration and recovery | [#235](https://github.com/CorbanuCore/CorbanuTerminal/pull/235) (`65d42158d7`) | `protected_mode_preflight` | merged behind flag; record current (milestone items open) |
+| [PF-29-S01](../../sprints/current/p0-security-levels/pf-29-s01-protected-mode-inventory.md) Protected-mode inventory and activation preflight | #228 (`b751254169`) | `protected_mode_preflight` | merged behind flag; record current (milestone items open) |
+| [PF-29-S02](../../sprints/current/p0-security-levels/pf-29-s02-human-secret-migration.md) Human-reviewed credential migration and recovery | #235 (`65d42158d7`) | `protected_mode_preflight` | merged behind flag; record current (milestone items open) |
+
+PR links:
+
+- #228: https://github.com/CorbanuCore/CorbanuTerminal/pull/228
+- #235: https://github.com/CorbanuCore/CorbanuTerminal/pull/235
 
 ## PF-29-S01: Protected-mode inventory and activation preflight
 

@@ -11,8 +11,14 @@ human sign-off, flag removal and the P1 hardening plan. Carried-forward items ar
 
 | Sprint | PRs (merge commit on main) | Flag | Record status |
 | --- | --- | --- | --- |
-| [PF-28-S01](../../sprints/archive/p0-security-levels/pf-28-s01-central-secret-output-gate.md) Central secret and protected-output gate | [#208](https://github.com/CorbanuCore/CorbanuTerminal/pull/208) (`24a57e38c4`) | `secret_output_gate` | completed (archived) |
-| [PF-28-S02](../../sprints/current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md) Reflected-secret response scrubbing and credential binding | [#216](https://github.com/CorbanuCore/CorbanuTerminal/pull/216) (`b9f215ec50`), [#225](https://github.com/CorbanuCore/CorbanuTerminal/pull/225) (`8cf46179f5`) | `secret_output_gate` | merged behind flag; record current (milestone items open) |
+| [PF-28-S01](../../sprints/archive/p0-security-levels/pf-28-s01-central-secret-output-gate.md) Central secret and protected-output gate | #208 (`24a57e38c4`) | `secret_output_gate` | completed (archived) |
+| [PF-28-S02](../../sprints/current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md) Reflected-secret response scrubbing and credential binding | #216 (`b9f215ec50`), #225 (`8cf46179f5`) | `secret_output_gate` | merged behind flag; record current (milestone items open) |
+
+PR links:
+
+- #208: https://github.com/CorbanuCore/CorbanuTerminal/pull/208
+- #216: https://github.com/CorbanuCore/CorbanuTerminal/pull/216
+- #225: https://github.com/CorbanuCore/CorbanuTerminal/pull/225
 
 ## PF-28-S01: Central secret and protected-output gate
 

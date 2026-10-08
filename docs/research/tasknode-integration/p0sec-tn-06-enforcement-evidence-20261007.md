@@ -11,9 +11,21 @@ human sign-off, flag removal and the P1 hardening plan. Carried-forward items ar
 
 | Sprint | PRs (merge commit on main) | Flag | Record status |
 | --- | --- | --- | --- |
-| [PF-23-S01](../../sprints/archive/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md) Moderate ingress and disclosure enforcement | [#223](https://github.com/CorbanuCore/CorbanuTerminal/pull/223) (`f79887d182`), [#233](https://github.com/CorbanuCore/CorbanuTerminal/pull/233) (`64137b7189`) | `security_levels` | completed (archived) |
-| [PF-23-S02](../../sprints/archive/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md) Aggressive deny and grant enforcement | [#243](https://github.com/CorbanuCore/CorbanuTerminal/pull/243) (`6b1c8b8873`), [#250](https://github.com/CorbanuCore/CorbanuTerminal/pull/250) (`a230f20821`) | `security_levels` | completed (archived) |
-| [PF-23-S03](../../sprints/archive/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) Downgrade, restart and inheritance enforcement | [#246](https://github.com/CorbanuCore/CorbanuTerminal/pull/246) (`95b5f34a55`), [#247](https://github.com/CorbanuCore/CorbanuTerminal/pull/247) (`242f4d3bde`), [#248](https://github.com/CorbanuCore/CorbanuTerminal/pull/248) (`7fc064e593`), [#249](https://github.com/CorbanuCore/CorbanuTerminal/pull/249) (`4f09d7af99`), [#256](https://github.com/CorbanuCore/CorbanuTerminal/pull/256) (`213698e607`) | `security_levels` | completed (archived) |
+| [PF-23-S01](../../sprints/archive/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md) Moderate ingress and disclosure enforcement | #223 (`f79887d182`), #233 (`64137b7189`) | `security_levels` | completed (archived) |
+| [PF-23-S02](../../sprints/archive/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md) Aggressive deny and grant enforcement | #243 (`6b1c8b8873`), #250 (`a230f20821`) | `security_levels` | completed (archived) |
+| [PF-23-S03](../../sprints/archive/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) Downgrade, restart and inheritance enforcement | #246 (`95b5f34a55`), #247 (`242f4d3bde`), #248 (`7fc064e593`), #249 (`4f09d7af99`), #256 (`213698e607`) | `security_levels` | completed (archived) |
+
+PR links:
+
+- #223: https://github.com/CorbanuCore/CorbanuTerminal/pull/223
+- #233: https://github.com/CorbanuCore/CorbanuTerminal/pull/233
+- #243: https://github.com/CorbanuCore/CorbanuTerminal/pull/243
+- #250: https://github.com/CorbanuCore/CorbanuTerminal/pull/250
+- #246: https://github.com/CorbanuCore/CorbanuTerminal/pull/246
+- #247: https://github.com/CorbanuCore/CorbanuTerminal/pull/247
+- #248: https://github.com/CorbanuCore/CorbanuTerminal/pull/248
+- #249: https://github.com/CorbanuCore/CorbanuTerminal/pull/249
+- #256: https://github.com/CorbanuCore/CorbanuTerminal/pull/256
 
 ## PF-23-S01: Moderate ingress and disclosure enforcement
 

@@ -11,9 +11,16 @@ human sign-off, flag removal and the P1 hardening plan. Carried-forward items ar
 
 | Sprint | PRs (merge commit on main) | Flag | Record status |
 | --- | --- | --- | --- |
-| [PF-27-S04](../../sprints/archive/p0-security-levels/pf-27-s04-isolated-credential-broker.md) Isolated credential broker process | [#180](https://github.com/CorbanuCore/CorbanuTerminal/pull/180) (`13cf4a2d0c`) | `isolated_credential_broker` | completed (archived) |
-| [PF-27-S02](../../sprints/archive/p0-security-levels/pf-27-s02-secretless-agent-launch.md) Secretless agent launch and broker containment | [#191](https://github.com/CorbanuCore/CorbanuTerminal/pull/191) (`699bd4a82f`) | `secretless_agent_launch` | completed (archived) |
-| [PF-27-S05](../../sprints/archive/p0-security-levels/pf-27-s05-model-client-auth-broker.md) Model-client auth held by the broker | [#229](https://github.com/CorbanuCore/CorbanuTerminal/pull/229) (`c5bdadd322`), [#237](https://github.com/CorbanuCore/CorbanuTerminal/pull/237) (`5656e997d2`) | `broker_model_auth` | completed (archived) |
+| [PF-27-S04](../../sprints/archive/p0-security-levels/pf-27-s04-isolated-credential-broker.md) Isolated credential broker process | #180 (`13cf4a2d0c`) | `isolated_credential_broker` | completed (archived) |
+| [PF-27-S02](../../sprints/archive/p0-security-levels/pf-27-s02-secretless-agent-launch.md) Secretless agent launch and broker containment | #191 (`699bd4a82f`) | `secretless_agent_launch` | completed (archived) |
+| [PF-27-S05](../../sprints/archive/p0-security-levels/pf-27-s05-model-client-auth-broker.md) Model-client auth held by the broker | #229 (`c5bdadd322`), #237 (`5656e997d2`) | `broker_model_auth` | completed (archived) |
+
+PR links:
+
+- #180: https://github.com/CorbanuCore/CorbanuTerminal/pull/180
+- #191: https://github.com/CorbanuCore/CorbanuTerminal/pull/191
+- #229: https://github.com/CorbanuCore/CorbanuTerminal/pull/229
+- #237: https://github.com/CorbanuCore/CorbanuTerminal/pull/237
 
 ## PF-27-S04: Isolated credential broker process
 
