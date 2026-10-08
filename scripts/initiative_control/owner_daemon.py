@@ -1770,13 +1770,17 @@ def scheduled_tick(root, recover=None):
         previous_firing = status.get("firing")
         status.update(started_at=time.time(), completed_at=None, firing=firing_source(root, receipt))
         f.write_json(root / "tick.json", status)
-        cycles_before, transient = None, False
+        cycles_before, timed_out = None, False
+        if lane == "manager":
+            # Read before anything that can time out (the pins check runs the interpreter).
+            try:
+                cycles_before = manager_status(root)["cycles"]
+            except Exception:
+                cycles_before = None
         try:
             pins = receipt["pins"]
             f.require(schedule_pins(Path(pins["python"]), Path(pins["runtime"]),
                                     Path(pins["config"]), pins["python_sha256"]) == pins, "schedule_pin_drift")
-            if lane == "manager":
-                cycles_before = manager_status(root)["cycles"]
             result = (manager_lane(Path(pins["config"]), root) if lane == "manager"
                       else Kernel(Path(pins["config"])).tick())
         except BlockingIOError:
@@ -1785,20 +1789,29 @@ def scheduled_tick(root, recover=None):
             result = {"state": "HOLD", "reason": "owner_run_refused", "refusal": str(exc)}
         except Exception as exc:
             result = {"state": "ERROR", "reason": type(exc).__name__}
-            transient = isinstance(exc, subprocess.TimeoutExpired)
+            timed_out = isinstance(exc, subprocess.TimeoutExpired)
         status["completed_at"] = time.time()
-        if lane == "manager" and transient and cycles_before is not None:
-            # A subprocess timeout before any cycle started (no manager call, no claim)
-            # is a transient error, as on the owner lane, until it repeats.
+        pre_cycle_timeout = False
+        if lane == "manager" and timed_out and cycles_before is not None:
+            # Only the tick writes the cycle counter (under tick.lock) and it is bumped
+            # before any manager call or claim: unchanged means no cycle started.
             try:
-                transient = manager_status(root)["cycles"] == cycles_before
+                pre_cycle_timeout = manager_status(root)["cycles"] == cycles_before
             except Exception:
-                transient = False
-            transient = transient and status.get("consecutive_errors", 0) + 1 < MANAGER_TRANSIENT_LIMIT
-        else:
-            transient = False
-        if lane == "manager" and result["state"] in {"HOLD", "ERROR"} and not transient:
-            # Fail closed: any manager-lane failure latches until --recover.
+                pre_cycle_timeout = False
+        streak = status.get("consecutive_errors", 0) + 1
+        if pre_cycle_timeout and streak < MANAGER_TRANSIENT_LIMIT:
+            # A brief host slowdown: counted as an error, as on the owner lane.
+            append_log(root / MANAGER_LOG, {"event": "transient_error", "at": time.time(),
+                                            "reason": result["reason"], "consecutive_errors": streak})
+            status.update(errors=status.get("errors", 0) + 1, consecutive_errors=streak,
+                          last_error=result["reason"], previous_success=None)
+        elif lane == "manager" and result["state"] in {"HOLD", "ERROR"}:
+            # Fail closed: every other manager-lane failure, and a pre-cycle timeout
+            # that repeats MANAGER_TRANSIENT_LIMIT times in a row, latches until --recover.
+            if pre_cycle_timeout:
+                result = dict(result, reason="manager_pre_cycle_timeouts",
+                              refusal=f"{result['reason']} x{streak}")
             status.update(hold=result.get("reason") or "manager_lane_error",
                           first_refusal=status.get("first_refusal") or time.time(),
                           last_refusal=time.time(), refusal=result.get("refusal", result.get("reason")))
@@ -1908,7 +1921,8 @@ def main(argv=None):
         if args.schedule:
             try:
                 result = scheduled_tick(args.schedule, args.recover)
-            except (f.LaunchError, OSError, sqlite3.Error, ValueError, TypeError, KeyError):
+            except (f.LaunchError, OSError, sqlite3.Error, ValueError, TypeError, KeyError,
+                    subprocess.SubprocessError):
                 result = {"state": "HOLD", "reason": "owner_run_refused"}
             try:
                 publish_schedule(args.schedule)
