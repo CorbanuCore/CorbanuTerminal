@@ -238,18 +238,20 @@ fn sec_win_304_removal_skips_an_object_renamed_onto_a_stale_path() {
     std::fs::rename(&home.secret, &stash).expect("rename secret");
     std::fs::create_dir(&plain).expect("plain dir");
     junction(&home.secret, &plain);
-    // Launch 2 adds the entry through the junction, to `plain`.
-    sync(&home, std::slice::from_ref(&home.secret), &group);
-    assert!(state(&home).contains("plain"), "{}", state(&home));
+    if junction_followable(&home.secret) {
+        // Launch 2 adds the entry through the junction, to `plain`.
+        sync(&home, std::slice::from_ref(&home.secret), &group);
+        assert!(state(&home).contains("plain"), "{}", state(&home));
 
-    // Command 2: put the secret where `plain` was.
-    std::fs::remove_dir(&home.secret).expect("remove junction");
-    std::fs::remove_dir(&plain).expect("remove plain");
-    std::fs::rename(&stash, &plain).expect("rename secret onto plain");
-    // Launch 3: `plain` is stale, but it is now the secret.
-    sync(&home, std::slice::from_ref(&home.secret), &group);
-    assert!(explicit_deny(&plain, &group), "{}", dacl_sddl(&plain));
-    assert!(!state(&home).contains("plain"), "{}", state(&home));
+        // Command 2: put the secret where `plain` was.
+        std::fs::remove_dir(&home.secret).expect("remove junction");
+        std::fs::remove_dir(&plain).expect("remove plain");
+        std::fs::rename(&stash, &plain).expect("rename secret onto plain");
+        // Launch 3: `plain` is stale, but it is now the secret.
+        sync(&home, std::slice::from_ref(&home.secret), &group);
+        assert!(explicit_deny(&plain, &group), "{}", dacl_sddl(&plain));
+        assert!(!state(&home).contains("plain"), "{}", state(&home));
+    }
 
     // The same with a file renamed onto a stale file path.
     let stale = home.codex_home.join("old.env");
@@ -271,6 +273,9 @@ fn sec_win_304_entry_added_through_a_link_is_removed_from_its_target() {
     let group = LocalSid::from_string(SANDBOX_GROUP).expect("group SID");
     let link = home.codex_home.join("linked-secret");
     junction(&link, &home.secret);
+    if !junction_followable(&link) {
+        return;
+    }
     let before = dacl_sddl(&home.secret);
     sync(&home, std::slice::from_ref(&link), &group);
     assert!(
@@ -306,6 +311,18 @@ fn sec_win_304_entry_another_codex_home_added_is_kept() {
 fn explicit_deny(path: &Path, sid: &LocalSid) -> bool {
     // SAFETY: a valid SID and an existing path.
     unsafe { has_explicit_deny_read_ace(path, sid.as_ptr()) }.expect("read DACL")
+}
+
+/// Whether this process may follow the junction at `link`. Windows refuses a
+/// junction a non-administrator created to a process at medium integrity on
+/// some machines (the QA machine); the elevated sandbox's setup, which runs
+/// the sync, is an administrator.
+fn junction_followable(link: &Path) -> bool {
+    let followable = std::fs::metadata(link).is_ok();
+    if !followable {
+        eprintln!("skipped: this process cannot follow {}", link.display());
+    }
+    followable
 }
 
 /// Creates a directory junction at `link` to `target` (no privilege needed).
