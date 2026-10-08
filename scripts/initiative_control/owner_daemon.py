@@ -27,6 +27,10 @@ CLOSE_TIMEOUT = 20
 MANAGER_SETTINGS = frozenset({"binary", "binary_sha256", "auth_vault_home", "runs_dir",
                               "timeout_seconds", "min_interval_seconds", "daily_cap"})
 MANAGER_STATE, MANAGER_LOG = "manager-auto.json", "manager-cycles.jsonl"
+# Consecutive pre-cycle subprocess timeouts the manager lane counts as errors (as the
+# owner lane does) before it latches a hold: a brief host slowdown must not need
+# --recover, a persistent one still fails closed.
+MANAGER_TRANSIENT_LIMIT = 3
 # An unchanged wake situation (a result still awaiting a verdict, nothing queued)
 # is raised again at most once per window, never in a loop.
 WAKE_REPEAT_SECONDS = 12 * 3600
@@ -1748,6 +1752,8 @@ def scheduled_tick(root, recover=None):
                       **({"reconciliation": reconciliation} if lane == "manager" else {})})
             status.update(hold=None, started_at=None, completed_at=None,
                           last_success=None, previous_success=None)
+            if lane == "manager":
+                status["consecutive_errors"] = 0
             f.write_json(root / "tick.json", status)
             return {"state": "RECOVERED"}
         if status["started_at"] is not None and status["completed_at"] is None:
@@ -1764,10 +1770,13 @@ def scheduled_tick(root, recover=None):
         previous_firing = status.get("firing")
         status.update(started_at=time.time(), completed_at=None, firing=firing_source(root, receipt))
         f.write_json(root / "tick.json", status)
+        cycles_before, transient = None, False
         try:
             pins = receipt["pins"]
             f.require(schedule_pins(Path(pins["python"]), Path(pins["runtime"]),
                                     Path(pins["config"]), pins["python_sha256"]) == pins, "schedule_pin_drift")
+            if lane == "manager":
+                cycles_before = manager_status(root)["cycles"]
             result = (manager_lane(Path(pins["config"]), root) if lane == "manager"
                       else Kernel(Path(pins["config"])).tick())
         except BlockingIOError:
@@ -1776,8 +1785,19 @@ def scheduled_tick(root, recover=None):
             result = {"state": "HOLD", "reason": "owner_run_refused", "refusal": str(exc)}
         except Exception as exc:
             result = {"state": "ERROR", "reason": type(exc).__name__}
+            transient = isinstance(exc, subprocess.TimeoutExpired)
         status["completed_at"] = time.time()
-        if lane == "manager" and result["state"] in {"HOLD", "ERROR"}:
+        if lane == "manager" and transient and cycles_before is not None:
+            # A subprocess timeout before any cycle started (no manager call, no claim)
+            # is a transient error, as on the owner lane, until it repeats.
+            try:
+                transient = manager_status(root)["cycles"] == cycles_before
+            except Exception:
+                transient = False
+            transient = transient and status.get("consecutive_errors", 0) + 1 < MANAGER_TRANSIENT_LIMIT
+        else:
+            transient = False
+        if lane == "manager" and result["state"] in {"HOLD", "ERROR"} and not transient:
             # Fail closed: any manager-lane failure latches until --recover.
             status.update(hold=result.get("reason") or "manager_lane_error",
                           first_refusal=status.get("first_refusal") or time.time(),

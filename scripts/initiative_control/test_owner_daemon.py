@@ -3306,6 +3306,58 @@ class ManagerLaneTests(unittest.TestCase):
         self.assertEqual("owner_run_refused", owner.load(root / "tick.json")["hold"])
         self.assertEqual([], self.calls)
 
+    def test_pre_cycle_timeout_counts_as_an_error_until_it_repeats(self):
+        self.manager()
+        root = self.scheduled()
+        timeout = subprocess.TimeoutExpired("ps", 5)
+        with patch.object(owner.manager_cycle, "compact_finished", side_effect=timeout):
+            result = owner.scheduled_tick(root)
+        self.assertEqual(("ERROR", "TimeoutExpired"), (result["state"], result["reason"]))
+        status = owner.load(root / "tick.json")
+        self.assertIsNone(status["hold"])
+        self.assertEqual((1, 1, "TimeoutExpired"),
+                         (status["errors"], status["consecutive_errors"], status["last_error"]))
+        self.assertEqual([], self.log())
+        # The next pass runs normally and clears the streak, without --recover.
+        self.c.event({"id": "work"})
+        with patch.object(owner.manager_cycle, "run_cycle", self.accepting):
+            self.assertEqual("CYCLE", owner.scheduled_tick(root)["state"])
+        status = owner.load(root / "tick.json")
+        self.assertEqual((None, 0), (status["hold"], status["consecutive_errors"]))
+        # A persistent timeout still fails closed at the limit.
+        state = owner.load(root / owner.MANAGER_STATE)
+        f.write_json(root / owner.MANAGER_STATE, dict(state, last_started_at=0))
+        with patch.object(owner.manager_cycle, "compact_finished", side_effect=timeout):
+            for _ in range(owner.MANAGER_TRANSIENT_LIMIT - 1):
+                self.assertEqual("ERROR", owner.scheduled_tick(root)["state"])
+                self.assertIsNone(owner.load(root / "tick.json")["hold"])
+            self.assertEqual("ERROR", owner.scheduled_tick(root)["state"])
+            self.assertEqual(("HOLD", "TimeoutExpired"),
+                             tuple(owner.scheduled_tick(root)[k] for k in ("state", "reason")))
+        self.assertEqual("TimeoutExpired", owner.load(root / "tick.json")["hold"])
+        self.assertEqual(["cycle_started", "cycle_finished", "hold"], [r["event"] for r in self.log()])
+        self.assertEqual("RECOVERED", owner.scheduled_tick(root, recover="fixture: host slowdown over")["state"])
+        self.assertEqual(0, owner.load(root / "tick.json")["consecutive_errors"])
+        self.assertEqual(1, len(self.calls))
+
+    def test_timeout_after_a_cycle_started_latches_at_once(self):
+        self.manager()
+        root = self.scheduled()
+        self.c.event({"id": "work"})
+        with patch.object(owner.manager_cycle, "run_cycle",
+                          side_effect=subprocess.TimeoutExpired("corbanu", 900)):
+            result = owner.scheduled_tick(root)
+        self.assertEqual(("ERROR", "TimeoutExpired"), (result["state"], result["reason"]))
+        self.assertEqual("TimeoutExpired", owner.load(root / "tick.json")["hold"])
+        self.assertEqual(["cycle_started", "hold"], [r["event"] for r in self.log()])
+
+    def test_other_pre_cycle_errors_still_latch(self):
+        self.manager()
+        root = self.scheduled()
+        with patch.object(owner.manager_cycle, "compact_finished", side_effect=RuntimeError("fixture")):
+            owner.scheduled_tick(root)
+        self.assertEqual("RuntimeError", owner.load(root / "tick.json")["hold"])
+
 
 if __name__ == "__main__":
     unittest.main()
