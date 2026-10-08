@@ -5,6 +5,7 @@ use std::ffi::c_void;
 use std::path::Path;
 use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::Foundation::ERROR_SUCCESS;
+use windows_sys::Win32::Foundation::GetLastError;
 use windows_sys::Win32::Foundation::HLOCAL;
 use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
 use windows_sys::Win32::Foundation::LocalFree;
@@ -14,6 +15,7 @@ use windows_sys::Win32::Security::ACE_HEADER;
 use windows_sys::Win32::Security::ACL;
 use windows_sys::Win32::Security::ACL_SIZE_INFORMATION;
 use windows_sys::Win32::Security::AclSizeInformation;
+use windows_sys::Win32::Security::AddAce;
 use windows_sys::Win32::Security::Authorization::EXPLICIT_ACCESS_W;
 use windows_sys::Win32::Security::Authorization::GetNamedSecurityInfoW;
 use windows_sys::Win32::Security::Authorization::GetSecurityInfo;
@@ -28,7 +30,12 @@ use windows_sys::Win32::Security::EqualSid;
 use windows_sys::Win32::Security::GENERIC_MAPPING;
 use windows_sys::Win32::Security::GetAce;
 use windows_sys::Win32::Security::GetAclInformation;
+use windows_sys::Win32::Security::GetSecurityDescriptorControl;
+use windows_sys::Win32::Security::InitializeAcl;
 use windows_sys::Win32::Security::MapGenericMask;
+use windows_sys::Win32::Security::PROTECTED_DACL_SECURITY_INFORMATION;
+use windows_sys::Win32::Security::SE_DACL_PROTECTED;
+use windows_sys::Win32::Security::UNPROTECTED_DACL_SECURITY_INFORMATION;
 use windows_sys::Win32::Storage::FileSystem::CreateFileW;
 use windows_sys::Win32::Storage::FileSystem::DELETE;
 use windows_sys::Win32::Storage::FileSystem::FILE_ALL_ACCESS;
@@ -649,6 +656,15 @@ pub unsafe fn add_deny_delete_child_ace(
 pub unsafe fn add_deny_read_ace_for_new_files(path: &Path, psid: *mut c_void) -> Result<bool> {
     add_deny_ace(path, psid, DenyAceKind::ReadNewFiles)?;
     // `add_deny_ace` reports a failed write as "not added"; confirm instead.
+    has_deny_read_ace_for_new_files(path, psid)
+}
+
+/// Whether `path` has the entry [`add_deny_read_ace_for_new_files`] adds
+/// for `psid`.
+///
+/// # Safety
+/// Caller must ensure `psid` points to a valid SID.
+pub unsafe fn has_deny_read_ace_for_new_files(path: &Path, psid: *mut c_void) -> Result<bool> {
     let mut p_sd: *mut c_void = std::ptr::null_mut();
     let mut p_dacl: *mut ACL = std::ptr::null_mut();
     let code = GetNamedSecurityInfoW(
@@ -669,6 +685,132 @@ pub unsafe fn add_deny_read_ace_for_new_files(path: &Path, psid: *mut c_void) ->
         LocalFree(p_sd as HLOCAL);
     }
     Ok(present)
+}
+
+/// True when `ace` is exactly the entry [`add_deny_read_ace_for_new_files`]
+/// adds for `psid`: an explicit deny, inherit-only for files one level down,
+/// whose mask maps to file read and nothing else.
+unsafe fn is_new_file_read_deny(ace: *const c_void, psid: *mut c_void) -> bool {
+    let hdr = &*(ace as *const ACE_HEADER);
+    let flags = OBJECT_INHERIT_ACE | u32::from(INHERIT_ONLY_ACE) | NO_PROPAGATE_INHERIT_ACE;
+    if hdr.AceType != ACCESS_DENIED_ACE_TYPE || u32::from(hdr.AceFlags) != flags {
+        return false;
+    }
+    let mut mask = (*(ace as *const ACCESS_DENIED_ACE)).Mask;
+    let mapping = GENERIC_MAPPING {
+        GenericRead: FILE_GENERIC_READ,
+        GenericWrite: FILE_GENERIC_WRITE,
+        GenericExecute: FILE_GENERIC_EXECUTE,
+        GenericAll: FILE_ALL_ACCESS,
+    };
+    MapGenericMask(&mut mask, &mapping);
+    let sid = (ace as usize + std::mem::size_of::<ACE_HEADER>() + std::mem::size_of::<u32>())
+        as *mut c_void;
+    mask == FILE_GENERIC_READ && EqualSid(sid, psid) != 0
+}
+
+/// PF-27-S07: removes exactly the entry [`add_deny_read_ace_for_new_files`]
+/// added for `psid` on `path`, and with it the copies files directly in
+/// `path` inherited. Every other entry, and whether the DACL is protected,
+/// stays as it was. Returns whether an entry was removed.
+///
+/// # Safety
+/// Caller must ensure `psid` points to a valid SID and `path` is a directory.
+pub unsafe fn remove_deny_read_ace_for_new_files(path: &Path, psid: *mut c_void) -> Result<bool> {
+    let mut p_sd: *mut c_void = std::ptr::null_mut();
+    let mut p_dacl: *mut ACL = std::ptr::null_mut();
+    let code = GetNamedSecurityInfoW(
+        to_wide(path).as_ptr(),
+        1,
+        DACL_SECURITY_INFORMATION,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        &mut p_dacl,
+        std::ptr::null_mut(),
+        &mut p_sd,
+    );
+    if code != ERROR_SUCCESS {
+        return Err(anyhow!("GetNamedSecurityInfoW failed: {code}"));
+    }
+    let result = remove_new_file_read_denies(path, p_sd, p_dacl, psid);
+    if !p_sd.is_null() {
+        LocalFree(p_sd as HLOCAL);
+    }
+    result
+}
+
+unsafe fn remove_new_file_read_denies(
+    path: &Path,
+    p_sd: *mut c_void,
+    p_dacl: *mut ACL,
+    psid: *mut c_void,
+) -> Result<bool> {
+    if p_dacl.is_null() {
+        return Ok(false);
+    }
+    let mut info: ACL_SIZE_INFORMATION = std::mem::zeroed();
+    if GetAclInformation(
+        p_dacl as *const ACL,
+        &mut info as *mut _ as *mut c_void,
+        std::mem::size_of::<ACL_SIZE_INFORMATION>() as u32,
+        AclSizeInformation,
+    ) == 0
+    {
+        return Err(anyhow!("GetAclInformation failed: {}", GetLastError()));
+    }
+    let revision = u32::from((*p_dacl).AclRevision);
+    let size = (*p_dacl).AclSize;
+    // u32 storage keeps the ACL suitably aligned.
+    let mut buffer = vec![0_u32; usize::from(size).div_ceil(4)];
+    let new_dacl = buffer.as_mut_ptr() as *mut ACL;
+    if InitializeAcl(new_dacl, u32::from(size), revision) == 0 {
+        return Err(anyhow!("InitializeAcl failed: {}", GetLastError()));
+    }
+    let mut removed = false;
+    for i in 0..info.AceCount {
+        let mut p_ace: *mut c_void = std::ptr::null_mut();
+        if GetAce(p_dacl as *const ACL, i, &mut p_ace) == 0 {
+            return Err(anyhow!("GetAce failed: {}", GetLastError()));
+        }
+        if is_new_file_read_deny(p_ace, psid) {
+            removed = true;
+            continue;
+        }
+        let ace_size = u32::from((*(p_ace as *const ACE_HEADER)).AceSize);
+        if AddAce(new_dacl, revision, u32::MAX, p_ace, ace_size) == 0 {
+            return Err(anyhow!("AddAce failed: {}", GetLastError()));
+        }
+    }
+    if !removed {
+        return Ok(false);
+    }
+    let mut control: u16 = 0;
+    let mut sd_revision: u32 = 0;
+    if GetSecurityDescriptorControl(p_sd, &mut control, &mut sd_revision) == 0 {
+        return Err(anyhow!(
+            "GetSecurityDescriptorControl failed: {}",
+            GetLastError()
+        ));
+    }
+    let protection = if control & SE_DACL_PROTECTED != 0 {
+        PROTECTED_DACL_SECURITY_INFORMATION
+    } else {
+        UNPROTECTED_DACL_SECURITY_INFORMATION
+    };
+    // Also recomputes the children's inherited entries, dropping the copies.
+    let code = SetNamedSecurityInfoW(
+        to_wide(path).as_ptr() as *mut u16,
+        1,
+        DACL_SECURITY_INFORMATION | protection,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        new_dacl,
+        std::ptr::null_mut(),
+    );
+    if code != ERROR_SUCCESS {
+        return Err(anyhow!("SetNamedSecurityInfoW failed: {code}"));
+    }
+    Ok(true)
 }
 
 #[derive(Clone, Copy)]
@@ -961,3 +1103,7 @@ pub unsafe fn allow_null_device(psid: *mut c_void) {
 const CONTAINER_INHERIT_ACE: u32 = 0x2;
 const NO_PROPAGATE_INHERIT_ACE: u32 = 0x4;
 const OBJECT_INHERIT_ACE: u32 = 0x1;
+
+#[cfg(test)]
+#[path = "acl_tests.rs"]
+mod tests;

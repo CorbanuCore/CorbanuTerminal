@@ -179,6 +179,8 @@ impl std::fmt::Debug for LaunchContract {
 pub(crate) fn arm(codex_home: &AbsolutePathBuf) {
     secretless_launch::arm();
     ACTIVE.get_or_init(|| {
+        #[cfg(windows)]
+        hold_armed_lock(codex_home.as_path());
         let hardened = harden_current_process();
         LaunchContract::capture(codex_home, std::env::vars_os(), hardened)
     });
@@ -389,7 +391,8 @@ impl LaunchContract {
     /// new file and would not carry its per-file deny, so every file created
     /// directly in `CODEX_HOME` inherits a read deny for the elevated
     /// sandbox's users (subdirectories such as `skills` are unaffected). The
-    /// entry stays on the directory. Needs the sandbox's users group, which
+    /// entry stays on the directory until a process starts with the flag off
+    /// ([`release_codex_home_when_unarmed`]). Needs the sandbox's users group, which
     /// its setup creates; until then protected launches are refused. Checked
     /// on every launch (a no-op once present), so a setup rerun that resets
     /// the directory's ACL is repaired. A file moved in from another
@@ -616,6 +619,92 @@ impl LaunchContract {
             .iter()
             .any(|value| text.contains(value.as_str()))
     }
+}
+
+/// PF-27-S07: a lock file in `CODEX_HOME` that every armed process holds
+/// shared for its lifetime, so a process with the flag off never removes the
+/// new-file deny under one that relies on it.
+#[cfg(windows)]
+const ARMED_LOCK_FILE: &str = ".secretless-launch.lock";
+
+/// Takes the shared armed lock and keeps it for the life of the process.
+/// Best effort: an armed process re-adds the deny before every launch anyway.
+#[cfg(windows)]
+fn hold_armed_lock(codex_home: &Path) {
+    static LOCK: OnceLock<std::fs::File> = OnceLock::new();
+    let locked = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(codex_home.join(ARMED_LOCK_FILE))
+        .and_then(|file| file.lock_shared().map(|()| file));
+    match locked {
+        Ok(file) => {
+            let _ = LOCK.set(file);
+        }
+        Err(err) => tracing::warn!("secretless_agent_launch: could not take the armed lock: {err}"),
+    }
+}
+
+/// PF-27-S07: on Windows, once per process with `secretless_agent_launch`
+/// off and the contract not armed here, removes exactly the `CODEX_HOME`
+/// new-file deny an earlier protected run added (and the copies files in
+/// `CODEX_HOME` inherited), leaving every other entry. Skipped while another
+/// process has the contract armed. Turning the flag off in a process that
+/// already armed it takes effect at its next start (arming is one-way).
+#[cfg(windows)]
+pub(crate) fn release_codex_home_when_unarmed(codex_home: &AbsolutePathBuf) {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    if active().is_some() {
+        return;
+    }
+    ONCE.call_once(|| {
+        // No sandbox group: setup never ran, so no entry names it.
+        let Ok(mut group) = codex_windows_sandbox::resolve_sid(WINDOWS_SANDBOX_USERS_GROUP) else {
+            return;
+        };
+        match release_new_file_deny(codex_home.as_path(), group.as_mut_ptr().cast()) {
+            Ok(true) => tracing::info!(
+                "secretless_agent_launch is off: removed the CODEX_HOME new-file deny"
+            ),
+            Ok(false) => {}
+            Err(err) => tracing::warn!(
+                "secretless_agent_launch is off, but the CODEX_HOME new-file deny could not be removed: {err}"
+            ),
+        }
+    });
+}
+
+/// Removes the new-file deny for `group` from `codex_home` unless an armed
+/// process holds the lock. Returns whether it was removed.
+#[cfg(windows)]
+pub(crate) fn release_new_file_deny(
+    codex_home: &Path,
+    group: *mut std::ffi::c_void,
+) -> std::io::Result<bool> {
+    // SAFETY: `group` is a valid SID for the duration of the call.
+    let present =
+        unsafe { codex_windows_sandbox::has_deny_read_ace_for_new_files(codex_home, group) }
+            .map_err(std::io::Error::other)?;
+    if !present {
+        return Ok(false);
+    }
+    let lock = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(codex_home.join(ARMED_LOCK_FILE))?;
+    match lock.try_lock() {
+        Ok(()) => {}
+        Err(std::fs::TryLockError::WouldBlock) => return Ok(false),
+        Err(std::fs::TryLockError::Error(err)) => return Err(err),
+    }
+    // Held exclusively until `lock` drops: no process can arm meanwhile.
+    // SAFETY: as above.
+    unsafe { codex_windows_sandbox::remove_deny_read_ace_for_new_files(codex_home, group) }
+        .map_err(std::io::Error::other)
 }
 
 /// `sh -l`, `bash -lc`, `zsh --login`, and similar.

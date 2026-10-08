@@ -587,3 +587,46 @@ impl Drop for EnvGuard {
         }
     }
 }
+
+/// PF-27-S07: with the flag off, the `CODEX_HOME` new-file deny is removed,
+/// but never while another process has the contract armed (it holds the
+/// armed lock shared).
+#[test]
+fn pf_27_s07_flag_off_removes_the_deny_unless_a_contract_is_armed() {
+    let dir = tempfile::tempdir().expect("codex home");
+    let group = codex_windows_sandbox::LocalSid::from_string(
+        "S-1-5-21-2718281828-3141592653-1618033988-1001",
+    )
+    .expect("group SID");
+    let present = || {
+        // SAFETY: a valid SID and an existing directory.
+        unsafe {
+            codex_windows_sandbox::has_deny_read_ace_for_new_files(dir.path(), group.as_ptr())
+        }
+        .expect("read DACL")
+    };
+    // SAFETY: as above.
+    let added = unsafe {
+        codex_windows_sandbox::add_deny_read_ace_for_new_files(dir.path(), group.as_ptr())
+    };
+    assert!(added.expect("add deny"));
+
+    let armed = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(dir.path().join(super::ARMED_LOCK_FILE))
+        .expect("lock file");
+    armed.lock_shared().expect("armed lock");
+    let released = super::release_new_file_deny(dir.path(), group.as_ptr()).expect("release");
+    assert!(!released);
+    assert!(present());
+
+    drop(armed);
+    let released = super::release_new_file_deny(dir.path(), group.as_ptr()).expect("release");
+    assert!(released);
+    assert!(!present());
+    let again = super::release_new_file_deny(dir.path(), group.as_ptr()).expect("release");
+    assert!(!again);
+}

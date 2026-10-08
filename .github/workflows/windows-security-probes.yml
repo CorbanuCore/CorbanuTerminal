@@ -1,7 +1,8 @@
 name: windows-security-probes
 
-# PF-27-S06: measured Windows containment probes and broker transport tests.
-# They run real processes, tokens and named pipes, so they need a Windows host.
+# PF-27-S06/S07: measured Windows containment probes and broker transport
+# tests. They run real processes, tokens, ACLs and named pipes, so they need a
+# Windows host.
 
 on:
   workflow_dispatch:
@@ -50,7 +51,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       - name: Process access probes
         shell: bash
-        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-process-hardening pf_27_s06 -- --nocapture --test-threads=1
+        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-process-hardening -- pf_27_s06 pf_27_s07 --nocapture --test-threads=1
+      - name: CODEX_HOME deny removal
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib pf_27_s07 -- --nocapture --test-threads=1
       - name: Broker transport probes and broker suite over named pipes
         if: ${{ !cancelled() }}
         shell: bash
@@ -67,7 +72,7 @@ jobs:
           bin_dir="${CARGO_TARGET_DIR}/debug"
           export CARGO_BIN_EXE_codex_windows_sandbox_setup="$(cygpath -w "${bin_dir}/codex-windows-sandbox-setup.exe")"
           export CARGO_BIN_EXE_codex_command_runner="$(cygpath -w "${bin_dir}/codex-command-runner.exe")"
-          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-core --lib "pf_27_s06" -- --nocapture --test-threads=1
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-core --lib -- pf_27_s06 pf_27_s07 --nocapture --test-threads=1
       - name: Require a clean worktree
         if: always() && !cancelled()
         uses: ./.github/actions/check-clean-worktree
