@@ -382,6 +382,10 @@ impl SecurityDescriptor {
         Ok(Self(descriptor))
     }
 
+    pub(crate) fn as_ptr(&self) -> *mut c_void {
+        self.0
+    }
+
     pub(crate) fn dacl(&self) -> io::Result<*const ACL> {
         let mut present = 0;
         let mut defaulted = 0;
