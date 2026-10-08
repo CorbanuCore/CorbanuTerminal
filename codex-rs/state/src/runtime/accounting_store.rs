@@ -235,7 +235,11 @@ impl AsOf {
     }
 
     /// `sample`, with `Now` held at the checkpoint `conn`'s transaction sees.
-    async fn sample_on(self, conn: &mut SqliteConnection) -> anyhow::Result<i64> {
+    /// Conversation deletion uses the same rule as ledger writes.
+    pub(in crate::runtime) async fn sample_on(
+        self,
+        conn: &mut SqliteConnection,
+    ) -> anyhow::Result<i64> {
         let now = self.sample();
         if self != Self::Now {
             return Ok(now);
