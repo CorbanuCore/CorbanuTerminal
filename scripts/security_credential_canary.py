@@ -18,6 +18,10 @@ from typing import Any
 
 REPORT_NAME = "credential-canary-report.json"
 MAX_CAPTURE_BYTES = 1024 * 1024
+# Cold debug builds on hosted Windows and macOS runners regularly exceed 15
+# minutes; test execution keeps the tighter bound so a hang is still caught.
+BUILD_TIMEOUT_SECONDS = 60 * 60
+TEST_RUN_TIMEOUT_SECONDS = 15 * 60
 SUPPORTED_HOSTS = {"Linux", "Darwin", "Windows"}
 CANARY_SENTINEL = "CORBANU_SECURITY_CREDENTIAL_CANARY "
 CANARY_DIGEST_PATTERN = re.compile(r"^[0-9a-f]{64}$")
@@ -315,7 +319,7 @@ def run_command(
     *,
     cwd: Path,
     env: dict[str, str],
-    timeout_seconds: int = 900,
+    timeout_seconds: int = TEST_RUN_TIMEOUT_SECONDS,
 ) -> CommandResult:
     try:
         completed = subprocess.run(
@@ -390,9 +394,12 @@ def build_candidate(
         ],
         cwd=repo_root / "codex-rs",
         env=env,
+        timeout_seconds=BUILD_TIMEOUT_SECONDS,
     )
     if result.returncode != 0:
-        raise QualificationError("candidate workspace build failed")
+        raise QualificationError(
+            f"candidate workspace build failed:{stderr_tail(result)}"
+        )
     return result
 
 
@@ -477,6 +484,11 @@ def panic_reports(output: str) -> list[dict[str, str]]:
             }
         )
     return panics
+
+
+def stderr_tail(result: CommandResult) -> str:
+    tail = redact("\n".join(result.stderr.strip().splitlines()[-MAX_TAIL_LINES:]))
+    return "\n" + "\n".join(f"    {line}" for line in tail.splitlines())
 
 
 def describe_probe_failure(
@@ -646,6 +658,16 @@ def run_qualification(
         probe_reports = []
         command_results = []
         for probe in PROBES:
+            compile_result = run_command(
+                ["cargo", "test", "--no-run", "-p", probe.package, *probe.cargo_args],
+                cwd=repo_root / "codex-rs",
+                env=environment,
+                timeout_seconds=BUILD_TIMEOUT_SECONDS,
+            )
+            if compile_result.returncode != 0:
+                raise QualificationError(
+                    f"probe {probe.probe_id} did not build:{stderr_tail(compile_result)}"
+                )
             command = [
                 "cargo",
                 "test",
@@ -659,6 +681,7 @@ def run_qualification(
                 command,
                 cwd=repo_root / "codex-rs",
                 env=environment,
+                timeout_seconds=TEST_RUN_TIMEOUT_SECONDS,
             )
             command_results.append(result)
             executed = validate_probe_output(probe, result)

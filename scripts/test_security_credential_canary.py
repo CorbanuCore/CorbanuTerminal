@@ -323,6 +323,41 @@ class SecurityCredentialCanaryTests(unittest.TestCase):
             ):
                 canary.run_command(["cargo"], cwd=Path.cwd(), env={})
 
+    def test_probe_compiles_with_build_timeout_then_runs_with_test_timeout(
+        self,
+    ) -> None:
+        calls = []
+
+        def fake_run(command, *, cwd, env, timeout_seconds=None):
+            calls.append((command, timeout_seconds))
+            return canary.CommandResult(command, 0, "", "")
+
+        with (
+            mock.patch.multiple(
+                canary,
+                PROBES=(canary.PROBES[0],),
+                build_candidate=mock.Mock(
+                    return_value=canary.CommandResult(["b"], 0, "", "")
+                ),
+                candidate_identity=mock.Mock(
+                    return_value=({}, canary.CommandResult(["v"], 0, "", ""))
+                ),
+                run_command=fake_run,
+                validate_probe_output=mock.Mock(return_value=1),
+                source_evidence=mock.Mock(return_value=[]),
+                parse_canary_result=mock.Mock(return_value={}),
+                write_report=mock.Mock(return_value=Path("report.json")),
+            ),
+            mock.patch.object(canary, "git_output", side_effect=["a" * 40, ""]),
+            mock.patch.object(canary, "sanitized_environment", return_value={}),
+        ):
+            canary.run_qualification(Path.cwd(), Path("corbanu"), Path("evidence"))
+        (compile_command, compile_timeout), (run_command, run_timeout) = calls
+        self.assertIn("--no-run", compile_command)
+        self.assertEqual(compile_timeout, canary.BUILD_TIMEOUT_SECONDS)
+        self.assertNotIn("--no-run", run_command)
+        self.assertEqual(run_timeout, canary.TEST_RUN_TIMEOUT_SECONDS)
+
     def test_timeout_names_the_command(self) -> None:
         with mock.patch.object(
             canary.subprocess,
@@ -449,6 +484,7 @@ class SecurityCredentialCanaryTests(unittest.TestCase):
                 expected = [
                     "build",
                     "identity",
+                    "probe",
                     "probe",
                     "validate",
                     "sources",
