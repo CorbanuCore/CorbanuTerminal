@@ -73,6 +73,8 @@ mod identity;
 #[cfg(target_os = "windows")]
 mod logging;
 #[cfg(target_os = "windows")]
+mod logon_launch;
+#[cfg(target_os = "windows")]
 mod path_normalization;
 #[cfg(target_os = "windows")]
 mod process;
@@ -250,6 +252,18 @@ pub use logging::log_file_path_for_utc_date;
 pub use logging::log_note;
 #[cfg(target_os = "windows")]
 pub use logging::log_writer;
+#[cfg(target_os = "windows")]
+pub use logon_launch::LOGON_LAUNCH_ARG;
+#[cfg(target_os = "windows")]
+pub use logon_launch::LaunchedProcess;
+#[cfg(target_os = "windows")]
+pub use logon_launch::LogonError;
+#[cfg(target_os = "windows")]
+pub use logon_launch::LogonLaunchRequest;
+#[cfg(target_os = "windows")]
+pub use logon_launch::create_process_with_logon;
+#[cfg(target_os = "windows")]
+pub use logon_launch::run_logon_launcher;
 #[cfg(target_os = "windows")]
 pub use path_normalization::canonicalize_path;
 #[cfg(target_os = "windows")]

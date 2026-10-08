@@ -11,7 +11,8 @@
 //! elevated setup resets the sandbox users' passwords (which also invalidates
 //! a real installation's saved setup), so record the seed with an elevated run
 //! of this test (it writes the directory) right before. The seed holds those
-//! passwords: keep the directory outside every sandbox read root.
+//! passwords: keep the directory outside every sandbox read root. A run above
+//! medium integrity records the seed; a run at or below it uses the seed.
 
 // The probes' output is the evidence of these measured runs (`--nocapture`).
 #![allow(clippy::print_stderr)]
@@ -298,6 +299,9 @@ fn seed_elevated_setup(codex_home: &AbsolutePathBuf) {
     let Some(seed) = std::env::var_os(SETUP_SEED_ENV) else {
         return;
     };
+    if above_medium_integrity() {
+        return;
+    }
     let seed = Path::new(&seed);
     for (file, dir) in SETUP_FILES {
         if !seed.join(file).exists() {
@@ -309,15 +313,63 @@ fn seed_elevated_setup(codex_home: &AbsolutePathBuf) {
     }
 }
 
-/// Records the setup this run used into the seed directory.
+/// Records the setup an elevated run did into the seed directory.
 fn record_elevated_setup(codex_home: &AbsolutePathBuf) {
     let Some(seed) = std::env::var_os(SETUP_SEED_ENV) else {
         return;
     };
+    if !above_medium_integrity() {
+        return;
+    }
     let seed = Path::new(&seed);
     std::fs::create_dir_all(seed).expect("seed dir");
     for (file, dir) in SETUP_FILES {
         std::fs::copy(codex_home.join(dir).join(file), seed.join(file))
             .expect("record elevated setup");
     }
+}
+
+/// True when this process runs above medium integrity (an elevated session).
+fn above_medium_integrity() -> bool {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::Security::GetSidSubAuthority;
+    use windows_sys::Win32::Security::GetSidSubAuthorityCount;
+    use windows_sys::Win32::Security::GetTokenInformation;
+    use windows_sys::Win32::Security::TOKEN_MANDATORY_LABEL;
+    use windows_sys::Win32::Security::TOKEN_QUERY;
+    use windows_sys::Win32::Security::TokenIntegrityLevel;
+    use windows_sys::Win32::System::Threading::GetCurrentProcess;
+    use windows_sys::Win32::System::Threading::OpenProcessToken;
+    /// `SECURITY_MANDATORY_MEDIUM_RID`.
+    const MEDIUM: u32 = 0x2000;
+    let mut token = 0;
+    // SAFETY: opens this process's token for query; closed below.
+    if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) } == 0 {
+        return false;
+    }
+    let mut buffer = vec![0u8; 256];
+    let mut length = 0;
+    // SAFETY: `buffer` is large enough for a mandatory label and its SID.
+    let ok = unsafe {
+        GetTokenInformation(
+            token,
+            TokenIntegrityLevel,
+            buffer.as_mut_ptr().cast(),
+            buffer.len() as u32,
+            &mut length,
+        )
+    };
+    // SAFETY: opened above.
+    unsafe { CloseHandle(token) };
+    if ok == 0 {
+        return false;
+    }
+    // SAFETY: the call filled `buffer` with a TOKEN_MANDATORY_LABEL whose SID
+    // points into it.
+    let level = unsafe {
+        let label = &*(buffer.as_ptr() as *const TOKEN_MANDATORY_LABEL);
+        let count = *GetSidSubAuthorityCount(label.Label.Sid);
+        *GetSidSubAuthority(label.Label.Sid, u32::from(count) - 1)
+    };
+    level > MEDIUM
 }
