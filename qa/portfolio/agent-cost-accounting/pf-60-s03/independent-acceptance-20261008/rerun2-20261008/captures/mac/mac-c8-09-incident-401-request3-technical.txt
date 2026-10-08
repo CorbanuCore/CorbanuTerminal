@@ -1,0 +1,40 @@
+  Attempt, components and original price
+  Requested UTC day: 2026-10-08
+  Provider: zainousage
+  Model: Z.AI GLM 5.2
+  Billing: Pay per use
+  Estimated cost: no price available
+  Next step for requests with no price: check the bill from zainousage. No published price covers them, so no cost is shown for them here.
+  Tokens: tokens not reported
+  —— Details ——
+  Request: 077dd17d-4658-4222-8799-cfc7639e7db8
+  ↑↓ scroll · Enter open · Esc back/close
+  Attempt: dc033750-43af-4d99-9ab8-e3b49d0590d3
+  Thread: 01a11cb0-2d3b-7102-802a-020b79ac8654
+  Turn: 01a11cb4-40f9-7683-9ebf-505c48ad9aa8
+  Model: glm-5.2
+  Opaque scope: d5370ab2-8b22-4907-acfa-a960d70f19f5
+  Arithmetic dialect: Inclusive
+  Admission time: 2026-10-08T18:08:58.224Z
+  Retry predecessor: none
+  Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+  Token cost: unavailable — no applicable price; recorded usage is not a zero-cost claim.
+  Input: unknown — no retained numeric evidence
+  Noncached input (derived for inclusive input): unknown — no retained numeric evidence
+  Cache read: unknown — no retained numeric evidence
+  Cache write: unknown — no retained numeric evidence
+  Output: unknown — no retained numeric evidence
+  Reasoning (subset, not separately billed): unknown — no retained numeric evidence
+  Total (not separately billed): unknown — no retained numeric evidence
+  Noncached input cost: unknown — no retained numeric evidence
+  Cache read cost: unknown — no retained numeric evidence
+  Cache write cost: unknown — no retained numeric evidence
+  Output cost: unknown — no retained numeric evidence
+  Known subtotal exact USD: none — no price for these attempts
+  Price: unavailable — no dispatch-time price snapshot
+  Estimate versus billed difference: unknown — no settlement evidence
+  Billed cost: unavailable — no settlement evidence
+  Snapshot is not current; newer activity is unverified
+  Back
+  Refresh
+  Close

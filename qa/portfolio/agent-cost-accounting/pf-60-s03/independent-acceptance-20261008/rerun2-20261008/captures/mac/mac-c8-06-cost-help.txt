@@ -1,0 +1,15 @@
+$ /cost help
+  Z.AI GLM 5.2 via zainousage standard · <scratch>/repos/is-plain-obj · Corbanu Terminal · TPS: -- tok/s
+--- last screen:
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                         │
+│                                                       │
+│ model:     glm-5.2   /model to change                 │
+│ directory: <corbanu-root>/…/repos/is-plain-obj │
+╰───────────────────────────────────────────────────────╯
+› Read readme.md and summarize it in one sentence.
+• is-plain-obj is a JavaScript package that checks whether a value is a plain object (created by {}, new Object(), or Object.create(null)), correctly working across realms and excluding arrays, class
+  instances, and other non-plain objects.
+■ Usage: /cost [YYYY-MM-DD] (UTC, no future dates). Custom: /cost START END hour|day|week|month; dates or UTC timestamps ending Z; end exclusive.
+› Implement {feature}
+  Z.AI GLM 5.2 via zainousage standard · <scratch>/repos/is-plain-obj · Corbanu Terminal · TPS: -- tok/s

@@ -1,0 +1,13 @@
+nu-zai: 62 SSE events traced; chunks carrying usage: 2
+    2026-10-08T18:04:09.677566Z 20261009020407c6ddb8ee97924d65 {"prompt_tokens": 12704, "completion_tokens": 21, "total_tokens": 12725, "prompt_tokens_details": {"cached_tokens": 5248}, "completion_tokens_details": {"reasoning_tokens": 9}}
+    2026-10-08T18:04:12.174882Z 20261009020410870f400746a34a2b {"prompt_tokens": 12989, "completion_tokens": 50, "total_tokens": 13039, "prompt_tokens_details": {"cached_tokens": 12672}, "completion_tokens_details": {"reasoning_tokens": 1}}
+nu-proxy: 58 SSE events traced; chunks carrying usage: 2
+    2026-10-08T18:04:15.683109Z 202610090204135898d951af514468 {"prompt_tokens": 9975, "completion_tokens": 21, "total_tokens": 9996, "prompt_tokens_details": {"cached_tokens": 0}, "completion_tokens_details": {"reasoning_tokens": 9}}
+    2026-10-08T18:04:29.983905Z 2026100902041638d850cddb224f32 {"prompt_tokens": 10262, "completion_tokens": 46, "total_tokens": 10308, "prompt_tokens_details": {"cached_tokens": 0}, "completion_tokens_details": {"reasoning_tokens": 1}}
+nu-nousage: 77 SSE events traced; chunks carrying usage: 0
+nu-partial: 62 SSE events traced; chunks carrying usage: 2
+    2026-10-08T18:04:38.377720Z 2026100902043797e6a16dc6cb437b {"prompt_tokens": 9975, "total_tokens": 9996, "prompt_tokens_details": {"cached_tokens": 9920}, "completion_tokens_details": {"reasoning_tokens": 9}}
+    2026-10-08T18:04:40.933365Z 202610090204382cfc00895c984763 {"prompt_tokens": 10262, "total_tokens": 10312, "prompt_tokens_details": {"cached_tokens": 9984}, "completion_tokens_details": {"reasoning_tokens": 1}}
+def-zai: 56 SSE events traced; chunks carrying usage: 2
+    2026-10-08T18:15:27.073191Z 2026100902152543f67c78503346cf {"prompt_tokens": 12684, "completion_tokens": 56, "total_tokens": 12740, "prompt_tokens_details": {"cached_tokens": 5248}, "completion_tokens_details": {"reasoning_tokens": 9}}
+    2026-10-08T18:15:30.009530Z 202610090215275b8cdb623e5741cc {"prompt_tokens": 13427, "completion_tokens": 44, "total_tokens": 13471, "prompt_tokens_details": {"cached_tokens": 5248}, "completion_tokens_details": {"reasoning_tokens": 1}}
