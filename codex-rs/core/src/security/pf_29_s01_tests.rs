@@ -8,6 +8,7 @@ use tempfile::TempDir;
 
 use super::preflight::ConfigLayerInput;
 use super::preflight::Disposition;
+#[cfg(unix)]
 use super::preflight::EntryStatus;
 use super::preflight::Finding;
 use super::preflight::FindingKind;

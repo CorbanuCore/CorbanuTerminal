@@ -2130,9 +2130,8 @@ pub(crate) enum AppEvent {
         profile_selection: Option<PermissionProfileSelection>,
     },
 
-    /// Update the Windows sandbox feature mode without changing approval presets.
-    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-
+    // Handled when sent; nothing constructs it in this build.
+    #[allow(dead_code)]
     /// Update the current approval policy in the running app and widget.
     UpdateAskForApprovalPolicy(AskForApproval),
 
