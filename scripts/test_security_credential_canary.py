@@ -245,6 +245,73 @@ class SecurityCredentialCanaryTests(unittest.TestCase):
         self.assertIn("SIGSEGV", message)
         self.assertTrue(diagnostics["process_errors"])
 
+    def test_pretty_assertions_diff_is_reported_after_its_blank_line(self) -> None:
+        probe = canary.PROBES[0]
+        failed = canary.CommandResult(
+            command=["cargo", "test"],
+            returncode=101,
+            stdout=(
+                "running 2 tests\n"
+                "thread 'm::t' panicked at src/x.rs:7:9:\n"
+                "assertion failed: `(left == right)`\n"
+                "\n"
+                "\x1b[1mDiff\x1b[0m \x1b[31m< left\x1b[0m / \x1b[32mright >\x1b[0m :\n"
+                "\x1b[31m<Some(Brokered)\x1b[0m\n"
+                "\x1b[32m>Some(IsolatedBrokerUnavailable)\x1b[0m\n"
+                "\n"
+                "note: run with `RUST_BACKTRACE=1` environment variable\n"
+                "test m::t ... FAILED\n"
+            ),
+            stderr="",
+        )
+        message, diagnostics = canary.describe_probe_failure(probe, failed, [])
+        self.assertIn("<Some(Brokered)", message)
+        self.assertIn(">Some(IsolatedBrokerUnavailable)", message)
+        self.assertNotIn("\x1b", message)
+        self.assertEqual(diagnostics["tests_started"], 2)
+        self.assertEqual(diagnostics["tests_reported"], 1)
+
+    def test_secret_scan_sees_through_colour_codes_and_underscore_prefixes(
+        self,
+    ) -> None:
+        for value in (
+            "sk-\x1b[31mAbCdEfGh12345678\x1b[0m",
+            "ghp_AbCdEfGh12345678",
+            "github_pat_AbCdEfGh12345678",
+        ):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(
+                    canary.QualificationError, "credential-shaped material"
+                ) as caught:
+                    canary.assert_secret_free(value, "stdout")
+                self.assertNotIn("AbCdEfGh", str(caught.exception))
+
+    def test_redaction_keeps_names_and_paths_readable(self) -> None:
+        self.assertEqual(
+            canary.redact('{"api_key": "AbCdEf123", "token":"x9"}'),
+            '{"api_key": *** "token":***',
+        )
+        readable = (
+            "credential_broker::isolated::tests::"
+            "pf_27_s04_pf_27_s01_externally_terminated_broker_is_detected_and_cleaned_up "
+            "/var/tmp/corbanu-credential-canary-k2j3h4x9/cbk-a1b2c3/d.sock"
+        )
+        self.assertEqual(canary.redact(readable), readable)
+        self.assertEqual(canary.redact("key " + "a1" * 20), "key ***")
+
+    def test_timeout_reports_a_secret_free_output_tail(self) -> None:
+        with mock.patch.object(
+            canary.subprocess,
+            "run",
+            side_effect=subprocess.TimeoutExpired(
+                ["cargo"], 900, output=b"running 3 tests\ntest a ... ok\n"
+            ),
+        ):
+            with self.assertRaisesRegex(
+                canary.QualificationError, r"(?s)last output:.*test a \.\.\. ok"
+            ):
+                canary.run_command(["cargo"], cwd=Path.cwd(), env={})
+
     def test_timeout_names_the_command(self) -> None:
         with mock.patch.object(
             canary.subprocess,

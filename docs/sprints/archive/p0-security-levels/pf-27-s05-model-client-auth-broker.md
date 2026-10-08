@@ -84,7 +84,8 @@ Known limits below are follow-ups for the plan worker; the main one is the in-pr
   encrypted vault in-process, which decrypts the file in Core memory; only the provider key *for requests* is read
   by the broker alone. Follow-up: split the vault index from values or serve metadata through the broker. These
   features no longer see an env-only provider key.
-- Env scrubbing runs at session start (races C-level `getenv`; a launch value `.env` replaced keeps its bytes);
+- Env scrubbing runs at session start (races C-level `getenv` and `setenv` from outside `codex-network-proxy`,
+  whose own writers share its lock since #222; a launch value `.env` replaced keeps its bytes);
   moving it before `main` needs the flag decided at process start. Only the first enabling config's key variables
   are handed over; pre-session uses (first catalog refresh, `corbanu doctor`) fail closed.
 - Core still holds and refreshes ChatGPT sign-in tokens; agent-identity registration sends the access token

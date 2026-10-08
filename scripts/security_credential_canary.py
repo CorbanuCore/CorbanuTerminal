@@ -22,9 +22,11 @@ SUPPORTED_HOSTS = {"Linux", "Darwin", "Windows"}
 CANARY_SENTINEL = "CORBANU_SECURITY_CREDENTIAL_CANARY "
 CANARY_DIGEST_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 SECRET_PATTERNS = (
-    re.compile(r"(?i)\b(?:sk|ghp|gho|ghu|ghs|ghr)-[A-Za-z0-9_-]{8,}"),
+    re.compile(r"(?i)\b(?:sk|ghp|gho|ghu|ghs|ghr|github_pat)[-_][A-Za-z0-9_-]{8,}"),
     re.compile(r"(?i)\bBearer\s+[^\s\"']{8,}"),
 )
+# Colour codes would otherwise split a key (pretty_assertions colours diffs).
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 SENSITIVE_ENV_SUFFIXES = ("_API_KEY", "_TOKEN", "_SECRET", "_PASSWORD")
 FAILURE_REPORT_NAME = "credential-canary-failure.json"
 # Diagnostics are printed to CI logs, so anything token-shaped is masked even
@@ -34,16 +36,22 @@ REDACTION_PATTERNS = (
     re.compile(
         r"(?i)\b((?:sk|ghp|gho|ghu|ghs|ghr|github_pat|xox[abprs])[-_])[A-Za-z0-9_-]{6,}"
     ),
-    re.compile(r"(?i)\b((?:x-api-key|api[_-]?key|token|password|secret)\s*[:=]\s*)\S+"),
-    # Long mixed letter-digit runs (keys, bearer values); identifiers with
-    # underscores, such as test names, stay readable.
     re.compile(
-        r"()(?<![A-Za-z0-9_])(?=[A-Za-z0-9+/=-]*\d)(?=[A-Za-z0-9+/=-]*[A-Za-z])"
-        r"[A-Za-z0-9+/-]{32,}={0,2}"
+        r"(?i)\b((?:x-api-key|api[_-]?key|token|password|secret)[\"']?\s*[:=]\s*)\S+"
+    ),
+    # Long mixed letter-digit runs (keys, digests). Identifiers with
+    # underscores (test names) and hyphenated or slash-separated paths stay
+    # readable.
+    re.compile(
+        r"()(?<![A-Za-z0-9_])(?=[A-Za-z0-9+]*\d)(?=[A-Za-z0-9+]*[A-Za-z])"
+        r"[A-Za-z0-9+]{32,}={0,2}(?![A-Za-z0-9_])"
     ),
 )
-MAX_PANIC_LINES = 24
+MAX_PANIC_LINES = 40
+MAX_TAIL_LINES = 20
 MAX_DIAGNOSTIC_CHARS = 6000
+RUNNING_PATTERN = re.compile(r"^running (\d+) tests?$", re.MULTILINE)
+REPORTED_PATTERN = re.compile(r"^test \S+ \.\.\. \w+", re.MULTILINE)
 FAILED_TEST_PATTERN = re.compile(r"^test (\S+) \.\.\. FAILED\s*$", re.MULTILINE)
 PANIC_PATTERN = re.compile(r"^thread '([^']+)'(?: \(\d+\))? panicked at (.+?):?$")
 PANIC_END_PREFIXES = (
@@ -315,10 +323,11 @@ def run_command(
             timeout=timeout_seconds,
             check=False,
         )
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as timeout:
         raise QualificationError(
             f"command timed out after {timeout_seconds}s; output capture is "
             f"incomplete: {redact(' '.join(command))}"
+            f"{partial_output_tail(timeout)}"
         ) from None
     # Never discard unscanned output or certify a partial test transcript. Scan
     # first so a credential beyond the retention limit still fails explicitly.
@@ -406,18 +415,36 @@ def candidate_identity(
     )
 
 
+def partial_output_tail(timeout: subprocess.TimeoutExpired) -> str:
+    """The last lines a timed-out command printed, if they are secret-free."""
+    lines = []
+    for stream in (timeout.output, timeout.stderr):
+        if isinstance(stream, bytes):
+            stream = stream.decode("utf-8", errors="replace")
+        if stream:
+            lines.extend(stream.splitlines()[-MAX_TAIL_LINES:])
+    if not lines:
+        return ""
+    tail = redact("\n".join(lines))
+    try:
+        assert_secret_free(tail, "timeout output")
+    except QualificationError:
+        return "\n  (last output withheld: it held credential-shaped material)"
+    return "\n  last output:\n" + "\n".join(f"    {line}" for line in tail.splitlines())
+
+
 def assert_secret_free(value: str, surface: str) -> None:
     for pattern in SECRET_PATTERNS:
-        match = pattern.search(value)
+        match = pattern.search(value) or pattern.search(ANSI_ESCAPE.sub("", value))
         if match is not None:
-            line = value.count("\n", 0, match.start()) + 1
             raise QualificationError(
                 f"credential-shaped material escaped into {surface} "
-                f"(line {line}, pattern {pattern.pattern!r}; value withheld)"
+                f"(pattern {pattern.pattern!r}; value withheld)"
             )
 
 
 def redact(value: str) -> str:
+    value = ANSI_ESCAPE.sub("", value)
     for pattern in REDACTION_PATTERNS:
         value = pattern.sub(lambda match: f"{match.group(1)}***", value)
     return value
@@ -433,14 +460,14 @@ def panic_reports(output: str) -> list[dict[str, str]]:
             continue
         message = []
         for following in lines[index + 1 : index + 1 + MAX_PANIC_LINES]:
-            if not following.strip() or following.startswith(PANIC_END_PREFIXES):
+            if following.startswith(PANIC_END_PREFIXES):
                 break
             message.append(following)
         panics.append(
             {
                 "test": match.group(1),
                 "location": match.group(2),
-                "message": redact("\n".join(message)),
+                "message": redact("\n".join(message).strip()),
             }
         )
     return panics
@@ -450,8 +477,10 @@ def describe_probe_failure(
     probe: Probe, result: CommandResult, missing: list[str]
 ) -> tuple[str, dict[str, Any]]:
     """Explains a failed probe: which tests and assertions, expected vs observed."""
-    combined = f"{result.stdout}\n{result.stderr}"
+    combined = ANSI_ESCAPE.sub("", f"{result.stdout}\n{result.stderr}")
     failed_tests = FAILED_TEST_PATTERN.findall(combined)
+    started = sum(int(count) for count in RUNNING_PATTERN.findall(combined))
+    reported = len(REPORTED_PATTERN.findall(combined))
     panics = panic_reports(combined)
     process_errors = [redact(line) for line in PROCESS_ERROR_PATTERN.findall(combined)]
     diagnostics = {
@@ -463,6 +492,8 @@ def describe_probe_failure(
         "panics": panics,
         "expected_tests_not_ok": missing,
         "process_errors": process_errors[-8:],
+        "tests_started": started,
+        "tests_reported": reported,
     }
     lines = [
         f"probe {probe.probe_id} failed: `{' '.join(result.command)}` "
@@ -477,9 +508,12 @@ def describe_probe_failure(
         lines.append(f"  expected tests not reported ok: {', '.join(missing)}")
     if not failed_tests and not panics:
         # No libtest verdict: the test binary crashed, hung or did not build.
-        tail = redact("\n".join(result.stderr.strip().splitlines()[-20:]))
+        tail = redact("\n".join(result.stderr.strip().splitlines()[-MAX_TAIL_LINES:]))
         diagnostics["stderr_tail"] = tail
-        lines.append("  no test failure was reported; last stderr lines:")
+        lines.append(
+            f"  no test failure was reported ({reported} of {started} started tests "
+            "reported a result; a crash takes down the rest); last stderr lines:"
+        )
         lines.extend(f"    {line}" for line in tail.splitlines())
     text = "\n".join(lines)
     if len(text) > MAX_DIAGNOSTIC_CHARS:
