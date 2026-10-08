@@ -66,12 +66,14 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib pf_27_s07 -- --nocapture --test-threads=1
-      - name: P1 Windows hardening regressions (#307, #320)
+      - name: P1 Windows hardening regressions (#307)
         if: ${{ !cancelled() }}
         shell: bash
-        run: |
-          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib sec_win_ -- --nocapture --test-threads=1
-          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-process-hardening --lib sec_win_ -- --nocapture --test-threads=1
+        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib sec_win_ -- --nocapture --test-threads=1
+      - name: P1 Windows hardening regressions (#320)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-process-hardening --lib sec_win_ -- --nocapture --test-threads=1
       - name: Broker transport probes and broker suite over named pipes
         if: ${{ !cancelled() }}
         shell: bash

@@ -289,7 +289,7 @@ struct AttributeList {
 
 impl AttributeList {
     /// `handles` must outlive the list; `parent` needs
-    /// `PROCESS_CREATE_PROCESS` access.
+    /// `PROCESS_CREATE_PROCESS` and `PROCESS_DUP_HANDLE` access.
     fn new(parent: HANDLE, handles: &mut [HANDLE]) -> io::Result<Self> {
         let mut size = 0_usize;
         // SAFETY: a size query.
@@ -338,7 +338,7 @@ impl AttributeList {
 
 impl Drop for AttributeList {
     fn drop(&mut self) {
-        // SAFETY: initialized in `with_handles`.
+        // SAFETY: initialized in `new`.
         unsafe { DeleteProcThreadAttributeList(self.as_mut_ptr()) };
     }
 }

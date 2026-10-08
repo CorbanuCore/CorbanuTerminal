@@ -10,9 +10,9 @@
 //! from the holder's table, and its handle list and std handles use the
 //! holder's values. Nothing else is ever started from a holder.
 //!
-//! The child inherits the holder's token and job (copies of this process's)
-//! and reports the holder as its parent process; the holder is ended right
-//! after the child starts.
+//! The child inherits the holder's token (a copy of this process's) and
+//! job (this process's), and reports the holder as its parent process; the
+//! holder is ended right after the child starts.
 
 use std::ffi::OsStr;
 use std::io;
