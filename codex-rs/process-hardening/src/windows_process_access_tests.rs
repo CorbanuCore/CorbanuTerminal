@@ -280,7 +280,10 @@ fn probe_with_restricted_token(target_pid: u32) -> ProbeReport {
     )
     .expect("spawn restricted probe");
     let (sender, receiver) = std::sync::mpsc::channel::<Vec<u8>>();
-    let reader = codex_windows_sandbox::read_handle_loop(spawned.stdout_read, move |chunk| {
+    // Not joined: a process spawned concurrently by another test can inherit
+    // the pipe's write end while it is briefly inheritable, so EOF may come
+    // late. The report line is all that is needed.
+    let _reader = codex_windows_sandbox::read_handle_loop(spawned.stdout_read, move |chunk| {
         let _ = sender.send(chunk.to_vec());
     });
     // SAFETY: the process handle stays valid until closed below.
@@ -290,9 +293,27 @@ fn probe_with_restricted_token(target_pid: u32) -> ProbeReport {
         CloseHandle(spawned.process.hProcess);
         CloseHandle(token);
     }
-    let _ = reader.join();
-    let output: Vec<u8> = receiver.try_iter().flatten().collect();
-    ProbeReport::decode(&String::from_utf8_lossy(&output))
+    ProbeReport::decode(&String::from_utf8_lossy(&collect_report(&receiver)))
+}
+
+/// Collects output until a full report line arrives (or a deadline passes).
+fn collect_report(receiver: &std::sync::mpsc::Receiver<Vec<u8>>) -> Vec<u8> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let mut output = Vec::new();
+    loop {
+        let text = String::from_utf8_lossy(&output);
+        let has_report = text
+            .find(REPORT_PREFIX)
+            .is_some_and(|start| text[start..].contains('\n'));
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if has_report || remaining.is_zero() {
+            return output;
+        }
+        match receiver.recv_timeout(remaining) {
+            Ok(chunk) => output.extend(chunk),
+            Err(_) => return output,
+        }
+    }
 }
 
 fn run_probe() {
