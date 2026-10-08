@@ -1496,6 +1496,12 @@ allow_local_binding = true
                 .expect("set permission profile");
         });
     let test = builder.build_with_remote_and_local_env(server).await?;
+    // In the remote lane `config.cwd` is the container-side cwd, but these
+    // tests also run commands in the local environment with that same cwd.
+    // Make sure it exists on the host too.
+    if core_test_support::is_remote_test_environment() {
+        fs::create_dir_all(&test.config.cwd)?;
+    }
     assert!(
         test.config.managed_network_requirements_enabled(),
         "expected managed network requirements to be enabled"
