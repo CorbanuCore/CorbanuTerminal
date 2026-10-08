@@ -13,6 +13,7 @@ use codex_state::accounting::Attempt;
 use codex_state::accounting::BucketQuote;
 use codex_state::accounting::DayTotals;
 use codex_state::accounting::Decimal;
+use codex_state::accounting::DeletedAttempts;
 use codex_state::accounting::Dialect;
 use codex_state::accounting::Inspection;
 use codex_state::accounting::InspectionDay;
@@ -157,6 +158,7 @@ fn two_other_conversations() -> OtherConversations {
             priced(/*id*/ 12, thread(/*n*/ 2)),
             unpriced(/*id*/ 13, thread(/*n*/ 3), "local-mock", "mock-model"),
         ]),
+        deleted_attempts: DeletedAttempts::Counted(0),
     }
 }
 
@@ -261,13 +263,38 @@ fn empty_conversation_states_its_scope_and_the_days_other_conversations() {
 #[test]
 fn every_day_view_says_whether_other_conversations_were_read() {
     let first = |others| first_screen(&inspection_pages(Ok(day(Vec::new(), others)))[0]);
+    let empty = |deleted_attempts| OtherConversations {
+        deleted_attempts,
+        ..Default::default()
+    };
     assert_eq!(
-        first(Some(OtherConversations::default())),
+        first(Some(empty(DeletedAttempts::Counted(0)))),
         vec![
             "This conversation on 2026-09-16 (UTC): no recorded requests.",
             "No other conversation recorded requests on this day.",
             "Costs are estimates from published prices; your provider's bill is the final amount.",
         ]
+    );
+    // #286: a day whose only other spend was deleted never reads as empty.
+    assert_eq!(
+        first(Some(empty(DeletedAttempts::Counted(7)))),
+        vec![
+            "This conversation on 2026-09-16 (UTC): no recorded requests.",
+            "No other saved conversation has recorded requests on this day.",
+            "Deleted conversations or subagents sent 7 request attempts on this day. Their recorded cost was deleted with them, so it is not included here; any cost they incurred is on your provider's bill.",
+            "Costs are estimates from published prices; your provider's bill is the final amount.",
+        ]
+    );
+    assert_eq!(
+        first(Some(empty(DeletedAttempts::PastDetailWindow)))[1..3].to_vec(),
+        vec![
+            "No other saved conversation has recorded requests on this day.",
+            "Days older than 90 days keep too little detail to count requests from deleted conversations; any they made are not included here.",
+        ]
+    );
+    assert_eq!(
+        first(Some(empty(DeletedAttempts::Unread)))[2],
+        "Requests from deleted conversations could not be counted for this day; any they made are not included here."
     );
     assert_eq!(
         first(None)[1],
@@ -278,6 +305,7 @@ fn every_day_view_says_whether_other_conversations_were_read() {
         conversations: 2,
         unavailable: 1,
         requests: by_request(vec![priced(/*id*/ 11, thread(/*n*/ 2))]),
+        deleted_attempts: DeletedAttempts::Counted(0),
     };
     assert_eq!(
         first(Some(partly))[1..6].to_vec(),
@@ -288,6 +316,18 @@ fn every_day_view_says_whether_other_conversations_were_read() {
             "1 conversation could not be read in full; their cost is unknown and not included.",
             "To see those requests, open that conversation with /resume and run /cost there.",
         ]
+    );
+    // Deleted spend is disclosed beside the open conversations' total too.
+    let mut deleted = two_other_conversations();
+    deleted.deleted_attempts = DeletedAttempts::Counted(1);
+    let screen = first(Some(deleted));
+    let resume = screen
+        .iter()
+        .position(|line| line.starts_with("To see those requests"))
+        .unwrap();
+    assert_eq!(
+        screen[resume + 1],
+        "Deleted conversations or subagents sent 1 request attempt on this day. Their recorded cost was deleted with them, so it is not included here; any cost they incurred is on your provider's bill."
     );
 }
 

@@ -235,21 +235,17 @@ async fn accounting_chat_native_top_level_error_retains_usage() -> anyhow::Resul
 }
 
 #[tokio::test]
-async fn accounting_chat_native_mismatched_endpoint_never_sends() -> anyhow::Result<()> {
+async fn accounting_chat_native_mismatched_endpoint_is_sent_unrecorded() -> anyhow::Result<()> {
     for suffix in ["/wrong", "?q=1", ":1", "/v1", "#fragment"] {
         let server = MockServer::start().await;
         let endpoint = format!("{}/v1", server.uri());
+        mount(&server, success(usage())).await;
         let test = builder(endpoint.clone(), enabled(&format!("{endpoint}{suffix}")))
             .build_with_auto_env(&server)
             .await?;
         submit(&test).await?;
-        assert!(
-            terminal(&test)
-                .await?
-                .iter()
-                .any(|e| matches!(e, EventMsg::Error(_)))
-        );
-        assert!(server.received_requests().await.unwrap().is_empty());
+        core_test_support::assert_accounting_gap(&terminal(&test).await?);
+        posts(&server, /*expected*/ 1).await;
         let db = test.codex.state_db().unwrap();
         absent(&db).await?;
         stop(&test).await;

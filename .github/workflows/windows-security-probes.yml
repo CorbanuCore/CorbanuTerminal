@@ -17,6 +17,10 @@ on:
       - "codex-rs/network-proxy/src/credential_broker/**"
       - "codex-rs/network-proxy/src/credential_broker.rs"
       - "codex-rs/core/src/security/**"
+      - "codex-rs/core/src/exec.rs"
+      - "codex-rs/core/src/tools/sandboxing.rs"
+      - "codex-rs/core/src/sandboxing/**"
+      - "codex-rs/sandboxing/src/windows.rs"
       - ".github/scripts/run-at-medium-integrity.ps1"
   push:
     branches: [main]
@@ -30,6 +34,10 @@ on:
       - "codex-rs/network-proxy/src/credential_broker/**"
       - "codex-rs/network-proxy/src/credential_broker.rs"
       - "codex-rs/core/src/security/**"
+      - "codex-rs/core/src/exec.rs"
+      - "codex-rs/core/src/tools/sandboxing.rs"
+      - "codex-rs/core/src/sandboxing/**"
+      - "codex-rs/sandboxing/src/windows.rs"
       - ".github/scripts/run-at-medium-integrity.ps1"
 
 permissions:

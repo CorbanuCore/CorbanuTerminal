@@ -190,9 +190,66 @@ pub(crate) struct TurnScopes {
     pub(crate) anthropic: Option<Arc<Sampling>>,
     pub(crate) responses: Option<Arc<responses::DeferredResponsesSampling>>,
     pub(crate) chat: Option<Arc<chat::DeferredChatSampling>>,
+    /// A collector for this turn never opened.
+    unrecorded: bool,
     _anthropic_scope: SamplingScope,
     _responses_scope: responses::Scope,
     _chat_scope: chat::Scope,
+}
+
+impl TurnScopes {
+    /// Whether this turn has stopped recording its requests: a collector never
+    /// opened, or one closed after an accounting failure. Its requests still go
+    /// to the provider; they are only missing from the ledger.
+    pub(crate) fn stopped(&self) -> bool {
+        self.unrecorded
+            || self
+                .anthropic
+                .as_ref()
+                .is_some_and(|value| value.is_closed())
+            || self
+                .responses
+                .as_ref()
+                .is_some_and(|value| value.is_closed())
+            || self.chat.as_ref().is_some_and(|value| value.is_closed())
+    }
+
+    /// Whether a collector stopped this turn (`Sampling::halt`).
+    pub(crate) fn halted(&self) -> bool {
+        self.anthropic
+            .as_ref()
+            .is_some_and(|value| value.is_halted())
+            || self
+                .responses
+                .as_ref()
+                .is_some_and(|value| value.is_halted())
+            || self.chat.as_ref().is_some_and(|value| value.is_halted())
+    }
+}
+
+/// Warn once per turn when `scopes` - or a collector that never attached
+/// (`None`) - left a model request unrecorded.
+pub(crate) async fn warn_if_unrecorded(
+    session: &crate::session::session::Session,
+    turn_context: &crate::session::turn_context::TurnContext,
+    scopes: Option<&TurnScopes>,
+) {
+    if scopes.is_none_or(TurnScopes::stopped)
+        && !turn_context
+            .accounting_gap_warning_emitted
+            .swap(true, Ordering::Relaxed)
+    {
+        session
+            .send_event(
+                turn_context,
+                codex_protocol::protocol::EventMsg::Warning(
+                    codex_protocol::protocol::WarningEvent {
+                        message: GAP_WARNING.to_string(),
+                    },
+                ),
+            )
+            .await;
+    }
 }
 
 /// Bind collection for one turn on one client session.
@@ -267,15 +324,29 @@ pub(crate) async fn attach_scopes(
         accounting.clone()
     };
     let collects_wire = |wire| collects(&mode, provider_id, provider, wire);
+    // A sampling that cannot open leaves this turn's Messages requests
+    // unrecorded; it never stops them.
+    let mut unrecorded = false;
     let anthropic = if collects_wire(codex_model_provider_info::WireApi::Anthropic) {
-        session
-            .try_ensure_rollout_materialized()
-            .await
-            .map_err(|error| CodexErr::Fatal(failure("materialize rollout", error).into()))?;
-        let runtime = session
-            .state_db()
-            .ok_or_else(|| CodexErr::Fatal(failure("open sampling", "no state database").into()))?;
-        Some(Sampling::start(runtime, session.thread_id, turn.clone(), &mode).await?)
+        let opened = async {
+            session
+                .try_ensure_rollout_materialized()
+                .await
+                .map_err(|error| CodexErr::Fatal(failure("materialize rollout", error).into()))?;
+            let runtime = session.state_db().ok_or_else(|| {
+                CodexErr::Fatal(failure("open sampling", "no state database").into())
+            })?;
+            Sampling::start(runtime, session.thread_id, turn.clone(), &mode).await
+        }
+        .await;
+        match opened {
+            Ok(sampling) => Some(sampling),
+            Err(error) => {
+                gap("open sampling", error);
+                unrecorded = true;
+                None
+            }
+        }
     } else {
         None
     };
@@ -296,6 +367,7 @@ pub(crate) async fn attach_scopes(
         anthropic,
         responses,
         chat,
+        unrecorded,
         _anthropic_scope,
         _responses_scope,
         _chat_scope,
@@ -486,41 +558,67 @@ pub(crate) fn collects(
     }
 }
 
-pub(crate) const FAILURE: &str =
-    "Native Anthropic accounting failed; request stopped without a repair send";
+/// The error chain an accounting failure carries. It never reaches the user:
+/// every accounting failure sends the request unrecorded (`gap`).
+pub(crate) const FAILURE: &str = "developer accounting failed";
+
+/// A stage-one memory denial observed while a recorded websocket response was
+/// streaming. It is a privacy guard, not an accounting failure, and the one
+/// case that stops the turn (`Sampling::halt`).
+pub(crate) const MEMORY_DENIAL: &str =
+    "Stage-one memory denied this request while it was streaming; it was not re-sent";
 
 /// Where accounting diagnostics go. Exec prints errors on this target to stderr
 /// and the TUI keeps them in its log database.
 const LOG_TARGET: &str = "codex_core::accounting";
 
-/// Record why a request is being stopped on accounting grounds, and return the
-/// one message the user sees.
+/// Record why accounting failed, and return `FAILURE` for the error chain.
 ///
-/// Every such path reports only `FAILURE`, so without this the cause - a busy
-/// state database, a route mismatch, a ledger validation error - is lost. `step`
-/// names where it happened; `cause` is the underlying error chain. Neither ever
-/// carries prompt content or credentials.
+/// Most callers then send the request unrecorded rather than stop it, so the
+/// cause - a busy state database, a route mismatch, a ledger validation error -
+/// is logged here or lost. `step` names where it happened; `cause` is the
+/// underlying error chain. Neither ever carries prompt content or credentials.
 pub(crate) fn failure(step: &'static str, cause: impl std::fmt::Display) -> &'static str {
     tracing::error!(target: LOG_TARGET, step, cause = %cause, "{FAILURE}");
     FAILURE
 }
 
+/// Record that a request goes to the provider unrecorded because accounting
+/// failed. Accounting observes model requests; it never blocks one. The
+/// provider still bills such a request, so the gap is logged here and the turn
+/// warns once (`TurnScopes::stopped`).
+pub(crate) fn gap(step: &'static str, cause: impl std::fmt::Display) {
+    tracing::warn!(
+        target: LOG_TARGET,
+        step,
+        cause = %cause,
+        "accounting: request sent unrecorded"
+    );
+}
+
+/// The warning a turn shows once when any of its requests went unrecorded.
+pub(crate) const GAP_WARNING: &str = "Developer accounting could not record one or more model requests in this turn. \
+     They were sent anyway; /cost does not include them. \
+     The cause is in the log (target codex_core::accounting).";
+
 /// How long one accounting operation - opening a sampling, an admission or an
 /// observation, each with every store call it makes - waits out contention on
-/// the shared state DB before the request fails closed.
+/// the shared state DB before it gives up and the request goes unrecorded.
 ///
 /// The state DB is shared by every Corbanu process on a home: the TUI, `exec`
 /// workers, owner-loop workers. Another process's write can hold its lock for
-/// seconds, and SQLite gives up after its 5 s busy timeout, which used to end the
-/// turn on the spot. A contended write wrote nothing, so it is simply retried.
-const CONTENTION_BUDGET: std::time::Duration = std::time::Duration::from_secs(120);
+/// seconds, and SQLite gives up after its 5 s busy timeout. A contended write
+/// wrote nothing, so it is retried. The wait holds up the send (admission) or
+/// the stream (observation), and giving up only leaves a gap, so it stays
+/// short: about three busy timeouts.
+const CONTENTION_BUDGET: std::time::Duration = std::time::Duration::from_secs(15);
 
 /// Run one idempotent store call, retrying while the state DB is contended and
 /// `deadline` - shared by every call of one operation - has not passed.
 ///
 /// Only contention is retried (`is_contention`); any other error returns at
-/// once, with `step` in its chain. The caller keeps its fail-closed handling for
-/// whatever finally comes back.
+/// once, with `step` in its chain. Whatever finally comes back, the caller
+/// sends the request unrecorded.
 async fn store_call<T, F, Fut>(
     step: &'static str,
     deadline: std::time::Instant,
@@ -598,6 +696,21 @@ thread_local! {
         Box::leak(Box::new(tokio::sync::Semaphore::const_new(1)));
 }
 
+/// This process's accounting write gate, waited for within `deadline`: the
+/// contention budget covers the whole operation, including the wait behind
+/// this process's other accounting writes.
+async fn write_gate(
+    deadline: std::time::Instant,
+) -> anyhow::Result<tokio::sync::SemaphorePermit<'static>> {
+    Ok(
+        tokio::time::timeout_at(tokio::time::Instant::from_std(deadline), writes().acquire())
+            .await
+            .map_err(|_| {
+                anyhow::anyhow!("accounting write gate busy past the contention budget")
+            })??,
+    )
+}
+
 fn writes() -> &'static tokio::sync::Semaphore {
     #[cfg(not(test))]
     {
@@ -609,16 +722,18 @@ fn writes() -> &'static tokio::sync::Semaphore {
     }
 }
 
+/// The sampling this request is recorded on, if any. A closed sampling or a
+/// poisoned slot records nothing, so the request goes out unrecorded on the
+/// ordinary client.
 pub(crate) fn read_slot(slot: &Slot) -> Result<Option<Arc<Sampling>>, CodexErr> {
     match slot.lock() {
-        Ok(value) => Ok(value.clone()),
+        Ok(value) => Ok(value.clone().filter(|sampling| !sampling.is_closed())),
         Err(poison) => {
             if let Some(stale) = poison.into_inner().take() {
                 stale.reject();
             }
-            Err(CodexErr::Fatal(
-                failure("read sampling slot", "slot lock poisoned").into(),
-            ))
+            gap("read sampling slot", "slot lock poisoned");
+            Ok(None)
         }
     }
 }
@@ -631,15 +746,14 @@ impl SamplingScope {
             match slot.lock() {
                 Ok(mut value) => *value = sampling,
                 Err(poison) => {
+                    // Leave the slot empty: this turn's requests go unrecorded.
                     if let Some(stale) = poison.into_inner().take() {
                         stale.reject();
                     }
                     if let Some(incoming) = sampling {
                         incoming.reject();
                     }
-                    return Err(CodexErr::Fatal(
-                        failure("attach sampling", "slot lock poisoned").into(),
-                    ));
+                    gap("attach sampling", "slot lock poisoned");
                 }
             }
         }
@@ -706,6 +820,8 @@ pub(crate) struct Sampling {
     pricing: Pricing,
     previous: Mutex<Option<Uuid>>,
     failed: AtomicBool,
+    /// The turn must stop: see `halt`.
+    halted: AtomicBool,
 }
 
 // A cancelled SQL future may already have committed. Never reuse that sampling
@@ -856,11 +972,10 @@ impl Sampling {
                 .into(),
             ));
         }
-        let _write = writes()
-            .acquire()
+        let deadline = std::time::Instant::now() + CONTENTION_BUDGET;
+        let _write = write_gate(deadline)
             .await
             .map_err(|error| CodexErr::Fatal(failure("open sampling", error).into()))?;
-        let deadline = std::time::Instant::now() + CONTENTION_BUDGET;
         store_call("open accounting store", deadline, || {
             AccountingStore::open(&runtime, AsOf::Now)
         })
@@ -884,26 +999,44 @@ impl Sampling {
             pricing: pricing_for(mode),
             previous: Mutex::new(None),
             failed: AtomicBool::new(false),
+            halted: AtomicBool::new(false),
         }))
     }
 
     pub(crate) fn check(&self) -> Result<(), CodexErr> {
-        if self.failed.load(Ordering::Acquire) {
+        if self.is_closed() {
             Err(CodexErr::Fatal(FAILURE.into()))
         } else {
             Ok(())
         }
     }
 
-    /// Close this sampling: every later request on it stops with `FAILURE`.
-    /// The first close is logged with its caller, so a later stop has a cause.
+    pub(crate) fn is_closed(&self) -> bool {
+        self.failed.load(Ordering::Acquire)
+    }
+
+    /// Close this sampling and stop its turn with `MEMORY_DENIAL`: a stage-one
+    /// memory denial seen mid-stream. Every accounting failure only closes the
+    /// sampling.
+    #[track_caller]
+    pub(crate) fn halt(&self) {
+        self.halted.store(true, Ordering::Release);
+        self.reject();
+    }
+
+    pub(crate) fn is_halted(&self) -> bool {
+        self.halted.load(Ordering::Acquire)
+    }
+
+    /// Close this sampling: it records nothing more, and every later request on
+    /// it is sent unrecorded. The first close is logged with its caller.
     #[track_caller]
     pub(crate) fn reject(&self) {
         if !self.failed.swap(true, Ordering::AcqRel) {
             tracing::warn!(
                 target: LOG_TARGET,
                 at = %std::panic::Location::caller(),
-                "accounting sampling closed; later requests in this turn stop"
+                "accounting sampling closed; later requests in this turn are sent unrecorded"
             );
         }
     }
@@ -923,7 +1056,8 @@ impl Sampling {
             canonical_route(endpoint) == canonical_route(&self.endpoint),
             "accounting route mismatch"
         );
-        let _write = writes().acquire().await?;
+        let deadline = std::time::Instant::now() + CONTENTION_BUDGET;
+        let _write = write_gate(deadline).await?;
         self.check()?;
         let mut completion = Completion {
             sampling: self,
@@ -935,7 +1069,6 @@ impl Sampling {
         })?;
         // The facade borrows its runtime. Reopening validates/maintains through
         // its public contract; never fabricate an attached or Active handle.
-        let deadline = std::time::Instant::now() + CONTENTION_BUDGET;
         let store = store_call("open accounting store", deadline, || {
             AccountingStore::open(&self.runtime, AsOf::Now)
         })
@@ -1020,13 +1153,13 @@ impl Sampling {
             sequence: position,
             patch,
         };
-        let _write = writes().acquire().await?;
+        let deadline = std::time::Instant::now() + CONTENTION_BUDGET;
+        let _write = write_gate(deadline).await?;
         self.check()?;
         let mut completion = Completion {
             sampling: self,
             complete: false,
         };
-        let deadline = std::time::Instant::now() + CONTENTION_BUDGET;
         let store = store_call("open accounting store", deadline, || {
             AccountingStore::open(&self.runtime, AsOf::Now)
         })

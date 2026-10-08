@@ -1137,8 +1137,8 @@ async fn accounting_policy_previous_poison_before_and_during_admission_is_sticky
 }
 
 #[tokio::test]
-async fn accounting_policy_slot_poison_rejects_stale_and_incoming_without_disabling() -> Result<()>
-{
+async fn accounting_policy_slot_poison_closes_stale_and_incoming_and_serves_unrecorded()
+-> Result<()> {
     for operation in ["read", "attach", "drop"] {
         let fixture = Fixture::new().await?;
         let incoming = Sampling::start(
@@ -1152,9 +1152,9 @@ async fn accounting_policy_slot_poison_rejects_stale_and_incoming_without_disabl
         let scope = SamplingScope::attach(slot.clone(), Some(fixture.sampling.clone()))?;
         poison(&slot);
         match operation {
-            "read" => assert!(read_slot(&slot).is_err()),
+            "read" => assert!(read_slot(&slot)?.is_none()),
             "attach" => {
-                assert!(SamplingScope::attach(slot.clone(), Some(incoming.clone())).is_err());
+                drop(SamplingScope::attach(slot.clone(), Some(incoming.clone()))?);
                 assert!(incoming.check().is_err());
             }
             _ => {}
@@ -1163,8 +1163,9 @@ async fn accounting_policy_slot_poison_rejects_stale_and_incoming_without_disabl
         assert!(fixture.sampling.check().is_err());
         assert!(slot.is_poisoned());
         assert!(slot.lock().err().unwrap().into_inner().is_none());
-        assert!(read_slot(&slot).is_err(), "empty poison must not look OFF");
-        assert!(SamplingScope::attach(slot.clone(), /*sampling*/ None).is_err());
+        // A poisoned slot records nothing; its requests are served unrecorded.
+        assert!(read_slot(&slot)?.is_none());
+        drop(SamplingScope::attach(slot.clone(), /*sampling*/ None)?);
         assert!(fixture.attempts().await?.is_empty());
         fixture.db.close().await;
     }

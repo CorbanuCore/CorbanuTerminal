@@ -172,6 +172,23 @@ class DemoVideoTest(unittest.TestCase):
         self.assertIn(f"CORBANU_HOME={places['home']}", script)
         self.assertIn("CORBANU_TEST_NO_NATIVE_KEYRING=1", script)
 
+    def test_run_step_uses_disposable_profile_and_fails_loudly(self):
+        spec = dv.load_spec(self.spec_path)
+        _, places = dv.prepare_run(spec, self.dir / "out")
+        last = dv.run_step(
+            'echo first; echo "$CODEX_HOME|$HOME|$CORBANU_TEST_NO_NATIVE_KEYRING|$DEMO_X"',
+            7,
+            places,
+            'DEMO_X="$(echo resolved)"',
+        )
+        output = (Path(places["logs"]) / "run-step-7.log").read_text().splitlines()[-1]
+        self.assertEqual(last, output)
+        self.assertEqual(output, f"{places['home']}|{places['userhome']}|1|resolved")
+        with self.assertRaises(dv.DemoError):
+            dv.run_step("exit 3", 8, places, "")
+        with self.assertRaises(dv.DemoError):
+            dv.run_step("sleep 5", 9, places, "", timeout=0.2)
+
     def test_scan_blocks_published_and_redacts_private(self):
         cast = self.dir / "cast"
         cast.write_bytes(b"hello synthetic-canary-value and sk-" + b"a" * 30)

@@ -11,7 +11,7 @@ use support::*;
 use wiremock::MockServer;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn accounting_anthropic_redirects_never_send_or_attribute_to_unapproved_endpoint()
+async fn accounting_anthropic_redirects_are_resent_unrecorded_never_attributed()
 -> anyhow::Result<()> {
     use wiremock::Mock;
     use wiremock::ResponseTemplate;
@@ -27,7 +27,9 @@ async fn accounting_anthropic_redirects_never_send_or_attribute_to_unapproved_en
                     ResponseTemplate::new(status)
                         .insert_header("location", format!("{}/v1/messages", target.uri())),
                 )
-                .expect(1)
+                // With accounting on, the no-redirect send is refused and then
+                // resent once, unrecorded, on the ordinary client.
+                .expect(1 + u64::from(on))
                 .mount(&approved)
                 .await;
             Mock::given(method("POST"))
@@ -36,7 +38,7 @@ async fn accounting_anthropic_redirects_never_send_or_attribute_to_unapproved_en
                     json!({"input_tokens":71}),
                     json!({"output_tokens":19}),
                 ))
-                .expect(if on { 0 } else { 1 })
+                .expect(1)
                 .mount(&target)
                 .await;
             let endpoint = format!("{}/v1", approved.uri());
@@ -50,26 +52,27 @@ async fn accounting_anthropic_redirects_never_send_or_attribute_to_unapproved_en
                 .await?;
             submit(&test).await?;
             let events = terminal(&test).await?;
-            assert_eq!(
-                events
-                    .iter()
-                    .any(|event| matches!(event, EventMsg::Error(_))),
-                on,
-                "{events:?}"
-            );
+            if on {
+                core_test_support::assert_accounting_gap(&events);
+            } else {
+                assert!(
+                    !events
+                        .iter()
+                        .any(|event| matches!(event, EventMsg::Error(_))),
+                    "{events:?}"
+                );
+            }
             let sent = approved.received_requests().await.unwrap();
-            assert_eq!(sent.len(), 1);
+            assert_eq!(sent.len(), 1 + usize::from(on));
             assert_eq!(
                 sent[0].body_json::<serde_json::Value>()?["model"],
                 "claude-opus-5"
             );
             assert!(sent[0].headers.contains_key("user-agent"));
-            assert_eq!(
-                target.received_requests().await.unwrap().len(),
-                usize::from(!on)
-            );
+            assert_eq!(target.received_requests().await.unwrap().len(), 1);
             let db = test.codex.state_db().unwrap();
             if on {
+                // The refused send is the one attempt; the resend is a gap.
                 let records = attempts(&db).await?;
                 assert_eq!(records.len(), 1);
                 assert_eq!(records[0].thread_id, test.session_configured.thread_id);
@@ -228,8 +231,7 @@ async fn accounting_anthropic_stream_retry_retains_start_usage_without_merging_r
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn accounting_anthropic_missing_optional_state_is_only_fatal_when_enabled()
--> anyhow::Result<()> {
+async fn accounting_anthropic_missing_optional_state_is_never_fatal() -> anyhow::Result<()> {
     for on in [false, true] {
         let server = MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::method("POST"))
@@ -238,7 +240,7 @@ async fn accounting_anthropic_missing_optional_state_is_only_fatal_when_enabled(
                 json!({"input_tokens":0}),
                 json!({"output_tokens":0}),
             ))
-            .expect(if on { 0 } else { 1 })
+            .expect(1)
             .mount(&server)
             .await;
         let endpoint = format!("{}/v1", server.uri());
@@ -258,7 +260,16 @@ async fn accounting_anthropic_missing_optional_state_is_only_fatal_when_enabled(
         assert!(test.codex.state_db().is_none());
         submit(&test).await?;
         let events = terminal(&test).await?;
-        assert_eq!(events.iter().any(|event| matches!(event, EventMsg::Error(error) if error.message.contains("accounting"))), on);
+        if on {
+            core_test_support::assert_accounting_gap(&events);
+        } else {
+            assert!(
+                !events
+                    .iter()
+                    .any(|event| matches!(event, EventMsg::Error(_) | EventMsg::Warning(_))),
+                "{events:?}"
+            );
+        }
         stop(&test).await;
     }
     Ok(())
@@ -277,7 +288,8 @@ async fn accounting_anthropic_401_and_429_are_terminal_and_preflight_schema_faul
                 wiremock::ResponseTemplate::new(status)
                     .set_body_json(json!({"error":{"message":"synthetic denied"}})),
             )
-            .expect(if schema_fault { 0 } else { 1 })
+            // A ledger fault leaves the request unrecorded, never unsent.
+            .expect(1)
             .mount(&server)
             .await;
         let endpoint = format!("{}/v1", server.uri());
@@ -308,7 +320,7 @@ async fn accounting_anthropic_401_and_429_are_terminal_and_preflight_schema_faul
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn accounting_anthropic_observation_failure_stops_real_sampling_without_repair_send()
+async fn accounting_anthropic_observation_failure_closes_sampling_without_repair_send()
 -> anyhow::Result<()> {
     let server = MockServer::start().await;
     let mut gate = GateServer::start().await?;
@@ -334,9 +346,7 @@ async fn accounting_anthropic_observation_failure_stops_real_sampling_without_re
         .await?;
     drop(request);
     let events = terminal(&test).await?;
-    assert!(events.iter().any(
-        |event| matches!(event, EventMsg::Error(error) if error.message.contains("accounting"))
-    ));
+    core_test_support::assert_accounting_gap(&events);
     assert_eq!(observations(&db).await?, before);
     assert_eq!(attempts(&db).await?.len(), 1);
     assert!(gate.incoming.try_recv().is_err());
@@ -476,9 +486,7 @@ async fn accounting_anthropic_deleted_native_owner_cannot_be_resurrected_by_dela
         .await?;
     drop(request);
     let events = terminal(&test).await?;
-    assert!(events.iter().any(
-        |event| matches!(event, EventMsg::Error(error) if error.message.contains("accounting"))
-    ));
+    core_test_support::assert_accounting_gap(&events);
     assert_eq!(attempts(&db).await?, saved_attempts);
     assert_eq!(observations(&db).await?, saved_observations);
     assert!(gate.incoming.try_recv().is_err());
