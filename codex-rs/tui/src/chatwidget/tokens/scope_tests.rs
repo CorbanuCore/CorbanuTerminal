@@ -846,15 +846,29 @@ fn unpriced_and_partly_priced_requests_get_next_steps() {
     }
 
     let mut in_part = priced(/*id*/ 2, thread(/*n*/ 1));
+    in_part.snapshot = Some(openai_price());
     in_part.buckets[3] = BucketQuote::MissingRate;
     in_part.known_subtotal = decimal("0.00041");
     in_part.all_buckets_priced = None;
+    in_part.subtotal_display = in_part.known_subtotal.display();
     let in_part_pages = own_day(vec![in_part]);
     let first = first_screen(&in_part_pages[0]);
-    assert!(
-        first.contains(&"Next step for requests priced only in part: check the bill from OpenAI. Some of their tokens have no published price, so the estimate is only a lower bound.".to_string()),
-        "{first:#?}"
+    assert_eq!(
+        first[1],
+        "• OpenAI · gpt-5.4 — Pay per use. 1 request, 110 tokens. Estimated cost: at least $0.000410 (1 attempt had no price)."
     );
+    let step = "Next step for requests priced only in part: check the bill from OpenAI. Some of their tokens have no published price, so the estimate is only a lower bound.";
+    for page in in_part_pages
+        .iter()
+        .filter(|page| ["Cost — this conversation", "Request"].contains(&page.title.as_str()))
+    {
+        let steps: Vec<&String> = page
+            .text
+            .iter()
+            .filter(|line| line.starts_with("Next step"))
+            .collect();
+        assert_eq!(steps, vec![step], "{}", page.title);
+    }
     assert_never_zero(&pages);
     assert_never_zero(&in_part_pages);
 }

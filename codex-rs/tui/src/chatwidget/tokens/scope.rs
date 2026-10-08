@@ -96,6 +96,10 @@ pub(super) fn no_price_next_step<'a>(
             .any(|(count, bucket)| {
                 count.is_some_and(|count| count > 0) && matches!(bucket, BucketQuote::Priced(_))
             });
+        // Only decides requests with no price at all: with a price, a missing
+        // rate already makes the request no-price or priced in part. Without
+        // it, a request that reported nothing (all counts missing) would get
+        // no step.
         let unreported = quote
             .buckets
             .iter()
