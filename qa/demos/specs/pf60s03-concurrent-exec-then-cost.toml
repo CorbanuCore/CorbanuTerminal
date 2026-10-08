@@ -1,0 +1,55 @@
+# PF-60-S03: three concurrent `corbanu exec` runs on one state database all finish cleanly (the
+# "Native Anthropic accounting failed" contention fixes), then /cost on one of them.
+# The three runs start off screen against the same disposable home, with the candidate and real GLM 5.2;
+# the first run's session id (from its own output) is then resumed by id.
+id = "pf60s03-concurrent-exec-then-cost"
+feature = "Three concurrent corbanu exec runs finish cleanly, then /cost on one"
+expected = "All three runs exit 0 and none prints an accounting failure. Resuming one of them, /cost shows its recorded request on Z.AI GLM 5.2 with tokens and an estimated cost."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+run = '''
+for i in 1 2 3; do
+  ( "{bin}" exec --skip-git-repo-check -s read-only -m glm-5.2 -c 'model_provider="zai"' \
+      "Reply with the single word READY$i." > "exec-$i.txt" 2>&1
+    echo "run $i exit $?" >> exec-results.txt ) &
+done
+wait
+sed -n 's/^session id: //p' exec-1.txt
+'''
+timeout = 300
+capture = "exec1"
+[[steps]]
+type = "!sort exec-results.txt; grep -ci 'accounting failed' exec-1.txt exec-2.txt exec-3.txt || true"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "exec-3.txt:0"
+[[steps]]
+pause = 4
+[[steps]]
+type = "/resume {exec1}"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "READY1"
+timeout = 60
+[[steps]]
+pause = 2
+[[steps]]
+type = "/cost"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Today \\(UTC\\) in this conversation"
+[[steps]]
+pause = 4

@@ -34,7 +34,9 @@ implementation_worktrees:
   to users is not authorised.
 - **S01, S02:** done and archived. **S03:** in progress, merged but not accepted; its Done list now covers the
   09-20..10-03 work ([commit ledger](../../../qa/portfolio/agent-cost-accounting/pf-60-s03/commits-20260920-20261003.md)).
-  Acceptance waits on Travis's decision `acct-s03-acceptance-20260917`. **S04:** not started.
+  Its listed code gaps closed in PR #291 with demo videos; an independent review of the 09-20..10-02 body found
+  1 Blocker and 4 Majors, open in the sprint's Remaining list. Acceptance waits on Travis's decision
+  `acct-s03-acceptance-20260917`. **S04:** not started.
 - **Worktrees:** one active lane, `worktrees/pf60-s03-20261008` (branch `work/pf60-s03-20261008`). The September lane
   checkouts (acct-inspect, acct-chat, bootstrap-acct-ws) were removed after #138; the remaining `accounting-*`
   worktrees and `workstream/accounting-*` branches hold only commits already on main.

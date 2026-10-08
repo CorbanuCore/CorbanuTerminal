@@ -24,6 +24,27 @@ pub struct OtherConversations {
     pub unavailable: usize,
     /// Readable attempts by logical request. Never part of the inspected total.
     pub requests: BTreeMap<uuid::Uuid, Vec<ObservationQuote>>,
+    /// Attempts dispatched this day by conversations since deleted.
+    pub deleted_attempts: DeletedAttempts,
+}
+
+/// Deleting a conversation removes its attempts and their cost; only a replay
+/// fence (tombstone) per attempt survives, which is what this counts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DeletedAttempts {
+    Counted(usize),
+    /// The day reaches past the raw detail window, where retention's own
+    /// tombstones cannot be told apart from deletions.
+    PastDetailWindow,
+    /// The count could not be read: the work budget ran out, the ledger has no
+    /// checkpoint yet, or the read failed.
+    Unread,
+}
+
+impl Default for DeletedAttempts {
+    fn default() -> Self {
+        Self::Counted(0)
+    }
 }
 
 const MAX_ATTEMPTS: usize = 512;
@@ -32,6 +53,67 @@ const MAX_BYTES: usize = 4 * 1024 * 1024;
 /// so a busy host answers about this conversation promptly and states the
 /// conversations it did not read rather than reading all of them.
 const MAX_ROWS: usize = 1_000_000;
+
+/// How long a deleted attempt's replay fence (tombstone) outlives its dispatch,
+/// and how long raw attempt detail is kept. Kept equal to the retention plan's.
+const REPLAY_MS: i64 = 365 * 86_400_000;
+const DETAIL_MS: i64 = 90 * 86_400_000;
+
+/// Attempts dispatched on `day` whose conversation (or subagent) was deleted.
+///
+/// A tombstone expires exactly `REPLAY_MS` after its attempt's dispatch, so the
+/// dispatch time is recoverable. Deletion is not the only writer: retention
+/// leaves one when raw detail ages out, and compact-only imports leave one too,
+/// but only for attempts already past the detail window at the time they ran.
+/// That time is, on a monotonic host clock, no later than the checkpoint or -
+/// for batched expiry that has not advanced the checkpoint yet - than about
+/// this reader's clock. A tombstone whose dispatch is inside the window at both
+/// is therefore a deletion; a day that reaches past it cannot be counted.
+pub(super) async fn deleted_attempts(
+    conn: &mut SqliteConnection,
+    day: i64,
+    read_at_ms: i64,
+    work: &mut InspectionWork,
+) -> DeletedAttempts {
+    // One unindexed scan of the tombstone table, charged like one other scan.
+    // Tombstones outlive raw detail, so this can under-charge the budget; the
+    // count is cheap either way.
+    if !work.scans(/*count*/ 1) {
+        return DeletedAttempts::Unread;
+    }
+    let checkpoint: Option<i64> = match sqlx::query_scalar(
+        "SELECT completed_as_of_ms FROM draft_accounting_retention_checkpoint WHERE singleton = 1",
+    )
+    .fetch_optional(&mut *conn)
+    .await
+    {
+        Ok(checkpoint) => checkpoint.flatten(),
+        Err(_) => return DeletedAttempts::Unread,
+    };
+    let (Some(checkpoint), Some(start)) = (checkpoint, day.checked_mul(86_400_000)) else {
+        return DeletedAttempts::Unread;
+    };
+    if start.saturating_add(DETAIL_MS) <= checkpoint.max(read_at_ms) {
+        return DeletedAttempts::PastDetailWindow;
+    }
+    let (Some(from), Some(to)) = (
+        start.checked_add(REPLAY_MS),
+        start.checked_add(86_400_000 + REPLAY_MS),
+    ) else {
+        return DeletedAttempts::Unread;
+    };
+    let count: Result<i64, _> = sqlx::query_scalar(
+        "SELECT count(*) FROM draft_accounting_tombstones WHERE expires_at_ms >= ? AND expires_at_ms < ?",
+    )
+    .bind(from)
+    .bind(to)
+    .fetch_one(&mut *conn)
+    .await;
+    count
+        .ok()
+        .and_then(|count| usize::try_from(count).ok())
+        .map_or(DeletedAttempts::Unread, DeletedAttempts::Counted)
+}
 
 /// `threads` pairs each unrelated thread with its terminal root conversation.
 pub(super) async fn other_conversations(
@@ -86,9 +168,11 @@ pub(super) async fn other_conversations(
             requests.entry(request).or_default().extend(quotes);
         }
     }
+    let deleted_attempts = deleted_attempts(conn, day, read_at_ms, work).await;
     OtherConversations {
         conversations,
         unavailable: unavailable.len(),
         requests,
+        deleted_attempts,
     }
 }
