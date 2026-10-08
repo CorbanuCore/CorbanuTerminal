@@ -3343,8 +3343,9 @@ class ManagerLaneTests(unittest.TestCase):
             self.assertEqual(("HOLD", "manager_pre_cycle_timeouts"),
                              tuple(owner.scheduled_tick(root)[k] for k in ("state", "reason")))
         status = owner.load(root / "tick.json")
-        self.assertEqual(("manager_pre_cycle_timeouts", "TimeoutExpired x%d" % owner.MANAGER_TRANSIENT_LIMIT),
-                         (status["hold"], status["refusal"]))
+        self.assertEqual(("manager_pre_cycle_timeouts", "TimeoutExpired x%d" % owner.MANAGER_TRANSIENT_LIMIT,
+                          owner.MANAGER_TRANSIENT_LIMIT, owner.MANAGER_TRANSIENT_LIMIT + 1),
+                         (status["hold"], status["refusal"], status["consecutive_errors"], status["errors"]))
         self.assertEqual(["hold"], [r["event"] for r in self.log()][-1:])
         self.assertEqual("RECOVERED", owner.scheduled_tick(root, recover="fixture: host slowdown over")["state"])
         self.assertEqual(0, owner.load(root / "tick.json")["consecutive_errors"])
@@ -3369,12 +3370,32 @@ class ManagerLaneTests(unittest.TestCase):
             owner.scheduled_tick(root)
         self.assertEqual("TimeoutExpired", owner.load(root / "tick.json")["hold"])
 
+    def test_timeout_with_the_counter_unreadable_afterwards_latches(self):
+        self.manager()
+        root = self.scheduled()
+        status = owner.manager_status
+        reads = []
+        def flaky(path):
+            reads.append(path)
+            if len(reads) > 1:
+                raise ValueError("fixture")
+            return status(path)
+        with self.pins_timeout(), patch.object(owner, "manager_status", side_effect=flaky):
+            owner.scheduled_tick(root)
+        self.assertEqual(2, len(reads))
+        self.assertEqual("TimeoutExpired", owner.load(root / "tick.json")["hold"])
+
     def test_other_pre_cycle_errors_still_latch(self):
         self.manager()
         root = self.scheduled()
         with patch.object(owner.manager_cycle, "compact_finished", side_effect=RuntimeError("fixture")):
             owner.scheduled_tick(root)
         self.assertEqual("RuntimeError", owner.load(root / "tick.json")["hold"])
+        self.assertEqual("RECOVERED", owner.scheduled_tick(root, recover="fixture")["state"])
+        with patch.object(owner.subprocess, "check_output",
+                          side_effect=subprocess.CalledProcessError(1, "python3")):
+            owner.scheduled_tick(root)
+        self.assertEqual("CalledProcessError", owner.load(root / "tick.json")["hold"])
 
     def test_owner_lane_timeouts_never_latch(self):
         import activate

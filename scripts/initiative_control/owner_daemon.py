@@ -1810,6 +1810,8 @@ def scheduled_tick(root, recover=None):
             # Fail closed: every other manager-lane failure, and a pre-cycle timeout
             # that repeats MANAGER_TRANSIENT_LIMIT times in a row, latches until --recover.
             if pre_cycle_timeout:
+                status.update(errors=status.get("errors", 0) + 1, consecutive_errors=streak,
+                              last_error=result["reason"])
                 result = dict(result, reason="manager_pre_cycle_timeouts",
                               refusal=f"{result['reason']} x{streak}")
             status.update(hold=result.get("reason") or "manager_lane_error",
