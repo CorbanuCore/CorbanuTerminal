@@ -287,9 +287,12 @@ def owner_activation(args):
         if login_agent:
             # Retries until the job is loaded (e.g. its volume mounts late); exits 0 when it is.
             # Its log stays on the home volume, so a late-mounting schedule root cannot stop it.
-            log = agents.parent / "Logs" / (login_agent.stem + ".log")
-            f.require(log.parent.is_dir(), "unsafe_launch_agents_directory")
-            log = str(log)
+            # It gets a line only per failed attempt (at most one per 30 s) and is kept as history.
+            logs_dir = f.no_links(agents.parent / "Logs")
+            info = logs_dir.stat() if logs_dir.is_dir() else None
+            f.require(info is not None and info.st_uid == os.getuid() and info.st_mode & 0o022 == 0,
+                      "unsafe_login_agent_log_directory")
+            log = str(logs_dir / (login_agent.stem + ".log"))
             login_raw = plistlib.dumps(dict(
                 Label=login_agent.stem, RunAtLoad=True, KeepAlive=dict(SuccessfulExit=False),
                 ThrottleInterval=30, LimitLoadToSessionType="Aqua", ProcessType="Background", Umask=63,

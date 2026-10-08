@@ -2261,7 +2261,7 @@ class RecurrenceTests(unittest.TestCase):
     def launch_agents(self, mode=0o755):
         agents = Path(self.tmp.name) / "LaunchAgents"
         agents.mkdir(mode=mode, exist_ok=True)
-        (Path(self.tmp.name) / "Logs").mkdir(exist_ok=True)
+        (Path(self.tmp.name) / "Logs").mkdir(mode=0o755, exist_ok=True)
         agents.chmod(mode)
         return agents, patch.object(owner, "launch_agents", return_value=agents)
 
@@ -2398,6 +2398,8 @@ class RecurrenceTests(unittest.TestCase):
             receipt = owner.load(args.root / "installation.json")
             self.assertEqual(("installing", str(plist)), (receipt["phase"], receipt["plist"]))
             commands.side_effect = real
+            observed = owner.observe_schedule(args.root)
+            self.assertEqual(("unknown", "observation-unavailable"), (observed["service"], observed["reason"]))
             with self.assertRaisesRegex(f.LaunchError, "installation_reconciliation_required"):
                 activate.owner_activation(args)
             args.owner = "uninstall"
