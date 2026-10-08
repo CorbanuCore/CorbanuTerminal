@@ -64,7 +64,7 @@ fn pf_27_s06_d1_hardened_process_starts_a_process_as_another_user() {
             command_line: &format!("cmd.exe /D /C exit {EXIT_CODE}"),
             cwd: &system_root,
         },
-        &command_runner(),
+        &command_runner().expect("build codex-command-runner first"),
     )
     .expect("start a process as the other user from a hardened process");
 
@@ -92,23 +92,14 @@ fn pf_27_s06_d1_hardened_process_starts_a_process_as_another_user() {
 }
 
 /// The elevated sandbox's command runner from this build.
-fn command_runner() -> PathBuf {
+fn command_runner() -> Option<PathBuf> {
     if let Some(path) = std::env::var_os("CARGO_BIN_EXE_codex_command_runner") {
-        return PathBuf::from(path);
+        return Some(PathBuf::from(path));
     }
     // target/<profile>/deps/<test>.exe -> target/<profile>/codex-command-runner.exe
-    let exe = std::env::current_exe().expect("test binary");
-    let runner = exe
-        .parent()
-        .and_then(|deps| deps.parent())
-        .expect("target dir")
-        .join("codex-command-runner.exe");
-    assert!(
-        runner.exists(),
-        "build codex-command-runner first: {}",
-        runner.display()
-    );
-    runner
+    let exe = std::env::current_exe().ok()?;
+    let runner = exe.parent()?.parent()?.join("codex-command-runner.exe");
+    runner.exists().then_some(runner)
 }
 
 fn integrity_level() -> u32 {
