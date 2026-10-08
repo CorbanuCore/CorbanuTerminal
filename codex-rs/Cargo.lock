@@ -3997,10 +3997,12 @@ dependencies = [
 name = "codex-process-hardening"
 version = "0.1.48"
 dependencies = [
+ "codex-windows-sandbox",
  "landlock",
  "libc",
  "pretty_assertions",
  "seccompiler",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

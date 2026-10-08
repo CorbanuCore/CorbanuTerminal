@@ -1,17 +1,17 @@
 ---
 sprint_id: "PF-27-S06"
 title: "Windows broker and secretless launch"
-status: draft
+status: active
 plan_file: "docs/plans/proposed/p1-security-hardening.md"
 plan_feature: "PF-27"
 execution_order: 45
-owner: "broker lane"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+owner: "broker lane worker (2026-10-08)"
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-27-s06-20261008"
+branch: "sec/pf-27-s06-windows-broker"
+base_commit: "7e6ef740ef1574d48c3caf2e84af82779c5b5969"
 depends_on: "PF-27-S02"
 created: 2026-10-06
-updated: 2026-10-06
+updated: 2026-10-08
 ---
 
 # PF-27-S06 — Windows broker and secretless launch
@@ -21,6 +21,10 @@ coordinator's 2026-10-06 instruction not to block on Windows. Until this lands, 
 `isolated_credential_broker` virtualizes but never injects, and with `secretless_agent_launch` it refuses
 agent commands with a stated reason. Moved to the P1 hardening plan on 2026-10-06 (Travis); its dependency
 on [PF-27-S02](../../archive/p0-security-levels/pf-27-s02-secretless-agent-launch.md) is unchanged.
+
+Started 2026-10-08 (Travis approved starting before the plan is activated). No Windows host yet: real probes run
+on the `windows-2022` CI runners (`windows-security-probes` workflow); the tmux run and videos wait for a Windows
+machine. Several reviewable PRs, each from a branch named after this one.
 
 ## Execution mandate
 
@@ -43,7 +47,7 @@ on [PF-27-S02](../../archive/p0-security-levels/pf-27-s02-secretless-agent-launc
 
 ## Preconditions
 
-- [ ] PF-27-S02 completed and archived; a Windows host or CI runner for real probes.
+- [x] PF-27-S02 completed and archived; Windows CI runner for real probes (a Windows host is still needed for the tmux run and videos).
 
 ## Done
 
