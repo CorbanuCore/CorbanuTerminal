@@ -326,6 +326,53 @@ async fn pf_27_s04_pf_27_s01_raw_credential_is_substituted_only_inside_the_broke
     assert_eq!(headers, bearer(&dummy));
 }
 
+/// Disables `SeDebugPrivilege` in this process's token, if it is enabled.
+#[cfg(windows)]
+fn disable_debug_privilege() {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::Foundation::LUID;
+    use windows_sys::Win32::Security::AdjustTokenPrivileges;
+    use windows_sys::Win32::Security::LUID_AND_ATTRIBUTES;
+    use windows_sys::Win32::Security::LookupPrivilegeValueW;
+    use windows_sys::Win32::Security::TOKEN_ADJUST_PRIVILEGES;
+    use windows_sys::Win32::Security::TOKEN_PRIVILEGES;
+    use windows_sys::Win32::System::Threading::GetCurrentProcess;
+    use windows_sys::Win32::System::Threading::OpenProcessToken;
+    let name: Vec<u16> = "SeDebugPrivilege"
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let mut luid = LUID {
+        LowPart: 0,
+        HighPart: 0,
+    };
+    let mut token = 0;
+    // SAFETY: valid pointers; the token is closed below.
+    unsafe {
+        if LookupPrivilegeValueW(std::ptr::null(), name.as_ptr(), &mut luid) == 0
+            || OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, &mut token) == 0
+        {
+            return;
+        }
+        let disabled = TOKEN_PRIVILEGES {
+            PrivilegeCount: 1,
+            Privileges: [LUID_AND_ATTRIBUTES {
+                Luid: luid,
+                Attributes: 0,
+            }],
+        };
+        AdjustTokenPrivileges(
+            token,
+            0,
+            &disabled,
+            0,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        );
+        CloseHandle(token);
+    }
+}
+
 /// PF-27-S06: on Windows the broker runs over its named pipes, reports both
 /// containment layers, and no other process of the user can open it to read
 /// its memory or environment (opening this test process is the control).
@@ -368,6 +415,9 @@ async fn pf_27_s06_windows_broker_uses_pipes_and_cannot_be_read() {
     );
 
     assert_eq!(open_for_reading(std::process::id()), Ok(()));
+    // CI runners run elevated with SeDebugPrivilege enabled, which opens any
+    // process whatever its DACL; an ordinary process of the user has it off.
+    disable_debug_privilege();
     let broker_pid = client.pid_for_test().expect("broker pid");
     assert_eq!(open_for_reading(broker_pid), Err(/*ERROR_ACCESS_DENIED*/ 5));
 }

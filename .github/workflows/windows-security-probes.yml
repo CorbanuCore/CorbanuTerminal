@@ -52,6 +52,7 @@ jobs:
         shell: bash
         run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-process-hardening pf_27_s06 -- --nocapture --test-threads=1
       - name: Broker transport probes and broker suite over named pipes
+        if: ${{ !cancelled() }}
         shell: bash
         run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-network-proxy "credential_broker::isolated::" -- --nocapture --test-threads=1
       - name: Require a clean worktree
