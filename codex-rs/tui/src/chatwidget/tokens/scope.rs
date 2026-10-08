@@ -42,7 +42,7 @@ pub(super) fn other_conversations_lines(others: Option<&OtherConversations>) -> 
         return match deleted {
             None => vec!["No other conversation recorded requests on this day.".into()],
             Some(deleted) => vec![
-                "No other open conversation has recorded requests on this day.".into(),
+                "No other saved conversation has recorded requests on this day.".into(),
                 deleted,
             ],
         };
@@ -77,23 +77,26 @@ pub(super) fn other_conversations_lines(others: Option<&OtherConversations>) -> 
             counted(others.unavailable, "conversation")
         ));
     }
-    lines.extend(deleted);
     lines.push(RESUME_STEP.into());
+    // After the resume step: deleted conversations cannot be resumed.
+    lines.extend(deleted);
     lines
 }
 
 /// Deleted conversations' spend on this day. Deletion removes their recorded
-/// requests and cost, but the provider billed them; say so rather than let the
-/// day look emptier or cheaper than it was. `None` means none were deleted.
+/// requests and cost, but not what the provider charged for them; say so
+/// rather than let the day look emptier or cheaper than it was. `None` means
+/// none were deleted. A deleted subagent of this conversation counts here too:
+/// its replay fence names no conversation.
 fn deleted_line(deleted_attempts: DeletedAttempts) -> Option<String> {
     match deleted_attempts {
         DeletedAttempts::Counted(0) => None,
         DeletedAttempts::Counted(n) => Some(format!(
-            "Deleted conversations sent {} on this day. Their recorded cost was deleted with them, so it is not included here; the provider still billed it.",
+            "Deleted conversations or subagents sent {} on this day. Their recorded cost was deleted with them, so it is not included here; any cost they incurred is on your provider's bill.",
             counted(n, "request attempt")
         )),
         DeletedAttempts::Uncountable => Some(
-            "Requests from deleted conversations cannot be counted for this day; any they made are not included here.".into(),
+            "Days older than 90 days keep too little detail to count requests from deleted conversations; any they made are not included here.".into(),
         ),
     }
 }

@@ -280,16 +280,16 @@ fn every_day_view_says_whether_other_conversations_were_read() {
         first(Some(empty(DeletedAttempts::Counted(7)))),
         vec![
             "This conversation on 2026-09-16 (UTC): no recorded requests.",
-            "No other open conversation has recorded requests on this day.",
-            "Deleted conversations sent 7 request attempts on this day. Their recorded cost was deleted with them, so it is not included here; the provider still billed it.",
+            "No other saved conversation has recorded requests on this day.",
+            "Deleted conversations or subagents sent 7 request attempts on this day. Their recorded cost was deleted with them, so it is not included here; any cost they incurred is on your provider's bill.",
             "Costs are estimates from published prices; your provider's bill is the final amount.",
         ]
     );
     assert_eq!(
         first(Some(empty(DeletedAttempts::Uncountable)))[1..3].to_vec(),
         vec![
-            "No other open conversation has recorded requests on this day.",
-            "Requests from deleted conversations cannot be counted for this day; any they made are not included here.",
+            "No other saved conversation has recorded requests on this day.",
+            "Days older than 90 days keep too little detail to count requests from deleted conversations; any they made are not included here.",
         ]
     );
     assert_eq!(
@@ -322,8 +322,8 @@ fn every_day_view_says_whether_other_conversations_were_read() {
         .position(|line| line.starts_with("To see those requests"))
         .unwrap();
     assert_eq!(
-        screen[resume - 1],
-        "Deleted conversations sent 1 request attempt on this day. Their recorded cost was deleted with them, so it is not included here; the provider still billed it."
+        screen[resume + 1],
+        "Deleted conversations or subagents sent 1 request attempt on this day. Their recorded cost was deleted with them, so it is not included here; any cost they incurred is on your provider's bill."
     );
 }
 

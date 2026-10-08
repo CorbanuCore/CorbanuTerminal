@@ -56,29 +56,36 @@ const MAX_ROWS: usize = 1_000_000;
 const REPLAY_MS: i64 = 365 * 86_400_000;
 const DETAIL_MS: i64 = 90 * 86_400_000;
 
-/// Attempts dispatched on `day` whose conversation was deleted.
+/// Attempts dispatched on `day` whose conversation (or subagent) was deleted.
 ///
 /// A tombstone expires exactly `REPLAY_MS` after its attempt's dispatch, so the
 /// dispatch time is recoverable. Deletion is not the only writer: retention
 /// leaves one when raw detail ages out, and compact-only imports leave one too,
-/// but both only for attempts older than the detail window at the checkpoint.
-/// A tombstone whose dispatch is still inside the window is therefore always a
-/// deletion; a day that reaches past the window cannot be counted.
+/// but only for attempts already past the detail window at the time they ran.
+/// That time is never later than the checkpoint or, for batched expiry that has
+/// not advanced the checkpoint yet, than this reader's clock. A tombstone whose
+/// dispatch is inside the window at both is therefore always a deletion; a day
+/// that reaches past it cannot be counted.
 async fn deleted_attempts(
     conn: &mut SqliteConnection,
     day: i64,
+    read_at_ms: i64,
     work: &mut InspectionWork,
 ) -> DeletedAttempts {
-    count_deleted(conn, day, work)
+    count_deleted(conn, day, read_at_ms, work)
         .await
         .map_or(DeletedAttempts::Uncountable, DeletedAttempts::Counted)
 }
 
-async fn count_deleted(
+pub(super) async fn count_deleted(
     conn: &mut SqliteConnection,
     day: i64,
+    read_at_ms: i64,
     work: &mut InspectionWork,
 ) -> Option<usize> {
+    // One unindexed scan of the tombstone table, charged like one other scan.
+    // Tombstones outlive raw detail, so this can under-charge the budget; the
+    // count is cheap either way.
     if !work.scans(/*count*/ 1) {
         return None;
     }
@@ -90,7 +97,7 @@ async fn count_deleted(
     .ok()
     .flatten()?;
     let start = day.checked_mul(86_400_000)?;
-    if start.checked_add(DETAIL_MS)? <= checkpoint? {
+    if start.checked_add(DETAIL_MS)? <= checkpoint?.max(read_at_ms) {
         return None;
     }
     let count: i64 = sqlx::query_scalar(
@@ -157,7 +164,7 @@ pub(super) async fn other_conversations(
             requests.entry(request).or_default().extend(quotes);
         }
     }
-    let deleted_attempts = deleted_attempts(conn, day, work).await;
+    let deleted_attempts = deleted_attempts(conn, day, read_at_ms, work).await;
     OtherConversations {
         conversations,
         unavailable: unavailable.len(),

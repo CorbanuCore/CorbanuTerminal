@@ -903,6 +903,50 @@ async fn accounting_inspect_counts_deleted_conversations_attempts() -> anyhow::R
     Ok(())
 }
 
+// #286: only tombstones that cannot come from retention count as deletions.
+#[tokio::test]
+async fn accounting_deleted_attempts_count_only_what_retention_cannot_explain() -> anyhow::Result<()>
+{
+    const REPLAY: i64 = 365 * DAY;
+    let path = home();
+    let runtime = open(&path).await?;
+    seed(&runtime).await?;
+    let ahead = 200 * DAY;
+    AccountingStore::open(&runtime, ahead).await?;
+    // Tombstones for attempts dispatched on day 150 and day 100.
+    for (id, dispatch) in [(1u128, 150 * DAY + 5), (2, 100 * DAY + 5)] {
+        sqlx::query("INSERT INTO draft_accounting_tombstones VALUES (?, ?)")
+            .bind(Uuid::from_u128(id).to_string())
+            .bind(dispatch + REPLAY)
+            .execute(runtime.pool.as_ref())
+            .await?;
+    }
+    let count = |day: i64, read_at: i64| {
+        let runtime = runtime.clone();
+        async move {
+            let mut conn = runtime.pool.acquire().await?;
+            let mut work = InspectionWork::new(&mut conn).await?;
+            anyhow::Ok(scope::count_deleted(&mut conn, day, read_at, &mut work).await)
+        }
+    };
+    // Inside the detail window at the checkpoint: a deletion.
+    assert_eq!(count(150, ahead).await?, Some(1));
+    // Past it (day 100 + 90 days <= day 200): retention may have written it.
+    assert_eq!(count(100, ahead).await?, None);
+    // Batched expiry can run ahead of the checkpoint: the reader's clock
+    // bounds the window too.
+    assert_eq!(count(150, 245 * DAY).await?, None);
+    // A day nothing was deleted on, inside the window.
+    assert_eq!(count(151, ahead).await?, Some(0));
+    // No checkpoint yet: uncountable, never zero.
+    sqlx::query("UPDATE draft_accounting_retention_checkpoint SET completed_as_of_ms = NULL, admission_active = 0")
+        .execute(runtime.pool.as_ref())
+        .await?;
+    assert_eq!(count(150, ahead).await?, None);
+    runtime.close().await;
+    Ok(())
+}
+
 // Range buckets do not read other conversations, and say so with `None`.
 #[tokio::test]
 async fn accounting_inspect_range_days_do_not_read_other_conversations() -> anyhow::Result<()> {
