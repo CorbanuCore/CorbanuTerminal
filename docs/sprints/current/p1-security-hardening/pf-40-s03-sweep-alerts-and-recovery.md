@@ -2,7 +2,7 @@
 sprint_id: "PF-40-S03"
 title: "Agent Sweep alerts revocation and recovery"
 status: draft
-plan_file: "docs/plans/proposed/p1-security-hardening.md"
+plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-40"
 execution_order: 70
 owner: "Jim Ricketts"
@@ -23,7 +23,7 @@ updated: 2026-10-06
 
 ## Plan linkage
 
-- Plan: [P1 security hardening](../../../plans/proposed/p1-security-hardening.md#pf-40).
+- Plan: [P1 security hardening](../../../plans/active/p1-security-hardening.md#pf-40).
 - Feature: `PF-40`.
 - Product citation: **Non-negotiable controls** — “Support allowlists, denylists, rate limits, daily loss/notional/leverage caps, cooldowns, revocation, and a kill switch.”
 - Acceptance advanced: A user can understand and recover from a security stop without reviving stale authority.

@@ -1,0 +1,49 @@
+  Attempt, components and original price
+  Requested UTC day: 2026-10-08
+  Provider: Z.AI
+  Model: Z.AI GLM 5.2
+  Billing: Pay per use
+  Estimated cost: $0.020484 (rounded)
+  Tokens: 14,329 tokens
+  —— Details ——
+  Request: ef25f485-070c-4a0e-9af1-16012f01ab47
+  Attempt: 55f02130-8a36-4ad4-b09f-441e3bc27dd7
+  ↑↓ scroll · Enter open · Esc back/close
+  Thread: 01a11b1d-ecc9-7581-afa4-c59a9295612c
+  Turn: 01a11b1e-14fe-7ea1-a2da-f1a32c15d471
+  Provider: zai
+  Model: glm-5.2
+  Opaque scope: 10f30216-a469-47f8-b4f4-65bf3a84c781
+  Arithmetic dialect: Inclusive
+  Admission time: 2026-10-08T10:45:18.983Z
+  Retry predecessor: none
+  Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+  Estimated token cost for recorded attempts: $0.020484 (rounded)
+  Input: 14188
+  Noncached input (derived for inclusive input): unknown — no retained numeric evidence
+  Cache read: 0 (reported)
+  Cache write: unknown — no retained numeric evidence
+  Output: 141
+  Reasoning (subset, not separately billed): 27
+  Total (not separately billed): 14329
+  Noncached input cost: $0.019863 (rounded); exact USD 0.0198632
+  Cache read cost: $0.000000; exact USD 0
+  Cache write cost: $0.000000; exact USD 0
+  Output cost: $0.000620 (rounded); exact USD 0.0006204
+  Known subtotal exact USD: 0.0204836
+  Price ID: c0c6f217-6454-421b-bf7f-79b5dff59c62
+  Price source: NativeCatalog; reference 29354527-a0e0-59c7-934b-8d0170caf339
+  Price currency/unit: Usd / PerMillionTokens
+  Price observed/approved: 2026-10-08T10:45:18.983Z / 2026-10-08T10:45:18.983Z
+  Price effective interval: [2026-10-08T10:45:18.983Z, unbounded)
+  Noncached input rate: 1.4 USD per million tokens
+  Cache read rate: 0.26 USD per million tokens
+  Cache write rate: 0 USD per million tokens
+  Output rate: 4.4 USD per million tokens
+  Evidence revision 30; source 583df822-f56f-488c-ade1-ce3b9182121c; sequence 30; presence patch
+  {"input":14188,"read":0,"output":141,"reasoning":27,"total":14329}
+  Estimate versus billed difference: unknown — no settlement evidence
+  Billed cost: unavailable — no settlement evidence
+  Snapshot is not current; newer activity is unverified
+  Back
+  Refresh

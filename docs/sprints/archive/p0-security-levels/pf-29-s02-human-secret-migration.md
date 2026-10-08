@@ -1,13 +1,13 @@
 ---
 sprint_id: "PF-29-S02"
 title: "Human-reviewed credential migration and recovery"
-status: draft
-plan_file: "docs/plans/active/p0-security-levels.md"
+status: completed
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-29"
 execution_order: 36
 owner: "first-free lane worker (codex, 2026-10-06)"
 parallel_lane: "tui"
-write_scope: "codex-rs/core/src/security/migration.rs, codex-rs/core/src/security/pf_29_s02_tests.rs, codex-rs/tui/src/security/migration.rs, codex-rs/tui/src/bottom_pane/security_migration.rs, qa/security-levels/sprints/PF-29-S02/, qa/demos/index/PF-29-S02.md, docs/sprints/current/p0-security-levels/pf-29-s02-human-secret-migration.md"
+write_scope: "codex-rs/core/src/security/migration.rs, codex-rs/core/src/security/pf_29_s02_tests.rs, codex-rs/tui/src/security/migration.rs, codex-rs/tui/src/bottom_pane/security_migration.rs, qa/security-levels/sprints/PF-29-S02/, qa/demos/index/PF-29-S02.md, docs/sprints/archive/p0-security-levels/pf-29-s02-human-secret-migration.md"
 integration_gate: "PR to main under the per-sprint gate (sec-common decision 5): focused tests, GLM 5.2 tmux run, one Opus 5.5 High review, SOP videos; behind protected_mode_preflight (PF-29-S01, default off). Builds on PF-29-S01's files (inventory.rs source lines and assignment span, preflight.rs readiness, the picker and its tests, security/mod.rs and bottom_pane/mod.rs module lines), owned by PF-29-S01 in the same lane; new demo specs qa/demos/specs/pf29s02-*.toml under the directory PF-23-S01 reserves (new files only); the plan worktree coordinates and the index row."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-29-s02-20261006"
 branch: "pf-29-s02-20261006"
@@ -16,7 +16,7 @@ depends_on: "PF-29-S01, PF-24-S01"
 merged_behind_flag: "protected_mode_preflight"
 gate_evidence: "qa/security-levels/sprints/PF-29-S02/README.md"
 created: 2026-08-28
-updated: 2026-10-06
+updated: 2026-10-08
 ---
 
 # PF-29-S02 — Human-reviewed credential migration and recovery
@@ -30,7 +30,7 @@ updated: 2026-10-06
 
 ## Plan linkage
 
-- Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md#pf-29).
+- Plan: [P0 `/security` levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md#pf-29).
 - Feature: `PF-29`.
 - Product citation: **Non-negotiable controls** — “Permit agents to reference credentials only by label; resolve them solely inside the trusted execution boundary.”
 - Acceptance advanced: Migration is explicit, encrypted, recoverable and re-audited before Moderate/Aggressive becomes active.
@@ -71,21 +71,23 @@ updated: 2026-10-06
 
 ## Remaining
 
-- [ ] Only shell-profile exports are migrated; config literals, env variables and memories are listed with actions.
-- [ ] Broker leases and other live capabilities are not revoked on migration (restart covers this session).
+Nothing left in this sprint: merged behind its flag and archived when Travis closed the P0 plan on 2026-10-08. These open items moved to the [P1 plan](../../../plans/active/p1-security-hardening.md#carried-forward-from-p0):
+
+- Only shell-profile exports are migrated; config literals, env variables and memories are listed with actions.
+- Broker leases and other live capabilities are not revoked on migration (restart covers this session).
 
 ## Verification
 
 - [x] `just fix -p codex-core -p codex-tui`, `just fmt`; final diff inspected.
 - [x] Focused `pf_29_s02`: core 6, tui 4 (with the PF-29-S01 tests: core 20, tui 12).
 - [x] Suites, three GLM 5.2 videos, Opus review (changes, then approved); CI green; merged as #235 ([evidence](../../../../qa/security-levels/sprints/PF-29-S02/README.md)).
-- [ ] PF-26 final-candidate requalification (milestone gate).
+- Moved to P1: PF-26 final-candidate requalification (milestone gate).
 
 ## Exit evidence
 
 - [x] Commits, commands, outcomes, videos and review under `qa/security-levels/sprints/PF-29-S02/`.
-- [ ] PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
-- [ ] Done/Remaining reflect reality; completed record moved to the archive and plan/navigation updated.
+- Moved to P1: PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
+- [x] Ledgers reflect reality; open items moved to the [P1 plan](../../../plans/active/p1-security-hardening.md#carried-forward-from-p0) and the record archived with the P0 close (Travis, 2026-10-08).
 
 ## Split with PF-23-S01 (2026-10-06)
 

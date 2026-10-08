@@ -2,7 +2,7 @@
 sprint_id: "PF-23-S03"
 title: "Downgrade, restart, and inheritance enforcement"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-23"
 execution_order: 42
 owner: "untrusted-content lane"
@@ -26,7 +26,7 @@ updated: 2026-10-07
 
 ## Plan linkage
 
-- Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
+- Plan: [P0 `/security` levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md)
 - Feature: `PF-23`
 - Reconciliation: [source decisions and archive mapping](../../../plans/security-source-reconciliation.md).
 - Product citation: **P0 `/security` levels** — “Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged.”

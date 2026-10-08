@@ -2,7 +2,7 @@
 sprint_id: "PF-39-S02"
 title: "Outbound disclosure clipboard and export controls"
 status: draft
-plan_file: "docs/plans/proposed/p1-security-hardening.md"
+plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-39"
 execution_order: 67
 owner: "Jim Ricketts"
@@ -23,7 +23,7 @@ updated: 2026-10-06
 
 ## Plan linkage
 
-- Plan: [P1 security hardening](../../../plans/proposed/p1-security-hardening.md#pf-39).
+- Plan: [P1 security hardening](../../../plans/active/p1-security-hardening.md#pf-39).
 - Feature: `PF-39`.
 - Product citation: **Non-negotiable controls** — “Keep vault values, seeds, private keys, broker credentials, balances, positions, PNL, and identifying financial data out of model-visible context except for narrowly scoped derived values.”
 - Acceptance advanced: Protected data cannot escape through a non-chat sink or an indirect export route.

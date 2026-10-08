@@ -25,7 +25,7 @@ Plan lifecycle: `docs/plans/index.md`
 
 This is **historical proposed design input**, retained as a draft rather than
 reactivated. On 2026-08-28, Travis Good requested selective reuse and reconciliation
-into the [active P0 plan](../active/p0-security-levels.md). That plan now owns all
+into the [active P0 plan](../completed/main-2026-10-08-p0-security-levels.md). That plan now owns all
 accepted implementation scope and its 64 current plus nine completed sprints. This document and its
 72 cancelled sprints do not authorize parallel work or describe finished behavior.
 
@@ -97,7 +97,7 @@ The user can always tell:
 
 ## Relationship to the active P0 plan
 
-The [active P0 plan](../active/p0-security-levels.md) is the sole implementation
+The [active P0 plan](../completed/main-2026-10-08-p0-security-levels.md) is the sole implementation
 authority. The 2026-08-28 decision selected merging the accepted contracts into
 that plan, not activating a second overlapping initiative. All 72 old sprint
 records remain cancelled; their individual dispositions and current owners are
@@ -649,7 +649,7 @@ No implementation worktree exists because this proposal is not active.
 | Path or symbol | Why it matters |
 | --- | --- |
 | `docs/corbanu-product-spec.md` — `P0 /security levels` | Product contract and profile semantics |
-| `docs/plans/active/p0-security-levels.md` | Active initiative that must be reconciled before promotion |
+| `docs/plans/completed/main-2026-10-08-p0-security-levels.md` | Active initiative that must be reconciled before promotion |
 | `codex-rs/protocol/src/models.rs::PermissionProfile` | Existing low-level permission policy to compose, not replace |
 | `codex-rs/vault/src/lib.rs::reveal_for_programmatic_use` | Existing credential resolution boundary that must become references-only to model-visible paths |
 | `codex-rs/network-proxy/src/policy.rs` | Existing egress decision point for IP, destination, and profile enforcement |

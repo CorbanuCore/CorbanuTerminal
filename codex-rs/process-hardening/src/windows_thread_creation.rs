@@ -298,7 +298,7 @@ pub fn protect_new_objects_by_default() -> io::Result<()> {
 
 /// Sets the protected thread DACL as `token`'s default DACL. `token` needs
 /// `TOKEN_ADJUST_DEFAULT` and must belong to the current user.
-fn set_protected_default_dacl(token: HANDLE) -> io::Result<()> {
+pub(crate) fn set_protected_default_dacl(token: HANDLE) -> io::Result<()> {
     let descriptor = SecurityDescriptor::from_sddl(&thread_dacl_sddl(&current_user_sid_string()?))?;
     let dacl: *const ACL = descriptor.dacl()?;
     let value = TOKEN_DEFAULT_DACL {

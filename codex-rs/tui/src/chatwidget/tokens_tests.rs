@@ -1135,6 +1135,7 @@ async fn accounting_inspect_maintenance_with_stale_raw_renders_refresh() -> anyh
         insta::allow_duplicates! {
             insta::assert_snapshot!(text, @"
             Recorded totals unavailable — stored contributions need refresh. Retry rereads only; no repair performed.
+            Next step: select Refresh. If it stays unavailable, the recorded totals cannot be checked here; check your provider's bill.
             Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
             Billed cost: unavailable — no settlement evidence
             Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
@@ -2017,16 +2018,18 @@ fn accounting_inspect_first_screen_names_provider_model_and_billing_type() {
 fn accounting_inspect_plain_wording_counts_attempts_and_names_every_route() {
     let mut first = quote();
     first.all_buckets_priced = None;
+    first.buckets[3] = BucketQuote::MissingRate;
     first.known_subtotal = decimal("0.00001");
     let mut retry = quote();
     retry.attempt.attempt_id = Uuid::from_u128(9);
     retry.attempt.model = "other-model".into();
     retry.all_buckets_priced = None;
+    retry.buckets[3] = BucketQuote::MissingRate;
     retry.known_subtotal = decimal("0.00001");
     let quotes = vec![first, retry];
     let totals = DayTotals::from_quotes(quotes.iter()).unwrap();
     assert_eq!(
-        plain_billing(&totals),
+        plain_billing(&totals, EstimateGaps::of(quotes.iter())),
         (
             "Pay per use",
             format!(
