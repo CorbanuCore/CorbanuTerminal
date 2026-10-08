@@ -782,8 +782,10 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
     inspection_pages_for(result, /*period*/ None)
 }
 
-/// The command that opens this view in this build: `/cost` exists only where
-/// costs are recorded; elsewhere the view is reached as `/usage requests`.
+/// The command the user typed to open this view: `/cost`. The view is
+/// developer-only; a default build answers `/usage requests` with
+/// `NO_COST_HISTORY` and never opens it, so the other name appears only in
+/// tests of the view itself.
 pub(crate) fn cost_command() -> &'static str {
     if cfg!(feature = "developer-accounting") {
         "/cost"
@@ -1614,7 +1616,7 @@ fn plain_header(quotes: &[&ObservationQuote]) -> Vec<String> {
 }
 
 /// "Today (UTC) in this conversation:" for the current UTC day, else the
-/// inspected date: `/usage requests YYYY-MM-DD` opens any past day.
+/// inspected date: `/cost YYYY-MM-DD` opens any past day.
 fn day_heading(utc_day: i64, today: i64) -> String {
     if utc_day == today {
         return "Today (UTC) in this conversation:".to_string();
@@ -1788,15 +1790,26 @@ fn interval(start: i64, end: i64) -> String {
     format!("[{}, {})", utc_instant(start), utc_instant(end))
 }
 
-/// A bucket still running when it was read is in progress, not partial: it
-/// holds everything recorded up to its coverage end, and the rest of it has
-/// not happened yet. Returns that end. A bucket cut short by the requested
-/// range or by retention is still partial.
-fn in_progress_end(
+/// A range bucket that the read time cuts short. Nothing is recorded after
+/// the ledger's checkpoint (inspection refuses such a request), so neither is
+/// missing anything; a bucket cut short by the requested range, retention or
+/// unverified days stays partial.
+#[derive(Clone, Copy)]
+enum Progress {
+    /// Still running: everything recorded up to this coverage end.
+    InProgress(i64),
+    /// Starts after the read time.
+    NotStarted,
+}
+
+fn progress(
     requested: InspectionRange,
     read_at: i64,
     bucket: &codex_state::accounting::InspectionBucket,
-) -> Option<i64> {
+) -> Option<Progress> {
+    if bucket.start_ms > read_at {
+        return Some(Progress::NotStarted);
+    }
     let (start, end) = bucket.effective?;
     let first_day = start / 86_400_000;
     (bucket.partial
@@ -1813,8 +1826,11 @@ fn in_progress_end(
                 InspectionDay::CheckpointLag => day * 86_400_000 >= end,
                 _ => false,
             }))
-    .then_some(end)
+    .then_some(Progress::InProgress(end))
 }
+
+const NOT_STARTED: &str = "Not started yet — nothing is recorded for it.";
+const NOT_CURRENT: &str = "Snapshot is not current; newer activity is unverified";
 
 fn in_progress_line(end: i64) -> String {
     format!(
@@ -1836,30 +1852,40 @@ fn range_pages(
             requested.grouping
         ),
         format!(
-            "Retention: request detail kept since {}; daily totals kept since {}",
+            "Retention: request detail kept since {}; daily totals kept {}",
             read_at
                 .checked_sub(90 * 86_400_000)
                 .filter(|v| *v >= 0)
                 .map_or_else(|| "the start".to_string(), utc_instant),
-            aggregate_day_floor.map_or_else(|| "unknown".to_string(), utc_date)
+            aggregate_day_floor.map_or_else(
+                || "not known yet".to_string(),
+                |day| format!("since {}", utc_date(day))
+            )
         ),
         "Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost: unavailable — no settlement evidence.".into(),
     ];
     let progress: Vec<_> = buckets
         .iter()
-        .map(|b| in_progress_end(requested, read_at, b))
+        .map(|b| progress(requested, read_at, b))
         .collect();
-    // The days of an in-progress bucket after its coverage end have not
-    // happened yet; they say nothing about the range.
+    // Days not reached yet say nothing about the range: those of a bucket not
+    // started, and those of an in-progress bucket after its coverage end.
     let states = buckets
         .iter()
         .zip(&progress)
         .flat_map(|(b, progress)| {
-            b.days
-                .iter()
-                .filter(move |d| progress.is_none() || !matches!(d, InspectionDay::CheckpointLag))
+            b.days.iter().filter(move |d| match progress {
+                None => true,
+                Some(Progress::InProgress(_)) => !matches!(d, InspectionDay::CheckpointLag),
+                Some(Progress::NotStarted) => false,
+            })
         })
         .collect::<Vec<_>>();
+    // Every day shares one checkpoint. With a bucket in progress, a ledger
+    // behind the read time is that bucket's "recorded through", not a gap.
+    let running = progress
+        .iter()
+        .any(|p| matches!(p, Some(Progress::InProgress(_))));
     if states
         .iter()
         .any(|s| matches!(s, InspectionDay::NeedsRefresh))
@@ -1867,7 +1893,7 @@ fn range_pages(
         context.push("Recorded totals unavailable — stored contributions need refresh".into());
     } else if states.iter().any(|s| match s {
         InspectionDay::CheckpointLag => true,
-        InspectionDay::Ready(v) => v.read_at_ms > v.coverage.completed_as_of_ms,
+        InspectionDay::Ready(v) => v.read_at_ms > v.coverage.completed_as_of_ms && !running,
         InspectionDay::DetailUnavailable {
             coverage,
             read_at_ms,
@@ -1875,7 +1901,7 @@ fn range_pages(
         } => *read_at_ms > coverage.completed_as_of_ms,
         _ => false,
     }) {
-        context.push("Snapshot is not current; newer activity is unverified".into());
+        context.push(NOT_CURRENT.into());
     }
     let (unknown_attempts, unavailable_entries) = states
         .iter()
@@ -1915,8 +1941,15 @@ fn range_pages(
             || (!b.partial && b.days.iter().all(|d| matches!(d, InspectionDay::Ready(_))))
     });
     if complete {
-        if let Some(end) = progress.iter().flatten().max() {
-            pages[0].text.push(in_progress_line(*end));
+        if let Some(end) = progress
+            .iter()
+            .filter_map(|p| match p {
+                Some(Progress::InProgress(end)) => Some(*end),
+                _ => None,
+            })
+            .max()
+        {
+            pages[0].text.push(in_progress_line(end));
         }
         let quotes = buckets
             .iter()
@@ -1959,7 +1992,8 @@ fn range_pages(
             "Bucket: {bounds}; effective coverage (requested ∩ aggregate retention ∩ snapshot): {effective}"
         ));
         header.push(match progress {
-            Some(end) => in_progress_line(end),
+            Some(Progress::InProgress(end)) => in_progress_line(end),
+            Some(Progress::NotStarted) => NOT_STARTED.into(),
             None if bucket.partial => "Partial bucket — excluded from totals".into(),
             None => "Whole bucket within aggregate retention coverage; detail availability checked separately".into(),
         });
@@ -1989,8 +2023,7 @@ fn range_pages(
                         merged = Some(view);
                     }
                 }
-                // The days of an in-progress bucket after its coverage end
-                // have not happened yet; there is nothing to report on them.
+                // Days not reached yet have nothing to report.
                 InspectionDay::CheckpointLag if progress.is_some() => {}
                 other => {
                     detail_unavailable |= matches!(other, InspectionDay::DetailUnavailable { .. });
@@ -2008,15 +2041,23 @@ fn range_pages(
             format!(
                 "{:?} {bounds}{}",
                 requested.grouping,
-                if progress.is_some() {
-                    " (in progress)"
-                } else {
-                    ""
+                match progress {
+                    Some(Progress::InProgress(_)) => " (in progress)",
+                    Some(Progress::NotStarted) => " (not started)",
+                    None => "",
                 }
             ),
             offset,
         ));
-        let mut children = if (!bucket.partial || progress.is_some()) && available {
+        let mut children = if matches!(progress, Some(Progress::NotStarted)) {
+            vec![InspectorPage {
+                title: "Not started yet".into(),
+                text: vec![],
+                links: vec![],
+                parent: None,
+                selected: Arc::default(),
+            }]
+        } else if (!bucket.partial || progress.is_some()) && available {
             if let Some(mut view) = merged {
                 let recalculate = (|| -> anyhow::Result<()> {
                     view.totals = codex_state::accounting::DayTotals::from_quotes(
@@ -2048,6 +2089,9 @@ fn range_pages(
                             Some(format!("so far in {bounds}")),
                         );
                         pages[0].title = "Cost so far — this conversation".into();
+                        for page in &mut pages {
+                            page.text.retain(|line| line != NOT_CURRENT);
+                        }
                         pages
                     }
                     Ok(()) => {

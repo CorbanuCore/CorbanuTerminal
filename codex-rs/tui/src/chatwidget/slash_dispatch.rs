@@ -818,7 +818,12 @@ impl ChatWidget {
                     match tokens::TokenActivityView::parse(trimmed) {
                         Some(view) => self.add_token_activity_output(view),
                         None => self.add_error_message(
-                            "Usage: /usage [daily|weekly|cumulative] or /usage requests [YYYY-MM-DD]".to_string(),
+                            if cfg!(feature = "developer-accounting") {
+                                "Usage: /usage [daily|weekly|cumulative] or /usage requests [YYYY-MM-DD]"
+                            } else {
+                                "Usage: /usage [daily|weekly|cumulative]"
+                            }
+                            .to_string(),
                         ),
                     }
                 }

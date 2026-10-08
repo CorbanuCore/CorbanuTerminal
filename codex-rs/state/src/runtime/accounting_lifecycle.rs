@@ -6,7 +6,7 @@ use codex_protocol::ThreadId;
 use std::collections::BTreeMap;
 
 const DAY_MS: i64 = 86_400_000;
-const REPLAY_MS: i64 = 365 * DAY_MS;
+const REPLAY_MS: i64 = crate::runtime::accounting::REPLAY_MS;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Current<T> {

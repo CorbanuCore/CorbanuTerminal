@@ -56,7 +56,7 @@ const MAX_ROWS: usize = 1_000_000;
 
 /// How long a deleted attempt's replay fence (tombstone) outlives its dispatch,
 /// and how long raw attempt detail is kept. Kept equal to the retention plan's.
-const REPLAY_MS: i64 = 365 * 86_400_000;
+const REPLAY_MS: i64 = crate::runtime::accounting::REPLAY_MS;
 const DETAIL_MS: i64 = 90 * 86_400_000;
 
 /// Attempts dispatched on `day` whose conversation (or subagent) was deleted.

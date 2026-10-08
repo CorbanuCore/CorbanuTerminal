@@ -1552,7 +1552,12 @@ async fn usage_command_with_invalid_view_reports_usage_snapshot() {
         .map(|cell| lines_to_single_string(cell))
         .collect::<Vec<_>>()
         .join("\n");
-    assert_chatwidget_snapshot!("usage_command_with_invalid_view_reports_usage", rendered);
+    // Pin the shipped wording; only the developer-accounting build, which has
+    // the recorded-request view, names `/usage requests`.
+    assert_chatwidget_snapshot!(
+        "usage_command_with_invalid_view_reports_usage",
+        rendered.replace(" or /usage requests [YYYY-MM-DD]", "")
+    );
     assert_eq!(recall_latest_after_clearing(&mut chat), "/usage monthly");
 }
 

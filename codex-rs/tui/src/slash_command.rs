@@ -118,9 +118,10 @@ impl SlashCommand {
             SlashCommand::Import => "import setup, this project, and recent chats from Claude Code",
             SlashCommand::Hooks => "view and manage lifecycle hooks",
             SlashCommand::Status => "show current session configuration and token usage",
-            SlashCommand::Usage => {
+            SlashCommand::Usage if cfg!(feature = "developer-accounting") => {
                 "view recorded request cost, account usage, or use a rate-limit reset"
             }
+            SlashCommand::Usage => "view account usage or use a rate-limit reset",
             SlashCommand::Cost => "what your turns cost, on whichever provider served them",
             SlashCommand::DebugConfig => "show config layers and requirement sources for debugging",
             SlashCommand::Title => "configure which items appear in the terminal title",
@@ -314,8 +315,7 @@ impl SlashCommand {
             // shipped binary, and advertising the view there was never
             // authorised. It is gated on the same build that can collect: in
             // any other build typing it is an unrecognized command, and
-            // `/usage requests` remains the only way to the (empty) view, so
-            // nothing new is reachable in a shipped build.
+            // `/usage requests` says the history is not part of the build.
             SlashCommand::Cost => cfg!(feature = "developer-accounting"),
             _ => true,
         }

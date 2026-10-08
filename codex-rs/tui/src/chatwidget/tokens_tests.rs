@@ -443,6 +443,7 @@ fn accounting_inspect_range_bucket_reaching_today_is_in_progress() {
         "Next step: send a turn",
         "excluded from totals",
         "unavailable slices may contain",
+        NOT_CURRENT,
     ] {
         assert!(!all.contains(absent), "{absent}: {all}");
     }
@@ -463,6 +464,279 @@ fn accounting_inspect_range_bucket_reaching_today_is_in_progress() {
             .iter()
             .any(|s| s.starts_with("Range total unavailable"))
     );
+}
+
+fn bucket(
+    start_ms: i64,
+    end_ms: i64,
+    effective: Option<(i64, i64)>,
+    days: Vec<InspectionDay>,
+) -> codex_state::accounting::InspectionBucket {
+    codex_state::accounting::InspectionBucket {
+        start_ms,
+        end_ms,
+        partial: effective != Some((start_ms, end_ms)),
+        effective,
+        days,
+    }
+}
+
+fn ready_at(checkpoint: i64, read_at: i64) -> InspectionDay {
+    let InspectionDay::Ready(mut view) = packet() else {
+        panic!()
+    };
+    view.coverage.completed_as_of_ms = checkpoint;
+    view.read_at_ms = read_at;
+    InspectionDay::Ready(view)
+}
+
+fn joined(pages: &[InspectorPage]) -> String {
+    pages
+        .iter()
+        .flat_map(|p| p.text.iter().chain([&p.title]))
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+// A bucket reaching today stays partial, and withheld, unless the read time
+// is all that cuts it short.
+#[test]
+fn accounting_inspect_range_bucket_reaching_today_stays_partial_when_unverified() {
+    const DAY: i64 = 86_400_000;
+    let week = |end_ms: i64, effective: (i64, i64), first: InspectionDay| {
+        let mut days = vec![first];
+        days.extend((1..7).map(|_| InspectionDay::CheckpointLag));
+        range_pages(
+            InspectionRange {
+                start_ms: 0,
+                end_ms,
+                grouping: InspectionGrouping::Week,
+            },
+            Some(0),
+            /*read_at*/ 2 * DAY,
+            vec![bucket(0, 7 * DAY, Some(effective), days)],
+        )
+    };
+    let detail = InspectionDay::DetailUnavailable {
+        coverage: RetentionCoverage {
+            completed_as_of_ms: 1_000,
+            detail_expired_through_ms: None,
+            aggregate_day_floor: 0,
+            oldest_recorded_day: Some(0),
+        },
+        read_at_ms: 2 * DAY,
+        compact: false,
+    };
+    for (label, pages) in [
+        (
+            "needs refresh",
+            week(7 * DAY, (0, 1_001), InspectionDay::NeedsRefresh),
+        ),
+        ("detail unavailable", week(7 * DAY, (0, 1_001), detail)),
+        // A lagging day inside the coverage is unverified, not "not yet".
+        (
+            "lag before end",
+            week(7 * DAY, (0, 1_001), InspectionDay::CheckpointLag),
+        ),
+        // The requested range ends at the read time: cut short by the request.
+        (
+            "request ends",
+            week(2 * DAY, (0, 2 * DAY), ready_at(2 * DAY, 2 * DAY)),
+        ),
+    ] {
+        let text = joined(&pages);
+        assert!(
+            text.contains("Partial bucket — excluded from totals"),
+            "{label}: {text}"
+        );
+        assert!(text.contains("Range total unavailable"), "{label}: {text}");
+        assert!(!text.contains("In progress"), "{label}: {text}");
+    }
+}
+
+// Hour grouping: a whole hour and the current one. The range total is their
+// sum, and says it is so far.
+#[test]
+fn accounting_inspect_range_hour_in_progress_total_sums_whole_and_current() {
+    const HOUR: i64 = 3_600_000;
+    let checkpoint = HOUR + 1_000;
+    let pages = range_pages(
+        InspectionRange {
+            start_ms: 0,
+            end_ms: 2 * HOUR,
+            grouping: InspectionGrouping::Hour,
+        },
+        Some(0),
+        /*read_at*/ HOUR + HOUR / 2,
+        vec![
+            bucket(
+                0,
+                HOUR,
+                Some((0, HOUR)),
+                vec![ready_at(checkpoint, HOUR + HOUR / 2)],
+            ),
+            bucket(
+                HOUR,
+                2 * HOUR,
+                Some((HOUR, checkpoint + 1)),
+                vec![ready_at(checkpoint, HOUR + HOUR / 2)],
+            ),
+        ],
+    );
+    let q = quote();
+    let sum = DayTotals::from_quotes([&q, &q]).unwrap();
+    let range = &pages[0].text;
+    assert!(
+        range.contains(
+            &"In progress — totals so far, recorded through 1970-01-01T01:00:01.000Z".to_string()
+        ),
+        "{range:#?}"
+    );
+    for line in estimate(&sum) {
+        assert!(range.contains(&line), "{line}: {range:#?}");
+    }
+    assert!(!range.iter().any(|s| s == NOT_CURRENT), "{range:#?}");
+    let labels: Vec<_> = pages[0].links.iter().map(|(l, _)| l.clone()).collect();
+    assert!(!labels[0].contains("(in progress)"), "{labels:?}");
+    assert!(labels[1].ends_with(" (in progress)"), "{labels:?}");
+}
+
+// Weeks after today have not started: they say so, offer no next step and do
+// not withhold the total of the week in progress.
+#[test]
+fn accounting_inspect_range_future_buckets_have_not_started() {
+    const DAY: i64 = 86_400_000;
+    let lag = || {
+        (0..7)
+            .map(|_| InspectionDay::CheckpointLag)
+            .collect::<Vec<_>>()
+    };
+    let mut current = vec![ready_at(1_000, 2 * DAY)];
+    current.extend((1..7).map(|_| InspectionDay::CheckpointLag));
+    let pages = range_pages(
+        InspectionRange {
+            start_ms: 0,
+            end_ms: 21 * DAY,
+            grouping: InspectionGrouping::Week,
+        },
+        Some(0),
+        /*read_at*/ 2 * DAY,
+        vec![
+            bucket(0, 7 * DAY, Some((0, 1_001)), current),
+            bucket(7 * DAY, 14 * DAY, None, lag()),
+            bucket(14 * DAY, 21 * DAY, None, lag()),
+        ],
+    );
+    let range = &pages[0].text;
+    assert!(
+        range
+            .iter()
+            .any(|s| s.starts_with("In progress — totals so far")),
+        "{range:#?}"
+    );
+    assert!(
+        !range
+            .iter()
+            .any(|s| s.starts_with("Range total unavailable")),
+        "{range:#?}"
+    );
+    let links = &pages[0].links;
+    assert!(links[0].0.ends_with(" (in progress)"));
+    for (label, target) in &links[1..] {
+        assert!(label.ends_with(" (not started)"), "{label}");
+        let page = &pages[*target];
+        assert_eq!(page.title, "Not started yet");
+        assert!(
+            page.text.iter().any(|s| s == NOT_STARTED),
+            "{:#?}",
+            page.text
+        );
+    }
+    let text = joined(&pages);
+    for absent in [
+        "Bucket unavailable",
+        "Next step: send a turn",
+        "Partial bucket",
+        NOT_CURRENT,
+    ] {
+        assert!(!text.contains(absent), "{absent}: {text}");
+    }
+}
+
+// The same, from what the store actually returns for a week reaching today
+// and the weeks after it.
+#[tokio::test]
+async fn accounting_inspect_store_range_reaching_today_reads_as_in_progress() -> anyhow::Result<()>
+{
+    use codex_state::accounting::AccountingStore;
+    const DAY: i64 = 86_400_000;
+    // 1970-04-11, a Saturday; its ISO week starts on day 95.
+    let time = 100 * DAY;
+    let home = tempfile::tempdir()?;
+    let runtime = codex_state::StateRuntime::init(
+        codex_state::SqliteConfig::from_sqlite_home(
+            codex_utils_absolute_path::AbsolutePathBuf::try_from(home.path().to_path_buf())?,
+        ),
+        "synthetic".into(),
+    )
+    .await?;
+    let mut attempt = quote().attempt;
+    attempt.retry_of = None;
+    attempt.dispatched_at_ms = time.try_into()?;
+    let owner = attempt.thread_id;
+    let metadata = codex_state::ThreadMetadataBuilder::new(
+        owner,
+        home.path().join("synthetic.jsonl"),
+        chrono::Utc::now(),
+        codex_protocol::protocol::SessionSource::Cli,
+    );
+    runtime.upsert_thread(&metadata.build("synthetic")).await?;
+    let store = AccountingStore::open(&runtime, time).await?;
+    store.admit(owner, &attempt, &[], time).await?;
+    let result = AccountingStore::inspect_range(
+        &runtime,
+        owner,
+        InspectionRange {
+            start_ms: 95 * DAY,
+            end_ms: 116 * DAY,
+            grouping: InspectionGrouping::Week,
+        },
+        time + 3_600_000,
+    )
+    .await?;
+    let pages = inspection_pages(Ok(result));
+    let titles: Vec<_> = pages[0]
+        .links
+        .iter()
+        .map(|(_, target)| pages[*target].title.clone())
+        .collect();
+    assert_eq!(
+        titles,
+        vec![
+            "Cost so far — this conversation",
+            "Not started yet",
+            "Not started yet"
+        ]
+    );
+    assert!(
+        pages[0]
+            .text
+            .iter()
+            .any(|s| s == "In progress — totals so far, recorded through 1970-04-11T00:00:00.000Z"),
+        "{:#?}",
+        pages[0].text
+    );
+    let text = joined(&pages);
+    for absent in [
+        "Bucket unavailable",
+        "Next step: send a turn",
+        "Partial bucket",
+    ] {
+        assert!(!text.contains(absent), "{absent}: {text}");
+    }
+    runtime.close().await;
+    Ok(())
 }
 
 // #289 R3: the range header and the day pages state the same floor.

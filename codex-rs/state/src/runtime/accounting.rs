@@ -206,12 +206,15 @@ enum RetentionFixture {
     Active(i64),
 }
 
-/// The first UTC day whose daily totals are still kept at `checkpoint`: a
-/// day's totals are kept for a year. Day pages and ranges both read it here,
-/// so they agree on how far back the totals go.
+/// How long a day's totals and replay fences are kept: one year. Expiry and
+/// the stated retention floor both use this one value.
+const REPLAY_MS: i64 = 365 * 86_400_000;
+
+/// The first UTC day whose daily totals are still kept at `checkpoint`. Day
+/// pages and ranges both read it here, so they agree on how far back the
+/// totals go.
 fn aggregate_day_floor(checkpoint: i64) -> i64 {
     const DAY_MS: i64 = 86_400_000;
-    const REPLAY_MS: i64 = 365 * DAY_MS;
     if checkpoint < REPLAY_MS {
         0
     } else {
