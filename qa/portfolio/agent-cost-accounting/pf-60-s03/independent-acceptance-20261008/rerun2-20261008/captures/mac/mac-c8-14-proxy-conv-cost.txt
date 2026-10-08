@@ -1,0 +1,56 @@
+$ /cost
+  Cost — this conversation
+  Requested UTC day: 2026-10-08
+  Today (UTC) in this conversation:
+  • zaiproxy · Z.AI GLM 5.2 — Pay per use. 2 requests, 20,304 tokens. Estimated cost: no price available.
+  Other conversations on this day, not included above: 7 requests in 3 conversations.
+  • Z.AI · Z.AI GLM 5.2 — Pay per use. 2 requests, 25,764 tokens. Estimated cost: $0.015854 (rounded).
+  • zainousage · Z.AI GLM 5.2 — Pay per use. 3 requests, tokens not reported. Estimated cost: no price available.
+  • zaipartial · Z.AI GLM 5.2 — Pay per use. 2 requests, 20,308 tokens. Estimated cost: no price available.
+  Other conversations' estimated cost: at least $0.015854 (rounded) (5 attempts had no price).
+  To see those requests, open that conversation with /resume and run /cost there.
+  ↑↓ scroll · Enter open · Esc back/close
+  Next step for requests with no price: check the bill from zaiproxy, zainousage and zaipartial. No published price covers them, so no cost is shown for them here.
+  Costs are estimates from published prices; your provider's bill is the final amount.
+  Select a provider below to see its requests.
+  —— Details ——
+  Estimated token cost: unknown
+  Full recorded estimate: unavailable (2 of 2 billed attempts incomplete)
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+  Attempts with no price for any recorded tokens: 2 on zaiproxy · Z.AI GLM 5.2 (zaiproxy/glm-5.2). No money is stated for those attempts, which is not a zero-cost claim, and says nothing about the
+  other attempts on the same model. A price can be absent because the catalogue states no rate for the row, because this route's credential or service tier is not one the quoted rates apply to, or
+  because no rate was in effect at dispatch.
+  Day covered (UTC): [2026-10-08T00:00:00.000Z, 2026-10-09T00:00:00.000Z)
+  Read at: 2026-10-08T18:39:28.141Z; ledger current to: 2026-10-08T18:08:58.230Z (1829911 ms behind)
+  Retention: request detail kept since 2026-07-10T18:39:28.141Z; daily totals kept since 2025-10-09; oldest recorded day in this conversation 2026-10-08
+  Known subtotal exact USD: none — no price for these attempts
+  Input: 20,237
+  Noncached input (derived for inclusive input): not reported (2 attempts)
+  Cache read: 0
+  Cache write: not reported (2 attempts)
+  Output: 67
+  Reasoning (subset, not separately billed): 10
+  Total (not separately billed): 20,304
+  Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+  Unknown parent population: 0 attempts, excluded from root total
+  Estimate versus billed difference: unknown — no settlement evidence
+  —— Open ——
+  → zaiproxy · Z.AI GLM 5.2 — no price available (2 requests)
+  → Request 1 · zaiproxy · Z.AI GLM 5.2 · no price available
+  → Request 2 · zaiproxy · Z.AI GLM 5.2 · no price available
+  → Root's own attempts (2 attempts)
+  → Descendant attempts (none)
+  → Unknown provider/model attribution (none)
+  → Unknown parent population (none)
+  Refresh
+  Close
+--- last screen:
+  • Z.AI · Z.AI GLM 5.2 — Pay per use. 2 requests, 25,764 tokens. Estimated cost: $0.015854 (rounded).
+  • zainousage · Z.AI GLM 5.2 — Pay per use. 3 requests, tokens not reported. Estimated cost: no price available.
+  • zaipartial · Z.AI GLM 5.2 — Pay per use. 2 requests, 20,308 tokens. Estimated cost: no price available.
+  Other conversations' estimated cost: at least $0.015854 (rounded) (5 attempts had no price).
+  To see those requests, open that conversation with /resume and run /cost there.
+  ↑↓ scroll · Enter open · Esc back/close

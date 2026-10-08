@@ -1,0 +1,19 @@
+  Request
+  Requested UTC day: 2026-10-08
+  Provider: zaipartial
+  Model: Z.AI GLM 5.2
+  Billing: Pay per use
+  Estimated cost: no price available
+  Next step for requests with no price: check the bill from zaipartial. No published price covers them, so no cost is shown for them here.
+  Tokens: 9,996 tokens
+  —— Details ——
+  Request: 8a35ba40-dd5b-4566-9a8b-84fad1e3f47e
+  ↑↓ scroll · Enter open · Esc back/close
+  Estimate versus billed difference: unknown — no settlement evidence
+  Billed cost: unavailable — no settlement evidence
+  Snapshot is not current; newer activity is unverified
+  —— Open ——
+  → Technical details (attempt 1)
+  Back
+  Refresh
+  Close

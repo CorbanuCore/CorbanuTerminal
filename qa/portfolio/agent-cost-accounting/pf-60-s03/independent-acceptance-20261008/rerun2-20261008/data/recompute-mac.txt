@@ -1,0 +1,15 @@
+2026-10-08T18:04:09 nu-zai                 20261009020407c6ddb8ee97924d65       p=  12704 c=   5248 o=   21 tot=  12725 usd=0.011895
+2026-10-08T18:04:12 nu-zai                 20261009020410870f400746a34a2b       p=  12989 c=  12672 o=   50 tot=  13039 usd=0.003959
+2026-10-08T18:04:15 nu-proxy               202610090204135898d951af514468       p=   9975 c=      0 o=   21 tot=   9996 usd=0.014057
+2026-10-08T18:04:29 nu-proxy               2026100902041638d850cddb224f32       p=  10262 c=      0 o=   46 tot=  10308 usd=0.014569
+2026-10-08T18:04:33 proxy:proxy-stripped.jsonl 202610090204318fcfe242f04243c7       p=   9975 c=   9920 o=   30 tot=  10005 usd=0.002788
+2026-10-08T18:04:35 proxy:proxy-stripped.jsonl 20261009020433762b662e7057430e       p=  10261 c=   9984 o=   56 tot=  10317 usd=0.003230
+2026-10-08T18:04:38 proxy:proxy-partial.jsonl 2026100902043797e6a16dc6cb437b       p=   9975 c=   9920 o=   21 tot=   9996 usd=0.002749
+2026-10-08T18:04:40 proxy:proxy-partial.jsonl 202610090204382cfc00895c984763       p=  10262 c=   9984 o=   50 tot=  10312 usd=0.003205
+
+per source: requests prompt cached completion total usd
+  nu-proxy                   2    20237        0     67    20304 0.028627
+  nu-zai                     2    25693    17920     71    25764 0.015854
+  proxy:proxy-partial.jsonl   2    20237    19904     71    20308 0.005954
+  proxy:proxy-stripped.jsonl   2    20236    19904     86    20322 0.006018
+  ALL 8 requests, 86698 tokens, usd=0.056452

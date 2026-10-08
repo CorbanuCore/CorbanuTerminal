@@ -1,0 +1,9 @@
+$ /cost
+  Z.AI GLM 5.2 via zai standard · <scratch>/repos/ansi-regex · Corbanu Terminal · TPS: -- tok/s
+--- last screen:
+• ansi-regex is a JavaScript package that exports a regular expression for matching ANSI escape codes, with an option to match only the first occurrence and a note that ReDoS is not considered a valid
+  vulnerability.
+■ 2026-10-09 is after today (2026-10-08, UTC); there is nothing recorded for it yet. Run /usage requests for today.
+• Unrecognized command '/cost'. Type "/" for a list of supported commands.
+› /cost
+  Z.AI GLM 5.2 via zai standard · <scratch>/repos/ansi-regex · Corbanu Terminal · TPS: -- tok/s
