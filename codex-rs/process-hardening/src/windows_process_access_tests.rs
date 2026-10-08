@@ -63,6 +63,7 @@ const CANARY_ENV: &str = "CODEX_PF27S06_CANARY";
 const DEFAULT_DACL_ENV: &str = "CODEX_PF27S07_DEFAULT_DACL";
 const NEW_THREADS_ENV: &str = "CODEX_PF27S07_NEW_THREADS";
 const NEW_THREAD_IDS_ENV: &str = "CODEX_PF27S07_NEW_THREAD_IDS";
+const PARK_ENV: &str = "CODEX_PF27S07_PARK";
 const NEW_THREADS_MARKER: &str = "new-threads=";
 /// Synthetic value; only its presence in the target's memory is checked.
 const CANARY: &str = "pf27s06-synthetic-env-canary-7c41d9";
@@ -188,6 +189,7 @@ fn pf_27_s07_default_dacl_protects_every_new_thread() {
         harden: true,
         default_dacl: true,
         new_threads: true,
+        ..TargetOptions::default()
     });
     for report in [
         probe_as_same_user(&target),
@@ -196,6 +198,117 @@ fn pf_27_s07_default_dacl_protects_every_new_thread() {
         assert_new_threads(&report, "imported", "denied");
         assert_new_threads(&report, "direct", "denied");
     }
+}
+
+/// PF-27-S07: a process started with `spawn_protected` (the broker) is
+/// never openable: no hardening call of its own is needed for its process,
+/// first thread, or any thread it starts.
+#[test]
+fn pf_27_s07_protected_spawn_is_never_openable() {
+    let target = Target::spawn_with(TargetOptions {
+        new_threads: true,
+        protected_spawn: true,
+        ..TargetOptions::default()
+    });
+    for report in [
+        probe_as_same_user(&target),
+        probe_with_restricted_token(&target),
+    ] {
+        assert_new_threads(&report, "imported", "denied");
+        assert_new_threads(&report, "direct", "denied");
+        let original: Report = report
+            .iter()
+            .filter(|(key, _)| !key.starts_with("new_"))
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect();
+        assert_all_denied(&original);
+    }
+}
+
+/// PF-27-S07: the broker's own containment still succeeds in a process
+/// started protected (it cannot rewrite its own DACL there, and need not).
+#[test]
+fn pf_27_s07_protected_spawn_then_broker_hardening_succeeds() {
+    let target = Target::spawn_with(TargetOptions {
+        harden: true,
+        default_dacl: true,
+        new_threads: true,
+        protected_spawn: true,
+    });
+    for report in [
+        probe_as_same_user(&target),
+        probe_with_restricted_token(&target),
+    ] {
+        assert_new_threads(&report, "imported", "denied");
+        assert_new_threads(&report, "direct", "denied");
+        let original: Report = report
+            .iter()
+            .filter(|(key, _)| !key.starts_with("new_"))
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect();
+        assert_all_denied(&original);
+    }
+}
+
+/// What `spawn_protected` needs to start `command`: exactly the
+/// environment `command` would pass, and `PARK_ENV` (its stdin is closed).
+fn protected_spawn_parts(
+    command: &Command,
+) -> (
+    std::path::PathBuf,
+    Vec<std::ffi::OsString>,
+    Vec<(std::ffi::OsString, std::ffi::OsString)>,
+) {
+    let mut env: Vec<(std::ffi::OsString, std::ffi::OsString)> = std::env::vars_os()
+        .filter(|(name, _)| {
+            !command
+                .get_envs()
+                .any(|(set, _)| set.eq_ignore_ascii_case(name))
+        })
+        .collect();
+    env.extend(
+        command
+            .get_envs()
+            .filter_map(|(name, value)| Some((name.to_owned(), value?.to_owned()))),
+    );
+    env.push((PARK_ENV.into(), "1".into()));
+    let args = command.get_args().map(ToOwned::to_owned).collect();
+    (command.get_program().into(), args, env)
+}
+
+/// PF-27-S07: between its creation and its first instruction (suspended), a
+/// process from `spawn_protected` and its first thread are already denied.
+/// Positive control: the same process started suspended by `std`.
+#[test]
+fn pf_27_s07_protected_spawn_is_unopenable_while_suspended() {
+    let mut command = child_command("target");
+    command.env(CANARY_ENV, CANARY);
+    let (program, args, env) = protected_spawn_parts(&command);
+    let (child, _stdout, _thread) =
+        crate::windows_protected_spawn::spawn_protected_suspended(&program, &args, &env)
+            .expect("protected spawn");
+    let target = Target {
+        child: TargetChild::Protected(child),
+        new_threads: None,
+    };
+    assert_all_denied(&probe_as_same_user(&target));
+    assert_all_denied(&probe_with_restricted_token(&target));
+
+    const CREATE_SUSPENDED: u32 = 0x4;
+    std::os::windows::process::CommandExt::creation_flags(&mut command, CREATE_SUSPENDED);
+    let control = Target {
+        child: TargetChild::Std(command.spawn().expect("std spawn")),
+        new_threads: None,
+    };
+    // The restricted token's own positive control is
+    // `pf_27_s06_restricted_token_probe_reads_an_unhardened_process`.
+    let report = probe_as_same_user(&control);
+    assert_eq!(report["vm_read"], "granted", "{report:?}");
+    assert_eq!(
+        report["thread_get_context"].split('@').next(),
+        Some("granted"),
+        "{report:?}"
+    );
 }
 
 fn assert_new_threads(report: &Report, thread: &str, expected: &str) {
@@ -230,11 +343,18 @@ struct TargetOptions {
     default_dacl: bool,
     /// Hold two brand-new threads in their creation window.
     new_threads: bool,
+    /// Started with `spawn_protected` instead of `std`.
+    protected_spawn: bool,
+}
+
+enum TargetChild {
+    Std(Child),
+    Protected(crate::ProtectedChild),
 }
 
 /// The target process; killed on drop.
 struct Target {
-    child: Child,
+    child: TargetChild,
     /// `imported=<tid>;direct=<tid>` for PF-27-S07 targets.
     new_threads: Option<String>,
 }
@@ -258,12 +378,20 @@ impl Target {
         for (_, name) in flags.iter().filter(|(on, _)| *on) {
             command.env(name, "1");
         }
-        command
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::inherit());
-        let mut child = command.spawn().expect("spawn target");
-        let lines = line_channel(child.stdout.take().expect("target stdout"));
+        let (child, lines) = if options.protected_spawn {
+            let (program, args, env) = protected_spawn_parts(&command);
+            let (child, stdout) =
+                crate::spawn_protected(&program, &args, &env).expect("protected spawn");
+            (TargetChild::Protected(child), line_channel(stdout))
+        } else {
+            command
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::inherit());
+            let mut child = command.spawn().expect("spawn target");
+            let lines = line_channel(child.stdout.take().expect("target stdout"));
+            (TargetChild::Std(child), lines)
+        };
         // Killed on drop if it never becomes ready.
         let mut target = Self {
             child,
@@ -281,14 +409,25 @@ impl Target {
     }
 
     fn pid(&self) -> u32 {
-        self.child.id()
+        match &self.child {
+            TargetChild::Std(child) => child.id(),
+            TargetChild::Protected(child) => child.id(),
+        }
     }
 }
 
 impl Drop for Target {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        match &mut self.child {
+            TargetChild::Std(child) => {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+            TargetChild::Protected(child) => {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
     }
 }
 
@@ -301,7 +440,8 @@ fn child_command(role: &str) -> Command {
         .env_remove(HARDEN_ENV)
         .env_remove(DEFAULT_DACL_ENV)
         .env_remove(NEW_THREADS_ENV)
-        .env_remove(NEW_THREAD_IDS_ENV);
+        .env_remove(NEW_THREAD_IDS_ENV)
+        .env_remove(PARK_ENV);
     command
 }
 
@@ -310,7 +450,11 @@ fn run_target() {
         crate::protect_new_objects_by_default().expect("protect new objects");
     }
     if std::env::var_os(HARDEN_ENV).is_some() {
-        restrict_current_process_access().expect("restrict process access");
+        if let Err(err) = restrict_current_process_access() {
+            // Visible even when stderr is closed (protected spawn).
+            println!("\nrestrict_current_process_access failed: {err}");
+            panic!("restrict process access: {err}");
+        }
         assert!(
             crate::thread_creation_protected(),
             "CreateThread imports were not redirected"
@@ -341,6 +485,9 @@ fn run_target() {
     // Stay alive until the test kills us or closes stdin.
     let mut sink = Vec::new();
     let _ = std::io::stdin().read_to_end(&mut sink);
+    while std::env::var_os(PARK_ENV).is_some() {
+        std::thread::park();
+    }
     std::process::exit(0);
 }
 
@@ -498,7 +645,14 @@ fn probe_with_restricted_token(target: &Target) -> Report {
     ];
     let mut env: HashMap<String, String> = std::env::vars()
         .filter(|(key, _)| {
-            ![CANARY_ENV, HARDEN_ENV, DEFAULT_DACL_ENV, NEW_THREADS_ENV].contains(&key.as_str())
+            ![
+                CANARY_ENV,
+                HARDEN_ENV,
+                DEFAULT_DACL_ENV,
+                NEW_THREADS_ENV,
+                PARK_ENV,
+            ]
+            .contains(&key.as_str())
         })
         .collect();
     env.insert(ROLE_ENV.to_string(), "probe".to_string());
