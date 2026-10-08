@@ -139,10 +139,11 @@ fn armed_session(codex_home: &Path) -> Child {
         .spawn()
         .expect("start the armed session");
     let stdout = child.stdout.take().expect("stdout");
+    // libtest prints the test's name without a newline before the line.
     let armed = BufReader::new(stdout)
         .lines()
         .map_while(Result::ok)
-        .any(|line| line == ARMED_LINE);
+        .any(|line| line.ends_with(ARMED_LINE));
     assert!(armed, "the armed session did not take the lock");
     child
 }
