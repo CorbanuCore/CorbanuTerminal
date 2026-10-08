@@ -91,7 +91,8 @@ workflow); the tmux run and videos wait for a Windows machine. One PR per slice,
 - [x] On `windows-2022` (job 113190329753, the merged slice 3 head): process-hardening 9, network-proxy broker and
   pipe suite 24, core 5 `pf_27_s06` tests pass. Linux (RTX box): clippy `-D warnings` clean; broker 55,
   process-hardening 7, core 12 + 23 tests pass. macOS: the same suites pass.
-- [ ] GLM 5.2 tmux run and SOP videos on a Windows host.
+- [ ] GLM 5.2 tmux run and videos on real Windows, 2026-10-08: **failed**, two defects (normal-session launches fail;
+  vault store readable). [Gate evidence](../../../../qa/security-levels/sprints/PF-27-S06/README.md#real-windows-gate-run-2026-10-08-failed-two-defects), [videos](../../../../qa/demos/index/PF-27-S06.md).
 
 ## Exit evidence
 
