@@ -28,6 +28,9 @@ public static class MediumIntegrity {
     [DllImport("advapi32.dll", SetLastError = true)] static extern bool CreateRestrictedToken(IntPtr token, uint flags, uint disableCount, SidAndAttributes[] disable, uint deleteCount, IntPtr delete, uint restrictCount, IntPtr restrict, out IntPtr newToken);
     [DllImport("advapi32.dll", SetLastError = true)] static extern bool SetTokenInformation(IntPtr token, int infoClass, ref SidAndAttributes info, uint length);
     [DllImport("advapi32.dll")] static extern uint GetLengthSid(IntPtr sid);
+    [DllImport("advapi32.dll", SetLastError = true)] static extern bool SetTokenInformation(IntPtr token, int infoClass, ref IntPtr info, uint length);
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern bool ConvertStringSecurityDescriptorToSecurityDescriptorW(string sddl, uint revision, out IntPtr sd, IntPtr size);
+    [DllImport("advapi32.dll", SetLastError = true)] static extern bool GetSecurityDescriptorDacl(IntPtr sd, out bool present, out IntPtr dacl, out bool defaulted);
     [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern bool CreateProcessAsUserW(IntPtr token, string app, System.Text.StringBuilder cmd, IntPtr pa, IntPtr ta, bool inherit, uint flags, IntPtr env, string cwd, ref StartupInfo si, out ProcessInfo pi);
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern IntPtr CreateFileW(string name, uint access, uint share, ref SecurityAttributes sa, uint disposition, uint flags, IntPtr template);
     [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
@@ -39,8 +42,9 @@ public static class MediumIntegrity {
         if (!ok) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), what);
     }
 
-    public static uint Run(string commandLine, string logPath) {
-        IntPtr token, restricted, admins, medium;
+    public static uint Run(string commandLine, string logPath, string userSid) {
+        IntPtr token, restricted, admins, medium, user, descriptor, dacl;
+        bool present, defaulted;
         // TOKEN_DUPLICATE | TOKEN_QUERY | TOKEN_ASSIGN_PRIMARY | TOKEN_ADJUST_DEFAULT
         Check(OpenProcessToken(GetCurrentProcess(), 0x2 | 0x8 | 0x1 | 0x80, out token), "OpenProcessToken");
         Check(ConvertStringSidToSidW("S-1-5-32-544", out admins), "Administrators SID");
@@ -51,6 +55,14 @@ public static class MediumIntegrity {
         // TokenIntegrityLevel with SE_GROUP_INTEGRITY
         var label = new SidAndAttributes { Sid = medium, Attributes = 0x20 };
         Check(SetTokenInformation(restricted, 25, ref label, (uint)Marshal.SizeOf(label) + GetLengthSid(medium)), "lower the integrity level");
+        // An elevated token's owner and default DACL are Administrators, which is
+        // now deny-only: the new process could not open its own objects. Use the
+        // user instead, as UAC's filtered token does.
+        Check(ConvertStringSidToSidW(userSid, out user), "user SID");
+        Check(SetTokenInformation(restricted, 4, ref user, (uint)IntPtr.Size), "TokenOwner");
+        Check(ConvertStringSecurityDescriptorToSecurityDescriptorW("D:(A;;GA;;;" + userSid + ")(A;;GA;;;SY)", 1, out descriptor, IntPtr.Zero), "default DACL");
+        Check(GetSecurityDescriptorDacl(descriptor, out present, out dacl, out defaulted), "default DACL");
+        Check(SetTokenInformation(restricted, 6, ref dacl, (uint)IntPtr.Size), "TokenDefaultDacl");
         var sa = new SecurityAttributes { length = Marshal.SizeOf(typeof(SecurityAttributes)), inherit = true };
         // GENERIC_WRITE, share read, CREATE_ALWAYS
         IntPtr log = CreateFileW(logPath, 0x40000000, 0x1, ref sa, 2, 0x80, IntPtr.Zero);
@@ -75,7 +87,10 @@ function Quote([string]$arg) {
 }
 $commandLine = ((@($Program) + $Arguments) | ForEach-Object { Quote $_ }) -join ' '
 $log = Join-Path ([IO.Path]::GetTempPath()) ("medium-integrity-{0}.log" -f [guid]::NewGuid())
-$code = [MediumIntegrity]::Run($commandLine, $log)
+$userSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+$code = [MediumIntegrity]::Run($commandLine, $log, $userSid)
 Get-Content -Raw $log | Write-Output
 Remove-Item $log
-exit $code
+if ($code -ne 0) { Write-Output ("medium-integrity run exited with 0x{0:X8}" -f $code) }
+# Exit codes are signed; NTSTATUS values such as 0xC0000142 must stay nonzero.
+exit [BitConverter]::ToInt32([BitConverter]::GetBytes([uint32]$code), 0)
