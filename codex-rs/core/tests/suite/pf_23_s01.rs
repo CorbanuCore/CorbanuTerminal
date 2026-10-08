@@ -34,7 +34,6 @@ use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
 use core_test_support::skip_if_sandbox;
-use core_test_support::stdio_server_bin;
 use core_test_support::test_codex::TestCodex;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
@@ -94,13 +93,16 @@ fn insert_rmcp_server(config: &mut Config) -> anyhow::Result<()> {
         McpServerConfig {
             auth: Default::default(),
             transport: McpServerTransportConfig::Stdio {
-                command: stdio_server_bin()?,
+                command: super::rmcp_client::remote_aware_stdio_server_bin()?,
                 args: Vec::new(),
                 env: None,
                 env_vars: Vec::new(),
-                cwd: None,
+                // Remote stdio MCP servers must be given an explicit cwd.
+                cwd: core_test_support::is_remote_test_environment().then(|| {
+                    codex_utils_path_uri::LegacyAppPathString::from_path(config.cwd.as_path())
+                }),
             },
-            environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+            environment_id: super::rmcp_client::remote_aware_environment_id(),
             enabled: true,
             required: false,
             supports_parallel_tool_calls: false,
