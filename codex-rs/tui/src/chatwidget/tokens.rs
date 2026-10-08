@@ -1688,7 +1688,7 @@ fn plain_overview<'a>(
     quotes: impl IntoIterator<Item = &'a ObservationQuote>,
     outside: Vec<String>,
     outside_per_use: bool,
-    next_step: Option<String>,
+    next_step: Vec<String>,
 ) -> Vec<String> {
     let groups = by_route(quotes);
     let mut lines = if groups.is_empty() {

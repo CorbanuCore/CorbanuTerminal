@@ -1169,6 +1169,7 @@ async fn accounting_inspect_maintenance_with_current_contributions_renders_raw_t
     This conversation on 1970-04-11 (UTC):
     • synthetic · synthetic-model — Pay per use. 1 request, tokens not reported. Estimated cost: no price available.
     No other conversation recorded requests on this day.
+    Next step for requests with no price: check the bill from synthetic. No published price covers them, so no cost is shown for them here.
     Costs are estimates from published prices; your provider's bill is the final amount.
     Select a provider below to see its requests.
     —— Details ——

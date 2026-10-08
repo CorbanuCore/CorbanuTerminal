@@ -6,7 +6,7 @@ Provider: local-mock
 Model: mock-model
 Billing: Pay per use
 Estimated cost: no price available
-Next step for requests with no price: check the bill from local-mock. No published price covers them, so only their tokens are shown here, not a cost.
+Next step for requests with no price: check the bill from local-mock. No published price covers them, so no cost is shown for them here.
 Tokens: 55 tokens
 —— Details ——
 Request: 00000000-0000-0000-0000-0000000003ea

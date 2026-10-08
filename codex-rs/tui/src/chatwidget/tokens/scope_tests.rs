@@ -221,7 +221,7 @@ fn assert_never_zero(pages: &[InspectorPage]) {
     }
 }
 
-const NEXT_STEP: &str = "Next step for requests with no price: check the bill from local-mock. No published price covers them, so only their tokens are shown here, not a cost.";
+const NEXT_STEP: &str = "Next step for requests with no price: check the bill from local-mock. No published price covers them, so no cost is shown for them here.";
 const OTHERS_BLOCK: [&str; 5] = [
     "Other conversations on this day, not included above: 3 requests in 2 conversations.",
     "• local-mock · mock-model — Pay per use. 1 request, 55 tokens. Estimated cost: no price available.",
@@ -611,6 +611,17 @@ fn missing_usage_is_labelled_apart_from_missing_price() {
             .any(|line| line.contains("no price")),
         "a priced route must not be told to look for a missing price"
     );
+    // #288: it still gets a next step, naming its own provider, on its own
+    // first screen and request page.
+    const INCOMPLETE: &str = "Next step for requests with incomplete usage: check the bill from OpenAI. Their provider did not report every token count, so the estimate is missing or only a lower bound.";
+    for title in ["Cost — this conversation", "Request"] {
+        let page = silent.iter().find(|page| page.title == title).unwrap();
+        assert!(
+            page.text.iter().any(|line| line == INCOMPLETE),
+            "{title}: {:#?}",
+            page.text
+        );
+    }
     assert_never_zero(&silent);
 
     let partial = own_day(vec![output_unreported(/*id*/ 1, thread(/*n*/ 1))]);
@@ -620,8 +631,8 @@ fn missing_usage_is_labelled_apart_from_missing_price() {
     );
     assert_never_zero(&partial);
 
-    // Both causes on one route are each counted, and the next step names only
-    // the provider whose tokens have no price.
+    // Both causes on one route are each counted, and each gets its own next
+    // step, the missing price first.
     let mixed = own_day(vec![
         no_usage(/*id*/ 1, thread(/*n*/ 1)),
         unpriced(/*id*/ 2, thread(/*n*/ 1), "openai", "gpt-5.4"),
@@ -631,9 +642,16 @@ fn missing_usage_is_labelled_apart_from_missing_price() {
         first[1],
         "• OpenAI · gpt-5.4 — Pay per use. 2 requests, 55+ tokens. Estimated cost: not available (1 attempt had no price, 1 had incomplete usage)."
     );
-    assert!(
-        first.contains(&"Next step for requests with no price: check the bill from OpenAI. No published price covers them, so only their tokens are shown here, not a cost.".to_string()),
-        "{first:#?}"
+    let steps: Vec<&String> = first
+        .iter()
+        .filter(|line| line.starts_with("Next step"))
+        .collect();
+    assert_eq!(
+        steps,
+        vec![
+            "Next step for requests with no price: check the bill from OpenAI. No published price covers them, so no cost is shown for them here.",
+            "Next step for requests with incomplete usage: check the bill from OpenAI. Their provider did not report every token count, so the estimate is missing or only a lower bound.",
+        ]
     );
     assert!(link_labels(&mixed).contains(
         &"OpenAI · gpt-5.4 — cost not available (1 attempt had no price, 1 had incomplete usage) (2 requests)".to_string()
@@ -813,4 +831,84 @@ fn subscription_only_day_points_at_no_bill() {
             .starts_with("OpenAI · gpt-5.4 — no price available; subscription part — ")),
         "{labels:#?}"
     );
+}
+
+// #288: a request on a provider with no price that also reported no tokens
+// gets the missing-price next step for its own provider.
+#[test]
+fn unpriced_request_without_usage_names_its_own_provider() {
+    let mut silent = unpriced(/*id*/ 1, thread(/*n*/ 1), "zainousage", "glm-5.2");
+    silent.usage = Usage::default();
+    silent.buckets = [BucketQuote::MissingUsage; 4];
+    let pages = own_day(vec![silent]);
+    let first = first_screen(&pages[0]);
+    assert_eq!(
+        first[1],
+        "• zainousage · Z.AI GLM 5.2 — Pay per use. 1 request, tokens not reported. Estimated cost: no price available."
+    );
+    let step = "Next step for requests with no price: check the bill from zainousage. No published price covers them, so no cost is shown for them here.";
+    assert!(first.contains(&step.to_string()), "{first:#?}");
+    let request = pages.iter().find(|page| page.title == "Request").unwrap();
+    assert!(
+        request.text.iter().any(|line| line == step),
+        "{:#?}",
+        request.text
+    );
+    assert_never_zero(&pages);
+}
+
+// #288: an unpriced request that reported some counts but no priced one (here
+// input only, output missing) still gets the missing-price step, and a request
+// priced only in part gets its own.
+#[test]
+fn unpriced_and_partly_priced_requests_get_next_steps() {
+    let mut input_only = unpriced(/*id*/ 1, thread(/*n*/ 1), "local-mock", "mock-model");
+    input_only.usage = Usage {
+        input: Some(100),
+        read: Some(0),
+        ..Usage::default()
+    };
+    input_only.buckets = [
+        BucketQuote::MissingUsage,
+        BucketQuote::MissingRate,
+        BucketQuote::MissingUsage,
+        BucketQuote::MissingUsage,
+    ];
+    let pages = own_day(vec![input_only]);
+    let step = "Next step for requests with no price: check the bill from local-mock. No published price covers them, so no cost is shown for them here.";
+    for title in ["Cost — this conversation", "Request"] {
+        let page = pages.iter().find(|page| page.title == title).unwrap();
+        assert!(
+            page.text.iter().any(|line| line == step),
+            "{title}: {:#?}",
+            page.text
+        );
+    }
+
+    let mut in_part = priced(/*id*/ 2, thread(/*n*/ 1));
+    in_part.snapshot = Some(openai_price());
+    in_part.buckets[3] = BucketQuote::MissingRate;
+    in_part.known_subtotal = decimal("0.00041");
+    in_part.all_buckets_priced = None;
+    in_part.subtotal_display = in_part.known_subtotal.display();
+    let in_part_pages = own_day(vec![in_part]);
+    let first = first_screen(&in_part_pages[0]);
+    assert_eq!(
+        first[1],
+        "• OpenAI · gpt-5.4 — Pay per use. 1 request, 110 tokens. Estimated cost: at least $0.000410 (1 attempt had no price)."
+    );
+    let step = "Next step for requests priced only in part: check the bill from OpenAI. Some of their tokens have no published price, so the estimate is only a lower bound.";
+    for page in in_part_pages
+        .iter()
+        .filter(|page| ["Cost — this conversation", "Request"].contains(&page.title.as_str()))
+    {
+        let steps: Vec<&String> = page
+            .text
+            .iter()
+            .filter(|line| line.starts_with("Next step"))
+            .collect();
+        assert_eq!(steps, vec![step], "{}", page.title);
+    }
+    assert_never_zero(&pages);
+    assert_never_zero(&in_part_pages);
 }
