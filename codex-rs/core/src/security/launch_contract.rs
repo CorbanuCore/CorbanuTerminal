@@ -936,5 +936,5 @@ mod windows_tests;
 
 #[cfg(test)]
 #[cfg(windows)]
-#[path = "launch_contract_windows_acl_tests.rs"]
-mod windows_acl_tests;
+#[path = "launch_contract_windows_workspace_write_tests.rs"]
+mod windows_workspace_write_tests;

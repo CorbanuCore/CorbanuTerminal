@@ -167,8 +167,18 @@ async fn pf_27_s06_d2_vault_unreadable_through_tool_launch_under_workspace_write
     let command = || vec!["cmd.exe".into(), "/D".into(), "/C".into(), script.clone()];
     let base = product_workspace_write(&cwd);
 
-    // Positive control: without the contract the sandbox user reads them.
-    let control = run(tool_launch(&base, &cwd, command())).await;
+    // Positive control: without the contract the sandbox user reads them. On
+    // a fresh machine the elevated setup grants read access to the user
+    // profile in the background (this profile reads everything), so wait for
+    // that first.
+    let mut control = String::new();
+    for _ in 0..120 {
+        control = run(tool_launch(&base, &cwd, command())).await;
+        if control.contains("NOTES-READ") {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    }
     record_elevated_setup(&codex_home);
     eprintln!("pf27s06 d2 workspace-write, no contract: {control}");
     for readable in ["VAULT", "AUTH", "NOTES"] {
