@@ -1,4 +1,5 @@
 use crate::winutil::to_wide;
+use anyhow::Context;
 use anyhow::Result;
 use anyhow::anyhow;
 use std::ffi::c_void;
@@ -6,6 +7,7 @@ use std::path::Path;
 use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::Foundation::ERROR_SUCCESS;
 use windows_sys::Win32::Foundation::GetLastError;
+use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::Foundation::HLOCAL;
 use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
 use windows_sys::Win32::Foundation::LocalFree;
@@ -36,13 +38,17 @@ use windows_sys::Win32::Security::MapGenericMask;
 use windows_sys::Win32::Security::PROTECTED_DACL_SECURITY_INFORMATION;
 use windows_sys::Win32::Security::SE_DACL_PROTECTED;
 use windows_sys::Win32::Security::UNPROTECTED_DACL_SECURITY_INFORMATION;
+use windows_sys::Win32::Storage::FileSystem::BY_HANDLE_FILE_INFORMATION;
 use windows_sys::Win32::Storage::FileSystem::CreateFileW;
 use windows_sys::Win32::Storage::FileSystem::DELETE;
 use windows_sys::Win32::Storage::FileSystem::FILE_ALL_ACCESS;
 use windows_sys::Win32::Storage::FileSystem::FILE_APPEND_DATA;
+use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_DIRECTORY;
 use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_NORMAL;
+use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 use windows_sys::Win32::Storage::FileSystem::FILE_DELETE_CHILD;
 use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS;
+use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT;
 use windows_sys::Win32::Storage::FileSystem::FILE_GENERIC_EXECUTE;
 use windows_sys::Win32::Storage::FileSystem::FILE_GENERIC_READ;
 use windows_sys::Win32::Storage::FileSystem::FILE_GENERIC_WRITE;
@@ -52,8 +58,11 @@ use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_WRITE;
 use windows_sys::Win32::Storage::FileSystem::FILE_WRITE_ATTRIBUTES;
 use windows_sys::Win32::Storage::FileSystem::FILE_WRITE_DATA;
 use windows_sys::Win32::Storage::FileSystem::FILE_WRITE_EA;
+use windows_sys::Win32::Storage::FileSystem::GetFileInformationByHandle;
+use windows_sys::Win32::Storage::FileSystem::GetFinalPathNameByHandleW;
 use windows_sys::Win32::Storage::FileSystem::OPEN_EXISTING;
 use windows_sys::Win32::Storage::FileSystem::READ_CONTROL;
+use windows_sys::Win32::Storage::FileSystem::WRITE_DAC;
 const SE_KERNEL_OBJECT: u32 = 6;
 const INHERIT_ONLY_ACE: u8 = 0x08;
 const INHERITED_ACE: u8 = 0x10;
@@ -314,44 +323,6 @@ pub unsafe fn dacl_has_write_deny_for_sid(p_dacl: *mut ACL, psid: *mut c_void) -
     false
 }
 
-pub unsafe fn dacl_has_read_deny_for_sid(p_dacl: *mut ACL, psid: *mut c_void) -> bool {
-    if p_dacl.is_null() {
-        return false;
-    }
-    let mut info: ACL_SIZE_INFORMATION = std::mem::zeroed();
-    let ok = GetAclInformation(
-        p_dacl as *const ACL,
-        &mut info as *mut _ as *mut c_void,
-        std::mem::size_of::<ACL_SIZE_INFORMATION>() as u32,
-        AclSizeInformation,
-    );
-    if ok == 0 {
-        return false;
-    }
-    let deny_read_mask = FILE_GENERIC_READ | GENERIC_READ_MASK;
-    for i in 0..info.AceCount {
-        let mut p_ace: *mut c_void = std::ptr::null_mut();
-        if GetAce(p_dacl as *const ACL, i, &mut p_ace) == 0 {
-            continue;
-        }
-        let hdr = &*(p_ace as *const ACE_HEADER);
-        if hdr.AceType != ACCESS_DENIED_ACE_TYPE {
-            continue; // ACCESS_DENIED_ACE_TYPE
-        }
-        if (hdr.AceFlags & INHERIT_ONLY_ACE) != 0 {
-            continue;
-        }
-        let ace = &*(p_ace as *const ACCESS_DENIED_ACE);
-        let base = p_ace as usize;
-        let sid_ptr =
-            (base + std::mem::size_of::<ACE_HEADER>() + std::mem::size_of::<u32>()) as *mut c_void;
-        if EqualSid(sid_ptr, psid) != 0 && (ace.Mask & deny_read_mask) != 0 {
-            return true;
-        }
-    }
-    false
-}
-
 /// True when the DACL has an explicit (not inherited) entry denying `psid`
 /// read access to the object itself.
 unsafe fn dacl_has_explicit_read_deny_for_sid(p_dacl: *mut ACL, psid: *mut c_void) -> bool {
@@ -415,8 +386,6 @@ pub unsafe fn has_explicit_deny_read_ace(path: &Path, psid: *mut c_void) -> Resu
 /// PF-27-S07: the number of hard links to an open file.
 pub fn file_link_count(file: &std::fs::File) -> std::io::Result<u32> {
     use std::os::windows::io::AsRawHandle as _;
-    use windows_sys::Win32::Storage::FileSystem::BY_HANDLE_FILE_INFORMATION;
-    use windows_sys::Win32::Storage::FileSystem::GetFileInformationByHandle;
     // SAFETY: zeroed out-structure; the handle is open for the call.
     let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
     if unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, &mut info) } == 0 {
@@ -845,24 +814,132 @@ pub unsafe fn remove_deny_read_ace_for_new_files(path: &Path, psid: *mut c_void)
 }
 
 /// #304: removes exactly the entry [`add_deny_read_ace`] adds for `psid` on
-/// `path` (an explicit read deny that subdirectories and files inherit), and
-/// with it the copies inherited below `path`. Every other entry (allows,
-/// other denies for `psid`, entries for other SIDs, inherited entries) and
-/// whether the DACL is protected stay as they were. `REVOKE_ACCESS` cannot
-/// do this: it removes only allow entries. Returns whether an entry was
-/// removed.
+/// `path`, and with it the copies inherited below `path`. Every other entry
+/// (allows, other denies for `psid`, entries for other SIDs, inherited
+/// entries) and whether the DACL is protected stay as they were.
+/// `REVOKE_ACCESS` cannot do this: it removes only allow entries.
+///
+/// The object is opened without following a link at `path` and must be the
+/// object `path` names, so a junction a sandboxed command left at a stale
+/// deny-read path (or above it) cannot point the removal at another denied
+/// object. Returns whether an entry was removed.
 ///
 /// # Safety
 /// Caller must ensure `psid` points to a valid SID.
 pub unsafe fn remove_deny_read_ace(path: &Path, psid: *mut c_void) -> Result<bool> {
-    remove_matching_aces(path, |dacl, ace| match deny_read_part(ace, psid) {
-        Some(DenyReadPart::Whole | DenyReadPart::Inherited) => true,
-        // Alone, it is the entry `ensure_explicit_deny_read_ace` adds.
-        Some(DenyReadPart::Effective) => {
-            dacl_has_deny_read_part(dacl, psid, DenyReadPart::Inherited)
+    let handle = open_exact(path, READ_CONTROL | WRITE_DAC)?;
+    let is_dir = handle.is_dir;
+    let mut p_sd: *mut c_void = std::ptr::null_mut();
+    let mut p_dacl: *mut ACL = std::ptr::null_mut();
+    let code = GetSecurityInfo(
+        handle.raw,
+        1, // SE_FILE_OBJECT
+        DACL_SECURITY_INFORMATION,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        &mut p_dacl,
+        std::ptr::null_mut(),
+        &mut p_sd,
+    );
+    if code != ERROR_SUCCESS {
+        return Err(anyhow!("GetSecurityInfo failed: {code}"));
+    }
+    let result = remove_aces_from(DaclTarget::Handle(handle.raw), p_sd, p_dacl, |dacl, ace| {
+        match deny_read_part(ace, psid) {
+            Some(DenyReadPart::Whole | DenyReadPart::Inherited) => true,
+            // On a directory, alone it is not that entry.
+            Some(DenyReadPart::Effective) => {
+                !is_dir || dacl_has_deny_read_part(dacl, psid, DenyReadPart::Inherited)
+            }
+            None => false,
         }
-        None => false,
-    })
+    });
+    if !p_sd.is_null() {
+        LocalFree(p_sd as HLOCAL);
+    }
+    result
+}
+
+/// Whether the DACL has the whole entry [`add_deny_read_ace`] adds for
+/// `psid`, in any of the forms Windows stores it in. Inherited entries do not
+/// count: they go when their parent's entry is removed.
+unsafe fn dacl_has_deny_read_entry(p_dacl: *mut ACL, psid: *mut c_void, is_dir: bool) -> bool {
+    let has = |part| dacl_has_deny_read_part(p_dacl, psid, part);
+    has(DenyReadPart::Whole)
+        || (has(DenyReadPart::Effective) && (!is_dir || has(DenyReadPart::Inherited)))
+}
+
+/// A handle opened by [`open_exact`].
+struct ExactHandle {
+    raw: HANDLE,
+    is_dir: bool,
+}
+
+impl Drop for ExactHandle {
+    fn drop(&mut self) {
+        // SAFETY: opened by `open_exact` and owned here.
+        unsafe { CloseHandle(self.raw) };
+    }
+}
+
+/// Opens the object `path` names with `access`, failing if `path` is a link
+/// (a symbolic link or junction) or resolves elsewhere through one above it.
+unsafe fn open_exact(path: &Path, access: u32) -> Result<ExactHandle> {
+    let raw = CreateFileW(
+        to_wide(path).as_ptr(),
+        access,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        std::ptr::null_mut(),
+        OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+        0,
+    );
+    if raw == INVALID_HANDLE_VALUE {
+        return Err(std::io::Error::last_os_error())
+            .with_context(|| format!("open {}", path.display()));
+    }
+    let mut handle = ExactHandle { raw, is_dir: false };
+    let mut info: BY_HANDLE_FILE_INFORMATION = std::mem::zeroed();
+    if GetFileInformationByHandle(handle.raw, &mut info) == 0 {
+        return Err(std::io::Error::last_os_error())
+            .with_context(|| format!("inspect {}", path.display()));
+    }
+    if info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+        return Err(anyhow!("{} is a link", path.display()));
+    }
+    let mut buffer = vec![0_u16; 1024];
+    let len = loop {
+        let len = GetFinalPathNameByHandleW(handle.raw, buffer.as_mut_ptr(), buffer.len() as u32, 0)
+            as usize;
+        if len == 0 {
+            return Err(std::io::Error::last_os_error())
+                .with_context(|| format!("resolve {}", path.display()));
+        }
+        if len < buffer.len() {
+            break len;
+        }
+        buffer.resize(len + 1, 0);
+    };
+    let resolved = String::from_utf16_lossy(&buffer[..len]);
+    if comparable_path(&resolved) != comparable_path(&path.to_string_lossy()) {
+        return Err(anyhow!("{} resolves to {resolved}", path.display()));
+    }
+    handle.is_dir = info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY != 0;
+    Ok(handle)
+}
+
+/// A Windows path in a form two names for the same location share (apart
+/// from short names and links, which [`open_exact`] refuses).
+fn comparable_path(path: &str) -> String {
+    let path = path.replace('/', "\\");
+    let path = if let Some(unc) = path.strip_prefix("\\\\?\\UNC\\") {
+        format!("\\\\{unc}")
+    } else {
+        path.strip_prefix("\\\\?\\")
+            .map(str::to_string)
+            .unwrap_or(path)
+    };
+    path.trim_end_matches('\\').to_lowercase()
 }
 
 /// How Windows stores the entry [`add_deny_read_ace`] adds: as given, or
@@ -940,15 +1017,21 @@ unsafe fn remove_matching_aces(
     if code != ERROR_SUCCESS {
         return Err(anyhow!("GetNamedSecurityInfoW failed: {code}"));
     }
-    let result = remove_aces_from(path, p_sd, p_dacl, matches);
+    let result = remove_aces_from(DaclTarget::Name(path), p_sd, p_dacl, matches);
     if !p_sd.is_null() {
         LocalFree(p_sd as HLOCAL);
     }
     result
 }
 
+/// Where [`remove_aces_from`] writes the new DACL.
+enum DaclTarget<'a> {
+    Name(&'a Path),
+    Handle(HANDLE),
+}
+
 unsafe fn remove_aces_from(
-    path: &Path,
+    target: DaclTarget<'_>,
     p_sd: *mut c_void,
     p_dacl: *mut ACL,
     matches: impl Fn(*mut ACL, *const c_void) -> bool,
@@ -1005,18 +1088,30 @@ unsafe fn remove_aces_from(
     } else {
         UNPROTECTED_DACL_SECURITY_INFORMATION
     };
-    // Also recomputes the children's inherited entries, dropping the copies.
-    let code = SetNamedSecurityInfoW(
-        to_wide(path).as_ptr() as *mut u16,
-        1,
-        DACL_SECURITY_INFORMATION | protection,
-        std::ptr::null_mut(),
-        std::ptr::null_mut(),
-        new_dacl,
-        std::ptr::null_mut(),
-    );
+    // Either call also recomputes the children's inherited entries, dropping
+    // the copies.
+    let code = match target {
+        DaclTarget::Name(path) => SetNamedSecurityInfoW(
+            to_wide(path).as_ptr() as *mut u16,
+            1,
+            DACL_SECURITY_INFORMATION | protection,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            new_dacl,
+            std::ptr::null_mut(),
+        ),
+        DaclTarget::Handle(handle) => SetSecurityInfo(
+            handle,
+            1, // SE_FILE_OBJECT
+            DACL_SECURITY_INFORMATION | protection,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            new_dacl,
+            std::ptr::null_mut(),
+        ),
+    };
     if code != ERROR_SUCCESS {
-        return Err(anyhow!("SetNamedSecurityInfoW failed: {code}"));
+        return Err(anyhow!("setting the DACL failed: {code}"));
     }
     Ok(true)
 }
@@ -1071,9 +1166,12 @@ impl DenyAceKind {
         }
     }
 
-    unsafe fn already_present(self, p_dacl: *mut ACL, psid: *mut c_void) -> bool {
+    unsafe fn already_present(self, p_dacl: *mut ACL, psid: *mut c_void, is_dir: bool) -> bool {
         match self {
-            Self::Read => dacl_has_read_deny_for_sid(p_dacl, psid),
+            // #304: only this entry itself counts. An inherited copy goes
+            // when its parent's entry is removed, and another deny (a write
+            // deny shares READ_CONTROL) is not a read deny.
+            Self::Read => dacl_has_deny_read_entry(p_dacl, psid, is_dir),
             Self::ReadExplicit => dacl_has_explicit_read_deny_for_sid(p_dacl, psid),
             Self::ReadNewFiles => dacl_has_new_file_read_deny_for_sid(p_dacl, psid),
             Self::Write => dacl_has_write_deny_for_sid(p_dacl, psid),
@@ -1145,7 +1243,7 @@ unsafe fn add_deny_ace(path: &Path, psid: *mut c_void, kind: DenyAceKind) -> Res
         return Err(anyhow!("GetNamedSecurityInfoW failed: {code}"));
     }
     let mut added = false;
-    if !kind.already_present(p_dacl, psid) {
+    if !kind.already_present(p_dacl, psid, path.is_dir()) {
         let trustee = TRUSTEE_W {
             pMultipleTrustee: std::ptr::null_mut(),
             MultipleTrusteeOperation: 0,

@@ -8,6 +8,7 @@ use crate::acl::add_allow_ace;
 use crate::acl::add_deny_read_ace;
 use crate::acl::add_deny_read_ace_for_new_files;
 use crate::acl::ensure_explicit_deny_read_ace;
+use crate::acl::has_explicit_deny_read_ace;
 use crate::setup::sandbox_dir;
 use crate::token::LocalSid;
 use crate::winutil::to_wide;
@@ -115,16 +116,128 @@ fn sec_win_304_sync_removes_exactly_the_deny_it_added() {
 fn sec_win_304_sync_keeps_a_deny_it_did_not_add() {
     let home = home();
     let group = LocalSid::from_string(SANDBOX_GROUP).expect("group SID");
-    // SAFETY: a valid SID and an existing directory.
+    let file = home.secret.join("lock");
+    std::fs::write(&file, "").expect("file");
+    // SAFETY: a valid SID and an existing file.
     unsafe {
-        assert!(ensure_explicit_deny_read_ace(&home.secret, group.as_ptr()).expect("deny"));
+        assert!(ensure_explicit_deny_read_ace(&file, group.as_ptr()).expect("deny"));
     }
-    let denied = dacl_sddl(&home.secret);
-    sync(&home, std::slice::from_ref(&home.secret), &group);
-    assert_eq!(dacl_sddl(&home.secret), denied);
+    let denied = dacl_sddl(&file);
+    sync(&home, std::slice::from_ref(&file), &group);
+    assert_eq!(dacl_sddl(&file), denied);
     sync(&home, &[], &group);
-    assert_eq!(dacl_sddl(&home.secret), denied);
+    assert_eq!(dacl_sddl(&file), denied);
     assert!(!recorded(&home));
+}
+
+/// Most protected paths are files (`auth.json`, `.env`).
+#[test]
+fn sec_win_304_sync_removes_the_deny_it_added_to_a_file() {
+    let home = home();
+    let group = LocalSid::from_string(SANDBOX_GROUP).expect("group SID");
+    let file = home.secret.join("auth.json");
+    std::fs::write(&file, "{}").expect("file");
+    let before = dacl_sddl(&file);
+    sync(&home, std::slice::from_ref(&file), &group);
+    assert!(explicit_deny(&file, &group), "{}", dacl_sddl(&file));
+    sync(&home, &[], &group);
+    assert_eq!(dacl_sddl(&file), before);
+    assert!(!recorded(&home));
+}
+
+/// A launch that denies a directory inside the previous launch's denied
+/// directory: the child gets its own entry before the parent's goes.
+#[test]
+fn sec_win_304_child_stays_denied_when_its_parent_is_dropped() {
+    let home = home();
+    let group = LocalSid::from_string(SANDBOX_GROUP).expect("group SID");
+    let before = dacl_sddl(&home.secret);
+    sync(&home, std::slice::from_ref(&home.secret), &group);
+    sync(&home, std::slice::from_ref(&home.nested), &group);
+    assert!(
+        explicit_deny(&home.nested, &group),
+        "{}",
+        dacl_sddl(&home.nested)
+    );
+    assert_eq!(dacl_sddl(&home.secret), before);
+}
+
+/// A sandboxed command can replace a stale deny-read path inside a writable
+/// root, or a directory above it, with a junction to a path that is still
+/// denied. The removal must not follow it.
+#[test]
+fn sec_win_304_removal_does_not_follow_a_junction() {
+    let home = home();
+    let group = LocalSid::from_string(SANDBOX_GROUP).expect("group SID");
+    let at_path = home.codex_home.join("workspace-env");
+    let parent = home.codex_home.join("workspace");
+    let under_parent = parent.join("vault-secret");
+    std::fs::create_dir_all(&at_path).expect("stale dir");
+    std::fs::create_dir_all(&under_parent).expect("stale dir");
+    sync(
+        &home,
+        &[at_path.clone(), under_parent.clone(), home.secret.clone()],
+        &group,
+    );
+    // The paths are swapped for junctions to the still-denied directory
+    // (`workspace\vault-secret` then names `vault-secret`).
+    std::fs::remove_dir(&at_path).expect("remove stale dir");
+    std::fs::remove_dir(&under_parent).expect("remove stale dir");
+    std::fs::remove_dir(&parent).expect("remove stale parent");
+    junction(&at_path, &home.secret);
+    junction(&parent, &home.codex_home);
+
+    sync(&home, std::slice::from_ref(&home.secret), &group);
+    assert!(
+        explicit_deny(&home.secret, &group),
+        "{}",
+        dacl_sddl(&home.secret)
+    );
+    // Kept, so the entries are removed if the paths come back.
+    let state =
+        std::fs::read_to_string(sandbox_dir(&home.codex_home).join("deny_read_acl_state.json"))
+            .expect("state");
+    assert!(state.contains("workspace-env"), "{state}");
+    assert!(state.contains("workspace\\\\vault-secret"), "{state}");
+}
+
+/// The sandbox's group is machine-wide, so another `CODEX_HOME`'s sessions
+/// can rely on the same entry; a sync removes only entries it added.
+#[test]
+fn sec_win_304_entry_another_codex_home_added_is_kept() {
+    let home_a = home();
+    let home_b = home();
+    let group = LocalSid::from_string(SANDBOX_GROUP).expect("group SID");
+    let shared = home_a.secret.clone();
+    sync(&home_a, std::slice::from_ref(&shared), &group);
+    sync(&home_b, std::slice::from_ref(&shared), &group);
+    sync(&home_b, &[], &group);
+    assert!(
+        explicit_deny(&shared, &group),
+        "removed another home's entry"
+    );
+    sync(&home_a, &[], &group);
+    assert!(!explicit_deny(&shared, &group));
+}
+
+/// Whether `path` has its own explicit read deny for `sid`.
+fn explicit_deny(path: &Path, sid: &LocalSid) -> bool {
+    // SAFETY: a valid SID and an existing path.
+    unsafe { has_explicit_deny_read_ace(path, sid.as_ptr()) }.expect("read DACL")
+}
+
+/// Creates a directory junction at `link` to `target` (no privilege needed).
+fn junction(link: &Path, target: &Path) {
+    let status = Command::new("cmd")
+        .arg("/C")
+        .arg("mklink")
+        .arg("/J")
+        .arg(link)
+        .arg(target)
+        .stdout(Stdio::null())
+        .status()
+        .expect("mklink");
+    assert!(status.success(), "mklink /J failed: {status}");
 }
 
 /// The armed session of [`sec_win_301_flag_off_session_keeps_denies_while_another_is_armed`]:

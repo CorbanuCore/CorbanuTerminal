@@ -49,6 +49,26 @@ pub(crate) fn lexical_path_key(path: &Path) -> String {
 /// # Safety
 /// Caller must pass a valid SID pointer for the sandbox principal being denied.
 pub unsafe fn apply_deny_read_acls(paths: &[PathBuf], psid: *mut c_void) -> Result<Vec<PathBuf>> {
+    unsafe { apply_deny_read_acls_tracked(paths, psid) }.map(|applied| applied.paths)
+}
+
+/// What [`apply_deny_read_acls_tracked`] did.
+pub(crate) struct AppliedDenyReads {
+    /// Every path that now has the deny (planned paths, deduplicated).
+    pub(crate) paths: Vec<PathBuf>,
+    /// The paths that got it from this call (the others already had it).
+    pub(crate) added: Vec<PathBuf>,
+}
+
+/// [`apply_deny_read_acls`], also reporting which paths this call added the
+/// entry to.
+///
+/// # Safety
+/// As for [`apply_deny_read_acls`].
+pub(crate) unsafe fn apply_deny_read_acls_tracked(
+    paths: &[PathBuf],
+    psid: *mut c_void,
+) -> Result<AppliedDenyReads> {
     let planned = plan_deny_read_acl_paths(paths);
     let mut applied = Vec::new();
     let mut seen = HashSet::new();
@@ -76,7 +96,10 @@ pub unsafe fn apply_deny_read_acls(paths: &[PathBuf], psid: *mut c_void) -> Resu
         }
         push_planned_path(&mut applied, &mut seen, path);
     }
-    Ok(applied)
+    Ok(AppliedDenyReads {
+        paths: applied,
+        added: added_in_this_call,
+    })
 }
 
 #[cfg(test)]
