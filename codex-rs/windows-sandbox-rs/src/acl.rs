@@ -841,6 +841,49 @@ pub unsafe fn has_exact_deny_read_ace_for_new_files(
 /// # Safety
 /// Caller must ensure `psid` points to a valid SID and `path` is a directory.
 pub unsafe fn remove_deny_read_ace_for_new_files(path: &Path, psid: *mut c_void) -> Result<bool> {
+    remove_matching_aces(path, |ace| is_new_file_read_deny(ace, Some(psid)))
+}
+
+/// #304: removes exactly the entry [`add_deny_read_ace`] adds for `psid` on
+/// `path` (an explicit read deny that subdirectories and files inherit), and
+/// with it the copies inherited below `path`. Every other entry (allows,
+/// other denies for `psid`, entries for other SIDs, inherited entries) and
+/// whether the DACL is protected stay as they were. `REVOKE_ACCESS` cannot
+/// do this: it removes only allow entries. Returns whether an entry was
+/// removed.
+///
+/// # Safety
+/// Caller must ensure `psid` points to a valid SID.
+pub unsafe fn remove_deny_read_ace(path: &Path, psid: *mut c_void) -> Result<bool> {
+    remove_matching_aces(path, |ace| is_deny_read_ace(ace, psid))
+}
+
+/// True when `ace` is exactly the entry [`add_deny_read_ace`] adds for
+/// `psid`: an explicit deny, effective on the object and inherited by
+/// subdirectories and files, whose mask maps to file read and nothing else.
+unsafe fn is_deny_read_ace(ace: *const c_void, psid: *mut c_void) -> bool {
+    let hdr = &*(ace as *const ACE_HEADER);
+    let flags = u32::from(hdr.AceFlags);
+    if hdr.AceType != ACCESS_DENIED_ACE_TYPE
+        || flags & u32::from(INHERITED_ACE) != 0
+        || flags & INHERITANCE_FLAGS != DenyAceKind::Read.inheritance()
+    {
+        return false;
+    }
+    let mut mask = (*(ace as *const ACCESS_DENIED_ACE)).Mask;
+    MapGenericMask(&mut mask, &FILE_MAPPING);
+    let sid = (ace as usize + std::mem::size_of::<ACE_HEADER>() + std::mem::size_of::<u32>())
+        as *mut c_void;
+    mask == FILE_GENERIC_READ && EqualSid(sid, psid) != 0
+}
+
+/// Rewrites `path`'s DACL without the entries `matches` selects (keeping
+/// whether it is protected); inherited copies below `path` follow. Returns
+/// whether an entry was removed.
+unsafe fn remove_matching_aces(
+    path: &Path,
+    matches: impl Fn(*const c_void) -> bool,
+) -> Result<bool> {
     let mut p_sd: *mut c_void = std::ptr::null_mut();
     let mut p_dacl: *mut ACL = std::ptr::null_mut();
     let code = GetNamedSecurityInfoW(
@@ -856,18 +899,18 @@ pub unsafe fn remove_deny_read_ace_for_new_files(path: &Path, psid: *mut c_void)
     if code != ERROR_SUCCESS {
         return Err(anyhow!("GetNamedSecurityInfoW failed: {code}"));
     }
-    let result = remove_new_file_read_denies(path, p_sd, p_dacl, psid);
+    let result = remove_aces_from(path, p_sd, p_dacl, matches);
     if !p_sd.is_null() {
         LocalFree(p_sd as HLOCAL);
     }
     result
 }
 
-unsafe fn remove_new_file_read_denies(
+unsafe fn remove_aces_from(
     path: &Path,
     p_sd: *mut c_void,
     p_dacl: *mut ACL,
-    psid: *mut c_void,
+    matches: impl Fn(*const c_void) -> bool,
 ) -> Result<bool> {
     if p_dacl.is_null() {
         return Ok(false);
@@ -896,7 +939,7 @@ unsafe fn remove_new_file_read_denies(
         if GetAce(p_dacl as *const ACL, i, &mut p_ace) == 0 {
             return Err(anyhow!("GetAce failed: {}", GetLastError()));
         }
-        if is_new_file_read_deny(p_ace, Some(psid)) {
+        if matches(p_ace) {
             removed = true;
             continue;
         }
@@ -1113,58 +1156,6 @@ pub unsafe fn add_deny_read_ace(path: &Path, psid: *mut c_void) -> Result<bool> 
     add_deny_ace(path, psid, DenyAceKind::Read)
 }
 
-pub unsafe fn revoke_ace(path: &Path, psid: *mut c_void) {
-    let mut p_sd: *mut c_void = std::ptr::null_mut();
-    let mut p_dacl: *mut ACL = std::ptr::null_mut();
-    let code = GetNamedSecurityInfoW(
-        to_wide(path).as_ptr(),
-        1,
-        DACL_SECURITY_INFORMATION,
-        std::ptr::null_mut(),
-        std::ptr::null_mut(),
-        &mut p_dacl,
-        std::ptr::null_mut(),
-        &mut p_sd,
-    );
-    if code != ERROR_SUCCESS {
-        if !p_sd.is_null() {
-            LocalFree(p_sd as HLOCAL);
-        }
-        return;
-    }
-    let trustee = TRUSTEE_W {
-        pMultipleTrustee: std::ptr::null_mut(),
-        MultipleTrusteeOperation: 0,
-        TrusteeForm: TRUSTEE_IS_SID,
-        TrusteeType: TRUSTEE_IS_UNKNOWN,
-        ptstrName: psid as *mut u16,
-    };
-    let mut explicit: EXPLICIT_ACCESS_W = std::mem::zeroed();
-    explicit.grfAccessPermissions = 0;
-    explicit.grfAccessMode = 4; // REVOKE_ACCESS
-    explicit.grfInheritance = CONTAINER_INHERIT_ACE | OBJECT_INHERIT_ACE;
-    explicit.Trustee = trustee;
-    let mut p_new_dacl: *mut ACL = std::ptr::null_mut();
-    let code2 = SetEntriesInAclW(1, &explicit, p_dacl, &mut p_new_dacl);
-    if code2 == ERROR_SUCCESS {
-        let _ = SetNamedSecurityInfoW(
-            to_wide(path).as_ptr() as *mut u16,
-            1,
-            DACL_SECURITY_INFORMATION,
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-            p_new_dacl,
-            std::ptr::null_mut(),
-        );
-        if !p_new_dacl.is_null() {
-            LocalFree(p_new_dacl as HLOCAL);
-        }
-    }
-    if !p_sd.is_null() {
-        LocalFree(p_sd as HLOCAL);
-    }
-}
-
 /// Grants RX to the null device for the given SID to support stdout/stderr redirection.
 ///
 /// # Safety
@@ -1234,6 +1225,17 @@ pub unsafe fn allow_null_device(psid: *mut c_void) {
 const CONTAINER_INHERIT_ACE: u32 = 0x2;
 const NO_PROPAGATE_INHERIT_ACE: u32 = 0x4;
 const OBJECT_INHERIT_ACE: u32 = 0x1;
+const INHERITANCE_FLAGS: u32 = OBJECT_INHERIT_ACE
+    | CONTAINER_INHERIT_ACE
+    | NO_PROPAGATE_INHERIT_ACE
+    | INHERIT_ONLY_ACE as u32;
+/// Maps generic rights to file rights.
+const FILE_MAPPING: GENERIC_MAPPING = GENERIC_MAPPING {
+    GenericRead: FILE_GENERIC_READ,
+    GenericWrite: FILE_GENERIC_WRITE,
+    GenericExecute: FILE_GENERIC_EXECUTE,
+    GenericAll: FILE_ALL_ACCESS,
+};
 
 #[cfg(test)]
 #[path = "acl_tests.rs"]

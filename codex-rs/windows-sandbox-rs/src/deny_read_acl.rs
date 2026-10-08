@@ -1,5 +1,5 @@
 use crate::acl::add_deny_read_ace;
-use crate::acl::revoke_ace;
+use crate::acl::remove_deny_read_ace;
 use crate::path_normalization::canonicalize_path;
 use anyhow::Context;
 use anyhow::Result;
@@ -43,7 +43,7 @@ pub(crate) fn lexical_path_key(path: &Path) -> String {
 /// Applies deny-read ACEs to explicit paths. Missing paths are materialized as
 /// directories before the ACE is applied so a sandboxed command cannot create a
 /// previously absent denied path and then read from it in the same run.
-/// If any path fails, deny ACEs applied by this call are revoked before the
+/// If any path fails, deny ACEs added by this call are removed before the
 /// error is returned so a one-shot sandbox run does not leave partial state.
 ///
 /// # Safety
@@ -66,7 +66,7 @@ pub unsafe fn apply_deny_read_acls(paths: &[PathBuf], psid: *mut c_void) -> Resu
             Ok(added) => added,
             Err(err) => {
                 for added_path in &added_in_this_call {
-                    revoke_ace(added_path, psid);
+                    let _ = remove_deny_read_ace(added_path, psid);
                 }
                 return Err(err);
             }

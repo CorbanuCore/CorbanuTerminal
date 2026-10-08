@@ -698,9 +698,10 @@ impl LaunchContract {
 
 /// PF-27-S07: a lock file in `CODEX_HOME` that every armed process holds
 /// shared for its lifetime, so a process with the flag off never removes the
-/// new-file deny under one that relies on it.
+/// new-file deny, or (#301) the sandbox's deny-read entries, under one that
+/// relies on them.
 #[cfg(windows)]
-const ARMED_LOCK_FILE: &str = ".secretless-launch.lock";
+const ARMED_LOCK_FILE: &str = codex_windows_sandbox::SECRETLESS_LAUNCH_LOCK_FILE;
 
 /// PF-27-S07: a contract's hold on the armed lock file.
 #[cfg(windows)]
