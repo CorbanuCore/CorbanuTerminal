@@ -28,9 +28,8 @@ agent commands with a stated reason. Moved to the P1 hardening plan on 2026-10-0
 on [PF-27-S02](../../archive/p0-security-levels/pf-27-s02-secretless-agent-launch.md) is unchanged.
 
 Started 2026-10-08 (Travis approved starting early). All code merged (PRs #267, #269, #270, #272) behind the
-default-off flags above; real probes run on `windows-2022` CI. **Blocked** since P1 activation (2026-10-08): the
-tmux run and videos need a real Windows machine. Scope is now evidence only (code fixes go to the broker lane); the
-build worktree was removed, so reallocate coordinates on the Windows host before the gate run.
+default-off flags above; real probes run on `windows-2022` CI. **Blocked**: the real-Windows gate run (2026-10-08)
+failed with two defects (Verification). Scope is evidence only; the fixes go to the broker lane, then the gate reruns.
 
 ## Execution mandate
 
@@ -82,7 +81,7 @@ build worktree was removed, so reallocate coordinates on the Windows host before
 
 ## Remaining
 
-- [ ] Decision 5 tmux run (GLM 5.2 driving the TUI) and SOP videos on a real Windows machine ([requirements](../../../../qa/security-levels/sprints/PF-27-S06/README.md#windows-machine-needed-for-the-remaining-gate)).
+- [ ] Fix both gate defects (broker lane), then rerun the gate in a normal session ([rerun needs](../../../../qa/security-levels/sprints/PF-27-S06/README.md#windows-machine-needed-for-the-remaining-gate)).
 - [ ] Unplaced follow-ups (listed in the plan's carried-forward table): file tools other than patches under the
   contract on Windows; the elevated sandbox's read of `~/.git-credentials`, `.ssh`, `.npmrc`, `.config/gh` if profile
   reads are ever granted (setup excludes most).
