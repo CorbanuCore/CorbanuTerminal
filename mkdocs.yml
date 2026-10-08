@@ -159,6 +159,11 @@ nav:
               - "PF-41-S02 — Tamper-evident audit and safe support export": sprints/current/p1-security-hardening/pf-41-s02-tamper-evident-security-audit.md
           - Current Provider Auth Work:
               - Overview: sprints/current/unified-provider-auth/index.md
+              - "PF-84-S01 — Home override hygiene": sprints/current/unified-provider-auth/pf-84-s01-home-override-hygiene.md
+              - "PF-84-S02 — Named account registry and resolution": sprints/current/unified-provider-auth/pf-84-s02-account-registry-and-resolution.md
+              - "PF-84-S03 — Account selection per session, CLI and worker": sprints/current/unified-provider-auth/pf-84-s03-account-selection-and-propagation.md
+              - "PF-84-S04 — Account management in /providers": sprints/current/unified-provider-auth/pf-84-s04-provider-account-management-ui.md
+              - "PF-84-S05 — Per-account usage attribution": sprints/current/unified-provider-auth/pf-84-s05-per-account-usage-attribution.md
           - Current Autoreview Work:
               - Overview: sprints/current/arbitrary-model-autoreview/index.md
               - "PF-14 — Arbitrary-model Autoreview":

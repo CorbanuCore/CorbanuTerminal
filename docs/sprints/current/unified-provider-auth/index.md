@@ -15,10 +15,17 @@ repositories, and the exact qualified binary is installed for human testing.
 PF-55-S04 is completed and archived: exact Luna/Kimi K3 child launches, results
 and cold resume pass in both live repositories. PF-58 is the current serial
 credential-health and reauthentication follow-up.
+PF-84-S01 to S05 (2026-10-08) are unallocated drafts for named accounts per
+provider; see the plan's PF-84 section.
 
 | Order | Sprint | Outcome | Status | Depends on |
 | ---: | --- | --- | --- | --- |
 | 22 | [PF-58-S01](pf-58-s01-credential-health-and-reauth.md) | Credential-scoped health and keyboard reauthentication | draft residual qualification; human-accepted for main integration | PF-57-S01 |
+| 23 | [PF-84-S01](pf-84-s01-home-override-hygiene.md) | Home override hygiene (wrapper pitfall) | draft | none |
+| 24 | [PF-84-S02](pf-84-s02-account-registry-and-resolution.md) | Named account registry, storage and resolution | draft | none |
+| 25 | [PF-84-S03](pf-84-s03-account-selection-and-propagation.md) | Account selection per session, CLI and worker | draft | PF-84-S02 |
+| 26 | [PF-84-S04](pf-84-s04-provider-account-management-ui.md) | `/providers` account management; duplicate-row fix | draft | PF-84-S03 |
+| 27 | [PF-84-S05](pf-84-s05-per-account-usage-attribution.md) | Per-account usage and rate-limit attribution | draft | PF-84-S03, PF-60-S04 |
 | 7 | [PF-48-S01](../../archive/unified-provider-auth/pf-48-s01-provider-catalog-contract.md) | Typed provider catalog and capability contract | completed | PF-47-S01 |
 | 8 | [PF-49-S01](../../archive/unified-provider-auth/pf-49-s01-status-and-eligibility.md) | Shared metadata status and eligibility persistence | completed | PF-48-S01 |
 | 9 | [PF-50-S01](../../archive/unified-provider-auth/pf-50-s01-api-key-flow-controller.md) | Shared typed controller and API-key adapter | completed | PF-49-S01 |

@@ -1,6 +1,8 @@
 mod broker_containment;
 #[cfg(windows)]
 mod windows_process_access;
+#[cfg(windows)]
+mod windows_thread_creation;
 
 pub use broker_containment::BrokerContainment;
 pub use broker_containment::broker_seatbelt_profile;
@@ -19,6 +21,10 @@ pub use windows_process_access::thread_callback_registered;
 pub use windows_process_access::thread_dacl_sddl;
 #[cfg(windows)]
 pub use windows_process_access::thread_protection_failures;
+#[cfg(windows)]
+pub use windows_thread_creation::protect_new_objects_by_default;
+#[cfg(windows)]
+pub use windows_thread_creation::thread_creation_protected;
 
 #[cfg(unix)]
 use std::ffi::OsString;

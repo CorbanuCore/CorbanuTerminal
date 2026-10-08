@@ -13,14 +13,20 @@
 //! so a same-user process cannot grant itself access back.
 //!
 //! Limits: `SYSTEM` and administrators with `SeDebugPrivilege` enabled are not
-//! stopped. A thread starts with the token's default DACL (the user has full
-//! access) and gets the protected one in its TLS callback, so a same-user
-//! process outside the sandbox that opens a new thread in that short window
-//! keeps its handle; threads created without loader notifications (for
-//! example the loader's own workers) keep the default DACL. Commands under
-//! the elevated sandbox run as another user and are not granted either way.
-//! The token default DACL is left alone because every child process would
-//! inherit it. Handles opened before the call keep their access, and the
+//! stopped. Threads this image starts get the protected DACL at creation
+//! (PF-27-S07, `windows_thread_creation`); a thread any other module starts
+//! (Windows thread pools, RPC, injected DLLs) gets the token's default DACL
+//! (the user has full access) and the protected one in its TLS callback, so
+//! a same-user process outside the sandbox that opens it in that short
+//! window keeps its handle, and threads created without loader notifications
+//! (the loader's own workers) keep the default DACL. The credential broker
+//! closes that too by changing its token's default DACL, which Core cannot
+//! (`protect_new_objects_by_default`). A thread created protected has, on its
+//! own pseudo-handle, only what Windows computes from that DACL plus its
+//! baseline (terminate, set and query information): it cannot change its own
+//! DACL or impersonate; Core and the broker do neither.
+//! Commands under the elevated sandbox run as another user and are not
+//! granted either way. Handles opened before the call keep their access, and the
 //! environment block exists from process start, so call this before any
 //! untrusted process can run, and never hand secrets over through the
 //! environment of a process started after it. The user can still read the
@@ -82,8 +88,8 @@ static THREAD_PROTECT_FAILURES: AtomicUsize = AtomicUsize::new(0);
 /// that no other process (of this or another user, short of `SYSTEM` or a
 /// debug-privileged administrator) can read its memory, read its
 /// environment, duplicate its handles, read or set a thread's context, or
-/// change either DACL. Threads started later get the thread DACL as they
-/// start. Idempotent.
+/// change either DACL. Threads this image starts later get the thread DACL
+/// at creation, others as they start. Idempotent.
 pub fn restrict_current_process_access() -> io::Result<()> {
     if !thread_callback_registered() {
         return Err(io::Error::other(
@@ -91,7 +97,8 @@ pub fn restrict_current_process_access() -> io::Result<()> {
         ));
     }
     let user_sid = current_user_sid_string()?;
-    protect_threads(&user_sid)?;
+    // Even if thread protection fails, the process DACL still applies.
+    let threads = protect_threads(&user_sid);
     let sddl = process_dacl_sddl(&user_sid);
     let descriptor = SecurityDescriptor::from_sddl(&sddl)?;
     let dacl = descriptor.dacl()?;
@@ -108,11 +115,10 @@ pub fn restrict_current_process_access() -> io::Result<()> {
             ptr::null(),
         )
     };
-    if status == ERROR_SUCCESS {
-        Ok(())
-    } else {
-        Err(io::Error::from_raw_os_error(status as i32))
+    if status != ERROR_SUCCESS {
+        return Err(io::Error::from_raw_os_error(status as i32));
     }
+    threads
 }
 
 /// The protected DACL applied by [`restrict_current_process_access`].
@@ -137,8 +143,8 @@ unsafe extern "system" {
     fn NtSetSecurityObject(handle: HANDLE, information: u32, descriptor: *mut c_void) -> i32;
 }
 
-/// Applies the thread DACL to every existing thread of this process and arms
-/// the TLS callback for threads started later.
+/// Arms the TLS callback and the `CreateThread` redirect for threads started
+/// later, then applies the thread DACL to every existing thread.
 fn protect_threads(user_sid: &str) -> io::Result<()> {
     if THREAD_DESCRIPTOR.load(Ordering::Acquire) == 0 {
         let descriptor = SecurityDescriptor::from_sddl(&thread_dacl_sddl(user_sid))?;
@@ -153,7 +159,9 @@ fn protect_threads(user_sid: &str) -> io::Result<()> {
             unsafe { LocalFree(raw as HLOCAL) };
         }
     }
-    let descriptor = THREAD_DESCRIPTOR.load(Ordering::Acquire) as *mut c_void;
+    // Existing threads are protected even if the redirect fails.
+    let redirected = crate::windows_thread_creation::redirect_thread_creation();
+    let descriptor = thread_descriptor();
     // SAFETY: a snapshot of all threads; closed below.
     let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
     if snapshot == INVALID_HANDLE_VALUE {
@@ -190,8 +198,11 @@ fn protect_threads(user_sid: &str) -> io::Result<()> {
     }
     // SAFETY: opened above.
     unsafe { CloseHandle(snapshot) };
-    result
+    result.and(redirected)
 }
+
+/// `STATUS_ACCESS_DENIED`.
+const STATUS_ACCESS_DENIED: i32 = 0xC000_0022_u32 as i32;
 
 /// TLS callback: protects each thread as it starts, once hardened.
 unsafe extern "system" fn on_thread_event(
@@ -213,10 +224,19 @@ unsafe extern "system" fn on_thread_event(
                 descriptor as *mut c_void,
             )
         };
-        if status < 0 {
+        // Access denied: the thread was created with a restrictive DACL
+        // (ours, through the `CreateThread` redirect), which leaves it no
+        // `WRITE_DAC` on itself; there is nothing to do.
+        if status < 0 && status != STATUS_ACCESS_DENIED {
             THREAD_PROTECT_FAILURES.fetch_add(1, Ordering::Relaxed);
         }
     }
+}
+
+/// The protected thread descriptor once hardened (self-relative, never
+/// freed), or null.
+pub(crate) fn thread_descriptor() -> *mut c_void {
+    THREAD_DESCRIPTOR.load(Ordering::Acquire) as *mut c_void
 }
 
 /// How many new threads could not be given the protected DACL.
@@ -352,10 +372,10 @@ fn token_user_sid_string(token: HANDLE) -> io::Result<String> {
     Ok(text)
 }
 
-struct SecurityDescriptor(PSECURITY_DESCRIPTOR);
+pub(crate) struct SecurityDescriptor(PSECURITY_DESCRIPTOR);
 
 impl SecurityDescriptor {
-    fn from_sddl(sddl: &str) -> io::Result<Self> {
+    pub(crate) fn from_sddl(sddl: &str) -> io::Result<Self> {
         let wide: Vec<u16> = sddl.encode_utf16().chain(std::iter::once(0)).collect();
         let mut descriptor: PSECURITY_DESCRIPTOR = ptr::null_mut();
         // SAFETY: `wide` is NUL-terminated; `descriptor` is freed on drop.
@@ -373,7 +393,7 @@ impl SecurityDescriptor {
         Ok(Self(descriptor))
     }
 
-    fn dacl(&self) -> io::Result<*const ACL> {
+    pub(crate) fn dacl(&self) -> io::Result<*const ACL> {
         let mut present = 0;
         let mut defaulted = 0;
         let mut dacl: *mut ACL = ptr::null_mut();
