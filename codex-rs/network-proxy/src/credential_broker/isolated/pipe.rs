@@ -1,17 +1,24 @@
 //! PF-27-S06: Windows named-pipe transport for the isolated credential broker.
 //!
 //! The broker creates both of its pipes (control and data):
-//! - under a random name, as the first instance, so nothing can squat it;
-//! - with a protected DACL that grants only the broker's own user SID. Opening
-//!   a pipe for a request needs write access, which the unelevated sandbox's
-//!   write-restricted token does not get from that DACL, and the elevated
-//!   sandbox runs commands as a different user;
+//! - under a random name, as the first instance, so nothing can squat it or
+//!   join it. The name is not a secret: pipe names can be listed;
+//! - with a protected DACL that grants only the broker's own user SID. The
+//!   elevated sandbox runs commands as another user, which cannot open the
+//!   pipe at all. The unelevated sandbox's write-restricted token cannot open
+//!   it for writing, but can still connect read-only (reads are checked
+//!   against its normal SIDs);
 //! - refusing remote clients, with handles that are never inheritable.
 //!
-//! Every connection is then matched to the expected peer process before a
-//! byte is read: the broker serves only its controller, and Core talks only
-//! to the broker it spawned. Clients connect at identification-level
-//! impersonation, so a pipe server cannot act with Core's token.
+//! The guarantee is the peer check: every connection is matched to the
+//! expected process before a byte is read or written, so the broker serves
+//! only its controller, and Core talks only to the broker it spawned. Any
+//! same-user process (the DACL grants the user everything, including adding
+//! instances) can connect and be dropped, which can delay Core (a denial of
+//! service, not a disclosure). Clients connect at identification-level
+//! impersonation, so a pipe server cannot act with Core's token. The broker
+//! holds a handle to its controller and exits with it, so the controller's
+//! process id cannot be reused while the broker serves it.
 
 use rama_core::Service;
 use rama_core::error::BoxError;
@@ -104,7 +111,14 @@ impl PipeListener {
     pub(crate) async fn accept(&mut self, expected_pid: u32) -> io::Result<NamedPipeServer> {
         loop {
             self.listening.connect().await?;
-            let next = create_instance(&self.name, /*first*/ false)?;
+            let next = match create_instance(&self.name, /*first*/ false) {
+                Ok(next) => next,
+                Err(error) => {
+                    // Never leave an unchecked client connected.
+                    let _ = self.listening.disconnect();
+                    return Err(error);
+                }
+            };
             let connected = std::mem::replace(&mut self.listening, next);
             if client_pid(&connected) == Some(expected_pid) {
                 return Ok(connected);
@@ -200,12 +214,24 @@ pub(crate) fn connect_control(name: &str, broker_pid: u32) -> Option<std::fs::Fi
     if !valid_pipe_name(name, /*control*/ true) {
         return None;
     }
-    let file = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .security_qos_flags(SECURITY_IDENTIFICATION)
-        .open(name)
-        .ok()?;
+    let deadline = std::time::Instant::now() + CONNECT_TIMEOUT;
+    let file = loop {
+        match std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .security_qos_flags(SECURITY_IDENTIFICATION)
+            .open(name)
+        {
+            Ok(file) => break file,
+            Err(error)
+                if error.raw_os_error() == Some(ERROR_PIPE_BUSY)
+                    && std::time::Instant::now() < deadline =>
+            {
+                std::thread::sleep(BUSY_RETRY);
+            }
+            Err(_) => return None,
+        }
+    };
     (server_pid(&file) == Some(broker_pid)).then_some(file)
 }
 
