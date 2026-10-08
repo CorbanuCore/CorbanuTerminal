@@ -390,15 +390,13 @@ impl LaunchContract {
     /// directly in `CODEX_HOME` inherits a read deny for the elevated
     /// sandbox's users (subdirectories such as `skills` are unaffected). The
     /// entry stays on the directory. Needs the sandbox's users group, which
-    /// its setup creates; until then protected launches are refused.
+    /// its setup creates; until then protected launches are refused. Checked
+    /// on every launch (a no-op once present), so a setup rerun that resets
+    /// the directory's ACL is repaired. A file moved in from another
+    /// directory keeps its own ACL: protected writers create their temporary
+    /// files inside `CODEX_HOME` (as `auth.json` storage does).
     #[cfg(windows)]
     pub(crate) fn protect_new_codex_home_files(&self) -> Result<(), LaunchDenied> {
-        use std::sync::atomic::AtomicBool;
-        use std::sync::atomic::Ordering;
-        static APPLIED: AtomicBool = AtomicBool::new(false);
-        if APPLIED.load(Ordering::Acquire) {
-            return Ok(());
-        }
         let mut group = codex_windows_sandbox::resolve_sid(WINDOWS_SANDBOX_USERS_GROUP)
             .map_err(|_| LaunchDenied::WindowsSandboxNotSetUp)?;
         // SAFETY: `group` holds a valid SID for the duration of the call.
@@ -411,7 +409,6 @@ impl LaunchContract {
         if !matches!(present, Ok(true)) {
             return Err(LaunchDenied::WindowsSandboxNotSetUp);
         }
-        APPLIED.store(true, Ordering::Release);
         Ok(())
     }
 
