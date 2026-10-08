@@ -1,0 +1,49 @@
+  Attempt, components and original price
+  Requested UTC day: 2026-10-08
+  Provider: Z.AI
+  Model: Z.AI GLM 5.2
+  Billing: Pay per use
+  Estimated cost: $0.009351
+  Tokens: 6,585 tokens
+  —— Details ——
+  Request: 1ff9bcc2-c23e-4882-bf7c-ae1f7317378c
+  Attempt: 4b066109-1d74-455c-a1af-500c659143b2
+  ↑↓ scroll · Enter open · Esc back/close
+  Thread: 01a11c44-75b8-7a13-88a3-eaabd09761a8
+  Turn: 01a11c44-75e2-76b1-87b9-deb574250cd9
+  Provider: zai
+  Model: glm-5.2
+  Opaque scope: ce7cb49a-b1eb-421c-9ad2-23640561b24c
+  Arithmetic dialect: Inclusive
+  Admission time: 2026-10-08T16:06:51.191Z
+  Retry predecessor: none
+  Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+  Estimated token cost for recorded attempts: $0.009351
+  Input: 6541
+  Noncached input (derived for inclusive input): 6541 (derived as input − cache read: cache writes were not reported, and this price charges nothing for cache writes)
+  Cache read: 0 (reported)
+  Cache write: not reported — this price charges nothing for cache writes
+  Output: 44
+  Reasoning (subset, not separately billed): 1
+  Total (not separately billed): 6585
+  Noncached input cost: $0.009157 (rounded); exact USD 0.0091574
+  Cache read cost: $0.000000; exact USD 0
+  Cache write cost: $0.000000; exact USD 0
+  Output cost: $0.000194 (rounded); exact USD 0.0001936
+  Known subtotal exact USD: 0.009351
+  Price ID: dc803f8b-6066-48be-9cb6-adae38bfd1d0
+  Price source: NativeCatalog; reference 29354527-a0e0-59c7-934b-8d0170caf339
+  Price currency/unit: Usd / PerMillionTokens
+  Price observed/approved: 2026-10-08T16:06:51.191Z / 2026-10-08T16:06:51.191Z
+  Price effective interval: [2026-10-08T16:06:51.191Z, unbounded)
+  Noncached input rate: 1.4 USD per million tokens
+  Cache read rate: 0.26 USD per million tokens
+  Cache write rate: 0 USD per million tokens
+  Output rate: 4.4 USD per million tokens
+  Evidence revision 3; source fdb6466c-419a-43d1-acb6-283c27379613; sequence 3; presence patch {"input":6541,"read":0,"output":44,"reasoning":1,"total":6585}
+  Estimate versus billed difference: unknown — no settlement evidence
+  Billed cost: unavailable — no settlement evidence
+  Snapshot is not current; newer activity is unverified
+  Back
+  Refresh
+  Close

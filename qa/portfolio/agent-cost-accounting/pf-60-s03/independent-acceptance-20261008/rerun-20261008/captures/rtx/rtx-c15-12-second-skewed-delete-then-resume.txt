@@ -1,0 +1,10 @@
+# (a real turn, sk-predel2, completed just before this)
+# rollouts for sk-predel before:
+<rtx-dir>/h-skew2/sessions/2026/10/08/rollout-2026-10-08T09-34-11-01a11c5d-7e23-7f60-a699-df5382269251.jsonl
+$ FAKETIME="@2026-10-08 16:51:47" (58 s behind the checkpoint just written) corbanu delete --force 01a11c5d-7e23-7f60-a699-df5382269251
+Error: failed to delete session: thread/delete failed: failed to delete app-server state for 01a11c5d-7e23-7f60-a699-df5382269251: negative or backward checkpoint (code -32603)
+exit=1
+# rollouts for sk-predel after:
+$ corbanu resume 01a11c5d-7e23-7f60-a699-df5382269251   (real clock, TUI in tmux; screen after 10 s:)
+TUI-EXITED=1
+ERROR: No saved session found with ID 01a11c5d-7e23-7f60-a699-df5382269251. Run `corbanu resume` without an ID to choose from existing sessions.
