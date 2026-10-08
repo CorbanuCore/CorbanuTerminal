@@ -111,13 +111,14 @@ fn pf_27_s06_restricted_token_probe_reads_an_unhardened_process() {
 fn pf_27_s06_same_user_probe_controls_an_unhardened_process() {
     let target = Target::spawn(/*harden*/ false);
     let report = probe_as_same_user(target.pid());
+    assert_eq!(report.len(), 2 + PROCESS_RIGHTS.len() + THREAD_RIGHTS.len());
     for (key, value) in &report {
         let expected = if key == "environment" {
             "canary_found"
         } else {
             "granted"
         };
-        assert_eq!(value, expected, "{key}: {report:?}");
+        assert_eq!(value.split('@').next(), Some(expected), "{key}: {report:?}");
     }
 }
 
@@ -210,6 +211,11 @@ fn run_target() {
         std::thread::park();
     });
     let _ = wait.recv();
+    assert_eq!(
+        super::thread_protection_failures(),
+        0,
+        "a new thread stayed unprotected"
+    );
     let mut stdout = std::io::stdout();
     // Own line: libtest prints the test name without a newline first.
     writeln!(stdout, "\n{READY}").expect("write ready");
@@ -407,7 +413,7 @@ fn open_threads(threads: &[u32], access: u32) -> String {
         if handle != 0 {
             // SAFETY: opened above.
             unsafe { CloseHandle(handle) };
-            return "granted".to_string();
+            return format!("granted@{tid}");
         }
         // SAFETY: reads the thread's last error.
         let code = unsafe { GetLastError() };
@@ -592,6 +598,12 @@ fn pf_27_s06_dacls_limit_user_and_owner_rights() {
         super::thread_dacl_sddl("S-1-5-21-1-2-3-1001"),
         "D:P(A;;0x100800;;;S-1-5-21-1-2-3-1001)(A;;GA;;;SY)(A;;RC;;;OW)"
     );
+}
+
+/// The TLS callback that protects new threads is linked into the image.
+#[test]
+fn pf_27_s06_thread_callback_is_registered() {
+    assert!(super::thread_callback_registered());
 }
 
 #[test]
