@@ -13,6 +13,9 @@
 //! of this test (it writes the directory) right before. The seed holds those
 //! passwords: keep the directory outside every sandbox read root.
 
+// The probes' output is the evidence of these measured runs (`--nocapture`).
+#![allow(clippy::print_stderr)]
+
 use super::LaunchContract;
 use super::windows_tests::EnvGuard;
 use super::windows_tests::absolute;

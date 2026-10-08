@@ -6,6 +6,9 @@
 //! binary, re-executed) then runs under the same sandbox and must not open a
 //! hardened stand-in for Core to read its memory or environment.
 
+// The probes' output is the evidence of these measured runs (`--nocapture`).
+#![allow(clippy::print_stderr)]
+
 use super::LaunchContract;
 use super::harden_current_process;
 use crate::exec::ExecCapturePolicy;
