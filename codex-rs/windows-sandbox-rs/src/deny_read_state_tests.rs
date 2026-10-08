@@ -139,13 +139,16 @@ fn armed_session(codex_home: &Path) -> Child {
         .stdout(Stdio::piped())
         .spawn()
         .expect("start the armed session");
-    let stdout = child.stdout.take().expect("stdout");
+    let mut stdout = BufReader::new(child.stdout.take().expect("stdout"));
+    let mut line = String::new();
     // libtest prints the test's name without a newline before the line.
-    let armed = BufReader::new(stdout)
-        .lines()
-        .map_while(Result::ok)
-        .any(|line| line.ends_with(ARMED_LINE));
-    assert!(armed, "the armed session did not take the lock");
+    while !line.trim_end().ends_with(ARMED_LINE) {
+        line.clear();
+        let read = stdout.read_line(&mut line).expect("armed session output");
+        assert_ne!(read, 0, "the armed session did not take the lock");
+    }
+    // Keep reading, so its remaining output does not hit a closed pipe.
+    std::thread::spawn(move || std::io::copy(&mut stdout, &mut std::io::sink()));
     child
 }
 
