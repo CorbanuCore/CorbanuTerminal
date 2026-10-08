@@ -19,9 +19,14 @@ use codex_app_server_protocol::ThreadStartResponse;
 use codex_core::find_thread_path_by_id_str;
 use codex_protocol::ThreadId;
 use codex_protocol::protocol::HistoryPosition;
+use codex_protocol::protocol::SessionSource;
 use codex_state::DirectionalThreadSpawnEdgeStatus;
 use codex_state::SqliteConfig;
 use codex_state::StateRuntime;
+use codex_state::ThreadMetadataBuilder;
+use codex_state::accounting::AccountingStore;
+use codex_state::accounting::AsOf;
+use codex_state::accounting::Attempt;
 use codex_utils_absolute_path::test_support::PathExt;
 use pretty_assertions::assert_eq;
 use std::path::Path;
@@ -331,5 +336,183 @@ async fn thread_delete_handles_live_threads_before_rollout_exists() -> Result<()
     data.sort();
     assert_eq!(data, vec![thread.id]);
 
+    Ok(())
+}
+
+/// A ledger attempt owned by `thread_id`, recorded now with the ledger's
+/// checkpoint `behind_ms` ahead of the clock (a clock that stepped back).
+async fn record_accounting_attempt(
+    state_db: &StateRuntime,
+    thread_id: ThreadId,
+    behind_ms: i64,
+) -> Result<()> {
+    let rollout_path = find_thread_path_by_id_str(
+        state_db.sqlite().home(),
+        &thread_id.to_string(),
+        /*state_db_ctx*/ None,
+    )
+    .await?
+    .expect("rollout path");
+    state_db
+        .upsert_thread(
+            &ThreadMetadataBuilder::new(
+                thread_id,
+                rollout_path,
+                chrono::Utc::now(),
+                SessionSource::Cli,
+            )
+            .build("mock_provider"),
+        )
+        .await?;
+    let now = chrono::Utc::now().timestamp_millis();
+    let store = AccountingStore::open(state_db, now + behind_ms).await?;
+    let attempt: Attempt = serde_json::from_value(serde_json::json!({
+        "attempt_id": uuid::Uuid::new_v4(), "request_id": uuid::Uuid::new_v4(),
+        "thread_id": thread_id, "turn": "fixture", "retry_of": null,
+        "provider": "synthetic", "model": "fixture", "scope": uuid::Uuid::nil(),
+        "dialect": "NativeAnthropic", "dispatched_at_ms": now
+    }))?;
+    store.admit(thread_id, &attempt, &[], AsOf::Now).await?;
+    Ok(())
+}
+
+async fn ledger_counts(state_db: &StateRuntime) -> Result<(i64, i64, i64)> {
+    let pool = state_db
+        .sqlite()
+        .open_read_write_pool(&state_db.sqlite().state_db_path())
+        .await?;
+    let counts = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM draft_accounting_attempts),
+                (SELECT count(*) FROM draft_accounting_tombstones),
+                (SELECT completed_as_of_ms FROM draft_accounting_retention_checkpoint)",
+    )
+    .fetch_one(&pool)
+    .await?;
+    pool.close().await;
+    Ok(counts)
+}
+
+/// #308: with the clock behind the ledger checkpoint, deleting failed as a
+/// backward checkpoint after the rollout was already gone. It now succeeds
+/// and the deleted spend is left as a deletion tombstone.
+#[tokio::test]
+async fn thread_delete_tolerates_a_clock_behind_the_accounting_checkpoint() -> Result<()> {
+    for behind_ms in [58_000, 6 * 86_400_000] {
+        let codex_home = TempDir::new()?;
+        let thread_id = create_delete_test_rollout(codex_home.path(), /*minute*/ 0, "skewed")?;
+        let owner = ThreadId::from_string(&thread_id)?;
+        let state_db = StateRuntime::init(
+            SqliteConfig::new_for_testing(codex_home.path().abs()),
+            "mock_provider".into(),
+        )
+        .await?;
+        record_accounting_attempt(&state_db, owner, behind_ms).await?;
+        let (_, _, checkpoint) = ledger_counts(&state_db).await?;
+        assert!(checkpoint > chrono::Utc::now().timestamp_millis());
+
+        let mut mcp = TestAppServer::builder()
+            .with_codex_home(codex_home.path())
+            .without_auto_env()
+            .build_initialized()
+            .await?;
+        let _: ThreadDeleteResponse = mcp
+            .request(|request_id| ClientRequest::ThreadDelete {
+                request_id,
+                params: ThreadDeleteParams {
+                    thread_id: thread_id.clone(),
+                },
+            })
+            .await?;
+
+        assert_eq!(
+            find_thread_path_by_id_str(codex_home.path(), &thread_id, /*state_db_ctx*/ None)
+                .await?,
+            None
+        );
+        let (attempts, tombstones, after) = ledger_counts(&state_db).await?;
+        assert_eq!((attempts, tombstones), (0, 1));
+        assert!(after >= checkpoint, "the checkpoint never moves backward");
+        assert!(state_db.get_thread(owner).await?.is_none());
+    }
+    Ok(())
+}
+
+/// #308: when the ledger cannot be updated, nothing is deleted and the error
+/// says so; once it can, the same delete finishes.
+#[tokio::test]
+async fn thread_delete_leaves_the_rollout_when_accounting_fails() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    let thread_id = create_delete_test_rollout(codex_home.path(), /*minute*/ 0, "kept")?;
+    let owner = ThreadId::from_string(&thread_id)?;
+    let state_db = StateRuntime::init(
+        SqliteConfig::new_for_testing(codex_home.path().abs()),
+        "mock_provider".into(),
+    )
+    .await?;
+    record_accounting_attempt(&state_db, owner, /*behind_ms*/ 0).await?;
+    let pool = state_db
+        .sqlite()
+        .open_read_write_pool(&state_db.sqlite().state_db_path())
+        .await?;
+    sqlx::query(
+        "CREATE TRIGGER fixture_reject_tombstone BEFORE INSERT ON draft_accounting_tombstones \
+         BEGIN SELECT RAISE(ABORT, 'fixture-ledger-failure'); END",
+    )
+    .execute(&pool)
+    .await?;
+
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .without_auto_env()
+        .build_initialized()
+        .await?;
+    let delete_id = mcp
+        .send_thread_delete_request(ThreadDeleteParams {
+            thread_id: thread_id.clone(),
+        })
+        .await?;
+    let error: JSONRPCError = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_error_message(RequestId::Integer(delete_id)),
+    )
+    .await??;
+    let message = error.error.message;
+    assert!(
+        message.starts_with(&format!(
+            "could not delete conversation {thread_id}: its local records (including its cost records) \
+             cannot be updated right now, so nothing was deleted. Try again;"
+        )),
+        "{message}"
+    );
+    assert!(message.contains("fixture-ledger-failure"), "{message}");
+    assert!(
+        find_thread_path_by_id_str(codex_home.path(), &thread_id, /*state_db_ctx*/ None)
+            .await?
+            .is_some(),
+        "the rollout stays"
+    );
+    assert_eq!(
+        ledger_counts(&state_db).await?.0,
+        1,
+        "the ledger is unchanged"
+    );
+
+    sqlx::query("DROP TRIGGER fixture_reject_tombstone")
+        .execute(&pool)
+        .await?;
+    pool.close().await;
+    let _: ThreadDeleteResponse = mcp
+        .request(|request_id| ClientRequest::ThreadDelete {
+            request_id,
+            params: ThreadDeleteParams {
+                thread_id: thread_id.clone(),
+            },
+        })
+        .await?;
+    assert_eq!(
+        find_thread_path_by_id_str(codex_home.path(), &thread_id, /*state_db_ctx*/ None).await?,
+        None
+    );
+    assert_eq!(ledger_counts(&state_db).await?.0, 0);
     Ok(())
 }

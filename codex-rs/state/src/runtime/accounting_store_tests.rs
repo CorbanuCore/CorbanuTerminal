@@ -2807,6 +2807,102 @@ async fn now_writes_hold_at_the_checkpoint_when_the_clock_is_behind_it() -> anyh
     Ok(())
 }
 
+/// #308: deleting a conversation with the clock behind the checkpoint (58 s and
+/// 6 days in the acceptance run) failed as a backward checkpoint. It now holds
+/// at the checkpoint like ledger writes, and the deleted spend is still counted
+/// for "deleted conversations" (#286).
+#[tokio::test]
+async fn delete_holds_at_the_checkpoint_when_the_clock_is_behind_it() -> anyhow::Result<()> {
+    for behind in [58_000, 6 * 86_400_000] {
+        let path = home();
+        let runtime = open(&path).await?;
+        seed(&runtime).await?;
+        let now = chrono::Utc::now().timestamp_millis();
+        let ahead = now + behind;
+        let store = AccountingStore::open(&runtime, ahead).await?;
+        let mut a = serde_json::to_value(attempt(/*id*/ 1))?;
+        a["dispatched_at_ms"] = json!(now);
+        let a: Attempt = serde_json::from_value(a)?;
+        store.admit(a.thread_id, &a, &[], AsOf::Now).await?;
+        store
+            .observe(a.thread_id, &a, &[row(/*revision*/ 1)], AsOf::Now)
+            .await?;
+
+        runtime.preflight_delete_threads(&[a.thread_id]).await?;
+        assert_eq!(
+            runtime
+                .get_thread(a.thread_id)
+                .await?
+                .map(|thread| thread.id),
+            Some(a.thread_id),
+            "the preflight changes nothing"
+        );
+        assert_eq!(runtime.delete_threads_strict(&[a.thread_id]).await?, 1);
+
+        let checkpoint: i64 = sqlx::query_scalar(
+            "SELECT completed_as_of_ms FROM draft_accounting_retention_checkpoint",
+        )
+        .fetch_one(runtime.pool.as_ref())
+        .await?;
+        assert!(checkpoint >= ahead, "the checkpoint never moves backward");
+        let attempts: i64 = sqlx::query_scalar("SELECT count(*) FROM draft_accounting_attempts")
+            .fetch_one(runtime.pool.as_ref())
+            .await?;
+        let tombstones: Vec<(String, i64)> =
+            sqlx::query_as("SELECT attempt_id, expires_at_ms FROM draft_accounting_tombstones")
+                .fetch_all(runtime.pool.as_ref())
+                .await?;
+        assert_eq!(
+            (attempts, tombstones),
+            (
+                0,
+                vec![(a.attempt_id.to_string(), now + 365 * 86_400_000_i64)]
+            )
+        );
+        let mut conn = runtime.pool.acquire().await?;
+        let mut work = InspectionWork::new(&mut conn).await?;
+        assert_eq!(
+            scope::deleted_attempts(&mut conn, now / 86_400_000, now, &mut work).await,
+            DeletedAttempts::Counted(1)
+        );
+        drop(conn);
+        assert!(runtime.get_thread(a.thread_id).await?.is_none());
+        runtime.close().await;
+    }
+    Ok(())
+}
+
+/// #308: a ledger that cannot be updated fails the preflight and the delete,
+/// and leaves every row as it was.
+#[tokio::test]
+async fn failed_delete_preflight_changes_nothing() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    seed(&runtime).await?;
+    let mut a = serde_json::to_value(attempt(/*id*/ 1))?;
+    a["dispatched_at_ms"] = json!(chrono::Utc::now().timestamp_millis());
+    let a: Attempt = serde_json::from_value(a)?;
+    AccountingStore::open(&runtime, AsOf::Now)
+        .await?
+        .admit(a.thread_id, &a, &[], AsOf::Now)
+        .await?;
+    sqlx::query("CREATE TRIGGER reject_tombstone BEFORE INSERT ON draft_accounting_tombstones BEGIN SELECT RAISE(ABORT, 'fixture-ledger-failure'); END")
+        .execute(runtime.pool.as_ref())
+        .await?;
+    let before = rows(&runtime).await?;
+    marker(
+        runtime
+            .preflight_delete_threads(&[a.thread_id])
+            .await
+            .unwrap_err(),
+        "fixture-ledger-failure",
+    );
+    assert_eq!(rows(&runtime).await?, before);
+    assert!(runtime.get_thread(a.thread_id).await?.is_some());
+    runtime.close().await;
+    Ok(())
+}
+
 #[tokio::test]
 async fn writes_read_their_clock_after_another_process_advanced_the_checkpoint()
 -> anyhow::Result<()> {

@@ -1094,14 +1094,11 @@ ON CONFLICT(id) DO UPDATE SET
         }
 
         let mut tx = super::accounting::native::begin_delete(&self.pool).await?;
-        // Cleanup and lock acquisition can be overtaken by a later accounting writer.
-        // Capture production time only after serialization; explicit clocks stay strict.
-        let as_of_ms = match time {
-            DeletionTime::AtWriterLock => Utc::now().timestamp_millis(),
-            #[cfg(test)]
-            DeletionTime::Explicit(as_of_ms) => as_of_ms,
-        };
-        let result = Self::delete_threads_on_connection(&mut tx, thread_ids, as_of_ms).await;
+        let result = async {
+            let as_of_ms = Self::deletion_time_on_connection(&mut tx, time).await?;
+            Self::delete_threads_on_connection(&mut tx, thread_ids, as_of_ms).await
+        }
+        .await;
         match result {
             Ok(rows) => {
                 tx.commit().await?;
@@ -1111,6 +1108,41 @@ ON CONFLICT(id) DO UPDATE SET
                 tx.rollback().await?;
                 Err(error)
             }
+        }
+    }
+
+    /// Check that deleting `thread_ids` can update this database, changing nothing.
+    ///
+    /// Callers that remove other records first (a conversation's rollout files)
+    /// run this before them, so a ledger that cannot be updated leaves the
+    /// conversation whole instead of half-deleted.
+    pub async fn preflight_delete_threads(&self, thread_ids: &[ThreadId]) -> anyhow::Result<()> {
+        if thread_ids.is_empty() {
+            return Ok(());
+        }
+        let mut tx = super::accounting::native::begin_delete(&self.pool).await?;
+        let result = async {
+            let as_of_ms =
+                Self::deletion_time_on_connection(&mut tx, DeletionTime::AtWriterLock).await?;
+            Self::delete_threads_on_connection(&mut tx, thread_ids, as_of_ms).await
+        }
+        .await;
+        tx.rollback().await?;
+        result.map(drop)
+    }
+
+    /// Cleanup and lock acquisition can be overtaken by a later accounting writer,
+    /// so production time is read only once the write lock is held. Like ledger
+    /// writes, it holds at the ledger checkpoint while the clock is behind it.
+    /// Explicit clocks stay strict.
+    async fn deletion_time_on_connection(
+        conn: &mut sqlx::SqliteConnection,
+        time: DeletionTime,
+    ) -> anyhow::Result<i64> {
+        match time {
+            DeletionTime::AtWriterLock => super::accounting::store::AsOf::Now.sample_on(conn).await,
+            #[cfg(test)]
+            DeletionTime::Explicit(as_of_ms) => Ok(as_of_ms),
         }
     }
 

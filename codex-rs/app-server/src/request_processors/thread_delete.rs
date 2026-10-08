@@ -40,6 +40,21 @@ impl ThreadRequestProcessor {
 
         self.validate_root_thread_delete(thread_id, thread_ids.len() > 1)
             .await?;
+        // Rollout files go first and cannot come back, so check before removing
+        // anything that the state database (its cost ledger included) can be
+        // updated. A failure here leaves the conversation whole.
+        if let Some(state_db) = self.state_db.as_ref() {
+            state_db
+                .preflight_delete_threads(thread_ids.as_slice())
+                .await
+                .map_err(|err| {
+                    internal_error(format!(
+                        "could not delete conversation {thread_id}: its local records (including its cost records) \
+                         cannot be updated right now, so nothing was deleted. Try again; if it keeps failing, \
+                         report this message. Cause: {err:#}"
+                    ))
+                })?;
+        }
         for thread_id_to_delete in thread_ids.iter().copied() {
             self.prepare_thread_for_delete(thread_id_to_delete).await;
         }
@@ -60,7 +75,8 @@ impl ThreadRequestProcessor {
                 .await
                 .map_err(|err| {
                     internal_error(format!(
-                        "failed to delete app-server state for {thread_id}: {err}"
+                        "conversation {thread_id} was deleted, but some of its local records (such as its cost \
+                         records) could not be removed. Delete it again to finish. Cause: {err:#}"
                     ))
                 })?;
         }
