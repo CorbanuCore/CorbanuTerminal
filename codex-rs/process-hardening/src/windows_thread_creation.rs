@@ -168,8 +168,10 @@ pub(crate) fn redirect_thread_creation() -> io::Result<()> {
     Ok(())
 }
 
+/// Restores in reverse order: entries sharing a page saved the protection an
+/// earlier entry had just set.
 fn restore_protection(entries: &[(*mut usize, u32)], size: usize) {
-    for (slot, previous) in entries {
+    for (slot, previous) in entries.iter().rev() {
         let mut ignored = 0_u32;
         // SAFETY: restores the protection this entry had.
         unsafe { VirtualProtect(slot.cast(), size, *previous, &mut ignored) };
