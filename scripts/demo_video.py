@@ -38,7 +38,9 @@ TYPE_DELAY = 0.035
 KEEPALIVE = (
     "\x1b7\x1b8"  # save/restore cursor: invisible, keeps a deliberate hold on screen
 )
-STEP_KINDS = ("type", "key", "wait", "pause")
+STEP_KINDS = ("type", "key", "wait", "pause", "run")
+# An off-screen `run` step is cut to this many seconds of video.
+RUN_STEP_SECONDS = 0.5
 # Generic shapes of real keys; any match blocks rendering and publishing.
 SECRET_PATTERNS = [
     re.compile(rb"\bsk-[A-Za-z0-9_\-]{20,}"),
@@ -60,6 +62,7 @@ class Step:
     repeat: int = 1
     compress: float | None = None
     verify: bool = True
+    capture: str | None = None
 
 
 @dataclass
@@ -99,6 +102,7 @@ def load_spec(path: Path) -> Spec:
                 repeat=int(raw.get("repeat", 1)),
                 compress=raw.get("compress"),
                 verify=bool(raw.get("verify", True)),
+                capture=raw.get("capture"),
             )
         )
     return Spec(
@@ -265,7 +269,55 @@ def tmux_literal(char: str) -> str:
     return "\\;" if char == ";" else char
 
 
-def drive(tmux: Tmux, spec: Spec, places: dict[str, str], t0: float, log) -> dict:
+def run_step(
+    command: str,
+    number: int,
+    places: dict[str, str],
+    creds: str,
+    timeout: float = 30.0,
+) -> str:
+    """Run a setup command off screen, such as seeding fixture data mid-demo.
+
+    It gets the disposable profile (never the real home), keyring isolation and
+    the spec's credentials resolved the same way as the launcher. Output goes to
+    the private log directory, which the leak check scans and redacts. Returns
+    the last line of output, which `capture` makes a placeholder for later steps.
+    """
+    env = {
+        "HOME": places["userhome"],
+        "CODEX_HOME": places["home"],
+        "CORBANU_HOME": places["home"],
+        "PFTERMINAL_HOME": places["home"],
+        KEYRING_ISOLATION_VAR: "1",
+    }
+    exports = " ".join(f"{k}={shlex.quote(v)}" for k, v in env.items())
+    script = (
+        f"{creds + ' ' if creds else ''}env {exports} bash -c {shlex.quote(command)}"
+    )
+    output = Path(places["logs"]) / f"run-step-{number}.log"
+    with output.open("w") as handle:
+        try:
+            proc = subprocess.run(
+                ["bash", "-c", script],
+                cwd=places["workspace"],
+                stdin=subprocess.DEVNULL,
+                stdout=handle,
+                stderr=subprocess.STDOUT,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise DemoError(
+                f"run step {number} timed out after {timeout:.0f}s; see {output}"
+            ) from error
+    if proc.returncode:
+        raise DemoError(f"run step {number} exited {proc.returncode}; see {output}")
+    lines = [line for line in output.read_text().splitlines() if line.strip()]
+    return lines[-1].strip() if lines else ""
+
+
+def drive(
+    tmux: Tmux, spec: Spec, places: dict[str, str], t0: float, log, creds: str = ""
+) -> dict:
     pauses, compress = [], []
     for number, step in enumerate(spec.steps, 1):
         start = time.monotonic() - t0
@@ -293,6 +345,13 @@ def drive(tmux: Tmux, spec: Spec, places: dict[str, str], t0: float, log) -> dic
         elif step.kind == "pause":
             time.sleep(float(step.value))
             pauses.append((start, time.monotonic() - t0))
+        elif step.kind == "run":
+            last = run_step(
+                expand(str(step.value), places), number, places, creds, step.timeout
+            )
+            if step.capture:
+                places[step.capture] = last
+            compress.append((start, time.monotonic() - t0, RUN_STEP_SECONDS))
     return {"pauses": pauses, "compress": compress}
 
 
@@ -646,6 +705,7 @@ def record(args: argparse.Namespace) -> Path:
     version = subprocess.run(
         [str(binary), "--version"], capture_output=True, text=True
     ).stdout.strip()
+    places["bin"] = str(binary)
     launcher = write_launcher(run, spec, binary, places, creds)
     tmux = Tmux(f"demo-{spec.id}-{os.getpid()}")
     raw_cast = run / "raw.cast"
@@ -702,7 +762,7 @@ def record(args: argparse.Namespace) -> Path:
                 raise DemoError("asciinema did not attach to the tmux session")
             time.sleep(0.05)
         (run / "go").touch()
-        timeline = drive(tmux, spec, places, t0, log)
+        timeline = drive(tmux, spec, places, t0, log, creds)
         end = time.monotonic() - t0
         (run / "final-screen.txt").write_text(tmux.capture())
         log("steps complete; exiting through /exit")

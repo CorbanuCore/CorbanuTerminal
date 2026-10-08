@@ -84,7 +84,7 @@ Specs live in `qa/demos/specs/<id>.toml`; see the two examples there.
 | `config` | Contents of the disposable `config.toml`. The workspace is trusted automatically |
 | `[fixtures]` | Workspace files to create (`"path" = "content"`) |
 | `args`, `cols`, `rows` | Extra CLI args and terminal size (default 120x36) |
-| `[[steps]]` | Exactly one of `type`, `key`, `wait`, `pause` per step |
+| `[[steps]]` | Exactly one of `type`, `key`, `wait`, `pause`, `run` per step |
 
 - `type = "text"`: sends real keys one character at a time, then waits until
   the text is visible. Enter is always its own `key` step.
@@ -95,9 +95,18 @@ Specs live in `qa/demos/specs/<id>.toml`; see the two examples there.
   turn, to N seconds of video.
 - `pause = seconds`: a hold kept at real speed so viewers can read. End every
   spec with a `wait` for the visible result and a `pause` of about 3 s.
+- `run = "shell command"`: runs off screen, for fixture setup such as seeding
+  data mid-demo. It gets the disposable profile (`CODEX_HOME`, `HOME`),
+  keyring isolation and the spec's credentials, resolved like the launcher's.
+  `{bin}` is the candidate. Output goes to `logs/run-step-N.log`; a nonzero exit
+  fails the recording, and so does running past its `timeout` (default 30 s).
+  The video keeps 0.5 s of it, so say on screen what it did.
+  `capture = "name"` makes its last output line the placeholder `{name}` for
+  later steps, such as a session id to `/resume`.
 
 Placeholders `{workspace}`, `{outside}`, `{home}`, `{logs}` and `{run}` are
-expanded in `type`, `wait`, `args`, `config` and fixtures. Prefer relative paths
+expanded in `type`, `wait`, `run`, `args`, `config` and fixtures (`{bin}` in
+`type`, `wait` and `run`). Prefer relative paths
 such as `../outside/x.txt`; they read better on screen. The run directory is
 outside the workspace and outside the temporary directories, so writes there
 need approval in the default mode.

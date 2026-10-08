@@ -1,0 +1,65 @@
+# PF-60-S03: /cost for a past UTC day and for a date range grouped by day and by ISO week.
+# The conversation's earlier days are seeded off screen (synthetic GLM 5.2 and GPT-5.4 requests on the
+# 14 days before today, at catalogue rates) after one real GLM turn creates the conversation.
+# Needs CORBANU_DEMO_SEED=<target>/debug/examples/accounting_demo_seed (cargo build -p codex-state --example accounting_demo_seed).
+id = "pf60s03-cost-history-ranges"
+feature = "/cost for a past day, then a date range grouped by day and by week (earlier days seeded with synthetic requests)"
+expected = "/cost 2026-10-01 shows that past day's requests by provider and model with their estimated cost. /cost START END day lists one bucket per UTC day; week groups the same range into ISO weeks and states its estimated cost."
+model = "glm-5.2"
+provider = "zai"
+rows = 44
+config = """
+suppress_unstable_features_warning = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "Reply with the single word OK."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "•\\s+OK"
+timeout = 120
+compress = 2
+[[steps]]
+run = '"$CORBANU_DEMO_SEED" "$CODEX_HOME" history "$(sqlite3 "$CODEX_HOME/pfterminal_state_5.sqlite" "select id from threads order by created_at desc limit 1")"'
+[[steps]]
+type = "/cost 2026-10-01"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "This conversation on 2026-10-01 \\(UTC\\)"
+[[steps]]
+pause = 4
+[[steps]]
+key = "Escape"
+[[steps]]
+type = "/cost 2026-09-28 2026-10-05 day"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "grouping: Day"
+[[steps]]
+pause = 3
+# Up from the first line wraps to the end of the page: the per-bucket links.
+[[steps]]
+key = "Up"
+repeat = 3
+[[steps]]
+pause = 4
+[[steps]]
+key = "Escape"
+[[steps]]
+type = "/cost 2026-09-21 2026-10-05 week"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "grouping: Week"
+[[steps]]
+wait = "Estimated token cost for recorded attempts: \\$"
+[[steps]]
+pause = 4
