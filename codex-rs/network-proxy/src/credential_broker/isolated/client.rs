@@ -22,8 +22,6 @@ use crate::connect_policy::PinnedPeers;
 use crate::credential_broker::providers;
 use crate::upstream::UpstreamClient;
 use base64::Engine as _;
-#[cfg(windows)]
-use codex_process_hardening::ProtectedChild as Child;
 use codex_secret_broker::BrokerBinding;
 use codex_secret_broker::BrokerChannelMac;
 use codex_secret_broker::CredentialReference;
@@ -48,11 +46,8 @@ use std::os::unix::fs::PermissionsExt as _;
 use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::path::PathBuf;
-#[cfg(unix)]
 use std::process::Child;
-#[cfg(unix)]
 use std::process::Command;
-#[cfg(unix)]
 use std::process::Stdio;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
@@ -217,21 +212,44 @@ impl IsolatedBrokerClient {
             None => std::env::current_exe().map_err(|_| IsolatedBrokerError::Spawn)?,
         };
         let runtime_dir = prepare_runtime_dir(options.runtime_dir.as_deref());
+        let mut command = Command::new(program);
+        // PF-27-S02: no data ever crosses a descriptor created here. stdout
+        // carries only the broker's control socket path; the control channel
+        // is a socket the broker creates, so a process that inherits one of
+        // these pipes during the macOS close-on-exec window learns nothing.
+        command
+            .args(&launcher.args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null());
+        // Own process group: terminal hangups and interrupts aimed at the TUI
+        // must not kill the broker before it removes its socket directory.
+        #[cfg(unix)]
+        std::os::unix::process::CommandExt::process_group(&mut command, 0);
+        // PF-27-S06: its own hidden console, so console control events
+        // aimed at the TUI do not reach it either.
+        #[cfg(windows)]
+        std::os::windows::process::CommandExt::creation_flags(&mut command, CREATE_NO_WINDOW);
         // Raw values reach the broker only through the private control socket.
-        let mut removed: Vec<OsString> = providers::credential_broker_env_keys()
-            .map(OsString::from)
-            .collect();
-        removed.extend(launcher.removed_envs.iter().cloned());
-        let mut envs = launcher.envs.clone();
-        match runtime_dir.as_ref() {
-            Some(dir) => envs.insert(
-                0,
-                (BROKER_RUNTIME_DIR_ENV.into(), dir.as_os_str().to_owned()),
-            ),
-            None => removed.push(BROKER_RUNTIME_DIR_ENV.into()),
+        for key in providers::credential_broker_env_keys() {
+            command.env_remove(key);
         }
-        let (child, stdout) = start_broker_process(&program, &launcher.args, &removed, &envs)?;
+        match runtime_dir.as_ref() {
+            Some(dir) => command.env(BROKER_RUNTIME_DIR_ENV, dir),
+            None => command.env_remove(BROKER_RUNTIME_DIR_ENV),
+        };
+        for key in &launcher.removed_envs {
+            command.env_remove(key);
+        }
+        for (key, value) in &launcher.envs {
+            command.env(key, value);
+        }
+        let mut child = command.spawn().map_err(|_| IsolatedBrokerError::Spawn)?;
         let broker_pid = child.id();
+        let Some(stdout) = child.stdout.take() else {
+            kill_and_reap(child);
+            return Err(IsolatedBrokerError::Spawn);
+        };
         let Ok(bootstrap_lines) = spawn_line_reader("credential-broker-bootstrap", stdout) else {
             kill_and_reap(child);
             return Err(IsolatedBrokerError::Spawn);
@@ -981,69 +999,6 @@ fn read_control_line<R: std::io::Read>(
     Ok(Some(line))
 }
 
-/// Starts the broker with `args`, without the `removed` variables and with
-/// `envs` set (later entries win). Returns it and its stdout.
-#[cfg(unix)]
-fn start_broker_process(
-    program: &Path,
-    args: &[OsString],
-    removed: &[OsString],
-    envs: &[(OsString, OsString)],
-) -> Result<(Child, std::process::ChildStdout), IsolatedBrokerError> {
-    let mut command = Command::new(program);
-    // PF-27-S02: no data ever crosses a descriptor created here. stdout
-    // carries only the broker's control socket path; the control channel
-    // is a socket the broker creates, so a process that inherits one of
-    // these pipes during the macOS close-on-exec window learns nothing.
-    command
-        .args(args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null());
-    // Own process group: terminal hangups and interrupts aimed at the TUI
-    // must not kill the broker before it removes its socket directory.
-    std::os::unix::process::CommandExt::process_group(&mut command, 0);
-    for key in removed {
-        command.env_remove(key);
-    }
-    for (key, value) in envs {
-        command.env(key, value);
-    }
-    let mut child = command.spawn().map_err(|_| IsolatedBrokerError::Spawn)?;
-    match child.stdout.take() {
-        Some(stdout) => Ok((child, stdout)),
-        None => {
-            kill_and_reap(child);
-            Err(IsolatedBrokerError::Spawn)
-        }
-    }
-}
-
-/// PF-27-S07: no other process of the user can open the broker at any point
-/// (`spawn_protected`). No console, so console control events aimed at the
-/// TUI do not reach it either.
-#[cfg(windows)]
-fn start_broker_process(
-    program: &Path,
-    args: &[OsString],
-    removed: &[OsString],
-    envs: &[(OsString, OsString)],
-) -> Result<(Child, std::fs::File), IsolatedBrokerError> {
-    let same = |a: &OsString, b: &OsString| a.eq_ignore_ascii_case(b);
-    let mut env: Vec<(OsString, OsString)> = std::env::vars_os()
-        .filter(|(name, _)| {
-            !removed.iter().any(|key| same(key, name))
-                && !envs.iter().any(|(key, _)| same(key, name))
-        })
-        .collect();
-    for (key, value) in envs {
-        env.retain(|(name, _)| !same(name, key));
-        env.push((key.clone(), value.clone()));
-    }
-    codex_process_hardening::spawn_protected(program, args, &env)
-        .map_err(|_| IsolatedBrokerError::Spawn)
-}
-
 /// Gives the broker a short grace period to observe stdin EOF and remove its
 /// socket directory, then kills it.
 fn reap_after_grace(mut child: Child, socket_path: PathBuf) {
@@ -1101,6 +1056,10 @@ fn random_hex<const N: usize>() -> String {
     rand::rng().fill_bytes(&mut bytes);
     encode_hex(&bytes)
 }
+
+/// `CREATE_NO_WINDOW` process creation flag.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[cfg(test)]
 #[cfg(unix)]

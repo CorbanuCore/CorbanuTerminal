@@ -63,7 +63,6 @@ const CANARY_ENV: &str = "CODEX_PF27S06_CANARY";
 const DEFAULT_DACL_ENV: &str = "CODEX_PF27S07_DEFAULT_DACL";
 const NEW_THREADS_ENV: &str = "CODEX_PF27S07_NEW_THREADS";
 const NEW_THREAD_IDS_ENV: &str = "CODEX_PF27S07_NEW_THREAD_IDS";
-const PARK_ENV: &str = "CODEX_PF27S07_PARK";
 const NEW_THREADS_MARKER: &str = "new-threads=";
 /// Synthetic value; only its presence in the target's memory is checked.
 const CANARY: &str = "pf27s06-synthetic-env-canary-7c41d9";
@@ -182,7 +181,6 @@ fn pf_27_s07_default_dacl_protects_every_new_thread() {
         harden: true,
         default_dacl: true,
         new_threads: true,
-        ..TargetOptions::default()
     });
     for report in [
         probe_as_same_user(&target),
@@ -190,31 +188,6 @@ fn pf_27_s07_default_dacl_protects_every_new_thread() {
     ] {
         assert_new_threads(&report, "imported", "denied");
         assert_new_threads(&report, "direct", "denied");
-    }
-}
-
-/// PF-27-S07: a process started with `spawn_protected` (the broker) is
-/// never openable: no hardening call of its own is needed for its process,
-/// first thread, or any thread it starts.
-#[test]
-fn pf_27_s07_protected_spawn_is_never_openable() {
-    let target = Target::spawn_with(TargetOptions {
-        new_threads: true,
-        protected_spawn: true,
-        ..TargetOptions::default()
-    });
-    for report in [
-        probe_as_same_user(&target),
-        probe_with_restricted_token(&target),
-    ] {
-        assert_new_threads(&report, "imported", "denied");
-        assert_new_threads(&report, "direct", "denied");
-        let original: Report = report
-            .iter()
-            .filter(|(key, _)| !key.starts_with("new_"))
-            .map(|(key, value)| (key.clone(), value.clone()))
-            .collect();
-        assert_all_denied(&original);
     }
 }
 
@@ -250,18 +223,11 @@ struct TargetOptions {
     default_dacl: bool,
     /// Hold two brand-new threads in their creation window.
     new_threads: bool,
-    /// Started with `spawn_protected` instead of `std`.
-    protected_spawn: bool,
-}
-
-enum TargetChild {
-    Std(Child),
-    Protected(crate::ProtectedChild),
 }
 
 /// The target process; killed on drop.
 struct Target {
-    child: TargetChild,
+    child: Child,
     /// `imported=<tid>;direct=<tid>` for PF-27-S07 targets.
     new_threads: Option<String>,
 }
@@ -285,36 +251,12 @@ impl Target {
         for (_, name) in flags.iter().filter(|(on, _)| *on) {
             command.env(name, "1");
         }
-        let (child, lines) = if options.protected_spawn {
-            // Exactly the environment `command` would pass.
-            let mut env: Vec<(std::ffi::OsString, std::ffi::OsString)> = std::env::vars_os()
-                .filter(|(name, _)| {
-                    !command
-                        .get_envs()
-                        .any(|(set, _)| set.eq_ignore_ascii_case(name))
-                })
-                .collect();
-            env.extend(
-                command
-                    .get_envs()
-                    .filter_map(|(name, value)| Some((name.to_owned(), value?.to_owned()))),
-            );
-            // Its stdin is closed: park rather than exit at EOF.
-            env.push((PARK_ENV.into(), "1".into()));
-            let args: Vec<std::ffi::OsString> = command.get_args().map(ToOwned::to_owned).collect();
-            let (child, stdout) =
-                crate::spawn_protected(std::path::Path::new(command.get_program()), &args, &env)
-                    .expect("protected spawn");
-            (TargetChild::Protected(child), line_channel(stdout))
-        } else {
-            command
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::inherit());
-            let mut child = command.spawn().expect("spawn target");
-            let lines = line_channel(child.stdout.take().expect("target stdout"));
-            (TargetChild::Std(child), lines)
-        };
+        command
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit());
+        let mut child = command.spawn().expect("spawn target");
+        let lines = line_channel(child.stdout.take().expect("target stdout"));
         // Killed on drop if it never becomes ready.
         let mut target = Self {
             child,
@@ -332,25 +274,14 @@ impl Target {
     }
 
     fn pid(&self) -> u32 {
-        match &self.child {
-            TargetChild::Std(child) => child.id(),
-            TargetChild::Protected(child) => child.id(),
-        }
+        self.child.id()
     }
 }
 
 impl Drop for Target {
     fn drop(&mut self) {
-        match &mut self.child {
-            TargetChild::Std(child) => {
-                let _ = child.kill();
-                let _ = child.wait();
-            }
-            TargetChild::Protected(child) => {
-                let _ = child.kill();
-                let _ = child.wait();
-            }
-        }
+        let _ = self.child.kill();
+        let _ = self.child.wait();
     }
 }
 
@@ -363,8 +294,7 @@ fn child_command(role: &str) -> Command {
         .env_remove(HARDEN_ENV)
         .env_remove(DEFAULT_DACL_ENV)
         .env_remove(NEW_THREADS_ENV)
-        .env_remove(NEW_THREAD_IDS_ENV)
-        .env_remove(PARK_ENV);
+        .env_remove(NEW_THREAD_IDS_ENV);
     command
 }
 
@@ -404,9 +334,6 @@ fn run_target() {
     // Stay alive until the test kills us or closes stdin.
     let mut sink = Vec::new();
     let _ = std::io::stdin().read_to_end(&mut sink);
-    while std::env::var_os(PARK_ENV).is_some() {
-        std::thread::park();
-    }
     std::process::exit(0);
 }
 
@@ -545,14 +472,7 @@ fn probe_with_restricted_token(target: &Target) -> Report {
     ];
     let mut env: HashMap<String, String> = std::env::vars()
         .filter(|(key, _)| {
-            ![
-                CANARY_ENV,
-                HARDEN_ENV,
-                DEFAULT_DACL_ENV,
-                NEW_THREADS_ENV,
-                PARK_ENV,
-            ]
-            .contains(&key.as_str())
+            ![CANARY_ENV, HARDEN_ENV, DEFAULT_DACL_ENV, NEW_THREADS_ENV].contains(&key.as_str())
         })
         .collect();
     env.insert(ROLE_ENV.to_string(), "probe".to_string());

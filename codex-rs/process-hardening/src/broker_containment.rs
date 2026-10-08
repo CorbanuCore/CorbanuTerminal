@@ -318,8 +318,7 @@ mod windows {
     pub(super) fn contain() -> BrokerContainment {
         let mut mechanisms = Vec::new();
         // PF-27-S07: every object the broker creates from now on, threads
-        // included, is protected at creation (a no-op when Core started it
-        // with `spawn_protected`, which already set this).
+        // included, is protected at creation.
         if crate::protect_new_objects_by_default().is_ok()
             && crate::restrict_current_process_access().is_ok()
         {
