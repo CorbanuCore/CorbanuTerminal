@@ -1648,7 +1648,10 @@ def plist_path(root, receipt):
     if not receipt or "plist" not in receipt:
         return default
     path = Path(receipt["plist"])
-    f.require(path in (default, launch_agents() / (receipt["label"] + ".plist")), "invalid_plist_path")
+    # launchd reloads ~/Library/LaunchAgents only into the GUI domain.
+    agent = launch_agents() / (receipt["label"] + ".plist")
+    f.require(path == default or (path == agent and installation_domain(receipt).startswith("gui/")),
+              "invalid_plist_path")
     return f.no_links(path)
 
 

@@ -87,6 +87,11 @@ def owner_activation(args):
         """Login agent that bootstraps a Background (user-domain) job again after a reboot."""
         return f.no_links(owner.launch_agents() / (label + "-login.plist"))
 
+    def login_agent_loaded(name):
+        result = subprocess.run(["/bin/launchctl", "print", f"gui/{os.getuid()}/{name}"],
+                                capture_output=True, timeout=5, env={})
+        return result.returncode == 0
+
     if args.owner == "install":
         f.require(bool(args.label), "explicit_label_required")
         f.require(args.label != "com.corbanu.initiative-owner" or
@@ -130,8 +135,10 @@ def owner_activation(args):
         # Validate every loaded instance before removing any of them.
         for location, (state, output) in observations.items():
             if previous and state == "present":
+                # An interrupted uninstall removes the LaunchAgents plist before its bootout.
                 f.require(f"path = {plist}\n" in output and
-                          f.file_digest(owner.private_file(plist)) == previous["plist_sha256"],
+                          (f.file_digest(owner.private_file(plist)) == previous["plist_sha256"]
+                           if os.path.lexists(plist) else previous["phase"] == "uninstalling"),
                           f"unowned_service: {location}/{label}")
         if args.owner == "uninstall":
             f.require(previous is not None, "installation_receipt_required")
@@ -140,17 +147,26 @@ def owner_activation(args):
             if plist.exists():
                 f.require(f.file_digest(owner.private_file(plist)) == previous["plist_sha256"],
                           "plist_drift")
-            if previous.get("login_agent"):
-                # Remove the login agent first so no login can reload the job meanwhile.
-                login_agent = login_agent_path(label)
+            login_agent = login_agent_path(label) if previous.get("login_agent") else None
+            if login_agent:
                 f.require(str(login_agent) == previous["login_agent"], "invalid_plist_path")
                 if os.path.lexists(login_agent):
                     f.require(f.file_digest(owner.private_file(login_agent)) == previous["login_agent_sha256"],
                               "plist_drift")
-                    # It runs only at load; a loaded copy without its file is inert.
+            if login_agent or plist != root / "owner.plist":
+                # From here a job that launchd loads again refuses its ticks (receipt not
+                # installed), and nothing in ~/Library/LaunchAgents can load it at the next login.
+                previous["phase"] = "uninstalling"
+                f.write_json(receipt_path, previous)
+            if login_agent:
+                if login_agent_loaded(login_agent.stem):
                     subprocess.run(["/bin/launchctl", "bootout", f"gui/{os.getuid()}/{login_agent.stem}"],
-                                   timeout=40, env={}, capture_output=True)
+                                   check=True, timeout=40, env={})
+                    f.require(not login_agent_loaded(login_agent.stem), "service_still_present: login agent")
+                if os.path.lexists(login_agent):
                     login_agent.unlink()
+            if plist != root / "owner.plist" and os.path.lexists(plist):
+                plist.unlink()  # bootout by label does not need the file
             for location, (state, _) in observations.items():
                 if state == "present":
                     subprocess.run(["/bin/launchctl", "bootout", f"{location}/{label}"],
@@ -200,8 +216,9 @@ def owner_activation(args):
         # login, but only into the GUI domain. A GUI job's plist moves there; a Background
         # (user-domain) job keeps its plist and gets a login agent that bootstraps it again.
         job_plist, login_agent = root / "owner.plist", None
+        agents = f.no_links(owner.launch_agents())
         if getattr(args, "launch_agent", False):
-            agents = f.no_links(owner.launch_agents())
+            f.require(agents.is_dir(), "unsafe_launch_agents_directory")
             info = agents.stat()
             f.require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid()
                       and info.st_mode & 0o022 == 0, "unsafe_launch_agents_directory")
@@ -244,6 +261,9 @@ def owner_activation(args):
                           "installation_conflict")
             if presence == "present":
                 f.require(previous["phase"] == "installed", "installation_reconciliation_required")
+                if login_agent:
+                    f.require(os.path.lexists(login_agent) and f.file_digest(owner.private_file(login_agent))
+                              == previous["login_agent_sha256"], "installation_reconciliation_required")
                 previous["sibling_observation"] = sibling_observation()
                 f.write_json(receipt_path, previous)
                 return
@@ -251,21 +271,29 @@ def owner_activation(args):
         else:
             f.require(presence == "absent" and not any(os.path.lexists(root / name) for name in
                       ("owner.plist", "tick.json", "tick.lock")), "unowned_service")
+        # Whatever is in ~/Library/LaunchAgents under this label would load at the next login.
+        f.require(not any(os.path.lexists(path) for path in
+                          (job_plist, agents / (label + ".plist"), agents / (label + "-login.plist"))),
+                  "unowned_plist")
+        if not previous:
             f.write_file(root / "tick.lock", b"")
             f.write_json(root / "tick.json", dict(started_at=None, completed_at=None, last_success=None,
                                                  hold=None, skipped=0, ticks=0, last_probe=None))
-        f.require(not any(os.path.lexists(path) for path in (job_plist, login_agent) if path), "unowned_plist")
-        f.write_file(job_plist, raw)
         expected["plist"] = str(job_plist)
         if login_agent:
+            # Retries until the job is loaded (e.g. its volume mounts late); exits 0 when it is.
             login_raw = plistlib.dumps(dict(
-                Label=login_agent.stem, RunAtLoad=True, LimitLoadToSessionType="Aqua",
-                ProcessType="Background", ProgramArguments=[
+                Label=login_agent.stem, RunAtLoad=True, KeepAlive=dict(SuccessfulExit=False),
+                ThrottleInterval=30, LimitLoadToSessionType="Aqua", ProcessType="Background", Umask=63,
+                StandardOutPath=str(root / "logs" / "login-agent.log"),
+                StandardErrorPath=str(root / "logs" / "login-agent.log"), ProgramArguments=[
                     "/bin/sh", "-c", '/bin/launchctl print "$1/$2" >/dev/null 2>&1 || '
                     'exec /bin/launchctl bootstrap "$1" "$3"', "sh", domain, label, str(job_plist)]))
             expected.update(login_agent=str(login_agent),
                             login_agent_sha256=hashlib.sha256(login_raw).hexdigest())
+        # The receipt names every file before it exists, so an interrupted install can be uninstalled.
         f.write_json(receipt_path, dict(expected, phase="installing", sibling_observation=sibling_observation()))
+        f.write_file(job_plist, raw)
         subprocess.run(["/bin/launchctl", "bootstrap", domain, str(job_plist)],
                        check=True, timeout=10, env={})
         f.require(owner.service(label, domain)[0] == "present", "installation_unobserved")
