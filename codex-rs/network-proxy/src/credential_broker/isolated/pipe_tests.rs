@@ -373,7 +373,10 @@ fn run_restricted_child(role: &str, name: &str) -> String {
     )
     .expect("spawn restricted child");
     let (sender, receiver) = std::sync::mpsc::channel::<Vec<u8>>();
-    let reader = codex_windows_sandbox::read_handle_loop(spawned.stdout_read, move |chunk| {
+    // Not joined: a process spawned concurrently by another test can inherit
+    // the pipe's write end while it is briefly inheritable, so EOF may come
+    // late. The report line is all that is needed.
+    let _reader = codex_windows_sandbox::read_handle_loop(spawned.stdout_read, move |chunk| {
         let _ = sender.send(chunk.to_vec());
     });
     // SAFETY: the handles stay valid until closed here.
@@ -383,7 +386,21 @@ fn run_restricted_child(role: &str, name: &str) -> String {
         CloseHandle(spawned.process.hProcess);
         CloseHandle(token);
     }
-    let _ = reader.join();
-    let output: Vec<u8> = receiver.try_iter().flatten().collect();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let mut output = Vec::new();
+    loop {
+        let text = String::from_utf8_lossy(&output);
+        let complete = text
+            .find(REPORT_PREFIX)
+            .is_some_and(|start| text[start..].contains('\n'));
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if complete || remaining.is_zero() {
+            break;
+        }
+        match receiver.recv_timeout(remaining) {
+            Ok(chunk) => output.extend(chunk),
+            Err(_) => break,
+        }
+    }
     parse_report(&output)
 }
