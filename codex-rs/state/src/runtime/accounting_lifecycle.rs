@@ -513,11 +513,7 @@ impl Journal<'_> {
             completed_as_of_ms: checkpoint,
             detail_expired_through_ms: (checkpoint >= 90 * DAY_MS)
                 .then(|| checkpoint - 90 * DAY_MS),
-            aggregate_day_floor: if checkpoint < REPLAY_MS {
-                0
-            } else {
-                (checkpoint - REPLAY_MS) / DAY_MS + 1
-            },
+            aggregate_day_floor: crate::runtime::accounting::aggregate_day_floor(checkpoint),
             oldest_recorded_day: sqlx::query_scalar(
                 "SELECT min(day) FROM (
                  SELECT utc_day day FROM draft_accounting_compact_days WHERE thread_id = ?1

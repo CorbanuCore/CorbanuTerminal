@@ -206,6 +206,19 @@ enum RetentionFixture {
     Active(i64),
 }
 
+/// The first UTC day whose daily totals are still kept at `checkpoint`: a
+/// day's totals are kept for a year. Day pages and ranges both read it here,
+/// so they agree on how far back the totals go.
+fn aggregate_day_floor(checkpoint: i64) -> i64 {
+    const DAY_MS: i64 = 86_400_000;
+    const REPLAY_MS: i64 = 365 * DAY_MS;
+    if checkpoint < REPLAY_MS {
+        0
+    } else {
+        (checkpoint - REPLAY_MS) / DAY_MS + 1
+    }
+}
+
 /// Strict fixture metadata, never an implicit install, repair or activation path.
 async fn retention_fixture_on_connection(
     conn: &mut SqliteConnection,

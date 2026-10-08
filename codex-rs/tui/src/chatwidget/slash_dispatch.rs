@@ -36,14 +36,13 @@ const SIDE_SLASH_COMMAND_UNAVAILABLE_HINT: &str =
     "Press Ctrl+C to return to the main thread first.";
 const GOAL_USAGE_HINT: &str = "Example: /goal improve benchmark coverage";
 const RAW_USAGE: &str = "Usage: /raw [on|off]";
-/// Account usage is an OpenAI account API and needs that sign-in. What a turn
-/// cost is recorded locally for whatever provider served it, so the message
-/// points at the view that does work here rather than dead-ending, by the name
-/// this build resolves (`/cost` is only a command where costs are recorded).
+/// Account usage is an OpenAI account API and needs that sign-in. Where costs
+/// are recorded locally (`/cost`, developer builds only), the message points
+/// there; other builds have no per-request cost view to point at.
 const USAGE_CHATGPT_LOGIN_REQUIRED: &str = if cfg!(feature = "developer-accounting") {
     "Sign in with ChatGPT to view OpenAI account usage. For what your turns cost on this provider, run `/cost`."
 } else {
-    "Sign in with ChatGPT to view OpenAI account usage. For what your turns cost on this provider, run `/usage requests`."
+    "Sign in with ChatGPT to view OpenAI account usage."
 };
 
 fn tasknode_new_chat_id() -> String {
@@ -804,7 +803,17 @@ impl ChatWidget {
         match cmd {
             SlashCommand::Usage => {
                 if trimmed.split_whitespace().next() == Some("requests") {
-                    self.open_accounting_command(trimmed, chrono::Utc::now().date_naive());
+                    // `/cost` is developer-only (PF-60-S03): a build that
+                    // records no costs says so instead of opening a view it
+                    // could never fill.
+                    if cfg!(feature = "developer-accounting") {
+                        self.open_accounting_command(trimmed, chrono::Utc::now().date_naive());
+                    } else {
+                        self.add_info_message(
+                            tokens::NO_COST_HISTORY.to_string(),
+                            /*hint*/ None,
+                        );
+                    }
                 } else if self.ensure_usage_command_available() {
                     match tokens::TokenActivityView::parse(trimmed) {
                         Some(view) => self.add_token_activity_output(view),

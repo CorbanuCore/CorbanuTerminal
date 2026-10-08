@@ -44,10 +44,12 @@ async fn accounting_inspect_command_without_account_auth() {
     let (mut chat, mut rx, mut ops) = make_chatwidget_manual(/*model_override*/ None).await;
     assert!(!chat.has_codex_backend_auth());
     chat.dispatch_command_with_args(SlashCommand::Usage, "requests".into(), Vec::new());
-    assert_matches!(rx.try_recv(), Ok(AppEvent::LoadAccountingInspector { .. }));
-    assert!(rx.try_recv().is_err());
+    if cfg!(feature = "developer-accounting") {
+        assert_matches!(rx.try_recv(), Ok(AppEvent::LoadAccountingInspector { .. }));
+        assert!(rx.try_recv().is_err());
+        assert!(render_bottom_popup(&chat, /*width*/ 80).contains("Loading recorded requests"));
+    }
     assert!(ops.try_recv().is_err());
-    assert!(render_bottom_popup(&chat, /*width*/ 80).contains("Loading recorded requests"));
     chat.clear_pending_token_activity_refreshes();
     chat.dispatch_command_with_args(SlashCommand::Usage, "weekly".into(), Vec::new());
     let cells = drain_insert_history(&mut rx);
@@ -58,6 +60,40 @@ async fn accounting_inspect_command_without_account_auth() {
             .collect::<String>()
             .contains("Sign in with ChatGPT")
     );
+}
+
+// Criterion 13b (PF-60-S03): `/cost` is developer-only, so a build that
+// records no costs answers every `/usage requests` form with one plain line
+// and never opens a cost page it could not fill.
+#[tokio::test]
+async fn usage_requests_in_default_build_says_cost_history_is_absent() {
+    if cfg!(feature = "developer-accounting") {
+        return;
+    }
+    for args in [
+        "requests",
+        "requests 2026-09-15",
+        "requests 2999-01-01",
+        "requests 2026-09-01 2026-10-01 week",
+        "requests junk",
+    ] {
+        let (mut chat, mut rx, mut ops) = make_chatwidget_manual(/*model_override*/ None).await;
+        chat.dispatch_command_with_args(SlashCommand::Usage, args.into(), Vec::new());
+        let cells = drain_insert_history(&mut rx);
+        let rendered = cells
+            .iter()
+            .map(|cell| lines_to_single_string(cell))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert_eq!(
+            rendered.trim(),
+            "• Per-request cost history is not part of this build.",
+            "{args}"
+        );
+        assert!(chat.accounting_inspector.is_none(), "{args}");
+        assert!(rx.try_recv().is_err(), "{args}");
+        assert!(ops.try_recv().is_err(), "{args}");
+    }
 }
 
 #[tokio::test]
@@ -1436,13 +1472,13 @@ async fn signed_out_usage_command_reports_chatgpt_login_requirement() {
         .map(|cell| lines_to_single_string(cell))
         .collect::<Vec<_>>()
         .join("\n");
-    // The hint names the build's cost command; pin the shipped wording, which
-    // the developer-accounting build replaces with `/cost`.
+    // Pin the shipped wording; the developer-accounting build adds a pointer
+    // to `/cost`, which only it has.
     assert_chatwidget_snapshot!(
         "signed_out_usage_command_reports_chatgpt_login_requirement",
         rendered.replace(
-            &format!("`{}`", crate::chatwidget::cost_command()),
-            "`/usage requests`"
+            " For what your turns cost on this provider, run `/cost`.",
+            ""
         )
     );
     assert_eq!(recall_latest_after_clearing(&mut chat), "/usage");
@@ -1464,11 +1500,15 @@ async fn signed_out_usage_command_with_args_reports_chatgpt_login_requirement() 
         rendered.contains("Sign in with ChatGPT to view OpenAI account usage."),
         "expected ChatGPT login requirement, got: {rendered:?}"
     );
-    // The account view needs that sign-in; what a turn cost does not, and an
-    // operator on another provider must be told where to look instead of being
-    // left to conclude the feature does not exist.
-    // Named by the command this build resolves: `/cost` only exists where
-    // costs are recorded.
+    // The account view needs that sign-in; what a turn cost does not, so
+    // where costs are recorded the operator is told where to look. A build
+    // that records none has no such view and names none.
+    if !cfg!(feature = "developer-accounting") {
+        assert!(!rendered.contains("/usage requests"), "{rendered:?}");
+        assert!(!rendered.contains("/cost"), "{rendered:?}");
+        assert_eq!(recall_latest_after_clearing(&mut chat), "/usage weekly");
+        return;
+    }
     let command = crate::chatwidget::cost_command();
     assert!(
         rendered.contains(&format!("run `{command}`")),
