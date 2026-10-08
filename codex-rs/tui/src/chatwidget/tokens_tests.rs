@@ -442,6 +442,7 @@ fn accounting_inspect_range_bucket_reaching_today_is_in_progress() {
         "Partial bucket",
         "Next step: send a turn",
         "excluded from totals",
+        "unavailable slices may contain",
     ] {
         assert!(!all.contains(absent), "{absent}: {all}");
     }

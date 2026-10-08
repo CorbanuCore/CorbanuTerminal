@@ -1845,7 +1845,21 @@ fn range_pages(
         ),
         "Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost: unavailable — no settlement evidence.".into(),
     ];
-    let states = buckets.iter().flat_map(|b| &b.days).collect::<Vec<_>>();
+    let progress: Vec<_> = buckets
+        .iter()
+        .map(|b| in_progress_end(requested, read_at, b))
+        .collect();
+    // The days of an in-progress bucket after its coverage end have not
+    // happened yet; they say nothing about the range.
+    let states = buckets
+        .iter()
+        .zip(&progress)
+        .flat_map(|(b, progress)| {
+            b.days
+                .iter()
+                .filter(move |d| progress.is_none() || !matches!(d, InspectionDay::CheckpointLag))
+        })
+        .collect::<Vec<_>>();
     if states
         .iter()
         .any(|s| matches!(s, InspectionDay::NeedsRefresh))
@@ -1896,10 +1910,6 @@ fn range_pages(
     pages[0]
         .text
         .extend(scope::other_conversations_lines(/*others*/ None));
-    let progress: Vec<_> = buckets
-        .iter()
-        .map(|b| in_progress_end(requested, read_at, b))
-        .collect();
     let complete = buckets.iter().zip(&progress).all(|(b, progress)| {
         progress.is_some()
             || (!b.partial && b.days.iter().all(|d| matches!(d, InspectionDay::Ready(_))))
