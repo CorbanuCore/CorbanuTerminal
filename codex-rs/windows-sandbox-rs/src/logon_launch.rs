@@ -14,15 +14,15 @@
 //! The launcher inherits only its own two pipes and an environment holding
 //! just `SystemRoot`. The pipe ends are never inheritable in Core's own
 //! handle table (#307), where any process Core started on another thread
-//! (`std::process::Command` always inherits) would also get them: they are
-//! duplicated, inheritable, into a holder process that never runs, and the
-//! launcher is started as that holder's child. It receives the sandbox
-//! user's password, which is not a
-//! secret from this user (it is stored under `.sandbox-secrets`, which this
-//! user can read). Its binary is in the sandbox's helper directory, which the
-//! sandbox's users can only read and execute. Core checks that the returned
-//! handle is the process the launcher named, and the launcher ends that
-//! process unless Core acknowledges it.
+//! meanwhile (`std::process::Command` always inherits) would get them too:
+//! they are duplicated, inheritable, into a holder process that never runs,
+//! and the launcher is started as the holder's child. The launcher receives
+//! the sandbox user's password, which is not a secret from this user (it is
+//! stored under `.sandbox-secrets`, which this user can read). Its binary is
+//! in the sandbox's helper directory, which the sandbox's users can only read
+//! and execute. Core checks that the returned handle is the process the
+//! launcher named, and the launcher ends that process unless Core
+//! acknowledges it.
 
 use crate::proc_thread_attr::ProcThreadAttributeList;
 use crate::winutil::quote_windows_arg;
@@ -254,7 +254,8 @@ impl HandleHolder {
             )
         };
         if ok == 0 {
-            return Err(std::io::Error::last_os_error()).context("start the launcher's handle holder");
+            return Err(std::io::Error::last_os_error())
+                .context("start the launcher's handle holder");
         }
         // SAFETY: returned by the call above and not used again.
         unsafe { CloseHandle(info.hThread) };
@@ -278,7 +279,8 @@ impl HandleHolder {
             )
         };
         if ok == 0 {
-            return Err(std::io::Error::last_os_error()).context("hand a launcher pipe to the holder");
+            return Err(std::io::Error::last_os_error())
+                .context("hand a launcher pipe to the holder");
         }
         Ok(held)
     }
