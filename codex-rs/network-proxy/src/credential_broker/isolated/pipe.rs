@@ -306,7 +306,7 @@ fn parent_pid() -> Option<u32> {
     let status = unsafe {
         NtQueryInformationProcess(
             GetCurrentProcess(),
-            /*ProcessBasicInformation*/ 0,
+            /*class*/ 0,
             (&mut info as *mut BasicInformation).cast(),
             std::mem::size_of::<BasicInformation>() as u32,
             &mut returned,
