@@ -2,7 +2,7 @@
 sprint_id: "PF-20-S02"
 title: "Protected authoritative-state persistence"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-20"
 execution_order: 24
 owner: "Codex authoritative-state lane"
@@ -26,7 +26,7 @@ updated: 2026-08-30
 
 ## Plan linkage
 
-- Plan: [P0 security levels](../../../plans/active/p0-security-levels.md).
+- Plan: [P0 security levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md).
 - Feature: `PF-20`.
 - Product citation: **Reconciled security scope — TO BUILD** — “Unknown or unsupported protected paths fail visibly rather than falling back to raw secrets or unscreened execution.”
 - Acceptance advanced: [architecture refinements](../../../plans/security-architecture-refinements-2026-08-28.md); preserve the completed S01 and its historical evidence, with only added guarantees in this follow-up.

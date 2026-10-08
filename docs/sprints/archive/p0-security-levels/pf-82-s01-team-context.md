@@ -2,7 +2,7 @@
 sprint_id: "PF-82-S01"
 title: "Expose existing Team Context in Corbanu"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-82"
 execution_order: 100
 owner: "Codex Team Context integration"
@@ -29,7 +29,7 @@ Expose the existing authorized Team Context report through a read-only terminal 
 
 ## Plan linkage
 
-[Active plan PF-82](../../../plans/active/p0-security-levels.md#pf-82--team-context-terminal-parity).
+[Active plan PF-82](../../../plans/completed/main-2026-10-08-p0-security-levels.md#pf-82--team-context-terminal-parity).
 
 ## Code boundaries
 

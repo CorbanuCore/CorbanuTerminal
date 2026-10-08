@@ -1,18 +1,20 @@
 ---
 sprint_id: "PF-27-S06"
 title: "Windows broker and secretless launch"
-status: draft
-plan_file: "docs/plans/proposed/p1-security-hardening.md"
+status: blocked
+plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-27"
 execution_order: 42
-owner: "broker lane worker (2026-10-08)"
-parallel_lane: "broker"
-write_scope: "codex-rs/process-hardening/, codex-rs/network-proxy/src/credential_broker/isolated/, codex-rs/network-proxy/src/credential_broker/isolated.rs, codex-rs/network-proxy/src/credential_broker/isolated_tests.rs, codex-rs/network-proxy/src/credential_broker.rs, codex-rs/network-proxy/src/credential_broker/providers.rs, codex-rs/network-proxy/src/upstream.rs, codex-rs/network-proxy/src/lib.rs, codex-rs/network-proxy/Cargo.toml, codex-rs/arg0/src/lib.rs, codex-rs/core/src/security/launch_contract.rs, codex-rs/core/src/security/launch_contract_tests.rs, codex-rs/core/src/security/launch_contract_windows_tests.rs, codex-rs/core/src/security/inspection.rs, codex-rs/core/src/tools/sandboxing.rs, codex-rs/core/src/tools/sandboxing_tests.rs, codex-rs/core/src/tools/runtimes/apply_patch.rs, codex-rs/windows-sandbox-rs/src/acl.rs, codex-rs/windows-sandbox-rs/src/lib.rs, codex-rs/core/src/tools/runtimes/shell/unix_escalation.rs, codex-rs/core/Cargo.toml, codex-rs/network-proxy/src/mitm.rs, codex-rs/network-proxy/src/certs.rs, codex-rs/network-proxy/src/credential_broker_tests.rs, codex-rs/arg0/Cargo.toml, codex-rs/core/tests/suite/windows_sandbox.rs, codex-rs/Cargo.lock, MODULE.bazel.lock, .github/workflows/windows-security-probes.yml, qa/security-levels/sprints/PF-27-S06/, docs/sprints/current/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md"
-integration_gate: "Per-sprint gate (sec-common decision 5), one PR per slice: pf_27_s06 tests on the windows-2022 runner (windows-security-probes workflow), Linux clippy on the RTX box, one Opus 5.5 High review per slice; merged behind the existing default-off flags. The GLM 5.2 tmux run and SOP videos need a real Windows machine."
+owner: "Windows-host gate owner (Jim Ricketts; code by the broker lane worker, 2026-10-08)"
+parallel_lane: "windows-host"
+write_scope: "qa/security-levels/sprints/PF-27-S06/, qa/demos/index/PF-27-S06.md, docs/sprints/current/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md"
+integration_gate: "Per-sprint gate (sec-common decision 5), one PR per slice: pf_27_s06 tests on the windows-2022 runner (windows-security-probes workflow), Linux clippy on the RTX box, one Opus 5.5 High review per slice; merged behind the existing default-off flags. Remaining: GLM 5.2 tmux run and SOP videos on a real Windows machine, received by the P1 integration owner."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-27-s06-20261008"
 branch: "sec/pf-27-s06-windows-broker"
 base_commit: "7e6ef740ef1574d48c3caf2e84af82779c5b5969"
 depends_on: "PF-27-S02"
+merged_behind_flag: "isolated_credential_broker, secretless_agent_launch"
+gate_evidence: "qa/security-levels/sprints/PF-27-S06/README.md"
 created: 2026-10-06
 updated: 2026-10-08
 ---
@@ -25,10 +27,10 @@ coordinator's 2026-10-06 instruction not to block on Windows. Until this lands, 
 agent commands with a stated reason. Moved to the P1 hardening plan on 2026-10-06 (Travis); its dependency
 on [PF-27-S02](../../archive/p0-security-levels/pf-27-s02-secretless-agent-launch.md) is unchanged.
 
-Started 2026-10-08 (Travis approved starting before the plan is activated). Status stays `draft` until the
-plan worker activates the P1 plan and records these coordinates (the lifecycle checker requires both; plan slots
-are 3/3). No Windows host yet: real probes run on the `windows-2022` CI runners (`windows-security-probes`
-workflow); the tmux run and videos wait for a Windows machine. One PR per slice, from branches named after this one.
+Started 2026-10-08 (Travis approved starting early). All code merged (PRs #267, #269, #270, #272) behind the
+default-off flags above; real probes run on `windows-2022` CI. **Blocked** since P1 activation (2026-10-08): the
+tmux run and videos need a real Windows machine. Scope is now evidence only (code fixes go to the broker lane); the
+build worktree was removed, so reallocate coordinates on the Windows host before the gate run.
 
 ## Execution mandate
 
@@ -37,7 +39,7 @@ workflow); the tmux run and videos wait for a Windows machine. One PR per slice,
 
 ## Plan linkage
 
-- Plan: [P1 security hardening](../../../plans/proposed/p1-security-hardening.md#pf-27).
+- Plan: [P1 security hardening](../../../plans/active/p1-security-hardening.md#pf-27).
 - Feature: `PF-27`.
 - Product citation: **Required trust boundaries** — “Credentials are referenced by label and resolved only inside a trusted execution boundary.”
 - Acceptance advanced: no raw managed secret enters agent environment, command line or process memory on Windows.
@@ -75,16 +77,15 @@ workflow); the tmux run and videos wait for a Windows machine. One PR per slice,
   replaced during a run denied (an inherit-only, files-only deny on `CODEX_HOME`), Core stand-ins unopenable.
 - [x] `pf_27_s06` tests run on every PR touching this code (`windows-security-probes` workflow); Linux clippy clean
   on the RTX box; Opus 5.5 High reviews per slice, all approved (2-3 rounds each).
-- [x] Travis approved fixing the four documented limits (2026-10-08): new threads and the `CODEX_HOME` deny in
-  [PF-27-S07](pf-27-s07-windows-hardening-follow-ups.md), the broker's own token in
-  [PF-27-S08](pf-27-s08-windows-broker-restricted-token.md), Windows model auth in
-  [PF-27-S09](pf-27-s09-windows-model-client-auth.md).
+- [x] Travis approved fixing the four documented limits (2026-10-08): [PF-27-S07](pf-27-s07-windows-hardening-follow-ups.md)
+  (new threads, `CODEX_HOME` deny), [S08](pf-27-s08-windows-broker-restricted-token.md) (broker token), [S09](pf-27-s09-windows-model-client-auth.md) (model auth).
 
 ## Remaining
 
 - [ ] Decision 5 tmux run (GLM 5.2 driving the TUI) and SOP videos on a real Windows machine ([requirements](../../../../qa/security-levels/sprints/PF-27-S06/README.md#windows-machine-needed-for-the-remaining-gate)).
-- [ ] Follow-ups for the plan worker: file tools other than patches under the contract on Windows; the elevated sandbox's read of
-  `~/.git-credentials`, `.ssh`, `.npmrc`, `.config/gh` if profile reads are ever granted (setup excludes most).
+- [ ] Unplaced follow-ups (listed in the plan's carried-forward table): file tools other than patches under the
+  contract on Windows; the elevated sandbox's read of `~/.git-credentials`, `.ssh`, `.npmrc`, `.config/gh` if profile
+  reads are ever granted (setup excludes most).
 
 ## Verification
 

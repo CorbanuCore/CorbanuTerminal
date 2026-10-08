@@ -2,7 +2,7 @@
 sprint_id: "PF-27-S08"
 title: "Windows broker confined by its own restricted token or AppContainer"
 status: draft
-plan_file: "docs/plans/proposed/p1-security-hardening.md"
+plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-27"
 execution_order: 44
 owner: "broker lane (unassigned)"
@@ -31,7 +31,7 @@ can still write the user's files, open the user's other processes, and ask anoth
 
 ## Plan linkage
 
-- Plan: [P1 security hardening](../../../plans/proposed/p1-security-hardening.md#pf-27).
+- Plan: [P1 security hardening](../../../plans/active/p1-security-hardening.md#pf-27).
 - Feature: `PF-27`.
 - Product citation: **Required trust boundaries** — “Credentials are referenced by label and resolved only inside a trusted execution boundary.”
 - Acceptance advanced: the process that holds raw credentials is itself confined on every platform.

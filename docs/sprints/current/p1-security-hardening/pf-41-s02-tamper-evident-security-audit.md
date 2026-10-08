@@ -2,7 +2,7 @@
 sprint_id: "PF-41-S02"
 title: "Tamper-evident audit and safe support export"
 status: draft
-plan_file: "docs/plans/proposed/p1-security-hardening.md"
+plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-41"
 execution_order: 72
 owner: "Jim Ricketts"
@@ -23,7 +23,7 @@ updated: 2026-10-06
 
 ## Plan linkage
 
-- Plan: [P1 security hardening](../../../plans/proposed/p1-security-hardening.md#pf-41).
+- Plan: [P1 security hardening](../../../plans/active/p1-security-hardening.md#pf-41).
 - Feature: `PF-41`.
 - Product citation: **Non-negotiable controls** — “Record tamper-evident policy decisions, tool calls, approvals, signatures, and transaction or order IDs without secrets.”
 - Acceptance advanced: Security decisions are inspectable and exportable without creating another secret-disclosure channel.

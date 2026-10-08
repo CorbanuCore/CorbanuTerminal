@@ -2,7 +2,7 @@
 sprint_id: "PF-38-S03"
 title: "Separate signing broadcasting and idempotent receipts"
 status: draft
-plan_file: "docs/plans/proposed/p1-security-hardening.md"
+plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-38"
 execution_order: 65
 owner: "Jim Ricketts"
@@ -23,7 +23,7 @@ updated: 2026-10-06
 
 ## Plan linkage
 
-- Plan: [P1 security hardening](../../../plans/proposed/p1-security-hardening.md#pf-38).
+- Plan: [P1 security hardening](../../../plans/active/p1-security-hardening.md#pf-38).
 - Feature: `PF-38`.
 - Product citation: **Non-negotiable controls** — “Simulate and display the complete expected effect before signing.”
 - Acceptance advanced: Sign and broadcast are separate guarded operations; retries cannot silently duplicate a financial effect.

@@ -2,7 +2,7 @@
 sprint_id: "PF-77-S01"
 title: "Task Node durable command and transport recovery"
 status: draft
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-77"
 execution_order: 79
 owner: "Task Node reliability integration"
@@ -35,7 +35,7 @@ completed work and the unchecked observation; this is not completion.
 
 ## Plan linkage
 
-- Plan: [P0 security](../../../plans/active/p0-security-levels.md), feature `PF-77`.
+- Plan: [P0 security](../../../plans/completed/main-2026-10-08-p0-security-levels.md), feature `PF-77`.
 - Repeated submission recovers the original account-owned receipt; stale
   profile/view responses cannot replace the current display.
 

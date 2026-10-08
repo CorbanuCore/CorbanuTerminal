@@ -2,7 +2,7 @@
 sprint_id: "PF-33-S01"
 title: "URL DNS and redirect policy"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-33"
 execution_order: 32
 owner: "first-free lane worker (codex, 2026-10-06)"
@@ -27,8 +27,8 @@ Completed under the per-sprint gate (sec-common decision 5): merged (PR #210) be
 
 | Carried forward | To |
 | --- | --- |
-| Bind legacy per-host credential adapters to exact host, port, method and path (`credential_broker.rs`) | [PF-28-S02](../../current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md) (broker lane; coordinator, 2026-10-06) |
-| Local upstream proxies, connection pinning to the checked answers, in-process MITM test seam | Done in [PF-33-S02](../../current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md) |
+| Bind legacy per-host credential adapters to exact host, port, method and path (`credential_broker.rs`) | [PF-28-S02](../../archive/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md) (broker lane; coordinator, 2026-10-06) |
+| Local upstream proxies, connection pinning to the checked answers, in-process MITM test seam | Done in [PF-33-S02](../../archive/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md) |
 | POST answered 301/302 refused; more than 16 answers refused; timed-out lookups not cancelled; redirects to runtime-only approved hosts refused | Documented behaviour; not scheduled |
 
 ## Execution mandate
@@ -38,7 +38,7 @@ Completed under the per-sprint gate (sec-common decision 5): merged (PR #210) be
 
 ## Plan linkage
 
-- Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md#pf-33).
+- Plan: [P0 `/security` levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md#pf-33).
 - Feature: `PF-33`.
 - Product citation: **Non-negotiable controls** — “Default to no secret export, arbitrary egress, clipboard exposure, or sensitive logging.”
 - Acceptance advanced: URL authorization remains valid through DNS and every redirect, not merely on the initial hostname.

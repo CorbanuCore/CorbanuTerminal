@@ -2,7 +2,7 @@
 sprint_id: "PF-27-S07"
 title: "Windows hardening follow-ups"
 status: draft
-plan_file: "docs/plans/proposed/p1-security-hardening.md"
+plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-27"
 execution_order: 43
 owner: "broker lane worker (2026-10-08)"
@@ -32,7 +32,7 @@ until the P1 plan is activated, as for PF-27-S06. One PR per slice, from branche
 
 ## Plan linkage
 
-- Plan: [P1 security hardening](../../../plans/proposed/p1-security-hardening.md#pf-27).
+- Plan: [P1 security hardening](../../../plans/active/p1-security-hardening.md#pf-27).
 - Feature: `PF-27`.
 - Product citation: **Required trust boundaries** — “Credentials are referenced by label and resolved only inside a trusted execution boundary.”
 - Acceptance advanced: no raw managed secret enters agent environment, command line or process memory on Windows.

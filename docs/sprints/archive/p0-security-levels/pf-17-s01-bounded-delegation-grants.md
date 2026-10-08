@@ -2,7 +2,7 @@
 sprint_id: "PF-17-S01"
 title: "Bounded delegation grants reconciliation"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-17"
 execution_order: 3
 owner: "Jim Ricketts"
@@ -23,7 +23,7 @@ updated: 2026-08-25
 
 ## Plan linkage
 
-- Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
+- Plan: [P0 `/security` levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md)
 - Feature: `PF-17`
 - Acceptance advanced: adjacent action, actor, destination, limit, and post-expiry use fail.
 

@@ -1,8 +1,8 @@
 ---
 sprint_id: "PF-41-S01"
 title: "Effective security inspector and degradation state"
-status: draft
-plan_file: "docs/plans/active/p0-security-levels.md"
+status: completed
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-41"
 execution_order: 71
 owner: "convergence lane worker (2026-10-07)"
@@ -16,7 +16,7 @@ depends_on: "PF-23-S03, PF-29-S02, PF-24-S02"
 merged_behind_flag: "security_levels"
 gate_evidence: "qa/security-levels/sprints/PF-41-S01/README.md"
 created: 2026-08-28
-updated: 2026-10-07
+updated: 2026-10-08
 ---
 
 # PF-41-S01 — Effective security inspector and degradation state
@@ -28,7 +28,7 @@ updated: 2026-10-07
 
 ## Plan linkage
 
-- Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md#pf-41).
+- Plan: [P0 `/security` levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md#pf-41).
 - Feature: `PF-41`.
 - Product citation: **Non-negotiable controls** — “Record tamper-evident policy decisions, tool calls, approvals, signatures, and transaction or order IDs without secrets.”
 - Acceptance advanced: The user can inspect the protection actually enforced, including degradation and recent denials.
@@ -73,10 +73,12 @@ Gate: [qa/security-levels/sprints/PF-41-S01/README.md](../../../../qa/security-l
 
 ## Remaining
 
-- [ ] Full `just test -p codex-core` / `-p codex-tui` suites run in post-merge CI (only focused and security filters
+Nothing left in this sprint: merged behind its flag and archived when Travis closed the P0 plan on 2026-10-08. These open items moved to the [P1 plan](../../../plans/active/p1-security-hardening.md#carried-forward-from-p0):
+
+- Full `just test -p codex-core` / `-p codex-tui` suites run in post-merge CI (only focused and security filters
   ran here); one pre-existing TMPDIR-length flake in a picker test is noted in the gate record.
-- [ ] Code-blind functional design/execution and human sign-off are milestone work (flag removal), not this gate.
-- [ ] Not observed here, so never green: the network credential broker's health and the model key broker's health.
+- Code-blind functional design/execution and human sign-off are milestone work (flag removal), not this gate.
+- Not observed here, so never green: the network credential broker's health and the model key broker's health.
   Launch-contract denials carry no thread (shown as "this process").
 
 ## Verification
@@ -89,11 +91,11 @@ Gate: [qa/security-levels/sprints/PF-41-S01/README.md](../../../../qa/security-l
   inject failure (`security_state.json` overwritten) → Blocked → confirm a level → restart → recovered.
 - [x] Commits, commands, outcomes and video links recorded in the gate record; no production credentials.
 - [x] Linux clippy (`-D warnings`; core, tui, app-server-client) on the RTX box.
-- [ ] Full crate suites in post-merge CI; code-blind run at the flag-removal milestone.
+- Moved to P1: Full crate suites in post-merge CI; code-blind run at the flag-removal milestone.
 
 ## Exit evidence
 
 - [x] Implementation commits and final-tree outputs under `qa/security-levels/sprints/PF-41-S01/`.
 - [x] Acceptance assertions proven in tests and true-TUI keys after formatting.
-- [ ] PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
-- [ ] Record stays current until the milestone gate (flag removal) closes the remaining items above.
+- Moved to P1: PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
+- [x] Ledgers reflect reality; open items moved to the [P1 plan](../../../plans/active/p1-security-hardening.md#carried-forward-from-p0) and the record archived with the P0 close (Travis, 2026-10-08).

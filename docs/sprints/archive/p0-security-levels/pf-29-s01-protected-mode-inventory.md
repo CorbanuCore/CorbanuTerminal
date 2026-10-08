@@ -1,13 +1,13 @@
 ---
 sprint_id: "PF-29-S01"
 title: "Protected-mode inventory and activation preflight"
-status: draft
-plan_file: "docs/plans/active/p0-security-levels.md"
+status: completed
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-29"
 execution_order: 35
 owner: "first-free lane worker (codex, 2026-10-06)"
 parallel_lane: "tui"
-write_scope: "codex-rs/core/src/security/inventory.rs, codex-rs/core/src/security/preflight.rs, codex-rs/core/src/security/pf_29_s01_tests.rs, codex-rs/core/src/lib.rs, codex-rs/core/src/exec_env.rs, codex-rs/core/config.schema.json, codex-rs/features/src/lib.rs, codex-rs/app-server-client/src/lib.rs, codex-rs/tui/src/security/preflight.rs, codex-rs/tui/src/security/preflight_tests.rs, codex-rs/tui/src/security/mod.rs, codex-rs/tui/src/security/level.rs, codex-rs/tui/src/security/launch.rs, codex-rs/tui/src/security/aggressive.rs, codex-rs/tui/src/security/view.rs, codex-rs/tui/src/bottom_pane/security_level_picker.rs, codex-rs/tui/src/bottom_pane/security_level_picker_tests.rs, codex-rs/tui/src/bottom_pane/security_view.rs, codex-rs/tui/src/bottom_pane/security_view_tests.rs, codex-rs/tui/src/slash_command.rs, codex-rs/tui/src/lib.rs, codex-rs/tui/src/app/session_lifecycle.rs, qa/security-levels/sprints/PF-29-S01/, docs/plans/active/p0-security-levels.md, docs/sprints/current/p0-security-levels/index.md, docs/sprints/current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md, qa/demos/index/PF-29-S01.md, docs/sprints/current/p0-security-levels/pf-29-s01-protected-mode-inventory.md"
+write_scope: "codex-rs/core/src/security/inventory.rs, codex-rs/core/src/security/preflight.rs, codex-rs/core/src/security/pf_29_s01_tests.rs, codex-rs/core/src/lib.rs, codex-rs/core/src/exec_env.rs, codex-rs/core/config.schema.json, codex-rs/features/src/lib.rs, codex-rs/app-server-client/src/lib.rs, codex-rs/tui/src/security/preflight.rs, codex-rs/tui/src/security/preflight_tests.rs, codex-rs/tui/src/security/mod.rs, codex-rs/tui/src/security/level.rs, codex-rs/tui/src/security/launch.rs, codex-rs/tui/src/security/aggressive.rs, codex-rs/tui/src/security/view.rs, codex-rs/tui/src/bottom_pane/security_level_picker.rs, codex-rs/tui/src/bottom_pane/security_level_picker_tests.rs, codex-rs/tui/src/bottom_pane/security_view.rs, codex-rs/tui/src/bottom_pane/security_view_tests.rs, codex-rs/tui/src/slash_command.rs, codex-rs/tui/src/lib.rs, codex-rs/tui/src/app/session_lifecycle.rs, qa/security-levels/sprints/PF-29-S01/, docs/plans/completed/main-2026-10-08-p0-security-levels.md, docs/sprints/current/p0-security-levels/index.md, docs/sprints/archive/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md, qa/demos/index/PF-29-S01.md, docs/sprints/archive/p0-security-levels/pf-29-s01-protected-mode-inventory.md"
 integration_gate: "PR to main under the per-sprint gate (sec-common decision 5): focused tests, GLM 5.2 tmux run, one Opus 5.5 High review, SOP videos; behaviour behind the new default-off protected_mode_preflight flag (only with security_levels). Shared hunks kept small: two module lines in core/src/security/mod.rs (PF-27-S02 scope), the /security view argument in tui/src/chatwidget/slash_dispatch.rs (PF-60-S03 scope), one module re-export each in core/src/lib.rs and app-server-client/src/lib.rs, one helper in core/src/exec_env.rs, the flag in features/src/lib.rs and core/config.schema.json, the resume hooks in tui/src/lib.rs and app/session_lifecycle.rs, the merged_behind_flag note in the PF-28-S02 record and the index row; new demo specs qa/demos/specs/pf29s01-*.toml under the directory PF-23-S01 reserves (new files only)."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-29-s01-20261006"
 branch: "pf-29-s01-20261006"
@@ -16,7 +16,7 @@ depends_on: "PF-28-S02, PF-20-S02"
 merged_behind_flag: "protected_mode_preflight"
 gate_evidence: "qa/security-levels/sprints/PF-29-S01/README.md"
 created: 2026-08-28
-updated: 2026-10-06
+updated: 2026-10-08
 ---
 
 # PF-29-S01 — Protected-mode inventory and activation preflight
@@ -30,7 +30,7 @@ updated: 2026-10-06
 
 ## Plan linkage
 
-- Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md#pf-29).
+- Plan: [P0 `/security` levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md#pf-29).
 - Feature: `PF-29`.
 - Product citation: **Non-negotiable controls** — “Permit agents to reference credentials only by label; resolve them solely inside the trusted execution boundary.”
 - Acceptance advanced: Protected-mode activation cannot claim a clean boundary while a known raw-secret route or contaminated resume remains usable.
@@ -81,20 +81,22 @@ updated: 2026-10-06
 
 ## Remaining
 
-- [ ] MCP servers, hooks and notify run outside the sandbox: listed as "not contained", not blocked, pending Travis's
+Nothing left in this sprint: merged behind its flag and archived when Travis closed the P0 plan on 2026-10-08. These open items moved to the [P1 plan](../../../plans/active/p1-security-hardening.md#carried-forward-from-p0):
+
+- MCP servers, hooks and notify run outside the sandbox: listed as "not contained", not blocked, pending Travis's
   PF-27-S02 decision. Claude panes are not inventoried.
-- [ ] Consent flow for exec-provider sign-in commands (today: remove `auth` or block). Migration: PF-29-S02.
-- [ ] Launch isolation uses the start folder; a `.env` in another `-C` folder is reported not clean, not denied.
+- Consent flow for exec-provider sign-in commands (today: remove `auth` or block). Migration: PF-29-S02.
+- Launch isolation uses the start folder; a `.env` in another `-C` folder is reported not clean, not denied.
 
 ## Verification
 
 - [x] `just fix -p codex-features -p codex-core -p codex-app-server-client -p codex-tui`, `just fmt`; diff inspected.
 - [x] Focused `pf_29_s01`: core 14, tui 8. Suites, five GLM 5.2 videos, three Opus reviews (all findings handled).
 - [x] PR CI green; merged as #228. Details in the [evidence](../../../../qa/security-levels/sprints/PF-29-S01/README.md).
-- [ ] PF-26 final-candidate requalification (milestone gate).
+- Moved to P1: PF-26 final-candidate requalification (milestone gate).
 
 ## Exit evidence
 
 - [x] Commits, commands, outcomes, videos and review under `qa/security-levels/sprints/PF-29-S01/`.
-- [ ] PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
-- [ ] Done/Remaining reflect reality; completed record moved to the archive and plan/navigation updated.
+- Moved to P1: PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
+- [x] Ledgers reflect reality; open items moved to the [P1 plan](../../../plans/active/p1-security-hardening.md#carried-forward-from-p0) and the record archived with the P0 close (Travis, 2026-10-08).

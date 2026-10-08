@@ -3,7 +3,7 @@ sprint_id: "PF-35-S01"
 title: "Classifier corpus and leakage-free evaluation"
 status: draft
 external_qualification_state: "DeepSeek API generation via Corbanu Terminal pending; RTX PRO 6000 fine-tuning retained; engineering reservation released, not completed"
-plan_file: "docs/plans/proposed/p1-security-hardening.md"
+plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-35"
 execution_order: 20
 owner: "Raman — classifier corpus lane"
@@ -41,7 +41,7 @@ consumers still require honest completion and archival. Handoff:
 
 ## Plan linkage
 
-- Plan: [P1 security hardening](../../../plans/proposed/p1-security-hardening.md#pf-35).
+- Plan: [P1 security hardening](../../../plans/active/p1-security-hardening.md#pf-35).
 - Feature: `PF-35`.
 - Product citation: **Non-negotiable controls** — “Classify instruction intent and provenance before external content can influence tools or financial actions.”
 - Acceptance advanced: Detector quality is measured on reproducible, licensed, leakage-free blind evidence, not handpicked prompts.
@@ -51,7 +51,7 @@ consumers still require honest completion and archival. Handoff:
 
 - OpenClaw adoption reference: [OC-4](../../../plans/openclaw-source-review-2026-08-28.md#oc-4) at `13adff02ca3897768d80d2bca18f5acf08c55d91`; see the review for named functions, callers, tests and limits. Reference tests are not candidate evidence.
 
-- Existing/foundation: PF-34-S04 frozen segment/verdict contract; docs/plans/proposed/p1-security-hardening.md qualification targets.
+- Existing/foundation: PF-34-S04 frozen segment/verdict contract; docs/plans/active/p1-security-hardening.md qualification targets.
 - Planned: qa/security-levels/classifier/{corpus-manifest.json,split-manifest.json}; scripts/security-classifier-eval.
 - Tests: planned colocated Rust test modules prefixed `pf_35_s01`; fixtures use synthetic secrets and fake services only.
 
