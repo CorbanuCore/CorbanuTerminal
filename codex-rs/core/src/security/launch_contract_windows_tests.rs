@@ -211,12 +211,51 @@ fn report(output: &str) -> String {
 }
 
 fn run_probe_unsandboxed(pid: u32) -> String {
-    let output = child_command("probe")
+    let mut child = child_command("probe")
         .env(TARGET_PID_ENV, pid.to_string())
         .stdin(std::process::Stdio::null())
-        .output()
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::inherit())
+        .spawn()
         .expect("unsandboxed probe");
-    String::from_utf8_lossy(&output.stdout).into_owned()
+    let lines = line_channel(child.stdout.take().expect("probe stdout"));
+    let output = read_until(&lines, REPORT_PREFIX);
+    let _ = child.kill();
+    let _ = child.wait();
+    output
+}
+
+/// Lines from a child's stdout, read on a detached thread.
+fn line_channel(stdout: std::process::ChildStdout) -> std::sync::mpsc::Receiver<String> {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for line in std::io::BufReader::new(stdout).lines() {
+            let Ok(line) = line else {
+                break;
+            };
+            if sender.send(line).is_err() {
+                break;
+            }
+        }
+    });
+    receiver
+}
+
+/// Collects lines until one contains `marker`, or a minute passes.
+fn read_until(lines: &std::sync::mpsc::Receiver<String>, marker: &str) -> String {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let mut output = String::new();
+    while !output.contains(marker) {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        match lines.recv_timeout(remaining) {
+            Ok(line) => {
+                output.push_str(&line);
+                output.push('\n');
+            }
+            Err(_) => break,
+        }
+    }
+    output
 }
 
 fn child_command(role: &str) -> std::process::Command {
@@ -237,17 +276,15 @@ impl Target {
         let mut child = child_command(if harden { "target" } else { "plain-target" })
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
+            .stderr(std::process::Stdio::inherit())
             .spawn()
             .expect("spawn target");
-        let stdout = child.stdout.take().expect("target stdout");
-        let ready = std::io::BufReader::new(stdout)
-            .lines()
-            .any(|line| line.is_ok_and(|line| line.trim() == "pf27s06-core-target:ready"));
-        assert!(
-            ready,
-            "Core stand-in did not start (or could not harden itself)"
-        );
+        let lines = line_channel(child.stdout.take().expect("target stdout"));
+        let output = read_until(&lines, "pf27s06-core-target:ready");
+        if !output.contains("pf27s06-core-target:ready") {
+            let _ = child.kill();
+            panic!("Core stand-in did not start or could not harden itself: {output}");
+        }
         Self { child }
     }
 
