@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -81,6 +82,11 @@ def owner_activation(args):
     import plistlib
     import owner_daemon as owner
     import fable_launcher as f
+
+    def login_agent_path(label):
+        """Login agent that bootstraps a Background (user-domain) job again after a reboot."""
+        return f.no_links(owner.launch_agents() / (label + "-login.plist"))
+
     if args.owner == "install":
         f.require(bool(args.label), "explicit_label_required")
         f.require(args.label != "com.corbanu.initiative-owner" or
@@ -92,9 +98,10 @@ def owner_activation(args):
     if not lock.exists():
         f.write_file(lock, b"")
     with owner.locked(lock):
-        receipt_path, plist = root / "installation.json", root / "owner.plist"
+        receipt_path = root / "installation.json"
         previous = owner.load(receipt_path) if os.path.lexists(receipt_path) else None
         label = previous["label"] if previous else args.label
+        plist = owner.plist_path(root, previous)
         requested_domain = f"{getattr(args, 'domain', 'gui')}/{os.getuid()}"
         domain = owner.installation_domain(previous or {"domain": requested_domain})
         domains = (domain, f"{'user' if domain.startswith('gui/') else 'gui'}/{os.getuid()}")
@@ -133,6 +140,17 @@ def owner_activation(args):
             if plist.exists():
                 f.require(f.file_digest(owner.private_file(plist)) == previous["plist_sha256"],
                           "plist_drift")
+            if previous.get("login_agent"):
+                # Remove the login agent first so no login can reload the job meanwhile.
+                login_agent = login_agent_path(label)
+                f.require(str(login_agent) == previous["login_agent"], "invalid_plist_path")
+                if os.path.lexists(login_agent):
+                    f.require(f.file_digest(owner.private_file(login_agent)) == previous["login_agent_sha256"],
+                              "plist_drift")
+                    # It runs only at load; a loaded copy without its file is inert.
+                    subprocess.run(["/bin/launchctl", "bootout", f"gui/{os.getuid()}/{login_agent.stem}"],
+                                   timeout=40, env={}, capture_output=True)
+                    login_agent.unlink()
             for location, (state, _) in observations.items():
                 if state == "present":
                     subprocess.run(["/bin/launchctl", "bootout", f"{location}/{label}"],
@@ -178,6 +196,20 @@ def owner_activation(args):
                    ThrottleInterval=0)
         if domain.startswith("user/"):
             job["LimitLoadToSessionType"] = "Background"
+        # Reboot-safe (--launch-agent): launchd loads ~/Library/LaunchAgents again at each
+        # login, but only into the GUI domain. A GUI job's plist moves there; a Background
+        # (user-domain) job keeps its plist and gets a login agent that bootstraps it again.
+        job_plist, login_agent = root / "owner.plist", None
+        if getattr(args, "launch_agent", False):
+            agents = f.no_links(owner.launch_agents())
+            info = agents.stat()
+            f.require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid()
+                      and info.st_mode & 0o022 == 0, "unsafe_launch_agents_directory")
+            if domain.startswith("gui/"):
+                job["LimitLoadToSessionType"] = "Aqua"
+                job_plist = agents / (label + ".plist")
+            else:
+                login_agent = login_agent_path(label)
         job["ProgramArguments"] += ["--schedule", str(root)]
         job["EnvironmentVariables"] = {key: str(root) for key in
                                        ("HOME", "CODEX_HOME", "CORBANU_HOME", "PFTERMINAL_HOME")}
@@ -197,6 +229,7 @@ def owner_activation(args):
             # A schedule root keeps its lane: never reinstall a manager lane as an owner lane.
             f.require(previous.get("lane", "owner") == lane, "installation_lane_conflict")
             if getattr(args, "repin", False):
+                # A repin may move the plist (e.g. to LaunchAgents); uninstall removed the old one.
                 f.require(previous["phase"] == "uninstalled" and presence == "absent",
                           "repin_requires_uninstalled")
                 f.require(all(previous.get(key) == expected.get(key) for key in
@@ -206,7 +239,9 @@ def owner_activation(args):
                               and meta["config_digest"] == owner.digest(owner.load(args.config))
                               and meta["package_digest"] == owner.package_digest(), "repin_requires_off_pins")
             else:
-                f.require({key: previous[key] for key in expected} == expected, "installation_conflict")
+                f.require({key: previous[key] for key in expected} == expected and job_plist == plist
+                          and previous.get("login_agent") == (login_agent and str(login_agent)),
+                          "installation_conflict")
             if presence == "present":
                 f.require(previous["phase"] == "installed", "installation_reconciliation_required")
                 previous["sibling_observation"] = sibling_observation()
@@ -219,11 +254,28 @@ def owner_activation(args):
             f.write_file(root / "tick.lock", b"")
             f.write_json(root / "tick.json", dict(started_at=None, completed_at=None, last_success=None,
                                                  hold=None, skipped=0, ticks=0, last_probe=None))
-        f.write_file(plist, raw)
+        f.require(not any(os.path.lexists(path) for path in (job_plist, login_agent) if path), "unowned_plist")
+        f.write_file(job_plist, raw)
+        expected["plist"] = str(job_plist)
+        if login_agent:
+            login_raw = plistlib.dumps(dict(
+                Label=login_agent.stem, RunAtLoad=True, LimitLoadToSessionType="Aqua",
+                ProcessType="Background", ProgramArguments=[
+                    "/bin/sh", "-c", '/bin/launchctl print "$1/$2" >/dev/null 2>&1 || '
+                    'exec /bin/launchctl bootstrap "$1" "$3"', "sh", domain, label, str(job_plist)]))
+            expected.update(login_agent=str(login_agent),
+                            login_agent_sha256=hashlib.sha256(login_raw).hexdigest())
         f.write_json(receipt_path, dict(expected, phase="installing", sibling_observation=sibling_observation()))
-        subprocess.run(["/bin/launchctl", "bootstrap", domain, str(plist)],
+        subprocess.run(["/bin/launchctl", "bootstrap", domain, str(job_plist)],
                        check=True, timeout=10, env={})
         f.require(owner.service(label, domain)[0] == "present", "installation_unobserved")
+        if login_agent:
+            f.write_file(login_agent, login_raw)
+            gui = domains[1]
+            if observations[gui][0] != "domain_absent":
+                # Loading runs it once now; it finds the job present and exits 0.
+                subprocess.run(["/bin/launchctl", "bootstrap", gui, str(login_agent)],
+                               check=True, timeout=10, env={})
         f.write_json(receipt_path, dict(expected, phase="installed", sibling_observation=sibling_observation()))
         subprocess.run(["/bin/launchctl", "kickstart", target], check=True, timeout=10, env={})
 
@@ -243,6 +295,9 @@ if __name__ == "__main__" and "--owner" in sys.argv:
     parser.add_argument("--config", type=Path)
     parser.add_argument("--interval", type=int, default=30)
     parser.add_argument("--lane", choices=("owner", "manager"), default="owner")
+    parser.add_argument("--launch-agent", action="store_true",
+                        help="reboot-safe: load the job again at each login (a GUI job's plist goes to "
+                             "~/Library/LaunchAgents; a user-domain job gets a login agent there)")
     owner_activation(parser.parse_args())
 elif __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)

@@ -160,7 +160,7 @@ def technical(manifest, ctx, selected, transport, state):
             "unreviewed_interval")
     domain = owner.installation_domain(receipt)
     sibling = ("user" if domain.startswith("gui/") else "gui/") + str(os.getuid())
-    plist = owner.private_file(root / "owner.plist")
+    plist = owner.private_file(owner.plist_path(root, receipt))
     require(f.file_digest(plist) == receipt["plist_sha256"], "plist_drift")
     for location in (domain, sibling):
         presence, detail = owner.service(receipt["label"], location)
