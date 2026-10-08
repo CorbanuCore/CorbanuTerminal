@@ -2069,6 +2069,9 @@ class RecurrenceTests(unittest.TestCase):
                 target.chmod(0o600)
         schedule = Path(self.tmp.name) / "schedule"
         schedule.mkdir(mode=0o700)
+        agents = patch.object(owner, "launch_agents", return_value=Path(self.tmp.name) / "LaunchAgents")
+        agents.start()  # never the real ~/Library/LaunchAgents
+        self.addCleanup(agents.stop)
         python = Path(sys.executable).resolve()
         return Namespace(owner="install", root=schedule, label="com.corbanu.initiative-owner.test-unit",
                          python=python, python_sha256=f.file_digest(python), runtime=runtime,
@@ -2077,14 +2080,22 @@ class RecurrenceTests(unittest.TestCase):
     def install(self, args, loaded=None):
         import activate
         loaded = {} if loaded is None else loaded
-        calls = []
+        calls, logins = [], set()
         real_run = subprocess.run
 
         def run(argv, **kwargs):
             if argv[0] != "/bin/launchctl":
                 return real_run(argv, **kwargs)
             calls.append(argv[1])
-            if argv[1] == "bootstrap":
+            if argv[-1].endswith(("-login.plist", "-login")):
+                calls[-1] += "-login"  # the login agent is a separate service
+                if argv[1] == "bootstrap":
+                    logins.add(argv[2])
+                elif argv[1] == "bootout":
+                    logins.discard(argv[2].rsplit("/", 1)[0])
+                elif argv[1] == "print":
+                    return subprocess.CompletedProcess(argv, 0 if argv[2].rsplit("/", 1)[0] in logins else 113)
+            elif argv[1] == "bootstrap":
                 loaded[argv[2]] = Path(argv[3])
             elif argv[1] == "bootout":
                 loaded.pop(argv[2].rsplit("/", 1)[0], None)
@@ -2246,6 +2257,261 @@ class RecurrenceTests(unittest.TestCase):
                     self.assertIn(["/bin/launchctl", "bootout", f"{domain}/{args.label}"],
                                   [call.args[0] for call in commands.call_args_list])
                     observed.assert_called_with(args.label, domain)
+
+    def launch_agents(self, mode=0o755):
+        agents = Path(self.tmp.name) / "LaunchAgents"
+        agents.mkdir(mode=mode, exist_ok=True)
+        (Path(self.tmp.name) / "Logs").mkdir(mode=0o755, exist_ok=True)
+        agents.chmod(mode)
+        return agents, patch.object(owner, "launch_agents", return_value=agents)
+
+    def test_launch_agent_install_is_reloaded_at_login_in_its_domain(self):
+        import activate
+        import plistlib
+        args = self.installation()
+        agents, home = self.launch_agents()
+        args.launch_agent = True
+        for kind in ("gui", "user"):
+            with self.subTest(domain=kind):
+                args.domain, args.owner = kind, "install"
+                args.label = "com.corbanu.initiative-owner.test-" + kind
+                args.root = Path(self.tmp.name) / ("agent-" + kind)
+                args.root.mkdir(mode=0o700)
+                domain = f"{kind}/{os.getuid()}"
+                plist = agents / (args.label + ".plist") if kind == "gui" else args.root / "owner.plist"
+                login = agents / (args.label + "-login.plist")
+                service, command, calls = self.install(args)
+                with home, service, command as commands:
+                    activate.owner_activation(args)
+                    receipt = owner.load(args.root / "installation.json")
+                    self.assertEqual(str(plist), receipt["plist"])
+                    job = plistlib.loads(plist.read_bytes())
+                    self.assertEqual("Aqua" if kind == "gui" else "Background", job["LimitLoadToSessionType"])
+                    self.assertFalse(job["Disabled"])
+                    self.assertEqual(receipt["plist_sha256"], f.file_digest(plist))
+                    argvs = [call.args[0] for call in commands.call_args_list]
+                    self.assertIn(["/bin/launchctl", "bootstrap", domain, str(plist)], argvs)
+                    if kind == "gui":
+                        self.assertFalse((args.root / "owner.plist").exists())
+                        self.assertFalse(login.exists())
+                        self.assertNotIn("login_agent", receipt)
+                    else:
+                        # launchd reloads ~/Library/LaunchAgents only into the GUI domain.
+                        agent = plistlib.loads(login.read_bytes())
+                        self.assertEqual(args.label + "-login", agent["Label"])
+                        self.assertEqual("Aqua", agent["LimitLoadToSessionType"])
+                        self.assertTrue(agent["RunAtLoad"])
+                        self.assertEqual({"SuccessfulExit": False}, agent["KeepAlive"])
+                        self.assertEqual(["sh", domain, args.label, str(plist), f"gui/{os.getuid()}"],
+                                         agent["ProgramArguments"][3:])
+                        self.assertEqual(str(Path(self.tmp.name) / "Logs" / (args.label + "-login.log")),
+                                         agent["StandardErrorPath"])
+                        self.assertEqual(str(login), receipt["login_agent"])
+                        self.assertEqual(receipt["login_agent_sha256"], f.file_digest(login))
+                        self.assertIn(["/bin/launchctl", "bootstrap", f"gui/{os.getuid()}", str(login)], argvs)
+                    self.assertEqual(plist, owner.plist_path(args.root, receipt))
+                    self.assertIsNone(owner.observe_schedule(args.root)["reason"])
+                    output = (f"path = {plist}\n\tstate = running\n"
+                              f"\tpid = {os.getpid()}\n\timmediate reason = interval\n")
+                    with patch.object(owner, "service", return_value=("present", output)):
+                        self.assertEqual("interval", owner.firing_source(args.root, receipt))
+                    activate.owner_activation(args)  # idempotent while installed
+                    args.launch_agent = False
+                    with self.assertRaisesRegex(f.LaunchError, "installation_conflict"):
+                        activate.owner_activation(args)
+                    args.launch_agent = True
+                    args.owner = "uninstall"
+                    phases, write_json = [], f.write_json
+                    def record(path, value):
+                        if path.name == "installation.json":
+                            phases.append(value["phase"])
+                        write_json(path, value)
+                    with patch.object(f, "write_json", side_effect=record):
+                        activate.owner_activation(args)
+                    self.assertEqual(["uninstalling", "uninstalled"], phases)
+                    self.assertFalse(plist.exists())
+                    self.assertFalse(login.exists())
+                    self.assertEqual(kind == "user", "bootout-login" in calls)
+                    self.assertEqual("uninstalled", owner.load(args.root / "installation.json")["phase"])
+
+    def test_repin_moves_a_schedule_into_launch_agents(self):
+        import activate
+        args = self.installation()
+        agents, home = self.launch_agents()
+        service, command, _ = self.install(args)
+        with home, service, command:
+            activate.owner_activation(args)
+            args.owner = "uninstall"
+            activate.owner_activation(args)
+            self.assertFalse((args.root / "owner.plist").exists())
+            args.owner, args.launch_agent = "install", True
+            with self.assertRaisesRegex(f.LaunchError, "installation_conflict"):
+                activate.owner_activation(args)
+            args.repin = True
+            activate.owner_activation(args)
+            receipt = owner.load(args.root / "installation.json")
+            self.assertEqual("installed", receipt["phase"])
+            self.assertEqual(str(agents / (args.label + ".plist")), receipt["plist"])
+            self.assertFalse((args.root / "owner.plist").exists())
+
+    def test_launch_agent_install_refuses_foreign_plist_unsafe_directory_and_bad_receipt(self):
+        import activate
+        args = self.installation()
+        args.launch_agent = True
+        agents, home = self.launch_agents()
+        foreign = agents / (args.label + ".plist")
+        foreign.write_bytes(b"foreign")
+        service, command, calls = self.install(args)
+        with home, service, command:
+            with self.assertRaisesRegex(f.LaunchError, "unowned_plist"):
+                activate.owner_activation(args)
+            self.assertEqual(b"foreign", foreign.read_bytes())
+            self.assertNotIn("bootstrap", calls)
+        args.root = Path(self.tmp.name) / "unsafe"
+        args.root.mkdir(mode=0o700)
+        agents, home = self.launch_agents(0o775)
+        service, command, calls = self.install(args)
+        with home, service, command:
+            with self.assertRaisesRegex(f.LaunchError, "unsafe_launch_agents_directory"):
+                activate.owner_activation(args)
+            self.assertNotIn("bootstrap", calls)
+        receipt = dict(label=args.label, plist=str(Path(self.tmp.name) / "elsewhere.plist"))
+        with home, self.assertRaisesRegex(f.LaunchError, "invalid_plist_path"):
+            owner.plist_path(args.root, receipt)
+
+    def test_launch_agent_install_and_uninstall_recover_from_interruptions(self):
+        import activate
+        args = self.installation()
+        args.launch_agent, args.domain = True, "gui"
+        agents, home = self.launch_agents()
+        plist = agents / (args.label + ".plist")
+        service, command, calls = self.install(args)
+        with home, service, command as commands:
+            real = commands.side_effect
+            def fail_bootstrap(argv, **kwargs):
+                if argv[:2] == ["/bin/launchctl", "bootstrap"]:
+                    raise subprocess.CalledProcessError(5, argv)
+                return real(argv, **kwargs)
+            commands.side_effect = fail_bootstrap
+            with self.assertRaises(subprocess.CalledProcessError):
+                activate.owner_activation(args)
+            receipt = owner.load(args.root / "installation.json")
+            self.assertEqual(("installing", str(plist)), (receipt["phase"], receipt["plist"]))
+            commands.side_effect = real
+            observed = owner.observe_schedule(args.root)
+            self.assertEqual(("unknown", "observation-unavailable"), (observed["service"], observed["reason"]))
+            with self.assertRaisesRegex(f.LaunchError, "installation_reconciliation_required"):
+                activate.owner_activation(args)
+            args.owner = "uninstall"
+            activate.owner_activation(args)
+            self.assertFalse(plist.exists())
+            args.owner = "install"
+            activate.owner_activation(args)
+            self.assertTrue(plist.exists())
+            # observation fails right after the bootout: nothing in LaunchAgents can reload the job
+            args.owner = "uninstall"
+            with patch.object(activate.subprocess, "run", side_effect=real), \
+                 patch.object(owner, "service", side_effect=[("present", f"path = {plist}\n"), ("absent", ""),
+                                                             f.LaunchError("service_observation_unavailable")]):
+                with self.assertRaisesRegex(f.LaunchError, "service_observation_unavailable"):
+                    activate.owner_activation(args)
+            self.assertFalse(plist.exists())
+            self.assertEqual("uninstalling", owner.load(args.root / "installation.json")["phase"])
+            with self.assertRaisesRegex(f.LaunchError, "uninstalled|reconciliation"):
+                args.owner = "install"
+                activate.owner_activation(args)
+            args.owner = "uninstall"
+            activate.owner_activation(args)
+            self.assertEqual("uninstalled", owner.load(args.root / "installation.json")["phase"])
+
+    def test_login_agent_drift_and_absence_fail_closed(self):
+        import activate
+        args = self.installation()
+        args.launch_agent, args.domain = True, "user"
+        agents, home = self.launch_agents()
+        login = agents / (args.label + "-login.plist")
+        service, command, calls = self.install(args)
+        with home, service, command:
+            activate.owner_activation(args)
+            raw = login.read_bytes()
+            login.unlink()
+            with self.assertRaisesRegex(f.LaunchError, "installation_reconciliation_required"):
+                activate.owner_activation(args)
+            f.write_file(login, raw + b" ")
+            args.owner = "uninstall"
+            with self.assertRaisesRegex(f.LaunchError, "plist_drift"):
+                activate.owner_activation(args)
+            self.assertNotIn("bootout", calls)
+            self.assertEqual("installed", owner.load(args.root / "installation.json")["phase"])
+            login.unlink()
+            f.write_file(login, raw)
+            activate.owner_activation(args)
+            self.assertFalse(login.exists())
+            self.assertEqual(["bootstrap", "bootstrap-login", "kickstart", "print-login", "bootout-login",
+                              "print-login", "bootout"], calls)
+
+    def test_any_install_refuses_leftover_launch_agents_for_its_label(self):
+        import activate
+        agents, home = self.launch_agents()
+        for name in (".plist", "-login.plist"):
+            with self.subTest(leftover=name):
+                args = self.installation() if name == ".plist" else args
+                args.root = Path(self.tmp.name) / ("leftover" + name)
+                args.root.mkdir(mode=0o700)
+                leftover = agents / (args.label + name)
+                leftover.write_bytes(b"other root")
+                service, command, calls = self.install(args)
+                with home, service, command:
+                    with self.assertRaisesRegex(f.LaunchError, "unowned_plist"):
+                        activate.owner_activation(args)
+                self.assertNotIn("bootstrap", calls)
+                self.assertFalse((args.root / "owner.plist").exists())
+                leftover.unlink()
+
+    def test_plain_uninstall_keeps_legacy_phases_and_present_reinstall_refuses_strays(self):
+        import activate
+        args = self.installation()
+        agents, home = self.launch_agents()
+        service, command, _ = self.install(args)
+        with home, service, command:
+            activate.owner_activation(args)
+            stray = agents / (args.label + "-login.plist")
+            stray.write_bytes(b"stray")
+            with self.assertRaisesRegex(f.LaunchError, "unowned_plist"):
+                activate.owner_activation(args)
+            stray.unlink()
+            activate.owner_activation(args)
+            args.owner = "uninstall"
+            phases, write_json = [], f.write_json
+            def record(path, value):
+                if path.name == "installation.json":
+                    phases.append(value["phase"])
+                write_json(path, value)
+            with patch.object(f, "write_json", side_effect=record):
+                activate.owner_activation(args)
+            self.assertEqual(["uninstalled"], phases)
+
+    def test_receipt_without_plist_and_user_receipt_in_launch_agents(self):
+        import activate
+        args = self.installation()
+        agents, home = self.launch_agents()
+        service, command, _ = self.install(args)
+        with home, service, command:
+            activate.owner_activation(args)
+            receipt = owner.load(args.root / "installation.json")
+            del receipt["plist"]
+            f.write_json(args.root / "installation.json", receipt)
+            plist = args.root / "owner.plist"
+            self.assertEqual(plist, owner.plist_path(args.root, receipt))
+            self.assertIsNone(owner.observe_schedule(args.root)["reason"])
+            output = (f"path = {plist}\n\tstate = running\n"
+                      f"\tpid = {os.getpid()}\n\timmediate reason = interval\n")
+            with patch.object(owner, "service", return_value=("present", output)):
+                self.assertEqual("interval", owner.firing_source(args.root, receipt))
+            agent = str(agents / (args.label + ".plist"))
+            self.assertEqual(Path(agent), owner.plist_path(args.root, dict(receipt, plist=agent)))
+            with self.assertRaisesRegex(f.LaunchError, "invalid_plist_path"):
+                owner.plist_path(args.root, dict(receipt, plist=agent, domain=f"user/{os.getuid()}"))
 
     def test_fresh_install_refuses_same_label_in_either_domain_before_writes(self):
         import activate
@@ -3306,6 +3572,109 @@ class ManagerLaneTests(unittest.TestCase):
         self.assertEqual("owner_run_refused", owner.load(root / "tick.json")["hold"])
         self.assertEqual([], self.calls)
 
+    def pins_timeout(self):
+        # The pins check runs the pinned interpreter with a 5 s timeout: the
+        # reachable pre-cycle timeout under host load.
+        return patch.object(owner.subprocess, "check_output",
+                            side_effect=subprocess.TimeoutExpired("python3", 5))
+
+    def test_pre_cycle_timeout_counts_as_an_error_until_it_repeats(self):
+        self.manager()
+        root = self.scheduled()
+        with self.pins_timeout():
+            self.assertEqual(2, owner.main(["--run", "--schedule", str(root)]))
+        status = owner.load(root / "tick.json")
+        self.assertIsNone(status["hold"])
+        self.assertEqual((1, 1, "TimeoutExpired"),
+                         (status["errors"], status["consecutive_errors"], status["last_error"]))
+        self.assertEqual(1, owner.load(self.root / "manager-recurrence.json")["consecutive_errors"])
+        self.assertEqual([("transient_error", 1)], [(r["event"], r["consecutive_errors"]) for r in self.log()])
+        # The next pass runs normally and clears the streak, without --recover.
+        self.c.event({"id": "work"})
+        with patch.object(owner.manager_cycle, "run_cycle", self.accepting):
+            self.assertEqual("CYCLE", owner.scheduled_tick(root)["state"])
+        status = owner.load(root / "tick.json")
+        self.assertEqual((None, 0), (status["hold"], status["consecutive_errors"]))
+        # A persistent timeout still fails closed at the limit; BUSY does not reset the streak.
+        with self.pins_timeout():
+            self.assertEqual("ERROR", owner.scheduled_tick(root)["state"])
+        with patch.object(owner, "manager_lane", side_effect=BlockingIOError):
+            self.assertEqual("BUSY", owner.scheduled_tick(root)["state"])
+        with self.pins_timeout():
+            for _ in range(owner.MANAGER_TRANSIENT_LIMIT - 2):
+                self.assertEqual("ERROR", owner.scheduled_tick(root)["state"])
+                self.assertIsNone(owner.load(root / "tick.json")["hold"])
+            result = owner.scheduled_tick(root)
+            self.assertEqual(("ERROR", "manager_pre_cycle_timeouts"), (result["state"], result["reason"]))
+            self.assertEqual(("HOLD", "manager_pre_cycle_timeouts"),
+                             tuple(owner.scheduled_tick(root)[k] for k in ("state", "reason")))
+        status = owner.load(root / "tick.json")
+        self.assertEqual(("manager_pre_cycle_timeouts", "TimeoutExpired x%d" % owner.MANAGER_TRANSIENT_LIMIT,
+                          owner.MANAGER_TRANSIENT_LIMIT, owner.MANAGER_TRANSIENT_LIMIT + 1),
+                         (status["hold"], status["refusal"], status["consecutive_errors"], status["errors"]))
+        self.assertEqual(["hold"], [r["event"] for r in self.log()][-1:])
+        self.assertEqual("RECOVERED", owner.scheduled_tick(root, recover="fixture: host slowdown over")["state"])
+        self.assertEqual(0, owner.load(root / "tick.json")["consecutive_errors"])
+        self.assertEqual(1, len(self.calls))
+
+    def test_timeout_after_a_cycle_started_latches_at_once(self):
+        self.manager()
+        root = self.scheduled()
+        self.c.event({"id": "work"})
+        with patch.object(owner.manager_cycle, "run_cycle",
+                          side_effect=subprocess.TimeoutExpired("corbanu", 900)):
+            result = owner.scheduled_tick(root)
+        self.assertEqual(("ERROR", "TimeoutExpired"), (result["state"], result["reason"]))
+        self.assertEqual("TimeoutExpired", owner.load(root / "tick.json")["hold"])
+        self.assertEqual(["cycle_started", "hold"], [r["event"] for r in self.log()])
+
+    def test_timeout_with_an_unreadable_cycle_counter_latches(self):
+        self.manager()
+        root = self.scheduled()
+        f.write_file(root / owner.MANAGER_STATE, b"not json")
+        with self.pins_timeout():
+            owner.scheduled_tick(root)
+        self.assertEqual("TimeoutExpired", owner.load(root / "tick.json")["hold"])
+
+    def test_timeout_with_the_counter_unreadable_afterwards_latches(self):
+        self.manager()
+        root = self.scheduled()
+        status = owner.manager_status
+        reads = []
+        def flaky(path):
+            reads.append(path)
+            if len(reads) > 1:
+                raise ValueError("fixture")
+            return status(path)
+        with self.pins_timeout(), patch.object(owner, "manager_status", side_effect=flaky):
+            owner.scheduled_tick(root)
+        self.assertEqual(2, len(reads))
+        self.assertEqual("TimeoutExpired", owner.load(root / "tick.json")["hold"])
+
+    def test_other_pre_cycle_errors_still_latch(self):
+        self.manager()
+        root = self.scheduled()
+        with patch.object(owner.manager_cycle, "compact_finished", side_effect=RuntimeError("fixture")):
+            owner.scheduled_tick(root)
+        self.assertEqual("RuntimeError", owner.load(root / "tick.json")["hold"])
+        self.assertEqual("RECOVERED", owner.scheduled_tick(root, recover="fixture")["state"])
+        with patch.object(owner.subprocess, "check_output",
+                          side_effect=subprocess.CalledProcessError(1, "python3")):
+            owner.scheduled_tick(root)
+        self.assertEqual("CalledProcessError", owner.load(root / "tick.json")["hold"])
+
+    def test_owner_lane_timeouts_never_latch(self):
+        import activate
+        args = self.installation()
+        service, command, _ = self.install(args)
+        with service, command:
+            activate.owner_activation(args)
+            with self.pins_timeout():
+                for _ in range(owner.MANAGER_TRANSIENT_LIMIT + 1):
+                    self.assertEqual("ERROR", owner.scheduled_tick(args.root)["state"])
+        status = owner.load(args.root / "tick.json")
+        self.assertEqual((None, owner.MANAGER_TRANSIENT_LIMIT + 1), (status["hold"], status["consecutive_errors"]))
+        self.assertFalse((args.root / owner.MANAGER_LOG).exists())
 
 if __name__ == "__main__":
     unittest.main()
