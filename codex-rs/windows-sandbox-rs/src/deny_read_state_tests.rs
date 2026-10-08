@@ -7,6 +7,7 @@ use super::sync_persistent_deny_read_acls;
 use crate::acl::add_allow_ace;
 use crate::acl::add_deny_read_ace;
 use crate::acl::add_deny_read_ace_for_new_files;
+use crate::acl::ensure_explicit_deny_read_ace;
 use crate::setup::sandbox_dir;
 use crate::token::LocalSid;
 use crate::winutil::to_wide;
@@ -103,6 +104,24 @@ fn sec_win_304_sync_removes_exactly_the_deny_it_added() {
     sync(&home, &[], &group);
     assert_eq!(dacl_sddl(&home.secret), dir_before);
     assert_eq!(dacl_sddl(&home.nested), nested_before);
+    assert!(!recorded(&home));
+}
+
+/// A read deny the sync found already in place (here, the explicit one the
+/// launch contract gives its lock file) is not the sync's to remove.
+#[test]
+fn sec_win_304_sync_keeps_a_deny_it_did_not_add() {
+    let home = home();
+    let group = LocalSid::from_string(SANDBOX_GROUP).expect("group SID");
+    // SAFETY: a valid SID and an existing directory.
+    unsafe {
+        assert!(ensure_explicit_deny_read_ace(&home.secret, group.as_ptr()).expect("deny"));
+    }
+    let denied = dacl_sddl(&home.secret);
+    sync(&home, std::slice::from_ref(&home.secret), &group);
+    assert_eq!(dacl_sddl(&home.secret), denied);
+    sync(&home, &[], &group);
+    assert_eq!(dacl_sddl(&home.secret), denied);
     assert!(!recorded(&home));
 }
 

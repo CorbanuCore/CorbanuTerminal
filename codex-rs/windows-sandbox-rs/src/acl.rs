@@ -841,7 +841,7 @@ pub unsafe fn has_exact_deny_read_ace_for_new_files(
 /// # Safety
 /// Caller must ensure `psid` points to a valid SID and `path` is a directory.
 pub unsafe fn remove_deny_read_ace_for_new_files(path: &Path, psid: *mut c_void) -> Result<bool> {
-    remove_matching_aces(path, |ace| is_new_file_read_deny(ace, Some(psid)))
+    remove_matching_aces(path, |_, ace| is_new_file_read_deny(ace, Some(psid)))
 }
 
 /// #304: removes exactly the entry [`add_deny_read_ace`] adds for `psid` on
@@ -855,26 +855,64 @@ pub unsafe fn remove_deny_read_ace_for_new_files(path: &Path, psid: *mut c_void)
 /// # Safety
 /// Caller must ensure `psid` points to a valid SID.
 pub unsafe fn remove_deny_read_ace(path: &Path, psid: *mut c_void) -> Result<bool> {
-    remove_matching_aces(path, |ace| is_deny_read_ace(ace, psid))
+    remove_matching_aces(path, |dacl, ace| match deny_read_part(ace, psid) {
+        Some(DenyReadPart::Whole | DenyReadPart::Inherited) => true,
+        // Alone, it is the entry `ensure_explicit_deny_read_ace` adds.
+        Some(DenyReadPart::Effective) => dacl_has_deny_read_part(dacl, psid, DenyReadPart::Inherited),
+        None => false,
+    })
 }
 
-/// True when `ace` is exactly the entry [`add_deny_read_ace`] adds for
-/// `psid`: an explicit deny, effective on the object and inherited by
-/// subdirectories and files, whose mask maps to file read and nothing else.
-unsafe fn is_deny_read_ace(ace: *const c_void, psid: *mut c_void) -> bool {
+/// How Windows stores the entry [`add_deny_read_ace`] adds: as given, or
+/// (measured on Windows 11) split into an entry for the object itself, with
+/// the generic right mapped, and an inherit-only one for its children.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DenyReadPart {
+    Whole,
+    Effective,
+    Inherited,
+}
+
+/// Which part of the [`add_deny_read_ace`] entry for `psid` `ace` is: an
+/// explicit deny whose mask maps to file read and nothing else.
+unsafe fn deny_read_part(ace: *const c_void, psid: *mut c_void) -> Option<DenyReadPart> {
     let hdr = &*(ace as *const ACE_HEADER);
     let flags = u32::from(hdr.AceFlags);
-    if hdr.AceType != ACCESS_DENIED_ACE_TYPE
-        || flags & u32::from(INHERITED_ACE) != 0
-        || flags & INHERITANCE_FLAGS != DenyAceKind::Read.inheritance()
-    {
-        return false;
+    if hdr.AceType != ACCESS_DENIED_ACE_TYPE || flags & u32::from(INHERITED_ACE) != 0 {
+        return None;
     }
     let mut mask = (*(ace as *const ACCESS_DENIED_ACE)).Mask;
     MapGenericMask(&mut mask, &FILE_MAPPING);
     let sid = (ace as usize + std::mem::size_of::<ACE_HEADER>() + std::mem::size_of::<u32>())
         as *mut c_void;
-    mask == FILE_GENERIC_READ && EqualSid(sid, psid) != 0
+    if mask != FILE_GENERIC_READ || EqualSid(sid, psid) == 0 {
+        return None;
+    }
+    let inheritance = DenyAceKind::Read.inheritance();
+    match flags & INHERITANCE_FLAGS {
+        0 => Some(DenyReadPart::Effective),
+        f if f == inheritance => Some(DenyReadPart::Whole),
+        f if f == inheritance | u32::from(INHERIT_ONLY_ACE) => Some(DenyReadPart::Inherited),
+        _ => None,
+    }
+}
+
+unsafe fn dacl_has_deny_read_part(p_dacl: *mut ACL, psid: *mut c_void, part: DenyReadPart) -> bool {
+    let mut info: ACL_SIZE_INFORMATION = std::mem::zeroed();
+    if p_dacl.is_null()
+        || GetAclInformation(
+            p_dacl as *const ACL,
+            &mut info as *mut _ as *mut c_void,
+            std::mem::size_of::<ACL_SIZE_INFORMATION>() as u32,
+            AclSizeInformation,
+        ) == 0
+    {
+        return false;
+    }
+    (0..info.AceCount).any(|i| {
+        let mut p_ace: *mut c_void = std::ptr::null_mut();
+        GetAce(p_dacl as *const ACL, i, &mut p_ace) != 0 && deny_read_part(p_ace, psid) == Some(part)
+    })
 }
 
 /// Rewrites `path`'s DACL without the entries `matches` selects (keeping
@@ -882,7 +920,7 @@ unsafe fn is_deny_read_ace(ace: *const c_void, psid: *mut c_void) -> bool {
 /// whether an entry was removed.
 unsafe fn remove_matching_aces(
     path: &Path,
-    matches: impl Fn(*const c_void) -> bool,
+    matches: impl Fn(*mut ACL, *const c_void) -> bool,
 ) -> Result<bool> {
     let mut p_sd: *mut c_void = std::ptr::null_mut();
     let mut p_dacl: *mut ACL = std::ptr::null_mut();
@@ -910,7 +948,7 @@ unsafe fn remove_aces_from(
     path: &Path,
     p_sd: *mut c_void,
     p_dacl: *mut ACL,
-    matches: impl Fn(*const c_void) -> bool,
+    matches: impl Fn(*mut ACL, *const c_void) -> bool,
 ) -> Result<bool> {
     if p_dacl.is_null() {
         return Ok(false);
@@ -939,7 +977,7 @@ unsafe fn remove_aces_from(
         if GetAce(p_dacl as *const ACL, i, &mut p_ace) == 0 {
             return Err(anyhow!("GetAce failed: {}", GetLastError()));
         }
-        if matches(p_ace) {
+        if matches(p_dacl, p_ace) {
             removed = true;
             continue;
         }
