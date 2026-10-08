@@ -1,0 +1,56 @@
+name: windows-security-probes
+
+# PF-27-S06: measured Windows containment probes and broker transport tests.
+# They run real processes, tokens and named pipes, so they need a Windows host.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/windows-security-probes.yml"
+      - ".github/actions/setup-ci/**"
+      - "codex-rs/Cargo.lock"
+      - "codex-rs/Cargo.toml"
+      - "codex-rs/process-hardening/**"
+      - "codex-rs/windows-sandbox-rs/**"
+      - "codex-rs/network-proxy/src/credential_broker/**"
+      - "codex-rs/network-proxy/src/credential_broker.rs"
+      - "codex-rs/core/src/security/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/windows-security-probes.yml"
+      - ".github/actions/setup-ci/**"
+      - "codex-rs/Cargo.lock"
+      - "codex-rs/Cargo.toml"
+      - "codex-rs/process-hardening/**"
+      - "codex-rs/windows-sandbox-rs/**"
+      - "codex-rs/network-proxy/src/credential_broker/**"
+      - "codex-rs/network-proxy/src/credential_broker.rs"
+      - "codex-rs/core/src/security/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-security-probes-${{ github.ref }}
+  # Keep runs on main as evidence; only superseded PR runs are cancelled.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  probes:
+    name: pf_27_s06 probes (windows-2022)
+    runs-on: windows-2022
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - name: Process access probes
+        shell: bash
+        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-process-hardening pf_27_s06 -- --nocapture --test-threads=1
+      - name: Require a clean worktree
+        if: always() && !cancelled()
+        uses: ./.github/actions/check-clean-worktree

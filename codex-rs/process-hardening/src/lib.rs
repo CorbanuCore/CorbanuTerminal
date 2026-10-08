@@ -1,10 +1,24 @@
 mod broker_containment;
+#[cfg(windows)]
+mod windows_process_access;
 
 pub use broker_containment::BrokerContainment;
 pub use broker_containment::broker_seatbelt_profile;
 pub use broker_containment::broker_seatbelt_profile_with_files;
 pub use broker_containment::contain_credential_broker;
 pub use broker_containment::contain_credential_broker_with_files;
+#[cfg(windows)]
+pub use windows_process_access::current_user_sid_string;
+#[cfg(windows)]
+pub use windows_process_access::process_dacl_sddl;
+#[cfg(windows)]
+pub use windows_process_access::restrict_current_process_access;
+#[cfg(windows)]
+pub use windows_process_access::thread_callback_registered;
+#[cfg(windows)]
+pub use windows_process_access::thread_dacl_sddl;
+#[cfg(windows)]
+pub use windows_process_access::thread_protection_failures;
 
 #[cfg(unix)]
 use std::ffi::OsString;
