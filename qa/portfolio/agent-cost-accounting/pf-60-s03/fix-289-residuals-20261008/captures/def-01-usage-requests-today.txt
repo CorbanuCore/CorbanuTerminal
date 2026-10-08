@@ -1,0 +1,12 @@
+$ /usage requests
+╭──────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                │
+│                                              │
+│ model:     glm-5.2   /model to change        │
+│ directory: <scratch>/repo │
+╰──────────────────────────────────────────────╯
+› Read README.md and summarize it in one sentence.
+• A tiny demo repo used to test cost screens.
+• Per-request cost history is not part of this build.
+› Write tests for @filename
+  Z.AI GLM 5.2 via zai standard · <scratch>/repo · Corbanu Terminal · TPS: -- tok/s
