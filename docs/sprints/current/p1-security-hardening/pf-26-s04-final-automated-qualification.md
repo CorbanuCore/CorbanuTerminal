@@ -2,7 +2,7 @@
 sprint_id: "PF-26-S04"
 title: "Final integrated automated security qualification"
 status: draft
-plan_file: "docs/plans/proposed/p1-security-hardening.md"
+plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-26"
 execution_order: 74
 owner: "Jim Ricketts"
@@ -26,7 +26,7 @@ updated: 2026-10-06
 ## Plan linkage
 
 - Upstream: [plan touch record](../../../plans/history/p0-security-levels-2026-10-06.md); resolve this sprint's adapter rows.
-- Plan: [P1 security hardening](../../../plans/proposed/p1-security-hardening.md).
+- Plan: [P1 security hardening](../../../plans/active/p1-security-hardening.md).
 - Feature: `PF-26`; see the plan's adopted contract and requirement traceability.
 - Acceptance advanced: Qualify one frozen integrated candidate with full automated, adversarial, platform, and standards evidence.
 

@@ -2,7 +2,7 @@
 sprint_id: "PF-31-S02"
 title: "Bounded fetch adapter with no host fallback"
 status: draft
-plan_file: "docs/plans/proposed/p1-security-hardening.md"
+plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-31"
 execution_order: 47
 owner: "Jim Ricketts"
@@ -23,7 +23,7 @@ updated: 2026-10-06
 
 ## Plan linkage
 
-- Plan: [P1 security hardening](../../../plans/proposed/p1-security-hardening.md#pf-31).
+- Plan: [P1 security hardening](../../../plans/active/p1-security-hardening.md#pf-31).
 - Feature: `PF-31`.
 - Product citation: **Non-negotiable controls** — “Default to no secret export, arbitrary egress, clipboard exposure, or sensitive logging.”
 - Acceptance advanced: Every fetch stays in the isolated lane and failure never falls back to a privileged browser.

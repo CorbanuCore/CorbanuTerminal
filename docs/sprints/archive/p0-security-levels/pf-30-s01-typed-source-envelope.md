@@ -2,7 +2,7 @@
 sprint_id: "PF-30-S01"
 title: "Typed source envelope and trusted ingress"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-30"
 execution_order: 37
 owner: "untrusted-content lane"
@@ -26,7 +26,7 @@ updated: 2026-10-06
 
 ## Plan linkage
 
-- Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md#pf-30).
+- Plan: [P0 `/security` levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md#pf-30).
 - Feature: `PF-30`.
 - Product citation: **Non-negotiable controls** — “Classify instruction intent and provenance before external content can influence tools or financial actions.”
 - Acceptance advanced: Content cannot assign its own authority or impersonate a human approval through source labels.

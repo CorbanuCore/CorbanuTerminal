@@ -38,6 +38,7 @@ use std::ptr;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use windows_sys::Win32::Foundation::CloseHandle;
+use windows_sys::Win32::Foundation::ERROR_ACCESS_DENIED;
 use windows_sys::Win32::Foundation::ERROR_SUCCESS;
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::Foundation::HLOCAL;
@@ -75,6 +76,8 @@ const SYNCHRONIZE: u32 = 0x0010_0000;
 
 /// `WRITE_DAC`: needed to replace an existing thread's DACL.
 const WRITE_DAC: u32 = 0x0004_0000;
+/// `READ_CONTROL`: needed to read an object's DACL.
+const READ_CONTROL: u32 = 0x0002_0000;
 /// `DLL_THREAD_ATTACH`, the TLS callback reason for a new thread.
 const DLL_THREAD_ATTACH: u32 = 2;
 
@@ -115,10 +118,97 @@ pub fn restrict_current_process_access() -> io::Result<()> {
             ptr::null(),
         )
     };
-    if status != ERROR_SUCCESS {
+    // A process started by `spawn_protected` already has this DACL and, its
+    // own handle being computed from it, may not rewrite it.
+    if status != ERROR_SUCCESS
+        && !(status == ERROR_ACCESS_DENIED
+            // SAFETY: the pseudo-handle is always valid.
+            && dacl_is_protected(
+                unsafe { GetCurrentProcess() },
+                PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE,
+            ))
+    {
         return Err(io::Error::from_raw_os_error(status as i32));
     }
     threads
+}
+
+/// True when `object`'s DACL grants nothing beyond `allowed` and
+/// read-control to anyone but `SYSTEM` (`object` needs `READ_CONTROL`).
+fn dacl_is_protected(object: HANDLE, allowed: u32) -> bool {
+    use windows_sys::Win32::Security::ACCESS_ALLOWED_ACE;
+    use windows_sys::Win32::Security::ACE_HEADER;
+    use windows_sys::Win32::Security::ACL_SIZE_INFORMATION;
+    use windows_sys::Win32::Security::AclSizeInformation;
+    use windows_sys::Win32::Security::Authorization::GetSecurityInfo;
+    use windows_sys::Win32::Security::GetAce;
+    use windows_sys::Win32::Security::GetAclInformation;
+    use windows_sys::Win32::Security::IsWellKnownSid;
+    use windows_sys::Win32::Security::WinLocalSystemSid;
+    const ACCESS_ALLOWED_ACE_TYPE: u8 = 0;
+    const ACCESS_DENIED_ACE_TYPE: u8 = 1;
+    let allowed = allowed | READ_CONTROL;
+    let mut dacl: *mut ACL = ptr::null_mut();
+    let mut descriptor: PSECURITY_DESCRIPTOR = ptr::null_mut();
+    // SAFETY: `object` is open; `descriptor` is freed below.
+    let status = unsafe {
+        GetSecurityInfo(
+            object,
+            SE_KERNEL_OBJECT,
+            DACL_SECURITY_INFORMATION,
+            ptr::null_mut(),
+            ptr::null_mut(),
+            &mut dacl,
+            ptr::null_mut(),
+            &mut descriptor,
+        )
+    };
+    if status != ERROR_SUCCESS {
+        return false;
+    }
+    let mut protected = !dacl.is_null();
+    // SAFETY: zeroed out-structure; `dacl` points into `descriptor`.
+    let mut info: ACL_SIZE_INFORMATION = unsafe { std::mem::zeroed() };
+    // SAFETY: `info` is valid for the size passed; `dacl` is non-null here.
+    protected = protected
+        && unsafe {
+            GetAclInformation(
+                dacl,
+                (&mut info as *mut ACL_SIZE_INFORMATION).cast(),
+                std::mem::size_of::<ACL_SIZE_INFORMATION>() as u32,
+                AclSizeInformation,
+            )
+        } != 0;
+    for index in 0..if protected { info.AceCount } else { 0 } {
+        let mut ace: *mut c_void = ptr::null_mut();
+        // SAFETY: `index` is below the ACE count of a valid ACL.
+        if unsafe { GetAce(dacl, index, &mut ace) } == 0 {
+            protected = false;
+            break;
+        }
+        // SAFETY: every ACE starts with a header.
+        let kind = unsafe { (*(ace as *const ACE_HEADER)).AceType };
+        if kind == ACCESS_DENIED_ACE_TYPE {
+            continue;
+        }
+        if kind != ACCESS_ALLOWED_ACE_TYPE {
+            protected = false;
+            break;
+        }
+        // SAFETY: an access-allowed ACE: header, mask, then the SID.
+        let mask = unsafe { (*(ace as *const ACCESS_ALLOWED_ACE)).Mask };
+        let sid = (ace as usize + std::mem::size_of::<ACE_HEADER>() + std::mem::size_of::<u32>())
+            as *mut c_void;
+        // SAFETY: `sid` points to the ACE's SID.
+        let system = unsafe { IsWellKnownSid(sid, WinLocalSystemSid) } != 0;
+        if !system && mask & !allowed != 0 {
+            protected = false;
+            break;
+        }
+    }
+    // SAFETY: allocated by GetSecurityInfo.
+    unsafe { LocalFree(descriptor as HLOCAL) };
+    protected
 }
 
 /// The protected DACL applied by [`restrict_current_process_access`].
@@ -177,16 +267,25 @@ fn protect_threads(user_sid: &str) -> io::Result<()> {
     let mut more = unsafe { Thread32First(snapshot, &mut entry) } != 0;
     while more {
         if entry.th32OwnerProcessID == own_pid {
-            // SAFETY: opens one of our own threads for WRITE_DAC; closed below.
-            let thread = unsafe { OpenThread(WRITE_DAC, 0, entry.th32ThreadID) };
-            // A thread that exited since the snapshot cannot be opened.
+            // SAFETY: opens one of our own threads; closed below.
+            let thread = unsafe { OpenThread(WRITE_DAC | READ_CONTROL, 0, entry.th32ThreadID) };
+            // A thread that exited since the snapshot, or one created with a
+            // restrictive DACL (PF-27-S07), cannot be opened.
             if thread != 0 {
                 // SAFETY: `thread` is open; `descriptor` is a live descriptor.
                 let status =
                     unsafe { NtSetSecurityObject(thread, DACL_SECURITY_INFORMATION, descriptor) };
+                // Denied: created protected (an enabled debug privilege still
+                // opens it); fine if its DACL is already as strict.
+                let protected = status >= 0
+                    || (status == STATUS_ACCESS_DENIED
+                        && dacl_is_protected(
+                            thread,
+                            THREAD_QUERY_LIMITED_INFORMATION | SYNCHRONIZE,
+                        ));
                 // SAFETY: opened above.
                 unsafe { CloseHandle(thread) };
-                if status < 0 && result.is_ok() {
+                if !protected && result.is_ok() {
                     result = Err(io::Error::other(format!(
                         "NtSetSecurityObject(thread) failed: {status:#x}"
                     )));
@@ -391,6 +490,10 @@ impl SecurityDescriptor {
             return Err(io::Error::last_os_error());
         }
         Ok(Self(descriptor))
+    }
+
+    pub(crate) fn as_ptr(&self) -> *mut c_void {
+        self.0
     }
 
     pub(crate) fn dacl(&self) -> io::Result<*const ACL> {

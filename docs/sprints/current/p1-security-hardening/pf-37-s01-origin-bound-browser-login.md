@@ -2,7 +2,7 @@
 sprint_id: "PF-37-S01"
 title: "Origin-bound brokered browser login"
 status: draft
-plan_file: "docs/plans/proposed/p1-security-hardening.md"
+plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-37"
 execution_order: 61
 owner: "Jim Ricketts"
@@ -23,7 +23,7 @@ updated: 2026-10-06
 
 ## Plan linkage
 
-- Plan: [P1 security hardening](../../../plans/proposed/p1-security-hardening.md#pf-37).
+- Plan: [P1 security hardening](../../../plans/active/p1-security-hardening.md#pf-37).
 - Feature: `PF-37`.
 - Product citation: **Non-negotiable controls** — “Permit agents to reference credentials only by label; resolve them solely inside the trusted execution boundary.”
 - Acceptance advanced: A model can request an approved login without seeing credentials or inheriting the user's browser profile.

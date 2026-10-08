@@ -1,13 +1,13 @@
 ---
 sprint_id: "PF-33-S02"
 title: "Connection pinning and alternate-egress denial"
-status: draft
-plan_file: "docs/plans/active/p0-security-levels.md"
+status: completed
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-33"
 execution_order: 33
 owner: "network-lane worker round 2 (codex, 2026-10-06)"
 parallel_lane: "tui"
-write_scope: "codex-rs/network-proxy/src/connect_policy.rs, codex-rs/network-proxy/src/upstream.rs, codex-rs/network-proxy/src/upstream_tests.rs, codex-rs/network-proxy/src/mitm.rs, codex-rs/network-proxy/src/mitm_tests.rs, codex-rs/network-proxy/src/destination.rs, codex-rs/network-proxy/src/destination_tests.rs, codex-rs/network-proxy/src/proxy.rs, codex-rs/network-proxy/src/http_proxy.rs, codex-rs/sandboxing/src/seatbelt_tests.rs, codex-rs/core/src/config/network_proxy_spec.rs, codex-rs/core/src/windows_sandbox_tests.rs, docs/sprints/check.py, docs/sprints/tests/test_check.py, qa/security-levels/sprints/PF-33-S02/, qa/demos/index/PF-33-S02.md, docs/sprints/current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md"
+write_scope: "codex-rs/network-proxy/src/connect_policy.rs, codex-rs/network-proxy/src/upstream.rs, codex-rs/network-proxy/src/upstream_tests.rs, codex-rs/network-proxy/src/mitm.rs, codex-rs/network-proxy/src/mitm_tests.rs, codex-rs/network-proxy/src/destination.rs, codex-rs/network-proxy/src/destination_tests.rs, codex-rs/network-proxy/src/proxy.rs, codex-rs/network-proxy/src/http_proxy.rs, codex-rs/sandboxing/src/seatbelt_tests.rs, codex-rs/core/src/config/network_proxy_spec.rs, codex-rs/core/src/windows_sandbox_tests.rs, docs/sprints/check.py, docs/sprints/tests/test_check.py, qa/security-levels/sprints/PF-33-S02/, qa/demos/index/PF-33-S02.md, docs/sprints/archive/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md"
 integration_gate: "PR to main under the per-sprint gate (sec-common decision 5): focused tests, GLM 5.2 tmux run, one Opus 5.5 High review, SOP videos; merged behind the existing url_destination_policy flag (default off). No Cargo, lockfile, lib.rs, config.rs or runtime.rs change. Shared-record hunks serialized by the integration owner: plan worktree coordinates, the PF-33-S01 and PF-28-S02 notes (coordinator decision), the sprint index row, one clause in docs/sprints/index.md, and new demo specs qa/demos/specs/pf33s02-*.toml under the directory PF-30-S03 reserves (new files only)."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-33-s02-20261006"
 branch: "pf-33-s02-20261006"
@@ -16,7 +16,7 @@ merged_behind_flag: "url_destination_policy"
 gate_evidence: "qa/security-levels/sprints/PF-33-S02/README.md"
 depends_on: "PF-33-S01"
 created: 2026-08-28
-updated: 2026-10-06
+updated: 2026-10-08
 ---
 
 # PF-33-S02 — Connection pinning and alternate-egress denial
@@ -32,7 +32,7 @@ to free the TUI lane: the remaining items belong to the broker lane, a future Se
 
 ## Plan linkage
 
-- Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md#pf-33).
+- Plan: [P0 `/security` levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md#pf-33).
 - Feature: `PF-33`.
 - Product citation: **Non-negotiable controls** — “Default to no secret export, arbitrary egress, clipboard exposure, or sensitive logging.”
 - Acceptance advanced: An agent cannot bypass policy by changing transport, resolution, proxy or local socket.
@@ -76,8 +76,10 @@ to free the TUI lane: the remaining items belong to the broker lane, a future Se
 
 ## Remaining
 
-- [ ] SearXNG: no adapter exists in the tree; route it through an exact private-service grant when one is added.
-- [ ] Runtime-approved (decider) hosts are not revoked on an open tunnel (PF-25-S02). No live rebinding-resolver
+Nothing left in this sprint: merged behind its flag and archived when Travis closed the P0 plan on 2026-10-08. These open items moved to the [P1 plan](../../../plans/active/p1-security-hardening.md#carried-forward-from-p0):
+
+- SearXNG: no adapter exists in the tree; route it through an exact private-service grant when one is added.
+- Runtime-approved (decider) hosts are not revoked on an open tunnel (PF-25-S02). No live rebinding-resolver
   fixture; rebinding is covered by pinning tests.
 
 ## Verification
@@ -90,10 +92,10 @@ to free the TUI lane: the remaining items belong to the broker lane, a future Se
 - [x] GLM 5.2 tmux runs as five SOP videos ([index](../../../../qa/demos/index/PF-33-S02.md)); Opus 5.5 High review
   APPROVE WITH NITS, dispositions in the [evidence README](../../../../qa/security-levels/sprints/PF-33-S02/README.md).
 - [x] PR CI green; merged behind `url_destination_policy` as PR #215 (`a0d96aea4b`).
-- [ ] PF-26 final-candidate requalification (milestone gate).
+- Moved to P1: PF-26 final-candidate requalification (milestone gate).
 
 ## Exit evidence
 
 - [x] Commits, commands, outcomes and review record under `qa/security-levels/sprints/PF-33-S02/`.
-- [ ] PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
-- [ ] Remaining items placed; completed record archived and plan/navigation updated.
+- Moved to P1: PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
+- [x] Ledgers reflect reality; open items moved to the [P1 plan](../../../plans/active/p1-security-hardening.md#carried-forward-from-p0) and the record archived with the P0 close (Travis, 2026-10-08).

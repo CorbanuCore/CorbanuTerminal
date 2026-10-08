@@ -2,12 +2,12 @@
 sprint_id: "PF-27-S04"
 title: "Isolated credential broker process"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-27"
 execution_order: 28
 owner: "/root"
 parallel_lane: "broker"
-write_scope: "codex-rs/linux-pidfd-spawn/, codex-rs/protected-state/src/lib.rs, codex-rs/protected-state/src/synthetic_fixture.rs, codex-rs/protected-state/src/native.rs, codex-rs/protected-state/src/native_tests.rs, codex-rs/protected-state/Cargo.toml, codex-rs/secret-broker-service/, codex-rs/secret-broker/, codex-rs/network-proxy/src/credential_broker.rs, codex-rs/network-proxy/src/credential_broker/, codex-rs/network-proxy/src/credential_broker_tests.rs, codex-rs/core/src/security/broker_client.rs, codex-rs/core/src/security/broker_client_tests.rs, codex-rs/core/src/config/network_proxy_credential.rs, codex-rs/core/src/config/network_proxy_credential_tests.rs, codex-rs/vault/src/capability.rs, codex-rs/vault/src/capability_tests.rs, qa/security-levels/sprints/PF-27-S04/, docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md, codex-rs/Cargo.toml, codex-rs/Cargo.lock, MODULE.bazel.lock, docs/plans/active/p0-security-levels.md, docs/sprints/current/p0-security-levels/index.md, qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/, securityProgress.html"
+write_scope: "codex-rs/linux-pidfd-spawn/, codex-rs/protected-state/src/lib.rs, codex-rs/protected-state/src/synthetic_fixture.rs, codex-rs/protected-state/src/native.rs, codex-rs/protected-state/src/native_tests.rs, codex-rs/protected-state/Cargo.toml, codex-rs/secret-broker-service/, codex-rs/secret-broker/, codex-rs/network-proxy/src/credential_broker.rs, codex-rs/network-proxy/src/credential_broker/, codex-rs/network-proxy/src/credential_broker_tests.rs, codex-rs/core/src/security/broker_client.rs, codex-rs/core/src/security/broker_client_tests.rs, codex-rs/core/src/config/network_proxy_credential.rs, codex-rs/core/src/config/network_proxy_credential_tests.rs, codex-rs/vault/src/capability.rs, codex-rs/vault/src/capability_tests.rs, qa/security-levels/sprints/PF-27-S04/, docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md, codex-rs/Cargo.toml, codex-rs/Cargo.lock, MODULE.bazel.lock, docs/plans/completed/main-2026-10-08-p0-security-levels.md, docs/sprints/current/p0-security-levels/index.md, qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/, securityProgress.html"
 integration_gate: "Codex /root serializes shared registration, audits scope and runs affected final-tree qualification on RTX plus synthetic lifecycle through TMUX. Six historical reviews spent; Travis granted five additional review slots replenishing every six hours, tracked in PF27 review-budget.md. Use Astra High and Fable 5.1 High Corbanu/TMUX without duplicate reviews. Production/native/all-OS gates remain open; no privileged installation or protected activation. Coordinate main writes with other integration owners."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf27-s04-broker-20261006"
 branch: "feat/pf27-s04-broker-20261006"
@@ -45,7 +45,7 @@ open items out, so nothing below is claimed as done here:
 
 ## Plan linkage
 
-- Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md#pf-27).
+- Plan: [P0 `/security` levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md#pf-27).
 - Feature: `PF-27`.
 - Product citation: **Non-negotiable controls** — “Permit agents to reference credentials only by label; resolve them solely inside the trusted execution boundary.”
 - Acceptance advanced: Raw credentials exist only in the trusted broker; a compromised agent process cannot call an unrestricted resolver.

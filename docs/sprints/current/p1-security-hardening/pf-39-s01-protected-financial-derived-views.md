@@ -2,7 +2,7 @@
 sprint_id: "PF-39-S01"
 title: "Protected financial derived views"
 status: draft
-plan_file: "docs/plans/proposed/p1-security-hardening.md"
+plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-39"
 execution_order: 66
 owner: "Jim Ricketts"
@@ -23,7 +23,7 @@ updated: 2026-10-06
 
 ## Plan linkage
 
-- Plan: [P1 security hardening](../../../plans/proposed/p1-security-hardening.md#pf-39).
+- Plan: [P1 security hardening](../../../plans/active/p1-security-hardening.md#pf-39).
 - Feature: `PF-39`.
 - Product citation: **Non-negotiable controls** — “Keep vault values, seeds, private keys, broker credentials, balances, positions, PNL, and identifying financial data out of model-visible context except for narrowly scoped derived values.”
 - Acceptance advanced: The model receives only explicitly scoped derived financial information, not raw portfolio records.

@@ -2,7 +2,7 @@
 sprint_id: "PF-30-S04"
 title: "Policy-bound stage-one memory dispatch"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-30"
 execution_order: 77
 owner: "/root/security_ui"
@@ -26,7 +26,7 @@ updated: 2026-09-04
 
 ## Plan linkage
 
-- Plan: [P0 security levels](../../../plans/active/p0-security-levels.md), feature PF-30.
+- Plan: [P0 security levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md), feature PF-30.
 - Product citation: **Non-negotiable controls** — “Classify instruction intent and provenance before external content can influence tools or financial actions.”
 - This independent denial boundary consumes the completed PF-22-S02 runtime-policy contract, not unfinished PF-30-S01 screening or PF-30-S02 persistence.
 - [Design and exact API proposal](../../../../qa/security-levels/sprints/PF-30-S04/memory-policy-binding-design.md) is adopted with this mandate as authority; its original preparation-only status is retained as historical provenance.

@@ -7,7 +7,7 @@ product behavior, authorization, sprint status, dependency or worker allocation.
 
 ## Canonical identities
 
-All rows below belong to [P0 security](../plans/active/p0-security-levels.md).
+All rows below belong to [P0 security](../plans/completed/main-2026-10-08-p0-security-levels.md).
 Interpret a legacy ID only together with that owning plan and its old record
 path. Bare PF-42–45 identifiers continue to belong to the existing Claude-auth
 feature contracts; there is no global alias from those IDs to P0.

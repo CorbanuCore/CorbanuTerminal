@@ -2,12 +2,12 @@
 sprint_id: "PF-34-S04"
 title: "Screening segment contract and fixtures"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-34"
 execution_order: 19
 owner: "Codex ingress/classifier lane"
 parallel_lane: "ingress-classifier"
-write_scope: "codex-rs/content-security/, codex-rs/Cargo.toml, codex-rs/Cargo.lock, BUILD.bazel, MODULE.bazel.lock, .github/workflows/security-ingress-contract.yml, qa/security-levels/ingress-contract/, qa/security-levels/sprints/PF-34-S04/, docs/sprints/current/p1-security-hardening/pf-34-s04-screening-contract-and-fixtures.md, docs/sprints/archive/p0-security-levels/pf-34-s04-screening-contract-and-fixtures.md, docs/sprints/current/p0-security-levels/index.md, docs/sprints/index.md, docs/plans/active/p0-security-levels.md, mkdocs.yml"
+write_scope: "codex-rs/content-security/, codex-rs/Cargo.toml, codex-rs/Cargo.lock, BUILD.bazel, MODULE.bazel.lock, .github/workflows/security-ingress-contract.yml, qa/security-levels/ingress-contract/, qa/security-levels/sprints/PF-34-S04/, docs/sprints/current/p1-security-hardening/pf-34-s04-screening-contract-and-fixtures.md, docs/sprints/archive/p0-security-levels/pf-34-s04-screening-contract-and-fixtures.md, docs/sprints/current/p0-security-levels/index.md, docs/sprints/index.md, docs/plans/completed/main-2026-10-08-p0-security-levels.md, mkdocs.yml"
 integration_gate: "Codex ingress/classifier lane owns the user-authorized G1/G2 transfer: combine current main at 3232f5e65bae60bc86122a5495ebb4c280f7c8fb, audit the literal scope, serialize content-security crate/workspace/Cargo/Bazel/lock/CI registration, rerun governance and the complete content-security suite, obtain an independent TMUX plus Corbanu Terminal plus Claude Opus 5.0 Max review, then archive PF-34-S04 before PF-35-S01 allocation."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-ingress-classifier"
 branch: "feat/p0-security-ingress-classifier"
@@ -26,7 +26,7 @@ updated: 2026-08-30
 
 ## Plan linkage
 
-- Plan: [P0 security levels](../../../plans/active/p0-security-levels.md#pf-34).
+- Plan: [P0 security levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md#pf-34).
 - Feature: `PF-34`.
 - Product citation: **Reconciled security scope — TO BUILD** — “Unknown or unsupported protected paths fail visibly rather than falling back to raw secrets or unscreened execution.”
 - Acceptance advanced: [accepted architecture refinements](../../../plans/security-architecture-refinements-2026-08-28.md).

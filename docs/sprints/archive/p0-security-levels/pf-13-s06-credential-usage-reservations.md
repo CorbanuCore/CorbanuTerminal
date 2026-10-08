@@ -2,7 +2,7 @@
 sprint_id: "PF-13-S06"
 title: "Credential usage reservations"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-13"
 execution_order: 22
 owner: "Pauli — credential reservations lane"
@@ -26,7 +26,7 @@ updated: 2026-08-30
 
 ## Plan linkage
 
-- Plan: [P0 security levels](../../../plans/active/p0-security-levels.md).
+- Plan: [P0 security levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md).
 - Feature: `PF-13`.
 - Product citation: **Required trust boundaries** — “Credentials are referenced by label and resolved only inside a trusted execution boundary.”
 - Acceptance advanced: [architecture refinements](../../../plans/security-architecture-refinements-2026-08-28.md); preserve the completed S01 and its historical evidence, with only added guarantees in this follow-up.

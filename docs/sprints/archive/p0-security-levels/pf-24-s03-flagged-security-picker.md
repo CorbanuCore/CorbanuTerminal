@@ -2,7 +2,7 @@
 sprint_id: "PF-24-S03"
 title: "Flagged /security picker: Permissive and Aggressive"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-24"
 execution_order: 20
 owner: "TUI lane worker (codex, 2026-10-06)"
@@ -29,7 +29,7 @@ updated: 2026-10-07
 
 ## Plan linkage
 
-- Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md#sprint-execution-map); feature `PF-24`.
+- Plan: [P0 `/security` levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md#sprint-execution-map); feature `PF-24`.
 - Product citation: **P0 `/security` levels** — “Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged.”
 - Acceptance advanced: flag off, Open and cancel, Select Aggressive, Return to Permissive, Agent attempts a change.
 

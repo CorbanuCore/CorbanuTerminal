@@ -2,7 +2,7 @@
 sprint_id: "PF-27-S01"
 title: "Shared security integration contracts"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-27"
 execution_order: 14
 owner: "Jim Ricketts"
@@ -25,8 +25,8 @@ updated: 2026-08-27
 
 ## Plan linkage
 
-- Upstream: [plan touch record](../../../plans/active/p0-security-levels.md#upstream-touch-record); resolve this sprint's adapter rows.
-- Plan: [P0 security levels](../../../plans/active/p0-security-levels.md).
+- Upstream: [plan touch record](../../../plans/completed/main-2026-10-08-p0-security-levels.md#upstream-touch-record); resolve this sprint's adapter rows.
+- Plan: [P0 security levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md).
 - Feature: `PF-27`; see the plan's adopted contract and requirement traceability.
 - Acceptance advanced: Land typed shared interfaces that let isolated security lanes compose without inventing competing authority.
 
