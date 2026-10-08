@@ -1,0 +1,42 @@
+$ /cost 2026-10-01 2026-11-01 month
+╭──────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                │
+│                                              │
+│ model:     glm-5.2   /model to change        │
+│ directory: <scratch>/repo │
+╰──────────────────────────────────────────────╯
+› Read README.md and summarize it in one sentence.
+• README.md describes a tiny demo repo used to test cost screens.
+  Recorded request range
+› Requested: [2026-10-01T00:00:00.000Z, 2026-11-01T00:00:00.000Z); timezone: UTC; grouping: Month
+  Retention: request detail kept since 2026-07-10T20:25:24.014Z; daily totals kept since 2025-10-09
+  Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost: unavailable — no settlement evidence.
+  Range: Unknown parent population: 0 inspectable attempts, excluded from range total
+  Other conversations are not included in this view; /cost covers only the open conversation.
+  In progress — totals so far, recorded through 2026-10-08T19:25:49.323Z
+  Estimated token cost for recorded attempts: $0.021652 (rounded)
+  Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [2026-10-01T00:00:00.000Z, 2026-11-01T00:00:00.000Z): [2026-10-01T00:00:00.000Z, 2026-10-08T19:25:49.324Z)
+  ↑↓ scroll · Enter open · Esc back/close
+=== month range page (union of popup lines while scrolling)
+╭──────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                │
+│                                              │
+│ model:     glm-5.2   /model to change        │
+│ directory: <scratch>/repo │
+╰──────────────────────────────────────────────╯
+  Read README.md and summarize it in one sentence.
+• README.md describes a tiny demo repo used to test cost screens.
+  Recorded request range
+  Requested: [2026-10-01T00:00:00.000Z, 2026-11-01T00:00:00.000Z); timezone: UTC; grouping: Month
+  Retention: request detail kept since 2026-07-10T20:25:24.014Z; daily totals kept since 2025-10-09
+  Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost: unavailable — no settlement evidence.
+  Range: Unknown parent population: 0 inspectable attempts, excluded from range total
+  Other conversations are not included in this view; /cost covers only the open conversation.
+  In progress — totals so far, recorded through 2026-10-08T19:25:49.323Z
+  Estimated token cost for recorded attempts: $0.021652 (rounded)
+  Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [2026-10-01T00:00:00.000Z, 2026-11-01T00:00:00.000Z): [2026-10-01T00:00:00.000Z, 2026-10-08T19:25:49.324Z)
+  ↑↓ scroll · Enter open · Esc back/close
+  —— Open ——
+  → Month [2026-10-01T00:00:00.000Z, 2026-11-01T00:00:00.000Z) (in progress)
+  Refresh
+  Close

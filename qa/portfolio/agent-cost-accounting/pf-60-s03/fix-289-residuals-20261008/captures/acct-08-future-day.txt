@@ -1,0 +1,12 @@
+$ /cost 2026-10-09
+╭──────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                │
+│                                              │
+│ model:     glm-5.2   /model to change        │
+│ directory: <scratch>/repo │
+╰──────────────────────────────────────────────╯
+› Read README.md and summarize it in one sentence.
+• README.md describes a tiny demo repo used to test cost screens.
+■ 2026-10-09 is after today (2026-10-08, UTC); there is nothing recorded for it yet. Run /cost for today.
+› Write tests for @filename
+  Z.AI GLM 5.2 via zai standard · <scratch>/repo · Corbanu Terminal · TPS: -- tok/s

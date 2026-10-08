@@ -605,16 +605,16 @@ fn resolved_counts<'a>(quotes: impl IntoIterator<Item = &'a ObservationQuote>) -
     })
 }
 
-/// The state line for a home with no ledger. A build that records costs
-/// creates the ledger with the first request it records, so collection is
-/// not "off" there; other builds may never create one.
+/// The state line for a home with no ledger. The view opens only in a build
+/// that records costs, which creates the ledger with the first request it
+/// records, so collection is not "off" there.
 fn absent_state() -> &'static str {
-    if cfg!(feature = "developer-accounting") {
-        "Unavailable — no requests recorded in this home yet; the accounting ledger is created when the first one is."
-    } else {
-        "Unavailable — accounting ledger not installed."
-    }
+    "Unavailable — no requests recorded in this home yet; the accounting ledger is created when the first one is."
 }
+
+/// What `/usage requests` says in a build that records no costs, instead of
+/// opening a view it could never fill.
+pub(crate) const NO_COST_HISTORY: &str = "Per-request cost history is not part of this build.";
 
 fn attempt_text(q: &ObservationQuote) -> Vec<String> {
     let a = &q.attempt;
@@ -782,8 +782,10 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
     inspection_pages_for(result, /*period*/ None)
 }
 
-/// The command that opens this view in this build: `/cost` exists only where
-/// costs are recorded; elsewhere the view is reached as `/usage requests`.
+/// The command the user typed to open this view: `/cost`. The view is
+/// developer-only; a default build answers `/usage requests` with
+/// `NO_COST_HISTORY` and never opens it, so the other name appears only in
+/// tests of the view itself.
 pub(crate) fn cost_command() -> &'static str {
     if cfg!(feature = "developer-accounting") {
         "/cost"
@@ -797,13 +799,8 @@ pub(crate) fn cost_command() -> &'static str {
 fn unavailable_next_step(state: &InspectionDay) -> Option<String> {
     let cost = cost_command();
     Some(match state {
-        InspectionDay::Absent if cfg!(feature = "developer-accounting") => format!(
-            "Next step: send a turn in this conversation, then run {cost} again. If it stays unavailable, check your provider's bill."
-        ),
-        // The core half of developer accounting can be built without this
-        // crate's, so a build here may still record.
         InspectionDay::Absent => format!(
-            "Next step: if this build records costs, send a turn and run {cost} again; otherwise check your provider's bill."
+            "Next step: send a turn in this conversation, then run {cost} again. If it stays unavailable, check your provider's bill."
         ),
         InspectionDay::MissingThread => {
             format!("Next step: open a saved conversation with /resume, then run {cost} there.")
@@ -835,12 +832,12 @@ fn inspection_pages_for(
 ) -> Vec<InspectorPage> {
     if let Ok(InspectionDay::Range {
         requested,
-        oldest_aggregate_day,
+        aggregate_day_floor,
         read_at_ms,
         buckets,
     }) = result
     {
-        return range_pages(requested, oldest_aggregate_day, read_at_ms, buckets);
+        return range_pages(requested, aggregate_day_floor, read_at_ms, buckets);
     }
     let mut pages = vec![InspectorPage { title: "Cost — this conversation".into(), text: vec![
         "Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.".into(),
@@ -1619,7 +1616,7 @@ fn plain_header(quotes: &[&ObservationQuote]) -> Vec<String> {
 }
 
 /// "Today (UTC) in this conversation:" for the current UTC day, else the
-/// inspected date: `/usage requests YYYY-MM-DD` opens any past day.
+/// inspected date: `/cost YYYY-MM-DD` opens any past day.
 fn day_heading(utc_day: i64, today: i64) -> String {
     if utc_day == today {
         return "Today (UTC) in this conversation:".to_string();
@@ -1793,9 +1790,58 @@ fn interval(start: i64, end: i64) -> String {
     format!("[{}, {})", utc_instant(start), utc_instant(end))
 }
 
+/// A range bucket that the read time cuts short. Nothing is recorded after
+/// the ledger's checkpoint (inspection refuses such a request), so neither is
+/// missing anything; a bucket cut short by the requested range, retention or
+/// unverified days stays partial.
+#[derive(Clone, Copy)]
+enum Progress {
+    /// Still running: everything recorded up to this coverage end.
+    InProgress(i64),
+    /// Starts after the read time.
+    NotStarted,
+}
+
+fn progress(
+    requested: InspectionRange,
+    read_at: i64,
+    bucket: &codex_state::accounting::InspectionBucket,
+) -> Option<Progress> {
+    if bucket.start_ms > read_at {
+        return Some(Progress::NotStarted);
+    }
+    let (start, end) = bucket.effective?;
+    let first_day = start / 86_400_000;
+    (bucket.partial
+        && bucket.end_ms > read_at
+        && requested.end_ms > read_at
+        && start == bucket.start_ms
+        && bucket
+            .days
+            .iter()
+            .zip(first_day..)
+            .all(|(state, day)| match state {
+                InspectionDay::Ready(_) => true,
+                // A day after the coverage end has nothing recorded yet.
+                InspectionDay::CheckpointLag => day * 86_400_000 >= end,
+                _ => false,
+            }))
+    .then_some(Progress::InProgress(end))
+}
+
+const NOT_STARTED: &str = "Not started yet — it starts after this view was read.";
+const NOT_CURRENT: &str = "Snapshot is not current; newer activity is unverified";
+
+fn in_progress_line(end: i64) -> String {
+    format!(
+        "In progress — totals so far, recorded through {}",
+        utc_instant(end - 1)
+    )
+}
+
 fn range_pages(
     requested: InspectionRange,
-    oldest: Option<i64>,
+    aggregate_day_floor: Option<i64>,
     read_at: i64,
     buckets: Vec<codex_state::accounting::InspectionBucket>,
 ) -> Vec<InspectorPage> {
@@ -1806,16 +1852,40 @@ fn range_pages(
             requested.grouping
         ),
         format!(
-            "Retention: request detail kept since {}; oldest daily total kept {}",
+            "Retention: request detail kept since {}; daily totals {}",
             read_at
                 .checked_sub(90 * 86_400_000)
                 .filter(|v| *v >= 0)
                 .map_or_else(|| "the start".to_string(), utc_instant),
-            oldest.map_or_else(|| "none".to_string(), utc_date)
+            aggregate_day_floor.map_or_else(
+                || "kept: not known yet".to_string(),
+                |day| format!("kept since {}", utc_date(day))
+            )
         ),
         "Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost: unavailable — no settlement evidence.".into(),
     ];
-    let states = buckets.iter().flat_map(|b| &b.days).collect::<Vec<_>>();
+    let progress: Vec<_> = buckets
+        .iter()
+        .map(|b| progress(requested, read_at, b))
+        .collect();
+    // Days not reached yet say nothing about the range: those of a bucket not
+    // started, and those of an in-progress bucket after its coverage end.
+    let states = buckets
+        .iter()
+        .zip(&progress)
+        .flat_map(|(b, progress)| {
+            b.days.iter().filter(move |d| match progress {
+                None => true,
+                Some(Progress::InProgress(_)) => !matches!(d, InspectionDay::CheckpointLag),
+                Some(Progress::NotStarted) => false,
+            })
+        })
+        .collect::<Vec<_>>();
+    // Every day shares one checkpoint. With a bucket in progress, a ledger
+    // behind the read time is that bucket's "recorded through", not a gap.
+    let running = progress
+        .iter()
+        .any(|p| matches!(p, Some(Progress::InProgress(_))));
     if states
         .iter()
         .any(|s| matches!(s, InspectionDay::NeedsRefresh))
@@ -1823,15 +1893,15 @@ fn range_pages(
         context.push("Recorded totals unavailable — stored contributions need refresh".into());
     } else if states.iter().any(|s| match s {
         InspectionDay::CheckpointLag => true,
-        InspectionDay::Ready(v) => v.read_at_ms > v.coverage.completed_as_of_ms,
+        InspectionDay::Ready(v) => v.read_at_ms > v.coverage.completed_as_of_ms && !running,
         InspectionDay::DetailUnavailable {
             coverage,
             read_at_ms,
             ..
-        } => *read_at_ms > coverage.completed_as_of_ms,
+        } => *read_at_ms > coverage.completed_as_of_ms && !running,
         _ => false,
     }) {
-        context.push("Snapshot is not current; newer activity is unverified".into());
+        context.push(NOT_CURRENT.into());
     }
     let (unknown_attempts, unavailable_entries) = states
         .iter()
@@ -1866,10 +1936,21 @@ fn range_pages(
     pages[0]
         .text
         .extend(scope::other_conversations_lines(/*others*/ None));
-    let complete = buckets
-        .iter()
-        .all(|b| !b.partial && b.days.iter().all(|d| matches!(d, InspectionDay::Ready(_))));
+    let complete = buckets.iter().zip(&progress).all(|(b, progress)| {
+        progress.is_some()
+            || (!b.partial && b.days.iter().all(|d| matches!(d, InspectionDay::Ready(_))))
+    });
     if complete {
+        if let Some(end) = progress
+            .iter()
+            .filter_map(|p| match p {
+                Some(Progress::InProgress(end)) => Some(*end),
+                _ => None,
+            })
+            .max()
+        {
+            pages[0].text.push(in_progress_line(end));
+        }
         let quotes = buckets
             .iter()
             .flat_map(|b| &b.days)
@@ -1900,24 +1981,23 @@ fn range_pages(
                 .into(),
         );
     }
-    for bucket in buckets {
+    for (bucket, progress) in buckets.into_iter().zip(progress) {
         let bounds = interval(bucket.start_ms, bucket.end_ms);
-        let effective = bucket
-            .effective
-            .map(|(s, e)| interval(s, e))
-            .unwrap_or_else(|| "unavailable".into());
+        let effective = match (bucket.effective, progress) {
+            (Some((s, e)), _) => interval(s, e),
+            (None, Some(Progress::NotStarted)) => "not started".into(),
+            (None, _) => "unavailable".into(),
+        };
         let mut header = context.clone();
         header.push(format!(
             "Bucket: {bounds}; effective coverage (requested ∩ aggregate retention ∩ snapshot): {effective}"
         ));
-        header.push(
-            if bucket.partial {
-                "Partial bucket — excluded from totals"
-            } else {
-                "Whole bucket within aggregate retention coverage; detail availability checked separately"
-            }
-            .into(),
-        );
+        header.push(match progress {
+            Some(Progress::InProgress(end)) => in_progress_line(end),
+            Some(Progress::NotStarted) => NOT_STARTED.into(),
+            None if bucket.partial => "Partial bucket — excluded from totals".into(),
+            None => "Whole bucket within aggregate retention coverage; detail availability checked separately".into(),
+        });
         pages[0].text.push(format!(
             "Effective coverage (requested ∩ aggregate retention ∩ snapshot) for {bounds}: {effective}"
         ));
@@ -1944,6 +2024,8 @@ fn range_pages(
                         merged = Some(view);
                     }
                 }
+                // Days not reached yet have nothing to report.
+                InspectionDay::CheckpointLag if progress.is_some() => {}
                 other => {
                     detail_unavailable |= matches!(other, InspectionDay::DetailUnavailable { .. });
                     diagnostics.extend(inspection_pages(Ok(other)).remove(0).text);
@@ -1956,10 +2038,27 @@ fn range_pages(
             header.push(format!("Precision unsupported outside retained raw detail; compacted days lost request/provider attribution. No bucket total. Whole UTC-day bounds offered: {}; this does not restore attribution.", interval(requested.start_ms / 86_400_000 * 86_400_000, ((requested.end_ms - 1) / 86_400_000 + 1) * 86_400_000)));
         }
         let offset = pages.len();
-        pages[0]
-            .links
-            .push((format!("{:?} {bounds}", requested.grouping), offset));
-        let mut children = if !bucket.partial && available {
+        pages[0].links.push((
+            format!(
+                "{:?} {bounds}{}",
+                requested.grouping,
+                match progress {
+                    Some(Progress::InProgress(_)) => " (in progress)",
+                    Some(Progress::NotStarted) => " (not started)",
+                    None => "",
+                }
+            ),
+            offset,
+        ));
+        let mut children = if matches!(progress, Some(Progress::NotStarted)) {
+            vec![InspectorPage {
+                title: "Not started yet".into(),
+                text: vec![],
+                links: vec![],
+                parent: None,
+                selected: Arc::default(),
+            }]
+        } else if (!bucket.partial || progress.is_some()) && available {
             if let Some(mut view) = merged {
                 let recalculate = (|| -> anyhow::Result<()> {
                     view.totals = codex_state::accounting::DayTotals::from_quotes(
@@ -1985,6 +2084,17 @@ fn range_pages(
                 match recalculate {
                     // The merged view keeps its first day's `utc_day`;
                     // the heading names the whole bucket instead.
+                    Ok(()) if progress.is_some() => {
+                        let mut pages = inspection_pages_for(
+                            Ok(InspectionDay::Ready(view)),
+                            Some(format!("so far in {bounds}")),
+                        );
+                        pages[0].title = "Cost so far — this conversation".into();
+                        for page in &mut pages {
+                            page.text.retain(|line| line != NOT_CURRENT);
+                        }
+                        pages
+                    }
                     Ok(()) => {
                         inspection_pages_for(Ok(InspectionDay::Ready(view)), Some(bounds.clone()))
                     }

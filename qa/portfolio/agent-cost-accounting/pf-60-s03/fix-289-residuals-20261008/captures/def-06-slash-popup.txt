@@ -1,0 +1,4 @@
+$ /usa (slash popup)
+■ Sign in with ChatGPT to view OpenAI account usage.
+› /usa
+  /usage  view account usage or use a rate-limit reset

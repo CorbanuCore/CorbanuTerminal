@@ -1459,7 +1459,7 @@ async fn accounting_inspect_range_mixed_compaction_exact_no_double_count() -> an
     )
     .await?;
     assert!(
-        matches!(&value, InspectionDay::Range { oldest_aggregate_day: Some(0), read_at_ms, .. } if *read_at_ms == 90 * DAY)
+        matches!(&value, InspectionDay::Range { aggregate_day_floor: Some(0), read_at_ms, .. } if *read_at_ms == 90 * DAY)
     );
     let mut buckets = range_buckets(value);
     assert!(matches!(
@@ -1487,6 +1487,35 @@ async fn accounting_inspect_range_mixed_compaction_exact_no_double_count() -> an
     };
     assert_eq!(compact.known_usd, "0.000001".to_owned().try_into()?);
     assert_eq!(rows(&runtime).await?, before);
+    runtime.close().await;
+    Ok(())
+}
+
+// #289 R3: a range states the same daily-totals floor as the day pages, even
+// before anything has been compacted.
+#[tokio::test]
+async fn accounting_inspect_range_states_day_page_retention_floor() -> anyhow::Result<()> {
+    const DAY: i64 = 86_400_000;
+    let path = home();
+    let runtime = open(&path).await?;
+    seed(&runtime).await?;
+    let time = 400 * DAY;
+    let store = AccountingStore::open(&runtime, time).await?;
+    let mut a = attempt(/*id*/ 1);
+    a.dispatched_at_ms = time.try_into()?;
+    store.admit(a.thread_id, &a, &[snapshot()], time).await?;
+    store
+        .observe(a.thread_id, &a, &[row(/*id*/ 1)], time)
+        .await?;
+    let floor = inspection(inspected(&runtime, /*day*/ 400, time).await?)
+        .coverage
+        .aggregate_day_floor;
+    assert_eq!(floor, 36);
+    let value = range_read(&runtime, time, time + DAY, InspectionGrouping::Day, time).await?;
+    assert!(
+        matches!(value, InspectionDay::Range { aggregate_day_floor: Some(f), .. } if f == floor),
+        "{value:?}"
+    );
     runtime.close().await;
     Ok(())
 }
