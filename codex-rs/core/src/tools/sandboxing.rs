@@ -557,11 +557,18 @@ impl<'a> SandboxAttempt<'a> {
             .iter()
             .map(PathUri::to_abs_path)
             .collect::<std::io::Result<Vec<_>>>()?;
-        Ok(crate::sandboxing::ExecRequest::from_sandbox_exec_request(
+        let mut exec_request = crate::sandboxing::ExecRequest::from_sandbox_exec_request(
             request,
             options,
             workspace_roots,
-        ))
+        );
+        // #294: without this the Windows backends apply none of the profile's
+        // deny entries, including the launch contract's.
+        crate::exec::attach_windows_sandbox_filesystem_overrides(
+            &mut exec_request,
+            &self.sandbox_cwd.to_abs_path()?,
+        )?;
+        Ok(exec_request)
     }
 
     pub fn env_for_exec_server(

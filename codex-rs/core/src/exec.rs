@@ -406,6 +406,20 @@ pub fn build_exec_request(
             )
         })
         .map_err(CodexErr::from)?;
+    attach_windows_sandbox_filesystem_overrides(&mut exec_req, sandbox_cwd)?;
+    Ok(exec_req)
+}
+
+/// Resolves the Windows sandbox's filesystem overrides (deny-read and
+/// deny-write ACL targets, read and write root overrides) from the request's
+/// final permission profile. Every launch path must call this after the
+/// sandbox transform: without it the Windows backends get no deny-read paths
+/// and apply none of the profile's deny entries (#294). A no-op for requests
+/// that do not use a Windows sandbox.
+pub(crate) fn attach_windows_sandbox_filesystem_overrides(
+    exec_req: &mut ExecRequest,
+    sandbox_cwd: &AbsolutePathBuf,
+) -> Result<()> {
     let use_windows_elevated_backend = windows_sandbox_uses_elevated_backend(
         exec_req.windows_sandbox_level,
         exec_req.network.is_some(),
@@ -426,7 +440,7 @@ pub fn build_exec_request(
         )
     }
     .map_err(CodexErr::UnsupportedOperation)?;
-    Ok(exec_req)
+    Ok(())
 }
 
 pub(crate) async fn execute_exec_request(

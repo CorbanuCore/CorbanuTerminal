@@ -59,6 +59,19 @@ const PROTECTED_CODEX_HOME_ENTRIES: &[&str] = &[
     "history.jsonl",
 ];
 
+/// The entries of [`PROTECTED_CODEX_HOME_ENTRIES`] that are directories. On
+/// Windows they are denied even before they exist (#294); files created
+/// directly in `CODEX_HOME` are covered by its new-files deny instead.
+const PROTECTED_CODEX_HOME_DIRS: &[&str] = &[
+    "secrets",
+    "wallet",
+    "run",
+    "shell_snapshots",
+    "log",
+    "sessions",
+    "archived_sessions",
+];
+
 /// Credential files under `$HOME` that tools read for the user: CLI tokens
 /// for GitHub, AWS, Docker, npm and git, `.netrc`, and Claude's sign-in.
 const PROTECTED_HOME_ENTRIES: &[&str] = &[
@@ -489,8 +502,13 @@ impl LaunchContract {
             .map(|path| {
                 let path_entry = FileSystemPath::Path { path: path.clone() };
                 // PF-27-S06: the Windows sandbox drops every skip-if-missing
-                // entry, so a path that exists is denied outright there.
-                if cfg!(windows) && path.as_path().exists() {
+                // entry, so a path that exists is denied outright there. So
+                // is a protected CODEX_HOME directory that does not exist yet
+                // (#294): the sandbox's ACL setup creates it before applying
+                // the deny, so a vault created later is covered too.
+                if cfg!(windows)
+                    && (path.as_path().exists() || self.is_protected_codex_home_dir(path))
+                {
                     FileSystemSandboxEntry::new(path_entry, FileSystemAccessMode::Deny)
                 } else {
                     FileSystemSandboxEntry::skip_missing_path(
@@ -609,6 +627,12 @@ impl LaunchContract {
             return Err(LaunchDenied::RawSecretInStdin);
         }
         Ok(())
+    }
+
+    fn is_protected_codex_home_dir(&self, path: &AbsolutePathBuf) -> bool {
+        PROTECTED_CODEX_HOME_DIRS
+            .iter()
+            .any(|dir| self.codex_home.join(dir) == *path)
     }
 
     fn contains_managed_value(&self, text: &str) -> bool {
