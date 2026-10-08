@@ -858,7 +858,9 @@ pub unsafe fn remove_deny_read_ace(path: &Path, psid: *mut c_void) -> Result<boo
     remove_matching_aces(path, |dacl, ace| match deny_read_part(ace, psid) {
         Some(DenyReadPart::Whole | DenyReadPart::Inherited) => true,
         // Alone, it is the entry `ensure_explicit_deny_read_ace` adds.
-        Some(DenyReadPart::Effective) => dacl_has_deny_read_part(dacl, psid, DenyReadPart::Inherited),
+        Some(DenyReadPart::Effective) => {
+            dacl_has_deny_read_part(dacl, psid, DenyReadPart::Inherited)
+        }
         None => false,
     })
 }
@@ -911,7 +913,8 @@ unsafe fn dacl_has_deny_read_part(p_dacl: *mut ACL, psid: *mut c_void, part: Den
     }
     (0..info.AceCount).any(|i| {
         let mut p_ace: *mut c_void = std::ptr::null_mut();
-        GetAce(p_dacl as *const ACL, i, &mut p_ace) != 0 && deny_read_part(p_ace, psid) == Some(part)
+        GetAce(p_dacl as *const ACL, i, &mut p_ace) != 0
+            && deny_read_part(p_ace, psid) == Some(part)
     })
 }
 
@@ -1263,10 +1266,8 @@ pub unsafe fn allow_null_device(psid: *mut c_void) {
 const CONTAINER_INHERIT_ACE: u32 = 0x2;
 const NO_PROPAGATE_INHERIT_ACE: u32 = 0x4;
 const OBJECT_INHERIT_ACE: u32 = 0x1;
-const INHERITANCE_FLAGS: u32 = OBJECT_INHERIT_ACE
-    | CONTAINER_INHERIT_ACE
-    | NO_PROPAGATE_INHERIT_ACE
-    | INHERIT_ONLY_ACE as u32;
+const INHERITANCE_FLAGS: u32 =
+    OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE | NO_PROPAGATE_INHERIT_ACE | INHERIT_ONLY_ACE as u32;
 /// Maps generic rights to file rights.
 const FILE_MAPPING: GENERIC_MAPPING = GENERIC_MAPPING {
     GenericRead: FILE_GENERIC_READ,

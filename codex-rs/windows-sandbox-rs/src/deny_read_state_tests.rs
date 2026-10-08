@@ -89,7 +89,9 @@ fn sec_win_304_sync_removes_exactly_the_deny_it_added() {
     unsafe {
         assert!(add_allow_ace(&home.secret, group.as_ptr()).expect("allow"));
         assert!(add_deny_read_ace(&home.secret, other.as_ptr()).expect("other deny"));
-        assert!(add_deny_read_ace_for_new_files(&home.secret, group.as_ptr()).expect("new-file deny"));
+        assert!(
+            add_deny_read_ace_for_new_files(&home.secret, group.as_ptr()).expect("new-file deny")
+        );
     }
     let dir_before = dacl_sddl(&home.secret);
     let nested_before = dacl_sddl(&home.nested);
@@ -227,7 +229,10 @@ fn dacl_sddl(path: &Path) -> String {
             std::ptr::null_mut(),
         )
     };
-    assert_ne!(ok, 0, "ConvertSecurityDescriptorToStringSecurityDescriptorW");
+    assert_ne!(
+        ok, 0,
+        "ConvertSecurityDescriptorToStringSecurityDescriptorW"
+    );
     // SAFETY: `text` is a NUL-terminated string allocated by the call.
     let sddl = unsafe {
         let len = (0..).take_while(|&i| *text.add(i) != 0).count();
