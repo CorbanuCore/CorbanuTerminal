@@ -1463,8 +1463,8 @@ async fn signed_out_usage_command_with_args_reports_chatgpt_login_requirement() 
     // operator on another provider must be told where to look instead of being
     // left to conclude the feature does not exist.
     assert!(
-        rendered.contains("/usage requests"),
-        "expected the recorded-cost view to be named, got: {rendered:?}"
+        rendered.contains("run `/cost`"),
+        "expected the recorded-cost view to be named by its current command, got: {rendered:?}"
     );
     assert_eq!(recall_latest_after_clearing(&mut chat), "/usage weekly");
 }
@@ -3479,5 +3479,59 @@ async fn cost_command_is_listed_and_runs_without_chatgpt_auth() {
     assert!(
         !rendered.contains("Sign in with ChatGPT"),
         "`/cost` never demands a ChatGPT sign-in, got: {rendered:?}"
+    );
+}
+
+// Current command: `/cost` takes the same arguments as `/usage requests`, and
+// its errors name `/cost`, the command the user typed.
+#[tokio::test]
+async fn cost_command_arguments_and_errors_name_cost() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    for (args, expected) in [
+        ("yesterday", "Usage: /cost [YYYY-MM-DD]"),
+        (
+            "2026-09-02 2026-09-01 day",
+            "Usage: /cost START END hour|day|week|month",
+        ),
+    ] {
+        chat.dispatch_command_with_args(SlashCommand::Cost, args.to_string(), Vec::new());
+        let rendered = drain_insert_history(&mut rx)
+            .iter()
+            .map(|cell| lines_to_single_string(cell))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(rendered.contains(expected), "{args}: {rendered}");
+        assert!(!rendered.contains("/usage requests"), "{args}: {rendered}");
+        assert!(chat.accounting_inspector.is_none());
+    }
+    let day = |date: &str| {
+        chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc()
+            .timestamp()
+            / 86_400
+    };
+    chat.dispatch_command_with_args(SlashCommand::Cost, "2026-09-15".to_string(), Vec::new());
+    let event = std::iter::from_fn(|| rx.try_recv().ok())
+        .find(|event| matches!(event, AppEvent::LoadAccountingInspector { .. }));
+    assert!(
+        matches!(event, Some(AppEvent::LoadAccountingInspector { day: opened, range: None, .. }) if opened == day("2026-09-15")),
+        "{event:?}"
+    );
+    chat.dispatch_command_with_args(
+        SlashCommand::Cost,
+        "2026-09-01 2026-09-15 week".to_string(),
+        Vec::new(),
+    );
+    let event = std::iter::from_fn(|| rx.try_recv().ok())
+        .find(|event| matches!(event, AppEvent::LoadAccountingInspector { .. }));
+    assert!(
+        matches!(&event, Some(AppEvent::LoadAccountingInspector { range: Some(range), .. })
+            if range.start_ms == day("2026-09-01") * 86_400_000
+                && range.end_ms == day("2026-09-15") * 86_400_000
+                && range.grouping == codex_state::accounting::InspectionGrouping::Week),
+        "{event:?}"
     );
 }

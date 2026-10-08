@@ -499,3 +499,213 @@ async fn cost_scope_snapshots_wide_and_narrow() {
         render_bottom_popup_with_height(&narrow, /*width*/ 40, /*height*/ 60)
     );
 }
+
+/// The OpenAI price bound at dispatch: $5/M noncached, $0.50/M cache read,
+/// $30/M output, no stated cache-write rate.
+fn openai_price() -> codex_state::accounting::Snapshot {
+    serde_json::from_value(serde_json::json!({
+        "id": Uuid::from_u128(77), "provider": "openai", "model": "gpt-5.4", "scope": Uuid::from_u128(5),
+        "currency": "USD", "unit": "PerMillionTokens",
+        "rates": {"noncached": "5", "read": "0.5", "write": null, "output": "30"},
+        "source_reference": Uuid::from_u128(78), "source_kind": "ProviderPublished",
+        "observed_at_ms": 0, "approved_at_ms": 0, "effective_from_ms": 0, "effective_end_ms": null
+    }))
+    .unwrap()
+}
+
+/// An OpenAI attempt priced at dispatch whose provider reported no token
+/// counts at all: a failed or refused request.
+fn no_usage(id: u128, owner: ThreadId) -> ObservationQuote {
+    let mut quote = unpriced(id, owner, "openai", "gpt-5.4");
+    quote.snapshot = Some(openai_price());
+    quote.usage = Usage::default();
+    quote.buckets = [BucketQuote::MissingUsage; 4];
+    quote
+}
+
+/// The priced OpenAI attempt with its output count missing: $0.00041 of input
+/// is known, the output's cost is not.
+fn output_unreported(id: u128, owner: ThreadId) -> ObservationQuote {
+    let mut quote = priced(id, owner);
+    quote.snapshot = Some(openai_price());
+    quote.usage.output = None;
+    quote.buckets[3] = BucketQuote::MissingUsage;
+    quote.known_subtotal = decimal("0.00041");
+    quote.all_buckets_priced = None;
+    quote.subtotal_display = quote.known_subtotal.display();
+    quote
+}
+
+fn own_day(own: Vec<ObservationQuote>) -> Vec<InspectorPage> {
+    inspection_pages(Ok(day(own, Some(OtherConversations::default()))))
+}
+
+fn link_labels(pages: &[InspectorPage]) -> Vec<String> {
+    pages[0]
+        .links
+        .iter()
+        .map(|(label, _)| label.clone())
+        .collect()
+}
+
+// No-usage: a request whose provider did not report the counts its price
+// needs reads as incomplete usage, not as a missing price, and never as zero.
+#[test]
+fn missing_usage_is_labelled_apart_from_missing_price() {
+    let silent = own_day(vec![no_usage(/*id*/ 1, thread(/*n*/ 1))]);
+    assert_eq!(
+        first_screen(&silent[0])[1],
+        "• OpenAI · gpt-5.4 — Pay per use. 1 request, tokens not reported. Estimated cost: not available — usage incomplete."
+    );
+    let labels = link_labels(&silent);
+    for label in [
+        "Request 1 · OpenAI · gpt-5.4 · usage incomplete",
+        "OpenAI · gpt-5.4 — usage incomplete (1 request)",
+    ] {
+        assert!(labels.contains(&label.to_string()), "{label}: {labels:#?}");
+    }
+    assert!(
+        !silent
+            .iter()
+            .flat_map(|page| &page.text)
+            .any(|line| line.contains("no price")),
+        "a priced route must not be told to look for a missing price"
+    );
+    assert_never_zero(&silent);
+
+    let partial = own_day(vec![output_unreported(/*id*/ 1, thread(/*n*/ 1))]);
+    assert_eq!(
+        first_screen(&partial[0])[1],
+        "• OpenAI · gpt-5.4 — Pay per use. 1 request, 100+ tokens. Estimated cost: at least $0.000410 (1 attempt had incomplete usage)."
+    );
+    assert_never_zero(&partial);
+
+    // Both causes on one route are each counted, and the next step names only
+    // the provider whose tokens have no price.
+    let mixed = own_day(vec![
+        no_usage(/*id*/ 1, thread(/*n*/ 1)),
+        unpriced(/*id*/ 2, thread(/*n*/ 1), "openai", "gpt-5.4"),
+    ]);
+    let first = first_screen(&mixed[0]);
+    assert_eq!(
+        first[1],
+        "• OpenAI · gpt-5.4 — Pay per use. 2 requests, 55+ tokens. Estimated cost: not available (1 attempt had no price, 1 had incomplete usage)."
+    );
+    assert!(
+        first.contains(&"Next step for requests with no price: check the bill from OpenAI. No published price covers them, so only their tokens are shown here, not a cost.".to_string()),
+        "{first:#?}"
+    );
+    assert!(link_labels(&mixed).contains(
+        &"OpenAI · gpt-5.4 — cost not available (1 attempt had no price, 1 had incomplete usage) (2 requests)".to_string()
+    ));
+    assert_never_zero(&mixed);
+}
+
+// Stale estimate: figures read ahead of the ledger's checkpoint say so on every
+// page that states an amount, and a reply to a superseded read never replaces
+// the refreshed view.
+#[tokio::test]
+async fn stale_estimate_is_marked_and_never_replaces_a_refresh() {
+    const STALE: &str = "Snapshot is not current; newer activity is unverified";
+    let stale = || {
+        let mut view = day(
+            vec![priced(/*id*/ 1, thread(/*n*/ 1))],
+            Some(OtherConversations::default()),
+        );
+        if let InspectionDay::Ready(inspection) = &mut view {
+            inspection.coverage.completed_as_of_ms -= 60_000;
+        }
+        view
+    };
+    let pages = inspection_pages(Ok(stale()));
+    let priced_pages: Vec<&InspectorPage> = pages
+        .iter()
+        .filter(|page| page.text.iter().any(|line| line.contains('$')))
+        .collect();
+    assert!(
+        priced_pages.len() >= 3,
+        "fixture states amounts on several pages"
+    );
+    for page in priced_pages {
+        assert!(
+            page.text.iter().any(|line| line == STALE),
+            "{:?} states an amount without saying it may be behind",
+            page.title
+        );
+    }
+
+    let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.on_terminal_resize(/*width*/ 120);
+    chat.open_accounting_command(
+        "requests 2026-09-16",
+        NaiveDate::from_ymd_opt(2026, 9, 16).unwrap(),
+    );
+    let AppEvent::LoadAccountingInspector {
+        generation: superseded,
+        thread: owner,
+        day: requested,
+        ..
+    } = rx.try_recv().unwrap()
+    else {
+        panic!("expected inspector load");
+    };
+    chat.finish_accounting_inspector(superseded, owner, requested, Ok(stale()));
+    chat.refresh_accounting_inspector(superseded);
+    let AppEvent::LoadAccountingInspector {
+        generation: current,
+        ..
+    } = rx.try_recv().unwrap()
+    else {
+        panic!("expected refresh load");
+    };
+    assert_ne!(current, superseded);
+    let fresh = day(
+        vec![
+            priced(/*id*/ 1, thread(/*n*/ 1)),
+            priced(/*id*/ 2, thread(/*n*/ 1)),
+        ],
+        Some(OtherConversations::default()),
+    );
+    chat.finish_accounting_inspector(current, owner, requested, Ok(fresh));
+    chat.finish_accounting_inspector(superseded, owner, requested, Ok(stale()));
+    let screen = render_bottom_popup_with_height(&chat, /*width*/ 120, /*height*/ 30);
+    assert!(screen.contains("2 requests, 220 tokens"), "{screen}");
+    assert!(!screen.contains(STALE), "{screen}");
+}
+
+// Unavailable backend: every state with no figures says what to do next,
+// directly under the reason.
+#[test]
+fn every_unavailable_state_names_a_next_step() {
+    let states = [
+        InspectionDay::Absent,
+        InspectionDay::MissingThread,
+        InspectionDay::CheckpointLag,
+        InspectionDay::NeedsRefresh,
+        InspectionDay::TooLarge,
+        InspectionDay::DetailUnavailable {
+            coverage: RetentionCoverage {
+                completed_as_of_ms: 200 * DAY_MS,
+                detail_expired_through_ms: Some(100 * DAY_MS),
+                aggregate_day_floor: 0,
+                oldest_recorded_day: Some(0),
+            },
+            read_at_ms: 200 * DAY_MS,
+            compact: true,
+        },
+    ];
+    for state in states {
+        let label = format!("{state:?}");
+        let pages = inspection_pages(Ok(state));
+        assert_eq!(pages.len(), 1, "{label}");
+        assert!(
+            pages[0].text[1].starts_with("Next step: "),
+            "{label}: {:#?}",
+            pages[0].text
+        );
+        assert!(
+            !pages[0].text.iter().any(|line| line.contains('$')),
+            "{label}"
+        );
+    }
+}

@@ -11,6 +11,7 @@ use codex_state::accounting::DayTotals;
 use codex_state::accounting::ObservationQuote;
 use codex_state::accounting::OtherConversations;
 
+use super::EstimateGaps;
 use super::by_route;
 use super::has_no_price;
 use super::lower_first;
@@ -56,7 +57,7 @@ pub(super) fn other_conversations_lines(others: Option<&OtherConversations>) -> 
         lines.push(match DayTotals::from_quotes(quotes.iter().copied()) {
             Ok(totals) => format!(
                 "Other conversations' {}.",
-                lower_first(&plain_billing(&totals).1)
+                lower_first(&plain_billing(&totals, EstimateGaps::of(quotes.iter().copied())).1)
             ),
             Err(_) => "Other conversations' cost: unavailable — exact arithmetic overflow.".into(),
         });

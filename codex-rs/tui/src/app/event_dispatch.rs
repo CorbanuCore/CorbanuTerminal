@@ -42,9 +42,9 @@ impl App {
                 let tx = self.app_event_tx.clone();
                 tokio::spawn(async move {
                     let result = if !embedded {
-                        Err("Unavailable — recorded request inspection is local-only; remote server selected.".into())
+                        Err("Unavailable — recorded request inspection is local-only; remote server selected. Next step: run /cost in a session started without a remote server.".into())
                     } else if thread.is_none() || thread != current {
-                        Err("Unavailable — no current native thread.".into())
+                        Err("Unavailable — no current native thread. Next step: send a turn or open a conversation with /resume, then run /cost.".into())
                     } else if let (Some(db), Some(owner)) = (db, thread) {
                         accounting_inspector_read_result(async {
                             let now = chrono::Utc::now().timestamp_millis();
@@ -65,7 +65,7 @@ impl App {
                         })
                         .await
                     } else {
-                        Err("Unavailable — native state database is not open.".into())
+                        Err("Unavailable — native state database is not open. Next step: restart Corbanu Terminal; if it stays unavailable, check that its home directory is writable.".into())
                     };
                     tx.send(AppEvent::AccountingInspectorLoaded {
                         generation,
@@ -105,8 +105,8 @@ pub(super) async fn accounting_inspector_read_result(
 ) -> Result<codex_state::accounting::InspectionDay, String> {
     match tokio::time::timeout(Duration::from_secs(15), read).await {
         Ok(Ok(value)) => Ok(value),
-        Ok(Err(_)) => Err("Unavailable — accounting evidence is corrupt, incompatible or could not be read. Refresh to retry; no repair performed.".into()),
-        Err(_) => Err("Unavailable — inspection timed out. Refresh to retry.".into()),
+        Ok(Err(_)) => Err("Unavailable — accounting evidence is corrupt, incompatible or could not be read. Refresh to retry; no repair performed. Next step: if Refresh fails again, check your provider's bill; the log names the cause.".into()),
+        Err(_) => Err("Unavailable — inspection timed out. Next step: select Refresh; another Corbanu process may be holding the ledger.".into()),
     }
 }
 

@@ -548,13 +548,19 @@ fn rate_scaled(milli_tokens: i64) -> String {
 
 /// The exact known subtotal, or "none" when nothing billed per token was
 /// priced: a bare `0` beside an unknown estimate reads as a zero-cost claim.
-fn known_exact(t: &codex_state::accounting::DayTotals) -> String {
+fn known_exact(t: &codex_state::accounting::DayTotals, gaps: EstimateGaps) -> String {
+    let unknown = t.unknown_estimates.saturating_sub(t.plan_attempts);
     if t.attempts == 0 {
         "none — no recorded attempts in this conversation".to_string()
     } else if t.plan_attempts == t.attempts {
         "none — subscription work is not billed per token".to_string()
-    } else if t.known_usd == Decimal::default() && t.unknown_estimates > t.plan_attempts {
-        "none — no price for these attempts".to_string()
+    } else if t.known_usd == Decimal::default() && unknown > 0 {
+        match gaps.incomplete_usage.min(unknown) {
+            0 => "none — no price for these attempts",
+            usage if usage == unknown => "none — usage incomplete for these attempts",
+            _ => "none — no price or incomplete usage for these attempts",
+        }
+        .to_string()
     } else {
         exact(t.known_usd)
     }
@@ -675,8 +681,10 @@ fn attempt_text(q: &ObservationQuote) -> Vec<String> {
     }
     lines.push(format!(
         "Known subtotal exact USD: {}",
-        codex_state::accounting::DayTotals::from_quotes([q])
-            .map_or_else(|_| exact(q.known_subtotal), |t| known_exact(&t))
+        codex_state::accounting::DayTotals::from_quotes([q]).map_or_else(
+            |_| exact(q.known_subtotal),
+            |t| known_exact(&t, EstimateGaps::of([q]))
+        )
     ));
     if let Some(s) = &q.snapshot {
         lines.extend([
@@ -728,6 +736,32 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
     inspection_pages_for(result, /*period*/ None)
 }
 
+/// What the user can do when a view has no figures to show. `None` where the
+/// state line already says it (a `Ready` view, or a range).
+fn unavailable_next_step(state: &InspectionDay) -> Option<&'static str> {
+    Some(match state {
+        InspectionDay::Absent => {
+            "Next step: send a turn in this conversation, then run /cost again. If it stays unavailable, this build does not record costs; check your provider's bill."
+        }
+        InspectionDay::MissingThread => {
+            "Next step: open a saved conversation with /resume, then run /cost there."
+        }
+        InspectionDay::CheckpointLag => {
+            "Next step: wait a moment for the ledger to catch up, then select Refresh."
+        }
+        InspectionDay::NeedsRefresh => {
+            "Next step: select Refresh. If it stays unavailable, the recorded totals cannot be checked here; check your provider's bill."
+        }
+        InspectionDay::TooLarge => {
+            "Next step: open a shorter span, such as one UTC day with /cost YYYY-MM-DD. If one day is still refused, the ledger is too large to inspect here; check your provider's bill."
+        }
+        InspectionDay::DetailUnavailable { .. } => {
+            "Next step: request detail is kept for recent days only; open a more recent day with /cost YYYY-MM-DD, or check your provider's bill for this one."
+        }
+        InspectionDay::Ready(_) | InspectionDay::Range { .. } => return None,
+    })
+}
+
 /// `period` names the span a merged multi-day view covers; `None` means the
 /// view is the single UTC day it states.
 fn inspection_pages_for(
@@ -751,6 +785,9 @@ fn inspection_pages_for(
     let ready = match result {
         Ok(InspectionDay::Ready(view)) => view,
         other => {
+            if let Some(step) = other.as_ref().ok().and_then(unavailable_next_step) {
+                pages[0].text.insert(0, step.into());
+            }
             pages[0].text.insert(0, match other {
                 Ok(InspectionDay::Absent) => "Unavailable — accounting ledger not installed. Collection remains off.".into(),
                 Ok(InspectionDay::MissingThread) => "Unavailable — native thread no longer exists.".into(),
@@ -804,7 +841,10 @@ fn inspection_pages_for(
                 ready.coverage.oldest_recorded_day
             )
         ),
-        format!("Known subtotal exact USD: {}", known_exact(t)),
+        format!(
+            "Known subtotal exact USD: {}",
+            known_exact(t, EstimateGaps::of(ready.requests.values().flatten()))
+        ),
     ]);
     for (label, m) in METRICS.iter().zip(&t.measured) {
         pages[0].text.push(format!("{label}: {}", metric_text(m)));
@@ -918,7 +958,10 @@ fn inspection_pages_for(
                 text.extend(estimate(&t));
                 text.push(format!("Recorded attempts: {}", t.attempts));
                 if t.attempts > 0 {
-                    text.push(format!("Known estimate exact USD: {}", known_exact(&t)));
+                    text.push(format!(
+                        "Known estimate exact USD: {}",
+                        known_exact(&t, EstimateGaps::of(quotes.iter().copied()))
+                    ));
                 }
             }
             Err(_) => text.push("Estimate unavailable — exact arithmetic overflow".into()),
@@ -1170,24 +1213,83 @@ fn grouped(n: i64) -> String {
 const COVERED: &str = "Covered by your subscription (not billed per request)";
 const PAY_PER_USE: &str = "Pay per use";
 const NO_PRICE: &str = "Estimated cost: no price available";
+/// A price applies but the provider did not report every token count it
+/// needs, so no estimate is possible. Not a missing price: the next step for
+/// unpriced requests does not apply to it.
+const NO_USAGE: &str = "Estimated cost: not available — usage incomplete";
 const DAY_COVERED: &str = "Day covered (UTC):";
+
+/// How many pay-per-use attempts with no complete estimate lack a price, and
+/// how many have one but are missing a usage count the price needs.
+#[derive(Clone, Copy, Default)]
+struct EstimateGaps {
+    incomplete_usage: i64,
+}
+
+impl EstimateGaps {
+    fn of<'a>(quotes: impl IntoIterator<Item = &'a ObservationQuote>) -> Self {
+        let incomplete_usage = quotes
+            .into_iter()
+            .filter(|q| !q.is_plan() && q.all_buckets_priced.is_none() && !lacks_price(q))
+            .count();
+        Self {
+            incomplete_usage: i64::try_from(incomplete_usage).unwrap_or(i64::MAX),
+        }
+    }
+
+    /// "1 attempt had no price, 2 had incomplete usage" for `unknown` attempts.
+    fn reasons(self, unknown: i64) -> String {
+        let usage = self.incomplete_usage.min(unknown);
+        let price = unknown - usage;
+        let noun = |n: i64| if n == 1 { "attempt" } else { "attempts" };
+        match (price, usage) {
+            (price, 0) => format!("{price} {} had no price", noun(price)),
+            (0, usage) => format!("{usage} {} had incomplete usage", noun(usage)),
+            (price, usage) => {
+                format!(
+                    "{price} {} had no price, {usage} had incomplete usage",
+                    noun(price)
+                )
+            }
+        }
+    }
+}
+
+/// No price applies: none was bound at dispatch, or the bound one states no
+/// rate for a bucket the attempt has. An attempt with a price whose only gaps
+/// are counts the provider did not report has incomplete usage instead.
+fn lacks_price(quote: &ObservationQuote) -> bool {
+    quote.snapshot.is_none()
+        || quote
+            .buckets
+            .iter()
+            .any(|bucket| matches!(bucket, BucketQuote::MissingRate))
+}
 
 /// How a set of attempts is paid for, and the one money figure that goes
 /// with it. Subscription work is never stated as money spent: its figure is
-/// what the same work would cost at API prices.
-fn plain_billing(t: &codex_state::accounting::DayTotals) -> (&'static str, String) {
+/// what the same work would cost at API prices. `gaps` must come from the
+/// same attempts as `t`.
+fn plain_billing(
+    t: &codex_state::accounting::DayTotals,
+    gaps: EstimateGaps,
+) -> (&'static str, String) {
     let billed = t.attempts.saturating_sub(t.plan_attempts);
     let unknown = t.unknown_estimates.saturating_sub(t.plan_attempts);
     let per_use = (billed > 0).then(|| {
         if unknown == 0 {
             format!("Estimated cost: {}", money(t.known_usd))
         } else if t.known_usd == Decimal::default() {
-            NO_PRICE.to_string()
+            match gaps.incomplete_usage.min(unknown) {
+                0 => NO_PRICE.to_string(),
+                usage if usage == unknown => NO_USAGE.to_string(),
+                _ => format!("Estimated cost: not available ({})", gaps.reasons(unknown)),
+            }
         } else {
             format!(
-                "Estimated cost: at least {} ({unknown} {} had no price)",
+                "Estimated cost: at least {} ({})",
                 money(t.known_usd),
-                if unknown == 1 { "attempt" } else { "attempts" }
+                gaps.reasons(unknown)
             )
         }
     });
@@ -1325,11 +1427,17 @@ fn billed_detail(figure: &str) -> String {
 /// A short link label figure: the cost, or that a subscription covered it.
 fn short_cost(quotes: &[&ObservationQuote]) -> String {
     match codex_state::accounting::DayTotals::from_quotes(quotes.iter().copied()) {
-        Ok(t) => match (plain_billing(&t), leading_charge(quotes, &t)) {
+        Ok(t) => match (
+            plain_billing(&t, EstimateGaps::of(quotes.iter().copied())),
+            leading_charge(quotes, &t),
+        ) {
             ((COVERED, _), _) => "covered by subscription".to_string(),
             (_, Some(billed)) => format!("billed {}", billed.text()),
             ((_, cost), None) if cost == NO_PRICE => "no price available".to_string(),
-            ((_, cost), None) => cost.replacen("Estimated cost: ", "estimated ", 1),
+            ((_, cost), None) if cost == NO_USAGE => "usage incomplete".to_string(),
+            ((_, cost), None) => cost
+                .replacen("Estimated cost: not available", "cost not available", 1)
+                .replacen("Estimated cost: ", "estimated ", 1),
         },
         Err(_) => "cost unavailable".to_string(),
     }
@@ -1373,7 +1481,7 @@ fn plain_header(quotes: &[&ObservationQuote]) -> Vec<String> {
     };
     match codex_state::accounting::DayTotals::from_quotes(quotes.iter().copied()) {
         Ok(t) => {
-            let (billing, cost) = plain_billing(&t);
+            let (billing, cost) = plain_billing(&t, EstimateGaps::of(quotes.iter().copied()));
             lines.push(format!("Billing: {billing}"));
             lines.push(cost);
             lines.extend(scope::no_price_next_step(quotes.iter().copied()));
@@ -1424,7 +1532,7 @@ fn route_line(quotes: &[&ObservationQuote]) -> String {
     let route = route_name(quotes[0]);
     match codex_state::accounting::DayTotals::from_quotes(quotes.iter().copied()) {
         Ok(t) => {
-            let (billing, cost) = plain_billing(&t);
+            let (billing, cost) = plain_billing(&t, EstimateGaps::of(quotes.iter().copied()));
             let provider = provider_name(&quotes[0].attempt.provider);
             match leading_charge(quotes, &t).ok_or_else(|| billed_charge(quotes)) {
                 // Every request carries the provider's own charge, but the
@@ -1484,11 +1592,17 @@ fn plain_overview<'a>(
                     .map_or_else(String::new, |billed| format!("; billed: {billed}"));
                 lines.push(format!(
                     "Pay-per-use total — {}{billed}",
-                    lower_first(&plain_billing(&per_use).1)
+                    lower_first(
+                        &plain_billing(
+                            &per_use,
+                            EstimateGaps::of(all.iter().copied().filter(|q| !q.is_plan()))
+                        )
+                        .1
+                    )
                 ));
                 lines.push(format!(
                     "Subscription work — {}",
-                    lower_first(&plain_billing(&covered).1)
+                    lower_first(&plain_billing(&covered, EstimateGaps::default()).1)
                 ));
             }
         }
@@ -1498,6 +1612,10 @@ fn plain_overview<'a>(
     lines.push(
         if billed_figure(&all).is_some() {
             "Estimates use published prices; billed figures are what the provider stated with each response."
+        } else if !all.is_empty() && all.iter().all(|quote| quote.is_plan()) {
+            // No bill exists for subscription work; pointing at one would
+            // suggest a charge the plan never makes.
+            "Subscription work is not billed per request; any figure here is what it would cost at API prices."
         } else {
             "Costs are estimates from published prices; your provider's bill is the final amount."
         }
@@ -1914,6 +2032,17 @@ impl ChatWidget {
     }
 
     pub(super) fn open_accounting_command(&mut self, args: &str, today: NaiveDate) {
+        self.open_accounting_command_as("/usage requests", args, today);
+    }
+
+    /// `/cost [args]`: the same view, with errors that name `/cost`.
+    pub(super) fn open_cost_command(&mut self, args: &str, today: NaiveDate) {
+        let args = format!("requests {args}");
+        self.open_accounting_command_as("/cost", args.trim_end(), today);
+    }
+
+    /// `command` is how the user asked, so a usage error names what they typed.
+    fn open_accounting_command_as(&mut self, command: &str, args: &str, today: NaiveDate) {
         let parts: Vec<_> = args.split_whitespace().collect();
         if let ["requests", start, end, grouping] = parts.as_slice() {
             let parsed = (|| -> anyhow::Result<InspectionRange> {
@@ -1959,7 +2088,9 @@ impl ChatWidget {
             })();
             match parsed {
                 Ok(range) => self.open_accounting_range(range.start_ms / 86_400_000, Some(range)),
-                Err(error) => self.add_error_message(format!("Range refused: {error}")),
+                Err(error) => self.add_error_message(format!(
+                    "Range refused: {error}. Usage: {command} START END hour|day|week|month"
+                )),
             }
             return;
         }
@@ -1977,7 +2108,7 @@ impl ChatWidget {
             self.open_accounting_inspector(time.and_utc().timestamp() / 86_400);
         } else {
             self.add_error_message(
-                "Usage: /usage requests [YYYY-MM-DD] (UTC, no future dates). Custom: /usage requests START END hour|day|week|month; dates or UTC timestamps ending Z; end exclusive.".into(),
+                format!("Usage: {command} [YYYY-MM-DD] (UTC, no future dates). Custom: {command} START END hour|day|week|month; dates or UTC timestamps ending Z; end exclusive."),
             );
         }
     }
