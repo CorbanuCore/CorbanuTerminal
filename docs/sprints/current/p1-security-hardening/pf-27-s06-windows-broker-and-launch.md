@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-27-S06"
 title: "Windows broker and secretless launch"
-status: blocked
+status: ready
 plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-27"
 execution_order: 42
@@ -28,8 +28,9 @@ agent commands with a stated reason. Moved to the P1 hardening plan on 2026-10-0
 on [PF-27-S02](../../archive/p0-security-levels/pf-27-s02-secretless-agent-launch.md) is unchanged.
 
 Started 2026-10-08 (Travis approved starting early). All code merged (PRs #267, #269, #270, #272) behind the
-default-off flags above; real probes run on `windows-2022` CI. **Blocked**: the real-Windows gate run (2026-10-08)
-failed with two defects (Verification). Scope is evidence only; the fixes go to the broker lane, then the gate reruns.
+default-off flags above; real probes run on `windows-2022` CI. The first real-Windows gate run (2026-10-08) failed
+with two defects. They were fixed in #298 (#294) and #302 (#295), and the gate rerun passed in a normal session
+(Verification). The record is ready for the P1 integration owner to receive and archive.
 
 ## Execution mandate
 
@@ -60,16 +61,12 @@ failed with two defects (Verification). Scope is evidence only; the fixes go to 
 
 - [x] Record created as the explicit Windows follow-up.
 - [x] Process containment (slice 1, PR #267): Core and the broker replace their process and thread DACLs (user:
-  query-limited and synchronize only; OWNER RIGHTS: read-control), new threads included through a TLS callback that
-  hardening verifies is linked. Measured on `windows-2022`: a command under the unelevated sandbox's restricted token
-  and a same-user process without privileges cannot open them for `PROCESS_VM_READ`, read their environment,
-  duplicate their handles, inject, re-ACL, or open any thread for its context; unhardened targets are the positive
-  controls.
+  query-limited and synchronize only), new threads included. Measured: a restricted-token command and a same-user
+  process cannot read their memory or environment, duplicate handles, inject, re-ACL or open threads (unhardened
+  positive controls).
 - [x] Broker transport on Windows (slices 2a/2b, PRs #269/#270): named pipes with random first-instance names, a
-  DACL for the user, remote clients refused, no inheritable handles (measured by a handle scan with a positive
-  control), the client process id checked before any byte, the server process id checked by Core, an overlapped
-  control pipe. The broker runs contained (`dacl+job`: no child processes, no desktop/clipboard/atoms), holds its
-  controller's handle and exits with it. The PF-27-S04/S28/S33 broker suite passes over the pipes.
+  user DACL, remote clients refused, no inheritable handles, both peers' process ids checked. The broker runs
+  contained (`dacl+job`) and exits with its controller. The PF-27-S04/S28/S33 broker suite passes over the pipes.
 - [x] Launch contract (slice 3, PR #272): the Windows refusal is now a measured pass under the elevated sandbox
   (separate sandbox user) and a stated refusal for the unelevated one. Measured: vault, sign-in, policy store and
   state databases unreadable (readable in the base-profile control), `CODEX_HOME` unwritable, files created or
@@ -78,21 +75,24 @@ failed with two defects (Verification). Scope is evidence only; the fixes go to 
   on the RTX box; Opus 5.5 High reviews per slice, all approved (2-3 rounds each).
 - [x] Travis approved fixing the four documented limits (2026-10-08): [PF-27-S07](pf-27-s07-windows-hardening-follow-ups.md)
   (new threads, `CODEX_HOME` deny), [S08](pf-27-s08-windows-broker-restricted-token.md) (broker token), [S09](pf-27-s09-windows-model-client-auth.md) (model auth).
+- [x] Both gate defects fixed (#298 for #294, #302 for #295), each with a regression test that fails before and passes
+  after on the real machine; `windows-security-probes` also runs them at medium integrity.
 
 ## Remaining
 
-- [ ] Fix both gate defects (broker lane), then rerun the gate in a normal session ([rerun needs](../../../../qa/security-levels/sprints/PF-27-S06/README.md#windows-machine-needed-for-the-remaining-gate)).
+- [ ] Follow-ups from the gate fixes: #300 (decision needed), #301, #304, #307.
 - [ ] Unplaced follow-ups (listed in the plan's carried-forward table): file tools other than patches under the
   contract on Windows; the elevated sandbox's read of `~/.git-credentials`, `.ssh`, `.npmrc`, `.config/gh` if profile
   reads are ever granted (setup excludes most).
 
 ## Verification
 
-- [x] On `windows-2022` (job 113190329753, the merged slice 3 head): process-hardening 9, network-proxy broker and
-  pipe suite 24, core 5 `pf_27_s06` tests pass. Linux (RTX box): clippy `-D warnings` clean; broker 55,
-  process-hardening 7, core 12 + 23 tests pass. macOS: the same suites pass.
-- [ ] GLM 5.2 tmux run and videos on real Windows, 2026-10-08: **failed**, two defects (normal-session launches fail;
-  vault store readable). [Gate evidence](../../../../qa/security-levels/sprints/PF-27-S06/README.md#real-windows-gate-run-2026-10-08-failed-two-defects), [videos](../../../../qa/demos/index/PF-27-S06.md).
+- [x] `windows-2022` (job 113190329753): process-hardening 9, broker and pipe suite 24, core 5 `pf_27_s06` tests
+  pass. Linux (RTX box): clippy `-D warnings` clean; broker 55, process-hardening 7, core 12 + 23 pass. macOS: same.
+- [x] GLM 5.2 tmux run and videos on real Windows: the first run (2026-10-08) **failed** with two defects; the
+  [rerun](../../../../qa/security-levels/sprints/PF-27-S06/README.md#gate-rerun-after-the-fixes-2026-10-08-pass) at
+  `661b5c6a48cd` **passed** in a normal session ([videos](../../../../qa/demos/index/PF-27-S06.md)).
+- [ ] Gate evidence received by the P1 integration owner.
 
 ## Exit evidence
 
