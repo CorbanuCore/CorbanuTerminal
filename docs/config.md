@@ -171,6 +171,40 @@ Do not put long-lived provider keys in `experimental_bearer_token` unless you
 are intentionally running an automation-only setup. For interactive use, use
 onboarding or `/vault`.
 
+<a id="shell-environment"></a>
+
+## Shell Environment
+
+Commands the model runs (shell commands and long-running exec sessions, at
+every `/security` level) start with Corbanu's environment, filtered by
+`[shell_environment_policy]`. Provider API key variables are always removed
+first, so a command can't read the key Corbanu uses to talk to the model. That
+covers every built-in provider's key variable (`OPENAI_API_KEY`,
+`CODEX_API_KEY`, `ANTHROPIC_API_KEY`, `ZAI_API_KEY`, `OPENROUTER_API_KEY`,
+`KIMI_API_KEY`, `DEEPSEEK_API_KEY` and the rest of the table above, plus
+`AZURE_OPENAI_API_KEY` and `ANTHROPIC_AUTH_TOKEN`) and the `env_key` of any
+provider you configure. Corbanu itself still reads them.
+
+To hand one of these variables to commands on purpose, name it exactly in your
+policy. Either list it in `include_only` (keep `"*"` to leave the rest of the
+environment alone) to pass Corbanu's value through:
+
+```toml
+[shell_environment_policy]
+include_only = ["*", "OPENROUTER_API_KEY"]
+```
+
+or give it a value with `set` (this stores the value in `config.toml`). Wildcards
+such as `"*_API_KEY"` never pass a provider key through. For a one-off command,
+prefer fetching the key from the vault inside that command:
+`OPENROUTER_API_KEY="$(corbanu vault auth-helper provider/openrouter_api_key)" my-tool`.
+
+MCP servers started over stdio only receive a short list of basic variables
+plus the ones named in that server's `env_vars` or `env`, so a provider key
+reaches one only if you list it there. A shell profile that exports a key
+itself (for example a login shell reading `~/.zprofile`) is outside this
+filter.
+
 <a id="telegram"></a>
 
 ## Telegram Connector

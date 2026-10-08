@@ -135,6 +135,50 @@ fn shell_tool_env_removes_provider_auth_vars_even_when_policy_keeps_sensitive_va
 }
 
 #[test]
+fn built_in_provider_auth_names_come_from_the_provider_table() {
+    for name in [
+        "ZAI_API_KEY",
+        "KIMI_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "OPENROUTER_API_KEY",
+        "CORBANU_API_KEY",
+        "CORBANU_PLAN_API_KEY",
+        "OPENAI_API_KEY",
+        "CODEX_API_KEY",
+    ] {
+        assert!(is_provider_auth_env_var(name), "{name} should be blocked");
+    }
+    assert!(!is_provider_auth_env_var("GENERIC_API_KEY"));
+}
+
+#[test]
+fn blocked_provider_auth_vars_honor_explicit_set_and_exact_include_only() {
+    let blocked_for = |policy: &ShellEnvironmentPolicy| {
+        blocked_provider_auth_env_vars(policy, ["CORP_MODEL_TOKEN"])
+    };
+    let default_blocked = blocked_for(&ShellEnvironmentPolicy::default());
+    for name in ["ZAI_API_KEY", "OPENROUTER_API_KEY", "CORP_MODEL_TOKEN"] {
+        assert!(default_blocked.iter().any(|blocked| blocked == name));
+    }
+
+    let opted_in = ShellEnvironmentPolicy {
+        r#set: hashmap! { "OPENROUTER_API_KEY".to_string() => "explicit".to_string() },
+        include_only: vec![
+            EnvironmentVariablePattern::new_case_insensitive("*"),
+            EnvironmentVariablePattern::new_case_insensitive("ZAI_API_KEY"),
+            EnvironmentVariablePattern::new_case_insensitive("CORP_MODEL_*"),
+        ],
+        ..Default::default()
+    };
+    let blocked = blocked_for(&opted_in);
+    assert!(!blocked.iter().any(|name| name == "ZAI_API_KEY"));
+    assert!(!blocked.iter().any(|name| name == "OPENROUTER_API_KEY"));
+    // Wildcards never opt a credential in.
+    assert!(blocked.iter().any(|name| name == "CORP_MODEL_TOKEN"));
+    assert!(blocked.iter().any(|name| name == "DEEPSEEK_API_KEY"));
+}
+
+#[test]
 fn test_include_only() {
     let vars = make_vars(&[("PATH", "/usr/bin"), ("FOO", "bar")]);
 

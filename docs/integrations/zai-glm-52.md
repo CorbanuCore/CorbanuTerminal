@@ -78,7 +78,10 @@ provider/zai_api_key
 ```
 
 The environment variable `ZAI_API_KEY` is still supported for temporary shells
-and automation.
+and automation. Corbanu reads it to call Z.AI but removes it from the commands
+the model runs, so a command (or a prompt injection) can't read your key. To
+give it to commands on purpose, see
+[Shell Environment](../config.md#shell-environment).
 
 ## Source
 

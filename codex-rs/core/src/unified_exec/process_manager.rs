@@ -16,9 +16,11 @@ use uuid::Uuid;
 use crate::codex_thread::BackgroundTerminalInfo;
 use crate::exec_env::CODEX_PERMISSION_PROFILE_ENV_VAR;
 use crate::exec_env::CODEX_THREAD_ID_ENV_VAR;
-use crate::exec_env::create_env;
+use crate::exec_env::blocked_provider_auth_env_vars;
+use crate::exec_env::create_shell_tool_env;
 use crate::exec_env::inject_permission_profile_env;
 use crate::exec_env::inject_tasknode_profile_env;
+use crate::exec_env::provider_env_keys;
 use crate::exec_policy::ExecApprovalRequest;
 use crate::sandboxing::ExecOptions;
 use crate::sandboxing::ExecRequest;
@@ -116,8 +118,11 @@ fn apply_unified_exec_env(mut env: HashMap<String, String>) -> HashMap<String, S
     env
 }
 
+/// `blocked_env_vars` are provider credential names the executor must drop
+/// from its own environment too (issue #310).
 fn exec_env_policy_from_shell_policy(
     policy: &ShellEnvironmentPolicy,
+    blocked_env_vars: Vec<String>,
 ) -> codex_exec_server::ExecEnvPolicy {
     let mut exclude = policy
         .exclude
@@ -125,6 +130,7 @@ fn exec_env_policy_from_shell_policy(
         .map(std::string::ToString::to_string)
         .collect::<Vec<_>>();
     exclude.push(CODEX_PERMISSION_PROFILE_ENV_VAR.to_string());
+    exclude.extend(blocked_env_vars);
     let mut r#set = policy.r#set.clone();
     r#set.retain(|key, _| !key.eq_ignore_ascii_case(CODEX_PERMISSION_PROFILE_ENV_VAR));
     codex_exec_server::ExecEnvPolicy {
@@ -1177,9 +1183,12 @@ impl UnifiedExecProcessManager {
         cwd: PathUri,
         context: &UnifiedExecContext,
     ) -> Result<(UnifiedExecProcess, Option<DeferredNetworkApproval>), UnifiedExecError> {
-        let local_policy_env = create_env(
-            &context.turn.config.permissions.shell_environment_policy,
+        let shell_policy = &context.turn.config.permissions.shell_environment_policy;
+        let provider_env_keys = provider_env_keys(&context.turn.config);
+        let local_policy_env = create_shell_tool_env(
+            shell_policy,
             /*thread_id*/ None,
+            provider_env_keys.iter().copied(),
         );
         let mut env = local_policy_env.clone();
         env.insert(
@@ -1192,7 +1201,8 @@ impl UnifiedExecProcessManager {
         let env = apply_unified_exec_env(env);
         let exec_server_env_config = ExecServerEnvConfig {
             policy: exec_env_policy_from_shell_policy(
-                &context.turn.config.permissions.shell_environment_policy,
+                shell_policy,
+                blocked_provider_auth_env_vars(shell_policy, provider_env_keys),
             ),
             local_policy_env,
         };
