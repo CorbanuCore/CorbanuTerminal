@@ -28,6 +28,7 @@ const ROLE_ENV: &str = "CODEX_SEC_WIN_307_ROLE";
 const TEST_NAME: &str =
     "logon_launch::tests::sec_win_307_launcher_pipes_never_reach_other_children";
 const LAUNCHES: usize = 300;
+const RACED: &str = "sec-win-307: raced";
 /// Handle values are multiples of 4; a test process stays far below this.
 const MAX_HANDLE_VALUE: usize = 0x1_0000;
 
@@ -43,12 +44,16 @@ fn sec_win_307_launcher_pipes_never_reach_other_children() {
         return;
     }
     // Alone in a fresh process, so no other test's pipes are in the table.
-    let status = Command::new(std::env::current_exe().expect("test binary"))
+    let output = Command::new(std::env::current_exe().expect("test binary"))
         .args([TEST_NAME, "--exact", "--nocapture", "--test-threads=1"])
         .env(ROLE_ENV, "1")
-        .status()
+        .output()
         .expect("rerun this test alone");
-    assert!(status.success(), "{status}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    eprint!("{stderr}");
+    assert!(output.status.success(), "{}", output.status);
+    // A rename would make the rerun match nothing and pass.
+    assert!(stderr.contains(RACED), "the race did not run");
 }
 
 fn race() {
@@ -107,6 +112,7 @@ fn race() {
     );
     assert!(children > 0, "no child started during the launches");
     assert_eq!(leaks, 0, "a child inherited a launcher pipe end");
+    eprintln!("{RACED}");
 }
 
 /// The pipe handles in `process`'s table (a suspended child of this process).

@@ -16,7 +16,10 @@
 //! handle table (#307), where any process Core started on another thread
 //! meanwhile (`std::process::Command` always inherits) would get them too:
 //! they are duplicated, inheritable, into a holder process that never runs,
-//! and the launcher is started as the holder's child. The launcher receives
+//! and the launcher is started as the holder's child; Core starts nothing
+//! else from the holder. (Like the launcher, the holder has the default DACL,
+//! so this user's other processes could open it; the sandbox's users cannot.)
+//! The launcher receives
 //! the sandbox user's password, which is not a secret from this user (it is
 //! stored under `.sandbox-secrets`, which this user can read). Its binary is
 //! in the sandbox's helper directory, which the sandbox's users can only read
@@ -63,6 +66,7 @@ use windows_sys::Win32::System::Threading::CREATE_SUSPENDED;
 use windows_sys::Win32::System::Threading::CREATE_UNICODE_ENVIRONMENT;
 use windows_sys::Win32::System::Threading::CreateProcessW;
 use windows_sys::Win32::System::Threading::CreateProcessWithLogonW;
+use windows_sys::Win32::System::Threading::DETACHED_PROCESS;
 use windows_sys::Win32::System::Threading::EXTENDED_STARTUPINFO_PRESENT;
 use windows_sys::Win32::System::Threading::GetCurrentProcess;
 use windows_sys::Win32::System::Threading::GetProcessId;
@@ -83,6 +87,8 @@ pub const LOGON_LAUNCH_ARG: &str = "--logon-launch";
 /// How long Core waits for the launcher's reply, and for it to exit.
 const LAUNCHER_REPLY_TIMEOUT: Duration = Duration::from_secs(30);
 const LAUNCHER_EXIT_TIMEOUT_MS: u32 = 5_000;
+/// How long Core waits for the ended holder (see [`HandleHolder`]) to go.
+const HOLDER_EXIT_TIMEOUT_MS: u32 = 1_000;
 /// Core's acknowledgement: it holds its own handle to the started process.
 const ACK: &str = "ack";
 
@@ -226,8 +232,7 @@ fn launcher_pipe(child_reads: bool) -> anyhow::Result<(OwnedHandle, File)> {
 
 /// #307: a process of Core's that never runs: created suspended, inheriting
 /// nothing, and ended on drop. The launcher's pipe ends are inheritable only
-/// in its handle table, and the launcher is started as its child, so no
-/// other process can inherit them.
+/// in its handle table, and Core starts no process from it but the launcher.
 struct HandleHolder(OwnedHandle);
 
 impl HandleHolder {
@@ -246,7 +251,7 @@ impl HandleHolder {
                 ptr::null(),
                 ptr::null(),
                 /*binherithandles*/ 0,
-                CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
+                CREATE_SUSPENDED | DETACHED_PROCESS | CREATE_UNICODE_ENVIRONMENT,
                 environment.as_ptr().cast(),
                 ptr::null(),
                 &startup,
@@ -288,8 +293,13 @@ impl HandleHolder {
 
 impl Drop for HandleHolder {
     fn drop(&mut self) {
-        // SAFETY: the holder never ran; ending it closes the copies it holds.
-        unsafe { TerminateProcess(self.0.0, 1) };
+        // SAFETY: the holder never ran; ending it closes the copies it holds
+        // (waited for, so the reply pipe's EOF is not delayed).
+        unsafe {
+            if TerminateProcess(self.0.0, 1) != 0 {
+                WaitForSingleObject(self.0.0, HOLDER_EXIT_TIMEOUT_MS);
+            }
+        }
     }
 }
 
