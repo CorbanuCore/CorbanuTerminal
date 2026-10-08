@@ -589,8 +589,8 @@ impl Drop for EnvGuard {
 }
 
 /// PF-27-S07: with the flag off, the `CODEX_HOME` new-file deny is removed,
-/// but never while another process has the contract armed (it holds the
-/// armed lock shared).
+/// but never while a contract for that directory holds the armed lock (in
+/// this or another process: Windows file locks belong to handles).
 #[test]
 fn pf_27_s07_flag_off_removes_the_deny_unless_a_contract_is_armed() {
     let dir = tempfile::tempdir().expect("codex home");
@@ -601,7 +601,10 @@ fn pf_27_s07_flag_off_removes_the_deny_unless_a_contract_is_armed() {
     let present = || {
         // SAFETY: a valid SID and an existing directory.
         unsafe {
-            codex_windows_sandbox::has_deny_read_ace_for_new_files(dir.path(), group.as_ptr())
+            codex_windows_sandbox::has_exact_deny_read_ace_for_new_files(
+                dir.path(),
+                Some(group.as_ptr()),
+            )
         }
         .expect("read DACL")
     };
@@ -611,22 +614,41 @@ fn pf_27_s07_flag_off_removes_the_deny_unless_a_contract_is_armed() {
     };
     assert!(added.expect("add deny"));
 
-    let armed = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(dir.path().join(super::ARMED_LOCK_FILE))
-        .expect("lock file");
-    armed.lock_shared().expect("armed lock");
+    let codex_home = absolute(dir.path());
+    let contract = LaunchContract::capture(&codex_home, std::iter::empty(), /*hardened*/ true);
+    assert!(
+        format!("{contract:?}").contains("armed_lock: true"),
+        "{contract:?}"
+    );
     let released = super::release_new_file_deny(dir.path(), group.as_ptr()).expect("release");
-    assert!(!released);
+    assert!(!released, "removed under an armed contract");
     assert!(present());
 
-    drop(armed);
+    drop(contract);
     let released = super::release_new_file_deny(dir.path(), group.as_ptr()).expect("release");
     assert!(released);
     assert!(!present());
     let again = super::release_new_file_deny(dir.path(), group.as_ptr()).expect("release");
     assert!(!again);
+}
+
+/// PF-27-S07: the armed lock file is a regular file opened without
+/// following links, and cannot be deleted while it is held.
+#[test]
+fn pf_27_s07_armed_lock_refuses_links_and_deletion() {
+    let dir = tempfile::tempdir().expect("codex home");
+    let lock = super::open_armed_lock(dir.path(), /*group*/ None).expect("lock file");
+    lock.try_lock_shared().expect("shared lock");
+    let path = dir.path().join(super::ARMED_LOCK_FILE);
+    assert!(std::fs::remove_file(&path).is_err(), "deleted while held");
+    drop(lock);
+
+    let other = tempfile::tempdir().expect("other dir");
+    let target = other.path().join("config.toml");
+    std::fs::write(&target, "x").expect("target");
+    std::fs::remove_file(&path).expect("remove lock file");
+    // Creating a symbolic link needs a privilege or developer mode; the CI
+    // runner is elevated.
+    std::os::windows::fs::symlink_file(&target, &path).expect("symlink");
+    assert!(super::open_armed_lock(dir.path(), /*group*/ None).is_err());
 }

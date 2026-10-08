@@ -688,9 +688,9 @@ pub unsafe fn has_deny_read_ace_for_new_files(path: &Path, psid: *mut c_void) ->
 }
 
 /// True when `ace` is exactly the entry [`add_deny_read_ace_for_new_files`]
-/// adds for `psid`: an explicit deny, inherit-only for files one level down,
-/// whose mask maps to file read and nothing else.
-unsafe fn is_new_file_read_deny(ace: *const c_void, psid: *mut c_void) -> bool {
+/// adds for `psid` (any SID when `None`): an explicit deny, inherit-only for
+/// files one level down, whose mask maps to file read and nothing else.
+unsafe fn is_new_file_read_deny(ace: *const c_void, psid: Option<*mut c_void>) -> bool {
     let hdr = &*(ace as *const ACE_HEADER);
     let flags = OBJECT_INHERIT_ACE | u32::from(INHERIT_ONLY_ACE) | NO_PROPAGATE_INHERIT_ACE;
     if hdr.AceType != ACCESS_DENIED_ACE_TYPE || u32::from(hdr.AceFlags) != flags {
@@ -706,7 +706,58 @@ unsafe fn is_new_file_read_deny(ace: *const c_void, psid: *mut c_void) -> bool {
     MapGenericMask(&mut mask, &mapping);
     let sid = (ace as usize + std::mem::size_of::<ACE_HEADER>() + std::mem::size_of::<u32>())
         as *mut c_void;
-    mask == FILE_GENERIC_READ && EqualSid(sid, psid) != 0
+    mask == FILE_GENERIC_READ && psid.is_none_or(|psid| EqualSid(sid, psid) != 0)
+}
+
+/// PF-27-S07: whether `path` has exactly the entry
+/// [`add_deny_read_ace_for_new_files`] adds, for `psid` or (`None`) for any
+/// SID; what [`remove_deny_read_ace_for_new_files`] would remove.
+///
+/// # Safety
+/// Caller must ensure `psid`, if given, points to a valid SID.
+pub unsafe fn has_exact_deny_read_ace_for_new_files(
+    path: &Path,
+    psid: Option<*mut c_void>,
+) -> Result<bool> {
+    let mut p_sd: *mut c_void = std::ptr::null_mut();
+    let mut p_dacl: *mut ACL = std::ptr::null_mut();
+    let code = GetNamedSecurityInfoW(
+        to_wide(path).as_ptr(),
+        1,
+        DACL_SECURITY_INFORMATION,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        &mut p_dacl,
+        std::ptr::null_mut(),
+        &mut p_sd,
+    );
+    if code != ERROR_SUCCESS {
+        return Err(anyhow!("GetNamedSecurityInfoW failed: {code}"));
+    }
+    let mut found = false;
+    let mut info: ACL_SIZE_INFORMATION = std::mem::zeroed();
+    if !p_dacl.is_null()
+        && GetAclInformation(
+            p_dacl as *const ACL,
+            &mut info as *mut _ as *mut c_void,
+            std::mem::size_of::<ACL_SIZE_INFORMATION>() as u32,
+            AclSizeInformation,
+        ) != 0
+    {
+        for i in 0..info.AceCount {
+            let mut p_ace: *mut c_void = std::ptr::null_mut();
+            if GetAce(p_dacl as *const ACL, i, &mut p_ace) != 0
+                && is_new_file_read_deny(p_ace, psid)
+            {
+                found = true;
+                break;
+            }
+        }
+    }
+    if !p_sd.is_null() {
+        LocalFree(p_sd as HLOCAL);
+    }
+    Ok(found)
 }
 
 /// PF-27-S07: removes exactly the entry [`add_deny_read_ace_for_new_files`]
@@ -772,7 +823,7 @@ unsafe fn remove_new_file_read_denies(
         if GetAce(p_dacl as *const ACL, i, &mut p_ace) == 0 {
             return Err(anyhow!("GetAce failed: {}", GetLastError()));
         }
-        if is_new_file_read_deny(p_ace, psid) {
+        if is_new_file_read_deny(p_ace, Some(psid)) {
             removed = true;
             continue;
         }

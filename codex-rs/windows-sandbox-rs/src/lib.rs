@@ -141,6 +141,8 @@ pub use acl::add_deny_write_ace;
 #[cfg(target_os = "windows")]
 pub use acl::has_deny_read_ace_for_new_files;
 #[cfg(target_os = "windows")]
+pub use acl::has_exact_deny_read_ace_for_new_files;
+#[cfg(target_os = "windows")]
 pub use acl::remove_deny_read_ace_for_new_files;
 
 #[cfg(target_os = "windows")]

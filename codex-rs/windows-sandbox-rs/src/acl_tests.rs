@@ -3,6 +3,7 @@
 use super::add_deny_read_ace;
 use super::add_deny_read_ace_for_new_files;
 use super::add_deny_write_ace;
+use super::has_exact_deny_read_ace_for_new_files;
 use super::remove_deny_read_ace_for_new_files;
 use crate::token::LocalSid;
 use crate::winutil::to_wide;
@@ -12,11 +13,21 @@ use std::path::Path;
 use windows_sys::Win32::Foundation::ERROR_SUCCESS;
 use windows_sys::Win32::Foundation::HLOCAL;
 use windows_sys::Win32::Foundation::LocalFree;
+use windows_sys::Win32::Security::ACL;
 use windows_sys::Win32::Security::Authorization::ConvertSecurityDescriptorToStringSecurityDescriptorW;
+use windows_sys::Win32::Security::Authorization::EXPLICIT_ACCESS_W;
 use windows_sys::Win32::Security::Authorization::GetNamedSecurityInfoW;
 use windows_sys::Win32::Security::Authorization::SDDL_REVISION_1;
 use windows_sys::Win32::Security::Authorization::SE_FILE_OBJECT;
+use windows_sys::Win32::Security::Authorization::SetEntriesInAclW;
+use windows_sys::Win32::Security::Authorization::SetNamedSecurityInfoW;
+use windows_sys::Win32::Security::Authorization::TRUSTEE_IS_SID;
+use windows_sys::Win32::Security::Authorization::TRUSTEE_IS_UNKNOWN;
+use windows_sys::Win32::Security::Authorization::TRUSTEE_W;
 use windows_sys::Win32::Security::DACL_SECURITY_INFORMATION;
+use windows_sys::Win32::Security::PROTECTED_DACL_SECURITY_INFORMATION;
+use windows_sys::Win32::Storage::FileSystem::FILE_GENERIC_READ;
+use windows_sys::Win32::Storage::FileSystem::FILE_GENERIC_WRITE;
 
 const SANDBOX_GROUP: &str = "S-1-5-21-2718281828-3141592653-1618033988-1001";
 const OTHER_SID: &str = "S-1-5-21-2718281828-3141592653-1618033988-1002";
@@ -78,6 +89,120 @@ fn pf_27_s07_keeps_a_new_file_deny_for_another_sid() {
     let removed = unsafe { remove_deny_read_ace_for_new_files(dir, group.as_ptr()) };
     assert!(!removed.expect("remove"));
     assert_eq!(dacl_sddl(dir), before);
+}
+
+/// A protected DACL keeps its protection, and a deny for the same group with
+/// the same inheritance but a wider mask is not ours to remove.
+#[test]
+fn pf_27_s07_keeps_protection_and_wider_denies() {
+    let dir = tempfile::tempdir().expect("dir");
+    let dir = dir.path();
+    let group = LocalSid::from_string(SANDBOX_GROUP).expect("group SID");
+    protect_dacl(dir);
+    let protected = dacl_sddl(dir);
+    assert!(protected.starts_with("D:P"), "{protected}");
+
+    // SAFETY: a valid SID and an existing directory.
+    unsafe {
+        assert!(add_deny_read_ace_for_new_files(dir, group.as_ptr()).expect("deny"));
+        assert!(has_exact_deny_read_ace_for_new_files(dir, None).expect("any SID"));
+        assert!(remove_deny_read_ace_for_new_files(dir, group.as_ptr()).expect("remove"));
+    }
+    assert_eq!(dacl_sddl(dir), protected);
+
+    // Read and write, inherit-only for files: not the entry PF-27-S06 adds.
+    add_deny(
+        dir,
+        group.as_ptr(),
+        FILE_GENERIC_READ | FILE_GENERIC_WRITE,
+        0x1 | 0x4 | 0x8,
+    );
+    let wider = dacl_sddl(dir);
+    // SAFETY: as above.
+    unsafe {
+        assert!(!has_exact_deny_read_ace_for_new_files(dir, Some(group.as_ptr())).expect("exact"));
+        assert!(!remove_deny_read_ace_for_new_files(dir, group.as_ptr()).expect("remove"));
+    }
+    assert_eq!(dacl_sddl(dir), wider);
+}
+
+/// Re-sets `path`'s DACL as protected (inherited entries become explicit).
+fn protect_dacl(path: &Path) {
+    let mut sd: *mut c_void = std::ptr::null_mut();
+    let mut dacl: *mut ACL = std::ptr::null_mut();
+    // SAFETY: valid path and out pointers; `sd` is freed below.
+    unsafe {
+        let code = GetNamedSecurityInfoW(
+            to_wide(path).as_ptr(),
+            SE_FILE_OBJECT,
+            DACL_SECURITY_INFORMATION,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            &mut dacl,
+            std::ptr::null_mut(),
+            &mut sd,
+        );
+        assert_eq!(code, ERROR_SUCCESS, "GetNamedSecurityInfoW");
+        let code = SetNamedSecurityInfoW(
+            to_wide(path).as_ptr() as *mut u16,
+            SE_FILE_OBJECT,
+            DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            dacl,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(code, ERROR_SUCCESS, "SetNamedSecurityInfoW");
+        LocalFree(sd as HLOCAL);
+    }
+}
+
+/// Adds a deny entry with an arbitrary mask and inheritance.
+fn add_deny(path: &Path, sid: *mut c_void, mask: u32, inheritance: u32) {
+    let mut sd: *mut c_void = std::ptr::null_mut();
+    let mut dacl: *mut ACL = std::ptr::null_mut();
+    // SAFETY: valid path, SID and out pointers; allocations freed below.
+    unsafe {
+        let code = GetNamedSecurityInfoW(
+            to_wide(path).as_ptr(),
+            SE_FILE_OBJECT,
+            DACL_SECURITY_INFORMATION,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            &mut dacl,
+            std::ptr::null_mut(),
+            &mut sd,
+        );
+        assert_eq!(code, ERROR_SUCCESS, "GetNamedSecurityInfoW");
+        let mut explicit: EXPLICIT_ACCESS_W = std::mem::zeroed();
+        explicit.grfAccessPermissions = mask;
+        explicit.grfAccessMode = 3; // DENY_ACCESS
+        explicit.grfInheritance = inheritance;
+        explicit.Trustee = TRUSTEE_W {
+            pMultipleTrustee: std::ptr::null_mut(),
+            MultipleTrusteeOperation: 0,
+            TrusteeForm: TRUSTEE_IS_SID,
+            TrusteeType: TRUSTEE_IS_UNKNOWN,
+            ptstrName: sid as *mut u16,
+        };
+        let mut new_dacl: *mut ACL = std::ptr::null_mut();
+        assert_eq!(
+            SetEntriesInAclW(1, &explicit, dacl, &mut new_dacl),
+            ERROR_SUCCESS
+        );
+        let code = SetNamedSecurityInfoW(
+            to_wide(path).as_ptr() as *mut u16,
+            SE_FILE_OBJECT,
+            DACL_SECURITY_INFORMATION,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            new_dacl,
+            std::ptr::null_mut(),
+        );
+        assert_eq!(code, ERROR_SUCCESS, "SetNamedSecurityInfoW");
+        LocalFree(new_dacl as HLOCAL);
+        LocalFree(sd as HLOCAL);
+    }
 }
 
 fn dacl_sddl(path: &Path) -> String {
