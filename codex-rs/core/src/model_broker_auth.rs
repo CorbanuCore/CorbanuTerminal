@@ -21,7 +21,6 @@ use codex_api::AuthError;
 use codex_api::AuthProvider;
 use codex_api::AuthProviderFuture;
 use codex_api::SharedAuthProvider;
-use codex_http_client::MODEL_BROKER_FRAME_HEADER;
 use codex_http_client::Request;
 use codex_model_provider::BrokeredAuthRequest;
 use codex_model_provider::BrokeredKeySource;
@@ -29,7 +28,6 @@ use codex_model_provider::ModelKeyBroker;
 use codex_model_provider::ProviderApiKeyHeader;
 use codex_protocol::error::CodexErr;
 use http::HeaderMap;
-use http::HeaderValue;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -67,6 +65,10 @@ pub async fn install_for_config(config: &Config) {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(
+    not(unix),
+    allow(dead_code, reason = "only the Unix broker reads these settings")
+)]
 struct BrokerSettings {
     runtime_dir: std::path::PathBuf,
     scrub_responses: bool,
@@ -129,10 +131,22 @@ pub(crate) enum BrokerModelAuthError {
         "no API key for this provider: set {env} or save the key with /providers \
          (broker_model_auth reads it inside the credential broker)"
     )]
+    #[cfg_attr(
+        not(unix),
+        allow(dead_code, reason = "only the Unix broker reports it")
+    )]
     MissingKey { env: String },
     #[error("the credential broker could not read the stored provider key: {0}")]
+    #[cfg_attr(
+        not(unix),
+        allow(dead_code, reason = "only the Unix broker reports it")
+    )]
     Store(&'static str),
     #[error("the isolated credential broker refused the provider credential")]
+    #[cfg_attr(
+        not(unix),
+        allow(dead_code, reason = "only the Unix broker reports it")
+    )]
     Rejected,
 }
 
@@ -304,6 +318,7 @@ impl ModelKeyBroker for CoreModelKeyBroker {
 enum Source {
     ProviderKey {
         provider_key_id: String,
+        #[cfg_attr(not(unix), allow(dead_code, reason = "only the Unix broker reads it"))]
         env_vars: Vec<String>,
     },
     Value {
@@ -337,6 +352,18 @@ impl AuthProvider for BrokeredAuth {
 /// its refreshed value) when needed. The state lock is not held while the
 /// broker registers (a blocking control-channel call), so other requests are
 /// not serialized behind it.
+///
+/// Without a broker (non-Unix) `Credential` is uninhabited, so everything after
+/// a successful registration is statically unreachable there.
+#[cfg_attr(
+    not(unix),
+    allow(
+        unreachable_code,
+        unused_variables,
+        clippy::redundant_clone,
+        reason = "`Credential` is uninhabited without the broker"
+    )
+)]
 fn credential_for(
     state: &Mutex<BrokerState>,
     binding: Binding,
@@ -528,6 +555,8 @@ fn hex(bytes: &[u8]) -> String {
 /// transport sends a frame-bearing request only to the broker's socket).
 #[cfg(unix)]
 fn broker_request(credential: &Credential, mut request: Request) -> Result<Request, AuthError> {
+    use codex_http_client::MODEL_BROKER_FRAME_HEADER;
+    use http::HeaderValue;
     let rewrite = BrokerRewrite::for_url(&request.url)
         .ok_or_else(|| AuthError::Build("model request URL cannot be brokered".to_string()))?;
     let frame = credential
@@ -553,6 +582,7 @@ fn broker_request(credential: &Credential, _request: Request) -> Result<Request,
 }
 
 /// The signed parts of an HTTPS URL and the plain-HTTP URL sent to the broker.
+#[cfg(any(unix, test))]
 #[derive(Debug, PartialEq, Eq)]
 struct BrokerRewrite {
     host: String,
@@ -561,6 +591,7 @@ struct BrokerRewrite {
     broker_url: String,
 }
 
+#[cfg(any(unix, test))]
 impl BrokerRewrite {
     fn for_url(url: &str) -> Option<Self> {
         let mut url = url::Url::parse(url).ok()?;

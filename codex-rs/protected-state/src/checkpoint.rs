@@ -1,10 +1,14 @@
 use codex_config::AuthoritativeStateOwner;
+#[cfg(target_os = "linux")]
 use codex_security_audit::IntegrityCheckpoint;
+#[cfg(target_os = "linux")]
 use codex_security_policy::BoundedText;
+#[cfg(target_os = "linux")]
 use codex_security_policy::PolicyPrincipal;
 use serde::Deserialize;
 use serde::Serialize;
 
+#[cfg(target_os = "linux")]
 use crate::RootError;
 
 /// The existing PF-20 policy anchor payload. Values are data, not authorization;
@@ -19,6 +23,9 @@ pub struct PolicyCheckpoint {
     pub commit_sha256: String,
 }
 
+// The internal checkpoint and binding types are used only by the Linux
+// controller root (`store`, `native`).
+#[cfg(target_os = "linux")]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value", deny_unknown_fields)]
 pub(crate) enum Checkpoint {
@@ -26,6 +33,7 @@ pub(crate) enum Checkpoint {
     Policy(PolicyCheckpoint),
 }
 
+#[cfg(target_os = "linux")]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
 pub(crate) enum Binding {
@@ -39,6 +47,7 @@ pub(crate) enum Binding {
     },
 }
 
+#[cfg(target_os = "linux")]
 pub(crate) fn hash_valid(hash: &str) -> bool {
     hash.len() == 64
         && hash
@@ -46,6 +55,7 @@ pub(crate) fn hash_valid(hash: &str) -> bool {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
+#[cfg(target_os = "linux")]
 impl Checkpoint {
     pub(crate) fn validate_successor(
         &self,

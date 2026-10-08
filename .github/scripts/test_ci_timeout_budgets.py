@@ -68,10 +68,23 @@ class PrLinuxClippyTest(unittest.TestCase):
     def test_lint_build_definition_is_shared(self) -> None:
         full = self.workflow("rust-ci-full.yml")
         self.assertIn("uses: ./.github/workflows/rust-ci-lint-build.yml", full)
-        self.assertRegex(full, r"(?m)^      timeout_minutes: 30$")
+        # Linux legs default to 30 minutes; a leg may set its own budget.
+        self.assertRegex(
+            full,
+            r"(?m)^      timeout_minutes: \$\{\{ matrix\.timeout_minutes \|\| 30 \}\}$",
+        )
         self.assertIn(
             "timeout-minutes: ${{ inputs.timeout_minutes }}",
             self.workflow("rust-ci-lint-build.yml"),
+        )
+
+    def test_postmerge_runs_windows_clippy_within_budget(self) -> None:
+        self.assertRegex(
+            self.workflow("rust-ci-full.yml"),
+            r"(?m)^          - runner: windows-2022\n"
+            r"            target: x86_64-pc-windows-msvc\n"
+            r"            profile: dev\n"
+            r"            timeout_minutes: 60$",
         )
 
 

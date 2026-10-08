@@ -31,7 +31,7 @@ pub(crate) fn model_broker_client() -> Option<HttpClient> {
 }
 
 /// Removes the installed broker client (tests only: the route is process-wide).
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(crate) fn uninstall_model_broker_client() {
     *BROKER_CLIENT
         .write()
