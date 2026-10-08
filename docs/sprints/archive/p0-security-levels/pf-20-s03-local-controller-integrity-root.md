@@ -2,7 +2,7 @@
 sprint_id: "PF-20-S03"
 title: "Local controller integrity root"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-20"
 execution_order: 78
 owner: "/root/provenance"
@@ -26,7 +26,7 @@ updated: 2026-09-04
 
 ## Plan linkage
 
-- Plan: [P0 security levels](../../../plans/active/p0-security-levels.md), feature PF-20.
+- Plan: [P0 security levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md), feature PF-20.
 - Product citation: **Non-negotiable controls** — “Record tamper-evident policy decisions, tool calls, approvals, signatures, and transaction or order IDs without secrets.”
 - Product decision: **Data-rollback scope decision — 2026-09-04** permits local controller authority under trusted kernel/administrator/controller-store assumptions; whole-machine rollback is outside scope.
 - [Design](../../../../qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/protected-audit-root-design.md) supplies the construction proposal, subject to that resolved threat model and this exact allocation.

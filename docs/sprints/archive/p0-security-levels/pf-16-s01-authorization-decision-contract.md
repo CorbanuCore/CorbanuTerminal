@@ -2,7 +2,7 @@
 sprint_id: "PF-16-S01"
 title: "Authorization decision contract reconciliation"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-16"
 execution_order: 2
 owner: "Jim Ricketts"
@@ -23,7 +23,7 @@ updated: 2026-08-25
 
 ## Plan linkage
 
-- Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
+- Plan: [P0 `/security` levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md)
 - Feature: `PF-16`
 - Acceptance advanced: protected operations use subject, resource, action, context, and typed allow/deny.
 

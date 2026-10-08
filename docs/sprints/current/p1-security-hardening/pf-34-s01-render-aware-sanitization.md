@@ -2,7 +2,7 @@
 sprint_id: "PF-34-S01"
 title: "Render-aware content sanitization"
 status: draft
-plan_file: "docs/plans/proposed/p1-security-hardening.md"
+plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-34"
 execution_order: 49
 owner: "Jim Ricketts"
@@ -23,7 +23,7 @@ updated: 2026-10-06
 
 ## Plan linkage
 
-- Plan: [P1 security hardening](../../../plans/proposed/p1-security-hardening.md#pf-34).
+- Plan: [P1 security hardening](../../../plans/active/p1-security-hardening.md#pf-34).
 - Feature: `PF-34`.
 - Product citation: **Non-negotiable controls** — “Classify instruction intent and provenance before external content can influence tools or financial actions.”
 - Acceptance advanced: Only bounded sanitized content proceeds to screening, with original provenance and no implicit trust promotion.

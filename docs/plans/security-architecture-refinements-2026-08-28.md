@@ -1,6 +1,6 @@
 # Security architecture refinements — 2026-08-28
 
-This is an acceptance/sequencing appendix to the [active P0 plan](active/p0-security-levels.md),
+This is an acceptance/sequencing appendix to the [active P0 plan](completed/main-2026-10-08-p0-security-levels.md),
 not finished-feature guidance or a second active plan. Travis Good authorized
 adopting the relevant findings after assessment. Change class: routine planning
 and process; no runtime feature, platform or release acceptance is claimed.

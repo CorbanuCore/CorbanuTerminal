@@ -2,7 +2,7 @@
 sprint_id: PF-77-S02
 title: Multiple-account relink recovery
 status: completed
-plan_file: docs/plans/active/p0-security-levels.md
+plan_file: docs/plans/completed/main-2026-10-08-p0-security-levels.md
 plan_feature: PF-77
 execution_order: 82
 owner: Codex account recovery owner
@@ -31,7 +31,7 @@ User authority: September 8 report requesting multiple accounts on one machine.
 
 ## Plan linkage
 
-Active [P0 plan](../../../plans/active/p0-security-levels.md), feature PF-77.
+Active [P0 plan](../../../plans/completed/main-2026-10-08-p0-security-levels.md), feature PF-77.
 
 ## Code boundaries
 

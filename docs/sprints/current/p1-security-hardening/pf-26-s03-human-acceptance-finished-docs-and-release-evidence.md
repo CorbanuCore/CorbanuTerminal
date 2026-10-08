@@ -2,7 +2,7 @@
 sprint_id: "PF-26-S03"
 title: "Human acceptance, finished docs, and release evidence"
 status: draft
-plan_file: "docs/plans/proposed/p1-security-hardening.md"
+plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-26"
 execution_order: 76
 owner: "Jim Ricketts"
@@ -26,7 +26,7 @@ updated: 2026-10-06
 ## Plan linkage
 
 - Upstream: [plan touch record](../../../plans/history/p0-security-levels-2026-10-06.md); resolve this sprint's adapter rows.
-- Plan: [P1 security hardening](../../../plans/proposed/p1-security-hardening.md)
+- Plan: [P1 security hardening](../../../plans/active/p1-security-hardening.md)
 - Feature: `PF-26`
 - Acceptance advanced: users receive accurate security/vault guidance only after the final candidate passes required evidence.
 

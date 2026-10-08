@@ -2,7 +2,7 @@
 sprint_id: "PF-32-S03"
 title: "Exa brokered search adapter"
 status: draft
-plan_file: "docs/plans/proposed/p1-security-hardening.md"
+plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-32"
 execution_order: 55
 owner: "Jim Ricketts"
@@ -23,7 +23,7 @@ updated: 2026-10-06
 
 ## Plan linkage
 
-- Plan: [P1 security hardening](../../../plans/proposed/p1-security-hardening.md#pf-32).
+- Plan: [P1 security hardening](../../../plans/active/p1-security-hardening.md#pf-32).
 - Feature: `PF-32`.
 - Product citation: **Non-negotiable controls** — “Classify instruction intent and provenance before external content can influence tools or financial actions.”
 - Acceptance advanced: Exa search is usable through the common screened contract without raw credential or history disclosure.

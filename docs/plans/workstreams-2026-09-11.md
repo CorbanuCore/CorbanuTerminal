@@ -11,7 +11,7 @@ is not proof of a running agent, accepted feature or permission to spend.
 
 | Slot | Initiative / sequence | Observed machine and checkout | Next gate |
 | --- | --- | --- | --- |
-| 1 | [PF-13 security](active/p0-security-levels.md); preserve S01–S06 archives, then dependency-gated S07 | Alex Linux: `/home/pfrpc/repos/CorbanuTerminal-pf13-s02`, `feat/pf-13-s02-scoped-vault-resolver` | Resolve branch freshness and existing PF-35 reservation before a new security dispatch |
+| 1 | [PF-13 security](completed/main-2026-10-08-p0-security-levels.md); preserve S01–S06 archives, then dependency-gated S07 | Alex Linux: `/home/pfrpc/repos/CorbanuTerminal-pf13-s02`, `feat/pf-13-s02-scoped-vault-resolver` | Resolve branch freshness and existing PF-35 reservation before a new security dispatch |
 | 2 | [PF-60 accounting](active/portfolio-agent-cost-accounting.md): S01 contract/fixtures → S02 persistence/replay → S03 totals → S04 acceptance | This Mac: management records in `/Volumes/CorbanuDrive/Corbanu/CorbanuTerminal`; independent implementation worktree not allocated | Accept cost vocabulary, unknown/estimated/billed distinctions, retention and source ownership; allocate S01 without shared-doc writes |
 | 3 | [Task Node integration](active/initiative-delivery-control.md): link and task targets verified → bounded progress acceptance → PF-79-S01 beta channel/contract → S02 public testing pilot | This Mac: Corbanu setup; Alex Linux: `/home/pfrpc/corbanu-control`, live posting disabled; beta execution unallocated | Entitlement, proposed-target eligibility, remote credential permission, enrollment and first progress payload; beta remains draft |
 

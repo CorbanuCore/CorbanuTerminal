@@ -2,7 +2,7 @@
 sprint_id: "PF-36-S01"
 title: "Optional hosted detector consent contract"
 status: draft
-plan_file: "docs/plans/proposed/p1-security-hardening.md"
+plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-36"
 execution_order: 59
 owner: "Jim Ricketts"
@@ -23,7 +23,7 @@ updated: 2026-10-06
 
 ## Plan linkage
 
-- Plan: [P1 security hardening](../../../plans/proposed/p1-security-hardening.md#pf-36).
+- Plan: [P1 security hardening](../../../plans/active/p1-security-hardening.md#pf-36).
 - Feature: `PF-36`.
 - Product citation: **Non-negotiable controls** — “Classify instruction intent and provenance before external content can influence tools or financial actions.”
 - Acceptance advanced: Hosted screening cannot disclose protected data or activate without exact human consent.

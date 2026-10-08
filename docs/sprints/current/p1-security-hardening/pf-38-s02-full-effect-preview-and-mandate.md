@@ -2,7 +2,7 @@
 sprint_id: "PF-38-S02"
 title: "Full-effect financial preview and exact mandate"
 status: draft
-plan_file: "docs/plans/proposed/p1-security-hardening.md"
+plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-38"
 execution_order: 64
 owner: "Jim Ricketts"
@@ -23,7 +23,7 @@ updated: 2026-10-06
 
 ## Plan linkage
 
-- Plan: [P1 security hardening](../../../plans/proposed/p1-security-hardening.md#pf-38).
+- Plan: [P1 security hardening](../../../plans/active/p1-security-hardening.md#pf-38).
 - Feature: `PF-38`.
 - Product citation: **Non-negotiable controls** — “Simulate and display the complete expected effect before signing.”
 - Acceptance advanced: Human approval binds the complete supported financial effect rather than an agent-written summary.

@@ -1,6 +1,6 @@
 ---
 title: "1. PF-13 security and protected credentials"
-status: active
+status: completed
 change_class: product-initiative
 priority: P0
 owner: "Jim Ricketts"
@@ -9,10 +9,10 @@ parallel_lanes: "broker, untrusted-content, tui"
 integration_owner: "Codex /root security round-five coordinator"
 activation_authority: "Product authority defined in the product specification"
 activation_basis: "P0 sequencing plus Travis Good’s 2026-08-28 decision to reconcile the complete security program into this active plan; scope cut and lanes per Travis's 2026-10-06 decisions."
-target_release: "TBD — candidate qualified by 2026-10-09"
+target_release: "None: merged to main behind default-off flags; release linkage carried to the P1 plan"
 deadline: 2026-10-09
 created: 2026-08-23
-updated: 2026-10-06
+updated: 2026-10-08
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "P0 /security levels"
@@ -73,13 +73,35 @@ implementation_worktrees:
 Policy: repository-root `AGENTS.md`. Plan lifecycle: `docs/plans/index.md`.
 Everything written before 2026-10-06 (allocations, review ledgers, round notes,
 expanded contracts) is in the [history file](../history/p0-security-levels-2026-10-06.md).
-Deferred features are in the [P1 security hardening plan](../proposed/p1-security-hardening.md).
+Deferred features are in the [P1 security hardening plan](../active/p1-security-hardening.md).
+
+## Closing note (2026-10-08)
+
+Travis closed this plan on 2026-10-08 and gave its slot to the [P1 security hardening plan](../active/p1-security-hardening.md).
+
+- **Delivered:** the work of all 20 core sprints plus the broker-lane PF-27-S05 is on main behind default-off flags
+  (`security_levels`, `secret_output_gate`, `url_destination_policy`, `protected_mode_preflight`,
+  `isolated_credential_broker`, `secretless_agent_launch`); each sprint record holds its gate evidence. Twenty of the
+  21 records are archived. PF-28-S02, PF-29-S01/S02,
+  PF-33-S02 and PF-41-S01 were archived at close; their recorded open items moved to P1.
+- **Carried forward, not done:** [PF-13-S07](../../sprints/current/p1-security-hardening/pf-13-s07-integrated-credential-boundary-qualification.md)
+  moved to P1 still `ready`: its gate passed on 2026-10-07, but its final archive waits on the Aggressive milestone.
+  None of the three milestones (Aggressive ships, Moderate ships, flag removal) has run. No isolated code-blind VM
+  run, human sign-off, Permissive-compatibility rerun or versioned release covers this work. All of these are open
+  items in the P1 plan's [carried-forward table](../active/p1-security-hardening.md#carried-forward-from-p0).
+  This is therefore a decision-closed plan, not a released one. The `main-2026-10-08` filename prefix names the
+  tree that holds the work, not a release.
+- **Task Node:** P0SEC-TN-01..09 were all Rewarded (27.5 PFT, 2026-10-08). The
+  [task map](../../../qa/initiative-control/p0-security-levels/tasknode-task-map.md) lists tasks, PRs and evidence.
+- **Demo reel:** [narrated P0 security reel](https://corbanu-p0-security-reel.cloudflare-share.workers.dev/)
+  (11:51; [chapters and sources](../../../qa/demos/index/P0-security-reel.md)).
+- **Still hosted here:** drafts PF-76-S01 and PF-77-S01 (not security; see below) need a new home plan.
 
 ## Activation record
 
 | Field | Value |
 | --- | --- |
-| Status | **Active**, slot 1 of 3 |
+| Status | **Completed** (closed by Travis, 2026-10-08); slot 1 passed to P1 security hardening |
 | Authoritative decision | “Accountable sequencing,” item 1: `/security` is P0 and begins immediately |
 | Binding scope decisions | Travis, 2026-10-06: PF-83 closes; flagged picker ships early; 20-sprint core; 3 lanes; tiered gate |
 | Delivery owner / integration owner | Jim Ricketts / Codex /root security coordinator |
@@ -120,7 +142,7 @@ controls (PF-27, PF-28, PF-29, PF-33); durable provenance (PF-30); Moderate and
 Aggressive enforcement (PF-23); confirm/downgrade, grants and kill switch TUI
 (PF-24, PF-25); the inspector (PF-41-S01); final credential qualification (PF-13-S07).
 
-Out: everything moved to the [P1 hardening plan](../proposed/p1-security-hardening.md)
+Out: everything moved to the [P1 hardening plan](../active/p1-security-hardening.md)
 (PF-26 final program qualification, PF-27-S06 Windows broker and launch, PF-31, PF-32, PF-34, PF-35, PF-36, PF-37,
 PF-38, PF-39, PF-40, PF-41-S02); replacing `/permissions`; changing Permissive;
 letting a model choose or downgrade a level; conformance claims to external standards.
@@ -157,16 +179,16 @@ protocol and schema edits.
 
 ## Sprint execution map
 
-Twenty current sprints: the 19 named in decision 3 plus the picker. A lane is a
+At close: 20 of the 21 records archived; PF-13-S07 carried to P1. Core: the 19 named in decision 3 plus the picker. A lane is a
 worker slot; a sprint still waits for its dependencies in any lane.
 
 | Lane | Sprints in order |
 | --- | --- |
-| broker | PF-27-S04 (completed 2026-10-06, [archived](../../sprints/archive/p0-security-levels/pf-27-s04-isolated-credential-broker.md)) → PF-27-S02 (done, PR #191, [archived](../../sprints/archive/p0-security-levels/pf-27-s02-secretless-agent-launch.md)) → PF-27-S05 (done, PRs #229/#237, [archived](../../sprints/archive/p0-security-levels/pf-27-s05-model-client-auth-broker.md)) → PF-28-S01 (done, PR #208, [archived](../../sprints/archive/p0-security-levels/pf-28-s01-central-secret-output-gate.md)) → [PF-28-S02](../../sprints/current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md); Windows follow-up [PF-27-S06](../../sprints/current/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md) moved to the P1 hardening plan |
-| untrusted content | [PF-30-S01](../../sprints/archive/p0-security-levels/pf-30-s01-typed-source-envelope.md) (done, PR #178) → [PF-30-S02](../../sprints/archive/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md) (done, PRs #190, #198) → [PF-30-S03](../../sprints/archive/p0-security-levels/pf-30-s03-post-taint-authority-checks.md) (done, PRs #204, #212) → [PF-23-S01](../../sprints/archive/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md) (done, PRs #223, #233) → [PF-23-S02](../../sprints/archive/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md) (done, PR #243) → [PF-23-S03](../../sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) |
+| broker | PF-27-S04 (completed 2026-10-06, [archived](../../sprints/archive/p0-security-levels/pf-27-s04-isolated-credential-broker.md)) → PF-27-S02 (done, PR #191, [archived](../../sprints/archive/p0-security-levels/pf-27-s02-secretless-agent-launch.md)) → PF-27-S05 (done, PRs #229/#237, [archived](../../sprints/archive/p0-security-levels/pf-27-s05-model-client-auth-broker.md)) → PF-28-S01 (done, PR #208, [archived](../../sprints/archive/p0-security-levels/pf-28-s01-central-secret-output-gate.md)) → [PF-28-S02](../../sprints/archive/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md) (PR #216, archived at close); Windows follow-up [PF-27-S06](../../sprints/current/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md) moved to the P1 hardening plan |
+| untrusted content | [PF-30-S01](../../sprints/archive/p0-security-levels/pf-30-s01-typed-source-envelope.md) (done, PR #178) → [PF-30-S02](../../sprints/archive/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md) (done, PRs #190, #198) → [PF-30-S03](../../sprints/archive/p0-security-levels/pf-30-s03-post-taint-authority-checks.md) (done, PRs #204, #212) → [PF-23-S01](../../sprints/archive/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md) (done, PRs #223, #233) → [PF-23-S02](../../sprints/archive/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md) (done, PR #243) → [PF-23-S03](../../sprints/archive/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) |
 | tui | [PF-24-S03 flagged picker](../../sprints/archive/p0-security-levels/pf-24-s03-flagged-security-picker.md) (done, PR #186) → [PF-24-S02](../../sprints/archive/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) → [PF-25-S01](../../sprints/archive/p0-security-levels/pf-25-s01-temporary-grant-tui.md) → [PF-25-S02](../../sprints/archive/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md) |
-| first free lane | PF-33-S01 (done, PR #210, [archived](../../sprints/archive/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md)) → [PF-33-S02](../../sprints/current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md); [PF-29-S01](../../sprints/current/p0-security-levels/pf-29-s01-protected-mode-inventory.md) → [PF-29-S02](../../sprints/current/p0-security-levels/pf-29-s02-human-secret-migration.md) (after PF-28-S02) |
-| convergence | [PF-41-S01](../../sprints/current/p0-security-levels/pf-41-s01-effective-security-inspector.md) (after PF-23-S03, PF-24-S02, PF-29-S02), then [PF-13-S07](../../sprints/current/p0-security-levels/pf-13-s07-integrated-credential-boundary-qualification.md) |
+| first free lane | PF-33-S01 (done, PR #210, [archived](../../sprints/archive/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md)) → [PF-33-S02](../../sprints/archive/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md); [PF-29-S01](../../sprints/archive/p0-security-levels/pf-29-s01-protected-mode-inventory.md) → [PF-29-S02](../../sprints/archive/p0-security-levels/pf-29-s02-human-secret-migration.md) (after PF-28-S02) |
+| convergence | [PF-41-S01](../../sprints/archive/p0-security-levels/pf-41-s01-effective-security-inspector.md) (after PF-23-S03, PF-24-S02, PF-29-S02), then [PF-13-S07](../../sprints/current/p1-security-hardening/pf-13-s07-integrated-credential-boundary-qualification.md) (carried to P1 at close) |
 
 Cross-lane waits: PF-24-S02 needs PF-23-S03 and PF-29-S02; PF-25 needs PF-23-S02/S03;
 PF-23-S01 needs PF-30-S03. The [sprint index](../../sprints/current/p0-security-levels/index.md)
@@ -175,7 +197,7 @@ PF-40-S03; it shows those controls as “not available”.
 
 ### TUI lane bugs from PF-83
 
-Handed to the TUI lane on 2026-10-06 by decision 1. Each is a bounded fix against
+Handed to the TUI lane on 2026-10-06 by decision 1; carried to the P1 plan at close. Each is a bounded fix against
 **Permission selection confirmation — TO BUILD** and runs under the per-sprint gate.
 
 | Bug | Found in | State |
@@ -190,7 +212,7 @@ Handed to the TUI lane on 2026-10-06 by decision 1. Each is a bounded fix agains
 [PF-76-S01](../../sprints/current/p0-security-levels/pf-76-s01-provider-profile-persistence.md)
 (provider profile persistence) and [PF-77-S01](../../sprints/current/p0-security-levels/pf-77-s01-tasknode-reliability.md)
 (Task Node reliability) are drafts hosted here for history, outside the security
-core and lanes. Completed hosted records PF-77-S02, PF-78-S01/S02 and PF-82-S01 are archived.
+core and lanes. They stay `draft` under this closed plan until rehomed. Completed hosted records PF-77-S02, PF-78-S01/S02 and PF-82-S01 are archived.
 
 ## Acceptance flows
 
@@ -270,20 +292,21 @@ describe only behaviour verified at a milestone, citing **P0 `/security` levels*
 | Aggressive vault denial from existing controls | PF-24-S03 must prove it; if impossible, stop and escalate |
 | Aggressive sandbox design (A: `corbanu-aggressive` permission profile; B: literal `SandboxPolicy` table; C: `on-request` approvals) | Decided: A, the `corbanu-aggressive` profile as merged in #186 (Travis, 2026-10-07) |
 | Global reservation cap | 3 security lanes + 1 accounting + 1 Task Node = 5 (`docs/sprints/index.md`); confirmed by Travis 2026-10-06 |
-| October 8 deadline | Unchanged and not re-estimated against the 20-sprint core |
+| October 9 deadline | Plan closed 2026-10-08 by decision; milestones carried to P1 without a date |
 
 ## Release linkage
 
-Each milestone links its `qa/release/<version>/` record. Remaining blockers: the
-20 core sprints, milestone code-blind runs and human sign-off.
+No `qa/release/<version>/` record: no release contains this work yet (0.1.48 predates it). Milestone runs,
+human sign-off and release linkage moved to the P1 plan.
 
 ## Completion
 
 - [x] PF-83-S01 closed with per-case results; defects handed to the TUI lane (2026-10-06).
 - [x] Deferred scope moved to the P1 hardening plan with dependencies intact (2026-10-06).
-- [ ] Milestone: Aggressive ships.
-- [ ] Milestone: Moderate ships.
-- [ ] Milestone: flag removal; Permissive compatibility proven; no critical finding open.
+- [x] All core sprints merged behind flags; 20 of 21 records archived (2026-10-08).
+- [x] Plan closed by Travis's decision (2026-10-08); slot passed to P1.
+- Not done here, moved to P1: Aggressive ships; Moderate ships; flag removal with Permissive compatibility proven
+  and no critical finding open; PF-13-S07 archive.
 
 ## History
 
@@ -291,4 +314,4 @@ Each milestone links its `qa/release/<version>/` record. Remaining blockers: the
 | --- | --- |
 | [Plan history through 2026-10-06](../history/p0-security-levels-2026-10-06.md) | All earlier prose: allocations, PF-27 stage log, expanded contracts PF-27–41, standards profile, profile/failure matrix |
 | [Source reconciliation](../security-source-reconciliation.md), [architecture refinements](../security-architecture-refinements-2026-08-28.md), [upstream reconciliation](../security-upstream-reconciliation-2026-08-28.md), [OpenClaw review](../openclaw-source-review-2026-08-28.md) | August 28 design inputs |
-| [Completed archive](../../sprints/archive/p0-security-levels/) | PF-13-S01–S06, foundations PF-15, PF-16, PF-17, PF-18, PF-19, PF-20, PF-21, PF-22, PF-24-S01/S03, PF-26-S01, PF-27-S01/S02/S03/S04, PF-28-S01, PF-30-S01–S04, PF-31-S04, PF-33-S01/S03, PF-34-S04, PF-41-S03, PF-83-S01, plus hosted PF-77/78/82 |
+| [Completed archive](../../sprints/archive/p0-security-levels/) | PF-13-S01–S06, foundations PF-15, PF-16, PF-17, PF-18, PF-19, PF-20, PF-21, PF-22, PF-24-S01/S03, PF-26-S01, PF-27-S01/S02/S03/S04, PF-28-S01, PF-23-S01–S03, PF-24-S02, PF-25-S01/S02, PF-27-S05, PF-28-S02, PF-29-S01/S02, PF-30-S01–S04, PF-31-S04, PF-33-S01–S03, PF-34-S04, PF-41-S01, PF-41-S03, PF-83-S01, plus hosted PF-77/78/82 |

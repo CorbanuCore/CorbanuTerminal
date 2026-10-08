@@ -2,7 +2,7 @@
 sprint_id: "PF-35-S02"
 title: "Reproducible local CPU detector artifact"
 status: draft
-plan_file: "docs/plans/proposed/p1-security-hardening.md"
+plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-35"
 execution_order: 21
 owner: "Jim Ricketts"
@@ -27,7 +27,7 @@ does not move training to the API or change offline CPU production inference.
 
 ## Plan linkage
 
-- Plan: [P1 security hardening](../../../plans/proposed/p1-security-hardening.md#pf-35).
+- Plan: [P1 security hardening](../../../plans/active/p1-security-hardening.md#pf-35).
 - Feature: `PF-35`.
 - Product citation: **Non-negotiable controls** — “Classify instruction intent and provenance before external content can influence tools or financial actions.”
 - Acceptance advanced: The local detector runs offline within an explicit resource envelope and identifies its exact artifact.

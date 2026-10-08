@@ -2,7 +2,7 @@
 sprint_id: "PF-27-S09"
 title: "Windows model-client auth through the broker"
 status: draft
-plan_file: "docs/plans/proposed/p1-security-hardening.md"
+plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-27"
 execution_order: 45
 owner: "broker lane (unassigned)"
@@ -31,7 +31,7 @@ use its key path.
 
 ## Plan linkage
 
-- Plan: [P1 security hardening](../../../plans/proposed/p1-security-hardening.md#pf-27).
+- Plan: [P1 security hardening](../../../plans/active/p1-security-hardening.md#pf-27).
 - Feature: `PF-27`.
 - Product citation: **Required trust boundaries** — “Credentials are referenced by label and resolved only inside a trusted execution boundary.”
 - Acceptance advanced: raw credentials exist only in the trusted broker on Windows too, including Core's own.
