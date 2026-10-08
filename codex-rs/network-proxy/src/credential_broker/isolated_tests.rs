@@ -1361,8 +1361,7 @@ mod pf_27_s05 {
     async fn pf_27_s05_env_keys_are_handed_over_removed_and_unregistered() {
         let upstream = start_upstream().await;
         let name = format!("PF27_S05_ENV_KEY_{}", std::process::id());
-        // SAFETY: a unique variable no other test reads.
-        unsafe { std::env::set_var(&name, MODEL_KEY) };
+        crate::credential_broker::env_scrub::set_env_var_for_test(&name, MODEL_KEY);
         let broker = model_broker(&upstream);
         let taken = broker
             .take_env_keys(&[name.clone(), "PF27_S05_NEVER_SET_KEY".to_string()])

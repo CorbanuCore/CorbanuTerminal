@@ -1,0 +1,3 @@
+$ CORBANU_TEST_NO_NATIVE_KEYRING=1 CODEX_HOME=<rtx-dir>/h-del ... ZAI_API_KEY=view-only-placeholder corbanu delete --force 01a113a8-9e61-7841-9088-dba35ae242ec   (real clock)
+Deleted session 01a113a8-9e61-7841-9088-dba35ae242ec.
+exit=0   (transcribed from the executor terminal)

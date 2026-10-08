@@ -1,0 +1,19 @@
+$ /usage requests 2026-07-05
+  Cost — this conversation
+  Requested UTC day: 2026-07-05
+  Request detail unavailable for this whole UTC day — day touches expired detail or aggregate history. No total shown. Ledger current to: 2026-10-08T16:09:02.430Z; request detail kept since 2026-
+  07-10T16:10:49.853Z; daily totals kept since 2025-10-09; oldest recorded day in this conversation none.
+  Next step: request detail is kept for recent days only; open a more recent day with /cost YYYY-MM-DD, or check your provider's bill for this one.
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Refresh
+  Close
+  ↑↓ scroll · Enter open · Esc back/close
+--- last screen:
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Billed cost: unavailable — no settlement evidence
+› Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Refresh
+  Close
+  ↑↓ scroll · Enter open · Esc back/close

@@ -1,0 +1,6 @@
+$ FAKETIME='@2026-10-10 12:45:00' corbanu delete --force 01a1201a-f5b1-7470-9e16-ba73043ef7d2
+Deleted session 01a1201a-f5b1-7470-9e16-ba73043ef7d2.
+exit=0
+$ FAKETIME='@2026-10-10 12:45:00' corbanu delete --force 01a12541-515d-7360-9386-92b8c762af52
+Deleted session 01a12541-515d-7360-9386-92b8c762af52.
+exit=0

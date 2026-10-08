@@ -1,0 +1,51 @@
+$ /cost
+  Cost — this conversation
+  Requested UTC day: 2026-10-08
+  Today (UTC) in this conversation:
+  • Z.AI · Z.AI GLM 5.2 — Pay per use. 4 requests, 27,748 tokens. Estimated cost: $0.024372 (rounded).
+  Other conversations on this day, not included above: 5 requests in 3 conversations.
+  • Z.AI · Z.AI GLM 5.2 — Pay per use. 5 requests, 34,276 tokens. Estimated cost: $0.024734 (rounded).
+  Other conversations' estimated cost: $0.024734 (rounded).
+  To see those requests, open that conversation with /resume and run /cost there.
+  Costs are estimates from published prices; your provider's bill is the final amount.
+  Select a provider below to see its requests.
+  ↑↓ scroll · Enter open · Esc back/close
+  —— Details ——
+  Estimated token cost for recorded attempts: $0.024372 (rounded)
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+  Day covered (UTC): [2026-10-08T00:00:00.000Z, 2026-10-09T00:00:00.000Z)
+  Read at: 2026-10-08T16:34:30.888Z; ledger current to: 2026-10-08T16:34:14.286Z (16602 ms behind)
+  Retention: request detail kept since 2026-07-10T16:34:30.888Z; daily totals kept since 2025-10-09; oldest recorded day in this conversation 2026-10-08
+  Known subtotal exact USD: 0.02437244
+  Input: 27,563
+  Noncached input (derived for inclusive input): not reported (4 attempts) — costed as input − cache read for 4 attempts, whose price charges nothing for cache writes
+  Cache read: 13,184
+  Cache write: not reported (4 attempts) — free at the price of 4 attempts, so nothing was charged
+  Output: 185
+  Reasoning (subset, not separately billed): 36
+  Total (not separately billed): 27,748
+  Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+  Unknown parent population: 0 attempts, excluded from root total
+  Estimate versus billed difference: unknown — no settlement evidence
+  —— Open ——
+  → Z.AI · Z.AI GLM 5.2 — estimated $0.024372 (rounded) (4 requests)
+  → Request 1 · Z.AI · Z.AI GLM 5.2 · estimated $0.009351
+  → Request 2 · Z.AI · Z.AI GLM 5.2 · estimated $0.002158 (rounded)
+  → Request 3 · Z.AI · Z.AI GLM 5.2 · estimated $0.002231 (rounded)
+  → Request 4 · Z.AI · Z.AI GLM 5.2 · estimated $0.010632 (rounded)
+  → Root's own attempts (4 attempts)
+  → Descendant attempts (none)
+  → Unknown provider/model attribution (none)
+  → Unknown parent population (none)
+  Refresh
+  Close
+--- last screen:
+  • Z.AI · Z.AI GLM 5.2 — Pay per use. 5 requests, 34,276 tokens. Estimated cost: $0.024734 (rounded).
+  Other conversations' estimated cost: $0.024734 (rounded).
+› To see those requests, open that conversation with /resume and run /cost there.
+  Costs are estimates from published prices; your provider's bill is the final amount.
+  Select a provider below to see its requests.
+  ↑↓ scroll · Enter open · Esc back/close

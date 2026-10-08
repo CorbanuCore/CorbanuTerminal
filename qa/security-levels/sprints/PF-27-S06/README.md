@@ -149,6 +149,39 @@ and no redactions in private logs.
 - Each run's directory names showed in the TUI's cwd; one GLM reply remarked on the folder name. No tool call or
   result was affected.
 
+## Gate rerun after the fixes (2026-10-08): PASS
+
+Same host. Candidate: debug build of `origin/main` at `661b5c6a48cd`, which includes #298 (fixes #294) and #302 (fixes
+#295). Every run below was in a **normal session**: medium integrity, started through `explorer.exe`, and the
+recorder printed `Medium Mandatory Level`.
+
+| Failed item | Rerun |
+| --- | --- |
+| Defect 1: agent commands fail with `CreateProcessWithLogonW failed: 5` | **pass**: `whoami` runs as `CodexSandboxOffline`. The sandbox log records `runner started through the logon launcher (protected process, #295)` |
+| Defect 2: vault store readable under `workspace-write` | **pass**: vault store, `auth.json`, `config.toml` and the state database are denied, and so is writing `config.toml`; the workspace control file is read |
+| `pf_27_s06_d1` (#295 probe), normal session | pass: the fallback ran (`via launcher: true`) |
+| `pf_27_s06_d2` (#294 probes, product profile through the tool path), normal session | pass: 2 tests. The vault is denied to a protected launch, to an unprotected launch from an armed process, and to a command still running across it |
+
+Before the fixes, the same probes failed on this host: `pf_27_s06_d1` in a normal session, from an elevated session
+through the CI script, and (with PF-27-S07 merged) even elevated; both `pf_27_s06_d2` tests in both sessions. CI
+now covers this: `windows-security-probes` runs the probes again with the token UAC gives an administrator's normal
+session (`.github/scripts/run-at-medium-integrity.ps1`). What CI does not cover: a separate non-administrator
+account, and the elevated setup itself from a normal session (it needs a UAC answer, so the step reuses a setup
+recorded just before).
+
+Videos ([index](../../../demos/index/PF-27-S06.md); leak scan: no credential value in any cast, screen or log, checked
+by the recorder and again on macOS):
+
+| Video | Session | Shows |
+| --- | --- | --- |
+| `pf27s06-win-normal-session-works` | normal | agent command runs as the sandbox user (defect 1 fixed) |
+| `pf27s06-win-vault-denied` | normal | vault read denied under `workspace-write`, next to the other denials (defect 2 fixed) |
+
+Follow-ups filed while fixing: #300 (unelevated tool path doesn't enforce deny-read; needs a product decision),
+#301 (a flag-off session on the same `CODEX_HOME`), #304 (deny ACEs are never revoked), #307 (launcher pipe
+inheritance window). The rerun used the same harness as the first run. The normal-session runs were seeded from the
+setup of an elevated run made just before, because each elevated setup resets the sandbox passwords.
+
 ## Windows machine needed for the remaining gate
 
 To rerun the gate after the fixes, use a Windows 11 Pro or Enterprise 23H2+ machine with:
