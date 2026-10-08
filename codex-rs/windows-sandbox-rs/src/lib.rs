@@ -135,6 +135,8 @@ pub(crate) use elevated::runner_pipe;
 #[cfg(target_os = "windows")]
 pub use acl::add_deny_read_ace;
 #[cfg(target_os = "windows")]
+pub use acl::add_deny_read_ace_for_new_files;
+#[cfg(target_os = "windows")]
 pub use acl::add_deny_write_ace;
 
 #[cfg(target_os = "windows")]
@@ -333,6 +335,8 @@ pub use windows_impl::run_windows_sandbox_capture_with_filesystem_overrides;
 pub use windows_impl::run_windows_sandbox_legacy_preflight;
 #[cfg(target_os = "windows")]
 pub use winutil::quote_windows_arg;
+#[cfg(target_os = "windows")]
+pub use winutil::resolve_sid;
 #[cfg(target_os = "windows")]
 pub use winutil::string_from_sid_bytes;
 #[cfg(target_os = "windows")]

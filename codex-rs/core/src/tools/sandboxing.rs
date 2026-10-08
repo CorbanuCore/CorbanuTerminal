@@ -492,6 +492,13 @@ impl<'a> SandboxAttempt<'a> {
                 cwd.as_path(),
             )
             .map_err(|denied| CodexErr::UnsupportedOperation(denied.to_string()))?;
+        #[cfg(windows)]
+        if windows_elevated {
+            contract
+                .protect_new_codex_home_files()
+                .inspect_err(crate::security::inspection::record_launch_denial)
+                .map_err(|denied| CodexErr::UnsupportedOperation(denied.to_string()))?;
+        }
         Ok(Some(protected))
     }
 

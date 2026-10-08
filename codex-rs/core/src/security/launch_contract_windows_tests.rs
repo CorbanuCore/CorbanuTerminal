@@ -61,12 +61,13 @@ async fn pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory() 
     stage_windows_sandbox_helpers();
 
     std::fs::create_dir_all(codex_home.join("secrets")).expect("secrets dir");
+    std::fs::create_dir_all(codex_home.join("skills")).expect("skills dir");
     for (name, body) in [
         ("secrets/vault.json", "pf27s06-vault"),
         ("auth.json", "pf27s06-auth"),
         ("config.toml", "model = \"pf27s06\""),
         ("state_5.sqlite", "pf27s06-state"),
-        ("notes.txt", "unprotected control"),
+        ("skills\\notes.txt", "unprotected control"),
     ] {
         std::fs::write(codex_home.join(name), body).expect("fixture file");
     }
@@ -125,7 +126,7 @@ async fn pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory() 
         read("AUTH", "auth.json"),
         read("CONFIG", "config.toml"),
         read("SQLITE", "state_5.sqlite"),
-        read("NOTES", "notes.txt"),
+        read("NOTES", "skills\\notes.txt"),
         format!(
             "(echo x> {home}\\config.toml 2>NUL && echo CONFIG-WRITE-ALLOWED || echo CONFIG-WRITE-DENIED)"
         ),
@@ -152,6 +153,11 @@ async fn pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory() 
             "{readable}: {control}"
         );
     }
+    // What a protected launch does first on Windows (the elevated setup that
+    // creates the sandbox's users ran with the base-profile command above).
+    contract
+        .protect_new_codex_home_files()
+        .expect("deny new CODEX_HOME files to the sandbox");
     let files = run_sandboxed(
         vec!["cmd.exe".into(), "/D".into(), "/C".into(), script],
         HashMap::new(),
@@ -183,15 +189,16 @@ async fn pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory() 
     );
 
     // Files that appear while a protected command runs: one in a protected
-    // directory (inherited deny), and auth.json replaced by rename, as a
-    // token refresh does (recorded: a per-file deny does not carry over).
+    // directory, auth.json replaced by rename (as a token refresh does) and a
+    // new SQLite WAL file. All three are new files that inherit a deny.
     let later = {
         let profile = protected.clone();
         let cwd = cwd.clone();
         let script = format!(
-            "ping -n 6 127.0.0.1 >NUL & {} & {}",
+            "ping -n 6 127.0.0.1 >NUL & {} & {} & {}",
             read("LATER", "secrets\\later.json"),
-            read("REPLACED", "auth.json")
+            read("REPLACED", "auth.json"),
+            read("WAL", "state_9.sqlite-wal")
         );
         tokio::spawn(async move {
             run_sandboxed(
@@ -215,9 +222,15 @@ async fn pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory() 
         codex_home.join("auth.json"),
     )
     .expect("replace auth.json");
+    std::fs::write(codex_home.join("state_9.sqlite-wal"), "pf27s06-wal").expect("wal");
     let later = later.await.expect("later run");
     eprintln!("pf27s06 elevated probes for files created during a run: {later}");
-    assert!(later.contains("LATER-DENIED"), "{later}");
+    for denied in ["LATER", "REPLACED", "WAL"] {
+        assert!(
+            later.contains(&format!("{denied}-DENIED")),
+            "{denied}: {later}"
+        );
+    }
 
     // Positive control: the probe reads an unhardened process of its user.
     let unhardened = Target::spawn(/*harden*/ false);

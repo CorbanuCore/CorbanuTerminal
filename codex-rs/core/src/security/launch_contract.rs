@@ -32,6 +32,10 @@ use std::path::Path;
 use std::sync::OnceLock;
 use zeroize::Zeroizing;
 
+/// The local group the elevated Windows sandbox's users belong to.
+#[cfg(windows)]
+const WINDOWS_SANDBOX_USERS_GROUP: &str = "CodexSandboxUsers";
+
 /// Shorter values are too likely to collide with ordinary text.
 const MIN_MANAGED_VALUE_BYTES: usize = 8;
 
@@ -82,6 +86,10 @@ pub(crate) enum LaunchDenied {
     UnsupportedPlatform,
     /// PF-27-S06: the unelevated Windows sandbox restricts writes only.
     WindowsUnelevatedSandbox,
+    /// PF-27-S06: new files in `CODEX_HOME` could not be denied to the
+    /// elevated sandbox's users (it is not set up yet, or the ACL failed).
+    #[cfg_attr(not(windows), allow(dead_code))]
+    WindowsSandboxNotSetUp,
     ProcessHardening,
     Unsandboxed,
     RemoteEnvironment,
@@ -101,6 +109,10 @@ impl std::fmt::Display for LaunchDenied {
             }
             Self::WindowsUnelevatedSandbox => {
                 "the unelevated Windows sandbox cannot deny reads of the vault and sign-in files; set `sandbox = \"elevated\"` under `[windows]`"
+                    .to_string()
+            }
+            Self::WindowsSandboxNotSetUp => {
+                "the elevated Windows sandbox is not set up yet, so new files in Corbanu's configuration directory cannot be denied to it; set it up first"
                     .to_string()
             }
             Self::ProcessHardening => {
@@ -371,6 +383,36 @@ impl LaunchContract {
             self.protect_permissions(profile, cwd)
         };
         protect().inspect_err(super::inspection::record_launch_denial)
+    }
+
+    /// PF-27-S06: a protected file replaced by rename (a token refresh) is a
+    /// new file and would not carry its per-file deny, so every file created
+    /// directly in `CODEX_HOME` inherits a read deny for the elevated
+    /// sandbox's users (subdirectories such as `skills` are unaffected). The
+    /// entry stays on the directory. Needs the sandbox's users group, which
+    /// its setup creates; until then protected launches are refused.
+    #[cfg(windows)]
+    pub(crate) fn protect_new_codex_home_files(&self) -> Result<(), LaunchDenied> {
+        use std::sync::atomic::AtomicBool;
+        use std::sync::atomic::Ordering;
+        static APPLIED: AtomicBool = AtomicBool::new(false);
+        if APPLIED.load(Ordering::Acquire) {
+            return Ok(());
+        }
+        let mut group = codex_windows_sandbox::resolve_sid(WINDOWS_SANDBOX_USERS_GROUP)
+            .map_err(|_| LaunchDenied::WindowsSandboxNotSetUp)?;
+        // SAFETY: `group` holds a valid SID for the duration of the call.
+        let present = unsafe {
+            codex_windows_sandbox::add_deny_read_ace_for_new_files(
+                self.codex_home.as_path(),
+                group.as_mut_ptr().cast(),
+            )
+        };
+        if !matches!(present, Ok(true)) {
+            return Err(LaunchDenied::WindowsSandboxNotSetUp);
+        }
+        APPLIED.store(true, Ordering::Release);
+        Ok(())
     }
 
     /// Whether Core's own process hardening succeeded when it was armed.

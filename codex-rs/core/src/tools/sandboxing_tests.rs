@@ -488,5 +488,13 @@ fn pf_27_s06_env_for_requires_the_elevated_windows_sandbox() {
     let refused = launch(&attempt).expect_err("unelevated launch refused");
     assert!(refused.contains("unelevated Windows sandbox"), "{refused}");
     attempt.windows_sandbox_level = WindowsSandboxLevel::Elevated;
-    assert_eq!(launch(&attempt), Ok(()));
+    match launch(&attempt) {
+        Ok(()) => {}
+        // Before the elevated sandbox's first setup its users group does not
+        // exist, and the launch is refused rather than left unprotected.
+        Err(refused)
+            if codex_windows_sandbox::resolve_sid("CodexSandboxUsers").is_err()
+                && refused.contains("not set up yet") => {}
+        Err(refused) => panic!("elevated launch refused: {refused}"),
+    }
 }
