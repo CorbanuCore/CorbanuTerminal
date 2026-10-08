@@ -7,6 +7,9 @@ use crate::ipc_framed::Message;
 use crate::ipc_framed::SpawnRequest;
 use crate::ipc_framed::read_frame;
 use crate::ipc_framed::write_frame;
+use crate::logon_launch::LogonError as RunnerLogonError;
+use crate::logon_launch::LogonLaunchRequest;
+use crate::logon_launch::create_process_with_logon;
 use crate::runner_pipe::PIPE_ACCESS_INBOUND;
 use crate::runner_pipe::PIPE_ACCESS_OUTBOUND;
 use crate::runner_pipe::connect_pipe;
@@ -14,7 +17,6 @@ use crate::runner_pipe::create_named_pipe;
 use crate::runner_pipe::find_runner_exe;
 use crate::runner_pipe::pipe_pair;
 use crate::winutil::quote_windows_arg;
-use crate::winutil::to_wide;
 use anyhow::Context;
 use anyhow::Result;
 use std::ffi::c_void;
@@ -35,35 +37,17 @@ use windows_sys::Win32::Foundation::ERROR_NO_SUCH_LOGON_SESSION;
 use windows_sys::Win32::Foundation::ERROR_NOT_FOUND;
 use windows_sys::Win32::Foundation::GetLastError;
 use windows_sys::Win32::Foundation::HANDLE;
-use windows_sys::Win32::System::Diagnostics::Debug::SetErrorMode;
 use windows_sys::Win32::System::IO::CancelSynchronousIo;
 use windows_sys::Win32::System::Pipes::PeekNamedPipe;
-use windows_sys::Win32::System::Threading::CreateProcessWithLogonW;
 use windows_sys::Win32::System::Threading::GetCurrentProcess;
 use windows_sys::Win32::System::Threading::GetCurrentThread;
-use windows_sys::Win32::System::Threading::PROCESS_INFORMATION;
-use windows_sys::Win32::System::Threading::STARTUPINFOW;
 use windows_sys::Win32::System::Threading::TerminateProcess;
 use windows_sys::Win32::System::Threading::WaitForSingleObject;
 
 const RUNNER_SPAWN_READY_TIMEOUT: Duration = Duration::from_secs(15);
 const RUNNER_PIPE_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const RUNNER_SPAWN_READY_POLL_INTERVAL: Duration = Duration::from_millis(5);
-const RUNNER_ERROR_MODE_FLAGS: u32 = 0x0001 | 0x0002;
 const WAIT_OBJECT_0: u32 = 0;
-
-#[derive(Debug)]
-struct RunnerLogonError {
-    code: u32,
-}
-
-impl std::fmt::Display for RunnerLogonError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "CreateProcessWithLogonW failed: {}", self.code)
-    }
-}
-
-impl std::error::Error for RunnerLogonError {}
 
 #[derive(Debug)]
 pub(crate) struct RunnerStartupError {
@@ -331,50 +315,24 @@ pub(crate) fn spawn_runner_transport(
         quote_windows_arg(&format!("--pipe-in={pipe_in_name}")),
         quote_windows_arg(&format!("--pipe-out={pipe_out_name}"))
     );
-    let mut cmdline_vec = to_wide(&runner_full_cmd);
-    let exe_w = to_wide(&runner_cmdline);
-    let cwd_w = to_wide(cwd);
-    let user_w = to_wide(&sandbox_creds.username);
-    let domain_w = to_wide(".");
-    let password_w = to_wide(&sandbox_creds.password);
-    let mut si: STARTUPINFOW = unsafe { std::mem::zeroed() };
-    si.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
-    let mut pi: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
-    let env_block: Option<Vec<u16>> = None;
-
-    let previous_error_mode = unsafe { SetErrorMode(RUNNER_ERROR_MODE_FLAGS) };
-    // Sandbox users have no profile state that commands should inherit.
-    let spawn_res = unsafe {
-        CreateProcessWithLogonW(
-            user_w.as_ptr(),
-            domain_w.as_ptr(),
-            password_w.as_ptr(),
-            /*dwlogonflags*/ 0,
-            exe_w.as_ptr(),
-            cmdline_vec.as_mut_ptr(),
-            windows_sys::Win32::System::Threading::CREATE_NO_WINDOW
-                | windows_sys::Win32::System::Threading::CREATE_UNICODE_ENVIRONMENT,
-            env_block
-                .as_ref()
-                .map(|block| block.as_ptr() as *const c_void)
-                .unwrap_or(ptr::null()),
-            cwd_w.as_ptr(),
-            &si,
-            &mut pi,
-        )
-    };
-    unsafe {
-        SetErrorMode(previous_error_mode);
-    }
-    if spawn_res == 0 {
-        let err = unsafe { GetLastError() };
-        unsafe {
-            CloseHandle(h_pipe_in);
-            CloseHandle(h_pipe_out);
+    let launched = match create_process_with_logon(&LogonLaunchRequest {
+        username: &sandbox_creds.username,
+        password: &sandbox_creds.password,
+        application: Path::new(&runner_cmdline),
+        command_line: &runner_full_cmd,
+        cwd,
+    }, &runner_exe) {
+        Ok(launched) => launched,
+        Err(err) => {
+            unsafe {
+                CloseHandle(h_pipe_in);
+                CloseHandle(h_pipe_out);
+            }
+            return Err(err);
         }
-        return Err(RunnerLogonError { code: err }.into());
-    }
-    let expected_runner_pid = pi.dwProcessId;
+    };
+    let runner_process = launched.process;
+    let expected_runner_pid = launched.pid;
 
     let connect_result = (|| -> Result<()> {
         connect_pipe_with_timeout(h_pipe_in, expected_runner_pid, "pipe-in")?;
@@ -382,20 +340,14 @@ pub(crate) fn spawn_runner_transport(
         Ok(())
     })();
 
-    unsafe {
-        if pi.hThread != 0 {
-            CloseHandle(pi.hThread);
-        }
-    }
-
     if let Err(err) = connect_result {
         unsafe {
             // Keep the process handle alive until the pipe handshake finishes. If the handshake
             // fails after the runner process has already launched, we still need a way to stop
             // that child instead of leaking a stray `codex-command-runner.exe`.
-            if pi.hProcess != 0 {
-                let _ = TerminateProcess(pi.hProcess, 1);
-                CloseHandle(pi.hProcess);
+            if runner_process != 0 {
+                let _ = TerminateProcess(runner_process, 1);
+                CloseHandle(runner_process);
             }
             CloseHandle(h_pipe_in);
             CloseHandle(h_pipe_out);
@@ -419,9 +371,9 @@ pub(crate) fn spawn_runner_transport(
     })();
     if let Err(err) = startup_result {
         unsafe {
-            if pi.hProcess != 0 {
-                let _ = TerminateProcess(pi.hProcess, 1);
-                CloseHandle(pi.hProcess);
+            if runner_process != 0 {
+                let _ = TerminateProcess(runner_process, 1);
+                CloseHandle(runner_process);
             }
         }
         drop(transport);
@@ -429,11 +381,11 @@ pub(crate) fn spawn_runner_transport(
     }
 
     unsafe {
-        if pi.hProcess != 0 {
+        if runner_process != 0 {
             // The runner has now connected both pipes *and* acknowledged the spawn request, so
             // startup is complete. At that point the transport pipes become the only lifetime
             // anchor we need to keep the session alive.
-            CloseHandle(pi.hProcess);
+            CloseHandle(runner_process);
         }
     }
 
