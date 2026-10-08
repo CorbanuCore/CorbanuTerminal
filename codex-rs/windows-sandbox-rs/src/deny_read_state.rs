@@ -90,9 +90,11 @@ pub unsafe fn sync_persistent_deny_read_acls(
     } else {
         for path in stale_paths {
             // A path that is gone has no entry left. Keep any other failure
-            // (including a link left at the path) recorded, so a later sync
-            // retries it.
-            if unsafe { remove_deny_read_ace(&path, psid) }.is_err() && path.exists() {
+            // (including a link left at the path, followable or not)
+            // recorded, so a later sync retries it.
+            if unsafe { remove_deny_read_ace(&path, psid) }.is_err()
+                && path.symlink_metadata().is_ok()
+            {
                 recorded_paths.push(path);
             }
         }

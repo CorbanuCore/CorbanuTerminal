@@ -238,6 +238,7 @@ fn junction(link: &Path, target: &Path) {
         .status()
         .expect("mklink");
     assert!(status.success(), "mklink /J failed: {status}");
+    assert!(link.symlink_metadata().is_ok(), "no junction at {}", link.display());
 }
 
 /// The armed session of [`sec_win_301_flag_off_session_keeps_denies_while_another_is_armed`]:
