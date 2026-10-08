@@ -144,7 +144,7 @@ pub(super) fn openai_provider() -> &'static CredentialProvider {
     &openai::PROVIDER
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub(super) fn provider_by_id(
     id: super::isolated::protocol::ProviderId,
 ) -> &'static CredentialProvider {
@@ -154,7 +154,7 @@ pub(super) fn provider_by_id(
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub(super) fn provider_id(
     provider: &'static CredentialProvider,
 ) -> Option<super::isolated::protocol::ProviderId> {

@@ -68,6 +68,28 @@ fn test_stored_key(home: &std::path::Path, id: &str) -> std::io::Result<Option<S
     }
 }
 
+/// Whether the broker's data endpoint still exists: its socket file, or on
+/// Windows its named pipe (probed without connecting).
+fn endpoint_exists(path: &std::path::Path) -> bool {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::System::Pipes::WaitNamedPipeW;
+        const ERROR_FILE_NOT_FOUND: i32 = 2;
+        let wide: Vec<u16> = path
+            .to_string_lossy()
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        // SAFETY: `wide` is NUL-terminated; waits at most 1 ms.
+        let ready = unsafe { WaitNamedPipeW(wide.as_ptr(), 1) } != 0;
+        ready || std::io::Error::last_os_error().raw_os_error() != Some(ERROR_FILE_NOT_FOUND)
+    }
+    #[cfg(unix)]
+    {
+        path.exists()
+    }
+}
+
 /// PF-27-S05: the key the upstream's `/check` path expects.
 static CHECK_KEY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
@@ -304,6 +326,52 @@ async fn pf_27_s04_pf_27_s01_raw_credential_is_substituted_only_inside_the_broke
     assert_eq!(headers, bearer(&dummy));
 }
 
+/// PF-27-S06: on Windows the broker runs over its named pipes, reports both
+/// containment layers, and no other process of the user can open it to read
+/// its memory or environment (opening this test process is the control).
+#[cfg(windows)]
+#[tokio::test(flavor = "multi_thread")]
+async fn pf_27_s06_windows_broker_uses_pipes_and_cannot_be_read() {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::Foundation::GetLastError;
+    use windows_sys::Win32::System::Threading::OpenProcess;
+    use windows_sys::Win32::System::Threading::PROCESS_QUERY_INFORMATION;
+    use windows_sys::Win32::System::Threading::PROCESS_VM_READ;
+    let open_for_reading = |pid: u32| -> Result<(), u32> {
+        // SAFETY: plain OpenProcess; the handle is closed at once.
+        unsafe {
+            let handle = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, 0, pid);
+            if handle == 0 {
+                Err(GetLastError())
+            } else {
+                CloseHandle(handle);
+                Ok(())
+            }
+        }
+    };
+
+    let upstream = start_upstream().await;
+    let broker = isolated_broker(launcher(&upstream, /*controller_pid_override*/ None));
+    let dummy = virtualized_dummy(&broker);
+    let client = broker.current_isolated_client().expect("broker client");
+    assert_eq!(client.containment(), "dacl+job");
+    let pipe = client.socket_path().to_string_lossy().into_owned();
+    assert!(
+        super::pipe::valid_pipe_name(&pipe, /*control*/ false),
+        "{pipe}"
+    );
+
+    let response = forward(&broker, upstream.port, "/echo", &dummy).await;
+    assert_eq!(
+        response.try_into_string().await.expect("body"),
+        format!("Bearer {SYNTHETIC_TOKEN}")
+    );
+
+    assert_eq!(open_for_reading(std::process::id()), Ok(()));
+    let broker_pid = client.pid_for_test().expect("broker pid");
+    assert_eq!(open_for_reading(broker_pid), Err(/*ERROR_ACCESS_DENIED*/ 5));
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn pf_27_s04_pf_27_s01_wrong_os_peer_is_disconnected_before_any_request() {
     let upstream = start_upstream().await;
@@ -471,7 +539,7 @@ async fn pf_27_s04_pf_27_s01_broker_crash_fails_closed_and_restart_rejects_old_h
         route(&broker, upstream.port, "/echo", &old_dummy).err(),
         Some(ScopedCredentialInjectionError::IsolatedBrokerUnavailable)
     );
-    assert!(!old_client.socket_path().exists());
+    assert!(!endpoint_exists(old_client.socket_path()));
 
     // A dead broker is not replaced: later children still get only dummies and
     // nothing is injected until Core restarts.
@@ -566,14 +634,14 @@ async fn pf_27_s04_pf_27_s01_controller_exit_stops_the_broker() {
         .expect("broker client")
         .socket_path()
         .to_path_buf();
-    assert!(socket_path.exists());
+    assert!(endpoint_exists(&socket_path));
 
     drop(broker);
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
-    while socket_path.exists() && tokio::time::Instant::now() < deadline {
+    while endpoint_exists(&socket_path) && tokio::time::Instant::now() < deadline {
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
-    assert!(!socket_path.exists());
+    assert!(!endpoint_exists(&socket_path));
 }
 
 #[test]
@@ -593,6 +661,7 @@ fn pf_27_s04_pf_27_s01_unavailable_broker_never_exposes_or_injects_raw_values() 
     );
 }
 
+#[cfg(unix)]
 #[tokio::test(flavor = "multi_thread")]
 async fn pf_27_s04_pf_27_s01_externally_terminated_broker_is_detected_and_cleaned_up() {
     let upstream = start_upstream().await;
@@ -619,6 +688,7 @@ async fn pf_27_s04_pf_27_s01_externally_terminated_broker_is_detected_and_cleane
     );
 }
 
+#[cfg(unix)]
 #[tokio::test(flavor = "multi_thread")]
 async fn pf_27_s02_broker_sockets_live_in_the_private_runtime_dir() {
     let upstream = start_upstream().await;
@@ -666,6 +736,7 @@ async fn pf_27_s02_broker_sockets_live_in_the_private_runtime_dir() {
     );
 }
 
+#[cfg(unix)]
 #[tokio::test(flavor = "multi_thread")]
 async fn pf_27_s02_a_spoofed_bootstrap_path_is_never_trusted() {
     // A "broker" that prints a control socket owned by someone else: the
@@ -868,6 +939,8 @@ async fn pf_33_s02_unpinned_broker_resolves_and_pins_keep_the_private_peer_check
     assert_eq!(denial(&response), Some("upstream_failed"));
 }
 
+// PF-27-S05 model auth is Unix-only.
+#[cfg(unix)]
 mod pf_27_s05 {
     use super::Body;
     use super::CHECK_KEY;

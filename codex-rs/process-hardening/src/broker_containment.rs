@@ -44,7 +44,12 @@ pub fn contain_credential_broker_with_files(
     {
         linux::contain(writable_dir, writable_files)
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(windows)]
+    {
+        let _ = (writable_dir, writable_files);
+        windows::contain()
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
     {
         let _ = (writable_dir, writable_files);
         BrokerContainment::none()
@@ -273,6 +278,74 @@ mod linux {
         seccompiler::apply_filter_all_threads(&clone3)?;
         seccompiler::apply_filter_all_threads(&program)?;
         Ok(())
+    }
+}
+
+/// PF-27-S06: Windows has no per-process file sandbox the broker can apply
+/// to itself, so it applies what it can: a process DACL that keeps other
+/// processes out of its memory (`dacl`), and a job that allows no child
+/// processes (`job`). File writes are not confined on Windows.
+#[cfg(windows)]
+mod windows {
+    use super::BrokerContainment;
+    use std::io;
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::JobObjects::AssignProcessToJobObject;
+    use windows_sys::Win32::System::JobObjects::CreateJobObjectW;
+    use windows_sys::Win32::System::JobObjects::JOB_OBJECT_LIMIT_ACTIVE_PROCESS;
+    use windows_sys::Win32::System::JobObjects::JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION;
+    use windows_sys::Win32::System::JobObjects::JOBOBJECT_EXTENDED_LIMIT_INFORMATION;
+    use windows_sys::Win32::System::JobObjects::JobObjectExtendedLimitInformation;
+    use windows_sys::Win32::System::JobObjects::SetInformationJobObject;
+    use windows_sys::Win32::System::Threading::GetCurrentProcess;
+
+    pub(super) fn contain() -> BrokerContainment {
+        let mut mechanisms = Vec::new();
+        if crate::restrict_current_process_access().is_ok() {
+            mechanisms.push("dacl");
+        }
+        if forbid_child_processes().is_ok() {
+            mechanisms.push("job");
+        }
+        if mechanisms.is_empty() {
+            return BrokerContainment::none();
+        }
+        BrokerContainment {
+            mechanism: mechanisms.join("+"),
+        }
+    }
+
+    /// Puts this process in a job that allows one active process: itself.
+    /// The job handle stays open for the life of the process.
+    fn forbid_child_processes() -> io::Result<()> {
+        // SAFETY: an anonymous job with default security.
+        let job = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
+        if job == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: zeroed POD; the fields set below are the only limits.
+        let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { std::mem::zeroed() };
+        limits.BasicLimitInformation.LimitFlags =
+            JOB_OBJECT_LIMIT_ACTIVE_PROCESS | JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION;
+        limits.BasicLimitInformation.ActiveProcessLimit = 1;
+        // SAFETY: `limits` is valid for the size passed; `job` is open.
+        let applied = unsafe {
+            SetInformationJobObject(
+                job,
+                JobObjectExtendedLimitInformation,
+                (&limits as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+                std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            ) != 0
+                && AssignProcessToJobObject(job, GetCurrentProcess()) != 0
+        };
+        if applied {
+            Ok(())
+        } else {
+            let error = io::Error::last_os_error();
+            // SAFETY: opened above; not assigned, so closing it is safe.
+            unsafe { CloseHandle(job) };
+            Err(error)
+        }
     }
 }
 

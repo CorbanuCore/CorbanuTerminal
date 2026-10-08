@@ -774,7 +774,7 @@ fn pf_28_s02_legacy_credential_is_bound_to_https_method_and_path() {
             .route_request_credentials(scheme, host, port, method, path, &mut headers)
             .map(|routing| match routing {
                 CredentialRouting::Direct(gate) => gate.is_some(),
-                #[cfg(unix)]
+                #[cfg(any(unix, windows))]
                 CredentialRouting::Brokered(_) => false,
             });
         (result, authorization(&headers).map(str::to_string))

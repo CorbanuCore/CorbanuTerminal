@@ -36,6 +36,7 @@ use tokio::net::windows::named_pipe::NamedPipeClient;
 use tokio::net::windows::named_pipe::NamedPipeServer;
 use tokio::net::windows::named_pipe::PipeMode;
 use tokio::net::windows::named_pipe::ServerOptions;
+use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::Foundation::HLOCAL;
 use windows_sys::Win32::Foundation::LocalFree;
@@ -45,6 +46,11 @@ use windows_sys::Win32::Security::PSECURITY_DESCRIPTOR;
 use windows_sys::Win32::Security::SECURITY_ATTRIBUTES;
 use windows_sys::Win32::System::Pipes::GetNamedPipeClientProcessId;
 use windows_sys::Win32::System::Pipes::GetNamedPipeServerProcessId;
+use windows_sys::Win32::System::Threading::GetCurrentProcess;
+use windows_sys::Win32::System::Threading::INFINITE;
+use windows_sys::Win32::System::Threading::OpenProcess;
+use windows_sys::Win32::System::Threading::PROCESS_SYNCHRONIZE;
+use windows_sys::Win32::System::Threading::WaitForSingleObject;
 
 /// Every broker pipe name starts with this.
 pub(crate) const PIPE_PREFIX: &str = r"\\.\pipe\corbanu-cbk-";
@@ -239,6 +245,67 @@ pub(crate) async fn connect_data(name: &str, broker_pid: u32) -> io::Result<Name
             "credential broker pipe is served by another process",
         ))
     }
+}
+
+/// The process id of this process's parent (the controller that spawned
+/// the broker).
+pub(crate) fn parent_pid() -> Option<u32> {
+    #[link(name = "ntdll")]
+    unsafe extern "system" {
+        fn NtQueryInformationProcess(
+            process: HANDLE,
+            class: u32,
+            information: *mut c_void,
+            length: u32,
+            return_length: *mut u32,
+        ) -> i32;
+    }
+    // PROCESS_BASIC_INFORMATION (x64/x86 layout of pointer-sized fields).
+    #[repr(C)]
+    struct BasicInformation {
+        exit_status: i32,
+        peb: usize,
+        affinity: usize,
+        priority: i32,
+        pid: usize,
+        parent_pid: usize,
+    }
+    // SAFETY: zeroed POD out-structure.
+    let mut info: BasicInformation = unsafe { std::mem::zeroed() };
+    let mut returned = 0_u32;
+    // SAFETY: the pseudo-handle is valid; `info` matches the size passed.
+    let status = unsafe {
+        NtQueryInformationProcess(
+            GetCurrentProcess(),
+            /*ProcessBasicInformation*/ 0,
+            (&mut info as *mut BasicInformation).cast(),
+            std::mem::size_of::<BasicInformation>() as u32,
+            &mut returned,
+        )
+    };
+    (status >= 0)
+        .then(|| u32::try_from(info.parent_pid).ok())
+        .flatten()
+}
+
+/// Opens `pid` for waiting now and resolves once that process exits. Fails
+/// if the process cannot be opened (it already exited).
+pub(crate) fn process_exit(pid: u32) -> io::Result<tokio::task::JoinHandle<()>> {
+    // SAFETY: OpenProcess with wait-only access; the handle moves into the
+    // blocking task, which closes it.
+    let process = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, pid) };
+    if process == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let process = process as isize;
+    Ok(tokio::task::spawn_blocking(move || {
+        let process = process as HANDLE;
+        // SAFETY: `process` is a valid handle owned by this task.
+        unsafe {
+            WaitForSingleObject(process, INFINITE);
+            CloseHandle(process);
+        }
+    }))
 }
 
 /// A pipe end carrying rama connection extensions.
