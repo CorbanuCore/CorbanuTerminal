@@ -20,7 +20,7 @@ I reviewed only the diff (`6a0a5f8d62..HEAD`). I did not build or run anything. 
   - PE32 (`0x10b`): the count is at +92 and the directories start at +96.
   - The TLS directory is index 9, and its entries are 8 bytes each.
 - **The `AddressOfCallBacks` offset is correct.** It is at +24 in PE32+ (three u64 fields come first) and at +12 in PE32 (three u32 fields come first).
-- **Treating it as a VA is correct.** The field is a VA that the loader has already relocated, so it is right to dereference it directly rather than add it to `base`. The callback array entries are also relocated VAs, so they compare correctly with the pointer value in `THREAD_ATTACH_CALLBACK`.
+- **Treating it as a VA is correct.** The field is a VA that the loader has already relocated, so it is right to dereference it directly rather than add it to `base`. The callback array entries are also relocated virtual addresses, so they compare correctly with the pointer value in `THREAD_ATTACH_CALLBACK`.
 - **The pointer width is correct for both formats.** Reading entries as `usize` matches the image's pointer size: an x64 Rust binary is PE32+, and an x86 one is PE32.
 - **The walk always terminates.** It stops at a null entry or after 64 entries, and returns empty on a bad magic, too few directories or no TLS directory. All of these fail closed, so hardening refuses.
 - **The volatile read keeps the callback linked.** It references the `.CRT$XLC` static from `restrict_current_process_access`, so `/OPT:REF` keeps the section whenever Core calls the hardening.
