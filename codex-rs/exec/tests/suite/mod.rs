@@ -13,6 +13,7 @@ mod nested_launch;
 mod originator;
 mod output_schema;
 mod prompt_stdin;
+mod provider_key_env;
 mod resume;
 mod sandbox;
 mod server_error_exit;

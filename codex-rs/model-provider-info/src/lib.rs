@@ -1939,6 +1939,23 @@ pub fn built_in_model_providers(
     .collect()
 }
 
+/// Every environment variable a built-in provider reads its API key from,
+/// including accepted compatibility names, derived from
+/// [`built_in_model_providers`]. Core keeps these out of model-run commands.
+pub fn built_in_provider_api_key_env_vars() -> &'static [String] {
+    static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    NAMES.get_or_init(|| {
+        let mut names = built_in_model_providers(/*openai_base_url*/ None)
+            .values()
+            .flat_map(ModelProviderInfo::api_key_env_vars)
+            .map(str::to_string)
+            .collect::<Vec<_>>();
+        names.sort();
+        names.dedup();
+        names
+    })
+}
+
 /// Merge configured providers into the built-in provider catalog.
 ///
 /// Configured providers extend the built-in set. Built-in providers are not

@@ -171,6 +171,47 @@ Do not put long-lived provider keys in `experimental_bearer_token` unless you
 are intentionally running an automation-only setup. For interactive use, use
 onboarding or `/vault`.
 
+<a id="shell-environment"></a>
+
+## Shell Environment
+
+Commands the model runs (shell commands and long-running exec sessions, at
+every `/security` level) start with Corbanu's environment, filtered by
+`[shell_environment_policy]`. Provider API key variables are then removed, so
+a command can't read the key Corbanu uses to talk to the model. That covers
+every built-in provider's key variable (`OPENAI_API_KEY`, `CODEX_API_KEY`,
+`ANTHROPIC_API_KEY`, `ZAI_API_KEY`, `OPENROUTER_API_KEY`, `KIMI_API_KEY`,
+`DEEPSEEK_API_KEY` and the rest of the table above), a few other credentials
+Corbanu reads (`CODEX_ACCESS_TOKEN`, `AZURE_OPENAI_API_KEY`,
+`ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `AWS_BEARER_TOKEN_BEDROCK`)
+and the `env_key` of any provider you configure. Corbanu itself still reads
+them, and the session's shell snapshot leaves them out too, even when a shell
+startup file such as `~/.zshrc` exports them.
+
+To hand Corbanu's value of one of these variables to commands on purpose, name
+it exactly in `include_only` (keep `"*"` to leave the rest of the environment
+alone), or the equivalent `filters = { "*" = "include", OPENROUTER_API_KEY = "include" }`:
+
+```toml
+[shell_environment_policy]
+include_only = ["*", "OPENROUTER_API_KEY"]
+```
+
+Wildcards such as `"*_API_KEY"` never pass a provider key through. A `set`
+entry gives commands the value written in `config.toml` instead, never the
+inherited one. When the default excludes are on
+(`ignore_default_excludes = false`), names containing `KEY`, `SECRET` or
+`TOKEN` are removed before `include_only` is applied, so for those only `set`
+works. For a one-off command, prefer
+fetching the key from the vault inside that command:
+`OPENROUTER_API_KEY="$(corbanu vault auth-helper provider/openrouter_api_key)" my-tool`.
+
+MCP servers started over stdio only receive a short list of basic variables
+plus the ones named in that server's `env_vars` or `env`, so a provider key
+reaches one only if you list it there. A shell profile that exports a key
+itself (for example a login shell reading `~/.zprofile`) is outside this
+filter.
+
 <a id="telegram"></a>
 
 ## Telegram Connector

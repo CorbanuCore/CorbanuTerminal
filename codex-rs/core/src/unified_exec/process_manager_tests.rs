@@ -93,11 +93,14 @@ fn exec_env_policy_excludes_runtime_permission_profile() {
     };
 
     assert_eq!(
-        exec_env_policy_from_shell_policy(&policy),
+        exec_env_policy_from_shell_policy(&policy, vec!["ZAI_API_KEY".to_string()]),
         codex_exec_server::ExecEnvPolicy {
             inherit: policy.inherit,
             ignore_default_excludes: policy.ignore_default_excludes,
-            exclude: vec![CODEX_PERMISSION_PROFILE_ENV_VAR.to_string()],
+            exclude: vec![
+                CODEX_PERMISSION_PROFILE_ENV_VAR.to_string(),
+                "ZAI_API_KEY".to_string(),
+            ],
             r#set: HashMap::from([("KEEP".to_string(), "value".to_string())]),
             include_only: Vec::new(),
         }
