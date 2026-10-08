@@ -258,6 +258,10 @@ pub(crate) fn base_profile(containment: &ClaudeContainment) -> Result<Permission
 #[derive(Debug)]
 pub(crate) struct ContainedCommand {
     pub(crate) argv: Vec<String>,
+    #[cfg_attr(
+        not(unix),
+        allow(dead_code, reason = "argv[0] is only overridden on Unix")
+    )]
     pub(crate) arg0: Option<String>,
     pub(crate) env: HashMap<String, String>,
 }

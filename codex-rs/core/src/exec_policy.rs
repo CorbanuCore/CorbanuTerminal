@@ -324,6 +324,8 @@ impl ExecPolicyManager {
         Ok(Self::new(Arc::new(policy)))
     }
 
+    /// Read by the Unix shell-escalation runtime only.
+    #[cfg(unix)]
     pub(crate) fn strict_rules(&self) -> bool {
         self.strict_rules
     }
