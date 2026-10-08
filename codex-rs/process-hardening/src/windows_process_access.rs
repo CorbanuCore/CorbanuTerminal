@@ -1,22 +1,34 @@
 //! PF-27-S06: on Windows, keep other processes from reading this process's
-//! memory or environment.
+//! memory or environment, or taking over its threads.
 //!
 //! A process's default DACL gives its user full access, so any process of the
 //! same user (including a command under the restricted-token sandbox, whose
 //! token restricts writes only) can open it with `PROCESS_VM_READ` and read
-//! its memory and environment block. This replaces the DACL with one that
-//! gives the user only `PROCESS_QUERY_LIMITED_INFORMATION` and `SYNCHRONIZE`.
-//! An `OWNER RIGHTS` entry limited to `READ_CONTROL` removes the owner's
-//! implicit `WRITE_DAC`, so a same-user process cannot grant itself access
-//! back. Handles this process already holds to itself, and the handles it
-//! receives when it creates a child, are unaffected.
+//! its memory and environment block, and open its threads to read or set
+//! their register context. This replaces the process DACL with one that gives
+//! the user only `PROCESS_QUERY_LIMITED_INFORMATION` and `SYNCHRONIZE`, and
+//! every thread's (existing ones now, later ones as they start) with
+//! `THREAD_QUERY_LIMITED_INFORMATION` and `SYNCHRONIZE`. An `OWNER RIGHTS`
+//! entry limited to `READ_CONTROL` removes the owner's implicit `WRITE_DAC`,
+//! so a same-user process cannot grant itself access back.
+//!
+//! Limits: `SYSTEM` and administrators with `SeDebugPrivilege` enabled are not
+//! stopped. Handles opened before the call keep their access, and the
+//! environment block exists from process start, so call this before any
+//! untrusted process can run, and never hand secrets over through the
+//! environment of a process started after it. The user can still read the
+//! image path and command line (query-limited access).
 
+use std::ffi::c_void;
 use std::io;
 use std::ptr;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::Foundation::ERROR_SUCCESS;
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::Foundation::HLOCAL;
+use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
 use windows_sys::Win32::Foundation::LocalFree;
 use windows_sys::Win32::Security::ACL;
 use windows_sys::Win32::Security::Authorization::ConvertSidToStringSidW;
@@ -32,19 +44,40 @@ use windows_sys::Win32::Security::PSECURITY_DESCRIPTOR;
 use windows_sys::Win32::Security::TOKEN_QUERY;
 use windows_sys::Win32::Security::TOKEN_USER;
 use windows_sys::Win32::Security::TokenUser;
+use windows_sys::Win32::System::Diagnostics::ToolHelp::CreateToolhelp32Snapshot;
+use windows_sys::Win32::System::Diagnostics::ToolHelp::TH32CS_SNAPTHREAD;
+use windows_sys::Win32::System::Diagnostics::ToolHelp::THREADENTRY32;
+use windows_sys::Win32::System::Diagnostics::ToolHelp::Thread32First;
+use windows_sys::Win32::System::Diagnostics::ToolHelp::Thread32Next;
 use windows_sys::Win32::System::Threading::GetCurrentProcess;
+use windows_sys::Win32::System::Threading::GetCurrentProcessId;
+use windows_sys::Win32::System::Threading::GetCurrentThread;
 use windows_sys::Win32::System::Threading::OpenProcessToken;
+use windows_sys::Win32::System::Threading::OpenThread;
 use windows_sys::Win32::System::Threading::PROCESS_QUERY_LIMITED_INFORMATION;
+use windows_sys::Win32::System::Threading::THREAD_QUERY_LIMITED_INFORMATION;
 
 /// `SYNCHRONIZE`: lets the user wait for the process to exit.
 const SYNCHRONIZE: u32 = 0x0010_0000;
 
-/// Replaces the current process's DACL so that no other process (of this or
-/// another user, short of `SYSTEM` or a debug-privileged administrator) can
-/// read its memory, read its environment, duplicate its handles or change
-/// its DACL.
+/// `WRITE_DAC`: needed to replace an existing thread's DACL.
+const WRITE_DAC: u32 = 0x0004_0000;
+/// `DLL_THREAD_ATTACH`, the TLS callback reason for a new thread.
+const DLL_THREAD_ATTACH: u32 = 2;
+
+/// The thread descriptor (a leaked, self-relative allocation) once hardened;
+/// 0 before. Read by the TLS callback for every new thread.
+static THREAD_DESCRIPTOR: AtomicUsize = AtomicUsize::new(0);
+
+/// Replaces the current process's DACL, and that of each of its threads, so
+/// that no other process (of this or another user, short of `SYSTEM` or a
+/// debug-privileged administrator) can read its memory, read its
+/// environment, duplicate its handles, read or set a thread's context, or
+/// change either DACL. Threads started later get the thread DACL as they
+/// start. Idempotent.
 pub fn restrict_current_process_access() -> io::Result<()> {
     let user_sid = current_user_sid_string()?;
+    protect_threads(&user_sid)?;
     let sddl = process_dacl_sddl(&user_sid);
     let descriptor = SecurityDescriptor::from_sddl(&sddl)?;
     let dacl = descriptor.dacl()?;
@@ -70,10 +103,111 @@ pub fn restrict_current_process_access() -> io::Result<()> {
 
 /// The protected DACL applied by [`restrict_current_process_access`].
 pub fn process_dacl_sddl(user_sid: &str) -> String {
-    let user_mask = PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE;
+    protected_dacl_sddl(user_sid, PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE)
+}
+
+/// The protected DACL applied to every thread.
+pub fn thread_dacl_sddl(user_sid: &str) -> String {
+    protected_dacl_sddl(user_sid, THREAD_QUERY_LIMITED_INFORMATION | SYNCHRONIZE)
+}
+
+fn protected_dacl_sddl(user_sid: &str, user_mask: u32) -> String {
     // GA for SYSTEM; READ_CONTROL only for OWNER RIGHTS (S-1-3-4).
     format!("D:P(A;;0x{user_mask:x};;;{user_sid})(A;;GA;;;SY)(A;;RC;;;OW)")
 }
+
+#[link(name = "ntdll")]
+unsafe extern "system" {
+    /// Sets a kernel object's security from a self-relative descriptor; safe
+    /// to call under the loader lock (unlike most advapi32 functions).
+    fn NtSetSecurityObject(handle: HANDLE, information: u32, descriptor: *mut c_void) -> i32;
+}
+
+/// Applies the thread DACL to every existing thread of this process and arms
+/// the TLS callback for threads started later.
+fn protect_threads(user_sid: &str) -> io::Result<()> {
+    if THREAD_DESCRIPTOR.load(Ordering::Acquire) == 0 {
+        let descriptor = SecurityDescriptor::from_sddl(&thread_dacl_sddl(user_sid))?;
+        // Kept for the life of the process: new threads use it.
+        let raw = descriptor.0 as usize;
+        std::mem::forget(descriptor);
+        if THREAD_DESCRIPTOR
+            .compare_exchange(0, raw, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
+            // SAFETY: allocated above and never published.
+            unsafe { LocalFree(raw as HLOCAL) };
+        }
+    }
+    let descriptor = THREAD_DESCRIPTOR.load(Ordering::Acquire) as *mut c_void;
+    // SAFETY: a snapshot of all threads; closed below.
+    let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
+    if snapshot == INVALID_HANDLE_VALUE {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: plain query.
+    let own_pid = unsafe { GetCurrentProcessId() };
+    // SAFETY: zeroed POD with its size set, as Thread32First requires.
+    let mut entry: THREADENTRY32 = unsafe { std::mem::zeroed() };
+    entry.dwSize = std::mem::size_of::<THREADENTRY32>() as u32;
+    let mut result = Ok(());
+    // SAFETY: `snapshot` is open and `entry` is valid.
+    let mut more = unsafe { Thread32First(snapshot, &mut entry) } != 0;
+    while more {
+        if entry.th32OwnerProcessID == own_pid {
+            // SAFETY: opens one of our own threads for WRITE_DAC; closed below.
+            let thread = unsafe { OpenThread(WRITE_DAC, 0, entry.th32ThreadID) };
+            // A thread that exited since the snapshot cannot be opened.
+            if thread != 0 {
+                // SAFETY: `thread` is open; `descriptor` is a live descriptor.
+                let status =
+                    unsafe { NtSetSecurityObject(thread, DACL_SECURITY_INFORMATION, descriptor) };
+                // SAFETY: opened above.
+                unsafe { CloseHandle(thread) };
+                if status < 0 && result.is_ok() {
+                    result = Err(io::Error::other(format!(
+                        "NtSetSecurityObject(thread) failed: {status:#x}"
+                    )));
+                }
+            }
+        }
+        // SAFETY: as above.
+        more = unsafe { Thread32Next(snapshot, &mut entry) } != 0;
+    }
+    // SAFETY: opened above.
+    unsafe { CloseHandle(snapshot) };
+    result
+}
+
+/// TLS callback: protects each thread as it starts, once hardened.
+unsafe extern "system" fn on_thread_event(
+    _module: *mut c_void,
+    reason: u32,
+    _reserved: *mut c_void,
+) {
+    if reason != DLL_THREAD_ATTACH {
+        return;
+    }
+    let descriptor = THREAD_DESCRIPTOR.load(Ordering::Acquire);
+    if descriptor != 0 {
+        // SAFETY: the pseudo-handle is valid for this thread; the descriptor
+        // is never freed once published.
+        unsafe {
+            NtSetSecurityObject(
+                GetCurrentThread(),
+                DACL_SECURITY_INFORMATION,
+                descriptor as *mut c_void,
+            );
+        }
+    }
+}
+
+/// Registers [`on_thread_event`] as a TLS callback (`.CRT$XL*`, where the C
+/// runtime collects them and the loader calls them for each new thread).
+#[used]
+#[unsafe(link_section = ".CRT$XLC")]
+static THREAD_ATTACH_CALLBACK: unsafe extern "system" fn(*mut c_void, u32, *mut c_void) =
+    on_thread_event;
 
 /// The current process user's SID in string form (`S-1-5-21-...`).
 pub fn current_user_sid_string() -> io::Result<String> {
