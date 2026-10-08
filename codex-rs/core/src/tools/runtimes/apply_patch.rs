@@ -105,7 +105,14 @@ impl ApplyPatchRuntime {
             permissions = match cwd {
                 Some(cwd) => contract.file_tool_permissions(
                     &permissions,
-                    attempt.sandbox != SandboxType::None,
+                    // PF-27-S06: on Windows only the elevated sandbox can
+                    // deny reads (patches never go through the proxy).
+                    attempt.sandbox != SandboxType::None
+                        && (!cfg!(windows)
+                            || codex_sandboxing::windows_sandbox_uses_elevated_backend(
+                                attempt.windows_sandbox_level,
+                                /*proxy_enforced*/ false,
+                            )),
                     cwd.as_path(),
                 ),
                 None => contract.file_tool_permissions(

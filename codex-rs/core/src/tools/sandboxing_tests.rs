@@ -426,3 +426,67 @@ fn pf_27_s02_env_for_applies_the_launch_contract() {
         "accepted"
     );
 }
+
+/// PF-27-S06: on Windows the contract accepts only launches that run under
+/// the elevated sandbox; the unelevated restricted-token one is refused.
+#[cfg(windows)]
+#[test]
+fn pf_27_s06_env_for_requires_the_elevated_windows_sandbox() {
+    use crate::security::launch_contract::LaunchContract;
+    use codex_protocol::config_types::WindowsSandboxLevel;
+
+    let codex_home_dir = tempfile::tempdir().expect("codex home");
+    let workspace_dir = tempfile::tempdir().expect("workspace");
+    let codex_home =
+        AbsolutePathBuf::from_absolute_path(codex_home_dir.path()).expect("absolute home");
+    let cwd = AbsolutePathBuf::from_absolute_path(workspace_dir.path()).expect("absolute cwd");
+    let contract = LaunchContract::capture(&codex_home, std::iter::empty(), /*hardened*/ true);
+    let cwd_uri = PathUri::from_abs_path(&cwd);
+    let exec_server_permissions = codex_protocol::models::PermissionProfile::workspace_write();
+    let permissions = exec_server_permissions
+        .clone()
+        .materialize_project_roots_with_workspace_roots(std::slice::from_ref(&cwd));
+    let manager = SandboxManager::new();
+    let mut attempt = SandboxAttempt {
+        sandbox: SandboxType::WindowsRestrictedToken,
+        sandbox_requested: true,
+        permissions: &permissions,
+        exec_server_permissions: &exec_server_permissions,
+        enforce_managed_network: false,
+        manager: &manager,
+        sandbox_cwd: &cwd_uri,
+        workspace_roots: std::slice::from_ref(&cwd_uri),
+        codex_linux_sandbox_exe: None,
+        use_legacy_landlock: false,
+        windows_sandbox_level: WindowsSandboxLevel::RestrictedToken,
+        windows_sandbox_private_desktop: false,
+        network_denial_cancellation_token: None,
+        network_proxy: None,
+    };
+    let launch = |attempt: &SandboxAttempt<'_>| {
+        attempt
+            .env_for_with_contract(
+                Some(&contract),
+                SandboxCommand {
+                    program: "cmd.exe".into(),
+                    args: vec!["/D".to_string(), "/C".to_string(), "echo ok".to_string()],
+                    cwd: cwd_uri.clone(),
+                    env: std::collections::HashMap::new(),
+                    managed_network: None,
+                    additional_permissions: None,
+                },
+                crate::sandboxing::ExecOptions {
+                    expiration: crate::exec::ExecExpiration::DefaultTimeout,
+                    capture_policy: crate::exec::ExecCapturePolicy::ShellTool,
+                },
+                None,
+                None,
+            )
+            .map(|_| ())
+            .map_err(|err| err.to_string())
+    };
+    let refused = launch(&attempt).expect_err("unelevated launch refused");
+    assert!(refused.contains("unelevated Windows sandbox"), "{refused}");
+    attempt.windows_sandbox_level = WindowsSandboxLevel::Elevated;
+    assert_eq!(launch(&attempt), Ok(()));
+}

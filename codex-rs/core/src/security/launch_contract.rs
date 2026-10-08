@@ -288,6 +288,20 @@ impl LaunchContract {
             && let Ok(app_data) = AbsolutePathBuf::from_absolute_path(app_data)
         {
             protected_read_paths.push(app_data.join("GitHub CLI").join("hosts.yml"));
+            protected_read_paths.push(app_data.join("gcloud"));
+        }
+        if cfg!(windows)
+            && let Some(cargo_home) = std::env::var_os("CARGO_HOME").or_else(|| {
+                std::env::var_os("USERPROFILE").map(|home| {
+                    std::path::PathBuf::from(home)
+                        .join(".cargo")
+                        .into_os_string()
+                })
+            })
+            && let Ok(cargo_home) = AbsolutePathBuf::from_absolute_path(cargo_home)
+        {
+            protected_read_paths.push(cargo_home.join("credentials.toml"));
+            protected_read_paths.push(cargo_home.join("credentials"));
         }
         if let Some(dir) = std::env::var_os("CLAUDE_CONFIG_DIR")
             && let Ok(dir) = AbsolutePathBuf::from_absolute_path(dir)
@@ -368,7 +382,8 @@ impl LaunchContract {
     /// `sandbox_requested` is the policy decision; `sandbox` is the concrete
     /// wrapper (`None` for exec-server launches, which apply it remotely).
     /// On Windows only the elevated backend (`windows_elevated`) can deny
-    /// reads, so the unelevated one is refused (PF-27-S06).
+    /// reads, so the unelevated one is refused (PF-27-S06). Exec-server
+    /// launches are refused on every platform before that.
     pub(crate) fn check_sandbox(
         &self,
         sandbox: SandboxType,

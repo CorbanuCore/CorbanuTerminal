@@ -42,7 +42,13 @@ fn pf_27_s06_core_child_entry() {
 
 #[tokio::test]
 async fn pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory() {
-    let codex_home_dir = tempfile::tempdir().expect("codex home");
+    // Inside the user profile, like the default `~/.codex`: the elevated
+    // sandbox's setup grants its user read access to profile folders.
+    let profile_dir = std::env::var_os("USERPROFILE").expect("USERPROFILE");
+    let codex_home_dir = tempfile::Builder::new()
+        .prefix("pf27s06-codex-home-")
+        .tempdir_in(profile_dir)
+        .expect("codex home");
     let workspace_dir = tempfile::tempdir().expect("workspace");
     let codex_home = absolute(codex_home_dir.path());
     let cwd = absolute(workspace_dir.path());
@@ -101,6 +107,22 @@ async fn pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory() 
         "type public.txt".to_string(),
     ]
     .join(" & ");
+    // Positive control: without the contract's profile the sandbox user
+    // reads these files, so the denials below come from the contract.
+    let control = run_sandboxed(
+        vec!["cmd.exe".into(), "/D".into(), "/C".into(), script.clone()],
+        HashMap::new(),
+        &base,
+        &cwd,
+    )
+    .await;
+    eprintln!("pf27s06 elevated file probes, base profile: {control}");
+    for readable in ["VAULT", "AUTH", "CONFIG", "SQLITE", "NOTES"] {
+        assert!(
+            control.contains(&format!("{readable}-READ")),
+            "{readable}: {control}"
+        );
+    }
     let files = run_sandboxed(
         vec!["cmd.exe".into(), "/D".into(), "/C".into(), script],
         HashMap::new(),
@@ -108,8 +130,8 @@ async fn pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory() 
         &cwd,
     )
     .await;
-    // Evidence for the record (the unprotected NOTES line is informational).
-    eprintln!("pf27s06 elevated file probes: {files}");
+    eprintln!("pf27s06 elevated file probes, protected profile: {files}");
+    assert!(files.contains("NOTES-READ"), "unprotected file: {files}");
     for denied in ["VAULT", "AUTH", "CONFIG", "SQLITE"] {
         assert!(
             files.contains(&format!("{denied}-DENIED")),
@@ -130,6 +152,43 @@ async fn pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory() 
         std::fs::read_to_string(codex_home.join("config.toml")).expect("config"),
         "model = \"pf27s06\""
     );
+
+    // Files that appear while a protected command runs: one in a protected
+    // directory (inherited deny), and auth.json replaced by rename, as a
+    // token refresh does (recorded: a per-file deny does not carry over).
+    let later = {
+        let profile = protected.clone();
+        let cwd = cwd.clone();
+        let script = format!(
+            "ping -n 6 127.0.0.1 >NUL & {} & {}",
+            read("LATER", "secrets\\later.json"),
+            read("REPLACED", "auth.json")
+        );
+        tokio::spawn(async move {
+            run_sandboxed(
+                vec!["cmd.exe".into(), "/D".into(), "/C".into(), script],
+                HashMap::new(),
+                &profile,
+                &cwd,
+            )
+            .await
+        })
+    };
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    std::fs::write(
+        codex_home.join("secrets").join("later.json"),
+        "pf27s06-later",
+    )
+    .expect("later file");
+    std::fs::write(codex_home.join("auth.json.tmp"), "pf27s06-refreshed").expect("tmp");
+    std::fs::rename(
+        codex_home.join("auth.json.tmp"),
+        codex_home.join("auth.json"),
+    )
+    .expect("replace auth.json");
+    let later = later.await.expect("later run");
+    eprintln!("pf27s06 elevated probes for files created during a run: {later}");
+    assert!(later.contains("LATER-DENIED"), "{later}");
 
     // Positive control: the probe reads an unhardened process of its user.
     let unhardened = Target::spawn(/*harden*/ false);
@@ -164,7 +223,30 @@ async fn pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory() 
         &cwd,
     )
     .await;
-    eprintln!("pf27s06 elevated memory probe: {sandboxed}");
+    eprintln!("pf27s06 elevated memory probe (hardened stand-in): {sandboxed}");
+    // Recorded: is the separate sandbox user alone already the boundary?
+    let plain = Target::spawn(/*harden*/ false);
+    let mut env = HashMap::from([
+        (ROLE_ENV.to_string(), "probe".to_string()),
+        (TARGET_PID_ENV.to_string(), plain.pid().to_string()),
+    ]);
+    if let Ok(root) = std::env::var("SystemRoot") {
+        env.insert("SystemRoot".to_string(), root);
+    }
+    let plain_report = run_sandboxed(
+        vec![
+            exe.to_string_lossy().into_owned(),
+            CHILD_TEST.to_string(),
+            "--exact".to_string(),
+            "--nocapture".to_string(),
+            "--test-threads=1".to_string(),
+        ],
+        env,
+        &protected,
+        &cwd,
+    )
+    .await;
+    eprintln!("pf27s06 elevated memory probe (unhardened stand-in): {plain_report}");
     assert_eq!(report(&unsandboxed), "vm_read=denied,threads=denied");
     assert_eq!(report(&sandboxed), "vm_read=denied,threads=denied");
 }
