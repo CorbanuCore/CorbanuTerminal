@@ -247,10 +247,10 @@ async fn capture_snapshot(
 ) -> Result<String> {
     let shell_type = shell.shell_type;
     let script = match shell_type {
-        ShellType::Zsh => zsh_snapshot_script(),
-        ShellType::Bash => bash_snapshot_script(),
-        ShellType::Sh => sh_snapshot_script(),
-        ShellType::PowerShell => powershell_snapshot_script(),
+        ShellType::Zsh => zsh_snapshot_script(removed_env_vars),
+        ShellType::Bash => bash_snapshot_script(removed_env_vars),
+        ShellType::Sh => sh_snapshot_script(removed_env_vars),
+        ShellType::PowerShell => powershell_snapshot_script(removed_env_vars),
         ShellType::Cmd => bail!("Shell snapshotting is not yet supported for {shell_type:?}"),
     };
     run_script_with_timeout(
@@ -340,10 +340,37 @@ async fn run_script_with_timeout(
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-fn excluded_exports_regex() -> String {
+/// Names never exported from a snapshot: the fixed list plus `extra`
+/// (provider credential names, which a startup file may export under a name
+/// the secret patterns miss). Upper-cased, since the scripts compare
+/// upper-cased names; anything that isn't a plain identifier is dropped so a
+/// configured name can't change the patterns.
+fn excluded_export_names(extra: &[String]) -> String {
+    EXCLUDED_EXPORT_VARS
+        .iter()
+        .map(|name| (*name).to_string())
+        .chain(
+            extra
+                .iter()
+                .filter(|name| is_plain_env_name(name))
+                .map(|name| name.to_ascii_uppercase()),
+        )
+        .collect::<Vec<_>>()
+        .join("|")
+}
+
+fn is_plain_env_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars
+        .next()
+        .is_some_and(|first| first == '_' || first.is_ascii_alphabetic())
+        && chars.all(|c| c == '_' || c.is_ascii_alphanumeric())
+}
+
+fn excluded_exports_regex(extra: &[String]) -> String {
     format!(
         "{}|{SECRET_EXPORT_NAME_REGEX}",
-        EXCLUDED_EXPORT_VARS.join("|")
+        excluded_export_names(extra)
     )
 }
 
@@ -364,15 +391,15 @@ fn ascii_case_insensitive_regex(regex: &str) -> String {
         .collect()
 }
 
-fn excluded_exports_shell_patterns() -> String {
+fn excluded_exports_shell_patterns(extra: &[String]) -> String {
     format!(
         "{}|{SECRET_EXPORT_SHELL_PATTERNS}",
-        EXCLUDED_EXPORT_VARS.join("|")
+        excluded_export_names(extra)
     )
 }
 
-fn zsh_snapshot_script() -> String {
-    let excluded = excluded_exports_regex();
+fn zsh_snapshot_script(removed_env_vars: &[String]) -> String {
+    let excluded = excluded_exports_regex(removed_env_vars);
     let script = r##"if [[ -n "$ZDOTDIR" ]]; then
   rc="$ZDOTDIR/.zshrc"
 else
@@ -422,8 +449,8 @@ fi
     script.replace("EXCLUDED_EXPORTS", &excluded)
 }
 
-fn bash_snapshot_script() -> String {
-    let excluded = ascii_case_insensitive_regex(&excluded_exports_regex());
+fn bash_snapshot_script(removed_env_vars: &[String]) -> String {
+    let excluded = ascii_case_insensitive_regex(&excluded_exports_regex(removed_env_vars));
     let script = r##"if [ -z "$BASH_ENV" ] && [ -r "$HOME/.bashrc" ]; then
   . "$HOME/.bashrc"
 fi
@@ -466,9 +493,9 @@ fi
     script.replace("EXCLUDED_EXPORTS", &excluded)
 }
 
-fn sh_snapshot_script() -> String {
-    let excluded = excluded_exports_regex();
-    let excluded_shell_patterns = excluded_exports_shell_patterns();
+fn sh_snapshot_script(removed_env_vars: &[String]) -> String {
+    let excluded = excluded_exports_regex(removed_env_vars);
+    let excluded_shell_patterns = excluded_exports_shell_patterns(removed_env_vars);
     let script = r##"if [ -n "$ENV" ] && [ -r "$ENV" ]; then
   . "$ENV"
 fi
@@ -538,8 +565,8 @@ fi
         .replace("EXCLUDED_SHELL_PATTERNS", &excluded_shell_patterns)
 }
 
-fn powershell_snapshot_script() -> String {
-    let excluded = excluded_exports_regex();
+fn powershell_snapshot_script(removed_env_vars: &[String]) -> String {
+    let excluded = excluded_exports_regex(removed_env_vars);
     r##"$ErrorActionPreference = 'Stop'
 Write-Output '# Snapshot file'
 Write-Output '# Unset all aliases to avoid conflicts with functions'

@@ -185,7 +185,8 @@ every built-in provider's key variable (`OPENAI_API_KEY`, `CODEX_API_KEY`,
 Corbanu reads (`CODEX_ACCESS_TOKEN`, `AZURE_OPENAI_API_KEY`,
 `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `AWS_BEARER_TOKEN_BEDROCK`)
 and the `env_key` of any provider you configure. Corbanu itself still reads
-them, and the session's shell snapshot leaves them out too.
+them, and the session's shell snapshot leaves them out too, even when a shell
+startup file such as `~/.zshrc` exports them.
 
 To hand Corbanu's value of one of these variables to commands on purpose, name
 it exactly in `include_only` (keep `"*"` to leave the rest of the environment
@@ -198,9 +199,10 @@ include_only = ["*", "OPENROUTER_API_KEY"]
 
 Wildcards such as `"*_API_KEY"` never pass a provider key through. A `set`
 entry gives commands the value written in `config.toml` instead, never the
-inherited one. When the default `KEY`/`SECRET`/`TOKEN` excludes are on
-(`ignore_default_excludes = false`), they remove the variable before
-`include_only` is applied, so only `set` works. For a one-off command, prefer
+inherited one. When the default excludes are on
+(`ignore_default_excludes = false`), names containing `KEY`, `SECRET` or
+`TOKEN` are removed before `include_only` is applied, so for those only `set`
+works. For a one-off command, prefer
 fetching the key from the vault inside that command:
 `OPENROUTER_API_KEY="$(corbanu vault auth-helper provider/openrouter_api_key)" my-tool`.
 
