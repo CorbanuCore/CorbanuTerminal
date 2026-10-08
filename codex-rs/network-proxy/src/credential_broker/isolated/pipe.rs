@@ -30,6 +30,7 @@ use std::ffi::c_void;
 use std::io;
 use std::os::windows::fs::OpenOptionsExt as _;
 use std::os::windows::io::AsRawHandle;
+use std::os::windows::io::OwnedHandle;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::Context;
@@ -44,7 +45,10 @@ use tokio::net::windows::named_pipe::NamedPipeServer;
 use tokio::net::windows::named_pipe::PipeMode;
 use tokio::net::windows::named_pipe::ServerOptions;
 use windows_sys::Win32::Foundation::CloseHandle;
+use windows_sys::Win32::Foundation::ERROR_BROKEN_PIPE;
+use windows_sys::Win32::Foundation::ERROR_IO_PENDING;
 use windows_sys::Win32::Foundation::FILETIME;
+use windows_sys::Win32::Foundation::GetLastError;
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::Foundation::HLOCAL;
 use windows_sys::Win32::Foundation::LocalFree;
@@ -52,8 +56,15 @@ use windows_sys::Win32::Security::Authorization::ConvertStringSecurityDescriptor
 use windows_sys::Win32::Security::Authorization::SDDL_REVISION_1;
 use windows_sys::Win32::Security::PSECURITY_DESCRIPTOR;
 use windows_sys::Win32::Security::SECURITY_ATTRIBUTES;
+use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OVERLAPPED;
+use windows_sys::Win32::Storage::FileSystem::ReadFile;
+use windows_sys::Win32::Storage::FileSystem::WriteFile;
+use windows_sys::Win32::System::IO::CancelIoEx;
+use windows_sys::Win32::System::IO::GetOverlappedResult;
+use windows_sys::Win32::System::IO::OVERLAPPED;
 use windows_sys::Win32::System::Pipes::GetNamedPipeClientProcessId;
 use windows_sys::Win32::System::Pipes::GetNamedPipeServerProcessId;
+use windows_sys::Win32::System::Threading::CreateEventW;
 use windows_sys::Win32::System::Threading::GetCurrentProcess;
 use windows_sys::Win32::System::Threading::GetProcessTimes;
 use windows_sys::Win32::System::Threading::INFINITE;
@@ -219,7 +230,7 @@ pub(crate) fn server_pid(client: &impl AsRawHandle) -> Option<u32> {
 
 /// Opens the broker's control pipe for blocking use, if `name` is a broker
 /// control pipe served by process `broker_pid`.
-pub(crate) fn connect_control(name: &str, broker_pid: u32) -> Option<std::fs::File> {
+pub(crate) fn connect_control(name: &str, broker_pid: u32) -> Option<ControlPipe> {
     if !valid_pipe_name(name, /*control*/ true) {
         return None;
     }
@@ -228,6 +239,7 @@ pub(crate) fn connect_control(name: &str, broker_pid: u32) -> Option<std::fs::Fi
         match std::fs::OpenOptions::new()
             .read(true)
             .write(true)
+            .custom_flags(FILE_FLAG_OVERLAPPED)
             .security_qos_flags(SECURITY_IDENTIFICATION)
             .open(name)
         {
@@ -241,7 +253,108 @@ pub(crate) fn connect_control(name: &str, broker_pid: u32) -> Option<std::fs::Fi
             Err(_) => return None,
         }
     };
-    (server_pid(&file) == Some(broker_pid)).then_some(file)
+    (server_pid(&file) == Some(broker_pid)).then(|| ControlPipe {
+        handle: Arc::new(OwnedHandle::from(file)),
+    })
+}
+
+/// The controller's end of the control pipe, opened for overlapped I/O. A
+/// synchronous pipe handle serializes every operation on it, so a write would
+/// wait behind the reader thread's pending read; each operation here has its
+/// own `OVERLAPPED` instead. Clones share the handle.
+#[derive(Clone)]
+pub(crate) struct ControlPipe {
+    handle: Arc<OwnedHandle>,
+}
+
+impl ControlPipe {
+    pub(crate) fn try_clone(&self) -> io::Result<Self> {
+        Ok(self.clone())
+    }
+
+    /// Cancels pending I/O (the reader's read returns), so the handle closes
+    /// once the last clone is dropped and the broker sees the pipe end.
+    pub(crate) fn shutdown(&self) {
+        // SAFETY: a valid handle; null cancels every operation on it.
+        unsafe { CancelIoEx(self.raw(), std::ptr::null()) };
+    }
+
+    fn raw(&self) -> HANDLE {
+        self.handle.as_raw_handle() as HANDLE
+    }
+
+    fn overlapped_io(&self, read: bool, buffer: *mut u8, len: usize) -> io::Result<usize> {
+        let len = u32::try_from(len).unwrap_or(u32::MAX);
+        // SAFETY: a manual-reset event for this operation; closed below.
+        let event = unsafe { CreateEventW(std::ptr::null(), 1, 0, std::ptr::null()) };
+        if event == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: zeroed POD with the event set.
+        let mut overlapped: OVERLAPPED = unsafe { std::mem::zeroed() };
+        overlapped.hEvent = event;
+        let mut transferred = 0_u32;
+        // SAFETY: `buffer` is valid for `len` bytes and, like `overlapped`,
+        // outlives the operation: GetOverlappedResult waits for it to finish.
+        let result = unsafe {
+            // Byte counts come from GetOverlappedResult, not the start call.
+            let started = if read {
+                ReadFile(
+                    self.raw(),
+                    buffer,
+                    len,
+                    std::ptr::null_mut(),
+                    &mut overlapped,
+                )
+            } else {
+                WriteFile(
+                    self.raw(),
+                    buffer,
+                    len,
+                    std::ptr::null_mut(),
+                    &mut overlapped,
+                )
+            };
+            if started != 0 || GetLastError() == ERROR_IO_PENDING {
+                if GetOverlappedResult(self.raw(), &overlapped, &mut transferred, 1) != 0 {
+                    Ok(transferred as usize)
+                } else {
+                    Err(io::Error::last_os_error())
+                }
+            } else {
+                Err(io::Error::last_os_error())
+            }
+        };
+        // SAFETY: created above.
+        unsafe { CloseHandle(event) };
+        match result {
+            // The broker closed its end: end of stream.
+            Err(error) if read && error.raw_os_error() == Some(ERROR_BROKEN_PIPE as i32) => Ok(0),
+            other => other,
+        }
+    }
+}
+
+impl io::Read for ControlPipe {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.overlapped_io(/*read*/ true, buf.as_mut_ptr(), buf.len())
+    }
+}
+
+impl io::Write for ControlPipe {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.overlapped_io(/*read*/ false, buf.as_ptr().cast_mut(), buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+impl AsRawHandle for ControlPipe {
+    fn as_raw_handle(&self) -> std::os::windows::io::RawHandle {
+        self.handle.as_raw_handle()
+    }
 }
 
 /// Opens one data connection to the broker, if `name` is a broker data pipe

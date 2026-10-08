@@ -171,7 +171,7 @@ type LineReceiver = mpsc::Receiver<std::io::Result<Zeroizing<Vec<u8>>>>;
 #[cfg(unix)]
 type ControlStream = UnixStream;
 #[cfg(windows)]
-type ControlStream = std::fs::File;
+type ControlStream = super::pipe::ControlPipe;
 
 struct ControlChannel {
     writer: Option<ControlStream>,
@@ -702,14 +702,14 @@ impl ControlChannel {
 
     /// Shuts the socket down for every holder, so the broker sees EOF even if
     /// another process inherited a duplicate of this descriptor. On Windows
-    /// the pipe handles are never inheritable; the broker sees the pipe close
-    /// once the reader's handle goes too, and is killed after a grace period.
+    /// the pipe handle is never inheritable: cancelling the reader's pending
+    /// read lets the last handle close, which the broker sees as EOF.
     fn close(&mut self) {
         if let Some(writer) = self.writer.take() {
             #[cfg(unix)]
             let _ = writer.shutdown(std::net::Shutdown::Both);
             #[cfg(windows)]
-            drop(writer);
+            writer.shutdown();
         }
     }
 }
