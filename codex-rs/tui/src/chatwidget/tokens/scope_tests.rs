@@ -286,11 +286,15 @@ fn every_day_view_says_whether_other_conversations_were_read() {
         ]
     );
     assert_eq!(
-        first(Some(empty(DeletedAttempts::Uncountable)))[1..3].to_vec(),
+        first(Some(empty(DeletedAttempts::PastDetailWindow)))[1..3].to_vec(),
         vec![
             "No other saved conversation has recorded requests on this day.",
             "Days older than 90 days keep too little detail to count requests from deleted conversations; any they made are not included here.",
         ]
+    );
+    assert_eq!(
+        first(Some(empty(DeletedAttempts::Unread)))[2],
+        "Requests from deleted conversations could not be counted for this day; any they made are not included here."
     );
     assert_eq!(
         first(None)[1],

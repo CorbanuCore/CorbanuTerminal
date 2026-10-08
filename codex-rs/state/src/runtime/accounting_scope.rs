@@ -33,9 +33,12 @@ pub struct OtherConversations {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DeletedAttempts {
     Counted(usize),
-    /// Deletions cannot be told apart from attempts retention compacted: the
-    /// day reaches past the raw detail window, or the count could not be read.
-    Uncountable,
+    /// The day reaches past the raw detail window, where retention's own
+    /// tombstones cannot be told apart from deletions.
+    PastDetailWindow,
+    /// The count could not be read: the work budget ran out, the ledger has no
+    /// checkpoint yet, or the read failed.
+    Unread,
 }
 
 impl Default for DeletedAttempts {
@@ -62,53 +65,54 @@ const DETAIL_MS: i64 = 90 * 86_400_000;
 /// dispatch time is recoverable. Deletion is not the only writer: retention
 /// leaves one when raw detail ages out, and compact-only imports leave one too,
 /// but only for attempts already past the detail window at the time they ran.
-/// That time is never later than the checkpoint or, for batched expiry that has
-/// not advanced the checkpoint yet, than this reader's clock. A tombstone whose
-/// dispatch is inside the window at both is therefore always a deletion; a day
-/// that reaches past it cannot be counted.
-async fn deleted_attempts(
+/// That time is, on a monotonic host clock, no later than the checkpoint or -
+/// for batched expiry that has not advanced the checkpoint yet - than about
+/// this reader's clock. A tombstone whose dispatch is inside the window at both
+/// is therefore a deletion; a day that reaches past it cannot be counted.
+pub(super) async fn deleted_attempts(
     conn: &mut SqliteConnection,
     day: i64,
     read_at_ms: i64,
     work: &mut InspectionWork,
 ) -> DeletedAttempts {
-    count_deleted(conn, day, read_at_ms, work)
-        .await
-        .map_or(DeletedAttempts::Uncountable, DeletedAttempts::Counted)
-}
-
-pub(super) async fn count_deleted(
-    conn: &mut SqliteConnection,
-    day: i64,
-    read_at_ms: i64,
-    work: &mut InspectionWork,
-) -> Option<usize> {
     // One unindexed scan of the tombstone table, charged like one other scan.
     // Tombstones outlive raw detail, so this can under-charge the budget; the
     // count is cheap either way.
     if !work.scans(/*count*/ 1) {
-        return None;
+        return DeletedAttempts::Unread;
     }
-    let checkpoint: Option<i64> = sqlx::query_scalar(
+    let checkpoint: Option<i64> = match sqlx::query_scalar(
         "SELECT completed_as_of_ms FROM draft_accounting_retention_checkpoint WHERE singleton = 1",
     )
     .fetch_optional(&mut *conn)
     .await
-    .ok()
-    .flatten()?;
-    let start = day.checked_mul(86_400_000)?;
-    if start.checked_add(DETAIL_MS)? <= checkpoint?.max(read_at_ms) {
-        return None;
+    {
+        Ok(checkpoint) => checkpoint.flatten(),
+        Err(_) => return DeletedAttempts::Unread,
+    };
+    let (Some(checkpoint), Some(start)) = (checkpoint, day.checked_mul(86_400_000)) else {
+        return DeletedAttempts::Unread;
+    };
+    if start.saturating_add(DETAIL_MS) <= checkpoint.max(read_at_ms) {
+        return DeletedAttempts::PastDetailWindow;
     }
-    let count: i64 = sqlx::query_scalar(
+    let (Some(from), Some(to)) = (
+        start.checked_add(REPLAY_MS),
+        start.checked_add(86_400_000 + REPLAY_MS),
+    ) else {
+        return DeletedAttempts::Unread;
+    };
+    let count: Result<i64, _> = sqlx::query_scalar(
         "SELECT count(*) FROM draft_accounting_tombstones WHERE expires_at_ms >= ? AND expires_at_ms < ?",
     )
-    .bind(start.checked_add(REPLAY_MS)?)
-    .bind(start.checked_add(86_400_000 + REPLAY_MS)?)
+    .bind(from)
+    .bind(to)
     .fetch_one(&mut *conn)
-    .await
-    .ok()?;
-    usize::try_from(count).ok()
+    .await;
+    count
+        .ok()
+        .and_then(|count| usize::try_from(count).ok())
+        .map_or(DeletedAttempts::Unread, DeletedAttempts::Counted)
 }
 
 /// `threads` pairs each unrelated thread with its terminal root conversation.

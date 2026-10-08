@@ -95,8 +95,11 @@ fn deleted_line(deleted_attempts: DeletedAttempts) -> Option<String> {
             "Deleted conversations or subagents sent {} on this day. Their recorded cost was deleted with them, so it is not included here; any cost they incurred is on your provider's bill.",
             counted(n, "request attempt")
         )),
-        DeletedAttempts::Uncountable => Some(
+        DeletedAttempts::PastDetailWindow => Some(
             "Days older than 90 days keep too little detail to count requests from deleted conversations; any they made are not included here.".into(),
+        ),
+        DeletedAttempts::Unread => Some(
+            "Requests from deleted conversations could not be counted for this day; any they made are not included here.".into(),
         ),
     }
 }

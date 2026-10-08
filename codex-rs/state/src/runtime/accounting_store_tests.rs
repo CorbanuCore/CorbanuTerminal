@@ -926,23 +926,43 @@ async fn accounting_deleted_attempts_count_only_what_retention_cannot_explain() 
         async move {
             let mut conn = runtime.pool.acquire().await?;
             let mut work = InspectionWork::new(&mut conn).await?;
-            anyhow::Ok(scope::count_deleted(&mut conn, day, read_at, &mut work).await)
+            anyhow::Ok(scope::deleted_attempts(&mut conn, day, read_at, &mut work).await)
         }
     };
     // Inside the detail window at the checkpoint: a deletion.
-    assert_eq!(count(150, ahead).await?, Some(1));
+    assert_eq!(count(150, ahead).await?, DeletedAttempts::Counted(1));
     // Past it (day 100 + 90 days <= day 200): retention may have written it.
-    assert_eq!(count(100, ahead).await?, None);
+    assert_eq!(count(100, ahead).await?, DeletedAttempts::PastDetailWindow);
     // Batched expiry can run ahead of the checkpoint: the reader's clock
-    // bounds the window too.
-    assert_eq!(count(150, 245 * DAY).await?, None);
+    // bounds the window too, exactly at the edge.
+    assert_eq!(
+        count(150, 240 * DAY).await?,
+        DeletedAttempts::PastDetailWindow
+    );
+    assert_eq!(
+        count(150, 240 * DAY - 1).await?,
+        DeletedAttempts::Counted(1)
+    );
     // A day nothing was deleted on, inside the window.
-    assert_eq!(count(151, ahead).await?, Some(0));
-    // No checkpoint yet: uncountable, never zero.
+    assert_eq!(count(151, ahead).await?, DeletedAttempts::Counted(0));
+    // An exhausted work budget reads as unread, never zero.
+    {
+        let mut conn = runtime.pool.acquire().await?;
+        let mut work = InspectionWork {
+            rows: 0,
+            visits: 0,
+            scan_rows: 1,
+        };
+        assert_eq!(
+            scope::deleted_attempts(&mut conn, 150, ahead, &mut work).await,
+            DeletedAttempts::Unread
+        );
+    }
+    // No checkpoint yet: unread, never zero.
     sqlx::query("UPDATE draft_accounting_retention_checkpoint SET completed_as_of_ms = NULL, admission_active = 0")
         .execute(runtime.pool.as_ref())
         .await?;
-    assert_eq!(count(150, ahead).await?, None);
+    assert_eq!(count(150, ahead).await?, DeletedAttempts::Unread);
     runtime.close().await;
     Ok(())
 }
