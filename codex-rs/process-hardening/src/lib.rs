@@ -13,6 +13,12 @@ pub use windows_process_access::current_user_sid_string;
 pub use windows_process_access::process_dacl_sddl;
 #[cfg(windows)]
 pub use windows_process_access::restrict_current_process_access;
+#[cfg(windows)]
+pub use windows_process_access::thread_callback_registered;
+#[cfg(windows)]
+pub use windows_process_access::thread_dacl_sddl;
+#[cfg(windows)]
+pub use windows_process_access::thread_protection_failures;
 
 #[cfg(unix)]
 use std::ffi::OsString;
