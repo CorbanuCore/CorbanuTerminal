@@ -88,9 +88,12 @@ async fn pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory() 
         .protect_permissions(&base, cwd.as_path())
         .expect("protected profile");
 
-    let home = codex_home.as_path().display();
+    // Unquoted: the elevated runner re-quotes argv, which cmd.exe then sees
+    // as part of the path. The profile path has no spaces on the CI runner.
+    let home = codex_home.as_path().display().to_string();
+    assert!(!home.contains(' '), "CODEX_HOME path has a space: {home}");
     let read = |label: &str, file: &str| {
-        format!("(type \"{home}\\{file}\" 1>NUL 2>NUL && echo {label}-READ || echo {label}-DENIED)")
+        format!("(type {home}\\{file} 1>NUL 2>NUL && echo {label}-READ || echo {label}-DENIED)")
     };
     let script = [
         read("VAULT", "secrets\\vault.json"),
@@ -99,10 +102,10 @@ async fn pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory() 
         read("SQLITE", "state_5.sqlite"),
         read("NOTES", "notes.txt"),
         format!(
-            "(echo x> \"{home}\\config.toml\" 2>NUL && echo CONFIG-WRITE-ALLOWED || echo CONFIG-WRITE-DENIED)"
+            "(echo x> {home}\\config.toml 2>NUL && echo CONFIG-WRITE-ALLOWED || echo CONFIG-WRITE-DENIED)"
         ),
         format!(
-            "(echo x> \"{home}\\planted.txt\" 2>NUL && echo HOME-WRITE-ALLOWED || echo HOME-WRITE-DENIED)"
+            "(echo x> {home}\\planted.txt 2>NUL && echo HOME-WRITE-ALLOWED || echo HOME-WRITE-DENIED)"
         ),
         "type public.txt".to_string(),
     ]
@@ -116,6 +119,7 @@ async fn pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory() 
         &cwd,
     )
     .await;
+    eprintln!("pf27s06 elevated file probes, script: {script}");
     eprintln!("pf27s06 elevated file probes, base profile: {control}");
     for readable in ["VAULT", "AUTH", "CONFIG", "SQLITE", "NOTES"] {
         assert!(
