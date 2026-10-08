@@ -184,8 +184,10 @@ impl std::fmt::Debug for LaunchContract {
             .field("managed_values", &self.managed_values.len())
             .field("hardened", &self.hardened);
         #[cfg(windows)]
-        let locked = self.armed_lock.lock().is_ok_and(|lock| lock.locked);
-        debug.field("armed_lock", &locked);
+        {
+            let locked = self.armed_lock.lock().is_ok_and(|lock| lock.locked);
+            debug.field("armed_lock", &locked);
+        }
         debug.finish()
     }
 }

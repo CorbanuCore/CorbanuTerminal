@@ -46,7 +46,9 @@ fn pf_27_s07_removes_only_the_new_file_deny() {
     unsafe {
         assert!(add_deny_read_ace(dir, other.as_ptr()).expect("other deny"));
         assert!(add_deny_write_ace(dir, group.as_ptr()).expect("write deny"));
-        assert!(add_deny_read_ace(&existing, group.as_ptr()).expect("file deny"));
+        // S06's `add_deny_read_ace` would count the inherited write deny
+        // (it overlaps in READ_CONTROL and SYNCHRONIZE) as present.
+        assert!(ensure_explicit_deny_read_ace(&existing, group.as_ptr()).expect("file deny"));
     }
     let dir_before = dacl_sddl(dir);
     let existing_before = dacl_sddl(&existing);
