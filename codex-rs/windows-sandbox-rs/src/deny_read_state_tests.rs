@@ -40,9 +40,9 @@ const ARMED_LINE: &str = "sec-win-301: armed";
 struct Home {
     _dir: tempfile::TempDir,
     codex_home: PathBuf,
-    /// A protected directory, and a file in it.
+    /// A protected directory, and a directory in it.
     secret: PathBuf,
-    file: PathBuf,
+    nested: PathBuf,
 }
 
 fn home() -> Home {
@@ -51,13 +51,13 @@ fn home() -> Home {
     std::fs::create_dir_all(sandbox_dir(&codex_home)).expect("sandbox dir");
     let secret = codex_home.join("vault-secret");
     std::fs::create_dir(&secret).expect("secret dir");
-    let file = secret.join("local.age");
-    std::fs::write(&file, "x").expect("secret file");
+    let nested = secret.join("nested");
+    std::fs::create_dir(&nested).expect("nested dir");
     Home {
         _dir: dir,
         codex_home,
         secret,
-        file,
+        nested,
     }
 }
 
@@ -91,17 +91,18 @@ fn sec_win_304_sync_removes_exactly_the_deny_it_added() {
         assert!(add_deny_read_ace_for_new_files(&home.secret, group.as_ptr()).expect("new-file deny"));
     }
     let dir_before = dacl_sddl(&home.secret);
-    let file_before = dacl_sddl(&home.file);
+    let nested_before = dacl_sddl(&home.nested);
 
     sync(&home, std::slice::from_ref(&home.secret), &group);
     assert_ne!(dacl_sddl(&home.secret), dir_before);
-    assert_ne!(dacl_sddl(&home.file), file_before);
+    // Subdirectories inherit the deny (the new-file deny does not reach them).
+    assert_ne!(dacl_sddl(&home.nested), nested_before);
     assert!(recorded(&home));
 
     // The rule is gone: the next launch no longer lists the path.
     sync(&home, &[], &group);
     assert_eq!(dacl_sddl(&home.secret), dir_before);
-    assert_eq!(dacl_sddl(&home.file), file_before);
+    assert_eq!(dacl_sddl(&home.nested), nested_before);
     assert!(!recorded(&home));
 }
 
