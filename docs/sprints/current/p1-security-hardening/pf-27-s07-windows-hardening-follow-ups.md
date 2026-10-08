@@ -1,18 +1,20 @@
 ---
 sprint_id: "PF-27-S07"
 title: "Windows hardening follow-ups"
-status: draft
+status: blocked
 plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-27"
 execution_order: 43
 owner: "broker lane worker (2026-10-08)"
 parallel_lane: "broker"
-write_scope: "codex-rs/process-hardening/, codex-rs/network-proxy/src/credential_broker/isolated/client.rs, codex-rs/windows-sandbox-rs/src/acl.rs, codex-rs/windows-sandbox-rs/src/acl_tests.rs, codex-rs/windows-sandbox-rs/src/lib.rs, codex-rs/core/src/security/launch_contract.rs, codex-rs/core/src/security/launch_contract_windows_tests.rs, codex-rs/core/src/security/inspection.rs, codex-rs/core/src/config/mod.rs, .github/workflows/windows-security-probes.yml, qa/security-levels/sprints/PF-27-S07/, docs/sprints/current/p1-security-hardening/pf-27-s07-windows-hardening-follow-ups.md"
+write_scope: "codex-rs/process-hardening/, codex-rs/network-proxy/src/credential_broker/isolated/client.rs, codex-rs/windows-sandbox-rs/src/acl.rs, codex-rs/windows-sandbox-rs/src/acl_tests.rs, codex-rs/windows-sandbox-rs/src/lib.rs, codex-rs/core/src/security/launch_contract.rs, codex-rs/core/src/security/launch_contract_windows_tests.rs, codex-rs/core/src/security/inspection.rs, .github/workflows/windows-security-probes.yml, qa/security-levels/sprints/PF-27-S07/, docs/sprints/current/p1-security-hardening/pf-27-s07-windows-hardening-follow-ups.md"
 integration_gate: "Per-sprint gate (sec-common decision 5), one PR per slice: pf_27_s07 tests on the windows-2022 runner (windows-security-probes workflow), Linux clippy on the RTX box, one Opus 5.5 High review per slice; merged behind the existing default-off flags. The GLM 5.2 tmux run and SOP videos need a real Windows machine (as for PF-27-S06)."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-27-s07-20261008"
 branch: "sec/pf-27-s07-win-hardening"
 base_commit: "ad96c55cb519e79d08da40c6513ead4c847b0866"
 depends_on: "PF-27-S06"
+merged_behind_flag: "isolated_credential_broker, secretless_agent_launch (default off)"
+gate_evidence: "qa/security-levels/sprints/PF-27-S07/README.md"
 created: 2026-10-08
 updated: 2026-10-08
 ---
@@ -21,8 +23,9 @@ updated: 2026-10-08
 
 Travis approved fixing the four limits PF-27-S06 documented (2026-10-08). This sprint fixes the two that need no
 real Windows machine; the other two are [PF-27-S08](pf-27-s08-windows-broker-restricted-token.md) (the broker's
-own token) and [PF-27-S09](pf-27-s09-windows-model-client-auth.md) (Windows model auth). Status stays `draft`
-until the P1 plan is activated, as for PF-27-S06. One PR per slice, from branches named after this one.
+own token) and [PF-27-S09](pf-27-s09-windows-model-client-auth.md) (Windows model auth). All slices merged;
+`blocked` only on the Windows-machine gate items, as PF-27-S06 (the one-line `config/mod.rs` hook merged with
+slice 1, PF-60-S03 holds that file). One PR per slice, from branches named after this one.
 
 ## Execution mandate
 
