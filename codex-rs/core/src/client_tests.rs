@@ -1617,6 +1617,96 @@ fn corbanu_flash_request_omits_parallel_control_with_function_tools() {
 }
 
 #[test]
+fn chat_completions_conversion_keeps_mcp_namespace_tools() {
+    let tools = super::create_tools_json_for_chat_completions(
+        &[mcp_namespace_tool_spec()],
+        /*strip_strict*/ false,
+        /*zai_native_web_search*/ false,
+    )
+    .expect("convert tools");
+
+    assert_eq!(
+        tools,
+        vec![json!({
+            "type": "function",
+            "function": {
+                "name": "mcp__orders__lookup_order",
+                "description": "Look up an order",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "order_id": {
+                            "type": "string"
+                        }
+                    },
+                    "required": ["order_id"],
+                    "additionalProperties": false
+                },
+                "strict": false
+            }
+        })]
+    );
+}
+
+#[test]
+fn anthropic_conversion_keeps_mcp_namespace_tools() {
+    let tools = super::create_tools_json_for_anthropic_messages(
+        &[mcp_namespace_tool_spec()],
+        &json!({"type": "ephemeral"}),
+        /*web_search_max_uses*/ None,
+    )
+    .expect("convert tools");
+
+    assert_eq!(
+        tools,
+        vec![json!({
+            "name": "mcp__orders__lookup_order",
+            "description": "Look up an order",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "order_id": {
+                        "type": "string"
+                    }
+                },
+                "required": ["order_id"],
+                "additionalProperties": false
+            },
+            "cache_control": {
+                "type": "ephemeral"
+            }
+        })]
+    );
+}
+
+fn mcp_namespace_tool_spec() -> codex_tools::ToolSpec {
+    codex_tools::ToolSpec::Namespace(codex_tools::ResponsesApiNamespace {
+        name: "mcp__orders__".to_string(),
+        description: "Order tools".to_string(),
+        tools: vec![codex_tools::ResponsesApiNamespaceTool::Function(
+            codex_tools::ResponsesApiTool {
+                name: "mcp__orders__lookup_order".to_string(),
+                description: "Look up an order".to_string(),
+                strict: false,
+                defer_loading: Some(true),
+                parameters: serde_json::from_value(json!({
+                    "type": "object",
+                    "properties": {
+                        "order_id": {
+                            "type": "string"
+                        }
+                    },
+                    "required": ["order_id"],
+                    "additionalProperties": false
+                }))
+                .expect("tool schema"),
+                output_schema: None,
+            },
+        )],
+    })
+}
+
+#[test]
 fn zai_required_thinking_models_send_an_enabled_supported_effort() {
     let client = test_model_client(SessionSource::Cli)
         .for_provider(&ModelProviderInfo::create_zai_provider());
