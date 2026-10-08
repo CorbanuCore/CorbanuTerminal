@@ -7,6 +7,11 @@
 //! The probe runs either under the restricted token the unelevated Windows
 //! sandbox gives agent commands, or as a plain same-user process, and reports
 //! what it could open and read. Unhardened targets are the positive controls.
+//!
+//! PF-27-S07 targets also hold two brand-new threads open in their creation
+//! window (created suspended, so their TLS callback has not run): one through
+//! this image's `CreateThread` import, as every Rust thread is created, and
+//! one without it, as Windows starts its own threads.
 
 use super::restrict_current_process_access;
 use codex_windows_sandbox::ConsoleMode;
@@ -55,6 +60,10 @@ const ROLE_ENV: &str = "CODEX_PF27S06_ROLE";
 const TARGET_PID_ENV: &str = "CODEX_PF27S06_TARGET_PID";
 const HARDEN_ENV: &str = "CODEX_PF27S06_HARDEN";
 const CANARY_ENV: &str = "CODEX_PF27S06_CANARY";
+const DEFAULT_DACL_ENV: &str = "CODEX_PF27S07_DEFAULT_DACL";
+const NEW_THREADS_ENV: &str = "CODEX_PF27S07_NEW_THREADS";
+const NEW_THREAD_IDS_ENV: &str = "CODEX_PF27S07_NEW_THREAD_IDS";
+const NEW_THREADS_MARKER: &str = "new-threads=";
 /// Synthetic value; only its presence in the target's memory is checked.
 const CANARY: &str = "pf27s06-synthetic-env-canary-7c41d9";
 const CHILD_TEST: &str = "windows_process_access::tests::pf_27_s06_child_entry";
@@ -100,7 +109,7 @@ fn pf_27_s06_child_entry() {
 #[test]
 fn pf_27_s06_restricted_token_probe_reads_an_unhardened_process() {
     let target = Target::spawn(/*harden*/ false);
-    let report = probe_with_restricted_token(target.pid());
+    let report = probe_with_restricted_token(&target);
     assert_eq!(report["vm_read"], "granted", "{report:?}");
     assert_eq!(report["environment"], "canary_found", "{report:?}");
 }
@@ -110,7 +119,7 @@ fn pf_27_s06_restricted_token_probe_reads_an_unhardened_process() {
 #[test]
 fn pf_27_s06_same_user_probe_controls_an_unhardened_process() {
     let target = Target::spawn(/*harden*/ false);
-    let report = probe_as_same_user(target.pid());
+    let report = probe_as_same_user(&target);
     assert_eq!(report.len(), 2 + PROCESS_RIGHTS.len() + THREAD_RIGHTS.len());
     for (key, value) in &report {
         let expected = if key == "environment" {
@@ -127,7 +136,7 @@ fn pf_27_s06_same_user_probe_controls_an_unhardened_process() {
 #[test]
 fn pf_27_s06_restricted_token_probe_cannot_read_a_hardened_process() {
     let target = Target::spawn(/*harden*/ true);
-    assert_all_denied(&probe_with_restricted_token(target.pid()));
+    assert_all_denied(&probe_with_restricted_token(&target));
 }
 
 /// The same holds for an unsandboxed process of the same user (for example
@@ -137,7 +146,67 @@ fn pf_27_s06_restricted_token_probe_cannot_read_a_hardened_process() {
 #[test]
 fn pf_27_s06_same_user_probe_cannot_read_a_hardened_process() {
     let target = Target::spawn(/*harden*/ true);
-    assert_all_denied(&probe_as_same_user(target.pid()));
+    assert_all_denied(&probe_as_same_user(&target));
+}
+
+/// PF-27-S07: a thread Core or the broker creates through `CreateThread`
+/// (every Rust thread) cannot be opened even in its creation window. A
+/// thread created another way still can by a same-user process, which is
+/// the positive control that the probe reaches that window.
+#[test]
+fn pf_27_s07_imported_thread_creation_is_protected_from_the_start() {
+    let target = Target::spawn_with(TargetOptions {
+        harden: true,
+        new_threads: true,
+        ..TargetOptions::default()
+    });
+    let same_user = probe_as_same_user(&target);
+    assert_new_threads(&same_user, "imported", "denied");
+    assert_eq!(
+        same_user["new_direct_thread_get_context"], "granted",
+        "{same_user:?}"
+    );
+    assert_eq!(
+        same_user["new_direct_thread_set_context"], "granted",
+        "{same_user:?}"
+    );
+    // The restricted token restricts writes only: reading the unprotected
+    // thread's context is its positive control.
+    let restricted = probe_with_restricted_token(&target);
+    assert_new_threads(&restricted, "imported", "denied");
+    assert_eq!(
+        restricted["new_direct_thread_get_context"], "granted",
+        "{restricted:?}"
+    );
+}
+
+/// PF-27-S07: with the protected default DACL (the broker), every new
+/// thread is protected from creation, however it was started.
+#[test]
+fn pf_27_s07_default_dacl_protects_every_new_thread() {
+    let target = Target::spawn_with(TargetOptions {
+        harden: true,
+        default_dacl: true,
+        new_threads: true,
+    });
+    for report in [
+        probe_as_same_user(&target),
+        probe_with_restricted_token(&target),
+    ] {
+        assert_new_threads(&report, "imported", "denied");
+        assert_new_threads(&report, "direct", "denied");
+    }
+}
+
+fn assert_new_threads(report: &Report, thread: &str, expected: &str) {
+    for (name, _) in THREAD_RIGHTS {
+        let key = format!("new_{thread}_{name}");
+        assert_eq!(
+            report.get(&key).map(String::as_str),
+            Some(expected),
+            "{key}: {report:?}"
+        );
+    }
 }
 
 fn assert_all_denied(report: &Report) {
@@ -152,30 +221,63 @@ fn assert_all_denied(report: &Report) {
     }
 }
 
+/// How a target is started and hardened.
+#[derive(Clone, Copy, Default)]
+struct TargetOptions {
+    /// `restrict_current_process_access` (Core and the broker).
+    harden: bool,
+    /// `protect_new_objects_by_default` (the broker).
+    default_dacl: bool,
+    /// Hold two brand-new threads in their creation window.
+    new_threads: bool,
+}
+
 /// The target process; killed on drop.
 struct Target {
     child: Child,
+    /// `imported=<tid>;direct=<tid>` for PF-27-S07 targets.
+    new_threads: Option<String>,
 }
 
 impl Target {
     fn spawn(harden: bool) -> Self {
+        Self::spawn_with(TargetOptions {
+            harden,
+            ..TargetOptions::default()
+        })
+    }
+
+    fn spawn_with(options: TargetOptions) -> Self {
         let mut command = child_command("target");
+        command.env(CANARY_ENV, CANARY);
+        let flags = [
+            (options.harden, HARDEN_ENV),
+            (options.default_dacl, DEFAULT_DACL_ENV),
+            (options.new_threads, NEW_THREADS_ENV),
+        ];
+        for (_, name) in flags.iter().filter(|(on, _)| *on) {
+            command.env(name, "1");
+        }
         command
-            .env(CANARY_ENV, CANARY)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit());
-        if harden {
-            command.env(HARDEN_ENV, "1");
-        }
         let mut child = command.spawn().expect("spawn target");
         let lines = line_channel(child.stdout.take().expect("target stdout"));
+        // Killed on drop if it never becomes ready.
+        let mut target = Self {
+            child,
+            new_threads: None,
+        };
         let output = read_until(&lines, READY);
         if !output.contains(READY) {
-            let _ = child.kill();
             panic!("target did not become ready; it printed: {output}");
         }
-        Self { child }
+        target.new_threads = output
+            .lines()
+            .find_map(|line| line.split_once(NEW_THREADS_MARKER))
+            .map(|(_, ids)| ids.trim().to_string());
+        target
     }
 
     fn pid(&self) -> u32 {
@@ -196,13 +298,23 @@ fn child_command(role: &str) -> Command {
         .args([CHILD_TEST, "--exact", "--nocapture", "--test-threads=1"])
         .env(ROLE_ENV, role)
         .env_remove(CANARY_ENV)
-        .env_remove(HARDEN_ENV);
+        .env_remove(HARDEN_ENV)
+        .env_remove(DEFAULT_DACL_ENV)
+        .env_remove(NEW_THREADS_ENV)
+        .env_remove(NEW_THREAD_IDS_ENV);
     command
 }
 
 fn run_target() {
+    if std::env::var_os(DEFAULT_DACL_ENV).is_some() {
+        crate::protect_new_objects_by_default().expect("protect new objects");
+    }
     if std::env::var_os(HARDEN_ENV).is_some() {
         restrict_current_process_access().expect("restrict process access");
+        assert!(
+            crate::thread_creation_protected(),
+            "CreateThread imports were not redirected"
+        );
     }
     // A thread started after hardening must be protected too.
     let (started, wait) = std::sync::mpsc::channel();
@@ -216,9 +328,15 @@ fn run_target() {
         0,
         "a new thread stayed unprotected"
     );
+    let new_threads = if std::env::var_os(NEW_THREADS_ENV).is_some() {
+        assert_threads_keep_rights_to_themselves();
+        format!(" {NEW_THREADS_MARKER}{}", hold_new_threads())
+    } else {
+        String::new()
+    };
     let mut stdout = std::io::stdout();
     // Own line: libtest prints the test name without a newline first.
-    writeln!(stdout, "\n{READY}").expect("write ready");
+    writeln!(stdout, "\n{READY}{new_threads}").expect("write ready");
     stdout.flush().expect("flush ready");
     // Stay alive until the test kills us or closes stdin.
     let mut sink = Vec::new();
@@ -226,9 +344,100 @@ fn run_target() {
     std::process::exit(0);
 }
 
-fn probe_as_same_user(target_pid: u32) -> Report {
-    let mut child = child_command("probe")
-        .env(TARGET_PID_ENV, target_pid.to_string())
+unsafe extern "system" fn never_runs(_parameter: *mut c_void) -> u32 {
+    0
+}
+
+/// Creates two suspended threads, which stay in their creation window (the
+/// TLS callback runs only when a thread first runs): one through this
+/// image's `CreateThread` import, one with `CreateRemoteThread` on itself.
+/// Returns `imported=<tid>;direct=<tid>`.
+fn hold_new_threads() -> String {
+    use windows_sys::Win32::System::Threading::CREATE_SUSPENDED;
+    use windows_sys::Win32::System::Threading::CreateRemoteThread;
+    use windows_sys::Win32::System::Threading::CreateThread;
+    use windows_sys::Win32::System::Threading::GetCurrentProcess;
+    let mut imported = 0_u32;
+    let mut direct = 0_u32;
+    // SAFETY: the threads never run; their handles are closed at once
+    // (suspended threads outlive their handles).
+    unsafe {
+        let handle = CreateThread(
+            std::ptr::null(),
+            0,
+            Some(never_runs),
+            std::ptr::null(),
+            CREATE_SUSPENDED,
+            &mut imported,
+        );
+        assert_ne!(handle, 0, "CreateThread");
+        CloseHandle(handle);
+        let handle = CreateRemoteThread(
+            GetCurrentProcess(),
+            std::ptr::null(),
+            0,
+            Some(never_runs),
+            std::ptr::null(),
+            CREATE_SUSPENDED,
+            &mut direct,
+        );
+        assert_ne!(handle, 0, "CreateRemoteThread");
+        CloseHandle(handle);
+    }
+    format!("imported={imported};direct={direct}")
+}
+
+/// A thread created with the protected DACL keeps the rights Rust and its
+/// runtimes use on themselves (priority, thread names), and its TLS
+/// callback does not count it as a failure.
+fn assert_threads_keep_rights_to_themselves() {
+    use windows_sys::Win32::Foundation::LocalFree;
+    use windows_sys::Win32::System::Threading::GetCurrentThread;
+    use windows_sys::Win32::System::Threading::GetThreadDescription;
+    use windows_sys::Win32::System::Threading::SetThreadDescription;
+    use windows_sys::Win32::System::Threading::SetThreadPriority;
+    use windows_sys::Win32::System::Threading::THREAD_PRIORITY_NORMAL;
+    std::thread::spawn(|| {
+        let name: Vec<u16> = "pf27s07-named".encode_utf16().chain([0]).collect();
+        // SAFETY: plain calls on this thread's own pseudo-handle; the
+        // description is freed below.
+        unsafe {
+            assert_ne!(
+                SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL),
+                0,
+                "SetThreadPriority on itself"
+            );
+            assert!(
+                SetThreadDescription(GetCurrentThread(), name.as_ptr()) >= 0,
+                "SetThreadDescription on itself"
+            );
+            let mut read: *mut u16 = std::ptr::null_mut();
+            assert!(
+                GetThreadDescription(GetCurrentThread(), &mut read) >= 0,
+                "GetThreadDescription on itself"
+            );
+            let len = (0..).take_while(|&i| *read.add(i) != 0).count();
+            let read_name = String::from_utf16_lossy(std::slice::from_raw_parts(read, len));
+            LocalFree(read as _);
+            assert_eq!(read_name, "pf27s07-named");
+        }
+    })
+    .join()
+    .expect("a new thread lost rights to itself");
+    assert_eq!(
+        super::thread_protection_failures(),
+        0,
+        "the TLS callback failed on a thread created protected"
+    );
+}
+
+fn probe_as_same_user(target: &Target) -> Report {
+    let mut command = child_command("probe");
+    if let Some(ids) = &target.new_threads {
+        command.env(NEW_THREAD_IDS_ENV, ids);
+    }
+    let mut child = command
+        .env(TARGET_PID_ENV, target.pid().to_string())
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
@@ -278,7 +487,7 @@ fn read_until(lines: &std::sync::mpsc::Receiver<String>, marker: &str) -> String
 
 /// Runs the probe under the same restricted token the unelevated Windows
 /// sandbox creates for agent commands.
-fn probe_with_restricted_token(target_pid: u32) -> Report {
+fn probe_with_restricted_token(target: &Target) -> Report {
     let exe = std::env::current_exe().expect("test binary");
     let argv = vec![
         exe.to_string_lossy().into_owned(),
@@ -288,10 +497,15 @@ fn probe_with_restricted_token(target_pid: u32) -> Report {
         "--test-threads=1".to_string(),
     ];
     let mut env: HashMap<String, String> = std::env::vars()
-        .filter(|(key, _)| key != CANARY_ENV && key != HARDEN_ENV)
+        .filter(|(key, _)| {
+            ![CANARY_ENV, HARDEN_ENV, DEFAULT_DACL_ENV, NEW_THREADS_ENV].contains(&key.as_str())
+        })
         .collect();
     env.insert(ROLE_ENV.to_string(), "probe".to_string());
-    env.insert(TARGET_PID_ENV.to_string(), target_pid.to_string());
+    env.insert(TARGET_PID_ENV.to_string(), target.pid().to_string());
+    if let Some(ids) = &target.new_threads {
+        env.insert(NEW_THREAD_IDS_ENV.to_string(), ids.clone());
+    }
     let cwd = std::env::current_dir().expect("cwd");
     let capability = codex_windows_sandbox::LocalSid::from_string(
         "S-1-5-21-2718281828-3141592653-1618033988-1001",
@@ -391,6 +605,19 @@ fn run_probe() {
     let threads = thread_ids(pid);
     for (name, access) in THREAD_RIGHTS {
         report.insert((*name).to_string(), open_threads(&threads, *access));
+    }
+    // PF-27-S07: the target's brand-new threads, one by one.
+    let new_threads = std::env::var(NEW_THREAD_IDS_ENV).unwrap_or_default();
+    for (thread, tid) in new_threads
+        .split(';')
+        .filter_map(|pair| pair.split_once('='))
+    {
+        let tid: u32 = tid.parse().expect("thread id");
+        for (name, access) in THREAD_RIGHTS {
+            let outcome = open_threads(&[tid], *access);
+            let outcome = outcome.split('@').next().unwrap_or_default().to_string();
+            report.insert(format!("new_{thread}_{name}"), outcome);
+        }
     }
     let encoded: Vec<String> = report.iter().map(|(k, v)| format!("{k}={v}")).collect();
     let mut stdout = std::io::stdout();
