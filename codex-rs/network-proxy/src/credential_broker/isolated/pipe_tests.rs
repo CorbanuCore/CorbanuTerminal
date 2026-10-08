@@ -44,7 +44,8 @@ const GREETING: &[u8] = b"broker-hello\n";
 #[test]
 fn pf_27_s06_pipe_child_entry() {
     match std::env::var(ROLE_ENV).as_deref() {
-        Ok("connect") => child_connect(),
+        Ok("connect") => child_connect(/*write*/ true),
+        Ok("connect-read") => child_connect(/*write*/ false),
         Ok("scan") => child_scan(),
         _ => {}
     }
@@ -103,15 +104,24 @@ async fn pf_27_s06_broker_pipe_serves_only_the_expected_client() {
 }
 
 /// A command under the unelevated sandbox's restricted token cannot open
-/// the broker's pipe at all.
+/// the broker's pipe for reading and writing. It can connect read-only (its
+/// token restricts writes only), and is then dropped without a byte.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn pf_27_s06_restricted_token_cannot_open_broker_pipe() {
+async fn pf_27_s06_restricted_token_cannot_use_broker_pipe() {
     let (control, _) = pipe_names();
     let _server = serve_greeting(&control, std::process::id());
-    let report = tokio::task::spawn_blocking(move || run_restricted_child("connect", &control))
-        .await
-        .expect("child");
-    assert_eq!(report, "open=denied");
+    let read_write = tokio::task::spawn_blocking({
+        let control = control.clone();
+        move || run_restricted_child("connect", &control)
+    })
+    .await
+    .expect("child");
+    assert_eq!(read_write, "open=denied");
+    let read_only =
+        tokio::task::spawn_blocking(move || run_restricted_child("connect-read", &control))
+            .await
+            .expect("child");
+    assert_eq!(read_only, "open=granted,served=no");
 }
 
 /// Core talks only to the broker it spawned: a pipe served by another
@@ -211,11 +221,11 @@ fn serve_greeting(name: &str, expected_pid: u32) -> tokio::task::JoinHandle<()> 
     })
 }
 
-fn child_connect() {
+fn child_connect(write: bool) {
     let name = std::env::var(NAME_ENV).expect("pipe name");
     let report = match std::fs::OpenOptions::new()
         .read(true)
-        .write(true)
+        .write(write)
         .open(&name)
     {
         Ok(mut file) => {
@@ -234,7 +244,7 @@ fn child_connect() {
 fn child_scan() {
     let nonce = std::env::var(NAME_ENV).expect("nonce");
     let mut found = 0;
-    for value in (4..=0x0001_0000_isize).step_by(4) {
+    for value in (4..=0x0010_0000_isize).step_by(4) {
         let handle = value as HANDLE;
         // SAFETY: probing handle values; invalid ones fail harmlessly.
         if unsafe { GetFileType(handle) } != FILE_TYPE_PIPE {
@@ -323,15 +333,50 @@ fn parse_report(output: &[u8]) -> String {
 }
 
 fn run_same_user_child(role: &str, name: &str) -> String {
-    let output = Command::new(std::env::current_exe().expect("test binary"))
+    let mut child = Command::new(std::env::current_exe().expect("test binary"))
         .args(child_args())
         .env(ROLE_ENV, role)
         .env(NAME_ENV, name)
         .stdin(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
-        .output()
+        .spawn()
         .expect("run child");
-    parse_report(&output.stdout)
+    // Bounded: read the report line, then stop the child.
+    let mut stdout = child.stdout.take().expect("child stdout");
+    let (sender, receiver) = std::sync::mpsc::channel::<Vec<u8>>();
+    std::thread::spawn(move || {
+        let mut buffer = [0_u8; 4096];
+        while let Ok(read) = stdout.read(&mut buffer) {
+            if read == 0 || sender.send(buffer[..read].to_vec()).is_err() {
+                break;
+            }
+        }
+    });
+    let output = collect_report(&receiver);
+    let _ = child.kill();
+    let _ = child.wait();
+    parse_report(&output)
+}
+
+/// Collects output until a full report line arrives or 60 s pass.
+fn collect_report(receiver: &std::sync::mpsc::Receiver<Vec<u8>>) -> Vec<u8> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let mut output = Vec::new();
+    loop {
+        let text = String::from_utf8_lossy(&output);
+        let complete = text
+            .find(REPORT_PREFIX)
+            .is_some_and(|start| text[start..].contains('\n'));
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if complete || remaining.is_zero() {
+            return output;
+        }
+        match receiver.recv_timeout(remaining) {
+            Ok(chunk) => output.extend(chunk),
+            Err(_) => return output,
+        }
+    }
 }
 
 fn run_scan_child(nonce: &str) -> usize {
@@ -384,26 +429,13 @@ fn run_restricted_child(role: &str, name: &str) -> String {
     });
     // SAFETY: the handles stay valid until closed here.
     unsafe {
-        WaitForSingleObject(spawned.process.hProcess, 60_000);
+        if WaitForSingleObject(spawned.process.hProcess, 60_000) == /*WAIT_TIMEOUT*/ 0x102 {
+            windows_sys::Win32::System::Threading::TerminateProcess(spawned.process.hProcess, 1);
+        }
         CloseHandle(spawned.process.hThread);
         CloseHandle(spawned.process.hProcess);
         CloseHandle(token);
     }
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    let mut output = Vec::new();
-    loop {
-        let text = String::from_utf8_lossy(&output);
-        let complete = text
-            .find(REPORT_PREFIX)
-            .is_some_and(|start| text[start..].contains('\n'));
-        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-        if complete || remaining.is_zero() {
-            break;
-        }
-        match receiver.recv_timeout(remaining) {
-            Ok(chunk) => output.extend(chunk),
-            Err(_) => break,
-        }
-    }
+    let output = collect_report(&receiver);
     parse_report(&output)
 }
