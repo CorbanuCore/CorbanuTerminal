@@ -1,6 +1,6 @@
 #[cfg(unix)]
 mod env_scrub;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub(crate) mod isolated;
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
 mod memory_scan_tests;
