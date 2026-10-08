@@ -535,7 +535,7 @@ fn read_environment_block(process: HANDLE) -> Option<Vec<u8>> {
     let status = unsafe {
         NtQueryInformationProcess(
             process,
-            /*ProcessBasicInformation*/ 0,
+            /*class*/ 0,
             (&mut info as *mut PROCESS_BASIC_INFORMATION).cast(),
             std::mem::size_of::<PROCESS_BASIC_INFORMATION>() as u32,
             &mut returned,
