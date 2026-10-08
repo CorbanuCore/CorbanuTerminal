@@ -38,8 +38,13 @@ const GOAL_USAGE_HINT: &str = "Example: /goal improve benchmark coverage";
 const RAW_USAGE: &str = "Usage: /raw [on|off]";
 /// Account usage is an OpenAI account API and needs that sign-in. What a turn
 /// cost is recorded locally for whatever provider served it, so the message
-/// points at the view that does work here rather than dead-ending.
-const USAGE_CHATGPT_LOGIN_REQUIRED: &str = "Sign in with ChatGPT to view OpenAI account usage. For what your turns cost on this provider, run `/usage requests`.";
+/// points at the view that does work here rather than dead-ending, by the name
+/// this build resolves (`/cost` is only a command where costs are recorded).
+const USAGE_CHATGPT_LOGIN_REQUIRED: &str = if cfg!(feature = "developer-accounting") {
+    "Sign in with ChatGPT to view OpenAI account usage. For what your turns cost on this provider, run `/cost`."
+} else {
+    "Sign in with ChatGPT to view OpenAI account usage. For what your turns cost on this provider, run `/usage requests`."
+};
 
 fn tasknode_new_chat_id() -> String {
     format!("chat_{}", uuid::Uuid::new_v4().simple())
@@ -549,7 +554,7 @@ impl ChatWidget {
             // No arguments means the current UTC day, which is the question an
             // operator actually has when they type this.
             SlashCommand::Cost => {
-                self.open_accounting_command("requests", chrono::Utc::now().date_naive());
+                self.open_cost_command("", chrono::Utc::now().date_naive());
             }
             SlashCommand::Ide => {
                 self.handle_ide_command();
@@ -815,12 +820,7 @@ impl ChatWidget {
             // previously reachable only as an undocumented argument to a
             // command that hid itself without one.
             SlashCommand::Cost => {
-                let args = if trimmed.is_empty() {
-                    "requests".to_string()
-                } else {
-                    format!("requests {trimmed}")
-                };
-                self.open_accounting_command(&args, chrono::Utc::now().date_naive());
+                self.open_cost_command(trimmed, chrono::Utc::now().date_naive());
             }
             SlashCommand::Ide => {
                 self.handle_ide_command_args(trimmed);

@@ -173,7 +173,7 @@ async fn accounting_inspect_app_remote_does_not_read_local() -> anyhow::Result<(
     };
     let event = accounting_load(&mut app, &mut rx, day).await;
     assert!(
-        matches!(&event, AppEvent::AccountingInspectorLoaded { result: Err(message), .. } if message.contains("remote"))
+        matches!(&event, AppEvent::AccountingInspectorLoaded { result: Err(message), .. } if message.contains("remote") && message.contains("Next step: "))
     );
     app.handle_accounting_inspector_event(event);
     let screen = accounting_scroll(&mut app);

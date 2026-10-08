@@ -1,0 +1,45 @@
+$ /usage requests 2026-10-06
+  Cost — this conversation
+  Requested UTC day: 2026-10-06
+  This conversation on 2026-10-06 (UTC):
+  • Z.AI · Z.AI GLM 5.2 — Pay per use. 1 request, 6,647 tokens. Estimated cost: $0.003563 (rounded).
+  No other conversation recorded requests on this day.
+  Costs are estimates from published prices; your provider's bill is the final amount.
+  Select a provider below to see its requests.
+  —— Details ——
+  Estimated token cost for recorded attempts: $0.003563 (rounded)
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  ↑↓ scroll · Enter open · Esc back/close
+  Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+  Day covered (UTC): [2026-10-06T00:00:00.000Z, 2026-10-07T00:00:00.000Z)
+  Read at: 2026-10-08T11:52:09.076Z; ledger current to: 2026-10-08T11:51:24.740Z (44336 ms behind)
+  Retention: request detail kept since 2026-07-10T11:52:09.076Z; daily totals kept since 2025-10-09; oldest recorded day in this conversation 2026-10-06
+  Known subtotal exact USD: 0.00356308
+  Input: 6,567
+  Noncached input (derived for inclusive input): not reported (1 attempt)
+  Cache read: 5,248
+  Cache write: not reported (1 attempt)
+  Output: 80
+  Reasoning (subset, not separately billed): 30
+  Total (not separately billed): 6,647
+  Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+  Unknown parent population: 0 attempts, excluded from root total
+  Estimate versus billed difference: unknown — no settlement evidence
+  —— Open ——
+  → Z.AI · Z.AI GLM 5.2 — estimated $0.003563 (rounded) (1 request)
+  → Request 1 · Z.AI · Z.AI GLM 5.2 · estimated $0.003563 (rounded)
+  → Root's own attempts (1 attempt)
+  → Descendant attempts (none)
+  → Unknown provider/model attribution (none)
+  → Unknown parent population (none)
+  Refresh
+  Close
+--- last screen:
+  Read at: 2026-10-08T11:52:09.076Z; ledger current to: 2026-10-08T11:51:24.740Z (44336 ms behind)
+  Retention: request detail kept since 2026-07-10T11:52:09.076Z; daily totals kept since 2025-10-09; oldest recorded day in this conversation 2026-10-06
+  Known subtotal exact USD: 0.00356308
+  Input: 6,567
+› Noncached input (derived for inclusive input): not reported (1 attempt)
+  ↑↓ scroll · Enter open · Esc back/close
