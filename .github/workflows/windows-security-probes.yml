@@ -46,6 +46,9 @@ jobs:
       - name: Process access probes
         shell: bash
         run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-process-hardening pf_27_s06 -- --nocapture
+      - name: Broker transport probes
+        shell: bash
+        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-network-proxy pf_27_s06 -- --nocapture
       - name: Require a clean worktree
         if: always() && !cancelled()
         uses: ./.github/actions/check-clean-worktree
