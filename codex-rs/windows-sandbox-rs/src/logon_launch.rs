@@ -71,8 +71,13 @@ struct LauncherRequest {
 #[serde(rename_all = "snake_case")]
 enum LauncherReply {
     /// `process` is a handle value in the launcher's handle table.
-    Started { pid: u32, process: usize },
-    Failed { code: u32 },
+    Started {
+        pid: u32,
+        process: usize,
+    },
+    Failed {
+        code: u32,
+    },
 }
 
 /// `CreateProcessWithLogonW` failed with this Win32 error.

@@ -315,13 +315,16 @@ pub(crate) fn spawn_runner_transport(
         quote_windows_arg(&format!("--pipe-in={pipe_in_name}")),
         quote_windows_arg(&format!("--pipe-out={pipe_out_name}"))
     );
-    let launched = match create_process_with_logon(&LogonLaunchRequest {
-        username: &sandbox_creds.username,
-        password: &sandbox_creds.password,
-        application: Path::new(&runner_cmdline),
-        command_line: &runner_full_cmd,
-        cwd,
-    }, &runner_exe) {
+    let launched = match create_process_with_logon(
+        &LogonLaunchRequest {
+            username: &sandbox_creds.username,
+            password: &sandbox_creds.password,
+            application: Path::new(&runner_cmdline),
+            command_line: &runner_full_cmd,
+            cwd,
+        },
+        &runner_exe,
+    ) {
         Ok(launched) => launched,
         Err(err) => {
             unsafe {
