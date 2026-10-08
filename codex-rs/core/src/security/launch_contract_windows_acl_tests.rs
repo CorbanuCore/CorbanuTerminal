@@ -190,8 +190,11 @@ async fn pf_27_s06_d2_vault_unreadable_through_tool_launch_under_workspace_write
     // created and denied by that launch, so a file written there later is
     // denied to the next command too.
     std::fs::create_dir_all(codex_home.join("wallet")).expect("wallet dir");
-    std::fs::write(codex_home.join("wallet").join("seed.json"), "pf27s06d2-seed")
-        .expect("wallet file");
+    std::fs::write(
+        codex_home.join("wallet").join("seed.json"),
+        "pf27s06d2-seed",
+    )
+    .expect("wallet file");
     let later = run(tool_launch(&protected, &cwd, command())).await;
     eprintln!("pf27s06 d2 workspace-write, contract, later wallet: {later}");
     assert!(later.contains("WALLET-DENIED"), "{later}");
