@@ -135,7 +135,7 @@ async fn pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory() 
     let unhardened = Target::spawn(/*harden*/ false);
     assert_eq!(
         report(&run_probe_unsandboxed(unhardened.pid())),
-        "vm_read=granted"
+        "vm_read=granted,threads=granted"
     );
     drop(unhardened);
 
@@ -165,8 +165,8 @@ async fn pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory() 
     )
     .await;
     eprintln!("pf27s06 elevated memory probe: {sandboxed}");
-    assert_eq!(report(&unsandboxed), "vm_read=denied");
-    assert_eq!(report(&sandboxed), "vm_read=denied");
+    assert_eq!(report(&unsandboxed), "vm_read=denied,threads=denied");
+    assert_eq!(report(&sandboxed), "vm_read=denied,threads=denied");
 }
 
 async fn run_sandboxed(
@@ -205,7 +205,9 @@ async fn run_sandboxed(
 fn report(output: &str) -> String {
     output
         .lines()
-        .find_map(|line| line.trim().strip_prefix(REPORT_PREFIX))
+        .find_map(|line| line.find(REPORT_PREFIX).map(|start| &line[start..]))
+        .and_then(|line| line.strip_prefix(REPORT_PREFIX))
+        .map(str::trim)
         .unwrap_or_else(|| panic!("probe printed no report:\n{output}"))
         .to_string()
 }
@@ -303,7 +305,8 @@ impl Drop for Target {
 fn run_target(harden: bool) {
     let mut stdout = std::io::stdout();
     if !harden || harden_current_process() {
-        let _ = writeln!(stdout, "pf27s06-core-target:ready");
+        // Own line: libtest prints the test name without a newline first.
+        let _ = writeln!(stdout, "\npf27s06-core-target:ready");
     }
     let _ = stdout.flush();
     let mut sink = Vec::new();
@@ -314,28 +317,70 @@ fn run_target(harden: bool) {
 fn run_probe() {
     use windows_sys::Win32::Foundation::CloseHandle;
     use windows_sys::Win32::Foundation::GetLastError;
+    use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::CreateToolhelp32Snapshot;
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::TH32CS_SNAPTHREAD;
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::THREADENTRY32;
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::Thread32First;
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::Thread32Next;
     use windows_sys::Win32::System::Threading::OpenProcess;
+    use windows_sys::Win32::System::Threading::OpenThread;
     use windows_sys::Win32::System::Threading::PROCESS_QUERY_INFORMATION;
     use windows_sys::Win32::System::Threading::PROCESS_VM_READ;
+    use windows_sys::Win32::System::Threading::THREAD_GET_CONTEXT;
+    use windows_sys::Win32::System::Threading::THREAD_SET_CONTEXT;
     let pid: u32 = std::env::var(TARGET_PID_ENV)
         .ok()
         .and_then(|pid| pid.parse().ok())
         .unwrap_or_default();
-    // SAFETY: plain OpenProcess; the handle is closed at once.
-    let outcome = unsafe {
-        let handle = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, 0, pid);
+    let classify = |handle: isize| {
         if handle == 0 {
-            match GetLastError() {
+            // SAFETY: reads the thread's last error.
+            match unsafe { GetLastError() } {
                 ERROR_ACCESS_DENIED => "denied".to_string(),
                 code => format!("failed:{code}"),
             }
         } else {
-            CloseHandle(handle);
+            // SAFETY: opened by the caller; closed once.
+            unsafe { CloseHandle(handle) };
             "granted".to_string()
         }
     };
+    // SAFETY: plain OpenProcess; classified (and closed) at once.
+    let vm_read =
+        classify(unsafe { OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, 0, pid) });
+    // Any of the target's threads opened for reading or setting its context.
+    let mut threads = "no_threads".to_string();
+    // SAFETY: a thread snapshot; closed below.
+    let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
+    if snapshot != INVALID_HANDLE_VALUE {
+        // SAFETY: zeroed POD with its size set.
+        let mut entry: THREADENTRY32 = unsafe { std::mem::zeroed() };
+        entry.dwSize = std::mem::size_of::<THREADENTRY32>() as u32;
+        // SAFETY: valid snapshot and entry.
+        let mut more = unsafe { Thread32First(snapshot, &mut entry) } != 0;
+        while more {
+            if entry.th32OwnerProcessID == pid && threads != "granted" {
+                // SAFETY: plain OpenThread; classified (and closed) at once.
+                threads = classify(unsafe {
+                    OpenThread(
+                        THREAD_GET_CONTEXT | THREAD_SET_CONTEXT,
+                        0,
+                        entry.th32ThreadID,
+                    )
+                });
+            }
+            // SAFETY: as above.
+            more = unsafe { Thread32Next(snapshot, &mut entry) } != 0;
+        }
+        // SAFETY: opened above.
+        unsafe { CloseHandle(snapshot) };
+    }
     let mut stdout = std::io::stdout();
-    let _ = writeln!(stdout, "{REPORT_PREFIX}vm_read={outcome}");
+    let _ = writeln!(
+        stdout,
+        "\n{REPORT_PREFIX}vm_read={vm_read},threads={threads}"
+    );
     let _ = stdout.flush();
     std::process::exit(0);
 }
