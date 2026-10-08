@@ -677,3 +677,8 @@ mod tests;
 #[cfg(windows)]
 #[path = "launch_contract_windows_tests.rs"]
 mod windows_tests;
+
+#[cfg(test)]
+#[cfg(windows)]
+#[path = "launch_contract_windows_acl_tests.rs"]
+mod windows_acl_tests;
