@@ -1112,6 +1112,18 @@ async fn accounting_inspect_range_bucket_reaching_past_the_ledger_states_its_cov
             "{grouping:?}"
         );
     }
+    // A bucket whose first day the ledger has not reached stays unavailable.
+    let later = range_buckets(
+        range_read(
+            &runtime,
+            /*start*/ 7 * DAY,
+            /*end*/ 9 * DAY,
+            InspectionGrouping::Week,
+            /*now*/ 9 * DAY,
+        )
+        .await?,
+    );
+    assert_eq!(later[0].effective, None);
     runtime.close().await;
     Ok(())
 }

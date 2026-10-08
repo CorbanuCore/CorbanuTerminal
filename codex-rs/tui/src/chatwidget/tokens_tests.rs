@@ -2486,6 +2486,18 @@ fn accounting_inspect_requests_are_numbered_in_dispatch_order() {
             .map(|(n, (_, id))| ((n + 1).to_string(), Uuid::from_u128(id).to_string()))
             .collect::<Vec<_>>()
     );
+    // Group pages list the same requests in the same order and numbering.
+    let root = pages
+        .iter()
+        .find(|page| page.title == "Root's own attempts")
+        .expect("root group page");
+    assert_eq!(
+        root.links
+            .iter()
+            .map(|(label, _)| label.as_str())
+            .collect::<Vec<_>>(),
+        ["Request 1", "Request 2", "Request 3"]
+    );
 }
 
 /// #289: a valid date after today is refused with the reason, not the syntax.

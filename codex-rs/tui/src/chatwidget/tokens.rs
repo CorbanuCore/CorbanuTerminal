@@ -593,13 +593,16 @@ const BUCKETS: [&str; 4] = ["Noncached input", "Cache read", "Cache write", "Out
 /// cache hits plus misses.
 const WRITES_FREE: &str = "this price charges nothing for cache writes";
 
-/// How many attempts were priced from a cache-write count they never
-/// reported (see `WRITES_FREE`).
-fn resolved_cache_writes<'a>(quotes: impl IntoIterator<Item = &'a ObservationQuote>) -> i64 {
-    quotes
-        .into_iter()
-        .filter(|q| q.usage.write.is_none() && q.priced_counts()[2].is_some())
-        .count() as i64
+/// How many attempts were priced with a noncached-input and a cache-write
+/// count they never reported (see `WRITES_FREE`).
+fn resolved_counts<'a>(quotes: impl IntoIterator<Item = &'a ObservationQuote>) -> (i64, i64) {
+    quotes.into_iter().fold((0, 0), |(noncached, write), q| {
+        let priced = q.priced_counts();
+        (
+            noncached + i64::from(q.usage.noncached.is_none() && priced[0].is_some()),
+            write + i64::from(q.usage.write.is_none() && priced[2].is_some()),
+        )
+    })
 }
 
 /// The state line for a home with no ledger. A build that records costs
@@ -684,8 +687,7 @@ fn attempt_text(q: &ObservationQuote) -> Vec<String> {
         let resolved = match index {
             1 => priced[0].filter(|_| value.is_none()).map(|n| {
                 format!(
-                    "{} (derived as input − cache read: cache writes were not reported, and {WRITES_FREE})",
-                    grouped(n)
+                    "{n} (derived as input − cache read: cache writes were not reported, and {WRITES_FREE})"
                 )
             }),
             3 => priced[2]
@@ -921,9 +923,13 @@ fn inspection_pages_for(
             known_exact(t, EstimateGaps::of(ready.requests.values().flatten()))
         ),
     ]);
-    let resolved = resolved_cache_writes(ready.requests.values().flatten());
+    let (noncached, write) = resolved_counts(ready.requests.values().flatten());
     for (index, (label, m)) in METRICS.iter().zip(&t.measured).enumerate() {
-        let n = resolved.min(m.unknown);
+        let n = match index {
+            1 => noncached,
+            3 => write,
+            _ => 0,
+        };
         let attempts = format!("{n} {}", if n == 1 { "attempt" } else { "attempts" });
         let note = match index {
             1 => format!(
@@ -931,7 +937,7 @@ fn inspection_pages_for(
             ),
             _ => format!("free at the price of {attempts}, so nothing was charged"),
         };
-        pages[0].text.push(if matches!(index, 1 | 3) && n > 0 {
+        pages[0].text.push(if n > 0 {
             format!("{label}: {} — {note}", metric_text(m))
         } else {
             format!("{label}: {}", metric_text(m))
@@ -939,6 +945,7 @@ fn inspection_pages_for(
     }
     let context = pages[0].text.clone();
     let mut request_pages = std::collections::BTreeMap::new();
+    let mut request_numbers = std::collections::BTreeMap::new();
     // Number requests in the order they were sent, not by their ids.
     let mut ordered: Vec<_> = ready.requests.iter().collect();
     ordered.sort_by_key(|(request, quotes)| {
@@ -954,7 +961,10 @@ fn inspection_pages_for(
         let request_page = pages.len();
         request_pages.insert(*request, request_page);
         let number = pages[0].links.len() + 1;
-        let attempts: Vec<&ObservationQuote> = quotes.iter().collect();
+        request_numbers.insert(*request, number);
+        // Attempts in the order they were sent, so attempt 1 is the original.
+        let mut attempts: Vec<&ObservationQuote> = quotes.iter().collect();
+        attempts.sort_by_key(|q| (i64::from(q.attempt.dispatched_at_ms), q.attempt.attempt_id));
         let label = match request_route(quotes) {
             Some(route) => format!("Request {number} · {route} · {}", short_cost(&attempts)),
             None => format!("Request {number}"),
@@ -969,7 +979,7 @@ fn inspection_pages_for(
             parent: Some(0),
             selected: Arc::default(),
         });
-        for (index, quote) in quotes.iter().enumerate() {
+        for (index, quote) in attempts.iter().copied().enumerate() {
             let target = pages.len();
             pages[request_page]
                 .links
@@ -1065,16 +1075,18 @@ fn inspection_pages_for(
             }
             Err(_) => text.push("Estimate unavailable — exact arithmetic overflow".into()),
         }
+        // In send order, numbered as on the first screen.
         let links = quotes
             .iter()
             .map(|q| {
                 (
-                    format!("Request {}", q.attempt.request_id),
                     request_pages[&q.attempt.request_id],
+                    format!("Request {}", request_numbers[&q.attempt.request_id]),
                 )
             })
-            .collect::<std::collections::BTreeSet<_>>()
+            .collect::<std::collections::BTreeMap<_, _>>()
             .into_iter()
+            .map(|(page, label)| (label, page))
             .collect();
         let target = pages.len();
         let label = if provider_group {
