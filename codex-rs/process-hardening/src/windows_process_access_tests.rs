@@ -240,6 +240,65 @@ fn pf_27_s07_protected_spawn_then_broker_hardening_succeeds() {
     assert_new_threads(&report, "direct", "denied");
 }
 
+/// What `spawn_protected` needs to start `command`: exactly the
+/// environment `command` would pass, and `PARK_ENV` (its stdin is closed).
+fn protected_spawn_parts(
+    command: &Command,
+) -> (
+    std::path::PathBuf,
+    Vec<std::ffi::OsString>,
+    Vec<(std::ffi::OsString, std::ffi::OsString)>,
+) {
+    let mut env: Vec<(std::ffi::OsString, std::ffi::OsString)> = std::env::vars_os()
+        .filter(|(name, _)| {
+            !command
+                .get_envs()
+                .any(|(set, _)| set.eq_ignore_ascii_case(name))
+        })
+        .collect();
+    env.extend(
+        command
+            .get_envs()
+            .filter_map(|(name, value)| Some((name.to_owned(), value?.to_owned()))),
+    );
+    env.push((PARK_ENV.into(), "1".into()));
+    let args = command.get_args().map(ToOwned::to_owned).collect();
+    (command.get_program().into(), args, env)
+}
+
+/// PF-27-S07: between its creation and its first instruction (suspended), a
+/// process from `spawn_protected` and its first thread are already denied.
+/// Positive control: the same process started suspended by `std`.
+#[test]
+fn pf_27_s07_protected_spawn_is_unopenable_while_suspended() {
+    let mut command = child_command("target");
+    command.env(CANARY_ENV, CANARY);
+    let (program, args, env) = protected_spawn_parts(&command);
+    let (child, _stdout, _thread) =
+        crate::windows_protected_spawn::spawn_protected_suspended(&program, &args, &env)
+            .expect("protected spawn");
+    let target = Target {
+        child: TargetChild::Protected(child),
+        new_threads: None,
+    };
+    assert_all_denied(&probe_as_same_user(&target));
+    assert_all_denied(&probe_with_restricted_token(&target));
+
+    const CREATE_SUSPENDED: u32 = 0x4;
+    std::os::windows::process::CommandExt::creation_flags(&mut command, CREATE_SUSPENDED);
+    let control = Target {
+        child: TargetChild::Std(command.spawn().expect("std spawn")),
+        new_threads: None,
+    };
+    let report = probe_as_same_user(&control);
+    assert_eq!(report["vm_read"], "granted", "{report:?}");
+    assert_eq!(
+        report["thread_get_context"].split('@').next(),
+        Some("granted"),
+        "{report:?}"
+    );
+}
+
 fn assert_new_threads(report: &Report, thread: &str, expected: &str) {
     for (name, _) in THREAD_RIGHTS {
         let key = format!("new_{thread}_{name}");
@@ -308,25 +367,9 @@ impl Target {
             command.env(name, "1");
         }
         let (child, lines) = if options.protected_spawn {
-            // Exactly the environment `command` would pass.
-            let mut env: Vec<(std::ffi::OsString, std::ffi::OsString)> = std::env::vars_os()
-                .filter(|(name, _)| {
-                    !command
-                        .get_envs()
-                        .any(|(set, _)| set.eq_ignore_ascii_case(name))
-                })
-                .collect();
-            env.extend(
-                command
-                    .get_envs()
-                    .filter_map(|(name, value)| Some((name.to_owned(), value?.to_owned()))),
-            );
-            // Its stdin is closed: park rather than exit at EOF.
-            env.push((PARK_ENV.into(), "1".into()));
-            let args: Vec<std::ffi::OsString> = command.get_args().map(ToOwned::to_owned).collect();
+            let (program, args, env) = protected_spawn_parts(&command);
             let (child, stdout) =
-                crate::spawn_protected(std::path::Path::new(command.get_program()), &args, &env)
-                    .expect("protected spawn");
+                crate::spawn_protected(&program, &args, &env).expect("protected spawn");
             (TargetChild::Protected(child), line_channel(stdout))
         } else {
             command

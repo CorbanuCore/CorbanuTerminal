@@ -128,6 +128,23 @@ pub fn spawn_protected(
     args: &[OsString],
     env: &[(OsString, OsString)],
 ) -> io::Result<(ProtectedChild, File)> {
+    let (mut child, stdout, thread) = spawn_protected_suspended(program, args, env)?;
+    // SAFETY: the suspended first thread; resumed once.
+    if unsafe { ResumeThread(thread.as_raw_handle() as HANDLE) } == u32::MAX {
+        let error = io::Error::last_os_error();
+        kill_unstarted(&mut child);
+        return Err(error);
+    }
+    Ok((child, stdout))
+}
+
+/// [`spawn_protected`] up to, not including, resuming the first thread,
+/// whose handle is returned.
+pub(crate) fn spawn_protected_suspended(
+    program: &Path,
+    args: &[OsString],
+    env: &[(OsString, OsString)],
+) -> io::Result<(ProtectedChild, File, OwnedHandle)> {
     let user_sid = current_user_sid_string()?;
     let process_descriptor = SecurityDescriptor::from_sddl(&process_dacl_sddl(&user_sid))?;
     let thread_descriptor = SecurityDescriptor::from_sddl(&thread_dacl_sddl(&user_sid))?;
@@ -138,7 +155,7 @@ pub fn spawn_protected(
     let mut handles = [stdout_write.as_raw_handle() as HANDLE];
     let mut attributes = AttributeList::with_handles(&mut handles)?;
 
-    let mut command_line = command_line(program, args);
+    let mut command_line = command_line(program, args)?;
     let mut environment = environment_block(env)?;
     let application: Vec<u16> = program.as_os_str().encode_wide().chain([0]).collect();
     // SAFETY: zeroed POD; the fields set below are the only ones used.
@@ -187,20 +204,18 @@ pub fn spawn_protected(
         process,
         pid: info.dwProcessId,
     };
-    let started = protect_child_token(&child).and_then(|()| {
-        // SAFETY: the suspended first thread; resumed once.
-        if unsafe { ResumeThread(thread.as_raw_handle() as HANDLE) } == u32::MAX {
-            Err(io::Error::last_os_error())
-        } else {
-            Ok(())
-        }
-    });
-    if let Err(err) = started {
-        let _ = child.kill();
-        let _ = child.wait();
+    if let Err(err) = protect_child_token(&child) {
+        kill_unstarted(&mut child);
         return Err(err);
     }
-    Ok((child, File::from(stdout_read)))
+    Ok((child, File::from(stdout_read), thread))
+}
+
+/// Kills a child that never ran; reaps it only if the kill succeeded.
+fn kill_unstarted(child: &mut ProtectedChild) {
+    if child.kill().is_ok() {
+        let _ = child.wait();
+    }
 }
 
 /// Sets the suspended child's default DACL to the protected thread DACL.
@@ -291,15 +306,22 @@ impl Drop for AttributeList {
 }
 
 /// `program` and `args` quoted for `CommandLineToArgvW` / the MSVC runtime.
-pub(crate) fn command_line(program: &Path, args: &[OsString]) -> Vec<u16> {
+/// Refuses NUL, which would cut the command line short.
+pub(crate) fn command_line(program: &Path, args: &[OsString]) -> io::Result<Vec<u16>> {
     let mut line = Vec::new();
     append_argument(&mut line, program.as_os_str());
     for arg in args {
         line.push(u16::from(b' '));
         append_argument(&mut line, arg);
     }
+    if line.contains(&0) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "NUL in the program or an argument",
+        ));
+    }
     line.push(0);
-    line
+    Ok(line)
 }
 
 fn append_argument(line: &mut Vec<u16>, arg: &OsStr) {
@@ -334,15 +356,19 @@ fn append_argument(line: &mut Vec<u16>, arg: &OsStr) {
     line.push(u16::from(b'"'));
 }
 
-/// A sorted, double-NUL-terminated `NAME=value` block.
+/// A sorted, double-NUL-terminated `NAME=value` block. Names compare as
+/// Windows does (ordinal, ASCII case-insensitive); a later duplicate wins.
+/// A leading `=` is allowed (`cmd.exe`'s per-drive `=C:` variables).
 pub(crate) fn environment_block(env: &[(OsString, OsString)]) -> io::Result<Vec<u16>> {
-    let mut entries: Vec<(Vec<u16>, Vec<u16>)> = env
-        .iter()
-        .map(|(name, value)| (name.encode_wide().collect(), value.encode_wide().collect()))
-        .collect();
+    let mut entries: Vec<(Vec<u16>, Vec<u16>)> = Vec::new();
+    for (name, value) in env {
+        let name: Vec<u16> = name.encode_wide().collect();
+        entries.retain(|(known, _)| !same_name(known, &name));
+        entries.push((name, value.encode_wide().collect()));
+    }
     if entries.iter().any(|(name, value)| {
         name.is_empty()
-            || name.contains(&u16::from(b'='))
+            || name[1..].contains(&u16::from(b'='))
             || name.contains(&0)
             || value.contains(&0)
     }) {
@@ -353,9 +379,9 @@ pub(crate) fn environment_block(env: &[(OsString, OsString)]) -> io::Result<Vec<
     }
     // Windows expects the block sorted case-insensitively.
     entries.sort_by(|(a, _), (b, _)| {
-        String::from_utf16_lossy(a)
-            .to_uppercase()
-            .cmp(&String::from_utf16_lossy(b).to_uppercase())
+        a.iter()
+            .map(|&unit| ascii_upper(unit))
+            .cmp(b.iter().map(|&unit| ascii_upper(unit)))
     });
     let mut block = Vec::new();
     for (name, value) in entries {
@@ -374,3 +400,18 @@ pub(crate) fn environment_block(env: &[(OsString, OsString)]) -> io::Result<Vec<
 #[cfg(test)]
 #[path = "windows_protected_spawn_tests.rs"]
 mod tests;
+
+fn ascii_upper(unit: u16) -> u16 {
+    if (u16::from(b'a')..=u16::from(b'z')).contains(&unit) {
+        unit - 32
+    } else {
+        unit
+    }
+}
+
+fn same_name(a: &[u16], b: &[u16]) -> bool {
+    a.len() == b.len()
+        && a.iter()
+            .zip(b)
+            .all(|(&x, &y)| ascii_upper(x) == ascii_upper(y))
+}
