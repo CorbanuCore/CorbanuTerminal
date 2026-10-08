@@ -9,7 +9,7 @@ use crate::acl::add_deny_read_ace;
 use crate::acl::add_deny_read_ace_for_new_files;
 use crate::acl::ensure_explicit_deny_read_ace;
 use crate::acl::has_explicit_deny_read_ace;
-use crate::setup::sandbox_dir;
+use crate::setup::sandbox_secrets_dir;
 use crate::token::LocalSid;
 use crate::winutil::to_wide;
 use pretty_assertions::assert_eq;
@@ -50,7 +50,6 @@ struct Home {
 fn home() -> Home {
     let dir = tempfile::tempdir().expect("codex home");
     let codex_home = dunce::canonicalize(dir.path()).expect("canonical codex home");
-    std::fs::create_dir_all(sandbox_dir(&codex_home)).expect("sandbox dir");
     let secret = codex_home.join("vault-secret");
     std::fs::create_dir(&secret).expect("secret dir");
     let nested = secret.join("nested");
@@ -72,10 +71,15 @@ fn sync(home: &Home, paths: &[PathBuf], group: &LocalSid) {
     .expect("sync deny-read ACLs");
 }
 
+/// The sync's record of the entries it added.
+fn state(home: &Home) -> String {
+    std::fs::read_to_string(sandbox_secrets_dir(&home.codex_home).join("deny_read_acl_owned.json"))
+        .unwrap_or_default()
+}
+
 /// Whether the sync state still lists the protected directory.
 fn recorded(home: &Home) -> bool {
-    std::fs::read_to_string(sandbox_dir(&home.codex_home).join("deny_read_acl_state.json"))
-        .is_ok_and(|state| state.contains("vault-secret"))
+    state(home).contains("vault-secret")
 }
 
 #[test]
@@ -164,41 +168,58 @@ fn sec_win_304_child_stays_denied_when_its_parent_is_dropped() {
 
 /// A sandboxed command can replace a stale deny-read path inside a writable
 /// root, or a directory above it, with a junction to a path that is still
-/// denied. The removal must not follow it.
+/// denied, or a stale file with a hard link to a file that is. The removal
+/// must not reach them.
 #[test]
-fn sec_win_304_removal_does_not_follow_a_junction() {
+fn sec_win_304_removal_does_not_follow_a_link() {
     let home = home();
     let group = LocalSid::from_string(SANDBOX_GROUP).expect("group SID");
     let at_path = home.codex_home.join("workspace-env");
     let parent = home.codex_home.join("workspace");
     let under_parent = parent.join("vault-secret");
+    let stale_file = home.codex_home.join("workspace.env");
+    let denied_file = home.secret.join("auth.json");
     std::fs::create_dir_all(&at_path).expect("stale dir");
     std::fs::create_dir_all(&under_parent).expect("stale dir");
+    std::fs::write(&stale_file, "").expect("stale file");
+    std::fs::write(&denied_file, "{}").expect("denied file");
     sync(
         &home,
-        &[at_path.clone(), under_parent.clone(), home.secret.clone()],
+        &[
+            at_path.clone(),
+            under_parent.clone(),
+            stale_file.clone(),
+            home.secret.clone(),
+            denied_file.clone(),
+        ],
         &group,
     );
-    // The paths are swapped for junctions to the still-denied directory
+    // The paths are swapped for links to the still-denied objects
     // (`workspace\vault-secret` then names `vault-secret`).
     std::fs::remove_dir(&at_path).expect("remove stale dir");
     std::fs::remove_dir(&under_parent).expect("remove stale dir");
     std::fs::remove_dir(&parent).expect("remove stale parent");
+    std::fs::remove_file(&stale_file).expect("remove stale file");
     junction(&at_path, &home.secret);
     junction(&parent, &home.codex_home);
+    std::fs::hard_link(&denied_file, &stale_file).expect("hard link");
 
-    sync(&home, std::slice::from_ref(&home.secret), &group);
+    sync(&home, &[home.secret.clone(), denied_file.clone()], &group);
     assert!(
         explicit_deny(&home.secret, &group),
         "{}",
         dacl_sddl(&home.secret)
     );
+    assert!(
+        explicit_deny(&denied_file, &group),
+        "{}",
+        dacl_sddl(&denied_file)
+    );
     // Kept, so the entries are removed if the paths come back.
-    let state =
-        std::fs::read_to_string(sandbox_dir(&home.codex_home).join("deny_read_acl_state.json"))
-            .expect("state");
+    let state = state(&home);
     assert!(state.contains("workspace-env"), "{state}");
     assert!(state.contains("workspace\\\\vault-secret"), "{state}");
+    assert!(state.contains("workspace.env"), "{state}");
 }
 
 /// The sandbox's group is machine-wide, so another `CODEX_HOME`'s sessions

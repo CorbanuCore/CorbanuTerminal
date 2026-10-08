@@ -3,7 +3,7 @@ use crate::acl::file_link_count;
 use crate::acl::remove_deny_read_ace;
 use crate::deny_read_acl::apply_deny_read_acls_tracked;
 use crate::deny_read_acl::lexical_path_key;
-use crate::setup::sandbox_dir;
+use crate::setup::sandbox_secrets_dir;
 use anyhow::Context;
 use anyhow::Result;
 use serde::Deserialize;
@@ -15,7 +15,11 @@ use std::fs::File;
 use std::path::Path;
 use std::path::PathBuf;
 
-const DENY_READ_ACL_STATE_FILE: &str = "deny_read_acl_state.json";
+/// In `.sandbox-secrets`, which the sandbox's users cannot write: the paths
+/// it lists get their entries removed. (Earlier versions kept every applied
+/// path in `.sandbox`, which they can write; that file is no longer read, so
+/// the entries it lists stay.)
+const DENY_READ_ACL_STATE_FILE: &str = "deny_read_acl_owned.json";
 
 /// PF-27-S07: the lock file in `CODEX_HOME` that every process with the
 /// secretless launch contract armed holds shared for its lifetime.
@@ -54,7 +58,10 @@ pub unsafe fn sync_persistent_deny_read_acls(
     desired_paths: &[PathBuf],
     psid: *mut c_void,
 ) -> Result<Vec<PathBuf>> {
-    let state_path = sandbox_dir(codex_home).join(DENY_READ_ACL_STATE_FILE);
+    let state_dir = sandbox_secrets_dir(codex_home);
+    std::fs::create_dir_all(&state_dir)
+        .with_context(|| format!("create {}", state_dir.display()))?;
+    let state_path = state_dir.join(DENY_READ_ACL_STATE_FILE);
     let mut state = load_state(&state_path)?;
     let previous_paths = state
         .principals

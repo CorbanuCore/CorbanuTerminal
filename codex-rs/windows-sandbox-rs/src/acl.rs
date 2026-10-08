@@ -820,9 +820,9 @@ pub unsafe fn remove_deny_read_ace_for_new_files(path: &Path, psid: *mut c_void)
 /// `REVOKE_ACCESS` cannot do this: it removes only allow entries.
 ///
 /// The object is opened without following a link at `path` and must be the
-/// object `path` names, so a junction a sandboxed command left at a stale
-/// deny-read path (or above it) cannot point the removal at another denied
-/// object. Returns whether an entry was removed.
+/// object `path` names, so a junction or hard link a sandboxed command left
+/// at a stale deny-read path (or a junction above it) cannot point the
+/// removal at another denied object. Returns whether an entry was removed.
 ///
 /// # Safety
 /// Caller must ensure `psid` points to a valid SID.
@@ -883,7 +883,8 @@ impl Drop for ExactHandle {
 }
 
 /// Opens the object `path` names with `access`, failing if `path` is a link
-/// (a symbolic link or junction) or resolves elsewhere through one above it.
+/// (a symbolic link or junction), resolves elsewhere through one above it, or
+/// is a file with other hard links.
 unsafe fn open_exact(path: &Path, access: u32) -> Result<ExactHandle> {
     let raw = CreateFileW(
         to_wide(path).as_ptr(),
@@ -907,6 +908,12 @@ unsafe fn open_exact(path: &Path, access: u32) -> Result<ExactHandle> {
     if info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
         return Err(anyhow!("{} is a link", path.display()));
     }
+    // A hard link shares its DACL with the file's other names, and the name
+    // check below cannot tell.
+    let is_dir = info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY != 0;
+    if !is_dir && info.nNumberOfLinks != 1 {
+        return Err(anyhow!("{} has other hard links", path.display()));
+    }
     let mut buffer = vec![0_u16; 1024];
     let len = loop {
         let len = GetFinalPathNameByHandleW(handle.raw, buffer.as_mut_ptr(), buffer.len() as u32, 0)
@@ -924,7 +931,7 @@ unsafe fn open_exact(path: &Path, access: u32) -> Result<ExactHandle> {
     if comparable_path(&resolved) != comparable_path(&path.to_string_lossy()) {
         return Err(anyhow!("{} resolves to {resolved}", path.display()));
     }
-    handle.is_dir = info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY != 0;
+    handle.is_dir = is_dir;
     Ok(handle)
 }
 

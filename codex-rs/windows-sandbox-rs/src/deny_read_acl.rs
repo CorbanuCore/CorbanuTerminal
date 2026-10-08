@@ -92,7 +92,14 @@ pub(crate) unsafe fn apply_deny_read_acls_tracked(
             }
         };
         if added {
-            added_in_this_call.push(path.clone());
+            // Through a link the entry is on the target: record that, which
+            // the removal (it refuses links) can reach.
+            let target = canonicalize_path(&path);
+            added_in_this_call.push(if lexical_path_key(&target) == lexical_path_key(&path) {
+                path.clone()
+            } else {
+                target
+            });
         }
         push_planned_path(&mut applied, &mut seen, path);
     }
