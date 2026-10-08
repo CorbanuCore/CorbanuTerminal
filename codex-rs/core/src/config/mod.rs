@@ -3689,9 +3689,10 @@ impl Config {
                         .to_string(),
                 );
             }
-        } else {
-            // PF-27-S07: drop the CODEX_HOME deny a protected run left behind.
-            #[cfg(windows)]
+        }
+        // PF-27-S07: drop the CODEX_HOME deny a protected run left behind.
+        #[cfg(windows)]
+        if !secretless_agent_launch {
             crate::security::launch_contract::release_codex_home_when_unarmed(&codex_home);
         }
         if features.enabled(Feature::BrokerModelAuth) {
