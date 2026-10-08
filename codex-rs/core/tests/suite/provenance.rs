@@ -804,6 +804,7 @@ const PF_30_S03_HOME_READ: &str = "cat \"$CODEX_HOME/config.toml\"";
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn pf_30_s03_permission_hook_allow_does_not_approve_a_tainted_protected_action()
 -> anyhow::Result<()> {
+    core_test_support::skip_if_remote!(Ok(()), "the permission hook writes its marker inside the remote container, but the assertion checks the host");
     use codex_protocol::protocol::AskForApproval;
     use codex_protocol::protocol::ReviewDecision;
     skip_if_no_network!(Ok(()));

@@ -1139,6 +1139,7 @@ async fn guardian_receives_exact_trigger_for_single_network_request() -> Result<
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_guardian_network_decisions_are_scoped_to_each_request_and_environment() -> Result<()>
 {
+    core_test_support::skip_if_remote!(Ok(()), "network requests from inside the remote container do not reach the host-side network approval proxy (#157 follow-up)");
     skip_if_target_windows!(Ok(()), "uses the POSIX/Python network fixture");
     skip_if_host_windows!(Ok(()));
     skip_if_no_network!(Ok(()));
@@ -1357,6 +1358,7 @@ async fn remote_guardian_network_decisions_are_scoped_to_each_request_and_enviro
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn approved_network_host_for_one_environment_still_prompts_in_another() -> Result<()> {
+    core_test_support::skip_if_remote!(Ok(()), "network requests from inside the remote container do not reach the host-side network approval proxy (#157 follow-up)");
     skip_if_target_windows!(Ok(()), "uses the POSIX/Python network fixture");
     skip_if_host_windows!(Ok(()));
     skip_if_no_network!(Ok(()));

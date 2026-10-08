@@ -297,6 +297,7 @@ async fn pf_23_s01_protected_mcp_call_after_untrusted_content_needs_the_human() 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn pf_23_s01_typing_a_protected_command_into_a_running_shell_needs_the_human()
 -> anyhow::Result<()> {
+    core_test_support::skip_if_remote!(Ok(()), "split write_stdin into a remote interactive shell does not reproduce the local output (#157 follow-up)");
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
     let stdin_turn = |approval, chars: &str| {
@@ -801,6 +802,7 @@ async fn pf_23_s02_sandbox_makes_persistence_files_read_only_under_full_access()
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn pf_23_s02_typing_into_a_shell_started_before_untrusted_content_is_confined()
 -> anyhow::Result<()> {
+    core_test_support::skip_if_remote!(Ok(()), "writes its canary fixture on the host, but the shell runs in the remote container");
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
     // The shell proves it is confined: it cannot read a Corbanu home store
