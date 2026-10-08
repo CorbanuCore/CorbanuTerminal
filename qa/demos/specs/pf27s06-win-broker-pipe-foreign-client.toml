@@ -1,0 +1,91 @@
+# PF-27-S06 Windows gate: foreign clients of the credential broker's named pipes. A same-user
+# process (the user's ! command) connects and is dropped before any byte; the sandbox user cannot open them.
+id = "pf27s06-win-broker-pipe-foreign-client"
+feature = "Windows credential broker: its named pipes refuse foreign clients"
+expected = "A same-user process connects to the data pipe and is dropped with 0 bytes received; an agent command (sandbox user) is denied opening it."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[windows]
+sandbox = "elevated"
+
+[sandbox_workspace_write]
+network_access = true
+
+[features]
+isolated_credential_broker = true
+secretless_agent_launch = false
+
+[features.network_proxy]
+enabled = true
+allow_local_binding = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"pipe-probe.ps1" = '''
+# Connects to Corbanu's credential-broker pipes as a foreign client.
+$me = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+$pipes = [IO.Directory]::GetFiles('\\.\pipe\') | Where-Object { $_ -like '*corbanu-cbk-*' }
+"${me}: found $($pipes.Count) broker pipes"
+foreach ($p in $pipes) {
+  $name = $p.Substring(9)
+  $short = $name.Substring(0, 20) + '...' + $name.Substring($name.Length - 2)
+  $c = New-Object IO.Pipes.NamedPipeClientStream('.', $name, [IO.Pipes.PipeDirection]::InOut)
+  try {
+    try { $c.Connect(2000) }
+    catch [UnauthorizedAccessException] { "${short}: open denied (access denied)"; continue }
+    catch { "${short}: no free instance to connect to (controller already attached)"; continue }
+    $buf = New-Object byte[] 64
+    try { $n = $c.Read($buf, 0, 64) } catch { $n = 0 }
+    "${short}: connected, then dropped by the broker; bytes received: $n"
+  } finally { $c.Dispose() }
+}
+'pipe probe done'
+'''
+
+[[steps]]
+wait = "Do you trust the contents of this directory"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+type = "!powershell -NoProfile -ExecutionPolicy Bypass -File pipe-probe.ps1"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "pipe probe done"
+timeout = 60
+
+[[steps]]
+type = "Run this exact command once and show me its raw output, then stop: powershell -NoProfile -ExecutionPolicy Bypass -File pipe-probe.ps1"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "CodexSandbox\\w+: found"
+timeout = 240
+compress = 3
+
+[[steps]]
+wait = "(?s)CodexSandbox.*pipe probe done"
+timeout = 120
+compress = 2
+
+[[steps]]
+pause = 5.0
