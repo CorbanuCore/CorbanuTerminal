@@ -189,12 +189,7 @@ async fn accounting_responses_native_observation_failure() -> anyhow::Result<()>
     sqlx::query("CREATE TRIGGER reject_responses_observation BEFORE INSERT ON draft_accounting_observations BEGIN SELECT RAISE(ABORT, 'fixture'); END")
         .execute(&mut connection(&db).await?).await?;
     held.chunks.send(success(usage(Some(0)))).await?;
-    assert!(
-        terminal(&test)
-            .await?
-            .iter()
-            .any(|e| matches!(e, EventMsg::Error(_)))
-    );
+    core_test_support::assert_accounting_gap(&terminal(&test).await?);
     assert_eq!(observations(&db).await?, before);
     assert_eq!(attempts(&db).await?.len(), 1);
     gate.no_pending();
@@ -224,13 +219,11 @@ async fn accounting_responses_native_admission_barrier() -> anyhow::Result<()> {
     held.chunks.send(success(usage(Some(0)))).await?;
     terminal(&test).await?;
     sqlx::query("CREATE TRIGGER reject_responses_attempt BEFORE INSERT ON draft_accounting_attempts BEGIN SELECT RAISE(ABORT, 'fixture'); END").execute(&mut lock).await?;
+    // A failed admission sends the request unrecorded.
     submit(&test).await?;
-    assert!(
-        terminal(&test)
-            .await?
-            .iter()
-            .any(|e| matches!(e, EventMsg::Error(_)))
-    );
+    let held = gate.next().await?;
+    held.chunks.send(success(usage(Some(0)))).await?;
+    core_test_support::assert_accounting_gap(&terminal(&test).await?);
     assert_eq!(attempts(&db).await?.len(), 1);
     gate.no_pending();
     stop(&test).await;

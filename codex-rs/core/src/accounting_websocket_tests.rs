@@ -80,7 +80,9 @@ async fn accounting_responses_ws_subscription_uses_resolved_endpoint_without_api
         Some(&auth),
         &provider.to_api_provider(Some(codex_protocol::auth::AuthMode::ApiKey))?,
     );
-    assert!(wrong.validate(&fixture.deferred, /*cached*/ None).is_err());
+    // Not the approved route: served unrecorded, and collection closes.
+    assert!(!wrong.validate(&fixture.deferred, /*cached*/ None)?);
+    assert!(fixture.deferred.check().is_err());
     Ok(())
 }
 
@@ -333,11 +335,7 @@ async fn accounting_responses_ws_auth_route_eligibility() -> anyhow::Result<()> 
     fixture.resolve().await?;
     let mut current = provenance();
     current.api_key = false;
-    assert!(
-        current
-            .validate(&fixture.deferred, /*cached*/ None)
-            .is_err()
-    );
+    assert!(!current.validate(&fixture.deferred, /*cached*/ None)?);
     assert!(fixture.deferred.check().is_err());
     Ok(())
 }
@@ -369,11 +367,8 @@ async fn accounting_responses_ws_exact_endpoint_binding() -> anyhow::Result<()> 
         let fixture = Fixture::new(mode()).await?;
         let mut current = provenance();
         current.endpoint = Some(bad.into());
-        assert!(
-            current
-                .validate(&fixture.deferred, /*cached*/ None)
-                .is_err()
-        );
+        assert!(!current.validate(&fixture.deferred, /*cached*/ None)?);
+        assert!(fixture.deferred.check().is_err());
         assert!(
             fixture
                 .rows::<Attempt>("draft_accounting_attempts")
@@ -396,7 +391,7 @@ async fn accounting_responses_ws_cached_connection_provenance() -> anyhow::Resul
             cached.endpoint = None;
         }
         assert_eq!(
-            current.validate(&fixture.deferred, Some(&cached)).is_ok(),
+            current.validate(&fixture.deferred, Some(&cached))?,
             variant == 0
         );
     }
@@ -504,14 +499,25 @@ async fn accounting_responses_ws_failure_and_cancellation_latch() -> anyhow::Res
         observer
             .observe(/*position*/ 1, Err(codex_api::InvalidResponsesUsage))
             .await
-            .is_err()
+            .is_ok()
     );
     assert!(fixture.deferred.check().is_err());
-    assert!(
-        admission
-            .admit("gpt-5.6-sol".into(), /*tier*/ None)
-            .await
-            .is_err()
+    // A closed sampling admits nothing more, but the request still goes out
+    // with an observer that records nothing.
+    let recorded = fixture.rows::<Attempt>("draft_accounting_attempts").await?;
+    let unrecorded = admission.admit("gpt-5.6-sol".into(), /*tier*/ None).await?;
+    unrecorded
+        .observe(
+            /*position*/ 1,
+            Ok(codex_api::ResponsesUsagePatch {
+                input_tokens: codex_api::ResponsesTokenPresence::Number(7),
+                ..Default::default()
+            }),
+        )
+        .await?;
+    assert_eq!(
+        fixture.rows::<Attempt>("draft_accounting_attempts").await?,
+        recorded
     );
     let slot = super::super::responses::Slot::default();
     let scope =
@@ -538,8 +544,8 @@ async fn accounting_responses_ws_failure_and_cancellation_latch() -> anyhow::Res
     assert!(
         failed
             .resolve(&provider(), Some(&auth()), &format!("{BASE}/responses"))
-            .await
-            .is_err()
+            .await?
+            .is_none()
     );
     assert!(failed.check().is_err());
     Ok(())

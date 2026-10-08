@@ -138,8 +138,8 @@ async fn accounting_responses_auth_route_eligibility() -> anyhow::Result<()> {
                 /*auth*/ None,
                 &format!("{ENDPOINT}/responses")
             )
-            .await
-            .is_err()
+            .await?
+            .is_none()
     );
     assert!(fixture.deferred.check().is_err());
     Ok(())
@@ -238,8 +238,8 @@ async fn accounting_responses_bootstrap_failure_and_cancellation() -> anyhow::Re
     assert!(
         deferred
             .resolve(&provider(), Some(&auth()), &format!("{ENDPOINT}/responses"))
-            .await
-            .is_err()
+            .await?
+            .is_none()
     );
     assert!(deferred.check().is_err());
     let fixture = Fixture::new().await?;
@@ -265,7 +265,7 @@ async fn accounting_responses_scope_cleanup_and_failure_latch() -> anyhow::Resul
         evidence
             .observe(/*position*/ 1, Err(codex_api::InvalidResponsesUsage))
             .await
-            .is_err()
+            .is_ok()
     );
     assert!(fixture.deferred.check().is_err());
     drop(scope);

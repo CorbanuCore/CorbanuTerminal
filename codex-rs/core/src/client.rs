@@ -4187,21 +4187,17 @@ impl ModelClientSession {
                 &client_setup.api_provider,
             );
             let sampling = if let Some(deferred) = &deferred {
-                let cached = if self.websocket_session.connection.is_some() {
-                    Some(self.websocket_session.provenance.as_ref().ok_or_else(|| {
-                        deferred.reject();
-                        CodexErr::Fatal(
-                            crate::accounting::failure(
-                                "websocket admission",
-                                "open connection has no recorded provenance",
-                            )
-                            .into(),
-                        )
-                    })?)
-                } else {
+                let open = self.websocket_session.connection.is_some();
+                let cached = self.websocket_session.provenance.as_ref().filter(|_| open);
+                if open && cached.is_none() {
+                    // Not attributable: send it unrecorded.
+                    deferred.reject();
+                    crate::accounting::gap(
+                        "websocket admission",
+                        "open connection has no recorded provenance",
+                    );
                     None
-                };
-                if provenance.validate(deferred, cached)? {
+                } else if provenance.validate(deferred, cached)? {
                     deferred
                         .resolve(
                             self.client.state.provider.info(),
@@ -4342,33 +4338,32 @@ impl ModelClientSession {
             }
             let admission = match (sampling, deferred.as_ref()) {
                 (Some(sampling), Some(deferred)) => {
-                    let established =
-                        self.websocket_session.provenance.clone().ok_or_else(|| {
+                    match (
+                        self.websocket_session.provenance.clone(),
+                        deferred.websocket_endpoint()?,
+                    ) {
+                        (Some(established), Some(expected)) => {
+                            Some(crate::accounting::websocket::Admission::new(
+                                sampling,
+                                established,
+                                expected,
+                                self.client.stage_one_memory_binding.clone(),
+                            ))
+                        }
+                        // Not attributable: send it unrecorded.
+                        (established, _) => {
                             deferred.reject();
-                            CodexErr::Fatal(
-                                crate::accounting::failure(
-                                    "websocket admission",
-                                    "connection has no recorded provenance",
-                                )
-                                .into(),
-                            )
-                        })?;
-                    let expected = deferred.websocket_endpoint()?.ok_or_else(|| {
-                        deferred.reject();
-                        CodexErr::Fatal(
-                            crate::accounting::failure(
+                            crate::accounting::gap(
                                 "websocket admission",
-                                "turn has no approved websocket endpoint",
-                            )
-                            .into(),
-                        )
-                    })?;
-                    Some(crate::accounting::websocket::Admission::new(
-                        sampling,
-                        established,
-                        expected,
-                        self.client.stage_one_memory_binding.clone(),
-                    ))
+                                if established.is_none() {
+                                    "connection has no recorded provenance"
+                                } else {
+                                    "turn has no approved websocket endpoint"
+                                },
+                            );
+                            None
+                        }
+                    }
                 }
                 _ => None,
             };

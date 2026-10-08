@@ -373,9 +373,7 @@ async fn accounting_responses_ws_native_redirects_never_escape_binding() -> anyh
                     .collect();
                 assert_eq!(
                     errors,
-                    [
-                        "Fatal error: Native Anthropic accounting failed; request stopped without a repair send"
-                    ],
+                    ["Fatal error: Developer accounting stopped this request; it was not re-sent"],
                     "WS redirect {status} must latch accounting failure"
                 );
             }
@@ -401,7 +399,8 @@ async fn accounting_responses_ws_native_redirects_never_escape_binding() -> anyh
     Ok(())
 }
 #[tokio::test]
-async fn accounting_responses_ws_native_endpoint_and_cached_auth_mismatch() -> anyhow::Result<()> {
+async fn accounting_responses_ws_native_endpoint_and_cached_auth_mismatch_are_sent_unrecorded()
+-> anyhow::Result<()> {
     let server = MockServer::start().await;
     let mut gate = Gate::start().await?;
     let test = builder(
@@ -411,15 +410,11 @@ async fn accounting_responses_ws_native_endpoint_and_cached_auth_mismatch() -> a
     .build_with_auto_env(&server)
     .await?;
     submit(&test).await?;
-    assert!(
-        terminal(&test)
-            .await?
-            .iter()
-            .any(|event| matches!(event, EventMsg::Error(_)))
-    );
+    gate.next().await?.complete().await?;
+    core_test_support::assert_accounting_gap(&terminal(&test).await?);
     gate.no_pending().await;
     absent(&test.codex.state_db().unwrap()).await?;
-    assert_eq!(gate.counts.lock().unwrap().2, 0);
+    assert_eq!(gate.counts.lock().unwrap().2, 1);
     stop(&test).await;
 
     let mut gate = Gate::start().await?;
@@ -444,13 +439,9 @@ async fn accounting_responses_ws_native_endpoint_and_cached_auth_mismatch() -> a
         )))
         .await?;
     warmup.complete().await?;
-    assert!(
-        terminal(&test)
-            .await?
-            .iter()
-            .any(|event| matches!(event, EventMsg::Error(_)))
-    );
-    counts(&gate, (1, 1, 0, 0));
+    gate.next().await?.complete().await?;
+    core_test_support::assert_accounting_gap(&terminal(&test).await?);
+    counts(&gate, (1, 1, 1, 0));
     absent(&test.codex.state_db().unwrap()).await?;
     stop(&test).await;
     Ok(())

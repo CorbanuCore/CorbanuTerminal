@@ -252,21 +252,17 @@ async fn accounting_responses_native_unknown_prices_and_tiers() -> anyhow::Resul
 }
 
 #[tokio::test]
-async fn accounting_responses_native_endpoint_mismatch() -> anyhow::Result<()> {
+async fn accounting_responses_native_endpoint_mismatch_is_sent_unrecorded() -> anyhow::Result<()> {
     for suffix in ["/wrong", "?unexpected=1", ":1234", "/v1"] {
         let server = MockServer::start().await;
         let endpoint = format!("{}/v1", server.uri());
+        let mock = responses::mount_sse_once(&server, success(usage(Some(0)))).await;
         let test = builder(endpoint.clone(), enabled(&format!("{endpoint}{suffix}")))
             .build_with_auto_env(&server)
             .await?;
         submit(&test).await?;
-        assert!(
-            terminal(&test)
-                .await?
-                .iter()
-                .any(|e| matches!(e, EventMsg::Error(_)))
-        );
-        assert!(server.received_requests().await.unwrap().is_empty());
+        core_test_support::assert_accounting_gap(&terminal(&test).await?);
+        assert_eq!(mock.requests().len(), 1);
         absent(&test.codex.state_db().unwrap()).await?;
         stop(&test).await;
     }

@@ -741,7 +741,7 @@ async fn accounting_guard_denial_precedes_admission_and_never_sends() -> anyhow:
 }
 
 #[tokio::test]
-async fn accounting_admission_failure_and_route_mismatch_are_sticky_without_send()
+async fn accounting_admission_failure_and_route_mismatch_serve_the_request_unrecorded()
 -> anyhow::Result<()> {
     for fault in ["admission", "route", "missing_owner"] {
         let fixture = Fixture::new().await?;
@@ -765,27 +765,24 @@ async fn accounting_admission_failure_and_route_mismatch_are_sticky_without_send
         if fault == "route" {
             outbound.url = "http://127.0.0.1:2/v1/messages".into();
         }
-        assert!(transport.stream(outbound).await.is_err());
-        assert!(transport.stream(request()).await.is_err());
+        // Accounting never stops a request: both are sent, neither recorded,
+        // and the sampling stays closed for the rest of the turn.
+        transport.stream(outbound).await?;
+        transport.stream(request()).await?;
         assert_eq!(
             (
                 fixture.attempts().await?.len(),
                 sends.load(Ordering::SeqCst)
             ),
-            (0, 0)
+            (0, 2)
         );
-        let error = fixture.sampling.check().unwrap_err();
-        assert!(!error.is_retryable());
-        assert_eq!(
-            error.to_string(),
-            format!("Fatal error: {}", crate::accounting::FAILURE)
-        );
+        assert!(fixture.sampling.is_closed());
     }
     Ok(())
 }
 
 #[tokio::test]
-async fn accounting_scope_drop_clears_cancelled_sampling_and_observation_failure_is_fatal()
+async fn accounting_scope_drop_clears_cancelled_sampling_and_observation_failure_closes_it()
 -> anyhow::Result<()> {
     let fixture = Fixture::new().await?;
     let slot = Default::default();
@@ -810,13 +807,11 @@ async fn accounting_scope_drop_clears_cancelled_sampling_and_observation_failure
         .await?;
     sqlx::query("CREATE TRIGGER reject_observation BEFORE INSERT ON draft_accounting_observations BEGIN SELECT RAISE(ABORT, 'fixture-observation'); END")
         .execute(&mut fixture.connection().await?).await?;
-    assert!(
-        evidence
-            .observe(/*position*/ 2, Ok(usage(/*value*/ 9)))
-            .await
-            .is_err()
-    );
-    assert!(!fixture.sampling.check().unwrap_err().is_retryable());
+    // The stream carries on; only recording stops.
+    evidence
+        .observe(/*position*/ 2, Ok(usage(/*value*/ 9)))
+        .await?;
+    assert!(fixture.sampling.is_closed());
     let rows: Vec<String> = sqlx::query_scalar(
         "SELECT json_extract(payload, '$.patch') FROM draft_accounting_observations",
     )
@@ -894,7 +889,53 @@ async fn accounting_waits_out_another_process_holding_the_state_db_past_its_busy
     Ok(())
 }
 
-/// The user sees one fixed message; the log records which step failed and why.
+/// #287: with the clock behind the ledger checkpoint (58 s, 6 days), opening a
+/// sampling failed and every request in the turn stopped before it was sent.
+/// Now the sampling opens and the request is sent and recorded at the time the
+/// clock read.
+#[tokio::test]
+async fn accounting_clock_behind_the_checkpoint_still_records_and_sends() -> anyhow::Result<()> {
+    for behind in [58_000_i64, 6 * 86_400_000] {
+        let fixture = Fixture::new().await?;
+        let ahead = chrono::Utc::now().timestamp_millis() + behind;
+        sqlx::query("UPDATE draft_accounting_retention_checkpoint SET completed_as_of_ms = ?")
+            .bind(ahead)
+            .execute(&mut fixture.connection().await?)
+            .await?;
+        let sampling = Sampling::start(
+            fixture.db.clone(),
+            fixture.owner,
+            "skewed".into(),
+            &AccountingMode::DirectAnthropic {
+                scope: Uuid::new_v4(),
+                approved_endpoint: ENDPOINT.into(),
+            },
+        )
+        .await?;
+        let sends = Arc::new(AtomicUsize::new(0));
+        let evidence = ResponseEvidence::new(sampling.clone());
+        AccountingTransport::new(
+            Probe {
+                sends: sends.clone(),
+                fail_first: false,
+            },
+            Some(evidence.clone()),
+            "claude-opus-5".into(),
+        )
+        .stream(request())
+        .await?;
+        evidence
+            .observe(/*position*/ 1, Ok(usage(/*value*/ 7)))
+            .await?;
+        let attempts = fixture.attempts().await?;
+        assert_eq!((attempts.len(), sends.load(Ordering::SeqCst)), (1, 1));
+        assert!(i64::from(attempts[0].dispatched_at_ms) < ahead);
+        assert!(!sampling.is_closed());
+    }
+    Ok(())
+}
+
+/// The request is sent; the log records which step failed and why.
 #[tokio::test]
 #[tracing_test::traced_test]
 async fn accounting_failure_logs_its_step_and_cause() -> anyhow::Result<()> {
@@ -909,10 +950,10 @@ async fn accounting_failure_logs_its_step_and_cause() -> anyhow::Result<()> {
         Some(ResponseEvidence::new(fixture.sampling.clone())),
         "claude-opus-5".into(),
     );
-    assert!(transport.stream(request()).await.is_err());
+    transport.stream(request()).await?;
     assert!(logs_contain("admit attempt"));
     assert!(logs_contain("fixture-admission"));
-    assert!(logs_contain(crate::accounting::FAILURE));
+    assert!(logs_contain("request sent unrecorded"));
     // Not contention, so it was not retried.
     assert!(!logs_contain("retrying"));
     Ok(())

@@ -277,16 +277,14 @@ async fn responses_accounting_awaits_observation_before_completion() {
         assert_eq!(sink.values.lock().unwrap().len(), 1);
         sink.gate.as_ref().unwrap().add_permits(1);
         let output = drain(stream).await;
-        assert_eq!(completed(&output), usize::from(!reject));
-        assert_eq!(
-            output.iter().filter(|v| v.is_err()).count(),
-            usize::from(reject)
-        );
+        // A rejected observation never ends the stream.
+        assert_eq!(completed(&output), 1);
+        assert_eq!(output.iter().filter(|v| v.is_err()).count(), 0);
     }
 }
 
 #[tokio::test]
-async fn responses_accounting_invalid_usage_latches_and_stops() {
+async fn responses_accounting_invalid_usage_stops_observing_not_the_stream() {
     let sink = Arc::new(Sink::default());
     let output = drain(stream(
         vec![
@@ -300,10 +298,10 @@ async fn responses_accounting_invalid_usage_latches_and_stops() {
         *sink.values.lock().unwrap(),
         vec![(1, Err(InvalidResponsesUsage))]
     );
-    assert_eq!(completed(&output), 0);
-    assert_eq!(output.len(), 2);
+    // Only the invalid event was observed; the stream still completed.
+    assert_eq!(completed(&output), 1, "{output:?}");
     assert!(matches!(output[0], Ok(ResponseEvent::RateLimits(_))));
-    assert!(output[1].is_err());
+    assert_eq!(output.iter().filter(|v| v.is_err()).count(), 0);
 }
 
 #[tokio::test]

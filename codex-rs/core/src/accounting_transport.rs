@@ -1,5 +1,4 @@
 //! Per-physical-send intent under endpoint retries, with response-local evidence.
-use super::FAILURE;
 use super::Sampling;
 use super::failure;
 use codex_api::AnthropicUsageObserver;
@@ -60,6 +59,15 @@ impl ResponseEvidence {
     fn is_excluded(&self) -> bool {
         self.excluded.load(Ordering::SeqCst)
     }
+
+    /// Accounting failed for this request: record nothing more for it or the
+    /// rest of its turn, and let it proceed. The request was, or will be, sent
+    /// and billed; failing it would lose the provider's answer as well.
+    fn give_up(&self, step: &'static str, cause: impl std::fmt::Display) {
+        self.sampling.reject();
+        self.exclude();
+        super::gap(step, cause);
+    }
 }
 
 impl AnthropicUsageObserver for ResponseEvidence {
@@ -83,10 +91,10 @@ impl AnthropicUsageObserver for ResponseEvidence {
                 )),
                 (_, Err(_)) => Err(anyhow::anyhow!("provider usage failed validation")),
             };
-            result.map_err(|error| {
-                self.sampling.reject();
-                ApiError::Stream(failure("observe usage", format_args!("{error:#}")).into())
-            })
+            if let Err(error) = result {
+                self.give_up("observe usage", format_args!("{error:#}"));
+            }
+            Ok(())
         })
     }
 }
@@ -117,10 +125,10 @@ impl codex_api::ResponsesUsageObserver for ResponseEvidence {
                     .await
             }
             .await;
-            result.map_err(|error| {
-                self.sampling.reject();
-                ApiError::Stream(failure("observe usage", format_args!("{error:#}")).into())
-            })
+            if let Err(error) = result {
+                self.give_up("observe usage", format_args!("{error:#}"));
+            }
+            Ok(())
         })
     }
 }
@@ -151,10 +159,10 @@ impl codex_api::ChatUsageObserver for ResponseEvidence {
                     .await
             }
             .await;
-            result.map_err(|error| {
-                self.sampling.reject();
-                ApiError::Stream(failure("observe usage", format_args!("{error:#}")).into())
-            })
+            if let Err(error) = result {
+                self.give_up("observe usage", format_args!("{error:#}"));
+            }
+            Ok(())
         })
     }
 }
@@ -286,11 +294,12 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
         let Some(evidence) = &self.evidence else {
             return self.inner.execute(request).await;
         };
+        if evidence.is_excluded() {
+            return self.inner.execute(request).await;
+        }
         if evidence.attempt.get().is_some() {
-            evidence.sampling.reject();
-            return Err(TransportError::Build(
-                failure("admit attempt", "a second send on one admitted response").into(),
-            ));
+            evidence.give_up("admit attempt", "a second send on one admitted response");
+            return self.inner.execute(request).await;
         }
         if let Some(reason) = request_refusal(
             &request,
@@ -305,17 +314,20 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
             evidence.exclude();
             return self.inner.execute(request).await;
         }
-        let attempt = evidence
+        let attempt = match evidence
             .sampling
             .admit_with_tier(&self.model, &request.url, self.tier.as_deref())
             .await
-            .map_err(|error| {
-                evidence.sampling.reject();
-                TransportError::Build(failure("admit attempt", format_args!("{error:#}")).into())
-            })?;
+        {
+            Ok(attempt) => attempt,
+            Err(error) => {
+                evidence.give_up("admit attempt", format_args!("{error:#}"));
+                return self.inner.execute(request).await;
+            }
+        };
         let response = match self.inner.execute(request).await {
             Err(TransportError::Http { status, .. }) if status.is_redirection() => {
-                evidence.sampling.reject();
+                evidence.sampling.halt();
                 return Err(TransportError::Build(
                     failure(
                         "send",
@@ -326,21 +338,20 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
             }
             result => result?,
         };
-        evidence.attempt.set(attempt).map_err(|_| {
-            evidence.sampling.reject();
-            TransportError::Build(failure("bind attempt", "response already bound").into())
-        })?;
+        if evidence.attempt.set(attempt).is_err() {
+            evidence.give_up("bind attempt", "response already bound");
+            return Ok(response);
+        }
         // One body, one observation: revisions are positive, and this response
-        // has exactly one.
+        // has exactly one. A failed observation is logged and leaves the
+        // response alone.
         if let Ok(Some(usage)) = codex_api::responses_body_usage(&response.body) {
-            // The observer has already logged its cause.
-            codex_api::ResponsesUsageObserver::observe(
+            let _ = codex_api::ResponsesUsageObserver::observe(
                 evidence.as_ref(),
                 /*position*/ 1,
                 Ok(usage),
             )
-            .await
-            .map_err(|_| TransportError::Build(FAILURE.into()))?;
+            .await;
         }
         Ok(response)
     }
@@ -349,11 +360,12 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
         let Some(evidence) = &self.evidence else {
             return self.inner.stream(request).await;
         };
+        if evidence.is_excluded() {
+            return self.inner.stream(request).await;
+        }
         if evidence.attempt.get().is_some() {
-            evidence.sampling.reject();
-            return Err(TransportError::Build(
-                failure("admit attempt", "a second send on one admitted response").into(),
-            ));
+            evidence.give_up("admit attempt", "a second send on one admitted response");
+            return self.inner.stream(request).await;
         }
         // A body that can re-route the serving provider must not be attributed to
         // the selected one, but it also must not kill the user's turn: Chat
@@ -386,13 +398,16 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
                     .admit_with_tier(&self.model, &request.url, self.tier.as_deref())
                     .await
             };
-        let attempt = admission.map_err(|error| {
-            evidence.sampling.reject();
-            TransportError::Build(failure("admit attempt", format_args!("{error:#}")).into())
-        })?;
+        let attempt = match admission {
+            Ok(attempt) => attempt,
+            Err(error) => {
+                evidence.give_up("admit attempt", format_args!("{error:#}"));
+                return self.inner.stream(request).await;
+            }
+        };
         let response = match self.inner.stream(request).await {
             Err(TransportError::Http { status, .. }) if status.is_redirection() => {
-                evidence.sampling.reject();
+                evidence.sampling.halt();
                 return Err(TransportError::Build(
                     failure(
                         "send",
@@ -403,10 +418,9 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
             }
             result => result?,
         };
-        evidence.attempt.set(attempt).map_err(|_| {
-            evidence.sampling.reject();
-            TransportError::Build(failure("bind attempt", "response already bound").into())
-        })?;
+        if evidence.attempt.set(attempt).is_err() {
+            evidence.give_up("bind attempt", "response already bound");
+        }
         Ok(response)
     }
 }

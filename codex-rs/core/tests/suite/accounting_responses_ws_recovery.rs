@@ -30,13 +30,10 @@ async fn accounting_responses_ws_native_admission_and_guard_barriers() -> anyhow
     gate.next().await?.complete().await?;
     terminal(&test).await?;
     sqlx::query("CREATE TRIGGER reject_ws_attempt BEFORE INSERT ON draft_accounting_attempts BEGIN SELECT RAISE(ABORT, 'fixture'); END").execute(&mut lock).await?;
+    // A failed admission sends the request unrecorded.
     submit(&test).await?;
-    assert!(
-        terminal(&test)
-            .await?
-            .iter()
-            .any(|e| matches!(e, EventMsg::Error(_)))
-    );
+    gate.next().await?.complete().await?;
+    core_test_support::assert_accounting_gap(&terminal(&test).await?);
     gate.no_pending().await;
     assert_eq!(turn_attempts(&db).await?.len(), 1);
     let guard = test
@@ -120,7 +117,7 @@ async fn live_binding_denial(prime_denial: bool) -> anyhow::Result<()> {
         held.complete().await?;
         let events = terminal(&test).await?;
         assert!(events.iter().any(|event| matches!(event, EventMsg::Error(error)
-            if error.message == "Fatal error: Native Anthropic accounting failed; request stopped without a repair send")),
+            if error.message == "Fatal error: Developer accounting stopped this request; it was not re-sent")),
             "live stage-one denial must stop the already-admitted sampling request");
         assert!(
             !events
@@ -160,12 +157,7 @@ async fn accounting_responses_ws_native_observation_failure_no_repair() -> anyho
     let before = turn_observations(&db).await?;
     sqlx::query("CREATE TRIGGER reject_ws_observation BEFORE INSERT ON draft_accounting_observations BEGIN SELECT RAISE(ABORT, 'fixture'); END").execute(&mut connection(&db).await?).await?;
     held.complete().await?;
-    assert!(
-        terminal(&test)
-            .await?
-            .iter()
-            .any(|e| matches!(e, EventMsg::Error(_)))
-    );
+    core_test_support::assert_accounting_gap(&terminal(&test).await?);
     gate.no_pending().await;
     assert_eq!(turn_observations(&db).await?, before);
     assert_eq!(turn_attempts(&db).await?.len(), 1);

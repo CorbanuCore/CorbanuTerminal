@@ -1661,16 +1661,27 @@ async fn run_sampling_request(
     let turn_context = Arc::clone(&step_context.turn);
     let router = Arc::clone(&step_context.tool_router);
 
-    let scopes = crate::accounting::attach_turn(
+    // Accounting observes this turn's requests; it never stops one. A turn whose
+    // collection cannot attach, or fails later, runs unrecorded and says so.
+    let scopes = match crate::accounting::attach_turn(
         &sess,
         &turn_context,
         client_session,
         turn_context.sub_id.clone(),
     )
-    .await?;
-    let accounting = scopes.anthropic.clone();
-    let responses_accounting = scopes.responses.clone();
-    let chat_accounting = scopes.chat.clone();
+    .await
+    {
+        Ok(scopes) => Some(scopes),
+        Err(error) => {
+            crate::accounting::gap("attach turn", &error);
+            None
+        }
+    };
+    let collection_stopped = || {
+        scopes
+            .as_ref()
+            .is_none_or(crate::accounting::TurnScopes::stopped)
+    };
 
     let base_instructions = sess.get_base_instructions().await;
     trace_turn_timing("after_get_base_instructions", sampling_started_at);
@@ -1732,14 +1743,24 @@ async fn run_sampling_request(
         )
         .await;
         let attempt_elapsed = attempt_started_at.elapsed();
-        if let Some(accounting) = &accounting {
-            accounting.check()?;
+        if scopes
+            .as_ref()
+            .is_some_and(crate::accounting::TurnScopes::halted)
+        {
+            return Err(CodexErr::Fatal(crate::accounting::FAILURE.into()));
         }
-        if let Some(accounting) = &responses_accounting {
-            accounting.check()?;
-        }
-        if let Some(accounting) = &chat_accounting {
-            accounting.check()?;
+        if collection_stopped()
+            && !turn_context
+                .accounting_gap_warning_emitted
+                .swap(true, std::sync::atomic::Ordering::Relaxed)
+        {
+            sess.send_event(
+                &turn_context,
+                EventMsg::Warning(WarningEvent {
+                    message: crate::accounting::GAP_WARNING.to_string(),
+                }),
+            )
+            .await;
         }
         let err = match attempt_result {
             Ok(output) => {

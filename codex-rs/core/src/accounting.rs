@@ -190,9 +190,41 @@ pub(crate) struct TurnScopes {
     pub(crate) anthropic: Option<Arc<Sampling>>,
     pub(crate) responses: Option<Arc<responses::DeferredResponsesSampling>>,
     pub(crate) chat: Option<Arc<chat::DeferredChatSampling>>,
+    /// A collector for this turn never opened.
+    unrecorded: bool,
     _anthropic_scope: SamplingScope,
     _responses_scope: responses::Scope,
     _chat_scope: chat::Scope,
+}
+
+impl TurnScopes {
+    /// Whether this turn has stopped recording its requests: a collector never
+    /// opened, or one closed after an accounting failure. Its requests still go
+    /// to the provider; they are only missing from the ledger.
+    pub(crate) fn stopped(&self) -> bool {
+        self.unrecorded
+            || self
+                .anthropic
+                .as_ref()
+                .is_some_and(|value| value.is_closed())
+            || self
+                .responses
+                .as_ref()
+                .is_some_and(|value| value.is_closed())
+            || self.chat.as_ref().is_some_and(|value| value.is_closed())
+    }
+
+    /// Whether a collector stopped this turn (`Sampling::halt`).
+    pub(crate) fn halted(&self) -> bool {
+        self.anthropic
+            .as_ref()
+            .is_some_and(|value| value.is_halted())
+            || self
+                .responses
+                .as_ref()
+                .is_some_and(|value| value.is_halted())
+            || self.chat.as_ref().is_some_and(|value| value.is_halted())
+    }
 }
 
 /// Bind collection for one turn on one client session.
@@ -267,15 +299,29 @@ pub(crate) async fn attach_scopes(
         accounting.clone()
     };
     let collects_wire = |wire| collects(&mode, provider_id, provider, wire);
+    // A sampling that cannot open leaves this turn's Messages requests
+    // unrecorded; it never stops them.
+    let mut unrecorded = false;
     let anthropic = if collects_wire(codex_model_provider_info::WireApi::Anthropic) {
-        session
-            .try_ensure_rollout_materialized()
-            .await
-            .map_err(|error| CodexErr::Fatal(failure("materialize rollout", error).into()))?;
-        let runtime = session
-            .state_db()
-            .ok_or_else(|| CodexErr::Fatal(failure("open sampling", "no state database").into()))?;
-        Some(Sampling::start(runtime, session.thread_id, turn.clone(), &mode).await?)
+        let opened = async {
+            session
+                .try_ensure_rollout_materialized()
+                .await
+                .map_err(|error| CodexErr::Fatal(failure("materialize rollout", error).into()))?;
+            let runtime = session.state_db().ok_or_else(|| {
+                CodexErr::Fatal(failure("open sampling", "no state database").into())
+            })?;
+            Sampling::start(runtime, session.thread_id, turn.clone(), &mode).await
+        }
+        .await;
+        match opened {
+            Ok(sampling) => Some(sampling),
+            Err(error) => {
+                gap("open sampling", error);
+                unrecorded = true;
+                None
+            }
+        }
     } else {
         None
     };
@@ -296,6 +342,7 @@ pub(crate) async fn attach_scopes(
         anthropic,
         responses,
         chat,
+        unrecorded,
         _anthropic_scope,
         _responses_scope,
         _chat_scope,
@@ -486,24 +533,44 @@ pub(crate) fn collects(
     }
 }
 
-pub(crate) const FAILURE: &str =
-    "Native Anthropic accounting failed; request stopped without a repair send";
+/// The message a request stopped on accounting grounds reports. Only a few
+/// cases still stop one: a provider redirect on a collected route, and a
+/// stage-one memory denial. Every other accounting failure sends the request
+/// unrecorded (`gap`).
+pub(crate) const FAILURE: &str = "Developer accounting stopped this request; it was not re-sent";
 
 /// Where accounting diagnostics go. Exec prints errors on this target to stderr
 /// and the TUI keeps them in its log database.
 const LOG_TARGET: &str = "codex_core::accounting";
 
-/// Record why a request is being stopped on accounting grounds, and return the
-/// one message the user sees.
+/// Record why accounting failed, and return `FAILURE` for the error chain.
 ///
-/// Every such path reports only `FAILURE`, so without this the cause - a busy
-/// state database, a route mismatch, a ledger validation error - is lost. `step`
-/// names where it happened; `cause` is the underlying error chain. Neither ever
-/// carries prompt content or credentials.
+/// Most callers then send the request unrecorded rather than stop it, so the
+/// cause - a busy state database, a route mismatch, a ledger validation error -
+/// is logged here or lost. `step` names where it happened; `cause` is the
+/// underlying error chain. Neither ever carries prompt content or credentials.
 pub(crate) fn failure(step: &'static str, cause: impl std::fmt::Display) -> &'static str {
-    tracing::error!(target: LOG_TARGET, step, cause = %cause, "{FAILURE}");
+    tracing::error!(target: LOG_TARGET, step, cause = %cause, "developer accounting failed");
     FAILURE
 }
+
+/// Record that a request goes to the provider unrecorded because accounting
+/// failed. Accounting observes model requests; it never blocks one. The
+/// provider still bills such a request, so the gap is logged here and the turn
+/// warns once (`TurnScopes::stopped`).
+pub(crate) fn gap(step: &'static str, cause: impl std::fmt::Display) {
+    tracing::warn!(
+        target: LOG_TARGET,
+        step,
+        cause = %cause,
+        "accounting: request sent unrecorded"
+    );
+}
+
+/// The warning a turn shows once when its requests stop being recorded.
+pub(crate) const GAP_WARNING: &str = "Developer accounting stopped recording this turn after an error. \
+     Requests continue, but /cost will not include the ones sent after it. \
+     The cause is in the log (target codex_core::accounting).";
 
 /// How long one accounting operation - opening a sampling, an admission or an
 /// observation, each with every store call it makes - waits out contention on
@@ -609,6 +676,8 @@ fn writes() -> &'static tokio::sync::Semaphore {
     }
 }
 
+/// The sampling attached to `slot`. A poisoned slot is closed and the request
+/// goes unrecorded.
 pub(crate) fn read_slot(slot: &Slot) -> Result<Option<Arc<Sampling>>, CodexErr> {
     match slot.lock() {
         Ok(value) => Ok(value.clone()),
@@ -616,9 +685,8 @@ pub(crate) fn read_slot(slot: &Slot) -> Result<Option<Arc<Sampling>>, CodexErr> 
             if let Some(stale) = poison.into_inner().take() {
                 stale.reject();
             }
-            Err(CodexErr::Fatal(
-                failure("read sampling slot", "slot lock poisoned").into(),
-            ))
+            gap("read sampling slot", "slot lock poisoned");
+            Ok(None)
         }
     }
 }
@@ -631,15 +699,14 @@ impl SamplingScope {
             match slot.lock() {
                 Ok(mut value) => *value = sampling,
                 Err(poison) => {
+                    // Leave the slot empty: this turn's requests go unrecorded.
                     if let Some(stale) = poison.into_inner().take() {
                         stale.reject();
                     }
                     if let Some(incoming) = sampling {
                         incoming.reject();
                     }
-                    return Err(CodexErr::Fatal(
-                        failure("attach sampling", "slot lock poisoned").into(),
-                    ));
+                    gap("attach sampling", "slot lock poisoned");
                 }
             }
         }
@@ -706,6 +773,8 @@ pub(crate) struct Sampling {
     pricing: Pricing,
     previous: Mutex<Option<Uuid>>,
     failed: AtomicBool,
+    /// The turn must stop: see `halt`.
+    halted: AtomicBool,
 }
 
 // A cancelled SQL future may already have committed. Never reuse that sampling
@@ -884,26 +953,45 @@ impl Sampling {
             pricing: pricing_for(mode),
             previous: Mutex::new(None),
             failed: AtomicBool::new(false),
+            halted: AtomicBool::new(false),
         }))
     }
 
     pub(crate) fn check(&self) -> Result<(), CodexErr> {
-        if self.failed.load(Ordering::Acquire) {
+        if self.is_closed() {
             Err(CodexErr::Fatal(FAILURE.into()))
         } else {
             Ok(())
         }
     }
 
-    /// Close this sampling: every later request on it stops with `FAILURE`.
-    /// The first close is logged with its caller, so a later stop has a cause.
+    pub(crate) fn is_closed(&self) -> bool {
+        self.failed.load(Ordering::Acquire)
+    }
+
+    /// Close this sampling and stop its turn with `FAILURE`. Only for a request
+    /// that already went somewhere it must not be attributed to and cannot be
+    /// re-sent safely: a provider redirect on a collected route, or a stage-one
+    /// memory denial. Every other accounting failure only closes the sampling.
+    #[track_caller]
+    pub(crate) fn halt(&self) {
+        self.halted.store(true, Ordering::Release);
+        self.reject();
+    }
+
+    pub(crate) fn is_halted(&self) -> bool {
+        self.halted.load(Ordering::Acquire)
+    }
+
+    /// Close this sampling: it records nothing more, and every later request on
+    /// it is sent unrecorded. The first close is logged with its caller.
     #[track_caller]
     pub(crate) fn reject(&self) {
         if !self.failed.swap(true, Ordering::AcqRel) {
             tracing::warn!(
                 target: LOG_TARGET,
                 at = %std::panic::Location::caller(),
-                "accounting sampling closed; later requests in this turn stop"
+                "accounting sampling closed; later requests in this turn are sent unrecorded"
             );
         }
     }
