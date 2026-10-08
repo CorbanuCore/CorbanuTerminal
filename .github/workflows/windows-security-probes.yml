@@ -85,12 +85,23 @@ jobs:
         if: ${{ !cancelled() }}
         shell: powershell
         run: |
-          # Native commands are checked through $LASTEXITCODE (their stderr is not an error).
+          # Actions sets 'Stop', which turns cargo's stderr into errors in Windows
+          # PowerShell; native commands are checked through $LASTEXITCODE instead.
+          $ErrorActionPreference = 'Continue'
+          $medium = '.github/scripts/run-at-medium-integrity.ps1'
           function Get-TestExe([string[]]$CargoArgs) {
             $artifacts = cargo test --locked --manifest-path codex-rs/Cargo.toml @CargoArgs --no-run --message-format=json
             if ($LASTEXITCODE -ne 0) { throw "cargo test --no-run failed" }
             ($artifacts | ForEach-Object { $_ | ConvertFrom-Json } | Where-Object { $_.executable } | Select-Object -Last 1).executable
           }
+          # A filter that matches nothing passes; require the probes to exist.
+          function Assert-Tests([string]$Exe, [string]$Filter, [int]$Count) {
+            $found = @(& $Exe --list --format terse $Filter | Where-Object { $_ -like '*: test' }).Count
+            if ($found -ne $Count) { throw "expected $Count tests matching $Filter, found $found" }
+          }
+          $whoami = & $medium -Program "$env:SystemRoot\System32\whoami.exe" -Arguments @('/groups')
+          $whoami | Select-String 'Mandatory Level|S-1-5-32-544'
+          if (-not ($whoami -match 'Medium Mandatory Level')) { throw "the normal-session token is not medium integrity" }
           $bin = Join-Path $env:CARGO_TARGET_DIR 'debug'
           $env:CARGO_BIN_EXE_codex_windows_sandbox_setup = Join-Path $bin 'codex-windows-sandbox-setup.exe'
           $env:CARGO_BIN_EXE_codex_command_runner = Join-Path $bin 'codex-command-runner.exe'
@@ -109,16 +120,20 @@ jobs:
             $env:CODEX_PF27S06_LOGON_USER = 'pf27s06logon'
             $env:CODEX_PF27S06_LOGON_PASSWORD_FILE = $passwordFile
             $d1 = Get-TestExe @('-p', 'codex-process-hardening', '--test', 'pf_27_s06_d1_logon_launch')
-            & .github/scripts/run-at-medium-integrity.ps1 -Program $d1 -Arguments @('--nocapture', '--test-threads=1')
+            Assert-Tests $d1 'pf_27_s06_d1' 1
+            & $medium -Program $d1 -Arguments @('--nocapture', '--test-threads=1')
             if ($LASTEXITCODE -ne 0) { throw "#295 probe failed in a normal session" }
             $core = Get-TestExe @('-p', 'codex-core', '--lib')
+            Assert-Tests $core 'pf_27_s06_d2' 2
+            # Each elevated setup resets the sandbox passwords, so record the
+            # setup the normal-session run reuses right before it.
             New-Item -ItemType Directory -Force $env:CODEX_PF27S06_SETUP_SEED | Out-Null
             & $core 'pf_27_s06_d2_vault' --nocapture --test-threads=1
             if ($LASTEXITCODE -ne 0) { throw "#294 probe failed elevated" }
-            & .github/scripts/run-at-medium-integrity.ps1 -Program $core -Arguments @('pf_27_s06_d2', '--nocapture', '--test-threads=1')
+            & $medium -Program $core -Arguments @('pf_27_s06_d2', '--nocapture', '--test-threads=1')
             if ($LASTEXITCODE -ne 0) { throw "#294 probes failed in a normal session" }
           } finally {
-            Remove-LocalUser -Name pf27s06logon
+            try { Remove-LocalUser -Name pf27s06logon -ErrorAction Stop } catch { Write-Warning "remove pf27s06logon: $_" }
             Remove-Item -ErrorAction SilentlyContinue $passwordFile
           }
       - name: Require a clean worktree

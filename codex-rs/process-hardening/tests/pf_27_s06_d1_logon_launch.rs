@@ -11,6 +11,7 @@
 //! through `.github/scripts/run-at-medium-integrity.ps1`).
 #![cfg(windows)]
 
+use pretty_assertions::assert_eq;
 use std::path::PathBuf;
 use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::Security::GetSidSubAuthority;
@@ -45,7 +46,8 @@ fn pf_27_s06_d1_hardened_process_starts_a_process_as_another_user() {
     let password = std::fs::read_to_string(password_file).expect("password file");
     let integrity = integrity_level();
     eprintln!("pf27s06 d1: integrity level {integrity:#x}");
-    if std::env::var_os("CODEX_PF27S06_EXPECT_MEDIUM").is_some() {
+    let expect_medium = std::env::var_os("CODEX_PF27S06_EXPECT_MEDIUM").is_some();
+    if expect_medium {
         assert_eq!(integrity, MEDIUM_INTEGRITY, "not a medium-integrity run");
     }
 
@@ -66,11 +68,21 @@ fn pf_27_s06_d1_hardened_process_starts_a_process_as_another_user() {
     )
     .expect("start a process as the other user from a hardened process");
 
+    eprintln!("pf27s06 d1: via launcher: {}", launched.via_launcher);
+    if expect_medium {
+        // The direct call is refused at medium integrity; this run covered
+        // the fallback.
+        assert!(launched.via_launcher, "started without the launcher");
+    }
     // The handle Core gets back must work: wait for the process and read
     // its exit code.
     // SAFETY: `launched.process` is a live process handle owned here.
     let exit_code = unsafe {
-        assert_eq!(WaitForSingleObject(launched.process, 30_000), 0, "wait");
+        assert_eq!(
+            WaitForSingleObject(launched.process, /*dwmilliseconds*/ 30_000),
+            0,
+            "wait"
+        );
         let mut code = 0;
         assert_ne!(GetExitCodeProcess(launched.process, &mut code), 0);
         CloseHandle(launched.process);

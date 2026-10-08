@@ -334,6 +334,12 @@ pub(crate) fn spawn_runner_transport(
             return Err(err);
         }
     };
+    if launched.via_launcher {
+        crate::logging::log_note(
+            "runner started through the logon launcher (protected process, #295)",
+            log_dir,
+        );
+    }
     let runner_process = launched.process;
     let expected_runner_pid = launched.pid;
 
