@@ -11,8 +11,14 @@ human sign-off, flag removal and the P1 hardening plan. Carried-forward items ar
 
 | Sprint | PRs (merge commit on main) | Flag | Record status |
 | --- | --- | --- | --- |
-| [PF-33-S01](../../sprints/archive/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md) URL, DNS and redirect destination policy | [#210](https://github.com/CorbanuCore/CorbanuTerminal/pull/210) (`8dd531714a`) | `url_destination_policy` | completed (archived) |
-| [PF-33-S02](../../sprints/current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md) Connection pinning and alternate-egress denial | [#215](https://github.com/CorbanuCore/CorbanuTerminal/pull/215) (`a0d96aea4b`), [#224](https://github.com/CorbanuCore/CorbanuTerminal/pull/224) (`6d55f6ae8f`) | `url_destination_policy` | merged behind flag; record current (milestone items open) |
+| [PF-33-S01](../../sprints/archive/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md) URL, DNS and redirect destination policy | #210 (`8dd531714a`) | `url_destination_policy` | completed (archived) |
+| [PF-33-S02](../../sprints/current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md) Connection pinning and alternate-egress denial | #215 (`a0d96aea4b`), #224 (`6d55f6ae8f`) | `url_destination_policy` | merged behind flag; record current (milestone items open) |
+
+PR links:
+
+- #210: https://github.com/CorbanuCore/CorbanuTerminal/pull/210
+- #215: https://github.com/CorbanuCore/CorbanuTerminal/pull/215
+- #224: https://github.com/CorbanuCore/CorbanuTerminal/pull/224
 
 ## PF-33-S01: URL, DNS and redirect destination policy
 

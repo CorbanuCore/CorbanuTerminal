@@ -11,8 +11,15 @@ human sign-off, flag removal and the P1 hardening plan. Carried-forward items ar
 
 | Sprint | PRs (merge commit on main) | Flag | Record status |
 | --- | --- | --- | --- |
-| [PF-41-S01](../../sprints/current/p0-security-levels/pf-41-s01-effective-security-inspector.md) Effective security inspector and degradation state | [#259](https://github.com/CorbanuCore/CorbanuTerminal/pull/259) (`8b3ac213c4`) | `security_levels` | merged behind flag; record current (milestone items open) |
-| [PF-13-S07](../../sprints/current/p0-security-levels/pf-13-s07-integrated-credential-boundary-qualification.md) Integrated credential boundary qualification + saved-level matrix | [#242](https://github.com/CorbanuCore/CorbanuTerminal/pull/242) (`8a8afb2384`), [#244](https://github.com/CorbanuCore/CorbanuTerminal/pull/244) (`824ce30b05`), [#255](https://github.com/CorbanuCore/CorbanuTerminal/pull/255) (`2bc2c0bd7f`) | `all protection flags` | qualification merged; record ready (archive after Aggressive milestone) |
+| [PF-41-S01](../../sprints/current/p0-security-levels/pf-41-s01-effective-security-inspector.md) Effective security inspector and degradation state | #259 (`8b3ac213c4`) | `security_levels` | merged behind flag; record current (milestone items open) |
+| [PF-13-S07](../../sprints/current/p0-security-levels/pf-13-s07-integrated-credential-boundary-qualification.md) Integrated credential boundary qualification + saved-level matrix | #242 (`8a8afb2384`), #244 (`824ce30b05`), #255 (`2bc2c0bd7f`) | `all protection flags` | qualification merged; record ready (archive after Aggressive milestone) |
+
+PR links:
+
+- #259: https://github.com/CorbanuCore/CorbanuTerminal/pull/259
+- #242: https://github.com/CorbanuCore/CorbanuTerminal/pull/242
+- #244: https://github.com/CorbanuCore/CorbanuTerminal/pull/244
+- #255: https://github.com/CorbanuCore/CorbanuTerminal/pull/255
 
 ## PF-41-S01: Effective security inspector and degradation state
 

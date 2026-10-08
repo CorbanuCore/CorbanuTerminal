@@ -11,9 +11,17 @@ human sign-off, flag removal and the P1 hardening plan. Carried-forward items ar
 
 | Sprint | PRs (merge commit on main) | Flag | Record status |
 | --- | --- | --- | --- |
-| [PF-30-S01](../../sprints/archive/p0-security-levels/pf-30-s01-typed-source-envelope.md) Typed source envelopes (labelled untrusted context) | [#178](https://github.com/CorbanuCore/CorbanuTerminal/pull/178) (`b96b23344b`) | `source_envelopes` | completed (archived) |
-| [PF-30-S02](../../sprints/archive/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md) Persistent taint across resume, compaction and memory | [#190](https://github.com/CorbanuCore/CorbanuTerminal/pull/190) (`7b2a04ea41`), [#198](https://github.com/CorbanuCore/CorbanuTerminal/pull/198) (`743a7c22da`) | `source_envelopes` | completed (archived) |
-| [PF-30-S03](../../sprints/archive/p0-security-levels/pf-30-s03-post-taint-authority-checks.md) Post-taint authority checks | [#204](https://github.com/CorbanuCore/CorbanuTerminal/pull/204) (`38516a5b22`), [#212](https://github.com/CorbanuCore/CorbanuTerminal/pull/212) (`55339d5b24`) | `source_envelopes` | completed (archived) |
+| [PF-30-S01](../../sprints/archive/p0-security-levels/pf-30-s01-typed-source-envelope.md) Typed source envelopes (labelled untrusted context) | #178 (`b96b23344b`) | `source_envelopes` | completed (archived) |
+| [PF-30-S02](../../sprints/archive/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md) Persistent taint across resume, compaction and memory | #190 (`7b2a04ea41`), #198 (`743a7c22da`) | `source_envelopes` | completed (archived) |
+| [PF-30-S03](../../sprints/archive/p0-security-levels/pf-30-s03-post-taint-authority-checks.md) Post-taint authority checks | #204 (`38516a5b22`), #212 (`55339d5b24`) | `source_envelopes` | completed (archived) |
+
+PR links:
+
+- #178: https://github.com/CorbanuCore/CorbanuTerminal/pull/178
+- #190: https://github.com/CorbanuCore/CorbanuTerminal/pull/190
+- #198: https://github.com/CorbanuCore/CorbanuTerminal/pull/198
+- #204: https://github.com/CorbanuCore/CorbanuTerminal/pull/204
+- #212: https://github.com/CorbanuCore/CorbanuTerminal/pull/212
 
 ## PF-30-S01: Typed source envelopes (labelled untrusted context)
 
