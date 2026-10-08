@@ -17,6 +17,7 @@ on:
       - "codex-rs/network-proxy/src/credential_broker/**"
       - "codex-rs/network-proxy/src/credential_broker.rs"
       - "codex-rs/core/src/security/**"
+      - ".github/scripts/run-at-medium-integrity.ps1"
   push:
     branches: [main]
     paths:
@@ -29,6 +30,7 @@ on:
       - "codex-rs/network-proxy/src/credential_broker/**"
       - "codex-rs/network-proxy/src/credential_broker.rs"
       - "codex-rs/core/src/security/**"
+      - ".github/scripts/run-at-medium-integrity.ps1"
 
 permissions:
   contents: read
@@ -72,7 +74,52 @@ jobs:
           bin_dir="${CARGO_TARGET_DIR}/debug"
           export CARGO_BIN_EXE_codex_windows_sandbox_setup="$(cygpath -w "${bin_dir}/codex-windows-sandbox-setup.exe")"
           export CARGO_BIN_EXE_codex_command_runner="$(cygpath -w "${bin_dir}/codex-command-runner.exe")"
+          # Records this run's elevated setup for the normal-session step.
+          mkdir -p "${RUNNER_TEMP}/pf27s06-seed"
+          export CODEX_PF27S06_SETUP_SEED="$(cygpath -w "${RUNNER_TEMP}/pf27s06-seed")"
           cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-core --lib -- pf_27_s06 pf_27_s07 --nocapture --test-threads=1
+      # The runners are elevated, which hid #294/#295. This reruns those probes
+      # with the token of an administrator's normal session (medium integrity).
+      # Not covered here: a separate non-administrator account, and the
+      # elevated sandbox's one-time setup from a normal session (it needs a
+      # UAC answer), so the #294 probe reuses the setup recorded above.
+      - name: Launch probes in a normal (medium-integrity) session
+        if: ${{ !cancelled() }}
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function Get-TestExe([string[]]$CargoArgs) {
+            $artifacts = cargo test --locked --manifest-path codex-rs/Cargo.toml @CargoArgs --no-run --message-format=json
+            if ($LASTEXITCODE -ne 0) { throw "cargo test --no-run failed" }
+            ($artifacts | ForEach-Object { $_ | ConvertFrom-Json } | Where-Object { $_.executable } | Select-Object -Last 1).executable
+          }
+          $bin = Join-Path $env:CARGO_TARGET_DIR 'debug'
+          $env:CARGO_BIN_EXE_codex_windows_sandbox_setup = Join-Path $bin 'codex-windows-sandbox-setup.exe'
+          $env:CARGO_BIN_EXE_codex_command_runner = Join-Path $bin 'codex-command-runner.exe'
+          $env:CODEX_PF27S06_SETUP_SEED = Join-Path $env:RUNNER_TEMP 'pf27s06-seed'
+          $env:CODEX_PF27S06_EXPECT_MEDIUM = '1'
+          $env:CODEX_PF27S06_REQUIRE_LOGON = '1'
+          # A throwaway local user for the #295 probe; its password is random and never printed.
+          $bytes = New-Object byte[] 24
+          (New-Object Security.Cryptography.RNGCryptoServiceProvider).GetBytes($bytes)
+          $password = [Convert]::ToBase64String($bytes) + 'a1!'
+          Write-Output "::add-mask::$password"
+          $passwordFile = Join-Path $env:RUNNER_TEMP 'pf27s06-logon.txt'
+          New-LocalUser -Name pf27s06logon -Password (ConvertTo-SecureString $password -AsPlainText -Force) -PasswordNeverExpires | Out-Null
+          try {
+            [IO.File]::WriteAllText($passwordFile, $password)
+            $env:CODEX_PF27S06_LOGON_USER = 'pf27s06logon'
+            $env:CODEX_PF27S06_LOGON_PASSWORD_FILE = $passwordFile
+            $d1 = Get-TestExe @('-p', 'codex-process-hardening', '--test', 'pf_27_s06_d1_logon_launch')
+            & .github/scripts/run-at-medium-integrity.ps1 -Program $d1 -Arguments @('--nocapture', '--test-threads=1')
+            if ($LASTEXITCODE -ne 0) { throw "#295 probe failed in a normal session" }
+            $core = Get-TestExe @('-p', 'codex-core', '--lib')
+            & .github/scripts/run-at-medium-integrity.ps1 -Program $core -Arguments @('pf_27_s06_d2', '--nocapture', '--test-threads=1')
+            if ($LASTEXITCODE -ne 0) { throw "#294 probes failed in a normal session" }
+          } finally {
+            Remove-LocalUser -Name pf27s06logon
+            Remove-Item -ErrorAction SilentlyContinue $passwordFile
+          }
       - name: Require a clean worktree
         if: always() && !cancelled()
         uses: ./.github/actions/check-clean-worktree
