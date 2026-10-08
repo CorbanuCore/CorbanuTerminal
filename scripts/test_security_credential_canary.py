@@ -298,6 +298,17 @@ class SecurityCredentialCanaryTests(unittest.TestCase):
         )
         self.assertEqual(canary.redact(readable), readable)
         self.assertEqual(canary.redact("key " + "a1" * 20), "key ***")
+        for secret in (
+            "Ab1-" * 10,
+            "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY1",
+            "OPENAI_API_KEY=AbCdEf123",
+            "client_secret: AbCdEf123",
+        ):
+            with self.subTest(secret=secret):
+                self.assertNotIn("AbCdEf123", canary.redact(secret))
+                self.assertIn("***", canary.redact(secret))
+        with self.assertRaisesRegex(canary.QualificationError, "credential-shaped"):
+            canary.assert_secret_free("ghp_\x1b]8;;x\x07AbCdEfGh12345678", "stdout")
 
     def test_timeout_reports_a_secret_free_output_tail(self) -> None:
         with mock.patch.object(

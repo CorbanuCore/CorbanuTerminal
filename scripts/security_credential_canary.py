@@ -26,7 +26,7 @@ SECRET_PATTERNS = (
     re.compile(r"(?i)\bBearer\s+[^\s\"']{8,}"),
 )
 # Colour codes would otherwise split a key (pretty_assertions colours diffs).
-ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
 SENSITIVE_ENV_SUFFIXES = ("_API_KEY", "_TOKEN", "_SECRET", "_PASSWORD")
 FAILURE_REPORT_NAME = "credential-canary-failure.json"
 # Diagnostics are printed to CI logs, so anything token-shaped is masked even
@@ -37,11 +37,16 @@ REDACTION_PATTERNS = (
         r"(?i)\b((?:sk|ghp|gho|ghu|ghs|ghr|github_pat|xox[abprs])[-_])[A-Za-z0-9_-]{6,}"
     ),
     re.compile(
-        r"(?i)\b((?:x-api-key|api[_-]?key|token|password|secret)[\"']?\s*[:=]\s*)\S+"
+        r"(?i)(?<![A-Za-z0-9])"
+        r"((?:x-api-key|api[_-]?key|token|password|secret)[\"']?\s*[:=]\s*)\S+"
     ),
-    # Long mixed letter-digit runs (keys, digests). Identifiers with
-    # underscores (test names) and hyphenated or slash-separated paths stay
-    # readable.
+    # Long mixed-case runs with digits (keys, JWT and base64 segments); paths
+    # and test names are rarely mixed-case with digits.
+    re.compile(
+        r"()(?<![A-Za-z0-9_])(?=[A-Za-z0-9+/-]*\d)(?=[A-Za-z0-9+/-]*[a-z])"
+        r"(?=[A-Za-z0-9+/-]*[A-Z])[A-Za-z0-9+/-]{32,}={0,2}(?![A-Za-z0-9_])"
+    ),
+    # Long unseparated letter-digit runs (hex keys, digests).
     re.compile(
         r"()(?<![A-Za-z0-9_])(?=[A-Za-z0-9+]*\d)(?=[A-Za-z0-9+]*[A-Za-z])"
         r"[A-Za-z0-9+]{32,}={0,2}(?![A-Za-z0-9_])"
@@ -58,6 +63,7 @@ PANIC_END_PREFIXES = (
     "note: ",
     "thread '",
     "test ",
+    "running ",
     "stack backtrace:",
     "---- ",
     "failures:",
@@ -425,7 +431,7 @@ def partial_output_tail(timeout: subprocess.TimeoutExpired) -> str:
             lines.extend(stream.splitlines()[-MAX_TAIL_LINES:])
     if not lines:
         return ""
-    tail = redact("\n".join(lines))
+    tail = redact("\n".join(lines))[-MAX_DIAGNOSTIC_CHARS:]
     try:
         assert_secret_free(tail, "timeout output")
     except QualificationError:
