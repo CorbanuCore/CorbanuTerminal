@@ -11,7 +11,7 @@ activation_basis: "The user's 2026-09-01 P1 decision to supersede the remaining 
 target_release: "TBD"
 deadline: "TBD"
 created: 2026-08-30
-updated: 2026-09-11
+updated: 2026-10-08
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "Shipping MVP — LIVE"
@@ -200,6 +200,74 @@ reactivated without deleting credentials. Credential removal is a separate,
 clearly labeled action. Deactivating the provider behind the current model
 requires the user to choose a usable replacement first.
 
+## Named accounts per provider (PF-84)
+
+2026-10-08 amendment from Travis. This is draft planning only: the plan stays
+deferred, and PF-84-S01 to S05 are unallocated drafts.
+
+**Requirement.** Support several accounts for any provider. That covers extra API
+keys (two Anthropic, OpenRouter or Z.AI keys) and extra subscription logins (two
+Claude Plan accounts, two ChatGPT logins). The account can be chosen per session,
+per worker or subagent, and from `corbanu exec`. Usage is attributed per account.
+A worker the coordinator spawns can use a different account than the coordinator.
+
+**Feasibility (multiacct1, installed 0.1.48, refs at `63ea3d0cbd`).** One home
+per account works today. It was proven live for Claude Plan: a fake token in
+home2 produced a 401, and the real home was unchanged. It is not a product,
+though, for four reasons:
+
+- The stock `~/.local/bin/corbanu` wrapper resets `CORBANU_HOME`, so workers
+  silently fall back to account A.
+- Each home has its own vault, so other labels (such as the ZAI key) are missing in home2.
+- Sessions and usage are split per home.
+- In-process subagents cannot switch account.
+
+**Design.**
+
+- An account is `(provider id, name)`. Today's credentials are the implicit
+  `default` account, with unchanged labels, so nothing is migrated or reauthenticated.
+- Named accounts live in the existing per-home vault under
+  `provider/<provider-id>/accounts/<name>/<kind>`, with an encrypted registry.
+  The vault key stays the one keychain item `codex`/`secrets|<sha16(home)>`, and
+  named accounts add none.
+- One resolver per auth kind takes the account:
+  - API key: named accounts ignore provider env vars.
+  - Claude Plan token: per-account token and selection.
+  - Claude Code login: the account stores its own `CLAUDE_CONFIG_DIR`.
+  - ChatGPT login: stored in the vault, with no new `Codex Auth` item.
+  - `auth.command`: gets `CORBANU_PROVIDER_ACCOUNT`.
+  - AWS: `aws.profile` per account.
+- Selection precedence: `--account` or the spawn `account` argument, then the
+  session choice, then `[provider_accounts]` in config, then `default`. An
+  unknown or failed account fails closed. There is never a silent fallback,
+  which matches the PF-58 invariant.
+- The thread config carries the account. Children inherit it unless the spawn
+  overrides it. Resume uses the recorded name. Accounting and rate-limit leases
+  are keyed by (provider, account fingerprint).
+
+**Fix items.**
+
+- The wrapper home reset and silent home precedence (PF-84-S01).
+- Duplicate provider rows after Claude Plan setup: "Anthropic Claude Account" and
+  "Claude Account" were both shown as configured (PF-84-S04).
+
+**Migration.**
+
+- Existing single-account homes keep working byte for byte.
+- Per-home workaround homes are not imported automatically, which is consistent
+  with "Out". The user re-enrolls the second credential as a named account in the
+  main home, then retires the extra home.
+
+**Gate per sprint.**
+
+- `just test` on the affected crates.
+- A true-tmux scenario following `docs/tmuxHarness.md`, with disposable homes and
+  `CORBANU_TEST_NO_NATIVE_KEYRING=1`.
+- A GLM 5.2 run (`-m glm-5.2 -c model_provider="zai"`), with a real `default`
+  ZAI account and a fake-key named account. The expected 401 proves the selection.
+- Demo videos via `qa/demos/README.md`.
+- One independent Opus 5.5 High review.
+
 ## Product linkage
 
 | Field | Value |
@@ -257,6 +325,8 @@ requires the user to choose a usable replacement first.
   plaintext adapter rejects OpenAI, whose reserved native schema cannot express
   model overrides. Support explicitly plaintext task briefs on that same-provider
   route without converting native ciphertext or widening provider authorization.
+- PF-84 named accounts per provider: alternate API keys and subscription logins,
+  chosen per session, worker or CLI, with per-account usage attribution.
 
 ### Out
 
@@ -396,6 +466,11 @@ OpenAI schema, provider authorization or credential format is rewritten.
 | `PF-58` | Credential-scoped runtime health and keyboard reauthentication | [PF-58-S01](../../sprints/current/unified-provider-auth/pf-58-s01-credential-health-and-reauth.md) | Draft residual qualification; implementation human-accepted for main integration September 11; historical blocked cases retained |
 | `PF-57` | Reconciled release credential-lifecycle regressions | [PF-57-S02](../../sprints/archive/unified-provider-auth/pf-57-s02-reconciliation-auth-repairs.md) | completed; [Astra repair evidence](../../../qa/release/0.1.38/astra-fixes.md) |
 | `PF-57` | Reconcile Travis's provider UX/catalog changes with repaired release | [PF-57-S03](../../sprints/archive/unified-provider-auth/pf-57-s03-travis-release-reconciliation.md) | completed; [combined-tree evidence](../../../qa/release/0.1.38/travis-reconciliation.md) at `c37eb277d9` |
+| `PF-84` | Home override hygiene (wrapper pitfall) | [PF-84-S01](../../sprints/current/unified-provider-auth/pf-84-s01-home-override-hygiene.md) | draft; unallocated |
+| `PF-84` | Named account registry, storage and resolution | [PF-84-S02](../../sprints/current/unified-provider-auth/pf-84-s02-account-registry-and-resolution.md) | draft; unallocated |
+| `PF-84` | Account selection per session, CLI and worker | [PF-84-S03](../../sprints/current/unified-provider-auth/pf-84-s03-account-selection-and-propagation.md) | draft; unallocated |
+| `PF-84` | `/providers` account management; duplicate-row fix | [PF-84-S04](../../sprints/current/unified-provider-auth/pf-84-s04-provider-account-management-ui.md) | draft; unallocated |
+| `PF-84` | Per-account usage and rate-limit attribution | [PF-84-S05](../../sprints/current/unified-provider-auth/pf-84-s05-per-account-usage-attribution.md) | draft; unallocated |
 
 ## Hard dependency graph
 
@@ -414,6 +489,9 @@ PF-42..PF-47 merged Claude foundation
                        and credential-store liveness
 ```
 
+PF-84 (named accounts, 2026-10-08 drafts): S01 has no dependency;
+S02 -> S03 -> S04, and S03 + PF-60-S04 (accounting schema) -> S05.
+
 One sprint is executable at a time. A dependent sprint remains draft until its
 predecessor is completed and archived.
 
@@ -429,6 +507,13 @@ predecessor is completed and archived.
 | Deactivate current | Current provider is active | Request deactivation | Replacement picker appears before mutation | Cancel is inert; choosing a usable replacement switches explicitly then deactivates |
 | Custom API provider | Runtime custom provider declares `env_key` | Open either host and configure/use it | Provider appears automatically with shared status and masked setup | Both hosts and startup agree; raw key never appears |
 | Existing install migration | Existing configured providers and usable selection | Upgrade and launch | Configured providers default active; current selection remains | No forced reauthentication or model switch |
+| Existing single-account migration (PF-84) | Home with today's credentials | Upgrade and launch | Each provider shows one `default` account row | Same credentials resolve; vault unchanged until a named account is added |
+| Add second account (PF-84) | One Claude Plan or API key configured | `/providers` → add account `work`, paste token or key | Two rows for that provider, one per account, no duplicates | Masked entry; restart preserves both |
+| Session account switch (PF-84) | Two accounts | Choose "use for this session" on `work` | Status shows provider/`work` | Requests use `work`; default unchanged after restart |
+| Worker on another account (PF-84) | Coordinator on `default` | Spawn subagent or tmux `corbanu exec --account work` | Spawn event shows `work` | Worker uses `work`, coordinator stays on `default`; failure never falls back |
+| Account isolation (PF-84) | Fake-key account `bad` | Select `bad`, send a prompt | Visible 401 with recovery | No retry on another account; no value in any artifact |
+| Per-account usage (PF-84) | Two accounts used | Open usage view | Rows grouped by provider and account | Counts match requests per account |
+| Wrapper/home override (PF-84) | Inherited `CORBANU_HOME` | Launch through `~/.local/bin/corbanu` with another home | Warning or correct home | Never silently runs on the coordinator's home |
 
 ## Implementation sequence
 
@@ -576,6 +661,10 @@ see the [reconciliation evidence](../../../qa/release/0.1.38/travis-reconciliati
 | Latest-main integration | integration | Codex primary integration agent | PF-57 | Completed: preserved PF-48–PF-56 identities, merged latest-main baseline `81dcbef5d`, and qualified candidate `a935e507b`. |
 | Credential-store liveness | regression | Codex primary integration agent | PF-57 | Completed: bounded serialized keyring operations, late-success circuit recovery, batched logical vault mutations including managed Claude token enrollment, and development/test-only crypto optimization preserve encrypted-vault fallback, work factor, format, and production implementation. |
 | Review remediation | regression | Codex primary integration agent | PF-57 | Completed: fresh onboarding occurs only when the current provider is unconfigured and no ready configured interactive alternative exists; established inactive, unavailable, recovery-required, removed, or missing-current profiles enter chat blocked until explicit recovery. Onboarding caches status, compatible-model persistence precedes selection completion, local/status-only providers remain usable, and command auth stays lazy. Dead legacy UI cleanup remains nonblocking follow-up work. |
+| D1 PF-84 storage | product | Travis | PF-84-S02 | Recommended: one vault per home with account-qualified labels (no new keychain items). Alternative: a home per account (proven, but splits vault, sessions and usage). |
+| D2 PF-84 import | product | Travis | PF-84-S04 | Recommended: no automatic import from per-home workaround homes; re-enroll. |
+| D3 PF-84 model-chosen account | security | Travis | PF-84-S03 | Recommended: spawn `account` limited to configured names, shown in the spawn event; requires approval under `/security` Aggressive. |
+| PF-76-S01 overlap | integration | plan owner | PF-84-S02 | P0 PF-76 persists provider auth per named Corbanu profile; reconcile before either is allocated. |
 
 ## Release linkage
 
