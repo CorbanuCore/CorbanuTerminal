@@ -266,6 +266,8 @@ async fn run_remote_compact_task_inner_impl(
                 analytics_details,
             )
             .await;
+            // The retry may have gone unrecorded where the first attempt did not.
+            crate::accounting::warn_if_unrecorded(sess, turn_context, accounting.as_ref()).await;
             record_model_fallback(
                 &sess.services.session_telemetry,
                 turn_context.model_info.slug.as_str(),
