@@ -52,9 +52,11 @@ jobs:
         shell: bash
         run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-process-hardening pf_27_s06 -- --nocapture --test-threads=1
       - name: Build the elevated sandbox helpers
+        if: ${{ !cancelled() }}
         shell: bash
         run: cargo build --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --bins
       - name: Launch contract probes under the elevated sandbox
+        if: ${{ !cancelled() }}
         shell: bash
         run: |
           set -euo pipefail

@@ -333,6 +333,7 @@ fn run_probe() {
         .ok()
         .and_then(|pid| pid.parse().ok())
         .unwrap_or_default();
+    disable_all_privileges();
     let classify = |handle: isize| {
         if handle == 0 {
             // SAFETY: reads the thread's last error.
@@ -383,6 +384,33 @@ fn run_probe() {
     );
     let _ = stdout.flush();
     std::process::exit(0);
+}
+
+/// Disables every privilege in this process's token, as in an ordinary user
+/// process: CI runners run elevated with `SeDebugPrivilege` enabled, which
+/// opens any process regardless of its DACL.
+fn disable_all_privileges() {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::Security::AdjustTokenPrivileges;
+    use windows_sys::Win32::Security::TOKEN_ADJUST_PRIVILEGES;
+    use windows_sys::Win32::System::Threading::GetCurrentProcess;
+    use windows_sys::Win32::System::Threading::OpenProcessToken;
+    let mut token = 0;
+    // SAFETY: opens this process's token; closed below.
+    if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, &mut token) } != 0 {
+        // SAFETY: DisableAllPrivileges ignores the new-state arguments.
+        unsafe {
+            AdjustTokenPrivileges(
+                token,
+                /*DisableAllPrivileges*/ 1,
+                std::ptr::null(),
+                0,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            );
+            CloseHandle(token);
+        }
+    }
 }
 
 fn absolute(path: &Path) -> AbsolutePathBuf {
