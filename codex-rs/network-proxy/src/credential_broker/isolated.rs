@@ -36,6 +36,7 @@ pub use server::run_credential_broker_main;
 #[cfg(unix)]
 pub use server::run_credential_broker_main_with;
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
+#[cfg(unix)]
 #[path = "isolated_tests.rs"]
 mod tests;
