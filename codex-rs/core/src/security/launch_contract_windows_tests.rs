@@ -632,6 +632,35 @@ fn pf_27_s07_flag_off_removes_the_deny_unless_a_contract_is_armed() {
     assert!(!again);
 }
 
+/// PF-27-S07: a contract that cannot take the armed lock (a removal holds it
+/// in another process) refuses protected launches, and takes it once free.
+#[test]
+fn pf_27_s07_contract_without_the_lock_refuses_protected_launches() {
+    let dir = tempfile::tempdir().expect("codex home");
+    let remover = super::open_armed_lock(dir.path(), /*group*/ None).expect("lock file");
+    remover.try_lock().expect("exclusive lock");
+    let contract = LaunchContract::capture(
+        &absolute(dir.path()),
+        std::iter::empty(),
+        /*hardened*/ true,
+    );
+    let refused = contract.protect_new_codex_home_files();
+    assert!(
+        matches!(refused, Err(super::LaunchDenied::CodexHomeLockUnavailable)),
+        "{refused:?}"
+    );
+    drop(remover);
+    let retried = contract.protect_new_codex_home_files();
+    assert!(
+        !matches!(retried, Err(super::LaunchDenied::CodexHomeLockUnavailable)),
+        "{retried:?}"
+    );
+    assert!(
+        format!("{contract:?}").contains("armed_lock: true"),
+        "{contract:?}"
+    );
+}
+
 /// PF-27-S07: the armed lock file is a regular file opened without
 /// following links, and cannot be deleted while it is held.
 #[test]
@@ -650,5 +679,10 @@ fn pf_27_s07_armed_lock_refuses_links_and_deletion() {
     // Creating a symbolic link needs a privilege or developer mode; the CI
     // runner is elevated.
     std::os::windows::fs::symlink_file(&target, &path).expect("symlink");
+    assert!(super::open_armed_lock(dir.path(), /*group*/ None).is_err());
+
+    // A hard link would lock another file.
+    std::fs::remove_file(&path).expect("remove link");
+    std::fs::hard_link(&target, &path).expect("hard link");
     assert!(super::open_armed_lock(dir.path(), /*group*/ None).is_err());
 }

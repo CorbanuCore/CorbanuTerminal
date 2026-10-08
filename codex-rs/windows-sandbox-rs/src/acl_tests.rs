@@ -3,6 +3,7 @@
 use super::add_deny_read_ace;
 use super::add_deny_read_ace_for_new_files;
 use super::add_deny_write_ace;
+use super::ensure_explicit_deny_read_ace;
 use super::has_exact_deny_read_ace_for_new_files;
 use super::remove_deny_read_ace_for_new_files;
 use crate::token::LocalSid;
@@ -124,6 +125,40 @@ fn pf_27_s07_keeps_protection_and_wider_denies() {
         assert!(!remove_deny_read_ace_for_new_files(dir, group.as_ptr()).expect("remove"));
     }
     assert_eq!(dacl_sddl(dir), wider);
+}
+
+/// A file whose only read deny is inherited gets its own explicit one, which
+/// stays when the inherited copy goes.
+#[test]
+fn pf_27_s07_lock_file_gets_its_own_deny() {
+    let dir = tempfile::tempdir().expect("dir");
+    let dir = dir.path();
+    let group = LocalSid::from_string(SANDBOX_GROUP).expect("group SID");
+    let file = dir.join("lock");
+    // SAFETY: a valid SID and existing paths.
+    unsafe {
+        assert!(add_deny_read_ace_for_new_files(dir, group.as_ptr()).expect("new-file deny"));
+        std::fs::write(&file, "").expect("file");
+        assert!(!explicit_deny(&file), "{}", dacl_sddl(&file));
+        assert!(ensure_explicit_deny_read_ace(&file, group.as_ptr()).expect("explicit deny"));
+        assert!(explicit_deny(&file), "{}", dacl_sddl(&file));
+        assert!(remove_deny_read_ace_for_new_files(dir, group.as_ptr()).expect("remove"));
+    }
+    assert!(explicit_deny(&file), "{}", dacl_sddl(&file));
+}
+
+/// Whether `path`'s SDDL has an explicit (not inherited) deny for the group.
+fn explicit_deny(path: &Path) -> bool {
+    dacl_sddl(path)
+        .split('(')
+        .filter_map(|entry| entry.strip_suffix(')'))
+        .map(|entry| entry.split(';').collect::<Vec<_>>())
+        .any(|fields| {
+            fields.len() == 6
+                && fields[0] == "D"
+                && !fields[1].contains("ID")
+                && fields[5] == SANDBOX_GROUP
+        })
 }
 
 /// Re-sets `path`'s DACL as protected (inherited entries become explicit).

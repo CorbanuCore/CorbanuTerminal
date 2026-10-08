@@ -352,6 +352,71 @@ pub unsafe fn dacl_has_read_deny_for_sid(p_dacl: *mut ACL, psid: *mut c_void) ->
     false
 }
 
+/// True when the DACL has an explicit (not inherited) entry denying `psid`
+/// read access to the object itself.
+unsafe fn dacl_has_explicit_read_deny_for_sid(p_dacl: *mut ACL, psid: *mut c_void) -> bool {
+    if p_dacl.is_null() {
+        return false;
+    }
+    let mut info: ACL_SIZE_INFORMATION = std::mem::zeroed();
+    if GetAclInformation(
+        p_dacl as *const ACL,
+        &mut info as *mut _ as *mut c_void,
+        std::mem::size_of::<ACL_SIZE_INFORMATION>() as u32,
+        AclSizeInformation,
+    ) == 0
+    {
+        return false;
+    }
+    for i in 0..info.AceCount {
+        let mut p_ace: *mut c_void = std::ptr::null_mut();
+        if GetAce(p_dacl as *const ACL, i, &mut p_ace) == 0 {
+            continue;
+        }
+        let hdr = &*(p_ace as *const ACE_HEADER);
+        if hdr.AceType != ACCESS_DENIED_ACE_TYPE
+            || (hdr.AceFlags & (INHERIT_ONLY_ACE | INHERITED_ACE)) != 0
+        {
+            continue;
+        }
+        let ace = &*(p_ace as *const ACCESS_DENIED_ACE);
+        let sid = (p_ace as usize + std::mem::size_of::<ACE_HEADER>() + std::mem::size_of::<u32>())
+            as *mut c_void;
+        if EqualSid(sid, psid) != 0 && (ace.Mask & FILE_GENERIC_READ) == FILE_GENERIC_READ {
+            return true;
+        }
+    }
+    false
+}
+
+/// PF-27-S07: makes sure `path` has its own explicit read deny for `psid`
+/// (an inherited one does not count). Returns whether it is present after.
+///
+/// # Safety
+/// Caller must ensure `psid` points to a valid SID and `path` exists.
+pub unsafe fn ensure_explicit_deny_read_ace(path: &Path, psid: *mut c_void) -> Result<bool> {
+    add_deny_ace(path, psid, DenyAceKind::ReadExplicit)?;
+    let (p_dacl, p_sd) = fetch_dacl_handle(path)?;
+    let present = dacl_has_explicit_read_deny_for_sid(p_dacl, psid);
+    if !p_sd.is_null() {
+        LocalFree(p_sd as HLOCAL);
+    }
+    Ok(present)
+}
+
+/// PF-27-S07: the number of hard links to an open file.
+pub fn file_link_count(file: &std::fs::File) -> std::io::Result<u32> {
+    use std::os::windows::io::AsRawHandle as _;
+    use windows_sys::Win32::Storage::FileSystem::BY_HANDLE_FILE_INFORMATION;
+    use windows_sys::Win32::Storage::FileSystem::GetFileInformationByHandle;
+    // SAFETY: zeroed out-structure; the handle is open for the call.
+    let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
+    if unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, &mut info) } == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(info.nNumberOfLinks)
+}
+
 /// True when the DACL already has an inherit-only, files-only read deny for
 /// `psid` (see [`add_deny_read_ace_for_new_files`]).
 unsafe fn dacl_has_new_file_read_deny_for_sid(p_dacl: *mut ACL, psid: *mut c_void) -> bool {
@@ -867,6 +932,9 @@ unsafe fn remove_new_file_read_denies(
 #[derive(Clone, Copy)]
 enum DenyAceKind {
     Read,
+    /// Read, on the object itself only, and only an explicit entry counts as
+    /// present (an inherited copy can disappear with its parent's entry).
+    ReadExplicit,
     /// Read, inherited by files directly in the directory only.
     ReadNewFiles,
     Write,
@@ -879,7 +947,9 @@ impl DenyAceKind {
     fn mask(self) -> u32 {
         match self {
             Self::DeleteChild { .. } => FILE_DELETE_CHILD,
-            Self::Read | Self::ReadNewFiles => FILE_GENERIC_READ | GENERIC_READ_MASK,
+            Self::Read | Self::ReadExplicit | Self::ReadNewFiles => {
+                FILE_GENERIC_READ | GENERIC_READ_MASK
+            }
             Self::Write => {
                 FILE_GENERIC_WRITE
                     | FILE_WRITE_DATA
@@ -896,6 +966,7 @@ impl DenyAceKind {
     fn inheritance(self) -> u32 {
         match self {
             Self::Read | Self::Write => CONTAINER_INHERIT_ACE | OBJECT_INHERIT_ACE,
+            Self::ReadExplicit => 0,
             Self::ReadNewFiles => {
                 OBJECT_INHERIT_ACE | u32::from(INHERIT_ONLY_ACE) | NO_PROPAGATE_INHERIT_ACE
             }
@@ -911,6 +982,7 @@ impl DenyAceKind {
     unsafe fn already_present(self, p_dacl: *mut ACL, psid: *mut c_void) -> bool {
         match self {
             Self::Read => dacl_has_read_deny_for_sid(p_dacl, psid),
+            Self::ReadExplicit => dacl_has_explicit_read_deny_for_sid(p_dacl, psid),
             Self::ReadNewFiles => dacl_has_new_file_read_deny_for_sid(p_dacl, psid),
             Self::Write => dacl_has_write_deny_for_sid(p_dacl, psid),
             Self::DeleteChild { inherit_to_subdirs } => {
