@@ -537,6 +537,10 @@ fn spawn_input_loop(
 
 /// Entry point for the Windows command runner process.
 pub fn main() -> Result<()> {
+    // #295: launcher mode, run as the real user by a hardened Core.
+    if std::env::args().nth(1).as_deref() == Some(codex_windows_sandbox::LOGON_LAUNCH_ARG) {
+        return codex_windows_sandbox::run_logon_launcher();
+    }
     let mut pipe_in = None;
     let mut pipe_out = None;
     for arg in std::env::args().skip(1) {

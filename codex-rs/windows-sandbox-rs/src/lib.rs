@@ -231,6 +231,8 @@ pub use ipc_framed::read_frame;
 #[cfg(target_os = "windows")]
 pub use ipc_framed::write_frame;
 #[cfg(target_os = "windows")]
+pub use logon_launch::LOGON_LAUNCH_ARG;
+#[cfg(target_os = "windows")]
 pub use logon_launch::LaunchedProcess;
 #[cfg(target_os = "windows")]
 pub use logon_launch::LogonError;
@@ -238,6 +240,8 @@ pub use logon_launch::LogonError;
 pub use logon_launch::LogonLaunchRequest;
 #[cfg(target_os = "windows")]
 pub use logon_launch::create_process_with_logon;
+#[cfg(target_os = "windows")]
+pub use logon_launch::run_logon_launcher;
 #[cfg(target_os = "windows")]
 pub use logging::current_log_file_path;
 #[cfg(target_os = "windows")]
