@@ -3,7 +3,9 @@
 Flags: `isolated_credential_broker` and `secretless_agent_launch` (both default off). Permissive is unchanged, and
 nothing changes on macOS or Linux beyond a refactor of the broker's transport code (Linux and macOS suites rerun).
 
-No Windows host was available. Every Windows result below is measured on GitHub's `windows-2022` runners by the
+**The real-Windows gate run on 2026-10-08 failed with two defects; see
+[the gate section](#real-windows-gate-run-2026-10-08-failed-two-defects).** The sections before it are the original
+CI evidence. No Windows host was available then. Those results are measured on GitHub's `windows-2022` runners by the
 `windows-security-probes` workflow, which runs on every PR that touches this code. The runners are elevated
 administrators with `SeDebugPrivilege` enabled, so probes that stand for an ordinary process disable their own
 privileges first (an enabled debug privilege opens any process whatever its DACL; that is a documented limit).
@@ -84,19 +86,65 @@ vacuous control), changes requested (replaced files still open), approve. Texts:
 Linux clippy (`-D warnings`) on the RTX box is clean for every slice; Linux `credential_broker` 55, process-hardening
 7, core `launch_contract` 12 and `pf_27_s0` 23 tests pass. macOS: the same suites pass.
 
-## Windows machine needed for the remaining gate
+## Real Windows gate run (2026-10-08): FAILED, two defects
 
-Still open: the decision 5 tmux run (GLM 5.2 driving the real TUI) and the SOP videos.
+Host: Windows 11 Pro 25H2 (build 26200), 16 cores, 31 GB, local admin `User`, logged on at the console. Candidate:
+debug build of `origin/main` at `63ea3d0cbd0c` (built on the host). GLM 5.2 (`zai`) drove the real TUI in tmux on a
+fresh `CODEX_HOME` per run. Toolchain: Rust 1.95.0 MSVC, VS 2022 Build Tools 17.14 (MSVC 14.44.35207, SDK
+10.0.26100), MSYS2 (runtime 3.6.10) with tmux 3.7c and Python 3.12.15, asciinema 2.4.0, agg 1.9.0, ffmpeg 9.0.2,
+Git 2.54.0, gh 2.93.0.
 
-- Windows 11 Pro/Enterprise 23H2 or later (or Windows Server 2022/2025 with Desktop Experience), x64, a real machine
-  or full VM (not Windows Sandbox or a container): the elevated sandbox creates local users and a group.
-- One local administrator account for the one-time elevated sandbox setup (UAC prompt), then a normal session of
-  that user; 8+ cores, 16 GB RAM, 60 GB free.
-- Remote access: OpenSSH Server for driving builds and tmux, plus RDP to look at the TUI.
-- Tools: Git for Windows, Visual Studio 2022 Build Tools (C++ workload, Windows 11 SDK), rustup with Rust 1.95.0
-  MSVC, Python 3.12+, MSYS2 with tmux (native console apps run through ConPTY), asciinema 3.x, agg, ffmpeg, gh.
-  The SOP recorder has only been used on macOS/Linux; a short feasibility check of tmux + asciinema under MSYS2
-  comes first, with Windows Terminal plus ffmpeg screen capture as the fallback.
-- Network: github.com, crates.io, and the Z.AI API for GLM 5.2.
-- Credentials: a Z.AI key reachable on that machine (vault label `zai` in an installed signed `corbanu`, or a scoped
-  key Travis provides) and a GitHub token only if videos are published from there.
+| Check | Result |
+| --- | --- |
+| `pf_27_s06` suites on the host (elevated session, like CI): process-hardening 9, broker over pipes 24, core 5 | pass |
+| Unelevated sandbox + contract: agent command refused with the stated reason | pass |
+| Broker pipes, same-user foreign process (the user's `!` command) | data pipe: connects, dropped with 0 bytes received; control pipe: no free instance |
+| Broker pipes, agent command (sandbox user `CodexSandboxOffline`) | data pipe open denied; control pipe: no free instance |
+| Elevated sandbox + contract, product `workspace-write` profile: `auth.json`, `config.toml`, `*state*.sqlite`, writing `config.toml` | denied |
+| Same probe: vault store `CODEX_HOME\secrets\local.age` (created before start or during the run) | **READ: defect 2** |
+| Control, contract off: vault, `auth.json`, `config.toml`, state database | all read |
+| Elevated sandbox + contract in a normal (medium-integrity) session | **every command fails: defect 1** |
+
+**Defect 1: unusable in a normal session.** Started from the user's shell (medium integrity) with
+`[windows] sandbox = "elevated"` and `secretless_agent_launch` on, every agent command fails with
+`windows sandbox: CreateProcessWithLogonW failed: 5`. The same profile works with the flag off (broker on or off)
+and from an elevated session. The Security log has no logon by the sandbox user, so the secondary logon service
+refuses before logging on. Likely cause: the contract arms `restrict_current_process_access()` (user keeps only
+query-limited and synchronize on Core), and the service opens the caller's process while impersonating it.
+
+**Defect 2: the vault store is readable.** Under the product's `workspace-write` profile the contract's deny
+entries are never applied as ACLs (`.sandbox\deny_read_acl_state.json` stays empty; the sandbox log shows only
+the `.git` deny). `auth.json`, `config.toml` and the databases are denied only by the files-only deny on
+`CODEX_HOME`, which does not reach `secrets\`. The CI probe passes because it uses a restricted-read base profile.
+
+CI missed both because the `windows-2022` runners are elevated and the probe does not use the product profile.
+
+### Videos
+
+[qa/demos/index/PF-27-S06.md](../../../demos/index/PF-27-S06.md); specs `qa/demos/specs/pf27s06-win-*.toml`. Leak
+scan: no credential value or key-shaped string in any cast (script scan and a second scan of the published files),
+and no redactions in private logs.
+
+| Video | Session | Shows |
+| --- | --- | --- |
+| `pf27s06-win-protected-files` | elevated | defect 2 next to the denials |
+| `pf27s06-win-baseline-flag-off` | elevated | control: everything readable without the contract |
+| `pf27s06-win-unelevated-refused` | normal | refusal with the reason |
+| `pf27s06-win-broker-pipe-foreign-client` | normal (contract off) | foreign clients dropped or denied |
+| `pf27s06-win-normal-session-launch-fails` | normal | defect 1 |
+
+### How it was run (for reruns)
+
+- The recorder works under MSYS2 tmux; native console programs run inside tmux panes through ConPTY. asciinema 3
+  has no Windows build, so a shim maps the script's asciinema 3 flags to asciinema 2.4.0 (MSYS2 Python) and shifts
+  its events by asciinema's start-up delay so cuts and holds line up. Publishing ran on macOS from the copied run
+  directories. Shims and job scripts: `.codex-work/workers-20261002/win-gate1/` (not in the repository).
+- The elevated sandbox's runner does not start from an SSH session (`timed out ... connecting runner pipe-in`), so
+  runs were started in the console session by scheduled tasks: elevated runs directly, normal-session runs through
+  `explorer.exe` so they get the user's ordinary token. MSYS2's `TEMP` was pointed back at the user's temp folder.
+- The elevated sandbox's admin setup is stored per `CODEX_HOME` and needs a UAC answer in a normal session. Normal-
+  session runs were seeded with the marker and sandbox-user record of the latest elevated setup (same user, same
+  DPAPI scope, the setup's deny on `.sandbox-secrets`). Defect 1 reproduces identically on a profile set up by the
+  product itself, and in `corbanu exec` started from `cmd.exe` without MSYS2.
+- Each run's directory names showed in the TUI's cwd; one GLM reply remarked on the folder name. No tool call or
+  result was affected.
