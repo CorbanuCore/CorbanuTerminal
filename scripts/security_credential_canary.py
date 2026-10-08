@@ -26,6 +26,38 @@ SECRET_PATTERNS = (
     re.compile(r"(?i)\bBearer\s+[^\s\"']{8,}"),
 )
 SENSITIVE_ENV_SUFFIXES = ("_API_KEY", "_TOKEN", "_SECRET", "_PASSWORD")
+FAILURE_REPORT_NAME = "credential-canary-failure.json"
+# Diagnostics are printed to CI logs, so anything token-shaped is masked even
+# though probe output already passed `assert_secret_free`.
+REDACTION_PATTERNS = (
+    re.compile(r"(?i)\b(Bearer\s+)[^\s\"',)]+"),
+    re.compile(
+        r"(?i)\b((?:sk|ghp|gho|ghu|ghs|ghr|github_pat|xox[abprs])[-_])[A-Za-z0-9_-]{6,}"
+    ),
+    re.compile(r"(?i)\b((?:x-api-key|api[_-]?key|token|password|secret)\s*[:=]\s*)\S+"),
+    # Long mixed letter-digit runs (keys, bearer values); identifiers with
+    # underscores, such as test names, stay readable.
+    re.compile(
+        r"()(?<![A-Za-z0-9_])(?=[A-Za-z0-9+/=-]*\d)(?=[A-Za-z0-9+/=-]*[A-Za-z])"
+        r"[A-Za-z0-9+/-]{32,}={0,2}"
+    ),
+)
+MAX_PANIC_LINES = 24
+MAX_DIAGNOSTIC_CHARS = 6000
+FAILED_TEST_PATTERN = re.compile(r"^test (\S+) \.\.\. FAILED\s*$", re.MULTILINE)
+PANIC_PATTERN = re.compile(r"^thread '([^']+)'(?: \(\d+\))? panicked at (.+?):?$")
+PANIC_END_PREFIXES = (
+    "note: ",
+    "thread '",
+    "test ",
+    "stack backtrace:",
+    "---- ",
+    "failures:",
+)
+PROCESS_ERROR_PATTERN = re.compile(
+    r"^(?:error: .*|.*process didn't exit successfully.*|.*\(signal: \d+.*)$",
+    re.MULTILINE,
+)
 REQUIRED_CANARY_SURFACES = {
     "exact_outgoing_request_capture",
     "model_context",
@@ -42,6 +74,10 @@ REQUIRED_CANARY_SURFACES = {
 
 class QualificationError(RuntimeError):
     """A fail-closed PF-13 qualification failure."""
+
+    def __init__(self, message: str, diagnostics: dict[str, Any] | None = None):
+        super().__init__(message)
+        self.diagnostics = diagnostics
 
 
 @dataclass(frozen=True)
@@ -281,7 +317,8 @@ def run_command(
         )
     except subprocess.TimeoutExpired:
         raise QualificationError(
-            "command timed out; output capture is incomplete"
+            f"command timed out after {timeout_seconds}s; output capture is "
+            f"incomplete: {redact(' '.join(command))}"
         ) from None
     # Never discard unscanned output or certify a partial test transcript. Scan
     # first so a credential beyond the retention limit still fails explicitly.
@@ -373,9 +410,82 @@ def assert_secret_free(value: str, surface: str) -> None:
     for pattern in SECRET_PATTERNS:
         match = pattern.search(value)
         if match is not None:
+            line = value.count("\n", 0, match.start()) + 1
             raise QualificationError(
-                f"credential-shaped material escaped into {surface}"
+                f"credential-shaped material escaped into {surface} "
+                f"(line {line}, pattern {pattern.pattern!r}; value withheld)"
             )
+
+
+def redact(value: str) -> str:
+    for pattern in REDACTION_PATTERNS:
+        value = pattern.sub(lambda match: f"{match.group(1)}***", value)
+    return value
+
+
+def panic_reports(output: str) -> list[dict[str, str]]:
+    """Each panic as test, location and its (bounded) message."""
+    panics = []
+    lines = output.splitlines()
+    for index, line in enumerate(lines):
+        match = PANIC_PATTERN.match(line)
+        if match is None:
+            continue
+        message = []
+        for following in lines[index + 1 : index + 1 + MAX_PANIC_LINES]:
+            if not following.strip() or following.startswith(PANIC_END_PREFIXES):
+                break
+            message.append(following)
+        panics.append(
+            {
+                "test": match.group(1),
+                "location": match.group(2),
+                "message": redact("\n".join(message)),
+            }
+        )
+    return panics
+
+
+def describe_probe_failure(
+    probe: Probe, result: CommandResult, missing: list[str]
+) -> tuple[str, dict[str, Any]]:
+    """Explains a failed probe: which tests and assertions, expected vs observed."""
+    combined = f"{result.stdout}\n{result.stderr}"
+    failed_tests = FAILED_TEST_PATTERN.findall(combined)
+    panics = panic_reports(combined)
+    process_errors = [redact(line) for line in PROCESS_ERROR_PATTERN.findall(combined)]
+    diagnostics = {
+        "status": "failed",
+        "probe": probe.probe_id,
+        "command": result.command,
+        "returncode": result.returncode,
+        "failed_tests": failed_tests,
+        "panics": panics,
+        "expected_tests_not_ok": missing,
+        "process_errors": process_errors[-8:],
+    }
+    lines = [
+        f"probe {probe.probe_id} failed: `{' '.join(result.command)}` "
+        f"exited with {result.returncode}"
+    ]
+    if failed_tests:
+        lines.append(f"  failed tests: {', '.join(failed_tests)}")
+    for panic in panics:
+        lines.append(f"  assertion in {panic['test']} at {panic['location']}:")
+        lines.extend(f"    {line}" for line in panic["message"].splitlines())
+    if missing:
+        lines.append(f"  expected tests not reported ok: {', '.join(missing)}")
+    if not failed_tests and not panics:
+        # No libtest verdict: the test binary crashed, hung or did not build.
+        tail = redact("\n".join(result.stderr.strip().splitlines()[-20:]))
+        diagnostics["stderr_tail"] = tail
+        lines.append("  no test failure was reported; last stderr lines:")
+        lines.extend(f"    {line}" for line in tail.splitlines())
+    text = "\n".join(lines)
+    if len(text) > MAX_DIAGNOSTIC_CHARS:
+        text = text[:MAX_DIAGNOSTIC_CHARS] + "\n  ... (truncated)"
+    assert_secret_free(text, "probe failure diagnostics")
+    return text, diagnostics
 
 
 def source_evidence(repo_root: Path, probe: Probe) -> list[dict[str, str]]:
@@ -414,13 +524,14 @@ def executed_test_count(result: CommandResult) -> int:
 def validate_probe_output(probe: Probe, result: CommandResult) -> int:
     combined = f"{result.stdout}\n{result.stderr}"
     assert_secret_free(combined, f"probe {probe.probe_id} output")
-    if result.returncode != 0:
-        raise QualificationError(f"probe {probe.probe_id} failed")
     missing = [
         test_name
         for test_name in probe.expected_tests
         if re.search(rf"\b{re.escape(test_name)}\s+\.\.\.\s+ok\b", combined) is None
     ]
+    if result.returncode != 0:
+        message, diagnostics = describe_probe_failure(probe, result, missing)
+        raise QualificationError(message, diagnostics)
     if missing:
         raise QualificationError(
             f"probe {probe.probe_id} did not execute expected tests: {missing}"
@@ -455,9 +566,11 @@ def parse_canary_result(results: list[CommandResult]) -> dict[str, Any]:
     return payload
 
 
-def write_report(output_dir: Path, report: dict[str, Any]) -> Path:
+def write_report(
+    output_dir: Path, report: dict[str, Any], name: str = REPORT_NAME
+) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
-    destination = output_dir / REPORT_NAME
+    destination = output_dir / name
     serialized = json.dumps(report, indent=2, sort_keys=True) + "\n"
     assert_secret_free(serialized, "qualification report")
     with tempfile.NamedTemporaryFile(
@@ -569,6 +682,13 @@ def main() -> int:
         subprocess.TimeoutExpired,
     ) as error:
         print(f"security-credential-canary: {error}")
+        diagnostics = getattr(error, "diagnostics", None)
+        if diagnostics is not None:
+            try:
+                path = write_report(arguments.output, diagnostics, FAILURE_REPORT_NAME)
+                print(f"security-credential-canary: failure details: {path}")
+            except (QualificationError, OSError) as report_error:
+                print(f"security-credential-canary: no failure report: {report_error}")
         return 2
     print(f"security-credential-canary: {'PASS' if passed else 'FAIL'}: {report_path}")
     return 0 if passed else 1

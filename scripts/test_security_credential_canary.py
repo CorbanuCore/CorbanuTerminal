@@ -164,6 +164,100 @@ class SecurityCredentialCanaryTests(unittest.TestCase):
         ):
             canary.validate_probe_output(probe, missing)
 
+    def test_failed_probe_reports_assertion_expected_and_observed(self) -> None:
+        probe = canary.Probe(
+            probe_id="fixture",
+            package="fixture",
+            cargo_args=("--lib", "credential"),
+            expected_tests=("first_case", "second_case"),
+            source_paths=("fixture.rs",),
+            covers=("surface",),
+        )
+        failed = canary.CommandResult(
+            command=["cargo", "test", "-p", "fixture"],
+            returncode=101,
+            stdout=(
+                "test module::first_case ... ok\n"
+                "thread 'module::second_case' (4242) panicked at src/fixture.rs:12:5:\n"
+                "assertion `left == right` failed\n"
+                "  left: Some(Brokered)\n"
+                " right: Some(Unavailable)\n"
+                "note: run with `RUST_BACKTRACE=1` to display a backtrace\n"
+                "test module::second_case ... FAILED\n"
+                "test result: FAILED. 1 passed; 1 failed; 0 ignored\n"
+            ),
+            stderr="error: test failed, to rerun pass `--lib`\n",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(canary.QualificationError) as caught:
+                canary.validate_probe_output(probe, failed)
+            message = str(caught.exception)
+            self.assertIn("probe fixture failed", message)
+            self.assertIn("exited with 101", message)
+            self.assertIn("failed tests: module::second_case", message)
+            self.assertIn("module::second_case at src/fixture.rs:12:5", message)
+            self.assertIn("left: Some(Brokered)", message)
+            self.assertIn("right: Some(Unavailable)", message)
+            self.assertIn("expected tests not reported ok: second_case", message)
+            diagnostics = caught.exception.diagnostics
+            self.assertEqual(diagnostics["failed_tests"], ["module::second_case"])
+            self.assertEqual(
+                diagnostics["panics"][0]["location"], "src/fixture.rs:12:5"
+            )
+            report = canary.write_report(
+                Path(directory), diagnostics, canary.FAILURE_REPORT_NAME
+            )
+            self.assertEqual(json.loads(report.read_text())["probe"], "fixture")
+
+    def test_failure_diagnostics_redact_token_shaped_values(self) -> None:
+        probe = canary.PROBES[0]
+        token = "ghp_" + "Ab1" * 12
+        failed = canary.CommandResult(
+            command=["cargo", "test"],
+            returncode=101,
+            stdout=(
+                "thread 't' panicked at src/x.rs:1:1:\n"
+                f'  left: "Bearer {token}"\n'
+                f' right: "x-api-key: {token}"\n'
+                "test t ... FAILED\n"
+            ),
+            stderr="",
+        )
+        message, diagnostics = canary.describe_probe_failure(probe, failed, [])
+        self.assertNotIn(token, message)
+        self.assertNotIn(token, json.dumps(diagnostics))
+        self.assertIn("Bearer ***", message)
+
+    def test_crashed_probe_reports_process_error_without_test_verdict(self) -> None:
+        probe = canary.PROBES[0]
+        crashed = canary.CommandResult(
+            command=["cargo", "test"],
+            returncode=101,
+            stdout="running 3 tests\n",
+            stderr=(
+                "error: test failed, to rerun pass `--lib`\n"
+                "Caused by:\n  process didn't exit successfully: `deps/x` "
+                "(signal: 11, SIGSEGV: invalid memory reference)\n"
+            ),
+        )
+        message, diagnostics = canary.describe_probe_failure(probe, crashed, [])
+        self.assertIn("no test failure was reported", message)
+        self.assertIn("SIGSEGV", message)
+        self.assertTrue(diagnostics["process_errors"])
+
+    def test_timeout_names_the_command(self) -> None:
+        with mock.patch.object(
+            canary.subprocess,
+            "run",
+            side_effect=subprocess.TimeoutExpired(["cargo"], 900),
+        ):
+            with self.assertRaisesRegex(
+                canary.QualificationError, r"after 900s.*cargo test -p fixture"
+            ):
+                canary.run_command(
+                    ["cargo", "test", "-p", "fixture"], cwd=Path.cwd(), env={}
+                )
+
     def test_parse_canary_result_requires_exact_surface_and_use_counts(self) -> None:
         payload = {
             "canary_sha256": "a" * 64,
