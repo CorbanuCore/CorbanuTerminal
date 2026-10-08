@@ -220,7 +220,8 @@ async fn run_broker(
 ) -> anyhow::Result<()> {
     // The control channel accepts exactly the process that spawned us. A
     // stale parent (reparented to init or launchd) means the controller died.
-    let parent_pid = transport::parent_pid().context("find the controller process")?;
+    let parent = transport::Parent::open().context("find the controller process")?;
+    let parent_pid = parent.pid;
     let mut endpoint = transport::Endpoint::bind(&runtime_dir).await?;
 
     // PF-27-S02: stdout carries only the (non-secret) control socket path.
@@ -307,7 +308,7 @@ async fn run_broker(
     .await?;
 
     let accept = endpoint.serve(broker.clone());
-    let parent_gone = transport::shutdown_requested(parent_pid)?;
+    let parent_gone = transport::shutdown_requested(parent)?;
     tokio::pin!(parent_gone);
     loop {
         let line = tokio::select! {
@@ -1017,8 +1018,17 @@ mod transport {
     use tokio::signal::unix::SignalKind;
     use tokio::signal::unix::signal;
 
-    pub(super) fn parent_pid() -> Option<u32> {
-        Some(std::os::unix::process::parent_id())
+    /// The spawning controller (Unix: polled by process id).
+    pub(super) struct Parent {
+        pub(super) pid: u32,
+    }
+
+    impl Parent {
+        pub(super) fn open() -> std::io::Result<Self> {
+            Ok(Self {
+                pid: std::os::unix::process::parent_id(),
+            })
+        }
     }
 
     pub(super) struct Endpoint {
@@ -1123,8 +1133,9 @@ mod transport {
     /// Resolves on a termination signal or when the controller has died
     /// (the broker was reparented).
     pub(super) fn shutdown_requested(
-        parent_pid: u32,
+        parent: Parent,
     ) -> anyhow::Result<impl std::future::Future<Output = ()>> {
+        let parent_pid = parent.pid;
         let mut terminate = signal(SignalKind::terminate())?;
         let mut hangup = signal(SignalKind::hangup())?;
         let mut interrupt = signal(SignalKind::interrupt())?;
@@ -1157,9 +1168,8 @@ mod transport {
     use std::sync::Arc;
     use tokio::net::windows::named_pipe::NamedPipeServer;
 
-    pub(super) fn parent_pid() -> Option<u32> {
-        pipe::parent_pid()
-    }
+    /// The spawning controller, held open (Windows).
+    pub(super) type Parent = pipe::ParentProcess;
 
     pub(super) struct Endpoint {
         control_name: String,
@@ -1225,9 +1235,9 @@ mod transport {
 
     /// Resolves when the controller process exits.
     pub(super) fn shutdown_requested(
-        parent_pid: u32,
+        parent: Parent,
     ) -> anyhow::Result<impl std::future::Future<Output = ()>> {
-        let exited = pipe::process_exit(parent_pid)?;
+        let exited = parent.exited();
         Ok(async move {
             let _ = exited.await;
         })

@@ -44,6 +44,7 @@ use tokio::net::windows::named_pipe::NamedPipeServer;
 use tokio::net::windows::named_pipe::PipeMode;
 use tokio::net::windows::named_pipe::ServerOptions;
 use windows_sys::Win32::Foundation::CloseHandle;
+use windows_sys::Win32::Foundation::FILETIME;
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::Foundation::HLOCAL;
 use windows_sys::Win32::Foundation::LocalFree;
@@ -54,8 +55,10 @@ use windows_sys::Win32::Security::SECURITY_ATTRIBUTES;
 use windows_sys::Win32::System::Pipes::GetNamedPipeClientProcessId;
 use windows_sys::Win32::System::Pipes::GetNamedPipeServerProcessId;
 use windows_sys::Win32::System::Threading::GetCurrentProcess;
+use windows_sys::Win32::System::Threading::GetProcessTimes;
 use windows_sys::Win32::System::Threading::INFINITE;
 use windows_sys::Win32::System::Threading::OpenProcess;
+use windows_sys::Win32::System::Threading::PROCESS_QUERY_LIMITED_INFORMATION;
 use windows_sys::Win32::System::Threading::PROCESS_SYNCHRONIZE;
 use windows_sys::Win32::System::Threading::WaitForSingleObject;
 
@@ -275,7 +278,7 @@ pub(crate) async fn connect_data(name: &str, broker_pid: u32) -> io::Result<Name
 
 /// The process id of this process's parent (the controller that spawned
 /// the broker).
-pub(crate) fn parent_pid() -> Option<u32> {
+fn parent_pid() -> Option<u32> {
     #[link(name = "ntdll")]
     unsafe extern "system" {
         fn NtQueryInformationProcess(
@@ -314,24 +317,72 @@ pub(crate) fn parent_pid() -> Option<u32> {
         .flatten()
 }
 
-/// Opens `pid` for waiting now and resolves once that process exits. Fails
-/// if the process cannot be opened (it already exited).
-pub(crate) fn process_exit(pid: u32) -> io::Result<tokio::task::JoinHandle<()>> {
-    // SAFETY: OpenProcess with wait-only access; the handle moves into the
-    // blocking task, which closes it.
-    let process = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, pid) };
-    if process == 0 {
+/// The controller process, held open from broker start so its process id
+/// cannot be reused while the broker serves it.
+pub(crate) struct ParentProcess {
+    pub(crate) pid: u32,
+    handle: isize,
+}
+
+impl ParentProcess {
+    /// Opens this process's parent, refusing one created after this process
+    /// (its id was reused after the real parent exited).
+    pub(crate) fn open() -> io::Result<Self> {
+        let pid = parent_pid().ok_or_else(|| io::Error::other("no parent process"))?;
+        // SAFETY: wait and query-limited access only; closed on drop.
+        let handle = unsafe {
+            OpenProcess(
+                PROCESS_SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
+                0,
+                pid,
+            )
+        };
+        if handle == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let parent = Self { pid, handle };
+        // SAFETY: the pseudo-handle is always valid.
+        let own = creation_time(unsafe { GetCurrentProcess() })?;
+        if creation_time(parent.handle)? > own {
+            return Err(io::Error::other("parent process id was reused"));
+        }
+        Ok(parent)
+    }
+
+    /// Resolves once the controller exits.
+    pub(crate) fn exited(self) -> tokio::task::JoinHandle<()> {
+        let handle = self.handle;
+        // The blocking task now owns the handle.
+        std::mem::forget(self);
+        tokio::task::spawn_blocking(move || {
+            // SAFETY: a valid process handle owned by this task.
+            unsafe {
+                WaitForSingleObject(handle as HANDLE, INFINITE);
+                CloseHandle(handle as HANDLE);
+            }
+        })
+    }
+}
+
+impl Drop for ParentProcess {
+    fn drop(&mut self) {
+        // SAFETY: opened in `open` and closed once.
+        unsafe { CloseHandle(self.handle as HANDLE) };
+    }
+}
+
+fn creation_time(process: HANDLE) -> io::Result<u64> {
+    let zero = FILETIME {
+        dwLowDateTime: 0,
+        dwHighDateTime: 0,
+    };
+    let (mut created, mut exited, mut kernel, mut user) = (zero, zero, zero, zero);
+    // SAFETY: valid out pointers; `process` has query-limited access.
+    let ok = unsafe { GetProcessTimes(process, &mut created, &mut exited, &mut kernel, &mut user) };
+    if ok == 0 {
         return Err(io::Error::last_os_error());
     }
-    let process = process as isize;
-    Ok(tokio::task::spawn_blocking(move || {
-        let process = process as HANDLE;
-        // SAFETY: `process` is a valid handle owned by this task.
-        unsafe {
-            WaitForSingleObject(process, INFINITE);
-            CloseHandle(process);
-        }
-    }))
+    Ok((u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime))
 }
 
 /// A pipe end carrying rama connection extensions.

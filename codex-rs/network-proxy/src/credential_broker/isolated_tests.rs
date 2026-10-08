@@ -326,6 +326,93 @@ async fn pf_27_s04_pf_27_s01_raw_credential_is_substituted_only_inside_the_broke
     assert_eq!(headers, bearer(&dummy));
 }
 
+const CONTROLLER_ENV: &str = "CODEX_PF27S06_CONTROLLER_CHILD";
+#[cfg(windows)]
+const CONTROLLER_TEST: &str =
+    "credential_broker::isolated::tests::pf_27_s06_controller_child_entry";
+
+/// Stands in for Core: starts a broker, prints its process id, then waits to
+/// be killed.
+#[test]
+fn pf_27_s06_controller_child_entry() {
+    if std::env::var_os(CONTROLLER_ENV).is_none() {
+        return;
+    }
+    let runtime = tokio::runtime::Runtime::new().expect("runtime");
+    runtime.block_on(async {
+        let upstream = start_upstream().await;
+        let broker = isolated_broker(launcher(&upstream, /*controller_pid_override*/ None));
+        let _ = virtualized_dummy(&broker);
+        let pid = broker
+            .current_isolated_client()
+            .and_then(|client| client.pid_for_test())
+            .expect("broker pid");
+        use std::io::Write as _;
+        let mut stdout = std::io::stdout();
+        let _ = writeln!(stdout, "\npf27s06-broker-pid:{pid}");
+        let _ = stdout.flush();
+        std::future::pending::<()>().await;
+    });
+}
+
+/// PF-27-S06: a broker whose controller is killed outright (no graceful
+/// close) exits by itself instead of lingering with credentials.
+#[cfg(windows)]
+#[test]
+fn pf_27_s06_broker_exits_when_its_controller_is_killed() {
+    use std::io::BufRead as _;
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::OpenProcess;
+    use windows_sys::Win32::System::Threading::PROCESS_SYNCHRONIZE;
+    use windows_sys::Win32::System::Threading::WaitForSingleObject;
+    let mut controller = std::process::Command::new(std::env::current_exe().expect("test binary"))
+        .args([
+            CONTROLLER_TEST,
+            "--exact",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(CONTROLLER_ENV, "1")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::inherit())
+        .spawn()
+        .expect("controller");
+    let stdout = controller.stdout.take().expect("controller stdout");
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for line in std::io::BufReader::new(stdout)
+            .lines()
+            .map_while(Result::ok)
+        {
+            if let Some(pid) = line
+                .split("pf27s06-broker-pid:")
+                .nth(1)
+                .and_then(|pid| pid.trim().parse::<u32>().ok())
+            {
+                let _ = sender.send(pid);
+                break;
+            }
+        }
+    });
+    let broker_pid = receiver
+        .recv_timeout(Duration::from_secs(60))
+        .expect("controller reported its broker");
+    // SAFETY: wait-only access; closed below.
+    let broker = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, broker_pid) };
+    assert_ne!(broker, 0, "the broker is running");
+    controller.kill().expect("kill controller");
+    let _ = controller.wait();
+    // SAFETY: `broker` is open.
+    let waited = unsafe { WaitForSingleObject(broker, 10_000) };
+    // SAFETY: opened above.
+    unsafe { CloseHandle(broker) };
+    assert_eq!(
+        waited, /*WAIT_OBJECT_0*/ 0,
+        "broker outlived its controller"
+    );
+}
+
 /// Disables `SeDebugPrivilege` in this process's token, if it is enabled.
 #[cfg(windows)]
 fn disable_debug_privilege() {

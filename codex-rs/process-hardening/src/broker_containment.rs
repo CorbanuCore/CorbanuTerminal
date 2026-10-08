@@ -282,9 +282,13 @@ mod linux {
 }
 
 /// PF-27-S06: Windows has no per-process file sandbox the broker can apply
-/// to itself, so it applies what it can: a process DACL that keeps other
-/// processes out of its memory (`dacl`), and a job that allows no child
-/// processes (`job`). File writes are not confined on Windows.
+/// to itself, so it applies what it can: a process and thread DACL that keeps
+/// other processes out of its memory (`dacl`), and a job (`job`) that allows
+/// no child processes and denies the desktop, clipboard, global atoms, other
+/// processes' USER handles and system settings. Not confined on Windows: file
+/// writes, opening other processes of the user, and asking another process
+/// to run something (WMI, Task Scheduler, out-of-process COM). A restricted
+/// or AppContainer token for the broker is the follow-up.
 #[cfg(windows)]
 mod windows {
     use super::BrokerContainment;
@@ -294,7 +298,17 @@ mod windows {
     use windows_sys::Win32::System::JobObjects::CreateJobObjectW;
     use windows_sys::Win32::System::JobObjects::JOB_OBJECT_LIMIT_ACTIVE_PROCESS;
     use windows_sys::Win32::System::JobObjects::JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION;
+    use windows_sys::Win32::System::JobObjects::JOB_OBJECT_UILIMIT_DESKTOP;
+    use windows_sys::Win32::System::JobObjects::JOB_OBJECT_UILIMIT_DISPLAYSETTINGS;
+    use windows_sys::Win32::System::JobObjects::JOB_OBJECT_UILIMIT_EXITWINDOWS;
+    use windows_sys::Win32::System::JobObjects::JOB_OBJECT_UILIMIT_GLOBALATOMS;
+    use windows_sys::Win32::System::JobObjects::JOB_OBJECT_UILIMIT_HANDLES;
+    use windows_sys::Win32::System::JobObjects::JOB_OBJECT_UILIMIT_READCLIPBOARD;
+    use windows_sys::Win32::System::JobObjects::JOB_OBJECT_UILIMIT_SYSTEMPARAMETERS;
+    use windows_sys::Win32::System::JobObjects::JOB_OBJECT_UILIMIT_WRITECLIPBOARD;
+    use windows_sys::Win32::System::JobObjects::JOBOBJECT_BASIC_UI_RESTRICTIONS;
     use windows_sys::Win32::System::JobObjects::JOBOBJECT_EXTENDED_LIMIT_INFORMATION;
+    use windows_sys::Win32::System::JobObjects::JobObjectBasicUIRestrictions;
     use windows_sys::Win32::System::JobObjects::JobObjectExtendedLimitInformation;
     use windows_sys::Win32::System::JobObjects::SetInformationJobObject;
     use windows_sys::Win32::System::Threading::GetCurrentProcess;
@@ -328,7 +342,17 @@ mod windows {
         limits.BasicLimitInformation.LimitFlags =
             JOB_OBJECT_LIMIT_ACTIVE_PROCESS | JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION;
         limits.BasicLimitInformation.ActiveProcessLimit = 1;
-        // SAFETY: `limits` is valid for the size passed; `job` is open.
+        let ui = JOBOBJECT_BASIC_UI_RESTRICTIONS {
+            UIRestrictionsClass: JOB_OBJECT_UILIMIT_DESKTOP
+                | JOB_OBJECT_UILIMIT_HANDLES
+                | JOB_OBJECT_UILIMIT_READCLIPBOARD
+                | JOB_OBJECT_UILIMIT_WRITECLIPBOARD
+                | JOB_OBJECT_UILIMIT_GLOBALATOMS
+                | JOB_OBJECT_UILIMIT_SYSTEMPARAMETERS
+                | JOB_OBJECT_UILIMIT_DISPLAYSETTINGS
+                | JOB_OBJECT_UILIMIT_EXITWINDOWS,
+        };
+        // SAFETY: `limits` and `ui` are valid for the sizes passed; `job` is open.
         let applied = unsafe {
             SetInformationJobObject(
                 job,
@@ -336,6 +360,12 @@ mod windows {
                 (&limits as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
                 std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
             ) != 0
+                && SetInformationJobObject(
+                    job,
+                    JobObjectBasicUIRestrictions,
+                    (&ui as *const JOBOBJECT_BASIC_UI_RESTRICTIONS).cast(),
+                    std::mem::size_of::<JOBOBJECT_BASIC_UI_RESTRICTIONS>() as u32,
+                ) != 0
                 && AssignProcessToJobObject(job, GetCurrentProcess()) != 0
         };
         if applied {
