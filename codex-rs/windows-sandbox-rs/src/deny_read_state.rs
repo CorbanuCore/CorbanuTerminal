@@ -90,10 +90,10 @@ pub unsafe fn sync_persistent_deny_read_acls(
     } else {
         for path in stale_paths {
             // A path that is gone has no entry left. Keep any other failure
-            // (including a link left at the path, followable or not)
+            // (a link left at the path or above it, followable or not)
             // recorded, so a later sync retries it.
             if unsafe { remove_deny_read_ace(&path, psid) }.is_err()
-                && path.symlink_metadata().is_ok()
+                && !matches!(path.symlink_metadata(), Err(err) if err.kind() == std::io::ErrorKind::NotFound)
             {
                 recorded_paths.push(path);
             }
