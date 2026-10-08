@@ -57,7 +57,7 @@ CI jobs (`windows-security-probes`), all green on the merged heads:
 - **Lock-file creation window.** If an armed contract creates the lock file before the sandbox group exists, or before its deny is applied, a sandboxed command could open it in that moment. Holding it shared only blocks cleanup (fails safe). Holding it exclusively makes protected launches refuse (fails closed).
 - **The lock file stays.** It keeps its own explicit deny after the removal.
 - **Lock path occupied.** A hard link or a symbolic link at the lock path makes protected launches refuse until the link is deleted.
-- **Still not done.** The GLM 5.2 tmux run and the SOP videos need a real Windows machine, as for PF-27-S06.
+- **Real-Windows gate.** Done on 2026-10-08; see [Real Windows gate run](#real-windows-gate-run-2026-10-08-pass).
 
 ## Reviews (Opus 5.5 High)
 
@@ -68,3 +68,79 @@ CI jobs (`windows-security-probes`), all green on the merged heads:
 | 2b | Changes requested (`=C:` variables), then approve with lows. All fixed: full denial asserted after the broker's hardening, plus a comment on the control and a missing SAFETY comment. |
 
 Texts: [reviews/](reviews/).
+
+## Real Windows gate run (2026-10-08): PASS
+
+Host: the PF-27-S06 machine (Windows 11 Pro 25H2, build 26200; local admin `User` at the console; same toolchain).
+Candidate: debug build of `origin/main` at `265172beed3d`, which has #281, #282 and #284 and the PF-27-S06 fixes
+#298 and #302. Every run below was in a **normal session**: medium integrity, no `SeDebugPrivilege`, started
+through `explorer.exe`. Config: `[windows] sandbox = "elevated"`, `workspace-write`, `isolated_credential_broker` and
+`secretless_agent_launch` on (off where stated). GLM 5.2 (`zai`) drove the TUI in tmux on a fresh `CODEX_HOME` per run.
+
+The probe (`threadprobe`, C# source in the specs) only opens handles. It tries 11 process rights and 5 thread rights
+(`GET_CONTEXT`, `SET_CONTEXT`, `SUSPEND_RESUME`, `TERMINATE`, `QUERY_INFORMATION`) on every thread. Its control is a
+child it starts itself, which it can always open.
+
+| Check | Result |
+| --- | --- |
+| Core, same-user process (the user's `!` command) | **pass**: only `QUERY_LIMITED` and `SYNCHRONIZE` (the protected DACL's user entry); 0 of 245 thread opens (49 threads) |
+| Core, agent command (sandbox user `CodexSandboxOffline`) | **pass**: no process right; 0 of 255 thread opens |
+| New threads: a same-user watcher polls Core and the broker during an agent turn and opens each new thread as soon as it appears | **pass**: 6 new Core threads and 2 new broker threads, none opened |
+| Broker (started with `spawn_protected`), same-user process | **pass**: only `QUERY_LIMITED` and `SYNCHRONIZE`; 0 of 40 thread opens |
+| Broker, agent command | **pass**: no process right; 0 of 40 thread opens |
+| `CODEX_HOME` deny, SDDL (script): after a flag-off run, then a flag-on run, then a flag-off `corbanu features list` | **pass**: the flag-on run adds `(D;OINPIO;0x80120089;;;<CodexSandboxUsers>)` to `CODEX_HOME`, and files in it (one created before, one after) get `(D;ID;FR;...)`. After the flag-off process, the SDDL of `CODEX_HOME` and of the earlier file match the baseline exactly. A second flag-off process changes nothing |
+| Same in the TUI: flag-off session after a protected `corbanu exec` | **pass**: the entry is gone from `CODEX_HOME` and `config.toml` |
+| A flag-off process while a protected session holds the lock | **pass**: the deny stays |
+| #295 regression: agent commands in a normal session | **pass**: `whoami` runs as `CodexSandboxOffline` |
+| #294 regression: vault under `workspace-write` | **pass**: the vault store, `auth.json`, `config.toml` and the state database are denied, and so is writing `config.toml`; the workspace control file is read |
+| Probe suites, elevated (as CI): process-hardening 18 + 1 (`pf_27_s06_d1`), windows-sandbox 4, broker 24, core 12 | pass |
+| Same suites in a normal session | pass, except 2 core tests that CI also runs only elevated (below) |
+
+The two core tests that need an elevated session:
+- `pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory` runs the elevated sandbox's admin setup,
+  which needs a UAC answer (`ShellExecuteExW ... 1223`).
+- `pf_27_s07_armed_lock_refuses_links_and_deletion` can't create its symbolic link without
+  `SeCreateSymbolicLinkPrivilege` (error 1314). The same limit stops a normal-session process from planting the link,
+  unless Developer Mode is on.
+
+Both pass elevated. Neither is a product failure.
+
+**What CI covers and what it doesn't.** `windows-security-probes` (on `windows-2022`) proves two things
+deterministically:
+- a thread can't be opened while it is held in its creation window;
+- the broker can't be opened while it is still suspended.
+
+CI runs all `pf_27_s07` tests elevated, with privileges disabled in the probe. Of the PF-27-S07 work, it runs only the
+#294/#295 probes at medium integrity. It does not cover:
+- the running product's real Core and broker;
+- a medium-integrity session (outside those two probes);
+- the TUI.
+
+This run covers those, but its watcher can't prove it reached the creation window. The deny-removal SDDL check and
+the lock are covered by both. Neither covers a separate non-admin account, or the admin setup from a normal session.
+
+**Videos** ([index](../../../demos/index/PF-27-S07.md); specs `qa/demos/specs/pf27s07-win-*.toml` and the PF-27-S06
+regression specs). Leak scan: no key value and no key-shaped string in any cast, frame, log or published file (the
+recorder's scan, and a second scan on macOS of the run folders and the downloaded release assets).
+
+| Video | Shows |
+| --- | --- |
+| `pf27s07-win-core-threads-unopenable` | Core and its new threads unopenable by the user's other processes and by the sandbox |
+| `pf27s07-win-broker-unopenable` | the same for the broker |
+| `pf27s07-win-codex-home-deny-flag-off` | a flag-off session removes the deny an earlier protected run left |
+| `pf27s07-win-codex-home-deny-kept-while-armed` | a flag-off process leaves it while a protected session runs |
+| `pf27s06-win-normal-session-works` | #295 regression |
+| `pf27s06-win-vault-denied` | #294 regression |
+
+**How it was run.** Harness as for PF-27-S06 (scripts in `.codex-work/workers-20261002/win-gate-s07/`, not in the
+repository). Normal-session runs reuse the result of one elevated setup run just before. The
+`codex-home-deny-flag-off` launch wrapper runs one protected `corbanu exec` in the run's `CODEX_HOME` before the TUI
+starts, and writes what it left to `before.txt`, which the video prints.
+
+Notes:
+- The removal's `info` log line never reaches `codex-tui.log`, because config loads before the file logger starts.
+  The SDDL is the evidence.
+- The seed wrapper's `.sandbox-secrets` deny had silently failed under MSYS2 path conversion, also in the PF-27-S06
+  runs. It's fixed in this harness. The product's own setup was unaffected.
+- `QUERY_LIMITED` and `SYNCHRONIZE` on the broker for the same user are by design (`process_dacl_sddl`); the sprint's
+  "every process right" means the rights its tests probe (`PROCESS_RIGHTS`), which don't include those two.

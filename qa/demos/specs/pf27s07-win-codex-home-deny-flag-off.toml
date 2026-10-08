@@ -1,0 +1,66 @@
+# PF-27-S07 Windows gate: the CODEX_HOME deny is removed when secretless_agent_launch is off. Before the
+# TUI starts, the launch wrapper (win-gate-s07/corbanu-flagon-first, outside the repository) runs one
+# protected `corbanu exec` in the same CODEX_HOME, which adds the deny, and writes what it left to
+# before.txt. The TUI then starts with the flag off; its first config load removes the entry.
+id = "pf27s07-win-codex-home-deny-flag-off"
+feature = "Windows: with secretless_agent_launch off, Corbanu removes the CODEX_HOME deny an earlier protected run left"
+expected = "before.txt shows the deny an earlier protected run added; in this flag-off session the entry is gone from CODEX_HOME and from config.toml."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[windows]
+sandbox = "elevated"
+
+[sandbox_workspace_write]
+network_access = true
+
+[features]
+isolated_credential_broker = true
+secretless_agent_launch = false
+
+[features.network_proxy]
+enabled = true
+allow_local_binding = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"sddl.ps1" = '''
+# Shows CODEX_HOME's DACL entries for the elevated sandbox's group (CodexSandboxUsers).
+$h = $env:CODEX_HOME
+$g = (New-Object Security.Principal.NTAccount 'CodexSandboxUsers').Translate([Security.Principal.SecurityIdentifier]).Value
+"group CodexSandboxUsers = $g"
+$flag = (Select-String -Path "$h\config.toml" '^secretless_agent_launch\s*=\s*(\w+)').Matches[0].Groups[1].Value
+"this session: secretless_agent_launch = $flag"
+if (Test-Path before.txt) { Get-Content before.txt }
+function denies($p) { $s = (Get-Acl -LiteralPath $p).Sddl; @([regex]::Matches($s, '\(D;[^)]*;' + $g + '\)') | ForEach-Object { $_.Value }) }
+$d = denies $h
+"CODEX_HOME deny entries for CodexSandboxUsers now: " + $(if ($d.Count) { $d -join ' ' } else { 'none' })
+$f = denies "$h\config.toml"
+"config.toml inherited deny entries now: " + $(if ($f.Count) { $f -join ' ' } else { 'none' })
+'sddl check done'
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+type = "!powershell -NoProfile -ExecutionPolicy Bypass -File sddl.ps1"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "(?s)deny entries for CodexSandboxUsers now: none.*sddl check done"
+timeout = 60
+
+[[steps]]
+pause = 6.0
