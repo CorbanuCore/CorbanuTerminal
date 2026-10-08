@@ -107,6 +107,11 @@ pub fn arg0_dispatch() -> Option<Arg0PathEntryGuard> {
         // stored provider keys are decrypted here, never in Core.
         codex_network_proxy::run_credential_broker_main_with(Some(broker_stored_provider_key));
     }
+    // PF-27-S06: the Windows broker (named pipes); it reads no stored keys.
+    #[cfg(windows)]
+    if argv1 == codex_network_proxy::CODEX_CREDENTIAL_BROKER_ARG1 {
+        codex_network_proxy::run_credential_broker_main();
+    }
     #[cfg(unix)]
     if argv1 == CODEX_ARG0_EXEC_HELPER_ARG1 {
         codex_exec_server::run_arg0_exec_helper_main();
