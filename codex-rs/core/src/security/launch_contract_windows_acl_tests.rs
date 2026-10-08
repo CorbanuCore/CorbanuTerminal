@@ -239,6 +239,9 @@ async fn pf_27_s06_d2_vault_unreadable_through_tool_launch_under_workspace_write
     let probe = run(unprotected).await;
     eprintln!("pf27s06 d2 unprotected launch in an armed process: {probe}");
     assert!(probe.contains("VAULT-DENIED"), "{probe}");
+    // Deny ACEs are never revoked today (#304), so this end-to-end check holds
+    // even without the armed union; the assertion on the overrides above
+    // guards the union until revocation works.
     let running = running.await.expect("running command");
     eprintln!("pf27s06 d2 protected command running across it: {running}");
     for denied in ["VAULT", "AUTH", "WALLET"] {
