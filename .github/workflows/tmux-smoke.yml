@@ -27,6 +27,8 @@ jobs:
       # sccache cannot cache incremental compilations.
       CARGO_INCREMENTAL: "0"
       SCCACHE_CACHE_SIZE: 3G
+      # Keep the server (and its stats) alive through the long test step.
+      SCCACHE_IDLE_TIMEOUT: "0"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
