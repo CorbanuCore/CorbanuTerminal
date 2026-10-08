@@ -127,7 +127,9 @@ async fn pf_30_s01_source_envelopes_label_tool_output_and_keep_human_prompt() ->
                     .enable(Feature::SourceEnvelopes)
                     .expect("enable source envelopes");
             })
-            .build_with_auto_env(&server)
+            // shell_command is only exposed for local environments, so pin this test
+            // to the local executor even in the remote test lane.
+            .build(&server)
             .await?;
         let human = "read the notes <keep> 日本語";
         test.submit_turn(human).await?;
