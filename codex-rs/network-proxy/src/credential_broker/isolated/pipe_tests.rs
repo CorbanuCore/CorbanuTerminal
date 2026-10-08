@@ -246,15 +246,36 @@ fn child_scan() {
     let mut found = 0;
     for value in (4..=0x0010_0000_isize).step_by(4) {
         let handle = value as HANDLE;
-        // SAFETY: probing handle values; invalid ones fail harmlessly.
-        if unsafe { GetFileType(handle) } != FILE_TYPE_PIPE {
+        let mut flags = 0_u32;
+        // SAFETY: probing handle values; an invalid one fails harmlessly
+        // (this asks the object manager, not the file object).
+        if unsafe { GetHandleInformation(handle, &mut flags) } == 0 {
             continue;
         }
-        if pipe_name(handle).is_some_and(|name| name.contains(&nonce)) {
+        if pipe_name_with_timeout(handle).is_some_and(|name| name.contains(&nonce)) {
             found += 1;
         }
     }
     report_and_exit(&found.to_string());
+}
+
+/// The pipe name behind `handle`, or `None` for anything else. File queries
+/// block while another process has synchronous I/O pending on the same file
+/// object (inherited CI pipes do), so each runs on a thread with a deadline.
+fn pipe_name_with_timeout(handle: HANDLE) -> Option<String> {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    // HANDLE is an integer in windows-sys 0.52, so it moves to the thread.
+    std::thread::spawn(move || {
+        // SAFETY: `handle` is valid in this process.
+        let name = (unsafe { GetFileType(handle) } == FILE_TYPE_PIPE)
+            .then(|| pipe_name(handle))
+            .flatten();
+        let _ = sender.send(name);
+    });
+    receiver
+        .recv_timeout(std::time::Duration::from_millis(200))
+        .ok()
+        .flatten()
 }
 
 fn pipe_name(handle: HANDLE) -> Option<String> {
