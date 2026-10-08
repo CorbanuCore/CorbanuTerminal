@@ -2820,15 +2820,31 @@ async fn delete_holds_at_the_checkpoint_when_the_clock_is_behind_it() -> anyhow:
         let now = chrono::Utc::now().timestamp_millis();
         let ahead = now + behind;
         let store = AccountingStore::open(&runtime, ahead).await?;
-        let mut a = serde_json::to_value(attempt(/*id*/ 1))?;
-        a["dispatched_at_ms"] = json!(now);
-        let a: Attempt = serde_json::from_value(a)?;
-        store.admit(a.thread_id, &a, &[], AsOf::Now).await?;
-        store
-            .observe(a.thread_id, &a, &[row(/*revision*/ 1)], AsOf::Now)
+        // A conversation and its subagent, deleted together.
+        let child = ThreadId::from_string(&Uuid::from_u128(8).to_string())?;
+        let home = runtime.sqlite().home().to_path_buf();
+        runtime
+            .upsert_thread(&test_thread_metadata(&home, child, home.clone()))
             .await?;
+        let mut owned = Vec::new();
+        for (id, owner) in [(1, None), (2, Some(child))] {
+            let mut a = serde_json::to_value(attempt(id))?;
+            a["dispatched_at_ms"] = json!(now);
+            if let Some(owner) = owner {
+                a["thread_id"] = json!(owner);
+            }
+            let a: Attempt = serde_json::from_value(a)?;
+            store.admit(a.thread_id, &a, &[], AsOf::Now).await?;
+            if owner.is_none() {
+                store
+                    .observe(a.thread_id, &a, &[row(/*revision*/ 1)], AsOf::Now)
+                    .await?;
+            }
+            owned.push(a);
+        }
+        let (a, owners) = (&owned[0], [owned[0].thread_id, child]);
 
-        runtime.preflight_delete_threads(&[a.thread_id]).await?;
+        runtime.preflight_delete_threads(&owners).await?;
         assert_eq!(
             runtime
                 .get_thread(a.thread_id)
@@ -2837,7 +2853,7 @@ async fn delete_holds_at_the_checkpoint_when_the_clock_is_behind_it() -> anyhow:
             Some(a.thread_id),
             "the preflight changes nothing"
         );
-        assert_eq!(runtime.delete_threads_strict(&[a.thread_id]).await?, 1);
+        assert_eq!(runtime.delete_threads_strict(&owners).await?, 2);
 
         let checkpoint: i64 = sqlx::query_scalar(
             "SELECT completed_as_of_ms FROM draft_accounting_retention_checkpoint",
@@ -2856,17 +2872,22 @@ async fn delete_holds_at_the_checkpoint_when_the_clock_is_behind_it() -> anyhow:
             (attempts, tombstones),
             (
                 0,
-                vec![(a.attempt_id.to_string(), now + 365 * 86_400_000_i64)]
+                owned
+                    .iter()
+                    .map(|a| (a.attempt_id.to_string(), now + 365 * 86_400_000_i64))
+                    .collect::<Vec<_>>()
             )
         );
         let mut conn = runtime.pool.acquire().await?;
         let mut work = InspectionWork::new(&mut conn).await?;
         assert_eq!(
             scope::deleted_attempts(&mut conn, now / 86_400_000, now, &mut work).await,
-            DeletedAttempts::Counted(1)
+            DeletedAttempts::Counted(2)
         );
         drop(conn);
-        assert!(runtime.get_thread(a.thread_id).await?.is_none());
+        for owner in owners {
+            assert!(runtime.get_thread(owner).await?.is_none());
+        }
         runtime.close().await;
     }
     Ok(())

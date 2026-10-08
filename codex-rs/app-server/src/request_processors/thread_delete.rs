@@ -49,9 +49,8 @@ impl ThreadRequestProcessor {
                 .await
                 .map_err(|err| {
                     internal_error(format!(
-                        "could not delete conversation {thread_id}: its local records (including its cost records) \
-                         cannot be updated right now, so nothing was deleted. Try again; if it keeps failing, \
-                         report this message. Cause: {err:#}"
+                        "could not delete conversation {thread_id}: its local records cannot be updated right now, \
+                         so it was left as it is. Try again; if it keeps failing, report this message. Cause: {err:#}"
                     ))
                 })?;
         }
@@ -75,8 +74,8 @@ impl ThreadRequestProcessor {
                 .await
                 .map_err(|err| {
                     internal_error(format!(
-                        "conversation {thread_id} was deleted, but some of its local records (such as its cost \
-                         records) could not be removed. Delete it again to finish. Cause: {err:#}"
+                        "conversation {thread_id} was deleted, but some of its local records could not be removed. \
+                         Delete it again to finish. Cause: {err:#}"
                     ))
                 })?;
         }

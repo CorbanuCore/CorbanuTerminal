@@ -1127,8 +1127,9 @@ ON CONFLICT(id) DO UPDATE SET
             Self::delete_threads_on_connection(&mut tx, thread_ids, as_of_ms).await
         }
         .await;
-        tx.rollback().await?;
-        result.map(drop)
+        let rolled_back = tx.rollback().await;
+        result?;
+        Ok(rolled_back?)
     }
 
     /// Cleanup and lock acquisition can be overtaken by a later accounting writer,

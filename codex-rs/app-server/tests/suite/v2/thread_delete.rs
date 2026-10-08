@@ -415,6 +415,10 @@ async fn thread_delete_tolerates_a_clock_behind_the_accounting_checkpoint() -> R
             .without_auto_env()
             .build_initialized()
             .await?;
+        assert!(
+            ledger_counts(&state_db).await?.2 > chrono::Utc::now().timestamp_millis(),
+            "the clock is still behind the checkpoint when the delete is sent"
+        );
         let _: ThreadDeleteResponse = mcp
             .request(|request_id| ClientRequest::ThreadDelete {
                 request_id,
@@ -479,8 +483,8 @@ async fn thread_delete_leaves_the_rollout_when_accounting_fails() -> Result<()> 
     let message = error.error.message;
     assert!(
         message.starts_with(&format!(
-            "could not delete conversation {thread_id}: its local records (including its cost records) \
-             cannot be updated right now, so nothing was deleted. Try again;"
+            "could not delete conversation {thread_id}: its local records cannot be updated right now, \
+             so it was left as it is. Try again;"
         )),
         "{message}"
     );
