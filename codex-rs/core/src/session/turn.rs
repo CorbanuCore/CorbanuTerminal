@@ -1673,7 +1673,7 @@ async fn run_sampling_request(
     {
         Ok(scopes) => Some(scopes),
         Err(error) => {
-            crate::accounting::gap("attach turn", &error);
+            crate::accounting::gap("attach turn", error);
             None
         }
     };
@@ -1747,7 +1747,7 @@ async fn run_sampling_request(
             .as_ref()
             .is_some_and(crate::accounting::TurnScopes::halted)
         {
-            return Err(CodexErr::Fatal(crate::accounting::FAILURE.into()));
+            return Err(CodexErr::Fatal(crate::accounting::MEMORY_DENIAL.into()));
         }
         if collection_stopped()
             && !turn_context

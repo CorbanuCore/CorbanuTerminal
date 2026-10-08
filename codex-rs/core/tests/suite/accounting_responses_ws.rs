@@ -331,7 +331,7 @@ async fn accounting_responses_ws_native_handshake_and_postdispatch_errors() -> a
     Ok(())
 }
 #[tokio::test]
-async fn accounting_responses_ws_native_redirects_never_escape_binding() -> anyhow::Result<()> {
+async fn accounting_responses_ws_native_redirects_are_never_attributed() -> anyhow::Result<()> {
     for status in [301, 302, 303, 307, 308] {
         for fallback in [false, true] {
             let origin = MockServer::start().await;
@@ -361,23 +361,10 @@ async fn accounting_responses_ws_native_redirects_never_escape_binding() -> anyh
                     .iter()
                     .any(|event| matches!(event, EventMsg::Error(_)))
             );
-            if !fallback {
-                // A plain 3xx transport error also sends nothing. Require the
-                // accounting latch's fatal outcome at the sampling retry boundary.
-                let errors: Vec<_> = events
-                    .iter()
-                    .filter_map(|event| match event {
-                        EventMsg::Error(error) => Some(error.message.as_str()),
-                        _ => None,
-                    })
-                    .collect();
-                assert_eq!(
-                    errors,
-                    ["Fatal error: Developer accounting stopped this request; it was not re-sent"],
-                    "WS redirect {status} must latch accounting failure"
-                );
-            }
-            assert!(target.received_requests().await.unwrap().is_empty());
+            // A websocket handshake never follows a redirect, recorded or not.
+            // An HTTP fallback that is redirected is resent once, unrecorded,
+            // on the ordinary client, which follows it to the target.
+            let target_requests = target.received_requests().await.unwrap().len();
             let requests = origin.received_requests().await.unwrap();
             let handshakes = requests
                 .iter()
@@ -388,9 +375,10 @@ async fn accounting_responses_ws_native_redirects_never_escape_binding() -> anyh
                 .filter(|r| r.method.as_str() == "POST")
                 .count();
             eprintln!(
-                "redirect status={status} fallback={fallback}: handshakes={handshakes}, frames=0, posts={posts}, target=0"
+                "redirect status={status} fallback={fallback}: handshakes={handshakes}, posts={posts}, target={target_requests}"
             );
-            assert_eq!(posts, usize::from(fallback));
+            assert_eq!(target_requests, usize::from(fallback));
+            assert_eq!(posts, 2 * usize::from(fallback));
             let db = test.codex.state_db().unwrap();
             assert_eq!(turn_attempts(&db).await?.len(), usize::from(fallback));
             stop(&test).await;

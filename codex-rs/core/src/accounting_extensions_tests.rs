@@ -439,6 +439,29 @@ async fn accounting_records_a_request_another_client_already_sent() -> anyhow::R
             .await?;
     assert_eq!(observations, 1);
 
+    // A usage report the ledger rejects is not reported as recorded.
+    let writer = db
+        .sqlite()
+        .open_read_write_pool(&db.sqlite().state_db_path())
+        .await?;
+    sqlx::query("CREATE TRIGGER reject_pane_observation BEFORE INSERT ON draft_accounting_observations BEGIN SELECT RAISE(ABORT, 'fixture-observation'); END")
+        .execute(&writer)
+        .await?;
+    assert!(
+        !ExtensionAccounting::new(Arc::downgrade(&owner))
+            .record_sent_request(sent())
+            .await
+    );
+    sqlx::query("DROP TRIGGER reject_pane_observation")
+        .execute(&writer)
+        .await?;
+    writer.close().await;
+    let observations: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM draft_accounting_observations")
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(observations, 1);
+
     // A session that is not collecting records nothing, and says so rather
     // than failing the caller.
     let owner_without_collection = {
@@ -458,6 +481,7 @@ async fn accounting_records_a_request_another_client_already_sent() -> anyhow::R
     let attempts_after: i64 = sqlx::query_scalar("SELECT count(*) FROM draft_accounting_attempts")
         .fetch_one(&pool)
         .await?;
-    assert_eq!(attempts_after, 1);
+    // The rejected report's attempt was admitted before its usage failed.
+    assert_eq!(attempts_after, 2);
     Ok(())
 }

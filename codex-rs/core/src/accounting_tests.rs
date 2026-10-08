@@ -935,6 +935,40 @@ async fn accounting_clock_behind_the_checkpoint_still_records_and_sends() -> any
     Ok(())
 }
 
+/// A clock more than the 90-day detail window behind the checkpoint (a clock
+/// that once ran far ahead, then was corrected) cannot be recorded at all:
+/// every attempt would already be past detail retention. It is a gap, never a
+/// stopped request.
+#[tokio::test]
+async fn accounting_clock_far_behind_the_checkpoint_sends_unrecorded() -> anyhow::Result<()> {
+    let fixture = Fixture::new().await?;
+    let ahead = chrono::Utc::now().timestamp_millis() + 100 * 86_400_000;
+    sqlx::query("UPDATE draft_accounting_retention_checkpoint SET completed_as_of_ms = ?")
+        .bind(ahead)
+        .execute(&mut fixture.connection().await?)
+        .await?;
+    let sends = Arc::new(AtomicUsize::new(0));
+    AccountingTransport::new(
+        Probe {
+            sends: sends.clone(),
+            fail_first: false,
+        },
+        Some(ResponseEvidence::new(fixture.sampling.clone())),
+        "claude-opus-5".into(),
+    )
+    .stream(request())
+    .await?;
+    assert_eq!(
+        (
+            fixture.attempts().await?.len(),
+            sends.load(Ordering::SeqCst)
+        ),
+        (0, 1)
+    );
+    assert!(fixture.sampling.is_closed());
+    Ok(())
+}
+
 /// The request is sent; the log records which step failed and why.
 #[tokio::test]
 #[tracing_test::traced_test]

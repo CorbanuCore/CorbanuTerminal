@@ -83,7 +83,7 @@ async fn accounting_chat_native_api_key_401_no_invented_refresh() -> anyhow::Res
 }
 
 #[tokio::test]
-async fn accounting_chat_native_redirects_no_follow_or_repair() -> anyhow::Result<()> {
+async fn accounting_chat_native_redirects_are_resent_unrecorded() -> anyhow::Result<()> {
     for status in [301, 302, 303, 307, 308] {
         for on in [true, false] {
             if !on && !matches!(status, 307 | 308) {
@@ -115,12 +115,17 @@ async fn accounting_chat_native_redirects_no_follow_or_repair() -> anyhow::Resul
                 .build_with_auto_env(&origin)
                 .await?;
             submit(&test).await?;
-            terminal(&test).await?;
-            assert_eq!(origin.received_requests().await.unwrap().len(), 1);
+            let events = terminal(&test).await?;
+            if on {
+                core_test_support::assert_accounting_gap(&events);
+            }
+            // Recorded or not, the request reaches the redirect target once;
+            // with accounting on the refused no-redirect send comes first.
             assert_eq!(
-                target.received_requests().await.unwrap().len(),
-                usize::from(!on)
+                origin.received_requests().await.unwrap().len(),
+                1 + usize::from(on)
             );
+            assert_eq!(target.received_requests().await.unwrap().len(), 1);
             let db = test.codex.state_db().unwrap();
             if on {
                 assert_eq!(attempts(&db).await?.len(), 1);

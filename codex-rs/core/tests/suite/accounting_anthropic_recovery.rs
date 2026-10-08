@@ -11,7 +11,7 @@ use support::*;
 use wiremock::MockServer;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn accounting_anthropic_redirects_never_send_or_attribute_to_unapproved_endpoint()
+async fn accounting_anthropic_redirects_are_resent_unrecorded_never_attributed()
 -> anyhow::Result<()> {
     use wiremock::Mock;
     use wiremock::ResponseTemplate;
@@ -27,7 +27,9 @@ async fn accounting_anthropic_redirects_never_send_or_attribute_to_unapproved_en
                     ResponseTemplate::new(status)
                         .insert_header("location", format!("{}/v1/messages", target.uri())),
                 )
-                .expect(1)
+                // With accounting on, the no-redirect send is refused and then
+                // resent once, unrecorded, on the ordinary client.
+                .expect(1 + u64::from(on))
                 .mount(&approved)
                 .await;
             Mock::given(method("POST"))
@@ -36,7 +38,7 @@ async fn accounting_anthropic_redirects_never_send_or_attribute_to_unapproved_en
                     json!({"input_tokens":71}),
                     json!({"output_tokens":19}),
                 ))
-                .expect(if on { 0 } else { 1 })
+                .expect(1)
                 .mount(&target)
                 .await;
             let endpoint = format!("{}/v1", approved.uri());
@@ -50,26 +52,27 @@ async fn accounting_anthropic_redirects_never_send_or_attribute_to_unapproved_en
                 .await?;
             submit(&test).await?;
             let events = terminal(&test).await?;
-            assert_eq!(
-                events
-                    .iter()
-                    .any(|event| matches!(event, EventMsg::Error(_))),
-                on,
-                "{events:?}"
-            );
+            if on {
+                core_test_support::assert_accounting_gap(&events);
+            } else {
+                assert!(
+                    !events
+                        .iter()
+                        .any(|event| matches!(event, EventMsg::Error(_))),
+                    "{events:?}"
+                );
+            }
             let sent = approved.received_requests().await.unwrap();
-            assert_eq!(sent.len(), 1);
+            assert_eq!(sent.len(), 1 + usize::from(on));
             assert_eq!(
                 sent[0].body_json::<serde_json::Value>()?["model"],
                 "claude-opus-5"
             );
             assert!(sent[0].headers.contains_key("user-agent"));
-            assert_eq!(
-                target.received_requests().await.unwrap().len(),
-                usize::from(!on)
-            );
+            assert_eq!(target.received_requests().await.unwrap().len(), 1);
             let db = test.codex.state_db().unwrap();
             if on {
+                // The refused send is the one attempt; the resend is a gap.
                 let records = attempts(&db).await?;
                 assert_eq!(records.len(), 1);
                 assert_eq!(records[0].thread_id, test.session_configured.thread_id);

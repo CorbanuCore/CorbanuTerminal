@@ -159,9 +159,11 @@ impl ResponsesWebsocketAdmission for Admission {
                 && binding.check_stream().is_err()
             {
                 self.sampling.halt();
-                return Err(ApiError::Stream(
-                    failure("websocket check", "memory binding stream check failed").into(),
-                ));
+                tracing::warn!(
+                    target: "codex_core::accounting",
+                    "stage-one memory denied a recorded websocket response mid-stream"
+                );
+                return Err(ApiError::Stream(super::MEMORY_DENIAL.into()));
             }
             Ok(())
         })

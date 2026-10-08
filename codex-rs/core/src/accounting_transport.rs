@@ -1,6 +1,5 @@
 //! Per-physical-send intent under endpoint retries, with response-local evidence.
 use super::Sampling;
-use super::failure;
 use codex_api::AnthropicUsageObserver;
 use codex_api::AnthropicUsagePatch;
 use codex_api::ApiError;
@@ -58,6 +57,12 @@ impl ResponseEvidence {
 
     fn is_excluded(&self) -> bool {
         self.excluded.load(Ordering::SeqCst)
+    }
+
+    /// Whether this response is still being recorded: accounting has not
+    /// given up on it or on its sampling.
+    pub(crate) fn is_recorded(&self) -> bool {
+        !self.is_excluded() && !self.sampling.is_closed()
     }
 
     /// Accounting failed for this request: record nothing more for it or the
@@ -164,6 +169,30 @@ impl codex_api::ChatUsageObserver for ResponseEvidence {
             }
             Ok(())
         })
+    }
+}
+
+/// The error a collected request's transport returns when the provider
+/// redirected it. A collected route uses a client that does not follow
+/// redirects, so a response from elsewhere is never attributed to it. The
+/// provider has served nothing yet, so the caller sends the request again,
+/// unrecorded, on its ordinary client (`is_unrecorded_redirect`).
+pub(crate) const REDIRECTED_UNRECORDED: &str =
+    "provider redirected a recorded request; resending it unrecorded";
+
+/// Whether `error` asks the caller to resend the request unrecorded.
+pub(crate) fn is_unrecorded_redirect(error: &ApiError) -> bool {
+    matches!(error, ApiError::Transport(TransportError::Build(message))
+        if message == REDIRECTED_UNRECORDED)
+}
+
+impl ResponseEvidence {
+    fn redirected(&self, status: http::StatusCode) -> TransportError {
+        self.give_up(
+            "send",
+            format_args!("provider redirected the request ({status})"),
+        );
+        TransportError::Build(REDIRECTED_UNRECORDED.into())
     }
 }
 
@@ -327,14 +356,7 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
         };
         let response = match self.inner.execute(request).await {
             Err(TransportError::Http { status, .. }) if status.is_redirection() => {
-                evidence.sampling.halt();
-                return Err(TransportError::Build(
-                    failure(
-                        "send",
-                        format_args!("provider redirected the request ({status})"),
-                    )
-                    .into(),
-                ));
+                return Err(evidence.redirected(status));
             }
             result => result?,
         };
@@ -407,14 +429,7 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
         };
         let response = match self.inner.stream(request).await {
             Err(TransportError::Http { status, .. }) if status.is_redirection() => {
-                evidence.sampling.halt();
-                return Err(TransportError::Build(
-                    failure(
-                        "send",
-                        format_args!("provider redirected the request ({status})"),
-                    )
-                    .into(),
-                ));
+                return Err(evidence.redirected(status));
             }
             result => result?,
         };

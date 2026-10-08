@@ -117,7 +117,7 @@ async fn live_binding_denial(prime_denial: bool) -> anyhow::Result<()> {
         held.complete().await?;
         let events = terminal(&test).await?;
         assert!(events.iter().any(|event| matches!(event, EventMsg::Error(error)
-            if error.message == "Fatal error: Developer accounting stopped this request; it was not re-sent")),
+            if error.message == "Fatal error: Stage-one memory denied this request while it was streaming; it was not re-sent")),
             "live stage-one denial must stop the already-admitted sampling request");
         assert!(
             !events

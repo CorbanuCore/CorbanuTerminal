@@ -267,7 +267,8 @@ fn warn_clock_behind(behind_ms: i64) {
         tracing::warn!(
             target: "codex_core::accounting",
             behind_ms,
-            "accounting: the system clock is behind the accounting ledger; recording at the ledger's time until it catches up"
+            "accounting: the system clock is behind the accounting ledger; recording at the ledger's time until it catches up. \
+             Requests cannot be recorded while it is more than 90 days behind"
         );
     }
 }

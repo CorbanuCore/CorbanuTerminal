@@ -533,11 +533,15 @@ pub(crate) fn collects(
     }
 }
 
-/// The message a request stopped on accounting grounds reports. Only a few
-/// cases still stop one: a provider redirect on a collected route, and a
-/// stage-one memory denial. Every other accounting failure sends the request
-/// unrecorded (`gap`).
-pub(crate) const FAILURE: &str = "Developer accounting stopped this request; it was not re-sent";
+/// The error chain an accounting failure carries. It never reaches the user:
+/// every accounting failure sends the request unrecorded (`gap`).
+pub(crate) const FAILURE: &str = "developer accounting failed";
+
+/// A stage-one memory denial observed while a recorded websocket response was
+/// streaming. It is a privacy guard, not an accounting failure, and the one
+/// case that stops the turn (`Sampling::halt`).
+pub(crate) const MEMORY_DENIAL: &str =
+    "Stage-one memory denied this request while it was streaming; it was not re-sent";
 
 /// Where accounting diagnostics go. Exec prints errors on this target to stderr
 /// and the TUI keeps them in its log database.
@@ -550,7 +554,7 @@ const LOG_TARGET: &str = "codex_core::accounting";
 /// is logged here or lost. `step` names where it happened; `cause` is the
 /// underlying error chain. Neither ever carries prompt content or credentials.
 pub(crate) fn failure(step: &'static str, cause: impl std::fmt::Display) -> &'static str {
-    tracing::error!(target: LOG_TARGET, step, cause = %cause, "developer accounting failed");
+    tracing::error!(target: LOG_TARGET, step, cause = %cause, "{FAILURE}");
     FAILURE
 }
 
@@ -567,27 +571,29 @@ pub(crate) fn gap(step: &'static str, cause: impl std::fmt::Display) {
     );
 }
 
-/// The warning a turn shows once when its requests stop being recorded.
-pub(crate) const GAP_WARNING: &str = "Developer accounting stopped recording this turn after an error. \
-     Requests continue, but /cost will not include the ones sent after it. \
+/// The warning a turn shows once when any of its requests went unrecorded.
+pub(crate) const GAP_WARNING: &str = "Developer accounting could not record one or more model requests in this turn. \
+     They were sent anyway; /cost does not include them. \
      The cause is in the log (target codex_core::accounting).";
 
 /// How long one accounting operation - opening a sampling, an admission or an
 /// observation, each with every store call it makes - waits out contention on
-/// the shared state DB before the request fails closed.
+/// the shared state DB before it gives up and the request goes unrecorded.
 ///
 /// The state DB is shared by every Corbanu process on a home: the TUI, `exec`
 /// workers, owner-loop workers. Another process's write can hold its lock for
-/// seconds, and SQLite gives up after its 5 s busy timeout, which used to end the
-/// turn on the spot. A contended write wrote nothing, so it is simply retried.
-const CONTENTION_BUDGET: std::time::Duration = std::time::Duration::from_secs(120);
+/// seconds, and SQLite gives up after its 5 s busy timeout. A contended write
+/// wrote nothing, so it is retried. The wait holds up the send (admission) or
+/// the stream (observation), and giving up only leaves a gap, so it stays
+/// short: about three busy timeouts.
+const CONTENTION_BUDGET: std::time::Duration = std::time::Duration::from_secs(15);
 
 /// Run one idempotent store call, retrying while the state DB is contended and
 /// `deadline` - shared by every call of one operation - has not passed.
 ///
 /// Only contention is retried (`is_contention`); any other error returns at
-/// once, with `step` in its chain. The caller keeps its fail-closed handling for
-/// whatever finally comes back.
+/// once, with `step` in its chain. Whatever finally comes back, the caller
+/// sends the request unrecorded.
 async fn store_call<T, F, Fut>(
     step: &'static str,
     deadline: std::time::Instant,
@@ -676,11 +682,12 @@ fn writes() -> &'static tokio::sync::Semaphore {
     }
 }
 
-/// The sampling attached to `slot`. A poisoned slot is closed and the request
-/// goes unrecorded.
+/// The sampling this request is recorded on, if any. A closed sampling or a
+/// poisoned slot records nothing, so the request goes out unrecorded on the
+/// ordinary client.
 pub(crate) fn read_slot(slot: &Slot) -> Result<Option<Arc<Sampling>>, CodexErr> {
     match slot.lock() {
-        Ok(value) => Ok(value.clone()),
+        Ok(value) => Ok(value.clone().filter(|sampling| !sampling.is_closed())),
         Err(poison) => {
             if let Some(stale) = poison.into_inner().take() {
                 stale.reject();
@@ -969,10 +976,9 @@ impl Sampling {
         self.failed.load(Ordering::Acquire)
     }
 
-    /// Close this sampling and stop its turn with `FAILURE`. Only for a request
-    /// that already went somewhere it must not be attributed to and cannot be
-    /// re-sent safely: a provider redirect on a collected route, or a stage-one
-    /// memory denial. Every other accounting failure only closes the sampling.
+    /// Close this sampling and stop its turn with `MEMORY_DENIAL`: a stage-one
+    /// memory denial seen mid-stream. Every accounting failure only closes the
+    /// sampling.
     #[track_caller]
     pub(crate) fn halt(&self) {
         self.halted.store(true, Ordering::Release);

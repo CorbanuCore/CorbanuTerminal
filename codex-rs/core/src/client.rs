@@ -3181,6 +3181,11 @@ impl ModelClientSession {
                     );
                     return Ok(stream);
                 }
+                // Accounting gave up on a redirected request before anything
+                // was served: resend it unrecorded on the ordinary client.
+                Err(err) if crate::accounting::transport::is_unrecorded_redirect(&err) => {
+                    continue;
+                }
                 Err(ApiError::Transport(
                     unauthorized_transport @ TransportError::Http { status, .. },
                 )) if status == StatusCode::UNAUTHORIZED => {
@@ -3743,6 +3748,11 @@ impl ModelClientSession {
                     );
                     return Ok(stream);
                 }
+                // Accounting gave up on a redirected request before anything
+                // was served: resend it unrecorded on the ordinary client.
+                Err(err) if crate::accounting::transport::is_unrecorded_redirect(&err) => {
+                    continue;
+                }
                 Err(ApiError::Transport(
                     unauthorized_transport @ TransportError::Http { status, .. },
                 )) if status == StatusCode::UNAUTHORIZED => {
@@ -4008,6 +4018,11 @@ impl ModelClientSession {
                     );
                     return Ok(stream);
                 }
+                // Accounting gave up on a redirected request before anything
+                // was served: resend it unrecorded on the ordinary client.
+                Err(err) if crate::accounting::transport::is_unrecorded_redirect(&err) => {
+                    continue;
+                }
                 Err(ApiError::Transport(
                     unauthorized_transport @ TransportError::Http { status, .. },
                 )) if status == StatusCode::UNAUTHORIZED => {
@@ -4238,19 +4253,19 @@ impl ModelClientSession {
                 .await
             {
                 Ok(_) => {}
-                Err(ApiError::Transport(TransportError::Http { status, .. }))
+                // A websocket connection never follows a redirect, recorded
+                // or not; accounting only stops recording this turn.
+                Err(err @ ApiError::Transport(TransportError::Http { status, .. }))
                     if status.is_redirection() && sampling.is_some() =>
                 {
                     if let Some(deferred) = &deferred {
                         deferred.reject();
                     }
-                    return Err(CodexErr::Fatal(
-                        crate::accounting::failure(
-                            "websocket connect",
-                            format_args!("provider redirected the connection ({status})"),
-                        )
-                        .into(),
-                    ));
+                    crate::accounting::gap(
+                        "websocket connect",
+                        format_args!("provider redirected the connection ({status})"),
+                    );
+                    return Err(self.client.state.provider.map_api_error(err));
                 }
                 Err(ApiError::Transport(TransportError::Http { status, .. }))
                     if status == StatusCode::UPGRADE_REQUIRED =>
