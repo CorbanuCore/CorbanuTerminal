@@ -33,34 +33,42 @@ pub(super) struct Dispatch {
 pub(super) struct Evidence {
     observer: Arc<dyn ResponsesUsageObserver>,
     position: i64,
+    /// Evidence was rejected; nothing more is observed for this response.
+    closed: bool,
 }
 impl Evidence {
     pub(super) fn new(observer: Arc<dyn ResponsesUsageObserver>) -> Self {
         Self {
             observer,
             position: 0,
+            closed: false,
         }
     }
 
+    /// Observe one text event. Accounting observes the stream; it never ends
+    /// it: rejected evidence stops observation for the rest of this response.
     pub(super) async fn text(&mut self, text: &str) -> Result<(), ApiError> {
+        if self.closed {
+            return Ok(());
+        }
         let Some(position) = self.position.checked_add(1) else {
-            self.observer
+            let _ = self
+                .observer
                 .observe(self.position, Err(InvalidResponsesUsage))
-                .await?;
-            return Err(ApiError::Stream(
-                "Responses accounting position overflow".into(),
-            ));
+                .await;
+            self.closed = true;
+            return Ok(());
         };
         self.position = position;
-        match decode(text) {
-            Ok(None) => Ok(()),
-            Ok(Some(patch)) => self.observer.observe(position, Ok(patch)).await,
+        let result = match decode(text) {
+            Ok(None) => return Ok(()),
+            Ok(Some(patch)) => self.observer.observe(position, Ok(patch)).await.is_ok(),
             Err(error) => {
-                self.observer.observe(position, Err(error)).await?;
-                Err(ApiError::Stream(
-                    "Invalid Responses accounting evidence".into(),
-                ))
+                let _ = self.observer.observe(position, Err(error)).await;
+                false
             }
-        }
+        };
+        self.closed = !result;
+        Ok(())
     }
 }

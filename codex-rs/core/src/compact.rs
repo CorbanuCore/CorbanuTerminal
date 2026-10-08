@@ -275,7 +275,7 @@ async fn run_compact_task_inner_impl(
     // silently escaping accounting.
     // Best effort on purpose: a compaction that cannot be recorded must still
     // run. Accounting is an observer here, not a gate on the user's session.
-    let _accounting = match crate::accounting::attach_turn(
+    let accounting = match crate::accounting::attach_turn(
         &sess,
         &turn_context,
         &client_session,
@@ -378,6 +378,8 @@ async fn run_compact_task_inner_impl(
         }
     }
 
+    // `/compact` is a request the user asked for: say so when it went unrecorded.
+    crate::accounting::warn_if_unrecorded(&sess, &turn_context, accounting.as_ref()).await;
     let history_snapshot = sess.clone_history().await;
     let history_items = history_snapshot.raw_items();
     let summary_suffix = get_last_assistant_message_from_turn(history_items).unwrap_or_default();

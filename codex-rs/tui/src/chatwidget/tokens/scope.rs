@@ -9,6 +9,7 @@
 
 use codex_state::accounting::BucketQuote;
 use codex_state::accounting::DayTotals;
+use codex_state::accounting::DeletedAttempts;
 use codex_state::accounting::ObservationQuote;
 use codex_state::accounting::OtherConversations;
 
@@ -37,8 +38,16 @@ pub(super) fn other_conversations_lines(others: Option<&OtherConversations>) -> 
             "Other conversations are not included in this view; /cost covers only the open conversation.".into(),
         ];
     };
+    let deleted = deleted_line(others.deleted_attempts);
     if others.conversations == 0 {
-        return vec!["No other conversation recorded requests on this day.".into()];
+        // Only a day with nothing deleted on it is known to be empty.
+        return match deleted {
+            None => vec!["No other conversation recorded requests on this day.".into()],
+            Some(deleted) => vec![
+                "No other saved conversation has recorded requests on this day.".into(),
+                deleted,
+            ],
+        };
     }
     let quotes: Vec<&ObservationQuote> = others.requests.values().flatten().collect();
     let conversations = counted(others.conversations, "conversation");
@@ -71,7 +80,30 @@ pub(super) fn other_conversations_lines(others: Option<&OtherConversations>) -> 
         ));
     }
     lines.push(RESUME_STEP.into());
+    // After the resume step: deleted conversations cannot be resumed.
+    lines.extend(deleted);
     lines
+}
+
+/// Deleted conversations' spend on this day. Deletion removes their recorded
+/// requests and cost, but not what the provider charged for them; say so
+/// rather than let the day look emptier or cheaper than it was. `None` means
+/// none were deleted. A deleted subagent of this conversation counts here too:
+/// its replay fence names no conversation.
+fn deleted_line(deleted_attempts: DeletedAttempts) -> Option<String> {
+    match deleted_attempts {
+        DeletedAttempts::Counted(0) => None,
+        DeletedAttempts::Counted(n) => Some(format!(
+            "Deleted conversations or subagents sent {} on this day. Their recorded cost was deleted with them, so it is not included here; any cost they incurred is on your provider's bill.",
+            counted(n, "request attempt")
+        )),
+        DeletedAttempts::PastDetailWindow => Some(
+            "Days older than 90 days keep too little detail to count requests from deleted conversations; any they made are not included here.".into(),
+        ),
+        DeletedAttempts::Unread => Some(
+            "Requests from deleted conversations could not be counted for this day; any they made are not included here.".into(),
+        ),
+    }
 }
 
 /// What to do about pay-per-use requests with no complete estimate: those no

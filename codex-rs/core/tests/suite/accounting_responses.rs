@@ -252,21 +252,17 @@ async fn accounting_responses_native_unknown_prices_and_tiers() -> anyhow::Resul
 }
 
 #[tokio::test]
-async fn accounting_responses_native_endpoint_mismatch() -> anyhow::Result<()> {
+async fn accounting_responses_native_endpoint_mismatch_is_sent_unrecorded() -> anyhow::Result<()> {
     for suffix in ["/wrong", "?unexpected=1", ":1234", "/v1"] {
         let server = MockServer::start().await;
         let endpoint = format!("{}/v1", server.uri());
+        let mock = responses::mount_sse_once(&server, success(usage(Some(0)))).await;
         let test = builder(endpoint.clone(), enabled(&format!("{endpoint}{suffix}")))
             .build_with_auto_env(&server)
             .await?;
         submit(&test).await?;
-        assert!(
-            terminal(&test)
-                .await?
-                .iter()
-                .any(|e| matches!(e, EventMsg::Error(_)))
-        );
-        assert!(server.received_requests().await.unwrap().is_empty());
+        core_test_support::assert_accounting_gap(&terminal(&test).await?);
+        assert_eq!(mock.requests().len(), 1);
         absent(&test.codex.state_db().unwrap()).await?;
         stop(&test).await;
     }
@@ -704,11 +700,12 @@ async fn accounting_records_legacy_compaction() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// A collected request must not follow a redirect: a response from somewhere
-/// else would be attributed to the approved endpoint. The streaming paths have
-/// pinned that for a while; the compaction endpoint takes the same branch now.
+/// A collected request never follows a redirect on its recording client: a
+/// response from somewhere else would be attributed to the approved endpoint.
+/// Accounting never blocks the request either, so a redirected compaction is
+/// resent once, unrecorded, on the ordinary client, and the turn says so.
 #[tokio::test]
-async fn accounting_legacy_compaction_never_follows_a_redirect() -> anyhow::Result<()> {
+async fn accounting_legacy_compaction_redirect_is_resent_unrecorded() -> anyhow::Result<()> {
     for status in [301, 302, 303, 307, 308] {
         let origin = MockServer::start().await;
         let target = MockServer::start().await;
@@ -748,13 +745,22 @@ async fn accounting_legacy_compaction_never_follows_a_redirect() -> anyhow::Resu
         test.codex
             .submit(codex_protocol::protocol::Op::Compact)
             .await?;
-        terminal(&test).await?;
+        let events = terminal(&test).await?;
+        assert!(
+            events
+                .iter()
+                .any(|event| matches!(event, EventMsg::Warning(warning)
+                if warning.message.starts_with("Developer accounting could not record"))),
+            "{status}: {events:?}"
+        );
         assert_eq!(
             target.received_requests().await.unwrap().len(),
-            0,
-            "{status} redirect was followed"
+            1,
+            "{status}: the unrecorded resend follows the redirect once"
         );
         assert_eq!(turn.requests().len(), 1);
+        // Only the turn's request and the refused compaction send were admitted.
+        assert_eq!(attempts(&db).await?.len(), 2);
         stop(&test).await;
     }
     Ok(())

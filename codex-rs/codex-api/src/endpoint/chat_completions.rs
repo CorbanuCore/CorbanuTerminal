@@ -1167,7 +1167,7 @@ async fn process_chat_sse_observed(
     telemetry: Option<Arc<dyn SseTelemetry>>,
     response_id_hint: Option<String>,
     metrics: Option<ChatCallMetrics>,
-    observer: Option<Arc<dyn accounting::ChatUsageObserver>>,
+    mut observer: Option<Arc<dyn accounting::ChatUsageObserver>>,
 ) {
     let mut position = 0_i64;
     let (activity, mut activity_rx) = ChatStreamActivity::new();
@@ -1255,7 +1255,7 @@ async fn process_chat_sse_observed(
             actionable_deadline_at = Some(now + actionable_silence_timeout);
         }
 
-        if let Some(observer) = &observer {
+        if let Some(active) = &observer {
             let next = position.checked_add(1);
             let patch = match next {
                 Some(next) => {
@@ -1274,15 +1274,12 @@ async fn process_chat_sse_observed(
                 let result = tokio::select! {
                     biased;
                     _ = tx_event.closed() => return,
-                    result = observer.observe(position, usage) => result,
+                    result = active.observe(position, usage) => result,
                 };
+                // Accounting observes the stream; it never ends it. Rejected
+                // evidence stops observation for the rest of this response.
                 if invalid || result.is_err() {
-                    let _ = tx_event
-                        .send(Err(ApiError::Stream(
-                            "Chat accounting evidence rejected".into(),
-                        )))
-                        .await;
-                    return;
+                    observer = None;
                 }
             }
         }

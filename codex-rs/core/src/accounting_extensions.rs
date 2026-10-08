@@ -214,6 +214,7 @@ impl ExtensionAccounting {
                         )
                         .await
                         .is_ok()
+                            && evidence.is_recorded()
                     }
                     Ok(None) => true,
                     Err(_) => false,
@@ -229,6 +230,7 @@ impl ExtensionAccounting {
                         )
                         .await
                         .is_ok()
+                            && evidence.is_recorded()
                     }
                     Ok(None) => true,
                     Err(_) => false,
@@ -244,6 +246,7 @@ impl ExtensionAccounting {
                         )
                         .await
                         .is_ok()
+                            && evidence.is_recorded()
                     }
                     // A streamed Anthropic response reports its usage inside
                     // events this path never sees. The call is recorded; its

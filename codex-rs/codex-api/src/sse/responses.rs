@@ -552,7 +552,7 @@ async fn process_sse_with_treatment(
     idle_timeout: Duration,
     telemetry: Option<Arc<dyn SseTelemetry>>,
     safety_buffering_treatment: SafetyBufferingTreatment,
-    observer: Option<Arc<dyn ResponsesUsageObserver>>,
+    mut observer: Option<Arc<dyn ResponsesUsageObserver>>,
 ) {
     let mut position = 0_i64;
     let mut stream = stream.eventsource();
@@ -588,7 +588,7 @@ async fn process_sse_with_treatment(
             }
         };
 
-        if let Some(observer) = &observer {
+        if let Some(active) = &observer {
             let decoded = match position.checked_add(1) {
                 Some(next) => {
                     position = next;
@@ -603,14 +603,11 @@ async fn process_sse_with_treatment(
             };
             if let Some(usage) = usage {
                 let invalid = usage.is_err();
-                let result = observer.observe(position, usage).await;
+                let result = active.observe(position, usage).await;
+                // Accounting observes the stream; it never ends it. Rejected
+                // evidence stops observation for the rest of this response.
                 if invalid || result.is_err() {
-                    let _ = tx_event
-                        .send(Err(ApiError::Stream(
-                            "Responses accounting evidence rejected".into(),
-                        )))
-                        .await;
-                    return;
+                    observer = None;
                 }
             }
         }

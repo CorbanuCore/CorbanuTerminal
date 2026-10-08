@@ -28,6 +28,7 @@ pub use super::types::Observation;
 pub use super::types::Patch;
 pub use super::types::Presence;
 pub use super::types::Usage;
+pub use scope::DeletedAttempts;
 pub use scope::OtherConversations;
 
 #[path = "accounting_scope.rs"]
@@ -211,6 +212,12 @@ pub struct AccountingStore<'a> {
 /// the wait, and the store rejects backward time. `Now` is read only once the
 /// write lock is held, so it cannot. `At` keeps an explicit time, which tests
 /// and imports need; a backward explicit time is still rejected.
+///
+/// `Now` is also never behind the ledger's own checkpoint. A wall clock that
+/// stepped back (NTP, a VM restore, a hand-set clock) used to make every write
+/// fail as a backward checkpoint, and with it every model request. The ledger
+/// time holds at the checkpoint until the clock passes it again; each attempt
+/// still carries the dispatch time the clock actually read.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AsOf {
     At(i64),
@@ -223,6 +230,47 @@ impl AsOf {
             Self::At(as_of_ms) => as_of_ms,
             Self::Now => chrono::Utc::now().timestamp_millis(),
         }
+    }
+
+    /// `sample`, with `Now` held at the checkpoint `conn`'s transaction sees.
+    async fn sample_on(self, conn: &mut SqliteConnection) -> anyhow::Result<i64> {
+        let now = self.sample();
+        if self != Self::Now {
+            return Ok(now);
+        }
+        let installed: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'draft_accounting_retention_checkpoint')",
+        )
+        .fetch_one(&mut *conn)
+        .await?;
+        if !installed {
+            return Ok(now);
+        }
+        let checkpoint: Option<Option<i64>> = sqlx::query_scalar(
+            "SELECT completed_as_of_ms FROM draft_accounting_retention_checkpoint WHERE singleton = 1",
+        )
+        .fetch_optional(&mut *conn)
+        .await?;
+        match checkpoint.flatten() {
+            Some(checkpoint) if checkpoint > now => {
+                warn_clock_behind(checkpoint - now);
+                Ok(checkpoint)
+            }
+            _ => Ok(now),
+        }
+    }
+}
+
+/// Say once per process that the clock is behind the ledger.
+fn warn_clock_behind(behind_ms: i64) {
+    static WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        tracing::warn!(
+            target: "codex_core::accounting",
+            behind_ms,
+            "accounting: the system clock is behind the accounting ledger; recording at the ledger's time until it catches up. \
+             Requests cannot be recorded while it is more than 90 days behind"
+        );
     }
 }
 
@@ -406,7 +454,13 @@ impl<'a> AccountingStore<'a> {
     ) -> anyhow::Result<ObservationQuote> {
         let validated_at_ms = self.prepare_write(as_of).await?;
         let mut tx = self.runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
-        let as_of_ms = as_of.sample();
+        let as_of_ms = match as_of.sample_on(&mut tx).await {
+            Ok(as_of_ms) => as_of_ms,
+            Err(error) => {
+                tx.rollback().await?;
+                return Err(error);
+            }
+        };
         let result = Journal::store_on_connection(
             &mut tx,
             owner,
@@ -441,7 +495,7 @@ impl<'a> AccountingStore<'a> {
             // The schema read opens the snapshot before the clock is read, so the
             // snapshot's checkpoint can never be later than this reading.
             validate_on_connection(&mut tx).await?;
-            let as_of_ms = as_of.sample();
+            let as_of_ms = as_of.sample_on(&mut tx).await?;
             let previous = cached.load(std::sync::atomic::Ordering::Acquire);
             let validated =
                 Journal::validate_hour_on_connection(&mut tx, as_of_ms, previous).await?;
@@ -484,8 +538,8 @@ impl<'a> AccountingStore<'a> {
         let mut tx = self.runtime.pool.begin().await?;
         let due = async {
             validate_on_connection(&mut tx).await?;
-            Journal::expiry_due_for_write_on_connection(&mut tx, as_of.sample(), validated_at_ms)
-                .await
+            let as_of_ms = as_of.sample_on(&mut tx).await?;
+            Journal::expiry_due_for_write_on_connection(&mut tx, as_of_ms, validated_at_ms).await
         }
         .await;
         tx.rollback().await?;
@@ -495,9 +549,9 @@ impl<'a> AccountingStore<'a> {
         loop {
             let mut tx = self.runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
             let held = std::time::Instant::now();
-            let as_of_ms = as_of.sample();
             let result = async {
                 validate_on_connection(&mut tx).await?;
+                let as_of_ms = as_of.sample_on(&mut tx).await?;
                 Journal::expire_for_write_on_connection(&mut tx, as_of_ms, validated_at_ms).await
             }
             .await;
@@ -556,9 +610,9 @@ impl<'a> AccountingStore<'a> {
     async fn maintain_for_write(&self, as_of: AsOf) -> anyhow::Result<()> {
         let validated_at_ms = self.prepare_write(as_of).await?;
         let mut tx = self.runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
-        let as_of_ms = as_of.sample();
         let result = async {
             validate_on_connection(&mut tx).await?;
+            let as_of_ms = as_of.sample_on(&mut tx).await?;
             Journal::maintain_for_write_on_connection(&mut tx, as_of_ms, validated_at_ms).await
         }
         .await;

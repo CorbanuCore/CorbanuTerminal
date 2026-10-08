@@ -324,7 +324,8 @@ mod reload {
             // Endpoint changes remain visible to its existing pre-send rejection.
             anyhow::ensure!(
                 provider.wire_api == accounting_wire,
-                crate::accounting::FAILURE
+                "this role changes the provider's wire_api, which developer accounting cannot follow; \
+                 remove wire_api from the role's [model_providers] overlay"
             );
             next_config
                 .model_providers

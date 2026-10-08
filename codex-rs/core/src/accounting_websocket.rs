@@ -71,14 +71,13 @@ impl Provenance {
             != Some(super::canonical_route(&expected).as_str())
             || cached.is_some_and(|old| old != self)
         {
+            // Not attributable to the approved route: send it unrecorded.
             deferred.reject();
-            return Err(CodexErr::Fatal(
-                failure(
-                    "websocket admission",
-                    "connection route or provenance differs from the approved one",
-                )
-                .into(),
-            ));
+            super::gap(
+                "websocket admission",
+                "connection route or provenance differs from the approved one",
+            );
+            return Ok(false);
         }
         Ok(true)
     }
@@ -159,10 +158,12 @@ impl ResponsesWebsocketAdmission for Admission {
             if let Some(binding) = self.binding.get()
                 && binding.check_stream().is_err()
             {
-                self.sampling.reject();
-                return Err(ApiError::Stream(
-                    failure("websocket check", "memory binding stream check failed").into(),
-                ));
+                self.sampling.halt();
+                tracing::warn!(
+                    target: "codex_core::accounting",
+                    "stage-one memory denied a recorded websocket response mid-stream"
+                );
+                return Err(ApiError::Stream(super::MEMORY_DENIAL.into()));
             }
             Ok(())
         })
@@ -198,10 +199,13 @@ impl ResponsesWebsocketAdmission for Admission {
                     attempt,
                 ) as Arc<dyn ResponsesUsageObserver>),
                 Err(error) => {
+                    // Send it anyway, unrecorded, with an observer that
+                    // records nothing.
                     self.sampling.reject();
-                    Err(ApiError::Stream(
-                        failure("admit attempt", format_args!("{error:#}")).into(),
-                    ))
+                    super::gap("admit attempt", format_args!("{error:#}"));
+                    let evidence = super::transport::ResponseEvidence::new(self.sampling.clone());
+                    evidence.exclude();
+                    Ok(evidence as Arc<dyn ResponsesUsageObserver>)
                 }
             }
         })

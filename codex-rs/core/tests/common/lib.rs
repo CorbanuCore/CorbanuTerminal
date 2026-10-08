@@ -784,3 +784,25 @@ macro_rules! skip_if_host_windows {
         }
     }};
 }
+
+/// Assert a turn ran on unrecorded after developer accounting failed: no error,
+/// and the one warning that says recording stopped. Accounting never stops a
+/// model request.
+#[track_caller]
+pub fn assert_accounting_gap(events: &[codex_protocol::protocol::EventMsg]) {
+    use codex_protocol::protocol::EventMsg;
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, EventMsg::Error(_))),
+        "an accounting failure must not fail the turn: {events:?}"
+    );
+    let warnings = events
+        .iter()
+        .filter(|event| {
+            matches!(event, EventMsg::Warning(warning)
+            if warning.message.starts_with("Developer accounting could not record"))
+        })
+        .count();
+    assert_eq!(warnings, 1, "one accounting-gap warning: {events:?}");
+}

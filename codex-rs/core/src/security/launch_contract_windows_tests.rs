@@ -6,6 +6,9 @@
 //! binary, re-executed) then runs under the same sandbox and must not open a
 //! hardened stand-in for Core to read its memory or environment.
 
+// The probes' output is the evidence of these measured runs (`--nocapture`).
+#![allow(clippy::print_stderr)]
+
 use super::LaunchContract;
 use super::harden_current_process;
 use crate::exec::ExecCapturePolicy;
@@ -540,14 +543,14 @@ fn disable_all_privileges() {
     }
 }
 
-fn absolute(path: &Path) -> AbsolutePathBuf {
+pub(super) fn absolute(path: &Path) -> AbsolutePathBuf {
     AbsolutePathBuf::from_absolute_path(dunce::canonicalize(path).expect("canonical path"))
         .expect("absolute path")
 }
 
 /// Copies the elevated sandbox helpers next to this test binary, where the
 /// sandbox looks for them (as the Windows sandbox integration tests do).
-fn stage_windows_sandbox_helpers() {
+pub(super) fn stage_windows_sandbox_helpers() {
     let exe = std::env::current_exe().expect("test binary");
     let resources = exe.parent().expect("test dir").join("codex-resources");
     std::fs::create_dir_all(&resources).expect("resources dir");
@@ -562,13 +565,13 @@ fn stage_windows_sandbox_helpers() {
     }
 }
 
-struct EnvGuard {
+pub(super) struct EnvGuard {
     key: &'static str,
     original: Option<std::ffi::OsString>,
 }
 
 impl EnvGuard {
-    fn set(key: &'static str, value: &Path) -> Self {
+    pub(super) fn set(key: &'static str, value: &Path) -> Self {
         let original = std::env::var_os(key);
         // SAFETY: the pf_27_s06 Windows tests run alone in their process.
         unsafe { std::env::set_var(key, value) };

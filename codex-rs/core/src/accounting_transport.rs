@@ -1,7 +1,5 @@
 //! Per-physical-send intent under endpoint retries, with response-local evidence.
-use super::FAILURE;
 use super::Sampling;
-use super::failure;
 use codex_api::AnthropicUsageObserver;
 use codex_api::AnthropicUsagePatch;
 use codex_api::ApiError;
@@ -60,6 +58,21 @@ impl ResponseEvidence {
     fn is_excluded(&self) -> bool {
         self.excluded.load(Ordering::SeqCst)
     }
+
+    /// Whether this response is still being recorded: accounting has not
+    /// given up on it or on its sampling.
+    pub(crate) fn is_recorded(&self) -> bool {
+        !self.is_excluded() && !self.sampling.is_closed()
+    }
+
+    /// Accounting failed for this request: record nothing more for it or the
+    /// rest of its turn, and let it proceed. The request was, or will be, sent
+    /// and billed; failing it would lose the provider's answer as well.
+    fn give_up(&self, step: &'static str, cause: impl std::fmt::Display) {
+        self.sampling.reject();
+        self.exclude();
+        super::gap(step, cause);
+    }
 }
 
 impl AnthropicUsageObserver for ResponseEvidence {
@@ -83,10 +96,10 @@ impl AnthropicUsageObserver for ResponseEvidence {
                 )),
                 (_, Err(_)) => Err(anyhow::anyhow!("provider usage failed validation")),
             };
-            result.map_err(|error| {
-                self.sampling.reject();
-                ApiError::Stream(failure("observe usage", format_args!("{error:#}")).into())
-            })
+            if let Err(error) = result {
+                self.give_up("observe usage", format_args!("{error:#}"));
+            }
+            Ok(())
         })
     }
 }
@@ -117,10 +130,10 @@ impl codex_api::ResponsesUsageObserver for ResponseEvidence {
                     .await
             }
             .await;
-            result.map_err(|error| {
-                self.sampling.reject();
-                ApiError::Stream(failure("observe usage", format_args!("{error:#}")).into())
-            })
+            if let Err(error) = result {
+                self.give_up("observe usage", format_args!("{error:#}"));
+            }
+            Ok(())
         })
     }
 }
@@ -151,13 +164,20 @@ impl codex_api::ChatUsageObserver for ResponseEvidence {
                     .await
             }
             .await;
-            result.map_err(|error| {
-                self.sampling.reject();
-                ApiError::Stream(failure("observe usage", format_args!("{error:#}")).into())
-            })
+            if let Err(error) = result {
+                self.give_up("observe usage", format_args!("{error:#}"));
+            }
+            Ok(())
         })
     }
 }
+
+/// The error a collected request's transport returns when the provider
+/// redirected it and no ordinary transport was supplied to resend it on
+/// (`AccountingTransport::with_redirect_fallback`). Accounting has given up
+/// on the request; the caller may resend it.
+pub(crate) const REDIRECTED_UNRECORDED: &str =
+    "provider redirected a recorded request; send it again to follow the redirect";
 
 /// Request-level routing hints can change the serving provider after selection.
 /// Inspect only the routing keys; never retain or report the request payload.
@@ -236,6 +256,13 @@ pub(crate) struct AccountingTransport<T> {
     configured_plugins: Option<serde_json::Value>,
     model: String,
     tier: Option<String>,
+    /// The caller's ordinary, redirect-following transport. A collected
+    /// request goes out on a client that never follows a redirect, so that a
+    /// response from elsewhere is never attributed to the approved route. When
+    /// the provider redirects, nothing has been served yet: accounting gives up
+    /// on the request and sends it again here, exactly as it would have gone
+    /// with accounting off.
+    follow: Option<T>,
 }
 
 impl<T> AccountingTransport<T> {
@@ -245,10 +272,16 @@ impl<T> AccountingTransport<T> {
             evidence,
             model,
             tier: None,
+            follow: None,
             configured_routing: None,
             configured_routing_options: None,
             configured_plugins: None,
         }
+    }
+
+    pub(crate) fn with_redirect_fallback(mut self, follow: Option<T>) -> Self {
+        self.follow = follow;
+        self
     }
 
     pub(crate) fn with_tier(mut self, tier: Option<String>) -> Self {
@@ -275,94 +308,23 @@ impl<T> AccountingTransport<T> {
     }
 }
 
-impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
-    /// One request, one response, no stream: the compaction endpoint.
-    ///
-    /// It is inference the operator paid for like any other, so it admits an
-    /// attempt before the send and records whatever numbers the body carries.
-    /// A body with no usage records the attempt with usage unknown, which is
-    /// what the provider actually said - not zero.
-    async fn execute(&self, request: Request) -> Result<Response, TransportError> {
-        let Some(evidence) = &self.evidence else {
-            return self.inner.execute(request).await;
-        };
+impl<T: HttpTransport> AccountingTransport<T> {
+    /// Admit this send, or decide it goes unrecorded. Never refuses it.
+    async fn admit(&self, evidence: &ResponseEvidence, request: &Request) -> Option<Attempt> {
+        if evidence.is_excluded() {
+            return None;
+        }
         if evidence.attempt.get().is_some() {
-            evidence.sampling.reject();
-            return Err(TransportError::Build(
-                failure("admit attempt", "a second send on one admitted response").into(),
-            ));
-        }
-        if let Some(reason) = request_refusal(
-            &request,
-            self.configured_routing.as_ref(),
-            self.configured_routing_options.as_ref(),
-            self.configured_plugins.as_ref(),
-        ) {
-            tracing::warn!(
-                accounting.excluded = reason,
-                "accounting: request not attributable to the selected provider; serving it unrecorded"
-            );
-            evidence.exclude();
-            return self.inner.execute(request).await;
-        }
-        let attempt = evidence
-            .sampling
-            .admit_with_tier(&self.model, &request.url, self.tier.as_deref())
-            .await
-            .map_err(|error| {
-                evidence.sampling.reject();
-                TransportError::Build(failure("admit attempt", format_args!("{error:#}")).into())
-            })?;
-        let response = match self.inner.execute(request).await {
-            Err(TransportError::Http { status, .. }) if status.is_redirection() => {
-                evidence.sampling.reject();
-                return Err(TransportError::Build(
-                    failure(
-                        "send",
-                        format_args!("provider redirected the request ({status})"),
-                    )
-                    .into(),
-                ));
-            }
-            result => result?,
-        };
-        evidence.attempt.set(attempt).map_err(|_| {
-            evidence.sampling.reject();
-            TransportError::Build(failure("bind attempt", "response already bound").into())
-        })?;
-        // One body, one observation: revisions are positive, and this response
-        // has exactly one.
-        if let Ok(Some(usage)) = codex_api::responses_body_usage(&response.body) {
-            // The observer has already logged its cause.
-            codex_api::ResponsesUsageObserver::observe(
-                evidence.as_ref(),
-                /*position*/ 1,
-                Ok(usage),
-            )
-            .await
-            .map_err(|_| TransportError::Build(FAILURE.into()))?;
-        }
-        Ok(response)
-    }
-
-    async fn stream(&self, request: Request) -> Result<StreamResponse, TransportError> {
-        let Some(evidence) = &self.evidence else {
-            return self.inner.stream(request).await;
-        };
-        if evidence.attempt.get().is_some() {
-            evidence.sampling.reject();
-            return Err(TransportError::Build(
-                failure("admit attempt", "a second send on one admitted response").into(),
-            ));
+            evidence.give_up("admit attempt", "a second send on one admitted response");
+            return None;
         }
         // A body that can re-route the serving provider must not be attributed to
         // the selected one, but it also must not kill the user's turn: Chat
         // declines such a request before a collector exists, and Responses and
-        // Anthropic have no typed body check, so failing closed here would end the
-        // turn for a request the product is happy to send. Decline to sample and
-        // let it through unrecorded.
+        // Anthropic have no typed body check. Decline to sample and let it
+        // through unrecorded.
         if let Some(reason) = request_refusal(
-            &request,
+            request,
             self.configured_routing.as_ref(),
             self.configured_routing_options.as_ref(),
             self.configured_plugins.as_ref(),
@@ -375,7 +337,7 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
                 "accounting: request not attributable to the selected provider; serving it unrecorded"
             );
             evidence.exclude();
-            return self.inner.stream(request).await;
+            return None;
         }
         let admission =
             if evidence.sampling.dialect == codex_state::accounting::Dialect::NativeAnthropic {
@@ -386,27 +348,87 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
                     .admit_with_tier(&self.model, &request.url, self.tier.as_deref())
                     .await
             };
-        let attempt = admission.map_err(|error| {
-            evidence.sampling.reject();
-            TransportError::Build(failure("admit attempt", format_args!("{error:#}")).into())
-        })?;
-        let response = match self.inner.stream(request).await {
+        match admission {
+            Ok(attempt) => Some(attempt),
+            Err(error) => {
+                evidence.give_up("admit attempt", format_args!("{error:#}"));
+                None
+            }
+        }
+    }
+
+    /// A redirected send: give up recording it and resend it on the ordinary
+    /// transport, or hand the caller `REDIRECTED_UNRECORDED` when there is none.
+    fn redirected(&self, evidence: &ResponseEvidence, status: http::StatusCode) -> Option<&T> {
+        evidence.give_up(
+            "send",
+            format_args!("provider redirected the request ({status}); resending it unrecorded"),
+        );
+        self.follow.as_ref()
+    }
+
+    fn bind(evidence: &ResponseEvidence, attempt: Option<Attempt>) {
+        if let Some(attempt) = attempt
+            && evidence.attempt.set(attempt).is_err()
+        {
+            evidence.give_up("bind attempt", "response already bound");
+        }
+    }
+}
+
+impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
+    /// One request, one response, no stream: the compaction endpoint.
+    ///
+    /// It is inference the operator paid for like any other, so it admits an
+    /// attempt before the send and records whatever numbers the body carries.
+    /// A body with no usage records the attempt with usage unknown, which is
+    /// what the provider actually said - not zero.
+    async fn execute(&self, request: Request) -> Result<Response, TransportError> {
+        let Some(evidence) = &self.evidence else {
+            return self.inner.execute(request).await;
+        };
+        let attempt = self.admit(evidence, &request).await;
+        let resend = self.follow.is_some().then(|| request.clone());
+        let response = match self.inner.execute(request).await {
             Err(TransportError::Http { status, .. }) if status.is_redirection() => {
-                evidence.sampling.reject();
-                return Err(TransportError::Build(
-                    failure(
-                        "send",
-                        format_args!("provider redirected the request ({status})"),
-                    )
-                    .into(),
-                ));
+                return match (self.redirected(evidence, status), resend) {
+                    (Some(follow), Some(request)) => follow.execute(request).await,
+                    _ => Err(TransportError::Build(REDIRECTED_UNRECORDED.into())),
+                };
             }
             result => result?,
         };
-        evidence.attempt.set(attempt).map_err(|_| {
-            evidence.sampling.reject();
-            TransportError::Build(failure("bind attempt", "response already bound").into())
-        })?;
+        Self::bind(evidence, attempt);
+        // One body, one observation: revisions are positive, and this response
+        // has exactly one. A failed observation is logged and leaves the
+        // response alone.
+        if let Ok(Some(usage)) = codex_api::responses_body_usage(&response.body) {
+            let _ = codex_api::ResponsesUsageObserver::observe(
+                evidence.as_ref(),
+                /*position*/ 1,
+                Ok(usage),
+            )
+            .await;
+        }
+        Ok(response)
+    }
+
+    async fn stream(&self, request: Request) -> Result<StreamResponse, TransportError> {
+        let Some(evidence) = &self.evidence else {
+            return self.inner.stream(request).await;
+        };
+        let attempt = self.admit(evidence, &request).await;
+        let resend = self.follow.is_some().then(|| request.clone());
+        let response = match self.inner.stream(request).await {
+            Err(TransportError::Http { status, .. }) if status.is_redirection() => {
+                return match (self.redirected(evidence, status), resend) {
+                    (Some(follow), Some(request)) => follow.stream(request).await,
+                    _ => Err(TransportError::Build(REDIRECTED_UNRECORDED.into())),
+                };
+            }
+            result => result?,
+        };
+        Self::bind(evidence, attempt);
         Ok(response)
     }
 }
