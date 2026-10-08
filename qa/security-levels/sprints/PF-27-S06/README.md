@@ -148,3 +148,14 @@ and no redactions in private logs.
   product itself, and in `corbanu exec` started from `cmd.exe` without MSYS2.
 - Each run's directory names showed in the TUI's cwd; one GLM reply remarked on the folder name. No tool call or
   result was affected.
+
+## Windows machine needed for the remaining gate
+
+To rerun the gate after the fixes, use a Windows 11 Pro or Enterprise 23H2+ machine with:
+
+- a local admin logged on at the console,
+- OpenSSH,
+- the toolchain above,
+- a Z.AI key in a file only that user can read.
+
+A real machine or full VM is required: the elevated sandbox creates local users, so Windows Sandbox and containers won't work.
