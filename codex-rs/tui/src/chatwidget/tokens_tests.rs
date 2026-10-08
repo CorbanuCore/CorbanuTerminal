@@ -664,6 +664,56 @@ fn accounting_inspect_range_future_buckets_have_not_started() {
     }
 }
 
+// An older bucket with expired detail beside the week in progress: the
+// ledger being behind the read time is still that week's "recorded through",
+// not a stale snapshot.
+#[test]
+fn accounting_inspect_range_expired_bucket_beside_in_progress_is_not_stale() {
+    const DAY: i64 = 86_400_000;
+    let expired = InspectionDay::DetailUnavailable {
+        coverage: RetentionCoverage {
+            completed_as_of_ms: 100 * DAY + 1_000,
+            detail_expired_through_ms: Some(10 * DAY),
+            aggregate_day_floor: 0,
+            oldest_recorded_day: Some(0),
+        },
+        read_at_ms: 102 * DAY,
+        compact: true,
+    };
+    let mut current = vec![ready_at(100 * DAY + 1_000, 102 * DAY)];
+    current.extend((1..7).map(|_| InspectionDay::CheckpointLag));
+    let pages = range_pages(
+        InspectionRange {
+            start_ms: 0,
+            end_ms: 107 * DAY,
+            grouping: InspectionGrouping::Day,
+        },
+        /*aggregate_day_floor*/ None,
+        /*read_at*/ 102 * DAY,
+        vec![
+            bucket(0, DAY, Some((0, DAY)), vec![expired]),
+            bucket(
+                100 * DAY,
+                107 * DAY,
+                Some((100 * DAY, 100 * DAY + 1_001)),
+                current,
+            ),
+        ],
+    );
+    let text = joined(&pages);
+    assert!(!text.contains(NOT_CURRENT), "{text}");
+    assert!(text.contains("In progress — totals so far"), "{text}");
+    assert!(
+        pages[0]
+            .text
+            .iter()
+            .any(|s| s.starts_with("Retention:")
+                && s.ends_with("; daily totals kept: not known yet")),
+        "{:#?}",
+        pages[0].text
+    );
+}
+
 // The same, from what the store actually returns for a week reaching today
 // and the weeks after it.
 #[tokio::test]

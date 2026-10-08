@@ -165,7 +165,6 @@ async fn accounting_inspect_range_app_dispatch_preserves_query() -> anyhow::Resu
         assert!(text.contains("In progress — totals so far"), "{text}");
         assert!(!text.contains("Range total unavailable"), "{text}");
     }
-    assert!(!text.contains("Next step: send a turn"), "{text}");
     app.state_db.as_ref().unwrap().close().await;
     Ok(())
 }

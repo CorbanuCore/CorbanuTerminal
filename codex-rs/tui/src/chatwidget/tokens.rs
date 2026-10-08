@@ -1829,7 +1829,7 @@ fn progress(
     .then_some(Progress::InProgress(end))
 }
 
-const NOT_STARTED: &str = "Not started yet — nothing is recorded for it.";
+const NOT_STARTED: &str = "Not started yet — it starts after this view was read.";
 const NOT_CURRENT: &str = "Snapshot is not current; newer activity is unverified";
 
 fn in_progress_line(end: i64) -> String {
@@ -1852,14 +1852,14 @@ fn range_pages(
             requested.grouping
         ),
         format!(
-            "Retention: request detail kept since {}; daily totals kept {}",
+            "Retention: request detail kept since {}; daily totals {}",
             read_at
                 .checked_sub(90 * 86_400_000)
                 .filter(|v| *v >= 0)
                 .map_or_else(|| "the start".to_string(), utc_instant),
             aggregate_day_floor.map_or_else(
-                || "not known yet".to_string(),
-                |day| format!("since {}", utc_date(day))
+                || "kept: not known yet".to_string(),
+                |day| format!("kept since {}", utc_date(day))
             )
         ),
         "Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost: unavailable — no settlement evidence.".into(),
@@ -1898,7 +1898,7 @@ fn range_pages(
             coverage,
             read_at_ms,
             ..
-        } => *read_at_ms > coverage.completed_as_of_ms,
+        } => *read_at_ms > coverage.completed_as_of_ms && !running,
         _ => false,
     }) {
         context.push(NOT_CURRENT.into());
@@ -1983,10 +1983,11 @@ fn range_pages(
     }
     for (bucket, progress) in buckets.into_iter().zip(progress) {
         let bounds = interval(bucket.start_ms, bucket.end_ms);
-        let effective = bucket
-            .effective
-            .map(|(s, e)| interval(s, e))
-            .unwrap_or_else(|| "unavailable".into());
+        let effective = match (bucket.effective, progress) {
+            (Some((s, e)), _) => interval(s, e),
+            (None, Some(Progress::NotStarted)) => "not started".into(),
+            (None, _) => "unavailable".into(),
+        };
         let mut header = context.clone();
         header.push(format!(
             "Bucket: {bounds}; effective coverage (requested ∩ aggregate retention ∩ snapshot): {effective}"

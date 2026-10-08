@@ -1558,6 +1558,12 @@ async fn usage_command_with_invalid_view_reports_usage_snapshot() {
         "usage_command_with_invalid_view_reports_usage",
         rendered.replace(" or /usage requests [YYYY-MM-DD]", "")
     );
+    assert_eq!(
+        rendered
+            .contains("Usage: /usage [daily|weekly|cumulative] or /usage requests [YYYY-MM-DD]"),
+        cfg!(feature = "developer-accounting"),
+        "{rendered}"
+    );
     assert_eq!(recall_latest_after_clearing(&mut chat), "/usage monthly");
 }
 
