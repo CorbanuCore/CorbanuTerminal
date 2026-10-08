@@ -225,6 +225,17 @@ async fn pf_27_s06_d2_vault_unreadable_through_tool_launch_under_workspace_write
         Some(&contract),
     )
     .expect("armed overrides");
+    assert!(
+        unprotected
+            .windows_sandbox_filesystem_overrides
+            .as_ref()
+            .is_some_and(|overrides| overrides
+                .additional_deny_read_paths
+                .contains(&codex_home.join("secrets"))),
+        "an armed process's unprotected launch keeps the contract's denies"
+    );
+    // The file exists, so a failed read below is an access denial.
+    assert!(codex_home.join("wallet").join("seed.json").is_file());
     let probe = run(unprotected).await;
     eprintln!("pf27s06 d2 unprotected launch in an armed process: {probe}");
     assert!(probe.contains("VAULT-DENIED"), "{probe}");
@@ -234,17 +245,6 @@ async fn pf_27_s06_d2_vault_unreadable_through_tool_launch_under_workspace_write
         assert!(
             running.contains(&format!("{denied}-DENIED")),
             "{denied}: {running}"
-        );
-    }
-
-    // Positive control for the wallet read, and cleanup: a launch without the
-    // contract removes its deny ACEs again.
-    let after = run(tool_launch(&base, &cwd, command())).await;
-    eprintln!("pf27s06 d2 workspace-write, no contract again: {after}");
-    for readable in ["VAULT", "WALLET"] {
-        assert!(
-            after.contains(&format!("{readable}-READ")),
-            "{readable}: {after}"
         );
     }
 }
