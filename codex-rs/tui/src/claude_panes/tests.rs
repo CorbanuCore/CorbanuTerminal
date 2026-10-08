@@ -47,6 +47,7 @@ use super::execution::ClaudeSecretRedactor;
 use super::execution::failed_turn_output;
 use super::execution::partial_failed_turn_output;
 use super::execution::run_claude_command_plan;
+#[cfg(unix)]
 use super::execution::stop_claude_child;
 use super::execution::write_turn_audit;
 use super::output_parse::parse_claude_output;
@@ -75,6 +76,7 @@ use super::smoke_workflows::smoke_provider_profile;
 use super::turn_types::ClaudeBridgeKind;
 #[cfg(unix)]
 use super::turn_types::ClaudeBridgePlan;
+#[cfg(unix)]
 use super::turn_types::ClaudeCommandPlan;
 use super::turn_types::ClaudePaneReasoningEvent;
 use super::turn_types::ClaudePaneToolEvent;
@@ -83,6 +85,7 @@ use super::turn_types::ClaudePaneTurnProgress;
 use super::turn_types::PaneDirectAccounting;
 
 use std::path::PathBuf;
+#[cfg(unix)]
 use tokio::process::Command;
 
 // Re-export items the test helpers use with their original unqualified names.

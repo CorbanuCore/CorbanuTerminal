@@ -571,6 +571,8 @@ fn atomic_json<T: Serialize>(path: &Path, value: &T, mode: u32) -> Result<(), Wa
     options.write(true).create_new(true);
     #[cfg(unix)]
     options.mode(mode);
+    #[cfg(not(unix))]
+    let _ = mode;
     let mut file = options.open(&temporary).map_err(storage)?;
     let bytes = serde_json::to_vec_pretty(value).map_err(storage)?;
     file.write_all(&bytes).map_err(storage)?;

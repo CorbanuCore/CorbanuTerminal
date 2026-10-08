@@ -267,7 +267,7 @@ fn spawn_launcher(launcher_exe: &Path) -> anyhow::Result<(OwnedHandle, File, Buf
             /*binherithandles*/ 1,
             CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT,
             environment.as_ptr().cast(),
-            cwd.as_ref().map_or(ptr::null(), |cwd| cwd.as_ptr()),
+            cwd.as_ref().map_or(ptr::null(), Vec::as_ptr),
             &startup.StartupInfo,
             &mut info,
         )

@@ -49,6 +49,7 @@ pub(crate) use test_environment::test_environment;
 pub use test_environment::test_target_os;
 
 static TEST_ARG0_PATH_ENTRY: OnceLock<Option<Arg0PathEntryGuard>> = OnceLock::new();
+#[cfg(target_os = "linux")]
 static LINUX_SANDBOX_SKIP_REASON: OnceLock<Option<String>> = OnceLock::new();
 
 // Keep macOS test constructors in regular text so large test binaries can use branch islands.

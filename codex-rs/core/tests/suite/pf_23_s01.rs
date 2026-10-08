@@ -25,6 +25,7 @@ use core_test_support::responses::ResponseMock;
 use core_test_support::responses::ResponsesRequest;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
+#[cfg(unix)]
 use core_test_support::responses::ev_custom_tool_call;
 use core_test_support::responses::ev_function_call;
 use core_test_support::responses::ev_function_call_with_namespace;
@@ -33,6 +34,7 @@ use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
+#[cfg(unix)]
 use core_test_support::skip_if_sandbox;
 use core_test_support::stdio_server_bin;
 use core_test_support::test_codex::TestCodex;
