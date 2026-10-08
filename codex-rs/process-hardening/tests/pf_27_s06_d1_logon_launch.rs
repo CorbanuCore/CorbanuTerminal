@@ -91,7 +91,9 @@ fn pf_27_s06_d1_hardened_process_starts_a_process_as_another_user() {
     assert_eq!(exit_code, EXIT_CODE);
 }
 
-/// The elevated sandbox's command runner from this build.
+/// The elevated sandbox's command runner from this build. Cargo sets
+/// `CARGO_BIN_EXE_*` only for a package's own binaries, so CI exports it;
+/// otherwise it is found next to this test's `deps` directory.
 fn command_runner() -> Option<PathBuf> {
     if let Some(path) = std::env::var_os("CARGO_BIN_EXE_codex_command_runner") {
         return Some(PathBuf::from(path));

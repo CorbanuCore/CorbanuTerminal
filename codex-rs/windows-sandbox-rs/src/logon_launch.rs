@@ -145,9 +145,15 @@ pub fn create_process_with_logon(
     launcher_exe: &Path,
 ) -> anyhow::Result<LaunchedProcess> {
     match create_process_with_logon_here(request) {
+        // Only an absolute path to the installed runner: a bare name would be
+        // looked up in the working directory (the workspace), and the launcher
+        // runs as the real user.
         Err(LogonError {
             code: ERROR_ACCESS_DENIED,
-        }) if current_process_dacl_is_protected() => {
+        }) if current_process_dacl_is_protected()
+            && launcher_exe.is_absolute()
+            && launcher_exe.is_file() =>
+        {
             create_process_with_logon_via_launcher(request, launcher_exe)
         }
         result => result.map_err(Into::into),
@@ -228,7 +234,8 @@ fn spawn_launcher(launcher_exe: &Path) -> anyhow::Result<(OwnedHandle, File, Buf
     startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
     startup.StartupInfo.hStdInput = child_stdin.0;
     startup.StartupInfo.hStdOutput = child_stdout.0;
-    startup.StartupInfo.hStdError = child_stdout.0;
+    // No stderr: nothing but the reply may reach the reply pipe.
+    startup.StartupInfo.hStdError = 0;
     startup.lpAttributeList = attributes.as_mut_ptr();
     let mut environment = Vec::new();
     if let Some(system_root) = std::env::var_os("SystemRoot") {
@@ -242,6 +249,8 @@ fn spawn_launcher(launcher_exe: &Path) -> anyhow::Result<(OwnedHandle, File, Buf
         quote_windows_arg(&launcher_exe.to_string_lossy())
     ));
     let application = to_wide(launcher_exe);
+    // Never the workspace: the launcher runs in its own directory.
+    let cwd = launcher_exe.parent().map(to_wide);
     // SAFETY: zeroed POD filled in by the call.
     let mut info: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
     // SAFETY: every pointer refers to a live buffer above; the handle list
@@ -255,7 +264,7 @@ fn spawn_launcher(launcher_exe: &Path) -> anyhow::Result<(OwnedHandle, File, Buf
             /*binherithandles*/ 1,
             CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT,
             environment.as_ptr().cast(),
-            ptr::null(),
+            cwd.as_ref().map_or(ptr::null(), |cwd| cwd.as_ptr()),
             &startup.StartupInfo,
             &mut info,
         )
@@ -325,8 +334,12 @@ fn create_process_with_logon_via_launcher(
                 if unsafe { GetProcessId(local.0) } != pid {
                     anyhow::bail!("logon launcher returned a handle to another process");
                 }
-                writeln!(stdin, "{ACK}").context("acknowledge the started process")?;
-                stdin.flush().context("acknowledge the started process")?;
+                if let Err(err) = writeln!(stdin, "{ACK}").and_then(|()| stdin.flush()) {
+                    // The launcher is gone and cannot end it; Core can.
+                    // SAFETY: `local.0` is the started process, checked above.
+                    unsafe { TerminateProcess(local.0, 1) };
+                    return Err(err).context("acknowledge the started process");
+                }
                 let process = local.0;
                 std::mem::forget(local);
                 Ok(LaunchedProcess {
