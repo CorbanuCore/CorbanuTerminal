@@ -2069,6 +2069,9 @@ class RecurrenceTests(unittest.TestCase):
                 target.chmod(0o600)
         schedule = Path(self.tmp.name) / "schedule"
         schedule.mkdir(mode=0o700)
+        agents = patch.object(owner, "launch_agents", return_value=Path(self.tmp.name) / "LaunchAgents")
+        agents.start()  # never the real ~/Library/LaunchAgents
+        self.addCleanup(agents.stop)
         python = Path(sys.executable).resolve()
         return Namespace(owner="install", root=schedule, label="com.corbanu.initiative-owner.test-unit",
                          python=python, python_sha256=f.file_digest(python), runtime=runtime,
@@ -2258,6 +2261,7 @@ class RecurrenceTests(unittest.TestCase):
     def launch_agents(self, mode=0o755):
         agents = Path(self.tmp.name) / "LaunchAgents"
         agents.mkdir(mode=mode, exist_ok=True)
+        (Path(self.tmp.name) / "Logs").mkdir(exist_ok=True)
         agents.chmod(mode)
         return agents, patch.object(owner, "launch_agents", return_value=agents)
 
@@ -2298,7 +2302,10 @@ class RecurrenceTests(unittest.TestCase):
                         self.assertEqual("Aqua", agent["LimitLoadToSessionType"])
                         self.assertTrue(agent["RunAtLoad"])
                         self.assertEqual({"SuccessfulExit": False}, agent["KeepAlive"])
-                        self.assertEqual(["sh", domain, args.label, str(plist)], agent["ProgramArguments"][3:])
+                        self.assertEqual(["sh", domain, args.label, str(plist), f"gui/{os.getuid()}"],
+                                         agent["ProgramArguments"][3:])
+                        self.assertEqual(str(Path(self.tmp.name) / "Logs" / (args.label + "-login.log")),
+                                         agent["StandardErrorPath"])
                         self.assertEqual(str(login), receipt["login_agent"])
                         self.assertEqual(receipt["login_agent_sha256"], f.file_digest(login))
                         self.assertIn(["/bin/launchctl", "bootstrap", f"gui/{os.getuid()}", str(login)], argvs)
@@ -2314,11 +2321,17 @@ class RecurrenceTests(unittest.TestCase):
                         activate.owner_activation(args)
                     args.launch_agent = True
                     args.owner = "uninstall"
-                    activate.owner_activation(args)
+                    phases, write_json = [], f.write_json
+                    def record(path, value):
+                        if path.name == "installation.json":
+                            phases.append(value["phase"])
+                        write_json(path, value)
+                    with patch.object(f, "write_json", side_effect=record):
+                        activate.owner_activation(args)
+                    self.assertEqual(["uninstalling", "uninstalled"], phases)
                     self.assertFalse(plist.exists())
                     self.assertFalse(login.exists())
                     self.assertEqual(kind == "user", "bootout-login" in calls)
-                    self.assertNotIn("uninstalling", calls)
                     self.assertEqual("uninstalled", owner.load(args.root / "installation.json")["phase"])
 
     def test_repin_moves_a_schedule_into_launch_agents(self):
@@ -2452,6 +2465,29 @@ class RecurrenceTests(unittest.TestCase):
                 self.assertNotIn("bootstrap", calls)
                 self.assertFalse((args.root / "owner.plist").exists())
                 leftover.unlink()
+
+    def test_plain_uninstall_keeps_legacy_phases_and_present_reinstall_refuses_strays(self):
+        import activate
+        args = self.installation()
+        agents, home = self.launch_agents()
+        service, command, _ = self.install(args)
+        with home, service, command:
+            activate.owner_activation(args)
+            stray = agents / (args.label + "-login.plist")
+            stray.write_bytes(b"stray")
+            with self.assertRaisesRegex(f.LaunchError, "unowned_plist"):
+                activate.owner_activation(args)
+            stray.unlink()
+            activate.owner_activation(args)
+            args.owner = "uninstall"
+            phases, write_json = [], f.write_json
+            def record(path, value):
+                if path.name == "installation.json":
+                    phases.append(value["phase"])
+                write_json(path, value)
+            with patch.object(f, "write_json", side_effect=record):
+                activate.owner_activation(args)
+            self.assertEqual(["uninstalled"], phases)
 
     def test_receipt_without_plist_and_user_receipt_in_launch_agents(self):
         import activate

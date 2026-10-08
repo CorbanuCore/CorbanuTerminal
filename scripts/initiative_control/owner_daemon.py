@@ -1709,7 +1709,7 @@ def observe_schedule(root, label="com.corbanu.initiative-owner"):
         f.require(receipt is not None or not os.path.lexists(root / "tick.json"), "installation_receipt_missing")
         if receipt:
             label = receipt["label"]
-        result["installed"] = receipt is not None and receipt["phase"] != "uninstalled"
+        result["installed"] = receipt is not None and receipt["phase"] == "installed"
         result["service"], output = service(label, installation_domain(receipt or {}))
         f.require(result["service"] != "domain_absent", "service_observation_unavailable")
         if receipt and result["service"] == "present":
