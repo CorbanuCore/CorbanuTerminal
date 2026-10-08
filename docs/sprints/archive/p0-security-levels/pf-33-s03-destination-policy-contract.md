@@ -2,7 +2,7 @@
 sprint_id: "PF-33-S03"
 title: "Pure destination-policy contract"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-33"
 execution_order: 18
 owner: "Codex browser/retrieval lane"
@@ -26,7 +26,7 @@ updated: 2026-08-30
 
 ## Plan linkage
 
-- Plan: [P0 security levels](../../../plans/active/p0-security-levels.md#pf-33).
+- Plan: [P0 security levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md#pf-33).
 - Feature: `PF-33`.
 - Product citation: **Reconciled security scope — TO BUILD** — “Unknown or unsupported protected paths fail visibly rather than falling back to raw secrets or unscreened execution.”
 - Acceptance advanced: [accepted architecture refinements](../../../plans/security-architecture-refinements-2026-08-28.md).

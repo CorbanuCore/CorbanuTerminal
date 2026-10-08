@@ -27,7 +27,7 @@ The machine source of truth is the front matter in each lifecycle directory.
 
 | Slot | Initiative | Priority | Deadline | Owner |
 | ---: | --- | --- | --- | --- |
-| 1 of 3 | [PF-13 security](active/p0-security-levels.md): 20-sprint core, 3 lanes; deferred work in draft [P1 hardening](proposed/p1-security-hardening.md) | P0 | 2026-10-09 | Existing security owner; unchanged |
+| 1 of 3 | [P1 security hardening](active/p1-security-hardening.md): deferred features plus P0's carried-forward milestones, 3 lanes; activated 2026-10-08 after [P0 security](completed/main-2026-10-08-p0-security-levels.md) closed | P1 | TBD | Jim Ricketts; Codex security coordinator integrates |
 | 2 of 3 | [Accounting](active/portfolio-agent-cost-accounting.md) | P1 | TBD | Codex accounting lane; Travis accepts |
 | 3 of 3 | [Task Node integration](active/initiative-delivery-control.md) | P1 | TBD | Codex Task Node lane; Travis accepts |
 
@@ -38,8 +38,8 @@ metadata, the three-plan limit and per-plan lane declarations. CI runs the same 
 
 Corbanu may have at most **three active product-initiative plans**. Each reserves
 one sprint, or up to three when it declares `parallel_sprint_limit` and matching
-`parallel_lanes` (Travis, 2026-10-06; P0 security uses three lanes). Travis authorized this operating model September 10 and selected
-PF-13, accounting and Task Node on September 11. See the [main handoff](main-workstreams-2026-09-11.md).
+`parallel_lanes` (Travis, 2026-10-06; the security plan uses three lanes). Travis authorized this operating model September 10 and selected
+PF-13, accounting and Task Node on September 11. On 2026-10-08 he closed P0 security and gave its slot to P1 security hardening. See the [main handoff](main-workstreams-2026-09-11.md).
 
 A plan counts toward the limit only when it:
 

@@ -100,31 +100,13 @@ nav:
       - Sprints:
           - Workflow: sprints/index.md
           - September 10 Identity Reconciliation: sprints/identity-reconciliation-2026-09-10.md
-          - Current Security Work:
+          - Closed P0 Security Work:
               - Overview: sprints/current/p0-security-levels/index.md
-              - "Broker lane":
-                  - "PF-28-S02 — Reflected-secret response scrubbing": sprints/current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md
-                  - "PF-27-S05 — Core model-client auth and vault labels through the broker": sprints/current/p0-security-levels/pf-27-s05-model-client-auth-broker.md
-              - "Untrusted-content lane":
-                  - "PF-23-S01 — Moderate ingress and disclosure enforcement": sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md
-                  - "PF-23-S02 — Aggressive deny and grant enforcement": sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md
-                  - "PF-23-S03 — Downgrade, restart, and inheritance enforcement": sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md
-              - "TUI lane":
-                  - "PF-24-S02 — Security confirm, cancel, and downgrade": sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md
-                  - "PF-25-S01 — Temporary grant TUI": sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md
-                  - "PF-25-S02 — Revocation and kill-switch TUI": sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md
-              - "First free lane":
-                  - "PF-33-S02 — Connection pinning and alternate-egress denial": sprints/current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md
-                  - "PF-29-S01 — Protected-mode inventory and activation preflight": sprints/current/p0-security-levels/pf-29-s01-protected-mode-inventory.md
-                  - "PF-29-S02 — Human-reviewed credential migration and recovery": sprints/current/p0-security-levels/pf-29-s02-human-secret-migration.md
-              - "Convergence":
-                  - "PF-41-S01 — Effective security inspector and degradation state": sprints/current/p0-security-levels/pf-41-s01-effective-security-inspector.md
-                  - "PF-13-S07 — Integrated credential boundary qualification": sprints/current/p0-security-levels/pf-13-s07-integrated-credential-boundary-qualification.md
-              - "Hosted non-security records":
-                  - "PF-76-S01 — Provider profile persistence": sprints/current/p0-security-levels/pf-76-s01-provider-profile-persistence.md
-                  - "PF-77-S01 — Task Node durable command and transport recovery": sprints/current/p0-security-levels/pf-77-s01-tasknode-reliability.md
-          - Deferred Security Work (P1):
+              - "PF-76-S01 — Provider profile persistence": sprints/current/p0-security-levels/pf-76-s01-provider-profile-persistence.md
+              - "PF-77-S01 — Task Node durable command and transport recovery": sprints/current/p0-security-levels/pf-77-s01-tasknode-reliability.md
+          - Current Security Work (P1):
               - Overview: sprints/current/p1-security-hardening/index.md
+              - "PF-13-S07 — Integrated credential boundary qualification": sprints/current/p1-security-hardening/pf-13-s07-integrated-credential-boundary-qualification.md
               - "PF-26-S02 — True-TUI and live-repository qualification": sprints/current/p1-security-hardening/pf-26-s02-true-tui-and-live-repository-qualification.md
               - "PF-26-S03 — Human acceptance, finished docs, and release evidence": sprints/current/p1-security-hardening/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md
               - "PF-26-S04 — Final integrated automated security qualification": sprints/current/p1-security-hardening/pf-26-s04-final-automated-qualification.md
@@ -271,9 +253,9 @@ nav:
           - Task Node Task Targets: plans/tasknode-workstream-tasks-2026-09-11.md
           - Desktop Beta Contract: plans/tasknode-beta-program.md
           - Feature Delivery Gates: plans/feature-delivery.md
-          - P0 Security Levels: plans/active/p0-security-levels.md
+          - P0 Security Levels: plans/completed/main-2026-10-08-p0-security-levels.md
           - P0 Security History (to 2026-10-06): plans/history/p0-security-levels-2026-10-06.md
-          - P1 Security Hardening: plans/proposed/p1-security-hardening.md
+          - P1 Security Hardening: plans/active/p1-security-hardening.md
           - Unified Provider Onboarding: plans/proposed/unified-provider-auth.md
           - Security Source Reconciliation: plans/security-source-reconciliation.md
           - OpenClaw Source Review: plans/openclaw-source-review-2026-08-28.md

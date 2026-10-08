@@ -2,7 +2,7 @@
 sprint_id: "PF-37-S02"
 title: "Human authentication handoff and session revocation"
 status: draft
-plan_file: "docs/plans/proposed/p1-security-hardening.md"
+plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-37"
 execution_order: 62
 owner: "Jim Ricketts"
@@ -23,7 +23,7 @@ updated: 2026-10-06
 
 ## Plan linkage
 
-- Plan: [P1 security hardening](../../../plans/proposed/p1-security-hardening.md#pf-37).
+- Plan: [P1 security hardening](../../../plans/active/p1-security-hardening.md#pf-37).
 - Feature: `PF-37`.
 - Product citation: **Non-negotiable controls** — “Permit agents to reference credentials only by label; resolve them solely inside the trusted execution boundary.”
 - Acceptance advanced: Credentialed browsing remains origin-bound and human-controlled across challenges, cancellation and resume.

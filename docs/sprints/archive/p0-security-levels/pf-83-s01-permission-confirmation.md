@@ -2,7 +2,7 @@
 sprint_id: "PF-83-S01"
 title: "Request-correlated permission confirmation"
 status: cancelled
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-83"
 execution_order: 84
 owner: "Astra High permission-confirmation worker"
@@ -44,7 +44,7 @@ F11 pass on the `zai` route. F03/F04 were not run on that route. These runs do n
 replace the independent execution above.
 
 Product defects handed to the TUI lane as bugs (tracked in the
-[P0 plan](../../../plans/active/p0-security-levels.md#tui-lane-bugs-from-pf-83)):
+[P0 plan](../../../plans/completed/main-2026-10-08-p0-security-levels.md#tui-lane-bugs-from-pf-83)):
 typed text in an open approval prompt can approve it with "don't ask again";
 "Enable full access?" defaults to Cancel and says nothing when cancelled; a declined
 request renders both "You canceled" and "Ran … (no output)"; the `zai-anthropic`

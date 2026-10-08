@@ -2,7 +2,7 @@
 sprint_id: "PF-32-S01"
 title: "Stable web facade and provider registry"
 status: draft
-plan_file: "docs/plans/proposed/p1-security-hardening.md"
+plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-32"
 execution_order: 53
 owner: "Jim Ricketts"
@@ -23,7 +23,7 @@ updated: 2026-10-06
 
 ## Plan linkage
 
-- Plan: [P1 security hardening](../../../plans/proposed/p1-security-hardening.md#pf-32).
+- Plan: [P1 security hardening](../../../plans/active/p1-security-hardening.md#pf-32).
 - Feature: `PF-32`.
 - Product citation: **Non-negotiable controls** — “Classify instruction intent and provenance before external content can influence tools or financial actions.”
 - Acceptance advanced: Protected web tools have one screened facade with deterministic provider capabilities and stable provenance.

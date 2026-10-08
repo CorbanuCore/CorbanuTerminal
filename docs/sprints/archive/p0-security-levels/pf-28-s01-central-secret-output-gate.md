@@ -2,7 +2,7 @@
 sprint_id: "PF-28-S01"
 title: "Central secret and protected-output gate"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-28"
 execution_order: 30
 owner: "broker lane worker (codex, 2026-10-06)"
@@ -26,8 +26,8 @@ Completed under the per-sprint gate (sec-common decision 5): merged as PR #208 b
 
 | Carried forward | To |
 | --- | --- |
-| Wrapped base64/hex and other decode-and-rescan cases; reflected values in responses | [PF-28-S02](../../current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md) |
-| Register MCP OAuth tokens refreshed after start; withhold comma-separated or numbered seed phrases; scrub known text fields per type (no serde round trip); per-session stream state and fewer rescans under load | [PF-28-S02](../../current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md) (gate carry-overs) |
+| Wrapped base64/hex and other decode-and-rescan cases; reflected values in responses | [PF-28-S02](../../archive/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md) |
+| Register MCP OAuth tokens refreshed after start; withhold comma-separated or numbered seed phrases; scrub known text fields per type (no serde round trip); per-session stream state and fewer rescans under load | [PF-28-S02](../../archive/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md) (gate carry-overs) |
 | Register a derived view for financial values | [PF-39-S01](../../current/p1-security-hardening/pf-39-s01-protected-financial-derived-views.md) (P1) |
 
 ## Execution mandate
@@ -37,7 +37,7 @@ Completed under the per-sprint gate (sec-common decision 5): merged as PR #208 b
 
 ## Plan linkage
 
-- Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md#pf-28).
+- Plan: [P0 `/security` levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md#pf-28).
 - Feature: `PF-28`.
 - Product citation: **Non-negotiable controls** — “Default to no secret export, arbitrary egress, clipboard exposure, or sensitive logging.”
 - Acceptance advanced: Managed secret canaries never reach model, tool, persistence, diagnostic, or export sinks.

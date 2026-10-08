@@ -2,7 +2,7 @@
 sprint_id: "PF-27-S02"
 title: "Secretless agent launch and bypass containment"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-27"
 execution_order: 29
 owner: "broker lane worker (codex, 2026-10-06)"
@@ -26,7 +26,7 @@ Completed under the per-sprint gate (sec-common decision 5): merged as PR #191 b
 
 | Open item | Disposition |
 | --- | --- |
-| MCP servers, hooks, the `!` user shell and app-server `command/exec` run outside the OS sandbox | Allowed as user-configured/user-started; the inspector shows them as "not contained" ([PF-41-S01](../../current/p0-security-levels/pf-41-s01-effective-security-inspector.md)) |
+| MCP servers, hooks, the `!` user shell and app-server `command/exec` run outside the OS sandbox | Allowed as user-configured/user-started; the inspector shows them as "not contained" ([PF-41-S01](../../archive/p0-security-levels/pf-41-s01-effective-security-inspector.md)) |
 | Claude panes and external provider harnesses are not under the contract | Handed to the TUI lane, recorded in [PF-24-S02](pf-24-s02-security-confirm-cancel-and-downgrade.md): blocked under Aggressive (PR #220); full contract is issue #218 |
 | Windows broker and contract | [PF-27-S06](../../current/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md), now in the P1 hardening plan |
 
@@ -40,7 +40,7 @@ Windows refuses protected launches with a reason until PF-27-S06 lands.
 
 ## Plan linkage
 
-- Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md#pf-27).
+- Plan: [P0 `/security` levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md#pf-27).
 - Feature: `PF-27`.
 - Product citation: **Non-negotiable controls** — “Permit agents to reference credentials only by label; resolve them solely inside the trusted execution boundary.”
 - Acceptance advanced: No raw managed secret enters agent environment, command line, mounts, process memory access, or tool output in protected modes.

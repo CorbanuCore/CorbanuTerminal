@@ -256,7 +256,7 @@ restart, and produces a secret-free audit event.
 
 The 2026-08-28 product decision preserves Permissive compatibility and makes the
 broker mandatory for both Moderate and Aggressive. It authorizes the
-[active security plan](plans/active/p0-security-levels.md) to reconcile the
+[P0 security plan](plans/completed/main-2026-10-08-p0-security-levels.md) to reconcile the
 working-session overview/transcript, archived security designs and OpenClaw
 implementation into one program; these outcomes are not yet shipped.
 

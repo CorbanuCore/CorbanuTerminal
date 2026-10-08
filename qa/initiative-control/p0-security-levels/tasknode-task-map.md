@@ -1,7 +1,7 @@
 # Task Node task map: P0 security levels
 
 Links each Task Node task to the sprints, merged PRs, gate records and evidence record behind it. Use it to check
-any evidence sent against these tasks. Plan: [p0-security-levels.md](../../../docs/plans/active/p0-security-levels.md),
+any evidence sent against these tasks. Plan: [p0-security-levels.md](../../../docs/plans/completed/main-2026-10-08-p0-security-levels.md),
 sprints: [index](../../../docs/sprints/current/p0-security-levels/index.md).
 
 - Rules (Travis): Task Node moves tasks through stages; Corbanu only submits evidence of completed work. Nothing is

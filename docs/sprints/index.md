@@ -161,13 +161,13 @@ separate authority. Current assignments/evidence are in the
 
 | Plan | Plan status | Current sprints | Execution authority |
 | --- | --- | ---: | --- |
-| [PF-13 / security — workstream 1](../plans/active/p0-security-levels.md) | Active | [15 current sprints](current/p0-security-levels/index.md) (core plus broker-lane PF-27-S05, 2 hosted), 41 archives | 2026-10-06: PF-30-S03 archived; PF-27-S02, PF-28-S01 and PF-33-S01 completed and archived after Travis's decisions; PF-27-S06 moved to P1 |
-| [P1 security hardening](../plans/proposed/p1-security-hardening.md) | Proposed | [32 draft sprints](current/p1-security-hardening/index.md) | None until plan activation; moved from P0 on 2026-10-06 |
+| [P1 security hardening — workstream 1](../plans/active/p1-security-hardening.md) | Active (2026-10-08) | [33 current sprints](current/p1-security-hardening/index.md) | PF-13-S07 `ready` (carried from P0); PF-27-S06 `blocked` on a Windows machine; the rest draft |
+| [P0 security](../plans/completed/main-2026-10-08-p0-security-levels.md) | Completed (closed by decision 2026-10-08) | [2 hosted drafts](current/p0-security-levels/index.md), 53 archives | 20 of 21 core records archived; PF-13-S07 and the milestones moved to P1 |
 | [Accounting — workstream 2](../plans/active/portfolio-agent-cost-accounting.md) | Active | 3 current PF-60 sprints; S01 archived | S02 isolated native-state journal allocated after S01 review and defaults approval; no live collection |
 | [Task Node — workstream 3](../plans/active/initiative-delivery-control.md) | Active | PF-80-S01, two PF-79 beta drafts, PF-81-S01 visual QA draft | Offline native increments integrated locally; latest validity worker returned for manager review; beta/harness dependencies unchanged |
 | [Unified provider onboarding and management](../plans/proposed/unified-provider-auth.md) | Deferred | [1 current sprint](current/unified-provider-auth/index.md) | PF-58 human accepted for integration; residual automated/native qualification retained separately |
 | [Arbitrary-model Autoreview](../plans/proposed/arbitrary-model-autoreview.md) | Proposed | [7 draft sprints](current/arbitrary-model-autoreview/index.md) | None until plan activation and sprint worktree allocation |
-| [Prompt-injection firewall and brokered authority](../plans/proposed/prompt-injection-firewall.md) | Proposed | 0 | Historical 72-sprint decomposition remains cancelled; every record maps into the active P0 plan's current work |
+| [Prompt-injection firewall and brokered authority](../plans/proposed/prompt-injection-firewall.md) | Proposed | 0 | Historical 72-sprint decomposition remains cancelled; every record maps into the P0 plan (closed 2026-10-08) and its P1 successor |
 
 ## Machine check
 

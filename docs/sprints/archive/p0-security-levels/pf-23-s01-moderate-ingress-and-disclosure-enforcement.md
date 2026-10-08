@@ -2,7 +2,7 @@
 sprint_id: "PF-23-S01"
 title: "Moderate ingress and disclosure enforcement"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-23"
 execution_order: 40
 owner: "untrusted-content lane"
@@ -26,7 +26,7 @@ updated: 2026-10-06
 
 ## Plan linkage
 
-- Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
+- Plan: [P0 `/security` levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md)
 - Feature: `PF-23`
 - Reconciliation: [source decisions and archive mapping](../../../plans/security-source-reconciliation.md).
 - Product citation: **P0 `/security` levels** — “Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged.”
@@ -48,7 +48,7 @@ Slice 3 is the runtime net: after untrusted content under Moderate/Aggressive, C
 agent command's sandbox (Corbanu home, other Corbanu homes, fixed `$HOME` credentials such as `~/.ssh`). PF-29
 owns launch and user data: S01 inventory and launch isolation (every credential file found, from launch), S02
 migration of secrets out of shell profiles and config. Slice 3 never denies shell profiles; no shared files.
-Also recorded in [PF-29-S02](../../current/p0-security-levels/pf-29-s02-human-secret-migration.md#split-with-pf-23-s01-2026-10-06).
+Also recorded in [PF-29-S02](../../archive/p0-security-levels/pf-29-s02-human-secret-migration.md#split-with-pf-23-s01-2026-10-06).
 
 ## Preconditions
 

@@ -11,7 +11,7 @@ depends_on: none
 created: 2026-09-07
 updated: 2026-09-10
 status: completed
-plan_file: docs/plans/active/p0-security-levels.md
+plan_file: docs/plans/completed/main-2026-10-08-p0-security-levels.md
 worktree: /home/pfrpc/repos/worktrees/corbanu-release-0.1.39
 branch: fix/tasknode-agent-profile-scope
 base_commit: 9b71d86d7fc57b25e3b020a813a6b75dd898836a
@@ -45,7 +45,7 @@ Finish agent profile propagation and fail closed before any Task Node account lo
 
 ## Plan linkage
 
-Plan: [P0 security levels](../../../plans/active/p0-security-levels.md), feature PF-78. Product heading **Campaign Tracker — LOCAL PILOT CANDIDATE**: “preserve attributable user prompts and compact GLM 5.3 Flash summaries in a bounded database”.
+Plan: [P0 security levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md), feature PF-78. Product heading **Campaign Tracker — LOCAL PILOT CANDIDATE**: “preserve attributable user prompts and compact GLM 5.3 Flash summaries in a bounded database”.
 
 ## Code boundaries
 

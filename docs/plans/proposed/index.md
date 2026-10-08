@@ -7,7 +7,6 @@ slot and do not authorize implementation.
 | --- | --- | --- | --- |
 | [Arbitrary-model Autoreview](arbitrary-model-autoreview.md) | P1 | Alex Good | Turns explicit second-model review into one secret-scanned, isolated, exact-runtime workflow across configured Corbanu providers |
 | [Prompt-injection firewall and brokered authority](prompt-injection-firewall.md) | P0 | Jim Ricketts | Historical input reconciled into the active P0 security plan on 2026-08-28; no separate implementation authority |
-| [P1 security hardening](p1-security-hardening.md) | P1 | Jim Ricketts | 32 security sprints deferred from the P0 core on 2026-10-06 (PF-26 final qualification, PF-27-S06 Windows, PF-31, PF-32, PF-34 to PF-40, PF-41-S02) |
 
 ## September 9 transcript portfolio
 

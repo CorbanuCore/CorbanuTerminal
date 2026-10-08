@@ -1,47 +1,14 @@
-# P0 security-level execution sprints
+# P0 security-level sprints (plan closed)
 
-The [P0 security plan](../../../plans/active/p0-security-levels.md) owns these
-14 records: the rest of the 20-sprint core from Travis's 2026-10-06 decisions (19 named
-sprints plus the flagged picker), the broker-lane addition PF-27-S05 (coordinator,
-2026-10-06), and two hosted non-security records. Up to three
-core sprints may be reserved at once, one per lane, with disjoint `write_scope`.
-PF-83-S01 closed on 2026-10-06 and is [archived](../../archive/p0-security-levels/pf-83-s01-permission-confirmation.md);
-PF-30-S01 completed (PR #178) and is [archived](../../archive/p0-security-levels/pf-30-s01-typed-source-envelope.md);
-PF-24-S03 completed (PR #186) and is [archived](../../archive/p0-security-levels/pf-24-s03-flagged-security-picker.md);
-PF-30-S02 completed (PRs #190, #198) and is [archived](../../archive/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md);
-PF-30-S03 completed (PRs #204, #212) and is [archived](../../archive/p0-security-levels/pf-30-s03-post-taint-authority-checks.md).
-PF-23-S01 completed (PRs #223, #233) and is [archived](../../archive/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md);
-PF-23-S02 completed and is [archived](../../archive/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md).
-PF-23-S03 completed on 2026-10-07 (PRs #246-#249 merged; GLM 5.2 demos in #256) and is [archived](../../archive/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md).
-PF-24-S02 completed on 2026-10-07 (PR #253; GLM 5.2 pass afterwards) and is [archived](../../archive/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md).
-PF-25-S01 completed on 2026-10-07 (PR #260) and is [archived](../../archive/p0-security-levels/pf-25-s01-temporary-grant-tui.md).
-PF-25-S02 completed on 2026-10-07 and is [archived](../../archive/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md).
-PF-27-S04 completed on 2026-10-06 and is [archived](../../archive/p0-security-levels/pf-27-s04-isolated-credential-broker.md);
-its open items moved to PF-27-S02, the new PF-27-S05 and PF-27-S06, and PF-23-S03.
-PF-27-S05 completed on 2026-10-07 (PRs #229, #237) and is [archived](../../archive/p0-security-levels/pf-27-s05-model-client-auth-broker.md).
-PF-27-S02 (PR #191), PF-28-S01 (PR #208) and PF-33-S01 (PR #210) completed on 2026-10-06 after Travis's
-decisions and are archived ([PF-27-S02](../../archive/p0-security-levels/pf-27-s02-secretless-agent-launch.md),
-[PF-28-S01](../../archive/p0-security-levels/pf-28-s01-central-secret-output-gate.md),
-[PF-33-S01](../../archive/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md)); PF-27-S06 (Windows)
-moved to the P1 hardening plan.
-Deferred sprints moved to the [P1 hardening sprints](../p1-security-hardening/index.md).
-Earlier allocation notes are in the [plan history](../../../plans/history/p0-security-levels-2026-10-06.md).
+Travis closed the [P0 security plan](../../../plans/completed/main-2026-10-08-p0-security-levels.md) on
+2026-10-08. Twenty of its 21 core records are [archived](../../archive/p0-security-levels/); PF-28-S02,
+PF-29-S01/S02, PF-33-S02 and PF-41-S01 were archived at close with their open items moved to the
+[P1 plan](../../../plans/active/p1-security-hardening.md#carried-forward-from-p0).
+[PF-13-S07](../p1-security-hardening/pf-13-s07-integrated-credential-boundary-qualification.md) moved to P1.
 
-| Order | Sprint | Outcome | Lane | Depends on |
-| ---: | --- | --- | --- | --- |
-| 31 | [PF-28-S02](pf-28-s02-reflected-secret-response-scrubbing.md) | Reflected-secret response scrubbing (merged behind `secret_output_gate`; two carried items open) | broker | PF-28-S01 (archived) |
-| 33 | [PF-33-S02](pf-33-s02-connection-pinning-and-bypass.md) | Connection pinning and alternate-egress denial (merged behind `url_destination_policy`, #215; open items recorded) | first free | PF-33-S01 (archived) |
-| 35 | [PF-29-S01](pf-29-s01-protected-mode-inventory.md) | Protected-mode inventory and activation preflight (merged behind `protected_mode_preflight`, #228; open items recorded) | first free | PF-28-S02 (merged behind flag), PF-20-S02 (archived) |
-| 36 | [PF-29-S02](pf-29-s02-human-secret-migration.md) | Human-reviewed credential migration and recovery (merged behind `protected_mode_preflight`, #235; open items recorded) | first free | PF-29-S01 (merged behind flag), PF-24-S01 (archived) |
-| 71 | [PF-41-S01](pf-41-s01-effective-security-inspector.md) | Effective security inspector and degradation state (merged behind `security_levels`, #259; open items recorded) | convergence | PF-23-S03, PF-29-S02, PF-24-S02 |
-| 73 | [PF-13-S07](pf-13-s07-integrated-credential-boundary-qualification.md) | Integrated credential boundary qualification | convergence | PF-13-S05, PF-13-S06, PF-27-S02, PF-28-S02, PF-29-S02, PF-33-S02 |
-| 79 | [PF-77-S01](pf-77-s01-tasknode-reliability.md) | Task Node durable command and transport recovery | hosted, not security | none |
-| 83 | [PF-76-S01](pf-76-s01-provider-profile-persistence.md) | Provider profile persistence | hosted, not security | none |
+Two hosted non-security drafts remain here until they get a home plan:
 
-Order is topological, not a schedule. Each record's front matter gives its status
-(`in_progress` for the active lane sprints, `draft` otherwise).
-
-```bash
-python3 docs/plans/check.py
-python3 docs/sprints/check.py
-```
+| Order | Sprint | Outcome | Depends on |
+| ---: | --- | --- | --- |
+| 79 | [PF-77-S01](pf-77-s01-tasknode-reliability.md) | Task Node durable command and transport recovery | none |
+| 83 | [PF-76-S01](pf-76-s01-provider-profile-persistence.md) | Provider profile persistence | none |
