@@ -2921,7 +2921,8 @@ async fn unified_exec_formats_large_output_summary() -> Result<()> {
             .enable(Feature::UnifiedExec)
             .expect("test config should allow feature update");
     });
-    let test = builder.build_with_auto_env(&server).await?;
+    // Pinned to the local executor; the remote lane does not cover this path yet.
+    let test = builder.build(&server).await?;
 
     let output_line = "token token \n";
     let output_repetitions = 100_000;
