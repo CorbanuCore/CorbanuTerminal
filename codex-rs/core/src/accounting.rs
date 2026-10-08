@@ -227,6 +227,31 @@ impl TurnScopes {
     }
 }
 
+/// Warn once per turn when `scopes` - or a collector that never attached
+/// (`None`) - left a model request unrecorded.
+pub(crate) async fn warn_if_unrecorded(
+    session: &crate::session::session::Session,
+    turn_context: &crate::session::turn_context::TurnContext,
+    scopes: Option<&TurnScopes>,
+) {
+    if scopes.is_none_or(TurnScopes::stopped)
+        && !turn_context
+            .accounting_gap_warning_emitted
+            .swap(true, Ordering::Relaxed)
+    {
+        session
+            .send_event(
+                turn_context,
+                codex_protocol::protocol::EventMsg::Warning(
+                    codex_protocol::protocol::WarningEvent {
+                        message: GAP_WARNING.to_string(),
+                    },
+                ),
+            )
+            .await;
+    }
+}
+
 /// Bind collection for one turn on one client session.
 ///
 /// Both the ordinary turn path and compaction use this: a compaction request is
@@ -671,6 +696,21 @@ thread_local! {
         Box::leak(Box::new(tokio::sync::Semaphore::const_new(1)));
 }
 
+/// This process's accounting write gate, waited for within `deadline`: the
+/// contention budget covers the whole operation, including the wait behind
+/// this process's other accounting writes.
+async fn write_gate(
+    deadline: std::time::Instant,
+) -> anyhow::Result<tokio::sync::SemaphorePermit<'static>> {
+    Ok(
+        tokio::time::timeout_at(tokio::time::Instant::from_std(deadline), writes().acquire())
+            .await
+            .map_err(|_| {
+                anyhow::anyhow!("accounting write gate busy past the contention budget")
+            })??,
+    )
+}
+
 fn writes() -> &'static tokio::sync::Semaphore {
     #[cfg(not(test))]
     {
@@ -932,11 +972,10 @@ impl Sampling {
                 .into(),
             ));
         }
-        let _write = writes()
-            .acquire()
+        let deadline = std::time::Instant::now() + CONTENTION_BUDGET;
+        let _write = write_gate(deadline)
             .await
             .map_err(|error| CodexErr::Fatal(failure("open sampling", error).into()))?;
-        let deadline = std::time::Instant::now() + CONTENTION_BUDGET;
         store_call("open accounting store", deadline, || {
             AccountingStore::open(&runtime, AsOf::Now)
         })
@@ -1017,7 +1056,8 @@ impl Sampling {
             canonical_route(endpoint) == canonical_route(&self.endpoint),
             "accounting route mismatch"
         );
-        let _write = writes().acquire().await?;
+        let deadline = std::time::Instant::now() + CONTENTION_BUDGET;
+        let _write = write_gate(deadline).await?;
         self.check()?;
         let mut completion = Completion {
             sampling: self,
@@ -1029,7 +1069,6 @@ impl Sampling {
         })?;
         // The facade borrows its runtime. Reopening validates/maintains through
         // its public contract; never fabricate an attached or Active handle.
-        let deadline = std::time::Instant::now() + CONTENTION_BUDGET;
         let store = store_call("open accounting store", deadline, || {
             AccountingStore::open(&self.runtime, AsOf::Now)
         })
@@ -1114,13 +1153,13 @@ impl Sampling {
             sequence: position,
             patch,
         };
-        let _write = writes().acquire().await?;
+        let deadline = std::time::Instant::now() + CONTENTION_BUDGET;
+        let _write = write_gate(deadline).await?;
         self.check()?;
         let mut completion = Completion {
             sampling: self,
             complete: false,
         };
-        let deadline = std::time::Instant::now() + CONTENTION_BUDGET;
         let store = store_call("open accounting store", deadline, || {
             AccountingStore::open(&self.runtime, AsOf::Now)
         })

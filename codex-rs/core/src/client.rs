@@ -1454,6 +1454,17 @@ impl ModelClient {
         // streaming paths build a no-redirect client whenever evidence exists,
         // so that a response from somewhere else can never be attributed to the
         // approved endpoint. This endpoint needs the same rule.
+        let follow = if evidence.is_some() {
+            Some(
+                self.redirect_fallback(
+                    &client_setup
+                        .api_provider
+                        .url_for_path(RESPONSES_COMPACT_ENDPOINT),
+                )?,
+            )
+        } else {
+            None
+        };
         let transport = if evidence.is_some() {
             let client = self.api_client_without_redirects(
                 &client_setup
@@ -1543,6 +1554,7 @@ impl ModelClient {
                 evidence.clone(),
                 model.clone(),
             )
+            .with_redirect_fallback(follow)
             .with_tier(service_tier.clone())
         });
         let client =
@@ -1607,6 +1619,11 @@ impl ModelClient {
             None => None,
         };
         let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
+        let follow = if evidence.is_some() {
+            Some(self.redirect_fallback(&call_url)?)
+        } else {
+            None
+        };
         let transport = if evidence.is_some() {
             let client = self.api_client_without_redirects(&call_url)?;
             crate::memory_stage_one::StageOneGuardedTransport::new(
@@ -1622,6 +1639,7 @@ impl ModelClient {
                 evidence.clone(),
                 session_config.model.clone().unwrap_or_default(),
             )
+            .with_redirect_fallback(follow)
         });
         let response = ApiRealtimeCallClient::new(transport, api_provider, client_setup.api_auth)
             .create_with_session_and_headers(sdp, session_config, extra_headers)
@@ -1689,6 +1707,17 @@ impl ModelClient {
         let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
         // A collected request must not be able to follow a redirect, for the
         // same reason every other collected route may not.
+        let follow = if evidence.is_some() {
+            Some(
+                self.redirect_fallback(
+                    &client_setup
+                        .api_provider
+                        .url_for_path(MEMORIES_SUMMARIZE_ENDPOINT),
+                )?,
+            )
+        } else {
+            None
+        };
         let transport = if evidence.is_some() {
             let client = self.api_client_without_redirects(
                 &client_setup
@@ -1708,6 +1737,7 @@ impl ModelClient {
                 evidence.clone(),
                 model_info.slug.clone(),
             )
+            .with_redirect_fallback(follow)
         });
         let request_telemetry = Self::build_request_telemetry(
             session_telemetry,
@@ -2660,6 +2690,19 @@ impl ModelClient {
         })
     }
 
+    /// The ordinary, redirect-following transport a recorded request is
+    /// resent on when its provider redirects it (see
+    /// `AccountingTransport::with_redirect_fallback`).
+    fn redirect_fallback(&self, request_url: &str) -> Result<ReqwestTransport> {
+        let client = create_client_for_route(
+            &self.http_client_factory,
+            request_url,
+            ClientRouteClass::Api,
+        )
+        .map_err(std::io::Error::from)?;
+        Ok(ReqwestTransport::from_http_client(client))
+    }
+
     /// No-redirect client for one model request.
     fn api_client_without_redirects(
         &self,
@@ -3057,6 +3100,17 @@ impl ModelClientSession {
             );
             let evidence = crate::accounting::read_slot(&self.accounting)?
                 .map(crate::accounting::transport::ResponseEvidence::new);
+            let follow = if evidence.is_some() {
+                Some(
+                    self.client.redirect_fallback(
+                        &client_setup
+                            .api_provider
+                            .url_for_path(ANTHROPIC_MESSAGES_ENDPOINT),
+                    )?,
+                )
+            } else {
+                None
+            };
             let transport = if evidence.is_some() {
                 let client = self.client.api_client_without_redirects(
                     &client_setup
@@ -3129,6 +3183,7 @@ impl ModelClientSession {
                     evidence.clone(),
                     accounting_model_identity(&model_info.slug),
                 )
+                .with_redirect_fallback(follow)
                 .with_configured_routing(
                     self.client
                         .state
@@ -3180,11 +3235,6 @@ impl ModelClientSession {
                         /*server_conversation_update*/ None,
                     );
                     return Ok(stream);
-                }
-                // Accounting gave up on a redirected request before anything
-                // was served: resend it unrecorded on the ordinary client.
-                Err(err) if crate::accounting::transport::is_unrecorded_redirect(&err) => {
-                    continue;
                 }
                 Err(ApiError::Transport(
                     unauthorized_transport @ TransportError::Http { status, .. },
@@ -3664,6 +3714,17 @@ impl ModelClientSession {
                 None => None,
             };
             let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
+            let follow = if evidence.is_some() {
+                Some(
+                    self.client.redirect_fallback(
+                        &client_setup
+                            .api_provider
+                            .url_for_path(CHAT_COMPLETIONS_ENDPOINT),
+                    )?,
+                )
+            } else {
+                None
+            };
             let transport = if evidence.is_some() {
                 let client = self.client.api_client_without_redirects(
                     &client_setup
@@ -3684,6 +3745,7 @@ impl ModelClientSession {
                     evidence.clone(),
                     accounting_model_identity(&model_info.slug),
                 )
+                .with_redirect_fallback(follow)
                 .with_configured_routing(
                     self.client
                         .state
@@ -3747,11 +3809,6 @@ impl ModelClientSession {
                         /*server_conversation_update*/ None,
                     );
                     return Ok(stream);
-                }
-                // Accounting gave up on a redirected request before anything
-                // was served: resend it unrecorded on the ordinary client.
-                Err(err) if crate::accounting::transport::is_unrecorded_redirect(&err) => {
-                    continue;
                 }
                 Err(ApiError::Transport(
                     unauthorized_transport @ TransportError::Http { status, .. },
@@ -3879,6 +3936,13 @@ impl ModelClientSession {
                 None => None,
             };
             let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
+            let follow = if evidence.is_some() {
+                Some(self.client.redirect_fallback(
+                    &client_setup.api_provider.url_for_path(RESPONSES_ENDPOINT),
+                )?)
+            } else {
+                None
+            };
             let transport = if evidence.is_some() {
                 let client = self.client.api_client_without_redirects(
                     &client_setup.api_provider.url_for_path(RESPONSES_ENDPOINT),
@@ -3959,6 +4023,7 @@ impl ModelClientSession {
                     evidence.clone(),
                     accounting_model_identity(&model_info.slug),
                 )
+                .with_redirect_fallback(follow)
                 .with_configured_routing(
                     self.client
                         .state
@@ -4017,11 +4082,6 @@ impl ModelClientSession {
                         server_conversation_update,
                     );
                     return Ok(stream);
-                }
-                // Accounting gave up on a redirected request before anything
-                // was served: resend it unrecorded on the ordinary client.
-                Err(err) if crate::accounting::transport::is_unrecorded_redirect(&err) => {
-                    continue;
                 }
                 Err(ApiError::Transport(
                     unauthorized_transport @ TransportError::Http { status, .. },

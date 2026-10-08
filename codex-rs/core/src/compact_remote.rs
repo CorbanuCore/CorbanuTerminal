@@ -214,7 +214,7 @@ async fn run_remote_compact_task_inner_impl(
     // and under the same `compact:` identity. Best effort: a compaction that
     // cannot be recorded still runs.
     let client_session = sess.services.new_model_client_session();
-    let _accounting = match crate::accounting::attach_turn(
+    let accounting = match crate::accounting::attach_turn(
         sess,
         turn_context.as_ref(),
         &client_session,
@@ -238,6 +238,7 @@ async fn run_remote_compact_task_inner_impl(
         analytics_details,
     )
     .await;
+    crate::accounting::warn_if_unrecorded(sess, turn_context, accounting.as_ref()).await;
     let (attempt, compaction_turn_context) = match attempt {
         Ok(attempt) => (attempt, turn_context),
         Err(error) => {

@@ -700,11 +700,12 @@ async fn accounting_records_legacy_compaction() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// A collected request must not follow a redirect: a response from somewhere
-/// else would be attributed to the approved endpoint. The streaming paths have
-/// pinned that for a while; the compaction endpoint takes the same branch now.
+/// A collected request never follows a redirect on its recording client: a
+/// response from somewhere else would be attributed to the approved endpoint.
+/// Accounting never blocks the request either, so a redirected compaction is
+/// resent once, unrecorded, on the ordinary client, and the turn says so.
 #[tokio::test]
-async fn accounting_legacy_compaction_never_follows_a_redirect() -> anyhow::Result<()> {
+async fn accounting_legacy_compaction_redirect_is_resent_unrecorded() -> anyhow::Result<()> {
     for status in [301, 302, 303, 307, 308] {
         let origin = MockServer::start().await;
         let target = MockServer::start().await;
@@ -744,13 +745,22 @@ async fn accounting_legacy_compaction_never_follows_a_redirect() -> anyhow::Resu
         test.codex
             .submit(codex_protocol::protocol::Op::Compact)
             .await?;
-        terminal(&test).await?;
+        let events = terminal(&test).await?;
+        assert!(
+            events
+                .iter()
+                .any(|event| matches!(event, EventMsg::Warning(warning)
+                if warning.message.starts_with("Developer accounting could not record"))),
+            "{status}: {events:?}"
+        );
         assert_eq!(
             target.received_requests().await.unwrap().len(),
-            0,
-            "{status} redirect was followed"
+            1,
+            "{status}: the unrecorded resend follows the redirect once"
         );
         assert_eq!(turn.requests().len(), 1);
+        // Only the turn's request and the refused compaction send were admitted.
+        assert_eq!(attempts(&db).await?.len(), 2);
         stop(&test).await;
     }
     Ok(())

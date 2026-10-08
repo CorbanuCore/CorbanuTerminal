@@ -102,7 +102,7 @@ pub(super) async fn run_remote_compact_v2_attempt(
     // Skipping the borrowed case - the first version of this - left every
     // auto-compaction unrecorded. Best effort: a compaction that cannot be
     // recorded must still run.
-    let _accounting = match crate::accounting::attach_turn(
+    let accounting = match crate::accounting::attach_turn(
         sess,
         turn_context.as_ref(),
         client_session,
@@ -124,6 +124,7 @@ pub(super) async fn run_remote_compact_v2_attempt(
         &responses_metadata,
     )
     .await;
+    crate::accounting::warn_if_unrecorded(sess, turn_context, accounting.as_ref()).await;
     trace_attempt.record_result(
         compaction_output_result
             .as_ref()

@@ -379,21 +379,7 @@ async fn run_compact_task_inner_impl(
     }
 
     // `/compact` is a request the user asked for: say so when it went unrecorded.
-    if accounting
-        .as_ref()
-        .is_none_or(crate::accounting::TurnScopes::stopped)
-        && !turn_context
-            .accounting_gap_warning_emitted
-            .swap(true, std::sync::atomic::Ordering::Relaxed)
-    {
-        sess.send_event(
-            &turn_context,
-            EventMsg::Warning(WarningEvent {
-                message: crate::accounting::GAP_WARNING.to_string(),
-            }),
-        )
-        .await;
-    }
+    crate::accounting::warn_if_unrecorded(&sess, &turn_context, accounting.as_ref()).await;
     let history_snapshot = sess.clone_history().await;
     let history_items = history_snapshot.raw_items();
     let summary_suffix = get_last_assistant_message_from_turn(history_items).unwrap_or_default();

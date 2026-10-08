@@ -1677,11 +1677,6 @@ async fn run_sampling_request(
             None
         }
     };
-    let collection_stopped = || {
-        scopes
-            .as_ref()
-            .is_none_or(crate::accounting::TurnScopes::stopped)
-    };
 
     let base_instructions = sess.get_base_instructions().await;
     trace_turn_timing("after_get_base_instructions", sampling_started_at);
@@ -1749,19 +1744,7 @@ async fn run_sampling_request(
         {
             return Err(CodexErr::Fatal(crate::accounting::MEMORY_DENIAL.into()));
         }
-        if collection_stopped()
-            && !turn_context
-                .accounting_gap_warning_emitted
-                .swap(true, std::sync::atomic::Ordering::Relaxed)
-        {
-            sess.send_event(
-                &turn_context,
-                EventMsg::Warning(WarningEvent {
-                    message: crate::accounting::GAP_WARNING.to_string(),
-                }),
-            )
-            .await;
-        }
+        crate::accounting::warn_if_unrecorded(&sess, &turn_context, scopes.as_ref()).await;
         let err = match attempt_result {
             Ok(output) => {
                 return Ok((output, original_input.unwrap_or(prompt.input)));
