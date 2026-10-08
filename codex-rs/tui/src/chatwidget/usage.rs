@@ -45,7 +45,7 @@ impl ChatWidget {
                     (false, "No usage limit resets available.".to_string())
                 }
             };
-        SelectionViewParams {
+        let mut params = SelectionViewParams {
             view_id: Some(USAGE_MENU_VIEW_ID),
             title: Some("Usage".to_string()),
             subtitle: Some("View account usage or redeem an earned reset.".to_string()),
@@ -70,22 +70,27 @@ impl ChatWidget {
                     dismiss_on_select: true,
                     ..Default::default()
                 },
-                SelectionItem {
-                    name: "Recorded requests".into(),
-                    description: Some(
-                        "Explain this thread's recorded requests for today (UTC).".into(),
-                    ),
-                    actions: vec![Box::new(|tx| {
-                        tx.send(AppEvent::OpenAccountingInspector {
-                            day: chrono::Utc::now().timestamp_millis() / 86_400_000,
-                        })
-                    })],
-                    dismiss_on_select: true,
-                    ..Default::default()
-                },
             ],
             ..Default::default()
+        };
+        // The recorded-request view is developer-only (PF-60-S03); a build
+        // that records no costs does not offer it.
+        if cfg!(feature = "developer-accounting") {
+            params.items.push(SelectionItem {
+                name: "Recorded requests".into(),
+                description: Some(
+                    "Explain this thread's recorded requests for today (UTC).".into(),
+                ),
+                actions: vec![Box::new(|tx| {
+                    tx.send(AppEvent::OpenAccountingInspector {
+                        day: chrono::Utc::now().timestamp_millis() / 86_400_000,
+                    })
+                })],
+                dismiss_on_select: true,
+                ..Default::default()
+            });
         }
+        params
     }
 
     pub(crate) fn finish_usage_menu_rate_limit_refresh(

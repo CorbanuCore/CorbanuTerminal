@@ -133,6 +133,7 @@ async fn accounting_inspect_range_app_dispatch_preserves_query() -> anyhow::Resu
     use codex_state::accounting::InspectionRange;
     let path = tempdir()?;
     let (mut app, mut rx, _ops) = make_test_app_with_channels().await;
+    let started = chrono::Utc::now().timestamp_millis();
     let (_, day) = accounting_fixture(&mut app, path.path()).await?;
     while rx.try_recv().is_ok() {}
     app.handle_accounting_inspector_event(AppEvent::OpenAccountingInspector { day });
@@ -156,7 +157,14 @@ async fn accounting_inspect_range_app_dispatch_preserves_query() -> anyhow::Resu
     app.handle_accounting_inspector_event(event);
     let text = accounting_scroll(&mut app);
     assert!(text.contains("timezone: UTC"));
-    assert!(text.contains("Range total unavailable"));
+    // Today's hours: the current one is in progress and later ones have not
+    // started, so the total so far is shown (#289 R2). Unless the hour turned
+    // while the test ran, which leaves the request's hour partial.
+    let hour = |ms: i64| ms / 3_600_000;
+    if hour(started) == hour(chrono::Utc::now().timestamp_millis()) {
+        assert!(text.contains("In progress — totals so far"), "{text}");
+        assert!(!text.contains("Range total unavailable"), "{text}");
+    }
     app.state_db.as_ref().unwrap().close().await;
     Ok(())
 }
