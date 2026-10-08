@@ -557,11 +557,27 @@ impl<'a> SandboxAttempt<'a> {
             .iter()
             .map(PathUri::to_abs_path)
             .collect::<std::io::Result<Vec<_>>>()?;
-        Ok(crate::sandboxing::ExecRequest::from_sandbox_exec_request(
+        let mut exec_request = crate::sandboxing::ExecRequest::from_sandbox_exec_request(
             request,
             options,
             workspace_roots,
-        ))
+        );
+        // #294: without this the elevated Windows sandbox applies none of the
+        // profile's deny entries, including the launch contract's. The
+        // unelevated backend keeps its earlier behaviour here (#300).
+        if exec_request.sandbox == SandboxType::WindowsRestrictedToken
+            && codex_sandboxing::windows_sandbox_uses_elevated_backend(
+                exec_request.windows_sandbox_level,
+                exec_request.network.is_some(),
+            )
+        {
+            crate::exec::attach_windows_sandbox_filesystem_overrides(
+                &mut exec_request,
+                &self.sandbox_cwd.to_abs_path()?,
+                contract,
+            )?;
+        }
+        Ok(exec_request)
     }
 
     pub fn env_for_exec_server(

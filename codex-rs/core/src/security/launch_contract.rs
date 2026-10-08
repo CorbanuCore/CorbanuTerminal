@@ -59,6 +59,19 @@ const PROTECTED_CODEX_HOME_ENTRIES: &[&str] = &[
     "history.jsonl",
 ];
 
+/// The entries of [`PROTECTED_CODEX_HOME_ENTRIES`] that are directories. On
+/// Windows they are denied even before they exist (#294); files created
+/// directly in `CODEX_HOME` are covered by its new-files deny instead.
+const PROTECTED_CODEX_HOME_DIRS: &[&str] = &[
+    "secrets",
+    "wallet",
+    "run",
+    "shell_snapshots",
+    "log",
+    "sessions",
+    "archived_sessions",
+];
+
 /// Credential files under `$HOME` that tools read for the user: CLI tokens
 /// for GitHub, AWS, Docker, npm and git, `.netrc`, and Claude's sign-in.
 const PROTECTED_HOME_ENTRIES: &[&str] = &[
@@ -507,6 +520,19 @@ impl LaunchContract {
                 FileSystemAccessMode::Read,
             ));
         }
+        for entry in self.protected_entries() {
+            if !file_system.entries.contains(&entry) {
+                file_system.entries.push(entry);
+            }
+        }
+        let protected = PermissionProfile::from_runtime_permissions(&file_system, network);
+        self.verify_permissions(&protected, cwd)?;
+        Ok(protected)
+    }
+
+    /// The deny entries [`Self::protect_permissions`] adds: every protected
+    /// path and Core's databases.
+    fn protected_entries(&self) -> Vec<FileSystemSandboxEntry> {
         let glob = FileSystemSandboxEntry::new(
             FileSystemPath::GlobPattern {
                 pattern: self
@@ -517,14 +543,18 @@ impl LaunchContract {
             },
             FileSystemAccessMode::Deny,
         );
-        for entry in self
-            .protected_read_paths
+        self.protected_read_paths
             .iter()
             .map(|path| {
                 let path_entry = FileSystemPath::Path { path: path.clone() };
                 // PF-27-S06: the Windows sandbox drops every skip-if-missing
-                // entry, so a path that exists is denied outright there.
-                if cfg!(windows) && path.as_path().exists() {
+                // entry, so a path that exists is denied outright there. So
+                // is a protected CODEX_HOME directory that does not exist yet
+                // (#294): the sandbox's ACL setup creates it before applying
+                // the deny, so a vault created later is covered too.
+                if cfg!(windows)
+                    && (path.as_path().exists() || self.is_protected_codex_home_dir(path))
+                {
                     FileSystemSandboxEntry::new(path_entry, FileSystemAccessMode::Deny)
                 } else {
                     FileSystemSandboxEntry::skip_missing_path(
@@ -534,14 +564,22 @@ impl LaunchContract {
                 }
             })
             .chain(std::iter::once(glob))
-        {
-            if !file_system.entries.contains(&entry) {
-                file_system.entries.push(entry);
-            }
-        }
-        let protected = PermissionProfile::from_runtime_permissions(&file_system, network);
-        self.verify_permissions(&protected, cwd)?;
-        Ok(protected)
+            .collect()
+    }
+
+    /// #294: the Windows deny-read ACL targets for the protected paths. Every
+    /// elevated sandbox launch in an armed process carries them, protected or
+    /// not: each launch's ACL sync revokes the sandbox-group denies it does
+    /// not list, so an unprotected launch (a TUI workspace probe) would
+    /// otherwise reopen the vault to commands that are already running.
+    #[cfg(windows)]
+    pub(crate) fn windows_deny_read_paths(
+        &self,
+        cwd: &AbsolutePathBuf,
+    ) -> Result<Vec<AbsolutePathBuf>, String> {
+        let mut policy = FileSystemSandboxPolicy::restricted(self.protected_entries());
+        policy.remove_skip_missing_path_entries();
+        codex_windows_sandbox::resolve_windows_deny_read_paths(&policy, cwd)
     }
 
     /// Verifies that `profile` denies reading every protected path and writing
@@ -643,6 +681,12 @@ impl LaunchContract {
             return Err(LaunchDenied::RawSecretInStdin);
         }
         Ok(())
+    }
+
+    fn is_protected_codex_home_dir(&self, path: &AbsolutePathBuf) -> bool {
+        PROTECTED_CODEX_HOME_DIRS
+            .iter()
+            .any(|dir| self.codex_home.join(dir) == *path)
     }
 
     fn contains_managed_value(&self, text: &str) -> bool {
@@ -889,3 +933,8 @@ mod tests;
 #[cfg(windows)]
 #[path = "launch_contract_windows_tests.rs"]
 mod windows_tests;
+
+#[cfg(test)]
+#[cfg(windows)]
+#[path = "launch_contract_windows_workspace_write_tests.rs"]
+mod windows_workspace_write_tests;

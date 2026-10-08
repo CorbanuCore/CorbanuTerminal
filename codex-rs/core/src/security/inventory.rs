@@ -742,12 +742,19 @@ impl<'a> Collector<'a> {
         ];
         // Config files are reported per secret key by `config_layer`.
         for (name, kind, class, disposition, unsupported) in entries {
+            let path = home.join(name);
+            // An empty directory holds nothing. On Windows the secretless
+            // launch contract creates its protected directories to deny them
+            // before they are used (#294).
+            if std::fs::read_dir(&path).is_ok_and(|mut entries| entries.next().is_none()) {
+                continue;
+            }
             self.path_finding(PathFinding {
                 kind,
                 class,
                 disposition,
                 scope: Scope::CorbanuHome,
-                path: &home.join(name),
+                path: &path,
                 detail: None,
                 unsupported,
             });
