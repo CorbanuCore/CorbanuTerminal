@@ -163,6 +163,7 @@ fn current_process_dacl_is_protected() -> bool {
     let mut protected = !dacl.is_null();
     // SAFETY: zeroed out-structure; `dacl` points into `descriptor`.
     let mut info: ACL_SIZE_INFORMATION = unsafe { std::mem::zeroed() };
+    // SAFETY: `info` is valid for the size passed; `dacl` is non-null here.
     protected = protected
         && unsafe {
             GetAclInformation(

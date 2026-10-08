@@ -235,9 +235,19 @@ fn pf_27_s07_protected_spawn_then_broker_hardening_succeeds() {
         new_threads: true,
         protected_spawn: true,
     });
-    let report = probe_as_same_user(&target);
-    assert_new_threads(&report, "imported", "denied");
-    assert_new_threads(&report, "direct", "denied");
+    for report in [
+        probe_as_same_user(&target),
+        probe_with_restricted_token(&target),
+    ] {
+        assert_new_threads(&report, "imported", "denied");
+        assert_new_threads(&report, "direct", "denied");
+        let original: Report = report
+            .iter()
+            .filter(|(key, _)| !key.starts_with("new_"))
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect();
+        assert_all_denied(&original);
+    }
 }
 
 /// What `spawn_protected` needs to start `command`: exactly the
@@ -290,6 +300,8 @@ fn pf_27_s07_protected_spawn_is_unopenable_while_suspended() {
         child: TargetChild::Std(command.spawn().expect("std spawn")),
         new_threads: None,
     };
+    // The restricted token's own positive control is
+    // `pf_27_s06_restricted_token_probe_reads_an_unhardened_process`.
     let report = probe_as_same_user(&control);
     assert_eq!(report["vm_read"], "granted", "{report:?}");
     assert_eq!(
