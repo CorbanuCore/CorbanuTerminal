@@ -24,9 +24,8 @@ updated: 2026-10-08
 Travis approved fixing the four limits PF-27-S06 documented (2026-10-08). This sprint fixes the two that need no
 real Windows machine; the other two are [PF-27-S08](pf-27-s08-windows-broker-restricted-token.md) (the broker's
 own token) and [PF-27-S09](pf-27-s09-windows-model-client-auth.md) (Windows model auth). All slices merged (the
-one-line `config/mod.rs` hook merged with slice 1, PF-60-S03 holds that file). The real-Windows gate run
-(2026-10-08, `265172beed3d`, normal session) passed. The record is ready for the P1 integration owner to receive and
-archive. One PR per slice, from branches named after this one.
+one-line `config/mod.rs` hook merged with slice 1, PF-60-S03 holds that file). The real-Windows gate run passed
+(2026-10-08), so the record is ready for the P1 integration owner to receive and archive.
 
 ## Execution mandate
 
@@ -80,23 +79,19 @@ archive. One PR per slice, from branches named after this one.
   creation, suspended until its token's default DACL is set): never openable, measured while suspended too.
 - [x] Acceptance criteria 1–4 measured on `windows-2022`, each with a positive control
   ([evidence](../../../../qa/security-levels/sprints/PF-27-S07/README.md)).
-- [x] Real-Windows gate (2026-10-08, `265172beed3d`, normal session): Core, its new threads and the broker can't be
-  opened by a same-user process or the sandbox. The `CODEX_HOME` deny is removed on flag-off (SDDL identical to
-  before) and kept while a protected session runs. #294 and #295 haven't regressed.
 
 ## Remaining
 
-- [ ] Travis's acceptance of the remaining limits (evidence README): threads other modules start in Core still
-  rely on the TLS callback and loader workers keep the default DACL (Core cannot use the default DACL: its child
-  pipes and processes inherit it); restart protected sessions before turning the flag off after upgrading.
+- [ ] Travis's acceptance of the known limits in the evidence README: Core threads that other modules start rely on
+  the TLS callback and loader workers keep the default DACL; after upgrading, restart protected sessions before flag-off.
 
 ## Verification
 
 - [x] `pf_27_s07` on `windows-2022` (jobs 113293258039, 113280283309, 113292935422); PF-27-S06 suites still pass;
   Linux clippy `-D warnings` clean on the RTX box; macOS suites pass.
 - [x] Opus 5.5 High review per slice: approve (slice 1 after 3 rounds, 2a and 2b after 2).
-- [x] GLM 5.2 tmux run and SOP videos on real Windows: [gate run](../../../../qa/security-levels/sprints/PF-27-S07/README.md#real-windows-gate-run-2026-10-08-pass)
-  **passed** in a normal session; probe suites pass on the host ([videos](../../../../qa/demos/index/PF-27-S07.md)).
+- [x] GLM 5.2 tmux run and SOP videos on real Windows at `265172beed3d`, normal session: **passed** (Core, new
+  threads and broker unopenable; deny removed on flag-off, kept while armed; #294/#295 hold) ([gate run](../../../../qa/security-levels/sprints/PF-27-S07/README.md#real-windows-gate-run-2026-10-08-pass), [videos](../../../../qa/demos/index/PF-27-S07.md)).
 - [ ] Gate evidence received by the P1 integration owner.
 
 ## Exit evidence
