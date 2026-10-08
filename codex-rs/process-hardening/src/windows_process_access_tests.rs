@@ -170,7 +170,14 @@ fn pf_27_s07_imported_thread_creation_is_protected_from_the_start() {
         same_user["new_direct_thread_set_context"], "granted",
         "{same_user:?}"
     );
-    assert_new_threads(&probe_with_restricted_token(&target), "imported", "denied");
+    // The restricted token restricts writes only: reading the unprotected
+    // thread's context is its positive control.
+    let restricted = probe_with_restricted_token(&target);
+    assert_new_threads(&restricted, "imported", "denied");
+    assert_eq!(
+        restricted["new_direct_thread_get_context"], "granted",
+        "{restricted:?}"
+    );
 }
 
 /// PF-27-S07: with the protected default DACL (the broker), every new
@@ -380,29 +387,48 @@ fn hold_new_threads() -> String {
     format!("imported={imported};direct={direct}")
 }
 
-/// A thread created with the protected DACL keeps the rights it needs on
-/// itself (through its pseudo-handle).
+/// A thread created with the protected DACL keeps the rights Rust and its
+/// runtimes use on themselves (priority, thread names), and its TLS
+/// callback does not count it as a failure.
 fn assert_threads_keep_rights_to_themselves() {
-    use windows_sys::Win32::Security::ImpersonateSelf;
-    use windows_sys::Win32::Security::RevertToSelf;
-    use windows_sys::Win32::Security::SecurityImpersonation;
+    use windows_sys::Win32::Foundation::LocalFree;
     use windows_sys::Win32::System::Threading::GetCurrentThread;
+    use windows_sys::Win32::System::Threading::GetThreadDescription;
+    use windows_sys::Win32::System::Threading::SetThreadDescription;
     use windows_sys::Win32::System::Threading::SetThreadPriority;
     use windows_sys::Win32::System::Threading::THREAD_PRIORITY_NORMAL;
     std::thread::spawn(|| {
-        // SAFETY: plain calls on this thread's own pseudo-handle.
+        let name: Vec<u16> = "pf27s07-named".encode_utf16().chain([0]).collect();
+        // SAFETY: plain calls on this thread's own pseudo-handle; the
+        // description is freed below.
         unsafe {
             assert_ne!(
                 SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL),
                 0,
                 "SetThreadPriority on itself"
             );
-            assert_ne!(ImpersonateSelf(SecurityImpersonation), 0, "ImpersonateSelf");
-            assert_ne!(RevertToSelf(), 0, "RevertToSelf");
+            assert!(
+                SetThreadDescription(GetCurrentThread(), name.as_ptr()) >= 0,
+                "SetThreadDescription on itself"
+            );
+            let mut read: *mut u16 = std::ptr::null_mut();
+            assert!(
+                GetThreadDescription(GetCurrentThread(), &mut read) >= 0,
+                "GetThreadDescription on itself"
+            );
+            let len = (0..).take_while(|&i| *read.add(i) != 0).count();
+            let read_name = String::from_utf16_lossy(std::slice::from_raw_parts(read, len));
+            LocalFree(read as _);
+            assert_eq!(read_name, "pf27s07-named");
         }
     })
     .join()
     .expect("a new thread lost rights to itself");
+    assert_eq!(
+        super::thread_protection_failures(),
+        0,
+        "the TLS callback failed on a thread created protected"
+    );
 }
 
 fn probe_as_same_user(target: &Target) -> Report {

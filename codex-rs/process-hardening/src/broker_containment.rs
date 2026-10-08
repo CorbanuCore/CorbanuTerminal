@@ -318,10 +318,11 @@ mod windows {
     pub(super) fn contain() -> BrokerContainment {
         let mut mechanisms = Vec::new();
         // PF-27-S07: every object the broker creates from now on, threads
-        // included, is protected at creation.
-        if crate::protect_new_objects_by_default().is_ok()
-            && crate::restrict_current_process_access().is_ok()
-        {
+        // included, is protected at creation. Both always run; `dacl` needs
+        // both (Core refuses a broker without it).
+        let default_dacl = crate::protect_new_objects_by_default();
+        let process_dacl = crate::restrict_current_process_access();
+        if default_dacl.is_ok() && process_dacl.is_ok() {
             mechanisms.push("dacl");
         }
         if forbid_child_processes().is_ok() {

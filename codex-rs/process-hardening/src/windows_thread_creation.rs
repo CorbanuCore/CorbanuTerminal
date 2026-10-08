@@ -6,10 +6,12 @@
 //! protects it, and keep that handle. Two mechanisms close that window:
 //!
 //! - In every hardened process, this image's `CreateThread` imports (every
-//!   Rust thread: std, tokio) are redirected to a wrapper that passes the
+//!   Rust thread: std, tokio; the C runtime is linked statically, so its
+//!   `_beginthreadex` too) are redirected to a wrapper that passes the
 //!   protected thread descriptor, so the thread object never exists with
-//!   another DACL. Threads Windows starts itself (thread-pool workers) still
-//!   rely on the TLS callback.
+//!   another DACL. Threads any other module starts (Windows thread pools,
+//!   RPC, injected DLLs) still rely on the TLS callback, and the loader's own
+//!   workers skip it.
 //! - In a process that starts no children and creates no unnamed objects it
 //!   reopens (the credential broker), the token's default DACL becomes the
 //!   protected one, which covers every thread whoever starts it. It would
@@ -63,9 +65,19 @@ unsafe extern "system" fn create_protected_thread(
     flags: u32,
     thread_id: *mut u32,
 ) -> HANDLE {
-    // SAFETY: set to the real `CreateThread` before any import points here.
-    let original: CreateThreadFn =
-        unsafe { std::mem::transmute(ORIGINAL_CREATE_THREAD.load(Ordering::Acquire)) };
+    let mut original = ORIGINAL_CREATE_THREAD.load(Ordering::Acquire);
+    if original == 0 {
+        // Stored before any import points here; a weakly ordered CPU could
+        // still show the import first. Never call back through the import.
+        original = resolve_create_thread();
+        if original == 0 {
+            // SAFETY: plain thread-local error state.
+            unsafe { windows_sys::Win32::Foundation::SetLastError(ERROR_NOT_READY) };
+            return 0;
+        }
+    }
+    // SAFETY: `original` is `CreateThread` from kernel32.
+    let original: CreateThreadFn = unsafe { std::mem::transmute(original) };
     let descriptor = thread_descriptor();
     // SAFETY: a non-null `attributes` points to a caller-owned structure.
     let explicit =
@@ -88,47 +100,80 @@ unsafe extern "system" fn create_protected_thread(
     unsafe { original(&protected, stack_size, start, parameter, flags, thread_id) }
 }
 
+/// `ERROR_NOT_READY`.
+const ERROR_NOT_READY: u32 = 21;
+
+/// `kernel32!CreateThread`, or 0.
+fn resolve_create_thread() -> usize {
+    use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
+    use windows_sys::Win32::System::LibraryLoader::GetProcAddress;
+    let name: Vec<u16> = "kernel32.dll".encode_utf16().chain([0]).collect();
+    // SAFETY: kernel32 is always loaded; both strings are NUL-terminated.
+    unsafe {
+        let module = GetModuleHandleW(name.as_ptr());
+        if module == 0 {
+            return 0;
+        }
+        GetProcAddress(module, c"CreateThread".as_ptr().cast()).map_or(0, |f| f as usize)
+    }
+}
+
 /// Points every `CreateThread` import of this image at
-/// [`create_protected_thread`]. Fails if there is none (the linker would
-/// have bound thread creation some other way). Idempotent.
+/// [`create_protected_thread`]. Fails, changing nothing, if there is none
+/// (the linker would have bound thread creation some other way) or any
+/// entry cannot be made writable. Idempotent.
 pub(crate) fn redirect_thread_creation() -> io::Result<()> {
     let _guard = REDIRECT_LOCK
         .lock()
         .map_err(|_| io::Error::other("thread-creation redirect lock poisoned"))?;
     let wrapper = create_protected_thread as CreateThreadFn as usize;
-    let slots = create_thread_import_slots();
+    let slots: Vec<*mut usize> = create_thread_import_slots()
+        .into_iter()
+        // SAFETY: pointer-sized, aligned import address table entries of
+        // this mapped image.
+        .filter(|slot| unsafe { slot.read_volatile() } != wrapper)
+        .collect();
     if slots.is_empty() {
-        return Err(io::Error::other(
-            "this image imports no CreateThread to protect new threads with",
-        ));
+        return if thread_creation_protected() {
+            Ok(())
+        } else {
+            Err(io::Error::other(
+                "this image imports no CreateThread to protect new threads with",
+            ))
+        };
     }
-    for slot in slots {
-        // SAFETY: `slot` is a pointer-sized, aligned import address table
-        // entry of this mapped image.
-        let current = unsafe { slot.read_volatile() };
-        if current == wrapper {
-            continue;
-        }
-        let _ = ORIGINAL_CREATE_THREAD.compare_exchange(
-            0,
-            current,
-            Ordering::AcqRel,
-            Ordering::Acquire,
-        );
-        let size = std::mem::size_of::<usize>();
+    // SAFETY: as above.
+    let original = unsafe { slots[0].read_volatile() };
+    let _ =
+        ORIGINAL_CREATE_THREAD.compare_exchange(0, original, Ordering::AcqRel, Ordering::Acquire);
+    let size = std::mem::size_of::<usize>();
+    // Make every entry writable first, so a failure changes nothing.
+    let mut writable = Vec::with_capacity(slots.len());
+    for slot in &slots {
         let mut previous = 0_u32;
         // SAFETY: changes the protection of one table entry of this image.
         if unsafe { VirtualProtect(slot.cast(), size, PAGE_READWRITE, &mut previous) } == 0 {
-            return Err(io::Error::last_os_error());
+            let error = io::Error::last_os_error();
+            restore_protection(&writable, size);
+            return Err(error);
         }
+        writable.push((*slot, previous));
+    }
+    for slot in &slots {
         // SAFETY: the entry is writable now; an aligned pointer-sized store
         // is atomic, so a concurrent caller sees the old or new function.
         unsafe { slot.write_volatile(wrapper) };
-        let mut ignored = 0_u32;
-        // SAFETY: restores the protection read above.
-        unsafe { VirtualProtect(slot.cast(), size, previous, &mut ignored) };
     }
+    restore_protection(&writable, size);
     Ok(())
+}
+
+fn restore_protection(entries: &[(*mut usize, u32)], size: usize) {
+    for (slot, previous) in entries {
+        let mut ignored = 0_u32;
+        // SAFETY: restores the protection this entry had.
+        unsafe { VirtualProtect(slot.cast(), size, *previous, &mut ignored) };
+    }
 }
 
 /// True when this image imports `CreateThread` and every import is
