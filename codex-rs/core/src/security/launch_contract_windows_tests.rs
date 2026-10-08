@@ -632,6 +632,32 @@ fn pf_27_s07_flag_off_removes_the_deny_unless_a_contract_is_armed() {
     assert!(!again);
 }
 
+/// PF-27-S07: the removal gives the lock file its own deny before the
+/// `CODEX_HOME` entry (and with it the lock file's inherited copy) goes.
+#[test]
+fn pf_27_s07_removal_leaves_the_lock_file_denied() {
+    let dir = tempfile::tempdir().expect("codex home");
+    let group = codex_windows_sandbox::LocalSid::from_string(
+        "S-1-5-21-2718281828-3141592653-1618033988-1001",
+    )
+    .expect("group SID");
+    // SAFETY: a valid SID and an existing directory.
+    let added = unsafe {
+        codex_windows_sandbox::add_deny_read_ace_for_new_files(dir.path(), group.as_ptr())
+    };
+    assert!(added.expect("add deny"));
+    drop(super::open_armed_lock(dir.path(), /*group*/ None).expect("lock file"));
+    assert!(super::release_new_file_deny(dir.path(), group.as_ptr()).expect("release"));
+    let lock_path = dir.path().join(super::ARMED_LOCK_FILE);
+    // SAFETY: as above.
+    let explicit =
+        unsafe { codex_windows_sandbox::has_explicit_deny_read_ace(&lock_path, group.as_ptr()) };
+    assert!(
+        explicit.expect("lock file DACL"),
+        "the lock file lost its deny"
+    );
+}
+
 /// PF-27-S07: a contract that cannot take the armed lock (a removal holds it
 /// in another process) refuses protected launches, and takes it once free.
 #[test]

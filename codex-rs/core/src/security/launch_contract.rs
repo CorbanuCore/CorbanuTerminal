@@ -656,10 +656,6 @@ impl LaunchContract {
 #[cfg(windows)]
 const ARMED_LOCK_FILE: &str = ".secretless-launch.lock";
 
-/// How long a protected launch waits for a removal in another process.
-#[cfg(windows)]
-const ARMED_LOCK_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
-
 /// PF-27-S07: a contract's hold on the armed lock file.
 #[cfg(windows)]
 #[derive(Default)]
@@ -691,23 +687,15 @@ impl ArmedLock {
         }
     }
 
-    /// Whether the lock is held, waiting a bounded time for a removal in
-    /// another process to finish.
+    /// Whether the lock is held, trying once more (without waiting: this
+    /// runs on the launch path) if it was not.
     fn ensure_locked(&mut self) -> bool {
-        let Some(file) = self.file.as_ref() else {
-            return false;
-        };
-        let deadline = std::time::Instant::now() + ARMED_LOCK_WAIT;
-        while !self.locked {
-            match file.try_lock_shared() {
-                Ok(()) => self.locked = true,
-                Err(std::fs::TryLockError::WouldBlock) if std::time::Instant::now() < deadline => {
-                    std::thread::sleep(std::time::Duration::from_millis(50));
-                }
-                Err(_) => return false,
-            }
+        if !self.locked
+            && let Some(file) = self.file.as_ref()
+        {
+            self.locked = file.try_lock_shared().is_ok();
         }
-        true
+        self.locked
     }
 }
 
@@ -734,13 +722,16 @@ pub(crate) fn open_armed_lock(
         .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
         .open(&path)?;
     let metadata = file.metadata()?;
-    // A hard link would lock (and deny) another file, such as `auth.json`.
-    if !metadata.is_file()
-        || metadata.file_type().is_symlink()
-        || codex_windows_sandbox::file_link_count(&file)? != 1
-    {
+    if !metadata.is_file() || metadata.file_type().is_symlink() {
         return Err(std::io::Error::other(format!(
             "{} is not a regular file",
+            path.display()
+        )));
+    }
+    // A hard link would lock (and deny) another file, such as `auth.json`.
+    if codex_windows_sandbox::file_link_count(&file)? != 1 {
+        return Err(std::io::Error::other(format!(
+            "{} has other hard links; delete it",
             path.display()
         )));
     }

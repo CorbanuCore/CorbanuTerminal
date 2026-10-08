@@ -396,6 +396,14 @@ unsafe fn dacl_has_explicit_read_deny_for_sid(p_dacl: *mut ACL, psid: *mut c_voi
 /// Caller must ensure `psid` points to a valid SID and `path` exists.
 pub unsafe fn ensure_explicit_deny_read_ace(path: &Path, psid: *mut c_void) -> Result<bool> {
     add_deny_ace(path, psid, DenyAceKind::ReadExplicit)?;
+    has_explicit_deny_read_ace(path, psid)
+}
+
+/// PF-27-S07: whether `path` has its own explicit read deny for `psid`.
+///
+/// # Safety
+/// Caller must ensure `psid` points to a valid SID and `path` exists.
+pub unsafe fn has_explicit_deny_read_ace(path: &Path, psid: *mut c_void) -> Result<bool> {
     let (p_dacl, p_sd) = fetch_dacl_handle(path)?;
     let present = dacl_has_explicit_read_deny_for_sid(p_dacl, psid);
     if !p_sd.is_null() {
