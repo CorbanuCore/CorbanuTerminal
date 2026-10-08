@@ -183,6 +183,8 @@ async fn build_gated_step_preparation_test(
                 serde_json::from_value(json!({
                     "command": command.clone(),
                     "environment_id": environment_id.clone(),
+                    // Remote stdio MCP servers must be given an explicit cwd.
+                    "cwd": config.cwd.clone(),
                     "env": {
                         "MCP_TEST_INITIALIZE_BARRIER_FILE": barrier_file,
                         "MCP_TEST_PID_FILE": pid_file,
