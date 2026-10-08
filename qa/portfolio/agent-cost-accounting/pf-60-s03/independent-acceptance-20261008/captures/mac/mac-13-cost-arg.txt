@@ -1,0 +1,19 @@
+$ /cost 2026-10-07
+  Cost — this conversation
+  Requested UTC day: 2026-10-07
+  This conversation on 2026-10-07 (UTC): no recorded requests.
+  No other conversation recorded requests on this day.
+  Costs are estimates from published prices; your provider's bill is the final amount.
+  —— Details ——
+  No recorded attempts in this conversation or its subagents; collection coverage unknown.
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  ↑↓ scroll · Enter open · Esc back/close
+--- last screen:
+› —— Details ——
+  No recorded attempts in this conversation or its subagents; collection coverage unknown.
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  ↑↓ scroll · Enter open · Esc back/close

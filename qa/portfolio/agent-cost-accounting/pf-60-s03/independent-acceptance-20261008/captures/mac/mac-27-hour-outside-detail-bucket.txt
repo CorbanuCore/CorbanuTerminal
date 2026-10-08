@@ -1,0 +1,23 @@
+  Bucket unavailable
+  Requested: [2026-06-01T00:00:00.000Z, 2026-06-01T02:00:00.000Z); timezone: UTC; grouping: Hour
+  Retention: request detail kept since 2026-07-10T11:31:43.447Z; oldest daily total kept none
+  Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost:
+  unavailable — no settlement evidence.
+  Snapshot is not current; newer activity is unverified
+  Range: Unknown parent population: 0 inspectable attempts, excluded from range total
+  Ancestry counts cover inspectable slices only; unavailable slices may contain additional unknown ancestry.
+  Bucket: [2026-06-01T00:00:00.000Z, 2026-06-01T01:00:00.000Z); effective coverage (requested ∩ aggregate retention ∩ snapshot): [2026-06-01T00:00:00.000Z,
+  ↑↓ scroll · Enter open · Esc back/close
+  2026-06-01T01:00:00.000Z)
+  Whole bucket within aggregate retention coverage; detail availability checked separately
+  Request detail unavailable for this whole UTC day — day touches expired detail or aggregate history. No total shown. Ledger current to: 2026-10-
+  08T11:28:21.218Z; request detail kept since 2026-07-10T11:31:43.447Z; daily totals kept since 2025-10-09; oldest recorded day in this conversation 2026-
+  10-08.
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts outside this bucket; this UTC hour is not their complete lifetime.
+  Precision unsupported outside retained raw detail; compacted days lost request/provider attribution. No bucket total. Whole UTC-day bounds offered: [2026-
+  06-01T00:00:00.000Z, 2026-06-02T00:00:00.000Z); this does not restore attribution.
+  Back
+  Refresh
+  Close

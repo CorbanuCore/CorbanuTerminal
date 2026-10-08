@@ -1,0 +1,17 @@
+$ /usage requests 2026-10-06
+  Cost — this conversation
+  Requested UTC day: 2026-10-06
+  Unavailable — native thread no longer exists.
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Refresh
+  Close
+  ↑↓ scroll · Enter open · Esc back/close
+--- last screen:
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+› Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Refresh
+  Close
+  ↑↓ scroll · Enter open · Esc back/close
