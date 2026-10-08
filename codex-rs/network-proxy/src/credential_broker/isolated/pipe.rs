@@ -255,6 +255,7 @@ pub(crate) fn connect_control(name: &str, broker_pid: u32) -> Option<ControlPipe
     };
     (server_pid(&file) == Some(broker_pid)).then(|| ControlPipe {
         handle: Arc::new(OwnedHandle::from(file)),
+        closed: Arc::new(std::sync::atomic::AtomicBool::new(false)),
     })
 }
 
@@ -265,6 +266,7 @@ pub(crate) fn connect_control(name: &str, broker_pid: u32) -> Option<ControlPipe
 #[derive(Clone)]
 pub(crate) struct ControlPipe {
     handle: Arc<OwnedHandle>,
+    closed: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl ControlPipe {
@@ -275,6 +277,8 @@ impl ControlPipe {
     /// Cancels pending I/O (the reader's read returns), so the handle closes
     /// once the last clone is dropped and the broker sees the pipe end.
     pub(crate) fn shutdown(&self) {
+        // Set first: an operation started after the cancel sees the flag.
+        self.closed.store(true, std::sync::atomic::Ordering::SeqCst);
         // SAFETY: a valid handle; null cancels every operation on it.
         unsafe { CancelIoEx(self.raw(), std::ptr::null()) };
     }
@@ -316,6 +320,11 @@ impl ControlPipe {
                 )
             };
             if started != 0 || GetLastError() == ERROR_IO_PENDING {
+                // A read that started after shutdown() cancelled is
+                // cancelled here instead of waiting forever.
+                if self.closed.load(std::sync::atomic::Ordering::SeqCst) {
+                    CancelIoEx(self.raw(), &overlapped);
+                }
                 if GetOverlappedResult(self.raw(), &overlapped, &mut transferred, 1) != 0 {
                     Ok(transferred as usize)
                 } else {

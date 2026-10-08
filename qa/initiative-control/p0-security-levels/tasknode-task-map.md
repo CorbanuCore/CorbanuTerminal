@@ -86,4 +86,6 @@ Request IDs:
 | 2026-10-07 | 01-08 | Requests created; tasks generated (Proposed) | request IDs above |
 | 2026-10-08 | 01-08 | Evidence records and this map merged (PR #262) | merge `319f7695f6` |
 | 2026-10-08 | 09 | PF-25-S02 request created; task generated (Proposed) | request ID above |
-| 2026-10-08 | 01-09 | Records list PR URLs as bare links (clean for Task Node's URL scan); PF-25-S02 added | this PR |
+| 2026-10-08 | 01-09 | Records list PR URLs as bare links (clean for Task Node's URL scan); PF-25-S02 added | merge `7e6ef740ef` (PR #264) |
+| 2026-10-08 | 01-09 | Travis accepted; initial evidence submitted for all nine (receipts ok) | Task Node receipts (local) |
+| 2026-10-08 | 08 | PF-13-S07 route count settled from the v5 result files: 11 BLOCKED of 13 rows per run (sprint record and #255 say 10) | this PR |
