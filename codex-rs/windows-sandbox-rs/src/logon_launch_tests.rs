@@ -33,8 +33,9 @@ const MAX_HANDLE_VALUE: usize = 0x1_0000;
 
 /// Starts launchers on one thread while another starts ordinary children
 /// (`std::process::Command`, which always inherits handles) and checks each
-/// child's handle table for pipes. This test's own process starts no other
-/// pipes, so any pipe a child holds came from a launcher start.
+/// child's handle table for pipes. This test's own process opens no other
+/// pipes, so any pipe a child holds beyond those it inherits before the
+/// race (this process's own inheritable stdio) came from a launcher start.
 #[test]
 fn sec_win_307_launcher_pipes_never_reach_other_children() {
     if std::env::var_os(ROLE_ENV).is_some() {
@@ -56,19 +57,28 @@ fn race() {
     // Any program does: the test only starts the launcher, never talks to it.
     let launcher = system32.join("whoami.exe");
     let child_program = system32.join("cmd.exe");
+    let start_child = || {
+        Command::new(&child_program)
+            .creation_flags(CREATE_SUSPENDED)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("start a child")
+    };
+    let mut first = start_child();
+    let baseline = pipe_handles(first.as_raw_handle() as HANDLE);
+    let _ = first.kill();
+    let _ = first.wait();
+    eprintln!("sec-win-307: pipes every child inherits: {baseline:x?}");
     let done = AtomicBool::new(false);
     let (children, leaks) = std::thread::scope(|scope| {
         let watcher = scope.spawn(|| {
             let (mut children, mut leaks) = (0_usize, 0_usize);
             while !done.load(Ordering::SeqCst) {
-                let mut child = Command::new(&child_program)
-                    .creation_flags(CREATE_SUSPENDED)
-                    .stdin(Stdio::null())
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn()
-                    .expect("start a child");
-                let pipes = pipe_handles(child.as_raw_handle() as HANDLE);
+                let mut child = start_child();
+                let mut pipes = pipe_handles(child.as_raw_handle() as HANDLE);
+                pipes.retain(|pipe| !baseline.contains(pipe));
                 if !pipes.is_empty() {
                     leaks += 1;
                     eprintln!("sec-win-307: child {} holds pipes {pipes:x?}", child.id());
