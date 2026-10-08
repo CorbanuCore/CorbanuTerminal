@@ -130,7 +130,9 @@ fn pf_27_s06_restricted_token_probe_cannot_read_a_hardened_process() {
 }
 
 /// The same holds for an unsandboxed process of the same user (for example
-/// an MCP server or hook, which run outside the sandbox).
+/// an MCP server or hook, which run outside the sandbox) that has no enabled
+/// privileges. (An administrator with `SeDebugPrivilege` enabled, as on the
+/// CI runner, bypasses any DACL by design; the probe disables it first.)
 #[test]
 fn pf_27_s06_same_user_probe_cannot_read_a_hardened_process() {
     let target = Target::spawn(/*harden*/ true);
@@ -350,6 +352,7 @@ fn run_probe() {
         .expect("target pid")
         .parse()
         .expect("numeric pid");
+    disable_all_privileges();
     let mut report = Report::new();
     match open_process(pid, PROCESS_VM_READ | PROCESS_QUERY_INFORMATION) {
         Ok(handle) => {
@@ -437,6 +440,35 @@ fn thread_ids(pid: u32) -> Vec<u32> {
     // SAFETY: opened above.
     unsafe { CloseHandle(snapshot) };
     ids
+}
+
+/// Disables every privilege in this process's token, as in an ordinary user
+/// process (CI runners run elevated with `SeDebugPrivilege` enabled, which
+/// opens any process regardless of its DACL).
+fn disable_all_privileges() {
+    use windows_sys::Win32::Security::AdjustTokenPrivileges;
+    use windows_sys::Win32::Security::TOKEN_ADJUST_PRIVILEGES;
+    use windows_sys::Win32::System::Threading::GetCurrentProcess;
+    use windows_sys::Win32::System::Threading::OpenProcessToken;
+    let mut token: HANDLE = 0;
+    // SAFETY: opens this process's token; closed below.
+    let opened =
+        unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, &mut token) };
+    assert_ne!(opened, 0, "OpenProcessToken failed");
+    // SAFETY: DisableAllPrivileges ignores the new-state arguments.
+    let adjusted = unsafe {
+        AdjustTokenPrivileges(
+            token,
+            /*DisableAllPrivileges*/ 1,
+            std::ptr::null(),
+            0,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+    // SAFETY: opened above.
+    unsafe { CloseHandle(token) };
+    assert_ne!(adjusted, 0, "AdjustTokenPrivileges failed");
 }
 
 fn access_from_error(code: u32) -> String {
