@@ -14,13 +14,17 @@
 //!
 //! Limits: `SYSTEM` and administrators with `SeDebugPrivilege` enabled are not
 //! stopped. Threads this image starts get the protected DACL at creation
-//! (PF-27-S07, `windows_thread_creation`); a thread Windows starts itself
-//! gets the token's default DACL (the user has full access) and the
-//! protected one in its TLS callback, so a same-user process outside the
-//! sandbox that opens it in that short window keeps its handle, and threads
-//! created without loader notifications (the loader's own workers) keep the
-//! default DACL. The credential broker closes that too by changing its
-//! token's default DACL, which Core cannot (`protect_new_objects_by_default`).
+//! (PF-27-S07, `windows_thread_creation`); a thread any other module starts
+//! (Windows thread pools, RPC, injected DLLs) gets the token's default DACL
+//! (the user has full access) and the protected one in its TLS callback, so
+//! a same-user process outside the sandbox that opens it in that short
+//! window keeps its handle, and threads created without loader notifications
+//! (the loader's own workers) keep the default DACL. The credential broker
+//! closes that too by changing its token's default DACL, which Core cannot
+//! (`protect_new_objects_by_default`). A thread created protected has, on its
+//! own pseudo-handle, only what Windows computes from that DACL plus its
+//! baseline (terminate, set and query information): it cannot change its own
+//! DACL or impersonate; Core and the broker do neither.
 //! Commands under the elevated sandbox run as another user and are not
 //! granted either way. Handles opened before the call keep their access, and the
 //! environment block exists from process start, so call this before any
@@ -93,7 +97,8 @@ pub fn restrict_current_process_access() -> io::Result<()> {
         ));
     }
     let user_sid = current_user_sid_string()?;
-    protect_threads(&user_sid)?;
+    // Even if thread protection fails, the process DACL still applies.
+    let threads = protect_threads(&user_sid);
     let sddl = process_dacl_sddl(&user_sid);
     let descriptor = SecurityDescriptor::from_sddl(&sddl)?;
     let dacl = descriptor.dacl()?;
@@ -110,11 +115,10 @@ pub fn restrict_current_process_access() -> io::Result<()> {
             ptr::null(),
         )
     };
-    if status == ERROR_SUCCESS {
-        Ok(())
-    } else {
-        Err(io::Error::from_raw_os_error(status as i32))
+    if status != ERROR_SUCCESS {
+        return Err(io::Error::from_raw_os_error(status as i32));
     }
+    threads
 }
 
 /// The protected DACL applied by [`restrict_current_process_access`].
@@ -155,7 +159,8 @@ fn protect_threads(user_sid: &str) -> io::Result<()> {
             unsafe { LocalFree(raw as HLOCAL) };
         }
     }
-    crate::windows_thread_creation::redirect_thread_creation()?;
+    // Existing threads are protected even if the redirect fails.
+    let redirected = crate::windows_thread_creation::redirect_thread_creation();
     let descriptor = thread_descriptor();
     // SAFETY: a snapshot of all threads; closed below.
     let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
@@ -193,8 +198,11 @@ fn protect_threads(user_sid: &str) -> io::Result<()> {
     }
     // SAFETY: opened above.
     unsafe { CloseHandle(snapshot) };
-    result
+    result.and(redirected)
 }
+
+/// `STATUS_ACCESS_DENIED`.
+const STATUS_ACCESS_DENIED: i32 = 0xC000_0022_u32 as i32;
 
 /// TLS callback: protects each thread as it starts, once hardened.
 unsafe extern "system" fn on_thread_event(
@@ -216,7 +224,10 @@ unsafe extern "system" fn on_thread_event(
                 descriptor as *mut c_void,
             )
         };
-        if status < 0 {
+        // Access denied: the thread was created with a restrictive DACL
+        // (ours, through the `CreateThread` redirect), which leaves it no
+        // `WRITE_DAC` on itself; there is nothing to do.
+        if status < 0 && status != STATUS_ACCESS_DENIED {
             THREAD_PROTECT_FAILURES.fetch_add(1, Ordering::Relaxed);
         }
     }
