@@ -53,13 +53,16 @@ use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT;
 use windows_sys::Win32::Storage::FileSystem::FILE_GENERIC_EXECUTE;
 use windows_sys::Win32::Storage::FileSystem::FILE_GENERIC_READ;
 use windows_sys::Win32::Storage::FileSystem::FILE_GENERIC_WRITE;
+use windows_sys::Win32::Storage::FileSystem::FILE_ID_INFO;
 use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_DELETE;
 use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_READ;
 use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_WRITE;
 use windows_sys::Win32::Storage::FileSystem::FILE_WRITE_ATTRIBUTES;
 use windows_sys::Win32::Storage::FileSystem::FILE_WRITE_DATA;
 use windows_sys::Win32::Storage::FileSystem::FILE_WRITE_EA;
+use windows_sys::Win32::Storage::FileSystem::FileIdInfo;
 use windows_sys::Win32::Storage::FileSystem::GetFileInformationByHandle;
+use windows_sys::Win32::Storage::FileSystem::GetFileInformationByHandleEx;
 use windows_sys::Win32::Storage::FileSystem::GetFinalPathNameByHandleW;
 use windows_sys::Win32::Storage::FileSystem::OPEN_EXISTING;
 use windows_sys::Win32::Storage::FileSystem::READ_CONTROL;
@@ -816,12 +819,19 @@ pub unsafe fn remove_deny_read_ace_for_new_files(path: &Path, psid: *mut c_void)
 
 /// #304: the file-system object a deny-read entry was added to: where it
 /// was (its resolved path) and which object it was (volume serial number and
-/// file index), so a removal can tell when another object has taken its place.
+/// 128-bit file ID, unique on NTFS and ReFS), so a removal can tell when
+/// another object has taken its place.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct DenyReadObject {
     pub path: PathBuf,
-    pub volume: u32,
-    pub index: u64,
+    pub volume: u64,
+    pub file_id: [u8; 16],
+}
+
+impl DenyReadObject {
+    pub fn identity(&self) -> (u64, [u8; 16]) {
+        (self.volume, self.file_id)
+    }
 }
 
 /// [`add_deny_read_ace`] on the object `path` resolves to (following links,
@@ -849,12 +859,14 @@ pub unsafe fn add_deny_read_ace_to_object(
     }
     let handle = OwnedFileHandle(raw);
     let info = file_info(raw).with_context(|| format!("inspect {}", path.display()))?;
+    let (volume, file_id) =
+        file_identity(raw).with_context(|| format!("identify {}", path.display()))?;
     let object = DenyReadObject {
         path: PathBuf::from(
             final_path(raw).with_context(|| format!("resolve {}", path.display()))?,
         ),
-        volume: info.dwVolumeSerialNumber,
-        index: (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow),
+        volume,
+        file_id,
     };
     let is_dir = info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY != 0;
     let (p_dacl, p_sd) = security_info(handle.0)?;
@@ -925,7 +937,7 @@ pub unsafe fn remove_deny_read_ace(
     psid: *mut c_void,
 ) -> Result<DenyReadRemoval> {
     let handle = open_exact(&object.path, READ_CONTROL | WRITE_DAC)?;
-    if (handle.volume, handle.index) != (object.volume, object.index) {
+    if (handle.volume, handle.file_id) != object.identity() {
         return Ok(DenyReadRemoval::OtherObject);
     }
     let is_dir = handle.is_dir;
@@ -971,8 +983,8 @@ impl Drop for OwnedFileHandle {
 struct ExactHandle {
     raw: HANDLE,
     is_dir: bool,
-    volume: u32,
-    index: u64,
+    volume: u64,
+    file_id: [u8; 16],
 }
 
 impl Drop for ExactHandle {
@@ -980,6 +992,22 @@ impl Drop for ExactHandle {
         // SAFETY: opened by `open_exact` and owned here.
         unsafe { CloseHandle(self.raw) };
     }
+}
+
+/// The volume serial number and 128-bit file ID of the file `handle` is open
+/// to (`FileIdInfo`; the 64-bit index is not unique on ReFS).
+unsafe fn file_identity(handle: HANDLE) -> std::io::Result<(u64, [u8; 16])> {
+    let mut info: FILE_ID_INFO = std::mem::zeroed();
+    if GetFileInformationByHandleEx(
+        handle,
+        FileIdInfo,
+        std::ptr::from_mut(&mut info).cast(),
+        std::mem::size_of::<FILE_ID_INFO>() as u32,
+    ) == 0
+    {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok((info.VolumeSerialNumber, info.FileId.Identifier))
 }
 
 unsafe fn file_info(handle: HANDLE) -> std::io::Result<BY_HANDLE_FILE_INFORMATION> {
@@ -1072,7 +1100,7 @@ unsafe fn open_exact(path: &Path, access: u32) -> Result<ExactHandle> {
         raw,
         is_dir: false,
         volume: 0,
-        index: 0,
+        file_id: [0; 16],
     };
     let info = file_info(handle.raw).with_context(|| format!("inspect {}", path.display()))?;
     if info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
@@ -1089,8 +1117,8 @@ unsafe fn open_exact(path: &Path, access: u32) -> Result<ExactHandle> {
         return Err(anyhow!("{} resolves to {resolved}", path.display()));
     }
     handle.is_dir = is_dir;
-    handle.volume = info.dwVolumeSerialNumber;
-    handle.index = (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow);
+    (handle.volume, handle.file_id) =
+        file_identity(handle.raw).with_context(|| format!("identify {}", path.display()))?;
     Ok(handle)
 }
 

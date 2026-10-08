@@ -70,8 +70,10 @@ pub unsafe fn sync_persistent_deny_read_acls(
         .cloned()
         .unwrap_or_default();
 
-    let applied = unsafe { apply_deny_read_acls_tracked(desired_paths, psid) }?;
-    let id = |object: &DenyReadObject| (object.volume, object.index);
+    // On a failure, what was added is still recorded (another session may
+    // already rely on it) and nothing is removed.
+    let (applied, applied_result) = unsafe { apply_deny_read_acls_tracked(desired_paths, psid) };
+    let id = |object: &DenyReadObject| object.identity();
     let previous_ids = previous_paths.iter().map(id).collect::<HashSet<_>>();
     let applied_ids = applied
         .objects
@@ -91,7 +93,7 @@ pub unsafe fn sync_persistent_deny_read_acls(
         .collect::<Vec<_>>();
 
     // Held until the state is stored: no process can arm meanwhile.
-    let lock = if stale_paths.is_empty() {
+    let lock = if stale_paths.is_empty() || applied_result.is_err() {
         None
     } else {
         lock_out_armed_contracts(codex_home, psid)
@@ -122,6 +124,7 @@ pub unsafe fn sync_persistent_deny_read_acls(
     store_state(&state_path, &state)?;
     drop(lock);
 
+    applied_result?;
     Ok(applied.paths)
 }
 

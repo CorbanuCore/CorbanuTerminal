@@ -44,13 +44,24 @@ pub(crate) fn lexical_path_key(path: &Path) -> String {
 /// Applies deny-read ACEs to explicit paths. Missing paths are materialized as
 /// directories before the ACE is applied so a sandboxed command cannot create a
 /// previously absent denied path and then read from it in the same run.
-/// If any path fails, deny ACEs added by this call are removed before the
-/// error is returned so a one-shot sandbox run does not leave partial state.
+/// If any path fails, deny ACEs this call added directly (not through a link)
+/// are removed before the error is returned so a one-shot sandbox run does
+/// not leave partial state. Persistent sessions use
+/// [`crate::sync_persistent_deny_read_acls`], which records them instead.
 ///
 /// # Safety
 /// Caller must pass a valid SID pointer for the sandbox principal being denied.
 pub unsafe fn apply_deny_read_acls(paths: &[PathBuf], psid: *mut c_void) -> Result<Vec<PathBuf>> {
-    unsafe { apply_deny_read_acls_tracked(paths, psid) }.map(|applied| applied.paths)
+    let (applied, result) = unsafe { apply_deny_read_acls_tracked(paths, psid) };
+    if let Err(err) = result {
+        for (object, added) in &applied.objects {
+            if *added {
+                let _ = unsafe { remove_deny_read_ace(object, psid) };
+            }
+        }
+        return Err(err);
+    }
+    Ok(applied.paths)
 }
 
 /// What [`apply_deny_read_acls_tracked`] did.
@@ -58,24 +69,34 @@ pub(crate) struct AppliedDenyReads {
     /// Every path that now has the deny (planned paths, deduplicated).
     pub(crate) paths: Vec<PathBuf>,
     /// The objects those paths resolve to, and whether this call added the
-    /// entry to each (the others already had it).
+    /// entry to each one through one of `paths` given as is (not through a
+    /// link or as the canonical form the planner adds). Only those are a
+    /// sync's to remove later: an entry that landed elsewhere through a link
+    /// stays (#304).
     pub(crate) objects: Vec<(DenyReadObject, bool)>,
 }
 
-/// [`apply_deny_read_acls`], also reporting the objects that have the entry
-/// and which of them got it from this call.
+/// [`apply_deny_read_acls`] without the rollback: the objects that have the
+/// entry are reported even when a later path fails (the error is returned
+/// alongside), so the caller can record what was added instead of removing
+/// it while another session may rely on it.
 ///
 /// # Safety
 /// As for [`apply_deny_read_acls`].
 pub(crate) unsafe fn apply_deny_read_acls_tracked(
     paths: &[PathBuf],
     psid: *mut c_void,
-) -> Result<AppliedDenyReads> {
-    let planned = plan_deny_read_acl_paths(paths);
-    let mut applied = Vec::new();
+) -> (AppliedDenyReads, Result<()>) {
+    let given = paths
+        .iter()
+        .map(|path| lexical_path_key(path))
+        .collect::<HashSet<_>>();
+    let mut applied = AppliedDenyReads {
+        paths: Vec::new(),
+        objects: Vec::new(),
+    };
     let mut seen = HashSet::new();
-    let mut objects: Vec<(DenyReadObject, bool)> = Vec::new();
-    for path in planned {
+    for path in plan_deny_read_acl_paths(paths) {
         let result = (|| -> Result<(bool, DenyReadObject)> {
             if !path.exists() {
                 std::fs::create_dir_all(&path)
@@ -86,28 +107,22 @@ pub(crate) unsafe fn apply_deny_read_acls_tracked(
         })();
         let (added, object) = match result {
             Ok(result) => result,
-            Err(err) => {
-                for (object, added) in &objects {
-                    if *added {
-                        let _ = remove_deny_read_ace(object, psid);
-                    }
-                }
-                return Err(err);
-            }
+            Err(err) => return (applied, Err(err)),
         };
-        match objects
+        let owned = added
+            && given.contains(&lexical_path_key(&path))
+            && lexical_path_key(&object.path) == lexical_path_key(&path);
+        match applied
+            .objects
             .iter_mut()
-            .find(|(known, _)| (known.volume, known.index) == (object.volume, object.index))
+            .find(|(known, _)| known.identity() == object.identity())
         {
-            Some((_, known_added)) => *known_added |= added,
-            None => objects.push((object, added)),
+            Some((_, known_owned)) => *known_owned |= owned,
+            None => applied.objects.push((object, owned)),
         }
-        push_planned_path(&mut applied, &mut seen, path);
+        push_planned_path(&mut applied.paths, &mut seen, path);
     }
-    Ok(AppliedDenyReads {
-        paths: applied,
-        objects,
-    })
+    (applied, Ok(()))
 }
 
 #[cfg(test)]

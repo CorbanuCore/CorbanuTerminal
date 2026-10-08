@@ -223,9 +223,9 @@ fn sec_win_304_removal_does_not_follow_a_link() {
 }
 
 /// A sandboxed command can rename a denied object (the entry does not deny
-/// DELETE) onto a recorded stale path, including one it got recorded by
-/// leaving a junction at a denied path. The removal must leave that object's
-/// entry: it was added to another object.
+/// DELETE) onto a recorded stale path, or try to get its own folder recorded
+/// by leaving a junction at a denied path. The removal must leave that
+/// object's entry: it was added to another object.
 #[test]
 fn sec_win_304_removal_skips_an_object_renamed_onto_a_stale_path() {
     let home = home();
@@ -239,9 +239,10 @@ fn sec_win_304_removal_skips_an_object_renamed_onto_a_stale_path() {
     std::fs::create_dir(&plain).expect("plain dir");
     junction(&home.secret, &plain);
     if junction_followable(&home.secret) {
-        // Launch 2 adds the entry through the junction, to `plain`.
+        // Launch 2 adds the entry through the junction, to `plain`, which is
+        // therefore not recorded.
         sync(&home, std::slice::from_ref(&home.secret), &group);
-        assert!(state(&home).contains("plain"), "{}", state(&home));
+        assert!(!state(&home).contains("plain"), "{}", state(&home));
 
         // Command 2: put the secret where `plain` was.
         std::fs::remove_dir(&home.secret).expect("remove junction");
@@ -265,10 +266,11 @@ fn sec_win_304_removal_skips_an_object_renamed_onto_a_stale_path() {
     assert!(explicit_deny(&stale, &group), "{}", dacl_sddl(&stale));
 }
 
-/// An entry added through a link lands on (and is recorded for) the target,
-/// and is removed from it once no launch lists the link.
+/// An entry added through a link lands on the target, which is not the
+/// configured path: it is not recorded, so it stays (a sandboxed command
+/// could have pointed the link at a folder it filled with moved secrets).
 #[test]
-fn sec_win_304_entry_added_through_a_link_is_removed_from_its_target() {
+fn sec_win_304_entry_added_through_a_link_stays() {
     let home = home();
     let group = LocalSid::from_string(SANDBOX_GROUP).expect("group SID");
     let link = home.codex_home.join("linked-secret");
@@ -276,16 +278,19 @@ fn sec_win_304_entry_added_through_a_link_is_removed_from_its_target() {
     if !junction_followable(&link) {
         return;
     }
-    let before = dacl_sddl(&home.secret);
     sync(&home, std::slice::from_ref(&link), &group);
     assert!(
         explicit_deny(&home.secret, &group),
         "{}",
         dacl_sddl(&home.secret)
     );
-    sync(&home, &[], &group);
-    assert_eq!(dacl_sddl(&home.secret), before);
     assert!(!recorded(&home), "{}", state(&home));
+    sync(&home, &[], &group);
+    assert!(
+        explicit_deny(&home.secret, &group),
+        "{}",
+        dacl_sddl(&home.secret)
+    );
 }
 
 /// The sandbox's group is machine-wide, so another `CODEX_HOME`'s sessions
