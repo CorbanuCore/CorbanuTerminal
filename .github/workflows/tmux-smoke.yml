@@ -24,6 +24,9 @@ jobs:
     env:
       CORBANU_TMUX_ARTIFACT_DIR: ${{ github.workspace }}/tmux-artifacts
       CORBANU_TMUX_REQUIRED: "1"
+      # sccache cannot cache incremental compilations.
+      CARGO_INCREMENTAL: "0"
+      SCCACHE_CACHE_SIZE: 3G
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -34,9 +37,30 @@ jobs:
         with:
           tool: nextest
           version: 0.9.103
-      # Onboarding scenarios launch the wallet daemon from beside the candidate binary.
-      - name: Build the wallet daemon
-        run: cargo build --locked -p codex-wallet-daemon --bin corbanu-walletd
+      # Local-disk sccache persisted with actions/cache, as in
+      # rust-ci-full-nextest-platform.yml's fallback path.
+      - uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
+        with:
+          tool: sccache
+          version: 0.7.5
+      - name: Configure sccache
+        id: sccache_config
+        run: |
+          set -euo pipefail
+          {
+            echo "SCCACHE_DIR=${CI_BUILD_ROOT}/sccache"
+            echo "RUSTC_WRAPPER=$(command -v sccache)"
+          } >> "$GITHUB_ENV"
+          echo "lockhash=$(cat Cargo.lock rust-toolchain.toml | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - name: Restore sccache cache
+        id: sccache_restore
+        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: sccache-tmux-smoke-${{ runner.os }}-${{ steps.sccache_config.outputs.lockhash }}-${{ github.run_id }}
+          restore-keys: |
+            sccache-tmux-smoke-${{ runner.os }}-${{ steps.sccache_config.outputs.lockhash }}-
+            sccache-tmux-smoke-${{ runner.os }}-
       - name: Install tmux prerequisites
         run: |
           sudo apt-get update -y
@@ -45,12 +69,36 @@ jobs:
             pkg-config \
             tmux
           tmux -V
-      - run: cargo build --locked -p codex-cli --bin corbanu --bin codex
+      # Same package set as the helper build in scripts/isolated_rust_tests.py,
+      # so `just test` reuses these artifacts instead of resolving different
+      # features and rebuilding most of the workspace. Includes corbanu-walletd,
+      # which onboarding scenarios launch from beside the candidate binary.
+      - name: Build candidate and helper binaries
+        run: cargo build --locked -p codex-cli -p codex-wallet-daemon -p codex-rmcp-client -p codex-code-mode-host --bins
+      - name: Build tmux test binary
+        run: cargo nextest run --locked --no-run -p codex-tui --test all
       - name: Run focused tmux tests
         run: |
           started=$SECONDS
           just test -p codex-tui --test all tmux --retries 0
           echo "tmux smoke runtime: $((SECONDS - started))s"
+      # Main keeps the cache warm; a PR saves only when nothing was restored.
+      - name: Save sccache cache
+        if: >-
+          always() && !cancelled() &&
+          (github.event_name != 'pull_request' || steps.sccache_restore.outputs.cache-matched-key == '')
+        continue-on-error: true
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: sccache-tmux-smoke-${{ runner.os }}-${{ steps.sccache_config.outputs.lockhash }}-${{ github.run_id }}
+      - name: sccache stats
+        if: always()
+        continue-on-error: true
+        run: |
+          sccache --show-stats || true
+          du -sh "${SCCACHE_DIR}" || true
+          df -h . || true
       - name: Upload tmux failure artifacts
         if: failure()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
