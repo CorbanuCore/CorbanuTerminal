@@ -1,4 +1,5 @@
-use crate::acl::add_deny_read_ace;
+use crate::acl::DenyReadObject;
+use crate::acl::add_deny_read_ace_to_object;
 use crate::acl::remove_deny_read_ace;
 use crate::path_normalization::canonicalize_path;
 use anyhow::Context;
@@ -56,12 +57,13 @@ pub unsafe fn apply_deny_read_acls(paths: &[PathBuf], psid: *mut c_void) -> Resu
 pub(crate) struct AppliedDenyReads {
     /// Every path that now has the deny (planned paths, deduplicated).
     pub(crate) paths: Vec<PathBuf>,
-    /// The paths that got it from this call (the others already had it).
-    pub(crate) added: Vec<PathBuf>,
+    /// The objects those paths resolve to, and whether this call added the
+    /// entry to each (the others already had it).
+    pub(crate) objects: Vec<(DenyReadObject, bool)>,
 }
 
-/// [`apply_deny_read_acls`], also reporting which paths this call added the
-/// entry to.
+/// [`apply_deny_read_acls`], also reporting the objects that have the entry
+/// and which of them got it from this call.
 ///
 /// # Safety
 /// As for [`apply_deny_read_acls`].
@@ -72,40 +74,39 @@ pub(crate) unsafe fn apply_deny_read_acls_tracked(
     let planned = plan_deny_read_acl_paths(paths);
     let mut applied = Vec::new();
     let mut seen = HashSet::new();
-    let mut added_in_this_call: Vec<PathBuf> = Vec::new();
+    let mut objects: Vec<(DenyReadObject, bool)> = Vec::new();
     for path in planned {
-        let result = (|| -> Result<bool> {
+        let result = (|| -> Result<(bool, DenyReadObject)> {
             if !path.exists() {
                 std::fs::create_dir_all(&path)
                     .with_context(|| format!("create deny-read path {}", path.display()))?;
             }
-            add_deny_read_ace(&path, psid)
+            add_deny_read_ace_to_object(&path, psid)
                 .with_context(|| format!("apply deny-read ACE to {}", path.display()))
         })();
-        let added = match result {
-            Ok(added) => added,
+        let (added, object) = match result {
+            Ok(result) => result,
             Err(err) => {
-                for added_path in &added_in_this_call {
-                    let _ = remove_deny_read_ace(added_path, psid);
+                for (object, added) in &objects {
+                    if *added {
+                        let _ = remove_deny_read_ace(object, psid);
+                    }
                 }
                 return Err(err);
             }
         };
-        if added {
-            // Through a link the entry is on the target: record that, which
-            // the removal (it refuses links) can reach.
-            let target = canonicalize_path(&path);
-            added_in_this_call.push(if lexical_path_key(&target) == lexical_path_key(&path) {
-                path.clone()
-            } else {
-                target
-            });
+        match objects
+            .iter_mut()
+            .find(|(known, _)| (known.volume, known.index) == (object.volume, object.index))
+        {
+            Some((_, known_added)) => *known_added |= added,
+            None => objects.push((object, added)),
         }
         push_planned_path(&mut applied, &mut seen, path);
     }
     Ok(AppliedDenyReads {
         paths: applied,
-        added: added_in_this_call,
+        objects,
     })
 }
 

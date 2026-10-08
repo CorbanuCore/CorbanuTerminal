@@ -222,6 +222,67 @@ fn sec_win_304_removal_does_not_follow_a_link() {
     assert!(state.contains("workspace.env"), "{state}");
 }
 
+/// A sandboxed command can rename a denied object (the entry does not deny
+/// DELETE) onto a recorded stale path, including one it got recorded by
+/// leaving a junction at a denied path. The removal must leave that object's
+/// entry: it was added to another object.
+#[test]
+fn sec_win_304_removal_skips_an_object_renamed_onto_a_stale_path() {
+    let home = home();
+    let group = LocalSid::from_string(SANDBOX_GROUP).expect("group SID");
+    let stash = home.codex_home.join("stash");
+    let plain = home.codex_home.join("plain");
+    sync(&home, std::slice::from_ref(&home.secret), &group);
+
+    // Command 1: move the secret away and leave a junction to a plain folder.
+    std::fs::rename(&home.secret, &stash).expect("rename secret");
+    std::fs::create_dir(&plain).expect("plain dir");
+    junction(&home.secret, &plain);
+    // Launch 2 adds the entry through the junction, to `plain`.
+    sync(&home, std::slice::from_ref(&home.secret), &group);
+    assert!(state(&home).contains("plain"), "{}", state(&home));
+
+    // Command 2: put the secret where `plain` was.
+    std::fs::remove_dir(&home.secret).expect("remove junction");
+    std::fs::remove_dir(&plain).expect("remove plain");
+    std::fs::rename(&stash, &plain).expect("rename secret onto plain");
+    // Launch 3: `plain` is stale, but it is now the secret.
+    sync(&home, std::slice::from_ref(&home.secret), &group);
+    assert!(explicit_deny(&plain, &group), "{}", dacl_sddl(&plain));
+    assert!(!state(&home).contains("plain"), "{}", state(&home));
+
+    // The same with a file renamed onto a stale file path.
+    let stale = home.codex_home.join("old.env");
+    let wallet = home.codex_home.join("wallet.json");
+    std::fs::write(&stale, "").expect("stale file");
+    std::fs::write(&wallet, "{}").expect("wallet");
+    sync(&home, &[stale.clone(), wallet.clone()], &group);
+    std::fs::remove_file(&stale).expect("remove stale file");
+    std::fs::rename(&wallet, &stale).expect("rename wallet onto stale");
+    sync(&home, &[], &group);
+    assert!(explicit_deny(&stale, &group), "{}", dacl_sddl(&stale));
+}
+
+/// An entry added through a link lands on (and is recorded for) the target,
+/// and is removed from it once no launch lists the link.
+#[test]
+fn sec_win_304_entry_added_through_a_link_is_removed_from_its_target() {
+    let home = home();
+    let group = LocalSid::from_string(SANDBOX_GROUP).expect("group SID");
+    let link = home.codex_home.join("linked-secret");
+    junction(&link, &home.secret);
+    let before = dacl_sddl(&home.secret);
+    sync(&home, std::slice::from_ref(&link), &group);
+    assert!(
+        explicit_deny(&home.secret, &group),
+        "{}",
+        dacl_sddl(&home.secret)
+    );
+    sync(&home, &[], &group);
+    assert_eq!(dacl_sddl(&home.secret), before);
+    assert!(!recorded(&home), "{}", state(&home));
+}
+
 /// The sandbox's group is machine-wide, so another `CODEX_HOME`'s sessions
 /// can rely on the same entry; a sync removes only entries it added.
 #[test]

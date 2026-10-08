@@ -1,8 +1,8 @@
+use crate::acl::DenyReadObject;
 use crate::acl::ensure_explicit_deny_read_ace;
 use crate::acl::file_link_count;
 use crate::acl::remove_deny_read_ace;
 use crate::deny_read_acl::apply_deny_read_acls_tracked;
-use crate::deny_read_acl::lexical_path_key;
 use crate::setup::sandbox_secrets_dir;
 use anyhow::Context;
 use anyhow::Result;
@@ -27,22 +27,23 @@ pub const SECRETLESS_LAUNCH_LOCK_FILE: &str = ".secretless-launch.lock";
 
 #[derive(Default, Deserialize, Serialize)]
 struct PersistentDenyReadAclState {
-    /// Per SID, the paths whose deny entry a sync added and has not removed
-    /// (#304: an entry already there belongs to someone else, such as
-    /// another `CODEX_HOME`'s sessions, and is never removed).
-    principals: BTreeMap<String, Vec<PathBuf>>,
+    /// Per SID, the objects whose deny entry a sync added and has not
+    /// removed (#304: an entry already there belongs to someone else, such
+    /// as another `CODEX_HOME`'s sessions, and is never removed).
+    principals: BTreeMap<String, Vec<DenyReadObject>>,
 }
 
 /// Reconciles the persistent deny-read ACEs owned by one sandbox principal.
 ///
 /// Workspace-write and elevated sandbox sessions intentionally leave ACLs in
 /// place after a command exits, because descendants may outlive the launcher.
-/// That makes the ACL set stateful across runs. Persist, per SID, the paths
-/// whose entry a sync added; apply the new desired set first, and only then
-/// remove the entries of recorded paths it no longer lists, so profile
-/// changes do not leave old deny-read ACEs behind (#304). Each desired path
-/// carries its own entry before any is removed, so removing a parent's entry
-/// never uncovers a path that is still denied.
+/// That makes the ACL set stateful across runs. Persist, per SID, the objects
+/// a sync added the entry to (path, volume and file index); apply the new
+/// desired set first, and only then remove the entries of recorded objects
+/// it no longer lists, so profile changes do not leave old deny-read ACEs
+/// behind (#304). Each desired path carries its own entry before any is
+/// removed, so removing a parent's entry never uncovers a path that is still
+/// denied, and an entry is removed only from the very object it was added to.
 ///
 /// #301: while any process has the secretless launch contract armed on this
 /// `CODEX_HOME` (it holds [`SECRETLESS_LAUNCH_LOCK_FILE`]), no entry is
@@ -70,21 +71,24 @@ pub unsafe fn sync_persistent_deny_read_acls(
         .unwrap_or_default();
 
     let applied = unsafe { apply_deny_read_acls_tracked(desired_paths, psid) }?;
-    let desired_keys = applied
-        .paths
+    let id = |object: &DenyReadObject| (object.volume, object.index);
+    let previous_ids = previous_paths.iter().map(id).collect::<HashSet<_>>();
+    let applied_ids = applied
+        .objects
         .iter()
-        .map(|path| lexical_path_key(path))
+        .map(|(object, _)| id(object))
         .collect::<HashSet<_>>();
-    let (kept_paths, stale_paths): (Vec<_>, Vec<_>) = previous_paths
+    // Still desired (at its current path), or newly added.
+    let mut recorded_paths = applied
+        .objects
+        .iter()
+        .filter(|(object, added)| *added || previous_ids.contains(&id(object)))
+        .map(|(object, _)| object.clone())
+        .collect::<Vec<_>>();
+    let stale_paths = previous_paths
         .into_iter()
-        .partition(|path| desired_keys.contains(&lexical_path_key(path)));
-    let mut recorded_paths = Vec::new();
-    let mut recorded_keys = HashSet::new();
-    for path in kept_paths.into_iter().chain(applied.added) {
-        if recorded_keys.insert(lexical_path_key(&path)) {
-            recorded_paths.push(path);
-        }
-    }
+        .filter(|object| !applied_ids.contains(&id(object)))
+        .collect::<Vec<_>>();
 
     // Held until the state is stored: no process can arm meanwhile.
     let lock = if stale_paths.is_empty() {
@@ -95,14 +99,15 @@ pub unsafe fn sync_persistent_deny_read_acls(
     if lock.is_none() {
         recorded_paths.extend(stale_paths);
     } else {
-        for path in stale_paths {
-            // A path that is gone has no entry left. Keep any other failure
-            // (a link left at the path or above it, followable or not)
-            // recorded, so a later sync retries it.
-            if unsafe { remove_deny_read_ace(&path, psid) }.is_err()
-                && !matches!(path.symlink_metadata(), Err(err) if err.kind() == std::io::ErrorKind::NotFound)
+        for object in stale_paths {
+            // Removed, never there, or another object at the path now (its
+            // entry, if any, is not ours): forget it. A path that is gone has
+            // no entry left. Keep any other failure (a link left at the path
+            // or above it) recorded, so a later sync retries it.
+            if unsafe { remove_deny_read_ace(&object, psid) }.is_err()
+                && !matches!(object.path.symlink_metadata(), Err(err) if err.kind() == std::io::ErrorKind::NotFound)
             {
-                recorded_paths.push(path);
+                recorded_paths.push(object);
             }
         }
     }

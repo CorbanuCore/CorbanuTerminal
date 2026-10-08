@@ -4,6 +4,7 @@ use anyhow::Result;
 use anyhow::anyhow;
 use std::ffi::c_void;
 use std::path::Path;
+use std::path::PathBuf;
 use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::Foundation::ERROR_SUCCESS;
 use windows_sys::Win32::Foundation::GetLastError;
@@ -813,37 +814,122 @@ pub unsafe fn remove_deny_read_ace_for_new_files(path: &Path, psid: *mut c_void)
     remove_matching_aces(path, |_, ace| is_new_file_read_deny(ace, Some(psid)))
 }
 
-/// #304: removes exactly the entry [`add_deny_read_ace`] adds for `psid` on
-/// `path`, and with it the copies inherited below `path`. Every other entry
-/// (allows, other denies for `psid`, entries for other SIDs, inherited
+/// #304: the file-system object a deny-read entry was added to: where it
+/// was (its resolved path) and which object it was (volume serial number and
+/// file index), so a removal can tell when another object has taken its place.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+pub struct DenyReadObject {
+    pub path: PathBuf,
+    pub volume: u32,
+    pub index: u64,
+}
+
+/// [`add_deny_read_ace`] on the object `path` resolves to (following links,
+/// as by name), through one handle. Returns whether the entry was added and
+/// which object has it.
+///
+/// # Safety
+/// Caller must ensure `psid` points to a valid SID and `path` exists.
+pub unsafe fn add_deny_read_ace_to_object(
+    path: &Path,
+    psid: *mut c_void,
+) -> Result<(bool, DenyReadObject)> {
+    let raw = CreateFileW(
+        to_wide(path).as_ptr(),
+        READ_CONTROL | WRITE_DAC,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        std::ptr::null_mut(),
+        OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS,
+        0,
+    );
+    if raw == INVALID_HANDLE_VALUE {
+        return Err(std::io::Error::last_os_error())
+            .with_context(|| format!("open {}", path.display()));
+    }
+    let handle = OwnedFileHandle(raw);
+    let info = file_info(raw).with_context(|| format!("inspect {}", path.display()))?;
+    let object = DenyReadObject {
+        path: PathBuf::from(
+            final_path(raw).with_context(|| format!("resolve {}", path.display()))?,
+        ),
+        volume: info.dwVolumeSerialNumber,
+        index: (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow),
+    };
+    let is_dir = info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY != 0;
+    let (p_dacl, p_sd) = security_info(handle.0)?;
+    let result = (|| {
+        if dacl_has_deny_read_entry(p_dacl, psid, is_dir) {
+            return Ok(false);
+        }
+        let mut explicit: EXPLICIT_ACCESS_W = std::mem::zeroed();
+        explicit.grfAccessPermissions = DenyAceKind::Read.mask();
+        explicit.grfAccessMode = DENY_ACCESS;
+        explicit.grfInheritance = DenyAceKind::Read.inheritance();
+        explicit.Trustee = TRUSTEE_W {
+            pMultipleTrustee: std::ptr::null_mut(),
+            MultipleTrusteeOperation: 0,
+            TrusteeForm: TRUSTEE_IS_SID,
+            TrusteeType: TRUSTEE_IS_UNKNOWN,
+            ptstrName: psid as *mut u16,
+        };
+        let mut p_new_dacl: *mut ACL = std::ptr::null_mut();
+        let code = SetEntriesInAclW(1, &explicit, p_dacl, &mut p_new_dacl);
+        if code != ERROR_SUCCESS {
+            return Err(anyhow!("SetEntriesInAclW failed: {code}"));
+        }
+        let code = SetSecurityInfo(
+            handle.0,
+            1, // SE_FILE_OBJECT
+            DACL_SECURITY_INFORMATION | dacl_protection(p_sd)?,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            p_new_dacl,
+            std::ptr::null_mut(),
+        );
+        LocalFree(p_new_dacl as HLOCAL);
+        if code != ERROR_SUCCESS {
+            return Err(anyhow!("SetSecurityInfo failed: {code}"));
+        }
+        Ok(true)
+    })();
+    LocalFree(p_sd as HLOCAL);
+    Ok((result?, object))
+}
+
+/// What [`remove_deny_read_ace`] found.
+#[derive(Debug, PartialEq, Eq)]
+pub enum DenyReadRemoval {
+    Removed,
+    /// The object has no such entry (left as it is).
+    NoEntry,
+    /// Another object is at the path now (left as it is).
+    OtherObject,
+}
+
+/// #304: removes exactly the entry [`add_deny_read_ace`] adds for `psid`
+/// from `object`, and with it the copies inherited below it. Every other
+/// entry (allows, other denies for `psid`, entries for other SIDs, inherited
 /// entries) and whether the DACL is protected stay as they were.
 /// `REVOKE_ACCESS` cannot do this: it removes only allow entries.
 ///
-/// The object is opened without following a link at `path` and must be the
-/// object `path` names, so a junction or hard link a sandboxed command left
-/// at a stale deny-read path (or a junction above it) cannot point the
-/// removal at another denied object. Returns whether an entry was removed.
+/// The object at `object.path` is opened without following a link and must
+/// be the one the entry was added to (same volume and file index), so a
+/// junction or hard link a sandboxed command left at the path (or a junction
+/// above it), or a denied object it renamed onto the path, is left alone.
 ///
 /// # Safety
 /// Caller must ensure `psid` points to a valid SID.
-pub unsafe fn remove_deny_read_ace(path: &Path, psid: *mut c_void) -> Result<bool> {
-    let handle = open_exact(path, READ_CONTROL | WRITE_DAC)?;
-    let is_dir = handle.is_dir;
-    let mut p_sd: *mut c_void = std::ptr::null_mut();
-    let mut p_dacl: *mut ACL = std::ptr::null_mut();
-    let code = GetSecurityInfo(
-        handle.raw,
-        1, // SE_FILE_OBJECT
-        DACL_SECURITY_INFORMATION,
-        std::ptr::null_mut(),
-        std::ptr::null_mut(),
-        &mut p_dacl,
-        std::ptr::null_mut(),
-        &mut p_sd,
-    );
-    if code != ERROR_SUCCESS {
-        return Err(anyhow!("GetSecurityInfo failed: {code}"));
+pub unsafe fn remove_deny_read_ace(
+    object: &DenyReadObject,
+    psid: *mut c_void,
+) -> Result<DenyReadRemoval> {
+    let handle = open_exact(&object.path, READ_CONTROL | WRITE_DAC)?;
+    if (handle.volume, handle.index) != (object.volume, object.index) {
+        return Ok(DenyReadRemoval::OtherObject);
     }
+    let is_dir = handle.is_dir;
+    let (p_dacl, p_sd) = security_info(handle.raw)?;
     let result = remove_aces_from(DaclTarget::Handle(handle.raw), p_sd, p_dacl, |dacl, ace| {
         match deny_read_part(ace, psid) {
             Some(DenyReadPart::Whole | DenyReadPart::Inherited) => true,
@@ -854,10 +940,12 @@ pub unsafe fn remove_deny_read_ace(path: &Path, psid: *mut c_void) -> Result<boo
             None => false,
         }
     });
-    if !p_sd.is_null() {
-        LocalFree(p_sd as HLOCAL);
-    }
-    result
+    LocalFree(p_sd as HLOCAL);
+    Ok(if result? {
+        DenyReadRemoval::Removed
+    } else {
+        DenyReadRemoval::NoEntry
+    })
 }
 
 /// Whether the DACL has the whole entry [`add_deny_read_ace`] adds for
@@ -869,10 +957,22 @@ unsafe fn dacl_has_deny_read_entry(p_dacl: *mut ACL, psid: *mut c_void, is_dir: 
         || (has(DenyReadPart::Effective) && (!is_dir || has(DenyReadPart::Inherited)))
 }
 
+/// A file handle closed on drop.
+struct OwnedFileHandle(HANDLE);
+
+impl Drop for OwnedFileHandle {
+    fn drop(&mut self) {
+        // SAFETY: owned by this value.
+        unsafe { CloseHandle(self.0) };
+    }
+}
+
 /// A handle opened by [`open_exact`].
 struct ExactHandle {
     raw: HANDLE,
     is_dir: bool,
+    volume: u32,
+    index: u64,
 }
 
 impl Drop for ExactHandle {
@@ -880,6 +980,75 @@ impl Drop for ExactHandle {
         // SAFETY: opened by `open_exact` and owned here.
         unsafe { CloseHandle(self.raw) };
     }
+}
+
+unsafe fn file_info(handle: HANDLE) -> std::io::Result<BY_HANDLE_FILE_INFORMATION> {
+    let mut info: BY_HANDLE_FILE_INFORMATION = std::mem::zeroed();
+    if GetFileInformationByHandle(handle, &mut info) == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(info)
+}
+
+/// The path `handle` was opened at, after links, without the `\\?\` prefix.
+unsafe fn final_path(handle: HANDLE) -> std::io::Result<String> {
+    let mut buffer = vec![0_u16; 1024];
+    loop {
+        let len =
+            GetFinalPathNameByHandleW(handle, buffer.as_mut_ptr(), buffer.len() as u32, 0) as usize;
+        if len == 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        if len < buffer.len() {
+            let path = String::from_utf16_lossy(&buffer[..len]);
+            return Ok(if let Some(unc) = path.strip_prefix(r"\\?\UNC\") {
+                format!(r"\\{unc}")
+            } else {
+                path.strip_prefix(r"\\?\")
+                    .map(str::to_string)
+                    .unwrap_or(path)
+            });
+        }
+        buffer.resize(len + 1, 0);
+    }
+}
+
+/// The DACL of the file `handle` is open to, and its descriptor (free it
+/// with `LocalFree`).
+unsafe fn security_info(handle: HANDLE) -> Result<(*mut ACL, *mut c_void)> {
+    let mut p_sd: *mut c_void = std::ptr::null_mut();
+    let mut p_dacl: *mut ACL = std::ptr::null_mut();
+    let code = GetSecurityInfo(
+        handle,
+        1, // SE_FILE_OBJECT
+        DACL_SECURITY_INFORMATION,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        &mut p_dacl,
+        std::ptr::null_mut(),
+        &mut p_sd,
+    );
+    if code != ERROR_SUCCESS {
+        return Err(anyhow!("GetSecurityInfo failed: {code}"));
+    }
+    Ok((p_dacl, p_sd))
+}
+
+/// The flag that keeps a DACL's protection as it is in `p_sd` when set.
+unsafe fn dacl_protection(p_sd: *mut c_void) -> Result<u32> {
+    let mut control: u16 = 0;
+    let mut revision: u32 = 0;
+    if GetSecurityDescriptorControl(p_sd, &mut control, &mut revision) == 0 {
+        return Err(anyhow!(
+            "GetSecurityDescriptorControl failed: {}",
+            GetLastError()
+        ));
+    }
+    Ok(if control & SE_DACL_PROTECTED != 0 {
+        PROTECTED_DACL_SECURITY_INFORMATION
+    } else {
+        UNPROTECTED_DACL_SECURITY_INFORMATION
+    })
 }
 
 /// Opens the object `path` names with `access`, failing if `path` is a link
@@ -899,12 +1068,13 @@ unsafe fn open_exact(path: &Path, access: u32) -> Result<ExactHandle> {
         return Err(std::io::Error::last_os_error())
             .with_context(|| format!("open {}", path.display()));
     }
-    let mut handle = ExactHandle { raw, is_dir: false };
-    let mut info: BY_HANDLE_FILE_INFORMATION = std::mem::zeroed();
-    if GetFileInformationByHandle(handle.raw, &mut info) == 0 {
-        return Err(std::io::Error::last_os_error())
-            .with_context(|| format!("inspect {}", path.display()));
-    }
+    let mut handle = ExactHandle {
+        raw,
+        is_dir: false,
+        volume: 0,
+        index: 0,
+    };
+    let info = file_info(handle.raw).with_context(|| format!("inspect {}", path.display()))?;
     if info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
         return Err(anyhow!("{} is a link", path.display()));
     }
@@ -914,24 +1084,13 @@ unsafe fn open_exact(path: &Path, access: u32) -> Result<ExactHandle> {
     if !is_dir && info.nNumberOfLinks != 1 {
         return Err(anyhow!("{} has other hard links", path.display()));
     }
-    let mut buffer = vec![0_u16; 1024];
-    let len = loop {
-        let len = GetFinalPathNameByHandleW(handle.raw, buffer.as_mut_ptr(), buffer.len() as u32, 0)
-            as usize;
-        if len == 0 {
-            return Err(std::io::Error::last_os_error())
-                .with_context(|| format!("resolve {}", path.display()));
-        }
-        if len < buffer.len() {
-            break len;
-        }
-        buffer.resize(len + 1, 0);
-    };
-    let resolved = String::from_utf16_lossy(&buffer[..len]);
+    let resolved = final_path(handle.raw).with_context(|| format!("resolve {}", path.display()))?;
     if comparable_path(&resolved) != comparable_path(&path.to_string_lossy()) {
         return Err(anyhow!("{} resolves to {resolved}", path.display()));
     }
     handle.is_dir = is_dir;
+    handle.volume = info.dwVolumeSerialNumber;
+    handle.index = (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow);
     Ok(handle)
 }
 
