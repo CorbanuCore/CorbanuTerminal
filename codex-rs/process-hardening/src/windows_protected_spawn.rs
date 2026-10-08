@@ -8,6 +8,7 @@
 //! becomes the protected thread DACL (so every thread it starts later is
 //! protected from creation too), and only then does it run.
 
+use crate::windows_handle_holder::HandleHolder;
 use crate::windows_process_access::SecurityDescriptor;
 use crate::windows_process_access::current_user_sid_string;
 use crate::windows_process_access::process_dacl_sddl;
@@ -28,8 +29,6 @@ use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::Foundation::ERROR_ACCESS_DENIED;
 use windows_sys::Win32::Foundation::GetLastError;
 use windows_sys::Win32::Foundation::HANDLE;
-use windows_sys::Win32::Foundation::HANDLE_FLAG_INHERIT;
-use windows_sys::Win32::Foundation::SetHandleInformation;
 use windows_sys::Win32::Foundation::WAIT_OBJECT_0;
 use windows_sys::Win32::Security::SECURITY_ATTRIBUTES;
 use windows_sys::Win32::Security::TOKEN_ADJUST_DEFAULT;
@@ -47,6 +46,7 @@ use windows_sys::Win32::System::Threading::InitializeProcThreadAttributeList;
 use windows_sys::Win32::System::Threading::LPPROC_THREAD_ATTRIBUTE_LIST;
 use windows_sys::Win32::System::Threading::OpenProcessToken;
 use windows_sys::Win32::System::Threading::PROC_THREAD_ATTRIBUTE_HANDLE_LIST;
+use windows_sys::Win32::System::Threading::PROC_THREAD_ATTRIBUTE_PARENT_PROCESS;
 use windows_sys::Win32::System::Threading::PROCESS_INFORMATION;
 use windows_sys::Win32::System::Threading::ResumeThread;
 use windows_sys::Win32::System::Threading::STARTF_USESTDHANDLES;
@@ -54,6 +54,18 @@ use windows_sys::Win32::System::Threading::STARTUPINFOEXW;
 use windows_sys::Win32::System::Threading::TerminateProcess;
 use windows_sys::Win32::System::Threading::UpdateProcThreadAttribute;
 use windows_sys::Win32::System::Threading::WaitForSingleObject;
+
+/// Set by [`spawn_protected`] in the child's environment: the id of the
+/// process that started it (Windows reports a [`HandleHolder`] as its
+/// parent).
+pub const PROTECTED_SPAWNER_PID_ENV: &str = "CODEX_PROTECTED_SPAWNER_PID";
+
+/// In a process started by [`spawn_protected`]: the id of the process that
+/// started it. Like a parent process id, it can name a process that has
+/// exited (and whose id was reused).
+pub fn protected_spawner_pid() -> Option<u32> {
+    std::env::var(PROTECTED_SPAWNER_PID_ENV).ok()?.parse().ok()
+}
 
 /// A process started by [`spawn_protected`]. Like [`std::process::Child`],
 /// dropping it neither kills nor waits for the process.
@@ -121,8 +133,11 @@ impl ProtectedChild {
 /// children and do not reopen objects they create without a descriptor
 /// (the credential broker). No console; stdin and stderr are closed;
 /// stdout is a pipe whose read end is returned. Only that pipe's write end
-/// is inherited (it is inheritable for the duration of the call, so a
-/// process spawned concurrently by `std` could inherit it too).
+/// is inherited, and it is never inheritable in this process's handle table
+/// (#320): it reaches the child through a [`HandleHolder`] (with the
+/// protected DACLs too), so the child's parent process is that holder, which
+/// is gone once this returns. The child finds this process's id in
+/// [`PROTECTED_SPAWNER_PID_ENV`] instead ([`protected_spawner_pid`]).
 pub fn spawn_protected(
     program: &Path,
     args: &[OsString],
@@ -152,26 +167,33 @@ pub(crate) fn spawn_protected_suspended(
     let thread_attributes = security_attributes(&thread_descriptor);
 
     let (stdout_read, stdout_write) = pipe()?;
-    let mut handles = [stdout_write.as_raw_handle() as HANDLE];
-    let mut attributes = AttributeList::with_handles(&mut handles)?;
+    let holder =
+        HandleHolder::start_with(program, Some(&process_attributes), Some(&thread_attributes))?;
+    let mut handles = [holder.hold(stdout_write.as_raw_handle() as HANDLE)?];
+    // The holder has its own copy now.
+    drop(stdout_write);
+    let mut attributes = AttributeList::new(holder.raw(), &mut handles)?;
 
     let mut command_line = command_line(program, args)?;
-    let mut environment = environment_block(env)?;
+    // Later entries win, so the child cannot be handed another spawner.
+    let spawner = (
+        OsString::from(PROTECTED_SPAWNER_PID_ENV),
+        OsString::from(std::process::id().to_string()),
+    );
+    let mut environment = environment_block(&[env, &[spawner]].concat())?;
     let application: Vec<u16> = program.as_os_str().encode_wide().chain([0]).collect();
     // SAFETY: zeroed POD; the fields set below are the only ones used.
     let mut startup: STARTUPINFOEXW = unsafe { std::mem::zeroed() };
     startup.StartupInfo.cb = std::mem::size_of::<STARTUPINFOEXW>() as u32;
     startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    // A value in the holder's table, as the parent-process attribute requires.
     startup.StartupInfo.hStdOutput = handles[0];
     startup.lpAttributeList = attributes.as_mut_ptr();
     // SAFETY: zeroed out-structure.
     let mut info: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
-    // SAFETY: the write end is ours; it is inheritable only for this call.
-    if unsafe { SetHandleInformation(handles[0], HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT) } == 0 {
-        return Err(io::Error::last_os_error());
-    }
     // SAFETY: every pointer refers to a live, NUL-terminated or sized buffer
-    // owned by this function; the handle list names one inheritable handle.
+    // owned by this function; the child inherits from the holder, and only
+    // the one inheritable handle in the list.
     let created = unsafe {
         CreateProcessW(
             application.as_ptr(),
@@ -191,8 +213,8 @@ pub(crate) fn spawn_protected_suspended(
     };
     let create_error = io::Error::last_os_error();
     drop(attributes);
-    // The child holds its own copy now.
-    drop(stdout_write);
+    // The child holds its own copy now; ending the holder closes the other.
+    drop(holder);
     if created == 0 {
         return Err(create_error);
     }
@@ -257,37 +279,53 @@ fn pipe() -> io::Result<(OwnedHandle, OwnedHandle)> {
     })
 }
 
-/// A process attribute list naming the only handles to inherit.
+/// A process attribute list naming the parent process to inherit from and
+/// the only handles (values in the parent's table) to inherit.
 struct AttributeList {
     buffer: Vec<u64>,
+    /// Boxed: the list refers to it by address.
+    parent: Box<HANDLE>,
 }
 
 impl AttributeList {
-    /// `handles` must outlive the list.
-    fn with_handles(handles: &mut [HANDLE]) -> io::Result<Self> {
+    /// `handles` must outlive the list; `parent` needs
+    /// `PROCESS_CREATE_PROCESS` access.
+    fn new(parent: HANDLE, handles: &mut [HANDLE]) -> io::Result<Self> {
         let mut size = 0_usize;
         // SAFETY: a size query.
-        unsafe { InitializeProcThreadAttributeList(std::ptr::null_mut(), 1, 0, &mut size) };
+        unsafe { InitializeProcThreadAttributeList(std::ptr::null_mut(), 2, 0, &mut size) };
         let mut list = Self {
             buffer: vec![0_u64; size.div_ceil(8)],
+            parent: Box::new(parent),
         };
         // SAFETY: `buffer` holds at least `size` bytes.
-        if unsafe { InitializeProcThreadAttributeList(list.as_mut_ptr(), 1, 0, &mut size) } == 0 {
+        if unsafe { InitializeProcThreadAttributeList(list.as_mut_ptr(), 2, 0, &mut size) } == 0 {
             return Err(io::Error::last_os_error());
         }
-        // SAFETY: `handles` outlives the list (caller contract).
+        let parent = std::ptr::from_mut::<HANDLE>(&mut *list.parent).cast();
+        // SAFETY: `handles` outlives the list (caller contract); the boxed
+        // parent handle stays at its address as long as the list.
         let ok = unsafe {
             UpdateProcThreadAttribute(
                 list.as_mut_ptr(),
                 0,
-                PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize,
-                handles.as_mut_ptr().cast(),
-                std::mem::size_of_val(handles),
+                PROC_THREAD_ATTRIBUTE_PARENT_PROCESS as usize,
+                parent,
+                std::mem::size_of::<HANDLE>(),
                 std::ptr::null_mut(),
                 std::ptr::null(),
-            )
+            ) != 0
+                && UpdateProcThreadAttribute(
+                    list.as_mut_ptr(),
+                    0,
+                    PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize,
+                    handles.as_mut_ptr().cast(),
+                    std::mem::size_of_val(handles),
+                    std::ptr::null_mut(),
+                    std::ptr::null(),
+                ) != 0
         };
-        if ok == 0 {
+        if !ok {
             return Err(io::Error::last_os_error());
         }
         Ok(list)

@@ -200,3 +200,28 @@ fn pipe_handles(process: windows_sys::Win32::Foundation::HANDLE) -> Vec<usize> {
     }
     pipes
 }
+
+/// #320: the child's parent is the holder, so it learns its spawner from the
+/// environment, which a caller-supplied value cannot override.
+#[test]
+fn sec_win_320_protected_child_names_its_spawner() {
+    use std::io::Read as _;
+
+    let env: Vec<(OsString, OsString)> = std::env::vars_os()
+        .chain([(
+            OsString::from(super::PROTECTED_SPAWNER_PID_ENV.to_ascii_lowercase()),
+            OsString::from("4"),
+        )])
+        .collect();
+    let args = [
+        OsString::from("/d"),
+        OsString::from("/c"),
+        OsString::from(format!("echo %{}%", super::PROTECTED_SPAWNER_PID_ENV)),
+    ];
+    let (mut child, mut stdout) =
+        crate::spawn_protected(&system32().join("cmd.exe"), &args, &env).expect("protected spawn");
+    let mut output = String::new();
+    stdout.read_to_string(&mut output).expect("read stdout");
+    assert!(child.wait().expect("wait").success());
+    assert_eq!(output.trim(), std::process::id().to_string());
+}
