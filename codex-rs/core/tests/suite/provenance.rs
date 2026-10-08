@@ -127,7 +127,9 @@ async fn pf_30_s01_source_envelopes_label_tool_output_and_keep_human_prompt() ->
                     .enable(Feature::SourceEnvelopes)
                     .expect("enable source envelopes");
             })
-            .build_with_auto_env(&server)
+            // shell_command is only exposed for local environments, so pin this test
+            // to the local executor even in the remote test lane.
+            .build(&server)
             .await?;
         let human = "read the notes <keep> 日本語";
         test.submit_turn(human).await?;
@@ -802,6 +804,7 @@ const PF_30_S03_HOME_READ: &str = "cat \"$CODEX_HOME/config.toml\"";
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn pf_30_s03_permission_hook_allow_does_not_approve_a_tainted_protected_action()
 -> anyhow::Result<()> {
+    core_test_support::skip_if_remote!(Ok(()), "the permission hook writes its marker inside the remote container, but the assertion checks the host");
     use codex_protocol::protocol::AskForApproval;
     use codex_protocol::protocol::ReviewDecision;
     skip_if_no_network!(Ok(()));

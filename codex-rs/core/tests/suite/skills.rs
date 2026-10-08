@@ -57,7 +57,8 @@ async fn user_turn_includes_skill_instructions() -> Result<()> {
     let mut builder = test_codex().with_workspace_setup(move |cwd, fs| async move {
         write_repo_skill(cwd, fs, "demo", "demo skill", skill_body).await
     });
-    let test = builder.build_with_auto_env(&server).await?;
+    // Pinned to the local executor; the remote lane does not cover this path yet.
+    let test = builder.build(&server).await?;
 
     let skill_path = test
         .config

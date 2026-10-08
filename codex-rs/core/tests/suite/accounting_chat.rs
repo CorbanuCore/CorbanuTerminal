@@ -384,7 +384,9 @@ async fn accounting_chat_native_finish_reason_and_tool_parity() -> anyhow::Resul
                     .disable(codex_features::Feature::CodeModeOnly)
                     .unwrap();
             })
-            .build_with_auto_env(&server)
+            // shell_command is only exposed for local environments, so pin this test
+            // to the local executor even in the remote test lane.
+            .build(&server)
             .await?;
         submit(&test).await?;
         let held = gate.next().await?;
@@ -448,7 +450,9 @@ async fn accounting_chat_native_sampling_auxiliary_scope() -> anyhow::Result<()>
                 .disable(codex_features::Feature::RemoteCompactionV2)
                 .unwrap();
         })
-        .build_with_auto_env(&server)
+        // shell_command is only exposed for local environments, so pin this test
+        // to the local executor even in the remote test lane.
+        .build(&server)
         .await?;
     submit(&test).await?;
     gate.next().await?.chunks.send(data(json!({"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"safe-call",
