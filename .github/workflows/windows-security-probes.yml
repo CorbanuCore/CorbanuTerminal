@@ -45,10 +45,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       - name: Process access probes
         shell: bash
-        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-process-hardening pf_27_s06 -- --nocapture
+        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-process-hardening pf_27_s06 -- --nocapture --test-threads=1
       - name: Broker transport probes
         shell: bash
-        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-network-proxy pf_27_s06 -- --nocapture
+        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-network-proxy pf_27_s06 -- --nocapture --test-threads=1
       - name: Require a clean worktree
         if: always() && !cancelled()
         uses: ./.github/actions/check-clean-worktree
