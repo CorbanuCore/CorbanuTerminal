@@ -41,6 +41,7 @@ const CHILD_TEST: &str = "windows_process_access::tests::pf_27_s06_child_entry";
 const REPORT_PREFIX: &str = "pf27s06-probe:";
 const WRITE_DAC: u32 = 0x0004_0000;
 const ERROR_ACCESS_DENIED: u32 = 5;
+const CHILD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
 #[test]
 fn pf_27_s06_child_entry() {
@@ -180,15 +181,25 @@ impl Target {
             .env(CANARY_ENV, CANARY)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null());
+            .stderr(Stdio::inherit());
         if harden {
             command.env(HARDEN_ENV, "1");
         }
         let mut child = command.spawn().expect("spawn target");
-        let stdout = child.stdout.take().expect("target stdout");
-        let mut lines = std::io::BufReader::new(stdout).lines();
-        let ready = lines.any(|line| line.is_ok_and(|line| line.trim() == "pf27s06-target:ready"));
-        assert!(ready, "target did not become ready");
+        let lines = line_channel(child.stdout.take().expect("target stdout"));
+        let deadline = std::time::Instant::now() + CHILD_TIMEOUT;
+        let mut seen = Vec::new();
+        loop {
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            match lines.recv_timeout(remaining) {
+                Ok(line) if line.trim() == "pf27s06-target:ready" => break,
+                Ok(line) => seen.push(line),
+                Err(_) => {
+                    let _ = child.kill();
+                    panic!("target did not become ready; it printed: {seen:?}");
+                }
+            }
+        }
         Self { child }
     }
 
@@ -228,13 +239,47 @@ fn run_target() {
 }
 
 fn probe_as_same_user(target_pid: u32) -> ProbeReport {
-    let output = child_command("probe")
+    let mut child = child_command("probe")
         .env(TARGET_PID_ENV, target_pid.to_string())
         .stdin(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
-        .output()
+        .spawn()
         .expect("run probe");
-    ProbeReport::decode(&String::from_utf8_lossy(&output.stdout))
+    // Read the report line rather than waiting for EOF, which a process
+    // spawned concurrently elsewhere could delay by inheriting the pipe.
+    let lines = line_channel(child.stdout.take().expect("probe stdout"));
+    let deadline = std::time::Instant::now() + CHILD_TIMEOUT;
+    let mut output = String::new();
+    while !output.contains(REPORT_PREFIX) {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        match lines.recv_timeout(remaining) {
+            Ok(line) => {
+                output.push_str(&line);
+                output.push('\n');
+            }
+            Err(_) => break,
+        }
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+    ProbeReport::decode(&output)
+}
+
+/// Lines from a child's stdout, read on a detached thread.
+fn line_channel(stdout: std::process::ChildStdout) -> std::sync::mpsc::Receiver<String> {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for line in std::io::BufReader::new(stdout).lines() {
+            let Ok(line) = line else {
+                break;
+            };
+            if sender.send(line).is_err() {
+                break;
+            }
+        }
+    });
+    receiver
 }
 
 /// Runs the probe under the same restricted token the unelevated Windows
@@ -300,6 +345,7 @@ fn probe_with_restricted_token(target_pid: u32) -> ProbeReport {
 fn collect_report(receiver: &std::sync::mpsc::Receiver<Vec<u8>>) -> Vec<u8> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     let mut output = Vec::new();
+    // (The probe has exited; give its last write time to arrive.)
     loop {
         let text = String::from_utf8_lossy(&output);
         let has_report = text
