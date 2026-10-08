@@ -70,7 +70,8 @@ fn pf_27_s02_unsandboxed_and_unhardened_launches_are_refused() {
             contract.check_sandbox(
                 SandboxType::None,
                 /*sandbox_requested*/ false,
-                /*exec_server*/ false
+                /*exec_server*/ false,
+                /*windows_elevated*/ false
             ),
             Err(LaunchDenied::Unsandboxed)
         );
@@ -78,7 +79,8 @@ fn pf_27_s02_unsandboxed_and_unhardened_launches_are_refused() {
             contract.check_sandbox(
                 SandboxType::None,
                 /*sandbox_requested*/ true,
-                /*exec_server*/ false
+                /*exec_server*/ false,
+                /*windows_elevated*/ false
             ),
             Err(LaunchDenied::Unsandboxed)
         );
@@ -87,7 +89,8 @@ fn pf_27_s02_unsandboxed_and_unhardened_launches_are_refused() {
             contract.check_sandbox(
                 SandboxType::None,
                 /*sandbox_requested*/ true,
-                /*exec_server*/ true
+                /*exec_server*/ true,
+                /*windows_elevated*/ false
             ),
             Err(LaunchDenied::RemoteEnvironment)
         );
@@ -100,20 +103,81 @@ fn pf_27_s02_unsandboxed_and_unhardened_launches_are_refused() {
             unhardened.check_sandbox(
                 SandboxType::MacosSeatbelt,
                 /*sandbox_requested*/ true,
-                /*exec_server*/ false
+                /*exec_server*/ false,
+                /*windows_elevated*/ false
             ),
             Err(LaunchDenied::ProcessHardening)
         );
-    } else {
-        assert_eq!(
-            contract.check_sandbox(
-                SandboxType::WindowsRestrictedToken,
-                /*sandbox_requested*/ true,
-                /*exec_server*/ false
-            ),
-            Err(LaunchDenied::UnsupportedPlatform)
-        );
     }
+}
+
+/// PF-27-S06: Windows passes only under the elevated sandbox backend.
+#[cfg(windows)]
+#[test]
+fn pf_27_s06_windows_requires_the_elevated_sandbox() {
+    let fixture = fixture();
+    let contract = &fixture.contract;
+    let check = |sandbox, requested, elevated| {
+        contract.check_sandbox(sandbox, requested, /*exec_server*/ false, elevated)
+    };
+    assert_eq!(
+        check(SandboxType::WindowsRestrictedToken, true, true),
+        Ok(())
+    );
+    assert_eq!(
+        check(SandboxType::WindowsRestrictedToken, true, false),
+        Err(LaunchDenied::WindowsUnelevatedSandbox)
+    );
+    assert_eq!(
+        check(SandboxType::None, true, true),
+        Err(LaunchDenied::Unsandboxed)
+    );
+    assert_eq!(
+        check(SandboxType::WindowsRestrictedToken, false, true),
+        Err(LaunchDenied::Unsandboxed)
+    );
+    let unhardened = LaunchContract::capture(
+        &fixture.codex_home,
+        std::iter::empty(),
+        /*hardened*/ false,
+    );
+    assert_eq!(
+        unhardened.check_sandbox(
+            SandboxType::WindowsRestrictedToken,
+            /*sandbox_requested*/ true,
+            /*exec_server*/ false,
+            /*windows_elevated*/ true
+        ),
+        Err(LaunchDenied::ProcessHardening)
+    );
+}
+
+/// PF-27-S06: the Windows sandbox drops skip-if-missing entries, so paths
+/// that exist are denied with plain entries there.
+#[cfg(windows)]
+#[test]
+fn pf_27_s06_existing_protected_paths_are_denied_outright_on_windows() {
+    use codex_protocol::permissions::FileSystemPath;
+    let fixture = fixture();
+    std::fs::write(fixture.codex_home.join("auth.json"), "{}").expect("auth");
+    let protected = fixture
+        .contract
+        .protect_permissions(
+            &workspace_profile(&fixture.workspace),
+            fixture.workspace.as_path(),
+        )
+        .expect("protected");
+    let entries = protected.file_system_sandbox_policy().entries;
+    let entry_for = |name: &str| {
+        let path = fixture.codex_home.join(name);
+        entries
+            .iter()
+            .find(|entry| entry.path == FileSystemPath::Path { path: path.clone() })
+            .cloned()
+            .unwrap_or_else(|| panic!("no entry for {name}"))
+    };
+    assert!(!entry_for("auth.json").skips_missing_path());
+    assert!(entry_for("provider_auth.json").skips_missing_path());
 }
 
 #[test]

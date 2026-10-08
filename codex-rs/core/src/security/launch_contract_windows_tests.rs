@@ -1,0 +1,352 @@
+//! PF-27-S06: measured pass of the secretless launch contract on Windows.
+//!
+//! A real command runs under the elevated Windows sandbox with the profile
+//! the contract produces, and must not read the vault, sign-in files, policy
+//! store or state databases, nor write `CODEX_HOME`. A probe (this test
+//! binary, re-executed) then runs under the same sandbox and must not open a
+//! hardened stand-in for Core to read its memory or environment.
+
+use super::LaunchContract;
+use super::harden_current_process;
+use crate::exec::ExecCapturePolicy;
+use crate::exec::ExecParams;
+use crate::exec::process_exec_tool_call;
+use crate::sandboxing::SandboxPermissions;
+use codex_protocol::config_types::WindowsSandboxLevel;
+use codex_protocol::models::PermissionProfile;
+use codex_protocol::permissions::NetworkSandboxPolicy;
+use codex_sandboxing::SandboxType;
+use codex_utils_absolute_path::AbsolutePathBuf;
+use pretty_assertions::assert_eq;
+use std::collections::HashMap;
+use std::io::BufRead as _;
+use std::io::Read as _;
+use std::io::Write as _;
+use std::path::Path;
+
+const ROLE_ENV: &str = "CODEX_PF27S06_CORE_ROLE";
+const TARGET_PID_ENV: &str = "CODEX_PF27S06_CORE_TARGET_PID";
+const CHILD_TEST: &str = "security::launch_contract::windows_tests::pf_27_s06_core_child_entry";
+const REPORT_PREFIX: &str = "pf27s06-core-probe:";
+const ERROR_ACCESS_DENIED: u32 = 5;
+
+#[test]
+fn pf_27_s06_core_child_entry() {
+    match std::env::var(ROLE_ENV).as_deref() {
+        Ok("target") => run_target(/*harden*/ true),
+        Ok("plain-target") => run_target(/*harden*/ false),
+        Ok("probe") => run_probe(),
+        _ => {}
+    }
+}
+
+#[tokio::test]
+async fn pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory() {
+    let codex_home_dir = tempfile::tempdir().expect("codex home");
+    let workspace_dir = tempfile::tempdir().expect("workspace");
+    let codex_home = absolute(codex_home_dir.path());
+    let cwd = absolute(workspace_dir.path());
+    let _codex_home = EnvGuard::set("CODEX_HOME", codex_home.as_path());
+    stage_windows_sandbox_helpers();
+
+    std::fs::create_dir_all(codex_home.join("secrets")).expect("secrets dir");
+    for (name, body) in [
+        ("secrets/vault.json", "pf27s06-vault"),
+        ("auth.json", "pf27s06-auth"),
+        ("config.toml", "model = \"pf27s06\""),
+        ("state_5.sqlite", "pf27s06-state"),
+        ("notes.txt", "unprotected control"),
+    ] {
+        std::fs::write(codex_home.join(name), body).expect("fixture file");
+    }
+    std::fs::write(cwd.join("public.txt"), "public ok\n").expect("public file");
+
+    let contract = LaunchContract::capture(&codex_home, std::iter::empty(), /*hardened*/ true);
+    assert_eq!(
+        contract.check_sandbox(
+            SandboxType::WindowsRestrictedToken,
+            /*sandbox_requested*/ true,
+            /*exec_server*/ false,
+            /*windows_elevated*/ true,
+        ),
+        Ok(())
+    );
+    let base = PermissionProfile::workspace_write_with(
+        &[],
+        NetworkSandboxPolicy::Restricted,
+        /*exclude_tmpdir_env_var*/ true,
+        /*exclude_slash_tmp*/ true,
+    )
+    .materialize_project_roots_with_workspace_roots(std::slice::from_ref(&cwd));
+    let protected = contract
+        .protect_permissions(&base, cwd.as_path())
+        .expect("protected profile");
+
+    let home = codex_home.as_path().display();
+    let read = |label: &str, file: &str| {
+        format!("(type \"{home}\\{file}\" 1>NUL 2>NUL && echo {label}-READ || echo {label}-DENIED)")
+    };
+    let script = [
+        read("VAULT", "secrets\\vault.json"),
+        read("AUTH", "auth.json"),
+        read("CONFIG", "config.toml"),
+        read("SQLITE", "state_5.sqlite"),
+        read("NOTES", "notes.txt"),
+        format!(
+            "(echo x> \"{home}\\config.toml\" 2>NUL && echo CONFIG-WRITE-ALLOWED || echo CONFIG-WRITE-DENIED)"
+        ),
+        format!(
+            "(echo x> \"{home}\\planted.txt\" 2>NUL && echo HOME-WRITE-ALLOWED || echo HOME-WRITE-DENIED)"
+        ),
+        "type public.txt".to_string(),
+    ]
+    .join(" & ");
+    let files = run_sandboxed(
+        vec!["cmd.exe".into(), "/D".into(), "/C".into(), script],
+        HashMap::new(),
+        &protected,
+        &cwd,
+    )
+    .await;
+    // Evidence for the record (the unprotected NOTES line is informational).
+    eprintln!("pf27s06 elevated file probes: {files}");
+    for denied in ["VAULT", "AUTH", "CONFIG", "SQLITE"] {
+        assert!(
+            files.contains(&format!("{denied}-DENIED")),
+            "{denied}: {files}"
+        );
+        assert!(
+            !files.contains(&format!("{denied}-READ")),
+            "{denied}: {files}"
+        );
+    }
+    assert!(files.contains("CONFIG-WRITE-DENIED"), "{files}");
+    assert!(files.contains("HOME-WRITE-DENIED"), "{files}");
+    assert!(
+        files.contains("public ok"),
+        "allowed reads still work: {files}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(codex_home.join("config.toml")).expect("config"),
+        "model = \"pf27s06\""
+    );
+
+    // Positive control: the probe reads an unhardened process of its user.
+    let unhardened = Target::spawn(/*harden*/ false);
+    assert_eq!(
+        report(&run_probe_unsandboxed(unhardened.pid())),
+        "vm_read=granted"
+    );
+    drop(unhardened);
+
+    // Core stand-in: hardened exactly as an armed contract hardens Core.
+    let target = Target::spawn(/*harden*/ true);
+    let unsandboxed = run_probe_unsandboxed(target.pid());
+    let exe = std::env::current_exe().expect("test binary");
+    let env = HashMap::from([
+        (ROLE_ENV.to_string(), "probe".to_string()),
+        (TARGET_PID_ENV.to_string(), target.pid().to_string()),
+        (
+            "SystemRoot".to_string(),
+            std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".to_string()),
+        ),
+    ]);
+    let sandboxed = run_sandboxed(
+        vec![
+            exe.to_string_lossy().into_owned(),
+            CHILD_TEST.to_string(),
+            "--exact".to_string(),
+            "--nocapture".to_string(),
+            "--test-threads=1".to_string(),
+        ],
+        env,
+        &protected,
+        &cwd,
+    )
+    .await;
+    eprintln!("pf27s06 elevated memory probe: {sandboxed}");
+    assert_eq!(report(&unsandboxed), "vm_read=denied");
+    assert_eq!(report(&sandboxed), "vm_read=denied");
+}
+
+async fn run_sandboxed(
+    command: Vec<String>,
+    env: HashMap<String, String>,
+    profile: &PermissionProfile,
+    cwd: &AbsolutePathBuf,
+) -> String {
+    let output = process_exec_tool_call(
+        ExecParams {
+            command,
+            cwd: cwd.clone(),
+            expiration: 120_000.into(),
+            capture_policy: ExecCapturePolicy::ShellTool,
+            env,
+            network: None,
+            network_environment_id: None,
+            sandbox_permissions: SandboxPermissions::UseDefault,
+            windows_sandbox_level: WindowsSandboxLevel::Elevated,
+            windows_sandbox_private_desktop: false,
+            justification: None,
+            arg0: None,
+        },
+        profile,
+        cwd,
+        std::slice::from_ref(cwd),
+        &None,
+        /*use_legacy_landlock*/ false,
+        /*stdout_stream*/ None,
+    )
+    .await
+    .expect("elevated sandbox run");
+    format!("{}{}", output.stdout.text, output.stderr.text)
+}
+
+fn report(output: &str) -> String {
+    output
+        .lines()
+        .find_map(|line| line.trim().strip_prefix(REPORT_PREFIX))
+        .unwrap_or_else(|| panic!("probe printed no report:\n{output}"))
+        .to_string()
+}
+
+fn run_probe_unsandboxed(pid: u32) -> String {
+    let output = child_command("probe")
+        .env(TARGET_PID_ENV, pid.to_string())
+        .stdin(std::process::Stdio::null())
+        .output()
+        .expect("unsandboxed probe");
+    String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
+fn child_command(role: &str) -> std::process::Command {
+    let mut command = std::process::Command::new(std::env::current_exe().expect("test binary"));
+    command
+        .args([CHILD_TEST, "--exact", "--nocapture", "--test-threads=1"])
+        .env(ROLE_ENV, role);
+    command
+}
+
+/// The Core stand-in; killed on drop.
+struct Target {
+    child: std::process::Child,
+}
+
+impl Target {
+    fn spawn(harden: bool) -> Self {
+        let mut child = child_command(if harden { "target" } else { "plain-target" })
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("spawn target");
+        let stdout = child.stdout.take().expect("target stdout");
+        let ready = std::io::BufReader::new(stdout)
+            .lines()
+            .any(|line| line.is_ok_and(|line| line.trim() == "pf27s06-core-target:ready"));
+        assert!(
+            ready,
+            "Core stand-in did not start (or could not harden itself)"
+        );
+        Self { child }
+    }
+
+    fn pid(&self) -> u32 {
+        self.child.id()
+    }
+}
+
+impl Drop for Target {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+fn run_target(harden: bool) {
+    let mut stdout = std::io::stdout();
+    if !harden || harden_current_process() {
+        let _ = writeln!(stdout, "pf27s06-core-target:ready");
+    }
+    let _ = stdout.flush();
+    let mut sink = Vec::new();
+    let _ = std::io::stdin().read_to_end(&mut sink);
+    std::process::exit(0);
+}
+
+fn run_probe() {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::Foundation::GetLastError;
+    use windows_sys::Win32::System::Threading::OpenProcess;
+    use windows_sys::Win32::System::Threading::PROCESS_QUERY_INFORMATION;
+    use windows_sys::Win32::System::Threading::PROCESS_VM_READ;
+    let pid: u32 = std::env::var(TARGET_PID_ENV)
+        .ok()
+        .and_then(|pid| pid.parse().ok())
+        .unwrap_or_default();
+    // SAFETY: plain OpenProcess; the handle is closed at once.
+    let outcome = unsafe {
+        let handle = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, 0, pid);
+        if handle == 0 {
+            match GetLastError() {
+                ERROR_ACCESS_DENIED => "denied".to_string(),
+                code => format!("failed:{code}"),
+            }
+        } else {
+            CloseHandle(handle);
+            "granted".to_string()
+        }
+    };
+    let mut stdout = std::io::stdout();
+    let _ = writeln!(stdout, "{REPORT_PREFIX}vm_read={outcome}");
+    let _ = stdout.flush();
+    std::process::exit(0);
+}
+
+fn absolute(path: &Path) -> AbsolutePathBuf {
+    AbsolutePathBuf::from_absolute_path(dunce::canonicalize(path).expect("canonical path"))
+        .expect("absolute path")
+}
+
+/// Copies the elevated sandbox helpers next to this test binary, where the
+/// sandbox looks for them (as the Windows sandbox integration tests do).
+fn stage_windows_sandbox_helpers() {
+    let exe = std::env::current_exe().expect("test binary");
+    let resources = exe.parent().expect("test dir").join("codex-resources");
+    std::fs::create_dir_all(&resources).expect("resources dir");
+    for helper in ["codex-windows-sandbox-setup", "codex-command-runner"] {
+        let source = codex_utils_cargo_bin::cargo_bin(helper).expect("sandbox helper built");
+        let destination = resources.join(format!("{helper}.exe"));
+        if let Err(error) = std::fs::copy(&source, &destination)
+            && !destination.exists()
+        {
+            panic!("stage {helper}: {error}");
+        }
+    }
+}
+
+struct EnvGuard {
+    key: &'static str,
+    original: Option<std::ffi::OsString>,
+}
+
+impl EnvGuard {
+    fn set(key: &'static str, value: &Path) -> Self {
+        let original = std::env::var_os(key);
+        // SAFETY: the pf_27_s06 Windows tests run alone in their process.
+        unsafe { std::env::set_var(key, value) };
+        Self { key, original }
+    }
+}
+
+impl Drop for EnvGuard {
+    fn drop(&mut self) {
+        // SAFETY: as in `set`.
+        unsafe {
+            match &self.original {
+                Some(value) => std::env::set_var(self.key, value),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+}

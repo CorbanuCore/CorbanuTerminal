@@ -464,21 +464,29 @@ impl<'a> SandboxAttempt<'a> {
     /// PF-27-S02: when the secretless launch contract is armed, refuses
     /// launches it cannot contain, scrubs the command's environment and
     /// returns `permissions` with the protected paths denied.
+    /// `proxy_enforced`: the launch goes through the managed network proxy,
+    /// which on Windows selects the elevated sandbox backend.
     fn protect_launch(
         &self,
         contract: Option<&crate::security::launch_contract::LaunchContract>,
         command: &mut SandboxCommand,
         exec_server: bool,
+        proxy_enforced: bool,
     ) -> Result<Option<codex_protocol::models::PermissionProfile>, CodexErr> {
         let Some(contract) = contract else {
             return Ok(None);
         };
         let cwd = self.sandbox_cwd.to_abs_path()?;
+        let windows_elevated = codex_sandboxing::windows_sandbox_uses_elevated_backend(
+            self.windows_sandbox_level,
+            proxy_enforced,
+        );
         let protected = contract
             .protect_launch(
                 self.sandbox,
                 self.sandbox_requested,
                 exec_server,
+                windows_elevated,
                 command,
                 self.permissions,
                 cwd.as_path(),
@@ -513,7 +521,12 @@ impl<'a> SandboxAttempt<'a> {
         environment_id: Option<&str>,
     ) -> Result<crate::sandboxing::ExecRequest, CodexErr> {
         let network = self.network_proxy(network);
-        let protected = self.protect_launch(contract, &mut command, /*exec_server*/ false)?;
+        let protected = self.protect_launch(
+            contract,
+            &mut command,
+            /*exec_server*/ false,
+            /*proxy_enforced*/ network.is_some(),
+        )?;
         let request = self
             .manager
             .transform(SandboxTransformRequest {
@@ -566,7 +579,12 @@ impl<'a> SandboxAttempt<'a> {
         options: ExecOptions,
     ) -> Result<crate::sandboxing::ExecRequest, CodexErr> {
         let managed_network = command.managed_network.clone();
-        self.protect_launch(contract, &mut command, /*exec_server*/ true)?;
+        self.protect_launch(
+            contract,
+            &mut command,
+            /*exec_server*/ true,
+            /*proxy_enforced*/ false,
+        )?;
         let exec_server_permissions = effective_permission_profile(
             self.exec_server_permissions,
             command.additional_permissions.as_ref(),

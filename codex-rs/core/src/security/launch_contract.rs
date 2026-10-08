@@ -2,7 +2,8 @@
 //!
 //! Once armed, every agent command launch must:
 //! - run under an OS sandbox on a platform whose containment is verified here
-//!   (macOS Seatbelt, Linux bubblewrap/seccomp); Windows is refused for now;
+//!   (macOS Seatbelt, Linux bubblewrap/seccomp, and on Windows the elevated
+//!   sandbox, which runs commands as a separate user; PF-27-S06);
 //! - deny reads of the vault store, sign-in files, wallet and broker runtime
 //!   directory, and deny writes to `CODEX_HOME` (the policy store);
 //! - carry no raw managed secret in its environment, argv or stdin, and not
@@ -79,6 +80,8 @@ static ACTIVE: OnceLock<LaunchContract> = OnceLock::new();
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum LaunchDenied {
     UnsupportedPlatform,
+    /// PF-27-S06: the unelevated Windows sandbox restricts writes only.
+    WindowsUnelevatedSandbox,
     ProcessHardening,
     Unsandboxed,
     RemoteEnvironment,
@@ -95,6 +98,10 @@ impl std::fmt::Display for LaunchDenied {
         let reason = match self {
             Self::UnsupportedPlatform => {
                 "secretless agent launch is not available on this platform yet (PF-27-S06)".to_string()
+            }
+            Self::WindowsUnelevatedSandbox => {
+                "the unelevated Windows sandbox cannot deny reads of the vault and sign-in files; set `sandbox = \"elevated\"` under `[windows]`"
+                    .to_string()
             }
             Self::ProcessHardening => {
                 "Corbanu could not protect its own process memory from agent commands".to_string()
@@ -258,7 +265,13 @@ impl LaunchContract {
             .iter()
             .map(|entry| codex_home.join(entry))
             .collect::<Vec<_>>();
-        if let Some(home) = std::env::var_os("HOME")
+        // Windows has no HOME by default; its profile directory is USERPROFILE.
+        let home = std::env::var_os("HOME").or_else(|| {
+            cfg!(windows)
+                .then(|| std::env::var_os("USERPROFILE"))
+                .flatten()
+        });
+        if let Some(home) = home
             && let Ok(home) = AbsolutePathBuf::from_absolute_path(home)
         {
             protected_read_paths
@@ -266,6 +279,15 @@ impl LaunchContract {
             if cfg!(target_os = "macos") {
                 protected_read_paths.push(home.join("Library/Keychains"));
             }
+            if cfg!(windows) {
+                protected_read_paths.push(home.join("_netrc"));
+            }
+        }
+        if cfg!(windows)
+            && let Some(app_data) = std::env::var_os("APPDATA")
+            && let Ok(app_data) = AbsolutePathBuf::from_absolute_path(app_data)
+        {
+            protected_read_paths.push(app_data.join("GitHub CLI").join("hosts.yml"));
         }
         if let Some(dir) = std::env::var_os("CLAUDE_CONFIG_DIR")
             && let Ok(dir) = AbsolutePathBuf::from_absolute_path(dir)
@@ -289,17 +311,21 @@ impl LaunchContract {
     /// platform and sandbox checks, argv and environment checks, and the
     /// returned profile with protected paths denied (verified again after the
     /// command's own additional permissions are merged).
+    /// `windows_elevated`: the command will run under the elevated Windows
+    /// sandbox backend (ignored elsewhere).
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn protect_launch(
         &self,
         sandbox: SandboxType,
         sandbox_requested: bool,
         exec_server: bool,
+        windows_elevated: bool,
         command: &mut SandboxCommand,
         permissions: &PermissionProfile,
         cwd: &Path,
     ) -> Result<PermissionProfile, LaunchDenied> {
         let mut protect = || -> Result<PermissionProfile, LaunchDenied> {
-            self.check_sandbox(sandbox, sandbox_requested, exec_server)?;
+            self.check_sandbox(sandbox, sandbox_requested, exec_server, windows_elevated)?;
             let mut argv = vec![command.program.to_string_lossy().into_owned()];
             argv.extend(command.args.iter().cloned());
             self.check_command(&argv, &mut command.env)?;
@@ -322,8 +348,10 @@ impl LaunchContract {
         cwd: &Path,
     ) -> Result<PermissionProfile, LaunchDenied> {
         let mut protect = || -> Result<PermissionProfile, LaunchDenied> {
+            // External agents are not launched through the Windows sandbox.
             self.check_sandbox(
                 sandbox, /*sandbox_requested*/ true, /*exec_server*/ false,
+                /*windows_elevated*/ false,
             )?;
             self.check_command(argv, env)?;
             self.protect_permissions(profile, cwd)
@@ -339,13 +367,16 @@ impl LaunchContract {
     /// Platform, process-hardening and sandbox checks for one launch attempt.
     /// `sandbox_requested` is the policy decision; `sandbox` is the concrete
     /// wrapper (`None` for exec-server launches, which apply it remotely).
+    /// On Windows only the elevated backend (`windows_elevated`) can deny
+    /// reads, so the unelevated one is refused (PF-27-S06).
     pub(crate) fn check_sandbox(
         &self,
         sandbox: SandboxType,
         sandbox_requested: bool,
         exec_server: bool,
+        windows_elevated: bool,
     ) -> Result<(), LaunchDenied> {
-        if !cfg!(any(target_os = "macos", target_os = "linux")) {
+        if !cfg!(any(target_os = "macos", target_os = "linux", windows)) {
             return Err(LaunchDenied::UnsupportedPlatform);
         }
         if !self.hardened {
@@ -356,6 +387,9 @@ impl LaunchContract {
         }
         if !sandbox_requested || sandbox == SandboxType::None {
             return Err(LaunchDenied::Unsandboxed);
+        }
+        if cfg!(windows) && !windows_elevated {
+            return Err(LaunchDenied::WindowsUnelevatedSandbox);
         }
         Ok(())
     }
@@ -399,10 +433,17 @@ impl LaunchContract {
             .protected_read_paths
             .iter()
             .map(|path| {
-                FileSystemSandboxEntry::skip_missing_path(
-                    FileSystemPath::Path { path: path.clone() },
-                    FileSystemAccessMode::Deny,
-                )
+                let path_entry = FileSystemPath::Path { path: path.clone() };
+                // PF-27-S06: the Windows sandbox drops every skip-if-missing
+                // entry, so a path that exists is denied outright there.
+                if cfg!(windows) && path.as_path().exists() {
+                    FileSystemSandboxEntry::new(path_entry, FileSystemAccessMode::Deny)
+                } else {
+                    FileSystemSandboxEntry::skip_missing_path(
+                        path_entry,
+                        FileSystemAccessMode::Deny,
+                    )
+                }
             })
             .chain(std::iter::once(glob))
         {
@@ -500,7 +541,9 @@ impl LaunchContract {
         env.retain(|_, value| {
             !self.contains_managed_value(value) && !secretless_launch::value_has_url_password(value)
         });
-        env.insert("ZDOTDIR".to_string(), PROTECTED_ZDOTDIR.to_string());
+        if cfg!(unix) {
+            env.insert("ZDOTDIR".to_string(), PROTECTED_ZDOTDIR.to_string());
+        }
         Ok(())
     }
 
@@ -547,7 +590,8 @@ fn is_login_shell(argv: &[String]) -> bool {
 
 /// Keeps same-user processes outside the sandbox from reading Core's memory:
 /// non-dumpable on Linux (also hides `/proc/<pid>/environ` and `mem`), no
-/// debugger attach on macOS. Returns false when the platform call failed.
+/// debugger attach on macOS, a process DACL that grants no memory or handle
+/// access on Windows (PF-27-S06). Returns false when the platform call failed.
 fn harden_current_process() -> bool {
     #[cfg(target_os = "linux")]
     {
@@ -561,7 +605,11 @@ fn harden_current_process() -> bool {
         // SAFETY: PT_DENY_ATTACH takes no address or data.
         unsafe { libc::ptrace(libc::PT_DENY_ATTACH, 0, std::ptr::null_mut(), 0) == 0 }
     }
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(windows)]
+    {
+        codex_process_hardening::restrict_current_process_access().is_ok()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     {
         false
     }
@@ -570,3 +618,8 @@ fn harden_current_process() -> bool {
 #[cfg(test)]
 #[path = "launch_contract_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[cfg(windows)]
+#[path = "launch_contract_windows_tests.rs"]
+mod windows_tests;
