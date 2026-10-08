@@ -270,7 +270,8 @@ fn pipe_name(handle: HANDLE) -> Option<String> {
 
 fn report_and_exit(report: &str) -> ! {
     let mut stdout = std::io::stdout();
-    let _ = writeln!(stdout, "{REPORT_PREFIX}{report}");
+    // Own line: libtest prints the test name without a newline first.
+    let _ = writeln!(stdout, "\n{REPORT_PREFIX}{report}");
     let _ = stdout.flush();
     std::process::exit(0);
 }
@@ -314,8 +315,10 @@ fn parse_report(output: &[u8]) -> String {
     let output = String::from_utf8_lossy(output);
     output
         .lines()
-        .find_map(|line| line.trim().strip_prefix(REPORT_PREFIX))
+        .find_map(|line| line.find(REPORT_PREFIX).map(|start| &line[start..]))
+        .and_then(|line| line.strip_prefix(REPORT_PREFIX))
         .unwrap_or_else(|| panic!("child printed no report:\n{output}"))
+        .trim()
         .to_string()
 }
 
