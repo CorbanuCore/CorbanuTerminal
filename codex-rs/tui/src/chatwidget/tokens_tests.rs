@@ -42,11 +42,9 @@ async fn accounting_inspect_usability_unavailable_first_screen() {
     ] {
         let chat = unavailable_inspector(/*width*/ 150, args).await;
         let screen = render_bottom_popup_with_height(&chat, /*width*/ 150, /*height*/ 16);
-        assert!(
-            screen.contains("Unavailable — accounting ledger not installed."),
-            "{screen}"
-        );
-        assert!(screen.contains("Collection remains off."), "{screen}");
+        // #289: a build that records costs never says collection is off.
+        assert!(screen.contains(super::absent_state()), "{screen}");
+        assert!(!screen.contains("Collection remains off."), "{screen}");
     }
 }
 
@@ -61,19 +59,21 @@ async fn accounting_inspect_usability_wrap_tracks_resize() {
         .take(3)
         .collect::<Vec<_>>()
         .join("\n");
-    insta::assert_snapshot!(first_lines, @"
-    Cost — this conversation
-    Requested UTC day: 2026-09-16
-    › Unavailable — accounting ledger not installed. Collection remains off.
-    ");
+    assert_eq!(
+        first_lines,
+        format!(
+            "Cost — this conversation\nRequested UTC day: 2026-09-16\n› {}",
+            super::absent_state()
+        )
+    );
     assert!(
         wide.contains("Collection coverage: unknown; recorded root and resolved descendants only."),
         "{wide}"
     );
     chat.on_terminal_resize(/*width*/ 40);
     let narrow = render_bottom_popup_with_height(&chat, /*width*/ 40, /*height*/ 16);
-    assert!(!narrow.contains("Unavailable — accounting ledger not installed."));
-    assert!(narrow.contains("Unavailable — accounting"), "{narrow}");
+    assert!(!narrow.contains(super::absent_state()));
+    assert!(narrow.contains("Unavailable — "), "{narrow}");
     chat.on_terminal_resize(/*width*/ 150);
     assert_eq!(
         render_bottom_popup_with_height(&chat, /*width*/ 150, /*height*/ 16),
@@ -1225,8 +1225,8 @@ fn accounting_inspect_availability_state_snapshots() {
         .into_iter()
         .map(|s| inspection_pages(Ok(s))[0].text.first().unwrap().clone())
         .collect();
-    insta::assert_snapshot!(text.join("\n"), @"
-    Unavailable — accounting ledger not installed. Collection remains off.
+    assert_eq!(text[0], super::absent_state());
+    insta::assert_snapshot!(text[1..].join("\n"), @"
     Unavailable — native thread no longer exists.
     Snapshot is not current; newer activity is unverified
     Recorded totals unavailable — stored contributions need refresh. Retry rereads only; no repair performed.
@@ -2387,4 +2387,139 @@ fn accounting_inspect_plan_consumption_groups_thousands() {
     assert_eq!(rate_scaled(/*milli_tokens*/ 24_337_000), "24,337");
     assert_eq!(rate_scaled(/*milli_tokens*/ 1_234_567_500), "1,234,567.500");
     assert_eq!(rate_scaled(/*milli_tokens*/ 500), "0.500");
+}
+
+/// #289: an inclusive attempt that did not report cache writes, bound to a
+/// price that charges nothing for them, is costed from input − cache read.
+/// Its lines say so instead of calling the count unknown beside its cost.
+fn free_write_quote() -> ObservationQuote {
+    let mut q = quote();
+    q.snapshot = Some(
+        serde_json::from_value(serde_json::json!({
+            "id": Uuid::from_u128(1000), "provider": "synthetic", "model": "synthetic-model",
+            "scope": Uuid::from_u128(5), "currency": "USD", "unit": "PerMillionTokens",
+            "rates": {"noncached": "1.4", "read": "0.26", "write": "0", "output": "4.4"},
+            "source_reference": Uuid::from_u128(1001), "source_kind": "ProviderPublished",
+            "observed_at_ms": 0, "approved_at_ms": 0, "effective_from_ms": 0,
+            "effective_end_ms": null
+        }))
+        .unwrap(),
+    );
+    q
+}
+
+#[test]
+fn accounting_inspect_free_cache_writes_show_the_counts_their_costs_used() {
+    let q = free_write_quote();
+    assert_eq!(q.priced_counts(), [Some(80), Some(20), Some(0), Some(40)]);
+    let lines = super::attempt_text(&q);
+    for expected in [
+        "Noncached input (derived for inclusive input): 80 (derived as input − cache read: cache writes were not reported, and this price charges nothing for cache writes)",
+        "Cache write: not reported — this price charges nothing for cache writes",
+    ] {
+        assert!(
+            lines.iter().any(|line| line == expected),
+            "{expected}\n{lines:#?}"
+        );
+    }
+    assert!(
+        !lines.iter().any(
+            |line| line.contains("unknown — no retained numeric evidence")
+                && (line.starts_with("Noncached input (") || line.starts_with("Cache write:"))
+        ),
+        "{lines:#?}"
+    );
+
+    let InspectionDay::Ready(mut view) = packet() else {
+        unreachable!()
+    };
+    view.requests = std::collections::BTreeMap::from([(q.attempt.request_id, vec![q])]);
+    let text = inspection_pages(Ok(InspectionDay::Ready(view)))[0]
+        .text
+        .join("\n");
+    assert!(
+        text.contains("Noncached input (derived for inclusive input): not reported (1 attempt) — costed as input − cache read for 1 attempt, whose price charges nothing for cache writes"),
+        "{text}"
+    );
+    assert!(
+        text.contains("Cache write: not reported (1 attempt) — free at the price of 1 attempt, so nothing was charged"),
+        "{text}"
+    );
+}
+
+/// #289: requests are numbered in the order they were sent.
+#[test]
+fn accounting_inspect_requests_are_numbered_in_dispatch_order() {
+    let InspectionDay::Ready(mut view) = packet() else {
+        unreachable!()
+    };
+    view.requests.clear();
+    // Ids sort the other way round from dispatch time.
+    for (id, sent) in [(1u128, 30_000i64), (2, 10_000), (3, 20_000)] {
+        let mut q = quote();
+        q.attempt.attempt_id = Uuid::from_u128(id);
+        q.attempt.request_id = Uuid::from_u128(100 + id);
+        q.attempt.thread_id = view.owner;
+        q.attempt.dispatched_at_ms = sent.try_into().unwrap();
+        view.requests.insert(q.attempt.request_id, vec![q]);
+    }
+    let pages = inspection_pages(Ok(InspectionDay::Ready(view)));
+    let requests: Vec<_> = pages[0]
+        .links
+        .iter()
+        .filter(|(label, _)| label.starts_with("Request "))
+        .map(|(label, page)| {
+            let id = pages[*page]
+                .text
+                .iter()
+                .find_map(|line| line.strip_prefix("Request: "))
+                .unwrap()
+                .to_string();
+            (label.split(' ').nth(1).unwrap().to_string(), id)
+        })
+        .collect();
+    assert_eq!(
+        requests,
+        [(2, 102), (3, 103), (1, 101)]
+            .into_iter()
+            .enumerate()
+            .map(|(n, (_, id))| ((n + 1).to_string(), Uuid::from_u128(id).to_string()))
+            .collect::<Vec<_>>()
+    );
+    // Group pages list the same requests in the same order and numbering.
+    let root = pages
+        .iter()
+        .find(|page| page.title == "Root's own attempts")
+        .expect("root group page");
+    assert_eq!(
+        root.links
+            .iter()
+            .map(|(label, _)| label.as_str())
+            .collect::<Vec<_>>(),
+        ["Request 1", "Request 2", "Request 3"]
+    );
+}
+
+/// #289: a valid date after today is refused with the reason, not the syntax.
+#[tokio::test]
+async fn accounting_inspect_future_day_says_why() {
+    let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.open_accounting_command(
+        "requests 2026-09-17",
+        NaiveDate::from_ymd_opt(2026, 9, 16).unwrap(),
+    );
+    let mut text = String::new();
+    while let Ok(event) = rx.try_recv() {
+        if let AppEvent::InsertHistoryCell(cell) = event {
+            for line in cell.display_lines(/*width*/ 200) {
+                text.push_str(&line.to_string());
+                text.push('\n');
+            }
+        }
+    }
+    assert!(
+        text.contains("2026-09-17 is after today (2026-09-16, UTC)"),
+        "{text}"
+    );
+    assert!(!text.contains("Usage:"), "{text}");
 }

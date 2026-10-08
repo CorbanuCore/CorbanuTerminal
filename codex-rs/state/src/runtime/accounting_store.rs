@@ -941,14 +941,22 @@ async fn inspect_buckets(
                 InspectionDay::TooLarge => return Ok(value),
                 _ => None,
             };
-            if let (Some((from, to)), Some(coverage)) = (effective, coverage) {
-                let from = from.max(coverage.aggregate_day_floor * 86_400_000);
-                let to = to
-                    .min(coverage.completed_as_of_ms.saturating_add(1))
-                    .min(read_at_ms.saturating_add(1));
-                effective = (from < to).then_some((from, to));
-            } else {
-                effective = None;
+            match (effective, coverage) {
+                (Some((from, to)), Some(coverage)) => {
+                    let from = from.max(coverage.aggregate_day_floor * 86_400_000);
+                    let to = to
+                        .min(coverage.completed_as_of_ms.saturating_add(1))
+                        .min(read_at_ms.saturating_add(1));
+                    effective = (from < to).then_some((from, to));
+                }
+                // A day the ledger has not reached yet, after days it has: the
+                // bucket's coverage ends where the previous day's did, exactly
+                // as a day bucket that contains today reports it. Keep it only
+                // if coverage already ends before this day; a lagging day inside
+                // the ledger (detail awaiting compaction) is unverified.
+                (Some((_, to)), None)
+                    if to <= day * 86_400_000 && matches!(value, InspectionDay::CheckpointLag) => {}
+                _ => effective = None,
             }
             // Include empty-bucket/header costs in the unchanged packet ceiling.
             bytes += 8192;

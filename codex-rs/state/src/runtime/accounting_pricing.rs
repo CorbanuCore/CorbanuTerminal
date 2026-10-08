@@ -278,6 +278,18 @@ pub struct ObservationQuote {
 }
 
 impl ObservationQuote {
+    /// The token counts this quote priced: noncached input, cache read, cache
+    /// write, output. They equal the observed usage except where pricing
+    /// resolved an unreported cache-write count (`priced_counts`), so a
+    /// display can show the count each cost was computed from.
+    ///
+    /// These are the current rules' counts. Every recorded quote uses rules
+    /// version 1 today (`PRICING_RULES`); a later version that changes the
+    /// counts must dispatch on `self.pricing_rules` here too.
+    pub fn priced_counts(&self) -> [Option<i64>; 4] {
+        priced_counts(&self.usage, self.attempt.dialect, self.snapshot.as_ref())
+    }
+
     /// Whether the attempt ran on subscription capacity, whether or not a plan
     /// rate was stated for it.
     pub fn is_plan(&self) -> bool {
