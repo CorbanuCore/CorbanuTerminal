@@ -33,3 +33,5 @@ which reverses Travis's Oct 3 decision B1 ("from the vault at use time, never fr
 Also found: both jobs are bootstrapped from `~/Library/Application Support/corbanu-owner-live/*/owner.plist`,
 not `~/Library/LaunchAgents`, so neither is reloaded after a reboot. Whether `user/501` itself outlives a full
 logout was never tested.
+
+Update, later on 2026-10-08: Travis kept the login dependency (option 2). The fix is requalified and live, and both jobs are reboot-safe. See [owner-manager-reboot-safe-20261008.md](owner-manager-reboot-safe-20261008.md).
