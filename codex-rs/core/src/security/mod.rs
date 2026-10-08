@@ -25,6 +25,7 @@ pub mod preflight;
 mod protected_runtime;
 pub(crate) mod protected_surface;
 pub(crate) mod recovery;
+pub mod revocation_change;
 pub(crate) mod taint;
 pub(crate) mod tainted_action;
 pub(crate) mod ui_events;

@@ -98,6 +98,9 @@ pub use security::preflight as protected_preflight;
 /// PF-25-S01 Aggressive grant offers. Only the TUI's grant review may call
 /// `confirm` (`tui/src/security/grant_view_tests.rs` checks it).
 pub use security::grant_offer as security_grant;
+/// PF-25-S02 human revocation and kill switch; called only by the TUI's
+/// grants and kill switch view.
+pub use security::revocation_change as security_revocation;
 mod session_prefix;
 mod session_startup_prewarm;
 pub mod skills;

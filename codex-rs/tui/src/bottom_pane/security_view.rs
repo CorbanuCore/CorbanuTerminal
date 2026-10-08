@@ -29,6 +29,7 @@ use super::bottom_pane_view::BottomPaneView;
 use super::bottom_pane_view::ViewCompletion;
 use super::security_inspector::SecurityInspector;
 use super::security_level_picker::SecurityLevelPicker;
+use crate::security::revocation_view::RevocationView;
 
 pub(crate) struct SecurityView {
     requested: Option<SecurityLevel>,
@@ -37,6 +38,8 @@ pub(crate) struct SecurityView {
     cancelled: bool,
     inspected: bool,
     picker: Option<SecurityLevelPicker>,
+    /// PF-25-S02: the grants and kill switch view, opened from the picker.
+    revocations: Option<RevocationView>,
     /// PF-41-S01: what the inspector reads; `i` opens it over the picker.
     inspector_input: Option<crate::security::inspector::InspectorInput>,
     inspector: Option<SecurityInspector>,
@@ -65,6 +68,7 @@ impl SecurityView {
             keymap,
             cancelled: false,
             inspected: false,
+            revocations: None,
             inspector_input: None,
             inspector: None,
         }
@@ -158,6 +162,9 @@ impl SecurityView {
 
 impl SecurityView {
     fn body(&self, width: u16) -> Vec<Line<'static>> {
+        if let Some(revocations) = &self.revocations {
+            return revocations.lines(width);
+        }
         match &self.picker {
             Some(picker) => picker.lines(width),
             None => self.lines(width),
@@ -165,6 +172,9 @@ impl SecurityView {
     }
 
     fn footer_text(&self) -> String {
+        if let Some(revocations) = &self.revocations {
+            return revocations.footer();
+        }
         match &self.picker {
             Some(picker) if self.inspector_input.is_some() => {
                 format!("{} · i inspect", picker.footer())
@@ -184,8 +194,21 @@ impl BottomPaneView for SecurityView {
             }
             return;
         }
+        if let Some(revocations) = self.revocations.as_mut() {
+            revocations.handle_key_event(key);
+            if revocations.closed {
+                self.revocations = None;
+                if let Some(picker) = self.picker.as_mut() {
+                    picker.revocations_closed();
+                }
+            }
+            return;
+        }
         if let Some(input) = &self.inspector_input
             && key_hint::plain(KeyCode::Char('i')).is_press(key)
+            && !self.keymap.move_up.is_pressed(key)
+            && !self.keymap.move_down.is_pressed(key)
+            && !self.keymap.accept.is_pressed(key)
         {
             self.inspector = Some(SecurityInspector::new(input.clone(), self.keymap.clone()));
             return;
@@ -193,6 +216,14 @@ impl BottomPaneView for SecurityView {
         if let Some(picker) = self.picker.as_mut() {
             picker.handle_key_event(key);
             self.cancelled = picker.closed;
+            if picker.open_revocations {
+                let (target, app_event_tx) = picker.revocation_target();
+                self.revocations = Some(RevocationView::new(
+                    target,
+                    self.keymap.clone(),
+                    app_event_tx,
+                ));
+            }
             return;
         }
         if key_hint::plain(KeyCode::Esc).is_press(key) || self.keymap.cancel.is_pressed(key) {
@@ -222,6 +253,10 @@ impl BottomPaneView for SecurityView {
             .picker
             .as_ref()
             .is_some_and(SecurityLevelPicker::saving)
+            && !self
+                .revocations
+                .as_ref()
+                .is_some_and(RevocationView::saving)
         {
             self.cancelled = true;
         }
@@ -233,6 +268,9 @@ impl BottomPaneView for SecurityView {
     }
 
     fn pre_draw_tick(&mut self, _now: std::time::Instant) -> bool {
+        if let Some(revocations) = self.revocations.as_mut() {
+            return revocations.poll();
+        }
         self.picker.as_mut().is_some_and(SecurityLevelPicker::poll)
     }
 
@@ -242,10 +280,15 @@ impl BottomPaneView for SecurityView {
         if self.inspector.is_some() {
             return Some(std::time::Duration::from_secs(1));
         }
-        self.picker
+        let saving = self
+            .picker
             .as_ref()
-            .filter(|picker| picker.saving())
-            .map(|_| std::time::Duration::from_millis(50))
+            .is_some_and(SecurityLevelPicker::saving)
+            || self
+                .revocations
+                .as_ref()
+                .is_some_and(RevocationView::saving);
+        saving.then_some(std::time::Duration::from_millis(50))
     }
 }
 
@@ -273,7 +316,9 @@ impl Renderable for SecurityView {
         };
         let lines = self.body(area.width);
         let mut footer = footer_lines(self.footer_text());
-        if let Some(picker) = self.picker.as_ref() {
+        if self.revocations.is_none()
+            && let Some(picker) = self.picker.as_ref()
+        {
             // A review taller than the pane scrolls, and its footer says so.
             let body_height = area.height.saturating_sub(footer.len() as u16);
             picker.scroll_for(lines.len(), body_height);
@@ -284,10 +329,11 @@ impl Renderable for SecurityView {
             height: area.height.saturating_sub(footer_height),
             ..area
         };
-        let scroll = self
-            .picker
-            .as_ref()
-            .map_or(0, |picker| picker.scroll_for(lines.len(), body.height));
+        let scroll = match (&self.revocations, &self.picker) {
+            (Some(revocations), _) => revocations.scroll_for(lines.len(), body.height),
+            (None, Some(picker)) => picker.scroll_for(lines.len(), body.height),
+            (None, None) => 0,
+        };
         Paragraph::new(lines).scroll((scroll, 0)).render(body, buf);
         Paragraph::new(footer).render(
             Rect {

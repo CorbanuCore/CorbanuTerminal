@@ -89,6 +89,7 @@ pub mod legacy_core {
     pub use codex_core::resolve_installation_id;
     pub use codex_core::security_grant;
     pub use codex_core::security_level_change;
+    pub use codex_core::security_revocation;
     // PF-41-S01: the read-only `/security` inspector.
     pub use codex_core::security_inspection;
     // Contained Claude panes (#218) launch Claude Code from the TUI process,

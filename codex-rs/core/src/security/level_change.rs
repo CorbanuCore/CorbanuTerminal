@@ -78,9 +78,17 @@ pub struct LevelBasis {
     pub live: bool,
     /// That tree's epoch: any commit since the review moves it.
     epoch: Option<AuthorityEpoch>,
+    /// The kill-switch event in force (PF-25-S02): a release is for this one
+    /// only, also when no live tree's epoch would show a change.
+    kill_switch_event: Option<String>,
 }
 
 impl LevelBasis {
+    /// The live tree's epoch the review was shown under.
+    pub(super) fn epoch(&self) -> Option<AuthorityEpoch> {
+        self.epoch
+    }
+
     /// `configured` is [`configured_level`] of the session's config;
     /// `thread` the session's thread, when it has started.
     pub fn read(codex_home: &Path, configured: SecurityLevel, thread: Option<ThreadId>) -> Self {
@@ -96,6 +104,7 @@ impl LevelBasis {
                 stored,
                 live: true,
                 epoch: Some(epoch),
+                kill_switch_event: controller.kill_switch_event_id(),
             };
         }
         let recovered = recovery::recover(codex_home, configured);
@@ -106,6 +115,10 @@ impl LevelBasis {
             stored,
             live: false,
             epoch: None,
+            kill_switch_event: recovered
+                .revocations
+                .kill_switch_event_id()
+                .map(|id| id.as_str().to_string()),
         }
     }
 }
@@ -274,7 +287,7 @@ pub fn commit_human_level_change(
 
 /// A policy tree built from the stored state, for a commit made while no
 /// session of this process uses the home. It saves; nothing else holds it.
-fn stored_controller(
+pub(super) fn stored_controller(
     codex_home: &Path,
     configured: SecurityLevel,
 ) -> Result<TrustedSecurityController, LevelChangeError> {

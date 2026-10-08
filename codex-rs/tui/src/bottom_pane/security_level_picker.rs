@@ -128,6 +128,8 @@ pub(crate) struct SecurityLevelPicker {
     pub(super) commit_inline: bool,
     /// Sends the "restart now" request.
     app_event_tx: Option<AppEventSender>,
+    /// PF-25-S02: `g` asked for the grants and kill switch view.
+    pub(super) open_revocations: bool,
 }
 
 /// Core's `[security]` levels from the session's config layers, and the
@@ -182,7 +184,39 @@ impl SecurityLevelPicker {
             pending: None,
             commit_inline: cfg!(test),
             app_event_tx: None,
+            open_revocations: false,
         }
+    }
+
+    /// PF-25-S02: whether the grants and kill switch view is offered: Core
+    /// enforces a protected level, the kill switch is on, or grants are held.
+    fn revocations_useful(&self) -> bool {
+        self.basis.in_force != SecurityLevel::Permissive
+            || self.basis.kill_switch_active
+            || !crate::legacy_core::security_grant::held_grants().is_empty()
+    }
+
+    /// Where the grants and kill switch view commits, and its restart sender.
+    pub(super) fn revocation_target(
+        &self,
+    ) -> (
+        crate::security::revocation_view::RevocationTarget,
+        Option<AppEventSender>,
+    ) {
+        (
+            crate::security::revocation_view::RevocationTarget {
+                codex_home: self.codex_home.clone(),
+                configured: self.core.configured,
+                thread: self.core.thread,
+            },
+            self.app_event_tx.clone(),
+        )
+    }
+
+    /// Back from the grants and kill switch view: read Core's state again.
+    pub(super) fn revocations_closed(&mut self) {
+        self.open_revocations = false;
+        self.basis = self.read_basis();
     }
 
     pub(crate) fn set_core_levels(&mut self, core: CoreLevels) {
@@ -237,6 +271,13 @@ impl SecurityLevelPicker {
                 } else if key_hint::plain(KeyCode::Char('r')).is_press(key) && self.restart_useful()
                 {
                     self.restart();
+                } else if key_hint::plain(KeyCode::Char('g')).is_press(key)
+                    && !self.keymap.move_up.is_pressed(key)
+                    && !self.keymap.move_down.is_pressed(key)
+                    && !accept
+                    && self.revocations_useful()
+                {
+                    self.open_revocations = true;
                 } else if self.keymap.move_up.is_pressed(key) {
                     self.selected = (self.selected + ROWS.len() - 1) % ROWS.len();
                     self.screen = Screen::List { note: None };
@@ -694,6 +735,14 @@ impl SecurityLevelPicker {
         if let Some(line) = core_status(&self.basis) {
             lines.push(line);
         }
+        // PF-25-S02: the kill switch holds across restarts until turned off.
+        if self.basis.kill_switch_active
+            && !matches!(self.basis.stored, StoredSecurityState::Unreadable(_))
+        {
+            lines.push(
+                "Kill switch: on. New grants and protected actions after untrusted content are refused; press g to review it.".to_string(),
+            );
+        }
         // PF-25-S01: grants held now, with their scope and expiry.
         lines.extend(crate::security::grant_view::held_lines(
             &crate::legacy_core::security_grant::held_grants(),
@@ -964,11 +1013,16 @@ impl SecurityLevelPicker {
         let accept = label(&self.keymap.accept);
         match self.screen {
             Screen::List { .. } => format!(
-                "{}/{} move · {accept} choose · {}esc close",
+                "{}/{} move · {accept} choose · {}{}esc close",
                 label(&self.keymap.move_up),
                 label(&self.keymap.move_down),
                 if self.restart_useful() {
                     "r restart now · "
+                } else {
+                    ""
+                },
+                if self.revocations_useful() {
+                    "g grants and kill switch · "
                 } else {
                     ""
                 },
