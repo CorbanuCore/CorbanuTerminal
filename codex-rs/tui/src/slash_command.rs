@@ -312,9 +312,10 @@ impl SlashCommand {
             SlashCommand::Rollout | SlashCommand::TestApproval => cfg!(debug_assertions),
             // The recorded-request view is held: collection cannot exist in a
             // shipped binary, and advertising the view there was never
-            // authorised. Listing it is gated on the same build that can
-            // collect. Typing it still works, exactly as `/usage requests`
-            // already did, so nothing new is reachable in a shipped build.
+            // authorised. It is gated on the same build that can collect: in
+            // any other build typing it is an unrecognized command, and
+            // `/usage requests` remains the only way to the (empty) view, so
+            // nothing new is reachable in a shipped build.
             SlashCommand::Cost => cfg!(feature = "developer-accounting"),
             _ => true,
         }

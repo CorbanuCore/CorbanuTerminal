@@ -422,6 +422,7 @@ mod streaming;
 use self::status_surfaces::CachedProjectRootName;
 mod tokens;
 pub(crate) use self::tokens::TokenActivityView;
+pub(crate) use tokens::cost_command;
 mod tool_lifecycle;
 mod tool_requests;
 mod transcript;
