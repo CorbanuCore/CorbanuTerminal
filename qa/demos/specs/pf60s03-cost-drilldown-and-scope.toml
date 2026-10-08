@@ -1,0 +1,98 @@
+# PF-60-S03: /cost after a real GLM 5.2 turn: provider and model line, a request, its technical details,
+# Back and Esc, then a new empty conversation that lists the day's other conversations and the
+# missing-price next step. Two other conversations are seeded off screen first, as in the cost_scope tmux
+# test: two priced GPT-5.4 requests and one local-mock request with no published price.
+# Needs CORBANU_DEMO_SEED=<target>/debug/examples/accounting_demo_seed (cargo build -p codex-state --example accounting_demo_seed).
+id = "pf60s03-cost-drilldown-and-scope"
+feature = "/cost after a real turn: a request and its details, Back and Esc, then an empty conversation (two other conversations seeded)"
+expected = "The first screen names provider, model, billing and cost. A request opens its page, then its technical details; Esc goes back the way it came. A new conversation says it has no requests, lists the day's other conversations and names the next step for the one with no price."
+model = "glm-5.2"
+provider = "zai"
+rows = 44
+config = """
+suppress_unstable_features_warning = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+run = '"$CORBANU_DEMO_SEED" "$CODEX_HOME" others'
+[[steps]]
+type = "Reply with the single word OK."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "•\\s+OK"
+timeout = 120
+compress = 2
+[[steps]]
+type = "/cost"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Today \\(UTC\\) in this conversation"
+[[steps]]
+pause = 4
+# Up from the first line wraps to Close; seven steps up is "Request 1".
+[[steps]]
+key = "Up"
+repeat = 7
+[[steps]]
+wait = "› → Request 1"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Billing: Pay per use"
+[[steps]]
+pause = 3
+[[steps]]
+key = "Up"
+repeat = 4
+[[steps]]
+wait = "› → Technical details"
+[[steps]]
+pause = 1
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Attempt, components and original price"
+[[steps]]
+key = "Down"
+repeat = 16
+[[steps]]
+pause = 3
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "Estimate versus billed difference"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "› → Request 1"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Escape"
+[[steps]]
+type = "/new"
+[[steps]]
+key = "Enter"
+[[steps]]
+pause = 1
+[[steps]]
+type = "/cost"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Today \\(UTC\\) in this conversation: no recorded requests"
+[[steps]]
+wait = "Next step for requests with no price"
+[[steps]]
+pause = 4
