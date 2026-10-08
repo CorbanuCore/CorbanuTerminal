@@ -7,10 +7,10 @@
 //! first is stated beside this conversation's figures with its own total, the
 //! second with the step that finds the real amount.
 
+use codex_state::accounting::BucketQuote;
 use codex_state::accounting::DayTotals;
 use codex_state::accounting::ObservationQuote;
 use codex_state::accounting::OtherConversations;
-use codex_state::accounting::Usage;
 
 use super::EstimateGaps;
 use super::by_route;
@@ -74,26 +74,40 @@ pub(super) fn other_conversations_lines(others: Option<&OtherConversations>) -> 
     lines
 }
 
-/// What to do about pay-per-use requests with no complete estimate: those
-/// whose tokens no published price covers (including ones that reported no
-/// tokens at all), and those with a price whose provider did not report every
-/// token count. Either amount is on the provider's own bill, not zero.
+/// What to do about pay-per-use requests with no complete estimate: those no
+/// published price covers, those priced only in part, and those with a price
+/// whose provider did not report every token count. Each amount is on the
+/// provider's own bill, not zero. Requests that recorded only zero counts cost
+/// nothing and get no step.
 pub(super) fn no_price_next_step<'a>(
     quotes: impl IntoIterator<Item = &'a ObservationQuote>,
 ) -> Vec<String> {
     let mut no_price: Vec<String> = Vec::new();
+    let mut in_part: Vec<String> = Vec::new();
     let mut incomplete: Vec<String> = Vec::new();
     for quote in quotes {
         if quote.is_plan() || quote.all_buckets_priced.is_some() {
             continue;
         }
-        let silent = quote.usage == Usage::default();
-        let providers = if has_no_price(quote) || (silent && lacks_price(quote)) {
-            &mut no_price
-        } else if !lacks_price(quote) {
+        let usage = &quote.usage;
+        let priced_any = [usage.noncached, usage.read, usage.write, usage.output]
+            .into_iter()
+            .zip(quote.buckets)
+            .any(|(count, bucket)| {
+                count.is_some_and(|count| count > 0) && matches!(bucket, BucketQuote::Priced(_))
+            });
+        let unreported = quote
+            .buckets
+            .iter()
+            .any(|bucket| matches!(bucket, BucketQuote::MissingUsage));
+        let providers = if !lacks_price(quote) {
             &mut incomplete
+        } else if priced_any {
+            &mut in_part
+        } else if has_no_price(quote) || unreported {
+            &mut no_price
         } else {
-            // Partly priced: its known part is stated as "at least".
+            // Only zero counts, which cost nothing whatever the rate.
             continue;
         };
         let provider = provider_name(&quote.attempt.provider);
@@ -109,12 +123,17 @@ pub(super) fn no_price_next_step<'a>(
     let mut steps = Vec::new();
     if let Some(providers) = joined(&no_price) {
         steps.push(format!(
-            "Next step for requests with no price: check the bill from {providers}. No published price covers them, so only their tokens are shown here, not a cost."
+            "Next step for requests with no price: check the bill from {providers}. No published price covers them, so no cost is shown for them here."
+        ));
+    }
+    if let Some(providers) = joined(&in_part) {
+        steps.push(format!(
+            "Next step for requests priced only in part: check the bill from {providers}. Some of their tokens have no published price, so the estimate is only a lower bound."
         ));
     }
     if let Some(providers) = joined(&incomplete) {
         steps.push(format!(
-            "Next step for requests with incomplete usage: check the bill from {providers}. The provider did not report every token count, so their estimate is missing or only a lower bound."
+            "Next step for requests with incomplete usage: check the bill from {providers}. Their provider did not report every token count, so the estimate is missing or only a lower bound."
         ));
     }
     steps
