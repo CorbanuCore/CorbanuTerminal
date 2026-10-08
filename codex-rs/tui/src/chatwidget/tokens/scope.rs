@@ -10,10 +10,12 @@
 use codex_state::accounting::DayTotals;
 use codex_state::accounting::ObservationQuote;
 use codex_state::accounting::OtherConversations;
+use codex_state::accounting::Usage;
 
 use super::EstimateGaps;
 use super::by_route;
 use super::has_no_price;
+use super::lacks_price;
 use super::lower_first;
 use super::plain_billing;
 use super::provider_name;
@@ -72,26 +74,50 @@ pub(super) fn other_conversations_lines(others: Option<&OtherConversations>) -> 
     lines
 }
 
-/// What to do about requests whose recorded tokens no published price covers:
-/// the amount is on the provider's own bill, not zero.
+/// What to do about pay-per-use requests with no complete estimate: those
+/// whose tokens no published price covers (including ones that reported no
+/// tokens at all), and those with a price whose provider did not report every
+/// token count. Either amount is on the provider's own bill, not zero.
 pub(super) fn no_price_next_step<'a>(
     quotes: impl IntoIterator<Item = &'a ObservationQuote>,
-) -> Option<String> {
-    let mut providers: Vec<String> = Vec::new();
-    for quote in quotes.into_iter().filter(|quote| has_no_price(quote)) {
+) -> Vec<String> {
+    let mut no_price: Vec<String> = Vec::new();
+    let mut incomplete: Vec<String> = Vec::new();
+    for quote in quotes {
+        if quote.is_plan() || quote.all_buckets_priced.is_some() {
+            continue;
+        }
+        let silent = quote.usage == Usage::default();
+        let providers = if has_no_price(quote) || (silent && lacks_price(quote)) {
+            &mut no_price
+        } else if !lacks_price(quote) {
+            &mut incomplete
+        } else {
+            // Partly priced: its known part is stated as "at least".
+            continue;
+        };
         let provider = provider_name(&quote.attempt.provider);
         if !providers.contains(&provider) {
             providers.push(provider);
         }
     }
-    let providers = match providers.as_slice() {
-        [] => return None,
-        [one] => one.clone(),
-        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    let joined = |providers: &[String]| match providers {
+        [] => None,
+        [one] => Some(one.clone()),
+        [rest @ .., last] => Some(format!("{} and {last}", rest.join(", "))),
     };
-    Some(format!(
-        "Next step for requests with no price: check the bill from {providers}. No published price covers them, so only their tokens are shown here, not a cost."
-    ))
+    let mut steps = Vec::new();
+    if let Some(providers) = joined(&no_price) {
+        steps.push(format!(
+            "Next step for requests with no price: check the bill from {providers}. No published price covers them, so only their tokens are shown here, not a cost."
+        ));
+    }
+    if let Some(providers) = joined(&incomplete) {
+        steps.push(format!(
+            "Next step for requests with incomplete usage: check the bill from {providers}. The provider did not report every token count, so their estimate is missing or only a lower bound."
+        ));
+    }
+    steps
 }
 
 #[cfg(test)]

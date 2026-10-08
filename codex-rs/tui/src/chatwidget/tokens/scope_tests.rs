@@ -571,6 +571,17 @@ fn missing_usage_is_labelled_apart_from_missing_price() {
             .any(|line| line.contains("no price")),
         "a priced route must not be told to look for a missing price"
     );
+    // #288: it still gets a next step, naming its own provider, on its own
+    // first screen and request page.
+    const INCOMPLETE: &str = "Next step for requests with incomplete usage: check the bill from OpenAI. The provider did not report every token count, so their estimate is missing or only a lower bound.";
+    for title in ["Cost — this conversation", "Request"] {
+        let page = silent.iter().find(|page| page.title == title).unwrap();
+        assert!(
+            page.text.iter().any(|line| line == INCOMPLETE),
+            "{title}: {:#?}",
+            page.text
+        );
+    }
     assert_never_zero(&silent);
 
     let partial = own_day(vec![output_unreported(/*id*/ 1, thread(/*n*/ 1))]);
@@ -773,4 +784,28 @@ fn subscription_only_day_points_at_no_bill() {
             .starts_with("OpenAI · gpt-5.4 — no price available; subscription part — ")),
         "{labels:#?}"
     );
+}
+
+// #288: a request on a provider with no price that also reported no tokens
+// gets the missing-price next step for its own provider.
+#[test]
+fn unpriced_request_without_usage_names_its_own_provider() {
+    let mut silent = unpriced(/*id*/ 1, thread(/*n*/ 1), "zainousage", "glm-5.2");
+    silent.usage = Usage::default();
+    silent.buckets = [BucketQuote::MissingUsage; 4];
+    let pages = own_day(vec![silent]);
+    let first = first_screen(&pages[0]);
+    assert_eq!(
+        first[1],
+        "• zainousage · Z.AI GLM 5.2 — Pay per use. 1 request, tokens not reported. Estimated cost: no price available."
+    );
+    let step = "Next step for requests with no price: check the bill from zainousage. No published price covers them, so only their tokens are shown here, not a cost.";
+    assert!(first.contains(&step.to_string()), "{first:#?}");
+    let request = pages.iter().find(|page| page.title == "Request").unwrap();
+    assert!(
+        request.text.iter().any(|line| line == step),
+        "{:#?}",
+        request.text
+    );
+    assert_never_zero(&pages);
 }
