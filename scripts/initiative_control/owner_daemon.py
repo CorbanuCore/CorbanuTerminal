@@ -27,6 +27,10 @@ CLOSE_TIMEOUT = 20
 MANAGER_SETTINGS = frozenset({"binary", "binary_sha256", "auth_vault_home", "runs_dir",
                               "timeout_seconds", "min_interval_seconds", "daily_cap"})
 MANAGER_STATE, MANAGER_LOG = "manager-auto.json", "manager-cycles.jsonl"
+# Consecutive pre-cycle subprocess timeouts the manager lane counts as errors (as the
+# owner lane does) before it latches a hold: a brief host slowdown must not need
+# --recover, a persistent one still fails closed.
+MANAGER_TRANSIENT_LIMIT = 3
 # An unchanged wake situation (a result still awaiting a verdict, nothing queued)
 # is raised again at most once per window, never in a loop.
 WAKE_REPEAT_SECONDS = 12 * 3600
@@ -1748,6 +1752,8 @@ def scheduled_tick(root, recover=None):
                       **({"reconciliation": reconciliation} if lane == "manager" else {})})
             status.update(hold=None, started_at=None, completed_at=None,
                           last_success=None, previous_success=None)
+            if lane == "manager":
+                status["consecutive_errors"] = 0
             f.write_json(root / "tick.json", status)
             return {"state": "RECOVERED"}
         if status["started_at"] is not None and status["completed_at"] is None:
@@ -1764,6 +1770,13 @@ def scheduled_tick(root, recover=None):
         previous_firing = status.get("firing")
         status.update(started_at=time.time(), completed_at=None, firing=firing_source(root, receipt))
         f.write_json(root / "tick.json", status)
+        cycles_before, timed_out = None, False
+        if lane == "manager":
+            # Read before anything that can time out (the pins check runs the interpreter).
+            try:
+                cycles_before = manager_status(root)["cycles"]
+            except Exception:
+                cycles_before = None
         try:
             pins = receipt["pins"]
             f.require(schedule_pins(Path(pins["python"]), Path(pins["runtime"]),
@@ -1776,9 +1789,31 @@ def scheduled_tick(root, recover=None):
             result = {"state": "HOLD", "reason": "owner_run_refused", "refusal": str(exc)}
         except Exception as exc:
             result = {"state": "ERROR", "reason": type(exc).__name__}
+            timed_out = isinstance(exc, subprocess.TimeoutExpired)
         status["completed_at"] = time.time()
-        if lane == "manager" and result["state"] in {"HOLD", "ERROR"}:
-            # Fail closed: any manager-lane failure latches until --recover.
+        pre_cycle_timeout = False
+        if lane == "manager" and timed_out and cycles_before is not None:
+            # Only the tick writes the cycle counter (under tick.lock) and it is bumped
+            # before any manager call or claim: unchanged means no cycle started.
+            try:
+                pre_cycle_timeout = manager_status(root)["cycles"] == cycles_before
+            except Exception:
+                pre_cycle_timeout = False
+        streak = status.get("consecutive_errors", 0) + 1
+        if pre_cycle_timeout and streak < MANAGER_TRANSIENT_LIMIT:
+            # A brief host slowdown: counted as an error, as on the owner lane.
+            append_log(root / MANAGER_LOG, {"event": "transient_error", "at": time.time(),
+                                            "reason": result["reason"], "consecutive_errors": streak})
+            status.update(errors=status.get("errors", 0) + 1, consecutive_errors=streak,
+                          last_error=result["reason"], previous_success=None)
+        elif lane == "manager" and result["state"] in {"HOLD", "ERROR"}:
+            # Fail closed: every other manager-lane failure, and a pre-cycle timeout
+            # that repeats MANAGER_TRANSIENT_LIMIT times in a row, latches until --recover.
+            if pre_cycle_timeout:
+                status.update(errors=status.get("errors", 0) + 1, consecutive_errors=streak,
+                              last_error=result["reason"])
+                result = dict(result, reason="manager_pre_cycle_timeouts",
+                              refusal=f"{result['reason']} x{streak}")
             status.update(hold=result.get("reason") or "manager_lane_error",
                           first_refusal=status.get("first_refusal") or time.time(),
                           last_refusal=time.time(), refusal=result.get("refusal", result.get("reason")))
@@ -1888,7 +1923,8 @@ def main(argv=None):
         if args.schedule:
             try:
                 result = scheduled_tick(args.schedule, args.recover)
-            except (f.LaunchError, OSError, sqlite3.Error, ValueError, TypeError, KeyError):
+            except (f.LaunchError, OSError, sqlite3.Error, ValueError, TypeError, KeyError,
+                    subprocess.SubprocessError):
                 result = {"state": "HOLD", "reason": "owner_run_refused"}
             try:
                 publish_schedule(args.schedule)

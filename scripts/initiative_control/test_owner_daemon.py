@@ -3306,6 +3306,109 @@ class ManagerLaneTests(unittest.TestCase):
         self.assertEqual("owner_run_refused", owner.load(root / "tick.json")["hold"])
         self.assertEqual([], self.calls)
 
+    def pins_timeout(self):
+        # The pins check runs the pinned interpreter with a 5 s timeout: the
+        # reachable pre-cycle timeout under host load.
+        return patch.object(owner.subprocess, "check_output",
+                            side_effect=subprocess.TimeoutExpired("python3", 5))
+
+    def test_pre_cycle_timeout_counts_as_an_error_until_it_repeats(self):
+        self.manager()
+        root = self.scheduled()
+        with self.pins_timeout():
+            self.assertEqual(2, owner.main(["--run", "--schedule", str(root)]))
+        status = owner.load(root / "tick.json")
+        self.assertIsNone(status["hold"])
+        self.assertEqual((1, 1, "TimeoutExpired"),
+                         (status["errors"], status["consecutive_errors"], status["last_error"]))
+        self.assertEqual(1, owner.load(self.root / "manager-recurrence.json")["consecutive_errors"])
+        self.assertEqual([("transient_error", 1)], [(r["event"], r["consecutive_errors"]) for r in self.log()])
+        # The next pass runs normally and clears the streak, without --recover.
+        self.c.event({"id": "work"})
+        with patch.object(owner.manager_cycle, "run_cycle", self.accepting):
+            self.assertEqual("CYCLE", owner.scheduled_tick(root)["state"])
+        status = owner.load(root / "tick.json")
+        self.assertEqual((None, 0), (status["hold"], status["consecutive_errors"]))
+        # A persistent timeout still fails closed at the limit; BUSY does not reset the streak.
+        with self.pins_timeout():
+            self.assertEqual("ERROR", owner.scheduled_tick(root)["state"])
+        with patch.object(owner, "manager_lane", side_effect=BlockingIOError):
+            self.assertEqual("BUSY", owner.scheduled_tick(root)["state"])
+        with self.pins_timeout():
+            for _ in range(owner.MANAGER_TRANSIENT_LIMIT - 2):
+                self.assertEqual("ERROR", owner.scheduled_tick(root)["state"])
+                self.assertIsNone(owner.load(root / "tick.json")["hold"])
+            result = owner.scheduled_tick(root)
+            self.assertEqual(("ERROR", "manager_pre_cycle_timeouts"), (result["state"], result["reason"]))
+            self.assertEqual(("HOLD", "manager_pre_cycle_timeouts"),
+                             tuple(owner.scheduled_tick(root)[k] for k in ("state", "reason")))
+        status = owner.load(root / "tick.json")
+        self.assertEqual(("manager_pre_cycle_timeouts", "TimeoutExpired x%d" % owner.MANAGER_TRANSIENT_LIMIT,
+                          owner.MANAGER_TRANSIENT_LIMIT, owner.MANAGER_TRANSIENT_LIMIT + 1),
+                         (status["hold"], status["refusal"], status["consecutive_errors"], status["errors"]))
+        self.assertEqual(["hold"], [r["event"] for r in self.log()][-1:])
+        self.assertEqual("RECOVERED", owner.scheduled_tick(root, recover="fixture: host slowdown over")["state"])
+        self.assertEqual(0, owner.load(root / "tick.json")["consecutive_errors"])
+        self.assertEqual(1, len(self.calls))
+
+    def test_timeout_after_a_cycle_started_latches_at_once(self):
+        self.manager()
+        root = self.scheduled()
+        self.c.event({"id": "work"})
+        with patch.object(owner.manager_cycle, "run_cycle",
+                          side_effect=subprocess.TimeoutExpired("corbanu", 900)):
+            result = owner.scheduled_tick(root)
+        self.assertEqual(("ERROR", "TimeoutExpired"), (result["state"], result["reason"]))
+        self.assertEqual("TimeoutExpired", owner.load(root / "tick.json")["hold"])
+        self.assertEqual(["cycle_started", "hold"], [r["event"] for r in self.log()])
+
+    def test_timeout_with_an_unreadable_cycle_counter_latches(self):
+        self.manager()
+        root = self.scheduled()
+        f.write_file(root / owner.MANAGER_STATE, b"not json")
+        with self.pins_timeout():
+            owner.scheduled_tick(root)
+        self.assertEqual("TimeoutExpired", owner.load(root / "tick.json")["hold"])
+
+    def test_timeout_with_the_counter_unreadable_afterwards_latches(self):
+        self.manager()
+        root = self.scheduled()
+        status = owner.manager_status
+        reads = []
+        def flaky(path):
+            reads.append(path)
+            if len(reads) > 1:
+                raise ValueError("fixture")
+            return status(path)
+        with self.pins_timeout(), patch.object(owner, "manager_status", side_effect=flaky):
+            owner.scheduled_tick(root)
+        self.assertEqual(2, len(reads))
+        self.assertEqual("TimeoutExpired", owner.load(root / "tick.json")["hold"])
+
+    def test_other_pre_cycle_errors_still_latch(self):
+        self.manager()
+        root = self.scheduled()
+        with patch.object(owner.manager_cycle, "compact_finished", side_effect=RuntimeError("fixture")):
+            owner.scheduled_tick(root)
+        self.assertEqual("RuntimeError", owner.load(root / "tick.json")["hold"])
+        self.assertEqual("RECOVERED", owner.scheduled_tick(root, recover="fixture")["state"])
+        with patch.object(owner.subprocess, "check_output",
+                          side_effect=subprocess.CalledProcessError(1, "python3")):
+            owner.scheduled_tick(root)
+        self.assertEqual("CalledProcessError", owner.load(root / "tick.json")["hold"])
+
+    def test_owner_lane_timeouts_never_latch(self):
+        import activate
+        args = self.installation()
+        service, command, _ = self.install(args)
+        with service, command:
+            activate.owner_activation(args)
+            with self.pins_timeout():
+                for _ in range(owner.MANAGER_TRANSIENT_LIMIT + 1):
+                    self.assertEqual("ERROR", owner.scheduled_tick(args.root)["state"])
+        status = owner.load(args.root / "tick.json")
+        self.assertEqual((None, owner.MANAGER_TRANSIENT_LIMIT + 1), (status["hold"], status["consecutive_errors"]))
+        self.assertFalse((args.root / owner.MANAGER_LOG).exists())
 
 if __name__ == "__main__":
     unittest.main()
