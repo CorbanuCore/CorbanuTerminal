@@ -406,19 +406,28 @@ pub fn build_exec_request(
             )
         })
         .map_err(CodexErr::from)?;
-    attach_windows_sandbox_filesystem_overrides(&mut exec_req, sandbox_cwd)?;
+    attach_windows_sandbox_filesystem_overrides(
+        &mut exec_req,
+        sandbox_cwd,
+        crate::security::launch_contract::active(),
+    )?;
     Ok(exec_req)
 }
 
 /// Resolves the Windows sandbox's filesystem overrides (deny-read and
 /// deny-write ACL targets, read and write root overrides) from the request's
-/// final permission profile. Every launch path must call this after the
-/// sandbox transform: without it the Windows backends get no deny-read paths
-/// and apply none of the profile's deny entries (#294). A no-op for requests
-/// that do not use a Windows sandbox.
+/// final permission profile. Local launch paths call this after the sandbox
+/// transform: without it the Windows backends get no deny-read paths and apply
+/// none of the profile's deny entries (#294). With an armed launch `contract`
+/// an elevated launch also carries the contract's denies, protected or not
+/// (`LaunchContract::windows_deny_read_paths`). A no-op for requests that do
+/// not use a Windows sandbox.
 pub(crate) fn attach_windows_sandbox_filesystem_overrides(
     exec_req: &mut ExecRequest,
     sandbox_cwd: &AbsolutePathBuf,
+    #[cfg_attr(not(windows), allow(unused_variables))] contract: Option<
+        &crate::security::launch_contract::LaunchContract,
+    >,
 ) -> Result<()> {
     let use_windows_elevated_backend = windows_sandbox_uses_elevated_backend(
         exec_req.windows_sandbox_level,
@@ -440,6 +449,29 @@ pub(crate) fn attach_windows_sandbox_filesystem_overrides(
         )
     }
     .map_err(CodexErr::UnsupportedOperation)?;
+    #[cfg(windows)]
+    if use_windows_elevated_backend
+        && exec_req.sandbox == SandboxType::WindowsRestrictedToken
+        && let Some(contract) = contract
+    {
+        let protected = contract
+            .windows_deny_read_paths(sandbox_cwd)
+            .map_err(CodexErr::UnsupportedOperation)?;
+        let overrides = exec_req
+            .windows_sandbox_filesystem_overrides
+            .get_or_insert_with(|| WindowsSandboxFilesystemOverrides {
+                read_roots_override: None,
+                read_roots_include_platform_defaults: false,
+                write_roots_override: None,
+                additional_deny_read_paths: Vec::new(),
+                additional_deny_write_paths: Vec::new(),
+            });
+        for path in protected {
+            if !overrides.additional_deny_read_paths.contains(&path) {
+                overrides.additional_deny_read_paths.push(path);
+            }
+        }
+    }
     Ok(())
 }
 

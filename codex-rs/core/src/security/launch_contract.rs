@@ -520,6 +520,19 @@ impl LaunchContract {
                 FileSystemAccessMode::Read,
             ));
         }
+        for entry in self.protected_entries() {
+            if !file_system.entries.contains(&entry) {
+                file_system.entries.push(entry);
+            }
+        }
+        let protected = PermissionProfile::from_runtime_permissions(&file_system, network);
+        self.verify_permissions(&protected, cwd)?;
+        Ok(protected)
+    }
+
+    /// The deny entries [`Self::protect_permissions`] adds: every protected
+    /// path and Core's databases.
+    fn protected_entries(&self) -> Vec<FileSystemSandboxEntry> {
         let glob = FileSystemSandboxEntry::new(
             FileSystemPath::GlobPattern {
                 pattern: self
@@ -530,8 +543,7 @@ impl LaunchContract {
             },
             FileSystemAccessMode::Deny,
         );
-        for entry in self
-            .protected_read_paths
+        self.protected_read_paths
             .iter()
             .map(|path| {
                 let path_entry = FileSystemPath::Path { path: path.clone() };
@@ -552,14 +564,22 @@ impl LaunchContract {
                 }
             })
             .chain(std::iter::once(glob))
-        {
-            if !file_system.entries.contains(&entry) {
-                file_system.entries.push(entry);
-            }
-        }
-        let protected = PermissionProfile::from_runtime_permissions(&file_system, network);
-        self.verify_permissions(&protected, cwd)?;
-        Ok(protected)
+            .collect()
+    }
+
+    /// #294: the Windows deny-read ACL targets for the protected paths. Every
+    /// elevated sandbox launch in an armed process carries them, protected or
+    /// not: each launch's ACL sync revokes the sandbox-group denies it does
+    /// not list, so an unprotected launch (a TUI workspace probe) would
+    /// otherwise reopen the vault to commands that are already running.
+    #[cfg(windows)]
+    pub(crate) fn windows_deny_read_paths(
+        &self,
+        cwd: &AbsolutePathBuf,
+    ) -> Result<Vec<AbsolutePathBuf>, String> {
+        let mut policy = FileSystemSandboxPolicy::restricted(self.protected_entries());
+        policy.remove_skip_missing_path_entries();
+        codex_windows_sandbox::resolve_windows_deny_read_paths(&policy, cwd)
     }
 
     /// Verifies that `profile` denies reading every protected path and writing

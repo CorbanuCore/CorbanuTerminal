@@ -518,6 +518,21 @@ fn pf_29_s01_corrupt_snapshots_and_histories_are_isolated() {
     assert!(preflight.is_clean(), "{:?}", preflight.blockers());
 }
 
+/// #294: the secretless launch contract creates its protected directories
+/// empty on Windows; an empty directory is not a finding.
+#[test]
+fn pf_29_s01_empty_protected_directories_are_not_findings() {
+    let fixture = Fixture::new();
+    let home = fixture.corbanu();
+    for name in ["wallet", "secrets", "sessions", "log"] {
+        std::fs::create_dir_all(home.join(name)).expect("empty dir");
+    }
+    let preflight = fixture.run(&fixture.sources());
+    assert!(find(&preflight, FindingKind::Wallet).is_empty());
+    assert!(find(&preflight, FindingKind::VaultStore).is_empty());
+    assert!(find(&preflight, FindingKind::Transcript).is_empty());
+}
+
 #[test]
 fn pf_29_s01_drift_between_preflight_and_activation() {
     let fixture = Fixture::new();

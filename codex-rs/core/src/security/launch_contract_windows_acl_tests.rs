@@ -8,10 +8,15 @@
 //! UAC prompt, so set `CODEX_PF27S06_SETUP_SEED` to a directory holding the
 //! `setup_marker.json` and `sandbox_users.json` of an earlier elevated setup
 //! on the same machine and user (the sandbox's users are machine-wide). Every
-//! elevated setup resets the sandbox users' passwords, so record the seed with
-//! an elevated run of this test (it writes the directory) right before.
+//! elevated setup resets the sandbox users' passwords (which also invalidates
+//! a real installation's saved setup), so record the seed with an elevated run
+//! of this test (it writes the directory) right before. The seed holds those
+//! passwords: keep the directory outside every sandbox read root.
 
 use super::LaunchContract;
+use super::windows_tests::EnvGuard;
+use super::windows_tests::absolute;
+use super::windows_tests::stage_windows_sandbox_helpers;
 use crate::exec::ExecCapturePolicy;
 use crate::exec::ExecExpiration;
 use crate::sandboxing::ExecOptions;
@@ -170,13 +175,14 @@ async fn pf_27_s06_d2_vault_unreadable_through_tool_launch_under_workspace_write
         );
     }
 
-    let contract = LaunchContract::capture(&codex_home, std::iter::empty(), /*hardened*/ true);
+    let contract = capture_without_real_credentials(&codex_home);
     let protected = contract
         .protect_permissions(&base, cwd.as_path())
         .expect("protected profile");
     contract
         .protect_new_codex_home_files()
         .expect("deny new CODEX_HOME files to the sandbox");
+    assert!(!codex_home.join("wallet").exists());
     let files = run(tool_launch(&protected, &cwd, command())).await;
     eprintln!("pf27s06 d2 workspace-write, contract: {files}");
     assert!(files.contains("NOTES-READ"), "unprotected file: {files}");
@@ -186,20 +192,77 @@ async fn pf_27_s06_d2_vault_unreadable_through_tool_launch_under_workspace_write
             "{denied}: {files}"
         );
     }
+    // The wallet did not exist; the launch's ACL setup created and denied it.
+    assert!(codex_home.join("wallet").is_dir(), "wallet not created");
 
-    // A protected directory that did not exist at launch (the wallet) was
-    // created and denied by that launch, so a file written there later is
-    // denied to the next command too.
-    std::fs::create_dir_all(codex_home.join("wallet")).expect("wallet dir");
+    // While a protected command runs, a wallet file appears and an
+    // unprotected launch of the same armed process (a TUI workspace probe)
+    // syncs the sandbox's deny ACEs. It must keep the contract's denies, or
+    // the running command could read the vault again.
+    let running = {
+        let request = tool_launch(
+            &protected,
+            &cwd,
+            vec![
+                "cmd.exe".into(),
+                "/D".into(),
+                "/C".into(),
+                format!("ping -n 6 127.0.0.1 >NUL & {script}"),
+            ],
+        );
+        tokio::spawn(run(request))
+    };
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
     std::fs::write(
         codex_home.join("wallet").join("seed.json"),
         "pf27s06d2-seed",
     )
     .expect("wallet file");
-    let later = run(tool_launch(&protected, &cwd, command())).await;
-    eprintln!("pf27s06 d2 workspace-write, contract, later wallet: {later}");
-    assert!(later.contains("WALLET-DENIED"), "{later}");
-    assert!(later.contains("VAULT-DENIED"), "{later}");
+    let mut unprotected = tool_launch(&base, &cwd, command());
+    crate::exec::attach_windows_sandbox_filesystem_overrides(
+        &mut unprotected,
+        &cwd,
+        Some(&contract),
+    )
+    .expect("armed overrides");
+    let probe = run(unprotected).await;
+    eprintln!("pf27s06 d2 unprotected launch in an armed process: {probe}");
+    assert!(probe.contains("VAULT-DENIED"), "{probe}");
+    let running = running.await.expect("running command");
+    eprintln!("pf27s06 d2 protected command running across it: {running}");
+    for denied in ["VAULT", "AUTH", "WALLET"] {
+        assert!(
+            running.contains(&format!("{denied}-DENIED")),
+            "{denied}: {running}"
+        );
+    }
+
+    // Positive control for the wallet read, and cleanup: a launch without the
+    // contract removes its deny ACEs again.
+    let after = run(tool_launch(&base, &cwd, command())).await;
+    eprintln!("pf27s06 d2 workspace-write, no contract again: {after}");
+    for readable in ["VAULT", "WALLET"] {
+        assert!(
+            after.contains(&format!("{readable}-READ")),
+            "{readable}: {after}"
+        );
+    }
+}
+
+/// A contract for `codex_home` whose home-directory credential paths point
+/// into an empty temporary directory, so the test leaves no deny ACE on the
+/// machine's real credential files.
+fn capture_without_real_credentials(codex_home: &AbsolutePathBuf) -> LaunchContract {
+    let fake = tempfile::tempdir().expect("fake home");
+    let _guards = [
+        "HOME",
+        "USERPROFILE",
+        "APPDATA",
+        "CARGO_HOME",
+        "CLAUDE_CONFIG_DIR",
+    ]
+    .map(|key| EnvGuard::set(key, fake.path()));
+    LaunchContract::capture(codex_home, std::iter::empty(), /*hardened*/ true)
 }
 
 async fn run(request: crate::sandboxing::ExecRequest) -> String {
@@ -236,56 +299,9 @@ fn record_elevated_setup(codex_home: &AbsolutePathBuf) {
         return;
     };
     let seed = Path::new(&seed);
+    std::fs::create_dir_all(seed).expect("seed dir");
     for (file, dir) in SETUP_FILES {
         std::fs::copy(codex_home.join(dir).join(file), seed.join(file))
             .expect("record elevated setup");
-    }
-}
-
-fn absolute(path: &Path) -> AbsolutePathBuf {
-    AbsolutePathBuf::from_absolute_path(dunce::canonicalize(path).expect("canonical path"))
-        .expect("absolute path")
-}
-
-/// Copies the elevated sandbox helpers next to this test binary, where the
-/// sandbox looks for them.
-fn stage_windows_sandbox_helpers() {
-    let exe = std::env::current_exe().expect("test binary");
-    let resources = exe.parent().expect("test dir").join("codex-resources");
-    std::fs::create_dir_all(&resources).expect("resources dir");
-    for helper in ["codex-windows-sandbox-setup", "codex-command-runner"] {
-        let source = codex_utils_cargo_bin::cargo_bin(helper).expect("sandbox helper built");
-        let destination = resources.join(format!("{helper}.exe"));
-        if let Err(error) = std::fs::copy(&source, &destination)
-            && !destination.exists()
-        {
-            panic!("stage {helper}: {error}");
-        }
-    }
-}
-
-struct EnvGuard {
-    key: &'static str,
-    original: Option<std::ffi::OsString>,
-}
-
-impl EnvGuard {
-    fn set(key: &'static str, value: &Path) -> Self {
-        let original = std::env::var_os(key);
-        // SAFETY: the pf_27_s06 Windows tests run alone in their process.
-        unsafe { std::env::set_var(key, value) };
-        Self { key, original }
-    }
-}
-
-impl Drop for EnvGuard {
-    fn drop(&mut self) {
-        // SAFETY: as in `set`.
-        unsafe {
-            match &self.original {
-                Some(value) => std::env::set_var(self.key, value),
-                None => std::env::remove_var(self.key),
-            }
-        }
     }
 }

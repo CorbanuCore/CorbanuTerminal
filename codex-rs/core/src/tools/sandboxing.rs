@@ -562,12 +562,21 @@ impl<'a> SandboxAttempt<'a> {
             options,
             workspace_roots,
         );
-        // #294: without this the Windows backends apply none of the profile's
-        // deny entries, including the launch contract's.
-        crate::exec::attach_windows_sandbox_filesystem_overrides(
-            &mut exec_request,
-            &self.sandbox_cwd.to_abs_path()?,
-        )?;
+        // #294: without this the elevated Windows sandbox applies none of the
+        // profile's deny entries, including the launch contract's. The
+        // unelevated backend keeps its earlier behaviour here (#300).
+        if exec_request.sandbox == SandboxType::WindowsRestrictedToken
+            && codex_sandboxing::windows_sandbox_uses_elevated_backend(
+                exec_request.windows_sandbox_level,
+                exec_request.network.is_some(),
+            )
+        {
+            crate::exec::attach_windows_sandbox_filesystem_overrides(
+                &mut exec_request,
+                &self.sandbox_cwd.to_abs_path()?,
+                contract,
+            )?;
+        }
         Ok(exec_request)
     }
 

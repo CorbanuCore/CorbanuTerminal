@@ -449,3 +449,10 @@ fn contained_external_agent_launch_gets_the_whole_contract() {
     assert!(!file_system.can_write_path_with_cwd(fixture.codex_home.as_path(), cwd));
     assert!(file_system.can_write_path_with_cwd(&fixture.workspace.join("src.rs"), cwd));
 }
+
+#[test]
+fn pf_27_s06_protected_codex_home_dirs_are_protected_entries() {
+    for dir in super::PROTECTED_CODEX_HOME_DIRS {
+        assert!(super::PROTECTED_CODEX_HOME_ENTRIES.contains(dir), "{dir}");
+    }
+}
