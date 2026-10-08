@@ -14,6 +14,11 @@ use crate::exec::process_exec_tool_call;
 use crate::sandboxing::SandboxPermissions;
 use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::models::PermissionProfile;
+use codex_protocol::permissions::FileSystemAccessMode;
+use codex_protocol::permissions::FileSystemPath;
+use codex_protocol::permissions::FileSystemSandboxEntry;
+use codex_protocol::permissions::FileSystemSandboxPolicy;
+use codex_protocol::permissions::FileSystemSpecialPath;
 use codex_protocol::permissions::NetworkSandboxPolicy;
 use codex_sandboxing::SandboxType;
 use codex_utils_absolute_path::AbsolutePathBuf;
@@ -77,11 +82,31 @@ async fn pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory() 
         ),
         Ok(())
     );
-    let base = PermissionProfile::workspace_write_with(
-        &[],
+    // Reads limited to the platform, the workspace and CODEX_HOME, so the
+    // sandbox user is explicitly granted CODEX_HOME and the base-profile
+    // control can show the files are readable without the contract.
+    let base = PermissionProfile::from_runtime_permissions(
+        &FileSystemSandboxPolicy::restricted(vec![
+            FileSystemSandboxEntry::new(
+                FileSystemPath::Special {
+                    value: FileSystemSpecialPath::Minimal,
+                },
+                FileSystemAccessMode::Read,
+            ),
+            FileSystemSandboxEntry::new(
+                FileSystemPath::Special {
+                    value: FileSystemSpecialPath::project_roots(/*subpath*/ None),
+                },
+                FileSystemAccessMode::Write,
+            ),
+            FileSystemSandboxEntry::new(
+                FileSystemPath::Path {
+                    path: codex_home.clone(),
+                },
+                FileSystemAccessMode::Read,
+            ),
+        ]),
         NetworkSandboxPolicy::Restricted,
-        /*exclude_tmpdir_env_var*/ true,
-        /*exclude_slash_tmp*/ true,
     )
     .materialize_project_roots_with_workspace_roots(std::slice::from_ref(&cwd));
     let protected = contract
@@ -205,7 +230,10 @@ async fn pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory() 
     // Core stand-in: hardened exactly as an armed contract hardens Core.
     let target = Target::spawn(/*harden*/ true);
     let unsandboxed = run_probe_unsandboxed(target.pid());
-    let exe = std::env::current_exe().expect("test binary");
+    // The sandbox user can only read the workspace (and the platform), so the
+    // probe runs from a copy of this test binary there.
+    let exe = cwd.join("pf27s06-probe.exe");
+    std::fs::copy(std::env::current_exe().expect("test binary"), &exe).expect("copy probe");
     let env = HashMap::from([
         (ROLE_ENV.to_string(), "probe".to_string()),
         (TARGET_PID_ENV.to_string(), target.pid().to_string()),
