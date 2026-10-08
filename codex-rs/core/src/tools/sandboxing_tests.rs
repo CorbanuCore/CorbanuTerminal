@@ -479,8 +479,8 @@ fn pf_27_s06_env_for_requires_the_elevated_windows_sandbox() {
                     expiration: crate::exec::ExecExpiration::DefaultTimeout,
                     capture_policy: crate::exec::ExecCapturePolicy::ShellTool,
                 },
-                None,
-                None,
+                /*network*/ None,
+                /*environment_id*/ None,
             )
             .map(|_| ())
             .map_err(|err| err.to_string())
