@@ -1,0 +1,18 @@
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: /Volumes/CorbanuDrive/Corbanu/.codex-work/acct64/smoke
+model: claude-opus-5-5-plan
+provider: claude-plan
+approval: never
+sandbox: read-only
+session id: 01a1044a-aa57-7241-982c-b913f162c76c
+--------
+user
+Reply with exactly: OK 2
+corbanu
+OK 2
+tokens used
+16,356
+OK 2
+EXIT:0

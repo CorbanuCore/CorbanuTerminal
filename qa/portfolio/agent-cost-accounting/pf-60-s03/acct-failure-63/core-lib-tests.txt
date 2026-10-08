@@ -1,0 +1,9 @@
+test accounting::policy_tests::accounting_policy_cancel_in_operation_rejects_and_releases_capacity ... FAILED
+test accounting::policy_tests::accounting_policy_previous_poison_before_and_during_admission_is_sticky ... FAILED
+test accounting::policy_tests::accounting_policy_observe_wait_cancel_and_start_cancel_publish_nothing ... FAILED
+thread 'accounting::policy_tests::accounting_policy_cancel_in_operation_rejects_and_releases_capacity' (56884380) panicked at core/src/accounting_policy_tests.rs:1031:9:
+thread 'accounting::policy_tests::accounting_policy_previous_poison_before_and_during_admission_is_sticky' (56884383) panicked at core/src/accounting_policy_tests.rs:870:13:
+thread 'accounting::policy_tests::accounting_policy_previous_poison_before_and_during_admission_is_sticky' (56884383) panicked at core/src/accounting_policy_tests.rs:1099:9:
+thread 'accounting::policy_tests::accounting_policy_observe_wait_cancel_and_start_cancel_publish_nothing' (56884382) panicked at core/src/accounting_policy_tests.rs:986:5:
+test result: FAILED. 74 passed; 3 failed; 0 ignored; 0 measured; 2470 filtered out; finished in 16.89s
+error: test failed, to rerun pass `-p codex-core --lib`

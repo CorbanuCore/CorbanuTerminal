@@ -11,36 +11,38 @@ activation_basis: "Travis selected accounting September 11 and requested an Astr
 target_release: "TBD"
 deadline: "TBD"
 created: 2026-09-09
-updated: 2026-09-14
+updated: 2026-10-08
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "Product measurement"
   requirement_excerpt: "No commercial performance numbers have been supplied."
 implementation_worktrees:
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-inspect-20260915"
-    branch: "bootstrap/acct-inspect-20260915"
-    base_commit: "5105e3ce44d31fd16a35f6cb6900ef6abf6168a8"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-chat-20260915"
-    branch: "bootstrap/acct-chat-20260915"
-    base_commit: "155b0c1a96c2dc590cd7818e086ca2e0085e1996"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-acct-ws-20260914"
-    branch: "bootstrap/acct-ws-20260914"
-    base_commit: "73fc51b1a73ec6304fb51603b6fb46ee9f61b56b"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-contract-goldens-20260913"
-    branch: "workstream/accounting-contract-goldens-20260913"
-    base_commit: "81d0f90e77c1e9217a16e70fef1019ff9aa13753"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
-    branch: "integrate/management-workstreams-20260911"
-    base_commit: "c8358dd9b4329036c8f8fb525015bbd795433513"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911"
-    branch: "workstream/accounting-pf60-s01-20260911"
-    base_commit: "c8358dd9b4329036c8f8fb525015bbd795433513"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-policy-repair-20260912"
-    branch: "workstream/accounting-policy-repair-20260912"
-    base_commit: "a89a48548f644a64cbb8cd9da090b5b75578c922"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf60-s03-20261008"
+    branch: "work/pf60-s03-20261008"
+    base_commit: "63ea3d0cbd0ccb54d352b25a12c3e07f9f934bff"
 ---
 
 # 2. Accounting — unified agent cost and usage
+
+## Current state (2026-10-08)
+
+- **All accounting work is on main.** PR #138 merged the integration branch on 2026-10-04 (merge `3ecc3c4066`);
+  `integrate/management-workstreams-20260911` has nothing left that main lacks.
+- **Collection is developer-only.** Travis answered `accounting-collection-activation-20260916` with developer-only
+  activation: collection and `/cost` exist only in debug builds with the `developer-accounting` Cargo feature (core and
+  tui). Optimized builds with it do not compile and `build_codex_package.py` refuses to package them. Shipping `/cost`
+  to users is not authorised.
+- **S01, S02:** done and archived. **S03:** in progress, merged but not accepted; its Done list now covers the
+  09-20..10-03 work ([commit ledger](../../../qa/portfolio/agent-cost-accounting/pf-60-s03/commits-20260920-20261003.md)).
+  Acceptance waits on Travis's decision `acct-s03-acceptance-20260917`. **S04:** not started.
+- **Worktrees:** one active lane, `worktrees/pf60-s03-20261008` (branch `work/pf60-s03-20261008`). The September lane
+  checkouts (acct-inspect, acct-chat, bootstrap-acct-ws) were removed after #138; the remaining `accounting-*`
+  worktrees and `workstream/accounting-*` branches hold only commits already on main.
+- **Open issues:** #127 (tiered Grok pricing, mitigation PR #135), #129 (OpenRouter cap reconciliation).
+
+Everything below the next heading through "Activation record" is the September 12–15 log, kept as history.
+
+## September history
 
 September13 02:08UTC: compact import independently reviewed clean and received
 at81d0f90e7; combined595shared/100Core/20focused/6external, format/Clippy/check
@@ -204,11 +206,11 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 
 | Accountable role | Worktree | Branch | Base | Scope |
 | --- | --- | --- | --- | --- |
-| Astra High accounting direct-Chat lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/acct-chat-20260915` | `bootstrap/acct-chat-20260915` | Rebased onto the integration tip at each dispatch; the exact base commit is recorded in lease `acct-chat-20260915` and in the action's frozen inputs, which must agree with the checkout HEAD | PF-60-S02 [direct Chat Completions sampling allocation](../../research/agent-cost-accounting/chat-dispatch-allocation.md): 19 literal files, 38 named tests, target 3000/1150, STOP 3300/1300; default OFF; excludes Corbanu plan gateway economics, startup prewarm, auxiliary collection and both disclosed P3s. Exclusive build-target lease `acct-chat-20260915` |
-| Astra High accounting Responses-WebSocket lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-acct-ws-20260914` | `bootstrap/acct-ws-20260914` | `73fc51b1a73ec6304fb51603b6fb46ee9f61b56b` | PF-60-S02 [Responses WS sampling/fallback allocation](../../research/agent-cost-accounting/responses-websocket-allocation.md): received at `c86634e21` with both native vectors at `16c43b5fe`; consumed history |
-| Codex accounting contract-golden lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-contract-goldens-20260913` | `workstream/accounting-contract-goldens-20260913` | `81d0f90e77c1e9217a16e70fef1019ff9aa13753` | PF-60-S02 original-contract goldens f4507cb50 accepted at 855ab3382; consumed history |
-| Astra High accounting inspection lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/acct-inspect-20260915` | `bootstrap/acct-inspect-20260915` | `5105e3ce44d31fd16a35f6cb6900ef6abf6168a8` | PF-60-S03 [inspection allocation](../../research/agent-cost-accounting/s03-inspection-allocation-20260915.md): 21 literal files, 34 named tests, target 2500/1000, STOP 2800/1150; non-mutating inspection only, no schema migration; includes the three TUI paths released from PF-83-S01 on 2026-09-15 |
-| Codex management / Travis acceptance | Manager checkout in front matter | Recorded above | Recorded above | Shared plan and receiving evidence |
+| Codex accounting lane (PF-60-S03 catch-up, tests, demos) | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf60-s03-20261008` | `work/pf60-s03-20261008` | `63ea3d0cbd0ccb54d352b25a12c3e07f9f934bff` | S03 ledger, regression tests, unavailable-backend next steps, demo videos; small PRs to main |
+| Codex management / Travis acceptance | none | main | n/a | Shared plan and S03 acceptance decision |
+
+The September lanes (direct Chat, Responses WebSocket, contract goldens, inspection) are consumed history; their
+checkouts were removed after PR #138.
 
 S02 retains its reservation; Travis approved conservative daily expiry in this
 task. The [compact-value allocation](../../research/agent-cost-accounting/compact-values-allocation.md)
@@ -264,7 +266,7 @@ All records belong to the single feature **PF-60**. Dependencies are hard prereq
 | --- | --- | --- | --- | --- |
 | PF-60-S01 | [Accounting contract and golden fixtures](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s01-accounting-contract-and-golden-fixtures.md) | none | docs/research/agent-cost-accounting/contract.md | Accepted local contract/fixtures and reviewed handoff; archived |
 | PF-60-S02 | [Idempotent usage persistence and replay](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md) | PF-60-S01 | Four direct sampling paths received: Anthropic direct, Responses HTTP, Responses WebSocket and direct Chat, on the accepted persistence and replay substrate. Default no-install and collection OFF | The normal-library store is accepted history, not the next unit; that line was stale. Remaining and explicitly unqualified: Corbanu plan gateway economics, startup prewarm, auxiliary collection, legacy evidence acquisition and complete application coverage. Closure of the bounded sprint is a separate recorded manager decision |
-| PF-60-S03 | [Inspectable run and campaign totals](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md) | PF-60-S02 | codex-rs/tui/src/chatwidget/usage.rs | pending |
+| PF-60-S03 | [Inspectable run and campaign totals](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md) | PF-60-S02 | `/cost` inspector, ranges, developer-only activation, coverage, pricing, stated charges, contention fixes | On main (#138); in progress, awaiting `acct-s03-acceptance-20260917` |
 | PF-60-S04 | [Cost-accounting acceptance and handoff](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s04-cost-accounting-acceptance-and-handoff.md) | PF-60-S03 | qa/portfolio/agent-cost-accounting/qualification.md | pending |
 
 ## Acceptance flows
@@ -327,7 +329,7 @@ Research outputs stay under the declared research/QA paths. Finished-feature doc
 
 - Approved defaults stand; manager accepted separate `_accounting_migrations` sequence0001, typed facade and default no-install/collection OFF. Verify receiving collisions; ordinary migrator cannot adopt the separate ledger.
 - S01 archived; A/B/C1/C2/native accepted. The exact17-path store awaits parent document acceptance/integration and dispatch, not a new product decision. No live caller is allocated.
-- Actual dispatch/presence/original-price authority, full native goldens and90..365-day compact-only late import remain S02 obligations, explicitly unqualified and not waived. This store supplies neither permanent deleted-ID fencing nor cross-database erasure. S03 remains draft.
+- Actual dispatch/presence/original-price authority, full native goldens and90..365-day compact-only late import remain S02 obligations, explicitly unqualified and not waived. This store supplies neither permanent deleted-ID fencing nor cross-database erasure. S03 is in progress (see Current state).
 - Before each next sprint: predecessor evidence accepted/archived, its handoff resolves concrete inputs and any newly discovered decisions; otherwise stop.
 - Cross-plan IDs in the table must exist and be completed in the receiving ledger. A draft dependency does not activate either plan.
 - Before dispatch: agreed budget, named human acceptance owner, exact scope and privacy permissions. No capacity or deadline is assumed from hardware ownership alone.
