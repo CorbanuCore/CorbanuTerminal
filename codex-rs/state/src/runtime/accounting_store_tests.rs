@@ -846,6 +846,7 @@ async fn accounting_inspect_other_conversations_are_read_beside_the_tree() -> an
             conversations: 1,
             unavailable: 0,
             requests: alone.requests,
+            deleted_attempts: DeletedAttempts::Counted(0),
         })
     );
     assert_eq!(
@@ -859,6 +860,7 @@ async fn accounting_inspect_other_conversations_are_read_beside_the_tree() -> an
         conversations: 1,
         unavailable: 1,
         requests: Default::default(),
+        deleted_attempts: DeletedAttempts::Counted(0),
     });
     sqlx::query("DELETE FROM draft_accounting_contributions WHERE attempt_id = ?")
         .bind(Uuid::from_u128(5).to_string())
@@ -870,6 +872,97 @@ async fn accounting_inspect_other_conversations_are_read_beside_the_tree() -> an
         InspectionDay::Ready(expected)
     );
     assert_eq!(rows(&runtime).await?, before);
+    runtime.close().await;
+    Ok(())
+}
+
+// #286: deleting a conversation removes its attempts and their cost. The day
+// must still say that deleted conversations spent on it, never read as empty.
+#[tokio::test]
+async fn accounting_inspect_counts_deleted_conversations_attempts() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    tree_fixture(&runtime).await?;
+    let other = ThreadId::from_string(&Uuid::from_u128(11).to_string())?;
+    let before = inspection(inspected(&runtime, /*day*/ 0, /*time*/ 0).await?)
+        .other_conversations
+        .expect("day view reads other conversations");
+    let attempts: usize = before.requests.values().map(Vec::len).sum();
+    assert_eq!((before.conversations, attempts), (1, 1));
+    runtime.delete_threads_at(&[other], /*as_of_ms*/ 0).await?;
+    assert_eq!(
+        inspection(inspected(&runtime, /*day*/ 0, /*time*/ 0).await?).other_conversations,
+        Some(OtherConversations {
+            conversations: 0,
+            unavailable: 0,
+            requests: Default::default(),
+            deleted_attempts: DeletedAttempts::Counted(attempts),
+        })
+    );
+    runtime.close().await;
+    Ok(())
+}
+
+// #286: only tombstones that cannot come from retention count as deletions.
+#[tokio::test]
+async fn accounting_deleted_attempts_count_only_what_retention_cannot_explain() -> anyhow::Result<()>
+{
+    const REPLAY: i64 = 365 * DAY;
+    let path = home();
+    let runtime = open(&path).await?;
+    seed(&runtime).await?;
+    let ahead = 200 * DAY;
+    AccountingStore::open(&runtime, ahead).await?;
+    // Tombstones for attempts dispatched on day 150 and day 100.
+    for (id, dispatch) in [(1u128, 150 * DAY + 5), (2, 100 * DAY + 5)] {
+        sqlx::query("INSERT INTO draft_accounting_tombstones VALUES (?, ?)")
+            .bind(Uuid::from_u128(id).to_string())
+            .bind(dispatch + REPLAY)
+            .execute(runtime.pool.as_ref())
+            .await?;
+    }
+    let count = |day: i64, read_at: i64| {
+        let runtime = runtime.clone();
+        async move {
+            let mut conn = runtime.pool.acquire().await?;
+            let mut work = InspectionWork::new(&mut conn).await?;
+            anyhow::Ok(scope::deleted_attempts(&mut conn, day, read_at, &mut work).await)
+        }
+    };
+    // Inside the detail window at the checkpoint: a deletion.
+    assert_eq!(count(150, ahead).await?, DeletedAttempts::Counted(1));
+    // Past it (day 100 + 90 days <= day 200): retention may have written it.
+    assert_eq!(count(100, ahead).await?, DeletedAttempts::PastDetailWindow);
+    // Batched expiry can run ahead of the checkpoint: the reader's clock
+    // bounds the window too, exactly at the edge.
+    assert_eq!(
+        count(150, 240 * DAY).await?,
+        DeletedAttempts::PastDetailWindow
+    );
+    assert_eq!(
+        count(150, 240 * DAY - 1).await?,
+        DeletedAttempts::Counted(1)
+    );
+    // A day nothing was deleted on, inside the window.
+    assert_eq!(count(151, ahead).await?, DeletedAttempts::Counted(0));
+    // An exhausted work budget reads as unread, never zero.
+    {
+        let mut conn = runtime.pool.acquire().await?;
+        let mut work = InspectionWork {
+            rows: 0,
+            visits: 0,
+            scan_rows: 1,
+        };
+        assert_eq!(
+            scope::deleted_attempts(&mut conn, 150, ahead, &mut work).await,
+            DeletedAttempts::Unread
+        );
+    }
+    // No checkpoint yet: unread, never zero.
+    sqlx::query("UPDATE draft_accounting_retention_checkpoint SET completed_as_of_ms = NULL, admission_active = 0")
+        .execute(runtime.pool.as_ref())
+        .await?;
+    assert_eq!(count(150, ahead).await?, DeletedAttempts::Unread);
     runtime.close().await;
     Ok(())
 }
