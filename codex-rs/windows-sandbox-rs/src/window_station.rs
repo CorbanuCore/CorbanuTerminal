@@ -69,6 +69,7 @@ use windows_sys::Win32::System::StationsAndDesktops::GetThreadDesktop;
 use windows_sys::Win32::System::StationsAndDesktops::GetUserObjectInformationW;
 use windows_sys::Win32::System::StationsAndDesktops::OpenDesktopW;
 use windows_sys::Win32::System::StationsAndDesktops::OpenWindowStationW;
+use windows_sys::Win32::System::StationsAndDesktops::SetProcessWindowStation;
 use windows_sys::Win32::System::StationsAndDesktops::UOI_NAME;
 use windows_sys::Win32::System::Threading::GetCurrentThreadId;
 use windows_sys::Win32::System::Threading::OpenProcessToken;
@@ -86,6 +87,7 @@ const DESKTOP_WRITEOBJECTS: u32 = 0x0080;
 const ACCESS_ALLOWED_ACE_TYPE: u8 = 0;
 const ACCESS_DENIED_ACE_TYPE: u8 = 1;
 const GENERIC_ALL: u32 = 0x1000_0000;
+const MAXIMUM_ALLOWED: u32 = 0x0200_0000;
 
 /// The least a runner needs on the window station, measured on Windows 11
 /// 26200 over SSH: without `READ_CONTROL`, `WINSTA_ACCESSGLOBALATOMS` or
@@ -246,8 +248,20 @@ impl WindowAccess {
         &self.state
     }
 
-    /// Takes over the entries another process's value held.
+    /// Takes over the entries another process's value held. Its desktop is
+    /// opened in this process's window station, so this process moves to
+    /// that value's (a reaper may have started elsewhere).
     pub(crate) fn from_state(state: WindowAccessState) -> Self {
+        if current_window_station_name().as_deref() != Some(state.station.as_str()) {
+            let name = to_wide(&state.station);
+            // SAFETY: opens a named window station kept as this process's.
+            unsafe {
+                let station = OpenWindowStationW(name.as_ptr(), 0, MAXIMUM_ALLOWED);
+                if station != 0 {
+                    SetProcessWindowStation(station);
+                }
+            }
+        }
         Self {
             state,
             log_dir: None,
