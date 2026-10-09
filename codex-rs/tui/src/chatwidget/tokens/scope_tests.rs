@@ -837,24 +837,35 @@ fn subscription_only_day_points_at_no_bill() {
 // gets the missing-price next step for its own provider.
 #[test]
 fn unpriced_request_without_usage_names_its_own_provider() {
-    let mut silent = unpriced(/*id*/ 1, thread(/*n*/ 1), "zainousage", "glm-5.2");
-    silent.usage = Usage::default();
-    silent.buckets = [BucketQuote::MissingUsage; 4];
-    let pages = own_day(vec![silent]);
-    let first = first_screen(&pages[0]);
-    assert_eq!(
-        first[1],
-        "• zainousage · Z.AI GLM 5.2 — Pay per use. 1 request, tokens not reported. Estimated cost: no price available."
-    );
-    let step = "Next step for requests with no price: check the bill from zainousage. No published price covers them, so no cost is shown for them here.";
-    assert!(first.contains(&step.to_string()), "{first:#?}");
-    let request = pages.iter().find(|page| page.title == "Request").unwrap();
-    assert!(
-        request.text.iter().any(|line| line == step),
-        "{:#?}",
-        request.text
-    );
-    assert_never_zero(&pages);
+    // Before billing bases such an attempt had no record; now it is bound to
+    // a pay-per-use record with no rates. Either way it has no price.
+    for basis_record in [false, true] {
+        let mut silent = unpriced(/*id*/ 1, thread(/*n*/ 1), "zainousage", "glm-5.2");
+        silent.usage = Usage::default();
+        silent.buckets = [BucketQuote::MissingUsage; 4];
+        if basis_record {
+            silent = with_basis(
+                silent,
+                codex_state::accounting::Basis::Billed,
+                codex_state::accounting::BasisSource::BuiltIn,
+            );
+        }
+        let pages = own_day(vec![silent]);
+        let first = first_screen(&pages[0]);
+        assert_eq!(
+            first[1],
+            "• zainousage · Z.AI GLM 5.2 — Pay per use. 1 request, tokens not reported. Estimated cost: no price available."
+        );
+        let step = "Next step for requests with no price: check the bill from zainousage. No published price covers them, so no cost is shown for them here.";
+        assert!(first.contains(&step.to_string()), "{first:#?}");
+        let request = pages.iter().find(|page| page.title == "Request").unwrap();
+        assert!(
+            request.text.iter().any(|line| line == step),
+            "{:#?}",
+            request.text
+        );
+        assert_never_zero(&pages);
+    }
 }
 
 // #288: an unpriced request that reported some counts but no priced one (here

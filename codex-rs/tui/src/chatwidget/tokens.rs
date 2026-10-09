@@ -664,11 +664,13 @@ fn attempt_text(q: &ObservationQuote) -> Vec<String> {
         "Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable"
             .into(),
     ];
-    if q.snapshot.is_none()
-        && !q
-            .buckets
-            .iter()
-            .any(|bucket| matches!(bucket, BucketQuote::Priced(_)))
+    // Zero counts quote as zero under a record with no rates; any money at
+    // all means a rate applied.
+    if per_use(q)
+        && no_rates(q)
+        && !q.buckets.iter().any(
+            |bucket| matches!(bucket, BucketQuote::Priced(amount) if *amount != Decimal::default()),
+        )
     {
         lines.push("Token cost: unavailable — no applicable price; recorded usage is not a zero-cost claim.".into());
     } else {
@@ -1363,7 +1365,7 @@ const COVERED: &str = "Covered by your subscription (not billed per request)";
 const PAY_PER_USE: &str = "Pay per use";
 const LOCAL: &str = "Local (runs on your own machine)";
 const LOCAL_FIGURE: &str = "No charge";
-const NOT_DECLARED: &str = "Not declared";
+const NOT_DECLARED: &str = "Billing basis not declared";
 const NOT_DECLARED_FIGURE: &str = "Counted neither as money spent nor as subscription work";
 /// The cost of work whose basis is not declared: unknown, not "unbilled".
 const UNDECLARED_COST: &str = "Estimated token cost: unknown — the billing basis is not declared, so whether this work was billed per token is unknown; your provider's bill is the final amount.";
@@ -1439,11 +1441,20 @@ impl EstimateGaps {
     }
 }
 
+/// No rate was bound at dispatch: no record at all (an attempt from before
+/// billing bases), or one that states only the attempt's basis.
+fn no_rates(quote: &ObservationQuote) -> bool {
+    quote
+        .snapshot
+        .as_ref()
+        .is_none_or(|snapshot| snapshot.rates == codex_state::accounting::Rates::default())
+}
+
 /// No price applies: none was bound at dispatch, or the bound one states no
 /// rate for a bucket the attempt has. An attempt with a price whose only gaps
 /// are counts the provider did not report has incomplete usage instead.
 fn lacks_price(quote: &ObservationQuote) -> bool {
-    quote.snapshot.is_none()
+    no_rates(quote)
         || quote
             .buckets
             .iter()
@@ -1687,7 +1698,11 @@ fn plain_header(quotes: &[&ObservationQuote]) -> Vec<String> {
     match codex_state::accounting::DayTotals::from_quotes(quotes.iter().copied()) {
         Ok(t) => {
             let (billing, cost) = plain_billing(&t, EstimateGaps::of(quotes.iter().copied()));
-            lines.push(format!("Billing: {billing}"));
+            lines.push(if billing == NOT_DECLARED {
+                "Billing: not declared".to_string()
+            } else {
+                format!("Billing: {billing}")
+            });
             lines.push(cost);
             lines.extend(scope::no_price_next_step(quotes.iter().copied()));
             if let Some(billed) = billed_figure(quotes) {
