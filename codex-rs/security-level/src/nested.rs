@@ -152,9 +152,13 @@ pub fn nested_origins(homes: Vec<PathBuf>) -> Vec<(PathBuf, NestedAgents)> {
 /// first creates on the real file system; while that command runs every
 /// process sees the file. Its unreadable "level" and failing probes must not
 /// make every launch on the account look nested. A home whose metadata cannot
-/// be read stays a candidate: that is what a sandbox denial looks like.
+/// be read stays a candidate: that is what a sandbox denial looks like (a
+/// denial never reports "not a directory", which a placeholder parent does).
 fn is_not_a_folder(home: &Path) -> bool {
-    std::fs::metadata(home).is_ok_and(|metadata| !metadata.is_dir())
+    match std::fs::metadata(home) {
+        Ok(metadata) => !metadata.is_dir(),
+        Err(err) => err.kind() == io::ErrorKind::NotADirectory,
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

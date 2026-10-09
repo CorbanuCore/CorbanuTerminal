@@ -90,9 +90,9 @@ pub(crate) struct UnifiedExecProcess {
     process_handle: ProcessHandle,
     output_tx: broadcast::Sender<Vec<u8>>,
     output_buffer: OutputBuffer,
-    /// Every output byte (capped head and tail), written by the output task
-    /// itself so it never misses output a slow or late subscriber of
-    /// `output_tx` would. `output_buffer` is drained by polls; this is not.
+    /// Everything the output task receives (capped head and tail), written by
+    /// that task itself so it never misses output a slow or late subscriber
+    /// of `output_tx` would. `output_buffer` is drained by polls; this is not.
     transcript: OutputBuffer,
     output_notify: Arc<Notify>,
     output_closed: Arc<AtomicBool>,
