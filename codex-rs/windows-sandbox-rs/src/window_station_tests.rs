@@ -789,7 +789,7 @@ fn sec_win_345_sandboxed_commands_dont_get_the_runners_access() {
         });
         let line = stdout
             .lines()
-            .find(|line| line.starts_with(PROBE_LINE))
+            .find_map(|line| line.find(PROBE_LINE).map(|start| &line[start..]))
             .unwrap_or_else(|| panic!("no probe report in {stdout}"))
             .to_string();
         eprintln!("sec-win-345: private desktop {private_desktop}: {line}");
