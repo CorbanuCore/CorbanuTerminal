@@ -119,7 +119,7 @@ unsafe fn environ() -> *mut *mut libc::c_char {
 
 /// Returns the value of `name` (UTF-8) and removes it from the environment,
 /// with its bytes overwritten in the process environment block, in the C
-/// runtime's copies and in freed heap blocks. `None` when unset or empty
+/// runtime's tables and in other copies on the heap. `None` when unset or empty
 /// (nothing is changed), or when the value is not valid Unicode (it is still
 /// removed and overwritten).
 #[cfg(windows)]
@@ -152,9 +152,9 @@ pub(crate) fn take_env_var(name: &str) -> Option<Zeroizing<Vec<u8>>> {
     for unit in value.iter() {
         wide.extend_from_slice(&unit.to_le_bytes());
     }
-    // The C runtime and the loader copied the launch environment at start-up
-    // and freed the copies without wiping them.
-    windows_env::wipe_freed_heap_copies(&[wide.as_slice(), utf8.as_slice()]);
+    // The C runtime made more copies of the launch environment at start-up
+    // (some freed without being wiped, some kept); so may other code have.
+    windows_env::wipe_heap_copies(name, &[wide.as_slice(), utf8.as_slice()]);
     valid.then_some(utf8)
 }
 
@@ -230,13 +230,17 @@ mod windows_env {
         }
     }
 
-    /// Overwrites every occurrence of a needle (at least 8 bytes) inside the
-    /// free blocks of this process's heaps: copies freed without being wiped
-    /// (the C runtime's start-up copies of the environment, for one). Each
-    /// heap is locked while it is walked. Only bytes inside a free block's
-    /// data that equal a whole needle are written, which no heap metadata can
-    /// be, so the heap stays consistent.
-    pub(super) fn wipe_freed_heap_copies(needles: &[&[u8]]) {
+    /// Overwrites copies of a handed-over value in this process's heaps:
+    /// - in every block, a `name=value` environment entry (narrow or UTF-16,
+    ///   the name compared ASCII case-insensitively) gets `0` characters for
+    ///   its value, which keeps it a valid string of the same length;
+    /// - in free blocks, every occurrence of the value is zeroed.
+    ///
+    /// `values` holds the value's encodings (UTF-16LE, UTF-8); shorter than
+    /// 8 bytes is skipped. Each heap is locked while it is walked and nothing
+    /// is allocated meanwhile. Only bytes that equal a whole value are
+    /// written, which no heap metadata can be, so the heap stays consistent.
+    pub(super) fn wipe_heap_copies(name: &str, values: &[&[u8]]) {
         use windows_sys::Win32::System::Memory::GetProcessHeaps;
         use windows_sys::Win32::System::Memory::HeapLock;
         use windows_sys::Win32::System::Memory::HeapUnlock;
@@ -246,21 +250,33 @@ mod windows_env {
         const PROCESS_HEAP_REGION: u32 = 0x1;
         const PROCESS_HEAP_UNCOMMITTED_RANGE: u32 = 0x2;
         const PROCESS_HEAP_ENTRY_BUSY: u32 = 0x4;
-        let needles: Vec<&[u8]> = needles
-            .iter()
-            .copied()
-            .filter(|needle| needle.len() >= 8)
-            .collect();
-        if needles.is_empty() {
-            return;
-        }
         // Allocated before any heap is locked: nothing is allocated (and no
         // heap changes shape) during a walk.
+        let narrow_name: Vec<u8> = format!("{name}=").into_bytes();
+        let wide_name: Vec<u8> = format!("{name}=")
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect();
+        let patterns: Vec<Pattern<'_>> = values
+            .iter()
+            .filter(|value| value.len() >= 8)
+            .map(|value| Pattern {
+                // UTF-16LE values have a zero high byte for ASCII.
+                prefix: if value.len() > 1 && value[1] == 0 {
+                    &wide_name
+                } else {
+                    &narrow_name
+                },
+                value,
+            })
+            .collect();
+        if patterns.is_empty() {
+            return;
+        }
         // SAFETY: a size query, then a fill of at most `heaps.len()` handles.
         let mut heaps = vec![0; unsafe { GetProcessHeaps(0, std::ptr::null_mut()) } as usize + 8];
         let count = unsafe { GetProcessHeaps(heaps.len() as u32, heaps.as_mut_ptr()) } as usize;
         heaps.truncate(count.min(heaps.len()));
-        let skip = PROCESS_HEAP_ENTRY_BUSY | PROCESS_HEAP_REGION | PROCESS_HEAP_UNCOMMITTED_RANGE;
         let mut committed = CommittedPages::default();
         for heap in heaps {
             // SAFETY: a heap of this process; unlocked below.
@@ -269,28 +285,70 @@ mod windows_env {
             }
             // SAFETY: zeroed POD; a null `lpData` starts the walk.
             let mut entry: PROCESS_HEAP_ENTRY = unsafe { std::mem::zeroed() };
-            // SAFETY: the heap is locked, so the walk and the free blocks it
+            // SAFETY: the heap is locked, so the walk and the blocks it
             // reports stay valid until `HeapUnlock`.
             while unsafe { HeapWalk(heap, &mut entry) } != 0 {
-                if u32::from(entry.wFlags) & skip != 0 || entry.lpData.is_null() {
+                let flags = u32::from(entry.wFlags);
+                if flags & (PROCESS_HEAP_REGION | PROCESS_HEAP_UNCOMMITTED_RANGE) != 0
+                    || entry.lpData.is_null()
+                {
                     continue;
                 }
-                // Large free blocks may be partly decommitted: only the
-                // committed, writable pages are read.
+                let free = flags & PROCESS_HEAP_ENTRY_BUSY == 0;
                 let start = entry.lpData as usize;
                 let end = start.saturating_add(entry.cbData as usize);
-                // Nothing is allocated during the walk.
+                // Large free blocks may be partly decommitted: only the
+                // committed, writable pages are read.
                 committed.for_each_writable(start, end, |from, to| {
-                    // SAFETY: committed, writable bytes of a free block.
+                    // SAFETY: committed, writable bytes of a heap block.
                     let data =
                         unsafe { std::slice::from_raw_parts_mut(from as *mut u8, to - from) };
-                    for needle in &needles {
-                        wipe(data, needle);
+                    for pattern in &patterns {
+                        pattern.wipe(data, free);
                     }
                 });
             }
             // SAFETY: locked above.
             unsafe { HeapUnlock(heap) };
+        }
+    }
+
+    /// One encoding of a value and of the `name=` that precedes it in an
+    /// environment entry.
+    struct Pattern<'a> {
+        prefix: &'a [u8],
+        value: &'a [u8],
+    }
+
+    impl Pattern<'_> {
+        /// Overwrites `prefix value` entries' values with `0` characters
+        /// and, when `free`, zeroes every bare occurrence of the value.
+        fn wipe(&self, data: &mut [u8], free: bool) {
+            let wide = self.value.len() > 1 && self.value[1] == 0;
+            let fold = |byte: u8| byte.to_ascii_uppercase();
+            let mut at = 0;
+            while at + self.value.len() <= data.len() {
+                if data[at] != self.value[0] || data[at..at + self.value.len()] != *self.value {
+                    at += 1;
+                    continue;
+                }
+                let entry = at >= self.prefix.len()
+                    && data[at - self.prefix.len()..at]
+                        .iter()
+                        .zip(self.prefix)
+                        .all(|(have, want)| fold(*have) == fold(*want));
+                if entry || free {
+                    for (index, byte) in data[at..at + self.value.len()].iter_mut().enumerate() {
+                        let replacement = match (entry, wide && index % 2 == 1) {
+                            (true, false) => b'0',
+                            _ => 0,
+                        };
+                        // SAFETY: a valid byte of the block.
+                        unsafe { std::ptr::write_volatile(byte, replacement) };
+                    }
+                }
+                at += self.value.len();
+            }
         }
     }
 
@@ -347,22 +405,6 @@ mod windows_env {
                     visit(start, to);
                 }
                 start = to;
-            }
-        }
-    }
-
-    /// Zeroes every occurrence of `needle` in `data`.
-    fn wipe(data: &mut [u8], needle: &[u8]) {
-        let mut start = 0;
-        while start + needle.len() <= data.len() {
-            if data[start..start + needle.len()] == *needle {
-                for byte in &mut data[start..start + needle.len()] {
-                    // SAFETY: a valid byte of the block.
-                    unsafe { std::ptr::write_volatile(byte, 0) };
-                }
-                start += needle.len();
-            } else {
-                start += 1;
             }
         }
     }
