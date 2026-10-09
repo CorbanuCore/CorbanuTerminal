@@ -75,3 +75,21 @@ fn sec_win_323_registering_waits_for_a_sync_that_is_removing() {
     assert!(lock_out_other_sessions(&sessions(&registry, None)).is_none());
     assert!(lock_out_other_sessions(&sessions(&registry, Some(&registration))).is_some());
 }
+
+/// This process registers in the machine-wide registry. Run elevated first
+/// and then in a normal session (as CI does), this also checks that an
+/// elevated process's registry folder admits a normal session's files.
+#[test]
+fn sec_win_323_this_process_registers_in_program_data() {
+    let registry = super::registry_dir().expect("ProgramData");
+    let name = super::register_this_process().expect("register this process");
+    assert_eq!(super::register_this_process().expect("again"), name);
+    assert!(registry.join(&name).is_file(), "{}", registry.display());
+    assert_eq!(
+        DenyReadSessions::for_this_process(/*register*/ false),
+        DenyReadSessions {
+            registry: Some(registry),
+            own: Some(name),
+        }
+    );
+}
