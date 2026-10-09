@@ -54,6 +54,7 @@ use windows_sys::Win32::Security::GetLengthSid;
 use windows_sys::Win32::Security::PSECURITY_DESCRIPTOR;
 use windows_sys::Win32::Security::SECURITY_ATTRIBUTES;
 use windows_sys::Win32::Security::TOKEN_QUERY;
+use windows_sys::Win32::Storage::FileSystem::FILE_GENERIC_READ;
 use windows_sys::Win32::Storage::FileSystem::READ_CONTROL;
 use windows_sys::Win32::System::StationsAndDesktops::CloseDesktop;
 use windows_sys::Win32::System::StationsAndDesktops::CloseWindowStation;
@@ -772,6 +773,7 @@ fn sec_win_345_sandboxed_commands_dont_get_the_runners_access() {
             .expect("local application data"),
     )
     .expect("control file");
+    let mut controls = 0;
     let mut results = Vec::new();
     // ConPTY too: its console host starts on the runner's desktop.
     for (private_desktop, tty) in [(true, false), (false, false), (true, true)] {
@@ -789,10 +791,26 @@ fn sec_win_345_sandboxed_commands_dont_get_the_runners_access() {
             PROBE_LOCK_ENV.to_string(),
             lock_path.to_string_lossy().into_owned(),
         );
-        env_map.insert(
-            PROBE_CONTROL_ENV.to_string(),
-            control.path().to_string_lossy().into_owned(),
-        );
+        // The control gets the read the sandbox's read roots give the
+        // profile's folders, once the setup has created the group.
+        let controlled = resolve_sid("CodexSandboxUsers").is_ok_and(|mut group| {
+            // SAFETY: a valid SID for the call; the file exists.
+            unsafe {
+                crate::acl::ensure_allow_mask_aces(
+                    control.path(),
+                    &[group.as_mut_ptr().cast()],
+                    FILE_GENERIC_READ,
+                )
+            }
+            .is_ok()
+        });
+        if controlled {
+            env_map.insert(
+                PROBE_CONTROL_ENV.to_string(),
+                control.path().to_string_lossy().into_owned(),
+            );
+            controls += 1;
+        }
         let command = vec![
             std::env::current_exe()
                 .expect("test binary")
@@ -893,10 +911,13 @@ fn sec_win_345_sandboxed_commands_dont_get_the_runners_access() {
         // Without its folder's protected DACL the lock would be as open as
         // the control file.
         assert_eq!(
-            (field("lock_file"), field("control_file")),
-            ("PermissionDenied".to_string(), "opened".to_string()),
-            "a sandboxed command could open Core's window-access lock (or the control failed)"
+            field("lock_file"),
+            "PermissionDenied",
+            "a sandboxed command could open Core's window-access lock"
         );
+        if controlled {
+            assert_eq!(field("control_file"), "opened", "the control failed");
+        }
         results.push((
             field("create_desktop"),
             field("core_desktop"),
@@ -904,6 +925,7 @@ fn sec_win_345_sandboxed_commands_dont_get_the_runners_access() {
             after,
         ));
     }
+    assert!(controls >= 2, "the control ran {controls} times");
     let gone = ((vec![], vec![]), (vec![], vec![]));
     let expected = |core_desktop: &str| {
         (
