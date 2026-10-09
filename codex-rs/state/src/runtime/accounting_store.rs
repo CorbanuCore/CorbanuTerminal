@@ -401,6 +401,21 @@ impl<'a> AccountingStore<'a> {
         }
     }
 
+    /// Refuse a ledger written in a newer format (`NewerLedgerFormat`); a
+    /// missing ledger or one this build can read is fine. Read-only and cheap:
+    /// it reads the applied migrations only.
+    pub async fn check_format(runtime: &StateRuntime) -> anyhow::Result<()> {
+        let mut conn = runtime.pool.acquire().await?;
+        if !ledger_exists(&mut conn).await? {
+            return Ok(());
+        }
+        let versions: Vec<i64> =
+            sqlx::query_scalar("SELECT version FROM _accounting_migrations ORDER BY version")
+                .fetch_all(&mut *conn)
+                .await?;
+        refuse_newer(versions)
+    }
+
     /// Install only when wholly absent, otherwise validate without schema repair.
     /// Activation is a real complete retention sweep, never a fabricated checkpoint.
     pub async fn open(runtime: &'a StateRuntime, as_of: impl Into<AsOf>) -> anyhow::Result<Self> {
@@ -1056,6 +1071,23 @@ async fn applied_format(conn: &mut SqliteConnection) -> anyhow::Result<i64> {
     )
 }
 
+/// `NewerLedgerFormat` when any applied migration is newer than this build's.
+fn refuse_newer(applied: impl IntoIterator<Item = i64>) -> anyhow::Result<()> {
+    let supported = crate::migrations::accounting_migrator()
+        .iter()
+        .map(|migration| migration.version)
+        .max()
+        .unwrap_or(0);
+    match applied
+        .into_iter()
+        .filter(|version| *version > supported)
+        .max()
+    {
+        Some(found) => Err(NewerLedgerFormat { found, supported }.into()),
+        None => Ok(()),
+    }
+}
+
 /// Read-only version and physical-schema validation; no migration adoption/repair.
 ///
 /// A ledger in an older format validates against the migrations it applied:
@@ -1073,15 +1105,7 @@ pub(super) async fn validate_on_connection(conn: &mut SqliteConnection) -> anyho
         .iter()
         .map(|m| (m.version, true, m.checksum.to_vec()))
         .collect();
-    let supported = expected.last().map_or(0, |(version, _, _)| *version);
-    if let Some(found) = rows
-        .iter()
-        .map(|(version, _, _)| *version)
-        .filter(|version| *version > supported)
-        .max()
-    {
-        return Err(NewerLedgerFormat { found, supported }.into());
-    }
+    refuse_newer(rows.iter().map(|(version, _, _)| *version))?;
     ensure!(
         !rows.is_empty() && expected.starts_with(&rows),
         "unsupported, failed or checksum-mismatched accounting migration"
