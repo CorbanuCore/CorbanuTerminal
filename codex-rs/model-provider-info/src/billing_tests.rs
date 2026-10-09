@@ -298,3 +298,35 @@ fn billing_override_under_an_alias_reaches_the_provider() {
     );
     assert!(!merged.contains_key(crate::CORBANU_PLAN_PROVIDER_ID));
 }
+
+/// The real id wins over an alias of it, whatever the map's order.
+#[test]
+fn billing_override_under_the_real_id_wins_over_an_alias() {
+    for _ in 0..16 {
+        let configured = std::collections::HashMap::from([
+            (
+                crate::CORBANU_PLAN_PROVIDER_ID.to_string(),
+                ModelProviderInfo {
+                    billing: Some(Subscription),
+                    ..ModelProviderInfo::default()
+                },
+            ),
+            (
+                crate::PFTERMINAL_PLAN_PROVIDER_ID.to_string(),
+                ModelProviderInfo {
+                    billing: Some(PayPerUse),
+                    ..ModelProviderInfo::default()
+                },
+            ),
+        ]);
+        let merged = crate::merge_configured_model_providers(
+            built_in_model_providers(/*openai_base_url*/ None),
+            configured,
+        )
+        .unwrap();
+        assert_eq!(
+            merged[crate::PFTERMINAL_PLAN_PROVIDER_ID].billing,
+            Some(PayPerUse)
+        );
+    }
+}

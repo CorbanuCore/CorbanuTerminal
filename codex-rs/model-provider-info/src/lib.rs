@@ -2008,6 +2008,10 @@ pub fn merge_configured_model_providers(
     mut model_providers: HashMap<String, ModelProviderInfo>,
     configured_model_providers: HashMap<String, ModelProviderInfo>,
 ) -> Result<HashMap<String, ModelProviderInfo>, String> {
+    // Aliases first, so an entry under the real id always wins over one under
+    // an alias of it, whatever the map's iteration order.
+    let mut configured_model_providers: Vec<_> = configured_model_providers.into_iter().collect();
+    configured_model_providers.sort_by_key(|(key, _)| canonical_provider_id(key) == key.as_str());
     for (key, mut provider) in configured_model_providers {
         // A billing-only entry may name a built-in provider by an alias; it
         // adjusts that provider.
