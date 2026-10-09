@@ -1,0 +1,12 @@
+model = "glm-5.2"
+model_provider = "zaicoding"
+service_tier = "default"
+
+[model_providers.zaicoding]
+name = "Z.AI coding"
+base_url = "https://api.z.ai/api/coding/paas/v4"
+env_key = "ZAI_API_KEY"
+wire_api = "chat"
+
+[projects."<scratch>/work/repo"]
+trust_level = "trusted"

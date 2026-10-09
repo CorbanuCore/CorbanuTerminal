@@ -1,0 +1,56 @@
+$ /cost
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     z-ai/glm-5.2   /model to change               │
+│ directory: <corbanu-root>/tmp/…/work/repo │
+╰──────────────────────────────────────────────────────────╯
+
+  Use the shell tool to run: ls. Then reply with only the number of files listed.
+• 2
+  Cost — this conversation
+  Requested UTC day: 2026-10-09
+  Today (UTC) in this conversation:
+  • OpenRouter · Ambient GLM 5.2 — Pay per use. 2 requests, 18,899 tokens. Billed by OpenRouter: $0.008359 (rounded).
+  Other conversations on this day, not included above: 1 request in 1 conversation.
+  • OpenRouter · Ambient GLM 5.2 — Pay per use. 1 request, 9,383 tokens. Billed by OpenRouter: $0.001702 (rounded).
+  Other conversations' estimated cost: no price available.
+  To see those requests, open that conversation with /resume and run /cost there.
+  Next step for requests with no price: check the bill from OpenRouter. No published price covers them, so no cost is shown for them here.
+  Estimates use published prices; billed figures are what the provider stated with each response.
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Select a provider below to see its requests.
+  —— Details ——
+  Estimated token cost: unknown
+  Full recorded estimate: unavailable (2 of 2 billed attempts incomplete)
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Billed cost: $0.008359 (rounded) — as stated by the provider with each response
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+  Attempts with no price for any recorded tokens: 2 on OpenRouter · Ambient GLM 5.2 (openrouter/z-ai/glm-5.2). No money is stated for those attempts, which
+  is not a zero-cost claim, and says nothing about the other attempts on the same model. A price can be absent because the catalogue states no rate for the
+  row, because this route's credential or service tier is not one the quoted rates apply to, or because no rate was in effect at dispatch.
+  Day covered (UTC): [2026-10-09T00:00:00.000Z, 2026-10-10T00:00:00.000Z)
+  Read at: 2026-10-09T13:09:36.864Z; ledger current to: 2026-10-09T13:06:24.073Z (192791 ms behind)
+  Retention: request detail kept since 2026-07-11T13:09:36.864Z; daily totals kept since 2025-10-10; oldest recorded day in this conversation 2026-10-09
+  Known subtotal exact USD: none — no price for these attempts
+  Input: 18,859
+  Noncached input (derived for inclusive input): 9,067
+  Cache read: 9,792
+  Cache write: 0
+  Output: 40
+  Reasoning (subset, not separately billed): 19
+  Total (not separately billed): 18,899
+  Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+  Unknown parent population: 0 attempts, excluded from root total
+  —— Open ——
+  → OpenRouter · Ambient GLM 5.2 — billed $0.008359 (rounded) (2 requests)
+  → Request 1 · OpenRouter · Ambient GLM 5.2 · billed $0.006913 (rounded)
+  → Request 2 · OpenRouter · Ambient GLM 5.2 · billed $0.001446 (rounded)
+  → Root's own attempts (2 attempts)
+  → Descendant attempts (none)
+  → Unknown provider/model attribution (none)
+  → Unknown parent population (none)
+  Refresh
+  Close

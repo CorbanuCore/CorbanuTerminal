@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a120be-3b3a-7211-ba7d-60da76e414c2"}
+{"type":"turn.started"}
+{"type":"error","message":"unexpected status 401 Unauthorized: Invalid bearer token, url: https://api.anthropic.com/v1/messages, cf-ray: a47d8e682dad680f-SEA"}
+{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized: Invalid bearer token, url: https://api.anthropic.com/v1/messages, cf-ray: a47d8e682dad680f-SEA"}}

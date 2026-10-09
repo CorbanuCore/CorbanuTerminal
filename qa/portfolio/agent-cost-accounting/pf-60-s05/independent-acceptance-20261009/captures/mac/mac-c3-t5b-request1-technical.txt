@@ -1,0 +1,61 @@
+$
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     glm-5.2   /model to change                    │
+│ directory: <corbanu-root>/tmp/…/work/repo │
+╰──────────────────────────────────────────────────────────╯
+
+  Reply with exactly: turn five
+• turn five
+  Attempt, components and original price
+  Requested UTC day: 2026-10-09
+  Provider: zaiproxy
+  Model: Z.AI GLM 5.2
+  Billing: Pay per use
+  Estimated cost: no price available
+  Next step for requests with no price: check the bill from zaiproxy. No published price covers them, so no cost is shown for them here.
+  Tokens: 9,898 tokens
+  —— Details ——
+  Billed cost: zaiproxy doesn't report its charges, so any cost here is an estimate — check zaiproxy's bill.
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Request: d69e524d-cc88-4d8d-b931-53349a27bfab
+  Attempt: de2455b2-959d-4eab-bfdb-0696398ee3fc
+  Thread: 01a120c1-0ea1-7852-84d2-5bc98337e477
+  Turn: 01a120c1-1064-7a52-94ee-10d5b0402f8f
+  Model: glm-5.2
+  Opaque scope: 64dad6d7-8760-4146-b070-613b2f453e28
+  Arithmetic dialect: Inclusive
+  Admission time: 2026-10-09T13:01:26.188Z
+  Retry predecessor: none
+  Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+  Token cost: unavailable — no applicable price; recorded usage is not a zero-cost claim.
+  Billing basis: pay per use (set in your config)
+  Input: 9883
+  Noncached input (derived for inclusive input): unknown — no retained numeric evidence
+  Cache read: 0 (reported)
+  Cache write: unknown — no retained numeric evidence
+  Output: 15
+  Reasoning (subset, not separately billed): 13
+  Total (not separately billed): 9898
+  Noncached input cost: unknown — no retained numeric evidence
+  Cache read cost: $0.000000; exact USD 0
+  Cache write cost: unknown — no retained numeric evidence
+  Output cost: unknown — rate unavailable
+  Known subtotal exact USD: none — no price for these attempts
+  Price ID: 0a36d8b5-3872-4b2b-ad43-f1cb92b97274
+  Price source: NativeCatalog; reference e1edebf0-1e9a-5893-a027-f5670ccb111b
+  Price currency/unit: Usd / PerMillionTokens
+  Price observed/approved: 2026-10-09T13:01:26.188Z / 2026-10-09T13:01:26.188Z
+  Price effective interval: [2026-10-09T13:01:26.188Z, unbounded)
+  Rate unavailable for Noncached input
+  Rate unavailable for Cache read
+  Rate unavailable for Cache write
+  Rate unavailable for Output
+  Evidence revision 16; source cedd3dca-9f00-4e27-889c-d1e2c23c5ad6; sequence 16; presence patch
+  {"input":9883,"read":0,"output":15,"reasoning":13,"total":9898}
+  Snapshot is not current; newer activity is unverified
+  Back
+  Refresh
+  Close

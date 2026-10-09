@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a120e1-d994-7a10-9757-3e1ee0cf6234"}
+{"type":"turn.started"}
+{"type":"error","message":"unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: 6a8239fe-635c-4d93-8bea-fe1d1f9fd05c"}
+{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: 6a8239fe-635c-4d93-8bea-fe1d1f9fd05c"}}

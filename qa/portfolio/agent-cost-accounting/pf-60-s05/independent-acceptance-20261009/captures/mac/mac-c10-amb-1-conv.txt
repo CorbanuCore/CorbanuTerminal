@@ -1,0 +1,51 @@
+$ /cost
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     ambient/large   /model to change              │
+│ directory: <corbanu-root>/tmp/…/work/repo │
+╰──────────────────────────────────────────────────────────╯
+
+  Reply with exactly: first
+• first
+  Cost — this conversation
+  Requested UTC day: 2026-10-09
+  Today (UTC) in this conversation:
+  • Ambient · Ambient Large — Pay per use. 1 request, 8,099 tokens. Estimated cost: no price available.
+  No other conversation recorded requests on this day.
+  Next step for requests with no price: check the bill from Ambient. No published price covers them, so no cost is shown for them here.
+  Costs are estimates from published prices; Ambient doesn't report its charges — check Ambient's bill.
+  Select a provider below to see its requests.
+  —— Details ——
+  Estimated token cost: unknown
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+  Attempts with no price for any recorded tokens: 1 on Ambient · Ambient Large (ambient/ambient/large). No money is stated for those attempts, which is not
+  a zero-cost claim, and says nothing about the other attempts on the same model. A price can be absent because the catalogue states no rate for the row,
+  because this route's credential or service tier is not one the quoted rates apply to, or because no rate was in effect at dispatch.
+  Day covered (UTC): [2026-10-09T00:00:00.000Z, 2026-10-10T00:00:00.000Z)
+  Read at: 2026-10-09T13:47:34.251Z; ledger current to: 2026-10-09T13:47:16.215Z (18036 ms behind)
+  Retention: request detail kept since 2026-07-11T13:47:34.251Z; daily totals kept since 2025-10-10; oldest recorded day in this conversation 2026-10-09
+  Known subtotal exact USD: none — no price for these attempts
+  Input: 8,097
+  Noncached input (derived for inclusive input): not reported (1 attempt)
+  Cache read: 0
+  Cache write: not reported (1 attempt)
+  Output: 2
+  Reasoning (subset, not separately billed): 0
+  Total (not separately billed): 8,099
+  Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+  Unknown parent population: 0 attempts, excluded from root total
+  —— Open ——
+  → Ambient · Ambient Large — no price available (1 request)
+  → Request 1 · Ambient · Ambient Large · no price available
+  → Root's own attempts (1 attempt)
+  → Descendant attempts (none)
+  → Unknown provider/model attribution (none)
+  → Unknown parent population (none)
+  Refresh
+  Close

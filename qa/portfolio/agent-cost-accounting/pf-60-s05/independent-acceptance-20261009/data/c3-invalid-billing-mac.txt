@@ -1,0 +1,11 @@
+$ corbanu-acct exec … (config: [model_providers.zai] billing = "free")
+Error loading config.toml: unknown variant `free`, expected one of `subscription`, `pay_per_use`, `local`
+in `model_providers.zai.billing`
+
+$ corbanu-default exec … (config: [model_providers.zai] billing = "free")
+Error loading config.toml: unknown variant `free`, expected one of `subscription`, `pay_per_use`, `local`
+in `model_providers.zai.billing`
+
+$ corbanu-acct exec … (config: [model_providers.zaiproxy] billing = "Subscription")
+Error loading config.toml: unknown variant `Subscription`, expected one of `subscription`, `pay_per_use`, `local`
+in `model_providers.zaiproxy.billing`

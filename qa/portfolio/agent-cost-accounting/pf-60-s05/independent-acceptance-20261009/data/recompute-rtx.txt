@@ -1,0 +1,66 @@
+# Linux (RTX) recomputation from provider-reported usage (RUST_LOG=codex_api=trace SSE events; proxy for zaiproxy)
+## Z.AI GLM-5.2 list price 1.40 / 0.26 / 4.40
+l-c3-t1          2026-10-09T13:25:33.148 2026100921253188916a46bc85439c         chat       in=  6431 cached=  5248 out=  13 usd=0.00307788
+TOTAL l-c3-t1: requests=1 input=6431 cached=5248 output=13 tokens=6444 usd=0.00307788
+l-c3-t2-subscription 2026-10-09T13:25:37.329 20261009212535e3a4573cd61b436f         chat       in=  6431 cached=  5248 out=  13 usd=0.00307788
+TOTAL l-c3-t2-subscription: requests=1 input=6431 cached=5248 output=13 tokens=6444 usd=0.00307788
+l-mix-zai        2026-10-09T13:25:45.099 2026100921254397507431651043bc         chat       in=  6445 cached=  5248 out=  30 usd=0.00317228
+l-mix-zai        2026-10-09T13:25:46.902 2026100921254576b2f4902e4c49e3         chat       in=  6502 cached=  6400 out=   2 usd=0.0018156
+TOTAL l-mix-zai: requests=2 input=12947 cached=11648 output=32 tokens=12979 usd=0.00498788
+l-pay-zai        2026-10-09T13:26:02.976 20261009212600e41b0f7fd92a42c0         chat       in=  6445 cached=  5248 out=  34 usd=0.00318988
+l-pay-zai        2026-10-09T13:26:16.834 202610092126031093334c6caf4d46         chat       in=  6508 cached=  6400 out=   2 usd=0.001824
+TOTAL l-pay-zai: requests=2 input=12953 cached=11648 output=36 tokens=12989 usd=0.00501388
+l-c8-guard       2026-10-09T13:29:35.474 202610092129045bf554d07e3e4af1         chat       in=  7266 cached=  5248 out=  68 usd=0.00448888
+l-c8-guard       2026-10-09T13:29:39.327 20261009212935244969ba4db846d2         chat       in=  3913 cached=     0 out= 195 usd=0.0063362
+l-c8-guard       2026-10-09T13:29:41.262 20261009212939a11a01a7297c45d5         chat       in=  7360 cached=  7232 out=   6 usd=0.00208592
+TOTAL l-c8-guard: requests=3 input=18539 cached=12480 output=269 tokens=18808 usd=0.012911
+l-c9-eph         2026-10-09T13:26:25.384 20261009212623e1e5aa333ac04579         chat       in=  5830 cached=  4096 out=  27 usd=0.00361136
+l-c9-eph         2026-10-09T13:26:27.470 202610092126259c11a0a128ff4b08         chat       in=  5889 cached=  5824 out=   2 usd=0.00161404
+TOTAL l-c9-eph: requests=2 input=11719 cached=9920 output=29 tokens=11748 usd=0.0052254
+l-c9-ctl         2026-10-09T13:26:30.613 202610092126299c308f0836184caf         chat       in=  6445 cached=  5248 out=  34 usd=0.00318988
+l-c9-ctl         2026-10-09T13:26:34.060 2026100921263185e19b89f5e047b9         chat       in=  6511 cached=  6400 out=   2 usd=0.0018282
+TOTAL l-c9-ctl: requests=2 input=12956 cached=11648 output=36 tokens=12992 usd=0.00501808
+l-c6fut-t1       2026-10-09T13:28:56.014 202610092128545952ed47e42e48d5         chat       in=  6449 cached=  5248 out=  13 usd=0.00310308
+TOTAL l-c6fut-t1: requests=1 input=6449 cached=5248 output=13 tokens=6462 usd=0.00310308
+l-c6fut-t2       2026-10-09T13:29:00.135 2026100921285886c0b6f7b58e45d8         chat       in=  6463 cached=  6400 out=  42 usd=0.001937
+l-c6fut-t2       2026-10-09T13:29:02.729 20261009212900f53138d8863e40fe         chat       in=  6533 cached=  6400 out=   2 usd=0.001859
+TOTAL l-c6fut-t2: requests=2 input=12996 cached=12800 output=44 tokens=13040 usd=0.003796
+l-c7-t1          2026-10-09T13:38:30.395 2026100921382829d7deb297d948d5         chat       in=  6445 cached=  1344 out=  30 usd=0.00762284
+l-c7-t1          2026-10-09T13:38:32.247 20261009213830ef44ac03a0d7461f         chat       in=  6500 cached=  5248 out=   2 usd=0.00312608
+TOTAL l-c7-t1: requests=2 input=12945 cached=6592 output=32 tokens=12977 usd=0.01074892
+l-c7-t2          2026-10-09T13:38:36.445 20261009213834dd7f080ad2fa4671         chat       in=  6540 cached=  5248 out=  27 usd=0.00329208
+l-c7-t2          2026-10-09T13:38:40.738 20261009213836329c7c7a8f6a4456         chat       in=  1980 cached=     0 out= 209 usd=0.0036916
+l-c7-t2          2026-10-09T13:38:42.518 202610092138411b809091f2df4e9a         chat       in=  6755 cached=  4992 out=  19 usd=0.00384972
+l-c7-t2          2026-10-09T13:38:46.060 20261009213843b596f2e8e0c34af9         chat       in=  2146 cached=     0 out= 186 usd=0.0038228
+l-c7-t2          2026-10-09T13:38:47.622 202610092138467e9e5b3a236745ad         chat       in=  6735 cached=  6528 out=   2 usd=0.00199588
+TOTAL l-c7-t2: requests=5 input=24156 cached=16768 output=443 tokens=24599 usd=0.01665208
+old-binary       2026-10-09T12:29:42.263 20261009202940fedd8e5092314793         chat       in=  6415 cached=     0 out=   4 usd=0.0089986
+old-binary       2026-10-09T12:30:00.981 202610092029591da128d1dcb945ba         chat       in=  6426 cached=     0 out=  29 usd=0.009124
+old-binary       2026-10-09T12:30:02.513 2026100920300192c716c2e7ee42c3         chat       in=  6482 cached=  6400 out=   3 usd=0.001792
+old-binary       2026-10-09T12:30:06.757 202610092030044cb37cbdd05b4967         chat       in=  6415 cached=     0 out=   7 usd=0.0090118
+TOTAL old-binary: requests=4 input=25738 cached=6400 output=43 tokens=25781 usd=0.0289264
+rtx-c6-newturn   2026-10-09T13:23:48.543 202610092123470c5b33f9e28247a4         chat       in=  6424 cached=  5248 out=   4 usd=0.00302848
+TOTAL rtx-c6-newturn: requests=1 input=6424 cached=5248 output=4 tokens=6428 usd=0.00302848
+GRAND: requests=28 tokens=171691 usd=0.10556696
+## subscription routes (API-price equivalent for reference only)
+l-mix-coding     2026-10-09T13:25:50.153 20261009212548590f95e608a446ea         chat       in=  3716 cached=  2432 out=  31 usd=0.00256632
+l-mix-coding     2026-10-09T13:25:51.951 20261009212550e5c0b101ba314330         chat       in=  3775 cached=  3584 out=  12 usd=0.00125204
+TOTAL l-mix-coding: requests=2 input=7491 cached=6016 output=43 tokens=7534 usd=0.00381836
+l-mix-zaianth    2026-10-09T13:25:54.916 msg_20261009212553b5fcbc790b0e4189     anthropic  in=  3692 cached=     0 out=   1 usd=0.0051732
+TOTAL l-mix-zaianth: requests=1 input=3692 cached=0 output=1 tokens=3693 usd=0.0051732
+GRAND: requests=3 tokens=11227 usd=0.00899156
+## zaiproxy (proxy channel)
+l-c3-t4          1791552341.594956       2026100921253916b9ccbb1af84f85         chat(proxy) in=  3702 cached=     0 out=  13
+TOTAL l-c3-t4: requests=1 input=3702 cached=0 output=13 tokens=3715
+GRAND: requests=1 tokens=3715
+## DeepSeek deepseek-flash off-peak 0.15 / 0.003 / 0.6
+l-mix-ds         2026-10-09T13:25:57.451 5299be07-04ec-4d92-a208-ca5455e52391   responses  in=  7325 cached=  5888 out=  38 usd=0.000256014
+l-mix-ds         2026-10-09T13:25:58.731 c4673d8f-d448-4286-bba0-ac942bf5e8e4   responses  in=  7416 cached=  7168 out=   2 usd=0.000059904
+TOTAL l-mix-ds: requests=2 input=14741 cached=13056 output=40 tokens=14781 usd=0.000315918
+l-pay-ds         2026-10-09T13:26:19.420 8ed6c23a-b1c4-4146-bb73-8621328dccf4   responses  in=  7320 cached=  5888 out=   2 usd=0.000233664
+TOTAL l-pay-ds: requests=1 input=7320 cached=5888 output=2 tokens=7322 usd=0.000233664
+GRAND: requests=3 tokens=22103 usd=0.000549582
+## OpenRouter (provider-stated cost)
+l-pay-or         2026-10-09T13:26:22.346 gen-1791552381-Ue639bjMCEFyJrh7zmXf    chat       in=  6435 cached=  4992 out=   3 stated=0.00180282
+TOTAL l-pay-or: requests=1 input=6435 cached=4992 output=3 tokens=6438 stated=0.00180282
+GRAND: requests=1 tokens=6438
