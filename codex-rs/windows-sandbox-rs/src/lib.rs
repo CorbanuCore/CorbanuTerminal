@@ -202,6 +202,8 @@ pub use deny_read_targets::DenyReadTargets;
 #[cfg(target_os = "windows")]
 pub use desktop::LaunchDesktop;
 #[cfg(target_os = "windows")]
+pub use desktop::mark_as_command_runner;
+#[cfg(target_os = "windows")]
 pub use dpapi::protect as dpapi_protect;
 #[cfg(target_os = "windows")]
 pub use dpapi::unprotect as dpapi_unprotect;
@@ -270,9 +272,13 @@ pub use logon_launch::LogonError;
 #[cfg(target_os = "windows")]
 pub use logon_launch::LogonLaunchRequest;
 #[cfg(target_os = "windows")]
+pub use logon_launch::WINDOW_ACCESS_REAPER_ARG;
+#[cfg(target_os = "windows")]
 pub use logon_launch::create_process_with_logon;
 #[cfg(target_os = "windows")]
 pub use logon_launch::run_logon_launcher;
+#[cfg(target_os = "windows")]
+pub use logon_launch::run_window_access_reaper;
 #[cfg(target_os = "windows")]
 pub use path_normalization::canonicalize_path;
 #[cfg(target_os = "windows")]

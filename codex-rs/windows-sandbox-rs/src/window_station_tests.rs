@@ -603,9 +603,7 @@ fn sec_win_345_window_access_counts_narrows_and_removes_exactly() {
         return;
     }
     // The edits are serialized across processes, not just in this one.
-    let mutex = super::dacl_mutex().expect("the DACL-edit mutex");
-    // SAFETY: opened above.
-    unsafe { CloseHandle(mutex) };
+    assert!(super::dacl_lock_file().is_some(), "the DACL-edit lock");
     // Any SID the window station does not grant.
     let users = resolve_sid("Users").expect("Users SID");
     assert_eq!(allow_entries(&users), (vec![], vec![]));
@@ -660,6 +658,7 @@ fn sec_win_345_window_access_counts_narrows_and_removes_exactly() {
 const PROBE_ENV: &str = "CODEX_SEC_WIN_345_PROBE";
 const PROBE_TEST: &str = "window_station::tests::window_station_probe_in_the_sandbox";
 const PROBE_LINE: &str = "sec-win-345 probe:";
+const PROBE_PRIVATE_ENV: &str = "CODEX_SEC_WIN_345_PROBE_PRIVATE";
 
 /// Not a test of its own: the command [`sec_win_345_sandboxed_commands_dont_get_the_runners_access`]
 /// runs in the elevated sandbox. Reports whether it can create a desktop on
@@ -687,10 +686,12 @@ fn window_station_probe_in_the_sandbox() {
         }
     };
     // Core narrows the access right after the runner reports the command
-    // started; this command may get here first.
+    // started (the window station, then the desktop); this command may get
+    // here first.
+    let private = std::env::var_os(PROBE_PRIVATE_ENV).is_some();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     let mut access = probe();
-    while access.0 && std::time::Instant::now() < deadline {
+    while (access.0 || (private && access.1)) && std::time::Instant::now() < deadline {
         std::thread::sleep(std::time::Duration::from_millis(50));
         access = probe();
     }
@@ -742,13 +743,16 @@ fn sec_win_345_sandboxed_commands_dont_get_the_runners_access() {
     let mut results = Vec::new();
     // ConPTY too: its console host starts on the runner's desktop.
     for (private_desktop, tty) in [(true, false), (false, false), (true, true)] {
-        let env_map = std::collections::HashMap::from([
+        let mut env_map = std::collections::HashMap::from([
             (PROBE_ENV.to_string(), core_desktop.clone()),
             (
                 "SystemRoot".to_string(),
                 std::env::var("SystemRoot").expect("SystemRoot"),
             ),
         ]);
+        if private_desktop {
+            env_map.insert(PROBE_PRIVATE_ENV.to_string(), "1".to_string());
+        }
         let command = vec![
             std::env::current_exe()
                 .expect("test binary")
@@ -955,4 +959,186 @@ fn sec_win_345_unelevated_commands_start_on_cores_own_desktop() {
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
     assert_eq!(allow_entries(&logon).1, Vec::<u32>::new());
+}
+
+/// The elevated sandbox's command runner from this build
+/// (`CARGO_BIN_EXE_codex_command_runner`, else next to `deps`).
+fn command_runner() -> PathBuf {
+    std::env::var_os("CARGO_BIN_EXE_codex_command_runner")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            std::env::current_exe()
+                .expect("test binary")
+                .parent()
+                .and_then(std::path::Path::parent)
+                .expect("profile dir")
+                .join("codex-command-runner.exe")
+        })
+}
+
+/// A command that loads user32 now and again after a few seconds.
+fn slow_command_line(cmd: &std::path::Path, seconds: u32) -> String {
+    format!(
+        "\"{}\" /d /c \"whoami >nul && ping -n {seconds} 127.0.0.1 >nul && whoami >nul\"",
+        cmd.display()
+    )
+}
+
+/// #345, the launcher path (#295: a hardened Core at medium integrity starts
+/// the runner through the logon launcher): the process starts suspended in
+/// the launcher, Core gets its thread too, grants its logon, and resumes it.
+#[test]
+fn sec_win_345_launcher_path_grants_the_logon_and_resumes() {
+    if !on_fresh_window_station(
+        "window_station::tests::sec_win_345_launcher_path_grants_the_logon_and_resumes",
+    ) {
+        return;
+    }
+    let Some(user) = LogonUser::get() else {
+        eprintln!("sec-win-345: no local user for the logon launch; skipped");
+        return;
+    };
+    // As an armed launch contract hardens Core; and the launcher always.
+    codex_process_hardening::restrict_current_process_access().expect("harden this process");
+    crate::logon_launch::FORCE_LAUNCHER.store(true, std::sync::atomic::Ordering::SeqCst);
+    let cmd = system32("cmd.exe");
+    let launched = create_process_with_logon(
+        &LogonLaunchRequest {
+            username: user.name(),
+            password: user.password(),
+            application: &cmd,
+            command_line: &slow_command_line(&cmd, 3),
+            cwd: &system32(""),
+        },
+        &command_runner(),
+    )
+    .expect("start cmd through the launcher");
+    assert!(launched.via_launcher, "started without the launcher");
+    assert_eq!(launched.window_access_error, None);
+    let logon_sid = process_logon_sid_for_test(launched.process);
+    let while_running = allow_entries(&logon_sid);
+    let code = wait_exit_code(launched.process);
+    drop(launched);
+    let after = allow_entries(&logon_sid);
+    eprintln!(
+        "sec-win-345: through the launcher: entries {while_running:x?}, exit {code:#x}, then {after:x?}"
+    );
+    assert_eq!(code, 0, "a command started while it ran did not start");
+    assert_eq!(
+        (while_running, after),
+        (
+            (vec![RUNNER_STATION_MASK], vec![DESKTOP_MASK]),
+            (vec![], vec![])
+        )
+    );
+}
+
+const CORE_ROLE_ENV: &str = "CODEX_SEC_WIN_345_CORE";
+const CORE_USER_ENV: &str = "CODEX_SEC_WIN_345_CORE_USER";
+const CORE_PASSWORD_ENV: &str = "CODEX_SEC_WIN_345_CORE_PASSWORD";
+const CORE_TEST: &str = "window_station::tests::window_station_core_that_exits_early";
+const CORE_LINE: &str = "sec-win-345 core: handed";
+
+/// Not a test of its own: the Core process of
+/// [`sec_win_345_access_goes_with_the_runner_even_after_core_exits`]. Starts a
+/// slow command as the given user, hands its access to a reaper, and exits
+/// at once, without cleaning up.
+#[test]
+fn window_station_core_that_exits_early() {
+    let (Some(_), Some(user), Some(password)) = (
+        std::env::var_os(CORE_ROLE_ENV),
+        std::env::var(CORE_USER_ENV).ok(),
+        std::env::var(CORE_PASSWORD_ENV).ok(),
+    ) else {
+        return;
+    };
+    let cmd = system32("cmd.exe");
+    let mut launched = create_process_with_logon(
+        &LogonLaunchRequest {
+            username: &user,
+            password: &password,
+            application: &cmd,
+            command_line: &slow_command_line(&cmd, 6),
+            cwd: &system32(""),
+        },
+        &cmd,
+    )
+    .expect("start cmd as the test user");
+    let logon = process_logon_sid_for_test(launched.process);
+    let access = launched.window_access.take().expect("window access");
+    let reaper =
+        crate::logon_launch::WindowAccessReaper::start(access, launched.process, &command_runner())
+            .map_err(|(_, err)| err)
+            .expect("hand the access to a reaper");
+    std::mem::forget(reaper);
+    println!(
+        "{CORE_LINE} {}",
+        string_from_sid_bytes(&logon).expect("SID string")
+    );
+    std::process::exit(0);
+}
+
+/// #345: the runner's access goes when the runner exits, even if Core exits
+/// first (it quit or crashed): a reaper process holds it. Before, a thread in
+/// Core removed it, so it stayed until the window station went away.
+#[test]
+fn sec_win_345_access_goes_with_the_runner_even_after_core_exits() {
+    if !on_fresh_window_station(
+        "window_station::tests::sec_win_345_access_goes_with_the_runner_even_after_core_exits",
+    ) {
+        return;
+    }
+    let Some(user) = LogonUser::get() else {
+        eprintln!("sec-win-345: no local user for the logon launch; skipped");
+        return;
+    };
+    let output = Command::new(std::env::current_exe().expect("test binary"))
+        .args([CORE_TEST, "--exact", "--nocapture", "--test-threads=1"])
+        .env(CORE_ROLE_ENV, "1")
+        .env(CORE_USER_ENV, user.name())
+        .env(CORE_PASSWORD_ENV, user.password())
+        .output()
+        .expect("run the Core that exits early");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "{stdout}{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let logon = stdout
+        .lines()
+        .find_map(|line| line.split(CORE_LINE).nth(1))
+        .unwrap_or_else(|| panic!("no report in {stdout}"))
+        .trim()
+        .to_string();
+    let logon = {
+        let text = to_wide(&logon);
+        let mut psid: *mut c_void = ptr::null_mut();
+        // SAFETY: parses a SID string into a buffer copied and freed below.
+        unsafe {
+            assert_ne!(ConvertStringSidToSidW(text.as_ptr(), &mut psid), 0);
+            let bytes =
+                std::slice::from_raw_parts(psid as *const u8, GetLengthSid(psid) as usize).to_vec();
+            LocalFree(psid as HLOCAL);
+            bytes
+        }
+    };
+    // Core is gone; the runner still runs.
+    let after_core = allow_entries(&logon);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let mut after_runner = allow_entries(&logon);
+    while after_runner != (vec![], vec![]) && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        after_runner = allow_entries(&logon);
+    }
+    eprintln!(
+        "sec-win-345: entries after Core exited {after_core:x?}, after the runner did {after_runner:x?}"
+    );
+    assert_eq!(
+        (after_core, after_runner),
+        (
+            (vec![RUNNER_STATION_MASK], vec![DESKTOP_MASK]),
+            (vec![], vec![])
+        )
+    );
 }

@@ -24,12 +24,15 @@
 
 use crate::token::get_current_token_for_restriction;
 use crate::token::get_logon_sid_bytes;
-use crate::token::get_user_sid_bytes;
-use crate::winutil::string_from_sid_bytes;
 use crate::winutil::to_wide;
 use anyhow::Context;
 use anyhow::Result;
+use serde::Deserialize;
+use serde::Serialize;
 use std::ffi::c_void;
+use std::fs::File;
+use std::path::Path;
+use std::path::PathBuf;
 use std::ptr;
 use std::sync::Mutex;
 use windows_sys::Win32::Foundation::CloseHandle;
@@ -39,15 +42,12 @@ use windows_sys::Win32::Foundation::GetLastError;
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::Foundation::HLOCAL;
 use windows_sys::Win32::Foundation::LocalFree;
-use windows_sys::Win32::Foundation::WAIT_ABANDONED;
-use windows_sys::Win32::Foundation::WAIT_OBJECT_0;
 use windows_sys::Win32::Security::ACE_HEADER;
 use windows_sys::Win32::Security::ACL;
 use windows_sys::Win32::Security::ACL_REVISION;
 use windows_sys::Win32::Security::ACL_SIZE_INFORMATION;
 use windows_sys::Win32::Security::AclSizeInformation;
 use windows_sys::Win32::Security::AddAce;
-use windows_sys::Win32::Security::Authorization::ConvertStringSecurityDescriptorToSecurityDescriptorW;
 use windows_sys::Win32::Security::Authorization::GetSecurityInfo;
 use windows_sys::Win32::Security::Authorization::SE_WINDOW_OBJECT;
 use windows_sys::Win32::Security::Authorization::SetSecurityInfo;
@@ -58,10 +58,8 @@ use windows_sys::Win32::Security::GetAclInformation;
 use windows_sys::Win32::Security::INHERIT_ONLY_ACE;
 use windows_sys::Win32::Security::INHERITED_ACE;
 use windows_sys::Win32::Security::InitializeAcl;
-use windows_sys::Win32::Security::SECURITY_ATTRIBUTES;
 use windows_sys::Win32::Security::TOKEN_QUERY;
 use windows_sys::Win32::Storage::FileSystem::READ_CONTROL;
-use windows_sys::Win32::Storage::FileSystem::SYNCHRONIZE;
 use windows_sys::Win32::Storage::FileSystem::WRITE_DAC;
 use windows_sys::Win32::System::Pipes::PeekNamedPipe;
 use windows_sys::Win32::System::StationsAndDesktops::CloseDesktop;
@@ -72,11 +70,8 @@ use windows_sys::Win32::System::StationsAndDesktops::GetUserObjectInformationW;
 use windows_sys::Win32::System::StationsAndDesktops::OpenDesktopW;
 use windows_sys::Win32::System::StationsAndDesktops::OpenWindowStationW;
 use windows_sys::Win32::System::StationsAndDesktops::UOI_NAME;
-use windows_sys::Win32::System::Threading::CreateMutexExW;
 use windows_sys::Win32::System::Threading::GetCurrentThreadId;
 use windows_sys::Win32::System::Threading::OpenProcessToken;
-use windows_sys::Win32::System::Threading::ReleaseMutex;
-use windows_sys::Win32::System::Threading::WaitForSingleObject;
 
 /// The interactive window station, where the secondary logon service grants
 /// the new user access itself.
@@ -111,11 +106,11 @@ pub(crate) const COMMAND_STATION_ACCESS: u32 =
 /// start there (measured likewise): read and write objects. No hooks,
 /// windows or menus.
 pub(crate) const DESKTOP_ACCESS: u32 = DESKTOP_READOBJECTS | DESKTOP_WRITEOBJECTS;
-/// Serializes window-object DACL edits across Core processes (see
-/// [`with_dacl_lock`]); the user SID and window station follow.
-const DACL_MUTEX_PREFIX: &str = "Local\\CodexSandboxWindowAccess";
+/// Under this user's local application data: the lock file that serializes
+/// window-object DACL edits across processes (see [`with_dacl_lock`]).
+const DACL_LOCK_DIR: &str = "CorbanuTerminalSandbox";
 /// Each edit takes well under a millisecond.
-const DACL_MUTEX_TIMEOUT_MS: u32 = 2_000;
+const DACL_LOCK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// The name of this process's window station (`WinSta0` in an interactive
 /// session, `Service-0x0-<logon id>$` in an SSH session or a service).
@@ -176,12 +171,20 @@ enum WindowObject {
 /// station and desktop, removed on drop (#345).
 ///
 /// Each value adds entries of its own, even when an equal entry is there
-/// already, and removes exactly those: the runners Core starts from one
-/// logon session share their logon SID (the secondary logon service reuses
-/// the logon), so the entries count the runners that need them, across
-/// Core processes. Edits are serialized by [`with_dacl_lock`].
+/// already, and removes exactly those: the secondary logon service gives
+/// each runner its caller's logon SID, so all the runners Core processes
+/// start from one logon session share it, and the entries count the runners
+/// that need them. Edits are serialized by [`with_dacl_lock`].
 #[derive(Debug)]
 pub struct WindowAccess {
+    state: WindowAccessState,
+    log_dir: Option<PathBuf>,
+}
+
+/// What a [`WindowAccess`] holds, handed to the runner's reaper
+/// (`crate::logon_launch::WindowAccessReaper`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct WindowAccessState {
     station: String,
     desktop: String,
     sid: Vec<u8>,
@@ -199,8 +202,8 @@ impl WindowAccess {
         let Some(mut access) = Self::off_interactive_station(sid)? else {
             return Ok(None);
         };
-        access.add(WindowObject::Station, RUNNER_STATION_ACCESS)?;
-        access.add(WindowObject::Desktop, DESKTOP_ACCESS)?;
+        access.set(WindowObject::Station, Some(RUNNER_STATION_ACCESS))?;
+        access.set(WindowObject::Desktop, Some(DESKTOP_ACCESS))?;
         Ok(Some(access))
     }
 
@@ -211,7 +214,7 @@ impl WindowAccess {
         let Some(mut access) = Self::off_interactive_station(sid)? else {
             return Ok(None);
         };
-        access.add(WindowObject::Desktop, DESKTOP_ACCESS)?;
+        access.set(WindowObject::Desktop, Some(DESKTOP_ACCESS))?;
         Ok(Some(access))
     }
 
@@ -222,12 +225,39 @@ impl WindowAccess {
         }
         let desktop = current_desktop_name().context("read the desktop's name")?;
         Ok(Some(Self {
-            station,
-            desktop,
-            sid: sid.to_vec(),
-            station_entry: None,
-            desktop_entry: None,
+            state: WindowAccessState {
+                station,
+                desktop,
+                sid: sid.to_vec(),
+                station_entry: None,
+                desktop_entry: None,
+            },
+            log_dir: None,
         }))
+    }
+
+    /// Where to log an edit made without the cross-process lock.
+    pub(crate) fn set_log_dir(&mut self, log_dir: Option<&Path>) {
+        self.log_dir = log_dir.map(Path::to_path_buf);
+    }
+
+    pub(crate) fn state(&self) -> &WindowAccessState {
+        &self.state
+    }
+
+    /// Takes over the entries another process's value held.
+    pub(crate) fn from_state(state: WindowAccessState) -> Self {
+        Self {
+            state,
+            log_dir: None,
+        }
+    }
+
+    /// Forgets the entries without removing them (another process owns
+    /// them now).
+    pub(crate) fn disarm(mut self) {
+        self.state.station_entry = None;
+        self.state.desktop_entry = None;
     }
 
     /// Once the runner has started its command: what the commands started
@@ -236,54 +266,62 @@ impl WindowAccess {
     /// the commands start on this desktop (`commands_use_this_desktop`, no
     /// private desktop).
     pub(crate) fn narrow_for_commands(&mut self, commands_use_this_desktop: bool) -> Result<()> {
-        if let Some(mask) = self.station_entry
+        if let Some(mask) = self.state.station_entry
             && mask != COMMAND_STATION_ACCESS
         {
-            self.replace(WindowObject::Station, Some(COMMAND_STATION_ACCESS))?;
+            self.set(WindowObject::Station, Some(COMMAND_STATION_ACCESS))?;
         }
-        if !commands_use_this_desktop && self.desktop_entry.is_some() {
-            self.replace(WindowObject::Desktop, None)?;
+        if !commands_use_this_desktop && self.state.desktop_entry.is_some() {
+            self.set(WindowObject::Desktop, None)?;
         }
         Ok(())
     }
 
     fn entry(&mut self, object: WindowObject) -> &mut Option<u32> {
         match object {
-            WindowObject::Station => &mut self.station_entry,
-            WindowObject::Desktop => &mut self.desktop_entry,
+            WindowObject::Station => &mut self.state.station_entry,
+            WindowObject::Desktop => &mut self.state.desktop_entry,
         }
     }
 
     fn name(&self, object: WindowObject) -> String {
         match object {
-            WindowObject::Station => self.station.clone(),
-            WindowObject::Desktop => format!("{}\\{}", self.station, self.desktop),
+            WindowObject::Station => self.state.station.clone(),
+            WindowObject::Desktop => format!("{}\\{}", self.state.station, self.state.desktop),
         }
     }
 
-    fn add(&mut self, object: WindowObject, mask: u32) -> Result<()> {
-        debug_assert!(self.entry(object).is_none());
-        self.edit(object, None, Some(mask))?;
-        *self.entry(object) = Some(mask);
-        Ok(())
-    }
-
-    /// Replaces this value's entry on `object` with one with `mask`, or
-    /// removes it.
-    fn replace(&mut self, object: WindowObject, mask: Option<u32>) -> Result<()> {
+    /// Replaces this value's entry on `object` (if any) with one with
+    /// `mask`, or removes it. Once the DACL is written the value reflects
+    /// it, even if the access added was not kept (an error then).
+    fn set(&mut self, object: WindowObject, mask: Option<u32>) -> Result<()> {
         let current = *self.entry(object);
-        self.edit(object, current, mask)?;
-        *self.entry(object) = mask;
-        Ok(())
-    }
-
-    fn edit(&self, object: WindowObject, remove: Option<u32>, add: Option<u32>) -> Result<()> {
         let name = match object {
-            WindowObject::Station => &self.station,
-            WindowObject::Desktop => &self.desktop,
+            WindowObject::Station => self.state.station.clone(),
+            WindowObject::Desktop => self.state.desktop.clone(),
         };
-        with_dacl_lock(|| edit_window_object(object, name, &self.sid, remove, add))
-            .with_context(|| format!("{:?} {}", object, self.name(object)))
+        let sid = self.state.sid.clone();
+        let (locked, rewritten) =
+            with_dacl_lock(|| edit_window_object(object, &name, &sid, current, mask));
+        if !locked {
+            crate::logging::log_note(
+                &format!(
+                    "window access: edited {} without the cross-process lock",
+                    self.name(object)
+                ),
+                self.log_dir.as_deref(),
+            );
+        }
+        let kept = rewritten.with_context(|| format!("{:?} {}", object, self.name(object)))?;
+        *self.entry(object) = mask;
+        if !kept {
+            anyhow::bail!(
+                "{:?} {}: the access granted was not kept",
+                object,
+                self.name(object)
+            );
+        }
+        Ok(())
     }
 }
 
@@ -293,22 +331,27 @@ impl Drop for WindowAccess {
             if self.entry(object).is_some() {
                 // Nothing to do on failure: the entry stays until the window
                 // station goes away.
-                let _ = self.replace(object, None);
+                let _ = self.set(object, None);
             }
         }
     }
 }
 
 /// In the runner, off the interactive window station: waits until the
-/// console host of a ConPTY it just created has started, or `timeout`
-/// passes (returns false). The host starts on the runner's desktop, Core's,
-/// whose entry Core removes once the runner reports its command started
-/// ([`WindowAccess::narrow_for_commands`]); a host still starting then
-/// would die. It writes its first output (terminal mode requests) once it
-/// runs; this peeks at `output_read` for it and leaves it there.
-pub fn wait_for_console_host_start(output_read: HANDLE, timeout: std::time::Duration) -> bool {
+/// console host of a ConPTY it just created has started. The host starts on
+/// the runner's desktop, Core's, whose entry Core removes once the runner
+/// reports its command started ([`WindowAccess::narrow_for_commands`]); a
+/// host still starting then would die. It writes its first output (terminal
+/// mode requests) once it runs; this peeks at `output_read` for it and leaves
+/// it there. `None` on the interactive window station (nothing to wait
+/// for), else whether it started, or why that isn't known (Core then keeps
+/// the desktop entry).
+pub fn wait_for_console_host_start(
+    output_read: HANDLE,
+    timeout: std::time::Duration,
+) -> Option<std::result::Result<(), String>> {
     if current_window_station_name().is_some_and(|name| is_interactive_window_station(&name)) {
-        return true;
+        return None;
     }
     let deadline = std::time::Instant::now() + timeout;
     loop {
@@ -324,58 +367,23 @@ pub fn wait_for_console_host_start(output_read: HANDLE, timeout: std::time::Dura
                 ptr::null_mut(),
             )
         };
-        if ok == 0 || available > 0 {
-            // A broken pipe means the host is gone; nothing to wait for.
-            return ok != 0;
+        if ok == 0 {
+            return Some(Err(format!(
+                "the console host's output closed before it wrote ({})",
+                std::io::Error::last_os_error()
+            )));
+        }
+        if available > 0 {
+            return Some(Ok(()));
         }
         if std::time::Instant::now() >= deadline {
-            return false;
+            return Some(Err(format!(
+                "the console host wrote nothing in {}s",
+                timeout.as_secs()
+            )));
         }
         std::thread::sleep(std::time::Duration::from_millis(2));
     }
-}
-
-/// Opens or creates this user's DACL-edit mutex for this window station.
-fn dacl_mutex() -> Option<HANDLE> {
-    let user = current_user_sid_string()?;
-    let station = current_window_station_name()?;
-    let name = to_wide(format!("{DACL_MUTEX_PREFIX}-{user}-{station}"));
-    let sddl = to_wide(format!("D:P(A;;GA;;;{user})(A;;GA;;;SY)"));
-    let mut descriptor: *mut c_void = ptr::null_mut();
-    // SAFETY: parses `sddl` into a descriptor freed below.
-    if unsafe {
-        ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            sddl.as_ptr(),
-            1,
-            &mut descriptor,
-            ptr::null_mut(),
-        )
-    } == 0
-    {
-        return None;
-    }
-    let attributes = SECURITY_ATTRIBUTES {
-        nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
-        lpSecurityDescriptor: descriptor,
-        bInheritHandle: 0,
-    };
-    // SAFETY: opens or creates a named mutex with only the access waiting
-    // needs (a mutex made at another integrity level still opens).
-    let mutex = unsafe { CreateMutexExW(&attributes, name.as_ptr(), 0, SYNCHRONIZE) };
-    // SAFETY: allocated above.
-    unsafe { LocalFree(descriptor as HLOCAL) };
-    (mutex != 0).then_some(mutex)
-}
-
-fn current_user_sid_string() -> Option<String> {
-    // SAFETY: the token is closed right after reading its user.
-    let sid = unsafe {
-        let token = get_current_token_for_restriction().ok()?;
-        let sid = get_user_sid_bytes(token);
-        CloseHandle(token);
-        sid.ok()?
-    };
-    string_from_sid_bytes(&sid).ok()
 }
 
 /// The logon SID of `process`'s token (a process Core started).
@@ -404,43 +412,89 @@ pub(crate) fn current_logon_sid() -> Result<Vec<u8>> {
 }
 
 /// Serializes DACL edits on window objects, in this process and, through a
-/// named mutex, across this user's Core processes on this window station.
-/// Without it, two read-modify-write edits can lose one. The mutex admits
-/// only this user and SYSTEM, so the elevated sandbox's commands can't hold
-/// it; if it can't be had (another user took the name), or isn't released
-/// in time, only this process's edits are serialized.
-fn with_dacl_lock<T>(edit: impl FnOnce() -> T) -> T {
+/// lock file in this user's local application data (which the sandbox's
+/// users can't open), across this user's processes on this window station.
+/// Without it, two read-modify-write edits can lose one. Returns whether the
+/// cross-process lock was held: if it can't be had in time, the edit goes
+/// ahead with only this process's edits serialized.
+fn with_dacl_lock<T>(edit: impl FnOnce() -> T) -> (bool, T) {
     static LOCK: Mutex<()> = Mutex::new(());
     let _guard = LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let mutex = dacl_mutex().unwrap_or(0);
-    // SAFETY: waits on the mutex opened above (abandoned counts as owned).
-    let owned = mutex != 0
-        && matches!(
-            unsafe { WaitForSingleObject(mutex, DACL_MUTEX_TIMEOUT_MS) },
-            WAIT_OBJECT_0 | WAIT_ABANDONED
-        );
+    let file = dacl_lock_file();
     let result = edit();
-    // SAFETY: released only if owned; the handle is closed once.
-    unsafe {
-        if owned {
-            ReleaseMutex(mutex);
-        }
-        if mutex != 0 {
-            CloseHandle(mutex);
+    (file.is_some(), result)
+}
+
+/// This user's lock file for this window station, locked, or `None`.
+fn dacl_lock_file() -> Option<File> {
+    use std::os::windows::fs::OpenOptionsExt as _;
+    const FILE_SHARE_READ: u32 = 0x1;
+    const FILE_SHARE_WRITE: u32 = 0x2;
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    let dir = local_app_data()?.join(DACL_LOCK_DIR);
+    std::fs::create_dir_all(&dir).ok()?;
+    let station = current_window_station_name()?;
+    let path = dir.join(format!("window-access-{station}.lock"));
+    let open = |write: bool| {
+        std::fs::OpenOptions::new()
+            .read(true)
+            .write(write)
+            .create(write)
+            .truncate(false)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(&path)
+    };
+    // One an elevated process made opens only for reading here, which is
+    // enough to lock it.
+    let file = open(true).or_else(|_| open(false)).ok()?;
+    if !file.metadata().is_ok_and(|metadata| metadata.is_file()) {
+        return None;
+    }
+    let deadline = std::time::Instant::now() + DACL_LOCK_TIMEOUT;
+    loop {
+        match file.try_lock() {
+            Ok(()) => return Some(file),
+            Err(std::fs::TryLockError::WouldBlock) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+            Err(_) => return None,
         }
     }
+}
+
+/// This user's local application data folder (no environment needed: the
+/// reaper starts with almost none).
+fn local_app_data() -> Option<PathBuf> {
+    use windows_sys::Win32::System::Com::CoTaskMemFree;
+    use windows_sys::Win32::UI::Shell::FOLDERID_LocalAppData;
+    use windows_sys::Win32::UI::Shell::SHGetKnownFolderPath;
+    let mut path: *mut u16 = ptr::null_mut();
+    // SAFETY: `path` receives a string the call allocates, freed below.
+    let status = unsafe { SHGetKnownFolderPath(&FOLDERID_LocalAppData, 0, 0, &mut path) };
+    let result = (status == 0 && !path.is_null()).then(|| {
+        // SAFETY: a NUL-terminated string from the call.
+        let len = (0..).take_while(|&i| unsafe { *path.add(i) } != 0).count();
+        // SAFETY: as above.
+        PathBuf::from(String::from_utf16_lossy(unsafe {
+            std::slice::from_raw_parts(path, len)
+        }))
+    });
+    // SAFETY: allocated by SHGetKnownFolderPath (null is allowed).
+    unsafe { CoTaskMemFree(path.cast()) };
     result
 }
 
+/// Whether the access added (if any) was kept, once the DACL is written.
 fn edit_window_object(
     object: WindowObject,
     name: &str,
     sid: &[u8],
     remove: Option<u32>,
     add: Option<u32>,
-) -> Result<()> {
+) -> Result<bool> {
     let wide = to_wide(name);
     let handle = match object {
         // SAFETY: opens a named window station; closed below.
@@ -573,16 +627,17 @@ fn object_dacl(handle: isize) -> Result<(*mut ACL, *mut c_void)> {
 /// Rewrites `handle`'s DACL: the same entries in the same order, less the
 /// first allow entry for `sid` with exactly the mask `remove` (if given and
 /// present), plus an allow entry for `sid` with the mask `add` (if given),
-/// placed before any inherited entries. Fails if a deny entry for `sid`
-/// takes away any of `add`, or if the access added is not kept.
-fn rewrite_dacl(handle: isize, sid: &[u8], remove: Option<u32>, add: Option<u32>) -> Result<()> {
+/// placed before any inherited entries. Fails, writing nothing, if a deny
+/// entry for `sid` takes away any of `add`. Returns whether the access added
+/// (if any) was kept: another writer may have replaced the DACL meanwhile.
+fn rewrite_dacl(handle: isize, sid: &[u8], remove: Option<u32>, add: Option<u32>) -> Result<bool> {
     let (dacl, descriptor) = object_dacl(handle)?;
     // SAFETY: `dacl` belongs to `descriptor`, freed right after.
     let rebuilt = unsafe { rebuild_dacl(dacl, sid, remove, add) };
     // SAFETY: allocated by GetSecurityInfo; `dacl` is not used after this.
     unsafe { LocalFree(descriptor as HLOCAL) };
     let Some(mut rebuilt) = rebuilt? else {
-        return Ok(());
+        return Ok(true);
     };
     // SAFETY: `rebuilt` holds a valid ACL built by `rebuild_dacl`.
     let status = unsafe {
@@ -599,12 +654,10 @@ fn rewrite_dacl(handle: isize, sid: &[u8], remove: Option<u32>, add: Option<u32>
     if status != ERROR_SUCCESS {
         anyhow::bail!("SetSecurityInfo failed: {status}");
     }
-    if let Some(add) = add
-        && !object_grants(handle, sid, add)?
-    {
-        anyhow::bail!("the access granted was not kept");
-    }
-    Ok(())
+    Ok(match add {
+        Some(add) => object_grants(handle, sid, add).unwrap_or(false),
+        None => true,
+    })
 }
 
 /// The ACL [`rewrite_dacl`] writes, as `u32`s for alignment, or `None` when

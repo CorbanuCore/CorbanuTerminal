@@ -111,9 +111,19 @@ impl LaunchDesktop {
     }
 }
 
-/// See [`LaunchDesktop::prepare`]. A failure is logged, not fatal: the
-/// runner can't, and needs no, grant.
+static IS_COMMAND_RUNNER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The elevated sandbox's command runner calls this first: Core gave its
+/// logon the access to Core's desktop, which the runner can't change.
+pub fn mark_as_command_runner() {
+    IS_COMMAND_RUNNER.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// See [`LaunchDesktop::prepare`]. A failure is logged, not fatal.
 fn grant_own_desktop(logs_base_dir: Option<&Path>) -> Option<WindowAccess> {
+    if IS_COMMAND_RUNNER.load(std::sync::atomic::Ordering::SeqCst) {
+        return None;
+    }
     match current_logon_sid().and_then(|sid| WindowAccess::grant_desktop(&sid)) {
         Ok(access) => access,
         Err(err) => {

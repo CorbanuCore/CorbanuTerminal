@@ -35,6 +35,7 @@
 
 use crate::proc_thread_attr::ProcThreadAttributeList;
 use crate::window_station::WindowAccess;
+use crate::window_station::WindowAccessState;
 use crate::window_station::current_window_station_name;
 use crate::window_station::is_interactive_window_station;
 use crate::window_station::process_logon_sid;
@@ -70,6 +71,7 @@ use windows_sys::Win32::Security::DACL_SECURITY_INFORMATION;
 use windows_sys::Win32::Security::GetSecurityDescriptorControl;
 use windows_sys::Win32::Security::PSECURITY_DESCRIPTOR;
 use windows_sys::Win32::Security::SE_DACL_PROTECTED;
+use windows_sys::Win32::Storage::FileSystem::SYNCHRONIZE;
 use windows_sys::Win32::System::Diagnostics::Debug::SetErrorMode;
 use windows_sys::Win32::System::Pipes::CreatePipe;
 use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
@@ -80,6 +82,7 @@ use windows_sys::Win32::System::Threading::CreateProcessWithLogonW;
 use windows_sys::Win32::System::Threading::EXTENDED_STARTUPINFO_PRESENT;
 use windows_sys::Win32::System::Threading::GetCurrentProcess;
 use windows_sys::Win32::System::Threading::GetProcessId;
+use windows_sys::Win32::System::Threading::INFINITE;
 use windows_sys::Win32::System::Threading::PROCESS_INFORMATION;
 use windows_sys::Win32::System::Threading::ResumeThread;
 use windows_sys::Win32::System::Threading::STARTF_USESTDHANDLES;
@@ -203,31 +206,68 @@ pub fn create_process_with_logon(
     if started.thread == 0 {
         return Ok(launched);
     }
+    // Ends the process if anything below panics before it runs.
+    let suspended = Suspended {
+        process: launched.process,
+        thread: started.thread,
+    };
     match process_logon_sid(started.process).and_then(|sid| WindowAccess::grant_runner(&sid)) {
         Ok(access) => launched.window_access = access,
         Err(err) => launched.window_access_error = Some(format!("{err:#}")),
     }
-    // SAFETY: `started.thread` is the new process's suspended main thread.
-    let resumed = unsafe { ResumeThread(started.thread) } != u32::MAX;
-    let resume_error = std::io::Error::last_os_error();
-    // SAFETY: returned with the process and not used again.
-    unsafe { CloseHandle(started.thread) };
-    if !resumed {
-        // SAFETY: the process never ran; the handle is not used again.
-        unsafe {
-            TerminateProcess(launched.process, 1);
-            CloseHandle(launched.process);
-        }
-        return Err(resume_error).context("resume the started process");
+    if let Err(err) = suspended.resume() {
+        // SAFETY: the process was ended; the handle is not used again.
+        unsafe { CloseHandle(launched.process) };
+        return Err(err).context("resume the started process");
     }
     Ok(launched)
 }
+
+/// A process started suspended: ended on drop unless [`Suspended::resume`]
+/// succeeded. Closes the thread handle either way.
+struct Suspended {
+    process: HANDLE,
+    thread: HANDLE,
+}
+
+impl Suspended {
+    fn resume(self) -> std::io::Result<()> {
+        // SAFETY: `self.thread` is the process's suspended main thread.
+        if unsafe { ResumeThread(self.thread) } == u32::MAX {
+            return Err(std::io::Error::last_os_error());
+        }
+        // SAFETY: returned with the process and not used again.
+        unsafe { CloseHandle(self.thread) };
+        std::mem::forget(self);
+        Ok(())
+    }
+}
+
+impl Drop for Suspended {
+    fn drop(&mut self) {
+        // SAFETY: the process never ran; both handles are live.
+        unsafe {
+            TerminateProcess(self.process, 1);
+            CloseHandle(self.thread);
+        }
+    }
+}
+
+/// Tests: always start through the launcher, as a hardened Core at medium
+/// integrity does.
+#[cfg(test)]
+pub(crate) static FORCE_LAUNCHER: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 fn create_process_with_logon_any(
     request: &LogonLaunchRequest<'_>,
     launcher_exe: &Path,
     suspended: bool,
 ) -> anyhow::Result<Started> {
+    #[cfg(test)]
+    if FORCE_LAUNCHER.load(std::sync::atomic::Ordering::SeqCst) {
+        return create_process_with_logon_via_launcher(request, launcher_exe, suspended);
+    }
     match create_process_with_logon_here(request, suspended) {
         // Only an absolute path to the installed runner: a bare name would be
         // looked up in the working directory (the workspace), and the launcher
@@ -306,6 +346,13 @@ fn launcher_pipe(child_reads: bool) -> anyhow::Result<(OwnedHandle, File)> {
 
 /// Starts the launcher with only its two pipe ends inherited.
 fn spawn_launcher(launcher_exe: &Path) -> anyhow::Result<(OwnedHandle, File, BufReader<File>)> {
+    spawn_helper(launcher_exe, LOGON_LAUNCH_ARG)
+}
+
+/// Starts `exe` (the command runner) as this user in the helper mode `arg`,
+/// inheriting only its own two pipes; see the module docs.
+fn spawn_helper(exe: &Path, arg: &str) -> anyhow::Result<(OwnedHandle, File, BufReader<File>)> {
+    let launcher_exe = exe;
     let (child_stdin, stdin) = launcher_pipe(/*child_reads*/ true)?;
     let (child_stdout, stdout) = launcher_pipe(/*child_reads*/ false)?;
     let mut environment = Vec::new();
@@ -316,7 +363,7 @@ fn spawn_launcher(launcher_exe: &Path) -> anyhow::Result<(OwnedHandle, File, Buf
     }
     environment.push(0);
     let mut command_line = to_wide(format!(
-        "{} {LOGON_LAUNCH_ARG}",
+        "{} {arg}",
         quote_windows_arg(&launcher_exe.to_string_lossy())
     ));
     let application = to_wide(launcher_exe);
@@ -462,6 +509,160 @@ fn create_process_with_logon_via_launcher(
         }
     }
     result
+}
+
+/// The command runner's first argument for [`run_window_access_reaper`].
+pub const WINDOW_ACCESS_REAPER_ARG: &str = "--window-access-reaper";
+
+/// What Core hands a reaper: the runner (a handle value in the reaper's
+/// table, `SYNCHRONIZE` only) and the access its logon holds.
+#[derive(Serialize, Deserialize)]
+struct ReaperRequest {
+    runner: usize,
+    access: WindowAccessState,
+}
+
+/// #345: a runner's window access, held by a reaper process instead of Core
+/// so that it goes when the runner exits even if Core has exited first.
+///
+/// The reaper is the command runner started as this user in reaper mode
+/// ([`WINDOW_ACCESS_REAPER_ARG`]), like the logon launcher: only its own two
+/// pipes, almost no environment, its own directory. It waits for the runner
+/// and then removes the entries; Core tells it to narrow them once the
+/// runner reports its command started.
+pub(crate) struct WindowAccessReaper {
+    stdin: File,
+}
+
+impl WindowAccessReaper {
+    /// Hands `access` for `runner` to a new reaper. On failure Core keeps it.
+    pub(crate) fn start(
+        access: WindowAccess,
+        runner: HANDLE,
+        reaper_exe: &Path,
+    ) -> Result<Self, (WindowAccess, anyhow::Error)> {
+        match Self::hand_over(&access, runner, reaper_exe) {
+            Ok(reaper) => {
+                access.disarm();
+                Ok(reaper)
+            }
+            Err(err) => Err((access, err)),
+        }
+    }
+
+    fn hand_over(access: &WindowAccess, runner: HANDLE, reaper_exe: &Path) -> anyhow::Result<Self> {
+        if !reaper_exe.is_absolute() || !reaper_exe.is_file() {
+            anyhow::bail!("no runner at {} to reap with", reaper_exe.display());
+        }
+        let (reaper, mut stdin, mut stdout) = spawn_helper(reaper_exe, WINDOW_ACCESS_REAPER_ARG)?;
+        let result = (|| -> anyhow::Result<()> {
+            let mut remote: HANDLE = 0;
+            // SAFETY: `runner` is a live process handle; `reaper.0` is our own
+            // child, opened with full access.
+            if unsafe {
+                DuplicateHandle(
+                    GetCurrentProcess(),
+                    runner,
+                    reaper.0,
+                    &mut remote,
+                    SYNCHRONIZE,
+                    /*binherithandle*/ 0,
+                    /*dwoptions*/ 0,
+                )
+            } == 0
+            {
+                return Err(std::io::Error::last_os_error())
+                    .context("hand the runner's handle to the reaper");
+            }
+            let mut line = serde_json::to_vec(&ReaperRequest {
+                runner: remote as usize,
+                access: access.state().clone(),
+            })?;
+            line.push(b'\n');
+            stdin
+                .write_all(&line)
+                .context("send the reaper its request")?;
+            stdin.flush().context("send the reaper its request")?;
+            let (reply_tx, reply_rx) = mpsc::channel();
+            std::thread::spawn(move || {
+                let mut reply = String::new();
+                let read = stdout.read_line(&mut reply).map(|_| reply);
+                let _ = reply_tx.send(read);
+            });
+            match reply_rx.recv_timeout(LAUNCHER_REPLY_TIMEOUT) {
+                Ok(Ok(reply)) if reply.trim() == ACK => Ok(()),
+                Ok(Ok(reply)) => anyhow::bail!("the reaper replied {:?}", reply.trim()),
+                Ok(Err(err)) => Err(err).context("read the reaper's reply"),
+                Err(_) => anyhow::bail!("the reaper did not reply"),
+            }
+        })();
+        if result.is_err() {
+            // SAFETY: our own child; it holds nothing yet.
+            unsafe { TerminateProcess(reaper.0, 1) };
+        }
+        result.map(|()| Self { stdin })
+    }
+
+    /// See [`WindowAccess::narrow_for_commands`].
+    pub(crate) fn narrow_for_commands(
+        &mut self,
+        commands_use_this_desktop: bool,
+    ) -> anyhow::Result<()> {
+        let line = if commands_use_this_desktop {
+            "narrow shared"
+        } else {
+            "narrow private"
+        };
+        writeln!(self.stdin, "{line}")
+            .and_then(|()| self.stdin.flush())
+            .context("tell the reaper to narrow the access")
+    }
+}
+
+/// The command runner's reaper mode: takes over a runner's window access
+/// from Core (one request on stdin, acknowledged on stdout), narrows it when
+/// Core says so, and removes it once the runner exits, whether or not Core
+/// is still running.
+pub fn run_window_access_reaper() -> anyhow::Result<()> {
+    let mut stdin = std::io::stdin().lock();
+    let mut line = String::new();
+    stdin
+        .read_line(&mut line)
+        .context("read the reaper request")?;
+    let request: ReaperRequest = serde_json::from_str(&line).context("parse the reaper request")?;
+    let runner = OwnedHandle(request.runner as HANDLE);
+    let access = std::sync::Arc::new(std::sync::Mutex::new(Some(WindowAccess::from_state(
+        request.access,
+    ))));
+    {
+        let mut stdout = std::io::stdout().lock();
+        writeln!(stdout, "{ACK}")?;
+        stdout.flush()?;
+    }
+    drop(stdin);
+    let narrowing = std::sync::Arc::clone(&access);
+    std::thread::spawn(move || {
+        for line in std::io::stdin().lock().lines() {
+            let Ok(line) = line else {
+                break;
+            };
+            let shared = match line.trim() {
+                "narrow shared" => true,
+                "narrow private" => false,
+                _ => continue,
+            };
+            if let Ok(mut access) = narrowing.lock()
+                && let Some(access) = access.as_mut()
+            {
+                let _ = access.narrow_for_commands(shared);
+            }
+        }
+    });
+    // SAFETY: `runner` is the handle Core gave this process.
+    unsafe { WaitForSingleObject(runner.0, INFINITE) };
+    drop(access.lock().ok().and_then(|mut access| access.take()));
+    // The stdin thread may still be blocked reading.
+    std::process::exit(0);
 }
 
 /// Duplicates `handle`, a handle value in `launcher`'s table, into this
