@@ -1909,11 +1909,6 @@ impl Session {
         state.session_configuration.provider.clone()
     }
 
-    /// The accounting mode and provider identity in force right now.
-    ///
-    /// Read live rather than snapshotted: a session's provider can change, and
-    /// a client that records against the identity it had at startup would
-    /// attribute a request to a provider it no longer uses.
     /// The session's configured definition of provider `id`, user overrides
     /// such as `billing` included.
     pub(crate) async fn configured_model_provider(
@@ -1929,6 +1924,11 @@ impl Session {
             .cloned()
     }
 
+    /// The accounting mode and provider identity in force right now.
+    ///
+    /// Read live rather than snapshotted: a session's provider can change, and
+    /// a client that records against the identity it had at startup would
+    /// attribute a request to a provider it no longer uses.
     pub(crate) async fn accounting_binding(&self) -> (crate::config::AccountingMode, String) {
         let state = self.state.lock().await;
         let config = &state.session_configuration.original_config_do_not_use;

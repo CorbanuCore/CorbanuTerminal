@@ -276,3 +276,25 @@ fn default_routes_are_unambiguous() {
         );
     }
 }
+
+/// A billing-only entry under an alias adjusts the provider the alias names.
+#[test]
+fn billing_override_under_an_alias_reaches_the_provider() {
+    let configured = std::collections::HashMap::from([(
+        crate::CORBANU_PLAN_PROVIDER_ID.to_string(),
+        ModelProviderInfo {
+            billing: Some(Subscription),
+            ..ModelProviderInfo::default()
+        },
+    )]);
+    let merged = crate::merge_configured_model_providers(
+        built_in_model_providers(/*openai_base_url*/ None),
+        configured,
+    )
+    .unwrap();
+    assert_eq!(
+        merged[crate::PFTERMINAL_PLAN_PROVIDER_ID].billing,
+        Some(Subscription)
+    );
+    assert!(!merged.contains_key(crate::CORBANU_PLAN_PROVIDER_ID));
+}

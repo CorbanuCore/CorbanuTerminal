@@ -2009,6 +2009,13 @@ pub fn merge_configured_model_providers(
     configured_model_providers: HashMap<String, ModelProviderInfo>,
 ) -> Result<HashMap<String, ModelProviderInfo>, String> {
     for (key, mut provider) in configured_model_providers {
+        // A billing-only entry may name a built-in provider by an alias; it
+        // adjusts that provider.
+        let key = if provider.is_billing_override_only() {
+            canonical_provider_id(&key).to_string()
+        } else {
+            key
+        };
         if key == AMAZON_BEDROCK_PROVIDER_ID {
             let billing_override = provider.billing.take();
             let base_url_override = provider.base_url.take();

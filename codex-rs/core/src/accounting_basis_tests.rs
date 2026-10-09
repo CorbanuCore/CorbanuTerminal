@@ -225,6 +225,8 @@ async fn admission_binds_the_basis_to_every_attempt() -> anyhow::Result<()> {
         .build("my-llm"),
     )
     .await?;
+    // One UTC day for every read; the cases run within it.
+    let day = chrono::Utc::now().timestamp_millis() / 86_400_000;
     let cases = [
         (
             PriceAuthority::Undeclared,
@@ -257,7 +259,7 @@ async fn admission_binds_the_basis_to_every_attempt() -> anyhow::Result<()> {
         let quote = codex_state::accounting::AccountingStore::inspect_day(
             &db,
             owner,
-            chrono::Utc::now().timestamp_millis() / 86_400_000,
+            day,
             chrono::Utc::now().timestamp_millis(),
         )
         .await?;
@@ -283,7 +285,7 @@ async fn admission_binds_the_basis_to_every_attempt() -> anyhow::Result<()> {
         codex_state::accounting::AccountingStore::inspect_day(
             &db,
             owner,
-            chrono::Utc::now().timestamp_millis() / 86_400_000,
+            day,
             chrono::Utc::now().timestamp_millis(),
         )
         .await?
