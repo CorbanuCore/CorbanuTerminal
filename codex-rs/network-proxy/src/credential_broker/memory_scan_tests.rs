@@ -105,8 +105,22 @@ fn describe(address: usize) -> String {
             }
         }
     }
+    // The 24 bytes before the match (a variable name, if it is an
+    // environment copy), printable ASCII only.
+    let mut before = [0_u8; 24];
+    read_own_memory(address.saturating_sub(24), &mut before);
+    let before: String = before
+        .iter()
+        .map(|byte| {
+            if byte.is_ascii_graphic() {
+                *byte as char
+            } else {
+                '.'
+            }
+        })
+        .collect();
     format!(
-        "{address:#x}: allocation {:#x} region {:#x}+{:#x} type {:#x} protect {:#x}; {block}",
+        "{address:#x} after {before:?}: allocation {:#x} region {:#x}+{:#x} type {:#x} protect {:#x}; {block}",
         info.AllocationBase as usize,
         info.BaseAddress as usize,
         info.RegionSize,
