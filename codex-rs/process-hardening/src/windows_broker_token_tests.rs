@@ -74,8 +74,8 @@ fn pf_27_s08_broker_cannot_write_the_users_files() {
         .map(|home| home.join("AppData").join("LocalLow"))
         .filter(|dir| dir.is_dir())
         .map(|dir| dir.join(format!("pf27s08-files-{}", std::process::id())));
-    let mut bases = vec![("temp", root.clone())];
-    bases.extend(local_low.clone().map(|dir| ("locallow", dir)));
+    let mut bases = vec![("temp", root)];
+    bases.extend(local_low.map(|dir| ("locallow", dir)));
     for (role, confinement, expected) in [
         ("confined", Confinement::Broker(BROKER_TOKEN), "denied"),
         ("control", Confinement::SameToken, "ok"),
@@ -536,7 +536,6 @@ fn run_script_probe(confined: bool) -> Report {
     let token: HANDLE = if confined {
         create_broker_token(BrokerTokenOptions {
             default_dacl: BrokerDefaultDacl::OwnedByCapability,
-            ..BROKER_TOKEN
         })
         .expect("broker token")
         .into_raw_handle() as HANDLE
