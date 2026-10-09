@@ -37,7 +37,7 @@ pub fn builder(endpoint: String, mode: AccountingMode) -> TestCodexBuilder {
     test_codex()
         .with_auth(CodexAuth::from_api_key("synthetic-responses-accounting"))
         .with_config(move |config| {
-            config.model = Some("gpt-5.6-sol".into());
+            config.model = Some("gpt-5.6-terra".into());
             config.model_provider_id = "openai".into();
             config.model_provider = ModelProviderInfo {
                 request_max_retries: Some(1),

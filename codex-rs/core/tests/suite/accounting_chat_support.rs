@@ -45,7 +45,7 @@ pub fn builder(endpoint: String, mode: AccountingMode) -> TestCodexBuilder {
     test_codex()
         .with_auth(CodexAuth::from_api_key("synthetic-chat-accounting"))
         .with_config(move |config| {
-            config.model = Some("gpt-5.6-sol".into());
+            config.model = Some("gpt-5.6-terra".into());
             config.model_provider_id = "openai".into();
             config.model_provider = ModelProviderInfo {
                 request_max_retries: Some(0),
@@ -108,7 +108,7 @@ pub async fn posts(server: &wiremock::MockServer, expected: usize) {
             body["stream_options"]["include_usage"],
         );
         assert_eq!(body["stream_options"]["include_usage"], true);
-        assert_eq!(body["model"], "gpt-5.6-sol");
+        assert_eq!(body["model"], "gpt-5.6-terra");
         assert!(request.headers.get("x-pfterminal-request-id").is_none());
     }
 }
@@ -129,9 +129,9 @@ pub fn golden(cached: bool, zero: bool, count: i64) -> anyhow::Result<DayTotals>
         }),
         known_usd: match (zero, cached, count) {
             (true, _, _) => "0",
-            (false, true, 1) => "0.00121",
-            (false, true, 2) => "0.00242",
-            (false, false, 1) => "0.0012",
+            (false, true, 1) => "0.000484",
+            (false, true, 2) => "0.000968",
+            (false, false, 1) => "0.00048",
             _ => unreachable!(),
         }
         .to_string()

@@ -1,0 +1,5 @@
+# Installed by .github/workflows/codespell.yml with --require-hashes.
+# 2.4.3 is the version codespell-project/actions-codespell@v2.2 resolved
+# (its requirements.txt is codespell[toml]>=2.2.4) when this was pinned.
+codespell==2.4.3 \
+    --hash=sha256:af2505b335e8573dbd2d384d1c4ef498f4006f4ba2d6fceca01e55b91f52628a

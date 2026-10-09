@@ -49,6 +49,7 @@ export type { LegacyAppPathString } from "./LegacyAppPathString";
 export type { LocalShellAction } from "./LocalShellAction";
 export type { LocalShellExecAction } from "./LocalShellExecAction";
 export type { LocalShellStatus } from "./LocalShellStatus";
+export type { LongContextRates } from "./LongContextRates";
 export type { McpServerInfo } from "./McpServerInfo";
 export type { MessagePhase } from "./MessagePhase";
 export type { MeteredRates } from "./MeteredRates";

@@ -228,6 +228,7 @@ fn spawn_agent_catalog_separates_explicit_choices_from_cost_based_allocation() {
         provider_id: "openai".to_string(),
         capability: ModelCapabilityTier::Frontier,
         reason: "No verified allocation economics".to_string(),
+        billing: None,
     });
     let mut priced = unpriced.clone();
     priced.model = "priced-model".to_string();

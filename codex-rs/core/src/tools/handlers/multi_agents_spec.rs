@@ -1268,11 +1268,13 @@ fn format_model_billing(billing: &ModelBilling) -> String {
         ModelBilling::Metered {
             input_milli_usd_per_million_tokens,
             output_milli_usd_per_million_tokens,
+            valid_through_utc,
             ..
         } => format!(
-            "metered ${}/${} per M tok",
+            "metered ${}/${} per M tok{}",
             format_millis(*input_milli_usd_per_million_tokens),
-            format_millis(*output_milli_usd_per_million_tokens)
+            format_millis(*output_milli_usd_per_million_tokens),
+            through(valid_through_utc)
         ),
         ModelBilling::MeteredSchedule {
             off_peak,
@@ -1308,15 +1310,24 @@ fn format_model_billing(billing: &ModelBilling) -> String {
             plan_relative_burn_millis,
             api_key_input_milli_usd_per_million_tokens,
             api_key_output_milli_usd_per_million_tokens,
+            api_key_valid_through_utc,
             ..
         } => format!(
-            "auth-dependent: subscription burn {}x or API ${}/${} per M tok",
+            "auth-dependent: subscription burn {}x or API ${}/${} per M tok{}",
             format_millis(*plan_relative_burn_millis),
             format_millis(*api_key_input_milli_usd_per_million_tokens),
-            format_millis(*api_key_output_milli_usd_per_million_tokens)
+            format_millis(*api_key_output_milli_usd_per_million_tokens),
+            through(api_key_valid_through_utc)
         ),
         ModelBilling::Local => "local".to_string(),
     }
+}
+
+/// When API rates are stated only until an instant, such as a promotion's end.
+fn through(valid_through_utc: &Option<String>) -> String {
+    valid_through_utc
+        .as_deref()
+        .map_or_else(String::new, |end| format!(" through {end}"))
 }
 
 fn format_millis(value: u32) -> String {

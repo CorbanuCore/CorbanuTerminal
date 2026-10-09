@@ -386,6 +386,23 @@ impl MeteredRates {
     }
 }
 
+/// API rates for a whole request whose input exceeds a published threshold,
+/// such as OpenAI's long-context price for prompts above 272K input tokens.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, TS, JsonSchema, PartialEq, Eq)]
+pub struct LongContextRates {
+    /// The rates apply when the request's input tokens (cached and cache
+    /// writes included) are strictly more than this.
+    pub above_input_tokens: u32,
+    pub input_milli_usd_per_million_tokens: u32,
+    pub output_milli_usd_per_million_tokens: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub cached_input_milli_usd_per_million_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub cache_write_milli_usd_per_million_tokens: Option<u32>,
+}
+
 /// A `[start, end)` window in whole UTC hours; it may wrap past midnight.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, TS, JsonSchema, PartialEq, Eq)]
 pub struct UtcHourWindow {
@@ -432,6 +449,20 @@ pub enum ModelBilling {
         output_milli_usd_per_million_tokens: u32,
         #[serde(default)]
         cached_input_milli_usd_per_million_tokens: Option<u32>,
+        /// The published cache-write price. Omitted means the catalogue states
+        /// none, not that writes are free.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        cache_write_milli_usd_per_million_tokens: Option<u32>,
+        /// Rates for a request whose input exceeds a published threshold.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        long_context: Option<LongContextRates>,
+        /// The last UTC instant (RFC 3339) the provider says these rates hold,
+        /// such as the end of a promotion. Afterwards the row states no price.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        valid_through_utc: Option<String>,
     },
     /// Per-token rates that differ between peak windows and the rest of the week.
     ///
@@ -460,6 +491,16 @@ pub enum ModelBilling {
         api_key_output_milli_usd_per_million_tokens: u32,
         #[serde(default)]
         api_key_cached_input_milli_usd_per_million_tokens: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        api_key_cache_write_milli_usd_per_million_tokens: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        api_key_long_context: Option<LongContextRates>,
+        /// As `Metered::valid_through_utc`, for the API-key side only.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        api_key_valid_through_utc: Option<String>,
     },
     Local,
 }
@@ -546,8 +587,30 @@ impl ModelBilling {
                     });
                 Some(if peak_now { peak } else { off_peak }.tuple())
             }
-            billing => billing.api_key_rates(),
+            billing => billing
+                .api_key_rates()
+                .filter(|_| billing.api_key_rates_valid_at(at_ms)),
         }
+    }
+
+    /// Whether the flat API-key rates still hold at `at_ms`. A validity end
+    /// this client cannot read is treated as already passed: no price rather
+    /// than a price the provider may no longer charge.
+    fn api_key_rates_valid_at(&self, at_ms: i64) -> bool {
+        let through = match self {
+            Self::Metered {
+                valid_through_utc, ..
+            } => valid_through_utc,
+            Self::AuthDependent {
+                api_key_valid_through_utc,
+                ..
+            } => api_key_valid_through_utc,
+            _ => return true,
+        };
+        through.as_deref().is_none_or(|through| {
+            chrono::DateTime::parse_from_rfc3339(through)
+                .is_ok_and(|end| at_ms <= end.timestamp_millis())
+        })
     }
 
     /// The exact API-key rates this row would charge for the same tokens, in
@@ -562,6 +625,7 @@ impl ModelBilling {
                 input_milli_usd_per_million_tokens,
                 output_milli_usd_per_million_tokens,
                 cached_input_milli_usd_per_million_tokens,
+                ..
             } => Some((
                 *input_milli_usd_per_million_tokens,
                 *output_milli_usd_per_million_tokens,
@@ -584,6 +648,35 @@ impl ModelBilling {
         }
     }
 
+    /// The published API-key cache-write rate, in milli-USD per million
+    /// tokens. `None` means the catalogue states no price for cache writes.
+    pub fn api_key_cache_write(&self) -> Option<u32> {
+        match self {
+            Self::Metered {
+                cache_write_milli_usd_per_million_tokens,
+                ..
+            } => *cache_write_milli_usd_per_million_tokens,
+            Self::AuthDependent {
+                api_key_cache_write_milli_usd_per_million_tokens,
+                ..
+            } => *api_key_cache_write_milli_usd_per_million_tokens,
+            _ => None,
+        }
+    }
+
+    /// The API-key rates for a request whose input exceeds a threshold, if the
+    /// provider prices such requests differently.
+    pub fn api_key_long_context(&self) -> Option<LongContextRates> {
+        match self {
+            Self::Metered { long_context, .. } => *long_context,
+            Self::AuthDependent {
+                api_key_long_context,
+                ..
+            } => *api_key_long_context,
+            _ => None,
+        }
+    }
+
     /// Resolve an auth-dependent row for a runtime that knows its active OpenAI auth mode.
     pub fn resolve_auth_mode(&self, api_key: bool) -> Self {
         match self {
@@ -592,11 +685,18 @@ impl ModelBilling {
                 api_key_input_milli_usd_per_million_tokens,
                 api_key_output_milli_usd_per_million_tokens,
                 api_key_cached_input_milli_usd_per_million_tokens,
+                api_key_cache_write_milli_usd_per_million_tokens,
+                api_key_long_context,
+                api_key_valid_through_utc,
             } if api_key => Self::Metered {
                 input_milli_usd_per_million_tokens: *api_key_input_milli_usd_per_million_tokens,
                 output_milli_usd_per_million_tokens: *api_key_output_milli_usd_per_million_tokens,
                 cached_input_milli_usd_per_million_tokens:
                     *api_key_cached_input_milli_usd_per_million_tokens,
+                cache_write_milli_usd_per_million_tokens:
+                    *api_key_cache_write_milli_usd_per_million_tokens,
+                long_context: *api_key_long_context,
+                valid_through_utc: api_key_valid_through_utc.clone(),
             },
             Self::AuthDependent {
                 plan_relative_burn_millis,
@@ -624,6 +724,11 @@ pub enum ModelOrchestrationMetadata {
         provider_id: String,
         capability: ModelCapabilityTier,
         reason: String,
+        /// The provider's published price, for cost accounting of manual use.
+        /// Never used for spawn allocation.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        billing: Option<ModelBilling>,
     },
 }
 
@@ -644,6 +749,15 @@ impl ModelOrchestrationMetadata {
         match self {
             Self::Eligible { billing, .. } => Some(billing),
             Self::Disabled { .. } => None,
+        }
+    }
+
+    /// The price this row states for cost accounting: an eligible row's
+    /// billing, or a disabled row's published price.
+    pub fn accounting_billing(&self) -> Option<&ModelBilling> {
+        match self {
+            Self::Eligible { billing, .. } => Some(billing),
+            Self::Disabled { billing, .. } => billing.as_ref(),
         }
     }
 
@@ -1254,6 +1368,9 @@ mod tests {
             input_milli_usd_per_million_tokens: 1,
             output_milli_usd_per_million_tokens: 2,
             cached_input_milli_usd_per_million_tokens: None,
+            cache_write_milli_usd_per_million_tokens: None,
+            long_context: None,
+            valid_through_utc: None,
         };
         assert_eq!(
             flat.api_key_rates_at(at("2026-09-21T02:00:00Z")),
@@ -1284,6 +1401,9 @@ mod tests {
             api_key_input_milli_usd_per_million_tokens: 2500,
             api_key_output_milli_usd_per_million_tokens: 15000,
             api_key_cached_input_milli_usd_per_million_tokens: Some(250),
+            api_key_cache_write_milli_usd_per_million_tokens: None,
+            api_key_long_context: None,
+            api_key_valid_through_utc: None,
         };
         assert_eq!(
             auth.plan_burn_millis_at(at("2026-09-21T12:00:00Z")),
@@ -1295,6 +1415,9 @@ mod tests {
             input_milli_usd_per_million_tokens: 760,
             output_milli_usd_per_million_tokens: 2420,
             cached_input_milli_usd_per_million_tokens: Some(140),
+            cache_write_milli_usd_per_million_tokens: None,
+            long_context: None,
+            valid_through_utc: None,
         };
         assert_eq!(
             metered.plan_burn_millis_at(at("2026-09-21T12:00:00Z")),
@@ -1306,6 +1429,81 @@ mod tests {
             None
         );
         assert_eq!(ModelBilling::Local.api_key_rates(), None);
+    }
+
+    #[test]
+    fn stated_cache_write_long_context_and_validity_end() {
+        let tier = LongContextRates {
+            above_input_tokens: 272_000,
+            input_milli_usd_per_million_tokens: 8000,
+            output_milli_usd_per_million_tokens: 30000,
+            cached_input_milli_usd_per_million_tokens: Some(800),
+            cache_write_milli_usd_per_million_tokens: Some(10000),
+        };
+        let auth = ModelBilling::AuthDependent {
+            plan_relative_burn_millis: 1000,
+            api_key_input_milli_usd_per_million_tokens: 4000,
+            api_key_output_milli_usd_per_million_tokens: 20000,
+            api_key_cached_input_milli_usd_per_million_tokens: Some(400),
+            api_key_cache_write_milli_usd_per_million_tokens: Some(5000),
+            api_key_long_context: Some(tier),
+            api_key_valid_through_utc: Some("2026-11-21T23:59:59Z".to_string()),
+        };
+        assert_eq!(auth.api_key_cache_write(), Some(5000));
+        assert_eq!(auth.api_key_long_context(), Some(tier));
+        // The promotional rates hold through their stated end, and no later.
+        assert_eq!(
+            auth.api_key_rates_at(at("2026-11-21T23:59:59Z")),
+            Some((4000, 20000, Some(400)))
+        );
+        assert_eq!(auth.api_key_rates_at(at("2026-11-22T00:00:00Z")), None);
+        // The plan side is unaffected by the API price's end.
+        assert_eq!(
+            auth.plan_burn_millis_at(at("2026-11-22T00:00:00Z")),
+            Some(1000)
+        );
+        // An API-key runtime keeps every stated field.
+        let ModelBilling::Metered {
+            cache_write_milli_usd_per_million_tokens,
+            long_context,
+            valid_through_utc,
+            ..
+        } = auth.resolve_auth_mode(/*api_key*/ true)
+        else {
+            panic!("api-key side resolves to a metered row");
+        };
+        assert_eq!(
+            (cache_write_milli_usd_per_million_tokens, long_context),
+            (Some(5000), Some(tier))
+        );
+        assert_eq!(valid_through_utc.as_deref(), Some("2026-11-21T23:59:59Z"));
+        // An end this client cannot read states no price.
+        let unreadable = ModelBilling::Metered {
+            input_milli_usd_per_million_tokens: 1,
+            output_milli_usd_per_million_tokens: 2,
+            cached_input_milli_usd_per_million_tokens: None,
+            cache_write_milli_usd_per_million_tokens: None,
+            long_context: None,
+            valid_through_utc: Some("soon".to_string()),
+        };
+        assert_eq!(
+            unreadable.api_key_rates_at(at("2026-01-01T00:00:00Z")),
+            None
+        );
+        // Unstated fields are omitted, so earlier rows keep their bytes.
+        let plain = ModelBilling::Metered {
+            input_milli_usd_per_million_tokens: 1,
+            output_milli_usd_per_million_tokens: 2,
+            cached_input_milli_usd_per_million_tokens: None,
+            cache_write_milli_usd_per_million_tokens: None,
+            long_context: None,
+            valid_through_utc: None,
+        };
+        assert_eq!(
+            to_string(&plain).unwrap(),
+            r#"{"kind":"metered","input_milli_usd_per_million_tokens":1,"output_milli_usd_per_million_tokens":2,"cached_input_milli_usd_per_million_tokens":null}"#
+        );
+        assert_eq!(auth, from_str(&to_string(&auth).unwrap()).unwrap());
     }
 
     #[test]

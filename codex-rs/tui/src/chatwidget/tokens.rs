@@ -790,6 +790,30 @@ fn attempt_text(q: &ObservationQuote) -> Vec<String> {
                 |r| format!("{label} rate: {} USD per million tokens", exact(r)),
             ));
         }
+        if let Some(long) = &s.long_context {
+            let above = i64::from(long.above_input_tokens);
+            lines.push(format!(
+                "Long-context price: above {above} input tokens, the whole request is priced at:"
+            ));
+            for (label, rate) in BUCKETS.iter().zip([
+                long.rates.noncached,
+                long.rates.read,
+                long.rates.write,
+                long.rates.output,
+            ]) {
+                lines.push(rate.map_or_else(
+                    || format!("  Rate unavailable for {label}"),
+                    |r| format!("  {label} rate: {} USD per million tokens", exact(r)),
+                ));
+            }
+            lines.push(match q.usage.input {
+                Some(input) if input > above => {
+                    format!("Long-context price applied: input {input} > {above}")
+                }
+                Some(input) => format!("Long-context price not applied: input {input} ≤ {above}"),
+                None => "Long-context price: input unknown, so no rate applies".into(),
+            });
+        }
     } else {
         lines.push("Price: unavailable — no dispatch-time price snapshot".into());
     }

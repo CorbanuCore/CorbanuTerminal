@@ -1685,6 +1685,36 @@ async fn ledger_written_before_plan_basis_validates_and_reads() -> anyhow::Resul
         panic!("{compacted:?}");
     };
     assert_eq!(totals, Current::Ready(after.totals));
+    // A long-context price tier needs format 3: the format-2 ledger is upgraded
+    // as the record is written, and the record reads back with its tier.
+    let mut tiered = attempt(11, later)?;
+    tiered.thread_id = owner;
+    let mut price = snapshot()?;
+    price.id = Uuid::from_u128(2001);
+    price.effective_from_ms = later.try_into()?;
+    price.observed_at_ms = later.try_into()?;
+    price.approved_at_ms = later.try_into()?;
+    price.long_context = Some(LongContext {
+        above_input_tokens: 272_000.try_into()?,
+        rates: Rates {
+            noncached: Some("10".to_string().try_into()?),
+            ..Rates::default()
+        },
+    });
+    AccountingStore::open(&runtime, later)
+        .await?
+        .admit(owner, &tiered, std::slice::from_ref(&price), later)
+        .await?;
+    assert_eq!(formats(runtime.clone()).await?, vec![1, 2, 3]);
+    let mut conn = connection(&runtime).await?;
+    let stored: String = sqlx::query_scalar(
+        "SELECT payload FROM draft_accounting_price_snapshots WHERE snapshot_id = ?",
+    )
+    .bind(price.id.to_string())
+    .fetch_one(&mut conn)
+    .await?;
+    conn.close().await?;
+    assert_eq!(serde_json::from_str::<Snapshot>(&stored)?, price);
     runtime.close().await;
     Ok(())
 }

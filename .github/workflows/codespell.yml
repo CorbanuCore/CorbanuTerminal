@@ -21,10 +21,33 @@ jobs:
           persist-credentials: false
       - name: Annotate locations with typos
         uses: codespell-project/codespell-problem-matcher@b80729f885d32f78a716c2f107b4db1025001c42 # v1.1.0
-      - name: Codespell
-        uses: codespell-project/actions-codespell@8f01853be192eb0f849a5c7d721450e7a467c579 # v2.2
+      # codespell-project/actions-codespell is a Docker action whose image
+      # pulls python:3.13-alpine from Docker Hub anonymously, which hits the
+      # unauthenticated pull rate limit on shared runners. Run the same
+      # codespell release on the runner instead, with the same arguments.
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          ignore_words_file: .codespellignore
+          python-version: "3.13"
+      - name: Install codespell
+        shell: bash
+        run: >-
+          python -m pip install --disable-pip-version-check --no-deps
+          --only-binary :all: --require-hashes
+          -r .github/codespell-requirements.txt
+      - name: Codespell
+        shell: bash
+        run: |
+          set +e
+          # Matches actions-codespell@v2.2 with ignore_words_file:
+          # .codespellignore and its default skip (./.git). codespell reads
+          # .codespellrc from the repository root itself.
+          codespell --count --ignore-words .codespellignore --skip ./.git
+          status=$?
+          # Like the action, stop annotating once codespell has finished.
+          echo "::remove-matcher owner=codespell-matcher-default::"
+          echo "::remove-matcher owner=codespell-matcher-specified::"
+          exit "${status}"
 
       - name: Check for a clean worktree
         if: always() && !cancelled()
