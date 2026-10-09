@@ -1,0 +1,4 @@
+# accounting WARN/ERROR lines (RUST_LOG=…,warn). sk58s.err:
+2026-10-08T22:39:09.183868Z  WARN codex_core::accounting: accounting: the system clock is behind the accounting ledger; recording at the ledger's time until it catches up. Requests cannot be recorded while it is more than 90 days behind behind_ms=48950
+# del58s.err and del6d.err (RUST_LOG=warn): empty (0 bytes); no accounting warning or error was logged by either delete
+# a1, a2, vk, cp1 .err: accounting WARN/ERROR lines: 0

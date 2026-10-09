@@ -1,0 +1,7 @@
+$ corbanu resume 01a11daa-d8fc-7c30-bfd7-1769227e63f8
+exit=1
+$ corbanu resume 01a11daa-d8a3-7901-8252-240fb51e5b1d
+exit=1
+--- <rtx-dir>/h-del/stderr.log (the TUI's stderr) after the two resume attempts:
+ERROR: No saved session found with ID 01a11daa-d8fc-7c30-bfd7-1769227e63f8. Run `corbanu resume` without an ID to choose from existing sessions.
+ERROR: No saved session found with ID 01a11daa-d8a3-7901-8252-240fb51e5b1d. Run `corbanu resume` without an ID to choose from existing sessions.

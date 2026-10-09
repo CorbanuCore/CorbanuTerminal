@@ -1,0 +1,4 @@
+#!/bin/bash
+# usage: scrollcap.sh <session> <steps> [header-regex]: scroll popup with Down; print union of popup lines (from header) in order
+T="${TMUXCMD:-tmux -L pf60rerun3}"; s=$1; n=${2:-60}; h=${3:-'^(› |  )(Cost —|Cost so far|Recorded request|Request *$|Technical|Attempt |Descendant|Root|Attempt|Day |Hour |ISO week|Week|Month|Calendar|Bucket|Unknown|Z\.AI|zai|Other)'}
+{ for i in $(seq 0 $n); do $T capture-pane -p -J -t $s | awk -v h="$h" '$0 ~ h && !f {f=1} f' ; [ $i -lt $n ] && $T send-keys -t $s Down; sleep 0.15; done; } | sed "s/^› /  /; s/[[:space:]]*$//" | grep -v '^\s*$' | awk '!seen[$0]++'

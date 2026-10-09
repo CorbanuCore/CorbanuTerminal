@@ -1,0 +1,9 @@
+--- rollouts for 01a11daa-d8a3-7901-8252-240fb51e5b1d before:
+<rtx-dir>/h-del/sessions/2026/10/08/rollout-2026-10-08T22-38-18-01a11daa-d8a3-7901-8252-240fb51e5b1d.jsonl
+$ FAKETIME=@2026-10-02 22:41:05 corbanu delete --force 01a11daa-d8a3-7901-8252-240fb51e5b1d
+Deleted session 01a11daa-d8a3-7901-8252-240fb51e5b1d.
+exit=0 real_end=2026-10-08T22:41:06Z
+--- rollouts for 01a11daa-d8a3-7901-8252-240fb51e5b1d after:
+--- libfaketime control (same preload, same FAKETIME):
+2026-10-02T22:41:05Z
+2026-10-08T22:41:06Z
