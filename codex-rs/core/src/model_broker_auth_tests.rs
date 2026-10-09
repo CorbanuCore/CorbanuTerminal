@@ -139,7 +139,7 @@ fn pf_27_s05_platform_without_broker_refuses_every_credential() {
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 #[test]
 fn pf_27_s05_non_unix_start_is_the_refusing_broker() {
     let broker = CoreModelKeyBroker::start(BrokerSettings {
@@ -151,6 +151,30 @@ fn pf_27_s05_non_unix_start_is_the_refusing_broker() {
     });
     let error = refusal(&broker, "https://api.z.ai/api/paas/v4", held_value());
     assert!(error.contains("not available on this platform"), "{error}");
+}
+
+/// PF-27-S09: on Windows a broker that cannot start fails every credential
+/// use (nothing is sent directly), and the provider keys it would have been
+/// handed are still removed from Core's environment.
+#[cfg(windows)]
+#[test]
+fn pf_27_s09_windows_broker_that_cannot_start_fails_closed_and_scrubs_keys() {
+    let name = format!("PF27_S09_CORE_KEY_{}", std::process::id());
+    // SAFETY: a variable unique to this test; nothing else reads it.
+    unsafe { std::env::set_var(&name, "synthetic-pf27s09-core-key") };
+    let home = tempfile::tempdir().expect("home");
+    let broker = CoreModelKeyBroker::start(BrokerSettings {
+        runtime_dir: home.path().join("run"),
+        scrub_responses: false,
+        program: Some(home.path().join("missing-corbanu.exe")),
+        store_home: home.path().to_path_buf(),
+        env_names: vec![name.clone()],
+    });
+    assert_eq!(std::env::var_os(&name), None);
+    for source in [provider_key(), held_value()] {
+        let error = refusal(&broker, "https://api.z.ai/api/paas/v4", source);
+        assert!(error.contains("unavailable"), "{error}");
+    }
 }
 
 #[test]

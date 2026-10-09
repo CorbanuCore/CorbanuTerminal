@@ -7,9 +7,11 @@
 //! every model-provider request this process makes (model client, web
 //! search, image generation, model catalog) is signed for the broker, which
 //! attaches the credential and performs the HTTPS request; the HTTP transport
-//! sends such a request only to the broker's socket. For these requests,
-//! provider keys stored in the vault are read by the broker, not by Core
-//! (other features may still open the vault; see the sprint's known limits).
+//! sends such a request only to the broker's socket (on Windows, PF-27-S09,
+//! its data pipe, every connection checked to be served by the broker). For
+//! these requests, provider keys stored in the vault are read by the broker,
+//! not by Core (other features may still open the vault; see the sprint's
+//! known limits).
 //!
 //! Nothing falls back to sending a credential directly: a broker that cannot
 //! start or has died, a provider URL the broker cannot bind (plain HTTP, an
@@ -33,9 +35,9 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use zeroize::Zeroizing;
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 type Credential = codex_network_proxy::model_auth::ModelCredential;
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 #[derive(Clone)]
 enum Credential {}
 
@@ -66,8 +68,8 @@ pub async fn install_for_config(config: &Config) {
 
 #[derive(Clone, Debug)]
 #[cfg_attr(
-    not(unix),
-    allow(dead_code, reason = "only the Unix broker reads these settings")
+    not(any(unix, windows)),
+    allow(dead_code, reason = "only the broker reads these settings")
 )]
 struct BrokerSettings {
     runtime_dir: std::path::PathBuf,
@@ -103,12 +105,12 @@ impl BrokerSettings {
 
 #[derive(Clone)]
 enum BrokerHandle {
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     Running(codex_network_proxy::model_auth::ModelCredentialBroker),
     /// The broker could not start; it is not retried.
     Failed,
     /// No broker on this platform (PF-27-S06).
-    #[cfg_attr(unix, allow(dead_code))]
+    #[cfg_attr(any(unix, windows), allow(dead_code))]
     Unsupported,
 }
 
@@ -132,20 +134,20 @@ pub(crate) enum BrokerModelAuthError {
          (broker_model_auth reads it inside the credential broker)"
     )]
     #[cfg_attr(
-        not(unix),
-        allow(dead_code, reason = "only the Unix broker reports it")
+        not(any(unix, windows)),
+        allow(dead_code, reason = "only the broker reports it")
     )]
     MissingKey { env: String },
     #[error("the credential broker could not read the stored provider key: {0}")]
     #[cfg_attr(
-        not(unix),
-        allow(dead_code, reason = "only the Unix broker reports it")
+        not(any(unix, windows)),
+        allow(dead_code, reason = "only the broker reports it")
     )]
     Store(&'static str),
     #[error("the isolated credential broker refused the provider credential")]
     #[cfg_attr(
-        not(unix),
-        allow(dead_code, reason = "only the Unix broker reports it")
+        not(any(unix, windows)),
+        allow(dead_code, reason = "only the broker reports it")
     )]
     Rejected,
 }
@@ -221,18 +223,18 @@ impl CoreModelKeyBroker {
     }
 
     /// The broker for platforms without one: every brokered request fails.
-    #[cfg_attr(all(unix, not(test)), allow(dead_code))]
+    #[cfg_attr(all(any(unix, windows), not(test)), allow(dead_code))]
     pub(crate) fn unsupported() -> Self {
         Self::new(BrokerHandle::Unsupported)
     }
 
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     fn start(_settings: BrokerSettings) -> Self {
         // No fallback: the broker does not run on this platform (PF-27-S06).
         Self::unsupported()
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     fn start(settings: BrokerSettings) -> Self {
         use codex_network_proxy::model_auth::ModelCredentialBroker;
         use codex_network_proxy::model_auth::ModelCredentialBrokerOptions;
@@ -266,6 +268,7 @@ impl CoreModelKeyBroker {
                 return Self::new(BrokerHandle::Failed);
             }
         }
+        #[cfg(unix)]
         match codex_http_client::HttpClient::unix_socket(
             broker.socket_path(),
             codex_login::default_client::default_headers(),
@@ -274,6 +277,13 @@ impl CoreModelKeyBroker {
             // Brokered requests then fail in the transport.
             Err(error) => tracing::warn!("credential broker client: {error}"),
         }
+        // PF-27-S09: the broker's data pipe, every connection checked to be
+        // served by the broker process.
+        #[cfg(windows)]
+        codex_http_client::install_model_broker_sender(Arc::new(PipeSender {
+            broker: broker.clone(),
+            default_headers: codex_login::default_client::default_headers(),
+        }));
         Self::new(BrokerHandle::Running(broker))
     }
 }
@@ -318,7 +328,10 @@ impl ModelKeyBroker for CoreModelKeyBroker {
 enum Source {
     ProviderKey {
         provider_key_id: String,
-        #[cfg_attr(not(unix), allow(dead_code, reason = "only the Unix broker reads it"))]
+        #[cfg_attr(
+            not(any(unix, windows)),
+            allow(dead_code, reason = "only the broker reads it")
+        )]
         env_vars: Vec<String>,
     },
     Value {
@@ -353,10 +366,10 @@ impl AuthProvider for BrokeredAuth {
 /// broker registers (a blocking control-channel call), so other requests are
 /// not serialized behind it.
 ///
-/// Without a broker (non-Unix) `Credential` is uninhabited, so everything after
+/// Without a broker (neither Unix nor Windows) `Credential` is uninhabited, so everything after
 /// a successful registration is statically unreachable there.
 #[cfg_attr(
-    not(unix),
+    not(any(unix, windows)),
     allow(
         unreachable_code,
         unused_variables,
@@ -466,7 +479,7 @@ fn credential_for(
     Ok(credential)
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn register(
     handle: &BrokerHandle,
     binding: &Binding,
@@ -513,7 +526,7 @@ fn register(
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn register(
     handle: &BrokerHandle,
     _binding: &Binding,
@@ -525,24 +538,24 @@ fn register(
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn alive(credential: &Credential) -> bool {
     credential.is_alive()
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn alive(credential: &Credential) -> bool {
     match *credential {}
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn unregister(credential: &Credential) {
     if let Err(error) = credential.unregister() {
         tracing::debug!("credential broker unregister: {error}");
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn unregister(credential: &Credential) {
     match *credential {}
 }
@@ -553,7 +566,7 @@ fn hex(bytes: &[u8]) -> String {
 
 /// Signs `request` for the broker and points it at the broker (the HTTP
 /// transport sends a frame-bearing request only to the broker's socket).
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn broker_request(credential: &Credential, mut request: Request) -> Result<Request, AuthError> {
     use codex_http_client::MODEL_BROKER_FRAME_HEADER;
     use http::HeaderValue;
@@ -576,13 +589,13 @@ fn broker_request(credential: &Credential, mut request: Request) -> Result<Reque
     Ok(request)
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn broker_request(credential: &Credential, _request: Request) -> Result<Request, AuthError> {
     match *credential {}
 }
 
 /// The signed parts of an HTTPS URL and the plain-HTTP URL sent to the broker.
-#[cfg(any(unix, test))]
+#[cfg(any(unix, windows, test))]
 #[derive(Debug, PartialEq, Eq)]
 struct BrokerRewrite {
     host: String,
@@ -591,7 +604,7 @@ struct BrokerRewrite {
     broker_url: String,
 }
 
-#[cfg(any(unix, test))]
+#[cfg(any(unix, windows, test))]
 impl BrokerRewrite {
     fn for_url(url: &str) -> Option<Self> {
         let mut url = url::Url::parse(url).ok()?;
@@ -615,6 +628,74 @@ impl BrokerRewrite {
             port,
             path_and_query,
             broker_url: url.to_string(),
+        })
+    }
+}
+
+/// PF-27-S09: sends frame-bearing requests to the Windows broker's data
+/// pipe ([`ModelCredentialBroker::send`]).
+///
+/// [`ModelCredentialBroker::send`]: codex_network_proxy::model_auth::ModelCredentialBroker::send
+#[cfg(windows)]
+struct PipeSender {
+    broker: codex_network_proxy::model_auth::ModelCredentialBroker,
+    /// What the Unix socket client sends by default (user agent, originator).
+    default_headers: HeaderMap,
+}
+
+#[cfg(windows)]
+impl codex_http_client::ModelBrokerSender for PipeSender {
+    fn send(
+        &self,
+        request: codex_http_client::ModelBrokerRequest,
+    ) -> codex_http_client::ModelBrokerFuture {
+        use codex_http_client::TransportError;
+        use futures::StreamExt as _;
+        let broker = self.broker.clone();
+        let default_headers = self.default_headers.clone();
+        Box::pin(async move {
+            let codex_http_client::ModelBrokerRequest {
+                method,
+                url,
+                mut headers,
+                body,
+            } = request;
+            let url = url::Url::parse(&url)
+                .map_err(|_| TransportError::Build("brokered request URL".to_string()))?;
+            let host = match (url.host_str(), url.port()) {
+                (Some(host), Some(port)) => format!("{host}:{port}"),
+                (Some(host), None) => host.to_string(),
+                (None, _) => {
+                    return Err(TransportError::Build("brokered request URL".to_string()));
+                }
+            };
+            let path_and_query = match url.query() {
+                Some(query) => format!("{}?{query}", url.path()),
+                None => url.path().to_string(),
+            };
+            for (name, value) in &default_headers {
+                if !headers.contains_key(name) {
+                    headers.insert(name.clone(), value.clone());
+                }
+            }
+            let response = broker
+                .send(codex_network_proxy::model_auth::ModelBrokerRequest {
+                    method,
+                    host,
+                    path_and_query,
+                    headers,
+                    body,
+                })
+                .await
+                .map_err(|error| TransportError::Network(format!("credential broker: {error}")))?;
+            Ok(codex_http_client::ModelBrokerResponse {
+                status: response.status,
+                headers: response.headers,
+                bytes: response
+                    .body
+                    .map(|chunk| chunk.map_err(|error| TransportError::Network(error.to_string())))
+                    .boxed(),
+            })
         })
     }
 }
