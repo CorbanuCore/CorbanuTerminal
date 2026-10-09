@@ -34,7 +34,8 @@ Evidence (all under `qa/portfolio/agent-cost-accounting/pf-60-s03/independent-ac
   (#318, #322 included); no new defect.
 - Each run has its own code-blind Opus 5.5 High evidence review (`REVIEW.md` beside each README).
 - Fixes received: #299 (#287), #303 (#286), #291 and #305 (#288), #306 and #318 (#289), #322 (#308).
-- Demo videos: [index](../../../../qa/demos/index/PF-60-S03.md) (PR #332).
+- Demo videos: [index](../../../../qa/demos/index/PF-60-S03.md); PR #332 re-recorded them at `7a11f9068bdf` and added
+  four covering the acceptance fixes.
 
 Follow-ups (tracked, not blockers):
 
