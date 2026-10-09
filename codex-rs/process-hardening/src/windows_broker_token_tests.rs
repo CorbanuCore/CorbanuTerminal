@@ -41,6 +41,43 @@ fn pf_27_s08_child_entry() {
     println!("\n{REPORT_PREFIX}{}", line.join(","));
 }
 
+/// A process started by `spawn_protected_detached` (the broker's start)
+/// runs: `cmd.exe` exits with its own code and this test binary's child
+/// entry exits cleanly.
+#[test]
+fn pf_27_s08_detached_child_runs() {
+    let system_root = std::env::var("SystemRoot").expect("SystemRoot");
+    let cmd = PathBuf::from(format!(r"{system_root}\System32\cmd.exe"));
+    let args = ["/d", "/c", "exit 7"].map(OsString::from);
+    let env: Vec<(OsString, OsString)> = std::env::vars_os().collect();
+    let mut child = crate::spawn_protected_detached(&cmd, &args, &env).expect("cmd");
+    let status = child.wait().expect("wait");
+    eprintln!("pf27s08: detached cmd.exe: {status:?}");
+    let program = std::env::current_exe().expect("test binary");
+    let args = [CHILD_TEST, "--exact", "--test-threads=1"].map(OsString::from);
+    let mut env = env;
+    env.push((ROLE_ENV.into(), "token".into()));
+    let mut child = crate::spawn_protected_detached(&program, &args, &env).expect("test child");
+    let child_status = child.wait().expect("wait");
+    eprintln!("pf27s08: detached test child: {child_status:?}");
+    for protect_after_creation in [false, true] {
+        let args = [CHILD_TEST, "--exact", "--test-threads=1"].map(OsString::from);
+        let mut child = crate::windows_protected_spawn::spawn_protected_detached_with(
+            &program,
+            &args,
+            &env,
+            protect_after_creation,
+        )
+        .expect("test child");
+        eprintln!(
+            "pf27s08-diag detached protect_after_creation={protect_after_creation}: {:?}",
+            child.wait()
+        );
+    }
+    assert_eq!(status.code(), Some(7));
+    assert_eq!(child_status.code(), Some(0));
+}
+
 /// The broker token is low integrity, write-restricted to a SID the token
 /// does not otherwise hold, without privileges, and the broker reports it
 /// (`token+dacl+job`). Control: without it the check fails and the broker
@@ -508,7 +545,6 @@ fn run_script_probe(confined: bool) -> Report {
     let argv = vec![
         format!(r"{system_root}\System32\cscript.exe"),
         "//NoLogo".to_string(),
-        "//B".to_string(),
         script.to_string_lossy().into_owned(),
         format!("{}-{label}", std::process::id()),
     ];

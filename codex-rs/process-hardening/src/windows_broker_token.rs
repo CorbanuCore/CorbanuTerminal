@@ -102,6 +102,8 @@ pub(crate) enum BrokerDefaultDacl {
     /// reopens what it creates (PowerShell) runs. Probes only.
     #[cfg(test)]
     OwnedByCapability,
+    /// The starting process's default DACL (set later by the caller).
+    Unchanged,
 }
 
 /// What the broker token is built from.
@@ -167,14 +169,17 @@ pub(crate) fn create_broker_token(options: BrokerTokenOptions) -> io::Result<Own
     set_low_integrity(&token)?;
     let user = current_user_sid_string()?;
     let sddl = match default_dacl {
-        BrokerDefaultDacl::Protected => thread_dacl_sddl(&user),
+        BrokerDefaultDacl::Protected => Some(thread_dacl_sddl(&user)),
         #[cfg(test)]
-        BrokerDefaultDacl::OwnedByCapability => format!(
+        BrokerDefaultDacl::OwnedByCapability => Some(format!(
             "D:(A;;GA;;;{user})(A;;GA;;;{})(A;;GA;;;SY)",
             sid_string(capability.0)?
-        ),
+        )),
+        BrokerDefaultDacl::Unchanged => None,
     };
-    set_default_dacl(token.as_raw_handle() as HANDLE, &sddl)?;
+    if let Some(sddl) = sddl {
+        set_default_dacl(token.as_raw_handle() as HANDLE, &sddl)?;
+    }
     Ok(token)
 }
 

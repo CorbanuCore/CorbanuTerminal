@@ -895,12 +895,26 @@ fn connect_broker(
     _skip_harness_preamble: bool,
 ) -> Option<ControlStream> {
     let broker_pid = child.id();
-    super::pipe::connect_control(
+    let mut exited = None;
+    let control = super::pipe::connect_control(
         &control_pipe,
         broker_pid,
         std::time::Instant::now() + CONTROL_TIMEOUT,
-        || matches!(child.try_wait(), Ok(None)),
-    )
+        || match child.try_wait() {
+            Ok(None) => true,
+            status => {
+                exited = Some(status);
+                false
+            }
+        },
+    );
+    if let Some(status) = exited {
+        tracing::warn!(
+            ?status,
+            "isolated credential broker exited before it bound its pipe"
+        );
+    }
+    control
 }
 
 /// Connects to the control socket named in the bootstrap line, but only if

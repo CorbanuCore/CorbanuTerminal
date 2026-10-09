@@ -169,7 +169,25 @@ pub fn spawn_protected_detached(
     args: &[OsString],
     env: &[(OsString, OsString)],
 ) -> io::Result<ProtectedChild> {
-    let token = create_broker_token(BROKER_TOKEN)?;
+    spawn_protected_detached_with(program, args, env, /*protect_after_creation*/ false)
+}
+
+/// With `protect_after_creation`, the token starts with this process's
+/// default DACL and gets the protected one after the child is created,
+/// before it runs.
+pub(crate) fn spawn_protected_detached_with(
+    program: &Path,
+    args: &[OsString],
+    env: &[(OsString, OsString)],
+    protect_after_creation: bool,
+) -> io::Result<ProtectedChild> {
+    let token = if protect_after_creation {
+        create_broker_token(BrokerTokenOptions {
+            default_dacl: crate::windows_broker_token::BrokerDefaultDacl::Unchanged,
+        })?
+    } else {
+        create_broker_token(BROKER_TOKEN)?
+    };
     let user_sid = current_user_sid_string()?;
     let process_descriptor = SecurityDescriptor::from_sddl(&process_dacl_sddl(&user_sid))?;
     let thread_descriptor = SecurityDescriptor::from_sddl(&thread_dacl_sddl(&user_sid))?;
@@ -215,6 +233,10 @@ pub fn spawn_protected_detached(
         process: unsafe { OwnedHandle::from_raw_handle(info.hProcess as _) },
         pid: info.dwProcessId,
     };
+    if protect_after_creation && let Err(err) = protect_child_token(&child) {
+        kill_unstarted(&mut child);
+        return Err(err);
+    }
     // SAFETY: the suspended first thread; resumed once.
     if unsafe { ResumeThread(thread.as_raw_handle() as HANDLE) } == u32::MAX {
         let error = io::Error::last_os_error();
