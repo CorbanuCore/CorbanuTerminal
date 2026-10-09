@@ -55,7 +55,7 @@ exception) or hand the broker an opened lock. The Windows broker reads no stored
 
 ## Preconditions
 
-- [x] PF-27-S05 and S07 archived; PF-27-S08 merged behind its flags (#333; `ready`, awaiting Travis).
+- [x] PF-27-S05, S07 and S08 archived (S08 accepted 2026-10-09).
 - [x] A real Windows 11 machine (used 2026-10-09), for the GLM 5.2 runs, videos and Credential Manager.
 
 ## Acceptance criteria

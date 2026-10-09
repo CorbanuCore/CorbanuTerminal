@@ -1,0 +1,52 @@
+$ /cost
+╭─────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                       │
+│                                                     │
+│ model:     claude-fable-5-1-plan   /model to change │
+│ directory: <rtx-scratch>/work/repo               │
+╰─────────────────────────────────────────────────────╯
+
+  Reply with exactly the word: ok
+• ok
+  Cost — this conversation
+  Requested UTC day: 2026-10-09
+  Today (UTC) in this conversation:
+  • Claude Plan · Claude Fable 5.1 Plan — Covered by your subscription (not billed per request). 1 request, 8,355 tokens. Same work at API prices:
+  $0.167180.
+  No other conversation recorded requests on this day.
+  Paid usage beyond a plan (usage credits, Extra Usage or extra credits you bought) isn't visible here and is never counted as spent; check your provider's
+  usage page.
+  Subscription work is not billed per request; any figure here is what it would cost at API prices.
+  Select a provider below to see its requests.
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  —— Details ——
+  No recorded attempt here was billed per token.
+  Subscription capacity: 1 of 1 attempts, not billed per token
+  Plan consumption: 16,710 tokens at the plan rate that applied
+  Same tokens at API rates: $0.167180
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+  Day covered (UTC): [2026-10-09T00:00:00.000Z, 2026-10-10T00:00:00.000Z)
+  Read at: 2026-10-09T19:04:50.595Z; ledger current to: 2026-10-09T19:04:25.335Z (25260 ms behind)
+  Retention: request detail kept since 2026-07-11T19:04:50.595Z; daily totals kept since 2025-10-10; oldest recorded day in this conversation 2026-10-09
+  Known subtotal exact USD: none — subscription work is not billed per token
+  Input: 8,351
+  Noncached input (derived for inclusive input): 4
+  Cache read: 0
+  Cache write: 8,347
+  Output: 4
+  Reasoning (subset, not separately billed): not reported (1 attempt)
+  Total (not separately billed): 8,355
+  Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+  Unknown parent population: 0 attempts, excluded from root total
+  —— Open ——
+  → Claude Plan · Claude Fable 5.1 Plan — covered by subscription (1 request)
+  → Request 1 · Claude Plan · Claude Fable 5.1 Plan · covered by subscription
+  → Root's own attempts (1 attempt)
+  → Descendant attempts (none)
+  → Unknown provider/model attribution (none)
+  → Unknown parent population (none)
+  Refresh
+  Close

@@ -1,13 +1,13 @@
 ---
 sprint_id: "PF-27-S08"
 title: "Windows broker confined by its own restricted token or AppContainer"
-status: ready
+status: completed
 plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-27"
 execution_order: 44
 owner: "broker lane worker (2026-10-08)"
 parallel_lane: "broker"
-write_scope: "codex-rs/process-hardening/, codex-rs/network-proxy/src/credential_broker/isolated/, codex-rs/network-proxy/src/credential_broker/isolated_tests.rs, .github/workflows/windows-security-probes.yml, qa/security-levels/sprints/PF-27-S08/, qa/demos/index/PF-27-S08.md, docs/sprints/current/p1-security-hardening/pf-27-s08-windows-broker-restricted-token.md"
+write_scope: "codex-rs/process-hardening/, codex-rs/network-proxy/src/credential_broker/isolated/, codex-rs/network-proxy/src/credential_broker/isolated_tests.rs, .github/workflows/windows-security-probes.yml, qa/security-levels/sprints/PF-27-S08/, qa/demos/index/PF-27-S08.md, docs/sprints/archive/p1-security-hardening/pf-27-s08-windows-broker-restricted-token.md"
 integration_gate: "Per-sprint gate (sec-common decision 5), one PR per slice: pf_27_s08 probes on windows-2022 (windows-security-probes, elevated and medium integrity), Windows clippy and Linux clippy (RTX box) -D warnings, one Opus 5.5 High review per slice; merged behind the existing default-off flags. GLM 5.2 tmux run, Credential Manager probe and SOP videos on the real Windows machine."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-27-s08-20261008"
 branch: "sec/pf-27-s08-broker-token"
@@ -24,6 +24,36 @@ updated: 2026-10-09
 Third of the four PF-27-S06 limits Travis approved fixing (2026-10-08). Unlike macOS and Linux (Seatbelt, Landlock),
 the Windows broker had only the process DACL and a no-child-process job, so it could write the user's files, open
 their processes, or start work through WMI, Task Scheduler or out-of-process COM. Broker lane, 2026-10-08.
+
+## Closure — 2026-10-09
+
+Completed. Travis **accepted** PF-27-S08 **with known limits** on 2026-10-09 (in chat with the coordinator), after
+recording key-path decision (c) (PR #360). The limits are the
+[Known limits](../../../../qa/security-levels/sprints/PF-27-S08/README.md#known-limits) list in the evidence README:
+
+1. Credential Manager: a compromised broker can read the user's other generic credentials and create new ones
+   (measured); overwrite or delete of existing items (including the vault key) was **not probed**, so assume it
+   can. Its network is not restricted.
+2. Terminate: it can kill the user's ordinary processes; Core is protected.
+3. Delete (not create, change or rename) in low-integrity folders (`LocalLow`, `Temp\Low`, likely `Packages\*`,
+   `INetCache\Low`).
+4. Not probed: squatting low-labeled named objects, pipes or mailslots; `WRITE_DAC`/`WRITE_OWNER` on low-labeled
+   files; `HKCU\Software\AppDataLow`. Core trusts the broker's own report of its token.
+5. WMI/COM coverage is partial: other COM servers callable by low-integrity clients and the wider RPC surface;
+   an AppID granting Everyone, Users or Authenticated Users launch rights bypasses the INTERACTIVE deny.
+6. Task Scheduler refuses by hiding its folders; CI's normal-session row has no working control (elevated has one).
+7. Real-machine COM control: `MMC20.Application` needs elevation in a normal session, so the elevated run is the
+   control there.
+8. Parent-process spoofing signal from the holder start.
+
+Received and archived by the P1 integration owner; code in PR #333, decision and main recheck in PR #360.
+
+Follow-ups (linked, not blockers):
+
+- [PF-27-S09](../../current/p1-security-hardening/pf-27-s09-windows-model-client-auth.md) (Windows stored-key
+  reader and model auth): in progress, PR #363.
+- The vault lock S09 needs: each vault read opens `secrets/.vault.lock` for writing, which the S08 token cannot do;
+  S09 grants the broker access to it or hands it an opened lock.
 
 ## Execution mandate
 
@@ -80,10 +110,11 @@ their processes, or start work through WMI, Task Scheduler or out-of-process COM
 - [x] Planned (2026-10-08); criteria 1–5 as amended, with positive controls, on `windows-2022` and the real
   machine (PR #333); key path decided 2026-10-09.
 - [x] Real-Windows GLM 5.2 tmux run and SOP videos (2026-10-09).
+- [x] Travis accepted the sprint with the known limits in the evidence README (2026-10-09); follow-ups under Closure.
 
 ## Remaining
 
-- [ ] Travis's acceptance with the known limits in the evidence README, then archive.
+None. Follow-ups are listed under Closure.
 
 ## Verification
 
@@ -91,9 +122,9 @@ their processes, or start work through WMI, Task Scheduler or out-of-process COM
   on main `5d283fde18` (job 113966110399): `pf_27_s08` 7/7 and suite 25/25, both sessions.
 - [x] Opus 5.5 High review: REQUEST_CHANGES (B1, B2), fixed in #333; scoped re-review 2026-10-09 confirmed both,
   docs corrections from it applied (`workers-20261002/pf27s08-review-s2`).
-- [ ] Travis accepts the gate evidence.
+- [x] Travis accepted the gate evidence (2026-10-09); received by the P1 integration owner.
 
 ## Exit evidence
 
 - [x] Outputs under `qa/security-levels/sprints/PF-27-S08/` (probes, gate run, videos, key-path decision).
-- [ ] Record archived after Travis's acceptance.
+- [x] Record archived (2026-10-09, after Travis's acceptance, by the P1 integration owner).
