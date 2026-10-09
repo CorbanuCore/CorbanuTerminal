@@ -41,9 +41,12 @@ fn pf_27_s05_env_race_child_entry() {
                 for round in 0..2_000 {
                     // A fresh name each round grows (and reallocates) `environ`.
                     let name = format!("PF27_S05_RACE_{worker}_{round}");
-                    set_env_var_for_test(&name, "synthetic-race-value");
+                    // Distinct values: on Windows a take overwrites every
+                    // other copy of its value in the process (PF-27-S09).
+                    let expected = format!("synthetic-race-value-{worker}-{round}");
+                    set_env_var_for_test(&name, &expected);
                     let value = take_env_var(&name).expect("value");
-                    assert_eq!(value.as_slice(), b"synthetic-race-value");
+                    assert_eq!(value.as_slice(), expected.as_bytes());
                 }
             })
         })

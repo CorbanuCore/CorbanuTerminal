@@ -1373,10 +1373,13 @@ mod pf_27_s05 {
     async fn pf_27_s05_env_keys_are_handed_over_removed_and_unregistered() {
         let upstream = start_upstream().await;
         let name = format!("PF27_S05_ENV_KEY_{}", std::process::id());
-        // A value no other test holds: on Windows the hand-over overwrites
-        // every other copy of it in this process (PF-27-S09).
+        // A value no other test holds, kept here only masked: on Windows the
+        // hand-over overwrites every other copy of it in this process
+        // (PF-27-S09), this test's included.
         let key = format!("sk-pf27s05-env-{:016x}", rand::random::<u64>());
         crate::credential_broker::env_scrub::set_env_var_for_test(&name, &key);
+        let masked = memory_scan_tests::mask(key.as_bytes());
+        drop(key);
         let broker = model_broker(&upstream);
         let taken = broker
             .take_env_keys(&[name.clone(), "PF27_S05_NEVER_SET_KEY".to_string()])
@@ -1393,9 +1396,14 @@ mod pf_27_s05 {
             .expect("register")
             .expect("stashed key");
         let response = signed(&credential, upstream.port, "/v1/responses").await;
+        let body = response.try_into_string().await.expect("body");
+        let unmasked = body
+            .strip_prefix("Bearer ")
+            .map(|key| memory_scan_tests::mask(key.as_bytes()));
         assert_eq!(
-            response.try_into_string().await.expect("body"),
-            format!("Bearer {key}")
+            unmasked,
+            Some(masked),
+            "the broker attached the handed-over key"
         );
 
         // A replaced sign-in token drops the broker's copy.
