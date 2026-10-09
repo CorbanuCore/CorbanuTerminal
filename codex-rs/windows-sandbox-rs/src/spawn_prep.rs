@@ -314,6 +314,14 @@ pub(crate) fn apply_legacy_session_acl_rules(
             }
         }
         if !additional_deny_read_paths.is_empty() {
+            // Each path is its own exact rule here (the legacy backend
+            // refuses deny-read paths before it gets this far).
+            let targets = crate::DenyReadTargets::from_exact_paths(
+                additional_deny_read_paths
+                    .iter()
+                    .map(|path| AbsolutePathBuf::from_absolute_path(path))
+                    .collect::<std::io::Result<Vec<_>>>()?,
+            );
             if let Some(readonly_sid) = acl_sids.readonly_sid {
                 let Some(readonly_sid_str) = acl_sids.readonly_sid_str else {
                     anyhow::bail!("readonly capability SID string missing");
@@ -321,7 +329,7 @@ pub(crate) fn apply_legacy_session_acl_rules(
                 sync_persistent_deny_read_acls(
                     codex_home,
                     readonly_sid_str,
-                    additional_deny_read_paths,
+                    Some(&targets),
                     readonly_sid.as_ptr(),
                 )?;
             } else {
@@ -329,7 +337,7 @@ pub(crate) fn apply_legacy_session_acl_rules(
                     sync_persistent_deny_read_acls(
                         codex_home,
                         &root_sid.sid_str,
-                        additional_deny_read_paths,
+                        Some(&targets),
                         root_sid.sid.as_ptr(),
                     )?;
                 }
@@ -365,7 +373,7 @@ pub(crate) fn prepare_elevated_spawn_context_for_permissions(
     read_roots_override: Option<&[PathBuf]>,
     read_roots_include_platform_defaults: bool,
     write_roots_override: Option<&[PathBuf]>,
-    deny_read_paths_override: &[PathBuf],
+    deny_read_override: &crate::DenyReadTargets,
     deny_write_paths_override: &[PathBuf],
     proxy_enforced: bool,
     proxy_settings_mode: crate::WindowsSandboxProxySettingsMode,
@@ -417,7 +425,7 @@ pub(crate) fn prepare_elevated_spawn_context_for_permissions(
         read_roots_override,
         read_roots_include_platform_defaults,
         setup_write_roots_override,
-        deny_read_paths_override,
+        deny_read_override,
         if deny_write_paths_override.is_empty() {
             &deny_write_paths
         } else {

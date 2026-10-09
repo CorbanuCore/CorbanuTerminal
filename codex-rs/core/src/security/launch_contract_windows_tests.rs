@@ -653,7 +653,9 @@ fn pf_27_s07_flag_off_launch_keeps_an_armed_contracts_denies() {
             codex_windows_sandbox::sync_persistent_deny_read_acls(
                 &codex_home,
                 group_sid,
-                paths,
+                Some(&codex_windows_sandbox::DenyReadTargets::from_exact_paths(
+                    paths.iter().map(|path| absolute(path)),
+                )),
                 group.as_ptr(),
             )
         }

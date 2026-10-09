@@ -87,8 +87,10 @@ struct Payload {
     command_cwd: PathBuf,
     read_roots: Vec<PathBuf>,
     write_roots: Vec<PathBuf>,
+    /// `None`: this refresh carries no deny-read rules, so the sync adds and
+    /// removes no entry.
     #[serde(default)]
-    deny_read_paths: Vec<PathBuf>,
+    deny_read: Option<codex_windows_sandbox::DenyReadTargets>,
     #[serde(default)]
     deny_write_paths: Vec<PathBuf>,
     proxy_ports: Vec<u16>,
@@ -775,7 +777,7 @@ fn run_setup_full(payload: &Payload, log: &mut dyn Write, sbx_dir: &Path) -> Res
         sync_persistent_deny_read_acls(
             &payload.codex_home,
             &sandbox_group_sid_str,
-            &payload.deny_read_paths,
+            payload.deny_read.as_ref(),
             sandbox_group_psid,
         )
     }

@@ -9,9 +9,17 @@ use crate::acl::add_deny_read_ace;
 use crate::acl::add_deny_read_ace_for_new_files;
 use crate::acl::ensure_explicit_deny_read_ace;
 use crate::acl::has_explicit_deny_read_ace;
+use crate::deny_read_targets::DenyReadRule;
+use crate::deny_read_targets::DenyReadTargets;
+use crate::resolve_windows_deny_read_targets;
 use crate::setup::sandbox_secrets_dir;
 use crate::token::LocalSid;
 use crate::winutil::to_wide;
+use codex_protocol::permissions::FileSystemAccessMode;
+use codex_protocol::permissions::FileSystemPath;
+use codex_protocol::permissions::FileSystemSandboxEntry;
+use codex_protocol::permissions::FileSystemSandboxPolicy;
+use codex_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use std::ffi::c_void;
 use std::io::BufRead as _;
@@ -33,6 +41,7 @@ use windows_sys::Win32::Security::Authorization::SDDL_REVISION_1;
 use windows_sys::Win32::Security::Authorization::SE_FILE_OBJECT;
 use windows_sys::Win32::Security::DACL_SECURITY_INFORMATION;
 
+const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
 const SANDBOX_GROUP: &str = "S-1-5-21-2718281828-3141592653-1618033988-1001";
 const OTHER_SID: &str = "S-1-5-21-2718281828-3141592653-1618033988-1002";
 const ARMED_HOME_ENV: &str = "CODEX_SEC_WIN_301_ARMED_HOME";
@@ -62,18 +71,34 @@ fn home() -> Home {
     }
 }
 
-/// One launch's deny-read sync for the sandbox group.
+/// One launch's deny-read sync for the sandbox group, each path its own
+/// exact rule (the rule is gone when a later launch does not list it).
 fn sync(home: &Home, paths: &[PathBuf], group: &LocalSid) {
+    let targets = DenyReadTargets::from_exact_paths(
+        paths
+            .iter()
+            .map(|path| AbsolutePathBuf::from_absolute_path(path).expect("absolute path")),
+    );
+    sync_targets(home, &targets, group);
+}
+
+/// One launch's deny-read sync with the given rules.
+fn sync_targets(home: &Home, targets: &DenyReadTargets, group: &LocalSid) {
     // SAFETY: `group` is a valid SID for the call.
     unsafe {
-        sync_persistent_deny_read_acls(&home.codex_home, SANDBOX_GROUP, paths, group.as_ptr())
+        sync_persistent_deny_read_acls(
+            &home.codex_home,
+            SANDBOX_GROUP,
+            Some(targets),
+            group.as_ptr(),
+        )
     }
     .expect("sync deny-read ACLs");
 }
 
 /// The sync's record of the entries it added.
 fn state(home: &Home) -> String {
-    std::fs::read_to_string(sandbox_secrets_dir(&home.codex_home).join("deny_read_acl_owned.json"))
+    std::fs::read_to_string(sandbox_secrets_dir(&home.codex_home).join("deny_read_acl_rules.json"))
         .unwrap_or_default()
 }
 
@@ -310,6 +335,117 @@ fn sec_win_304_entry_another_codex_home_added_is_kept() {
     );
     sync(&home_a, &[], &group);
     assert!(!explicit_deny(&shared, &group));
+}
+
+/// S1: a lingering sandboxed process holds a folder open without sharing, so
+/// the glob scan cannot list it and misses the secret inside. The rule is
+/// still configured, so the secret keeps its deny; only removing the rule
+/// from the configuration removes it.
+#[test]
+fn sec_win_304_s1_a_secret_hidden_from_the_scan_keeps_its_deny() {
+    let home = home();
+    let group = LocalSid::from_string(SANDBOX_GROUP).expect("group SID");
+    let workspace = home.codex_home.join("ws");
+    let folder = workspace.join("b");
+    std::fs::create_dir_all(&folder).expect("folder");
+    let secret = folder.join("x.env");
+    std::fs::write(&secret, "secret").expect("secret");
+    let secret_path = AbsolutePathBuf::from_absolute_path(&secret).expect("absolute secret");
+    let before = dacl_sddl(&secret);
+    let cwd = AbsolutePathBuf::from_absolute_path(&workspace).expect("absolute workspace");
+    let policy = FileSystemSandboxPolicy::restricted(vec![FileSystemSandboxEntry {
+        path: FileSystemPath::GlobPattern {
+            pattern: "**/*.env".to_string(),
+        },
+        access: FileSystemAccessMode::Deny,
+        missing_path_behavior: None,
+    }]);
+    let scan = || resolve_windows_deny_read_targets(&policy, &cwd).expect("resolve");
+
+    let first = scan();
+    assert!(first.contains_path(&secret_path), "{first:?}");
+    sync_targets(&home, &first, &group);
+    assert!(explicit_deny(&secret, &group), "{}", dacl_sddl(&secret));
+
+    // Held open with no sharing: the next launch's scan cannot list it.
+    let holder = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(0)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+        .open(&folder)
+        .expect("hold the folder open");
+    let hidden = scan();
+    assert!(
+        !hidden.contains_path(&secret_path),
+        "the scan still saw the secret: {hidden:?}"
+    );
+    assert_eq!(hidden.rules().len(), 1, "the rule is still configured");
+    sync_targets(&home, &hidden, &group);
+    drop(holder);
+    assert!(
+        explicit_deny(&secret, &group),
+        "a match the scan missed lost its deny: {}",
+        dacl_sddl(&secret)
+    );
+    assert!(state(&home).contains("x.env"), "{}", state(&home));
+
+    // A launch whose scan sees it again keeps it recorded.
+    sync_targets(&home, &scan(), &group);
+    assert!(explicit_deny(&secret, &group));
+
+    // The rule is removed from the configuration: now the entry goes.
+    sync_targets(&home, &DenyReadTargets::default(), &group);
+    assert_eq!(dacl_sddl(&secret), before);
+    assert!(!state(&home).contains("x.env"), "{}", state(&home));
+}
+
+/// A glob rule's entries go when the rule is replaced by another one, while
+/// the new rule's own matches get theirs; a refresh that carries no rules
+/// (`None`: a read-root refresh, the first setup) changes nothing.
+#[test]
+fn sec_win_304_entries_follow_their_rules() {
+    let home = home();
+    let group = LocalSid::from_string(SANDBOX_GROUP).expect("group SID");
+    let env = home.secret.join("a.env");
+    let key = home.secret.join("a.key");
+    std::fs::write(&env, "env").expect("env");
+    std::fs::write(&key, "key").expect("key");
+    let env_before = dacl_sddl(&env);
+    let rule = |pattern: &str, matched: &Path| {
+        let mut targets = DenyReadTargets::default();
+        targets.add(
+            DenyReadRule::Glob(home.secret.join(pattern).to_string_lossy().into_owned()),
+            vec![AbsolutePathBuf::from_absolute_path(matched).expect("absolute")],
+        );
+        targets
+    };
+
+    sync_targets(&home, &rule("*.env", &env), &group);
+    assert!(explicit_deny(&env, &group));
+    // SAFETY: a valid SID for the call.
+    unsafe {
+        sync_persistent_deny_read_acls(&home.codex_home, SANDBOX_GROUP, None, group.as_ptr())
+    }
+    .expect("refresh without rules");
+    assert!(explicit_deny(&env, &group), "a refresh removed an entry");
+
+    // The same rule spelled differently (case, separators) is the same rule.
+    let mut respelled = DenyReadTargets::default();
+    respelled.add(
+        DenyReadRule::Glob(
+            home.secret
+                .join("*.ENV")
+                .to_string_lossy()
+                .replace('\\', "/"),
+        ),
+        Vec::new(),
+    );
+    sync_targets(&home, &respelled, &group);
+    assert!(explicit_deny(&env, &group), "{}", state(&home));
+
+    sync_targets(&home, &rule("*.key", &key), &group);
+    assert!(explicit_deny(&key, &group));
+    assert_eq!(dacl_sddl(&env), env_before);
 }
 
 /// Whether `path` has its own explicit read deny for `sid`.

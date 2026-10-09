@@ -420,7 +420,7 @@ pub fn build_exec_request(
 /// transform: without it the Windows backends get no deny-read paths and apply
 /// none of the profile's deny entries (#294). With an armed launch `contract`
 /// an elevated launch also carries the contract's denies, protected or not
-/// (`LaunchContract::windows_deny_read_paths`). A no-op for requests that do
+/// (`LaunchContract::windows_deny_read_targets`). A no-op for requests that do
 /// not use a Windows sandbox.
 pub(crate) fn attach_windows_sandbox_filesystem_overrides(
     exec_req: &mut ExecRequest,
@@ -455,7 +455,7 @@ pub(crate) fn attach_windows_sandbox_filesystem_overrides(
         && let Some(contract) = contract
     {
         let protected = contract
-            .windows_deny_read_paths(sandbox_cwd)
+            .windows_deny_read_targets(sandbox_cwd)
             .map_err(CodexErr::UnsupportedOperation)?;
         let overrides = exec_req
             .windows_sandbox_filesystem_overrides
@@ -463,14 +463,10 @@ pub(crate) fn attach_windows_sandbox_filesystem_overrides(
                 read_roots_override: None,
                 read_roots_include_platform_defaults: false,
                 write_roots_override: None,
-                additional_deny_read_paths: Vec::new(),
+                additional_deny_read: Default::default(),
                 additional_deny_write_paths: Vec::new(),
             });
-        for path in protected {
-            if !overrides.additional_deny_read_paths.contains(&path) {
-                overrides.additional_deny_read_paths.push(path);
-            }
-        }
+        overrides.additional_deny_read.extend(protected);
     }
     Ok(())
 }
@@ -715,8 +711,8 @@ async fn exec_windows_sandbox(
     let additional_deny_write_paths = windows_sandbox_filesystem_overrides
         .map(|overrides| overrides.additional_deny_write_paths.clone())
         .unwrap_or_default();
-    let additional_deny_read_paths = windows_sandbox_filesystem_overrides
-        .map(|overrides| overrides.additional_deny_read_paths.clone())
+    let additional_deny_read = windows_sandbox_filesystem_overrides
+        .map(|overrides| overrides.additional_deny_read.clone())
         .unwrap_or_default();
     let elevated_read_roots_override = windows_sandbox_filesystem_overrides
         .and_then(|overrides| overrides.read_roots_override.clone());
@@ -743,7 +739,7 @@ async fn exec_windows_sandbox(
                     read_roots_include_platform_defaults:
                         elevated_read_roots_include_platform_defaults,
                     write_roots_override: elevated_write_roots_override.as_deref(),
-                    deny_read_paths_override: &additional_deny_read_paths,
+                    deny_read_override: &additional_deny_read,
                     deny_write_paths_override: &additional_deny_write_paths,
                 },
             )
@@ -757,7 +753,7 @@ async fn exec_windows_sandbox(
                 env,
                 timeout_ms,
                 cancellation,
-                &additional_deny_read_paths,
+                &additional_deny_read.paths(),
                 &additional_deny_write_paths,
                 windows_sandbox_private_desktop,
             )

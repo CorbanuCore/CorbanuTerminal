@@ -573,13 +573,13 @@ impl LaunchContract {
     /// not list, so an unprotected launch (a TUI workspace probe) would
     /// otherwise reopen the vault to commands that are already running.
     #[cfg(windows)]
-    pub(crate) fn windows_deny_read_paths(
+    pub(crate) fn windows_deny_read_targets(
         &self,
         cwd: &AbsolutePathBuf,
-    ) -> Result<Vec<AbsolutePathBuf>, String> {
+    ) -> Result<codex_windows_sandbox::DenyReadTargets, String> {
         let mut policy = FileSystemSandboxPolicy::restricted(self.protected_entries());
         policy.remove_skip_missing_path_entries();
-        codex_windows_sandbox::resolve_windows_deny_read_paths(&policy, cwd)
+        codex_windows_sandbox::resolve_windows_deny_read_targets(&policy, cwd)
     }
 
     /// Verifies that `profile` denies reading every protected path and writing

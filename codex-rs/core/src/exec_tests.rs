@@ -669,7 +669,7 @@ fn windows_restricted_token_supports_full_read_split_write_read_carveouts() {
             read_roots_override: None,
             read_roots_include_platform_defaults: false,
             write_roots_override: None,
-            additional_deny_read_paths: vec![],
+            additional_deny_read: Default::default(),
             additional_deny_write_paths: expected_deny_write_paths,
         }))
     );
@@ -757,7 +757,7 @@ fn windows_elevated_supports_split_restricted_read_roots() {
             read_roots_override: Some(vec![expected_docs]),
             read_roots_include_platform_defaults: false,
             write_roots_override: None,
-            additional_deny_read_paths: vec![],
+            additional_deny_read: Default::default(),
             additional_deny_write_paths: vec![],
         }))
     );
@@ -811,7 +811,7 @@ fn windows_elevated_supports_split_write_read_carveouts() {
             read_roots_override: None,
             read_roots_include_platform_defaults: false,
             write_roots_override: None,
-            additional_deny_read_paths: vec![],
+            additional_deny_read: Default::default(),
             additional_deny_write_paths: vec![
                 codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(expected_docs)
                     .expect("absolute docs"),
@@ -914,12 +914,12 @@ fn windows_elevated_supports_unreadable_split_carveouts() {
             read_roots_override: None,
             read_roots_include_platform_defaults: false,
             write_roots_override: None,
-            additional_deny_read_paths: vec![
+            additional_deny_read: codex_windows_sandbox::DenyReadTargets::from_exact_paths([
                 codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(
                     expected_blocked.clone(),
                 )
                 .expect("absolute blocked"),
-            ],
+            ]),
             additional_deny_write_paths: vec![
                 codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(expected_blocked)
                     .expect("absolute blocked"),
@@ -975,10 +975,23 @@ fn windows_elevated_supports_unreadable_globs() {
             read_roots_override: None,
             read_roots_include_platform_defaults: false,
             write_roots_override: None,
-            additional_deny_read_paths: vec![
-                codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(secret)
-                    .expect("absolute secret"),
-            ],
+            additional_deny_read: {
+                let mut targets = codex_windows_sandbox::DenyReadTargets::default();
+                targets.add(
+                    codex_windows_sandbox::DenyReadRule::Glob(
+                        temp_dir
+                            .path()
+                            .join("**/*.env")
+                            .to_string_lossy()
+                            .into_owned(),
+                    ),
+                    vec![
+                        codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(secret)
+                            .expect("absolute secret"),
+                    ],
+                );
+                targets
+            },
             additional_deny_write_paths: vec![],
         }))
     );

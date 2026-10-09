@@ -7,6 +7,7 @@ use codex_protocol::models::PermissionProfile;
 use codex_protocol::permissions::FileSystemSandboxPolicy;
 use codex_protocol::protocol::WritableRoot;
 use codex_utils_absolute_path::AbsolutePathBuf;
+use codex_windows_sandbox::DenyReadTargets;
 
 use crate::SandboxType;
 use crate::compatibility_sandbox_policy_for_permission_profile;
@@ -25,7 +26,9 @@ pub struct WindowsSandboxFilesystemOverrides {
     pub read_roots_override: Option<Vec<PathBuf>>,
     pub read_roots_include_platform_defaults: bool,
     pub write_roots_override: Option<Vec<PathBuf>>,
-    pub additional_deny_read_paths: Vec<AbsolutePathBuf>,
+    /// Deny-read rules with their expanded paths. The elevated backend's
+    /// persistent sync removes an entry only once its rule is gone (#304).
+    pub additional_deny_read: DenyReadTargets,
     pub additional_deny_write_paths: Vec<AbsolutePathBuf>,
 }
 
@@ -200,7 +203,7 @@ pub fn resolve_windows_restricted_token_filesystem_overrides(
         }
     }
 
-    if additional_deny_read_paths.is_empty() && additional_deny_write_paths.is_empty() {
+    if additional_deny_write_paths.is_empty() {
         return Ok(None);
     }
 
@@ -208,7 +211,7 @@ pub fn resolve_windows_restricted_token_filesystem_overrides(
         read_roots_override: None,
         read_roots_include_platform_defaults: false,
         write_roots_override: None,
-        additional_deny_read_paths,
+        additional_deny_read: DenyReadTargets::default(),
         additional_deny_write_paths: additional_deny_write_paths
             .into_iter()
             .map(|path| AbsolutePathBuf::from_absolute_path(path).map_err(|err| err.to_string()))
@@ -242,7 +245,7 @@ pub fn resolve_windows_elevated_filesystem_overrides(
     // deny-write sentinels.
     file_system_sandbox_policy.remove_skip_missing_path_entries();
 
-    let additional_deny_read_paths = codex_windows_sandbox::resolve_windows_deny_read_paths(
+    let additional_deny_read = codex_windows_sandbox::resolve_windows_deny_read_targets(
         &file_system_sandbox_policy,
         sandbox_policy_cwd,
     )?;
@@ -347,7 +350,9 @@ pub fn resolve_windows_elevated_filesystem_overrides(
 
     if read_roots_override.is_none()
         && write_roots_override.is_none()
-        && additional_deny_read_paths.is_empty()
+        // A deny-read rule matching nothing now is still passed on, so the
+        // persistent sync keeps its earlier entries (#304).
+        && additional_deny_read.is_empty()
         && additional_deny_write_paths.is_empty()
     {
         return Ok(None);
@@ -358,7 +363,7 @@ pub fn resolve_windows_elevated_filesystem_overrides(
             && file_system_sandbox_policy.include_platform_defaults(),
         read_roots_override,
         write_roots_override,
-        additional_deny_read_paths,
+        additional_deny_read,
         additional_deny_write_paths,
     }))
 }
