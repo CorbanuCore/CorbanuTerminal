@@ -6,7 +6,6 @@
 use super::protocol::BROKER_RUNTIME_DIR_ENV;
 use super::protocol::BROKER_SESSION_ID;
 use super::protocol::BROKER_TASK_ID;
-#[cfg(unix)]
 use super::protocol::BrokerBootstrap;
 use super::protocol::CONTROL_PROTOCOL_VERSION;
 use super::protocol::ControlErrorCode;
@@ -231,15 +230,18 @@ impl IsolatedBrokerClient {
             ),
             None => removed.push(BROKER_RUNTIME_DIR_ENV.into()),
         }
-        let (mut child, bootstrap) =
-            start_broker_process(&program, &launcher.args, &removed, &envs)?;
+        let (child, stdout) = start_broker_process(&program, &launcher.args, &removed, &envs)?;
         let broker_pid = child.id();
-        let control_stream = connect_broker(
-            bootstrap,
-            runtime_dir.as_deref(),
-            &mut child,
-            launcher.skip_harness_preamble,
-        );
+        let Ok(bootstrap_lines) = spawn_line_reader("credential-broker-bootstrap", stdout) else {
+            kill_and_reap(child);
+            return Err(IsolatedBrokerError::Spawn);
+        };
+        let control_stream =
+            receive_json::<BrokerBootstrap>(&bootstrap_lines, launcher.skip_harness_preamble)
+                .ok()
+                .and_then(|bootstrap| {
+                    connect_control(&bootstrap, runtime_dir.as_deref(), child.id())
+                });
         let Some(control_stream) = control_stream else {
             kill_and_reap(child);
             return Err(IsolatedBrokerError::Spawn);
@@ -869,52 +871,18 @@ pub(crate) fn user_runtime_dir() -> Option<PathBuf> {
     }
 }
 
-/// Reads the broker's bootstrap line from its stdout and connects to the
-/// control socket it names.
-#[cfg(unix)]
-fn connect_broker(
-    stdout: std::process::ChildStdout,
-    runtime_dir: Option<&Path>,
-    child: &mut Child,
-    skip_harness_preamble: bool,
-) -> Option<UnixStream> {
-    let lines = spawn_line_reader("credential-broker-bootstrap", stdout).ok()?;
-    let bootstrap = receive_json::<BrokerBootstrap>(&lines, skip_harness_preamble).ok()?;
-    connect_control(&bootstrap, runtime_dir, child.id())
-}
-
-/// PF-27-S08: opens the control pipe Core chose for the broker once the
-/// broker has bound it, if it is served by the broker process this
-/// controller spawned. Gives up when the broker exits or after the control
-/// timeout.
+/// PF-27-S06: opens the control pipe named in the bootstrap line, if it is a
+/// broker control pipe served by the broker process this controller spawned.
 #[cfg(windows)]
-fn connect_broker(
-    control_pipe: String,
+fn connect_control(
+    bootstrap: &BrokerBootstrap,
     _runtime_dir: Option<&Path>,
-    child: &mut Child,
-    _skip_harness_preamble: bool,
+    broker_pid: u32,
 ) -> Option<ControlStream> {
-    let broker_pid = child.id();
-    let mut exited = None;
-    let control = super::pipe::connect_control(
-        &control_pipe,
-        broker_pid,
-        std::time::Instant::now() + CONTROL_TIMEOUT,
-        || match child.try_wait() {
-            Ok(None) => true,
-            status => {
-                exited = Some(status);
-                false
-            }
-        },
-    );
-    if let Some(status) = exited {
-        tracing::warn!(
-            ?status,
-            "isolated credential broker exited before it bound its pipe"
-        );
+    if bootstrap.protocol_version != CONTROL_PROTOCOL_VERSION {
+        return None;
     }
-    control
+    super::pipe::connect_control(&bootstrap.control_socket, broker_pid)
 }
 
 /// Connects to the control socket named in the bootstrap line, but only if
@@ -1052,28 +1020,18 @@ fn start_broker_process(
     }
 }
 
-/// PF-27-S07: no other process of the user can open the broker at any point.
-/// PF-27-S08: it runs under the broker token, which confines its writes and
-/// keeps it out of the user's other processes, and it inherits nothing:
-/// Core chooses its control pipe's name (`BROKER_CONTROL_PIPE_ENV`) and
-/// waits for the broker to bind it, so no stdout pipe and no handle holder
-/// is needed, and Windows reports Core as its parent. No console, so console
-/// control events aimed at the TUI do not reach it either. Returns the
-/// broker and that pipe name.
+/// PF-27-S07: no other process of the user can open the broker at any point
+/// (`spawn_protected`). PF-27-S08: it runs under the broker token, which
+/// confines its writes and keeps it out of the user's other processes. No console, so console control events aimed at the
+/// TUI do not reach it either.
 #[cfg(windows)]
 fn start_broker_process(
     program: &Path,
     args: &[OsString],
     removed: &[OsString],
     envs: &[(OsString, OsString)],
-) -> Result<(Child, String), IsolatedBrokerError> {
+) -> Result<(Child, std::fs::File), IsolatedBrokerError> {
     let same = |a: &OsString, b: &OsString| a.eq_ignore_ascii_case(b);
-    let (control_pipe, _) = super::pipe::pipe_names();
-    let chosen = [(
-        OsString::from(super::protocol::BROKER_CONTROL_PIPE_ENV),
-        OsString::from(&control_pipe),
-    )];
-    let envs: Vec<(OsString, OsString)> = envs.iter().chain(&chosen).cloned().collect();
     let mut env: Vec<(OsString, OsString)> = std::env::vars_os()
         .filter(|(name, _)| {
             !removed.iter().any(|key| same(key, name))
@@ -1081,12 +1039,11 @@ fn start_broker_process(
         })
         .collect();
     for (key, value) in envs {
-        env.retain(|(name, _)| !same(name, &key));
-        env.push((key, value));
+        env.retain(|(name, _)| !same(name, key));
+        env.push((key.clone(), value.clone()));
     }
-    let child = codex_process_hardening::spawn_protected_detached(program, args, &env)
-        .map_err(|_| IsolatedBrokerError::Spawn)?;
-    Ok((child, control_pipe))
+    codex_process_hardening::spawn_protected(program, args, &env)
+        .map_err(|_| IsolatedBrokerError::Spawn)
 }
 
 /// Gives the broker a short grace period to observe stdin EOF and remove its

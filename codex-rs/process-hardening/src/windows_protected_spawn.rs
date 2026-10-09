@@ -42,7 +42,6 @@ use windows_sys::Win32::Security::TOKEN_QUERY;
 use windows_sys::Win32::System::Pipes::CreatePipe;
 use windows_sys::Win32::System::Threading::CREATE_SUSPENDED;
 use windows_sys::Win32::System::Threading::CREATE_UNICODE_ENVIRONMENT;
-use windows_sys::Win32::System::Threading::CreateProcessAsUserW;
 use windows_sys::Win32::System::Threading::CreateProcessW;
 use windows_sys::Win32::System::Threading::DETACHED_PROCESS;
 use windows_sys::Win32::System::Threading::DeleteProcThreadAttributeList;
@@ -58,7 +57,6 @@ use windows_sys::Win32::System::Threading::PROCESS_INFORMATION;
 use windows_sys::Win32::System::Threading::ResumeThread;
 use windows_sys::Win32::System::Threading::STARTF_USESTDHANDLES;
 use windows_sys::Win32::System::Threading::STARTUPINFOEXW;
-use windows_sys::Win32::System::Threading::STARTUPINFOW;
 use windows_sys::Win32::System::Threading::TerminateProcess;
 use windows_sys::Win32::System::Threading::UpdateProcThreadAttribute;
 use windows_sys::Win32::System::Threading::WaitForSingleObject;
@@ -156,94 +154,6 @@ pub fn spawn_protected(
     env: &[(OsString, OsString)],
 ) -> io::Result<(ProtectedChild, File)> {
     spawn_protected_with(program, args, env, Confinement::Broker(BROKER_TOKEN))
-}
-
-/// PF-27-S08: like [`spawn_protected`] under the broker token, but the child
-/// inherits no handle at all (no stdin, stdout or stderr) and is created
-/// directly by this process, which Windows therefore reports as its parent:
-/// no [`HandleHolder`] stands in between (which security software can read
-/// as parent-process spoofing). The caller and the child agree on any
-/// channel beforehand (the broker binds pipes whose names Core chose).
-pub fn spawn_protected_detached(
-    program: &Path,
-    args: &[OsString],
-    env: &[(OsString, OsString)],
-) -> io::Result<ProtectedChild> {
-    spawn_protected_detached_with(program, args, env, /*protect_after_creation*/ false)
-}
-
-/// With `protect_after_creation`, the token starts with this process's
-/// default DACL and gets the protected one after the child is created,
-/// before it runs.
-pub(crate) fn spawn_protected_detached_with(
-    program: &Path,
-    args: &[OsString],
-    env: &[(OsString, OsString)],
-    protect_after_creation: bool,
-) -> io::Result<ProtectedChild> {
-    let token = if protect_after_creation {
-        create_broker_token(BrokerTokenOptions {
-            default_dacl: crate::windows_broker_token::BrokerDefaultDacl::Unchanged,
-        })?
-    } else {
-        create_broker_token(BROKER_TOKEN)?
-    };
-    let user_sid = current_user_sid_string()?;
-    let process_descriptor = SecurityDescriptor::from_sddl(&process_dacl_sddl(&user_sid))?;
-    let thread_descriptor = SecurityDescriptor::from_sddl(&thread_dacl_sddl(&user_sid))?;
-    let process_attributes = security_attributes(&process_descriptor);
-    let thread_attributes = security_attributes(&thread_descriptor);
-    let mut command_line = command_line(program, args)?;
-    let spawner = (
-        OsString::from(PROTECTED_SPAWNER_PID_ENV),
-        OsString::from(std::process::id().to_string()),
-    );
-    let mut environment = environment_block(&[env, &[spawner]].concat())?;
-    let application: Vec<u16> = program.as_os_str().encode_wide().chain([0]).collect();
-    // SAFETY: zeroed POD; null standard handles, so the child gets none.
-    let mut startup: STARTUPINFOW = unsafe { std::mem::zeroed() };
-    startup.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
-    startup.dwFlags = STARTF_USESTDHANDLES;
-    // SAFETY: zeroed out-structure.
-    let mut info: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
-    // SAFETY: every pointer refers to a live, NUL-terminated or sized buffer
-    // owned by this function; nothing is inherited.
-    let created = unsafe {
-        CreateProcessAsUserW(
-            token.as_raw_handle() as HANDLE,
-            application.as_ptr(),
-            command_line.as_mut_ptr(),
-            &process_attributes,
-            &thread_attributes,
-            /*binherithandles*/ 0,
-            CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | DETACHED_PROCESS,
-            environment.as_mut_ptr().cast(),
-            std::ptr::null(),
-            &startup,
-            &mut info,
-        )
-    };
-    if created == 0 {
-        return Err(io::Error::last_os_error());
-    }
-    // SAFETY: CreateProcessAsUserW returned owned handles.
-    let thread = unsafe { OwnedHandle::from_raw_handle(info.hThread as _) };
-    let mut child = ProtectedChild {
-        // SAFETY: as above.
-        process: unsafe { OwnedHandle::from_raw_handle(info.hProcess as _) },
-        pid: info.dwProcessId,
-    };
-    if protect_after_creation && let Err(err) = protect_child_token(&child) {
-        kill_unstarted(&mut child);
-        return Err(err);
-    }
-    // SAFETY: the suspended first thread; resumed once.
-    if unsafe { ResumeThread(thread.as_raw_handle() as HANDLE) } == u32::MAX {
-        let error = io::Error::last_os_error();
-        kill_unstarted(&mut child);
-        return Err(error);
-    }
-    Ok(child)
 }
 
 /// What a protected child runs under.

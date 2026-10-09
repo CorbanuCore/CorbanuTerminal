@@ -15,10 +15,6 @@ use zeroize::Zeroize;
 pub(crate) const CONTROL_PROTOCOL_VERSION: u32 = 4;
 /// Environment variable naming the broker's runtime parent directory.
 pub(crate) const BROKER_RUNTIME_DIR_ENV: &str = "CODEX_CREDENTIAL_BROKER_RUNTIME_DIR";
-/// PF-27-S08: on Windows, the control pipe Core chose for the broker (the
-/// data pipe's name follows from it); the broker binds both.
-#[cfg(windows)]
-pub(crate) const BROKER_CONTROL_PIPE_ENV: &str = "CODEX_CREDENTIAL_BROKER_CONTROL_PIPE";
 /// PF-27-S05: the Corbanu home whose stored provider keys the broker reads.
 #[cfg(unix)]
 pub(crate) const BROKER_STORE_HOME_ENV: &str = "CODEX_CREDENTIAL_BROKER_STORE_HOME";

@@ -509,67 +509,6 @@ async fn pf_27_s06_windows_broker_uses_pipes_and_cannot_be_read() {
     assert_eq!(open_for_reading(broker_pid), Err(/*ERROR_ACCESS_DENIED*/ 5));
 }
 
-/// PF-27-S08: Core starts the broker itself, under the broker token, with
-/// no handle to inherit: Windows reports Core as the broker's parent (no
-/// handle holder in between), and the broker reports its token.
-#[cfg(windows)]
-#[tokio::test(flavor = "multi_thread")]
-async fn pf_27_s08_windows_broker_is_core_s_child_under_its_token() {
-    use windows_sys::Win32::Foundation::CloseHandle;
-    use windows_sys::Win32::System::Threading::OpenProcess;
-    use windows_sys::Win32::System::Threading::PROCESS_QUERY_LIMITED_INFORMATION;
-
-    #[repr(C)]
-    struct BasicInformation {
-        exit_status: i32,
-        peb: usize,
-        affinity: usize,
-        priority: i32,
-        pid: usize,
-        parent_pid: usize,
-    }
-    #[link(name = "ntdll")]
-    unsafe extern "system" {
-        fn NtQueryInformationProcess(
-            process: windows_sys::Win32::Foundation::HANDLE,
-            class: u32,
-            information: *mut BasicInformation,
-            length: u32,
-            returned: *mut u32,
-        ) -> i32;
-    }
-
-    let upstream = start_upstream().await;
-    let broker = isolated_broker(launcher(&upstream, /*controller_pid_override*/ None));
-    let dummy = virtualized_dummy(&broker);
-    let client = broker.current_isolated_client().expect("broker client");
-    assert_eq!(client.containment(), "token+dacl+job");
-    let response = forward(&broker, upstream.port, "/echo", &dummy).await;
-    assert_eq!(
-        response.try_into_string().await.expect("body"),
-        format!("Bearer {SYNTHETIC_TOKEN}")
-    );
-    let broker_pid = client.pid_for_test().expect("broker pid");
-    // SAFETY: query-limited access, which the broker's DACL grants the
-    // user; the handle is closed below and the structure is plain data.
-    let parent = unsafe {
-        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, broker_pid);
-        assert_ne!(handle, 0, "open the broker for query-limited access");
-        let mut information: BasicInformation = std::mem::zeroed();
-        let status = NtQueryInformationProcess(
-            handle,
-            /*ProcessBasicInformation*/ 0,
-            &mut information,
-            std::mem::size_of::<BasicInformation>() as u32,
-            std::ptr::null_mut(),
-        );
-        CloseHandle(handle);
-        assert_eq!(status, 0, "NtQueryInformationProcess");
-        information.parent_pid
-    };
-    assert_eq!(parent, std::process::id() as usize);
-}
-
 #[tokio::test(flavor = "multi_thread")]
 async fn pf_27_s04_pf_27_s01_wrong_os_peer_is_disconnected_before_any_request() {
     let upstream = start_upstream().await;

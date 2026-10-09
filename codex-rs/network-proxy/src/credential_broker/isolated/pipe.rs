@@ -84,7 +84,6 @@ const NONCE_HEX_LEN: usize = 32;
 /// add `SECURITY_SQOS_PRESENT` when QoS flags are set.
 const SECURITY_IDENTIFICATION: u32 = 0x0001_0000;
 const ERROR_PIPE_BUSY: i32 = 231;
-const ERROR_FILE_NOT_FOUND: i32 = 2;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const BUSY_RETRY: Duration = Duration::from_millis(10);
 
@@ -98,14 +97,6 @@ pub(crate) fn pipe_names() -> (String, String) {
         format!("{PIPE_PREFIX}{nonce}{CONTROL_SUFFIX}"),
         format!("{PIPE_PREFIX}{nonce}{DATA_SUFFIX}"),
     )
-}
-
-/// The data pipe that goes with a control pipe name from [`pipe_names`].
-pub(crate) fn data_pipe_name(control: &str) -> Option<String> {
-    valid_pipe_name(control, /*control*/ true).then(|| {
-        let stem = &control[..control.len() - CONTROL_SUFFIX.len()];
-        format!("{stem}{DATA_SUFFIX}")
-    })
 }
 
 /// True for a control (`control == true`) or data pipe name made by
@@ -248,18 +239,12 @@ pub(crate) fn server_pid(client: &impl AsRawHandle) -> Option<u32> {
 }
 
 /// Opens the broker's control pipe for blocking use, if `name` is a broker
-/// control pipe served by process `broker_pid`. PF-27-S08: Core chose the
-/// name and the broker may not have bound it yet, so this waits for it until
-/// `deadline`, or until `alive` reports the broker gone.
-pub(crate) fn connect_control(
-    name: &str,
-    broker_pid: u32,
-    deadline: std::time::Instant,
-    mut alive: impl FnMut() -> bool,
-) -> Option<ControlPipe> {
+/// control pipe served by process `broker_pid`.
+pub(crate) fn connect_control(name: &str, broker_pid: u32) -> Option<ControlPipe> {
     if !valid_pipe_name(name, /*control*/ true) {
         return None;
     }
+    let deadline = std::time::Instant::now() + CONNECT_TIMEOUT;
     let file = loop {
         match std::fs::OpenOptions::new()
             .read(true)
@@ -270,11 +255,8 @@ pub(crate) fn connect_control(
         {
             Ok(file) => break file,
             Err(error)
-                if matches!(
-                    error.raw_os_error(),
-                    Some(ERROR_PIPE_BUSY | ERROR_FILE_NOT_FOUND)
-                ) && std::time::Instant::now() < deadline
-                    && alive() =>
+                if error.raw_os_error() == Some(ERROR_PIPE_BUSY)
+                    && std::time::Instant::now() < deadline =>
             {
                 std::thread::sleep(BUSY_RETRY);
             }
