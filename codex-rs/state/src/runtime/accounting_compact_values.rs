@@ -34,6 +34,18 @@ struct StoredValues {
     plan_burn_unknown: i64,
     #[serde(default)]
     plan_attempts: i64,
+    // Version 3 (ledger format 2): local and undeclared work. Omitted when
+    // zero, so a day without either keeps its version 2 bytes.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    local_attempts: i64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    undeclared_attempts: i64,
+}
+
+// serde's `skip_serializing_if` passes the field by reference.
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_zero(value: &i64) -> bool {
+    *value == 0
 }
 
 fn deserialize_amount<'de, D: serde::Deserializer<'de>>(
@@ -79,8 +91,12 @@ impl CompactValues {
         );
         let stored: StoredValues = serde_json::from_str(text)?;
         ensure!(
-            stored.version == 1 || stored.version == 2,
+            (1..=3).contains(&stored.version),
             "unsupported compact version"
+        );
+        ensure!(
+            (stored.version == 3) == (stored.local_attempts > 0 || stored.undeclared_attempts > 0),
+            "compact version 3 is exactly the days with local or undeclared work"
         );
         Self::from_day_totals(&DayTotals {
             measured: std::array::from_fn(|index| Metric {
@@ -97,13 +113,16 @@ impl CompactValues {
                 unknown: stored.plan_burn_unknown,
             },
             plan_attempts: stored.plan_attempts,
+            local_attempts: stored.local_attempts,
+            undeclared_attempts: stored.undeclared_attempts,
         })
     }
 
     pub(super) fn encode(&self) -> anyhow::Result<String> {
         self.validate()?;
+        let other_bases = self.totals.local_attempts > 0 || self.totals.undeclared_attempts > 0;
         serde_json::to_string(&StoredValues {
-            version: 2,
+            version: if other_bases { 3 } else { 2 },
             known: std::array::from_fn(|index| self.totals.measured[index].known),
             unknown: std::array::from_fn(|index| self.totals.measured[index].unknown),
             known_usd: self.totals.known_usd,
@@ -114,6 +133,8 @@ impl CompactValues {
             plan_burn_known: self.totals.plan_burn_milli_tokens.known,
             plan_burn_unknown: self.totals.plan_burn_milli_tokens.unknown,
             plan_attempts: self.totals.plan_attempts,
+            local_attempts: self.totals.local_attempts,
+            undeclared_attempts: self.totals.undeclared_attempts,
         })
         .context("encode compact values")
     }
@@ -165,6 +186,14 @@ impl CompactValues {
             .plan_attempts
             .checked_add(other.totals.plan_attempts)
             .context("plan attempt overflow")?;
+        totals.local_attempts = totals
+            .local_attempts
+            .checked_add(other.totals.local_attempts)
+            .context("local attempt overflow")?;
+        totals.undeclared_attempts = totals
+            .undeclared_attempts
+            .checked_add(other.totals.undeclared_attempts)
+            .context("undeclared attempt overflow")?;
         totals.unknown_estimates = totals
             .unknown_estimates
             .checked_add(other.totals.unknown_estimates)
@@ -216,6 +245,17 @@ impl CompactValues {
             (0..=totals.plan_attempts).contains(&totals.unknown_equivalents)
                 && (0..=totals.plan_attempts).contains(&totals.plan_burn_milli_tokens.unknown),
             "invalid plan unknown count"
+        );
+        // Plan, local and undeclared attempts are disjoint and have no billed
+        // price, so together they are among the unknown estimates.
+        ensure!(
+            totals.local_attempts >= 0
+                && totals.undeclared_attempts >= 0
+                && [totals.local_attempts, totals.undeclared_attempts]
+                    .into_iter()
+                    .try_fold(totals.plan_attempts, i64::checked_add)
+                    .is_some_and(|sum| sum <= totals.unknown_estimates),
+            "invalid plan, local or undeclared attempt count"
         );
         ensure!(
             totals.plan_burn_milli_tokens.known >= 0,

@@ -1,0 +1,98 @@
+//! One-off: write a ledger with the accounting store as of 3b6c338f8f (5bae03414e^).
+use codex_protocol::ThreadId;
+use codex_protocol::protocol::SessionSource;
+use codex_state::SqliteConfig;
+use codex_state::StateRuntime;
+use codex_state::ThreadMetadataBuilder;
+use codex_state::accounting::*;
+use codex_utils_absolute_path::AbsolutePathBuf;
+use serde_json::json;
+use uuid::Uuid;
+
+const T0: i64 = 1_789_473_600_000; // 2026-09-15T12:00:00Z
+
+fn attempt(id: u128, time: i64, dialect: Dialect) -> anyhow::Result<Attempt> {
+    Ok(Attempt {
+        attempt_id: Uuid::from_u128(id),
+        request_id: Uuid::from_u128(id + 100),
+        thread_id: ThreadId::from_string(&Uuid::from_u128(7).to_string())?,
+        turn: "pre-5bae-fixture".into(),
+        retry_of: None,
+        provider: "anthropic".into(),
+        model: "claude-fixture".into(),
+        scope: Uuid::from_u128(9),
+        dialect,
+        dispatched_at_ms: time.try_into()?,
+    })
+}
+
+#[tokio::test]
+async fn write_pre_5bae_ledger() -> anyhow::Result<()> {
+    let Ok(out) = std::env::var("ACCT_FIXTURE_OUT") else {
+        return Ok(());
+    };
+    let path = std::path::PathBuf::from(out);
+    std::fs::create_dir_all(&path)?;
+    let runtime = StateRuntime::init(
+        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(path.clone())?),
+        "synthetic".into(),
+    )
+    .await?;
+    let owner = ThreadId::from_string(&Uuid::from_u128(7).to_string())?;
+    let mut builder = ThreadMetadataBuilder::new(
+        owner,
+        path.join("synthetic.jsonl"),
+        chrono::DateTime::from_timestamp_millis(T0).unwrap(),
+        SessionSource::Cli,
+    );
+    builder.cwd = path.clone();
+    runtime.upsert_thread(&builder.build("synthetic")).await?;
+    let snapshot: Snapshot = serde_json::from_value(json!({
+        "id":Uuid::from_u128(1000), "provider":"anthropic", "model":"claude-fixture",
+        "scope":Uuid::from_u128(9), "currency":"USD", "unit":"PerMillionTokens",
+        "rates":{"noncached":"5","read":"0.5","write":"6.25","output":"25"},
+        "source_reference":Uuid::from_u128(1001), "source_kind":"NativeCatalog",
+        "observed_at_ms":T0,"approved_at_ms":T0,"effective_from_ms":T0,"effective_end_ms":null
+    }))?;
+    let store = AccountingStore::open(&runtime, T0).await?;
+    // Priced, complete usage.
+    let a = attempt(1, T0 + 1_000, Dialect::NativeAnthropic)?;
+    store.admit(owner, &a, &[snapshot.clone()], T0 + 1_000).await?;
+    let patch = Patch {
+        input: Presence::Number(1_200.try_into()?),
+        read: Presence::Number(300.try_into()?),
+        write: Presence::Number(100.try_into()?),
+        output: Presence::Number(450.try_into()?),
+        ..Patch::default()
+    };
+    store
+        .observe(owner, &a, &[Observation { revision: 1.try_into()?, source: a.attempt_id, sequence: 1.try_into()?, patch }], T0 + 2_000)
+        .await?;
+    // Priced, incomplete usage (two observations).
+    let b = attempt(2, T0 + 3_000, Dialect::NativeAnthropic)?;
+    store.admit(owner, &b, &[snapshot.clone()], T0 + 3_000).await?;
+    for (revision, patch) in [
+        (1, Patch { input: Presence::Number(10.try_into()?), ..Patch::default() }),
+        (2, Patch { output: Presence::Number(20.try_into()?), ..Patch::default() }),
+    ] {
+        store
+            .observe(owner, &b, &[Observation { revision: revision.try_into()?, source: b.attempt_id, sequence: revision.try_into()?, patch }], T0 + 4_000)
+            .await?;
+    }
+    // No price.
+    let mut c = attempt(3, T0 + 5_000, Dialect::Inclusive)?;
+    c.provider = "zai".into();
+    c.model = "glm-fixture".into();
+    store.admit(owner, &c, &[], T0 + 5_000).await?;
+    let patch = Patch {
+        input: Presence::Number(500.try_into()?),
+        read: Presence::Number(100.try_into()?),
+        output: Presence::Number(40.try_into()?),
+        ..Patch::default()
+    };
+    store
+        .observe(owner, &c, &[Observation { revision: 1.try_into()?, source: c.attempt_id, sequence: 1.try_into()?, patch }], T0 + 6_000)
+        .await?;
+    runtime.close().await;
+    Ok(())
+}

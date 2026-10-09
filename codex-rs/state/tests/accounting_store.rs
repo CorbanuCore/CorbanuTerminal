@@ -1272,6 +1272,8 @@ async fn normal_default_profiles_do_not_install_and_opt_in_keeps_ordinary_histor
         .await?,
         12
     );
+    // A new ledger starts in format 1; it moves to format 2 only when a
+    // record needs it.
     assert_eq!(
         sqlx::query_as::<_, (i64, bool)>("SELECT version, success FROM _accounting_migrations",)
             .fetch_all(&mut conn)
@@ -1535,7 +1537,9 @@ async fn normal_open_rejects_unversioned_partial_failed_checksum_and_newer_witho
         "DROP INDEX draft_accounting_request",
         "UPDATE _accounting_migrations SET success = 0",
         "UPDATE _accounting_migrations SET checksum = X'00'",
-        "UPDATE _accounting_migrations SET version = 2",
+        "UPDATE _accounting_migrations SET version = version + 10",
+        // Claims format 1 while holding format 2's table.
+        "CREATE TABLE draft_accounting_ledger_format (version INTEGER PRIMARY KEY NOT NULL CHECK(version = 2))",
         "DELETE FROM _accounting_migrations",
         "DROP TABLE _accounting_migrations",
     ] {
@@ -1575,5 +1579,203 @@ async fn normal_open_rejects_unversioned_partial_failed_checksum_and_newer_witho
             runtime.close().await;
         }
     }
+    Ok(())
+}
+
+/// A ledger written before price records gained a basis (`5bae03414e^`) still
+/// validates and reads on this build: every older payload is read under the
+/// format it was written in.
+#[tokio::test]
+async fn ledger_written_before_plan_basis_validates_and_reads() -> anyhow::Result<()> {
+    const T0: i64 = 1_789_473_600_000; // 2026-09-15T12:00:00Z, the fixture's day.
+    let path = home();
+    let runtime = open(&path).await?;
+    let owner = ThreadId::from_string(&Uuid::from_u128(7).to_string())?;
+    native(&runtime, owner).await?;
+    let mut conn = connection(&runtime).await?;
+    sqlx::raw_sql(sqlx::AssertSqlSafe(include_str!(
+        "fixtures/accounting/pre-5bae-ledger.sql"
+    )))
+    .execute(&mut conn)
+    .await?;
+    conn.close().await?;
+    let read_at = T0 + 60_000;
+    let view = ready(AccountingStore::inspect_day(&runtime, owner, T0 / DAY, read_at).await?);
+    assert_eq!(
+        (
+            view.totals.attempts,
+            view.totals.unknown_estimates,
+            view.totals.plan_attempts
+        ),
+        (3, 2, 0)
+    );
+    // 1,200 / 300 / 100 / 450 tokens at $5 / $0.50 / $6.25 / $25 per million,
+    // plus the incomplete attempt's 10 input and 20 output tokens.
+    assert_eq!(view.totals.known_usd.display().text, "0.018575");
+    // Opening for a write validates the whole ledger and leaves its format
+    // alone, so an older build sharing it keeps working.
+    let store = AccountingStore::open(&runtime, read_at).await?;
+    let formats = |runtime: Arc<StateRuntime>| async move {
+        let mut conn = connection(&runtime).await?;
+        let format: Vec<i64> =
+            sqlx::query_scalar("SELECT version FROM _accounting_migrations ORDER BY version")
+                .fetch_all(&mut conn)
+                .await?;
+        conn.close().await?;
+        anyhow::Ok(format)
+    };
+    assert_eq!(formats(runtime.clone()).await?, vec![1]);
+    // A new usage report on the old incomplete attempt mixes a legacy price
+    // record and legacy estimates with a current-form estimate.
+    let mut b = attempt(2, T0 + 3_000)?;
+    b.thread_id = owner;
+    b.turn = "pre-5bae-fixture".into();
+    b.provider = "anthropic".into();
+    b.model = "claude-fixture".into();
+    b.scope = Uuid::from_u128(9);
+    let patch = Patch {
+        read: Presence::Number(0.try_into()?),
+        write: Presence::Number(0.try_into()?),
+        ..Patch::default()
+    };
+    store
+        .observe(
+            owner,
+            &b,
+            &[Observation {
+                revision: 3.try_into()?,
+                source: b.attempt_id,
+                sequence: 3.try_into()?,
+                patch,
+            }],
+            read_at,
+        )
+        .await?;
+    assert_eq!(formats(runtime.clone()).await?, vec![1]);
+    // A record format 1 cannot express upgrades the ledger as it is written.
+    let mut local = attempt(10, read_at)?;
+    local.thread_id = owner;
+    let mut basis_only = snapshot()?;
+    basis_only.id = Uuid::from_u128(2000);
+    basis_only.rates = Rates::default();
+    basis_only.basis = Basis::Undeclared;
+    basis_only.effective_from_ms = read_at.try_into()?;
+    basis_only.observed_at_ms = read_at.try_into()?;
+    basis_only.approved_at_ms = read_at.try_into()?;
+    store.admit(owner, &local, &[basis_only], read_at).await?;
+    assert_eq!(formats(runtime.clone()).await?, vec![1, 2]);
+    let after = ready(AccountingStore::inspect_day(&runtime, owner, T0 / DAY, read_at).await?);
+    assert_eq!(
+        (
+            after.totals.attempts,
+            after.totals.unknown_estimates,
+            after.totals.undeclared_attempts
+        ),
+        (4, 2, 1)
+    );
+    // The completed attempt now prices 10 input and 20 output tokens.
+    assert_eq!(after.totals.known_usd.display().text, "0.018575");
+    // Long after, retention compacts the mixed day and it reads the same.
+    let later = read_at + 100 * DAY;
+    let compacted = AccountingStore::open(&runtime, later)
+        .await?
+        .read_day(owner, T0 / DAY, later)
+        .await?;
+    let RetainedDay::Available { totals, .. } = compacted else {
+        panic!("{compacted:?}");
+    };
+    assert_eq!(totals, Current::Ready(after.totals));
+    runtime.close().await;
+    Ok(())
+}
+
+/// A ledger in a format newer than this build's is refused by name, for reads
+/// and writes alike, and left untouched.
+#[tokio::test]
+async fn newer_ledger_format_is_refused_by_name() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    let a = attempt(1, 0)?;
+    native(&runtime, a.thread_id).await?;
+    AccountingStore::open(&runtime, 0)
+        .await?
+        .admit(a.thread_id, &a, &[], 0)
+        .await?;
+    let mut conn = connection(&runtime).await?;
+    sqlx::query(
+        "INSERT INTO _accounting_migrations (version, description, success, checksum, execution_time)
+            VALUES (99, 'future', 1, X'00', 0)",
+    )
+    .execute(&mut conn)
+    .await?;
+    let before = inspection_tables(&mut conn).await?;
+    let read = AccountingStore::inspect_day(&runtime, a.thread_id, 0, 1)
+        .await
+        .expect_err("newer format read");
+    let write = AccountingStore::open(&runtime, 1)
+        .await
+        .err()
+        .context("newer format write")?;
+    for error in [&read, &write] {
+        assert!(is_newer_format(error), "{error:#}");
+    }
+    assert_eq!(inspection_tables(&mut conn).await?, before);
+    conn.close().await?;
+    runtime.close().await;
+    Ok(())
+}
+
+/// Qualification helper, not part of the suite: validates and reads a copy of
+/// a real ledger. Set `ACCT_REAL_LEDGER` to a directory holding a state DB.
+#[tokio::test]
+#[ignore = "reads a real ledger named by ACCT_REAL_LEDGER"]
+async fn real_ledger_validates_and_reads() -> anyhow::Result<()> {
+    let source = std::path::PathBuf::from(std::env::var("ACCT_REAL_LEDGER")?);
+    let path = home();
+    std::fs::create_dir_all(&*path)?;
+    for entry in std::fs::read_dir(&source)? {
+        let entry = entry?;
+        std::fs::copy(entry.path(), path.join(entry.file_name()))?;
+    }
+    let runtime = open(&path).await?;
+    let mut conn = connection(&runtime).await?;
+    let days: Vec<(String, i64)> = sqlx::query_as(
+        "SELECT DISTINCT json_extract(payload, '$.thread_id'),
+                json_extract(payload, '$.dispatched_at_ms') / 86400000
+            FROM draft_accounting_attempts ORDER BY 1, 2",
+    )
+    .fetch_all(&mut conn)
+    .await?;
+    conn.close().await?;
+    let now = chrono::Utc::now().timestamp_millis();
+    let mut read = Vec::new();
+    for (thread, day) in &days {
+        let owner = ThreadId::from_string(thread)?;
+        read.push(
+            AccountingStore::inspect_day(&runtime, owner, *day, now)
+                .await
+                .with_context(|| format!("{thread} day {day} read at {now}"))?,
+        );
+    }
+    // Opening for a write validates the whole ledger; reads after it agree
+    // with reads before it, apart from the later read time they state.
+    AccountingStore::open(&runtime, AsOf::Now).await?;
+    let later = chrono::Utc::now().timestamp_millis();
+    for ((thread, day), before) in days.iter().zip(&read) {
+        let owner = ThreadId::from_string(thread)?;
+        let after = AccountingStore::inspect_day(&runtime, owner, *day, later).await?;
+        match (after, before) {
+            (InspectionDay::Ready(after), InspectionDay::Ready(before)) => {
+                assert_eq!(
+                    (&after.totals, &after.requests),
+                    (&before.totals, &before.requests),
+                    "{thread} day {day}"
+                );
+            }
+            (after, before) => assert_eq!(&after, before, "{thread} day {day}"),
+        }
+    }
+    println!("validated {} thread-days", days.len());
+    runtime.close().await;
     Ok(())
 }

@@ -288,7 +288,7 @@ impl<'a> EstimateStore<'a> {
             let quote = bound_quote(conn, rules, &attempt, &observations, binding).await?;
             // Do not deserialize quote decimals through the stricter rate parser.
             ensure!(
-                serde_json::to_string(&quote)? == payload,
+                super::format::quote_is_canonical(&quote, &payload)?,
                 "corrupt estimate payload"
             );
             Some(quote)
@@ -321,7 +321,7 @@ async fn read_snapshot(conn: &mut SqliteConnection, id: &str) -> anyhow::Result<
             snapshot.validate()?;
             ensure!(snapshot.id.to_string() == id, "snapshot identity mismatch");
             ensure!(
-                serde_json::to_string(&snapshot)? == payload,
+                super::format::snapshot_is_canonical(&snapshot, &payload)?,
                 "noncanonical snapshot"
             );
             Ok(snapshot)
@@ -410,7 +410,7 @@ async fn verify_recorded(
     let quote = quote_under_snapshot(rules, attempt, &observations, snapshot)?;
     // Do not deserialize quote decimals through the stricter rate parser.
     ensure!(
-        serde_json::to_string(&quote)? == payload,
+        super::format::quote_is_canonical(&quote, payload)?,
         "corrupt estimate payload"
     );
     Ok(quote)
@@ -542,6 +542,13 @@ impl Journal<'_> {
             None => quote_observations(&attempt, &observations, candidates)?,
         };
         if let Some(snapshot) = &quote.snapshot {
+            // A record a format-1 ledger cannot express upgrades the ledger in
+            // the same transaction that writes it.
+            let format = snapshot.ledger_format();
+            if format > 1 {
+                crate::runtime::accounting::store::require_format_on_connection(conn, format)
+                    .await?;
+            }
             sqlx::query("INSERT INTO draft_accounting_price_snapshots VALUES (?, ?) ON CONFLICT(snapshot_id) DO NOTHING")
                 .bind(snapshot.id.to_string()).bind(serde_json::to_string(snapshot)?)
                 .execute(&mut *conn).await?;

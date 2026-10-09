@@ -7,6 +7,7 @@ use codex_protocol::ThreadId;
 use sqlx::SqliteConnection;
 
 pub use super::pricing::Basis;
+pub use super::pricing::BasisSource;
 pub use super::pricing::BucketQuote;
 pub use super::pricing::Currency;
 pub use super::pricing::Current;
@@ -14,6 +15,7 @@ pub use super::pricing::DayTotals;
 pub use super::pricing::Decimal;
 pub use super::pricing::DisplayAmount;
 pub use super::pricing::Metric;
+pub use super::pricing::NewerLedgerFormat;
 pub use super::pricing::ObservationQuote;
 pub use super::pricing::Rates;
 pub use super::pricing::RetainedDay;
@@ -21,6 +23,7 @@ pub use super::pricing::RetentionCoverage;
 pub use super::pricing::Snapshot;
 pub use super::pricing::SourceKind;
 pub use super::pricing::Unit;
+pub use super::pricing::is_newer_format;
 pub use super::types::Attempt;
 pub use super::types::Count;
 pub use super::types::Dialect;
@@ -1000,6 +1003,11 @@ pub(super) async fn ledger_exists(conn: &mut SqliteConnection) -> anyhow::Result
 }
 
 // Caller owns BEGIN IMMEDIATE: schema and independent ledger commit together.
+//
+// A new ledger is installed in format 1, and an existing one is left in the
+// format it has: it is upgraded only when a record that needs a newer format is
+// first written (`require_format_on_connection`). An older build sharing the
+// state DB keeps reading the ledger until then.
 async fn install_on_connection(conn: &mut SqliteConnection) -> anyhow::Result<()> {
     if !ledger_exists(conn).await? {
         let objects: i64 = sqlx::query_scalar(
@@ -1009,13 +1017,50 @@ async fn install_on_connection(conn: &mut SqliteConnection) -> anyhow::Result<()
         .await?;
         ensure!(objects == 0, "unversioned accounting schema");
         crate::migrations::accounting_migrator()
-            .run_direct(/*target*/ None, conn, /*skip*/ false)
+            .run_direct(/*target*/ Some(1), conn, /*skip*/ false)
             .await?;
     }
     validate_on_connection(conn).await
 }
 
+/// Upgrade the ledger to at least `format` before writing a record that needs
+/// it. Caller owns the write transaction, so the upgrade commits with the
+/// record or not at all. An unknown or damaged ledger is refused, not migrated.
+pub(crate) async fn require_format_on_connection(
+    conn: &mut SqliteConnection,
+    format: i64,
+) -> anyhow::Result<()> {
+    // Callers write inside a transaction that already validated the ledger.
+    if applied_format(conn).await? >= format {
+        return Ok(());
+    }
+    validate_on_connection(conn).await?;
+    if applied_format(conn).await? < format {
+        crate::migrations::accounting_migrator()
+            .run_direct(/*target*/ Some(format), conn, /*skip*/ false)
+            .await?;
+        validate_on_connection(conn).await?;
+    }
+    ensure!(
+        applied_format(conn).await? >= format,
+        "accounting ledger was not upgraded"
+    );
+    Ok(())
+}
+
+async fn applied_format(conn: &mut SqliteConnection) -> anyhow::Result<i64> {
+    Ok(
+        sqlx::query_scalar("SELECT count(*) FROM _accounting_migrations")
+            .fetch_one(conn)
+            .await?,
+    )
+}
+
 /// Read-only version and physical-schema validation; no migration adoption/repair.
+///
+/// A ledger in an older format validates against the migrations it applied:
+/// it is read as written. One in a newer format is refused with
+/// `NewerLedgerFormat`.
 pub(super) async fn validate_on_connection(conn: &mut SqliteConnection) -> anyhow::Result<()> {
     ensure!(ledger_exists(conn).await?, "accounting ledger missing");
     let migrator = crate::migrations::accounting_migrator();
@@ -1028,13 +1073,38 @@ pub(super) async fn validate_on_connection(conn: &mut SqliteConnection) -> anyho
         .iter()
         .map(|m| (m.version, true, m.checksum.to_vec()))
         .collect();
+    let supported = expected.last().map_or(0, |(version, _, _)| *version);
+    if let Some(found) = rows
+        .iter()
+        .map(|(version, _, _)| *version)
+        .filter(|version| *version > supported)
+        .max()
+    {
+        return Err(NewerLedgerFormat { found, supported }.into());
+    }
     ensure!(
-        rows == expected,
+        !rows.is_empty() && expected.starts_with(&rows),
         "unsupported, failed or checksum-mismatched accounting migration"
     );
+    // A migration not yet applied must have left nothing behind: a ledger that
+    // claims an older format while holding a newer one's objects could hold
+    // records that format cannot express.
+    for migration in migrator.iter().skip(rows.len()) {
+        for name in created_objects(migration.sql.as_str()) {
+            let present: bool =
+                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name = ?)")
+                    .bind(name)
+                    .fetch_one(&mut *conn)
+                    .await?;
+            ensure!(
+                !present,
+                "accounting ledger holds objects of a later format: {name}"
+            );
+        }
+    }
     // Compare every owned table/index definition, not just a ledger claim.
     // SQLite preserves CREATE SQL; whitespace is not schema identity.
-    for migration in migrator.iter() {
+    for migration in migrator.iter().take(rows.len()) {
         for statement in migration
             .sql
             .as_str()
@@ -1062,6 +1132,17 @@ pub(super) async fn validate_on_connection(conn: &mut SqliteConnection) -> anyho
     }
     super::retention_fixture_on_connection(conn).await?;
     Ok(())
+}
+
+/// The names of the objects a migration's `CREATE` statements make. Every
+/// accounting migration starts with its `CREATE` statements (a test checks
+/// each yields at least one), so a leading comment cannot hide an object.
+fn created_objects(sql: &str) -> Vec<&str> {
+    sql.split(';')
+        .map(str::trim)
+        .filter(|statement| statement.starts_with("CREATE "))
+        .filter_map(|statement| statement.split_whitespace().nth(2))
+        .collect()
 }
 
 #[cfg(test)]

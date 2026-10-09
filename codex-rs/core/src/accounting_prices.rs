@@ -241,6 +241,7 @@ fn snapshot(
         source_kind: SourceKind::NativeCatalog,
         basis,
         plan_burn_millis,
+        basis_source: codex_state::accounting::BasisSource::BuiltIn,
         observed_at_ms: time,
         approved_at_ms: time,
         effective_from_ms: time,
