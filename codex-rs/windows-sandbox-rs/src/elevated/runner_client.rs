@@ -4,11 +4,13 @@ use crate::ipc_framed::ErrorStage;
 use crate::ipc_framed::FramedMessage;
 use crate::ipc_framed::IPC_PROTOCOL_VERSION;
 use crate::ipc_framed::Message;
+use crate::ipc_framed::SpawnReady;
 use crate::ipc_framed::SpawnRequest;
 use crate::ipc_framed::read_frame;
 use crate::ipc_framed::write_frame;
 use crate::logon_launch::LogonError as RunnerLogonError;
 use crate::logon_launch::LogonLaunchRequest;
+use crate::logon_launch::WindowAccessReaper;
 use crate::logon_launch::create_process_with_logon;
 use crate::runner_pipe::PIPE_ACCESS_INBOUND;
 use crate::runner_pipe::PIPE_ACCESS_OUTBOUND;
@@ -41,6 +43,7 @@ use windows_sys::Win32::System::IO::CancelSynchronousIo;
 use windows_sys::Win32::System::Pipes::PeekNamedPipe;
 use windows_sys::Win32::System::Threading::GetCurrentProcess;
 use windows_sys::Win32::System::Threading::GetCurrentThread;
+use windows_sys::Win32::System::Threading::INFINITE;
 use windows_sys::Win32::System::Threading::TerminateProcess;
 use windows_sys::Win32::System::Threading::WaitForSingleObject;
 
@@ -140,12 +143,12 @@ impl RunnerTransport {
         write_frame(&mut self.pipe_write, &spawn_request)
     }
 
-    pub(crate) fn read_spawn_ready(&mut self) -> Result<()> {
+    pub(crate) fn read_spawn_ready(&mut self) -> Result<SpawnReady> {
         wait_for_complete_frame(&self.pipe_read, RUNNER_SPAWN_READY_TIMEOUT)?;
         let msg = read_frame(&mut self.pipe_read)?
             .ok_or_else(|| anyhow::anyhow!("runner pipe closed before spawn_ready"))?;
         match msg.message {
-            Message::SpawnReady { .. } => Ok(()),
+            Message::SpawnReady { payload } => Ok(payload),
             Message::Error { payload } => Err(RunnerStartupError::new(payload).into()),
             other => Err(anyhow::anyhow!(
                 "expected spawn_ready from runner, got {other:?}"
@@ -304,6 +307,8 @@ pub(crate) fn spawn_runner_transport(
     let h_pipe_out =
         create_named_pipe(&pipe_out_name, PIPE_ACCESS_INBOUND, &sandbox_creds.username)?;
 
+    // Taken before the request moves into the transport.
+    let commands_use_this_desktop = !spawn_request.use_private_desktop;
     let runner_exe = find_runner_exe(codex_home, log_dir);
     let runner_cmdline = runner_exe
         .to_str()
@@ -315,7 +320,7 @@ pub(crate) fn spawn_runner_transport(
         quote_windows_arg(&format!("--pipe-in={pipe_in_name}")),
         quote_windows_arg(&format!("--pipe-out={pipe_out_name}"))
     );
-    let launched = match create_process_with_logon(
+    let mut launched = match create_process_with_logon(
         &LogonLaunchRequest {
             username: &sandbox_creds.username,
             password: &sandbox_creds.password,
@@ -342,12 +347,18 @@ pub(crate) fn spawn_runner_transport(
     }
     if let Some(err) = &launched.window_access_error {
         crate::logging::log_note(
-            &format!("runner may not start: could not grant its user this window station: {err}"),
+            &format!("runner may not start: could not give its logon this window station: {err}"),
             log_dir,
         );
     }
     let runner_process = launched.process;
     let expected_runner_pid = launched.pid;
+    // #345: removed when the runner exits, or on the failure paths below once
+    // it has been ended.
+    let window_access = launched.window_access.take().map(|mut access| {
+        access.set_log_dir(log_dir);
+        access
+    });
 
     let connect_result = (|| -> Result<()> {
         connect_pipe_with_timeout(h_pipe_in, expected_runner_pid, "pipe-in")?;
@@ -357,7 +368,7 @@ pub(crate) fn spawn_runner_transport(
     .map_err(|err| match &launched.window_access_error {
         // #341: the likely reason the runner never connected.
         Some(access) => anyhow::anyhow!(
-            "{err:#} (could not give the sandbox's user access to this session's window station: {access})"
+            "{err:#} (could not give the runner's logon access to this session's window station: {access})"
         ),
         None => err,
     });
@@ -383,32 +394,92 @@ pub(crate) fn spawn_runner_transport(
         pipe_write: unsafe { File::from_raw_handle(h_pipe_in as _) },
         pipe_read: unsafe { File::from_raw_handle(h_pipe_out as _) },
     };
-    let startup_result = (|| -> Result<()> {
+    let startup_result = (|| -> Result<SpawnReady> {
         // Keep the runner process HANDLE alive until the *entire* startup handshake finishes.
         // That way, a later `send_spawn_request` or `spawn_ready` failure can still terminate the
         // runner instead of leaving a stray `codex-command-runner.exe` behind.
         transport.send_spawn_request(spawn_request)?;
-        transport.read_spawn_ready()?;
-        Ok(())
+        transport.read_spawn_ready()
     })();
-    if let Err(err) = startup_result {
+    let spawn_ready = match startup_result {
+        Ok(spawn_ready) => spawn_ready,
+        Err(err) => {
+            unsafe {
+                if runner_process != 0 {
+                    let _ = TerminateProcess(runner_process, 1);
+                    CloseHandle(runner_process);
+                }
+            }
+            drop(transport);
+            return Err(err);
+        }
+    };
+
+    let Some(window_access) = window_access else {
         unsafe {
             if runner_process != 0 {
-                let _ = TerminateProcess(runner_process, 1);
+                // The runner has now connected both pipes *and* acknowledged the spawn request,
+                // so startup is complete. At that point the transport pipes become the only
+                // lifetime anchor we need to keep the session alive.
                 CloseHandle(runner_process);
             }
         }
-        drop(transport);
-        return Err(err);
-    }
-
-    unsafe {
-        if runner_process != 0 {
-            // The runner has now connected both pipes *and* acknowledged the spawn request, so
-            // startup is complete. At that point the transport pipes become the only lifetime
-            // anchor we need to keep the session alive.
-            CloseHandle(runner_process);
+        return Ok(transport);
+    };
+    // #345: the runner has created its desktop and started its command; leave the command
+    // only what it and its children need to start, and remove that once the runner exits.
+    // A ConPTY's console host starts on Core's desktop: keep that entry if the runner could
+    // not tell it had started.
+    let commands_use_this_desktop =
+        commands_use_this_desktop || spawn_ready.console_host_started == Some(false);
+    let mut window_access = match WindowAccessReaper::start(
+        window_access,
+        runner_process,
+        &runner_exe,
+    ) {
+        Ok(mut reaper) => {
+            // The reaper removes it when the runner exits, even after Core.
+            if let Err(err) = reaper.narrow_for_commands(commands_use_this_desktop) {
+                crate::logging::log_note(&format!("{err:#}"), log_dir);
+            }
+            unsafe { CloseHandle(runner_process) };
+            return Ok(transport);
         }
+        Err((window_access, err)) => {
+            crate::logging::log_note(
+                &format!(
+                    "no reaper for the runner's window station access ({err:#}); Core removes it, unless it exits first"
+                ),
+                log_dir,
+            );
+            window_access
+        }
+    };
+    if let Err(err) = window_access.narrow_for_commands(commands_use_this_desktop) {
+        crate::logging::log_note(
+            &format!("could not narrow the runner's window station access: {err:#}"),
+            log_dir,
+        );
+    }
+    let watch = thread::Builder::new()
+        .name("codex-runner-window-access".to_string())
+        .spawn(move || {
+            // SAFETY: the runner's process handle, owned by this thread from here on.
+            unsafe {
+                WaitForSingleObject(runner_process, INFINITE);
+                CloseHandle(runner_process);
+            }
+            drop(window_access);
+        });
+    if let Err(err) = watch {
+        // The closure, and with it the access, is dropped with the error: the access goes now
+        // rather than with the runner (its command has started already).
+        crate::logging::log_note(
+            &format!("could not watch the runner to remove its window station access: {err}"),
+            log_dir,
+        );
+        // SAFETY: the thread never started, so the handle is still ours.
+        unsafe { CloseHandle(runner_process) };
     }
 
     Ok(transport)

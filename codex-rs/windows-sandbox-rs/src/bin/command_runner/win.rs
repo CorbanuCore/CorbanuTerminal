@@ -44,6 +44,7 @@ use codex_windows_sandbox::read_handle_loop;
 use codex_windows_sandbox::spawn_process_with_pipes;
 use codex_windows_sandbox::to_wide;
 use codex_windows_sandbox::token_mode_for_permission_profile;
+use codex_windows_sandbox::wait_for_console_host_start;
 use codex_windows_sandbox::write_frame;
 use std::ffi::OsStr;
 use std::fs::File;
@@ -79,6 +80,7 @@ const FS_HELPER_ARG: &str = "--codex-run-as-fs-helper";
 const READ_ACL_MUTEX_NAME: &str = "Local\\CodexSandboxReadAcl";
 const TERMINATION_WAIT_MS: u32 = 5_000;
 const WAIT_TIMEOUT: u32 = 0x0000_0102;
+const CONSOLE_HOST_START_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 struct IpcSpawnedProcess {
     log_dir: PathBuf,
@@ -90,6 +92,8 @@ struct IpcSpawnedProcess {
     conpty_owner: Option<codex_windows_sandbox::ConptyInstance>,
     hpc_handle: Option<HANDLE>,
     _pipe_handles: Option<PipeSpawnHandles>,
+    /// #345: see `SpawnReady::console_host_started`.
+    console_host_started: Option<bool>,
 }
 
 /// Small RAII wrapper for raw Win32 handles.
@@ -297,6 +301,7 @@ fn spawn_ipc_process(req: &SpawnRequest) -> Result<IpcSpawnedProcess> {
     let effective_cwd = effective_cwd(&req.cwd, Some(log_dir.as_path()));
 
     let mut conpty_owner = None;
+    let mut console_host_started = None;
     let mut hpc_handle: Option<HANDLE> = None;
     let mut pipe_handles = None;
     let (pi, job, stdout_handle, stderr_handle, stdin_handle) = if req.tty {
@@ -314,6 +319,15 @@ fn spawn_ipc_process(req: &SpawnRequest) -> Result<IpcSpawnedProcess> {
         hpc_handle = conpty.raw_handle();
         let input_write = conpty.take_input_write();
         let output_read = conpty.take_output_read();
+        // #345: Core takes away the console host's desktop once we report the spawn.
+        let waited = wait_for_console_host_start(output_read, CONSOLE_HOST_START_TIMEOUT);
+        if let Some(Err(reason)) = &waited {
+            log_note(
+                &format!("runner: {reason}; reporting the spawn anyway"),
+                Some(log_dir.as_path()),
+            );
+        }
+        console_host_started = waited.map(|waited| waited.is_ok());
         conpty_owner = Some(conpty);
         let stdin_handle = if req.stdin_open {
             Some(input_write)
@@ -371,6 +385,7 @@ fn spawn_ipc_process(req: &SpawnRequest) -> Result<IpcSpawnedProcess> {
         conpty_owner,
         hpc_handle,
         _pipe_handles: pipe_handles,
+        console_host_started,
     })
 }
 
@@ -541,6 +556,12 @@ pub fn main() -> Result<()> {
     if std::env::args().nth(1).as_deref() == Some(codex_windows_sandbox::LOGON_LAUNCH_ARG) {
         return codex_windows_sandbox::run_logon_launcher();
     }
+    // #345: reaper mode, run as the real user by Core.
+    if std::env::args().nth(1).as_deref() == Some(codex_windows_sandbox::WINDOW_ACCESS_REAPER_ARG) {
+        return codex_windows_sandbox::run_window_access_reaper();
+    }
+    // Core gave this logon its desktop access; the runner can't change it.
+    codex_windows_sandbox::mark_as_command_runner();
     let mut pipe_in = None;
     let mut pipe_out = None;
     for arg in std::env::args().skip(1) {
@@ -607,6 +628,7 @@ pub fn main() -> Result<()> {
         message: Message::SpawnReady {
             payload: SpawnReady {
                 process_id: unsafe { GetProcessId(pi.hProcess) },
+                console_host_started: ipc_spawn.console_host_started,
             },
         },
     };

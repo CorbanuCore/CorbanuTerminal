@@ -53,17 +53,25 @@ affected.
   once.
 
 **Over SSH.** The default sandbox also works when you start Corbanu Terminal
-in a Windows OpenSSH session (or from a service). For that, Corbanu Terminal
-gives the sandbox's users the least access their command runner needs to
-start in the SSH session's window station and desktop (no hooks, windows or
-clipboard), until the SSH session ends. The grant is for the sandbox
-accounts, so the sandboxed commands hold it too (#345 tracks narrowing it to
-the runner). Earlier builds
-couldn't run any command there: each one failed after 15 seconds with
-`windows sandbox: timed out after 15000ms connecting runner pipe-in`, and the
-System event log showed `codex-command-runner ... (0xc0000142)`. If you see
-that with an older build, update, or start Corbanu Terminal from the console
-or Remote Desktop session instead.
+in a Windows OpenSSH session (or from a service). There, Corbanu Terminal
+gives the command runner's logon (the SSH session's own, not the sandbox
+accounts every Windows user's sandbox shares) the least access it needs in the
+session's window station and desktop (no hooks, windows or clipboard). Once
+the runner has started its command, that access shrinks to what the command
+and its children need to start: they can't create desktops there, or open
+your session's desktop unless `windows.sandbox_private_desktop = false`. It
+goes when the runner exits, even if Corbanu Terminal has exited by then, so a
+background process left running after its command ends can't start new
+programs that need a window station. (If Corbanu Terminal is ended in the
+moment between starting a runner and handing its access to the small helper
+process that removes it, or that helper can't start and Corbanu Terminal
+exits before the runner, that access stays until the SSH session ends.) The
+non-admin sandbox with `windows.sandbox_private_desktop = false` works over
+SSH too. Earlier builds couldn't run any command there: each one failed after
+15 seconds with `windows sandbox: timed out after 15000ms connecting runner
+pipe-in`, and the System event log showed `codex-command-runner ...
+(0xc0000142)`. If you see that with an older build, update, or start Corbanu
+Terminal from the console or Remote Desktop session instead.
 
 Your organization's managed requirements may allow only the non-admin sandbox.
 In that case the warning still appears so you know the limits.
