@@ -774,7 +774,8 @@ fn sec_win_345_sandboxed_commands_dont_get_the_runners_access() {
                 &crate::DenyReadTargets::default(),
                 &[],
                 tty,
-                /*stdin_open*/ false,
+                // A ConPTY whose input closes ends its console's processes.
+                /*stdin_open*/ tty,
                 private_desktop,
             )
             .await
