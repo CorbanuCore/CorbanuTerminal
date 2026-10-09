@@ -134,3 +134,60 @@ fn pf_27_s09_take_env_var_wipes_the_c_runtime_copy() {
         String::from_utf8_lossy(&output.stderr)
     );
 }
+
+/// Writes `masked ^ 0x5a` into `live`'s spare capacity at `offset`, as a
+/// stale copy in reused memory would sit there.
+#[cfg(windows)]
+fn plant(live: &mut Vec<u8>, offset: usize, masked: &[u8]) {
+    assert!(offset + masked.len() <= live.capacity());
+    for (index, byte) in masked.iter().enumerate() {
+        // SAFETY: within the vector's allocation.
+        unsafe { live.as_mut_ptr().add(offset + index).write(byte ^ 0x5a) };
+    }
+}
+
+/// The bytes at `offset` in `live`'s allocation.
+#[cfg(windows)]
+fn planted(live: &[u8], offset: usize, len: usize) -> Vec<u8> {
+    // SAFETY: written by `plant`, within the allocation.
+    unsafe { std::slice::from_raw_parts(live.as_ptr().add(offset), len) }.to_vec()
+}
+
+/// PF-27-S09: a stale copy of a handed-over key in a block in use (no
+/// `NAME=` before it) is overwritten with `0` characters, never NUL; a short
+/// placeholder value is left alone. Values are kept masked here so the test
+/// holds no plain copy of its own.
+#[cfg(windows)]
+#[test]
+fn pf_27_s09_take_env_var_overwrites_stale_copies_in_live_blocks() {
+    let unmask = |masked: &[u8]| {
+        masked
+            .iter()
+            .map(|byte| char::from(byte ^ 0x5a))
+            .collect::<String>()
+    };
+    let mask = |plain: &str| plain.bytes().map(|byte| byte ^ 0x5a).collect::<Vec<u8>>();
+    let key = mask(&format!("sk-pf27s09-stale-{:016x}", rand::random::<u64>()));
+    let placeholder = mask("dummy-key-9");
+    let mut live: Vec<u8> = Vec::with_capacity(4096);
+    plant(&mut live, 1000, &key);
+    plant(&mut live, 2000, &placeholder);
+
+    let key_name = format!("PF27_S09_STALE_KEY_{}", std::process::id());
+    let placeholder_name = format!("PF27_S09_STALE_PLACEHOLDER_{}", std::process::id());
+    set_env_var_for_test(&key_name, &unmask(&key));
+    set_env_var_for_test(&placeholder_name, &unmask(&placeholder));
+    let taken = take_env_var(&key_name).expect("key");
+    assert_eq!(mask(std::str::from_utf8(&taken).expect("utf-8")), key);
+    let taken = take_env_var(&placeholder_name).expect("placeholder");
+    assert_eq!(
+        mask(std::str::from_utf8(&taken).expect("utf-8")),
+        placeholder
+    );
+
+    assert_eq!(planted(&live, 1000, key.len()), vec![b'0'; key.len()]);
+    assert_eq!(
+        planted(&live, 2000, placeholder.len()),
+        unmask(&placeholder).into_bytes()
+    );
+}
