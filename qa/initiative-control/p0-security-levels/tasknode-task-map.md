@@ -83,14 +83,15 @@ Request IDs:
 | PF-33-S02 | P0SEC-TN-03 | [pf-33-s02-connection-pinning-and-bypass.md](../../../docs/sprints/archive/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md) (merged behind flag; archived 2026-10-08, milestone items moved to P1) | [README.md](../../security-levels/sprints/PF-33-S02/README.md) | [5](../../demos/index/PF-33-S02.md) |
 | PF-41-S01 | P0SEC-TN-08 | [pf-41-s01-effective-security-inspector.md](../../../docs/sprints/archive/p0-security-levels/pf-41-s01-effective-security-inspector.md) (merged behind flag; archived 2026-10-08, milestone items moved to P1) | [README.md](../../security-levels/sprints/PF-41-S01/README.md) | [3](../../demos/index/PF-41-S01.md) |
 | PF-13-S07 | P0SEC-TN-08 | [pf-13-s07-integrated-credential-boundary-qualification.md](../../../docs/sprints/current/p1-security-hardening/pf-13-s07-integrated-credential-boundary-qualification.md) (qualification merged; record ready in the P1 plan (archive after Aggressive milestone)) | [README.md](../../security-levels/sprints/PF-13-S07/evidence/README.md) | [2](../../demos/index/PF-13-S07.md) |
-| PF-27-S06 | P0SEC-TN-10 | [pf-27-s06-windows-broker-and-launch.md](../../../docs/sprints/current/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md) (blocked on a Windows machine; P1 plan; tmux run and videos open) | [README.md](../../security-levels/sprints/PF-27-S06/README.md) | none yet (needs a Windows machine) |
+| PF-27-S06 | P0SEC-TN-10 | [pf-27-s06-windows-broker-and-launch.md](../../../docs/sprints/archive/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md) (completed (archived) 2026-10-08 in the P1 plan; accepted by Travis with known limits; gate rerun PR #312) | [README.md](../../security-levels/sprints/PF-27-S06/README.md) | [7](../../demos/index/PF-27-S06.md) |
 
 ## Not covered yet
 
 - Smaller security follow-up PRs (for example #199, #200, #202, #203, #209, #219, #220, #226, #230-#232) are not in
   any task; they are fixes outside the 20 core sprint records.
 - Milestone gates (code-blind VM run, human sign-off, flag removal) are not claimed by any task here.
-- PF-27-S06's GLM 5.2 tmux run, videos and limits acceptance are open and not claimed by P0SEC-TN-10.
+- PF-27-S06's real-Windows gate rerun, videos and limits acceptance (all done 2026-10-08) are not yet claimed by
+  P0SEC-TN-10. PF-27-S07 (archived 2026-10-08, PR #316) is not in any task.
 
 ## Evidence log
 

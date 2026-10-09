@@ -21,12 +21,6 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf13-s07-20261007"
     branch: "feat/pf-13-s07-qualification-20261007"
     base_commit: "64137b71894fb15fb9d6bf754dc69c41d4cb0406"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-27-s06-20261008"
-    branch: "sec/pf-27-s06-windows-broker"
-    base_commit: "7e6ef740ef1574d48c3caf2e84af82779c5b5969"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-27-s07-20261008"
-    branch: "sec/pf-27-s07-win-hardening"
-    base_commit: "ad96c55cb519e79d08da40c6513ead4c847b0866"
 ---
 
 # P1 security hardening
@@ -67,7 +61,8 @@ Open when P0 closed on 2026-10-08. Nothing here is done; each item names where i
 | PF-83 TUI bug: "Enable full access?" defaults to Cancel, no message when cancelled | P0 TUI lane | Message fix on main (`6c003827ad`); verify both parts on the next candidate |
 | PF-83 TUI bug: declined request renders "You canceled…" and "Ran … (no output)" | P0 TUI lane | Fix pf83-unran-18 on main; verify on the next candidate |
 | PF-83 TUI bug: `zai-anthropic` `glm-5.2` lacked a max-output limit | P0 TUI lane | Catalog fix on main (`fa4d24eafb`); verify on the next candidate |
-| PF-27-S06 unplaced follow-ups | PF-27-S06 | File tools other than patches under the Windows launch contract; elevated-sandbox profile reads (`~/.git-credentials`, `.ssh`, `.npmrc`, `.config/gh`) |
+| PF-27-S06 unplaced follow-ups | [PF-27-S06](../../sprints/archive/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md) (archived 2026-10-08) | File tools other than patches under the Windows launch contract; elevated-sandbox profile reads (`~/.git-credentials`, `.ssh`, `.npmrc`, `.config/gh`) |
+| PF-27-S06/S07 Windows follow-ups | [S06](../../sprints/archive/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md), [S07](../../sprints/archive/p1-security-hardening/pf-27-s07-windows-hardening-follow-ups.md) (archived 2026-10-08, accepted with known limits) | #300 decided fail closed, being implemented; #301/#304 decided rule-driven removal, draft PR #326; #323 open; #307 and #320 fixed (PRs #321, #327); PF-27-S08/S09 planned |
 
 ## User pain
 
@@ -108,11 +103,11 @@ unbuilt controls read "not available".
 | Owner | Worktree | Branch | Base commit | Scope |
 | --- | --- | --- | --- | --- |
 | Jim Ricketts (qualification lane) | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf13-s07-20261007` | `feat/pf-13-s07-qualification-20261007` | `64137b71894f` | PF-13-S07 (`ready`) |
-| Windows-host gate owner | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf-27-s06-20261008` (removed; reallocate on the Windows host) | `sec/pf-27-s06-windows-broker` | `7e6ef740ef15` | PF-27-S06 (`blocked` on a Windows machine) |
-| broker lane worker | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf-27-s07-20261008` | `sec/pf-27-s07-win-hardening` | `ad96c55cb519` | PF-27-S07, then PF-27-S08/S09 |
+| Windows-host gate owner | released | released | released | PF-27-S06 completed and archived 2026-10-08 |
+| broker lane worker | released | released | released | PF-27-S07 completed and archived 2026-10-08 |
 | broker lane (unassigned) | UNALLOCATED | UNALLOCATED | UNALLOCATED | PF-27-S08, PF-27-S09 (drafts; need a real Windows machine) |
 
-Lanes: **broker** (Windows hardening PF-27-S07 → S08 → S09), **windows-host** (PF-27-S06's remaining gate),
+Lanes: **broker** (Windows hardening PF-27-S08 → S09; S07 archived), **windows-host** (real-Windows gate runs; free),
 **qualification** (PF-13-S07 and the milestone runs). Lanes and coordinates are revised by the integration owner
 as work starts; each executable record's coordinates must appear in front matter.
 
@@ -153,8 +148,8 @@ archived except PF-13-S07, which now lives here.
 | ---: | --- | --- | --- |
 | 20 | [PF-35-S01](../../sprints/current/p1-security-hardening/pf-35-s01-classifier-corpus-and-evaluation.md) | Classifier corpus and leakage-free evaluation | PF-34-S04 |
 | 21 | [PF-35-S02](../../sprints/current/p1-security-hardening/pf-35-s02-local-cpu-detector-artifact.md) | Reproducible local CPU detector artifact | PF-35-S01 |
-| 42 | [PF-27-S06](../../sprints/current/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md) | Windows broker and secretless launch | PF-27-S02 |
-| 43 | [PF-27-S07](../../sprints/current/p1-security-hardening/pf-27-s07-windows-hardening-follow-ups.md) | Windows hardening follow-ups: new threads protected at creation, `CODEX_HOME` deny removed on flag-off | PF-27-S06 |
+| 42 | [PF-27-S06](../../sprints/archive/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md) | Windows broker and secretless launch (completed and archived 2026-10-08; accepted with known limits; PR #312) | PF-27-S02 |
+| 43 | [PF-27-S07](../../sprints/archive/p1-security-hardening/pf-27-s07-windows-hardening-follow-ups.md) | Windows hardening follow-ups: new threads protected at creation, `CODEX_HOME` deny removed on flag-off (completed and archived 2026-10-08; accepted with known limits; PR #316) | PF-27-S06 |
 | 44 | [PF-27-S08](../../sprints/current/p1-security-hardening/pf-27-s08-windows-broker-restricted-token.md) | Windows broker confined by its own restricted token or AppContainer | PF-27-S07 |
 | 45 | [PF-27-S09](../../sprints/current/p1-security-hardening/pf-27-s09-windows-model-client-auth.md) | Windows model-client auth through the broker | PF-27-S05, PF-27-S07 |
 | 46 | [PF-31-S01](../../sprints/current/p1-security-hardening/pf-31-s01-pinned-retriever-isolation.md) | Pinned retriever artifact and sandbox | PF-33-S02, PF-27-S02, PF-31-S04 |
@@ -220,7 +215,7 @@ PF-35's qualification baseline, carried from the P0 plan. Changing a target need
 ## Implementation sequence
 
 1. Qualification lane: Aggressive milestone (code-blind run, sign-off), then PF-13-S07 archive; Moderate milestone.
-2. Broker lane in parallel: PF-27-S07 → S08 → S09; PF-27-S06's gate when a Windows machine exists.
+2. Broker lane in parallel: PF-27-S08 → S09 (PF-27-S06 and S07 completed 2026-10-08).
 3. The deferred features in the map order above, each under the per-sprint gate.
 4. Flag removal milestone, then PF-26-S04 → S02 → S03.
 
@@ -263,7 +258,7 @@ milestone, citing **P0 `/security` levels**.
 
 | Item | State |
 | --- | --- |
-| Windows machine for PF-27-S06 (and later S08/S09) gates | Needed; requirements in the [PF-27-S06 evidence](../../../qa/security-levels/sprints/PF-27-S06/README.md#windows-machine-needed-for-the-remaining-gate) |
+| Windows machine for PF-27-S08/S09 gates | Used for the PF-27-S06/S07 gates (2026-10-08); requirements in the [PF-27-S06 evidence](../../../qa/security-levels/sprints/PF-27-S06/README.md#windows-machine-needed-for-the-remaining-gate) |
 | Target release and deadline | Not set; Travis to decide |
 | PF-28-S02 latency targets | Need product authority |
 | External inputs | Login origin and test account (PF-37); hosted vendor and data terms (PF-36); corpus, licences and hardware pins (PF-35) |
