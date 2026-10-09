@@ -24,9 +24,18 @@ tests; three live speech modes, ASR, host/origin checks, idle unload and install
 bridge lifecycle. Full artifacts remain at
 `/Users/Neo/Documents/llmEncryption/breeze-bossa-migration-20261009/`.
 
-Only the Breeze patch and its test/record are staged; existing AuK, ComfyUI and
-other working-copy changes are excluded. Publish with the existing locked,
-committed-source workflow, which retains canonical committed manager state
-and never publishes unrelated uncommitted files. Verify actual served Breeze
+Only the Breeze patch and its tests/record are included; existing AuK, ComfyUI and
+other working-copy changes are excluded. The usual receiving checkout proved
+detached at origin/main, so preserve its state. Publish an isolated branch
+`codex/breeze-facilities-20261009` based on the exact prior live commit
+`24a57e38c4572928d4a618bc9b4624528ac29677` through the existing locked,
+committed-source workflow. This keeps unrelated manager content unchanged.
+The manager's later integration should retain these Breeze changes before
+returning publication to its usual branch. The existing sync wrapper is not
+reconfigured. Verify actual served Breeze
 link/label and read-only bridge status after publication. User listening/voice
 identity acceptance and a whole-product qualification are not claimed.
+
+Broader static-page suite initially found an old endpoint expectation; updated
+that expectation only. Default Python lacked markdown_it; use the existing
+publisher venv for the exact-source controller and static-page suite.

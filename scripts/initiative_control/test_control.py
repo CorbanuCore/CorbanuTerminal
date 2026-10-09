@@ -83,7 +83,7 @@ class ControlTests(unittest.TestCase):
     def test_facilities_page_indexes_all_machine_interfaces(self):
         with patch.object(socket, "create_connection", side_effect=AssertionError("static index must not probe services")):
             body = control.facilities()
-        for name, endpoint in (("Breeze TTS 2", "http://100.99.88.49:7868/"),
+        for name, endpoint in (("Breeze TTS 2", "http://100.116.44.7:7868/"),
                                ("ComfyUI", "http://100.99.88.49:8188/"),
                                ("YuE2 (YuE)", "http://100.99.88.49:7861/"),
                                ("YuE2 Real Audio", "http://100.99.88.49:7867/"),
