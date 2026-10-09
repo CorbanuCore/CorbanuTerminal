@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a120e1-c8d5-7f50-97fa-627b66a3f768"}
+{"type":"turn.started"}
+{"type":"error","message":"unexpected status 401 Unauthorized: 令牌已过期或验证不正确, url: https://open.bigmodel.cn/api/paas/v4/chat/completions"}
+{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized: 令牌已过期或验证不正确, url: https://open.bigmodel.cn/api/paas/v4/chat/completions"}}

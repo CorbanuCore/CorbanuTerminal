@@ -1,0 +1,4 @@
+Error loading config.toml: unknown variant `free`, expected one of `subscription`, `pay_per_use`, `local`
+in `model_providers.zai.billing`
+
+exit=1

@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"01a120da-5d51-7303-85e0-dbca383d7eb9"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_0","type":"command_execution","command":"/bin/bash -lc 'curl -sI https://example.com | head -1'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_0","type":"command_execution","command":"/bin/bash -lc 'curl -sI https://example.com | head -1'","aggregated_output":"HTTP/2 200 \r\n","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"HTTP/2 200"}}
+{"type":"turn.completed","usage":{"input_tokens":14626,"cached_input_tokens":12480,"cache_write_input_tokens":0,"output_tokens":74,"reasoning_output_tokens":21}}

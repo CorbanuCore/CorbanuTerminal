@@ -1,0 +1,55 @@
+$ /cost
+╭───────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)         │
+│                                       │
+│ model:     glm-5.2   /model to change │
+│ directory: ~/pf60-s05-indep/work/repo │
+╰───────────────────────────────────────╯
+
+  Use the shell tool to run: ls. Then reply with only the number of files listed.
+• 2
+  Cost — this conversation
+  Requested UTC day: 2026-10-09
+  Today (UTC) in this conversation:
+  • Z.AI · Z.AI GLM 5.2 — Pay per use. 2 requests, 12,979 tokens. Estimated cost: $0.004988 (rounded).
+  Other conversations on this day, not included above: 5 requests in 3 conversations.
+  • DeepSeek · DeepSeek V4.1 Flash (Direct) — Pay per use. 2 requests, 14,781 tokens. Estimated cost: $0.000316 (rounded).
+  • Z.AI Anthropic · Z.AI GLM 5.2 — Covered by your subscription (not billed per request). 1 request, 1+ tokens. Same work at API prices: not available.
+  • zaicoding · Z.AI GLM 5.2 — Covered by your subscription (not billed per request). 2 requests, 7,534 tokens. Same work at API prices: not available.
+  Other conversations' estimated cost: $0.000316 (rounded); subscription part — same work at API prices: not available.
+  To see those requests, open that conversation with /resume and run /cost there.
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Paid usage beyond a plan (usage credits, Extra Usage or extra credits you bought) isn't visible here and is never counted as spent; check your provider's
+  usage page.
+  Costs are estimates from published prices; DeepSeek and Z.AI don't report their charges — check their bills.
+  Select a provider below to see its requests.
+  —— Details ——
+  Estimated token cost for recorded attempts: $0.004988 (rounded)
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+  Day covered (UTC): [2026-10-09T00:00:00.000Z, 2026-10-10T00:00:00.000Z)
+  Read at: 2026-10-09T13:30:51.211Z; ledger current to: 2026-10-09T13:25:58.726Z (292485 ms behind)
+  Retention: request detail kept since 2026-07-11T13:30:51.211Z; daily totals kept since 2025-10-10; oldest recorded day in this conversation 2026-10-09
+  Known subtotal exact USD: 0.00498788
+  Input: 12,947
+  Noncached input (derived for inclusive input): not reported (2 attempts) — costed as input − cache read for 2 attempts, whose price charges nothing for
+  cache writes
+  Cache read: 11,648
+  Cache write: not reported (2 attempts) — free at the price of 2 attempts, so nothing was charged
+  Output: 32
+  Reasoning (subset, not separately billed): 21
+  Total (not separately billed): 12,979
+  Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+  Unknown parent population: 0 attempts, excluded from root total
+  —— Open ——
+  → Z.AI · Z.AI GLM 5.2 — estimated $0.004988 (rounded) (2 requests)
+  → Request 1 · Z.AI · Z.AI GLM 5.2 · estimated $0.003172 (rounded)
+  → Request 2 · Z.AI · Z.AI GLM 5.2 · estimated $0.001816 (rounded)
+  → Root's own attempts (2 attempts)
+  → Descendant attempts (none)
+  → Unknown provider/model attribution (none)
+  → Unknown parent population (none)
+  Refresh
+  Close

@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"01a120bd-ecf8-77b2-aaec-d1e7b37d1498"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Model metadata for `test-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues."}}
+{"type":"turn.started"}
+{"type":"error","message":"unexpected status 401 Unauthorized: {\"error\":\"API key is invalid or revoked\"}, url: https://api.corbanu.com/v1/chat/completions"}
+{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized: {\"error\":\"API key is invalid or revoked\"}, url: https://api.corbanu.com/v1/chat/completions"}}

@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a120a4-5810-7bc0-b9b2-0359d22e27b7"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"old ledger three"}}
+{"type":"turn.completed","usage":{"input_tokens":6415,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":7,"reasoning_output_tokens":4}}

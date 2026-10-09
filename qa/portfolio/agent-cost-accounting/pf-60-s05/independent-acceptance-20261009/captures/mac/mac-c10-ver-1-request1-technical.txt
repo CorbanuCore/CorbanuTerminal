@@ -1,0 +1,65 @@
+$
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     vercel/moonshotai/kimi-k3   /model to change  │
+│ directory: <corbanu-root>/tmp/…/work/repo │
+╰──────────────────────────────────────────────────────────╯
+
+  Reply with exactly: first
+• first
+  Attempt, components and original price
+  Requested UTC day: 2026-10-09
+  Provider: Vercel
+  Model: Vercel Kimi K3
+  Billing: Pay per use
+  Estimated cost: at least $0.000540 (1 attempt had incomplete usage)
+  Next step for requests with incomplete usage: check the bill from Vercel. Their provider did not report every token count, so the estimate is missing or
+  only a lower bound.
+  Billed by provider: $0.037207
+  Tokens: 12,225 tokens
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  —— Details ——
+  Billed cost: $0.037207 — as stated by the provider with each response
+  Request: 7587cc7b-97e3-4432-a641-7b24db1b3ef5
+  Attempt: 6f3fe4fc-6e6b-4b44-9836-591ea2a3e48f
+  Thread: 01a120eb-0910-7601-8a60-6d9c8b0fe3b3
+  Turn: 01a120eb-0ab3-7b13-9c7b-90a9836c7203
+  Provider: vercel
+  Model: vercel/moonshotai/kimi-k3
+  Opaque scope: 178d4a2b-152f-4b4e-8b8f-7e2464b35804
+  Arithmetic dialect: Inclusive
+  Admission time: 2026-10-09T13:47:17.244Z
+  Retry predecessor: none
+  Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+  Known estimated token cost: $0.000540 + unknown costs
+  Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
+  Billing basis: pay per use
+  Input: 12189
+  Noncached input (derived for inclusive input): unknown — no retained numeric evidence
+  Cache read: 0 (reported)
+  Cache write: unknown — no retained numeric evidence
+  Output: 36
+  Reasoning (subset, not separately billed): 22
+  Total (not separately billed): 12225
+  Noncached input cost: unknown — no retained numeric evidence
+  Cache read cost: $0.000000; exact USD 0
+  Cache write cost: unknown — no retained numeric evidence
+  Output cost: $0.000540; exact USD 0.00054
+  Known subtotal exact USD: 0.00054
+  Price ID: 488695ee-d224-4d45-bb3a-17c1d9bc5f4f
+  Price source: NativeCatalog; reference f67c3ed3-4f11-546a-a4b3-94e574c1ddd7
+  Price currency/unit: Usd / PerMillionTokens
+  Price observed/approved: 2026-10-09T13:47:17.244Z / 2026-10-09T13:47:17.244Z
+  Price effective interval: [2026-10-09T13:47:17.244Z, unbounded)
+  Noncached input rate: 3 USD per million tokens
+  Cache read rate: 0.3 USD per million tokens
+  Rate unavailable for Cache write
+  Output rate: 15 USD per million tokens
+  Evidence revision 24; source 0119844b-6e96-48f5-a9ba-7f836f42bafc; sequence 24; presence patch
+  {"input":12189,"read":0,"output":36,"reasoning":22,"total":12225,"billed_usd":"0.037207"}
+  Snapshot is not current; newer activity is unverified
+  Back
+  Refresh
+  Close
