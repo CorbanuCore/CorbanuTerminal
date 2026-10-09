@@ -13,7 +13,7 @@ One narrated video of the agent cost accounting work (`/cost`), edited from the 
   cards, one evidence card (the independent acceptance reconciliation), a side panel naming the sprint and criterion,
   highlights on the proving lines, and burned-in subtitles. Seeding is stated on each source clip's title card (cut
   from the reel) and in the narration where a seeded screen is highlighted.
-- Criteria: the [PF-60-S03 sprint record](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md)
+- Criteria: the [PF-60-S03 sprint record](../../../docs/sprints/archive/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md)
   and the [independent acceptance](../../portfolio/agent-cost-accounting/pf-60-s03/independent-acceptance-20261008/README.md)
   with its three re-runs. Clock-behind turns (criterion 15) are cited from re-run 3, not shown in a clip.
 - Not claimed: PF-60-S03's owner acceptance, and [PF-60-S05](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s05-collection-correctness-and-billing-basis.md)
