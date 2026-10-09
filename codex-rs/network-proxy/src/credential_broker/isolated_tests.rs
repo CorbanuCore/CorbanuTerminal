@@ -1562,14 +1562,26 @@ mod pf_27_s05 {
         );
         println!("PF27S05 memory hits_after={hits}");
         #[cfg(windows)]
-        if hits > 0 {
-            for (form, needle) in [("ascii", &masked), ("utf-16", &wide_masked)] {
-                for place in memory_scan_tests::locate_in_writable_memory(needle) {
-                    println!("PF27S09 left ({form}) at {place}");
-                }
-            }
-        }
-        assert_eq!(hits, 0, "the raw key is still in Core's memory");
+        let places: Vec<String> = if hits > 0 {
+            [("ascii", &masked), ("utf-16", &wide_masked)]
+                .into_iter()
+                .flat_map(|(form, needle)| {
+                    memory_scan_tests::locate_in_writable_memory(needle)
+                        .into_iter()
+                        .map(move |place| format!("({form}) {place}"))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        #[cfg(not(windows))]
+        let places: Vec<String> = Vec::new();
+        assert_eq!(
+            hits,
+            0,
+            "the raw key is still in Core's memory: {}",
+            places.join(" | ")
+        );
     }
 
     /// PF-27-S09: whether this process's environment block (what another
