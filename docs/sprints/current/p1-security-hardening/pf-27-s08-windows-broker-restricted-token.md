@@ -23,7 +23,7 @@ updated: 2026-10-08
 
 Third of the four PF-27-S06 limits Travis approved fixing (2026-10-08). On macOS and Linux the broker confines
 its own file writes (Seatbelt, Landlock); on Windows it only has the process DACL and a no-child-process job, so it
-can still write the user's files, open the user's other processes, and ask another process to run something
+can still write the user's files, open the user's other processes, or ask another process to run something
 (WMI, Task Scheduler, out-of-process COM). Allocated 2026-10-08 to the broker lane.
 
 ## Execution mandate
@@ -42,8 +42,7 @@ can still write the user's files, open the user's other processes, and ask anoth
 
 ## Code boundaries
 
-- `process-hardening/src/windows_protected_spawn.rs` (the token the broker starts with) and
-  `broker_containment.rs` (containment report `token+dacl+job`).
+- `process-hardening/src/windows_protected_spawn.rs` (broker token), `broker_containment.rs` (`token+dacl+job`).
 - `network-proxy/src/credential_broker/isolated/pipe.rs` and `server.rs`: pipe DACLs must admit the broker's token
   (AppContainer or restricting SID) and still only Core.
 - Stored keys: `arg0` stored-key reader, `secrets`/`keyring-store` on Windows (vault key in Credential Manager).
@@ -51,9 +50,8 @@ can still write the user's files, open the user's other processes, and ask anoth
 ## Preconditions
 
 - [x] PF-27-S07 merged; a real Windows machine (used 2026-10-09).
-- [ ] Product decision: how the vault key reaches the broker: (a) a one-shot user-token helper writes it into the
-  broker's control pipe; (b) Core sends it; (c) the broker reads Credential Manager itself. Measured: the broker
-  token can read it, so (c) ships unless Travis picks (a)/(b) (which need a stronger token; see the evidence).
+- [ ] Product decision: how the vault key reaches the broker: (a) one-shot helper, (b) Core sends it,
+  (c) broker reads Credential Manager itself. Measured: (c) works; (a)/(b) need a stronger token.
 
 ## Acceptance criteria
 
@@ -76,8 +74,8 @@ can still write the user's files, open the user's other processes, and ask anoth
 
 ## Decisions
 
-- Token: write-restricted, low-integrity restricted token, not an AppContainer; launch: the PF-27-S07 holder start
-  (a direct start was measured not to work as built). Reasons, measurements and limits: the evidence README.
+- Token: write-restricted, low-integrity restricted token, not an AppContainer; launch: the PF-27-S07 holder start.
+  Reasons, measurements and limits: the evidence README.
 - Key path: **open, for Travis.** The broker token can read Credential Manager (measured), so (c) is what ships.
 
 ## Done
