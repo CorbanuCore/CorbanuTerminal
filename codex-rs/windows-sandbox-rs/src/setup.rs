@@ -45,7 +45,7 @@ use windows_sys::Win32::Security::CheckTokenMembership;
 use windows_sys::Win32::Security::FreeSid;
 use windows_sys::Win32::Security::SECURITY_NT_AUTHORITY;
 
-pub const SETUP_VERSION: u32 = 5;
+pub const SETUP_VERSION: u32 = 6;
 pub const OFFLINE_USERNAME: &str = "CodexSandboxOffline";
 pub const ONLINE_USERNAME: &str = "CodexSandboxOnline";
 const ERROR_CANCELLED: u32 = 1223;
@@ -315,6 +315,10 @@ fn run_setup_refresh_inner(
         read_roots,
         write_roots,
         deny_read_paths: payload_deny_read_paths(overrides.deny_read.as_ref()),
+        deny_read_sessions: payload_deny_read_sessions(
+            overrides.deny_read.as_ref(),
+            request.codex_home,
+        ),
         deny_read: overrides.deny_read,
         deny_write_paths,
         proxy_ports: offline_proxy_settings.proxy_ports,
@@ -650,6 +654,9 @@ struct ElevationPayload {
     /// (a mismatched copy found on `PATH`): it still applies them.
     #[serde(default)]
     deny_read_paths: Vec<PathBuf>,
+    /// #323: the other live sessions the sync must not remove entries under.
+    #[serde(default)]
+    deny_read_sessions: crate::DenyReadSessions,
     #[serde(default)]
     deny_write_paths: Vec<PathBuf>,
     proxy_ports: Vec<u16>,
@@ -1034,6 +1041,10 @@ fn run_elevated_setup_inner(
         read_roots,
         write_roots,
         deny_read_paths: payload_deny_read_paths(overrides.deny_read.as_ref()),
+        deny_read_sessions: payload_deny_read_sessions(
+            overrides.deny_read.as_ref(),
+            request.codex_home,
+        ),
         deny_read: overrides.deny_read,
         deny_write_paths,
         proxy_ports: offline_proxy_settings.proxy_ports,
@@ -1049,7 +1060,20 @@ fn run_elevated_setup_inner(
             format!("failed to determine elevation state: {err}"),
         )
     })?;
-    run_setup_exe(&payload, needs_elevation, request.codex_home)
+    let rule_set = deny_read_rule_set(payload.deny_read.as_ref());
+    run_setup_exe(&payload, needs_elevation, request.codex_home)?;
+    // #323: the setup may just have created the session registry, which
+    // the payload's registration needed.
+    if rule_set.is_some_and(|rules| !rules.is_empty())
+        && let Err(err) =
+            crate::deny_read_sessions::register_this_process(crate::DENY_READ_SYNC_LOCK_WAIT)
+    {
+        log_note(
+            &format!("deny-read sessions: not registered after setup: {err:#}"),
+            Some(&sbx_dir),
+        );
+    }
+    Ok(())
 }
 
 pub fn run_elevated_provisioning_setup(
@@ -1085,6 +1109,7 @@ pub fn run_elevated_provisioning_setup(
         write_roots: Vec::new(),
         deny_read: None,
         deny_read_paths: Vec::new(),
+        deny_read_sessions: crate::DenyReadSessions::default(),
         deny_write_paths: Vec::new(),
         proxy_ports: settings.proxy_ports,
         allow_local_binding: settings.allow_local_binding,
@@ -1153,6 +1178,30 @@ fn build_payload_deny_write_paths(
         .collect();
     deny_write_paths.extend(allow_deny_paths.deny);
     deny_write_paths
+}
+
+/// #323: a launch with deny-read rules registers this process as a session
+/// that relies on their entries before its sync runs.
+fn payload_deny_read_sessions(
+    deny_read: Option<&crate::DenyReadTargets>,
+    codex_home: &Path,
+) -> crate::DenyReadSessions {
+    crate::DenyReadSessions::for_this_process(
+        deny_read_rule_set(deny_read),
+        Some(&sandbox_dir(codex_home)),
+    )
+}
+
+/// The launch's deny-read rules (not the paths they match now), empty for
+/// none; `None` when its sync doesn't run.
+pub(crate) fn deny_read_rule_set(deny_read: Option<&crate::DenyReadTargets>) -> Option<String> {
+    let mut keys = deny_read?
+        .rules()
+        .iter()
+        .map(|targets| targets.rule.key())
+        .collect::<Vec<_>>();
+    keys.sort();
+    Some(keys.join("\n"))
 }
 
 fn payload_deny_read_paths(deny_read: Option<&crate::DenyReadTargets>) -> Vec<PathBuf> {

@@ -4,6 +4,8 @@ use crate::acl::file_link_count;
 use crate::acl::remove_deny_read_ace;
 use crate::deny_read_acl::apply_deny_read_acls_tracked;
 use crate::deny_read_acl::lexical_path_key;
+use crate::deny_read_sessions::DenyReadSessions;
+use crate::deny_read_sessions::lock_out_other_sessions;
 use crate::deny_read_targets::DenyReadTargets;
 use crate::setup::sandbox_secrets_dir;
 use anyhow::Context;
@@ -72,6 +74,14 @@ struct OwnedDenyRead {
 /// session's launch (with the flag off) does not list. Stale entries stay
 /// recorded and are removed by the first sync after no contract is armed.
 ///
+/// #323: the same holds across `CODEX_HOME`s, armed or not: no entry is
+/// removed while a session other than `sessions.own` is registered in
+/// `sessions.registry` (see [`crate::deny_read_sessions`]), since its
+/// commands may rely on an entry this home added and it found there.
+/// `sessions` is `None` for entries on a principal only this `CODEX_HOME`
+/// uses (the unelevated sandbox's capability SIDs), which no other home's
+/// sessions rely on.
+///
 /// # Safety
 /// Caller must pass a valid SID pointer matching `principal_sid`.
 pub unsafe fn sync_persistent_deny_read_acls(
@@ -79,6 +89,7 @@ pub unsafe fn sync_persistent_deny_read_acls(
     principal_sid: &str,
     targets: Option<&DenyReadTargets>,
     psid: *mut c_void,
+    sessions: Option<&DenyReadSessions>,
 ) -> Result<Vec<PathBuf>> {
     let Some(targets) = targets else {
         return Ok(Vec::new());
@@ -173,11 +184,18 @@ pub unsafe fn sync_persistent_deny_read_acls(
         }
     }
 
-    // Held until the state is stored: no process can arm meanwhile.
+    // Held until the state is stored: no session can register, and no
+    // process can arm, meanwhile.
     let lock = if stale.is_empty() || applied_result.is_err() {
         None
     } else {
-        lock_out_armed_contracts(codex_home, psid)
+        let other_sessions = match sessions {
+            Some(sessions) => lock_out_other_sessions(sessions).map(Some),
+            None => Some(None),
+        };
+        other_sessions.and_then(|sessions| {
+            lock_out_armed_contracts(codex_home, psid).map(|home| (sessions, home))
+        })
     };
     if lock.is_none() {
         recorded.extend(stale);
