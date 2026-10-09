@@ -1,0 +1,82 @@
+r1-t1            2026-10-09T18:53:38.071 resp_096f5c6d623c4d5a016ac93831ff2887d responses  in=  9594 cached=     0 write=     0 out=   0 tier=auto usd=0.0019188
+r1-t1            2026-10-09T18:53:39.213 resp_096f5c6d623c4d5a016ac938326f2887d responses  in= 17340 cached=     0 write= 17337 out=   5 tier=default usd=0.00434085
+TOTAL r1-t1: requests=2 input=26934 cached=0 output=5 tokens=26939 usd=0.00625965
+r6a-image        2026-10-09T19:10:11.177 resp_0213f3ff932b1d79016ac93c13029c87d responses  in= 10094 cached=     0 write=     0 out=   0 tier=auto usd=0.0020188
+r6a-image        2026-10-09T19:10:13.269 resp_0213f3ff932b1d79016ac93c1397e887d responses  in= 18114 cached=     0 write= 18111 out=  70 tier=default usd=0.00461235
+r6a-image        2026-10-09T19:10:16.597 resp_0213f3ff932b1d79016ac93c15762c87d responses  in= 18239 cached= 18111 write=   125 out= 134 tier=default usd=0.00055487
+r6a-image        2026-10-09T19:10:20.275 resp_0213f3ff932b1d79016ac93c18d43887d responses  in= 18428 cached= 18236 write=   189 out= 275 tier=default usd=0.00074257
+r6a-image        2026-10-09T19:10:22.294 resp_0213f3ff932b1d79016ac93c1c75f887d responses  in= 18758 cached= 18425 write=   330 out= 109 tier=default usd=0.0005824
+TOTAL r6a-image: requests=5 input=83633 cached=54772 output=588 tokens=84221 usd=0.00851099
+r6a-image2       2026-10-09T19:12:34.756 resp_0018f641a4977434016ac93ca29dd087d responses  in= 10094 cached=     0 write=     0 out=   0 tier=auto usd=0.0020188
+r6a-image2       2026-10-09T19:12:36.875 resp_0018f641a4977434016ac93ca32b4c87d responses  in= 18114 cached=     0 write= 18111 out=  70 tier=default usd=0.00461235
+r6a-image2       2026-10-09T19:12:38.803 resp_0018f641a4977434016ac93ca527dc87d responses  in= 18787 cached= 18111 write=   673 out=  78 tier=default usd=0.00062467
+r6a-image2       2026-10-09T19:12:40.800 resp_0018f641a4977434016ac93ca6fffc87d responses  in= 21831 cached= 18784 write=  3044 out= 120 tier=default usd=0.00128128
+r6a-image2       2026-10-09T19:12:44.019 resp_0018f641a4977434016ac93ca90c4487d responses  in= 23332 cached= 21828 write=  1501 out= 190 tier=default usd=0.00104041
+r6a-image2       2026-10-09T19:12:45.819 resp_0018f641a4977434016ac93cac420487d responses  in= 23555 cached= 23329 write=   223 out= 142 tier=default usd=0.00069333
+r6a-image2       2026-10-09T19:12:47.990 resp_0018f641a4977434016ac93cae215487d responses  in= 23812 cached= 23552 write=   257 out= 141 tier=default usd=0.00070509
+r6a-image2       2026-10-09T19:12:49.827 resp_0018f641a4977434016ac93cb0554c87d responses  in= 24208 cached= 23809 write=   396 out= 133 tier=default usd=0.00073538
+r6a-image2       2026-10-09T19:12:52.780 resp_0018f641a4977434016ac93cb21e6c87d responses  in= 24379 cached= 24205 write=   171 out= 162 tier=default usd=0.00072185
+r6a-image2       2026-10-09T19:12:56.205 resp_0018f641a4977434016ac93cb4fc6c87d responses  in= 24564 cached= 24376 write=   185 out= 299 tier=default usd=0.00089317
+r6a-image2       2026-10-09T19:12:57.294 resp_0018f641a4977434016ac93cb8bef487d responses  in= 24913 cached= 24561 write=   349 out=   5 tier=default usd=0.00058507
+TOTAL r6a-image2: requests=11 input=237589 cached=202555 output=1340 tokens=238929 usd=0.0139114
+probe-tools      2026-10-09T19:13:28.638 resp_0315f7a6c5dc79c0016ac93cd835d487d responses  in=  9594 cached=     0 write=     0 out=   0 tier=auto usd=0.0019188
+probe-tools      2026-10-09T19:13:29.545 resp_0315f7a6c5dc79c0016ac93cd9029487d responses  in= 17340 cached=     0 write= 17337 out=   5 tier=default usd=0.00434085
+TOTAL probe-tools: requests=2 input=26934 cached=0 output=5 tokens=26939 usd=0.00625965
+GRAND: requests=20 tokens=377028 usd=0.03494169
+r5-prio          2026-10-09T18:58:55.769 resp_0812146f9c62f294016ac9396fa99487d responses  in=  9598 cached=     0 write=     0 out=   0 tier=priority usd=0.0038392
+r5-prio          2026-10-09T18:58:56.828 resp_0812146f9c62f294016ac93970217887d responses  in= 17343 cached=     0 write= 17340 out=   5 tier=priority usd=0.0086832
+TOTAL r5-prio: requests=2 input=26941 cached=0 output=5 tokens=26946 usd=0.0125224
+GRAND: requests=2 tokens=26946 usd=0.0125224
+r3-mini          2026-10-09T18:57:22.739 resp_0902375e070eb985016ac9391288a487d responses  in=  8618 cached=     0 write=     0 out=   0 tier=auto usd=0.0064635
+r3-mini          2026-10-09T18:57:24.117 resp_0902375e070eb985016ac939131e7887d responses  in= 14118 cached=     0 write=     0 out=  18 tier=default usd=0.0106695
+TOTAL r3-mini: requests=2 input=22736 cached=0 output=18 tokens=22754 usd=0.017133
+r3-oaicustom     2026-10-09T18:57:27.166 resp_0bddd05b6c35f158016ac93916069087d responses  in= 14118 cached=     0 write=     0 out=  15 tier=default usd=0.010656
+TOTAL r3-oaicustom: requests=1 input=14118 cached=0 output=15 tokens=14133 usd=0.010656
+probe-tools2     2026-10-09T19:13:37.974 resp_054a961554efb18c016ac93ce1ded887d responses  in=  8618 cached=     0 write=     0 out=   0 tier=auto usd=0.0064635
+probe-tools2     2026-10-09T19:13:40.119 resp_054a961554efb18c016ac93ce2580087d responses  in= 14119 cached=     0 write=     0 out=  15 tier=default usd=0.01065675
+TOTAL probe-tools2: requests=2 input=22737 cached=0 output=15 tokens=22752 usd=0.01712025
+r7-search-base   2026-10-09T19:14:00.077 resp_010fe6c9a2944c15016ac93cf802d487d responses  in=  8618 cached=     0 write=     0 out=   0 tier=auto usd=0.0064635
+r7-search-base   2026-10-09T19:14:05.285 resp_010fe6c9a2944c15016ac93cf878e887d responses  in= 18340 cached=     0 write=     0 out= 108 tier=default usd=0.014241
+TOTAL r7-search-base: requests=2 input=26958 cached=0 output=108 tokens=27066 usd=0.0207045
+r7-sws-base      2026-10-09T19:14:15.232 resp_0ad189d7b8746671016ac93d07231487d responses  in=  6586 cached=     0 write=     0 out=   0 tier=auto usd=0.0049395
+r7-sws-base      2026-10-09T19:14:16.419 resp_0ad189d7b8746671016ac93d07a4a087d responses  in= 12108 cached=     0 write=     0 out=  74 tier=default usd=0.009414
+r7-sws-base      2026-10-09T19:14:18.069 resp_0ad189d7b8746671016ac93d09af2c87d responses  in= 16110 cached= 11776 write=     0 out=  31 tier=default usd=0.0042732
+TOTAL r7-sws-base: requests=3 input=34804 cached=11776 output=105 tokens=34909 usd=0.0186267
+r7-search-inj    2026-10-09T19:16:06.132 resp_02b5fb6f15b77463016ac93d75cc1887d responses  in=  8618 cached=     0 write=     0 out=   0 tier=auto usd=0.0064635
+r7-search-inj    2026-10-09T19:16:10.227 resp_02b5fb6f15b77463016ac93d7682ac87d responses  in= 18306 cached=     0 write=     0 out=  78 tier=default usd=0.0140805
+TOTAL r7-search-inj: requests=2 input=26924 cached=0 output=78 tokens=27002 usd=0.020544
+r7-sws-inj       2026-10-09T19:16:12.541 resp_08c759069d990c44016ac93d7c52c887d responses  in=  6586 cached=     0 write=     0 out=   0 tier=auto usd=0.0049395
+r7-sws-inj       2026-10-09T19:16:14.837 resp_08c759069d990c44016ac93d7d052887d responses  in= 12112 cached=     0 write=     0 out=  69 tier=default usd=0.0093945
+r7-sws-inj       2026-10-09T19:16:17.489 resp_08c759069d990c44016ac93d802d5087d responses  in= 16196 cached= 11776 write=     0 out=  17 tier=default usd=0.0042747
+TOTAL r7-sws-inj: requests=3 input=34894 cached=11776 output=86 tokens=34980 usd=0.0186087
+r7-sws-post      2026-10-09T19:16:34.313 resp_00f1e9c9f5bdacd6016ac93d92351087d responses  in=  6586 cached=     0 write=     0 out=   0 tier=auto usd=0.0049395
+r7-sws-post      2026-10-09T19:16:35.459 resp_00f1e9c9f5bdacd6016ac93d92bbe487d responses  in= 12108 cached=     0 write=     0 out=  69 tier=default usd=0.0093915
+r7-sws-post      2026-10-09T19:16:37.051 resp_00f1e9c9f5bdacd6016ac93d94af8487d responses  in= 16150 cached= 11776 write=     0 out=   7 tier=default usd=0.0041952
+TOTAL r7-sws-post: requests=3 input=34844 cached=11776 output=76 tokens=34920 usd=0.0185262
+GRAND: requests=18 tokens=218516 usd=0.14191935
+r3-6luna         2026-10-09T18:58:15.678 resp_082d3928175a3ebf016ac93947924087d responses  in= 13691 cached=     0 write=     0 out=   0 tier=auto usd=0.0013691
+r3-6luna         2026-10-09T18:58:17.367 resp_082d3928175a3ebf016ac93948187c87d responses  in= 21784 cached=     0 write= 21781 out=   5 tier=default usd=0.002725425
+TOTAL r3-6luna: requests=2 input=35475 cached=0 output=5 tokens=35480 usd=0.004094525
+GRAND: requests=2 tokens=35480 usd=0.004094525
+r3-52            2026-10-09T18:58:19.165 resp_0febbe5fe2136576016ac9394b06e487d responses  in= 10522 cached=     0 write=     0 out=   0 tier=auto usd=0.0184135
+r3-52            2026-10-09T18:58:20.444 resp_0febbe5fe2136576016ac9394b87ac87d responses  in= 16022 cached=     0 write=     0 out=   5 tier=default usd=0.0281085
+TOTAL r3-52: requests=2 input=26544 cached=0 output=5 tokens=26549 usd=0.046522
+GRAND: requests=2 tokens=26549 usd=0.046522
+r3-terra         2026-10-09T18:59:04.929 resp_0276be3de7591402016ac93978d90c87d responses  in=  9594 cached=     0 write=     0 out=   0 tier=auto usd=0.019188
+r3-terra         2026-10-09T18:59:05.964 resp_0276be3de7591402016ac93979532087d responses  in= 17339 cached=     0 write= 17336 out=   5 tier=default usd=0.043406
+TOTAL r3-terra: requests=2 input=26933 cached=0 output=5 tokens=26938 usd=0.062594
+GRAND: requests=2 tokens=26938 usd=0.062594
+r8-t1            2026-10-09T19:27:29.394 resp_08dcc03f7d6aea97016ac94021499087d responses  in=  8618 cached=     0 write=     0 out=   0 tier=auto usd=0.0064635
+r8-t1            2026-10-09T19:27:30.763 resp_08dcc03f7d6aea97016ac94021cd1c87d responses  in= 14134 cached=     0 write=     0 out= 125 tier=default usd=0.011163
+r8-t1            2026-10-09T19:27:31.243 resp_08dcc03f7d6aea97016ac94023021c87d responses  in= 14330 cached= 14208 write=     0 out=   5 tier=default usd=0.0011796
+TOTAL r8-t1: requests=3 input=37082 cached=14208 output=130 tokens=37212 usd=0.0188061
+r8-t2-readonly   2026-10-09T19:27:41.030 resp_058ce0944ba55ee3016ac9402cf1e487d responses  in=  8618 cached=     0 write=     0 out=   0 tier=auto usd=0.0064635
+r8-t2-readonly   2026-10-09T19:27:42.490 resp_058ce0944ba55ee3016ac9402d626887d responses  in= 14330 cached= 13696 write=     0 out= 106 tier=default usd=0.0019797
+r8-t2-readonly   2026-10-09T19:27:43.873 resp_058ce0944ba55ee3016ac9402ec33487d responses  in= 14502 cached= 14208 write=     0 out= 237 tier=default usd=0.0023526
+r8-t2-readonly   2026-10-09T19:27:44.422 resp_058ce0944ba55ee3016ac94030175887d responses  in= 14394 cached=  8576 write=     0 out=   6 tier=default usd=0.0050337
+TOTAL r8-t2-readonly: requests=4 input=51844 cached=36480 output=349 tokens=52193 usd=0.0158295
+r8-t3-busy       2026-10-09T19:28:56.514 resp_058ce0944ba55ee3016ac940772b5c87d responses  in= 14421 cached= 14208 write=     0 out= 140 tier=default usd=0.00185535
+r8-t3-busy       2026-10-09T19:29:29.324 resp_058ce0944ba55ee3016ac94097babc87d responses  in= 14630 cached= 14208 write=     0 out= 291 tier=default usd=0.0026916
+r8-t3-busy       2026-10-09T19:30:09.631 resp_058ce0944ba55ee3016ac940c0d98887d responses  in= 14467 cached=  8576 write=     0 out=  17 tier=default usd=0.00513795
+TOTAL r8-t3-busy: requests=3 input=43518 cached=36992 output=448 tokens=43966 usd=0.0096849
+GRAND: requests=10 tokens=133371 usd=0.0443205

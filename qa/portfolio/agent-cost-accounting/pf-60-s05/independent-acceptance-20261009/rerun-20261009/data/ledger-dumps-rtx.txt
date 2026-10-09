@@ -1,0 +1,12 @@
+### h-r4
+format: [1]
+1791572663615 claude-plan claude-fable-5-1-plan thread=01a1220d-5ca1 turn=01a1220d-5cb5-70f0-be51- {"rates":{"noncached":"10","read":"0.25","write":"20","output":"50"},"source_kind":"NativeCatalog","basis":"PlanEquivalent","plan_burn_millis":2000} obs={"revision":6,"source":"3ab2f018-c525-469e-93e1-f74ab0f290cd","sequence":6,"patch":{"input":4,"read":0,"write":8347,"output":4}}
+### h-r4p
+format: [1]
+1791572927992 claude-plan claude-opus-5-5 thread=01a1220f-12c1 turn=pane:f4a5dced-50ba-4aaf- {"rates":{"noncached":null,"read":null,"write":null,"output":null},"source_kind":"NativeCatalog","basis":"PlanEquivalent","plan_burn_millis":null} obs={"revision":1,"source":"20e587e3-1942-4769-a0cb-54c9a2ffc005","sequence":1,"patch":{"input":2,"read":0,"write":26035,"output":4}}
+### h-lx
+format: [1]
+1791573420845 openai gpt-5.6-luna thread=01a12218-e706 turn=prewarm:adc53f7e-df29-46 {"rates":{"noncached":"1","read":"0.1","write":null,"output":"6"},"source_kind":"NativeCatalog","basis":"Billed","plan_burn_millis":null} obs={"revision":3,"source":"98fb474b-ab92-454a-969e-5b2b2970ee34","sequence":3,"patch":{"input":9594,"read":0,"write":0,"output":0,"reasoning":0,"total":9594}}
+1791573421164 openai gpt-5.6-luna thread=01a12218-e706 turn=01a12218-e719-7a61-98fe- {"rates":{"noncached":"1","read":"0.1","write":null,"output":"6"},"source_kind":"NativeCatalog","basis":"Billed","plan_burn_millis":null} obs={"revision":9,"source":"6c4063c1-560c-4ccc-b2e2-9fcfcbb994c4","sequence":9,"patch":{"input":11526,"read":0,"write":11523,"output":5,"reasoning":0,"total":11531}}
+1791573423527 kimi-code k3 thread=01a12218-f530 turn=01a12218-f558-7af0-8b6d- {"rates":{"noncached":null,"read":null,"write":null,"output":null},"source_kind":"NativeCatalog","basis":"PlanEquivalent","plan_burn_millis":null} obs={"revision":11,"source":"9d7f1647-e34e-4499-815c-c8c513a7b7f7","sequence":11,"patch":{"input":6073,"read":1024,"output":32,"reasoning":15,"total":6105}}
+1791573427641 kimi-code k3 thread=01a12218-f530 turn=assess:01a12218-f558-7af {"rates":{"noncached":null,"read":null,"write":null,"output":null},"source_kind":"NativeCatalog","basis":"PlanEquivalent","plan_burn_millis":null} obs={"revision":67,"source":"d6c7e0c1-b235-4145-b0fb-aa6620d76d18","sequence":67,"patch":{"input":343,"read":343,"output":79,"reasoning":41,"total":422}}

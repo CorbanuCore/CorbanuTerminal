@@ -1,0 +1,57 @@
+$ /cost
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     k3 low   /model to change                     │
+│ directory: <corbanu-root>/tmp/…/work/repo │
+╰──────────────────────────────────────────────────────────╯
+
+  Reply with exactly the word: ok
+• ok
+  Cost — this conversation
+  Requested UTC day: 2026-10-09
+  Today (UTC) in this conversation:
+  • Kimi Code · Kimi Code K3 — Covered by your subscription (not billed per request). 2 requests, 10,428 tokens. Same work at API prices: not available.
+  Other conversations on this day, not included above: 2 requests in 1 conversation.
+  • OpenAI · GPT-5.6-Luna — Pay per use. 2 requests, 26,939 tokens. Estimated cost: at least $0.009627 (1 attempt had no price).
+  Other conversations' estimated cost: at least $0.009627 (1 attempt had no price).
+  To see those requests, open that conversation with /resume and run /cost there.
+  Next step for requests priced only in part: check the bill from OpenAI. Some of their tokens have no published price, so the estimate is only a lower
+  bound.
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Paid usage beyond a plan (usage credits, Extra Usage or extra credits you bought) isn't visible here and is never counted as spent; check your provider's
+  usage page.
+  Costs are estimates from published prices; OpenAI doesn't report its charges — check OpenAI's bill.
+  Select a provider below to see its requests.
+  —— Details ——
+  No recorded attempt here was billed per token.
+  Subscription capacity: 2 of 2 attempts, not billed per token
+  Plan consumption: unavailable — no plan rate or token total for 2 of 2 plan attempts
+  Same tokens at API rates: unavailable — the catalogue states no API price for 2 of 2 plan attempts
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+  Day covered (UTC): [2026-10-09T00:00:00.000Z, 2026-10-10T00:00:00.000Z)
+  Read at: 2026-10-09T18:56:27.885Z; ledger current to: 2026-10-09T18:55:57.830Z (30055 ms behind)
+  Retention: request detail kept since 2026-07-11T18:56:27.885Z; daily totals kept since 2025-10-10; oldest recorded day in this conversation 2026-10-09
+  Known subtotal exact USD: none — subscription work is not billed per token
+  Input: 10,307
+  Noncached input (derived for inclusive input): not reported (2 attempts)
+  Cache read: 1,024 + not reported by 1 attempt
+  Cache write: not reported (2 attempts)
+  Output: 121
+  Reasoning (subset, not separately billed): 72
+  Total (not separately billed): 10,428
+  Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+  Unknown parent population: 0 attempts, excluded from root total
+  —— Open ——
+  → Kimi Code · Kimi Code K3 — covered by subscription (2 requests)
+  → Request 1 · Kimi Code · Kimi Code K3 · covered by subscription
+  → Request 2 · Kimi Code · Kimi Code K3 · covered by subscription
+  → Root's own attempts (2 attempts)
+  → Descendant attempts (none)
+  → Unknown provider/model attribution (none)
+  → Unknown parent population (none)
+  Refresh
+  Close
