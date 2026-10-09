@@ -1,0 +1,29 @@
+# Build receipts (rerun3, 2026-10-08)
+gh pr view 322 --json state  -> polled every 5 min from 21:49Z; MERGED at 2026-10-08T22:34:10Z, merge commit ccc38bfc030122cc33ac84241e9be4c2987ef806
+origin/main at build time: ccc38bfc030122cc33ac84241e9be4c2987ef806  (Merge pull request #322 from CorbanuCore/acct-fix-308-delete-clock)
+PR #318 merge 290bb285324ede4010d144692423f02d8433b6a4 ancestor-of-HEAD exit=0
+PR #322 merge ccc38bfc030122cc33ac84241e9be4c2987ef806 ancestor-of-HEAD exit=0
+
+## macOS (26.6.2 arm64), rustc rustc 1.95.0 (59807616e 2026-04-14)
+developer-accounting: tools/build-mac.sh  ->  cargo build --locked -j8 -p codex-cli --bin corbanu --features codex-core/developer-accounting,codex-tui/developer-accounting
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 54s
+default: tools/build-mac.sh default  ->  cargo build --locked -j8 -p codex-cli --bin corbanu
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 37s
+target dir: <corbanu-root>/.codex-work/targets/pf60-s03-indep-rerun3-20261008 (new); each binary copied to <scratch>/bin after its build
+d0d0f32d58efcb5b9c8e7a7996fb8844b32d03e04f957c0f369d3c2194944e7c  <scratch>/bin/corbanu-acct
+43fa46c3b66d24b230c857aa2152657a212da2e53dbb338f0ce836b98c29af5c  <scratch>/bin/corbanu-default
+corbanu 0.1.48
+corbanu 0.1.48
+
+## Linux (RTX box)
+Linux 6.8.0-138-generic x86_64
+rustc 1.95.0 (59807616e 2026-04-14)
+fresh clone, checked out ccc38bfc030122cc33ac84241e9be4c2987ef806
+libfaketime wolfcw/libfaketime e8d8c85, make (default target) -> src/libfaketime-time64.so.1
+acct: build-rtx.sh acct
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 40.22s
+default: build-rtx.sh default (built, not used: the default-build checks ran on macOS)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2m 17s
+95f075974ed90304fca6db627fc03d05d62e010fd15172e3c59b18bc62d4da26  corbanu-acct
+d7c97490b0a115d452d4b4390d29e22f6364e197a0af28538cb5bb4130d8c337  corbanu-default
+note: the same new target dirs (macOS and RTX) first ran one warm-up build at adbe1b0f81 while #322 was in CI; the binaries above were rebuilt from ccc38bfc03 afterwards.

@@ -28,7 +28,7 @@ Completed under the per-sprint gate (sec-common decision 5): merged as PR #191 b
 | --- | --- |
 | MCP servers, hooks, the `!` user shell and app-server `command/exec` run outside the OS sandbox | Allowed as user-configured/user-started; the inspector shows them as "not contained" ([PF-41-S01](../../archive/p0-security-levels/pf-41-s01-effective-security-inspector.md)) |
 | Claude panes and external provider harnesses are not under the contract | Handed to the TUI lane, recorded in [PF-24-S02](pf-24-s02-security-confirm-cancel-and-downgrade.md): blocked under Aggressive (PR #220); full contract is issue #218 |
-| Windows broker and contract | [PF-27-S06](../../current/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md), now in the P1 hardening plan |
+| Windows broker and contract | [PF-27-S06](../../archive/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md), now in the P1 hardening plan |
 
 Windows refuses protected launches with a reason until PF-27-S06 lands.
 [Evidence, launch-boundary inventory and known limits](../../../../qa/security-levels/sprints/PF-27-S02/README.md).
@@ -83,7 +83,7 @@ Windows refuses protected launches with a reason until PF-27-S06 lands.
 - [x] Integration: affected crate suites (722 passed; core subset 853 passed; one unrelated rmcp keyring-fixture failure recorded).
 - [x] TUI applicability: GLM 5.2 TUI runs and five SOP videos ([index](../../../../qa/demos/index/PF-27-S02.md)).
 - [x] Candidate, commands and outcomes recorded; synthetic credentials only.
-- [x] Windows verification moved with [PF-27-S06](../../current/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md) to the P1 hardening plan.
+- [x] Windows verification moved with [PF-27-S06](../../archive/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md) to the P1 hardening plan.
 
 ## Exit evidence
 

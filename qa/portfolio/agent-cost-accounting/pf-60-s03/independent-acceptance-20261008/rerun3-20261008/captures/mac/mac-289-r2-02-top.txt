@@ -1,0 +1,19 @@
+$ (range page) select "Week [2026-10-05…) (in progress)" — first screen, raw:
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                         │
+│                                                       │
+│ model:     glm-5.2   /model to change                 │
+│ directory: <corbanu-root>/…/repos/is-plain-obj │
+╰───────────────────────────────────────────────────────╯
+› Read readme.md and summarize it in one sentence.
+• is-plain-obj is a tiny npm package that checks whether a value is a plain object — one created via {}, new Object(), or Object.create(null) — working correctly even across JavaScript realms.
+  Cost so far — this conversation
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts outside this bucket; this bucket is not their complete lifetime.
+  Read at: 2026-10-08T22:45:51.732Z; ledger current to: 2026-10-08T22:45:11.964Z (39768 ms behind)
+  Retention: request detail kept since 2026-07-10T22:45:51.732Z; daily totals kept since 2025-10-09; oldest recorded day in this conversation 2026-10-08
+  Known subtotal exact USD: 0.0159218
+  Input: 25,751
+› Noncached input (derived for inclusive input): not reported (2 attempts) — costed as input − cache read for 2 attempts, whose price charges nothing for cache writes
+  ↑↓ scroll · Enter open · Esc back/close

@@ -110,8 +110,6 @@ nav:
               - "PF-26-S02 — True-TUI and live-repository qualification": sprints/current/p1-security-hardening/pf-26-s02-true-tui-and-live-repository-qualification.md
               - "PF-26-S03 — Human acceptance, finished docs, and release evidence": sprints/current/p1-security-hardening/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md
               - "PF-26-S04 — Final integrated automated security qualification": sprints/current/p1-security-hardening/pf-26-s04-final-automated-qualification.md
-              - "PF-27-S06 — Windows broker and secretless launch": sprints/current/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md
-              - "PF-27-S07 — Windows hardening follow-ups": sprints/current/p1-security-hardening/pf-27-s07-windows-hardening-follow-ups.md
               - "PF-27-S08 — Windows broker restricted token": sprints/current/p1-security-hardening/pf-27-s08-windows-broker-restricted-token.md
               - "PF-27-S09 — Windows model-client auth through the broker": sprints/current/p1-security-hardening/pf-27-s09-windows-model-client-auth.md
               - "PF-31-S01 — Pinned retriever artifact and sandbox": sprints/current/p1-security-hardening/pf-31-s01-pinned-retriever-isolation.md
@@ -164,7 +162,7 @@ nav:
               - "PF-60 — Unified agent cost and usage accounting":
                   - Plan: plans/active/portfolio-agent-cost-accounting.md
                   - "PF-60-S02 — Idempotent usage persistence and replay": sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md
-                  - "PF-60-S03 — Inspectable run and campaign totals": sprints/current/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md
+                  - "PF-60-S05 — Collection correctness and declared billing basis": sprints/current/portfolio-agent-cost-accounting/pf-60-s05-collection-correctness-and-billing-basis.md
                   - "PF-60-S04 — Cost-accounting acceptance and handoff": sprints/current/portfolio-agent-cost-accounting/pf-60-s04-cost-accounting-acceptance-and-handoff.md
               - "PF-61 — Plan and model-serving backend reconciliation":
                   - Plan: plans/proposed/portfolio-plan-backend-reconciliation.md

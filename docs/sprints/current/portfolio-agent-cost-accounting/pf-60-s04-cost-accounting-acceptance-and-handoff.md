@@ -4,7 +4,7 @@ title: "Cost-accounting acceptance and handoff"
 status: draft
 plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
-execution_order: 4
+execution_order: 5
 owner: "Jim Ricketts (proposed)"
 parallel_lane: "UNALLOCATED"
 write_scope: "UNALLOCATED"
@@ -12,9 +12,9 @@ integration_gate: "UNALLOCATED"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
-depends_on: "PF-60-S03"
+depends_on: "PF-60-S03, PF-60-S05"
 created: 2026-09-09
-updated: 2026-09-09
+updated: 2026-10-08
 ---
 
 # PF-60-S04 — Cost-accounting acceptance and handoff
@@ -41,6 +41,7 @@ updated: 2026-09-09
 
 - [ ] Plan active after explicit authority decision; global WIP and occupied lanes reconciled.
 - [ ] Dependencies completed and archived; Accepted PF-60-S03 output and its explicit go/no-go; no unresolved decision that changes this mandate.
+- [ ] PF-60-S05 (collection correctness and declared billing basis, approved 2026-10-08 to run first) completed and archived.
 - [ ] Exact worktree/branch/40-character base match plan; literal scopes and receiving owner are allocated.
 - [ ] Inputs, disclosure rights and spend/time limits approved; external writes and live financial actions remain excluded.
 - [ ] Resolve exact changed files, native compatibility and nonempty test commands before any code sprint starts.

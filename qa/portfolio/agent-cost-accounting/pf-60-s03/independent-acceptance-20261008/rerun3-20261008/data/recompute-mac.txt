@@ -1,0 +1,22 @@
+$ python3 tools/recompute.py --err dev-zai.err d1.err def-zai.err --proxy proxy-stripped.jsonl --group viewer=dev-zai deleted_d1=d1
+2026-10-08T22:44:39 dev-zai                2026100906443750bf7388ca4246c4       p=  12732 c=   5248 o=   21 tot=  12753 usd=0.011934
+2026-10-08T22:44:39 proxy:proxy-stripped.jsonl 2026100906443789db1fe270bf477a       p=  10003 c=      0 o=   28 tot=  10031 usd=0.014127
+2026-10-08T22:44:40 def-zai                202610090644371d6872510fee409c       p=  12732 c=   5248 o=   62 tot=  12794 usd=0.012115
+2026-10-08T22:44:41 dev-zai                20261009064439b2ad45a22df54e5b       p=  13019 c=  12672 o=   47 tot=  13066 usd=0.003987
+2026-10-08T22:44:41 proxy:proxy-stripped.jsonl 202610090644400100877f93dc48c0       p=  10291 c=   9984 o=   44 tot=  10335 usd=0.003219
+2026-10-08T22:44:42 d1                     2026100906443726a8fee34bf441a3       p=  12757 c=   5248 o=   88 tot=  12845 usd=0.012264
+2026-10-08T22:44:43 def-zai                2026100906444120cef88b55d14817       p=  13060 c=   5248 o=   47 tot=  13107 usd=0.012508
+2026-10-08T22:44:44 d1                     202610090644432837a02d0aff4af5       p=  12841 c=  12736 o=   46 tot=  12887 usd=0.003661
+2026-10-08T22:44:46 d1                     2026100906444360c5ef27b5924fae       p=  10018 c=      0 o=   60 tot=  10078 usd=0.014289
+2026-10-08T22:44:55 d1                     202610090644466dbe53004b634914       p=  10185 c=   9984 o=   48 tot=  10233 usd=0.003088
+2026-10-08T22:44:57 d1                     20261009064456cda50ad997ca4209       p=  13069 c=  12800 o=   36 tot=  13105 usd=0.003863
+2026-10-08T22:44:59 d1                     202610090644587d9d0f1c41e543c4       p=  13164 c=   1344 o=   56 tot=  13220 usd=0.017144
+
+per source: requests prompt cached completion total usd
+  d1                         6    72034    42112    334    72368 0.054310
+  def-zai                    2    25792    10496    109    25901 0.024623
+  dev-zai                    2    25751    17920     68    25819 0.015922
+  proxy:proxy-stripped.jsonl   2    20294     9984     72    20366 0.017347
+  GROUP viewer               2 requests, 25819 tokens, usd=0.015922
+  GROUP deleted_d1           6 requests, 72368 tokens, usd=0.054310
+  ALL 12 requests, 144454 tokens, usd=0.112201

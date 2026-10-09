@@ -1,0 +1,43 @@
+# PF-60-S03 (#288): a real GLM 5.2 turn interrupted with Esc while it streams, so Z.AI never reports its
+# token counts. /cost then says the request's usage is incomplete and names the conversation's own
+# provider's bill as the next step. No seeding: a fresh disposable home and one real request.
+id = "pf60s03-missing-usage-next-step"
+feature = "/cost on a conversation whose only request has no reported usage names its provider's bill (no seeding; a real turn interrupted with Esc)"
+expected = "/cost says the interrupted attempt had incomplete usage, so the estimate is missing or only a lower bound, and its next step is to check the bill from Z.AI, the conversation's own provider."
+model = "glm-5.2"
+provider = "zai"
+rows = 40
+config = """
+suppress_unstable_features_warning = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "Count from 1 to 400, one number per line, no other text."
+[[steps]]
+key = "Enter"
+# Interrupt once the answer is streaming, before the provider sends its usage.
+[[steps]]
+wait = "(?m)^\\s+1[5-9]\\s*$"
+timeout = 120
+compress = 3
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "Conversation interrupted"
+[[steps]]
+pause = 2
+[[steps]]
+type = "/cost"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "incomplete usage"
+[[steps]]
+wait = "Next step for requests with incomplete usage: check the bill from Z\\.AI"
+[[steps]]
+pause = 5

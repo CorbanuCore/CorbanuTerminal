@@ -1,13 +1,13 @@
 ---
 sprint_id: "PF-27-S06"
 title: "Windows broker and secretless launch"
-status: ready
+status: completed
 plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-27"
 execution_order: 42
 owner: "Windows-host gate owner (Jim Ricketts; code by the broker lane worker, 2026-10-08)"
 parallel_lane: "windows-host"
-write_scope: "qa/security-levels/sprints/PF-27-S06/, qa/demos/index/PF-27-S06.md, docs/sprints/current/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md"
+write_scope: "qa/security-levels/sprints/PF-27-S06/, qa/demos/index/PF-27-S06.md, docs/sprints/archive/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md"
 integration_gate: "Per-sprint gate (sec-common decision 5), one PR per slice: pf_27_s06 tests on the windows-2022 runner (windows-security-probes workflow), Linux clippy on the RTX box, one Opus 5.5 High review per slice; merged behind the existing default-off flags. Remaining: GLM 5.2 tmux run and SOP videos on a real Windows machine, received by the P1 integration owner."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-27-s06-20261008"
 branch: "sec/pf-27-s06-windows-broker"
@@ -30,7 +30,24 @@ on [PF-27-S02](../../archive/p0-security-levels/pf-27-s02-secretless-agent-launc
 Started 2026-10-08 (Travis approved starting early). All code merged (PRs #267, #269, #270, #272) behind the
 default-off flags above; real probes run on `windows-2022` CI. The first real-Windows gate run (2026-10-08) failed
 with two defects. They were fixed in #298 (#294) and #302 (#295), and the gate rerun passed in a normal session
-(Verification). The record is ready for the P1 integration owner to receive and archive.
+(Verification).
+
+## Closure — 2026-10-08
+
+Completed. Travis **accepted** PF-27-S06 **with known limits** on 2026-10-08 (in chat with the coordinator): the
+limits are the [Known limits](../../../../qa/security-levels/sprints/PF-27-S06/README.md#known-limits) list in the
+evidence README. Received and archived by the P1 integration owner; gate rerun evidence merged in PR #312.
+
+Follow-ups (linked, not blockers):
+
+- #300 (deny-read not enforced on the unelevated tool path): decided, fail closed; being implemented.
+- #301 and #304 (deny entries revoked by a flag-off session / never revoked): decided, rule-driven removal; draft PR #326.
+- #307 (launcher pipe inheritance) fixed by PR #321; #320 (`spawn_protected` stdout pipe) fixed by PR #327.
+- #323 (an armed contract's deny entries vs. another `CODEX_HOME`'s sync): open.
+- [PF-27-S08](../../current/p1-security-hardening/pf-27-s08-windows-broker-restricted-token.md) (broker token) and
+  [PF-27-S09](../../current/p1-security-hardening/pf-27-s09-windows-model-client-auth.md) (model auth): planned.
+- Unplaced: file tools other than patches under the Windows contract; elevated-sandbox profile reads
+  (`~/.git-credentials`, `.ssh`, `.npmrc`, `.config/gh`); both in the plan's carried-forward table.
 
 ## Execution mandate
 
@@ -74,16 +91,14 @@ with two defects. They were fixed in #298 (#294) and #302 (#295), and the gate r
 - [x] `pf_27_s06` tests run on every PR touching this code (`windows-security-probes` workflow); Linux clippy clean
   on the RTX box; Opus 5.5 High reviews per slice, all approved (2-3 rounds each).
 - [x] Travis approved fixing the four documented limits (2026-10-08): [PF-27-S07](pf-27-s07-windows-hardening-follow-ups.md)
-  (new threads, `CODEX_HOME` deny), [S08](pf-27-s08-windows-broker-restricted-token.md) (broker token), [S09](pf-27-s09-windows-model-client-auth.md) (model auth).
+  (new threads, `CODEX_HOME` deny), [S08](../../current/p1-security-hardening/pf-27-s08-windows-broker-restricted-token.md) (broker token), [S09](../../current/p1-security-hardening/pf-27-s09-windows-model-client-auth.md) (model auth).
 - [x] Both gate defects fixed (#298 for #294, #302 for #295), each with a regression test that fails before and passes
   after on the real machine; `windows-security-probes` also runs them at medium integrity.
+- [x] Travis accepted the sprint with its known limits (2026-10-08); follow-ups placed under Closure.
 
 ## Remaining
 
-- [ ] Follow-ups from the gate fixes: #300 (decision needed), #301, #304, #307.
-- [ ] Unplaced follow-ups (listed in the plan's carried-forward table): file tools other than patches under the
-  contract on Windows; the elevated sandbox's read of `~/.git-credentials`, `.ssh`, `.npmrc`, `.config/gh` if profile
-  reads are ever granted (setup excludes most).
+None. Follow-ups are listed under Closure.
 
 ## Verification
 
@@ -92,9 +107,9 @@ with two defects. They were fixed in #298 (#294) and #302 (#295), and the gate r
 - [x] GLM 5.2 tmux run and videos on real Windows: the first run (2026-10-08) **failed** with two defects; the
   [rerun](../../../../qa/security-levels/sprints/PF-27-S06/README.md#gate-rerun-after-the-fixes-2026-10-08-pass) at
   `661b5c6a48cd` **passed** in a normal session ([videos](../../../../qa/demos/index/PF-27-S06.md)).
-- [ ] Gate evidence received by the P1 integration owner.
+- [x] Gate evidence received by the P1 integration owner (2026-10-08; PR #312).
 
 ## Exit evidence
 
 - [x] Outputs under `qa/security-levels/sprints/PF-27-S06/` ([evidence](../../../../qa/security-levels/sprints/PF-27-S06/README.md)).
-- [ ] Record archived (after the Windows-host gate items).
+- [x] Record archived (2026-10-08, after Travis's acceptance).

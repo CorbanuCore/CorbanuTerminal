@@ -1,0 +1,12 @@
+› Read readme.md and summarize it in one sentence.
+• is-plain-obj is a tiny npm package that checks whether a value is a plain object — one created via {}, new Object(), or Object.create(null) — working correctly even across JavaScript realms.
+  Not started yet
+  Requested: [2026-10-05T00:00:00.000Z, 2026-10-19T00:00:00.000Z); timezone: UTC; grouping: Week
+  Retention: request detail kept since 2026-07-10T22:46:41.610Z; daily totals kept since 2025-10-09
+  Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost: unavailable — no settlement evidence.
+  Range: Unknown parent population: 0 inspectable attempts, excluded from range total
+  Bucket: [2026-10-12T00:00:00.000Z, 2026-10-19T00:00:00.000Z); effective coverage (requested ∩ aggregate retention ∩ snapshot): not started
+  Not started yet — it starts after this view was read.
+› Back
+  Refresh
+  ↑↓ scroll · Enter open · Esc back/close
