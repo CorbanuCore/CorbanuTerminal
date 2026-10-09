@@ -10,9 +10,10 @@
 //! from the holder's table, and its handle list and std handles use the
 //! holder's values. Nothing else is ever started from a holder.
 //!
-//! The child inherits the holder's token (a copy of this process's) and
-//! job (this process's), and reports the holder as its parent process; the
-//! holder is ended right after the child starts.
+//! The child inherits the holder's token (a copy of this process's, or the
+//! one the holder was started with) and job (this process's), and reports
+//! the holder as its parent process; the holder is ended right after the
+//! child starts.
 
 use std::ffi::OsStr;
 use std::io;
@@ -28,6 +29,7 @@ use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::Security::SECURITY_ATTRIBUTES;
 use windows_sys::Win32::System::Threading::CREATE_SUSPENDED;
 use windows_sys::Win32::System::Threading::CREATE_UNICODE_ENVIRONMENT;
+use windows_sys::Win32::System::Threading::CreateProcessAsUserW;
 use windows_sys::Win32::System::Threading::CreateProcessW;
 use windows_sys::Win32::System::Threading::DETACHED_PROCESS;
 use windows_sys::Win32::System::Threading::GetCurrentProcess;
@@ -52,16 +54,21 @@ impl HandleHolder {
     /// default security descriptors, so this user's other processes can open
     /// it. Use it only for handles that are no secret from them.
     pub fn start(image: &Path) -> io::Result<Self> {
-        Self::start_with(image, /*process*/ None, /*thread*/ None)
+        Self::start_with(
+            image, /*process*/ None, /*thread*/ None, /*token*/ None,
+        )
     }
 
     /// A holder whose process and first thread get these descriptors (e.g.
     /// the protected DACLs, so no other process of the user can take the
-    /// handles out of it).
+    /// handles out of it), running under `token` (a restricted copy of this
+    /// process's token, which needs no privilege) if given. A child started
+    /// from the holder inherits that token.
     pub(crate) fn start_with(
         image: &Path,
         process: Option<&SECURITY_ATTRIBUTES>,
         thread: Option<&SECURITY_ATTRIBUTES>,
+        token: Option<HANDLE>,
     ) -> io::Result<Self> {
         let application = wide(image.as_os_str());
         let mut command_line = crate::windows_protected_spawn::command_line(image, &[])?;
@@ -72,21 +79,39 @@ impl HandleHolder {
         startup.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
         // SAFETY: zeroed POD filled in by the call.
         let mut info: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
+        let process = process.map_or(std::ptr::null(), std::ptr::from_ref);
+        let thread = thread.map_or(std::ptr::null(), std::ptr::from_ref);
+        let flags = CREATE_SUSPENDED | DETACHED_PROCESS | CREATE_UNICODE_ENVIRONMENT;
         // SAFETY: every pointer refers to a live, NUL-terminated buffer or
-        // descriptor above, or is null.
+        // descriptor above, or is null; `token` is a primary token.
         let ok = unsafe {
-            CreateProcessW(
-                application.as_ptr(),
-                command_line.as_mut_ptr(),
-                process.map_or(std::ptr::null(), std::ptr::from_ref),
-                thread.map_or(std::ptr::null(), std::ptr::from_ref),
-                /*binherithandles*/ 0,
-                CREATE_SUSPENDED | DETACHED_PROCESS | CREATE_UNICODE_ENVIRONMENT,
-                environment.as_ptr().cast(),
-                std::ptr::null(),
-                &startup,
-                &mut info,
-            )
+            match token {
+                Some(token) => CreateProcessAsUserW(
+                    token,
+                    application.as_ptr(),
+                    command_line.as_mut_ptr(),
+                    process,
+                    thread,
+                    /*binherithandles*/ 0,
+                    flags,
+                    environment.as_ptr().cast(),
+                    std::ptr::null(),
+                    &startup,
+                    &mut info,
+                ),
+                None => CreateProcessW(
+                    application.as_ptr(),
+                    command_line.as_mut_ptr(),
+                    process,
+                    thread,
+                    /*binherithandles*/ 0,
+                    flags,
+                    environment.as_ptr().cast(),
+                    std::ptr::null(),
+                    &startup,
+                    &mut info,
+                ),
+            }
         };
         if ok == 0 {
             return Err(io::Error::last_os_error());

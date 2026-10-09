@@ -1,6 +1,6 @@
 name: windows-security-probes
 
-# PF-27-S06/S07: measured Windows containment probes and broker transport
+# PF-27-S06/S07/S08: measured Windows containment probes and broker transport
 # tests. They run real processes, tokens, ACLs and named pipes, so they need a
 # Windows host.
 
@@ -68,6 +68,10 @@ jobs:
       - name: Process access probes
         shell: bash
         run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-process-hardening -- pf_27_s06 pf_27_s07 --nocapture --test-threads=1
+      - name: Broker token probes (PF-27-S08)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-process-hardening --lib pf_27_s08 -- --nocapture --test-threads=1
       - name: CODEX_HOME deny removal
         if: ${{ !cancelled() }}
         shell: bash
@@ -153,6 +157,13 @@ jobs:
             Assert-Tests $hardening 'sec_win_' 2
             & $medium -Program $hardening -Arguments @('sec_win_', '--nocapture', '--test-threads=1')
             if ($LASTEXITCODE -ne 0) { throw "#320 regressions failed in a normal session" }
+            Assert-Tests $hardening 'pf_27_s08' 7
+            & $medium -Program $hardening -Arguments @('pf_27_s08', '--nocapture', '--test-threads=1')
+            if ($LASTEXITCODE -ne 0) { throw "PF-27-S08 broker token probes failed in a normal session" }
+            $proxy = Get-TestExe @('-p', 'codex-network-proxy', '--lib')
+            Assert-Tests $proxy 'pf_27_s06_windows_broker_uses_pipes' 1
+            & $medium -Program $proxy -Arguments @('credential_broker::isolated::', '--nocapture', '--test-threads=1')
+            if ($LASTEXITCODE -ne 0) { throw "the broker suite failed in a normal session" }
             $core = Get-TestExe @('-p', 'codex-core', '--lib')
             Assert-Tests $core 'pf_27_s06_d2' 2
             # #300: the unelevated sandbox, which a normal session uses by default.
