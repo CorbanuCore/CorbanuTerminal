@@ -64,7 +64,8 @@ goes when the runner exits, even if Corbanu Terminal has exited by then, so a
 background process left running after its command ends can't start new
 programs that need a window station. (If Corbanu Terminal is ended in the
 moment between starting a runner and handing its access to the small helper
-process that removes it, that access stays until the SSH session ends.) The
+process that removes it, or that helper can't start and Corbanu Terminal
+exits before the runner, that access stays until the SSH session ends.) The
 non-admin sandbox with `windows.sandbox_private_desktop = false` works over
 SSH too. Earlier builds couldn't run any command there: each one failed after
 15 seconds with `windows sandbox: timed out after 15000ms connecting runner

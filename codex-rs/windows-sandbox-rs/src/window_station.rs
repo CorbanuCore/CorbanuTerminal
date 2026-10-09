@@ -347,10 +347,14 @@ impl WindowAccess {
 impl Drop for WindowAccess {
     fn drop(&mut self) {
         for object in [WindowObject::Station, WindowObject::Desktop] {
-            if self.entry(object).is_some() {
-                // Nothing to do on failure: the entry stays until the window
-                // station goes away.
-                let _ = self.set(object, /*mask*/ None);
+            if self.entry(object).is_some()
+                && let Err(err) = self.set(object, /*mask*/ None)
+            {
+                // The entry stays until the window station goes away.
+                crate::logging::log_note(
+                    &format!("window access: could not remove an entry: {err:#}"),
+                    self.log_dir.as_deref(),
+                );
             }
         }
     }
@@ -435,7 +439,9 @@ pub(crate) fn current_logon_sid() -> Result<Vec<u8>> {
 /// processes (Core and the runners' reapers). Its folder's DACL is protected
 /// and grants only this user and SYSTEM: the elevated sandbox's read roots
 /// give its users inherited read on the profile's folders, which would let
-/// a sandboxed command open the file and hold its lock.
+/// a sandboxed command open the file and hold its lock. (The non-admin
+/// sandbox's commands run as this user and can still open it; holding it
+/// only makes edits go ahead unlocked, which is logged.)
 /// Without it, two read-modify-write edits can lose one. Returns whether the
 /// cross-process lock was held: if it can't be had in time, the edit goes
 /// ahead with only this process's edits serialized.
@@ -493,25 +499,37 @@ pub(crate) fn dacl_lock_path() -> Option<PathBuf> {
 }
 
 /// Gives `dir` a protected DACL that grants only this user and SYSTEM,
-/// inherited by everything in it, unless it has one already.
+/// inherited by everything in it, unless it has one already. Fails if `dir`
+/// is a link, or is owned by anyone but this user, Administrators (an
+/// elevated process's default owner) or SYSTEM.
 pub(crate) fn protect_to_this_user(dir: &Path) -> Result<()> {
+    use std::os::windows::fs::MetadataExt as _;
     use windows_sys::Win32::Security::Authorization::ConvertStringSecurityDescriptorToSecurityDescriptorW;
     use windows_sys::Win32::Security::Authorization::GetNamedSecurityInfoW;
     use windows_sys::Win32::Security::Authorization::SE_FILE_OBJECT;
     use windows_sys::Win32::Security::Authorization::SetNamedSecurityInfoW;
+    use windows_sys::Win32::Security::GetLengthSid;
     use windows_sys::Win32::Security::GetSecurityDescriptorControl;
     use windows_sys::Win32::Security::GetSecurityDescriptorDacl;
+    use windows_sys::Win32::Security::OWNER_SECURITY_INFORMATION;
     use windows_sys::Win32::Security::PROTECTED_DACL_SECURITY_INFORMATION;
     use windows_sys::Win32::Security::SE_DACL_PROTECTED;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+    let metadata = std::fs::symlink_metadata(dir)?;
+    if !metadata.is_dir() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+        anyhow::bail!("{} is not a folder", dir.display());
+    }
+    let user = current_user_sid_string().context("this user's SID")?;
     let path = to_wide(dir);
+    let mut owner: *mut c_void = ptr::null_mut();
     let mut current: *mut c_void = ptr::null_mut();
-    // SAFETY: reads `dir`'s DACL into a descriptor freed below.
+    // SAFETY: reads `dir`'s owner and DACL into a descriptor freed below.
     let status = unsafe {
         GetNamedSecurityInfoW(
             path.as_ptr(),
             SE_FILE_OBJECT,
-            DACL_SECURITY_INFORMATION,
-            ptr::null_mut(),
+            OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+            &mut owner,
             ptr::null_mut(),
             ptr::null_mut(),
             ptr::null_mut(),
@@ -521,18 +539,28 @@ pub(crate) fn protect_to_this_user(dir: &Path) -> Result<()> {
     if status != ERROR_SUCCESS {
         anyhow::bail!("read {}'s DACL: {status}", dir.display());
     }
+    let owner = (!owner.is_null()).then(|| {
+        // SAFETY: `owner` points to a valid SID in `current`.
+        let sid =
+            unsafe { std::slice::from_raw_parts(owner as *const u8, GetLengthSid(owner) as usize) };
+        crate::winutil::string_from_sid_bytes(sid).unwrap_or_default()
+    });
     let mut control = 0u16;
     let mut revision = 0u32;
     // SAFETY: `current` is a valid descriptor.
     let protected = unsafe { GetSecurityDescriptorControl(current, &mut control, &mut revision) }
         != 0
         && control & SE_DACL_PROTECTED != 0;
-    // SAFETY: allocated by GetNamedSecurityInfoW.
+    // SAFETY: allocated by GetNamedSecurityInfoW; `owner` is not used after this.
     unsafe { LocalFree(current as HLOCAL) };
+    if !owner
+        .is_some_and(|owner| [user.as_str(), "S-1-5-32-544", "S-1-5-18"].contains(&owner.as_str()))
+    {
+        anyhow::bail!("{} is owned by another user", dir.display());
+    }
     if protected {
         return Ok(());
     }
-    let user = current_user_sid_string().context("this user's SID")?;
     let sddl = to_wide(format!("D:P(A;OICI;FA;;;{user})(A;OICI;FA;;;SY)"));
     let mut descriptor: *mut c_void = ptr::null_mut();
     // SAFETY: parses `sddl` into a descriptor freed below.
