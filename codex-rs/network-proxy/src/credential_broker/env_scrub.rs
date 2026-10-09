@@ -350,15 +350,6 @@ mod windows_env {
         let Some(longest) = entries.iter().map(|(entry, _, _)| entry.len()).max() else {
             return;
         };
-        let mut buffer = Zeroizing::new(vec![0_u8; CHUNK + longest]);
-        // The search buffers hold entries themselves.
-        let mut own: Vec<(usize, usize)> = entries
-            .iter()
-            .map(|(entry, _, _)| allocation(entry.as_ptr(), entry.capacity()))
-            .collect();
-        own.push(allocation(buffer.as_ptr(), buffer.capacity()));
-        // SAFETY: a pseudo-handle for this process.
-        let process = unsafe { GetCurrentProcess() };
         let query = |at: usize| {
             // SAFETY: zeroed POD out-structure; queries this process.
             let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
@@ -374,12 +365,11 @@ mod windows_env {
         let Some(first) = query(address) else {
             return;
         };
+        // The committed, writable regions of the allocation.
         let allocation_base = first.AllocationBase as usize;
+        let mut regions = Vec::new();
         let mut address = allocation_base;
-        loop {
-            let Some(info) = query(address) else {
-                break;
-            };
+        while let Some(info) = query(address) {
             let base = info.BaseAddress as usize;
             let Some(end) = base.checked_add(info.RegionSize) else {
                 break;
@@ -387,11 +377,30 @@ mod windows_env {
             if info.AllocationBase as usize != allocation_base || end <= address {
                 break;
             }
-            let writable = info.State == MEM_COMMIT
+            if info.State == MEM_COMMIT
                 && info.Protect & (PAGE_READWRITE | PAGE_EXECUTE_READWRITE) != 0
-                && info.Protect & PAGE_GUARD == 0;
+                && info.Protect & PAGE_GUARD == 0
+            {
+                regions.push((base, end));
+            }
+            address = end;
+        }
+        let Some(largest) = regions.iter().map(|(start, end)| end - start).max() else {
+            return;
+        };
+        let chunk = largest.min(CHUNK);
+        let mut buffer = Zeroizing::new(vec![0_u8; chunk + longest]);
+        // The search buffers hold entries themselves.
+        let mut own: Vec<(usize, usize)> = entries
+            .iter()
+            .map(|(entry, _, _)| allocation(entry.as_ptr(), entry.capacity()))
+            .collect();
+        own.push(allocation(buffer.as_ptr(), buffer.capacity()));
+        // SAFETY: a pseudo-handle for this process.
+        let process = unsafe { GetCurrentProcess() };
+        for (base, end) in regions {
             let mut offset = base;
-            while writable && offset < end {
+            while offset < end {
                 // Chunks overlap by the longest entry so none is split.
                 let want = (end - offset).min(buffer.len());
                 let mut read = 0_usize;
@@ -442,9 +451,8 @@ mod windows_env {
                 if want < buffer.len() {
                     break;
                 }
-                offset += CHUNK;
+                offset += chunk;
             }
-            address = end;
         }
     }
 
