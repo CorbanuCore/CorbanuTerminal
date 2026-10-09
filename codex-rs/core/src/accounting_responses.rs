@@ -20,6 +20,10 @@ pub(crate) type Slot = Arc<Mutex<Option<Arc<DeferredResponsesSampling>>>>;
 pub(crate) struct DeferredResponsesSampling {
     request: Uuid,
     session: Arc<Session>,
+    /// The thread its attempts are recorded under.
+    owner: codex_protocol::ThreadId,
+    /// The ledger that thread lives in; the session's own when `None`.
+    owner_db: Option<codex_rollout::state_db::StateDbHandle>,
     turn: String,
     mode: AccountingMode,
     sampling: OnceCell<Arc<Sampling>>,
@@ -86,10 +90,33 @@ impl Drop for Bootstrap<'_> {
 }
 
 impl DeferredResponsesSampling {
+    #[cfg(test)]
     pub(crate) fn new(session: Arc<Session>, turn: String, mode: AccountingMode) -> Arc<Self> {
         Arc::new(Self {
             request: Uuid::new_v4(),
+            owner: session.thread_id,
+            owner_db: None,
             session,
+            turn,
+            mode,
+            sampling: OnceCell::new(),
+            failed: AtomicBool::new(false),
+        })
+    }
+
+    /// A sampling recorded under `owner`: the session's own thread, or the
+    /// conversation an ephemeral review fork works for.
+    pub(crate) fn new_for(
+        session: Arc<Session>,
+        owner: crate::accounting::AccountingOwner,
+        turn: String,
+        mode: AccountingMode,
+    ) -> Arc<Self> {
+        Arc::new(Self {
+            request: Uuid::new_v4(),
+            session,
+            owner: owner.thread,
+            owner_db: Some(owner.db),
             turn,
             mode,
             sampling: OnceCell::new(),
@@ -297,12 +324,16 @@ impl DeferredResponsesSampling {
                     .map_err(|error| {
                         CodexErr::Fatal(failure("materialize rollout", error).into())
                     })?;
-                let runtime = self.session.state_db().ok_or_else(|| {
-                    CodexErr::Fatal(failure("open sampling", "no state database").into())
-                })?;
+                let runtime = self
+                    .owner_db
+                    .clone()
+                    .or_else(|| self.session.state_db())
+                    .ok_or_else(|| {
+                        CodexErr::Fatal(failure("open sampling", "no state database").into())
+                    })?;
                 let sampling = Sampling::start_request(
                     runtime,
-                    self.session.thread_id,
+                    self.owner,
                     self.turn.clone(),
                     &mode,
                     self.request,
