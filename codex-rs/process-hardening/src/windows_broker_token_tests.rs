@@ -484,7 +484,7 @@ End If
 out = out & "," & Outcome("task")
 folder.DeleteTask task, 0
 Err.Clear
-Set mmc = CreateObject("MMC20.Application")
+Set mmc = GetObject("new:{49B2791A-B1AE-4C90-9B8E-E860BA07F889}")
 If Err.Number = 0 Then mmc.Quit
 out = out & "," & Outcome("com")
 WScript.Echo vbCrLf & "pf27s08-report:" & out
@@ -542,12 +542,17 @@ fn run_script_probe(confined: bool) -> Report {
     let reader = codex_windows_sandbox::read_handle_loop(spawned.stdout_read, move |chunk| {
         let _ = sender.send(chunk.to_vec());
     });
+    let mut code = 0_u32;
     // SAFETY: the handles stay valid until closed below.
     unsafe {
         const WAIT_TIMEOUT: u32 = 0x102;
         if WaitForSingleObject(spawned.process.hProcess, 180_000) == WAIT_TIMEOUT {
             TerminateProcess(spawned.process.hProcess, 1);
         }
+        windows_sys::Win32::System::Threading::GetExitCodeProcess(
+            spawned.process.hProcess,
+            &mut code,
+        );
         CloseHandle(spawned.process.hThread);
         CloseHandle(spawned.process.hProcess);
         CloseHandle(token);
@@ -555,5 +560,10 @@ fn run_script_probe(confined: bool) -> Report {
     let _ = reader.join();
     let output: Vec<u8> = receiver.try_iter().flatten().collect();
     let _ = std::fs::remove_file(&script);
-    decode(&String::from_utf8_lossy(&output))
+    let output = String::from_utf8_lossy(&output);
+    assert!(
+        output.contains(REPORT_PREFIX),
+        "{label} cscript exited 0x{code:x} without a report:\n{output}"
+    );
+    decode(&output)
 }
