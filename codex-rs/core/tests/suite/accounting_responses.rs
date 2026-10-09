@@ -874,7 +874,13 @@ async fn accounting_newer_ledger_format_turns_collection_off_once() -> anyhow::R
                 .await?
                 .into_iter()
                 .filter_map(|event| match event {
-                    EventMsg::Warning(warning) => Some(warning.message),
+                    // Only accounting's own warnings: a host may add others
+                    // (for example a missing code-mode host on Linux).
+                    EventMsg::Warning(warning)
+                        if warning.message.starts_with("Developer accounting") =>
+                    {
+                        Some(warning.message)
+                    }
                     _ => None,
                 }),
         );
