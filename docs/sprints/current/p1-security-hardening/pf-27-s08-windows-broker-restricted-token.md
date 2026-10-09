@@ -108,8 +108,8 @@ can still write the user's files, open the user's other processes, and ask anoth
 
 ## Verification
 
-- [x] Probes and suite on `windows-2022` and the real Windows machine (elevated and normal session); Credential
-  Manager measured on both.
+- [ ] Probes and suite on `windows-2022` and the real Windows machine (elevated and normal session), Credential
+  Manager measured on both: done 2026-10-09; checked when the gate run passes.
 
 ## Exit evidence
 
