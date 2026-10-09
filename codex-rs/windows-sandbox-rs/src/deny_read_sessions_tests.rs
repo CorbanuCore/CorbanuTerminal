@@ -1,16 +1,25 @@
 //! #323: the session registry a sync checks before it removes any entry.
 
+use super::DENY_READ_SYNC_LOCK_WAIT;
 use super::DenyReadSessions;
+use super::ProcessSessions;
 use super::Registration;
 use super::lock_out_other_sessions;
 use pretty_assertions::assert_eq;
+use std::path::Path;
 use std::time::Duration;
 
 fn sessions(registry: &tempfile::TempDir, own: Option<&Registration>) -> DenyReadSessions {
-    DenyReadSessions {
-        registry: Some(registry.path().to_path_buf()),
-        own: own.map(|registration| registration.name().to_string()),
-    }
+    DenyReadSessions::in_test_registry(registry.path(), own)
+}
+
+fn register(registry: &Path) -> Registration {
+    Registration::register(
+        registry,
+        /*trust_this_user*/ true,
+        DENY_READ_SYNC_LOCK_WAIT,
+    )
+    .expect("register")
 }
 
 #[test]
@@ -18,8 +27,8 @@ fn sec_win_323_a_sync_removes_only_while_no_other_session_lives() {
     let registry = tempfile::tempdir().expect("registry");
     assert!(lock_out_other_sessions(&sessions(&registry, None)).is_some());
 
-    let first = Registration::register(registry.path()).expect("register");
-    let second = Registration::register(registry.path()).expect("register again");
+    let first = register(registry.path());
+    let second = register(registry.path());
     assert_ne!(first.name(), second.name());
     // Another session lives: no removal, whoever asks.
     assert!(lock_out_other_sessions(&sessions(&registry, None)).is_none());
@@ -42,11 +51,7 @@ fn sec_win_323_a_sync_removes_only_while_no_other_session_lives() {
     assert!(lock_out_other_sessions(&DenyReadSessions::default()).is_none());
     let file = registry.path().join("a-file");
     std::fs::write(&file, b"").expect("file");
-    let missing = DenyReadSessions {
-        registry: Some(file.join("registry")),
-        own: None,
-    };
-    assert!(lock_out_other_sessions(&missing).is_none());
+    assert!(lock_out_other_sessions(&DenyReadSessions::in_test_registry(&file, None)).is_none());
 }
 
 /// A session that registers while a sync is between its check and its
@@ -58,7 +63,8 @@ fn sec_win_323_registering_waits_for_a_sync_that_is_removing() {
     let path = registry.path().to_path_buf();
     let (done_tx, done_rx) = std::sync::mpsc::channel();
     let registering = std::thread::spawn(move || {
-        let registration = Registration::register(&path).expect("register");
+        let registration =
+            Registration::register(&path, true, Duration::from_secs(10)).expect("register");
         let _ = done_tx.send(());
         registration
     });
@@ -76,20 +82,149 @@ fn sec_win_323_registering_waits_for_a_sync_that_is_removing() {
     assert!(lock_out_other_sessions(&sessions(&registry, Some(&registration))).is_some());
 }
 
-/// This process registers in the machine-wide registry. Run elevated first
-/// and then in a normal session (as CI does), this also checks that an
-/// elevated process's registry folder admits a normal session's files.
+/// Review M1: no one can delete or rename a live session's file, which
+/// would make it look gone to every sync.
+#[test]
+fn sec_win_323_a_live_sessions_file_cannot_be_deleted_or_renamed() {
+    let registry = tempfile::tempdir().expect("registry");
+    let session = register(registry.path());
+    let renamed = registry.path().join("renamed");
+    let deleted = std::fs::remove_file(session.path()).is_ok();
+    let moved = std::fs::rename(session.path(), &renamed).is_ok();
+    eprintln!("sec-win-323: live session file deleted: {deleted}; renamed: {moved}");
+    assert!(!deleted, "deleted a live session's file");
+    assert!(!moved, "renamed a live session's file");
+    assert!(lock_out_other_sessions(&sessions(&registry, None)).is_none());
+}
+
+/// Review M2: a registry folder that is a link, or that the wrong user owns,
+/// is not trusted: nothing is removed and no one registers there.
+#[test]
+fn sec_win_323_a_linked_or_foreign_owned_registry_is_refused() {
+    let dir = tempfile::tempdir().expect("dir");
+    let target = dir.path().join("target");
+    std::fs::create_dir(&target).expect("target");
+    let link = dir.path().join("registry");
+    let status = std::process::Command::new("cmd")
+        .args(["/D", "/C", "mklink", "/J"])
+        .arg(&link)
+        .arg(&target)
+        .output()
+        .expect("mklink");
+    assert!(status.status.success(), "{status:?}");
+    let linked = DenyReadSessions::in_test_registry(&link, None);
+    assert!(
+        lock_out_other_sessions(&linked).is_none(),
+        "trusted a junction"
+    );
+    assert!(
+        Registration::register(&link, true, DENY_READ_SYNC_LOCK_WAIT).is_err(),
+        "registered through a junction"
+    );
+    // The same folder, not through the link, is fine.
+    assert!(lock_out_other_sessions(&DenyReadSessions::in_test_registry(&target, None)).is_some());
+
+    // A folder this user owns is not trusted outside tests: only one
+    // Administrators or SYSTEM own is.
+    let owned = dir.path().join("owned");
+    std::fs::create_dir(&owned).expect("owned");
+    set_owner_to_this_user(&owned);
+    let production = DenyReadSessions {
+        registry: Some(owned.clone()),
+        own: None,
+        trust_this_user: false,
+    };
+    assert!(
+        lock_out_other_sessions(&production).is_none(),
+        "trusted a user's folder"
+    );
+    assert!(
+        Registration::register(&owned, false, DENY_READ_SYNC_LOCK_WAIT).is_err(),
+        "registered in a user's folder"
+    );
+}
+
+fn set_owner_to_this_user(path: &Path) {
+    use windows_sys::Win32::Security::Authorization::SE_FILE_OBJECT;
+    use windows_sys::Win32::Security::Authorization::SetNamedSecurityInfoW;
+    use windows_sys::Win32::Security::OWNER_SECURITY_INFORMATION;
+    let user = super::current_user_sid().expect("this user");
+    let sid = crate::LocalSid::from_string(&user).expect("SID");
+    let wide = crate::winutil::to_wide(path);
+    // SAFETY: valid path and SID.
+    let status = unsafe {
+        SetNamedSecurityInfoW(
+            wide.as_ptr(),
+            SE_FILE_OBJECT,
+            OWNER_SECURITY_INFORMATION,
+            sid.as_ptr(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+    assert_eq!(status, 0, "set the owner");
+}
+
+/// Review M3: once a process has launched with two rule sets, its own
+/// session counts as another's in its syncs.
+#[test]
+fn sec_win_323_a_process_with_two_rule_sets_keeps_its_own_entries() {
+    let registry = tempfile::tempdir().expect("registry");
+    let mut process = ProcessSessions::new();
+    let (first, error) = process.view(
+        Some(registry.path().to_path_buf()),
+        Some("path:a".to_string()),
+        true,
+    );
+    assert!(error.is_none(), "{error:?}");
+    assert!(first.own.is_some());
+    assert!(lock_out_other_sessions(&first).is_some());
+    // The same rules again: still its own.
+    let (again, _) = process.view(
+        Some(registry.path().to_path_buf()),
+        Some("path:a".to_string()),
+        true,
+    );
+    assert_eq!(again, first);
+    let (second, _) = process.view(
+        Some(registry.path().to_path_buf()),
+        Some("path:b".to_string()),
+        true,
+    );
+    assert_eq!(second.own, None);
+    assert!(
+        lock_out_other_sessions(&second).is_none(),
+        "removed under one rule set what the other relies on"
+    );
+    // A launch without rules sees the same.
+    let (none, _) = process.view(Some(registry.path().to_path_buf()), None, true);
+    assert_eq!(none.own, None);
+}
+
+/// The elevated setup creates the machine-wide registry, owned by
+/// Administrators, and this process registers in it. Run elevated first and
+/// then in a normal session (as CI does), this also checks that a normal
+/// session's Core may register there.
 #[test]
 fn sec_win_323_this_process_registers_in_program_data() {
     let registry = super::registry_dir().expect("ProgramData");
-    let name = super::register_this_process().expect("register this process");
-    assert_eq!(super::register_this_process().expect("again"), name);
-    assert!(registry.join(&name).is_file(), "{}", registry.display());
+    if crate::setup::is_elevated().expect("elevation") {
+        let group = crate::winutil::resolve_sid("CodexSandboxUsers")
+            .ok()
+            .and_then(|sid| crate::winutil::string_from_sid_bytes(&sid).ok());
+        assert_eq!(
+            super::ensure_registry(group.as_deref()).expect("set up the registry"),
+            registry
+        );
+    }
+    super::check_registry(&registry, /*trust_this_user*/ false)
+        .expect("the elevated setup's registry (run this test elevated first)");
+    let name = super::register_this_process(DENY_READ_SYNC_LOCK_WAIT).expect("register");
     assert_eq!(
-        DenyReadSessions::for_this_process(/*register*/ false),
-        DenyReadSessions {
-            registry: Some(registry),
-            own: Some(name),
-        }
+        super::register_this_process(DENY_READ_SYNC_LOCK_WAIT).expect("again"),
+        name
     );
+    assert!(registry.join(&name).is_file(), "{}", registry.display());
+    assert!(std::fs::remove_file(registry.join(&name)).is_err());
 }

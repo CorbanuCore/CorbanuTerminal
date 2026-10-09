@@ -142,7 +142,7 @@ impl std::fmt::Display for LaunchDenied {
                     .to_string()
             }
             Self::DenyReadSessionUnavailable => {
-                "Corbanu could not register this session in %ProgramData%\\CorbanuTerminalSandbox\\deny-read-sessions, so another Corbanu session could remove the sandbox's read protections while yours runs; check that folder's permissions and try again"
+                "Corbanu could not register this session in %ProgramData%\\CorbanuTerminalSandbox\\deny-read-sessions, so another Corbanu session could remove the sandbox's read protections while yours runs; run the Windows sandbox setup again (it creates and repairs that folder) and try again"
                     .to_string()
             }
             Self::ProcessHardening => {
@@ -440,17 +440,22 @@ impl LaunchContract {
     /// files inside `CODEX_HOME` (as `auth.json` storage does).
     #[cfg(windows)]
     pub(crate) fn protect_new_codex_home_files(&self) -> Result<(), LaunchDenied> {
-        let (locked, registered) = self.armed_lock.lock().map_or((false, true), |mut lock| {
-            (lock.ensure_locked(), lock.ensure_registered())
-        });
-        if !locked {
+        let Ok(mut armed_lock) = self.armed_lock.lock() else {
             return Err(LaunchDenied::CodexHomeLockUnavailable);
-        }
-        if !registered {
-            return Err(LaunchDenied::DenyReadSessionUnavailable);
+        };
+        if !armed_lock.ensure_locked() {
+            return Err(LaunchDenied::CodexHomeLockUnavailable);
         }
         let mut group = codex_windows_sandbox::resolve_sid(WINDOWS_SANDBOX_USERS_GROUP)
             .map_err(|_| LaunchDenied::WindowsSandboxNotSetUp)?;
+        // #323. A setup from before the registry existed: this launch's
+        // elevated setup creates it and then registers this process.
+        if !armed_lock.ensure_registered()
+            && codex_windows_sandbox::sandbox_setup_is_complete(self.codex_home.as_path())
+        {
+            return Err(LaunchDenied::DenyReadSessionUnavailable);
+        }
+        drop(armed_lock);
         // The group may not have existed when the lock file was opened.
         deny_armed_lock(
             &self.codex_home.as_path().join(ARMED_LOCK_FILE),
@@ -738,7 +743,8 @@ impl ArmedLock {
                 Self {
                     file: Some(file),
                     locked,
-                    registered: register_deny_read_session(),
+                    // Config load: hardly any wait.
+                    registered: register_deny_read_session(REGISTER_WAIT_AT_CONFIG_LOAD),
                 }
             }
             Err(err) => {
@@ -764,15 +770,19 @@ impl ArmedLock {
     /// Whether this process is registered, trying once more if not.
     fn ensure_registered(&mut self) -> bool {
         if !self.registered {
-            self.registered = register_deny_read_session();
+            self.registered =
+                register_deny_read_session(codex_windows_sandbox::DENY_READ_SYNC_LOCK_WAIT);
         }
         self.registered
     }
 }
 
 #[cfg(windows)]
-fn register_deny_read_session() -> bool {
-    match codex_windows_sandbox::register_deny_read_session() {
+const REGISTER_WAIT_AT_CONFIG_LOAD: std::time::Duration = std::time::Duration::from_millis(100);
+
+#[cfg(windows)]
+fn register_deny_read_session(wait: std::time::Duration) -> bool {
+    match codex_windows_sandbox::register_deny_read_session(wait) {
         Ok(_) => true,
         Err(err) => {
             tracing::warn!(
