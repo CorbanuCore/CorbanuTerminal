@@ -1373,7 +1373,10 @@ mod pf_27_s05 {
     async fn pf_27_s05_env_keys_are_handed_over_removed_and_unregistered() {
         let upstream = start_upstream().await;
         let name = format!("PF27_S05_ENV_KEY_{}", std::process::id());
-        crate::credential_broker::env_scrub::set_env_var_for_test(&name, MODEL_KEY);
+        // A value no other test holds: on Windows the hand-over overwrites
+        // every other copy of it in this process (PF-27-S09).
+        let key = format!("sk-pf27s05-env-{:016x}", rand::random::<u64>());
+        crate::credential_broker::env_scrub::set_env_var_for_test(&name, &key);
         let broker = model_broker(&upstream);
         let taken = broker
             .take_env_keys(&[name.clone(), "PF27_S05_NEVER_SET_KEY".to_string()])
@@ -1392,7 +1395,7 @@ mod pf_27_s05 {
         let response = signed(&credential, upstream.port, "/v1/responses").await;
         assert_eq!(
             response.try_into_string().await.expect("body"),
-            format!("Bearer {MODEL_KEY}")
+            format!("Bearer {key}")
         );
 
         // A replaced sign-in token drops the broker's copy.
