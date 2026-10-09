@@ -3917,7 +3917,6 @@ dependencies = [
  "rama-unix",
  "rand 0.9.3",
  "rustls-native-certs",
- "schannel",
  "security-framework 3.5.1",
  "serde",
  "serde_json",
