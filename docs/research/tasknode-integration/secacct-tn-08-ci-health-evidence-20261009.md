@@ -43,6 +43,8 @@ Issue fixed by #309:
 37902459043 9c36c54808 completed failure 2026-10-09T08:01:49Z
 ```
 
+The whole red stretch, from `gh run list --workflow postmerge-ci.yml --branch main --created '>=2026-10-06' -L 300 --json databaseId,headSha,status,conclusion,createdAt` (139 runs), counted in order of creation: the last success before the red stretch is run 37567149188 on `80869748b2` (2026-10-07T03:31:32Z); from run 37572720073 on `9bac4915f3` (2026-10-07T04:42:08Z) up to the #350 merge there are 83 runs: 79 failure, 4 cancelled, 0 success (#350's description counts 84; this list gives 83). The runs after it: run 37945252801 on `a202df29c0` success, run 37948678214 on `3254a302fd` success.
+
 ## #309: credential canary SIGSEGV race (#222)
 
 Verbatim, PR #309 description (https://github.com/CorbanuCore/CorbanuTerminal/pull/309), in full:
