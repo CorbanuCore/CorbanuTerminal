@@ -265,8 +265,14 @@ fn wait_exit_code(process: HANDLE) -> u32 {
 
 /// Starts `program` as this user on `desktop` and returns its exit code.
 fn run_on_desktop(program: &PathBuf, desktop: *mut u16) -> u32 {
+    run_command_on_desktop(program, &program.to_string_lossy(), desktop)
+}
+
+/// Starts `program` with `command_line` as this user on `desktop`, with this
+/// process's environment, and returns its exit code.
+fn run_command_on_desktop(program: &std::path::Path, command_line: &str, desktop: *mut u16) -> u32 {
     let application = to_wide(program);
-    let mut command_line = to_wide(program);
+    let mut command_line = to_wide(command_line);
     // SAFETY: zeroed POD with its size set, as the API requires.
     let mut startup: STARTUPINFOW = unsafe { std::mem::zeroed() };
     startup.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
@@ -1038,6 +1044,7 @@ const CORE_USER_ENV: &str = "CODEX_SEC_WIN_345_CORE_USER";
 const CORE_PASSWORD_ENV: &str = "CODEX_SEC_WIN_345_CORE_PASSWORD";
 const CORE_TEST: &str = "window_station::tests::window_station_core_that_exits_early";
 const CORE_LINE: &str = "sec-win-345 core: handed";
+const CORE_REPORT_ENV: &str = "CODEX_SEC_WIN_345_CORE_REPORT";
 
 /// Not a test of its own: the Core process of
 /// [`sec_win_345_access_goes_with_the_runner_even_after_core_exits`]. Starts a
@@ -1071,10 +1078,15 @@ fn window_station_core_that_exits_early() {
             .map_err(|(_, err)| err)
             .expect("hand the access to a reaper");
     std::mem::forget(reaper);
-    println!(
-        "{CORE_LINE} {}",
-        string_from_sid_bytes(&logon).expect("SID string")
-    );
+    let report = std::env::var_os(CORE_REPORT_ENV).expect("report file");
+    std::fs::write(
+        report,
+        format!(
+            "{CORE_LINE} {}",
+            string_from_sid_bytes(&logon).expect("SID string")
+        ),
+    )
+    .expect("report");
     std::process::exit(0);
 }
 
@@ -1092,23 +1104,38 @@ fn sec_win_345_access_goes_with_the_runner_even_after_core_exits() {
         eprintln!("sec-win-345: no local user for the logon launch; skipped");
         return;
     };
-    let output = Command::new(std::env::current_exe().expect("test binary"))
-        .args([CORE_TEST, "--exact", "--nocapture", "--test-threads=1"])
-        .env(CORE_ROLE_ENV, "1")
-        .env(CORE_USER_ENV, user.name())
-        .env(CORE_PASSWORD_ENV, user.password())
-        .output()
-        .expect("run the Core that exits early");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(
-        output.status.success(),
-        "{stdout}{}",
-        String::from_utf8_lossy(&output.stderr)
+    // On this window station and desktop: a child otherwise starts on the
+    // one this process started on, not the fresh one it moved to.
+    let report = tempfile::NamedTempFile::new().expect("report file");
+    // SAFETY: this test runs alone in its process (`--test-threads=1`).
+    unsafe {
+        std::env::set_var(CORE_ROLE_ENV, "1");
+        std::env::set_var(CORE_USER_ENV, user.name());
+        std::env::set_var(CORE_PASSWORD_ENV, user.password());
+        std::env::set_var(CORE_REPORT_ENV, report.path());
+    }
+    let exe = std::env::current_exe().expect("test binary");
+    let desktop = to_wide(format!(
+        "{}\\{}",
+        current_window_station_name().expect("window station"),
+        current_desktop_name().expect("desktop")
+    ));
+    let code = run_command_on_desktop(
+        &exe,
+        &format!(
+            "\"{}\" {CORE_TEST} --exact --nocapture --test-threads=1",
+            exe.display()
+        ),
+        desktop.as_ptr() as *mut u16,
     );
-    let logon = stdout
-        .lines()
-        .find_map(|line| line.split(CORE_LINE).nth(1))
-        .unwrap_or_else(|| panic!("no report in {stdout}"))
+    // SAFETY: as above.
+    unsafe { std::env::remove_var(CORE_PASSWORD_ENV) };
+    let reported = std::fs::read_to_string(report.path()).unwrap_or_default();
+    assert_eq!(code, 0, "the Core that exits early failed: {reported}");
+    let logon = reported
+        .split(CORE_LINE)
+        .nth(1)
+        .unwrap_or_else(|| panic!("no report in {reported:?}"))
         .trim()
         .to_string();
     let logon = {
