@@ -688,9 +688,7 @@ fn attempt_text(q: &ObservationQuote) -> Vec<String> {
         lines.push("Plan rate at dispatch: not stated by the vendor".into());
     }
     lines.push(format!("Billing basis: {}", basis_text(q)));
-    if let Some(billed) = billed_figure(&[q]) {
-        lines.push(billed_detail(&billed));
-    }
+    lines.extend(billed_line(&[q]));
     let u = &q.usage;
     let priced = q.priced_counts();
     for (index, (label, value)) in METRICS
@@ -870,7 +868,6 @@ fn inspection_pages_for(
     }
     let mut pages = vec![InspectorPage { title: "Cost — this conversation".into(), text: vec![
         "Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.".into(),
-        "Billed cost: unavailable — no settlement evidence".into(),
         "Logical requests may have attempts on other days; this UTC day is not their complete lifetime.".into(),
     ], links: Vec::new(), parent: None, selected: Arc::default() }];
     let ready = match result {
@@ -913,6 +910,12 @@ fn inspection_pages_for(
             .push("Snapshot is not current; newer activity is unverified".into());
     }
     let freshness = pages[0].text.clone();
+    // The plain overview already says when costs are estimates; the details
+    // add the provider's own charge only where it stated one.
+    let all: Vec<&ObservationQuote> = ready.requests.values().flatten().collect();
+    if let Some(billed) = billed_figure(&all) {
+        pages[0].text.insert(1, billed_detail(&billed));
+    }
     let t = &ready.totals;
     pages[0].text.splice(
         0..0,
@@ -1101,6 +1104,9 @@ fn inspection_pages_for(
             }
             Err(_) => text.push("Estimate unavailable — exact arithmetic overflow".into()),
         }
+        if !provider_group {
+            text.extend(billed_line(&quotes));
+        }
         // In send order, numbered as on the first screen.
         let links = quotes
             .iter()
@@ -1157,6 +1163,13 @@ fn inspection_pages_for(
         text.push("Estimates below cover inspectable attempts only; unavailable threads may have additional unknown costs.".into());
     }
     text.extend(estimate(u));
+    text.extend(billed_line(
+        &ready
+            .unknown_parent_requests
+            .values()
+            .flatten()
+            .collect::<Vec<_>>(),
+    ));
     text.extend(scope::overflow_note(
         ready.unknown_parent_requests.values().flatten(),
     ));
@@ -1196,18 +1209,6 @@ fn inspection_pages_for(
         u.attempts
     ));
     for page in &mut pages {
-        let stated = page
-            .text
-            .iter()
-            .any(|s| s.starts_with("Billed cost:") && s.ends_with("with each response"));
-        if !stated {
-            page.text
-                .push("Estimate versus billed difference: unknown — no settlement evidence".into());
-        }
-        if !page.text.iter().any(|s| s.starts_with("Billed cost:")) {
-            page.text
-                .push("Billed cost: unavailable — no settlement evidence".into());
-        }
         if ready.read_at_ms > ready.coverage.completed_as_of_ms
             && !page
                 .text
@@ -1224,15 +1225,6 @@ fn inspection_pages_for(
         || day_heading(ready.utc_day, Utc::now().timestamp() / 86_400),
         |period| format!("This conversation, {period} (UTC):"),
     );
-    let all: Vec<&ObservationQuote> = ready.requests.values().flatten().collect();
-    if let Some(billed) = billed_figure(&all)
-        && let Some(line) = pages[0]
-            .text
-            .iter_mut()
-            .find(|line| line.as_str() == "Billed cost: unavailable — no settlement evidence")
-    {
-        *line = billed_detail(&billed);
-    }
     let outside = scope::other_conversations_lines(ready.other_conversations.as_ref());
     let next_step = scope::no_price_next_step(
         ready.requests.values().flatten().chain(
@@ -1242,11 +1234,12 @@ fn inspection_pages_for(
                 .flat_map(|others| others.requests.values().flatten()),
         ),
     );
-    let outside_per_use = ready
+    let outside_per_use: Vec<&ObservationQuote> = ready
         .other_conversations
         .iter()
         .flat_map(|others| others.requests.values().flatten())
-        .any(per_use);
+        .filter(|quote| has_bill(quote))
+        .collect();
     let outside_plan = ready
         .other_conversations
         .iter()
@@ -1610,7 +1603,7 @@ impl BilledCharge {
 /// What the provider itself stated it charged for the pay-per-use attempts here,
 /// or None when none stated anything. Plan work is never billed per request.
 fn billed_charge(quotes: &[&ObservationQuote]) -> Option<BilledCharge> {
-    let per_use: Vec<&&ObservationQuote> = quotes.iter().filter(|q| per_use(q)).collect();
+    let per_use: Vec<&&ObservationQuote> = quotes.iter().filter(|q| has_bill(q)).collect();
     let mut charge = BilledCharge {
         sum: Decimal::default(),
         stated: 0,
@@ -1634,6 +1627,143 @@ fn billed_figure(quotes: &[&ObservationQuote]) -> Option<String> {
 
 fn billed_detail(figure: &str) -> String {
     format!("Billed cost: {figure} — as stated by the provider with each response")
+}
+
+/// Whether a provider states what it charged with each response. Only these
+/// routes record `billed_usd` (core `accounting_chat.rs`,
+/// `accounting_responses.rs` and `accounting.rs`); keep the lists in step.
+fn states_charges(provider_id: &str) -> bool {
+    matches!(
+        provider_id,
+        codex_model_provider_info::OPENROUTER_PROVIDER_ID
+            | codex_model_provider_info::VERCEL_PROVIDER_ID
+            | codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID
+            | codex_model_provider_info::PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID
+    )
+}
+
+/// Whether an attempt can appear on a provider's bill: not subscription work,
+/// and not a model run on the user's own machine.
+fn has_bill(quote: &ObservationQuote) -> bool {
+    !quote.is_plan() && quote.basis() != codex_state::accounting::Basis::Local
+}
+
+/// Display names in provider-id order, as the route lines list them.
+fn provider_names<'a>(ids: impl IntoIterator<Item = &'a str>) -> Vec<String> {
+    let mut ids: Vec<&str> = ids.into_iter().collect();
+    ids.sort_unstable();
+    ids.dedup();
+    let mut names: Vec<String> = Vec::new();
+    for id in ids {
+        let name = provider_name(id);
+        if !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    names
+}
+
+fn joined(names: &[String]) -> String {
+    match names {
+        [] => String::new(),
+        [one] => one.clone(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
+}
+
+/// Why the pay-per-use work among `quotes` has no stated charge, naming the
+/// providers ("Z.AI doesn't report its charges"), and whose bill to check
+/// ("Z.AI's bill"). A provider that reports charges but stated none here is
+/// not said never to report them. `None` when every attempt stated a charge,
+/// or one has no provider id.
+fn unstated_charge<'a>(
+    quotes: impl IntoIterator<Item = &'a ObservationQuote>,
+) -> Option<(String, String)> {
+    let mut never = Vec::new();
+    let mut silent = Vec::new();
+    for quote in quotes {
+        if !has_bill(quote) || quote.usage.billed_usd.is_some() {
+            continue;
+        }
+        let id = quote.attempt.provider.as_str();
+        if id.trim().is_empty() {
+            return None;
+        }
+        if states_charges(id) {
+            silent.push(id);
+        } else {
+            never.push(id);
+        }
+    }
+    let never = provider_names(never);
+    let silent = provider_names(silent);
+    let mut clauses = Vec::new();
+    if !never.is_empty() {
+        clauses.push(if never.len() == 1 {
+            format!("{} doesn't report its charges", never[0])
+        } else {
+            format!("{} don't report their charges", joined(&never))
+        });
+    }
+    if !silent.is_empty() {
+        clauses.push(format!(
+            "{} stated no charge for this work",
+            joined(&silent)
+        ));
+    }
+    let bill = match (never.as_slice(), silent.as_slice()) {
+        ([], []) => return None,
+        ([one], []) | ([], [one]) => format!("{one}'s bill"),
+        ([one], [other]) if one == other => format!("{one}'s bill"),
+        _ => "their bills".to_string(),
+    };
+    Some((clauses.join(" and "), bill))
+}
+
+/// A page's one billed-cost line: the provider's own charge where it stated
+/// one with its responses, else that any cost shown is only an estimate and
+/// whose bill has the real amount. `None` for a page with nothing that can be
+/// billed: subscription work is not billed per request, and its pages say so.
+fn billed_line(quotes: &[&ObservationQuote]) -> Option<String> {
+    if !quotes.iter().any(|quote| has_bill(quote)) {
+        return None;
+    }
+    if let Some(billed) = billed_figure(quotes) {
+        return Some(billed_detail(&billed));
+    }
+    if quotes
+        .iter()
+        .any(|quote| !quote.is_plan() && quote.usage.billed_usd.is_some())
+    {
+        return Some("Billed cost: unavailable — exact arithmetic overflow".into());
+    }
+    // Only refused attempts from providers that report charges: nothing was
+    // charged that the provider would have stated.
+    if quotes.iter().filter(|quote| has_bill(quote)).all(|quote| {
+        states_charges(&quote.attempt.provider)
+            && quote.usage == codex_state::accounting::Usage::default()
+    }) {
+        let names = provider_names(
+            quotes
+                .iter()
+                .filter(|quote| has_bill(quote))
+                .map(|quote| quote.attempt.provider.as_str()),
+        );
+        let bill = match names.as_slice() {
+            [one] => format!("{one}'s bill"),
+            _ => "their bills".to_string(),
+        };
+        return Some(format!(
+            "Billed cost: none stated — {} reported no usage here; a refused request is normally not charged, but if it stopped mid-response, check {bill}.",
+            joined(&names)
+        ));
+    }
+    Some(match unstated_charge(quotes.iter().copied()) {
+        Some((clause, bill)) => {
+            format!("Billed cost: {clause}, so any cost here is an estimate — check {bill}.")
+        }
+        None => "Billed cost: not reported, so any cost here is an estimate — check your provider's bill.".into(),
+    })
 }
 
 /// A short link label figure: the cost, or that a subscription covered it.
@@ -1714,9 +1844,7 @@ fn plain_header(quotes: &[&ObservationQuote]) -> Vec<String> {
         Err(_) => lines.push("Cost unavailable".to_string()),
     }
     lines.push("—— Details ——".to_string());
-    if let Some(billed) = billed_figure(quotes) {
-        lines.push(billed_detail(&billed));
-    }
+    lines.extend(billed_line(quotes));
     lines
 }
 
@@ -1789,7 +1917,7 @@ fn plain_overview<'a>(
     heading: String,
     quotes: impl IntoIterator<Item = &'a ObservationQuote>,
     outside: Vec<String>,
-    (outside_per_use, outside_plan): (bool, bool),
+    (outside_per_use, outside_plan): (Vec<&ObservationQuote>, bool),
     next_step: Vec<String>,
 ) -> Vec<String> {
     let groups = by_route(quotes);
@@ -1839,30 +1967,34 @@ fn plain_overview<'a>(
     }
     lines.push(
         if billed_figure(&all).is_some() {
-            "Estimates use published prices; billed figures are what the provider stated with each response."
-        } else if !outside_per_use && !all.is_empty() && all.iter().all(|quote| quote.is_plan()) {
+            "Estimates use published prices; billed figures are what the provider stated with each response.".to_string()
+        } else if outside_per_use.is_empty() && !all.is_empty() && all.iter().all(|quote| quote.is_plan()) {
             // No bill exists for subscription work; pointing at one would
             // suggest a charge the plan never makes. Pay-per-use figures from
             // other conversations on the screen keep the bill caveat.
-            "Subscription work is not billed per request; any figure here is what it would cost at API prices."
-        } else if !outside_per_use
+            "Subscription work is not billed per request; any figure here is what it would cost at API prices.".to_string()
+        } else if outside_per_use.is_empty()
             && !all.is_empty()
-            && all.iter().all(|quote| {
-                !per_use(quote) && quote.basis() != codex_state::accounting::Basis::Undeclared
-            })
+            && all.iter().all(|quote| !has_bill(quote))
         {
             // Only subscription and local work: neither has a bill to point
             // at. Undeclared work is not known to be unbilled, so any of it
             // keeps the bill caveat below.
             if all.iter().any(|quote| quote.is_plan()) {
-                "Nothing here is billed per request: local work has no charge, and any subscription figure is what it would cost at API prices."
+                "Nothing here is billed per request: local work has no charge, and any subscription figure is what it would cost at API prices.".to_string()
             } else {
-                "Local work runs on your own machine and has no charge."
+                "Local work runs on your own machine and has no charge.".to_string()
             }
         } else {
-            "Costs are estimates from published prices; your provider's bill is the final amount."
-        }
-        .to_string(),
+            // This page's one statement that the figures are estimates: it
+            // names whose bill has the real amount where it can.
+            match unstated_charge(all.iter().chain(&outside_per_use).copied()) {
+                Some((clause, bill)) => format!(
+                    "Costs are estimates from published prices; {clause} — check {bill}."
+                ),
+                None => "Costs are estimates from published prices; your provider's bill is the final amount.".to_string(),
+            }
+        },
     );
     if !all.is_empty() {
         lines.push("Select a provider below to see its requests.".to_string());
@@ -1987,7 +2119,7 @@ fn range_pages(
                 |day| format!("kept since {}", utc_date(day))
             )
         ),
-        "Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost: unavailable — no settlement evidence.".into(),
+        "Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns.".into(),
     ];
     let progress: Vec<_> = buckets
         .iter()
@@ -2086,6 +2218,7 @@ fn range_pages(
             .flat_map(|v| v.requests.values().flatten());
         let mut named = unpriced_rows(quotes.clone());
         named.extend(scope::no_price_next_step(quotes.clone()));
+        named.extend(billed_line(&quotes.clone().collect::<Vec<_>>()));
         named.extend(scope::overflow_note(quotes.clone()));
         match codex_state::accounting::DayTotals::from_quotes(quotes) {
             Ok(total) => {
@@ -2355,6 +2488,15 @@ impl Inspector {
             }),
             items,
             allow_number_shortcuts: false,
+            // The accepted bounds, on screen rather than only in an error.
+            // Only a developer-accounting build opens this view, as `/cost`.
+            footer_note: Some(Line::from(
+                format!(
+                    "Other dates: /cost {}",
+                    crate::slash_command::COST_ARGUMENT_HINT
+                )
+                .dim(),
+            )),
             footer_hint: Some("↑↓ scroll · Enter open · Esc back/close".into()),
             on_cancel: Some(Box::new(move |tx| {
                 if let Some(page) = parent {

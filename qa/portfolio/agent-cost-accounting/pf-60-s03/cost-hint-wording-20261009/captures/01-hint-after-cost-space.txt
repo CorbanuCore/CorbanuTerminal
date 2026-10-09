@@ -1,0 +1,10 @@
+╭───────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                 │
+│                                               │
+│ model:     glm-5.2   /model to change         │
+│ directory: <scratch>/ws │
+╰───────────────────────────────────────────────╯
+› Read README.md and summarize it in one sentence.
+• This is a tiny scratch project used to check the /cost screens.
+› /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  Z.AI GLM 5.2 via zai standard · <scratch>/ws · Corbanu Terminal · TPS: -- tok/s

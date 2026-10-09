@@ -19,7 +19,7 @@ pub struct ElevatedSandboxProfileCaptureRequest<'a> {
     pub read_roots_override: Option<&'a [PathBuf]>,
     pub read_roots_include_platform_defaults: bool,
     pub write_roots_override: Option<&'a [PathBuf]>,
-    pub deny_read_paths_override: &'a [AbsolutePathBuf],
+    pub deny_read_override: &'a crate::DenyReadTargets,
     pub deny_write_paths_override: &'a [AbsolutePathBuf],
 }
 
@@ -115,7 +115,7 @@ mod windows_impl {
             read_roots_override,
             read_roots_include_platform_defaults,
             write_roots_override,
-            deny_read_paths_override,
+            deny_read_override,
             deny_write_paths_override,
         } = request;
         let permissions =
@@ -123,10 +123,6 @@ mod windows_impl {
                 permission_profile,
                 workspace_roots,
             )?;
-        let deny_read_paths_override = deny_read_paths_override
-            .iter()
-            .map(AbsolutePathBuf::to_path_buf)
-            .collect::<Vec<_>>();
         let deny_write_paths_override = deny_write_paths_override
             .iter()
             .map(AbsolutePathBuf::to_path_buf)
@@ -149,7 +145,7 @@ mod windows_impl {
             read_roots_override,
             read_roots_include_platform_defaults,
             write_roots_override,
-            &deny_read_paths_override,
+            deny_read_override,
             &deny_write_paths_override,
             proxy_enforced,
             crate::WindowsSandboxProxySettingsMode::Reconcile,
@@ -219,7 +215,7 @@ mod windows_impl {
                         read_roots_override,
                         read_roots_include_platform_defaults,
                         write_roots_override,
-                        &deny_read_paths_override,
+                        deny_read_override,
                         &deny_write_paths_override,
                         proxy_enforced,
                         crate::WindowsSandboxProxySettingsMode::Reconcile,

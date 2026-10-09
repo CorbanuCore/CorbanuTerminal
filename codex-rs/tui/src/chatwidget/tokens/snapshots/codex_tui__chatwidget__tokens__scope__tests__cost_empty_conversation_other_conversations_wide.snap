@@ -14,4 +14,5 @@ expression: empty
   To see those requests, open that conversation with /resume and run /cost there.
   Next step for requests with no price: check the bill from local-mock. No published price
 
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
   ↑↓ scroll · Enter open · Esc back/close

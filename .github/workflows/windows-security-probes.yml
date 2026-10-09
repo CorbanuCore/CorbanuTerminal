@@ -72,7 +72,7 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib pf_27_s07 -- --nocapture --test-threads=1
-      - name: P1 Windows hardening regressions (#307)
+      - name: P1 Windows hardening regressions (#301, #304, #307)
         if: ${{ !cancelled() }}
         shell: bash
         run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib sec_win_ -- --nocapture --test-threads=1
@@ -146,7 +146,7 @@ jobs:
             & $medium -Program $d1 -Arguments @('--nocapture', '--test-threads=1')
             if ($LASTEXITCODE -ne 0) { throw "#295 probe failed in a normal session" }
             $sandbox = Get-TestExe @('-p', 'codex-windows-sandbox', '--lib')
-            Assert-Tests $sandbox 'sec_win_' 1
+            Assert-Tests $sandbox 'sec_win_' 13
             & $medium -Program $sandbox -Arguments @('sec_win_', '--nocapture', '--test-threads=1')
             if ($LASTEXITCODE -ne 0) { throw "P1 hardening regressions failed in a normal session" }
             $hardening = Get-TestExe @('-p', 'codex-process-hardening', '--lib')

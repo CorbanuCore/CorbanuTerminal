@@ -582,7 +582,7 @@ fn sec_win_300_unelevated_tool_path_refuses_deny_read_profiles() {
     assert!(
         elevated
             .windows_sandbox_filesystem_overrides
-            .is_some_and(|overrides| overrides.additional_deny_read_paths.contains(&secret)),
+            .is_some_and(|overrides| overrides.additional_deny_read.contains_path(&secret)),
         "the elevated launch carries the deny entry"
     );
 }

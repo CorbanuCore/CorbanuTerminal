@@ -334,7 +334,7 @@ fn elevated_non_tty_cmd_forwards_env_output_and_exit() {
             /*read_roots_override*/ None,
             /*read_roots_include_platform_defaults*/ true,
             /*write_roots_override*/ None,
-            &[],
+            &crate::DenyReadTargets::default(),
             &[],
             /*tty*/ false,
             /*stdin_open*/ false,

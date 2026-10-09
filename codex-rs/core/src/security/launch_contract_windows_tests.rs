@@ -635,6 +635,58 @@ fn pf_27_s07_flag_off_removes_the_deny_unless_a_contract_is_armed() {
     assert!(!again);
 }
 
+/// #301: a launch in a session with the flag off does not remove the
+/// sandbox's deny-read entries an armed contract's launches added on the
+/// same `CODEX_HOME`; the first launch after the contract is gone does.
+#[test]
+fn pf_27_s07_flag_off_launch_keeps_an_armed_contracts_denies() {
+    let dir = tempfile::tempdir().expect("codex home");
+    let codex_home = dunce::canonicalize(dir.path()).expect("canonical codex home");
+    std::fs::create_dir_all(codex_home.join(".sandbox")).expect("sandbox dir");
+    let vault = codex_home.join("secrets");
+    std::fs::create_dir(&vault).expect("vault dir");
+    let group_sid = "S-1-5-21-2718281828-3141592653-1618033988-1001";
+    let group = codex_windows_sandbox::LocalSid::from_string(group_sid).expect("group SID");
+    let sync = |paths: &[std::path::PathBuf]| {
+        // SAFETY: a valid SID for the call.
+        unsafe {
+            codex_windows_sandbox::sync_persistent_deny_read_acls(
+                &codex_home,
+                group_sid,
+                Some(&codex_windows_sandbox::DenyReadTargets::from_exact_paths(
+                    paths.iter().map(|path| absolute(path)),
+                )),
+                group.as_ptr(),
+            )
+        }
+        .expect("sync");
+    };
+    let denied = || {
+        // SAFETY: a valid SID and an existing directory.
+        unsafe { codex_windows_sandbox::has_explicit_deny_read_ace(&vault, group.as_ptr()) }
+            .expect("read DACL")
+    };
+
+    let contract = LaunchContract::capture(
+        &absolute(&codex_home),
+        std::iter::empty(),
+        /*hardened*/ true,
+    );
+    assert!(
+        format!("{contract:?}").contains("armed_lock: true"),
+        "{contract:?}"
+    );
+    sync(std::slice::from_ref(&vault));
+    assert!(denied());
+    // Another session, flag off: its launch does not list the vault.
+    sync(&[]);
+    assert!(denied(), "removed under an armed contract");
+
+    drop(contract);
+    sync(&[]);
+    assert!(!denied());
+}
+
 /// PF-27-S07: the removal gives the lock file its own deny before the
 /// `CODEX_HOME` entry (and with it the lock file's inherited copy) goes.
 #[test]
