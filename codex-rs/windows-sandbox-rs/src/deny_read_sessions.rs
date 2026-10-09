@@ -101,8 +101,9 @@ pub struct DenyReadSessions {
 
 impl DenyReadSessions {
     /// This process's view: the machine-wide registry, and this process's
-    /// session in it. `rules` (the launch's deny-read rules, serialized, if
-    /// it has any) registers the process first, and counts the rule set.
+    /// session in it. `rules` is the launch's deny-read rule set, serialized
+    /// (empty for none), if its sync runs: the rule set is counted, and a
+    /// non-empty one registers the process first.
     /// A failed registration is logged to `log_dir`.
     pub fn for_this_process(rules: Option<String>, log_dir: Option<&Path>) -> Self {
         let registry = registry_dir();
@@ -426,13 +427,20 @@ static THIS_PROCESS: Mutex<ProcessSessions> = Mutex::new(ProcessSessions::new())
 struct ProcessSessions {
     registration: Option<Registration>,
     rule_sets: BTreeSet<String>,
+    /// When a launch last failed to register: launches don't retry for
+    /// [`REGISTER_RETRY_AFTER`], so a held [`SYNC_LOCK_FILE`] doesn't slow
+    /// each one down.
+    failed_at: Option<Instant>,
 }
+
+const REGISTER_RETRY_AFTER: Duration = Duration::from_secs(10);
 
 impl ProcessSessions {
     const fn new() -> Self {
         Self {
             registration: None,
             rule_sets: BTreeSet::new(),
+            failed_at: None,
         }
     }
 
@@ -456,15 +464,26 @@ impl ProcessSessions {
         trust_this_user: bool,
     ) -> (DenyReadSessions, Option<anyhow::Error>) {
         let mut error = None;
+        // A launch without rules counts as a rule set too: its sync would
+        // remove every entry this home added.
         if let Some(rules) = rules {
+            let registers = !rules.is_empty();
             self.rule_sets.insert(rules);
-            let registered = match registry.as_deref() {
-                Some(registry) => self
-                    .register(registry, trust_this_user, DENY_READ_SYNC_LOCK_WAIT)
-                    .map(drop),
-                None => Err(anyhow::anyhow!("no ProgramData folder")),
-            };
-            error = registered.err();
+            let cooling = self
+                .failed_at
+                .is_some_and(|failed| failed.elapsed() < REGISTER_RETRY_AFTER);
+            if registers && self.registration.is_none() && cooling {
+                error = Some(anyhow::anyhow!("not retried yet after a failure"));
+            } else if registers {
+                let registered = match registry.as_deref() {
+                    Some(registry) => self
+                        .register(registry, trust_this_user, DENY_READ_SYNC_LOCK_WAIT)
+                        .map(drop),
+                    None => Err(anyhow::anyhow!("no ProgramData folder")),
+                };
+                self.failed_at = registered.is_err().then(Instant::now);
+                error = registered.err();
+            }
         }
         // With more than one rule set, this process may rely on an entry
         // its own sync would remove.

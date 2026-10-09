@@ -1064,8 +1064,14 @@ fn run_elevated_setup_inner(
     run_setup_exe(&payload, needs_elevation, request.codex_home)?;
     // #323: the setup may just have created the session registry, which
     // the payload's registration needed.
-    if rule_set.is_some() && payload.deny_read_sessions.own.is_none() {
-        crate::DenyReadSessions::for_this_process(rule_set, Some(&sbx_dir));
+    if rule_set.is_some_and(|rules| !rules.is_empty())
+        && let Err(err) =
+            crate::deny_read_sessions::register_this_process(crate::DENY_READ_SYNC_LOCK_WAIT)
+    {
+        log_note(
+            &format!("deny-read sessions: not registered after setup: {err:#}"),
+            Some(&sbx_dir),
+        );
     }
     Ok(())
 }
@@ -1186,15 +1192,16 @@ fn payload_deny_read_sessions(
     )
 }
 
-/// The launch's deny-read rules (not the paths they match now), if any.
-fn deny_read_rule_set(deny_read: Option<&crate::DenyReadTargets>) -> Option<String> {
+/// The launch's deny-read rules (not the paths they match now), empty for
+/// none; `None` when its sync doesn't run.
+pub(crate) fn deny_read_rule_set(deny_read: Option<&crate::DenyReadTargets>) -> Option<String> {
     let mut keys = deny_read?
         .rules()
         .iter()
         .map(|targets| targets.rule.key())
         .collect::<Vec<_>>();
     keys.sort();
-    (!keys.is_empty()).then(|| keys.join("\n"))
+    Some(keys.join("\n"))
 }
 
 fn payload_deny_read_paths(deny_read: Option<&crate::DenyReadTargets>) -> Vec<PathBuf> {

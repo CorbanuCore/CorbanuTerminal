@@ -191,44 +191,55 @@ fn set_owner_to_this_user(path: &Path) {
     assert_eq!(status, 0, "set the owner");
 }
 
-/// Review M3: once a process has launched with two rule sets, its own
-/// session counts as another's in its syncs.
+/// Review M3: once a process has launched with two rule sets (a launch
+/// without rules is one too), its own session counts as another's in its
+/// syncs.
 #[test]
 fn sec_win_323_a_process_with_two_rule_sets_keeps_its_own_entries() {
-    let registry = tempfile::tempdir().expect("registry");
-    let mut process = ProcessSessions::new();
-    let (first, error) = process.view(
-        Some(registry.path().to_path_buf()),
-        Some("path:a".to_string()),
-        /*trust_this_user*/ true,
-    );
-    assert!(error.is_none(), "{error:?}");
-    assert!(first.own.is_some());
-    assert!(lock_out_other_sessions(&first).is_some());
-    // The same rules again: still its own.
-    let (again, _) = process.view(
-        Some(registry.path().to_path_buf()),
-        Some("path:a".to_string()),
-        /*trust_this_user*/ true,
-    );
-    assert_eq!(again, first);
-    let (second, _) = process.view(
-        Some(registry.path().to_path_buf()),
-        Some("path:b".to_string()),
-        /*trust_this_user*/ true,
-    );
-    assert_eq!(second.own, None);
-    assert!(
-        lock_out_other_sessions(&second).is_none(),
-        "removed under one rule set what the other relies on"
-    );
-    // A launch without rules sees the same.
-    let (none, _) = process.view(
-        Some(registry.path().to_path_buf()),
-        /*rules*/ None,
-        /*trust_this_user*/ true,
-    );
-    assert_eq!(none.own, None);
+    for other in ["path:b", ""] {
+        let registry = tempfile::tempdir().expect("registry");
+        let mut process = ProcessSessions::new();
+        let mut view = |rules: Option<&str>| {
+            process.view(
+                Some(registry.path().to_path_buf()),
+                rules.map(str::to_string),
+                /*trust_this_user*/ true,
+            )
+        };
+        let (first, error) = view(Some("path:a"));
+        assert!(error.is_none(), "{error:?}");
+        assert!(first.own.is_some());
+        assert!(lock_out_other_sessions(&first).is_some());
+        // The same rules again, or a launch whose sync doesn't run: still
+        // its own.
+        assert_eq!(view(Some("path:a")).0, first);
+        assert_eq!(view(/*rules*/ None).0, first);
+        let (second, _) = view(Some(other));
+        assert_eq!(second.own, None, "{other:?}");
+        assert!(
+            lock_out_other_sessions(&second).is_none(),
+            "removed under {other:?} what path:a relies on"
+        );
+        assert_eq!(view(Some("path:a")).0.own, None);
+    }
+}
+
+/// Review M3': a launch whose profile has no deny-read rules still syncs
+/// (removing what this home added), so it counts as a rule set of its own.
+#[test]
+fn sec_win_323_a_launch_without_rules_is_a_rule_set() {
+    use crate::setup::deny_read_rule_set;
+    let empty = crate::DenyReadTargets::default();
+    assert_eq!(deny_read_rule_set(Some(&empty)), Some(String::new()));
+    assert_eq!(deny_read_rule_set(/*deny_read*/ None), None);
+    let path = codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(
+        std::env::temp_dir().join("Secret"),
+    )
+    .expect("absolute");
+    let one = crate::DenyReadTargets::from_exact_paths([path]);
+    let rules = deny_read_rule_set(Some(&one)).expect("rules");
+    assert!(!rules.is_empty());
+    assert_eq!(rules, rules.to_lowercase(), "keys as Windows compares paths");
 }
 
 /// The elevated setup creates the machine-wide registry, owned by
