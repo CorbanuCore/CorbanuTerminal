@@ -1005,15 +1005,17 @@ async fn accounting_anthropic_actual_presence_revisions_and_remote_only_price_un
         );
         let records = attempts(&db).await?;
         assert_eq!(records.len(), 1);
-        let snapshots: Vec<Snapshot> =
-            payloads::<Snapshot>(&db, "draft_accounting_price_snapshots")
-                .await?
-                .into_iter()
-                // An unpriced attempt is bound to a pay-per-use record with no
-                // rates (PF-60-S05); only priced records are counted here.
+        // An unpriced attempt is bound to a pay-per-use record with no rates
+        // (PF-60-S05); only priced records are counted here.
+        let snapshots: Vec<Snapshot> = payloads(&db, "draft_accounting_price_snapshots").await?;
+        assert_eq!(snapshots.len(), 1);
+        assert_eq!(
+            snapshots
+                .iter()
                 .filter(|snapshot| snapshot.rates != codex_state::accounting::Rates::default())
-                .collect();
-        assert_eq!(snapshots.len(), usize::from(!remote_only));
+                .count(),
+            usize::from(!remote_only)
+        );
         let as_of = chrono::Utc::now().timestamp_millis();
         let store = AccountingStore::open(&db, as_of).await?;
         let RetainedDay::Available {
