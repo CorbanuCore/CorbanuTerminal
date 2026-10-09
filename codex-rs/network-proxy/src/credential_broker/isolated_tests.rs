@@ -1473,6 +1473,19 @@ mod pf_27_s05 {
             let hits = hits + memory_scan_tests::count_in_writable_memory(&wide_masked);
             hits
         };
+        // Core grows its environment before the hand-over (arg0 prepends to
+        // PATH, `.env` adds variables), which can move the environment block.
+        let path = std::env::var_os("PATH").unwrap_or_default();
+        let mut paths: Vec<PathBuf> = (0..256)
+            .map(|index| std::env::temp_dir().join(format!("pf27s09-grow-{index}")))
+            .collect();
+        paths.extend(std::env::split_paths(&path));
+        let grown = std::env::join_paths(paths).expect("PATH");
+        crate::credential_broker::env_scrub::set_env_var_for_test("PATH", &grown.to_string_lossy());
+        crate::credential_broker::env_scrub::set_env_var_for_test(
+            "PF27_S09_GROWN",
+            &"x".repeat(32 * 1024),
+        );
         // Positive control: the launch environment still holds the key.
         let before = count(&masked);
         println!("PF27S05 memory hits_before={before}");
@@ -1645,7 +1658,13 @@ mod pf_27_s05 {
         use crate::credential_broker::isolated::prepare_vault_lock;
         let home = tempfile::tempdir().expect("home");
         let lock = prepare_vault_lock(home.path()).expect("lock created");
-        assert_eq!(lock, home.path().join("secrets").join(".vault.lock"));
+        assert_eq!(
+            lock,
+            std::fs::canonicalize(home.path())
+                .expect("canonical home")
+                .join("secrets")
+                .join(".vault.lock")
+        );
         assert!(lock.is_file());
         // Again: an existing lock is kept.
         assert_eq!(prepare_vault_lock(home.path()), Some(lock));
@@ -1680,6 +1699,84 @@ mod pf_27_s05 {
     }
 
     #[cfg(windows)]
+    const LOCK_CHILD_ENV: &str = "CODEX_PF27_S09_LOCK_CHILD";
+
+    /// Run under the broker token by the test below: opens the vault lock
+    /// named in [`LOCK_CHILD_ENV`] for writing, then read-only and locks it.
+    #[cfg(windows)]
+    #[test]
+    #[expect(clippy::print_stdout, reason = "the parent test reads the results")]
+    fn pf_27_s09_lock_child_entry() {
+        let Some(lock) = std::env::var_os(LOCK_CHILD_ENV) else {
+            return;
+        };
+        let write = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&lock);
+        println!(
+            "pf27s09-lock write-open={}",
+            match &write {
+                Ok(_) => "ok".to_string(),
+                Err(error) => format!("{:?}", error.kind()),
+            }
+        );
+        let locked = std::fs::OpenOptions::new()
+            .read(true)
+            .open(&lock)
+            .and_then(|file| file.lock().map(|()| file));
+        println!(
+            "pf27s09-lock read-only-lock={}",
+            if locked.is_ok() { "ok" } else { "failed" }
+        );
+    }
+
+    /// PF-27-S09: why the vault falls back to a read-only lock handle. Under
+    /// the broker token the lock Core created cannot be opened for writing
+    /// (access denied), but a read-only handle locks it exclusively. This
+    /// process, which can open it for writing, is the control.
+    #[cfg(windows)]
+    #[test]
+    fn pf_27_s09_broker_token_locks_the_vault_read_only() {
+        use crate::credential_broker::isolated::prepare_vault_lock;
+        use std::io::Read as _;
+        let home = tempfile::tempdir().expect("home");
+        let lock = prepare_vault_lock(home.path()).expect("lock");
+        std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&lock)
+            .expect("control: this process opens the lock for writing");
+        let mut env: Vec<(std::ffi::OsString, std::ffi::OsString)> = std::env::vars_os().collect();
+        env.push((LOCK_CHILD_ENV.into(), lock.into_os_string()));
+        let args: Vec<std::ffi::OsString> = [
+            "credential_broker::isolated::tests::pf_27_s05::pf_27_s09_lock_child_entry",
+            "--exact",
+            "--nocapture",
+        ]
+        .into_iter()
+        .map(Into::into)
+        .collect();
+        let (mut child, mut stdout) = codex_process_hardening::spawn_protected(
+            &std::env::current_exe().expect("test binary"),
+            &args,
+            &env,
+        )
+        .expect("start under the broker token");
+        let mut output = String::new();
+        stdout.read_to_string(&mut output).expect("child output");
+        let _ = child.wait();
+        assert!(
+            output.contains("pf27s09-lock write-open=PermissionDenied"),
+            "{output}"
+        );
+        assert!(
+            output.contains("pf27s09-lock read-only-lock=ok"),
+            "{output}"
+        );
+    }
+
+    #[cfg(windows)]
     const VAULT_CHILD_ENV: &str = "CODEX_PF27_S09_VAULT_CHILD";
     #[cfg(windows)]
     const VAULT_CHILD_TEST: &str =
@@ -1711,6 +1808,9 @@ mod pf_27_s05 {
                     secret: MODEL_KEY.to_string(),
                 })
                 .expect("vault entry");
+            // The vault made its lock; Core must make it for the broker.
+            std::fs::remove_file(home.path().join("secrets").join(".vault.lock"))
+                .expect("remove the vault's own lock");
             let broker = store_broker(&upstream, home.path());
             let bound = binding(upstream.port, "/v1", ModelAuthHeader::Bearer);
             // Core created the lock the broker token cannot create.

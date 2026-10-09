@@ -208,26 +208,22 @@ pub(crate) fn prepare_vault_lock(home: &std::path::Path) -> Option<std::path::Pa
 
 /// PF-27-S09: Windows counterpart of the Unix `prepare_vault_lock`, run by
 /// Core before it starts the broker, whose token cannot create files in the
-/// user's profile. A directory or file reached through a reparse point
-/// (symlink or junction) is refused.
+/// user's profile. A `secrets` directory or lock file that is a reparse point
+/// (symlink or junction) is refused, and the opened file must be the lock in
+/// `home`'s own `secrets` directory (a directory swapped meanwhile is caught).
 #[cfg(windows)]
 pub(crate) fn prepare_vault_lock(home: &std::path::Path) -> Option<std::path::PathBuf> {
     use std::os::windows::fs::OpenOptionsExt as _;
     use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT;
-    let real_dir =
-        |dir: &std::path::Path| std::fs::symlink_metadata(dir).is_ok_and(|meta| meta.is_dir());
-    if !real_dir(home) {
-        return None;
-    }
+    let home = std::fs::canonicalize(home).ok()?;
     let dir = home.join("secrets");
-    if !real_dir(&dir) {
-        std::fs::create_dir(&dir).ok()?;
-    }
-    if !real_dir(&dir) {
-        return None;
+    match std::fs::symlink_metadata(&dir) {
+        Ok(meta) if meta.is_dir() => {}
+        Ok(_) => return None,
+        Err(_) => std::fs::create_dir(&dir).ok()?,
     }
     let lock = dir.join(".vault.lock");
-    std::fs::OpenOptions::new()
+    let file = std::fs::OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
@@ -235,9 +231,38 @@ pub(crate) fn prepare_vault_lock(home: &std::path::Path) -> Option<std::path::Pa
         .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
         .open(&lock)
         .ok()?;
-    std::fs::symlink_metadata(&lock)
-        .is_ok_and(|meta| meta.is_file())
-        .then_some(lock)
+    let opened_is_lock = file.metadata().is_ok_and(|meta| meta.is_file())
+        && final_path(&file).is_some_and(|path| path.eq_ignore_ascii_case(lock.as_os_str()));
+    opened_is_lock.then_some(lock)
+}
+
+/// The path Windows reports for an open file (`\\?\` form, like
+/// `std::fs::canonicalize`).
+#[cfg(windows)]
+fn final_path(file: &std::fs::File) -> Option<std::ffi::OsString> {
+    use std::os::windows::ffi::OsStringExt as _;
+    use std::os::windows::io::AsRawHandle as _;
+    use windows_sys::Win32::Storage::FileSystem::GetFinalPathNameByHandleW;
+    let mut buffer = vec![0_u16; 1024];
+    loop {
+        // SAFETY: `buffer` holds `buffer.len()` units; flags 0: normalized,
+        // with a drive letter.
+        let len = unsafe {
+            GetFinalPathNameByHandleW(
+                file.as_raw_handle() as _,
+                buffer.as_mut_ptr(),
+                buffer.len() as u32,
+                0,
+            )
+        } as usize;
+        if len == 0 {
+            return None;
+        }
+        if len < buffer.len() {
+            return Some(std::ffi::OsString::from_wide(&buffer[..len]));
+        }
+        buffer.resize(len + 1, 0);
+    }
 }
 
 /// The Corbanu home named by the controller, if it is an absolute directory.
