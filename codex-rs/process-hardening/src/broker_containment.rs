@@ -285,12 +285,14 @@ mod linux {
 /// to itself, so it applies what it can: a process and thread DACL, and a
 /// token default DACL that protects every thread it starts from creation
 /// (PF-27-S07), that keep other processes out of its memory (`dacl`), and a
-/// job (`job`) that allows
-/// no child processes and denies the desktop, clipboard, global atoms, other
-/// processes' USER handles and system settings. Not confined on Windows: file
-/// writes, opening other processes of the user, and asking another process
-/// to run something (WMI, Task Scheduler, out-of-process COM). A restricted
-/// or AppContainer token for the broker is PF-27-S08.
+/// job (`job`) that allows no child processes and denies the desktop,
+/// clipboard, global atoms, other processes' USER handles and system
+/// settings. PF-27-S08: Core starts it under the broker token (`token`: low
+/// integrity, write-restricted to a capability SID, no privileges), which
+/// confines its file writes, keeps it out of the user's other processes,
+/// and keeps it from asking WMI, Task Scheduler or an out-of-process COM
+/// server to run something. The token cannot be applied from inside; this
+/// only checks it.
 #[cfg(windows)]
 mod windows {
     use super::BrokerContainment;
@@ -317,13 +319,18 @@ mod windows {
 
     pub(super) fn contain() -> BrokerContainment {
         let mut mechanisms = Vec::new();
+        if crate::current_token_is_broker_token().is_ok() {
+            mechanisms.push("token");
+        }
         // PF-27-S07: every object the broker creates from now on, threads
         // included, is protected at creation (already so when Core started
-        // it with `spawn_protected`). Both always run; `dacl` needs both
-        // (Core refuses a broker without it).
-        let default_dacl = crate::protect_new_objects_by_default();
+        // it with `spawn_protected`, whose broker token cannot change its
+        // own default DACL, so there it is checked instead). Both always
+        // run; `dacl` needs both (Core refuses a broker without it).
+        let default_dacl = crate::protect_new_objects_by_default().is_ok()
+            || crate::windows_broker_token::default_dacl_is_protected().unwrap_or(false);
         let process_dacl = crate::restrict_current_process_access();
-        if default_dacl.is_ok() && process_dacl.is_ok() {
+        if default_dacl && process_dacl.is_ok() {
             mechanisms.push("dacl");
         }
         if forbid_child_processes().is_ok() {

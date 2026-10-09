@@ -488,7 +488,7 @@ async fn pf_27_s06_windows_broker_uses_pipes_and_cannot_be_read() {
     let broker = isolated_broker(launcher(&upstream, /*controller_pid_override*/ None));
     let dummy = virtualized_dummy(&broker);
     let client = broker.current_isolated_client().expect("broker client");
-    assert_eq!(client.containment(), "dacl+job");
+    assert_eq!(client.containment(), "token+dacl+job");
     let pipe = client.socket_path().to_string_lossy().into_owned();
     assert!(
         super::pipe::valid_pipe_name(&pipe, /*control*/ false),

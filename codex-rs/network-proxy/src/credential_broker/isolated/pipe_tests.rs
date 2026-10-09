@@ -64,8 +64,12 @@ fn pf_27_s06_pipe_names_and_dacl() {
     assert!(!valid_pipe_name(r"\\.\pipe\other-c", /*control*/ true));
     assert_ne!(pipe_names().0, control);
     assert_eq!(
-        pipe_dacl_sddl("S-1-5-21-1-2-3-1001"),
+        pipe_dacl_sddl("S-1-5-21-1-2-3-1001", &[]),
         "D:P(A;;GA;;;S-1-5-21-1-2-3-1001)"
+    );
+    assert_eq!(
+        pipe_dacl_sddl("S-1-5-21-1-2-3-1001", &["S-1-5-21-4-5-6-7".to_string()]),
+        "D:P(A;;GA;;;S-1-5-21-1-2-3-1001)(A;;GA;;;S-1-5-21-4-5-6-7)"
     );
 }
 

@@ -3,11 +3,13 @@
 //! The broker creates both of its pipes (control and data):
 //! - under a random name, as the first instance, so nothing can squat it or
 //!   join it. The name is not a secret: pipe names can be listed;
-//! - with a protected DACL that grants only the broker's own user SID. The
-//!   elevated sandbox runs commands as another user, which cannot open the
-//!   pipe at all. The unelevated sandbox's write-restricted token cannot open
-//!   it for writing, but can still connect read-only (reads are checked
-//!   against its normal SIDs);
+//! - with a protected DACL that grants only the broker's own user SID, and
+//!   the capability SID of the broker's token (PF-27-S08), without which the
+//!   broker could not add pipe instances. The elevated sandbox runs commands
+//!   as another user, which cannot open the pipe at all. The unelevated
+//!   sandbox's write-restricted token cannot open it for writing (its
+//!   restricting SIDs are not granted), but can still connect read-only
+//!   (reads are checked against its normal SIDs);
 //! - refusing remote clients, with handles that are never inheritable.
 //!
 //! The guarantee is the peer check: every connection is matched to the
@@ -15,10 +17,15 @@
 //! only its controller, and Core talks only to the broker it spawned. Any
 //! same-user process (the DACL grants the user everything, including adding
 //! instances) can connect and be dropped, which can delay Core (a denial of
-//! service, not a disclosure). Clients connect at identification-level
-//! impersonation, so a pipe server cannot act with Core's token. The broker
-//! holds a handle to its controller and exits with it, so the controller's
-//! process id cannot be reused while the broker serves it.
+//! service, not a disclosure). Because the broker runs at low integrity
+//! (PF-27-S08), its pipe objects get a low integrity label, so low-integrity
+//! processes of the user can now open them too (before, the implicit medium
+//! label blocked them); the capability ACE admits only processes with equal
+//! trust: the broker, its holder, and COM servers it launches under its own
+//! token. Clients connect at identification-level impersonation, so a pipe
+//! server cannot act with Core's token. The broker holds a handle to its
+//! controller and exits with it, so the controller's process id cannot be
+//! reused while the broker serves it.
 
 use rama_core::Service;
 use rama_core::error::BoxError;
@@ -173,13 +180,15 @@ fn create_instance(name: &str, first: bool) -> io::Result<NamedPipeServer> {
     }
 }
 
-/// `D:P(A;;GA;;;<current user>)`, freed on drop.
+/// `D:P(A;;GA;;;<current user>)` plus the current token's capability SIDs,
+/// freed on drop.
 struct OwnerOnlyDescriptor(PSECURITY_DESCRIPTOR);
 
 impl OwnerOnlyDescriptor {
     fn new() -> io::Result<Self> {
         let user = codex_process_hardening::current_user_sid_string()?;
-        let sddl: Vec<u16> = pipe_dacl_sddl(&user)
+        let capabilities = codex_process_hardening::current_capability_sid_strings()?;
+        let sddl: Vec<u16> = pipe_dacl_sddl(&user, &capabilities)
             .encode_utf16()
             .chain(std::iter::once(0))
             .collect();
@@ -207,9 +216,15 @@ impl Drop for OwnerOnlyDescriptor {
     }
 }
 
-/// The protected DACL on every broker pipe instance.
-pub(crate) fn pipe_dacl_sddl(user_sid: &str) -> String {
-    format!("D:P(A;;GA;;;{user_sid})")
+/// The protected DACL on every broker pipe instance: the user, and the
+/// capability SIDs of the creator's token (the broker token's, which only
+/// the broker holds; none for an unrestricted token).
+pub(crate) fn pipe_dacl_sddl(user_sid: &str, capability_sids: &[String]) -> String {
+    let mut sddl = format!("D:P(A;;GA;;;{user_sid})");
+    for sid in capability_sids {
+        sddl.push_str(&format!("(A;;GA;;;{sid})"));
+    }
+    sddl
 }
 
 /// The process id of the client connected to a server instance.

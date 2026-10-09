@@ -1,5 +1,7 @@
 mod broker_containment;
 #[cfg(windows)]
+mod windows_broker_token;
+#[cfg(windows)]
 mod windows_handle_holder;
 #[cfg(windows)]
 mod windows_process_access;
@@ -13,6 +15,10 @@ pub use broker_containment::broker_seatbelt_profile;
 pub use broker_containment::broker_seatbelt_profile_with_files;
 pub use broker_containment::contain_credential_broker;
 pub use broker_containment::contain_credential_broker_with_files;
+#[cfg(windows)]
+pub use windows_broker_token::current_capability_sid_strings;
+#[cfg(windows)]
+pub use windows_broker_token::current_token_is_broker_token;
 #[cfg(windows)]
 pub use windows_handle_holder::HandleHolder;
 #[cfg(windows)]
