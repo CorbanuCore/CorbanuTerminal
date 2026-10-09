@@ -21,6 +21,9 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf13-s07-20261007"
     branch: "feat/pf-13-s07-qualification-20261007"
     base_commit: "64137b71894fb15fb9d6bf754dc69c41d4cb0406"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-27-s08-20261008"
+    branch: "sec/pf-27-s08-broker-token"
+    base_commit: "df44211c88d285367f62cff59a0df8203865e3d6"
 ---
 
 # P1 security hardening
@@ -105,7 +108,7 @@ unbuilt controls read "not available".
 | Jim Ricketts (qualification lane) | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf13-s07-20261007` | `feat/pf-13-s07-qualification-20261007` | `64137b71894f` | PF-13-S07 (`ready`) |
 | Windows-host gate owner | released | released | released | PF-27-S06 completed and archived 2026-10-08 |
 | broker lane worker | released | released | released | PF-27-S07 completed and archived 2026-10-08 |
-| broker lane (unassigned) | UNALLOCATED | UNALLOCATED | UNALLOCATED | PF-27-S08, PF-27-S09 (drafts; need a real Windows machine) |
+| broker lane worker (2026-10-08) | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf-27-s08-20261008` | `sec/pf-27-s08-broker-token` | `df44211c88d2` | PF-27-S08 (`in_progress`); PF-27-S09 next (draft) |
 
 Lanes: **broker** (Windows hardening PF-27-S08 → S09; S07 archived), **windows-host** (real-Windows gate runs; free),
 **qualification** (PF-13-S07 and the milestone runs). Lanes and coordinates are revised by the integration owner

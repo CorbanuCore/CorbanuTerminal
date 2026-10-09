@@ -129,7 +129,8 @@ pub fn run_credential_broker_main_with(resolver: Option<StoredKeyResolver>) -> !
         );
         (containment, resolver.zip(store_home))
     };
-    // PF-27-S06: process DACL and a no-child-process job. Stored provider
+    // PF-27-S06/S08: checks the broker token Core started it under, then
+    // applies the process DACL and a no-child-process job. Stored provider
     // keys (PF-27-S05 model auth) are not read by the Windows broker.
     #[cfg(windows)]
     let (containment, stored_keys) = {

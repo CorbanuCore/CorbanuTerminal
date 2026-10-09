@@ -775,7 +775,8 @@ fn spawn_line_reader<R: std::io::Read + Send + 'static>(
 }
 
 /// Seatbelt on macOS; seccomp (Landlock when the kernel has it) on Linux;
-/// on Windows both the process DACL and the no-child-process job.
+/// on Windows the broker token (PF-27-S08), the process DACL and the
+/// no-child-process job.
 fn containment_sufficient(containment: &str) -> bool {
     let has = |wanted: &str| containment.split('+').any(|mechanism| mechanism == wanted);
     if cfg!(target_os = "macos") {
@@ -783,7 +784,7 @@ fn containment_sufficient(containment: &str) -> bool {
     } else if cfg!(target_os = "linux") {
         has("seccomp")
     } else if cfg!(windows) {
-        has("dacl") && has("job")
+        has("token") && has("dacl") && has("job")
     } else {
         false
     }
@@ -1020,7 +1021,8 @@ fn start_broker_process(
 }
 
 /// PF-27-S07: no other process of the user can open the broker at any point
-/// (`spawn_protected`). No console, so console control events aimed at the
+/// (`spawn_protected`). PF-27-S08: it runs under the broker token, which
+/// confines its writes and keeps it out of the user's other processes. No console, so console control events aimed at the
 /// TUI do not reach it either.
 #[cfg(windows)]
 fn start_broker_process(
@@ -1100,6 +1102,23 @@ fn random_hex<const N: usize>() -> String {
     let mut bytes = [0_u8; N];
     rand::rng().fill_bytes(&mut bytes);
     encode_hex(&bytes)
+}
+
+#[cfg(test)]
+#[cfg(windows)]
+mod pf_27_s08_tests {
+    use super::containment_sufficient;
+
+    /// Core refuses a Windows broker that reports no broker token, even with
+    /// its other two layers.
+    #[test]
+    fn pf_27_s08_core_refuses_a_broker_without_its_token() {
+        assert!(containment_sufficient("token+dacl+job"));
+        assert!(!containment_sufficient("dacl+job"));
+        assert!(!containment_sufficient("token+job"));
+        assert!(!containment_sufficient("token+dacl"));
+        assert!(!containment_sufficient("none"));
+    }
 }
 
 #[cfg(test)]

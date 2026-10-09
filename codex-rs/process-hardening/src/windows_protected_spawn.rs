@@ -7,7 +7,12 @@
 //! DACLs at creation, the process starts suspended, its token's default DACL
 //! becomes the protected thread DACL (so every thread it starts later is
 //! protected from creation too), and only then does it run.
+//!
+//! PF-27-S08: the process runs under the broker token
+//! (`windows_broker_token`), which already carries that default DACL.
 
+use crate::windows_broker_token::BrokerDefaultDacl;
+use crate::windows_broker_token::create_broker_token;
 use crate::windows_handle_holder::HandleHolder;
 use crate::windows_process_access::SecurityDescriptor;
 use crate::windows_process_access::current_user_sid_string;
@@ -138,12 +143,36 @@ impl ProtectedChild {
 /// protected DACLs too), so the child's parent process is that holder, which
 /// is gone once this returns. The child finds this process's id in
 /// [`PROTECTED_SPAWNER_PID_ENV`] instead ([`protected_spawner_pid`]).
+///
+/// PF-27-S08: the child runs under a new broker token (low integrity,
+/// write-restricted to a fresh capability SID, no privileges; see
+/// `windows_broker_token`).
 pub fn spawn_protected(
     program: &Path,
     args: &[OsString],
     env: &[(OsString, OsString)],
 ) -> io::Result<(ProtectedChild, File)> {
-    let (mut child, stdout, thread) = spawn_protected_suspended(program, args, env)?;
+    spawn_protected_with(program, args, env, Confinement::BrokerToken)
+}
+
+/// What a protected child runs under.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Confinement {
+    /// A copy of this process's token (PF-27-S07), its default DACL made
+    /// the protected thread DACL before the child runs.
+    #[cfg_attr(not(test), allow(dead_code))]
+    SameToken,
+    /// The broker token (PF-27-S08).
+    BrokerToken,
+}
+
+pub(crate) fn spawn_protected_with(
+    program: &Path,
+    args: &[OsString],
+    env: &[(OsString, OsString)],
+    confinement: Confinement,
+) -> io::Result<(ProtectedChild, File)> {
+    let (mut child, stdout, thread) = spawn_protected_suspended(program, args, env, confinement)?;
     // SAFETY: the suspended first thread; resumed once.
     if unsafe { ResumeThread(thread.as_raw_handle() as HANDLE) } == u32::MAX {
         let error = io::Error::last_os_error();
@@ -159,7 +188,12 @@ pub(crate) fn spawn_protected_suspended(
     program: &Path,
     args: &[OsString],
     env: &[(OsString, OsString)],
+    confinement: Confinement,
 ) -> io::Result<(ProtectedChild, File, OwnedHandle)> {
+    let token = match confinement {
+        Confinement::BrokerToken => Some(create_broker_token(BrokerDefaultDacl::Protected)?),
+        Confinement::SameToken => None,
+    };
     let user_sid = current_user_sid_string()?;
     let process_descriptor = SecurityDescriptor::from_sddl(&process_dacl_sddl(&user_sid))?;
     let thread_descriptor = SecurityDescriptor::from_sddl(&thread_dacl_sddl(&user_sid))?;
@@ -167,8 +201,13 @@ pub(crate) fn spawn_protected_suspended(
     let thread_attributes = security_attributes(&thread_descriptor);
 
     let (stdout_read, stdout_write) = pipe()?;
-    let holder =
-        HandleHolder::start_with(program, Some(&process_attributes), Some(&thread_attributes))?;
+    // The child inherits the holder's token.
+    let holder = HandleHolder::start_with(
+        program,
+        Some(&process_attributes),
+        Some(&thread_attributes),
+        token.as_ref().map(|token| token.as_raw_handle() as HANDLE),
+    )?;
     let mut handles = [holder.hold(stdout_write.as_raw_handle() as HANDLE)?];
     // The holder has its own copy now.
     drop(stdout_write);
@@ -226,7 +265,10 @@ pub(crate) fn spawn_protected_suspended(
         process,
         pid: info.dwProcessId,
     };
-    if let Err(err) = protect_child_token(&child) {
+    // The broker token has its default DACL already.
+    if confinement == Confinement::SameToken
+        && let Err(err) = protect_child_token(&child)
+    {
         kill_unstarted(&mut child);
         return Err(err);
     }

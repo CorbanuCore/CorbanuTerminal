@@ -284,9 +284,13 @@ fn pf_27_s07_protected_spawn_is_unopenable_while_suspended() {
     let mut command = child_command("target");
     command.env(CANARY_ENV, CANARY);
     let (program, args, env) = protected_spawn_parts(&command);
-    let (child, _stdout, _thread) =
-        crate::windows_protected_spawn::spawn_protected_suspended(&program, &args, &env)
-            .expect("protected spawn");
+    let (child, _stdout, _thread) = crate::windows_protected_spawn::spawn_protected_suspended(
+        &program,
+        &args,
+        &env,
+        crate::windows_protected_spawn::Confinement::BrokerToken,
+    )
+    .expect("protected spawn");
     let target = Target {
         child: TargetChild::Protected(child),
         new_threads: None,
@@ -309,6 +313,46 @@ fn pf_27_s07_protected_spawn_is_unopenable_while_suspended() {
         Some("granted"),
         "{report:?}"
     );
+}
+
+/// PF-27-S08: under the broker token the broker cannot open an ordinary
+/// process of the user (or its threads) for any right that reads, injects
+/// into or re-ACLs it. Positive control: the same probe started protected
+/// with a copy of this process's token (the PF-27-S07 broker) gets them all.
+#[test]
+fn pf_27_s08_broker_token_cannot_open_the_users_processes() {
+    use crate::windows_protected_spawn::Confinement;
+    let target = Target::spawn(/*harden*/ false);
+    let control = probe_started_protected(&target, Confinement::SameToken);
+    assert_eq!(control["vm_read"], "granted", "{control:?}");
+    assert_eq!(control["environment"], "canary_found", "{control:?}");
+    for (name, _) in PROCESS_RIGHTS.iter().chain(THREAD_RIGHTS) {
+        assert_eq!(
+            control[*name].split('@').next(),
+            Some("granted"),
+            "{name}: {control:?}"
+        );
+    }
+    let confined = probe_started_protected(&target, Confinement::BrokerToken);
+    eprintln!("pf27s08: probe under the broker token: {confined:?}");
+    assert_all_denied(&confined);
+}
+
+/// The probe, started with `spawn_protected` under `confinement`.
+fn probe_started_protected(
+    target: &Target,
+    confinement: crate::windows_protected_spawn::Confinement,
+) -> Report {
+    let mut command = child_command("probe");
+    command.env(TARGET_PID_ENV, target.pid().to_string());
+    let (program, args, env) = protected_spawn_parts(&command);
+    let (mut child, stdout) =
+        crate::windows_protected_spawn::spawn_protected_with(&program, &args, &env, confinement)
+            .expect("protected probe");
+    let output = read_until(&line_channel(stdout), REPORT_PREFIX);
+    let _ = child.kill();
+    let _ = child.wait();
+    decode(&output)
 }
 
 fn assert_new_threads(report: &Report, thread: &str, expected: &str) {
@@ -726,7 +770,11 @@ fn run_probe() {
         .expect("target pid")
         .parse()
         .expect("numeric pid");
-    disable_all_privileges();
+    // The broker token has no privileges to disable (and may not adjust
+    // its own token).
+    if crate::current_token_is_broker_token().is_err() {
+        disable_all_privileges();
+    }
     let mut report = Report::new();
     match open_process(pid, PROCESS_VM_READ | PROCESS_QUERY_INFORMATION) {
         Ok(handle) => {
