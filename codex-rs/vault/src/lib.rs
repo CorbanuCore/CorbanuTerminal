@@ -639,6 +639,7 @@ impl Vault {
             // PF-27-S09: the Windows credential broker's token cannot write
             // the user's files. A read-only handle locks the existing lock
             // file just as exclusively; writes to the vault itself still fail.
+            #[cfg(windows)]
             Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
                 OpenOptions::new().read(true).open(&lock_path)
             }

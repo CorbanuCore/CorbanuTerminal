@@ -106,12 +106,13 @@ fn pf_27_s09_crt_copy_child_entry() {
     let value = take_env_var(CRT_KEY_ENV).expect("value");
     assert_eq!(value.as_slice(), b"synthetic-crt-value");
     assert_eq!(std::env::var_os(CRT_KEY_ENV), None);
-    // The C runtime's copy is overwritten in place.
-    assert_eq!(crt_value().as_deref(), Some("0000000000000000000"));
+    // The C runtime's copy is overwritten, then dropped.
+    assert_eq!(crt_value(), None);
 }
 
-/// PF-27-S09: on Windows the value is also wiped from the C runtime's copy
-/// of the environment, which `SetEnvironmentVariableW` does not update.
+/// PF-27-S09: on Windows the value is also wiped from (and the variable
+/// dropped from) the C runtime's copy of the environment, which
+/// `SetEnvironmentVariableW` does not update.
 #[cfg(windows)]
 #[test]
 fn pf_27_s09_take_env_var_wipes_the_c_runtime_copy() {

@@ -23,11 +23,13 @@
 //! - A launch-environment value that `.env` loading already replaced is no
 //!   longer reachable through `environ`; its original bytes stay in the
 //!   launch block.
-//! - Windows: the C runtime copies the environment at start-up, keeping some
-//!   copies and freeing others unwiped, so the process heaps are swept too:
-//!   `NAME=value` entries anywhere and bare values in free blocks. A copy in
-//!   another form (a parsed string held elsewhere, memory outside the heaps)
-//!   is not found.
+//! - Windows: the C runtimes in the process copy the environment at start-up,
+//!   keeping some copies and freeing others unwiped, so every process heap is
+//!   swept too: `NAME=value` entries anywhere and bare values in free blocks.
+//!   A copy in another form (a parsed string held elsewhere, memory outside
+//!   the heaps) is not found. A heap its owner created with
+//!   `HEAP_NO_SERIALIZE` is not locked by `HeapLock`, so walking it races
+//!   with that owner.
 
 #[cfg(unix)]
 use std::ffi::OsStr;
@@ -139,6 +141,7 @@ pub(crate) fn take_env_var(name: &str) -> Option<Zeroizing<Vec<u8>>> {
         return None;
     }
     windows_env::overwrite_in_place(name, &wide_name, value.len());
+    windows_env::remove_from_c_runtime(&wide_name);
     // SAFETY: Rust's own environment accessors serialize with this call and
     // this crate's writers hold `env_write_lock`.
     unsafe { std::env::remove_var(name) };
@@ -177,6 +180,17 @@ mod windows_env {
         fn __p__environ() -> *mut *mut *mut c_char;
         /// The C runtime's wide environment table (`_wenviron`).
         fn __p__wenviron() -> *mut *mut *mut u16;
+        /// Sets (an empty value: removes) a variable in the C runtime's
+        /// tables and the process environment.
+        fn _wputenv_s(name: *const u16, value: *const u16) -> i32;
+    }
+
+    /// Drops the (already overwritten) entry from the C runtime's tables, so
+    /// C `getenv` and the C runtime's spawn functions no longer see it.
+    pub(super) fn remove_from_c_runtime(wide_name: &[u16]) {
+        let empty = [0_u16];
+        // SAFETY: both strings are NUL-terminated.
+        unsafe { _wputenv_s(wide_name.as_ptr(), empty.as_ptr()) };
     }
 
     /// The value of the NUL-terminated `name`, read into a buffer that is
@@ -305,11 +319,9 @@ mod windows_env {
                 // Large free blocks may be partly decommitted: only the
                 // committed, writable pages are read.
                 committed.for_each_writable(start, end, |from, to| {
-                    // SAFETY: committed, writable bytes of a heap block.
-                    let data =
-                        unsafe { std::slice::from_raw_parts_mut(from as *mut u8, to - from) };
                     for pattern in &patterns {
-                        pattern.wipe(data, free);
+                        // SAFETY: committed, writable bytes of a heap block.
+                        unsafe { pattern.wipe(from as *mut u8, to - from, free) };
                     }
                 });
             }
@@ -327,29 +339,45 @@ mod windows_env {
 
     impl Pattern<'_> {
         /// Overwrites `prefix value` entries' values with `0` characters
-        /// and, when `free`, zeroes every bare occurrence of the value.
-        fn wipe(&self, data: &mut [u8], free: bool) {
+        /// and, when `free`, zeroes every bare occurrence of the value, in
+        /// the `len` bytes at `data`. Other threads may use a busy block
+        /// meanwhile, so the bytes are only ever read and written through
+        /// volatile raw-pointer accesses, never as a Rust slice.
+        ///
+        /// # Safety
+        ///
+        /// `data..data + len` must be committed, writable memory.
+        unsafe fn wipe(&self, data: *mut u8, len: usize, free: bool) {
             let wide = self.value.len() > 1 && self.value[1] == 0;
-            let fold = |byte: u8| byte.to_ascii_uppercase();
+            // SAFETY: (caller) `index < len` is committed and readable.
+            let byte = |index: usize| unsafe { std::ptr::read_volatile(data.add(index)) };
+            let equal = |at: usize, wanted: &[u8], fold: bool| {
+                wanted.iter().enumerate().all(|(offset, want)| {
+                    let have = byte(at + offset);
+                    if fold {
+                        have.eq_ignore_ascii_case(want)
+                    } else {
+                        have == *want
+                    }
+                })
+            };
             let mut at = 0;
-            while at + self.value.len() <= data.len() {
-                if data[at] != self.value[0] || data[at..at + self.value.len()] != *self.value {
+            while at + self.value.len() <= len {
+                if byte(at) != self.value[0] || !equal(at, self.value, false) {
                     at += 1;
                     continue;
                 }
-                let entry = at >= self.prefix.len()
-                    && data[at - self.prefix.len()..at]
-                        .iter()
-                        .zip(self.prefix)
-                        .all(|(have, want)| fold(*have) == fold(*want));
+                let entry =
+                    at >= self.prefix.len() && equal(at - self.prefix.len(), self.prefix, true);
                 if entry || free {
-                    for (index, byte) in data[at..at + self.value.len()].iter_mut().enumerate() {
-                        let replacement = match (entry, wide && index % 2 == 1) {
-                            (true, false) => b'0',
-                            _ => 0,
+                    for index in 0..self.value.len() {
+                        let replacement = if entry && !(wide && index % 2 == 1) {
+                            b'0'
+                        } else {
+                            0
                         };
-                        // SAFETY: a valid byte of the block.
-                        unsafe { std::ptr::write_volatile(byte, replacement) };
+                        // SAFETY: (caller) within the committed, writable range.
+                        unsafe { std::ptr::write_volatile(data.add(at + index), replacement) };
                     }
                 }
                 at += self.value.len();
