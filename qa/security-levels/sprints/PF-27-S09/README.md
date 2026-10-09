@@ -36,7 +36,7 @@ broker reads the vault key from Credential Manager itself, under its own PF-27-S
 ## Measured
 
 On a real Windows 11 machine, 2026-10-09, using `C:\CorbanuQA\s09`. Slice 1 was tested at `6e767d417`; the final
-product runs and videos used slice 2's head, with slice 1 merged in (the commit is in the video index):
+product runs and videos used `cf3d8b352a` (slice 2, with slice 1 merged in):
 
 | What | Elevated (SSH) | Normal session (console, medium) |
 | --- | --- | --- |
@@ -49,7 +49,7 @@ product runs and videos used slice 2's head, with slice 1 merged in (the commit 
 | `corbanu exec`, GLM 5.2, env key | answers; key handed over and removed; `token+dacl+job` | same |
 | `corbanu exec`, GLM 5.2, vault key | answers, with the vault key in the profile's file fallback (see limits) | answers, with the vault key in Credential Manager and no fallback file |
 | Elevated sandbox command (`whoami`) with brokered auth | `codexsandboxoffline` | not run (one-time admin setup needed) |
-| Heap sweep per handed-over key (debug build) | 112 ms | 111 ms |
+| Heap sweep per handed-over key (debug build) | 138 ms | 148 ms |
 
 - **Clippy `-D warnings`:** clean on Windows for network-proxy, vault, arg0, http-client and core, and on Linux on
   the RTX box for the same crates. Linux tests pass: network-proxy 298, vault 59, arg0 10, http-client 73, Core 5.
@@ -87,7 +87,7 @@ product runs and videos used slice 2's head, with slice 1 merged in (the commit 
   - Between the check and the write, the owner of a live block could reuse those bytes, and the sweep would then
     overwrite new data. The window is tiny, and it is not closed.
   - `HeapLock` does not lock a heap created with `HEAP_NO_SERIALIZE`, so walking one races with its owner.
-  - It costs about 110 ms per key at session start (debug build).
+  - It costs about 140 ms per key at session start (debug build).
   - Outside the heaps, only the parameters' allocation is swept: for example, a copy on a thread stack is not
     found.
 - **Over SSH there is no Credential Manager.** In an OpenSSH session authenticated with a key, the vault keeps its
