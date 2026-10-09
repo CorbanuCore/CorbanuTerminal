@@ -3,7 +3,9 @@
 //! The format is the number of accounting migrations a ledger has applied.
 //! Format 1 is the original schema. Format 2 lets a price record state a
 //! `Local` or `Undeclared` basis and where its basis came from, and lets a
-//! compact day count that work. A build reads every format up to its own, and
+//! compact day count that work. Format 3 lets a price record state a
+//! long-context tier (rates for an attempt whose input is above a threshold).
+//! A build reads every format up to its own, and
 //! upgrades a ledger only when it first writes a record the ledger's format
 //! cannot express (so an older build sharing the state DB keeps working until
 //! then); a ledger written in a newer format is
@@ -83,22 +85,23 @@ impl<'a> SnapshotBeforeBasis<'a> {
     fn of(snapshot: &'a Snapshot) -> Option<Self> {
         (snapshot.basis == Basis::Billed
             && snapshot.plan_burn_millis.is_none()
-            && snapshot.basis_source == BasisSource::BuiltIn)
-            .then_some(Self {
-                id: &snapshot.id,
-                provider: &snapshot.provider,
-                model: &snapshot.model,
-                scope: &snapshot.scope,
-                currency: &snapshot.currency,
-                unit: &snapshot.unit,
-                rates: &snapshot.rates,
-                source_reference: &snapshot.source_reference,
-                source_kind: &snapshot.source_kind,
-                observed_at_ms: &snapshot.observed_at_ms,
-                approved_at_ms: &snapshot.approved_at_ms,
-                effective_from_ms: &snapshot.effective_from_ms,
-                effective_end_ms: &snapshot.effective_end_ms,
-            })
+            && snapshot.basis_source == BasisSource::BuiltIn
+            && snapshot.long_context.is_none())
+        .then_some(Self {
+            id: &snapshot.id,
+            provider: &snapshot.provider,
+            model: &snapshot.model,
+            scope: &snapshot.scope,
+            currency: &snapshot.currency,
+            unit: &snapshot.unit,
+            rates: &snapshot.rates,
+            source_reference: &snapshot.source_reference,
+            source_kind: &snapshot.source_kind,
+            observed_at_ms: &snapshot.observed_at_ms,
+            approved_at_ms: &snapshot.approved_at_ms,
+            effective_from_ms: &snapshot.effective_from_ms,
+            effective_end_ms: &snapshot.effective_end_ms,
+        })
     }
 }
 
@@ -140,13 +143,20 @@ impl<'a> QuoteBeforeBasis<'a> {
 }
 
 impl Snapshot {
-    /// The ledger format this record needs: 2 for a basis or source format 1
-    /// cannot express, otherwise 1. Every path that stores a snapshot upgrades
-    /// the ledger to this first (`require_format_on_connection`).
+    /// The ledger format this record needs: 3 for a long-context price tier,
+    /// 2 for a basis or source format 1 cannot express, otherwise 1. Every
+    /// path that stores a snapshot upgrades the ledger to this first
+    /// (`require_format_on_connection`).
     pub(crate) fn ledger_format(&self) -> i64 {
         let format_two = matches!(self.basis, Basis::Local | Basis::Undeclared)
             || self.basis_source != BasisSource::BuiltIn;
-        if format_two { 2 } else { 1 }
+        if self.long_context.is_some() {
+            3
+        } else if format_two {
+            2
+        } else {
+            1
+        }
     }
 }
 

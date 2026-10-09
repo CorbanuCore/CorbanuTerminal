@@ -88,6 +88,7 @@ impl Fixture {
                 basis: Basis::Billed,
                 plan_burn_millis: None,
                 basis_source: BasisSource::BuiltIn,
+                long_context: None,
                 observed_at_ms: start.try_into()?,
                 approved_at_ms: start.try_into()?,
                 effective_from_ms: start.try_into()?,

@@ -209,10 +209,27 @@ pub struct Snapshot {
     pub plan_burn_millis: Option<u32>,
     #[serde(default, skip_serializing_if = "BasisSource::is_built_in")]
     pub basis_source: BasisSource,
+    /// Rates for the whole attempt when its input exceeds a threshold, such
+    /// as OpenAI's price for prompts above 272K input tokens. Omitted when the
+    /// price has no such tier, so every earlier record keeps its bytes.
+    /// Ledger format 3.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub long_context: Option<LongContext>,
     pub observed_at_ms: Count,
     pub approved_at_ms: Count,
     pub effective_from_ms: Count,
     pub effective_end_ms: Option<Count>,
+}
+
+/// A price tier keyed on the attempt's input size: when the attempt's input
+/// tokens (cache reads and writes included) are strictly more than
+/// `above_input_tokens`, `rates` price the whole attempt instead of the
+/// snapshot's base rates. An attempt whose input is unknown has no price.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct LongContext {
+    pub above_input_tokens: Count,
+    pub rates: Rates,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
@@ -252,7 +269,7 @@ impl Snapshot {
         // Local and undeclared work states no price of any kind.
         ensure!(
             matches!(self.basis, Basis::Billed | Basis::PlanEquivalent)
-                || self.rates == Rates::default(),
+                || (self.rates == Rates::default() && self.long_context.is_none()),
             "rates on a basis that charges nothing"
         );
         Ok(())
@@ -365,6 +382,30 @@ fn priced_counts(usage: &Usage, dialect: Dialect, snapshot: Option<&Snapshot>) -
     }
 }
 
+/// The rates that price this attempt under `snapshot`: its long-context
+/// rates when the attempt's input is above the threshold, its base rates
+/// otherwise, and none when the snapshot has a threshold but the input is
+/// unknown, since either tier could apply (the quote reports that as missing
+/// usage, not a missing rate).
+///
+/// Whether cache writes are free (`priced_counts`) is read from the base rates
+/// only; a tier must never change it.
+///
+/// This is pricing rules version 1 unchanged for every snapshot without a
+/// long-context tier; a snapshot with one exists only in ledger format 3,
+/// which a build that does not apply the tier refuses to read.
+fn applied_rates<'s>(snapshot: &'s Snapshot, usage: &Usage) -> Option<&'s Rates> {
+    let Some(long) = &snapshot.long_context else {
+        return Some(&snapshot.rates);
+    };
+    let input = usage.input?;
+    Some(if input > i64::from(long.above_input_tokens) {
+        &long.rates
+    } else {
+        &snapshot.rates
+    })
+}
+
 fn quote_observations(
     attempt: &Attempt,
     observations: &[Observation],
@@ -406,13 +447,11 @@ fn quote_observations_under(
             selected = Some(snapshot);
         }
     }
-    let rates = selected.map_or([None; 4], |s| {
-        [
-            s.rates.noncached,
-            s.rates.read,
-            s.rates.write,
-            s.rates.output,
-        ]
+    let applied = selected.and_then(|s| applied_rates(s, &usage));
+    // A tier that cannot be chosen is a gap in the usage, not in the price.
+    let undecided = selected.is_some() && applied.is_none();
+    let rates = applied.map_or([None; 4], |rates| {
+        [rates.noncached, rates.read, rates.write, rates.output]
     });
     let mut buckets = [BucketQuote::MissingUsage; 4];
     let mut known_subtotal = Decimal::default();
@@ -426,6 +465,7 @@ fn quote_observations_under(
             (None, _) => BucketQuote::MissingUsage,
             (Some(0), _) if selected.is_some() => BucketQuote::Priced(Decimal::default()),
             (Some(n), Some(rate)) => BucketQuote::Priced(rate.price(n)?),
+            (Some(_), None) if undecided => BucketQuote::MissingUsage,
             (Some(_), None) => BucketQuote::MissingRate,
         };
         if let BucketQuote::Priced(amount) = bucket {

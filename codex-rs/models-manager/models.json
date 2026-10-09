@@ -2055,7 +2055,18 @@
         "status": "disabled",
         "provider_id": "openai",
         "capability": "legacy",
-        "reason": "superseded by GPT-5.6 and lower capability than Sol, Terra, and Luna"
+        "reason": "superseded by GPT-5.6 and lower capability than Sol, Terra, and Luna",
+        "billing": {
+          "kind": "metered",
+          "input_milli_usd_per_million_tokens": 5000,
+          "output_milli_usd_per_million_tokens": 30000,
+          "cached_input_milli_usd_per_million_tokens": 500,
+          "long_context": {
+            "above_input_tokens": 272000,
+            "input_milli_usd_per_million_tokens": 10000,
+            "output_milli_usd_per_million_tokens": 45000
+          }
+        }
       },
       "display_name": "GPT-5.5",
       "description": "Frontier model for complex coding, research, and real-world work.",
@@ -2153,7 +2164,18 @@
         "status": "disabled",
         "provider_id": "openai",
         "capability": "legacy",
-        "reason": "superseded model without current orchestration economics"
+        "reason": "superseded model without current orchestration economics",
+        "billing": {
+          "kind": "metered",
+          "input_milli_usd_per_million_tokens": 2500,
+          "output_milli_usd_per_million_tokens": 15000,
+          "cached_input_milli_usd_per_million_tokens": 250,
+          "long_context": {
+            "above_input_tokens": 272000,
+            "input_milli_usd_per_million_tokens": 5000,
+            "output_milli_usd_per_million_tokens": 22500
+          }
+        }
       },
       "display_name": "gpt-5.4",
       "description": "Strong model for everyday coding.",
@@ -2248,7 +2270,13 @@
         "status": "disabled",
         "provider_id": "openai",
         "capability": "legacy",
-        "reason": "superseded model without current orchestration economics"
+        "reason": "superseded model without current orchestration economics",
+        "billing": {
+          "kind": "metered",
+          "input_milli_usd_per_million_tokens": 750,
+          "output_milli_usd_per_million_tokens": 4500,
+          "cached_input_milli_usd_per_million_tokens": 75
+        }
       },
       "display_name": "GPT-5.4-Mini",
       "description": "Small, fast, and cost-efficient model for simpler coding tasks.",
@@ -2318,7 +2346,21 @@
         "status": "disabled",
         "provider_id": "openai",
         "capability": "frontier",
-        "reason": "manual selection only; automatic allocation economics are not configured"
+        "reason": "manual selection only; automatic allocation economics are not configured",
+        "billing": {
+          "kind": "metered",
+          "input_milli_usd_per_million_tokens": 10000,
+          "output_milli_usd_per_million_tokens": 50000,
+          "cached_input_milli_usd_per_million_tokens": 1000,
+          "cache_write_milli_usd_per_million_tokens": 12500,
+          "long_context": {
+            "above_input_tokens": 272000,
+            "input_milli_usd_per_million_tokens": 20000,
+            "output_milli_usd_per_million_tokens": 75000,
+            "cached_input_milli_usd_per_million_tokens": 2000,
+            "cache_write_milli_usd_per_million_tokens": 25000
+          }
+        }
       },
       "display_name": "GPT-6 Astra",
       "description": "Advanced reasoning and coding. Requires eligible OpenAI account access.",
@@ -2406,7 +2448,15 @@
           "kind": "metered",
           "input_milli_usd_per_million_tokens": 2000,
           "output_milli_usd_per_million_tokens": 10000,
-          "cached_input_milli_usd_per_million_tokens": 200
+          "cached_input_milli_usd_per_million_tokens": 200,
+          "cache_write_milli_usd_per_million_tokens": 2500,
+          "long_context": {
+            "above_input_tokens": 272000,
+            "input_milli_usd_per_million_tokens": 4000,
+            "output_milli_usd_per_million_tokens": 15000,
+            "cached_input_milli_usd_per_million_tokens": 400,
+            "cache_write_milli_usd_per_million_tokens": 5000
+          }
         }
       },
       "display_name": "GPT-6 Sol",
@@ -2490,7 +2540,21 @@
         "status": "disabled",
         "provider_id": "openai",
         "capability": "fast",
-        "reason": "manual selection only; automatic allocation economics are not configured"
+        "reason": "manual selection only; automatic allocation economics are not configured",
+        "billing": {
+          "kind": "metered",
+          "input_milli_usd_per_million_tokens": 100,
+          "output_milli_usd_per_million_tokens": 500,
+          "cached_input_milli_usd_per_million_tokens": 10,
+          "cache_write_milli_usd_per_million_tokens": 125,
+          "long_context": {
+            "above_input_tokens": 272000,
+            "input_milli_usd_per_million_tokens": 200,
+            "output_milli_usd_per_million_tokens": 750,
+            "cached_input_milli_usd_per_million_tokens": 20,
+            "cache_write_milli_usd_per_million_tokens": 250
+          }
+        }
       },
       "display_name": "GPT-6 Luna",
       "description": "Efficient GPT-6 model for focused coding and high-volume tasks.",
@@ -2580,9 +2644,18 @@
         "billing": {
           "kind": "auth_dependent",
           "plan_relative_burn_millis": 1000,
-          "api_key_input_milli_usd_per_million_tokens": 5000,
-          "api_key_output_milli_usd_per_million_tokens": 30000,
-          "api_key_cached_input_milli_usd_per_million_tokens": 500
+          "api_key_input_milli_usd_per_million_tokens": 4000,
+          "api_key_output_milli_usd_per_million_tokens": 20000,
+          "api_key_cached_input_milli_usd_per_million_tokens": 400,
+          "api_key_cache_write_milli_usd_per_million_tokens": 5000,
+          "api_key_long_context": {
+            "above_input_tokens": 272000,
+            "input_milli_usd_per_million_tokens": 8000,
+            "output_milli_usd_per_million_tokens": 30000,
+            "cached_input_milli_usd_per_million_tokens": 800,
+            "cache_write_milli_usd_per_million_tokens": 10000
+          },
+          "api_key_valid_through_utc": "2026-11-21T23:59:59.999Z"
         }
       },
       "display_name": "GPT-5.6-Sol",
@@ -2665,9 +2738,17 @@
         "billing": {
           "kind": "auth_dependent",
           "plan_relative_burn_millis": 500,
-          "api_key_input_milli_usd_per_million_tokens": 2500,
-          "api_key_output_milli_usd_per_million_tokens": 15000,
-          "api_key_cached_input_milli_usd_per_million_tokens": 250
+          "api_key_input_milli_usd_per_million_tokens": 2000,
+          "api_key_output_milli_usd_per_million_tokens": 12000,
+          "api_key_cached_input_milli_usd_per_million_tokens": 200,
+          "api_key_cache_write_milli_usd_per_million_tokens": 2500,
+          "api_key_long_context": {
+            "above_input_tokens": 272000,
+            "input_milli_usd_per_million_tokens": 4000,
+            "output_milli_usd_per_million_tokens": 18000,
+            "cached_input_milli_usd_per_million_tokens": 400,
+            "cache_write_milli_usd_per_million_tokens": 5000
+          }
         }
       },
       "display_name": "GPT-5.6-Terra",
@@ -2750,9 +2831,17 @@
         "billing": {
           "kind": "auth_dependent",
           "plan_relative_burn_millis": 200,
-          "api_key_input_milli_usd_per_million_tokens": 1000,
-          "api_key_output_milli_usd_per_million_tokens": 6000,
-          "api_key_cached_input_milli_usd_per_million_tokens": 100
+          "api_key_input_milli_usd_per_million_tokens": 200,
+          "api_key_output_milli_usd_per_million_tokens": 1200,
+          "api_key_cached_input_milli_usd_per_million_tokens": 20,
+          "api_key_cache_write_milli_usd_per_million_tokens": 250,
+          "api_key_long_context": {
+            "above_input_tokens": 272000,
+            "input_milli_usd_per_million_tokens": 400,
+            "output_milli_usd_per_million_tokens": 1800,
+            "cached_input_milli_usd_per_million_tokens": 40,
+            "cache_write_milli_usd_per_million_tokens": 500
+          }
         }
       },
       "display_name": "GPT-5.6-Luna",
@@ -3408,7 +3497,13 @@
         "status": "disabled",
         "provider_id": "openai",
         "capability": "legacy",
-        "reason": "superseded model without current orchestration economics"
+        "reason": "superseded model without current orchestration economics",
+        "billing": {
+          "kind": "metered",
+          "input_milli_usd_per_million_tokens": 1750,
+          "output_milli_usd_per_million_tokens": 14000,
+          "cached_input_milli_usd_per_million_tokens": 175
+        }
       },
       "display_name": "gpt-5.3-codex",
       "description": "Coding-optimized model.",
@@ -3498,7 +3593,13 @@
         "status": "disabled",
         "provider_id": "openai",
         "capability": "legacy",
-        "reason": "superseded model without current orchestration economics"
+        "reason": "superseded model without current orchestration economics",
+        "billing": {
+          "kind": "metered",
+          "input_milli_usd_per_million_tokens": 1750,
+          "output_milli_usd_per_million_tokens": 14000,
+          "cached_input_milli_usd_per_million_tokens": 175
+        }
       },
       "display_name": "gpt-5.2",
       "description": "Optimized for professional work and long-running agents.",

@@ -7,4 +7,9 @@ import type { ModelCapabilityTier } from "./ModelCapabilityTier";
 /**
  * Canonical spawn-allocation metadata carried with a model through every catalogue layer.
  */
-export type ModelOrchestrationMetadata = { "status": "eligible", provider_id: string, capability: ModelCapabilityTier, billing: ModelBilling, } | { "status": "disabled", provider_id: string, capability: ModelCapabilityTier, reason: string, };
+export type ModelOrchestrationMetadata = { "status": "eligible", provider_id: string, capability: ModelCapabilityTier, billing: ModelBilling, } | { "status": "disabled", provider_id: string, capability: ModelCapabilityTier, reason: string,
+/**
+ * The provider's published price, for cost accounting of manual use.
+ * Never used for spawn allocation.
+ */
+billing?: ModelBilling, };

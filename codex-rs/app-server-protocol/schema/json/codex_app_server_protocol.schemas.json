@@ -12681,6 +12681,49 @@
         "title": "LogoutAccountResponse",
         "type": "object"
       },
+      "LongContextRates": {
+        "description": "API rates for a whole request whose input exceeds a published threshold, such as OpenAI's long-context price for prompts above 272K input tokens.",
+        "properties": {
+          "above_input_tokens": {
+            "description": "The rates apply when the request's input tokens (cached and cache writes included) are strictly more than this.",
+            "format": "uint32",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "cache_write_milli_usd_per_million_tokens": {
+            "format": "uint32",
+            "minimum": 0.0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "cached_input_milli_usd_per_million_tokens": {
+            "format": "uint32",
+            "minimum": 0.0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "input_milli_usd_per_million_tokens": {
+            "format": "uint32",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "output_milli_usd_per_million_tokens": {
+            "format": "uint32",
+            "minimum": 0.0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "above_input_tokens",
+          "input_milli_usd_per_million_tokens",
+          "output_milli_usd_per_million_tokens"
+        ],
+        "type": "object"
+      },
       "ManagedHooksRequirements": {
         "properties": {
           "PermissionRequest": {
@@ -13771,6 +13814,15 @@
           },
           {
             "properties": {
+              "cache_write_milli_usd_per_million_tokens": {
+                "description": "The published cache-write price. Omitted means the catalogue states none, not that writes are free.",
+                "format": "uint32",
+                "minimum": 0.0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
               "cached_input_milli_usd_per_million_tokens": {
                 "default": null,
                 "format": "uint32",
@@ -13791,10 +13843,28 @@
                 ],
                 "type": "string"
               },
+              "long_context": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/v2/LongContextRates"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Rates for a request whose input exceeds a published threshold."
+              },
               "output_milli_usd_per_million_tokens": {
                 "format": "uint32",
                 "minimum": 0.0,
                 "type": "integer"
+              },
+              "valid_through_utc": {
+                "description": "The last UTC instant (RFC 3339) the provider says these rates hold, such as the end of a promotion. Afterwards the row states no price.",
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "required": [
@@ -13858,6 +13928,14 @@
           {
             "description": "The same provider/model route can use subscription capacity or API-key billing.\n\nBoth sides are exact. Runtime consumers resolve the active side from authentication; catalogue consumers that do not know authentication must present both, never guess.",
             "properties": {
+              "api_key_cache_write_milli_usd_per_million_tokens": {
+                "format": "uint32",
+                "minimum": 0.0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
               "api_key_cached_input_milli_usd_per_million_tokens": {
                 "default": null,
                 "format": "uint32",
@@ -13872,10 +13950,27 @@
                 "minimum": 0.0,
                 "type": "integer"
               },
+              "api_key_long_context": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/v2/LongContextRates"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "api_key_output_milli_usd_per_million_tokens": {
                 "format": "uint32",
                 "minimum": 0.0,
                 "type": "integer"
+              },
+              "api_key_valid_through_utc": {
+                "description": "As `Metered::valid_through_utc`, for the API-key side only.",
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
               "kind": {
                 "enum": [
@@ -14011,6 +14106,17 @@
           {
             "description": "Non-spawnable models remain visible for existing sessions and manual use.",
             "properties": {
+              "billing": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/v2/ModelBilling"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The provider's published price, for cost accounting of manual use. Never used for spawn allocation."
+              },
               "capability": {
                 "$ref": "#/definitions/v2/ModelCapabilityTier"
               },

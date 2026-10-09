@@ -50,7 +50,7 @@ async fn accounting_responses_ws_subscription_uses_resolved_endpoint_without_api
     // applied and, because this row states API rates, what the same tokens
     // would have cost - as an equivalent, never as spend.
     let attempt = sampling
-        .admit("gpt-5.6-sol", &api.url_for_path("responses"))
+        .admit("gpt-5.6-terra", &api.url_for_path("responses"))
         .await?;
     let prices: Vec<Snapshot> = fixture.rows("draft_accounting_price_snapshots").await?;
     assert_eq!(prices.len(), 1);
@@ -58,10 +58,10 @@ async fn accounting_responses_ws_subscription_uses_resolved_endpoint_without_api
         prices[0].basis,
         codex_state::accounting::Basis::PlanEquivalent
     );
-    assert_eq!(prices[0].plan_burn_millis, Some(1000));
+    assert_eq!(prices[0].plan_burn_millis, Some(500));
     assert_eq!(prices[0].provider, "openai");
-    assert_eq!(prices[0].model, "gpt-5.6-sol");
-    // $5/M uncached, $30/M output, $0.50/M cached input: the catalogue's own
+    assert_eq!(prices[0].model, "gpt-5.6-terra");
+    // $2/M uncached, $12/M output, $0.20/M cached input: the catalogue's own
     // API-key side for this auth-dependent row.
     assert_eq!(
         (
@@ -70,9 +70,9 @@ async fn accounting_responses_ws_subscription_uses_resolved_endpoint_without_api
             prices[0].rates.read
         ),
         (
-            Some(serde_json::from_value(serde_json::json!("5"))?),
-            Some(serde_json::from_value(serde_json::json!("30"))?),
-            Some(serde_json::from_value(serde_json::json!("0.5"))?)
+            Some(serde_json::from_value(serde_json::json!("2"))?),
+            Some(serde_json::from_value(serde_json::json!("12"))?),
+            Some(serde_json::from_value(serde_json::json!("0.2"))?)
         )
     );
     assert_eq!(attempt.provider, "openai");
@@ -116,7 +116,7 @@ async fn accounting_subscription_without_a_price_stays_subscription() -> anyhow:
         .await?
         .unwrap();
     for (model, tier) in [
-        ("gpt-6-astra", None),
+        ("codex-auto-review", None),
         ("remote-only", None),
         ("gpt-5.6-sol", Some("priority")),
     ] {
@@ -491,8 +491,8 @@ async fn accounting_responses_ws_original_price_binding() -> anyhow::Result<()> 
     let fixture = Fixture::new(mode()).await?;
     let admission = fixture.admission().await?;
     for (model, tier) in [
-        ("gpt-5.6-sol", None),
-        ("gpt-6-astra", None),
+        ("gpt-5.3-codex", None),
+        ("codex-auto-review", None),
         ("gpt-5.6-sol", Some("priority")),
         ("alias", None),
         ("remote-only", None),
@@ -519,13 +519,13 @@ async fn accounting_responses_ws_original_price_binding() -> anyhow::Result<()> 
     let source = serde_json::to_vec(&(
         "openai-responses-api-key-bundled-v1",
         "openai",
-        "gpt-5.6-sol",
+        "gpt-5.3-codex",
         "api_key",
         "default",
         "USD/million",
-        5000u32,
-        30000u32,
-        Some(500u32),
+        1750u32,
+        14000u32,
+        Some(175u32),
     ))?;
     assert_eq!(
         snapshots[0].source_reference,
@@ -533,7 +533,7 @@ async fn accounting_responses_ws_original_price_binding() -> anyhow::Result<()> 
     );
     assert_eq!(
         serde_json::to_value(&snapshots[0].rates)?,
-        serde_json::json!({"noncached":"5","output":"30","read":"0.5","write":null})
+        serde_json::json!({"noncached":"1.75","output":"14","read":"0.175","write":null})
     );
     assert_eq!(
         fixture

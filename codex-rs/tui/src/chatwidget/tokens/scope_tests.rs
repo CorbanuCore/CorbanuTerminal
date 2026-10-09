@@ -941,6 +941,7 @@ fn with_basis(
         basis,
         plan_burn_millis: None,
         basis_source: source,
+        long_context: None,
         observed_at_ms: 0.try_into().unwrap(),
         approved_at_ms: 0.try_into().unwrap(),
         effective_from_ms: 0.try_into().unwrap(),
