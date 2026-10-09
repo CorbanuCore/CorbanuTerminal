@@ -215,6 +215,8 @@ impl Registration {
         // it while it is held), and gone with the last handle, however this
         // process exits.
         let file = std::fs::OpenOptions::new()
+            // `write` for `create_new`; `access_mode` adds `DELETE`.
+            .write(true)
             .access_mode(GENERIC_READ | GENERIC_WRITE | DELETE)
             .create_new(true)
             .share_mode(FILE_SHARE_READ | FILE_SHARE_DELETE)
