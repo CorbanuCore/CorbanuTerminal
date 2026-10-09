@@ -90,6 +90,10 @@ pub(crate) struct UnifiedExecProcess {
     process_handle: ProcessHandle,
     output_tx: broadcast::Sender<Vec<u8>>,
     output_buffer: OutputBuffer,
+    /// Everything the output task receives (capped head and tail), written by
+    /// that task itself so it never misses output a slow or late subscriber
+    /// of `output_tx` would. `output_buffer` is drained by polls; this is not.
+    transcript: OutputBuffer,
     output_notify: Arc<Notify>,
     output_closed: Arc<AtomicBool>,
     output_closed_notify: Arc<Notify>,
@@ -120,6 +124,7 @@ impl UnifiedExecProcess {
         spawn_lifecycle: Option<SpawnLifecycleHandle>,
     ) -> Self {
         let output_buffer = Arc::new(Mutex::new(HeadTailBuffer::default()));
+        let transcript = Arc::new(Mutex::new(HeadTailBuffer::default()));
         let output_notify = Arc::new(Notify::new());
         let output_closed = Arc::new(AtomicBool::new(false));
         let output_closed_notify = Arc::new(Notify::new());
@@ -132,6 +137,7 @@ impl UnifiedExecProcess {
             process_handle,
             output_tx,
             output_buffer,
+            transcript,
             output_notify,
             output_closed,
             output_closed_notify,
@@ -179,6 +185,11 @@ impl UnifiedExecProcess {
             output_closed_notify: Arc::clone(&self.output_closed_notify),
             cancellation_token: self.cancellation_token.clone(),
         }
+    }
+
+    /// The whole output of the process so far, for its end event.
+    pub(super) fn transcript(&self) -> OutputBuffer {
+        Arc::clone(&self.transcript)
     }
 
     pub(super) fn output_receiver(&self) -> tokio::sync::broadcast::Receiver<Vec<u8>> {
@@ -355,6 +366,7 @@ impl UnifiedExecProcess {
         managed.output_task = Some(Self::spawn_local_output_task(
             output_rx,
             Arc::clone(&managed.output_buffer),
+            Arc::clone(&managed.transcript),
             Arc::clone(&managed.output_notify),
             Arc::clone(&managed.output_closed),
             Arc::clone(&managed.output_closed_notify),
@@ -407,6 +419,7 @@ impl UnifiedExecProcess {
         managed.output_task = Some(Self::spawn_exec_server_output_task(
             started,
             output_handles,
+            Arc::clone(&managed.transcript),
             managed.output_tx.clone(),
             managed.state_tx.clone(),
         ));
@@ -435,6 +448,7 @@ impl UnifiedExecProcess {
     fn spawn_exec_server_output_task(
         started: StartedExecProcess,
         output_handles: OutputHandles,
+        transcript: OutputBuffer,
         output_tx: broadcast::Sender<Vec<u8>>,
         state_tx: watch::Sender<ProcessState>,
     ) -> JoinHandle<()> {
@@ -515,9 +529,7 @@ impl UnifiedExecProcess {
                     } = response;
                     for chunk in chunks.into_iter().filter(|chunk| chunk.seq > last_seq) {
                         let bytes = chunk.chunk.into_inner();
-                        let mut guard = output_buffer.lock().await;
-                        guard.push_chunk(bytes.clone());
-                        drop(guard);
+                        record_output(&output_buffer, &transcript, &bytes).await;
                         let _ = output_tx.send(bytes);
                         output_notify.notify_waiters();
                     }
@@ -558,9 +570,7 @@ impl UnifiedExecProcess {
                         }
                         last_seq = chunk.seq;
                         let bytes = chunk.chunk.into_inner();
-                        let mut guard = output_buffer.lock().await;
-                        guard.push_chunk(bytes.clone());
-                        drop(guard);
+                        record_output(&output_buffer, &transcript, &bytes).await;
                         let _ = output_tx.send(bytes);
                         output_notify.notify_waiters();
                     }
@@ -602,6 +612,7 @@ impl UnifiedExecProcess {
     fn spawn_local_output_task(
         mut receiver: tokio::sync::broadcast::Receiver<Vec<u8>>,
         buffer: OutputBuffer,
+        transcript: OutputBuffer,
         output_notify: Arc<Notify>,
         output_closed: Arc<AtomicBool>,
         output_closed_notify: Arc<Notify>,
@@ -615,9 +626,7 @@ impl UnifiedExecProcess {
             loop {
                 match receiver.recv().await {
                     Ok(chunk) => {
-                        let mut guard = buffer.lock().await;
-                        guard.push_chunk(chunk.clone());
-                        drop(guard);
+                        record_output(&buffer, &transcript, &chunk).await;
                         let _ = output_tx.send(chunk);
                         output_notify.notify_waiters();
                     }
@@ -637,6 +646,13 @@ impl UnifiedExecProcess {
         let _ = self.state_tx.send_replace(state.exited(exit_code));
         self.cancellation_token.cancel();
     }
+}
+
+/// Add a chunk to the polled buffer and the transcript before it is
+/// broadcast, so a subscriber that saw it can rely on both holding it.
+async fn record_output(buffer: &OutputBuffer, transcript: &OutputBuffer, chunk: &[u8]) {
+    buffer.lock().await.push_chunk(chunk.to_vec());
+    transcript.lock().await.push_chunk(chunk.to_vec());
 }
 
 impl Drop for UnifiedExecProcess {

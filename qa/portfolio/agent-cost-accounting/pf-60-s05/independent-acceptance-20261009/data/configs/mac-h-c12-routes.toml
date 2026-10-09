@@ -1,0 +1,41 @@
+model = "glm-5.2"
+model_provider = "zai"
+
+[model_providers.moonshot]
+name = "Kimi Open Platform"
+base_url = "https://api.moonshot.ai/v1"
+env_key = "QA_PLACEHOLDER_KEY"
+wire_api = "chat"
+
+[model_providers.bigmodel-coding]
+name = "BigModel coding"
+base_url = "https://open.bigmodel.cn/api/coding/paas/v4"
+env_key = "QA_PLACEHOLDER_KEY"
+wire_api = "chat"
+
+[model_providers.bigmodel-general]
+name = "BigModel general"
+base_url = "https://open.bigmodel.cn/api/paas/v4"
+env_key = "QA_PLACEHOLDER_KEY"
+wire_api = "chat"
+
+[model_providers.openai-apikey]
+name = "OpenAI API key route"
+base_url = "https://api.openai.com/v1"
+env_key = "QA_PLACEHOLDER_KEY"
+wire_api = "chat"
+
+[model_providers.kimicode-custom]
+name = "Kimi Code custom"
+base_url = "https://api.kimi.com/coding/v1"
+env_key = "QA_PLACEHOLDER_KEY"
+wire_api = "chat"
+
+[model_providers.zai-general-custom]
+name = "Z.AI general custom"
+base_url = "https://api.z.ai/api/paas/v4"
+env_key = "QA_PLACEHOLDER_KEY"
+wire_api = "chat"
+
+[projects."<scratch>/work/repo"]
+trust_level = "trusted"

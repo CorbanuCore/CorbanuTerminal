@@ -1,0 +1,3 @@
+Source: https://docs.z.ai/guides/overview/pricing, fetched 2026-10-09 (~14:10Z). Row used, USD per 1M tokens:
+Model | Input | Cached Input | Cached Input Storage | Output
+GLM-5.2 | $1.4 | $0.26 | Limited-time Free | $4.4

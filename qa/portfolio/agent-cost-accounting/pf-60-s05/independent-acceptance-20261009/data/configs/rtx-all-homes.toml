@@ -1,0 +1,82 @@
+### h-c1
+model = "glm-5.2"
+model_provider = "zai"
+
+[projects."<rtx-scratch>/work/repo"]
+trust_level = "trusted"
+### h-l-bad
+model = "glm-5.2"
+model_provider = "zai"
+
+[model_providers.zai]
+billing = "free"
+### h-l-c3
+model = "glm-5.2"
+model_provider = "zaiproxy"
+service_tier = "default"
+
+[model_providers.zai]
+billing = "subscription"
+
+[model_providers.zaiproxy]
+name = "zaiproxy"
+base_url = "http://127.0.0.1:18471/api/paas/v4"
+env_key = "ZAI_API_KEY"
+wire_api = "chat"
+
+[projects."<rtx-scratch>/work/repo"]
+trust_level = "trusted"
+### h-l-c6fut
+model = "glm-5.2"
+model_provider = "zai"
+### h-l-c7
+model = "glm-5.2"
+model_provider = "zai"
+model_auto_compact_token_limit = 6700
+### h-l-c8
+model = "glm-5.2"
+model_provider = "zai"
+approval_policy = "on-request"
+approvals_reviewer = "auto_review"
+service_tier = "default"
+
+[projects."<rtx-scratch>/work/repo"]
+trust_level = "trusted"
+### h-l-c9
+model = "glm-5.2"
+model_provider = "zai"
+### h-l-mixed
+model = "glm-5.2"
+model_provider = "zaicoding"
+service_tier = "default"
+
+[model_providers.zaicoding]
+name = "Z.AI coding"
+base_url = "https://api.z.ai/api/coding/paas/v4"
+env_key = "ZAI_API_KEY"
+wire_api = "chat"
+
+[projects."<rtx-scratch>/work/repo"]
+trust_level = "trusted"
+### h-l-payonly
+model = "z-ai/glm-5.2"
+model_provider = "openrouter"
+service_tier = "default"
+
+[projects."<rtx-scratch>/work/repo"]
+trust_level = "trusted"
+### h-old
+model = "glm-5.2"
+model_provider = "zai"
+### h-old-pristine-copy
+model = "glm-5.2"
+model_provider = "zai"
+### h-old-view
+model = "glm-5.2"
+model_provider = "zai"
+
+[projects."<rtx-scratch>/work/repo"]
+trust_level = "trusted"
+### h-old2
+model = "glm-5.2"
+model_provider = "zai"

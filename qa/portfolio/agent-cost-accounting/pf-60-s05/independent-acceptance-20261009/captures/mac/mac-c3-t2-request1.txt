@@ -1,0 +1,29 @@
+$
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     glm-5.2   /model to change                    │
+│ directory: <corbanu-root>/tmp/…/work/repo │
+╰──────────────────────────────────────────────────────────╯
+
+  Reply with exactly: turn two
+• turn two
+  Request
+  Requested UTC day: 2026-10-09
+  Provider: Z.AI
+  Model: Z.AI GLM 5.2
+  Billing: Covered by your subscription (not billed per request)
+  Same work at API prices: not available
+  Tokens: 12,615 tokens
+  Paid usage beyond a plan (usage credits, Extra Usage or extra credits you bought) isn't visible here and is never counted as spent; check your provider's
+  usage page.
+  —— Details ——
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Request: ac1d4f32-22eb-460d-ac4b-773ebc6f25ff
+  Snapshot is not current; newer activity is unverified
+  —— Open ——
+  → Technical details (attempt 1)
+  Back
+  Refresh
+  Close

@@ -1,0 +1,5 @@
+model = "glm-5.2"
+model_provider = "zai"
+
+[projects."<scratch>/work/repo"]
+trust_level = "trusted"

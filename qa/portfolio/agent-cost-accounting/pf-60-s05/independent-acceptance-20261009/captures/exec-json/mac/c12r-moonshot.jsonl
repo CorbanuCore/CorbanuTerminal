@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"01a120e1-bf0a-7611-86db-e17a95fe9a3b"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Skill descriptions were shortened to fit the 2% skills context budget. Codex can still see every skill, but some descriptions are shorter. Disable unused skills or plugins to leave more room for the rest."}}
+{"type":"turn.started"}
+{"type":"error","message":"unexpected status 401 Unauthorized: Invalid Authentication, url: https://api.moonshot.ai/v1/chat/completions, cf-ray: a47dc73d6d5154c7-PHX"}
+{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized: Invalid Authentication, url: https://api.moonshot.ai/v1/chat/completions, cf-ray: a47dc73d6d5154c7-PHX"}}

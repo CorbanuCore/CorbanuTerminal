@@ -1,0 +1,6 @@
+model = "deepseek-flash"
+model_provider = "deepseek"
+service_tier = "default"
+
+[projects."<scratch>/work/repo"]
+trust_level = "trusted"

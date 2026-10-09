@@ -1,0 +1,58 @@
+$ /cost
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     glm-5.2   /model to change                    │
+│ directory: <corbanu-root>/tmp/…/work/repo │
+╰──────────────────────────────────────────────────────────╯
+
+  Make two shell tool calls in parallel in the same response, each with escalated permissions because they need network access (give a short justification):
+  (1) curl -sI https://example.com | head -1  (2) curl -sI https://example.org | head -1 . Then run a third escalated command: curl -sI https://example.net |
+  head -1 . Reply with the three status lines.
+• Here are the three status lines:
+  1. https://example.com → HTTP/2 200
+  2. https://example.org → HTTP/2 200
+  3. https://example.net → HTTP/2 200
+  All three sites responded successfully with HTTP/2 200.
+  Cost — this conversation
+  Requested UTC day: 2026-10-09
+  Today (UTC) in this conversation:
+  • Z.AI · Z.AI GLM 5.2 — Pay per use. 6 requests, 56,455 tokens. Estimated cost: $0.038908 (rounded).
+  No other conversation recorded requests on this day.
+  Costs are estimates from published prices; Z.AI doesn't report its charges — check Z.AI's bill.
+  Select a provider below to see its requests.
+  —— Details ——
+  Estimated token cost for recorded attempts: $0.038908 (rounded)
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+  Day covered (UTC): [2026-10-09T00:00:00.000Z, 2026-10-10T00:00:00.000Z)
+  Read at: 2026-10-09T14:09:13.415Z; ledger current to: 2026-10-09T14:08:56.901Z (16514 ms behind)
+  Retention: request detail kept since 2026-07-11T14:09:13.415Z; daily totals kept since 2025-10-10; oldest recorded day in this conversation 2026-10-09
+  Known subtotal exact USD: 0.03890804
+  Input: 55,823
+  Noncached input (derived for inclusive input): not reported (6 attempts) — costed as input − cache read for 6 attempts, whose price charges nothing for
+  cache writes
+  Cache read: 36,864
+  Cache write: not reported (6 attempts) — free at the price of 6 attempts, so nothing was charged
+  Output: 632
+  Reasoning (subset, not separately billed): 400
+  Total (not separately billed): 56,455
+  Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+  Unknown parent population: 0 attempts, excluded from root total
+  —— Open ——
+  → Z.AI · Z.AI GLM 5.2 — estimated $0.038908 (rounded) (6 requests)
+  → Request 1 · Z.AI · Z.AI GLM 5.2 · estimated $0.020514 (rounded)
+  → Request 2 · Z.AI · Z.AI GLM 5.2 · estimated $0.005918 (rounded)
+  → Request 3 · Z.AI · Z.AI GLM 5.2 · estimated $0.001838 (rounded)
+  → Request 4 · Z.AI · Z.AI GLM 5.2 · estimated $0.004250 (rounded)
+  → Request 5 · Z.AI · Z.AI GLM 5.2 · estimated $0.002069 (rounded)
+  → Request 6 · Z.AI · Z.AI GLM 5.2 · estimated $0.004321 (rounded)
+  → Root's own attempts (6 attempts)
+  → Descendant attempts (none)
+  → Unknown provider/model attribution (none)
+  → Unknown parent population (none)
+  Refresh
+  Close

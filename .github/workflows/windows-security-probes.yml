@@ -76,13 +76,23 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib pf_27_s07 -- --nocapture --test-threads=1
-      - name: P1 Windows hardening regressions (#301, #304, #307, #323, #341)
+      - name: Build the elevated sandbox helpers
         if: ${{ !cancelled() }}
         shell: bash
-        # Elevated: the #341 tests must not skip.
+        run: cargo build --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --bins
+      - name: P1 Windows hardening regressions (#301, #304, #307, #323, #341, #345)
+        if: ${{ !cancelled() }}
+        shell: bash
+        # Elevated: the #341/#345 tests must not skip. #345 runs a command in
+        # the elevated sandbox, which needs its helpers.
         env:
           CODEX_SEC_WIN_341_REQUIRE: "1"
-        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib sec_win_ -- --nocapture --test-threads=1
+        run: |
+          set -euo pipefail
+          bin_dir="${CARGO_TARGET_DIR}/debug"
+          export CARGO_BIN_EXE_codex_windows_sandbox_setup="$(cygpath -w "${bin_dir}/codex-windows-sandbox-setup.exe")"
+          export CARGO_BIN_EXE_codex_command_runner="$(cygpath -w "${bin_dir}/codex-command-runner.exe")"
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib sec_win_ -- --nocapture --test-threads=1
       - name: P1 Windows hardening regressions (#320)
         if: ${{ !cancelled() }}
         shell: bash
@@ -91,10 +101,6 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-network-proxy "credential_broker::isolated::" -- --nocapture --test-threads=1
-      - name: Build the elevated sandbox helpers
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: cargo build --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --bins
       - name: Launch contract probes under the elevated sandbox
         if: ${{ !cancelled() }}
         shell: bash
@@ -153,7 +159,7 @@ jobs:
             & $medium -Program $d1 -Arguments @('--nocapture', '--test-threads=1')
             if ($LASTEXITCODE -ne 0) { throw "#295 probe failed in a normal session" }
             $sandbox = Get-TestExe @('-p', 'codex-windows-sandbox', '--lib')
-            Assert-Tests $sandbox 'sec_win_' 25
+            Assert-Tests $sandbox 'sec_win_' 31
             & $medium -Program $sandbox -Arguments @('sec_win_', '--nocapture', '--test-threads=1')
             if ($LASTEXITCODE -ne 0) { throw "P1 hardening regressions failed in a normal session" }
             $hardening = Get-TestExe @('-p', 'codex-process-hardening', '--lib')

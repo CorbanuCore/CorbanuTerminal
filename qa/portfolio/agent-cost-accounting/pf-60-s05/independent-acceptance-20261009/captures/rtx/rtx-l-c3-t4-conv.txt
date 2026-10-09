@@ -1,0 +1,56 @@
+$ /cost
+╭───────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)         │
+│                                       │
+│ model:     glm-5.2   /model to change │
+│ directory: ~/pf60-s05-indep/work/repo │
+╰───────────────────────────────────────╯
+
+  Reply with exactly: first
+• first
+  Cost — this conversation
+  Requested UTC day: 2026-10-09
+  Today (UTC) in this conversation:
+  • zaiproxy · Z.AI GLM 5.2 — Billing basis not declared. 1 request, 3,715 tokens. Counted neither as money spent nor as subscription work.
+  Other conversations on this day, not included above: 2 requests in 2 conversations.
+  • Z.AI · Z.AI GLM 5.2 — Partly subscription, partly pay per use. 2 requests, 12,888 tokens. Estimated cost: $0.003078 (rounded); subscription part — same
+  work at API prices: not available.
+  Other conversations' estimated cost: $0.003078 (rounded); subscription part — same work at API prices: not available.
+  To see those requests, open that conversation with /resume and run /cost there.
+  Billing basis not declared for zaiproxy. Next step: set model_providers.zaiproxy.billing = "subscription", "pay_per_use" or "local" in config.toml. Until
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  then these requests are counted neither as money spent nor as subscription work.
+  Paid usage beyond a plan (usage credits, Extra Usage or extra credits you bought) isn't visible here and is never counted as spent; check your provider's
+  usage page.
+  Costs are estimates from published prices; Z.AI and zaiproxy don't report their charges — check their bills.
+  Select a provider below to see its requests.
+  —— Details ——
+  Estimated token cost: unknown — the billing basis is not declared, so whether this work was billed per token is unknown; your provider's bill is the final
+  amount.
+  Billing basis not declared: 1 of 1 attempts, counted neither as money spent nor as subscription work
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+  Day covered (UTC): [2026-10-09T00:00:00.000Z, 2026-10-10T00:00:00.000Z)
+  Read at: 2026-10-09T13:27:47.135Z; ledger current to: 2026-10-09T13:25:41.612Z (125523 ms behind)
+  Retention: request detail kept since 2026-07-11T13:27:47.135Z; daily totals kept since 2025-10-10; oldest recorded day in this conversation 2026-10-09
+  Known subtotal exact USD: none — no work here is billed per token
+  Input: 3,702
+  Noncached input (derived for inclusive input): not reported (1 attempt)
+  Cache read: 0
+  Cache write: not reported (1 attempt)
+  Output: 13
+  Reasoning (subset, not separately billed): 11
+  Total (not separately billed): 3,715
+  Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+  Unknown parent population: 0 attempts, excluded from root total
+  —— Open ——
+  → zaiproxy · Z.AI GLM 5.2 — billing basis not declared (1 request)
+  → Request 1 · zaiproxy · Z.AI GLM 5.2 · billing basis not declared
+  → Root's own attempts (1 attempt)
+  → Descendant attempts (none)
+  → Unknown provider/model attribution (none)
+  → Unknown parent population (none)
+  Refresh
+  Close

@@ -1,0 +1,28 @@
+$
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     glm-5.2   /model to change                    │
+│ directory: <corbanu-root>/tmp/…/work/repo │
+╰──────────────────────────────────────────────────────────╯
+
+  Reply with exactly: turn one
+• turn one
+  Request
+  Requested UTC day: 2026-10-09
+  Provider: Z.AI
+  Model: Z.AI GLM 5.2
+  Billing: Pay per use
+  Estimated cost: $0.017597 (rounded)
+  Tokens: 12,615 tokens
+  —— Details ——
+  Billed cost: Z.AI doesn't report its charges, so any cost here is an estimate — check Z.AI's bill.
+  Request: 5a56584f-b505-4236-bee5-0fc7ad5f1f34
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Snapshot is not current; newer activity is unverified
+  —— Open ——
+  → Technical details (attempt 1)
+  Back
+  Refresh
+  Close

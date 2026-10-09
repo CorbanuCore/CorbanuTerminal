@@ -63,3 +63,21 @@ fn corbanu_decisions_are_unchanged_by_the_move() {
         other => panic!("{other:?}"),
     }
 }
+
+/// The empty file the Linux sandbox briefly creates for a missing denied home
+/// reads as unreadable and refuses the probes; it is still not an origin, nor
+/// is a home below such a file.
+#[cfg(unix)]
+#[test]
+fn a_file_in_place_of_a_home_is_not_an_origin() {
+    let account = tempfile::tempdir().unwrap();
+    let placeholder = account.path().join(".pfterminal");
+    std::fs::write(&placeholder, "").unwrap();
+    assert_eq!(
+        level::load_state(&placeholder).0.enforced(),
+        level::ChosenLevel::Aggressive
+    );
+    assert!(sandboxed_away_from(&placeholder));
+    let below = placeholder.join("home");
+    assert_eq!(nested_origins(vec![placeholder, below]), Vec::new());
+}
