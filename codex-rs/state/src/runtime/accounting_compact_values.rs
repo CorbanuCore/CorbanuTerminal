@@ -95,8 +95,8 @@ impl CompactValues {
             "unsupported compact version"
         );
         ensure!(
-            stored.version == 3 || (stored.local_attempts == 0 && stored.undeclared_attempts == 0),
-            "local or undeclared work before compact version 3"
+            (stored.version == 3) == (stored.local_attempts > 0 || stored.undeclared_attempts > 0),
+            "compact version 3 is exactly the days with local or undeclared work"
         );
         Self::from_day_totals(&DayTotals {
             measured: std::array::from_fn(|index| Metric {
@@ -246,16 +246,16 @@ impl CompactValues {
                 && (0..=totals.plan_attempts).contains(&totals.plan_burn_milli_tokens.unknown),
             "invalid plan unknown count"
         );
-        // Local and undeclared attempts are disjoint and have no billed price,
-        // so both are among the unknown estimates.
+        // Plan, local and undeclared attempts are disjoint and have no billed
+        // price, so together they are among the unknown estimates.
         ensure!(
             totals.local_attempts >= 0
                 && totals.undeclared_attempts >= 0
-                && totals
-                    .local_attempts
-                    .checked_add(totals.undeclared_attempts)
+                && [totals.local_attempts, totals.undeclared_attempts]
+                    .into_iter()
+                    .try_fold(totals.plan_attempts, i64::checked_add)
                     .is_some_and(|sum| sum <= totals.unknown_estimates),
-            "invalid local or undeclared attempt count"
+            "invalid plan, local or undeclared attempt count"
         );
         ensure!(
             totals.plan_burn_milli_tokens.known >= 0,

@@ -229,6 +229,7 @@ async fn accounting_inspect_schema_rejection_matrix() -> anyhow::Result<()> {
         "UPDATE _accounting_migrations SET checksum = X'00'",
         "UPDATE _accounting_migrations SET version = version + 10",
         "DELETE FROM _accounting_migrations WHERE version = 1",
+        "CREATE TABLE draft_accounting_ledger_format (version INTEGER PRIMARY KEY NOT NULL CHECK(version = 2))",
         "DELETE FROM _accounting_migrations",
         "DROP TABLE _accounting_migrations",
     ] {
@@ -3163,4 +3164,17 @@ async fn expiry_interrupted_mid_sweep_resumes_to_the_full_sweeps_result() -> any
     assert_eq!(accounting_rows(&runtime).await?, expected);
     runtime.close().await;
     Ok(())
+}
+
+/// The unapplied-migration check reads object names from `CREATE` statements;
+/// a migration whose statements it cannot see would make that check vacuous.
+#[test]
+fn every_accounting_migration_creates_named_objects() {
+    for migration in crate::migrations::accounting_migrator().iter() {
+        assert!(
+            !super::created_objects(migration.sql.as_str()).is_empty(),
+            "migration {} names no objects",
+            migration.version
+        );
+    }
 }

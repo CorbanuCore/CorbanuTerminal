@@ -505,6 +505,14 @@ fn local_and_undeclared_days_round_trip_as_version_three() {
     let mut uncounted = raw.clone();
     uncounted["unknown_estimates"] = json!(1);
     assert!(CompactValues::decode(&uncounted.to_string()).is_err());
+    // Plan work counts against the same unknown estimates.
+    let mut with_plan = raw.clone();
+    with_plan["plan_attempts"] = json!(1);
+    assert!(CompactValues::decode(&with_plan.to_string()).is_err());
+    // Version 3 without such work is not canonical.
+    let mut empty_three = literal();
+    empty_three["version"] = json!(3);
+    assert!(CompactValues::decode(&empty_three.to_string()).is_err());
     assert_eq!(
         serde_json::from_str::<Value>(&decode(&literal()).encode().unwrap()).unwrap(),
         literal()

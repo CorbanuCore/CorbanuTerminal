@@ -695,8 +695,7 @@ async fn assert_compact(
         .into_iter()
         .filter(|(table, _)| table.starts_with("draft_accounting_"))
         .collect::<Vec<_>>();
-    // Ten ledger tables plus the format marker (ledger format 2).
-    assert_eq!(accounting.len(), 11);
+    assert_eq!(accounting.len(), 10);
     for table in [
         "attempts",
         "observations",
