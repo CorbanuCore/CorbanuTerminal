@@ -81,7 +81,8 @@ fn basis_does_not_follow_the_auth_type() {
         declared(KIMI_CODE_PROVIDER_ID, kimi, Some(AuthMode::ApiKey)),
         BillingDeclaration::BuiltIn(Subscription)
     );
-    // OpenAI follows its per-credential rows.
+    // OpenAI follows its per-credential rows; credentials with no row are
+    // not declared.
     let openai = &providers[OPENAI_PROVIDER_ID];
     for (auth_mode, expected) in [
         (
@@ -89,12 +90,79 @@ fn basis_does_not_follow_the_auth_type() {
             BillingDeclaration::BuiltIn(Subscription),
         ),
         (
+            Some(AuthMode::ChatgptAuthTokens),
+            BillingDeclaration::BuiltIn(Subscription),
+        ),
+        (
             Some(AuthMode::ApiKey),
             BillingDeclaration::BuiltIn(PayPerUse),
+        ),
+        (Some(AuthMode::Headers), BillingDeclaration::NotDeclared),
+        (
+            Some(AuthMode::AgentIdentity),
+            BillingDeclaration::NotDeclared,
+        ),
+        (
+            Some(AuthMode::PersonalAccessToken),
+            BillingDeclaration::NotDeclared,
+        ),
+        (
+            Some(AuthMode::BedrockApiKey),
+            BillingDeclaration::NotDeclared,
         ),
         (None, BillingDeclaration::NotDeclared),
     ] {
         assert_eq!(declared(OPENAI_PROVIDER_ID, openai, auth_mode), expected);
+    }
+    // Bedrock resolves a regional route at runtime; its AWS signing and command
+    // login are pay per use wherever that route is.
+    for provider in [&bedrock, &providers[AMAZON_BEDROCK_PROVIDER_ID]] {
+        assert_eq!(
+            declared_billing(
+                AMAZON_BEDROCK_PROVIDER_ID,
+                provider,
+                BillingCredential::of(provider, None),
+                "https://bedrock-mantle.us-east-1.api.aws/openai/v1",
+                /*at_built_in_route*/ false,
+            ),
+            BillingDeclaration::BuiltIn(PayPerUse)
+        );
+    }
+    // Codex's realtime calls carry the ChatGPT sign-in to the API host.
+    assert_eq!(
+        declared_billing(
+            OPENAI_PROVIDER_ID,
+            openai,
+            BillingCredential::ChatgptLogin,
+            "https://api.openai.com/v1",
+            /*at_built_in_route*/ false,
+        ),
+        BillingDeclaration::BuiltIn(Subscription)
+    );
+    // Local only on this machine: an OSS provider pointed elsewhere may be paid.
+    let ollama = &providers[OLLAMA_OSS_PROVIDER_ID];
+    for (endpoint, expected) in [
+        (
+            "http://localhost:11434/v1",
+            BillingDeclaration::BuiltIn(Local),
+        ),
+        ("http://[::1]:11434/v1", BillingDeclaration::BuiltIn(Local)),
+        (
+            "https://ollama.example.com/v1",
+            BillingDeclaration::NotDeclared,
+        ),
+    ] {
+        assert_eq!(
+            declared_billing(
+                OLLAMA_OSS_PROVIDER_ID,
+                ollama,
+                BillingCredential::None,
+                endpoint,
+                /*at_built_in_route*/ true,
+            ),
+            expected,
+            "{endpoint}"
+        );
     }
     // A provider's own login is declared only for that provider.
     let claude = &providers[CLAUDE_PLAN_PROVIDER_ID];
@@ -191,7 +259,9 @@ fn billing_parses_and_names_bad_values() {
     let error = toml::from_str::<ModelProviderInfo>("billing = \"free\"")
         .unwrap_err()
         .to_string();
-    assert!(error.contains("billing"), "{error}");
+    for part in ["billing = \"free\"", "subscription", "pay_per_use", "local"] {
+        assert!(error.contains(part), "{error}");
+    }
 }
 
 /// No two built-in default routes declare different bases for one credential:

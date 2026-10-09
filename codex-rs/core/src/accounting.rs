@@ -804,6 +804,20 @@ fn pricing_for(mode: &AccountingMode) -> Pricing {
     }
 }
 
+/// Where a mode's basis was declared.
+fn basis_source_for(mode: &AccountingMode) -> codex_state::accounting::BasisSource {
+    match mode {
+        AccountingMode::Provider { basis_source, .. } => *basis_source,
+        AccountingMode::Disabled
+        | AccountingMode::DirectAnthropic { .. }
+        | AccountingMode::DirectOpenAiResponsesHttp { .. }
+        | AccountingMode::DirectOpenAiChat { .. }
+        | AccountingMode::DirectOpenAiResponses { .. } => {
+            codex_state::accounting::BasisSource::BuiltIn
+        }
+    }
+}
+
 pub(crate) struct Sampling {
     runtime: Arc<StateRuntime>,
     owner: ThreadId,
@@ -994,16 +1008,7 @@ impl Sampling {
             provider: provider.into(),
             dialect,
             pricing: pricing_for(mode),
-            basis_source: match mode {
-                AccountingMode::Provider { basis_source, .. } => *basis_source,
-                AccountingMode::Disabled
-                | AccountingMode::DirectAnthropic { .. }
-                | AccountingMode::DirectOpenAiResponsesHttp { .. }
-                | AccountingMode::DirectOpenAiChat { .. }
-                | AccountingMode::DirectOpenAiResponses { .. } => {
-                    codex_state::accounting::BasisSource::BuiltIn
-                }
-            },
+            basis_source: basis_source_for(mode),
             previous: Mutex::new(None),
             failed: AtomicBool::new(false),
             halted: AtomicBool::new(false),
@@ -1095,8 +1100,16 @@ impl Sampling {
             dispatched_at_ms: dispatched_at.try_into()?,
         };
         use codex_state::accounting::Basis;
-        let basis_only =
-            |basis| prices::basis_only(basis, model, &self.provider, self.scope, dispatched_at);
+        let basis_only = |basis| {
+            prices::basis_only(
+                basis,
+                self.basis_source,
+                model,
+                &self.provider,
+                self.scope,
+                dispatched_at,
+            )
+        };
         let mut prices = match self.pricing {
             Pricing::Unavailable => Vec::new(),
             // Subscription work stays subscription work with no catalogue

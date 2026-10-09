@@ -1914,6 +1914,21 @@ impl Session {
     /// Read live rather than snapshotted: a session's provider can change, and
     /// a client that records against the identity it had at startup would
     /// attribute a request to a provider it no longer uses.
+    /// The session's configured definition of provider `id`, user overrides
+    /// such as `billing` included.
+    pub(crate) async fn configured_model_provider(
+        &self,
+        id: &str,
+    ) -> Option<codex_model_provider_info::ModelProviderInfo> {
+        let state = self.state.lock().await;
+        state
+            .session_configuration
+            .original_config_do_not_use
+            .model_providers
+            .get(id)
+            .cloned()
+    }
+
     pub(crate) async fn accounting_binding(&self) -> (crate::config::AccountingMode, String) {
         let state = self.state.lock().await;
         let config = &state.session_configuration.original_config_do_not_use;
