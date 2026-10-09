@@ -249,6 +249,8 @@ fn a_configured_basis_wins_and_says_so() {
         BillingDeclaration::UserConfig(Subscription)
     );
     assert!(not_declared_next_step("my-llm").contains("model_providers.my-llm.billing"));
+    assert!(not_declared_next_step("my.llm").contains("model_providers.\"my.llm\".billing"));
+    assert!(not_declared_next_step("").contains("model_providers.\"\".billing"));
 }
 
 #[test]
