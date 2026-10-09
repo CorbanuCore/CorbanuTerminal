@@ -11,17 +11,20 @@
 //! Every Corbanu process on a home shares that DB, so another one can hold its
 //! write lock for minutes, and the file can be read-only. Either used to end
 //! the turn ("failed to check provider request throttle state"). Now a step
-//! waits for the DB at most `PROVIDER_REQUEST_BUSY_WAIT` and then decides from
-//! this process's copy of the same state, which every step keeps current:
-//! - a cooldown this process recorded or read still holds its requests back;
+//! waits for the DB about `PROVIDER_REQUEST_BUSY_WAIT` and then decides from
+//! this process's copy of the throttle state, which every step keeps:
+//! - a cooldown this process recorded or read still holds its requests back
+//!   (escalating default cooldowns count only the 429s this process saw);
 //! - this process's sub-agents still take the lease one at a time.
 //!
-//! Until the DB is writable again, this process and the others no longer see
-//! each other's cooldowns and leases: each one goes on enforcing what it
-//! knows. A busy DB slows a turn rather than ending it, and no request is sent
-//! that this process's own limits would have held back. After a failure the
-//! DB is left alone for `STATE_DB_RETRY_AFTER`, so the requests of a long turn
-//! don't each wait the lock out again.
+//! While the DB answers, it decides, and the copy adds nothing to it. Until it
+//! is writable again, this process and the others no longer see each other's
+//! cooldowns and leases: each one goes on enforcing what it knows. A busy DB
+//! slows a turn rather than ending it, and no request is sent that this
+//! process's own limits would have held back. After a failure the DB is left
+//! alone for `STATE_DB_RETRY_AFTER`, so the requests of a long turn don't each
+//! wait the lock out again; a DB lease that could not be released then is
+//! released by the next step that reaches the DB.
 use super::busy_retry::is_busy;
 use super::busy_retry::is_read_only;
 use super::provider_requests::RATE_LIMIT_STATUS;
@@ -76,6 +79,8 @@ impl<T> ProviderRequestThrottled<T> {
 pub(crate) struct ProviderRequestMemory {
     rows: Mutex<HashMap<ProviderRequestKey, MemoryRow>>,
     paused: Mutex<Option<(Instant, StateDbFallback)>>,
+    /// State DB leases that ended while the DB could not be written.
+    pending_releases: Mutex<Vec<ProviderRequestLease>>,
 }
 
 /// The fields of a `provider_request_state` row. A cooldown or lease the
@@ -165,36 +170,34 @@ impl MemoryRow {
     }
 
     /// Copy the cooldown the state DB just answered with, so it still applies
-    /// if the DB stops answering. `None`: the DB holds no cooldown now.
+    /// if the DB stops answering. The DB checks its cooldown first, so any
+    /// other answer means it holds none now.
     fn note_state_db(&mut self, block: Option<&ProviderRequestBlock>) {
-        let Some(block) = block else {
-            if self.cooldown_in_state_db {
-                self.cooldown_until_ms = 0;
+        match block.filter(|block| block.reason == ProviderRequestBlockReason::Cooldown) {
+            Some(block)
+                if self.cooldown_in_state_db || block.until_ms >= self.cooldown_until_ms =>
+            {
+                self.cooldown_until_ms = block.until_ms;
+                self.cooldown_in_state_db = true;
             }
-            return;
-        };
-        self.last_status = block.last_status;
-        self.last_request_id.clone_from(&block.last_request_id);
-        self.last_provider_input_tokens = block.last_provider_input_tokens;
-        self.last_provider_cached_input_tokens = block.last_provider_cached_input_tokens;
+            Some(_) => {}
+            None if self.cooldown_in_state_db => self.cooldown_until_ms = 0,
+            None => {}
+        }
         // Another process's lease is not copied: this process could not see it
         // end, and would hold its own requests back until the lease expired.
-        if block.reason == ProviderRequestBlockReason::Cooldown
-            && block.until_ms >= self.cooldown_until_ms
-        {
-            self.cooldown_until_ms = block.until_ms;
-            self.cooldown_in_state_db = true;
+        if let Some(block) = block {
+            self.last_status = block.last_status;
+            self.last_request_id.clone_from(&block.last_request_id);
+            self.last_provider_input_tokens = block.last_provider_input_tokens;
+            self.last_provider_cached_input_tokens = block.last_provider_cached_input_tokens;
         }
     }
 
     /// The in-memory `record_provider_request_result_once`.
-    fn record(
-        &mut self,
-        owner: &str,
-        result: &ProviderRequestResult,
-        now_ms: i64,
-        in_state_db: bool,
-    ) -> bool {
+    /// The cooldown it sets is this process's alone until the state DB has
+    /// recorded the same result. Whether `owner` held the lease.
+    fn record(&mut self, owner: &str, result: &ProviderRequestResult, now_ms: i64) -> bool {
         if self.lease_owner.as_deref() != Some(owner) {
             return false;
         }
@@ -237,7 +240,7 @@ impl MemoryRow {
                 } else {
                     0
                 };
-                self.cooldown_in_state_db = in_state_db;
+                self.cooldown_in_state_db = false;
                 self.last_status = status;
                 self.last_request_id.clone_from(request_id);
             }
@@ -259,6 +262,29 @@ impl ProviderRequestMemory {
     fn with_row<T>(&self, key: &ProviderRequestKey, f: impl FnOnce(&mut MemoryRow) -> T) -> T {
         let mut rows = self.rows.lock().unwrap_or_else(PoisonError::into_inner);
         f(rows.entry(key.clone()).or_default())
+    }
+
+    fn next_pending_release(&self) -> Option<ProviderRequestLease> {
+        self.pending_releases
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .first()
+            .cloned()
+    }
+
+    /// Leases stay queued until released, so an interrupt can't drop one.
+    fn released(&self, lease: &ProviderRequestLease) {
+        self.pending_releases
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .retain(|pending| pending != lease);
+    }
+
+    fn defer_releases(&self, leases: impl IntoIterator<Item = ProviderRequestLease>) {
+        self.pending_releases
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .extend(leases);
     }
 
     /// Why the state DB is being left alone, if it is.
@@ -295,6 +321,25 @@ impl ProviderRequestMemory {
 }
 
 impl StateRuntime {
+    /// `Some` when this step must not use the state DB: it is paused, or lease
+    /// releases left over from an earlier failure still don't land.
+    async fn provider_request_state_db_unready(&self, now_ms: i64) -> Option<StateDbFallback> {
+        let memory = &self.provider_request_memory;
+        if let Some(reason) = memory.paused() {
+            return Some(reason);
+        }
+        while let Some(lease) = memory.next_pending_release() {
+            if let Err(error) = self
+                .release_provider_request_lease_briefly(&lease, now_ms)
+                .await
+            {
+                return Some(memory.pause("release provider request lease", &error));
+            }
+            memory.released(&lease);
+        }
+        None
+    }
+
     /// Whether a request may be sent now, or a cooldown holds it back. Never
     /// fails: see the module docs.
     pub async fn check_provider_request_throttle(
@@ -305,7 +350,16 @@ impl StateRuntime {
     ) -> ProviderRequestThrottled<Option<ProviderRequestBlock>> {
         let memory = &self.provider_request_memory;
         let started = Instant::now();
-        let mut fallback = memory.paused();
+        // A cooldown the state DB never saw holds the request back without it.
+        // While the DB answers every step there is none, so this changes nothing.
+        let held = memory.with_row(key, |row| {
+            row.note_preflight(preflight);
+            row.cooldown_block(now_ms, /*state_db_answered*/ true)
+        });
+        if held.is_some() {
+            return ProviderRequestThrottled::new(held, memory.paused());
+        }
+        let mut fallback = self.provider_request_state_db_unready(now_ms).await;
         if fallback.is_none() {
             match self
                 .check_provider_request_cooldown(key, preflight, now_ms)
@@ -314,7 +368,6 @@ impl StateRuntime {
                 Ok(block) => {
                     let now_ms = since(now_ms, started);
                     let decision = memory.with_row(key, |row| {
-                        row.note_preflight(preflight);
                         row.note_state_db(block.as_ref());
                         block
                             .or_else(|| row.cooldown_block(now_ms, /*state_db_answered*/ true))
@@ -328,7 +381,6 @@ impl StateRuntime {
         }
         let now_ms = since(now_ms, started);
         let decision = memory.with_row(key, |row| {
-            row.note_preflight(preflight);
             row.cooldown_block(now_ms, /*state_db_answered*/ false)
         });
         ProviderRequestThrottled::new(decision, fallback)
@@ -346,7 +398,19 @@ impl StateRuntime {
     ) -> ProviderRequestThrottled<ProviderRequestLeaseDecision> {
         let memory = &self.provider_request_memory;
         let started = Instant::now();
-        let mut fallback = memory.paused();
+        // A cooldown or lease the state DB never saw holds the request back
+        // without it, so no DB lease is taken only to be given back.
+        let held = memory.with_row(key, |row| {
+            row.note_preflight(preflight);
+            row.lease_block(now_ms, /*state_db_answered*/ true)
+        });
+        if let Some(block) = held {
+            return ProviderRequestThrottled::new(
+                ProviderRequestLeaseDecision::Blocked(block),
+                memory.paused(),
+            );
+        }
+        let mut fallback = self.provider_request_state_db_unready(now_ms).await;
         if fallback.is_none() {
             match self
                 .try_acquire_provider_request_lease(key, preflight, owner, lease_ttl_ms, now_ms)
@@ -355,7 +419,6 @@ impl StateRuntime {
                 Ok(ProviderRequestLeaseDecision::Acquired(lease)) => {
                     let now_ms = since(now_ms, started);
                     let block = memory.with_row(key, |row| {
-                        row.note_preflight(preflight);
                         row.note_state_db(None);
                         let block = row.lease_block(now_ms, /*state_db_answered*/ true);
                         if block.is_none() {
@@ -369,24 +432,26 @@ impl StateRuntime {
                             None,
                         );
                     };
-                    // A cooldown or lease this process took while the state DB
-                    // was unavailable is still running; give the DB lease back.
-                    if let Err(error) = self.release_provider_request_lease(&lease, now_ms).await {
-                        warn!(
-                            error = %format!("{error:#}"),
-                            "failed to release a provider request lease held back in memory"
-                        );
-                    }
+                    // Another step in this process took a lease or recorded a
+                    // cooldown without the DB while this one waited for it.
+                    memory.defer_releases([lease.clone()]);
+                    let fallback = match self
+                        .release_provider_request_lease_briefly(&lease, now_ms)
+                        .await
+                    {
+                        Ok(_) => {
+                            memory.released(&lease);
+                            None
+                        }
+                        Err(error) => Some(memory.pause("release provider request lease", &error)),
+                    };
                     return ProviderRequestThrottled::new(
                         ProviderRequestLeaseDecision::Blocked(block),
-                        None,
+                        fallback,
                     );
                 }
                 Ok(ProviderRequestLeaseDecision::Blocked(block)) => {
-                    memory.with_row(key, |row| {
-                        row.note_preflight(preflight);
-                        row.note_state_db(Some(&block));
-                    });
+                    memory.with_row(key, |row| row.note_state_db(Some(&block)));
                     return ProviderRequestThrottled::new(
                         ProviderRequestLeaseDecision::Blocked(block),
                         None,
@@ -399,7 +464,6 @@ impl StateRuntime {
         }
         let now_ms = since(now_ms, started);
         let decision = memory.with_row(key, |row| {
-            row.note_preflight(preflight);
             if let Some(block) = row.lease_block(now_ms, /*state_db_answered*/ false) {
                 return ProviderRequestLeaseDecision::Blocked(block);
             }
@@ -425,56 +489,77 @@ impl StateRuntime {
         now_ms: i64,
     ) -> ProviderRequestThrottled<bool> {
         let memory = &self.provider_request_memory;
-        let started = Instant::now();
+        // Memory first, so an interrupt during the DB wait cannot lose a 429.
+        let recorded = memory.with_row(&lease.key, |row| {
+            row.record(&lease.owner, &result, now_ms)
+                .then_some(row.cooldown_until_ms)
+        });
         let mut fallback = None;
         let mut state_db_recorded = false;
         if lease.in_state_db {
-            fallback = memory.paused();
+            fallback = self.provider_request_state_db_unready(now_ms).await;
             if fallback.is_none() {
                 match self
-                    .record_provider_request_result(lease, result.clone(), now_ms)
+                    .record_provider_request_result(lease, result, now_ms)
                     .await
                 {
-                    Ok(rows_affected) => {
+                    Ok(0) => {
+                        // Not this lease's row any more: the DB holds no lease
+                        // to release, but did not record the cooldown either.
                         state_db_recorded = true;
-                        if rows_affected == 0 {
-                            warn!(
-                                provider = %lease.key.provider_id,
-                                model = %lease.key.model,
-                                owner = %lease.owner,
-                                "provider request result did not match active lease owner"
-                            );
-                        }
+                        warn!(
+                            provider = %lease.key.provider_id,
+                            model = %lease.key.model,
+                            owner = %lease.owner,
+                            "provider request result did not match active lease owner"
+                        );
+                    }
+                    Ok(_) => {
+                        state_db_recorded = true;
+                        memory.with_row(&lease.key, |row| {
+                            if recorded == Some(row.cooldown_until_ms) {
+                                row.cooldown_in_state_db = true;
+                            }
+                        });
                     }
                     Err(error) => {
                         fallback = Some(memory.pause("record provider request result", &error));
                     }
                 }
             }
+            if !state_db_recorded {
+                warn!(
+                    provider = %lease.key.provider_id,
+                    model = %lease.key.model,
+                    owner = %lease.owner,
+                    reason = ?fallback,
+                    "provider request result kept in this process only; its state DB lease is released later"
+                );
+            }
         }
-        let now_ms = since(now_ms, started);
-        memory.with_row(&lease.key, |row| {
-            row.record(&lease.owner, &result, now_ms, state_db_recorded)
-        });
         ProviderRequestThrottled::new(state_db_recorded || !lease.in_state_db, fallback)
     }
 
     /// End a lease without a result (an interrupted or abandoned request).
     /// This waits out a busy state DB for longer than the turn's steps do, so
-    /// run it off the turn's path.
+    /// run it off the turn's path. A DB lease it cannot release is released by
+    /// the next throttle step that reaches the DB, so it does not hold every
+    /// process's requests back until it expires.
     pub async fn release_provider_request_throttle_lease(
         &self,
         lease: &ProviderRequestLease,
         now_ms: i64,
     ) -> anyhow::Result<u64> {
-        let released = self
-            .provider_request_memory
-            .with_row(&lease.key, |row| row.release(&lease.owner));
-        if lease.in_state_db {
-            self.release_provider_request_lease(lease, now_ms).await
-        } else {
-            Ok(u64::from(released))
+        let memory = &self.provider_request_memory;
+        let released = memory.with_row(&lease.key, |row| row.release(&lease.owner));
+        if !lease.in_state_db {
+            return Ok(u64::from(released));
         }
+        let result = self.release_provider_request_lease(lease, now_ms).await;
+        if result.is_err() {
+            memory.defer_releases([lease.clone()]);
+        }
+        result
     }
 }
 

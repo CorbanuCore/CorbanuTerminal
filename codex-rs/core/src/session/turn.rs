@@ -2941,12 +2941,12 @@ async fn notify_state_db_fallback(
         return;
     }
     let cause = match fallback {
-        StateDbFallback::Busy => "is busy (another process is holding it)",
+        StateDbFallback::Busy => "is busy (another session or process is writing to it)",
         StateDbFallback::ReadOnly => "is read-only",
         StateDbFallback::Unavailable => "can't be written",
     };
     let message = format!(
-        "The shared state database {cause}. This session continues and still applies its own provider request limits; limits shared with your other Corbanu sessions resume once the database can be written."
+        "The shared state database {cause}. Requests continue, and the provider request limits this Corbanu process knows about still apply; limits shared with other Corbanu processes resume once the database can be written."
     );
     sess.send_event(turn_context, EventMsg::Warning(WarningEvent { message }))
         .await;
@@ -2981,11 +2981,20 @@ impl ProviderRequestLeaseGuard {
         self.lease = None;
     }
 
-    async fn record_result(&mut self, sess: &Session, result: ProviderRequestResult) {
+    /// On an interrupt the lease stays here, and dropping the guard releases it.
+    async fn record_result(
+        &mut self,
+        sess: &Session,
+        result: ProviderRequestResult,
+        cancellation_token: &CancellationToken,
+    ) {
         let Some(lease) = self.lease.clone() else {
             return;
         };
-        if record_provider_request_result_for_lease(sess, Some(&lease), result).await {
+        if let Ok(true) = record_provider_request_result_for_lease(sess, Some(&lease), result)
+            .or_cancel(cancellation_token)
+            .await
+        {
             self.lease = None;
         }
     }
@@ -3250,14 +3259,22 @@ async fn try_run_sampling_request(
         Ok(Ok(stream)) => stream,
         Ok(Err(err)) => {
             provider_request_lease_guard
-                .record_result(sess.as_ref(), provider_request_result_from_error(&err))
+                .record_result(
+                    sess.as_ref(),
+                    provider_request_result_from_error(&err),
+                    &cancellation_token,
+                )
                 .await;
             return Err(err);
         }
         Err(err) => {
             let err = CodexErr::from(err);
             provider_request_lease_guard
-                .record_result(sess.as_ref(), provider_request_result_from_error(&err))
+                .record_result(
+                    sess.as_ref(),
+                    provider_request_result_from_error(&err),
+                    &cancellation_token,
+                )
                 .await;
             return Err(err);
         }
@@ -3899,6 +3916,7 @@ async fn try_run_sampling_request(
         .record_result(
             sess.as_ref(),
             provider_request_result_from_outcome(&outcome),
+            &cancellation_token,
         )
         .await;
 

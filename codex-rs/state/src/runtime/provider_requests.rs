@@ -5,8 +5,9 @@ use std::time::Duration;
 
 pub(super) const RATE_LIMIT_STATUS: i64 = 429;
 const DEFAULT_COOLDOWN_CAP_MS: i64 = 5 * 60 * 1000;
-/// How long a throttle step on the turn's path waits for a busy state DB
-/// before the turn goes on with this process's in-memory throttle.
+/// About how long a throttle step on the turn's path waits for a busy state DB
+/// before the turn goes on with this process's in-memory throttle. An attempt
+/// started just before the deadline still waits out SQLite's 5 s busy timeout.
 const PROVIDER_REQUEST_BUSY_WAIT: Duration = Duration::from_secs(10);
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -423,9 +424,9 @@ impl StateRuntime {
     //
     // Each write below is one short transaction that rolls back whole when the
     // state DB is busy, so it is retried; see `retry_busy`. The steps on the
-    // turn's path wait at most `PROVIDER_REQUEST_BUSY_WAIT`; releasing a lease
-    // runs off the turn's path and waits the full busy deadline, so another
-    // process is not kept waiting on a lease nobody holds. A retry's clock
+    // turn's path wait about `PROVIDER_REQUEST_BUSY_WAIT`; releasing a lease
+    // off the turn's path waits the full busy deadline, so another process is
+    // not kept waiting on a lease nobody holds. A retry's clock
     // reading moves on by the time spent waiting, so cooldowns and leases count
     // from when the write lands.
 
@@ -499,6 +500,22 @@ impl StateRuntime {
         retry_busy("release provider request lease", || {
             self.release_provider_request_lease_once(lease, since(now_ms, started))
         })
+        .await
+    }
+
+    /// `release_provider_request_lease`, waiting only as long as a step on the
+    /// turn's path does.
+    pub(crate) async fn release_provider_request_lease_briefly(
+        &self,
+        lease: &ProviderRequestLease,
+        now_ms: i64,
+    ) -> anyhow::Result<u64> {
+        let started = Instant::now();
+        retry_busy_within(
+            "release provider request lease",
+            PROVIDER_REQUEST_BUSY_WAIT,
+            || self.release_provider_request_lease_once(lease, since(now_ms, started)),
+        )
         .await
     }
 }

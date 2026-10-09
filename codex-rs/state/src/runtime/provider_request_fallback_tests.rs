@@ -145,9 +145,69 @@ async fn a_lock_held_past_the_wait_falls_back_to_this_process() -> anyhow::Resul
         blocked_reason(&worker_d),
         Some(ProviderRequestBlockReason::Cooldown)
     );
-    // ...and the DB lease it was granted was given back.
+    // ...without taking a DB lease it would have to give back.
     let other_process = StateRuntime::init_for_testing(home.clone(), "zai".into()).await?;
     let elsewhere = acquire(&other_process, "worker-e", after_cooldown + 5).await;
+    assert_eq!(blocked_reason(&elsewhere), None);
+
+    other_process.close().await;
+    runtime.close().await;
+    let _ = std::fs::remove_dir_all(home);
+    Ok(())
+}
+
+/// An interrupt while the result waits for a busy DB keeps the 429 cooldown in
+/// this process.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_interrupted_record_keeps_the_cooldown() -> anyhow::Result<()> {
+    let home = unique_temp_dir();
+    let runtime = StateRuntime::init_for_testing(home.clone(), "zai".into()).await?;
+    let lease = acquired(acquire(&runtime, "worker-a", 1_000).await);
+    let held = hold_write_lock(&runtime.sqlite().state_db_path()).await?;
+    let interrupted = tokio::time::timeout(
+        Duration::from_millis(100),
+        runtime.record_provider_request_throttle_result(&lease, rate_limited(), 2_000),
+    )
+    .await;
+    assert!(interrupted.is_err());
+    let block = runtime.provider_request_memory.with_row(&key(), |row| {
+        row.cooldown_block(3_000, /*state_db_answered*/ true)
+    });
+    assert_eq!(
+        block.map(|block| (block.reason, block.until_ms)),
+        Some((ProviderRequestBlockReason::Cooldown, 62_000))
+    );
+
+    held.rollback().await?;
+    runtime.close().await;
+    let _ = std::fs::remove_dir_all(home);
+    Ok(())
+}
+
+/// A state DB lease whose release failed (the DB stayed busy) is released by
+/// the next step that reaches the DB, so it doesn't hold every process's
+/// requests back until it expires.
+#[tokio::test]
+async fn a_lease_left_in_the_state_db_is_released_once_it_answers() -> anyhow::Result<()> {
+    let home = unique_temp_dir();
+    let runtime = StateRuntime::init_for_testing(home.clone(), "zai".into()).await?;
+    let other_process = StateRuntime::init_for_testing(home.clone(), "zai".into()).await?;
+    let lease = acquired(acquire(&runtime, "worker-a", 1_000).await);
+    // What `release_provider_request_throttle_lease` leaves when the DB fails.
+    let memory = &runtime.provider_request_memory;
+    memory.with_row(&lease.key, |row| row.release(&lease.owner));
+    memory.defer_releases([lease]);
+    let elsewhere = acquire(&other_process, "worker-b", 2_000).await;
+    assert_eq!(
+        blocked_reason(&elsewhere),
+        Some(ProviderRequestBlockReason::Lease)
+    );
+
+    let check = runtime
+        .check_provider_request_throttle(&key(), &preflight(), 3_000)
+        .await;
+    assert_eq!(check, ProviderRequestThrottled::new(None, None));
+    let elsewhere = acquire(&other_process, "worker-c", 4_000).await;
     assert_eq!(blocked_reason(&elsewhere), None);
 
     other_process.close().await;
