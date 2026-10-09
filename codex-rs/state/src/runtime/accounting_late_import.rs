@@ -181,6 +181,16 @@ impl Journal<'_> {
             outcomes.insert(attempt.attempt_id, outcome);
         }
         maintain_on_connection(conn, as_of_ms).await?;
+        // Imported records a format-1 ledger cannot express upgrade it in this
+        // transaction, before any of them is written.
+        let format = prices
+            .values()
+            .map(Snapshot::ledger_format)
+            .max()
+            .unwrap_or(1);
+        if format > 1 {
+            crate::runtime::accounting::store::require_format_on_connection(conn, format).await?;
+        }
         // Only surviving days retain price evidence; expired days get anonymous fences.
         for (id, snapshot) in prices {
             if !references.values().any(|ids| ids.contains(&id)) {

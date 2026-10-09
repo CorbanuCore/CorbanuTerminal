@@ -57,6 +57,10 @@ pub struct DayTotals {
     /// meaning 1.0x. `unknown` counts plan attempts with no stateable figure.
     pub plan_burn_milli_tokens: Metric,
     pub plan_attempts: i64,
+    /// Attempts that ran on the user's own machine (`Basis::Local`).
+    pub local_attempts: i64,
+    /// Attempts with no declared billing basis (`Basis::Undeclared`).
+    pub undeclared_attempts: i64,
 }
 
 impl DayTotals {
@@ -69,6 +73,24 @@ impl DayTotals {
             totals.add(quote)?;
         }
         Ok(totals)
+    }
+
+    /// Attempts billed per token. Every other attempt - subscription, local or
+    /// undeclared - has no billed price by construction, so it is also counted
+    /// in `unknown_estimates`; `per_use_unknown` takes them back out.
+    pub fn per_use_attempts(&self) -> i64 {
+        self.attempts
+            .saturating_sub(self.plan_attempts)
+            .saturating_sub(self.local_attempts)
+            .saturating_sub(self.undeclared_attempts)
+    }
+
+    /// Pay-per-use attempts with no complete estimate.
+    pub fn per_use_unknown(&self) -> i64 {
+        self.unknown_estimates
+            .saturating_sub(self.plan_attempts)
+            .saturating_sub(self.local_attempts)
+            .saturating_sub(self.undeclared_attempts)
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
@@ -94,6 +116,21 @@ impl DayTotals {
             .unknown_estimates
             .checked_add(i64::from(quote.all_buckets_priced.is_none()))
             .context("estimate count overflow")?;
+        match quote.basis() {
+            Basis::Local => {
+                self.local_attempts = self
+                    .local_attempts
+                    .checked_add(1)
+                    .context("local attempt count overflow")?;
+            }
+            Basis::Undeclared => {
+                self.undeclared_attempts = self
+                    .undeclared_attempts
+                    .checked_add(1)
+                    .context("undeclared attempt count overflow")?;
+            }
+            Basis::Billed | Basis::PlanEquivalent => {}
+        }
         let plan = quote.is_plan();
         if plan {
             self.equivalent_usd = self.equivalent_usd.add(quote.known_equivalent)?;

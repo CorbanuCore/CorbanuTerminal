@@ -147,7 +147,7 @@ fn schema_requires_exact_fields_version_object_and_array_arity() {
     for (field, value) in [
         ("extra", json!(0)),
         ("version", json!(0)),
-        ("version", json!(3)),
+        ("version", json!(4)),
         ("version", json!(256)),
         ("version", json!(1.0)),
         ("version", json!("1")),
@@ -480,4 +480,41 @@ fn actual_quote_reduction_converts_partial_and_twenty_four_place_amounts() {
     }
     assert!(Decimal::try_from("0.000000000000000000000001".to_owned()).is_err());
     assert!(Decimal::try_from(u128::MAX.to_string()).is_err());
+}
+
+/// Local and undeclared work needs version 3; a day without it keeps the
+/// version 2 bytes it was written with.
+#[test]
+fn local_and_undeclared_days_round_trip_as_version_three() {
+    let mut raw = literal();
+    raw["version"] = json!(3);
+    raw["attempts"] = json!(3);
+    raw["unknown_estimates"] = json!(2);
+    raw["local_attempts"] = json!(1);
+    raw["undeclared_attempts"] = json!(1);
+    let values = decode(&raw);
+    let totals = values.to_day_totals().unwrap();
+    assert_eq!((totals.local_attempts, totals.undeclared_attempts), (1, 1));
+    assert_eq!(
+        serde_json::from_str::<Value>(&values.encode().unwrap()).unwrap(),
+        raw
+    );
+    let mut older = raw.clone();
+    older["version"] = json!(2);
+    assert!(CompactValues::decode(&older.to_string()).is_err());
+    let mut uncounted = raw.clone();
+    uncounted["unknown_estimates"] = json!(1);
+    assert!(CompactValues::decode(&uncounted.to_string()).is_err());
+    // Plan work counts against the same unknown estimates.
+    let mut with_plan = raw.clone();
+    with_plan["plan_attempts"] = json!(1);
+    assert!(CompactValues::decode(&with_plan.to_string()).is_err());
+    // Version 3 without such work is not canonical.
+    let mut empty_three = literal();
+    empty_three["version"] = json!(3);
+    assert!(CompactValues::decode(&empty_three.to_string()).is_err());
+    assert_eq!(
+        serde_json::from_str::<Value>(&decode(&literal()).encode().unwrap()).unwrap(),
+        literal()
+    );
 }
