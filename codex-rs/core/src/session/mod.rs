@@ -1924,11 +1924,6 @@ impl Session {
             .cloned()
     }
 
-    /// The accounting mode and provider identity in force right now.
-    ///
-    /// Read live rather than snapshotted: a session's provider can change, and
-    /// a client that records against the identity it had at startup would
-    /// attribute a request to a provider it no longer uses.
     /// The thread this session's paid requests are recorded under: its own
     /// when it is persisted; for an ephemeral guardian review fork, the
     /// conversation it reviews for (PF-60-S05); otherwise none.
@@ -1948,6 +1943,11 @@ impl Session {
         }
     }
 
+    /// The accounting mode and provider identity in force right now.
+    ///
+    /// Read live rather than snapshotted: a session's provider can change, and
+    /// a client that records against the identity it had at startup would
+    /// attribute a request to a provider it no longer uses.
     pub(crate) async fn accounting_binding(&self) -> (crate::config::AccountingMode, String) {
         let state = self.state.lock().await;
         let config = &state.session_configuration.original_config_do_not_use;

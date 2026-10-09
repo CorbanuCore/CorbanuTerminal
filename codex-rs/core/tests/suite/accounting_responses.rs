@@ -829,7 +829,9 @@ async fn accounting_store_failure_never_fails_compaction() -> anyhow::Result<()>
             "{table}: {events:?}"
         );
         assert!(
-            !events.iter().any(|event| matches!(event, EventMsg::Error(_))),
+            !events
+                .iter()
+                .any(|event| matches!(event, EventMsg::Error(_))),
             "{table}: {events:?}"
         );
         assert_eq!(compact.single_request().path(), "/v1/responses/compact");
@@ -865,10 +867,15 @@ async fn accounting_newer_ledger_format_turns_collection_off_once() -> anyhow::R
     let mut warnings = Vec::new();
     for _ in 0..2 {
         submit(&test).await?;
-        warnings.extend(terminal(&test).await?.into_iter().filter_map(|event| match event {
-            EventMsg::Warning(warning) => Some(warning.message),
-            _ => None,
-        }));
+        warnings.extend(
+            terminal(&test)
+                .await?
+                .into_iter()
+                .filter_map(|event| match event {
+                    EventMsg::Warning(warning) => Some(warning.message),
+                    _ => None,
+                }),
+        );
     }
     assert_eq!(
         warnings,

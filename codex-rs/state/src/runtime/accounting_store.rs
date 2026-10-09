@@ -418,7 +418,11 @@ impl<'a> AccountingStore<'a> {
             .map(|migration| migration.version)
             .max()
             .unwrap_or(0);
-        match versions.into_iter().filter(|version| *version > supported).max() {
+        match versions
+            .into_iter()
+            .filter(|version| *version > supported)
+            .max()
+        {
             Some(found) => Err(NewerLedgerFormat { found, supported }.into()),
             None => Ok(()),
         }
