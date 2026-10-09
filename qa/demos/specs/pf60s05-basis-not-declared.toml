@@ -1,0 +1,44 @@
+# PF-60-S05 option B: a custom provider pointed at a route the built-in table does not declare (DeepSeek's
+# /beta endpoint, a real route) has its tokens recorded, but /cost says its billing basis is not declared
+# and names the config key that declares it, instead of guessing. No seeding: one real request.
+id = "pf60s05-basis-not-declared"
+feature = "/cost after a real turn on a route with no declared billing basis (custom provider at DeepSeek /beta)"
+expected = "/cost shows the route as 'Not declared', counted neither as money spent nor as subscription work, with the next step: set model_providers.my-deepseek-beta.billing in config.toml."
+model = "deepseek-v4-flash"
+provider = "my-deepseek-beta"
+rows = 46
+config = """
+suppress_unstable_features_warning = true
+
+[model_providers.my-deepseek-beta]
+name = "my-deepseek-beta"
+base_url = "https://api.deepseek.com/beta"
+env_key = "DEEPSEEK_API_KEY"
+wire_api = "chat"
+"""
+
+[credentials]
+DEEPSEEK_API_KEY = "provider/deepseek_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "Reply with the single word READY."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*READY\\W*$"
+timeout = 120
+compress = 3
+[[steps]]
+pause = 1
+[[steps]]
+type = "/cost"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Billing basis not declared"
+[[steps]]
+wait = "Billing basis not declared for my-deepseek-beta\\. Next step: set model_providers\\.my-deepseek-beta\\.billing"
+[[steps]]
+pause = 5
