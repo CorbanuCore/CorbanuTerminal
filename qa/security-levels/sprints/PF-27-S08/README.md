@@ -35,7 +35,7 @@ not start (`0xC0000142`, the window station and desktop refuse it).
 | 1 | token check, containment string | low, write-restricted, 1 capability, no privileges; `token+dacl+job` | `dacl+job`, refused by Core |
 | 2 | create, overwrite, append, attributes, rename, delete, mkdir in `%TEMP%` | all denied | all succeed |
 | 2 | same in `%USERPROFILE%\AppData\LocalLow` (low integrity) | all denied **except delete** | all succeed |
-| 3 | an ordinary process of the user: `VM_READ`, `VM_WRITE`, `VM_OPERATION`, `DUP_HANDLE`, `CREATE_THREAD`, `SUSPEND_RESUME`, `SET_INFORMATION`, `WRITE_DAC`, `WRITE_OWNER`, `PROCESS_CREATE_PROCESS`, `SET_QUOTA`, `QUERY_INFORMATION`; its threads: get/set context, suspend, terminate, impersonate | all denied except **query-limited information, process terminate, thread terminate**; environment unreadable | all granted |
+| 3 | an ordinary process of the user: `VM_READ`, `VM_WRITE`, `VM_OPERATION`, `DUP_HANDLE`, `CREATE_THREAD`, `SUSPEND_RESUME`, `SET_INFORMATION`, `WRITE_DAC`, `WRITE_OWNER`, `PROCESS_CREATE_PROCESS`, `SET_QUOTA`, `QUERY_INFORMATION`; its threads: get/set context, suspend, terminate, impersonate | all denied except **query-limited information and process terminate**; environment unreadable | all granted |
 | 4 | `Win32_Process.Create` (WMI) | `80041003` access denied | starts a process |
 | 4 | `Schedule.Service` register a task | refused (`80070003`, the root folder is not shown) | registered |
 | 4 | `MMC20.Application` activation (out-of-process COM, starts `mmc.exe`) | `800A0046` permission denied | starts `mmc.exe` (elevated; a normal session needs elevation for it) |

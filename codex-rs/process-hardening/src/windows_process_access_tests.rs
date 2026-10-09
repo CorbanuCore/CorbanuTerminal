@@ -340,16 +340,15 @@ fn pf_27_s07_protected_spawn_is_unopenable_while_suspended() {
 /// process of the user (or its threads) for any right that reads, injects
 /// into, starts a child of, re-ACLs or impersonates it. Measured exceptions
 /// (low integrity leaves the execute-class rights): query-limited
-/// information, process terminate, thread terminate. Positive control: the
-/// same probe started protected with a copy of this process's token (the
-/// PF-27-S07 broker) gets every right.
+/// information and process terminate. Positive control: the same probe
+/// started protected with a copy of this process's token (the PF-27-S07
+/// broker) gets every right.
 #[test]
 fn pf_27_s08_broker_token_cannot_open_the_users_processes() {
     use crate::windows_protected_spawn::Confinement;
     const STILL_GRANTED: &[&str] = &[
         "x_query_limited_information",
         "x_terminate",
-        "x_thread_terminate",
     ];
     let target = Target::spawn(/*harden*/ false);
     let control = probe_started_protected(&target, Confinement::SameToken);
