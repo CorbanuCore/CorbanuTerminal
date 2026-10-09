@@ -1071,8 +1071,6 @@ async fn applied_format(conn: &mut SqliteConnection) -> anyhow::Result<i64> {
     )
 }
 
-/// Read-only version and physical-schema validation; no migration adoption/repair.
-///
 /// `NewerLedgerFormat` when any applied migration is newer than this build's.
 fn refuse_newer(applied: impl IntoIterator<Item = i64>) -> anyhow::Result<()> {
     let supported = crate::migrations::accounting_migrator()
@@ -1090,6 +1088,8 @@ fn refuse_newer(applied: impl IntoIterator<Item = i64>) -> anyhow::Result<()> {
     }
 }
 
+/// Read-only version and physical-schema validation; no migration adoption/repair.
+///
 /// A ledger in an older format validates against the migrations it applied:
 /// it is read as written. One in a newer format is refused with
 /// `NewerLedgerFormat`.

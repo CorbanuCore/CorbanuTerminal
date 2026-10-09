@@ -221,10 +221,15 @@ impl ExtensionAccounting {
         if owner.try_ensure_rollout_materialized().await.is_err() {
             return false;
         }
+        let label = if recorded.thread == owner.thread_id {
+            request.label.clone()
+        } else {
+            format!("review:{}", request.label)
+        };
         let Ok(sampling) = Sampling::start_at_path(
             recorded.db,
             recorded.thread,
-            format!("{}:{}", request.label, Uuid::new_v4()),
+            format!("{label}:{}", Uuid::new_v4()),
             &mode,
             &request.path,
         )

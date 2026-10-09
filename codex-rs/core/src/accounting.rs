@@ -398,8 +398,8 @@ pub(crate) async fn collecting_owner(
     let owner = session
         .accounting_owner()
         .await
-        .inspect_err(|why| match why {
-            Uncollected::Excluded(reason) => excluded_once(session, *reason),
+        .inspect_err(|why| match *why {
+            Uncollected::Excluded(reason) => excluded_once(session, reason),
             Uncollected::Failed(cause) => gap("open sampling", cause),
             Uncollected::NewerFormat => {}
         })?;
@@ -433,8 +433,27 @@ pub(crate) async fn attach_scopes(
     // left uncollected - named once in the log - and its turns run.
     // A ledger that cannot be reached leaves this turn's requests unrecorded;
     // it never stops them.
+    let candidate = match accounting {
+        AccountingMode::Provider { .. } => turn_mode(
+            accounting,
+            provider_id,
+            provider,
+            auth_mode,
+            resolved_endpoint,
+        ),
+        _ => accounting.clone(),
+    };
+    // The owner is only looked up when this route would be collected, so a
+    // session using a route that collects nothing is neither named nor warned.
+    let collected = [
+        codex_model_provider_info::WireApi::Anthropic,
+        codex_model_provider_info::WireApi::Responses,
+        codex_model_provider_info::WireApi::Chat,
+    ]
+    .into_iter()
+    .any(|wire| collects(&candidate, provider_id, provider, wire));
     let mut unrecorded = false;
-    let owner = if matches!(accounting, AccountingMode::Disabled) {
+    let owner = if !collected {
         None
     } else {
         match collecting_owner(session).await {
@@ -450,16 +469,10 @@ pub(crate) async fn attach_scopes(
         Some(owner) if owner.thread != session.thread_id => scoped_turn_label("review:", &turn),
         Some(_) | None => turn,
     };
-    let mode = match &owner {
-        None => AccountingMode::Disabled,
-        Some(_) if matches!(accounting, AccountingMode::Provider { .. }) => turn_mode(
-            accounting,
-            provider_id,
-            provider,
-            auth_mode,
-            resolved_endpoint,
-        ),
-        Some(_) => accounting.clone(),
+    let mode = if owner.is_some() {
+        candidate
+    } else {
+        AccountingMode::Disabled
     };
     let collects_wire = |wire| collects(&mode, provider_id, provider, wire);
     // A sampling that cannot open leaves this turn's Messages requests

@@ -897,11 +897,7 @@ async fn an_uncollected_session_is_named_once() {
         .set_default();
     let (session, _turn) = crate::session::tests::make_session_and_context().await;
     for _ in 0..3 {
-        assert!(
-            crate::accounting::collecting_owner(&session)
-                .await
-                .is_err()
-        );
+        assert!(crate::accounting::collecting_owner(&session).await.is_err());
     }
     assert_eq!(count.load(Ordering::SeqCst), 1);
 }
