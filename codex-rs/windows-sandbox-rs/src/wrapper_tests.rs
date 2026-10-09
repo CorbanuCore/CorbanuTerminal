@@ -11,7 +11,7 @@ use pretty_assertions::assert_eq;
 use super::CODEX_HOME_FLAG;
 use super::CODEX_WINDOWS_SANDBOX_ARG1;
 use super::COMMAND_CWD_FLAG;
-use super::DENY_READ_PATHS_JSON_FLAG;
+use super::DENY_READ_JSON_FLAG;
 use super::DENY_WRITE_PATHS_JSON_FLAG;
 use super::ENV_JSON_FLAG;
 use super::NETWORK_PROXY_RESTRICTING_SID_FLAG;
@@ -42,10 +42,16 @@ fn windows_wrapper_args_round_trip() {
     };
     let read_roots_override = vec![PathBuf::from(r"C:\read")];
     let write_roots_override = vec![PathBuf::from(r"C:\write")];
-    let deny_read_paths_override = vec![
-        AbsolutePathBuf::from_absolute_path(Path::new(r"C:\blocked-read"))
-            .expect("absolute deny-read"),
-    ];
+    let mut deny_read_override =
+        crate::DenyReadTargets::from_exact_paths([AbsolutePathBuf::from_absolute_path(Path::new(
+            r"C:\blocked-read",
+        ))
+        .expect("absolute deny-read")]);
+    // A glob that matches nothing now is passed too (#304/S1).
+    deny_read_override.add(
+        crate::DenyReadRule::Glob(r"C:\workspace\**\*.env".to_string()),
+        Vec::new(),
+    );
     let deny_write_paths_override = vec![
         AbsolutePathBuf::from_absolute_path(Path::new(r"C:\blocked-write"))
             .expect("absolute deny-write"),
@@ -68,7 +74,7 @@ fn windows_wrapper_args_round_trip() {
         Some(read_roots_override.as_slice()),
         /*read_roots_include_platform_defaults*/ true,
         Some(write_roots_override.as_slice()),
-        deny_read_paths_override.as_slice(),
+        &deny_read_override,
         deny_write_paths_override.as_slice(),
         Path::new(r"C:\Users\me\.codex"),
     );
@@ -87,7 +93,7 @@ fn windows_wrapper_args_round_trip() {
     assert!(args.contains(&READ_ROOTS_JSON_FLAG.to_string()));
     assert!(args.contains(&READ_ROOTS_INCLUDE_PLATFORM_DEFAULTS_FLAG.to_string()));
     assert!(args.contains(&WRITE_ROOTS_JSON_FLAG.to_string()));
-    assert!(args.contains(&DENY_READ_PATHS_JSON_FLAG.to_string()));
+    assert!(args.contains(&DENY_READ_JSON_FLAG.to_string()));
     assert!(args.contains(&DENY_WRITE_PATHS_JSON_FLAG.to_string()));
 
     let parsed =
@@ -115,6 +121,6 @@ fn windows_wrapper_args_round_trip() {
     assert_eq!(parsed.read_roots_override, Some(read_roots_override));
     assert_eq!(parsed.read_roots_include_platform_defaults, true);
     assert_eq!(parsed.write_roots_override, Some(write_roots_override));
-    assert_eq!(parsed.deny_read_paths_override, deny_read_paths_override);
+    assert_eq!(parsed.deny_read_override, deny_read_override);
     assert_eq!(parsed.deny_write_paths_override, deny_write_paths_override);
 }

@@ -121,10 +121,10 @@ fn pf_27_s06_d2_tool_launch_carries_contract_denies_to_windows_sandbox() {
         codex_home.join("sessions"),
     ] {
         assert!(
-            overrides.additional_deny_read_paths.contains(&denied),
+            overrides.additional_deny_read.contains_path(&denied),
             "{} missing from {:?}",
             denied.display(),
-            overrides.additional_deny_read_paths
+            overrides.additional_deny_read.paths()
         );
     }
 }
@@ -244,8 +244,8 @@ async fn pf_27_s06_d2_vault_unreadable_through_tool_launch_under_workspace_write
             .windows_sandbox_filesystem_overrides
             .as_ref()
             .is_some_and(|overrides| overrides
-                .additional_deny_read_paths
-                .contains(&codex_home.join("secrets"))),
+                .additional_deny_read
+                .contains_path(&codex_home.join("secrets"))),
         "an armed process's unprotected launch keeps the contract's denies"
     );
     // The file exists, so a failed read below is an access denial.

@@ -552,9 +552,10 @@ fn wrap_windows_sandbox_exec_request_for_direct_spawn(
     let write_roots_override = overrides
         .as_ref()
         .and_then(|overrides| overrides.write_roots_override.as_deref());
-    let deny_read_paths_override = overrides.as_ref().map_or(empty_paths, |overrides| {
-        overrides.additional_deny_read_paths.as_slice()
-    });
+    let no_deny_read = codex_windows_sandbox::DenyReadTargets::default();
+    let deny_read_override = overrides
+        .as_ref()
+        .map_or(&no_deny_read, |overrides| &overrides.additional_deny_read);
     let deny_write_paths_override = overrides.as_ref().map_or(empty_paths, |overrides| {
         overrides.additional_deny_write_paths.as_slice()
     });
@@ -573,7 +574,7 @@ fn wrap_windows_sandbox_exec_request_for_direct_spawn(
             read_roots_override,
             read_roots_include_platform_defaults,
             write_roots_override,
-            deny_read_paths_override,
+            deny_read_override,
             deny_write_paths_override,
             codex_home,
         );

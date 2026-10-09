@@ -356,7 +356,7 @@ fn accounting_inspect_range_partial_no_amount_and_explicit_coverage() {
     insta::assert_snapshot!(pages[0].text.join("\n"), @"
     Requested: [1970-01-01T00:00:00.001Z, 1970-01-01T01:00:00.000Z); timezone: UTC; grouping: Hour
     Retention: request detail kept since 1970-01-01T00:00:00.000Z; daily totals kept since 1970-01-01
-    Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost: unavailable — no settlement evidence.
+    Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns.
     Range: Unknown parent population: 0 inspectable attempts, excluded from range total
     Other conversations are not included in this view; /cost covers only the open conversation.
     Range total unavailable — partial or unavailable buckets excluded; no partial total.
@@ -1332,7 +1332,7 @@ fn accounting_inspect_partial_and_unknown_copy() {
         summary.contains("Cache write: not reported (1 attempt)"),
         "{summary}"
     );
-    assert!(summary.contains("Billed cost: unavailable"));
+    assert!(summary.contains(SYNTHETIC_NOT_STATED), "{summary}");
     assert!(summary.contains("Collection coverage: unknown"));
     assert!(
         attempt_text(&quote())
@@ -1594,7 +1594,6 @@ async fn accounting_inspect_maintenance_with_stale_raw_renders_refresh() -> anyh
             Recorded totals unavailable — stored contributions need refresh. Retry rereads only; no repair performed.
             Next step: select Refresh. If it stays unavailable, the recorded totals cannot be checked here; check your provider's bill.
             Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
-            Billed cost: unavailable — no settlement evidence
             Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
             ");
         }
@@ -1627,13 +1626,12 @@ async fn accounting_inspect_maintenance_with_current_contributions_renders_raw_t
     • synthetic · synthetic-model — Pay per use. 1 request, tokens not reported. Estimated cost: no price available.
     No other conversation recorded requests on this day.
     Next step for requests with no price: check the bill from synthetic. No published price covers them, so no cost is shown for them here.
-    Costs are estimates from published prices; your provider's bill is the final amount.
+    Costs are estimates from published prices; synthetic doesn't report its charges — check synthetic's bill.
     Select a provider below to see its requests.
     —— Details ——
     Estimated token cost: unknown
     Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
     Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
-    Billed cost: unavailable — no settlement evidence
     Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
     Day covered (UTC): [1970-04-11T00:00:00.000Z, 1970-04-12T00:00:00.000Z)
     Read at: 1970-04-11T00:00:00.000Z; ledger current to: 1970-04-11T00:00:00.000Z (0 ms behind)
@@ -1648,7 +1646,6 @@ async fn accounting_inspect_maintenance_with_current_contributions_renders_raw_t
     Total (not separately billed): not reported (1 attempt)
     Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
     Unknown parent population: 0 attempts, excluded from root total
-    Estimate versus billed difference: unknown — no settlement evidence
     ");
     // The fixture's day-100 attempt was admitted with no observations, so the
     // page must say it cannot complete the estimate rather than presenting the
@@ -1739,7 +1736,7 @@ fn accounting_inspect_coverage_never_claims_run_complete() {
     for caveat in [
         "Collection coverage: unknown",
         "resolved descendants only",
-        "Billed cost: unavailable",
+        SYNTHETIC_NOT_STATED,
         "other days",
         "Snapshot is not current; newer activity is unverified",
     ] {
@@ -1959,19 +1956,47 @@ fn accounting_zero_plan_usage_renders_money_unavailable() {
         @"Token cost: unavailable — no applicable price; recorded usage is not a zero-cost claim.");
 }
 
+/// The overview's one billing line for the `packet()` day, whose provider
+/// states no charge.
+const SYNTHETIC_NOT_STATED: &str = "Costs are estimates from published prices; synthetic doesn't report its charges — check synthetic's bill.";
+
 #[test]
 fn accounting_inspect_estimate_only_never_invents_billed_or_difference() {
     let pages = inspection_pages(Ok(breakdown_packet()));
+    // The first screen says it once, in its overview (one provider here is
+    // unnamed, so it names none); every other page with attempts says it once
+    // in its details, naming whose bill to check where it can.
+    let alpha = "Billed cost: alpha doesn't report its charges, so any cost here is an estimate — check alpha's bill.";
+    assert!(
+        pages[0].text.contains(
+            &"Costs are estimates from published prices; your provider's bill is the final amount."
+                .into()
+        ),
+        "{:#?}",
+        pages[0].text
+    );
+    assert!(!pages[0].text.iter().any(|s| s.starts_with("Billed cost:")));
     for page in &pages {
+        let billed: Vec<_> = page
+            .text
+            .iter()
+            .filter(|s| s.starts_with("Billed cost:"))
+            .collect();
+        assert!(billed.len() <= 1, "{}: {billed:?}", page.title);
         assert!(
-            page.text
-                .contains(&"Billed cost: unavailable — no settlement evidence".into())
+            billed.iter().all(|s| !s.starts_with("Billed cost: $")),
+            "{billed:?}"
         );
-        assert!(page.text.contains(
-            &"Estimate versus billed difference: unknown — no settlement evidence".into()
-        ));
-        assert!(!page.text.iter().any(|s| s.starts_with("Billed cost: $")));
+        assert!(
+            !page
+                .text
+                .iter()
+                .any(|s| s.contains("settlement") || s.contains("billed difference")),
+            "{}",
+            page.title
+        );
     }
+    assert!(pages.iter().any(|page| page.text.contains(&alpha.into())));
     assert!(
         pages[0]
             .text
@@ -2408,11 +2433,7 @@ fn accounting_inspect_first_screen_names_provider_model_and_billing_type() {
             "Select a provider below to see its requests.".to_string(),
         ]
     );
-    for technical in [
-        "Billed cost:",
-        "Collection coverage:",
-        "Known subtotal exact USD:",
-    ] {
+    for technical in ["Collection coverage:", "Known subtotal exact USD:"] {
         let at = root
             .text
             .iter()
@@ -2542,8 +2563,12 @@ fn accounting_inspect_states_the_providers_billed_charge() {
     let InspectionDay::Ready(mut view) = breakdown_packet() else {
         unreachable!()
     };
-    // alpha/one states its charge; alpha/two does not.
+    // OpenRouter states its charges: here on model one's response, not on
+    // model two's.
     for quote in view.requests.values_mut().flatten() {
+        if quote.attempt.provider == "alpha" {
+            quote.attempt.provider = "openrouter".into();
+        }
         if quote.attempt.model == "one" {
             quote.usage.billed_usd = Some(decimal("0.0123312"));
         }
@@ -2555,16 +2580,16 @@ fn accounting_inspect_states_the_providers_billed_charge() {
     let line = root
         .text
         .iter()
-        .find(|s| s.starts_with("• alpha · one"))
+        .find(|s| s.starts_with("• OpenRouter · one"))
         .unwrap();
     assert!(
-        line.ends_with(&format!(" Billed by alpha: {billed}.")),
+        line.ends_with(&format!(" Billed by OpenRouter: {billed}.")),
         "{line}"
     );
     let other = root
         .text
         .iter()
-        .find(|s| s.starts_with("• alpha · two"))
+        .find(|s| s.starts_with("• OpenRouter · two"))
         .unwrap();
     assert!(!other.contains("Billed"), "{other}");
     // Only one of the day's three pay-per-use attempts stated a charge.
@@ -2572,18 +2597,13 @@ fn accounting_inspect_states_the_providers_billed_charge() {
         "Billed cost: at least {billed} (1 of 3 attempts stated a charge) — as stated by the provider with each response"
     );
     assert!(root.text.contains(&detail), "{:?}", root.text);
-    assert!(
-        !root
-            .text
-            .iter()
-            .any(|s| s == "Billed cost: unavailable — no settlement evidence")
-    );
+    assert!(!root.text.iter().any(|s| s.contains("report its charges")));
     // The request page states it plainly, and no longer claims the
     // difference is unknowable next to a stated charge.
     let (_, page) = root
         .links
         .iter()
-        .find(|(label, _)| label.starts_with("Request ") && label.contains("alpha · one"))
+        .find(|(label, _)| label.starts_with("Request ") && label.contains("OpenRouter · one"))
         .unwrap();
     let request = &pages[*page];
     assert!(
@@ -2607,16 +2627,124 @@ fn accounting_inspect_states_the_providers_billed_charge() {
             .count(),
         1
     );
-    // A request that stated nothing keeps the honest unavailable line.
+    // A request whose response stated nothing says so, without claiming
+    // OpenRouter never reports its charges.
     let (_, page) = root
         .links
         .iter()
-        .find(|(label, _)| label.starts_with("Request ") && label.contains("alpha · two"))
+        .find(|(label, _)| label.starts_with("Request ") && label.contains("OpenRouter · two"))
         .unwrap();
     assert!(
         pages[*page]
             .text
-            .contains(&"Billed cost: unavailable — no settlement evidence".to_string())
+            .contains(&"Billed cost: OpenRouter stated no charge for this work, so any cost here is an estimate — check OpenRouter's bill.".to_string())
+    );
+}
+
+/// Every page with work that can be billed has exactly one billing line; the
+/// first screen's is its overview estimate line, so its details add none.
+#[test]
+fn accounting_inspect_one_billing_line_per_page() {
+    let pages = inspection_pages(Ok(breakdown_packet()));
+    let overview_lines = pages[0]
+        .text
+        .iter()
+        .filter(|s| s.starts_with("Costs are estimates") || s.starts_with("Billed cost:"))
+        .count();
+    assert_eq!(overview_lines, 1, "{:#?}", pages[0].text);
+    for page in &pages[1..] {
+        let lines = page
+            .text
+            .iter()
+            .filter(|s| s.starts_with("Billed cost:"))
+            .count();
+        // Every page past the first covers at least one pay-per-use attempt.
+        assert_eq!(lines, 1, "{}: {:#?}", page.title, page.text);
+    }
+}
+
+fn billed_quote(provider: &str) -> ObservationQuote {
+    let mut quote = quote();
+    quote.attempt.provider = provider.into();
+    quote
+}
+
+#[test]
+fn accounting_billed_line_names_whose_bill_to_check() {
+    let line = |quotes: &[ObservationQuote]| billed_line(&quotes.iter().collect::<Vec<_>>());
+    // A provider that never states its charge.
+    assert_eq!(
+        line(&[billed_quote("zai")]).unwrap(),
+        "Billed cost: Z.AI doesn't report its charges, so any cost here is an estimate — check Z.AI's bill."
+    );
+    // One that does, but stated none on these responses.
+    assert_eq!(
+        line(&[billed_quote("openrouter")]).unwrap(),
+        "Billed cost: OpenRouter stated no charge for this work, so any cost here is an estimate — check OpenRouter's bill."
+    );
+    // Both kinds, and several names.
+    assert_eq!(
+        line(&[billed_quote("zai"), billed_quote("openrouter")]).unwrap(),
+        "Billed cost: Z.AI doesn't report its charges and OpenRouter stated no charge for this work, so any cost here is an estimate — check their bills."
+    );
+    assert_eq!(
+        line(&[billed_quote("c"), billed_quote("a"), billed_quote("b")]).unwrap(),
+        "Billed cost: a, b and c don't report their charges, so any cost here is an estimate — check their bills."
+    );
+    // The Corbanu API's two routes are one provider.
+    assert_eq!(
+        line(&[
+            billed_quote("pfterminal-plan"),
+            billed_quote("pfterminal-plan-anthropic")
+        ])
+        .unwrap(),
+        "Billed cost: Corbanu API stated no charge for this work, so any cost here is an estimate — check Corbanu API's bill."
+    );
+    // A refused attempt that reported nothing was normally not charged.
+    let mut refused = billed_quote("openrouter");
+    refused.usage = Usage::default();
+    assert_eq!(
+        line(&[refused]).unwrap(),
+        "Billed cost: none stated — OpenRouter reported no usage here; a refused request is normally not charged, but if it stopped mid-response, check OpenRouter's bill."
+    );
+    // No provider id: nothing to name.
+    assert_eq!(
+        line(&[billed_quote("")]).unwrap(),
+        "Billed cost: not reported, so any cost here is an estimate — check your provider's bill."
+    );
+    // Subscription work has no bill to check, and an empty page no line.
+    let mut plan = billed_quote("claude-plan");
+    plan.plan_burn_millis = Some(1000);
+    assert_eq!(line(&[plan]), None);
+    assert_eq!(line(&[]), None);
+}
+
+/// A complete range states the billing basis once on its overview; a partial
+/// one shows no total, so no billing line either.
+#[test]
+fn accounting_inspect_range_overview_billing_line_only_with_a_total() {
+    let current = || {
+        let InspectionDay::Ready(mut view) = packet() else {
+            unreachable!()
+        };
+        view.read_at_ms = view.coverage.completed_as_of_ms;
+        InspectionDay::Ready(view)
+    };
+    let complete = inspection_pages(Ok(range_packet(/*partial*/ false, current())));
+    assert!(
+        complete[0].text.contains(
+            &"Billed cost: synthetic doesn't report its charges, so any cost here is an estimate — check synthetic's bill."
+                .to_string()
+        ),
+        "{:#?}",
+        complete[0].text
+    );
+    let partial = inspection_pages(Ok(range_packet(/*partial*/ true, current())));
+    assert!(
+        !partial[0]
+            .text
+            .iter()
+            .any(|s| s.starts_with("Billed cost:"))
     );
 }
 
