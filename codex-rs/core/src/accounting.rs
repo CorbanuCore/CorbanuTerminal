@@ -27,11 +27,11 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use uuid::Uuid;
 
-#[path = "accounting_chat.rs"]
-pub(crate) mod chat;
 #[cfg(test)]
 #[path = "accounting_basis_tests.rs"]
 mod basis_tests;
+#[path = "accounting_chat.rs"]
+pub(crate) mod chat;
 #[cfg(test)]
 #[path = "accounting_policy_tests.rs"]
 mod policy_tests;

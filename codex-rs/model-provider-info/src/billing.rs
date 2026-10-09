@@ -193,7 +193,11 @@ fn default_routes() -> &'static [(String, BillingCredential, BillingBasis)] {
             .into_iter()
             .filter_map(|(id, provider)| {
                 let credential = BillingCredential::of(&provider, /*auth_mode*/ None);
-                let route = provider.base_url.as_deref()?.trim_end_matches('/').to_string();
+                let route = provider
+                    .base_url
+                    .as_deref()?
+                    .trim_end_matches('/')
+                    .to_string();
                 matches!(credential, C::ApiKey | C::None)
                     .then(|| built_in_basis(&id, credential))
                     .flatten()

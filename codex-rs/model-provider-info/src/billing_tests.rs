@@ -68,7 +68,8 @@ fn basis_does_not_follow_the_auth_type() {
     };
     // A command login does not make Bedrock a subscription (review Minor 10).
     let mut bedrock = providers[AMAZON_BEDROCK_PROVIDER_ID].clone();
-    bedrock.auth = Some(toml::from_str::<ModelProviderAuthInfo>("command = \"print-token\"").unwrap());
+    bedrock.auth =
+        Some(toml::from_str::<ModelProviderAuthInfo>("command = \"print-token\"").unwrap());
     assert_eq!(
         declared(AMAZON_BEDROCK_PROVIDER_ID, &bedrock, None),
         BillingDeclaration::BuiltIn(PayPerUse)
@@ -83,8 +84,14 @@ fn basis_does_not_follow_the_auth_type() {
     // OpenAI follows its per-credential rows.
     let openai = &providers[OPENAI_PROVIDER_ID];
     for (auth_mode, expected) in [
-        (Some(AuthMode::Chatgpt), BillingDeclaration::BuiltIn(Subscription)),
-        (Some(AuthMode::ApiKey), BillingDeclaration::BuiltIn(PayPerUse)),
+        (
+            Some(AuthMode::Chatgpt),
+            BillingDeclaration::BuiltIn(Subscription),
+        ),
+        (
+            Some(AuthMode::ApiKey),
+            BillingDeclaration::BuiltIn(PayPerUse),
+        ),
         (None, BillingDeclaration::NotDeclared),
     ] {
         assert_eq!(declared(OPENAI_PROVIDER_ID, openai, auth_mode), expected);
@@ -136,7 +143,10 @@ fn custom_providers_follow_their_route() {
             "https://api.openai.com/v1",
             BillingDeclaration::BuiltIn(PayPerUse),
         ),
-        ("https://llm.example.com/v1", BillingDeclaration::NotDeclared),
+        (
+            "https://llm.example.com/v1",
+            BillingDeclaration::NotDeclared,
+        ),
     ] {
         assert_eq!(at(endpoint), expected, "{endpoint}");
     }

@@ -107,10 +107,7 @@ async fn accounting_plan_identity_zero_usage_and_provider_switch() -> anyhow::Re
             assert_eq!(quote.usage.input, Some(if zero { 0 } else { 7 }));
             assert_eq!(quote.usage.output, Some(if zero { 0 } else { 3 }));
             // Both fixture routes are mock servers no table declares.
-            assert_eq!(
-                quote.basis(),
-                codex_state::accounting::Basis::Undeclared
-            );
+            assert_eq!(quote.basis(), codex_state::accounting::Basis::Undeclared);
             assert_eq!(quote.all_buckets_priced, None);
             assert_eq!(quote.known_subtotal, Decimal::default());
         }

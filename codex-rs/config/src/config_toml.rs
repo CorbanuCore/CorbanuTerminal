@@ -1023,8 +1023,10 @@ pub fn validate_model_providers(
             }
             // A built-in provider may be named with only `billing` set.
             let built_in_billing = provider.is_billing_override_only()
-                && codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None)
-                    .contains_key(key);
+                && codex_model_provider_info::built_in_model_providers(
+                    /*openai_base_url*/ None,
+                )
+                .contains_key(key);
             if provider.name.trim().is_empty() && !built_in_billing {
                 return Err(format!(
                     "model_providers.{key}: provider name must not be empty"

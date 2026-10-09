@@ -1127,10 +1127,14 @@ billing = "pay_per_use"
     )
     .await
     .expect("billing-only overrides load");
-    let built_in = codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None);
+    let built_in =
+        codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None);
     for (id, basis) in [
         ("zai", codex_model_provider_info::BillingBasis::Subscription),
-        ("kimi-code", codex_model_provider_info::BillingBasis::PayPerUse),
+        (
+            "kimi-code",
+            codex_model_provider_info::BillingBasis::PayPerUse,
+        ),
     ] {
         assert_eq!(
             config.model_providers[id],

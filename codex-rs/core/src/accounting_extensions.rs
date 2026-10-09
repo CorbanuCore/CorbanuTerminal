@@ -156,21 +156,21 @@ impl ExtensionAccounting {
         };
         // The reporter's route is a built-in provider's own route (the server
         // checked it), reached with the credential that provider is built for.
-        let declared = codex_model_provider_info::built_in_model_providers(
-            /*openai_base_url*/ None,
-        )
-        .get(&request.provider_id)
-        .map(|built_in| {
-            let credential =
-                codex_model_provider_info::BillingCredential::of(built_in, /*auth_mode*/ None);
-            codex_model_provider_info::declared_billing(
-                &request.provider_id,
-                built_in,
-                credential,
-                &request.endpoint,
-                /*at_built_in_route*/ true,
-            )
-        });
+        let declared =
+            codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None)
+                .get(&request.provider_id)
+                .map(|built_in| {
+                    let credential = codex_model_provider_info::BillingCredential::of(
+                        built_in, /*auth_mode*/ None,
+                    );
+                    codex_model_provider_info::declared_billing(
+                        &request.provider_id,
+                        built_in,
+                        credential,
+                        &request.endpoint,
+                        /*at_built_in_route*/ true,
+                    )
+                });
         use codex_model_provider_info::BillingBasis;
         let pricing = match declared.and_then(codex_model_provider_info::BillingDeclaration::basis)
         {

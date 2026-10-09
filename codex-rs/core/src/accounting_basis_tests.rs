@@ -64,21 +64,87 @@ fn declared_basis_decides_the_economics() {
     };
     let cases = [
         // Kimi Code membership through an environment key: subscription.
-        ("kimi-code", built_in("kimi-code"), Some(AuthMode::ApiKey), own_route("kimi-code", None), PriceAuthority::PlanRate),
-        ("zai-anthropic", built_in("zai-anthropic"), Some(AuthMode::ApiKey), own_route("zai-anthropic", None), PriceAuthority::PlanRate),
-        ("zai", built_in("zai"), Some(AuthMode::ApiKey), own_route("zai", None), PriceAuthority::ApiKeyRates),
-        ("claude-plan", built_in("claude-plan"), None, own_route("claude-plan", None), PriceAuthority::PlanRate),
+        (
+            "kimi-code",
+            built_in("kimi-code"),
+            Some(AuthMode::ApiKey),
+            own_route("kimi-code", None),
+            PriceAuthority::PlanRate,
+        ),
+        (
+            "zai-anthropic",
+            built_in("zai-anthropic"),
+            Some(AuthMode::ApiKey),
+            own_route("zai-anthropic", None),
+            PriceAuthority::PlanRate,
+        ),
+        (
+            "zai",
+            built_in("zai"),
+            Some(AuthMode::ApiKey),
+            own_route("zai", None),
+            PriceAuthority::ApiKeyRates,
+        ),
+        (
+            "claude-plan",
+            built_in("claude-plan"),
+            None,
+            own_route("claude-plan", None),
+            PriceAuthority::PlanRate,
+        ),
         // A command login on Bedrock is still pay per use; AWS routes carry no
         // attributable catalogue rate.
-        ("amazon-bedrock", bedrock.clone(), None, own_route("amazon-bedrock", None), PriceAuthority::Unavailable),
-        ("ollama", built_in("ollama"), None, own_route("ollama", None), PriceAuthority::Local),
-        ("openai", built_in("openai"), Some(AuthMode::Chatgpt), own_route("openai", Some(AuthMode::Chatgpt)), PriceAuthority::PlanRate),
-        ("openai", built_in("openai"), Some(AuthMode::ApiKey), own_route("openai", Some(AuthMode::ApiKey)), PriceAuthority::ApiKeyRates),
+        (
+            "amazon-bedrock",
+            bedrock.clone(),
+            None,
+            own_route("amazon-bedrock", None),
+            PriceAuthority::Unavailable,
+        ),
+        (
+            "ollama",
+            built_in("ollama"),
+            None,
+            own_route("ollama", None),
+            PriceAuthority::Local,
+        ),
+        (
+            "openai",
+            built_in("openai"),
+            Some(AuthMode::Chatgpt),
+            own_route("openai", Some(AuthMode::Chatgpt)),
+            PriceAuthority::PlanRate,
+        ),
+        (
+            "openai",
+            built_in("openai"),
+            Some(AuthMode::ApiKey),
+            own_route("openai", Some(AuthMode::ApiKey)),
+            PriceAuthority::ApiKeyRates,
+        ),
         // Option B: a custom provider follows the route it used.
-        ("my-glm", custom.clone(), None, "https://api.z.ai/api/coding/paas/v4".to_string(), PriceAuthority::PlanBasis),
-        ("my-llm", custom.clone(), None, "https://llm.example.com/v1".to_string(), PriceAuthority::Undeclared),
+        (
+            "my-glm",
+            custom.clone(),
+            None,
+            "https://api.z.ai/api/coding/paas/v4".to_string(),
+            PriceAuthority::PlanBasis,
+        ),
+        (
+            "my-llm",
+            custom.clone(),
+            None,
+            "https://llm.example.com/v1".to_string(),
+            PriceAuthority::Undeclared,
+        ),
         // A built-in credential moved off its route is judged by that route.
-        ("openai", built_in("openai"), Some(AuthMode::ApiKey), "https://relay.invalid/v1".to_string(), PriceAuthority::Undeclared),
+        (
+            "openai",
+            built_in("openai"),
+            Some(AuthMode::ApiKey),
+            "https://relay.invalid/v1".to_string(),
+            PriceAuthority::Undeclared,
+        ),
     ];
     for (id, provider, auth, endpoint, expected) in cases {
         assert_eq!(
@@ -144,15 +210,31 @@ async fn admission_binds_the_basis_to_every_attempt() -> anyhow::Result<()> {
     )
     .await?;
     let cases = [
-        (PriceAuthority::Undeclared, BasisSource::BuiltIn, Some(Basis::Undeclared)),
-        (PriceAuthority::Local, BasisSource::UserConfig, Some(Basis::Local)),
-        (PriceAuthority::PlanBasis, BasisSource::UserConfig, Some(Basis::PlanEquivalent)),
+        (
+            PriceAuthority::Undeclared,
+            BasisSource::BuiltIn,
+            Some(Basis::Undeclared),
+        ),
+        (
+            PriceAuthority::Local,
+            BasisSource::UserConfig,
+            Some(Basis::Local),
+        ),
+        (
+            PriceAuthority::PlanBasis,
+            BasisSource::UserConfig,
+            Some(Basis::PlanEquivalent),
+        ),
         (PriceAuthority::Unavailable, BasisSource::BuiltIn, None),
     ];
     for (pricing, source, expected) in cases {
-        let sampling =
-            Sampling::start(db.clone(), owner, format!("{pricing:?}"), &mode(pricing, source))
-                .await?;
+        let sampling = Sampling::start(
+            db.clone(),
+            owner,
+            format!("{pricing:?}"),
+            &mode(pricing, source),
+        )
+        .await?;
         sampling
             .admit("some-model", "https://llm.example.com/v1/chat/completions")
             .await?;
