@@ -788,3 +788,59 @@ fn accounting_zai_api_states_published_rates_and_a_free_cache_write() -> anyhow:
     }
     Ok(())
 }
+
+/// Image generation on an OpenAI API key is priced from OpenAI's published
+/// image rates (text input, cached text input, image output), and only there.
+#[test]
+fn accounting_image_generation_prices_published_rates_only() -> anyhow::Result<()> {
+    let scope = Uuid::new_v4();
+    let priced = image_generation_original(
+        "gpt-image-2",
+        "openai",
+        scope,
+        /*accepted_at*/ 1000,
+        /*tier*/ None,
+    )?;
+    assert_eq!(priced.len(), 1);
+    assert_eq!(
+        priced[0].rates,
+        Rates {
+            noncached: Some(rate(/*milli*/ 5000)?),
+            read: Some(rate(/*milli*/ 1250)?),
+            write: None,
+            output: Some(rate(/*milli*/ 30000)?),
+        }
+    );
+    assert_eq!(priced[0].basis, Basis::Billed);
+    assert!(
+        image_generation_original(
+            "gpt-image-2",
+            "openrouter",
+            scope,
+            /*accepted_at*/ 1000,
+            /*tier*/ None
+        )?
+        .is_empty()
+    );
+    assert!(
+        image_generation_original(
+            "gpt-image-9",
+            "openai",
+            scope,
+            /*accepted_at*/ 1000,
+            /*tier*/ None
+        )?
+        .is_empty()
+    );
+    assert!(
+        image_generation_original(
+            "gpt-image-2",
+            "openai",
+            scope,
+            /*accepted_at*/ 1000,
+            Some("priority")
+        )?
+        .is_empty()
+    );
+    Ok(())
+}

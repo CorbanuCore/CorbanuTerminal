@@ -134,6 +134,37 @@ pub fn body_usage(body: &[u8]) -> Result<Option<ResponsesUsagePatch>, InvalidRes
     response_patch(Some(&value))
 }
 
+/// Numeric usage carried by an OpenAI Images API generation body, if any.
+///
+/// The Images API states its input as `text_tokens` plus `image_tokens` and
+/// states no cache fields. A generation request sends a text prompt only, so
+/// when the input is stated as all text (no image part) and no cache count is
+/// stated, cache read and write are taken to be zero rather than unknown. That
+/// is an inference from the report's shape: were some of that text served from
+/// a cache unreported, the estimate would read high, never low. Any other
+/// shape is read exactly as a Responses usage object.
+pub fn image_generation_body_usage(
+    body: &[u8],
+) -> Result<Option<ResponsesUsagePatch>, InvalidResponsesUsage> {
+    let value: Value = serde_json::from_slice(body).map_err(|_| InvalidResponsesUsage)?;
+    let usage = value.get("usage");
+    let Some(mut patch) = patch(usage)? else {
+        return Ok(None);
+    };
+    let details = usage.and_then(|usage| usage.get("input_tokens_details"));
+    let part = |name| details.and_then(|details| details.get(name)?.as_i64());
+    if let ResponsesTokenPresence::Number(input) = patch.input_tokens
+        && patch.cached_tokens == ResponsesTokenPresence::Missing
+        && patch.cache_write_tokens == ResponsesTokenPresence::Missing
+        && part("text_tokens") == Some(input)
+        && part("image_tokens") == Some(0)
+    {
+        patch.cached_tokens = ResponsesTokenPresence::Number(0);
+        patch.cache_write_tokens = ResponsesTokenPresence::Number(0);
+    }
+    Ok(Some(patch))
+}
+
 pub(crate) fn decode(data: &str) -> Result<Option<ResponsesUsagePatch>, InvalidResponsesUsage> {
     let value: Value = serde_json::from_str(data).map_err(|_| InvalidResponsesUsage)?;
     match value.get("type").and_then(Value::as_str) {
