@@ -5116,6 +5116,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "codex-otel",
+ "codex-process-hardening",
  "codex-protocol",
  "codex-utils-absolute-path",
  "codex-utils-pty",

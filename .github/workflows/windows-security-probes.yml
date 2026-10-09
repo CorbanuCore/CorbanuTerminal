@@ -70,6 +70,10 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib sec_win_ -- --nocapture --test-threads=1
+      - name: P1 Windows hardening regressions (#320)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-process-hardening --lib sec_win_ -- --nocapture --test-threads=1
       - name: Broker transport probes and broker suite over named pipes
         if: ${{ !cancelled() }}
         shell: bash
@@ -139,6 +143,10 @@ jobs:
             Assert-Tests $sandbox 'sec_win_' 1
             & $medium -Program $sandbox -Arguments @('sec_win_', '--nocapture', '--test-threads=1')
             if ($LASTEXITCODE -ne 0) { throw "P1 hardening regressions failed in a normal session" }
+            $hardening = Get-TestExe @('-p', 'codex-process-hardening', '--lib')
+            Assert-Tests $hardening 'sec_win_' 2
+            & $medium -Program $hardening -Arguments @('sec_win_', '--nocapture', '--test-threads=1')
+            if ($LASTEXITCODE -ne 0) { throw "#320 regressions failed in a normal session" }
             $core = Get-TestExe @('-p', 'codex-core', '--lib')
             Assert-Tests $core 'pf_27_s06_d2' 2
             # Each elevated setup resets the sandbox passwords, so record the
