@@ -24,10 +24,10 @@
 //!   longer reachable through `environ`; its original bytes stay in the
 //!   launch block.
 //! - Windows: the C runtimes in the process copy the environment at start-up,
-//!   keeping some copies and freeing others unwiped, so every process heap is
-//!   swept too: `NAME=value` entries anywhere and bare values in free blocks.
-//!   A copy in another form (a parsed string held elsewhere, memory outside
-//!   the heaps) is not found. A heap its owner created with
+//!   keeping some copies and freeing others unwiped (later reused, partly
+//!   overwritten), so every copy of the value in the process heaps is
+//!   overwritten too. A copy in another form, or outside the heaps (a thread
+//!   stack), is not found. A heap its owner created with
 //!   `HEAP_NO_SERIALIZE` is not locked by `HeapLock`, so walking it races
 //!   with that owner.
 
@@ -163,7 +163,20 @@ pub(crate) fn take_env_var(name: &str) -> Option<Zeroizing<Vec<u8>>> {
     // The C runtime made more copies of the launch environment at start-up
     // (some freed without being wiped, some kept); so may other code have.
     let started = std::time::Instant::now();
-    windows_env::wipe_heap_copies(name, &[wide.as_slice(), utf8.as_slice()]);
+    // This function's own buffers keep their copies until they are dropped.
+    let own = [
+        windows_env::allocation(value.as_ptr().cast(), value.capacity() * 2),
+        windows_env::allocation(wide.as_ptr(), wide.capacity()),
+        windows_env::allocation(utf8.as_ptr(), utf8.capacity()),
+    ];
+    // An invalid value's UTF-8 holds only a decoded prefix, which must not
+    // be swept for.
+    let patterns: &[&[u8]] = if valid {
+        &[wide.as_slice(), utf8.as_slice()]
+    } else {
+        &[wide.as_slice()]
+    };
+    windows_env::wipe_heap_copies(name, patterns, &own);
     tracing::debug!(
         "environment sweep for one handed-over variable took {} ms",
         started.elapsed().as_millis()
@@ -258,17 +271,31 @@ mod windows_env {
         }
     }
 
-    /// Overwrites copies of a handed-over value in this process's heaps:
-    /// - in every block, a `name=value` environment entry (narrow or UTF-16,
-    ///   the name compared ASCII case-insensitively) gets `0` characters for
-    ///   its value, which keeps it a valid string of the same length;
-    /// - in free blocks, every occurrence of the value is zeroed.
+    /// Shortest value (in characters) whose bare copies are overwritten in
+    /// blocks in use; real provider keys are much longer.
+    pub(super) const MIN_BARE_CHARS: usize = 20;
+
+    /// The address range `[start, start + len)` of an allocation.
+    pub(super) fn allocation(start: *const u8, len: usize) -> (usize, usize) {
+        (start as usize, start as usize + len)
+    }
+
+    /// Overwrites copies of a handed-over value in this process's heaps,
+    /// except inside the `keep` ranges (the caller's own buffers):
+    /// - a `name=value` environment entry (narrow or UTF-16, the name
+    ///   compared ASCII case-insensitively), and any occurrence in a free
+    ///   block, from 8 characters;
+    /// - any other occurrence in a block in use (a stale copy in reused
+    ///   memory, such as the C runtime's freed start-up copies, or a copy Core
+    ///   must not keep), from [`MIN_BARE_CHARS`] characters, so placeholder
+    ///   values (`dummy-key`) are not hunted through the process.
     ///
-    /// `values` holds the value's encodings (UTF-16LE, UTF-8); shorter than
-    /// 8 bytes is skipped. Each heap is locked while it is walked and nothing
+    /// Every match gets `0` characters (UTF-16: `0` units), never NUL, so a
+    /// live string stays the same length, valid and terminated where it was.
+    /// `values` holds the value's encodings (UTF-16LE, UTF-8). Each heap is locked while it is walked and nothing
     /// is allocated meanwhile. Only bytes that equal a whole value are
     /// written, which no heap metadata can be, so the heap stays consistent.
-    pub(super) fn wipe_heap_copies(name: &str, values: &[&[u8]]) {
+    pub(super) fn wipe_heap_copies(name: &str, values: &[&[u8]], keep: &[(usize, usize)]) {
         use windows_sys::Win32::System::Memory::GetProcessHeaps;
         use windows_sys::Win32::System::Memory::HeapLock;
         use windows_sys::Win32::System::Memory::HeapUnlock;
@@ -330,7 +357,7 @@ mod windows_env {
                 committed.for_each_writable(start, end, |from, to| {
                     for pattern in &patterns {
                         // SAFETY: committed, writable bytes of a heap block.
-                        unsafe { pattern.wipe(from as *mut u8, to - from, free) };
+                        unsafe { pattern.wipe(from as *mut u8, to - from, free, keep) };
                     }
                 });
             }
@@ -347,17 +374,23 @@ mod windows_env {
     }
 
     impl Pattern<'_> {
-        /// Overwrites `prefix value` entries' values with `0` characters
-        /// and, when `free`, zeroes every bare occurrence of the value, in
-        /// the `len` bytes at `data`. Other threads may use a busy block
+        /// Gives every `prefix value` entry and, in a free block or when the
+        /// value is long enough, every other occurrence of the value `0`
+        /// characters, in the `len` bytes at `data`, outside the `keep` ranges. Other threads may use a busy block
         /// meanwhile, so the bytes are only ever read and written through
         /// volatile raw-pointer accesses, never as a Rust slice.
         ///
         /// # Safety
         ///
         /// `data..data + len` must be committed, writable memory.
-        unsafe fn wipe(&self, data: *mut u8, len: usize, free: bool) {
+        unsafe fn wipe(&self, data: *mut u8, len: usize, free: bool, keep: &[(usize, usize)]) {
             let wide = self.value.len() > 1 && self.value[1] == 0;
+            let characters = if wide {
+                self.value.len() / 2
+            } else {
+                self.value.len()
+            };
+            let bare = free || characters >= MIN_BARE_CHARS;
             // SAFETY: (caller) `index < len` is committed and readable.
             let byte = |index: usize| unsafe { std::ptr::read_volatile(data.add(index)) };
             let equal = |at: usize, wanted: &[u8], fold: bool| {
@@ -376,17 +409,19 @@ mod windows_env {
                     at += 1;
                     continue;
                 }
-                let entry =
-                    at >= self.prefix.len() && equal(at - self.prefix.len(), self.prefix, true);
-                if entry || free {
-                    for index in 0..self.value.len() {
-                        let replacement = if entry && !(wide && index % 2 == 1) {
-                            b'0'
-                        } else {
-                            0
-                        };
-                        // SAFETY: (caller) within the committed, writable range.
-                        unsafe { std::ptr::write_volatile(data.add(at + index), replacement) };
+                let address = data as usize + at;
+                if !keep
+                    .iter()
+                    .any(|(start, end)| (*start..*end).contains(&address))
+                {
+                    let entry =
+                        at >= self.prefix.len() && equal(at - self.prefix.len(), self.prefix, true);
+                    if entry || bare {
+                        for index in 0..self.value.len() {
+                            let replacement = if wide && index % 2 == 1 { 0 } else { b'0' };
+                            // SAFETY: (caller) within the committed, writable range.
+                            unsafe { std::ptr::write_volatile(data.add(at + index), replacement) };
+                        }
                     }
                 }
                 at += self.value.len();

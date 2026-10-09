@@ -1,0 +1,6 @@
+r1-t2-kimi       2026-10-09T18:55:46.068 chatcmpl-WNlyAvsowgPGbCYOSleaGK39      chat       in=  9964 cached=  1024 write=     0 out=  20 tier=None
+r1-t2-kimi       2026-10-09T18:55:50.152 chatcmpl-ORlMe4u9NoAYAoWN0pVGWzFW      chat       in=   343 cached=     0 write=     0 out= 101 tier=None
+TOTAL r1-t2-kimi: requests=2 input=10307 cached=1024 output=121 tokens=10428
+r2-kimicustom    2026-10-09T18:57:31.637 chatcmpl-PtlKz76buWxNW2X5OVhjbexS      chat       in=  7399 cached=  1024 write=     0 out=  30 tier=None
+TOTAL r2-kimicustom: requests=1 input=7399 cached=1024 output=30 tokens=7429
+GRAND: requests=3 tokens=17857

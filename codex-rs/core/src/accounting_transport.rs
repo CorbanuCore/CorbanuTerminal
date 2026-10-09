@@ -402,7 +402,12 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
         // One body, one observation: revisions are positive, and this response
         // has exactly one. A failed observation is logged and leaves the
         // response alone.
-        if let Ok(Some(usage)) = codex_api::responses_body_usage(&response.body) {
+        let usage = if evidence.sampling.image_generation {
+            codex_api::image_generation_body_usage(&response.body)
+        } else {
+            codex_api::responses_body_usage(&response.body)
+        };
+        if let Ok(Some(usage)) = usage {
             let _ = codex_api::ResponsesUsageObserver::observe(
                 evidence.as_ref(),
                 /*position*/ 1,

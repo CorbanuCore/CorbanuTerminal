@@ -288,6 +288,17 @@ fn use_chatgpt_auth(turn: &mut TurnContext) {
     );
 }
 
+fn use_api_key_auth(turn: &mut TurnContext) {
+    use_openai_provider(turn);
+    turn.auth_manager = Some(AuthManager::from_auth_for_testing(CodexAuth::from_api_key(
+        "sk-test",
+    )));
+    turn.provider = create_model_provider(
+        turn.config.model_provider.clone(),
+        turn.auth_manager.clone(),
+    );
+}
+
 fn use_openai_provider(turn: &mut TurnContext) {
     let provider_info = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
     update_config(turn, |config| {
@@ -2302,6 +2313,75 @@ async fn hosted_web_search_fallback_follows_winning_browser_runtime() {
     };
     assert_eq!(namespace.description, "Tools from browser_collision.");
     plan.assert_visible_contains(&["web_search"]);
+}
+
+#[tokio::test]
+async fn standalone_image_generation_is_offered_on_an_openai_api_key() {
+    let image_generation_tool = Arc::new(TestNamespaceExtensionTool {
+        namespace: "image_gen",
+        tool_name: "imagegen",
+    });
+    // An OpenAI API key on the built-in provider reaches the public Images
+    // API with that key, so the tool is offered there too.
+    let api_key = probe_with(
+        |turn| {
+            use_api_key_auth(turn);
+            turn.model_info.input_modalities = vec![InputModality::Image];
+        },
+        ToolPlanInputs {
+            extension_tool_executors: vec![image_generation_tool.clone()],
+            ..Default::default()
+        },
+    )
+    .await;
+    api_key.assert_visible_contains(&["image_gen"]);
+
+    // Another provider's API key is not an OpenAI key: no Images API to reach.
+    let other_provider_api_key = probe_with(
+        |turn| {
+            use_api_key_auth(turn);
+            let provider_info = ModelProviderInfo {
+                name: "Custom".to_string(),
+                ..ModelProviderInfo::create_openai_provider(Some(
+                    "https://example.invalid/v1".to_string(),
+                ))
+            };
+            update_config(turn, |config| {
+                config.model_provider_id = "custom".to_string();
+                config.model_provider = provider_info.clone();
+            });
+            turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
+            turn.model_info.input_modalities = vec![InputModality::Image];
+        },
+        ToolPlanInputs {
+            extension_tool_executors: vec![image_generation_tool.clone()],
+            ..Default::default()
+        },
+    )
+    .await;
+    other_provider_api_key.assert_visible_lacks(&["image_gen"]);
+
+    // A custom provider that only borrows the name is not the built-in one.
+    let named_openai = probe_with(
+        |turn| {
+            use_api_key_auth(turn);
+            let provider_info = ModelProviderInfo::create_openai_provider(Some(
+                "https://proxy.example.invalid/v1".to_string(),
+            ));
+            update_config(turn, |config| {
+                config.model_provider_id = "my-proxy".to_string();
+                config.model_provider = provider_info.clone();
+            });
+            turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
+            turn.model_info.input_modalities = vec![InputModality::Image];
+        },
+        ToolPlanInputs {
+            extension_tool_executors: vec![image_generation_tool],
+            ..Default::default()
+        },
+    )
+    .await;
+    named_openai.assert_visible_lacks(&["image_gen"]);
 }
 
 #[tokio::test]

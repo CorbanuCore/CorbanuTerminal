@@ -1,6 +1,6 @@
 # PF-27-S07 evidence: Windows hardening follow-ups
 
-These are two of the four limits PF-27-S06 documented, which Travis approved fixing on 2026-10-08. The other two are planned as [PF-27-S08](../../../../docs/sprints/current/p1-security-hardening/pf-27-s08-windows-broker-restricted-token.md) (the broker's own token) and [PF-27-S09](../../../../docs/sprints/current/p1-security-hardening/pf-27-s09-windows-model-client-auth.md) (Windows model auth).
+These are two of the four limits PF-27-S06 documented, which Travis approved fixing on 2026-10-08. The other two are planned as [PF-27-S08](../../../../docs/sprints/archive/p1-security-hardening/pf-27-s08-windows-broker-restricted-token.md) (the broker's own token) and [PF-27-S09](../../../../docs/sprints/current/p1-security-hardening/pf-27-s09-windows-model-client-auth.md) (Windows model auth).
 
 Everything here sits behind the same default-off flags: `isolated_credential_broker` and `secretless_agent_launch`. Permissive mode, macOS and Linux are unchanged; on Unix the broker start was only moved into a function.
 
