@@ -704,3 +704,47 @@ fn quotes_refuse_rules_this_build_does_not_have() {
         );
     }
 }
+
+/// Local and undeclared work states no price and claims no money of either
+/// kind, and a day counts it apart from pay-per-use and subscription work.
+#[test]
+fn local_and_undeclared_work_is_neither_spent_nor_subscription() {
+    let attempt = attempt();
+    let rows = vec![row(/*revision*/ 1, json!({"input":50,"read":10}))];
+    let mut quotes = Vec::new();
+    for basis in [Basis::Local, Basis::Undeclared] {
+        let mut stated = snapshot();
+        stated.basis = basis;
+        // A basis that charges nothing cannot carry rates.
+        assert!(quote_observations(&attempt, &rows, std::slice::from_ref(&stated)).is_err());
+        stated.rates = Rates::default();
+        let quote = quote_observations(&attempt, &rows, &[stated]).unwrap();
+        assert_eq!(quote.basis(), basis);
+        assert!(!quote.is_plan());
+        assert_eq!(
+            (quote.known_subtotal, quote.known_equivalent),
+            (Decimal::default(), Decimal::default())
+        );
+        assert_eq!(
+            (quote.all_buckets_priced, quote.all_buckets_equivalent),
+            (None, None)
+        );
+        quotes.push(quote);
+    }
+    let priced = quote_observations(&attempt, &rows, &[snapshot()]).unwrap();
+    let totals = DayTotals::from_quotes(quotes.iter().chain([&priced])).unwrap();
+    assert_eq!(
+        (
+            totals.attempts,
+            totals.local_attempts,
+            totals.undeclared_attempts,
+            totals.plan_attempts
+        ),
+        (3, 1, 1, 0)
+    );
+    assert_eq!(
+        (totals.per_use_attempts(), totals.per_use_unknown()),
+        (1, 1)
+    );
+    assert_eq!(totals.known_usd, decimal("0.000153"));
+}

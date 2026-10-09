@@ -866,3 +866,38 @@ async fn accounting_late_import_retry_chain_normalizes_reordered_duplicate_revis
     runtime.close().await;
     Ok(())
 }
+
+/// An imported record a format-1 ledger cannot express upgrades the ledger in
+/// the import's own transaction (PF-60-S05).
+#[tokio::test]
+async fn accounting_late_import_of_an_undeclared_record_upgrades_the_format() -> anyhow::Result<()>
+{
+    let path = home();
+    let runtime = open(&path).await?;
+    let mut e = entry(/*id*/ 1, /*time*/ 0)?;
+    let mut undeclared = snapshot()?;
+    undeclared.rates = Rates::default();
+    undeclared.basis = Basis::Undeclared;
+    e.original_price = OriginalPriceEvidence::Bound(undeclared);
+    native(&runtime, e.attempt.thread_id).await?;
+    let store = AccountingStore::open(&runtime, 100 * DAY).await?;
+    let formats = || async {
+        let mut conn = connection(&runtime).await?;
+        let rows: Vec<i64> =
+            sqlx::query_scalar("SELECT version FROM _accounting_migrations ORDER BY version")
+                .fetch_all(&mut conn)
+                .await?;
+        conn.close().await?;
+        anyhow::Ok(rows)
+    };
+    assert_eq!(formats().await?, vec![1]);
+    assert_eq!(
+        store
+            .import_retained(e.attempt.thread_id, std::slice::from_ref(&e), 100 * DAY)
+            .await?,
+        vec![RetainedImportOutcome::Imported]
+    );
+    assert_eq!(formats().await?, vec![1, 2]);
+    runtime.close().await;
+    Ok(())
+}
