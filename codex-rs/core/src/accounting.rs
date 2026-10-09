@@ -990,6 +990,10 @@ pub(crate) struct Sampling {
     provider: String,
     dialect: Dialect,
     pricing: Pricing,
+    /// Pinned to OpenAI's Images API generation endpoint: priced from the
+    /// published image rates rather than the chat-model catalogue, and its
+    /// body read as an Images API usage report.
+    image_generation: bool,
     basis_source: codex_state::accounting::BasisSource,
     previous: Mutex<Option<Uuid>>,
     failed: AtomicBool,
@@ -1170,6 +1174,7 @@ impl Sampling {
             provider: provider.into(),
             dialect,
             pricing: pricing_for(mode),
+            image_generation: path_override == Some(prices::IMAGE_GENERATIONS_PATH),
             basis_source: basis_source_for(mode),
             previous: Mutex::new(None),
             failed: AtomicBool::new(false),
@@ -1291,6 +1296,9 @@ impl Sampling {
             Pricing::Undeclared => basis_only(Basis::Undeclared)?,
             Pricing::Anthropic => {
                 prices::anthropic_original(model, &self.provider, self.scope, dispatched_at)?
+            }
+            Pricing::Responses if self.image_generation => {
+                prices::image_generation_original(model, &self.provider, self.scope, dispatched_at)?
             }
             Pricing::Responses => {
                 prices::responses_original(model, &self.provider, self.scope, dispatched_at, tier)?

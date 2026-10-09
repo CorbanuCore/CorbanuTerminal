@@ -134,6 +134,37 @@ pub fn body_usage(body: &[u8]) -> Result<Option<ResponsesUsagePatch>, InvalidRes
     response_patch(Some(&value))
 }
 
+/// Numeric usage carried by an OpenAI Images API body, if it carries any.
+///
+/// The Images API states its input as `text_tokens` plus `image_tokens` and
+/// states no cache fields. When those two parts account for the whole input
+/// and no cache count is stated, nothing was read from or written to a cache,
+/// so both are recorded as zero rather than unknown. Any other shape is read
+/// exactly as a Responses usage object.
+pub fn images_body_usage(
+    body: &[u8],
+) -> Result<Option<ResponsesUsagePatch>, InvalidResponsesUsage> {
+    let value: Value = serde_json::from_slice(body).map_err(|_| InvalidResponsesUsage)?;
+    let usage = value.get("usage");
+    let Some(mut patch) = patch(usage)? else {
+        return Ok(None);
+    };
+    let details = usage.and_then(|usage| usage.get("input_tokens_details"));
+    let part = |name| details.and_then(|details| details.get(name)?.as_i64());
+    if let ResponsesTokenPresence::Number(input) = patch.input_tokens
+        && patch.cached_tokens == ResponsesTokenPresence::Missing
+        && patch.cache_write_tokens == ResponsesTokenPresence::Missing
+        && let (Some(text), Some(image)) = (part("text_tokens"), part("image_tokens"))
+        && text >= 0
+        && image >= 0
+        && text.checked_add(image) == Some(input)
+    {
+        patch.cached_tokens = ResponsesTokenPresence::Number(0);
+        patch.cache_write_tokens = ResponsesTokenPresence::Number(0);
+    }
+    Ok(Some(patch))
+}
+
 pub(crate) fn decode(data: &str) -> Result<Option<ResponsesUsagePatch>, InvalidResponsesUsage> {
     let value: Value = serde_json::from_str(data).map_err(|_| InvalidResponsesUsage)?;
     match value.get("type").and_then(Value::as_str) {

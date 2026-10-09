@@ -739,3 +739,169 @@ async fn accounting_store_failure_never_fails_search_or_image() -> anyhow::Resul
     }
     Ok(())
 }
+
+/// An image generated on an OpenAI API key is priced at OpenAI's published
+/// image rates, to the micro-dollar: the Images API states its input as text
+/// and image parts with no cache fields, which is a complete report, not a
+/// partial one. The edits endpoint mixes text and image input under one input
+/// count, so it records its tokens with no price rather than a wrong one.
+#[tokio::test]
+async fn accounting_extension_prices_an_api_key_image_generation() -> anyhow::Result<()> {
+    let server = wiremock::MockServer::start().await;
+    let endpoint = format!("{}/v1", server.uri());
+    let usage = serde_json::json!({
+        "input_tokens": 12,
+        "input_tokens_details": {"text_tokens": 12, "image_tokens": 0},
+        "output_tokens": 272,
+        "output_tokens_details": {"text_tokens": 0, "image_tokens": 272},
+        "total_tokens": 284
+    });
+    for route in ["/v1/images/generations", "/v1/images/edits"] {
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .and(wiremock::matchers::path(route))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "created": 0,
+                    "data": [{"b64_json": "aW1hZ2U="}],
+                    "usage": usage.clone(),
+                })),
+            )
+            .mount(&server)
+            .await;
+    }
+
+    let home = tempfile::tempdir()?;
+    let mut config = crate::session::tests::build_test_config(home.path()).await;
+    config.model_provider = codex_model_provider_info::ModelProviderInfo {
+        request_max_retries: Some(0),
+        stream_max_retries: Some(0),
+        supports_websockets: false,
+        ..codex_model_provider_info::ModelProviderInfo::create_openai_provider(Some(
+            endpoint.clone(),
+        ))
+    };
+    config.model_provider_id = "openai".into();
+    // OpenAI's API-key rates apply only at OpenAI's own route, which a local
+    // fixture cannot be; the direct API-key mode prices this route as that one.
+    config.accounting = crate::config::AccountingMode::DirectOpenAiResponsesHttp {
+        scope: Uuid::new_v4(),
+        approved_endpoint: endpoint.clone(),
+    };
+    config.features.enable(Feature::Sqlite)?;
+    let provider = config.model_provider.clone();
+
+    let (mut session, _context) =
+        crate::session::tests::make_session_and_context_for_config(config.clone()).await;
+    let db = StateRuntime::init(
+        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
+        "openai".into(),
+    )
+    .await?;
+    session.services.state_db = Some(db.clone());
+    crate::session::tests::open_thread_persistence(&mut session).await;
+    let owner = Arc::new(session);
+    db.upsert_thread(
+        &ThreadMetadataBuilder::new(
+            owner.thread_id,
+            home.path().join("image-fixture.jsonl"),
+            chrono::Utc::now(),
+            codex_protocol::protocol::SessionSource::Cli,
+        )
+        .build("openai"),
+    )
+    .await?;
+
+    let accounting = ExtensionAccounting::new(Arc::downgrade(&owner));
+    let api = provider.to_api_provider(Some(codex_protocol::auth::AuthMode::ApiKey))?;
+    let client = |path: &'static str, label: &'static str| {
+        let accounting = accounting.clone();
+        let provider = provider.clone();
+        let endpoint = endpoint.clone();
+        let api = api.clone();
+        async move {
+            let transport = accounting
+                .transport(
+                    codex_api::ReqwestTransport::from_http_client(
+                        codex_login::default_client::create_client(),
+                    ),
+                    &provider,
+                    &endpoint,
+                    "gpt-image-2",
+                    path,
+                    label,
+                )
+                .await;
+            codex_api::ImagesClient::new(transport, api, Arc::new(FixtureAuth))
+        }
+    };
+    client("images/generations", "image")
+        .await
+        .generate(
+            &codex_api::ImageGenerationRequest {
+                prompt: "fixture".into(),
+                background: None,
+                model: "gpt-image-2".into(),
+                n: None,
+                quality: None,
+                size: None,
+            },
+            http::HeaderMap::new(),
+        )
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    client("images/edits", "image-edit")
+        .await
+        .edit(
+            &codex_api::ImageEditRequest {
+                images: vec![codex_api::ImageUrl {
+                    image_url: "data:image/png;base64,aW1hZ2U=".into(),
+                }],
+                prompt: "fixture".into(),
+                background: None,
+                model: "gpt-image-2".into(),
+                n: None,
+                quality: None,
+                size: None,
+            },
+            http::HeaderMap::new(),
+        )
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+
+    let day = chrono::Utc::now().timestamp_millis() / 86_400_000;
+    let codex_state::accounting::InspectionDay::Ready(view) =
+        codex_state::accounting::AccountingStore::inspect_day(
+            &db,
+            owner.thread_id,
+            day,
+            chrono::Utc::now().timestamp_millis(),
+        )
+        .await?
+    else {
+        panic!("expected the day");
+    };
+    let quote = |label: &str| {
+        view.requests
+            .values()
+            .flatten()
+            .find(|quote| quote.attempt.turn.starts_with(&format!("{label}:")))
+            .cloned()
+            .unwrap_or_else(|| panic!("no {label} attempt recorded"))
+    };
+    // 12 text input tokens at $5.00/M plus 272 image output tokens at $30.00/M.
+    let generation = quote("image");
+    assert_eq!(
+        generation.all_buckets_priced,
+        Some(codex_state::accounting::Decimal::try_from(
+            "0.00822".to_string()
+        )?)
+    );
+    assert_eq!(
+        generation.snapshot.map(|snapshot| snapshot.basis),
+        Some(codex_state::accounting::Basis::Billed)
+    );
+    let edit = quote("image-edit");
+    assert_eq!(edit.all_buckets_priced, None);
+    assert_eq!(edit.usage.output, Some(272));
+    Ok(())
+}
