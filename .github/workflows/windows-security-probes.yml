@@ -20,8 +20,10 @@ on:
       - "codex-rs/core/src/exec.rs"
       - "codex-rs/core/src/tools/sandboxing.rs"
       - "codex-rs/core/src/tools/sandboxing_windows_tests.rs"
+      - "codex-rs/core/src/tools/sandboxing_tests.rs"
       - "codex-rs/core/src/sandboxing/**"
       - "codex-rs/sandboxing/src/windows.rs"
+      - "codex-rs/sandboxing/src/lib.rs"
       - ".github/scripts/run-at-medium-integrity.ps1"
   push:
     branches: [main]
@@ -38,8 +40,10 @@ on:
       - "codex-rs/core/src/exec.rs"
       - "codex-rs/core/src/tools/sandboxing.rs"
       - "codex-rs/core/src/tools/sandboxing_windows_tests.rs"
+      - "codex-rs/core/src/tools/sandboxing_tests.rs"
       - "codex-rs/core/src/sandboxing/**"
       - "codex-rs/sandboxing/src/windows.rs"
+      - "codex-rs/sandboxing/src/lib.rs"
       - ".github/scripts/run-at-medium-integrity.ps1"
 
 permissions:

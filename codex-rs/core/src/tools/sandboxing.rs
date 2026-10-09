@@ -583,8 +583,6 @@ impl<'a> SandboxAttempt<'a> {
                 codex_sandboxing::refuse_unenforceable_windows_read_restrictions(
                     exec_request.sandbox,
                     &exec_request.permission_profile,
-                    &sandbox_cwd,
-                    /*use_elevated_backend*/ false,
                 )
                 .map_err(CodexErr::UnsupportedOperation)?;
             }

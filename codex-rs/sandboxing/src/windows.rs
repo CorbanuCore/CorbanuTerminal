@@ -96,39 +96,25 @@ pub fn unsupported_windows_restricted_token_sandbox_reason(
 }
 
 /// #300: refuses a launch on the unelevated restricted-token backend when its
-/// profile restricts reads (deny-read entries, or a limited set of readable
-/// roots). That backend's token cannot block reads, so the command would run
-/// with the protected files readable. These are the read checks of
-/// [`resolve_windows_restricted_token_filesystem_overrides`] alone: paths that
-/// only differ in their write restrictions keep their earlier behaviour.
-/// `Ok` for every other sandbox and for the elevated backend.
+/// profile restricts reads: any deny-read entry (an exact path or a glob,
+/// whether or not it matches a file yet), or a limited set of readable roots.
+/// That backend's token cannot block reads. Its spawn rejects exactly these
+/// profiles (`has_full_disk_read_access`) with an unclear error, so this
+/// refuses them first, with a message that says how to switch to the elevated
+/// backend. `Ok` for every other sandbox type.
 pub fn refuse_unenforceable_windows_read_restrictions(
     sandbox: SandboxType,
     permission_profile: &PermissionProfile,
-    sandbox_policy_cwd: &AbsolutePathBuf,
-    use_elevated_backend: bool,
 ) -> std::result::Result<(), String> {
-    if sandbox != SandboxType::WindowsRestrictedToken || use_elevated_backend {
+    if sandbox != SandboxType::WindowsRestrictedToken {
         return Ok(());
     }
-    let (mut file_system_sandbox_policy, network_sandbox_policy) =
-        permission_profile.to_runtime_permissions();
-    if !file_system_sandbox_policy
-        .needs_direct_runtime_enforcement(network_sandbox_policy, sandbox_policy_cwd)
-    {
-        return Ok(());
-    }
-    file_system_sandbox_policy.remove_skip_missing_path_entries();
-    if !windows_policy_has_root_read_access(&file_system_sandbox_policy, sandbox_policy_cwd) {
-        return Err(UNELEVATED_READ_ROOTS_REFUSAL.to_string());
-    }
-    if !codex_windows_sandbox::resolve_windows_deny_read_paths(
-        &file_system_sandbox_policy,
-        sandbox_policy_cwd,
-    )?
-    .is_empty()
-    {
+    let (file_system_sandbox_policy, _) = permission_profile.to_runtime_permissions();
+    if file_system_sandbox_policy.has_denied_read_restrictions() {
         return Err(UNELEVATED_DENY_READ_REFUSAL.to_string());
+    }
+    if !file_system_sandbox_policy.has_full_disk_read_access() {
+        return Err(UNELEVATED_READ_ROOTS_REFUSAL.to_string());
     }
     Ok(())
 }

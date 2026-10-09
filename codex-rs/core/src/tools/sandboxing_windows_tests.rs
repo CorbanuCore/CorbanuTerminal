@@ -40,8 +40,9 @@ struct EnvGuard {
 impl EnvGuard {
     fn set(key: &'static str, value: &Path) -> Self {
         let original = std::env::var_os(key);
-        // SAFETY: serialized with the other CODEX_HOME tests; CI runs each
-        // test in its own process.
+        // SAFETY: CI runs this test in its own process (nextest) or filtered
+        // with `--test-threads=1`. Other tests in this crate that set
+        // CODEX_HOME are not serialized with it.
         unsafe { std::env::set_var(key, value) };
         Self { key, original }
     }
@@ -147,6 +148,13 @@ async fn sec_win_300_unelevated_tool_launch_refuses_deny_read_profiles() {
             "glob",
             FileSystemPath::GlobPattern {
                 pattern: "**/*.env".to_string(),
+            },
+        ),
+        // No file matches it yet; the backend cannot enforce it either.
+        (
+            "glob matching nothing",
+            FileSystemPath::GlobPattern {
+                pattern: "**/*.key".to_string(),
             },
         ),
     ];
