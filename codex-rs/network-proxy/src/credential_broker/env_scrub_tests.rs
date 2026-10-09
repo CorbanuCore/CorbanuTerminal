@@ -38,7 +38,9 @@ fn pf_27_s05_env_race_child_entry() {
     let workers: Vec<_> = (0..4)
         .map(|worker| {
             std::thread::spawn(move || {
-                for round in 0..2_000 {
+                // Fewer rounds on Windows, where each take also sweeps the
+                // process heaps and the parameters' allocation (PF-27-S09).
+                for round in 0..if cfg!(windows) { 300 } else { 2_000 } {
                     // A fresh name each round grows (and reallocates) `environ`.
                     let name = format!("PF27_S05_RACE_{worker}_{round}");
                     // Distinct values, formatted again only after the take:
