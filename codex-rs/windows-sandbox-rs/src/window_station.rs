@@ -63,6 +63,7 @@ use windows_sys::Win32::System::Threading::GetCurrentThreadId;
 /// the new user access itself.
 pub(crate) const INTERACTIVE_WINDOW_STATION: &str = "WinSta0";
 
+const WINSTA_READATTRIBUTES: u32 = 0x0002;
 const WINSTA_CREATEDESKTOP: u32 = 0x0008;
 const WINSTA_ACCESSGLOBALATOMS: u32 = 0x0020;
 const WINSTA_EXITWINDOWS: u32 = 0x0040;
@@ -72,14 +73,18 @@ const ACCESS_ALLOWED_ACE_TYPE: u8 = 0;
 const ACCESS_DENIED_ACE_TYPE: u8 = 1;
 const GENERIC_ALL: u32 = 0x1000_0000;
 
-/// The least the runner needs on the window station, measured on Windows 11
-/// 26200 over SSH: without `READ_CONTROL`, `WINSTA_ACCESSGLOBALATOMS` or
-/// `WINSTA_EXITWINDOWS` it still dies with `0xC0000142`;
+/// The least the runner and its commands need on the window station,
+/// measured on Windows 11 26200 over SSH: without `READ_CONTROL`,
+/// `WINSTA_ACCESSGLOBALATOMS` or `WINSTA_EXITWINDOWS` the runner dies with
+/// `0xC0000142`, and without `WINSTA_READATTRIBUTES` its commands do;
 /// `WINSTA_CREATEDESKTOP` is for its private desktop. Not the clipboard.
-pub(crate) const WINDOW_STATION_ACCESS: u32 =
-    READ_CONTROL | WINSTA_ACCESSGLOBALATOMS | WINSTA_EXITWINDOWS | WINSTA_CREATEDESKTOP;
-/// The least the runner needs on the desktop (measured likewise): read and
-/// write objects. No hooks, windows or menus.
+pub(crate) const WINDOW_STATION_ACCESS: u32 = READ_CONTROL
+    | WINSTA_READATTRIBUTES
+    | WINSTA_ACCESSGLOBALATOMS
+    | WINSTA_EXITWINDOWS
+    | WINSTA_CREATEDESKTOP;
+/// The least they need on the desktop (measured likewise): read and write
+/// objects. No hooks, windows or menus.
 pub(crate) const DESKTOP_ACCESS: u32 = DESKTOP_READOBJECTS | DESKTOP_WRITEOBJECTS;
 
 /// The name of this process's window station (`WinSta0` in an interactive
