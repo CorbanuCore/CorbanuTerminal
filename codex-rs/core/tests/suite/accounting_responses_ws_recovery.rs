@@ -241,7 +241,13 @@ async fn accounting_responses_ws_native_two_reopens_and_original_prices() -> any
         drop(held);
         let records = turn_attempts(&db).await?;
         let patches = turn_observations(&db).await?;
-        let prices: Vec<Snapshot> = payloads(&db, "draft_accounting_price_snapshots").await?;
+        let prices: Vec<Snapshot> = payloads::<Snapshot>(&db, "draft_accounting_price_snapshots")
+            .await?
+            .into_iter()
+            // An unpriced attempt is bound to a pay-per-use record with no
+            // rates (PF-60-S05); only priced records are counted here.
+            .filter(|snapshot| snapshot.rates != codex_state::accounting::Rates::default())
+            .collect();
         let before = totals(&db, &records[0]).await?;
         if prefix {
             // The turn's own money, plus the startup prewarm's $0.02997 - which
@@ -515,11 +521,13 @@ async fn accounting_responses_ws_native_unknown_prices_and_no_usage() -> anyhow:
         let db = test.codex.state_db().unwrap();
         let records = turn_attempts(&db).await?;
         assert_eq!(records.len(), 1);
-        assert!(
-            payloads::<Snapshot>(&db, "draft_accounting_price_snapshots")
-                .await?
-                .is_empty()
-        );
+        // No price: the attempt is bound only to its pay-per-use basis, by a
+        // record with no rates (PF-60-S05).
+        let bound: Vec<Snapshot> = payloads(&db, "draft_accounting_price_snapshots").await?;
+        assert!(!bound.is_empty());
+        assert!(bound.iter().all(|snapshot| snapshot.basis
+            == codex_state::accounting::Basis::Billed
+            && snapshot.rates == codex_state::accounting::Rates::default()));
         assert_eq!(
             turn_observations(&db).await?.len(),
             usize::from(usage_present)

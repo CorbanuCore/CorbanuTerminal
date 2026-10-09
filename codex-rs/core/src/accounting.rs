@@ -1137,6 +1137,12 @@ impl Sampling {
                 prices::chat_original(model, &self.provider, self.scope, dispatched_at)?
             }
         };
+        // Pay per use with no attributable rate still binds its basis and
+        // where it was declared: a record with no rates, which prices nothing
+        // and reads as "no price", so no attempt is left without a basis.
+        if prices.is_empty() {
+            prices = basis_only(Basis::Billed)?;
+        }
         for snapshot in &mut prices {
             snapshot.basis_source = self.basis_source;
         }

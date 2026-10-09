@@ -281,7 +281,16 @@ async fn accounting_chat_native_immutable_prices_and_unpriced_rows() -> anyhow::
         let db = test.codex.state_db().unwrap();
         let rows = attempts(&db).await?;
         let prices: Vec<Snapshot> = payloads(&db, "draft_accounting_price_snapshots").await?;
-        assert_eq!(prices.len(), usize::from(model == "gpt-5.6-sol"));
+        // An unpriced attempt is bound to a pay-per-use record with no rates
+        // (PF-60-S05); only the catalogue-priced model has rates.
+        assert_eq!(
+            prices
+                .iter()
+                .filter(|snapshot| snapshot.rates != codex_state::accounting::Rates::default())
+                .count(),
+            usize::from(model == "gpt-5.6-sol")
+        );
+        assert_eq!(prices.len(), 1);
         let before = totals(&db, &rows[0]).await?;
         assert_eq!(before.unknown_estimates, 1);
         assert_eq!(

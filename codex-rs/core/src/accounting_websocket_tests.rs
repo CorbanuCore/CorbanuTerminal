@@ -501,10 +501,21 @@ async fn accounting_responses_ws_original_price_binding() -> anyhow::Result<()> 
             .admit(model.into(), tier.map(str::to_string))
             .await?;
     }
-    let snapshots = fixture
+    let (snapshots, rateless): (Vec<Snapshot>, Vec<Snapshot>) = fixture
         .rows::<Snapshot>("draft_accounting_price_snapshots")
-        .await?;
+        .await?
+        .into_iter()
+        .partition(|snapshot| snapshot.rates != codex_state::accounting::Rates::default());
     assert_eq!(snapshots.len(), 1);
+    // Every attempt with no price is still bound to its pay-per-use basis, by
+    // a record with no rates (PF-60-S05).
+    assert_eq!(
+        rateless
+            .iter()
+            .map(|snapshot| snapshot.basis)
+            .collect::<Vec<_>>(),
+        vec![codex_state::accounting::Basis::Billed; 4]
+    );
     let source = serde_json::to_vec(&(
         "openai-responses-api-key-bundled-v1",
         "openai",
