@@ -109,6 +109,7 @@ pub(crate) const DESKTOP_ACCESS: u32 = DESKTOP_READOBJECTS | DESKTOP_WRITEOBJECT
 /// Under this user's local application data: the lock file that serializes
 /// window-object DACL edits across processes (see [`with_dacl_lock`]).
 const DACL_LOCK_DIR: &str = "CorbanuTerminalSandbox";
+const DACL_LOCK_FILE: &str = "window-access.lock";
 /// Each edit takes well under a millisecond.
 const DACL_LOCK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
 
@@ -413,7 +414,7 @@ pub(crate) fn current_logon_sid() -> Result<Vec<u8>> {
 
 /// Serializes DACL edits on window objects, in this process and, through a
 /// lock file in this user's local application data (which the sandbox's
-/// users can't open), across this user's processes on this window station.
+/// users can't open), across this user's processes.
 /// Without it, two read-modify-write edits can lose one. Returns whether the
 /// cross-process lock was held: if it can't be had in time, the edit goes
 /// ahead with only this process's edits serialized.
@@ -427,7 +428,7 @@ fn with_dacl_lock<T>(edit: impl FnOnce() -> T) -> (bool, T) {
     (file.is_some(), result)
 }
 
-/// This user's lock file for this window station, locked, or `None`.
+/// This user's lock file, locked, or `None`.
 fn dacl_lock_file() -> Option<File> {
     use std::os::windows::fs::OpenOptionsExt as _;
     const FILE_SHARE_READ: u32 = 0x1;
@@ -435,8 +436,7 @@ fn dacl_lock_file() -> Option<File> {
     const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
     let dir = local_app_data()?.join(DACL_LOCK_DIR);
     std::fs::create_dir_all(&dir).ok()?;
-    let station = current_window_station_name()?;
-    let path = dir.join(format!("window-access-{station}.lock"));
+    let path = dir.join(DACL_LOCK_FILE);
     let open = |write: bool| {
         std::fs::OpenOptions::new()
             .read(true)
