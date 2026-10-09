@@ -227,12 +227,12 @@ pub fn declared_billing(
         .map_or(BillingDeclaration::NotDeclared, BillingDeclaration::BuiltIn)
 }
 
-/// What to tell a user whose route has no declared basis.
+/// What to tell a user whose route has no declared basis: the config key that
+/// declares it, and what happens until then.
 pub fn not_declared_next_step(provider_id: &str) -> String {
     format!(
-        "Billing basis not declared for this provider's route. To declare it, set \
-         model_providers.{provider_id}.billing = \"subscription\", \"pay_per_use\" or \"local\" \
-         in config.toml."
+        "set model_providers.{provider_id}.billing = \"subscription\", \"pay_per_use\" or \"local\" \
+         in config.toml. Until then these requests count neither as money spent nor as subscription work."
     )
 }
 

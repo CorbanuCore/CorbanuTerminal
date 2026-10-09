@@ -912,3 +912,107 @@ fn unpriced_and_partly_priced_requests_get_next_steps() {
     assert_never_zero(&pages);
     assert_never_zero(&in_part_pages);
 }
+
+/// An attempt bound at admission to a rate-less record of `basis`.
+fn with_basis(
+    mut quote: ObservationQuote,
+    basis: codex_state::accounting::Basis,
+    source: codex_state::accounting::BasisSource,
+) -> ObservationQuote {
+    quote.snapshot = Some(codex_state::accounting::Snapshot {
+        id: Uuid::from_u128(9000 + quote.attempt.attempt_id.as_u128()),
+        provider: quote.attempt.provider.clone(),
+        model: quote.attempt.model.clone(),
+        scope: quote.attempt.scope,
+        currency: codex_state::accounting::Currency::Usd,
+        unit: codex_state::accounting::Unit::PerMillionTokens,
+        rates: codex_state::accounting::Rates::default(),
+        source_reference: Uuid::from_u128(1),
+        source_kind: codex_state::accounting::SourceKind::NativeCatalog,
+        basis,
+        plan_burn_millis: None,
+        basis_source: source,
+        observed_at_ms: 0.try_into().unwrap(),
+        approved_at_ms: 0.try_into().unwrap(),
+        effective_from_ms: 0.try_into().unwrap(),
+        effective_end_ms: None,
+    });
+    quote
+}
+
+/// PF-60-S05 option B on the first screen: Kimi Code membership work with no
+/// catalogue figure is subscription work, never pay per use or "no price";
+/// a route with no declared basis says so and names the config key; local
+/// work costs nothing; the overflow note appears with subscription work only.
+#[test]
+fn declared_bases_read_as_declared() {
+    use codex_state::accounting::Basis;
+    use codex_state::accounting::BasisSource;
+    let owner = thread(/*n*/ 1);
+    let kimi = with_basis(
+        unpriced(/*id*/ 1, owner, "kimi-code", "k3"),
+        Basis::PlanEquivalent,
+        BasisSource::BuiltIn,
+    );
+    let custom = with_basis(
+        unpriced(/*id*/ 2, owner, "my-llm", "my-model"),
+        Basis::Undeclared,
+        BasisSource::BuiltIn,
+    );
+    let ollama = with_basis(
+        unpriced(/*id*/ 3, owner, "ollama", "llama"),
+        Basis::Local,
+        BasisSource::UserConfig,
+    );
+    let first = |own: Vec<ObservationQuote>| {
+        first_screen(&inspection_pages(Ok(day(own, /*others*/ None)))[0])
+    };
+
+    let subscription = first(vec![kimi.clone()]);
+    assert!(
+        subscription.iter().any(|line| line.contains("Kimi Code")
+            && line.contains("Covered by your subscription")),
+        "{subscription:#?}"
+    );
+    for line in &subscription {
+        assert!(!line.contains("Pay per use"), "{line}");
+        assert!(!line.contains("no price available"), "{line}");
+        assert!(!line.contains("check the bill"), "{line}");
+    }
+    assert!(subscription.contains(&super::super::OVERFLOW_NOTE.to_string()));
+
+    let undeclared = first(vec![custom]);
+    assert!(
+        undeclared
+            .iter()
+            .any(|line| line.contains("my-llm") && line.contains("Billing basis not declared")),
+        "{undeclared:#?}"
+    );
+    assert!(
+        undeclared.iter().any(|line| line.starts_with(
+            "Billing basis not declared for my-llm. Next step: set model_providers.my-llm.billing"
+        )),
+        "{undeclared:#?}"
+    );
+    assert!(!undeclared.contains(&super::super::OVERFLOW_NOTE.to_string()));
+
+    let local = first(vec![ollama.clone()]);
+    assert!(
+        local
+            .iter()
+            .any(|line| line.contains("Local (runs on your own machine)")
+                && line.contains("No charge")),
+        "{local:#?}"
+    );
+    assert!(!local.contains(&super::super::OVERFLOW_NOTE.to_string()));
+
+    // A day mixing them states each part, and only pay per use as spending.
+    let mixed = first(vec![kimi, ollama, priced(/*id*/ 4, owner)]);
+    assert!(
+        mixed
+            .iter()
+            .any(|line| line.starts_with("Pay-per-use total — estimated cost: $0.000710")),
+        "{mixed:#?}"
+    );
+    assert!(mixed.contains(&super::super::OVERFLOW_NOTE.to_string()));
+}

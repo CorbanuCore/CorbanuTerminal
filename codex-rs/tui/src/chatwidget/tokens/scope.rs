@@ -14,10 +14,12 @@ use codex_state::accounting::ObservationQuote;
 use codex_state::accounting::OtherConversations;
 
 use super::EstimateGaps;
+use super::OVERFLOW_NOTE;
 use super::by_route;
 use super::has_no_price;
 use super::lacks_price;
 use super::lower_first;
+use super::per_use;
 use super::plain_billing;
 use super::provider_name;
 use super::request_count;
@@ -117,8 +119,15 @@ pub(super) fn no_price_next_step<'a>(
     let mut no_price: Vec<String> = Vec::new();
     let mut in_part: Vec<String> = Vec::new();
     let mut incomplete: Vec<String> = Vec::new();
+    let mut undeclared: Vec<String> = Vec::new();
     for quote in quotes {
-        if quote.is_plan() || quote.all_buckets_priced.is_some() {
+        if quote.basis() == codex_state::accounting::Basis::Undeclared {
+            if !undeclared.contains(&quote.attempt.provider) {
+                undeclared.push(quote.attempt.provider.clone());
+            }
+            continue;
+        }
+        if !per_use(quote) || quote.all_buckets_priced.is_some() {
             continue;
         }
         let usage = &quote.usage;
@@ -156,7 +165,16 @@ pub(super) fn no_price_next_step<'a>(
         [one] => Some(one.clone()),
         [rest @ .., last] => Some(format!("{} and {last}", rest.join(", "))),
     };
-    let mut steps = Vec::new();
+    let mut steps: Vec<String> = undeclared
+        .iter()
+        .map(|id| {
+            format!(
+                "Billing basis not declared for {}. Next step: {}",
+                provider_name(id),
+                codex_model_provider_info::not_declared_next_step(id)
+            )
+        })
+        .collect();
     if let Some(providers) = joined(&no_price) {
         steps.push(format!(
             "Next step for requests with no price: check the bill from {providers}. No published price covers them, so no cost is shown for them here."
@@ -173,6 +191,17 @@ pub(super) fn no_price_next_step<'a>(
         ));
     }
     steps
+}
+
+/// The overflow note, when any of `quotes` is subscription work (option B):
+/// paid usage beyond a plan is never counted, and this view cannot see it.
+pub(super) fn overflow_note<'a>(
+    quotes: impl IntoIterator<Item = &'a ObservationQuote>,
+) -> Option<String> {
+    quotes
+        .into_iter()
+        .any(ObservationQuote::is_plan)
+        .then(|| OVERFLOW_NOTE.to_string())
 }
 
 #[cfg(test)]

@@ -2402,6 +2402,7 @@ fn accounting_inspect_first_screen_names_provider_model_and_billing_type() {
                 money(decimal("0.5"))
             ),
             "No other conversation recorded requests on this day.".to_string(),
+            super::OVERFLOW_NOTE.to_string(),
             "Costs are estimates from published prices; your provider's bill is the final amount."
                 .to_string(),
             "Select a provider below to see its requests.".to_string(),
