@@ -446,7 +446,13 @@ fn sec_win_304_entries_follow_their_rules() {
     assert!(explicit_deny(&env, &group));
     // SAFETY: a valid SID for the call.
     unsafe {
-        sync_persistent_deny_read_acls(&home.codex_home, SANDBOX_GROUP, None, group.as_ptr())
+        sync_persistent_deny_read_acls(
+            &home.codex_home,
+            SANDBOX_GROUP,
+            None,
+            group.as_ptr(),
+            &home.sessions,
+        )
     }
     .expect("refresh without rules");
     assert!(explicit_deny(&env, &group), "a refresh removed an entry");
