@@ -366,7 +366,7 @@ mod pf_27_s09_tests {
         .expect("start under the broker token");
         let mut output = String::new();
         stdout.read_to_string(&mut output).expect("child output");
-        let _ = child.wait();
+        assert!(child.wait().expect("child exit").success(), "{output}");
         let roots: usize = output
             .split("pf27s09-roots:")
             .nth(1)

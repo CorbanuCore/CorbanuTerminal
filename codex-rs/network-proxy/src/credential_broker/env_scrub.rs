@@ -162,7 +162,12 @@ pub(crate) fn take_env_var(name: &str) -> Option<Zeroizing<Vec<u8>>> {
     }
     // The C runtime made more copies of the launch environment at start-up
     // (some freed without being wiped, some kept); so may other code have.
+    let started = std::time::Instant::now();
     windows_env::wipe_heap_copies(name, &[wide.as_slice(), utf8.as_slice()]);
+    tracing::debug!(
+        "environment sweep for one handed-over variable took {} ms",
+        started.elapsed().as_millis()
+    );
     valid.then_some(utf8)
 }
 
@@ -190,7 +195,11 @@ mod windows_env {
     pub(super) fn remove_from_c_runtime(wide_name: &[u16]) {
         let empty = [0_u16];
         // SAFETY: both strings are NUL-terminated.
-        unsafe { _wputenv_s(wide_name.as_ptr(), empty.as_ptr()) };
+        let error = unsafe { _wputenv_s(wide_name.as_ptr(), empty.as_ptr()) };
+        if error != 0 {
+            // The entry stays, overwritten with `0` characters.
+            tracing::debug!("C runtime environment entry not removed (errno {error})");
+        }
     }
 
     /// The value of the NUL-terminated `name`, read into a buffer that is
