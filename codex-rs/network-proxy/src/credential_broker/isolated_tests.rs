@@ -1484,7 +1484,8 @@ mod pf_27_s05 {
         crate::credential_broker::env_scrub::set_env_var_for_test("PATH", &grown.to_string_lossy());
         crate::credential_broker::env_scrub::set_env_var_for_test(
             "PF27_S09_GROWN",
-            &"x".repeat(32 * 1024),
+            // Within Windows' 32,767-character limit for a value.
+            &"x".repeat(30_000),
         );
         // Positive control: the launch environment still holds the key.
         let before = count(&masked);
