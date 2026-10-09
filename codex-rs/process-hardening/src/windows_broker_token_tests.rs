@@ -39,6 +39,113 @@ fn pf_27_s08_child_entry() {
     println!("\n{REPORT_PREFIX}{}", line.join(","));
 }
 
+/// Temporary diagnostics: which token variants can start this test binary
+/// and `cmd.exe`, with exit codes.
+#[test]
+fn pf_27_s08_diag_token_variants() {
+    use crate::windows_broker_token::BROKER_TOKEN;
+    use crate::windows_broker_token::BrokerTokenOptions;
+    use crate::windows_broker_token::create_broker_token_with;
+    for low_integrity in [true, false] {
+        for logon_sid in [false, true] {
+            for everyone in [false, true] {
+                let options = BrokerTokenOptions {
+                    logon_sid,
+                    everyone,
+                    low_integrity,
+                    ..BROKER_TOKEN
+                };
+                let exe = std::env::current_exe().expect("exe");
+                let system_root = std::env::var("SystemRoot").expect("SystemRoot");
+                for argv in [
+                    vec![
+                        format!(r"{system_root}\System32\cmd.exe"),
+                        "/d".to_string(),
+                        "/c".to_string(),
+                        "echo pf27s08-cmd-ok".to_string(),
+                    ],
+                    vec![
+                        exe.to_string_lossy().into_owned(),
+                        CHILD_TEST.to_string(),
+                        "--exact".to_string(),
+                        "--nocapture".to_string(),
+                    ],
+                ] {
+                    let token = create_broker_token_with(options).expect("token");
+                    let (code, output) = run_with_token(token, &argv, &[(ROLE_ENV, "token")]);
+                    eprintln!(
+                        "pf27s08-diag low={low_integrity} logon={logon_sid} everyone={everyone} {}: exit=0x{code:x} out={}",
+                        argv[0].rsplit('\\').next().unwrap_or_default(),
+                        output
+                            .replace('\n', " | ")
+                            .chars()
+                            .take(300)
+                            .collect::<String>()
+                    );
+                }
+            }
+        }
+    }
+}
+
+fn run_with_token(
+    token: std::os::windows::io::OwnedHandle,
+    argv: &[String],
+    extra_env: &[(&str, &str)],
+) -> (u32, String) {
+    use std::collections::HashMap;
+    use std::os::windows::io::IntoRawHandle as _;
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::Foundation::HANDLE;
+    use windows_sys::Win32::System::Threading::GetExitCodeProcess;
+    use windows_sys::Win32::System::Threading::TerminateProcess;
+    use windows_sys::Win32::System::Threading::WaitForSingleObject;
+    let mut env: HashMap<String, String> = std::env::vars()
+        .filter(|(name, _)| !name.to_ascii_uppercase().starts_with("CODEX_PF27S08_"))
+        .collect();
+    for (name, value) in extra_env {
+        env.insert((*name).to_string(), (*value).to_string());
+    }
+    let token = token.into_raw_handle() as HANDLE;
+    let spawned = match codex_windows_sandbox::spawn_process_with_pipes(
+        token,
+        argv,
+        &std::env::temp_dir(),
+        &env,
+        codex_windows_sandbox::StdinMode::Closed,
+        codex_windows_sandbox::StderrMode::MergeStdout,
+        codex_windows_sandbox::ConsoleMode::NoWindow,
+        /*use_private_desktop*/ false,
+        /*logs_base_dir*/ None,
+    ) {
+        Ok(spawned) => spawned,
+        Err(err) => {
+            // SAFETY: owned above.
+            unsafe { CloseHandle(token) };
+            return (u32::MAX, format!("spawn failed: {err}"));
+        }
+    };
+    let (sender, receiver) = std::sync::mpsc::channel::<Vec<u8>>();
+    let reader = codex_windows_sandbox::read_handle_loop(spawned.stdout_read, move |chunk| {
+        let _ = sender.send(chunk.to_vec());
+    });
+    let mut code = 0_u32;
+    // SAFETY: the handles stay valid until closed below.
+    unsafe {
+        const WAIT_TIMEOUT: u32 = 0x102;
+        if WaitForSingleObject(spawned.process.hProcess, 180_000) == WAIT_TIMEOUT {
+            TerminateProcess(spawned.process.hProcess, 1);
+        }
+        GetExitCodeProcess(spawned.process.hProcess, &mut code);
+        CloseHandle(spawned.process.hThread);
+        CloseHandle(spawned.process.hProcess);
+        CloseHandle(token);
+    }
+    let _ = reader.join();
+    let output: Vec<u8> = receiver.try_iter().flatten().collect();
+    (code, String::from_utf8_lossy(&output).into_owned())
+}
+
 /// The broker token is low integrity, write-restricted to a SID the token
 /// does not otherwise hold, without privileges, and the broker reports it
 /// (`token+dacl+job`). Control: without it the check fails and the broker
@@ -53,11 +160,11 @@ fn pf_27_s08_broker_runs_under_its_token_and_reports_it() {
     eprintln!("pf27s08: broker token: {confined:?}");
     assert_eq!(confined["token"], "ok", "{confined:?}");
     assert_eq!(confined["containment"], "token+dacl+job", "{confined:?}");
-    assert_eq!(confined["restricting_sids"], "1", "{confined:?}");
+    assert_eq!(confined["capability_sids"], "1", "{confined:?}");
     let control = run_child("token", &[], Confinement::SameToken);
     assert_ne!(control["token"], "ok", "{control:?}");
     assert_eq!(control["containment"], "dacl+job", "{control:?}");
-    assert_eq!(control["restricting_sids"], "0", "{control:?}");
+    assert_eq!(control["capability_sids"], "0", "{control:?}");
 }
 
 /// The broker cannot create, modify, rename or delete a file the user can
@@ -207,7 +314,10 @@ fn run_child(role: &str, env: &[(&str, OsString)], confinement: Confinement) -> 
         spawn_protected_with(&program, &args, &vars, confinement).expect("protected child");
     let mut output = String::new();
     let _ = stdout.read_to_string(&mut output);
-    let _ = child.wait();
+    let status = child.wait();
+    if !output.contains(REPORT_PREFIX) {
+        panic!("{role} child ({confinement:?}) printed no report; exit {status:?}:\n{output}");
+    }
     decode(&output)
 }
 
@@ -231,10 +341,10 @@ fn token_report() -> Report {
         Err(err) => format!("no:{}", err.to_string().replace([',', '='], " ")),
     };
     report.insert("token".to_string(), token);
-    let restricting = super::current_restricting_sid_strings()
+    let capabilities = super::current_capability_sid_strings()
         .map(|sids| sids.len().to_string())
         .unwrap_or_else(|_| "error".to_string());
-    report.insert("restricting_sids".to_string(), restricting);
+    report.insert("capability_sids".to_string(), capabilities);
     let dir = std::env::temp_dir();
     let containment = crate::contain_credential_broker(&dir).mechanism;
     report.insert("containment".to_string(), containment);

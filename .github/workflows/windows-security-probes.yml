@@ -151,7 +151,7 @@ jobs:
             Assert-Tests $hardening 'sec_win_' 2
             & $medium -Program $hardening -Arguments @('sec_win_', '--nocapture', '--test-threads=1')
             if ($LASTEXITCODE -ne 0) { throw "#320 regressions failed in a normal session" }
-            Assert-Tests $hardening 'pf_27_s08' 7
+            Assert-Tests $hardening 'pf_27_s08' 8
             & $medium -Program $hardening -Arguments @('pf_27_s08', '--nocapture', '--test-threads=1')
             if ($LASTEXITCODE -ne 0) { throw "PF-27-S08 broker token probes failed in a normal session" }
             $proxy = Get-TestExe @('-p', 'codex-network-proxy', '--lib')

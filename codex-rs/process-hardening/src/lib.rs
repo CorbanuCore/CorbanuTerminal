@@ -16,7 +16,7 @@ pub use broker_containment::broker_seatbelt_profile_with_files;
 pub use broker_containment::contain_credential_broker;
 pub use broker_containment::contain_credential_broker_with_files;
 #[cfg(windows)]
-pub use windows_broker_token::current_restricting_sid_strings;
+pub use windows_broker_token::current_capability_sid_strings;
 #[cfg(windows)]
 pub use windows_broker_token::current_token_is_broker_token;
 #[cfg(windows)]

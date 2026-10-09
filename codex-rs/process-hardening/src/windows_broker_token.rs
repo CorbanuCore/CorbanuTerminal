@@ -74,6 +74,9 @@ use windows_sys::Win32::System::Threading::OpenProcessToken;
 const LOW_INTEGRITY_SID: &str = "S-1-16-4096";
 const LOW_INTEGRITY_RID: u32 = 0x1000;
 const ADMINISTRATORS_SID: &str = "S-1-5-32-544";
+const EVERYONE_SID: &str = "S-1-1-0";
+/// `SE_GROUP_LOGON_ID`.
+const SE_GROUP_LOGON_ID: u32 = 0xC000_0000;
 /// `SE_GROUP_INTEGRITY`.
 const SE_GROUP_INTEGRITY: u32 = 0x20;
 const SE_GROUP_ENABLED: u32 = 0x4;
@@ -95,22 +98,70 @@ pub(crate) enum BrokerDefaultDacl {
     OwnedByCapability,
 }
 
+/// What the broker token is built from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BrokerTokenOptions {
+    pub(crate) default_dacl: BrokerDefaultDacl,
+    /// Also restrict to the logon SID, which the window station and desktop
+    /// grant: a process that loads `user32` needs them to start.
+    pub(crate) logon_sid: bool,
+    /// Also restrict to Everyone, which devices such as the network stack
+    /// grant.
+    pub(crate) everyone: bool,
+    pub(crate) low_integrity: bool,
+}
+
+/// The broker's token.
+pub(crate) const BROKER_TOKEN: BrokerTokenOptions = BrokerTokenOptions {
+    default_dacl: BrokerDefaultDacl::Protected,
+    logon_sid: true,
+    everyone: true,
+    low_integrity: true,
+};
+
 /// A new primary token for the broker (see the module docs), with a fresh
 /// capability SID and the given default DACL.
 pub(crate) fn create_broker_token(default_dacl: BrokerDefaultDacl) -> io::Result<OwnedHandle> {
+    create_broker_token_with(BrokerTokenOptions {
+        default_dacl,
+        ..BROKER_TOKEN
+    })
+}
+
+pub(crate) fn create_broker_token_with(options: BrokerTokenOptions) -> io::Result<OwnedHandle> {
+    let default_dacl = options.default_dacl;
     let base = open_current_token(
         TOKEN_DUPLICATE | TOKEN_QUERY | TOKEN_ASSIGN_PRIMARY | TOKEN_ADJUST_DEFAULT,
     )?;
     let capability = LocalSid::from_string(&random_capability_sid()?)?;
+    let everyone = LocalSid::from_string(EVERYONE_SID)?;
     let administrators = LocalSid::from_string(ADMINISTRATORS_SID)?;
     let disable = [SID_AND_ATTRIBUTES {
         Sid: administrators.0,
         Attributes: 0,
     }];
-    let restrict = [SID_AND_ATTRIBUTES {
+    let groups_buffer = token_information(base.as_raw_handle() as HANDLE, TokenGroups)?;
+    let logon = groups(&groups_buffer)
+        .iter()
+        .find(|group| group.Attributes & SE_GROUP_LOGON_ID == SE_GROUP_LOGON_ID)
+        .map(|group| group.Sid);
+    let mut restrict = vec![SID_AND_ATTRIBUTES {
         Sid: capability.0,
         Attributes: 0,
     }];
+    if options.logon_sid {
+        let sid = logon.ok_or_else(|| io::Error::other("the token has no logon SID"))?;
+        restrict.push(SID_AND_ATTRIBUTES {
+            Sid: sid,
+            Attributes: 0,
+        });
+    }
+    if options.everyone {
+        restrict.push(SID_AND_ATTRIBUTES {
+            Sid: everyone.0,
+            Attributes: 0,
+        });
+    }
     let mut raw: HANDLE = 0;
     // SAFETY: every array outlives the call; Administrators is ignored if
     // the token does not have it.
@@ -132,7 +183,9 @@ pub(crate) fn create_broker_token(default_dacl: BrokerDefaultDacl) -> io::Result
     }
     // SAFETY: returned by the call above; owned from here on.
     let token = unsafe { OwnedHandle::from_raw_handle(raw as _) };
-    set_low_integrity(&token)?;
+    if options.low_integrity {
+        set_low_integrity(&token)?;
+    }
     let user = current_user_sid_string()?;
     let sddl = match default_dacl {
         BrokerDefaultDacl::Protected => thread_dacl_sddl(&user),
@@ -177,19 +230,29 @@ pub fn current_token_is_broker_token() -> io::Result<()> {
     let user = unsafe { (*user_buffer.as_ptr().cast::<TOKEN_USER>()).User.Sid };
     let group_buffer = token_information(token, TokenGroups)?;
     let held = groups(&group_buffer);
+    // Every restricting SID is a capability (held by nothing else in the
+    // token), the logon SID or Everyone; at least one is a capability.
+    let everyone = LocalSid::from_string(EVERYONE_SID)?;
+    let mut capabilities = 0;
     for restricting in restricted {
         // SAFETY: both SIDs point into live buffers.
-        let normal = unsafe { EqualSid(restricting.Sid, user) != 0 }
-            || held
-                .iter()
-                // SAFETY: as above.
-                .any(|group| unsafe { EqualSid(restricting.Sid, group.Sid) != 0 });
-        if normal {
-            return Err(io::Error::other(format!(
-                "restricting SID {} is one the token holds",
-                sid_string(restricting.Sid)?
-            )));
+        let same = |sid: PSID| unsafe { EqualSid(restricting.Sid, sid) != 0 };
+        if same(everyone.0) {
+            continue;
         }
+        match held.iter().find(|group| same(group.Sid)) {
+            Some(group) if group.Attributes & SE_GROUP_LOGON_ID == SE_GROUP_LOGON_ID => {}
+            None if !same(user) => capabilities += 1,
+            _ => {
+                return Err(io::Error::other(format!(
+                    "restricting SID {} is one the token holds",
+                    sid_string(restricting.Sid)?
+                )));
+            }
+        }
+    }
+    if capabilities == 0 {
+        return Err(io::Error::other("no capability among the restricting SIDs"));
     }
 
     let administrators = LocalSid::from_string(ADMINISTRATORS_SID)?;
@@ -223,15 +286,28 @@ pub fn current_token_is_broker_token() -> io::Result<()> {
     Ok(())
 }
 
-/// The restricting SIDs of the current process's token, as strings (none
-/// for an unrestricted token). The broker's pipes grant them, so the broker
-/// can create its own pipe instances.
-pub fn current_restricting_sid_strings() -> io::Result<Vec<String>> {
+/// The capability SIDs of the current process's token (restricting SIDs
+/// that are neither Everyone nor held by the token otherwise), as strings;
+/// none for an unrestricted token. The broker's pipes grant them, so the
+/// broker can create its own pipe instances.
+pub fn current_capability_sid_strings() -> io::Result<Vec<String>> {
     let token = open_current_token(TOKEN_QUERY)?;
-    let buffer = token_information(token.as_raw_handle() as HANDLE, TokenRestrictedSids)?;
-    groups(&buffer)
+    let token = token.as_raw_handle() as HANDLE;
+    let restricted = token_information(token, TokenRestrictedSids)?;
+    let user_buffer = token_information(token, TokenUser)?;
+    // SAFETY: the buffer holds a TOKEN_USER whose SID points into it.
+    let user = unsafe { (*user_buffer.as_ptr().cast::<TOKEN_USER>()).User.Sid };
+    let group_buffer = token_information(token, TokenGroups)?;
+    let held = groups(&group_buffer);
+    let everyone = LocalSid::from_string(EVERYONE_SID)?;
+    groups(&restricted)
         .iter()
-        .map(|group| sid_string(group.Sid))
+        .filter(|restricting| {
+            // SAFETY: every SID points into a live buffer.
+            let same = |sid: PSID| unsafe { EqualSid(restricting.Sid, sid) != 0 };
+            !same(everyone.0) && !same(user) && !held.iter().any(|group| same(group.Sid))
+        })
+        .map(|restricting| sid_string(restricting.Sid))
         .collect()
 }
 
