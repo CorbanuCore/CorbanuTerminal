@@ -1,16 +1,20 @@
 ---
 sprint_id: "PF-27-S09"
 title: "Windows model-client auth through the broker"
-status: draft
+status: in_progress
 plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-27"
 execution_order: 45
-owner: "broker lane (unassigned)"
+owner: "broker lane worker (2026-10-09)"
 parallel_lane: "broker"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+write_scope: "codex-rs/network-proxy/src/credential_broker/, codex-rs/network-proxy/src/credential_broker.rs, codex-rs/network-proxy/src/native_certs.rs, codex-rs/network-proxy/src/lib.rs, codex-rs/network-proxy/Cargo.toml, codex-rs/vault/src/lib.rs, codex-rs/arg0/src/lib.rs, codex-rs/arg0/Cargo.toml, codex-rs/http-client/src/model_broker_route.rs, codex-rs/http-client/src/transport.rs, codex-rs/http-client/src/transport_tests.rs, codex-rs/http-client/src/lib.rs, codex-rs/core/src/model_broker_auth.rs, codex-rs/core/src/model_broker_auth_tests.rs, codex-rs/Cargo.lock, .github/workflows/windows-security-probes.yml, qa/security-levels/sprints/PF-27-S09/, qa/demos/index/PF-27-S09.md, qa/demos/specs/pf27s09-win-env-key-brokered.toml, qa/demos/specs/pf27s09-win-vault-key-brokered.toml, qa/demos/specs/pf27s09-win-ssh-brokered-sandbox.toml, docs/sprints/current/p1-security-hardening/pf-27-s09-windows-model-client-auth.md"
+integration_gate: "Per-sprint gate (sec-common decision 5), one PR per slice (1: broker side, network-proxy/vault/arg0; 2: Core and http-client routing): Windows clippy and Linux clippy (RTX box) -D warnings, focused tests on the real Windows machine elevated and in a normal session, windows-security-probes on windows-2022, one Opus 5.5 High review per slice; merged behind the default-off broker_model_auth flag. GLM 5.2 tmux SOP videos on the real Windows machine from a normal session and over SSH."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-27-s09-20261009"
+branch: "sec/pf-27-s09-model-auth"
+base_commit: "5d283fde18b9924127d061f7c4f5b58211a3a50a"
 depends_on: "PF-27-S05, PF-27-S07, PF-27-S08"
+merged_behind_flag: "broker_model_auth (default off)"
+gate_evidence: "qa/security-levels/sprints/PF-27-S09/README.md"
 created: 2026-10-08
 updated: 2026-10-09
 ---
@@ -20,7 +24,7 @@ updated: 2026-10-09
 Fourth of the four PF-27-S06 limits Travis approved fixing (2026-10-08): the port of
 [PF-27-S05](../../archive/p0-security-levels/pf-27-s05-model-client-auth-broker.md) to Windows. Today
 `broker_model_auth` on Windows refuses every brokered request (`model_broker_auth.rs`, non-Unix branch). Plan
-only: nothing is implemented until this record is allocated. Runs after PF-27-S08 (merged in #333). Key path: Travis
+allocated 2026-10-09 to the broker lane (slice 1 on `sec/pf-27-s09-model-auth`, slice 2 on `sec/pf-27-s09-core`). Runs after PF-27-S08 (merged in #333). Key path: Travis
 decided (c) on 2026-10-09: the broker reads the vault key from Credential Manager itself, under its PF-27-S08
 token, the same as the macOS and Linux brokers read the OS keyring, so S05's stored-key design ports as is. One
 Windows addition: every vault read opens `secrets/.vault.lock` for writing, which the S08 token cannot do on a
@@ -51,9 +55,8 @@ exception) or hand the broker an opened lock. The Windows broker reads no stored
 
 ## Preconditions
 
-- [ ] PF-27-S05 archived (done), PF-27-S07 archived (done), PF-27-S08 accepted (merged; awaiting Travis).
-- [ ] **Needs a real Windows machine** for the GLM 5.2 tmux run and SOP videos with a real provider key, and for
-  stored keys through Credential Manager. Everything else runs on `windows-2022`.
+- [x] PF-27-S05 and S07 archived; PF-27-S08 merged behind its flags (#333; `ready`, awaiting Travis).
+- [x] A real Windows 11 machine (used 2026-10-09), for the GLM 5.2 runs, videos and Credential Manager.
 
 ## Acceptance criteria
 

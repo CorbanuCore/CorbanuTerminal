@@ -11,5 +11,5 @@ with their dependencies, lanes and worktrees.
   ([S06](../../archive/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md),
   [S07](../../archive/p1-security-hardening/pf-27-s07-windows-hardening-follow-ups.md)).
 - [PF-27-S08](pf-27-s08-windows-broker-restricted-token.md) (`ready` for Travis's acceptance; key path (c) decided
-  2026-10-09), then S09 (draft).
+  2026-10-09); [PF-27-S09](pf-27-s09-windows-model-client-auth.md) (`in_progress`, broker lane).
 - Everything else: `draft` until allocated.

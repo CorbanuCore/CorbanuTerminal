@@ -1748,7 +1748,7 @@ mod pf_27_s05 {
             .open(&lock)
             .expect("control: this process opens the lock for writing");
         let mut env: Vec<(std::ffi::OsString, std::ffi::OsString)> = std::env::vars_os().collect();
-        env.push((LOCK_CHILD_ENV.into(), lock.clone().into_os_string()));
+        env.push((LOCK_CHILD_ENV.into(), lock.into_os_string()));
         let args: Vec<std::ffi::OsString> = [
             "credential_broker::isolated::tests::pf_27_s05::pf_27_s09_lock_child_entry",
             "--exact",
