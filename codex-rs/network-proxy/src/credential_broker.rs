@@ -1,10 +1,10 @@
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 mod env_scrub;
 #[cfg(any(unix, windows))]
 pub(crate) mod isolated;
-#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+#[cfg(all(test, any(target_os = "linux", target_os = "macos", windows)))]
 mod memory_scan_tests;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub mod model_auth;
 mod providers;
 mod resolver;

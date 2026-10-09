@@ -176,3 +176,72 @@ fn read_own_memory(address: usize, buffer: &mut [u8]) -> usize {
         0
     }
 }
+
+/// PF-27-S09: `bytes` (ASCII) as UTF-16LE, the form Windows keeps the
+/// process environment in.
+#[cfg(windows)]
+pub(crate) fn utf16le(bytes: &[u8]) -> Vec<u8> {
+    bytes.iter().flat_map(|byte| [*byte, 0]).collect()
+}
+
+#[cfg(windows)]
+fn writable_regions() -> Vec<(usize, usize)> {
+    use windows_sys::Win32::System::Memory::MEM_COMMIT;
+    use windows_sys::Win32::System::Memory::MEMORY_BASIC_INFORMATION;
+    use windows_sys::Win32::System::Memory::PAGE_EXECUTE_READWRITE;
+    use windows_sys::Win32::System::Memory::PAGE_EXECUTE_WRITECOPY;
+    use windows_sys::Win32::System::Memory::PAGE_GUARD;
+    use windows_sys::Win32::System::Memory::PAGE_READWRITE;
+    use windows_sys::Win32::System::Memory::PAGE_WRITECOPY;
+    use windows_sys::Win32::System::Memory::VirtualQuery;
+    let writable =
+        PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
+    let mut regions = Vec::new();
+    let mut address = 0_usize;
+    loop {
+        // SAFETY: zeroed POD out-structure.
+        let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
+        // SAFETY: queries this process's address space; `info` is valid.
+        let written = unsafe {
+            VirtualQuery(
+                address as *const std::ffi::c_void,
+                &mut info,
+                std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
+            )
+        };
+        if written == 0 || info.RegionSize == 0 {
+            break;
+        }
+        if info.State == MEM_COMMIT
+            && info.Protect & writable != 0
+            && info.Protect & PAGE_GUARD == 0
+        {
+            regions.push((info.BaseAddress as usize, info.RegionSize));
+        }
+        match (info.BaseAddress as usize).checked_add(info.RegionSize) {
+            Some(next) if next > address => address = next,
+            _ => break,
+        }
+    }
+    regions
+}
+
+#[cfg(windows)]
+fn read_own_memory(address: usize, buffer: &mut [u8]) -> usize {
+    use windows_sys::Win32::System::Diagnostics::Debug::ReadProcessMemory;
+    use windows_sys::Win32::System::Threading::GetCurrentProcess;
+    let mut read = 0_usize;
+    // SAFETY: the kernel copies at most `buffer.len()` bytes into `buffer`
+    // and reports failure instead of faulting on pages that changed.
+    let ok = unsafe {
+        ReadProcessMemory(
+            GetCurrentProcess(),
+            address as *const std::ffi::c_void,
+            buffer.as_mut_ptr().cast(),
+            buffer.len(),
+            &mut read,
+        )
+    };
+    // A partial copy (a page decommitted meanwhile) still reports its bytes.
+    if ok != 0 || read > 0 { read } else { 0 }
+}

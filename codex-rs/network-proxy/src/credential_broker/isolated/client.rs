@@ -113,7 +113,6 @@ impl IsolatedBrokerLauncher {
     }
 
     /// Runs `program` (a Corbanu executable) instead of the current one.
-    #[cfg_attr(windows, allow(dead_code))] // PF-27-S05 model auth is Unix-only.
     pub(crate) fn with_program(mut self, program: Option<PathBuf>) -> Self {
         if program.is_some() {
             self.program = program;
@@ -121,7 +120,6 @@ impl IsolatedBrokerLauncher {
         self
     }
 
-    #[cfg_attr(windows, allow(dead_code))] // PF-27-S05 model auth is Unix-only.
     pub(crate) fn with_env(mut self, key: &str, value: impl Into<OsString>) -> Self {
         self.envs.push((OsString::from(key), value.into()));
         self
@@ -129,7 +127,6 @@ impl IsolatedBrokerLauncher {
 
     /// The broker's launch environment must not carry `key` either: a
     /// same-user process can read another process's launch environment.
-    #[cfg_attr(windows, allow(dead_code))] // PF-27-S05 model auth is Unix-only.
     pub(crate) fn without_env(mut self, key: &str) -> Self {
         self.removed_envs.push(OsString::from(key));
         self
@@ -333,9 +330,15 @@ impl IsolatedBrokerClient {
         &self.broker_instance
     }
 
-    #[cfg_attr(windows, allow(dead_code))] // PF-27-S05 model auth is Unix-only.
     pub(crate) fn socket_path(&self) -> &std::path::Path {
         &self.socket_path
+    }
+
+    /// PF-27-S09: HTTP over the broker's data pipe, every connection checked
+    /// to be served by the broker process (PF-27-S06).
+    #[cfg(windows)]
+    pub(crate) fn data_pipe_client(&self) -> UpstreamClient {
+        UpstreamClient::named_pipe(&self.socket_path.to_string_lossy(), self.broker_pid)
     }
 
     /// OS containment the broker reported for itself (PF-27-S02).
@@ -365,7 +368,6 @@ impl IsolatedBrokerClient {
     }
 
     /// PF-27-S05: hands one of Core's model-provider keys to the broker.
-    #[cfg_attr(windows, allow(dead_code))] // PF-27-S05 model auth is Unix-only.
     pub(crate) fn register_model(
         &self,
         binding: ModelBindingWire,
@@ -379,7 +381,6 @@ impl IsolatedBrokerClient {
     }
 
     /// PF-27-S05: hands one environment variable's value to the broker.
-    #[cfg_attr(windows, allow(dead_code))] // PF-27-S05 model auth is Unix-only.
     pub(crate) fn stash_env(&self, name: &str, value: &str) -> Result<(), IsolatedBrokerError> {
         match self.call(&ControlRequest::StashEnv {
             name: name.to_string(),
@@ -392,7 +393,6 @@ impl IsolatedBrokerClient {
     }
 
     /// PF-27-S05: registers a model key the broker reads itself.
-    #[cfg_attr(windows, allow(dead_code))] // PF-27-S05 model auth is Unix-only.
     pub(crate) fn register_model_stored(
         &self,
         binding: ModelBindingWire,
@@ -418,7 +418,6 @@ impl IsolatedBrokerClient {
     }
 
     /// PF-27-S05: drops one reference.
-    #[cfg_attr(windows, allow(dead_code))] // PF-27-S05 model auth is Unix-only.
     pub(crate) fn unregister(
         &self,
         reference: &CredentialReference,
@@ -568,11 +567,10 @@ impl IsolatedBrokerClient {
             HOST,
             HeaderValue::from_str(operation.host()).map_err(|_| IsolatedBrokerError::Rejected)?,
         );
-        let socket_path = self.socket_path.to_string_lossy().into_owned();
         #[cfg(unix)]
-        let upstream = UpstreamClient::unix_socket(&socket_path);
+        let upstream = UpstreamClient::unix_socket(&self.socket_path.to_string_lossy());
         #[cfg(windows)]
-        let upstream = UpstreamClient::named_pipe(&socket_path, self.broker_pid);
+        let upstream = self.data_pipe_client();
         upstream
             .serve(Request::from_parts(parts, body))
             .await
@@ -583,6 +581,24 @@ impl IsolatedBrokerClient {
                     self.fail(IsolatedBrokerError::Unavailable)
                 }
             })
+    }
+
+    /// PF-27-S09: sends an already signed request over the data pipe.
+    #[cfg(windows)]
+    pub(crate) async fn send_signed(
+        &self,
+        request: Request,
+    ) -> Result<Response, IsolatedBrokerError> {
+        if !self.is_alive() {
+            return Err(IsolatedBrokerError::Unavailable);
+        }
+        self.data_pipe_client().serve(request).await.map_err(|_| {
+            if self.is_alive() {
+                IsolatedBrokerError::Unavailable
+            } else {
+                self.fail(IsolatedBrokerError::Unavailable)
+            }
+        })
     }
 
     /// Signs a frame for an arbitrary binding, for cross-run qualification.
@@ -697,7 +713,6 @@ impl ControlChannel {
 }
 
 /// PF-27-S05: outcome of a stored-key registration.
-#[cfg_attr(windows, allow(dead_code))] // PF-27-S05 model auth is Unix-only.
 pub(crate) enum StoredRegistration {
     Registered(CredentialReference),
     /// No stashed variable and no stored key.
@@ -1033,18 +1048,72 @@ fn start_broker_process(
     envs: &[(OsString, OsString)],
 ) -> Result<(Child, std::fs::File), IsolatedBrokerError> {
     let same = |a: &OsString, b: &OsString| a.eq_ignore_ascii_case(b);
-    let mut env: Vec<(OsString, OsString)> = std::env::vars_os()
-        .filter(|(name, _)| {
-            !removed.iter().any(|key| same(key, name))
-                && !envs.iter().any(|(key, _)| same(key, name))
-        })
-        .collect();
+    let mut env = inherited_env(|name| {
+        !removed.iter().any(|key| same(key, name)) && !envs.iter().any(|(key, _)| same(key, name))
+    });
     for (key, value) in envs {
         env.retain(|(name, _)| !same(name, key));
         env.push((key.clone(), value.clone()));
     }
     codex_process_hardening::spawn_protected(program, args, &env)
         .map_err(|_| IsolatedBrokerError::Spawn)
+}
+
+/// This process's environment variables whose names pass `keep`. Unlike
+/// `std::env::vars_os`, the value of a variable that is not kept (a provider
+/// key handed to the broker, PF-27-S09) is never copied: the snapshot is
+/// read in place and wiped before it is freed.
+#[cfg(windows)]
+fn inherited_env(keep: impl Fn(&OsString) -> bool) -> Vec<(OsString, OsString)> {
+    use std::os::windows::ffi::OsStringExt as _;
+    use windows_sys::Win32::System::Environment::FreeEnvironmentStringsW;
+    use windows_sys::Win32::System::Environment::GetEnvironmentStringsW;
+    let mut env = Vec::new();
+    // SAFETY: returns a private copy of the environment block (or null),
+    // freed below.
+    let block = unsafe { GetEnvironmentStringsW() };
+    if block.is_null() {
+        return env;
+    }
+    let mut offset = 0;
+    loop {
+        // SAFETY: the block is a sequence of NUL-terminated strings ended by
+        // an empty one; `offset` stays on an entry start.
+        let entry = unsafe {
+            let start = block.add(offset);
+            let mut len = 0;
+            while *start.add(len) != 0 {
+                len += 1;
+            }
+            std::slice::from_raw_parts_mut(start, len)
+        };
+        if entry.is_empty() {
+            break;
+        }
+        offset += entry.len() + 1;
+        // Hidden per-drive variables (`=C:=C:\...`) start with `=`.
+        let Some(split) = entry
+            .iter()
+            .skip(1)
+            .position(|unit| *unit == u16::from(b'='))
+            .map(|position| position + 1)
+        else {
+            entry.fill(0);
+            continue;
+        };
+        let name = OsString::from_wide(&entry[..split]);
+        if keep(&name) {
+            env.push((name, OsString::from_wide(&entry[split + 1..])));
+        }
+        // The private copy is wiped entry by entry before it is freed.
+        for unit in entry.iter_mut() {
+            // SAFETY: a valid element of the block.
+            unsafe { std::ptr::write_volatile(unit, 0) };
+        }
+    }
+    // SAFETY: from GetEnvironmentStringsW above.
+    unsafe { FreeEnvironmentStringsW(block) };
+    env
 }
 
 /// Gives the broker a short grace period to observe stdin EOF and remove its

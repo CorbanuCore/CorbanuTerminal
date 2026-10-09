@@ -1,17 +1,19 @@
 //! PF-27-S05: take a provider key out of this process's environment.
 //!
-//! Removing a variable is not enough: the C library keeps the original
-//! `NAME=value` bytes where they were (the launch environment on the main
-//! stack, which `ps -E` and `/proc/<pid>/environ` read, or a `setenv` heap
-//! string). The value bytes of every live entry are overwritten in place
-//! before the variable is removed.
+//! Removing a variable is not enough: the original `NAME=value` bytes stay
+//! where they were. On Unix that is the launch environment on the main stack
+//! (which `ps -E` and `/proc/<pid>/environ` read) or a `setenv` heap string;
+//! on Windows (PF-27-S09) it is the process environment block (which another
+//! process reads as this process's environment) and the C runtime's copies of
+//! the environment. The value bytes of every live entry are overwritten in
+//! place before the variable is removed.
 //!
 //! The walk of `environ` cannot take Rust's private environment lock, so a
 //! concurrent `setenv` could reallocate the array (or `unsetenv` free an
 //! entry) under it and crash the process. Environment writes in this crate
 //! therefore go through [`env_write_lock`], which the walk holds too.
 //!
-//! Known limits (recorded in the PF-27-S05 sprint record):
+//! Known limits (recorded in the PF-27-S05 and PF-27-S09 sprint records):
 //! - This runs once a session config enables the broker, when Core already
 //!   has other threads. The walk of `environ` and `unsetenv` are not
 //!   serialized with C-level `getenv` callers (resolver, TLS setup), or with
@@ -22,8 +24,11 @@
 //!   longer reachable through `environ`; its original bytes stay in the
 //!   launch block.
 
+#[cfg(unix)]
 use std::ffi::OsStr;
+#[cfg(unix)]
 use std::os::unix::ffi::OsStrExt as _;
+#[cfg(unix)]
 use std::os::unix::ffi::OsStringExt as _;
 use std::sync::Mutex;
 use std::sync::MutexGuard;
@@ -42,6 +47,7 @@ pub(crate) fn env_write_lock() -> MutexGuard<'static, ()> {
 
 /// Returns the value of `name` and removes it from the environment, with its
 /// bytes overwritten. `None` when unset or empty (nothing is changed).
+#[cfg(unix)]
 pub(crate) fn take_env_var(name: &str) -> Option<Zeroizing<Vec<u8>>> {
     if name.is_empty() || name.contains(['=', '\0']) {
         return None;
@@ -69,6 +75,7 @@ pub(crate) fn set_env_var_for_test(name: &str, value: &str) {
 }
 
 /// Overwrites the value bytes of every `name=` entry with `0` characters.
+#[cfg(unix)]
 fn overwrite_in_place(name: &[u8]) {
     // SAFETY: `environ` is a null-terminated array of NUL-terminated strings
     // owned by the C library. Only bytes inside an entry's existing value
@@ -101,13 +108,154 @@ unsafe fn environ() -> *mut *mut libc::c_char {
     unsafe { *libc::_NSGetEnviron() }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(unix, not(target_os = "macos")))]
 unsafe fn environ() -> *mut *mut libc::c_char {
     unsafe extern "C" {
         static mut environ: *mut *mut libc::c_char;
     }
     // SAFETY: reads the C library's `environ` pointer.
     unsafe { environ }
+}
+
+/// Returns the value of `name` (UTF-8) and removes it from the environment,
+/// with its bytes overwritten in the process environment block and in the C
+/// runtime's copies. `None` when unset or empty (nothing is changed), or when
+/// the value is not valid Unicode (it is still removed and overwritten).
+#[cfg(windows)]
+pub(crate) fn take_env_var(name: &str) -> Option<Zeroizing<Vec<u8>>> {
+    if name.is_empty() || name.contains(['=', '\0']) {
+        return None;
+    }
+    let _writes = env_write_lock();
+    let wide_name: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+    let value = windows_env::read(&wide_name)?;
+    if value.is_empty() {
+        return None;
+    }
+    windows_env::overwrite_in_place(name, &wide_name, value.len());
+    // SAFETY: Rust's own environment accessors serialize with this call and
+    // this crate's writers hold `env_write_lock`.
+    unsafe { std::env::remove_var(name) };
+    let mut utf8 = Zeroizing::new(Vec::with_capacity(value.len() * 3));
+    for unit in char::decode_utf16(value.iter().copied()) {
+        let Ok(unit) = unit else {
+            return None;
+        };
+        let mut buffer = [0_u8; 4];
+        utf8.extend_from_slice(unit.encode_utf8(&mut buffer).as_bytes());
+        buffer.fill(0);
+    }
+    Some(utf8)
+}
+
+/// PF-27-S09: the Windows environment, read and overwritten without copies
+/// that outlive the call.
+#[cfg(windows)]
+mod windows_env {
+    use std::ffi::c_char;
+    use windows_sys::Win32::System::Environment::GetEnvironmentVariableW;
+    use windows_sys::Win32::System::Environment::SetEnvironmentVariableW;
+    use zeroize::Zeroizing;
+
+    unsafe extern "C" {
+        /// The C runtime's narrow environment table (`_environ`).
+        fn __p__environ() -> *mut *mut *mut c_char;
+        /// The C runtime's wide environment table (`_wenviron`).
+        fn __p__wenviron() -> *mut *mut *mut u16;
+    }
+
+    /// The value of the NUL-terminated `name`, read into a buffer that is
+    /// wiped on drop (`std::env::var_os` would leave copies behind).
+    pub(super) fn read(name: &[u16]) -> Option<Zeroizing<Vec<u16>>> {
+        let mut buffer = Zeroizing::new(Vec::<u16>::new());
+        loop {
+            let capacity = u32::try_from(buffer.len()).ok()?;
+            // SAFETY: `name` is NUL-terminated; `buffer` holds `capacity`
+            // units (a null pointer with 0 asks for the size).
+            let needed = unsafe {
+                GetEnvironmentVariableW(
+                    name.as_ptr(),
+                    if capacity == 0 {
+                        std::ptr::null_mut()
+                    } else {
+                        buffer.as_mut_ptr()
+                    },
+                    capacity,
+                )
+            } as usize;
+            if needed == 0 {
+                // Unset (or empty: nothing to take either way).
+                return None;
+            }
+            if needed < buffer.len() {
+                buffer.truncate(needed);
+                return Some(buffer);
+            }
+            // Too small: `needed` includes the terminating NUL. Grow into a
+            // fresh buffer so no unwiped copy is left by a reallocation.
+            buffer = Zeroizing::new(vec![0_u16; needed]);
+        }
+    }
+
+    /// Replaces the value with as many `0` characters as it has UTF-16
+    /// units, which Windows writes over the old value inside the process
+    /// environment block (same size: nothing moves), then overwrites every
+    /// `name=` entry in the C runtime's environment tables.
+    pub(super) fn overwrite_in_place(name: &str, wide_name: &[u16], len: usize) {
+        let zeros: Vec<u16> = std::iter::repeat_n(u16::from(b'0'), len)
+            .chain(std::iter::once(0))
+            .collect();
+        // SAFETY: both strings are NUL-terminated.
+        unsafe { SetEnvironmentVariableW(wide_name.as_ptr(), zeros.as_ptr()) };
+        // SAFETY: the C runtime returns pointers to its table pointers; a
+        // table that was never created is null. Each entry is NUL-terminated
+        // and only bytes before its terminator are written, so every entry
+        // stays a valid string of the same length.
+        unsafe {
+            overwrite_table(*__p__environ(), name.as_bytes(), |entry: *mut c_char| {
+                entry.cast::<u8>()
+            });
+            let wide: Vec<u16> = name.encode_utf16().collect();
+            overwrite_table(*__p__wenviron(), &wide, |entry: *mut u16| entry);
+        }
+    }
+
+    /// Overwrites the value of each `name=` entry (names compared ASCII
+    /// case-insensitively, as Windows does) in a null-terminated table.
+    unsafe fn overwrite_table<C, U>(table: *mut *mut C, name: &[U], unit: impl Fn(*mut C) -> *mut U)
+    where
+        U: Copy + Into<u32> + From<u8>,
+    {
+        if table.is_null() {
+            return;
+        }
+        let fold = |value: u32| {
+            if (u32::from(b'a')..=u32::from(b'z')).contains(&value) {
+                value - 32
+            } else {
+                value
+            }
+        };
+        // SAFETY: (caller) a null-terminated table of NUL-terminated strings.
+        unsafe {
+            let mut entry = table;
+            while !(*entry).is_null() {
+                let start = unit(*entry);
+                let matches = name.iter().enumerate().all(|(index, wanted)| {
+                    let have: u32 = (*start.add(index)).into();
+                    have != 0 && fold(have) == fold((*wanted).into())
+                }) && (*start.add(name.len())).into() == u32::from(b'=');
+                if matches {
+                    let mut offset = name.len() + 1;
+                    while (*start.add(offset)).into() != 0 {
+                        std::ptr::write_volatile(start.add(offset), U::from(b'0'));
+                        offset += 1;
+                    }
+                }
+                entry = entry.add(1);
+            }
+        }
+    }
 }
 
 #[cfg(test)]

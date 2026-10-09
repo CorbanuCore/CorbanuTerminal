@@ -72,3 +72,60 @@ fn pf_27_s05_take_env_var_is_serialized_with_concurrent_env_writes() {
         String::from_utf8_lossy(&output.stderr)
     );
 }
+
+#[cfg(windows)]
+const CRT_CHILD_ENV: &str = "CODEX_PF27_S09_CRT_CHILD";
+#[cfg(windows)]
+const CRT_KEY_ENV: &str = "PF27_S09_CRT_KEY";
+#[cfg(windows)]
+const CRT_CHILD_TEST: &str = "credential_broker::env_scrub::tests::pf_27_s09_crt_copy_child_entry";
+
+/// Runs in a child whose launch environment holds the key, so the C runtime
+/// made its own copy at startup, as it does in Core.
+#[cfg(windows)]
+#[test]
+fn pf_27_s09_crt_copy_child_entry() {
+    if std::env::var_os(CRT_CHILD_ENV).is_none() {
+        return;
+    }
+    unsafe extern "C" {
+        fn getenv(name: *const std::ffi::c_char) -> *const std::ffi::c_char;
+    }
+    let crt_value = || {
+        let name = std::ffi::CString::new(CRT_KEY_ENV).expect("name");
+        // SAFETY: a NUL-terminated name; the result is copied at once.
+        let value = unsafe { getenv(name.as_ptr()) };
+        (!value.is_null()).then(|| {
+            // SAFETY: the C runtime returns a NUL-terminated string.
+            unsafe { std::ffi::CStr::from_ptr(value) }
+                .to_string_lossy()
+                .into_owned()
+        })
+    };
+    assert_eq!(crt_value().as_deref(), Some("synthetic-crt-value"));
+    let value = take_env_var(CRT_KEY_ENV).expect("value");
+    assert_eq!(value.as_slice(), b"synthetic-crt-value");
+    assert_eq!(std::env::var_os(CRT_KEY_ENV), None);
+    // The C runtime's copy is overwritten in place.
+    assert_eq!(crt_value().as_deref(), Some("0000000000000000000"));
+}
+
+/// PF-27-S09: on Windows the value is also wiped from the C runtime's copy
+/// of the environment, which `SetEnvironmentVariableW` does not update.
+#[cfg(windows)]
+#[test]
+fn pf_27_s09_take_env_var_wipes_the_c_runtime_copy() {
+    let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
+        .args([CRT_CHILD_TEST, "--exact", "--test-threads=1"])
+        .env(CRT_CHILD_ENV, "1")
+        .env(CRT_KEY_ENV, "synthetic-crt-value")
+        .output()
+        .expect("run CRT child");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success() && stdout.contains("1 passed"),
+        "CRT child: {:?}\n{stdout}\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
