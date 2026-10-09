@@ -22,14 +22,9 @@ updated: 2026-10-09
 # PF-27-S09 — Windows model-client auth through the broker
 
 Fourth of the four PF-27-S06 limits Travis approved fixing (2026-10-08): the port of
-[PF-27-S05](../../archive/p0-security-levels/pf-27-s05-model-client-auth-broker.md) to Windows. Today
-`broker_model_auth` on Windows refuses every brokered request (`model_broker_auth.rs`, non-Unix branch). Plan
-allocated 2026-10-09 to the broker lane (slice 1 on `sec/pf-27-s09-model-auth`, slice 2 on `sec/pf-27-s09-core`). Runs after PF-27-S08 (merged in #333). Key path: Travis
-decided (c) on 2026-10-09: the broker reads the vault key from Credential Manager itself, under its PF-27-S08
-token, the same as the macOS and Linux brokers read the OS keyring, so S05's stored-key design ports as is. One
-Windows addition: every vault read opens `secrets/.vault.lock` for writing, which the S08 token cannot do on a
-medium-labeled file; grant it (capability-SID entry and low label, like S05's `prepare_vault_lock` Landlock
-exception) or hand the broker an opened lock. The Windows broker reads no stored keys yet (`server.rs`).
+[PF-27-S05](../../archive/p0-security-levels/pf-27-s05-model-client-auth-broker.md) to Windows, with Travis's key
+path (c) (2026-10-09): the broker reads the vault key from Credential Manager under its own PF-27-S08 token.
+Allocated 2026-10-09 to the broker lane; slice 2 is on `sec/pf-27-s09-core`.
 
 ## Execution mandate
 
@@ -46,12 +41,9 @@ exception) or hand the broker an opened lock. The Windows broker reads no stored
 
 ## Code boundaries
 
-- Core: `core/src/model_broker_auth.rs` (the `cfg(not(unix))` refusal becomes the Windows start).
-- Broker: `network-proxy/src/credential_broker/model_auth.rs` and `env_scrub.rs` (Unix-only today), `isolated/`.
-- Vault lock for the broker token: `isolated/server.rs` (`prepare_vault_lock`), `vault/src/lib.rs`.
-- Routing: `http-client/src/model_broker_route.rs`, `transport.rs` (named pipe instead of a Unix socket, with the
-  PF-27-S06 server process-id check).
-- `model-provider/src/model_key_broker.rs`; stored-key reader in `arg0`.
+- Broker side: `network-proxy` (`credential_broker/` `model_auth.rs`, `env_scrub.rs`, `isolated/`; `native_certs.rs`),
+  `vault/src/lib.rs` (lock), `arg0` (stored-key reader).
+- Core: `core/src/model_broker_auth.rs`; routing in `http-client/src/model_broker_route.rs`, `transport.rs`.
 
 ## Preconditions
 
@@ -70,29 +62,20 @@ exception) or hand the broker an opened lock. The Windows broker reads no stored
 
 ## Test plan
 
-- The `pf_27_s05` suites in network-proxy, model-provider, http-client and core, enabled on Windows and run by
-  `windows-security-probes`; a Windows memory scan of Core (own process) with a positive control.
-- GLM 5.2 tmux run and SOP videos on the Windows machine; Linux clippy on the RTX box; Opus 5.5 High review.
+- `pf_27_s05`/`pf_27_s09` tests on Windows (memory scan with positive controls) in `windows-security-probes`;
+  GLM 5.2 runs and SOP videos on the Windows machine; Linux clippy on the RTX box; Opus 5.5 High reviews.
 
 ## Done
 
 - [x] Planned (2026-10-08); allocated 2026-10-09 (broker lane).
-- [x] Slice 1 (#363), broker side:
-  - Windows env scrub: environment block, C runtime tables, and a heap sweep;
-  - the broker's launch environment copies no withheld value;
-  - stored keys read in the broker (vault lock created by Core, read-only lock in the broker);
-  - checked pipe send;
-  - platform roots loaded read-only (the broker trusted none before).
-- [x] Slice 2, Core: the Windows start spawns the broker, hands over env keys and routes every frame-bearing request
-  through `PipeSender` to the checked pipe. Unsupported platforms still refuse.
-- [x] Criteria 1–4 measured on the real machine and in tests ([evidence](../../../../qa/security-levels/sprints/PF-27-S09/README.md)):
-  - 1: the route, refused with no broker;
-  - 2: handed over, scrubbed, memory scan 0 with positive controls;
-  - 3: vault key from Credential Manager under the broker token in the console session; ChatGPT refresh is
-    unit-level only;
-  - 4: fails closed when the broker cannot start or dies; flag off unchanged.
-- [x] Over SSH and in the console session: GLM 5.2 `corbanu exec` and SOP videos (env key, vault key, SSH with the
-  elevated sandbox).
+- [x] Slice 1 (#363), broker side: Windows env scrub (environment block, C runtime tables, heap sweep); no withheld
+  value in the broker's launch environment; stored keys read in the broker (lock by Core, read-only lock in the
+  broker); checked pipe send; platform roots loaded read-only (the broker trusted none before).
+- [x] Slice 2, Core: the Windows start spawns the broker, hands over env keys and routes every frame-bearing
+  request through `PipeSender` to the checked pipe; unsupported platforms still refuse.
+- [x] Criteria 1–4 measured ([evidence](../../../../qa/security-levels/sprints/PF-27-S09/README.md)); the vault
+  key came from Credential Manager in the console session; the ChatGPT refresh is unit-level only.
+- [x] GLM 5.2 `corbanu exec` and SOP videos over SSH and in the console (normal) session.
 
 ## Remaining
 
@@ -102,10 +85,7 @@ exception) or hand the broker an opened lock. The Windows broker reads no stored
 
 - [x] Windows clippy and Linux clippy (RTX box) `-D warnings`. Focused tests elevated and in a normal session on the
   real Windows 11 machine, plus Linux and macOS. `windows-security-probes` on `windows-2022` (#363).
-- [x] Opus 5.5 High reviews:
-  - slice 1: APPROVE, then a scoped re-review: APPROVE;
-  - slice 2: APPROVE;
-  - findings fixed or recorded as known limits.
+- [x] Opus 5.5 High reviews: slice 1 APPROVE (and a scoped re-review), slice 2 APPROVE; findings fixed or recorded.
 - [ ] Travis accepts the gate evidence.
 
 ## Exit evidence
