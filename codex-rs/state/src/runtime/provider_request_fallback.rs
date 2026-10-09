@@ -372,7 +372,9 @@ impl StateRuntime {
                         block
                             .or_else(|| row.cooldown_block(now_ms, /*state_db_answered*/ true))
                     });
-                    return ProviderRequestThrottled::new(decision, None);
+                    return ProviderRequestThrottled::new(
+                        decision, /*state_db_fallback*/ None,
+                    );
                 }
                 Err(error) => {
                     fallback = Some(memory.pause("check provider request cooldown", &error));
@@ -419,7 +421,7 @@ impl StateRuntime {
                 Ok(ProviderRequestLeaseDecision::Acquired(lease)) => {
                     let now_ms = since(now_ms, started);
                     let block = memory.with_row(key, |row| {
-                        row.note_state_db(None);
+                        row.note_state_db(/*block*/ None);
                         let block = row.lease_block(now_ms, /*state_db_answered*/ true);
                         if block.is_none() {
                             row.take_lease(owner, lease.lease_until_ms, /*in_state_db*/ true);
@@ -429,7 +431,7 @@ impl StateRuntime {
                     let Some(block) = block else {
                         return ProviderRequestThrottled::new(
                             ProviderRequestLeaseDecision::Acquired(lease),
-                            None,
+                            /*state_db_fallback*/ None,
                         );
                     };
                     // Another step in this process took a lease or recorded a
@@ -454,7 +456,7 @@ impl StateRuntime {
                     memory.with_row(key, |row| row.note_state_db(Some(&block)));
                     return ProviderRequestThrottled::new(
                         ProviderRequestLeaseDecision::Blocked(block),
-                        None,
+                        /*state_db_fallback*/ None,
                     );
                 }
                 Err(error) => {

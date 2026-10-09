@@ -45,7 +45,13 @@ async fn acquire(
     now_ms: i64,
 ) -> ProviderRequestThrottled<ProviderRequestLeaseDecision> {
     runtime
-        .acquire_provider_request_throttle_lease(&key(), &preflight(), owner, 600_000, now_ms)
+        .acquire_provider_request_throttle_lease(
+            &key(),
+            &preflight(),
+            owner,
+            /*lease_ttl_ms*/ 600_000,
+            now_ms,
+        )
         .await
 }
 
@@ -75,17 +81,20 @@ async fn a_lock_held_past_the_wait_falls_back_to_this_process() -> anyhow::Resul
     let home = unique_temp_dir();
     let runtime = StateRuntime::init_for_testing(home.clone(), "zai".into()).await?;
     // A cooldown recorded while the DB answers still applies once it doesn't.
-    let first = acquired(acquire(&runtime, "worker-a", 1_000).await);
+    let first = acquired(acquire(&runtime, "worker-a", /*now_ms*/ 1_000).await);
     assert_eq!(first.in_state_db, true);
     let recorded = runtime
-        .record_provider_request_throttle_result(&first, rate_limited(), 2_000)
+        .record_provider_request_throttle_result(&first, rate_limited(), /*now_ms*/ 2_000)
         .await;
-    assert_eq!(recorded, ProviderRequestThrottled::new(true, None));
+    assert_eq!(
+        recorded,
+        ProviderRequestThrottled::new(/*decision*/ true, /*state_db_fallback*/ None)
+    );
 
     let held = hold_write_lock(&runtime.sqlite().state_db_path()).await?;
     let started = Instant::now();
     let check = runtime
-        .check_provider_request_throttle(&key(), &preflight(), 3_000)
+        .check_provider_request_throttle(&key(), &preflight(), /*now_ms*/ 3_000)
         .await;
     let first_wait = started.elapsed();
     assert_eq!(check.state_db_fallback, Some(StateDbFallback::Busy));
@@ -122,7 +131,10 @@ async fn a_lock_held_past_the_wait_falls_back_to_this_process() -> anyhow::Resul
     let recorded = runtime
         .record_provider_request_throttle_result(&worker_b, rate_limited(), after_cooldown + 2)
         .await;
-    assert_eq!(recorded, ProviderRequestThrottled::new(true, None));
+    assert_eq!(
+        recorded,
+        ProviderRequestThrottled::new(/*decision*/ true, /*state_db_fallback*/ None)
+    );
     let check = runtime
         .check_provider_request_throttle(&key(), &preflight(), after_cooldown + 3)
         .await;
@@ -162,16 +174,20 @@ async fn a_lock_held_past_the_wait_falls_back_to_this_process() -> anyhow::Resul
 async fn an_interrupted_record_keeps_the_cooldown() -> anyhow::Result<()> {
     let home = unique_temp_dir();
     let runtime = StateRuntime::init_for_testing(home.clone(), "zai".into()).await?;
-    let lease = acquired(acquire(&runtime, "worker-a", 1_000).await);
+    let lease = acquired(acquire(&runtime, "worker-a", /*now_ms*/ 1_000).await);
     let held = hold_write_lock(&runtime.sqlite().state_db_path()).await?;
     let interrupted = tokio::time::timeout(
         Duration::from_millis(100),
-        runtime.record_provider_request_throttle_result(&lease, rate_limited(), 2_000),
+        runtime.record_provider_request_throttle_result(
+            &lease,
+            rate_limited(),
+            /*now_ms*/ 2_000,
+        ),
     )
     .await;
     assert!(interrupted.is_err());
     let block = runtime.provider_request_memory.with_row(&key(), |row| {
-        row.cooldown_block(3_000, /*state_db_answered*/ true)
+        row.cooldown_block(/*now_ms*/ 3_000, /*state_db_answered*/ true)
     });
     assert_eq!(
         block.map(|block| (block.reason, block.until_ms)),
@@ -192,22 +208,25 @@ async fn a_lease_left_in_the_state_db_is_released_once_it_answers() -> anyhow::R
     let home = unique_temp_dir();
     let runtime = StateRuntime::init_for_testing(home.clone(), "zai".into()).await?;
     let other_process = StateRuntime::init_for_testing(home.clone(), "zai".into()).await?;
-    let lease = acquired(acquire(&runtime, "worker-a", 1_000).await);
+    let lease = acquired(acquire(&runtime, "worker-a", /*now_ms*/ 1_000).await);
     // What `release_provider_request_throttle_lease` leaves when the DB fails.
     let memory = &runtime.provider_request_memory;
     memory.with_row(&lease.key, |row| row.release(&lease.owner));
     memory.defer_releases([lease]);
-    let elsewhere = acquire(&other_process, "worker-b", 2_000).await;
+    let elsewhere = acquire(&other_process, "worker-b", /*now_ms*/ 2_000).await;
     assert_eq!(
         blocked_reason(&elsewhere),
         Some(ProviderRequestBlockReason::Lease)
     );
 
     let check = runtime
-        .check_provider_request_throttle(&key(), &preflight(), 3_000)
+        .check_provider_request_throttle(&key(), &preflight(), /*now_ms*/ 3_000)
         .await;
-    assert_eq!(check, ProviderRequestThrottled::new(None, None));
-    let elsewhere = acquire(&other_process, "worker-c", 4_000).await;
+    assert_eq!(
+        check,
+        ProviderRequestThrottled::new(/*decision*/ None, /*state_db_fallback*/ None)
+    );
+    let elsewhere = acquire(&other_process, "worker-c", /*now_ms*/ 4_000).await;
     assert_eq!(blocked_reason(&elsewhere), None);
 
     other_process.close().await;
@@ -229,14 +248,14 @@ async fn a_read_only_state_db_falls_back_to_this_process() -> anyhow::Result<()>
     let runtime = StateRuntime::init_for_testing(home.clone(), "zai".into()).await?;
 
     let check = runtime
-        .check_provider_request_throttle(&key(), &preflight(), 1_000)
+        .check_provider_request_throttle(&key(), &preflight(), /*now_ms*/ 1_000)
         .await;
     assert_eq!(
         check,
-        ProviderRequestThrottled::new(None, Some(StateDbFallback::ReadOnly))
+        ProviderRequestThrottled::new(/*decision*/ None, Some(StateDbFallback::ReadOnly))
     );
-    let lease = acquired(acquire(&runtime, "worker-a", 1_001).await);
-    let second = acquire(&runtime, "worker-b", 1_002).await;
+    let lease = acquired(acquire(&runtime, "worker-a", /*now_ms*/ 1_001).await);
+    let second = acquire(&runtime, "worker-b", /*now_ms*/ 1_002).await;
     assert_eq!(second.state_db_fallback, Some(StateDbFallback::ReadOnly));
     assert_eq!(
         blocked_reason(&second),
@@ -244,11 +263,11 @@ async fn a_read_only_state_db_falls_back_to_this_process() -> anyhow::Result<()>
     );
     assert_eq!(
         runtime
-            .release_provider_request_throttle_lease(&lease, 1_003)
+            .release_provider_request_throttle_lease(&lease, /*now_ms*/ 1_003)
             .await?,
         1
     );
-    acquired(acquire(&runtime, "worker-b", 1_004).await);
+    acquired(acquire(&runtime, "worker-b", /*now_ms*/ 1_004).await);
 
     std::fs::set_permissions(&db_path, std::fs::Permissions::from_mode(0o644))?;
     runtime.close().await;
