@@ -12,6 +12,9 @@ approval_policy = "never"
 sandbox_mode = "read-only"
 suppress_unstable_features_warning = true
 
+[windows]
+sandbox = "unelevated"
+
 [features]
 broker_model_auth = true
 """
