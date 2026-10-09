@@ -11,6 +11,7 @@ use codex_windows_sandbox::SetupErrorCode;
 use codex_windows_sandbox::SetupErrorReport;
 use codex_windows_sandbox::SetupFailure;
 use codex_windows_sandbox::add_deny_write_ace;
+use codex_windows_sandbox::apply_deny_read_acls;
 use codex_windows_sandbox::convert_string_sid_to_sid;
 use codex_windows_sandbox::ensure_allow_mask_aces_with_inheritance;
 use codex_windows_sandbox::ensure_allow_write_aces;
@@ -91,6 +92,10 @@ struct Payload {
     /// removes no entry.
     #[serde(default)]
     deny_read: Option<codex_windows_sandbox::DenyReadTargets>,
+    /// The same paths, flattened. Used alone only from a launcher that
+    /// predates rules: applied, never recorded or removed.
+    #[serde(default)]
+    deny_read_paths: Vec<PathBuf>,
     #[serde(default)]
     deny_write_paths: Vec<PathBuf>,
     proxy_ports: Vec<u16>,
@@ -773,15 +778,22 @@ fn run_setup_full(payload: &Payload, log: &mut dyn Write, sbx_dir: &Path) -> Res
     // Deny-read ACEs must be present before the sandboxed command starts. Apply
     // them synchronously here instead of delegating them to the background
     // helper used for read grants.
-    let applied_deny_read_paths = unsafe {
-        sync_persistent_deny_read_acls(
-            &payload.codex_home,
-            &sandbox_group_sid_str,
-            payload.deny_read.as_ref(),
-            sandbox_group_psid,
-        )
-    }
-    .context("apply deny-read ACLs")?;
+    let applied_deny_read_paths =
+        if payload.deny_read.is_none() && !payload.deny_read_paths.is_empty() {
+            // SAFETY: the sandbox group's PSID is valid for this call.
+            unsafe { apply_deny_read_acls(&payload.deny_read_paths, sandbox_group_psid) }
+        } else {
+            // SAFETY: as above.
+            unsafe {
+                sync_persistent_deny_read_acls(
+                    &payload.codex_home,
+                    &sandbox_group_sid_str,
+                    payload.deny_read.as_ref(),
+                    sandbox_group_psid,
+                )
+            }
+        }
+        .context("apply deny-read ACLs")?;
     if !applied_deny_read_paths.is_empty() {
         log_line(
             log,

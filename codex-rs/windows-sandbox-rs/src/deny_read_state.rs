@@ -57,10 +57,10 @@ struct OwnedDenyRead {
 /// configures (#304). A rule that is still configured keeps its entries even
 /// when its glob no longer lists them: a sandboxed process can hide a match
 /// from the scan (by holding its folder open, say), and only a configuration
-/// change may remove an entry (S1). Each desired path carries its own entry
-/// before any is removed, so removing a parent's entry never uncovers a path
-/// that is still denied, and an entry is removed only from the very object it
-/// was added to.
+/// change may remove an entry (S1). Each path listed now carries its own
+/// entry before any is removed, so removing a parent's entry never uncovers a
+/// listed path; a match the scan missed keeps only the entries it had
+/// before. An entry is removed only from the very object it was added to.
 ///
 /// `targets` is `None` for a setup refresh that does not carry the launch's
 /// rules (a read-root refresh, the first setup): it applies and removes

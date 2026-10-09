@@ -314,6 +314,7 @@ fn run_setup_refresh_inner(
         command_cwd: request.command_cwd.to_path_buf(),
         read_roots,
         write_roots,
+        deny_read_paths: payload_deny_read_paths(overrides.deny_read.as_ref()),
         deny_read: overrides.deny_read,
         deny_write_paths,
         proxy_ports: offline_proxy_settings.proxy_ports,
@@ -645,6 +646,10 @@ struct ElevationPayload {
     write_roots: Vec<PathBuf>,
     #[serde(default)]
     deny_read: Option<crate::DenyReadTargets>,
+    /// `deny_read`'s paths, flattened, for a setup helper that predates rules
+    /// (a mismatched copy found on `PATH`): it still applies them.
+    #[serde(default)]
+    deny_read_paths: Vec<PathBuf>,
     #[serde(default)]
     deny_write_paths: Vec<PathBuf>,
     proxy_ports: Vec<u16>,
@@ -1028,6 +1033,7 @@ fn run_elevated_setup_inner(
         command_cwd: request.command_cwd.to_path_buf(),
         read_roots,
         write_roots,
+        deny_read_paths: payload_deny_read_paths(overrides.deny_read.as_ref()),
         deny_read: overrides.deny_read,
         deny_write_paths,
         proxy_ports: offline_proxy_settings.proxy_ports,
@@ -1078,6 +1084,7 @@ pub fn run_elevated_provisioning_setup(
         read_roots: Vec::new(),
         write_roots: Vec::new(),
         deny_read: None,
+        deny_read_paths: Vec::new(),
         deny_write_paths: Vec::new(),
         proxy_ports: settings.proxy_ports,
         allow_local_binding: settings.allow_local_binding,
@@ -1146,6 +1153,16 @@ fn build_payload_deny_write_paths(
         .collect();
     deny_write_paths.extend(allow_deny_paths.deny);
     deny_write_paths
+}
+
+fn payload_deny_read_paths(deny_read: Option<&crate::DenyReadTargets>) -> Vec<PathBuf> {
+    deny_read.map_or_else(Vec::new, |deny_read| {
+        deny_read
+            .paths()
+            .into_iter()
+            .map(AbsolutePathBuf::into_path_buf)
+            .collect()
+    })
 }
 
 fn expand_user_profile_root(roots: Vec<PathBuf>) -> Vec<PathBuf> {
