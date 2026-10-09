@@ -55,3 +55,9 @@ right basis without setup. Each was read on 2026-10-09.
 | `https://open.bigmodel.cn/api/paas/v4` | BigModel API key | pay per use | Same page: resource packages and prepaid balance use the general URL |
 | `https://api.moonshot.ai/v1` | Kimi Open Platform key | pay per use | [Kimi API overview](https://platform.kimi.ai/docs/api/overview); the membership and the platform are separate products (troubleshooting page above) |
 | `https://api.openai.com/v1` | OpenAI API key | pay per use | [Codex pricing](https://developers.openai.com/codex/pricing) |
+| `https://api.openai.com/v1` | ChatGPT sign-in | subscription | [Codex pricing](https://developers.openai.com/codex/pricing), re-checked 2026-10-09: Codex usage with a ChatGPT sign-in is part of the plan. Codex's realtime calls send this sign-in to this host. The page doesn't name realtime separately, so a real check is listed for Travis |
+
+Two rules apply on top of the table:
+
+- **Local is declared only on this machine.** `ollama` and `lmstudio` are local at `localhost`, `127.0.0.1` or `[::1]`. Pointed at any other host they are "not declared", because a remote host may be a paid service. An explicit `billing = "local"` in config still applies.
+- **A user's `billing` applies to new requests only.** Every request is recorded with the basis in force when it was sent and where it came from (built-in table or config). Changing `billing` never re-prices history.

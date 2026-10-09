@@ -1,0 +1,38 @@
+# PF-60-S05: a real GLM 5.2 turn on Z.AI's coding-plan route (built-in provider zai-anthropic, declared
+# subscription in the built-in table). /cost shows the work as covered by the subscription, never as money
+# spent or as "no price". No seeding: a fresh disposable home and one real request.
+id = "pf60s05-subscription-not-spent"
+feature = "/cost after a real turn on a subscription route (Z.AI coding plan): covered by the subscription, nothing spent"
+expected = "/cost names Z.AI's coding-plan route as covered by your subscription. No line counts it as money spent, pay per use or 'no price'."
+model = "glm-5.2"
+provider = "zai-anthropic"
+rows = 40
+config = """
+suppress_unstable_features_warning = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "Reply with the single word READY."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*READY\\W*$"
+timeout = 120
+compress = 3
+[[steps]]
+pause = 1
+[[steps]]
+type = "/cost"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Covered by your subscription"
+[[steps]]
+wait = "Subscription work is not billed per request"
+[[steps]]
+pause = 5
