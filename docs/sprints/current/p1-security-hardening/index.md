@@ -7,7 +7,8 @@ active [P1 security hardening plan](../../../plans/active/p1-security-hardening.
 with their dependencies, lanes and worktrees.
 
 - [PF-13-S07](pf-13-s07-integrated-credential-boundary-qualification.md): `ready`; archive after the Aggressive milestone.
-- [PF-27-S06](pf-27-s06-windows-broker-and-launch.md): merged; gate rerun passed on real Windows (2026-10-08); `ready` for receipt and archive.
-- [PF-27-S07](pf-27-s07-windows-hardening-follow-ups.md): merged; gate passed on real Windows (2026-10-08); `ready` for receipt and archive.
+- PF-27-S06 and PF-27-S07: completed 2026-10-08, accepted by Travis with known limits, and archived
+  ([S06](../../archive/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md),
+  [S07](../../archive/p1-security-hardening/pf-27-s07-windows-hardening-follow-ups.md)).
 - [PF-27-S08](pf-27-s08-windows-broker-restricted-token.md) and S09: broker lane, in that order (drafts).
 - Everything else: `draft` until allocated.
