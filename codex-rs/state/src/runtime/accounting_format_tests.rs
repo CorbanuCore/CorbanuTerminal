@@ -64,7 +64,7 @@ fn both_estimate_forms_read_and_no_other() {
     );
     assert!(quote_is_canonical(&quote, &current).unwrap());
     assert!(quote_is_canonical(&quote, &older).unwrap());
-    let mut plan = quote.clone();
+    let mut plan = quote;
     plan.plan_burn_millis = Some(1000);
     assert!(!quote_is_canonical(&plan, &older).unwrap());
 }
