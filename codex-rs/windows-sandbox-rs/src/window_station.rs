@@ -291,7 +291,7 @@ impl WindowAccess {
             self.set(WindowObject::Station, Some(COMMAND_STATION_ACCESS))?;
         }
         if !commands_use_this_desktop && self.state.desktop_entry.is_some() {
-            self.set(WindowObject::Desktop, None)?;
+            self.set(WindowObject::Desktop, /*mask*/ None)?;
         }
         Ok(())
     }
@@ -350,7 +350,7 @@ impl Drop for WindowAccess {
             if self.entry(object).is_some() {
                 // Nothing to do on failure: the entry stays until the window
                 // station goes away.
-                let _ = self.set(object, None);
+                let _ = self.set(object, /*mask*/ None);
             }
         }
     }
