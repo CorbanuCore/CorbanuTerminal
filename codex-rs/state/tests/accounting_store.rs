@@ -1270,13 +1270,13 @@ async fn normal_default_profiles_do_not_install_and_opt_in_keeps_ordinary_histor
         )
         .fetch_one(&mut conn)
         .await?,
-        12
+        13
     );
     assert_eq!(
         sqlx::query_as::<_, (i64, bool)>("SELECT version, success FROM _accounting_migrations",)
             .fetch_all(&mut conn)
             .await?,
-        vec![(1, true)]
+        vec![(1, true), (2, true)]
     );
     assert_eq!(
         sqlx::query_scalar::<_, String>("PRAGMA integrity_check")
@@ -1535,7 +1535,10 @@ async fn normal_open_rejects_unversioned_partial_failed_checksum_and_newer_witho
         "DROP INDEX draft_accounting_request",
         "UPDATE _accounting_migrations SET success = 0",
         "UPDATE _accounting_migrations SET checksum = X'00'",
-        "UPDATE _accounting_migrations SET version = 2",
+        "UPDATE _accounting_migrations SET version = version + 10",
+        "DELETE FROM _accounting_migrations WHERE version = 1",
+        // Claims format 1 while holding format 2's table: not upgraded over it.
+        "DELETE FROM _accounting_migrations WHERE version = 2",
         "DELETE FROM _accounting_migrations",
         "DROP TABLE _accounting_migrations",
     ] {
@@ -1575,5 +1578,89 @@ async fn normal_open_rejects_unversioned_partial_failed_checksum_and_newer_witho
             runtime.close().await;
         }
     }
+    Ok(())
+}
+
+/// A ledger written before price records gained a basis (`5bae03414e^`) still
+/// validates and reads on this build: every older payload is read under the
+/// format it was written in.
+#[tokio::test]
+async fn ledger_written_before_plan_basis_validates_and_reads() -> anyhow::Result<()> {
+    const T0: i64 = 1_789_473_600_000; // 2026-09-15T12:00:00Z, the fixture's day.
+    let path = home();
+    let runtime = open(&path).await?;
+    let owner = ThreadId::from_string(&Uuid::from_u128(7).to_string())?;
+    native(&runtime, owner).await?;
+    let mut conn = connection(&runtime).await?;
+    sqlx::raw_sql(sqlx::AssertSqlSafe(include_str!(
+        "fixtures/accounting/pre-5bae-ledger.sql"
+    )))
+    .execute(&mut conn)
+    .await?;
+    conn.close().await?;
+    let read_at = T0 + 60_000;
+    let view = ready(AccountingStore::inspect_day(&runtime, owner, T0 / DAY, read_at).await?);
+    assert_eq!(
+        (
+            view.totals.attempts,
+            view.totals.unknown_estimates,
+            view.totals.plan_attempts
+        ),
+        (3, 2, 0)
+    );
+    // 1,200 / 300 / 100 / 450 tokens at $5 / $0.50 / $6.25 / $25 per million,
+    // plus the incomplete attempt's 10 input and 20 output tokens.
+    assert_eq!(view.totals.known_usd.display().text, "0.018575");
+    // Opening for a write validates the whole ledger and upgrades its format;
+    // the old records still read exactly as before.
+    AccountingStore::open(&runtime, read_at).await?;
+    let mut conn = connection(&runtime).await?;
+    let format: Vec<i64> =
+        sqlx::query_scalar("SELECT version FROM _accounting_migrations ORDER BY version")
+            .fetch_all(&mut conn)
+            .await?;
+    conn.close().await?;
+    assert_eq!(format, vec![1, 2]);
+    assert_eq!(
+        ready(AccountingStore::inspect_day(&runtime, owner, T0 / DAY, read_at).await?).totals,
+        view.totals
+    );
+    runtime.close().await;
+    Ok(())
+}
+
+/// A ledger in a format newer than this build's is refused by name, for reads
+/// and writes alike, and left untouched.
+#[tokio::test]
+async fn newer_ledger_format_is_refused_by_name() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    let a = attempt(1, 0)?;
+    native(&runtime, a.thread_id).await?;
+    AccountingStore::open(&runtime, 0)
+        .await?
+        .admit(a.thread_id, &a, &[], 0)
+        .await?;
+    let mut conn = connection(&runtime).await?;
+    sqlx::query(
+        "INSERT INTO _accounting_migrations (version, description, success, checksum, execution_time)
+            VALUES (99, 'future', 1, X'00', 0)",
+    )
+    .execute(&mut conn)
+    .await?;
+    let before = inspection_tables(&mut conn).await?;
+    let read = AccountingStore::inspect_day(&runtime, a.thread_id, 0, 1)
+        .await
+        .expect_err("newer format read");
+    let write = AccountingStore::open(&runtime, 1)
+        .await
+        .err()
+        .context("newer format write")?;
+    for error in [&read, &write] {
+        assert!(is_newer_format(error), "{error:#}");
+    }
+    assert_eq!(inspection_tables(&mut conn).await?, before);
+    conn.close().await?;
+    runtime.close().await;
     Ok(())
 }

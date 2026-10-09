@@ -288,7 +288,7 @@ impl<'a> EstimateStore<'a> {
             let quote = bound_quote(conn, rules, &attempt, &observations, binding).await?;
             // Do not deserialize quote decimals through the stricter rate parser.
             ensure!(
-                serde_json::to_string(&quote)? == payload,
+                super::format::quote_is_canonical(&quote, &payload)?,
                 "corrupt estimate payload"
             );
             Some(quote)
@@ -321,7 +321,7 @@ async fn read_snapshot(conn: &mut SqliteConnection, id: &str) -> anyhow::Result<
             snapshot.validate()?;
             ensure!(snapshot.id.to_string() == id, "snapshot identity mismatch");
             ensure!(
-                serde_json::to_string(&snapshot)? == payload,
+                super::format::snapshot_is_canonical(&snapshot, &payload)?,
                 "noncanonical snapshot"
             );
             Ok(snapshot)
@@ -410,7 +410,7 @@ async fn verify_recorded(
     let quote = quote_under_snapshot(rules, attempt, &observations, snapshot)?;
     // Do not deserialize quote decimals through the stricter rate parser.
     ensure!(
-        serde_json::to_string(&quote)? == payload,
+        super::format::quote_is_canonical(&quote, payload)?,
         "corrupt estimate payload"
     );
     Ok(quote)

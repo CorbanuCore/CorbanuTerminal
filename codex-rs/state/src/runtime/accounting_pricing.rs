@@ -160,6 +160,30 @@ pub enum Basis {
     /// Subscription capacity: the plan rate applied, and the API rates, if the
     /// catalogue states any, are a counterfactual rather than a charge.
     PlanEquivalent,
+    /// The model ran on the user's own machine: nothing is charged. States no
+    /// rates. Ledger format 2.
+    Local,
+    /// No billing basis is declared for the route and credential used, so the
+    /// attempt is neither money spent nor subscription work. States no rates.
+    /// Ledger format 2.
+    Undeclared,
+}
+
+/// Where an attempt's billing basis came from.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+pub enum BasisSource {
+    /// The built-in route and credential table. Omitted when serialized, so
+    /// every snapshot recorded before the field existed keeps its bytes.
+    #[default]
+    BuiltIn,
+    /// `model_providers.<id>.billing` in the user's config. Ledger format 2.
+    UserConfig,
+}
+
+impl BasisSource {
+    fn is_built_in(&self) -> bool {
+        matches!(self, Self::BuiltIn)
+    }
 }
 
 /// Caller-supplied synthetic approval evidence, not production authorization.
@@ -181,13 +205,15 @@ pub struct Snapshot {
     /// Relative subscription-pool burn that applied at dispatch, 1000 meaning 1.0x.
     #[serde(default)]
     pub plan_burn_millis: Option<u32>,
+    #[serde(default, skip_serializing_if = "BasisSource::is_built_in")]
+    pub basis_source: BasisSource,
     pub observed_at_ms: Count,
     pub approved_at_ms: Count,
     pub effective_from_ms: Count,
     pub effective_end_ms: Option<Count>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Rates {
     pub noncached: Option<Decimal>,
@@ -220,6 +246,12 @@ impl Snapshot {
         ensure!(
             self.plan_burn_millis.is_none() || matches!(self.basis, Basis::PlanEquivalent),
             "plan rate does not match price basis"
+        );
+        // Local and undeclared work states no price of any kind.
+        ensure!(
+            matches!(self.basis, Basis::Billed | Basis::PlanEquivalent)
+                || self.rates == Rates::default(),
+            "rates on a basis that charges nothing"
         );
         Ok(())
     }
@@ -288,6 +320,15 @@ impl ObservationQuote {
     /// counts must dispatch on `self.pricing_rules` here too.
     pub fn priced_counts(&self) -> [Option<i64>; 4] {
         priced_counts(&self.usage, self.attempt.dialect, self.snapshot.as_ref())
+    }
+
+    /// The billing basis bound at admission. An attempt bound to no snapshot
+    /// is pay per use with no price, as every attempt was before bases other
+    /// than `Billed` existed.
+    pub fn basis(&self) -> Basis {
+        self.snapshot
+            .as_ref()
+            .map_or(Basis::Billed, |snapshot| snapshot.basis)
     }
 
     /// Whether the attempt ran on subscription capacity, whether or not a plan
@@ -393,16 +434,18 @@ fn quote_observations_under(
     }
     // Under a plan the same arithmetic answers a different question, so the total
     // moves to the equivalent field and money spent stays exactly zero.
-    let plan = selected.is_some_and(|snapshot| matches!(snapshot.basis, Basis::PlanEquivalent));
+    let basis = selected.map_or(Basis::Billed, |snapshot| snapshot.basis);
+    let plan = basis == Basis::PlanEquivalent;
     let plan_burn_millis = selected.and_then(|snapshot| snapshot.plan_burn_millis);
     let plan_burn_milli_tokens = plan_burn_millis
         .zip(usage.total)
         .map(|(burn, total)| i64::from(burn).checked_mul(total).context("burn overflow"))
         .transpose()?;
-    let (known_subtotal, known_equivalent) = if plan {
-        (Decimal::default(), known_subtotal)
-    } else {
-        (known_subtotal, Decimal::default())
+    // Local and undeclared work states no rates, so both figures are zero.
+    let (known_subtotal, known_equivalent) = match basis {
+        Basis::Billed => (known_subtotal, Decimal::default()),
+        Basis::PlanEquivalent => (Decimal::default(), known_subtotal),
+        Basis::Local | Basis::Undeclared => (Decimal::default(), Decimal::default()),
     };
     Ok(ObservationQuote {
         attempt: attempt.clone(),
@@ -411,7 +454,7 @@ fn quote_observations_under(
         snapshot: selected.cloned(),
         buckets,
         known_subtotal,
-        all_buckets_priced: (complete && !plan).then_some(known_subtotal),
+        all_buckets_priced: (complete && basis == Basis::Billed).then_some(known_subtotal),
         subtotal_display: known_subtotal.display(),
         known_equivalent,
         all_buckets_equivalent: (complete && plan).then_some(known_equivalent),
@@ -424,6 +467,11 @@ fn quote_observations_under(
 #[cfg(test)]
 #[path = "accounting_pricing_tests.rs"]
 mod tests;
+
+#[path = "accounting_format.rs"]
+mod format;
+pub use format::NewerLedgerFormat;
+pub use format::is_newer_format;
 
 #[path = "accounting_estimates.rs"]
 mod storage;

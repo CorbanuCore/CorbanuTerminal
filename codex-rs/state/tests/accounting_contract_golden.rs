@@ -87,6 +87,7 @@ impl Fixture {
                 source_kind: SourceKind::NativeCatalog,
                 basis: Basis::Billed,
                 plan_burn_millis: None,
+                basis_source: BasisSource::BuiltIn,
                 observed_at_ms: start.try_into()?,
                 approved_at_ms: start.try_into()?,
                 effective_from_ms: start.try_into()?,
@@ -694,7 +695,8 @@ async fn assert_compact(
         .into_iter()
         .filter(|(table, _)| table.starts_with("draft_accounting_"))
         .collect::<Vec<_>>();
-    assert_eq!(accounting.len(), 10);
+    // Ten ledger tables plus the format marker (ledger format 2).
+    assert_eq!(accounting.len(), 11);
     for table in [
         "attempts",
         "observations",
