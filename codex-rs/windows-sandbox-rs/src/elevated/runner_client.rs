@@ -340,6 +340,12 @@ pub(crate) fn spawn_runner_transport(
             log_dir,
         );
     }
+    if let Some(err) = &launched.window_access_error {
+        crate::logging::log_note(
+            &format!("runner may not start: could not grant its user this window station: {err}"),
+            log_dir,
+        );
+    }
     let runner_process = launched.process;
     let expected_runner_pid = launched.pid;
 
@@ -347,7 +353,14 @@ pub(crate) fn spawn_runner_transport(
         connect_pipe_with_timeout(h_pipe_in, expected_runner_pid, "pipe-in")?;
         connect_pipe_with_timeout(h_pipe_out, expected_runner_pid, "pipe-out")?;
         Ok(())
-    })();
+    })()
+    .map_err(|err| match &launched.window_access_error {
+        // #341: the likely reason the runner never connected.
+        Some(access) => anyhow::anyhow!(
+            "{err:#} (could not give the sandbox's user access to this session's window station: {access})"
+        ),
+        None => err,
+    });
 
     if let Err(err) = connect_result {
         unsafe {
