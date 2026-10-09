@@ -52,6 +52,7 @@ mod gpu_runtime_providers;
 mod log_scrub;
 mod logs;
 mod memories;
+mod provider_request_fallback;
 mod provider_requests;
 mod recovery;
 mod remote_control;
@@ -72,6 +73,8 @@ pub use goals::GoalAccountingOutcome;
 pub use goals::GoalStore;
 pub use goals::GoalUpdate;
 pub use memories::MemoryStore;
+pub use provider_request_fallback::ProviderRequestThrottled;
+pub use provider_request_fallback::StateDbFallback;
 pub use provider_requests::ProviderRequestBlock;
 pub use provider_requests::ProviderRequestBlockReason;
 pub use provider_requests::ProviderRequestKey;
@@ -112,6 +115,9 @@ pub struct StateRuntime {
     /// validation (`i64::MIN` if never). It stands for the rest of that UTC hour,
     /// so a write retried after contention does not validate again.
     accounting_validated_at_millis: Arc<AtomicI64>,
+    /// This process's copy of the provider-request throttle, used when the
+    /// state DB is busy or read-only; see `provider_request_fallback`.
+    provider_request_memory: Arc<provider_request_fallback::ProviderRequestMemory>,
 }
 
 impl StateRuntime {
@@ -279,6 +285,7 @@ impl StateRuntime {
             thread_updated_at_millis: Arc::new(AtomicI64::new(thread_updated_at_millis)),
             thread_recency_at_millis: Arc::new(AtomicI64::new(thread_recency_at_millis)),
             accounting_validated_at_millis: Arc::new(AtomicI64::new(i64::MIN)),
+            provider_request_memory: Arc::default(),
         });
         if let Err(err) = runtime.run_logs_startup_maintenance().await {
             warn!(

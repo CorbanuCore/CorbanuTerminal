@@ -134,6 +134,7 @@ use codex_state::ProviderRequestLease;
 use codex_state::ProviderRequestLeaseDecision;
 use codex_state::ProviderRequestPreflight;
 use codex_state::ProviderRequestResult;
+use codex_state::StateDbFallback;
 use codex_tools::DiscoverableTool;
 use codex_tools::ToolName;
 use codex_tools::filter_request_plugin_install_discoverable_tools_for_client;
@@ -2626,20 +2627,20 @@ async fn acquire_provider_request_lease(
     trace_turn_timing("provider_preflight_after_warning", preflight_started_at);
     let now_ms = now_unix_timestamp_ms();
     if !provider_request_active_lease_needed(turn_context, &preflight, last_token_usage.as_ref()) {
-        // The state DB write waits out another process's lock; an interrupt
-        // must not wait with it.
+        // A busy state DB is waited for briefly, then the throttle goes on from
+        // this process's own state; an interrupt must not wait with it.
+        // Boxed (type-erased) throughout: the turn's future is otherwise too
+        // deep for rustc's `Send` check.
         let Ok(cooldown) = state_db
-            .check_provider_request_cooldown(&key, &preflight, now_ms)
+            .check_provider_request_throttle(&key, &preflight, now_ms)
+            .boxed()
             .or_cancel(cancellation_token)
             .await
         else {
             return Err(CodexErr::TurnAborted);
         };
-        if let Some(block) = cooldown.map_err(|err| {
-            CodexErr::Fatal(format!(
-                "failed to check provider request throttle state: {err:#}"
-            ))
-        })? {
+        notify_state_db_fallback(sess, turn_context, cooldown.state_db_fallback).await;
+        if let Some(block) = cooldown.decision {
             warn!(
                 turn_id = %turn_context.sub_id,
                 provider = %key.provider_id,
@@ -2673,29 +2674,27 @@ async fn acquire_provider_request_lease(
             key: key.clone(),
             owner: owner.clone(),
             lease_until_ms: now_ms,
+            in_state_db: true,
         },
     );
     let Ok(decision) = state_db
-        .try_acquire_provider_request_lease(
+        .acquire_provider_request_throttle_lease(
             &key,
             &preflight,
             &owner,
             PROVIDER_REQUEST_LEASE_TTL_MS,
             now_ms,
         )
+        .boxed()
         .or_cancel(cancellation_token)
         .await
     else {
         return Err(CodexErr::TurnAborted);
     };
     provisional_lease.disarm();
-    let decision = decision.map_err(|err| {
-        CodexErr::Fatal(format!(
-            "failed to check provider request throttle state: {err:#}"
-        ))
-    })?;
+    notify_state_db_fallback(sess, turn_context, decision.state_db_fallback).await;
 
-    match decision {
+    match decision.decision {
         ProviderRequestLeaseDecision::Acquired(lease) => {
             trace_turn_timing("provider_preflight_acquired_lease", preflight_started_at);
             info!(
@@ -2907,45 +2906,50 @@ async fn record_provider_request_result_for_lease(
         return true;
     };
     let result_kind = provider_request_result_kind(&result);
-    let rows_affected = match state_db
-        .record_provider_request_result(lease, result, now_unix_timestamp_ms())
-        .await
-    {
-        Ok(rows_affected) => rows_affected,
-        Err(err) => {
-            warn!(
-                provider = %lease.key.provider_id,
-                model = %lease.key.model,
-                key_fingerprint = %lease.key.key_fingerprint,
-                owner = %lease.owner,
-                result = result_kind,
-                error = %err,
-                "failed to record provider request result"
-            );
-            return false;
-        }
+    let recorded = state_db
+        .record_provider_request_throttle_result(lease, result, now_unix_timestamp_ms())
+        .boxed()
+        .await;
+    trace!(
+        provider = %lease.key.provider_id,
+        model = %lease.key.model,
+        key_fingerprint = %lease.key.key_fingerprint,
+        owner = %lease.owner,
+        result = result_kind,
+        state_db_released = recorded.decision,
+        state_db_fallback = ?recorded.state_db_fallback,
+        "recorded provider request result"
+    );
+    recorded.decision
+}
+
+/// Say once per session that the shared state DB could not be written, so the
+/// provider-request throttle went on from this process's own state (#351).
+async fn notify_state_db_fallback(
+    sess: &Session,
+    turn_context: &TurnContext,
+    fallback: Option<StateDbFallback>,
+) {
+    let Some(fallback) = fallback else {
+        return;
     };
-    if rows_affected == 0 {
-        warn!(
-            provider = %lease.key.provider_id,
-            model = %lease.key.model,
-            key_fingerprint = %lease.key.key_fingerprint,
-            owner = %lease.owner,
-            result = result_kind,
-            "provider request result did not match active lease owner"
-        );
-    } else {
-        trace!(
-            provider = %lease.key.provider_id,
-            model = %lease.key.model,
-            key_fingerprint = %lease.key.key_fingerprint,
-            owner = %lease.owner,
-            result = result_kind,
-            rows_affected,
-            "recorded provider request result"
-        );
+    if sess
+        .services
+        .state_db_fallback_noticed
+        .swap(true, std::sync::atomic::Ordering::Relaxed)
+    {
+        return;
     }
-    true
+    let cause = match fallback {
+        StateDbFallback::Busy => "is busy (another process is holding it)",
+        StateDbFallback::ReadOnly => "is read-only",
+        StateDbFallback::Unavailable => "can't be written",
+    };
+    let message = format!(
+        "The shared state database {cause}. This session continues and still applies its own provider request limits; limits shared with your other Corbanu sessions resume once the database can be written."
+    );
+    sess.send_event(turn_context, EventMsg::Warning(WarningEvent { message }))
+        .await;
 }
 
 struct ProviderRequestLeaseGuard {
@@ -2998,7 +3002,7 @@ impl Drop for ProviderRequestLeaseGuard {
         let provisional = self.provisional;
         std::mem::drop(self.runtime_handle.spawn(async move {
             match state_db
-                .release_provider_request_lease(&lease, now_unix_timestamp_ms())
+                .release_provider_request_throttle_lease(&lease, now_unix_timestamp_ms())
                 .await
             {
                 Ok(0) if provisional => trace!(
