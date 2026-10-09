@@ -27,6 +27,7 @@ use rand::Rng;
 use rand::SeedableRng;
 use rand::rngs::SmallRng;
 use std::ffi::c_void;
+use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
 use std::ptr;
@@ -666,6 +667,7 @@ const PROBE_TEST: &str = "window_station::tests::window_station_probe_in_the_san
 const PROBE_LINE: &str = "sec-win-345 probe:";
 const PROBE_PRIVATE_ENV: &str = "CODEX_SEC_WIN_345_PROBE_PRIVATE";
 const PROBE_LOCK_ENV: &str = "CODEX_SEC_WIN_345_PROBE_LOCK";
+const PROBE_CONTROL_ENV: &str = "CODEX_SEC_WIN_345_PROBE_CONTROL";
 
 /// Not a test of its own: the command [`sec_win_345_sandboxed_commands_dont_get_the_runners_access`]
 /// runs in the elevated sandbox. Reports whether it can create a desktop on
@@ -711,15 +713,21 @@ fn window_station_probe_in_the_sandbox() {
     let user = string_from_sid_bytes(&current_user_sid()).expect("SID");
     // Core's window-access lock: a sandboxed command holding it would make
     // Core's edits go unlocked.
-    let lock_file = std::env::var_os(PROBE_LOCK_ENV).map(|path| {
-        match std::fs::OpenOptions::new().read(true).open(path) {
-            Ok(_) => "opened".to_string(),
-            Err(err) => format!("{:?}", err.kind()),
-        }
-    });
+    let open = |var: &str| {
+        std::env::var_os(var).map(
+            |path| match std::fs::OpenOptions::new().read(true).open(path) {
+                Ok(_) => "opened".to_string(),
+                Err(err) => format!("{:?}", err.kind()),
+            },
+        )
+    };
+    let lock_file = open(PROBE_LOCK_ENV);
+    // Control: a file beside the lock's folder, with the DACL it inherits.
+    let control_file = open(PROBE_CONTROL_ENV);
     // One short line each: ConPTY wraps long ones.
     for (name, value) in [
         ("lock_file", lock_file.unwrap_or_default()),
+        ("control_file", control_file.unwrap_or_default()),
         ("create_desktop", access.0.to_string()),
         ("core_desktop", access.1.to_string()),
         ("child", format!("{child:x?}")),
@@ -756,6 +764,14 @@ fn sec_win_345_sandboxed_commands_dont_get_the_runners_access() {
         .expect("runtime");
     let codex_home = tempfile::tempdir().expect("codex home");
     let cwd = std::env::current_dir().expect("cwd");
+    let lock_path = super::dacl_lock_path().expect("lock path");
+    let control = tempfile::NamedTempFile::new_in(
+        lock_path
+            .parent()
+            .and_then(Path::parent)
+            .expect("local application data"),
+    )
+    .expect("control file");
     let mut results = Vec::new();
     // ConPTY too: its console host starts on the runner's desktop.
     for (private_desktop, tty) in [(true, false), (false, false), (true, true)] {
@@ -771,10 +787,11 @@ fn sec_win_345_sandboxed_commands_dont_get_the_runners_access() {
         }
         env_map.insert(
             PROBE_LOCK_ENV.to_string(),
-            super::dacl_lock_path()
-                .expect("lock path")
-                .to_string_lossy()
-                .into_owned(),
+            lock_path.to_string_lossy().into_owned(),
+        );
+        env_map.insert(
+            PROBE_CONTROL_ENV.to_string(),
+            control.path().to_string_lossy().into_owned(),
         );
         let command = vec![
             std::env::current_exe()
@@ -873,10 +890,12 @@ fn sec_win_345_sandboxed_commands_dont_get_the_runners_access() {
             after = (allow_entries(&logon), allow_entries(&user));
         }
         eprintln!("sec-win-345: entries after the runner exited (logon, user): {after:x?}");
+        // Without its folder's protected DACL the lock would be as open as
+        // the control file.
         assert_eq!(
-            field("lock_file"),
-            "PermissionDenied",
-            "a sandboxed command could open Core's window-access lock"
+            (field("lock_file"), field("control_file")),
+            ("PermissionDenied".to_string(), "opened".to_string()),
+            "a sandboxed command could open Core's window-access lock (or the control failed)"
         );
         results.push((
             field("create_desktop"),
