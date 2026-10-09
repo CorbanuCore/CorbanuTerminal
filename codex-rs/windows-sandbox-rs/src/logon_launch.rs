@@ -31,7 +31,6 @@
 use crate::proc_thread_attr::ProcThreadAttributeList;
 use crate::window_station::grant_window_access;
 use crate::winutil::quote_windows_arg;
-use crate::winutil::resolve_sid;
 use crate::winutil::to_wide;
 use anyhow::Context;
 use codex_process_hardening::HandleHolder;
@@ -145,6 +144,9 @@ pub struct LaunchedProcess {
     pub process: HANDLE,
     /// Started through the launcher (see the module docs).
     pub via_launcher: bool,
+    /// Why the new user could not be given access to this process's
+    /// non-interactive window station, if it could not (#341).
+    pub window_access_error: Option<String>,
 }
 
 /// Starts `request`. When this process's DACL is protected and the secondary
@@ -153,18 +155,25 @@ pub struct LaunchedProcess {
 ///
 /// Outside the interactive window station (an SSH session, a service), the
 /// new user first gets access to this process's window station and desktop,
-/// which the new process (and the launcher) start on (#341).
+/// which the new process (and the launcher) start on (#341). If that fails,
+/// the launch goes ahead (the window station may admit the user anyway), and
+/// the error is in [`LaunchedProcess::window_access_error`].
 pub fn create_process_with_logon(
     request: &LogonLaunchRequest<'_>,
     launcher_exe: &Path,
 ) -> anyhow::Result<LaunchedProcess> {
-    let sid = resolve_sid(request.username)?;
-    grant_window_access(&sid).with_context(|| {
-        format!(
-            "give {} access to this session's window station and desktop",
-            request.username
-        )
-    })?;
+    let window_access_error = grant_window_access(request.username)
+        .err()
+        .map(|err| format!("{err:#}"));
+    let mut launched = create_process_with_logon_any(request, launcher_exe)?;
+    launched.window_access_error = window_access_error;
+    Ok(launched)
+}
+
+fn create_process_with_logon_any(
+    request: &LogonLaunchRequest<'_>,
+    launcher_exe: &Path,
+) -> anyhow::Result<LaunchedProcess> {
     match create_process_with_logon_here(request) {
         // Only an absolute path to the installed runner: a bare name would be
         // looked up in the working directory (the workspace), and the launcher
@@ -378,6 +387,7 @@ fn create_process_with_logon_via_launcher(
                     pid,
                     process,
                     via_launcher: true,
+                    window_access_error: None,
                 })
             }
         }
@@ -482,6 +492,7 @@ fn create_process_with_logon_here(
         pid: info.dwProcessId,
         process: info.hProcess,
         via_launcher: false,
+        window_access_error: None,
     })
 }
 

@@ -72,9 +72,12 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib pf_27_s07 -- --nocapture --test-threads=1
-      - name: P1 Windows hardening regressions (#301, #304, #307)
+      - name: P1 Windows hardening regressions (#301, #304, #307, #341)
         if: ${{ !cancelled() }}
         shell: bash
+        # Elevated: the #341 tests must not skip.
+        env:
+          CODEX_SEC_WIN_341_REQUIRE: "1"
         run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib sec_win_ -- --nocapture --test-threads=1
       - name: P1 Windows hardening regressions (#320)
         if: ${{ !cancelled() }}

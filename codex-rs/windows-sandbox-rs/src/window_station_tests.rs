@@ -63,10 +63,14 @@ const NO_FRESH_STATION: &str =
     "sec-win-341: a normal session cannot create a window station here; skipped";
 const STATUS_DLL_INIT_FAILED: u32 = 0xC000_0142;
 const READ_CONTROL_AND_WRITE_DAC: u32 = 0x0002_0000 | 0x0004_0000;
-/// The specific rights an SSH session's user has, and `READ_CONTROL`; no
-/// `WRITE_DAC`.
-const LIMITED_STATION_ACCESS: u32 = super::WINDOW_STATION_ACCESS;
-const LIMITED_DESKTOP_ACCESS: u32 = super::DESKTOP_ACCESS;
+/// The specific rights an SSH session gives its own user, and `READ_CONTROL`;
+/// no `WRITE_DAC`.
+const LIMITED_STATION_ACCESS: u32 = 0x006E | 0x0002_0000;
+const LIMITED_DESKTOP_ACCESS: u32 = 0x00CF | 0x0002_0000;
+/// Set where the fresh window station must be created (an elevated run), so
+/// a skip fails instead of passing.
+const REQUIRE_ENV: &str = "CODEX_SEC_WIN_341_REQUIRE";
+const CWF_CREATE_ONLY: u32 = 0x0001;
 
 /// In the parent: reruns `test` alone in a child that has moved to a fresh
 /// window station, and checks it passed there. In that child: returns true,
@@ -90,10 +94,14 @@ fn on_fresh_window_station(test: &str) -> bool {
     eprint!("{stderr}{}", String::from_utf8_lossy(&output.stdout));
     assert!(output.status.success(), "{}", output.status);
     // A rename would make the rerun match nothing and pass.
-    assert!(
-        stderr.contains(ON_FRESH_STATION) || stderr.contains(NO_FRESH_STATION),
-        "the rerun did not run"
-    );
+    if std::env::var_os(REQUIRE_ENV).is_some() {
+        assert!(stderr.contains(ON_FRESH_STATION), "the rerun was skipped");
+    } else {
+        assert!(
+            stderr.contains(ON_FRESH_STATION) || stderr.contains(NO_FRESH_STATION),
+            "the rerun did not run"
+        );
+    }
     false
 }
 
@@ -102,7 +110,7 @@ fn on_fresh_window_station(test: &str) -> bool {
 /// (Windows 11 26200): this user, and Administrators for a few rights.
 /// Returns false when this session may not create one and is not elevated.
 fn enter_fresh_window_station() -> bool {
-    let user = resolve_sid(&std::env::var("USERNAME").expect("USERNAME")).expect("user SID");
+    let user = current_user_sid();
     let user = string_from_sid_bytes(&user).expect("user SID string");
     let station_sddl = format!(
         "D:(A;;DCLCSWWPDTSDRCWDWO;;;{user})(A;OINPIO;CCDCLCSWDTLOSDRCWDWO;;;{user})(A;;CR;;;BA)(A;OINPIO;CCDTLO;;;BA)"
@@ -117,7 +125,7 @@ fn enter_fresh_window_station() -> bool {
     let handle = unsafe {
         CreateWindowStationW(
             station.as_ptr(),
-            0,
+            CWF_CREATE_ONLY,
             0x000F_006E,
             &station_attributes.attributes,
         )
@@ -165,6 +173,16 @@ fn enter_fresh_window_station() -> bool {
         std::io::Error::last_os_error()
     );
     true
+}
+
+fn current_user_sid() -> Vec<u8> {
+    // SAFETY: the token is closed right after reading its user.
+    unsafe {
+        let token = crate::token::get_current_token_for_restriction().expect("process token");
+        let sid = crate::token::get_user_sid_bytes(token).expect("token user");
+        CloseHandle(token);
+        sid
+    }
 }
 
 struct SecurityAttributes {
@@ -330,6 +348,10 @@ impl Drop for TempUser {
         // SAFETY: deletes the user this value created.
         let status = unsafe { NetUserDel(ptr::null(), name.as_ptr()) };
         eprintln!("sec-win-341: deleted {} ({status})", self.name);
+        // A leaked account must show; not while a failure unwinds.
+        if status != NERR_Success && !std::thread::panicking() {
+            panic!("NetUserDel {} failed: {status}", self.name);
+        }
     }
 }
 
@@ -380,6 +402,9 @@ fn sec_win_341_runner_user_can_start_on_a_non_interactive_window_station() {
             &whoami,
         )
         .expect("start whoami as the test user");
+        // `whoami` stands in for the launcher, which must not be used here.
+        assert!(!launched.via_launcher, "started through the launcher");
+        assert_eq!(launched.window_access_error, None);
         let code = wait_exit_code(launched.process);
         eprintln!("sec-win-341: whoami as {} exited {code:#x}", user.name);
         assert_ne!(
@@ -397,12 +422,12 @@ fn sec_win_341_runner_user_can_start_on_a_non_interactive_window_station() {
     let users = resolve_sid("Users").expect("Users SID");
     assert_eq!(station_and_desktop_grant(&users), (false, false));
     assert_eq!(
-        grant_window_access(&users).expect("grant"),
+        grant_window_access("Users").expect("grant"),
         WindowAccessGrant::Granted
     );
     assert_eq!(station_and_desktop_grant(&users), (true, true));
     assert_eq!(
-        grant_window_access(&users).expect("grant again"),
+        grant_window_access("Users").expect("grant again"),
         WindowAccessGrant::AlreadyGranted
     );
 }

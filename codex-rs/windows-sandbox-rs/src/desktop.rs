@@ -60,12 +60,15 @@ pub struct LaunchDesktop {
 }
 
 impl LaunchDesktop {
-    /// Desktops are named in this process's window station: `WinSta0` in an
-    /// interactive session, but not in an SSH session or a service, where a
-    /// child sent to `WinSta0` fails to start (#341). The private desktop is
-    /// created in this process's window station too.
+    /// In an interactive session, `Winsta0\Default` or a private desktop in
+    /// `Winsta0`, as before. In an SSH session or a service (a non-interactive
+    /// window station), where a child sent to `Winsta0` fails to start (#341),
+    /// this process's own window station and desktop, or a private desktop in
+    /// that window station (where it is created).
     pub fn prepare(use_private_desktop: bool, logs_base_dir: Option<&Path>) -> Result<Self> {
-        let station = crate::window_station::launch_window_station();
+        let own_station = crate::window_station::current_window_station_name()
+            .filter(|name| !crate::window_station::is_interactive_window_station(name));
+        let station = own_station.as_deref().unwrap_or("Winsta0");
         if use_private_desktop {
             let private_desktop = PrivateDesktop::create(logs_base_dir)?;
             let startup_name = to_wide(format!("{station}\\{}", private_desktop.name));
@@ -74,8 +77,11 @@ impl LaunchDesktop {
                 startup_name,
             })
         } else {
-            let desktop = crate::window_station::current_desktop_name()
-                .unwrap_or_else(|| "Default".to_string());
+            let desktop = match own_station {
+                Some(_) => crate::window_station::current_desktop_name()
+                    .unwrap_or_else(|| "Default".to_string()),
+                None => "Default".to_string(),
+            };
             Ok(Self {
                 _private_desktop: None,
                 startup_name: to_wide(format!("{station}\\{desktop}")),
