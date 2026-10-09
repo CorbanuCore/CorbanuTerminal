@@ -177,13 +177,6 @@ fn read_own_memory(address: usize, buffer: &mut [u8]) -> usize {
     }
 }
 
-/// PF-27-S09: `bytes` (ASCII) as UTF-16LE, the form Windows keeps the
-/// process environment in.
-#[cfg(windows)]
-pub(crate) fn utf16le(bytes: &[u8]) -> Vec<u8> {
-    bytes.iter().flat_map(|byte| [*byte, 0]).collect()
-}
-
 #[cfg(windows)]
 fn writable_regions() -> Vec<(usize, usize)> {
     use windows_sys::Win32::System::Memory::MEM_COMMIT;
