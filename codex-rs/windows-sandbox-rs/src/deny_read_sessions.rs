@@ -54,7 +54,12 @@ const SYNC_LOCK_WAIT: Duration = Duration::from_secs(10);
 const SANDBOX_USERS_GROUP: &str = "CodexSandboxUsers";
 const FILE_SHARE_READ: u32 = 0x1;
 const FILE_SHARE_WRITE: u32 = 0x2;
+const FILE_SHARE_DELETE: u32 = 0x4;
 const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+const FILE_FLAG_DELETE_ON_CLOSE: u32 = 0x0400_0000;
+const GENERIC_READ: u32 = 0x8000_0000;
+const GENERIC_WRITE: u32 = 0x4000_0000;
+const DELETE: u32 = 0x0001_0000;
 
 /// Where a sync looks for other sessions, and which one is the caller's.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -183,7 +188,8 @@ fn registered_session() -> Option<String> {
         .map(|registered| registered.name.clone())
 }
 
-/// A session's file, locked until dropped (then deleted).
+/// A session's file, locked until dropped or the process exits (then
+/// deleted).
 #[derive(Debug)]
 pub struct Registration {
     file: Option<File>,
@@ -205,13 +211,14 @@ impl Registration {
             rng.r#gen::<u128>()
         );
         let path = registry.join(&name);
-        // Only reads may share it: no one can delete or rename it while held.
+        // Shared for reading only (no one else may write, delete or rename
+        // it while it is held), and gone with the last handle, however this
+        // process exits.
         let file = std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
+            .access_mode(GENERIC_READ | GENERIC_WRITE | DELETE)
             .create_new(true)
-            .share_mode(FILE_SHARE_READ)
-            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_DELETE)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_DELETE_ON_CLOSE)
             .open(&path)
             .with_context(|| format!("create {}", path.display()))?;
         file.try_lock()
@@ -323,15 +330,15 @@ pub(crate) fn lock_out_other_sessions(sessions: &DenyReadSessions) -> Option<NoO
 fn session_is_live(path: &Path) -> Option<bool> {
     let file = match std::fs::OpenOptions::new()
         .read(true)
-        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
         .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
         .open(path)
     {
         Ok(file) => file,
         // Deleted since it was listed: that session is gone.
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Some(false),
-        // Its holder opened it without write sharing: live.
-        Err(err) if err.raw_os_error() == Some(32) => return Some(true),
+        // Being deleted (its holder just closed it): gone.
+        Err(err) if err.raw_os_error() == Some(5) && !path.exists() => return Some(false),
         Err(_) => return None,
     };
     match file.try_lock() {
