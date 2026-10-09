@@ -560,6 +560,9 @@ fn sec_win_301_flag_off_session_keeps_denies_while_another_is_armed() {
     assert!(!recorded(&home));
 }
 
+/// The entries of `path`'s DACL, in SDDL. The DACL's control flags are left
+/// out: rewriting a DACL sets "auto-inherited" (`AI`) on one that lacked it
+/// (as on GitHub's Windows runners), which changes no entry.
 fn dacl_sddl(path: &Path) -> String {
     let mut sd: *mut c_void = std::ptr::null_mut();
     // SAFETY: valid path; `sd` is freed below.
@@ -601,5 +604,8 @@ fn dacl_sddl(path: &Path) -> String {
         LocalFree(text as HLOCAL);
         LocalFree(sd as HLOCAL);
     }
-    sddl
+    match sddl.find('(') {
+        Some(entries) => sddl[entries..].to_string(),
+        None => String::new(),
+    }
 }
