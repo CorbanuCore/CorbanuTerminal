@@ -311,15 +311,18 @@ pub(super) const IMAGE_GENERATIONS_PATH: &str = "images/generations";
 const OPENAI_IMAGE_GENERATION_RATES: [(&str, u32, u32, u32); 1] =
     [("gpt-image-2", 5_000, 1_250, 30_000)];
 
-/// Rates for one image generation request on an OpenAI API key, or nothing
-/// for a model or provider the published table does not cover.
+/// Standard-tier rates for one image generation request on an OpenAI API key,
+/// or nothing for a tier, model or provider the published table does not cover.
 pub(super) fn image_generation_original(
     model: &str,
     provider: &str,
     scope: Uuid,
     accepted_at: i64,
+    tier: Option<&str>,
 ) -> anyhow::Result<Vec<Snapshot>> {
-    if provider != codex_model_provider_info::OPENAI_PROVIDER_ID {
+    if provider != codex_model_provider_info::OPENAI_PROVIDER_ID
+        || !matches!(tier, None | Some("default"))
+    {
         return Ok(Vec::new());
     }
     let Some(&(_, input, read, output)) = OPENAI_IMAGE_GENERATION_RATES

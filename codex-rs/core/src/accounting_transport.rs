@@ -403,7 +403,7 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
         // has exactly one. A failed observation is logged and leaves the
         // response alone.
         let usage = if evidence.sampling.image_generation {
-            codex_api::images_body_usage(&response.body)
+            codex_api::image_generation_body_usage(&response.body)
         } else {
             codex_api::responses_body_usage(&response.body)
         };

@@ -386,12 +386,12 @@ fn vercel_gateway_charge_is_read_with_the_final_usage() {
 }
 
 /// The Images API states input as text plus image parts and no cache fields:
-/// a split that covers the whole input means no cache was used. Anything else
-/// keeps the cache counts unknown.
+/// a generation whose input is stated as all text used no cache. Anything
+/// else keeps the cache counts unknown.
 #[test]
-fn images_body_usage_reads_a_full_input_split_as_no_cache() {
+fn image_generation_body_usage_reads_all_text_input_as_no_cache() {
     let parse = |usage: serde_json::Value| {
-        images_body_usage(
+        image_generation_body_usage(
             json!({"created": 1, "data": [], "usage": usage})
                 .to_string()
                 .as_bytes(),
@@ -428,6 +428,18 @@ fn images_body_usage_reads_a_full_input_split_as_no_cache() {
     assert_eq!(partial.cached_tokens, ResponsesTokenPresence::Missing);
     assert_eq!(partial.cache_write_tokens, ResponsesTokenPresence::Missing);
 
+    let image_input = parse(json!({
+        "input_tokens": 12,
+        "input_tokens_details": {"text_tokens": 4, "image_tokens": 8},
+        "output_tokens": 272,
+        "total_tokens": 284
+    }));
+    assert_eq!(image_input.cached_tokens, ResponsesTokenPresence::Missing);
+    assert_eq!(
+        image_input.cache_write_tokens,
+        ResponsesTokenPresence::Missing
+    );
+
     let stated = parse(json!({
         "input_tokens": 12,
         "input_tokens_details": {"text_tokens": 12, "image_tokens": 0, "cached_tokens": 4},
@@ -438,7 +450,7 @@ fn images_body_usage_reads_a_full_input_split_as_no_cache() {
     assert_eq!(stated.cache_write_tokens, ResponsesTokenPresence::Missing);
 
     assert_eq!(
-        images_body_usage(br#"{"created": 1, "data": []}"#),
+        image_generation_body_usage(br#"{"created": 1, "data": []}"#),
         Ok(None)
     );
 }

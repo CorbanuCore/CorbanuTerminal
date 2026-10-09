@@ -2354,12 +2354,34 @@ async fn standalone_image_generation_is_offered_on_an_openai_api_key() {
             turn.model_info.input_modalities = vec![InputModality::Image];
         },
         ToolPlanInputs {
-            extension_tool_executors: vec![image_generation_tool],
+            extension_tool_executors: vec![image_generation_tool.clone()],
             ..Default::default()
         },
     )
     .await;
     other_provider_api_key.assert_visible_lacks(&["image_gen"]);
+
+    // A custom provider that only borrows the name is not the built-in one.
+    let named_openai = probe_with(
+        |turn| {
+            use_api_key_auth(turn);
+            let provider_info = ModelProviderInfo::create_openai_provider(Some(
+                "https://proxy.example.invalid/v1".to_string(),
+            ));
+            update_config(turn, |config| {
+                config.model_provider_id = "my-proxy".to_string();
+                config.model_provider = provider_info.clone();
+            });
+            turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
+            turn.model_info.input_modalities = vec![InputModality::Image];
+        },
+        ToolPlanInputs {
+            extension_tool_executors: vec![image_generation_tool],
+            ..Default::default()
+        },
+    )
+    .await;
+    named_openai.assert_visible_lacks(&["image_gen"]);
 }
 
 #[tokio::test]

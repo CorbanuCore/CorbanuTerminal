@@ -314,3 +314,100 @@ async fn admission_binds_the_basis_to_every_attempt() -> anyhow::Result<()> {
     );
     Ok(())
 }
+
+/// Image generation takes OpenAI's published image rates only where API-key
+/// rates apply: OpenAI's own provider, pay per use. A plan route, an unpriced
+/// route or another provider gets no image rates, and keeps the ordinary
+/// usage reading.
+#[tokio::test(flavor = "current_thread")]
+async fn image_generation_rates_apply_only_to_openai_api_key_rates() -> anyhow::Result<()> {
+    let home = tempfile::tempdir()?;
+    let db = StateRuntime::init(
+        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path())?),
+        "openai".into(),
+    )
+    .await?;
+    let owner = ThreadId::new();
+    db.upsert_thread(
+        &ThreadMetadataBuilder::new(
+            owner,
+            home.path().join("image.jsonl"),
+            chrono::Utc::now(),
+            SessionSource::Cli,
+        )
+        .build("openai"),
+    )
+    .await?;
+    let day = chrono::Utc::now().timestamp_millis() / 86_400_000;
+    let endpoint = "https://api.openai.com/v1";
+    let image_rates = Rates {
+        noncached: Some(serde_json::from_value(serde_json::json!("5"))?),
+        read: Some(serde_json::from_value(serde_json::json!("1.25"))?),
+        write: None,
+        output: Some(serde_json::from_value(serde_json::json!("30"))?),
+    };
+    let cases = [
+        ("openai", PriceAuthority::ApiKeyRates, true, image_rates),
+        ("openai", PriceAuthority::PlanRate, false, Rates::default()),
+        (
+            "openai",
+            PriceAuthority::Unavailable,
+            false,
+            Rates::default(),
+        ),
+        (
+            "openrouter",
+            PriceAuthority::ApiKeyRates,
+            true,
+            Rates::default(),
+        ),
+    ];
+    for (provider, pricing, reads_images, expected) in cases {
+        let turn = format!("{provider}-{pricing:?}");
+        let mode = AccountingMode::Provider {
+            scope: Uuid::new_v4(),
+            provider_id: provider.into(),
+            wire_api: codex_model_provider_info::WireApi::Responses,
+            approved_endpoint: endpoint.into(),
+            approved_query: None,
+            pricing,
+            basis_source: BasisSource::BuiltIn,
+        };
+        let sampling = Sampling::start_at_path(
+            db.clone(),
+            owner,
+            turn.clone(),
+            &mode,
+            prices::IMAGE_GENERATIONS_PATH,
+        )
+        .await?;
+        assert_eq!(sampling.image_generation, reads_images, "{turn}");
+        sampling
+            .admit_with_tier(
+                "gpt-image-2",
+                "https://api.openai.com/v1/images/generations",
+                /*tier*/ None,
+            )
+            .await?;
+        let codex_state::accounting::InspectionDay::Ready(view) =
+            codex_state::accounting::AccountingStore::inspect_day(
+                &db,
+                owner,
+                day,
+                chrono::Utc::now().timestamp_millis(),
+            )
+            .await?
+        else {
+            panic!("expected the day");
+        };
+        let rates = view
+            .requests
+            .values()
+            .flatten()
+            .find(|quote| quote.attempt.turn == turn)
+            .and_then(|quote| quote.snapshot.clone())
+            .map(|snapshot| snapshot.rates);
+        assert_eq!(rates, Some(expected), "{turn}");
+    }
+    Ok(())
+}

@@ -794,8 +794,13 @@ fn accounting_zai_api_states_published_rates_and_a_free_cache_write() -> anyhow:
 #[test]
 fn accounting_image_generation_prices_published_rates_only() -> anyhow::Result<()> {
     let scope = Uuid::new_v4();
-    let priced =
-        image_generation_original("gpt-image-2", "openai", scope, /*accepted_at*/ 1000)?;
+    let priced = image_generation_original(
+        "gpt-image-2",
+        "openai",
+        scope,
+        /*accepted_at*/ 1000,
+        /*tier*/ None,
+    )?;
     assert_eq!(priced.len(), 1);
     assert_eq!(
         priced[0].rates,
@@ -812,12 +817,30 @@ fn accounting_image_generation_prices_published_rates_only() -> anyhow::Result<(
             "gpt-image-2",
             "openrouter",
             scope,
-            /*accepted_at*/ 1000
+            /*accepted_at*/ 1000,
+            /*tier*/ None
         )?
         .is_empty()
     );
     assert!(
-        image_generation_original("gpt-image-9", "openai", scope, /*accepted_at*/ 1000)?.is_empty()
+        image_generation_original(
+            "gpt-image-9",
+            "openai",
+            scope,
+            /*accepted_at*/ 1000,
+            /*tier*/ None
+        )?
+        .is_empty()
+    );
+    assert!(
+        image_generation_original(
+            "gpt-image-2",
+            "openai",
+            scope,
+            /*accepted_at*/ 1000,
+            Some("priority")
+        )?
+        .is_empty()
     );
     Ok(())
 }

@@ -71,6 +71,7 @@ use crate::tools::router::ToolRouter;
 use codex_extension_api::ExtensionData;
 use codex_features::Feature;
 use codex_login::AuthManager;
+use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_protocol::account::PlanType;
 use codex_protocol::auth::AuthMode;
 use codex_protocol::config_types::WebSearchMode;
@@ -481,7 +482,8 @@ fn image_generation_available(turn_context: &TurnContext) -> bool {
         // An OpenAI API key on the built-in provider reaches OpenAI's public
         // Images API: `images/generations` under the same base URL and key as
         // inference, billed to that key.
-        || (provider.is_openai()
+        || (turn_context.config.model_provider_id == OPENAI_PROVIDER_ID
+            && provider.is_openai()
             && auth_manager.and_then(AuthManager::get_api_auth_mode) == Some(AuthMode::ApiKey))
 }
 
