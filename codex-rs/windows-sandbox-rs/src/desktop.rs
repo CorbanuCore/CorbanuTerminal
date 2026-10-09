@@ -60,18 +60,25 @@ pub struct LaunchDesktop {
 }
 
 impl LaunchDesktop {
+    /// Desktops are named in this process's window station: `WinSta0` in an
+    /// interactive session, but not in an SSH session or a service, where a
+    /// child sent to `WinSta0` fails to start (#341). The private desktop is
+    /// created in this process's window station too.
     pub fn prepare(use_private_desktop: bool, logs_base_dir: Option<&Path>) -> Result<Self> {
+        let station = crate::window_station::launch_window_station();
         if use_private_desktop {
             let private_desktop = PrivateDesktop::create(logs_base_dir)?;
-            let startup_name = to_wide(format!("Winsta0\\{}", private_desktop.name));
+            let startup_name = to_wide(format!("{station}\\{}", private_desktop.name));
             Ok(Self {
                 _private_desktop: Some(private_desktop),
                 startup_name,
             })
         } else {
+            let desktop = crate::window_station::current_desktop_name()
+                .unwrap_or_else(|| "Default".to_string());
             Ok(Self {
                 _private_desktop: None,
-                startup_name: to_wide("Winsta0\\Default"),
+                startup_name: to_wide(format!("{station}\\{desktop}")),
             })
         }
     }

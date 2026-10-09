@@ -52,6 +52,16 @@ affected.
   has not run yet, the first sandboxed command asks for Administrator approval
   once.
 
+**Over SSH.** The default sandbox also works when you start Corbanu Terminal
+in a Windows OpenSSH session (or from a service). For that, Corbanu Terminal
+gives the sandbox's users access to the SSH session's window station and
+desktop, as Windows itself does for the console session. Earlier builds
+couldn't run any command there: each one failed after 15 seconds with
+`windows sandbox: timed out after 15000ms connecting runner pipe-in`, and the
+System event log showed `codex-command-runner ... (0xc0000142)`. If you see
+that with an older build, update, or start Corbanu Terminal from the console
+or Remote Desktop session instead.
+
 Your organization's managed requirements may allow only the non-admin sandbox.
 In that case the warning still appears so you know the limits.
 

@@ -29,7 +29,9 @@
 //! acknowledges it.
 
 use crate::proc_thread_attr::ProcThreadAttributeList;
+use crate::window_station::grant_window_access;
 use crate::winutil::quote_windows_arg;
+use crate::winutil::resolve_sid;
 use crate::winutil::to_wide;
 use anyhow::Context;
 use codex_process_hardening::HandleHolder;
@@ -148,10 +150,21 @@ pub struct LaunchedProcess {
 /// Starts `request`. When this process's DACL is protected and the secondary
 /// logon service refuses it, `launcher_exe` (the command runner) makes the
 /// call instead; see the module docs.
+///
+/// Outside the interactive window station (an SSH session, a service), the
+/// new user first gets access to this process's window station and desktop,
+/// which the new process (and the launcher) start on (#341).
 pub fn create_process_with_logon(
     request: &LogonLaunchRequest<'_>,
     launcher_exe: &Path,
 ) -> anyhow::Result<LaunchedProcess> {
+    let sid = resolve_sid(request.username)?;
+    grant_window_access(&sid).with_context(|| {
+        format!(
+            "give {} access to this session's window station and desktop",
+            request.username
+        )
+    })?;
     match create_process_with_logon_here(request) {
         // Only an absolute path to the installed runner: a bare name would be
         // looked up in the working directory (the workspace), and the launcher
