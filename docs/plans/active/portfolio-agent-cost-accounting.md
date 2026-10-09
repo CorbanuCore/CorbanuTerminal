@@ -17,9 +17,6 @@ product_spec:
   heading: "Product measurement"
   requirement_excerpt: "No commercial performance numbers have been supplied."
 implementation_worktrees:
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf60-s03-20261008"
-    branch: "work/pf60-s03-20261008"
-    base_commit: "63ea3d0cbd0ccb54d352b25a12c3e07f9f934bff"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf60-s05-20261009"
     branch: "work/pf60-s05-20261009"
     base_commit: "7ac8fcb6cb5eb568a62161ec190d5f04ba1fee2a"
@@ -35,19 +32,19 @@ implementation_worktrees:
   activation: collection and `/cost` exist only in debug builds with the `developer-accounting` Cargo feature (core and
   tui). Optimized builds with it do not compile and `build_codex_package.py` refuses to package them. Shipping `/cost`
   to users is not authorised.
-- **S01, S02:** done and archived. **S03:** in progress, merged but not accepted; its Done list now covers the
-  09-20..10-03 work ([commit ledger](../../../qa/portfolio/agent-cost-accounting/pf-60-s03/commits-20260920-20261003.md)).
-  Its listed code gaps closed in PR #291 with demo videos; an independent review of the 09-20..10-02 body found
-  1 Blocker and 4 Majors, open in the sprint's Remaining list. Acceptance waits on Travis's decision
-  `acct-s03-acceptance-20260917`. **S05 (new, 2026-10-08):** Travis approved a collection-correctness sprint that runs
+- **S01, S02, S03:** done and archived. Travis accepted **S03** on 2026-10-09 after the independent code-blind
+  acceptance and three re-runs (PRs #292, #311, #315, #328). Follow-ups, not blockers: #287 (clock-behind WARN
+  wording), #325, and the 09-20..10-02 body review's findings, owned by S05; review Minors 6, 7, 9 and Nits 11-14
+  have no sprint yet. Carried limits are in the [archived record](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md#remaining).
+  **S05 (new, 2026-10-08):** Travis approved a collection-correctness sprint that runs
   before S04 and fixes the review's Blocker and Majors 2-5. Billing basis is declared per provider with cited defaults.
   On 2026-10-09 Travis chose option B for "both" behaviour (the basis follows the route and credential used; unknown
   routes show "not declared"; overflow is never spent)
   ([options memo](../../../qa/portfolio/agent-cost-accounting/pf-60-s05/both-behaviour-options.md)). S05 is `ready`
   in `worktrees/pf60-s05-20261009` and goes `in_progress` once S03 is archived.
   **S04:** not started; depends on S03 and S05.
-- **Worktrees:** `worktrees/pf60-s03-20261008` (branch `work/pf60-s03-20261008`) for S03 and
-  `worktrees/pf60-s05-20261009` (branch `work/pf60-s05-20261009`) for S05. The September lane
+- **Worktrees:** `worktrees/pf60-s05-20261009` (branch `work/pf60-s05-20261009`) for S05. The S03 lane,
+  `worktrees/pf60-s03-20261008` (branch `work/pf60-s03-20261008`), was released at S03's archive. The September lane
   checkouts (acct-inspect, acct-chat, bootstrap-acct-ws) were removed after #138; the remaining `accounting-*`
   worktrees and `workstream/accounting-*` branches hold only commits already on main.
 - **Open issues:** #127 (tiered Grok pricing, mitigation PR #135), #129 (OpenRouter cap reconciliation).
@@ -218,9 +215,9 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 
 | Accountable role | Worktree | Branch | Base | Scope |
 | --- | --- | --- | --- | --- |
-| Codex accounting lane (PF-60-S03 catch-up, tests, demos) | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf60-s03-20261008` | `work/pf60-s03-20261008` | `63ea3d0cbd0ccb54d352b25a12c3e07f9f934bff` | S03 ledger, regression tests, unavailable-backend next steps, demo videos; small PRs to main |
+| Codex accounting lane (PF-60-S03 catch-up, tests, demos; released 2026-10-09 at S03 archive) | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf60-s03-20261008` | `work/pf60-s03-20261008` | `63ea3d0cbd0ccb54d352b25a12c3e07f9f934bff` | S03 ledger, regression tests, unavailable-backend next steps, demo videos; small PRs to main |
 | Codex accounting lane (PF-60-S05 collection correctness) | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf60-s05-20261009` | `work/pf60-s05-20261009` | `7ac8fcb6cb5eb568a62161ec190d5f04ba1fee2a` | S05 write scope (declared basis, ledger format, best effort, guardian attribution); slice PRs to main |
-| Codex management / Travis acceptance | none | main | n/a | Shared plan and S03 acceptance decision |
+| Codex management / Travis acceptance | none | main | n/a | Shared plan; S03 accepted 2026-10-09 |
 
 The September lanes (direct Chat, Responses WebSocket, contract goldens, inspection) are consumed history; their
 checkouts were removed after PR #138.
@@ -279,7 +276,7 @@ All records belong to the single feature **PF-60**. Dependencies are hard prereq
 | --- | --- | --- | --- | --- |
 | PF-60-S01 | [Accounting contract and golden fixtures](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s01-accounting-contract-and-golden-fixtures.md) | none | docs/research/agent-cost-accounting/contract.md | Accepted local contract/fixtures and reviewed handoff; archived |
 | PF-60-S02 | [Idempotent usage persistence and replay](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md) | PF-60-S01 | Four direct sampling paths received: Anthropic direct, Responses HTTP, Responses WebSocket and direct Chat, on the accepted persistence and replay substrate. Default no-install and collection OFF | The normal-library store is accepted history, not the next unit; that line was stale. Remaining and explicitly unqualified: Corbanu plan gateway economics, startup prewarm, auxiliary collection, legacy evidence acquisition and complete application coverage. Closure of the bounded sprint is a separate recorded manager decision |
-| PF-60-S03 | [Inspectable run and campaign totals](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md) | PF-60-S02 | `/cost` inspector, ranges, developer-only activation, coverage, pricing, stated charges, contention fixes | On main (#138); in progress, awaiting `acct-s03-acceptance-20260917` |
+| PF-60-S03 | [Inspectable run and campaign totals](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md) | PF-60-S02 | `/cost` inspector, ranges, developer-only activation, coverage, pricing, stated charges, contention fixes | Accepted by Travis 2026-10-09 after independent code-blind acceptance (#292, #311, #315, #328); archived. Follow-ups #287, #325 |
 | PF-60-S05 | [Collection correctness and declared billing basis](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s05-collection-correctness-and-billing-basis.md) | PF-60-S02 | Declared billing basis with cited defaults; subscription basis kept without a price; versioned ledger format; best-effort compaction, web search and image generation; guardian forks attributed | Ready (option B chosen 2026-10-09); runs before S04 |
 | PF-60-S04 | [Cost-accounting acceptance and handoff](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s04-cost-accounting-acceptance-and-handoff.md) | PF-60-S03, PF-60-S05 | qa/portfolio/agent-cost-accounting/qualification.md | pending |
 

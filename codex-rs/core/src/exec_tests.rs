@@ -569,10 +569,7 @@ fn windows_restricted_token_rejects_split_only_filesystem_policies() {
             &temp_dir.path().abs(),
             WindowsSandboxLevel::RestrictedToken,
         ),
-        Some(
-            "windows unelevated restricted-token sandbox cannot enforce split filesystem read restrictions directly; refusing to run unsandboxed"
-                .to_string()
-        )
+        Some(codex_sandboxing::UNELEVATED_READ_ROOTS_REFUSAL.to_string())
     );
 }
 
@@ -718,10 +715,7 @@ fn windows_restricted_token_rejects_unreadable_split_carveouts() {
             &cwd,
             WindowsSandboxLevel::RestrictedToken,
         ),
-        Err(
-            "windows unelevated restricted-token sandbox cannot enforce deny-read restrictions directly; refusing to run unsandboxed"
-                .to_string()
-        )
+        Err(codex_sandboxing::UNELEVATED_DENY_READ_REFUSAL.to_string())
     );
 }
 
