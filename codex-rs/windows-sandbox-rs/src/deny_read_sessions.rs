@@ -304,9 +304,7 @@ pub(crate) fn lock_out_other_sessions(sessions: &DenyReadSessions) -> Option<NoO
     for entry in std::fs::read_dir(registry).ok()? {
         let entry = entry.ok()?;
         let name = entry.file_name();
-        let Some(name) = name.to_str() else {
-            return None;
-        };
+        let name = name.to_str()?;
         if !(name.starts_with(SESSION_PREFIX) && name.ends_with(SESSION_SUFFIX)) {
             continue;
         }
