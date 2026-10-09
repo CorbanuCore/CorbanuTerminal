@@ -175,6 +175,10 @@ impl Write for TestLogWriter {
 /// goes to the broker's socket.
 #[cfg(unix)]
 #[tokio::test]
+#[expect(
+    clippy::await_holding_invalid_type,
+    reason = "the broker route is process-wide; tests that install one run one at a time"
+)]
 async fn pf_27_s05_broker_frame_requests_go_only_to_the_broker_socket() {
     use tokio::io::AsyncReadExt as _;
     use tokio::io::AsyncWriteExt as _;
@@ -271,6 +275,10 @@ impl crate::ModelBrokerSender for RecordingSender {
 /// request goes to it, never to the network; execute and stream both work,
 /// error statuses keep their shape, and the request timeout still applies.
 #[tokio::test]
+#[expect(
+    clippy::await_holding_invalid_type,
+    reason = "the broker route is process-wide; tests that install one run one at a time"
+)]
 async fn pf_27_s09_broker_frame_requests_go_only_to_the_broker_sender() {
     use futures::StreamExt as _;
     let _route = crate::model_broker_route::ROUTE_TEST_LOCK.lock().await;
