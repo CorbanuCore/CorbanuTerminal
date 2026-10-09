@@ -319,7 +319,7 @@ pub(crate) fn apply_legacy_session_acl_rules(
             let targets = crate::DenyReadTargets::from_exact_paths(
                 additional_deny_read_paths
                     .iter()
-                    .map(|path| AbsolutePathBuf::from_absolute_path(path))
+                    .map(AbsolutePathBuf::from_absolute_path)
                     .collect::<std::io::Result<Vec<_>>>()?,
             );
             if let Some(readonly_sid) = acl_sids.readonly_sid {
