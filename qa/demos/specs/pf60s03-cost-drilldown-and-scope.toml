@@ -5,7 +5,7 @@
 # Needs CORBANU_DEMO_SEED=<target>/debug/examples/accounting_demo_seed (cargo build -p codex-state --example accounting_demo_seed).
 id = "pf60s03-cost-drilldown-and-scope"
 feature = "/cost after a real turn: a request and its details, Back and Esc, then an empty conversation (two other conversations seeded)"
-expected = "The first screen names provider, model, billing and cost. A request opens its page, then its technical details; Esc goes back the way it came. A new conversation says it has no requests, lists the day's other conversations and names the next step for the one with no price."
+expected = "The first screen names provider, model, billing and cost. A request opens its page, then its technical details; Esc goes back the way it came. A new conversation says it has no requests, lists the day's other conversations, and for the one with no price names its provider's bill (local-mock) as the next step."
 model = "glm-5.2"
 provider = "zai"
 rows = 44

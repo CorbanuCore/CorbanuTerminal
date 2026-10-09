@@ -1,0 +1,69 @@
+# PF-60-S03 (#289): a month range that includes today. The range reads "In progress", its October bucket
+# opens as "Cost so far", and the range header and a day page give the same retention floor.
+# One real GLM turn creates the conversation; its earlier days are then seeded off screen (synthetic
+# GLM 5.2 and GPT-5.4 requests on the 14 days before today, at catalogue rates).
+# Needs CORBANU_DEMO_SEED=<target>/debug/examples/accounting_demo_seed (cargo build -p codex-state --example accounting_demo_seed).
+id = "pf60s03-range-in-progress"
+feature = "/cost for a month range that includes today: In progress, Cost so far, and one retention floor (earlier days seeded with synthetic requests)"
+expected = "/cost 2026-09-01 2026-11-01 month says In progress with totals recorded so far; the October bucket opens as Cost so far. The range header and the 2026-10-08 day page both say daily totals kept since the same date."
+model = "glm-5.2"
+provider = "zai"
+rows = 40
+config = """
+suppress_unstable_features_warning = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "Reply with the single word OK."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "•\\s+OK"
+timeout = 120
+compress = 2
+[[steps]]
+run = '"$CORBANU_DEMO_SEED" "$CODEX_HOME" history "$(sqlite3 "$CODEX_HOME/pfterminal_state_5.sqlite" "select id from threads order by created_at desc limit 1")"'
+[[steps]]
+type = "/cost 2026-09-01 2026-11-01 month"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "In progress — totals so far, recorded through"
+[[steps]]
+pause = 4
+# Up from the first line wraps to Close, then Refresh, then the October bucket.
+[[steps]]
+key = "Up"
+repeat = 3
+[[steps]]
+wait = "› → Month \\[2026-10-01.*\\(in progress\\)"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Cost so far — this conversation"
+[[steps]]
+pause = 4
+[[steps]]
+key = "Escape"
+[[steps]]
+key = "Escape"
+[[steps]]
+type = "/cost 2026-10-08"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "This conversation on 2026-10-08 \\(UTC\\)"
+[[steps]]
+key = "Down"
+repeat = 13
+[[steps]]
+wait = "daily totals kept since"
+[[steps]]
+pause = 5

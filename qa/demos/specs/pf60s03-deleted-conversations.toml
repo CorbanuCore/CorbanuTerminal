@@ -1,0 +1,66 @@
+# PF-60-S03 (#286/#303, #308): a deleted conversation and its subagent stay disclosed on the day page.
+# After one real turn on screen, another conversation is created off screen by a real `corbanu exec`
+# run (GLM 5.2) that spawns one subagent. /cost lists it under other conversations; it is then deleted
+# with `corbanu delete --force`, run under libfaketime with the clock 2 hours behind the ledger (#308),
+# and /cost discloses the deleted request attempts. Needs libfaketime (brew install libfaketime).
+id = "pf60s03-deleted-conversations"
+feature = "Deleting a conversation with a subagent, with the clock 2 h behind, keeps its requests disclosed on the day page (that conversation and its subagent created off screen by a real corbanu exec run)"
+expected = "/cost first lists the other conversation's requests. corbanu delete --force, run 2 hours in the past via libfaketime, deletes it. /cost then says deleted conversations or subagents sent that many request attempts today, cost on the provider's bill."
+model = "glm-5.2"
+provider = "zai"
+rows = 40
+config = """
+suppress_unstable_features_warning = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "Reply with the single word OK."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "•\\s+OK"
+timeout = 120
+compress = 2
+[[steps]]
+run = '''
+ln -s "{bin}" ../corbanu
+"{bin}" exec --skip-git-repo-check -s read-only -m glm-5.2 -c 'model_provider="zai"' \
+  "Use the spawn_agent tool to start one subagent whose task is: reply with the single word PONG. Wait for it to finish, then reply with the single word DONE." \
+  > ../outside/exec.txt 2>&1
+grep -q "collab: SpawnAgent" ../outside/exec.txt
+sed -n 's/^session id: //p' ../outside/exec.txt
+'''
+timeout = 300
+capture = "other"
+[[steps]]
+type = "/cost"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Other conversations on this day, not included above: \\d+ requests in 1 conversation"
+[[steps]]
+pause = 4
+[[steps]]
+key = "Escape"
+[[steps]]
+type = "!faketime -f -2h ../corbanu delete --force {other}"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Deleted session {other}"
+timeout = 60
+[[steps]]
+pause = 2
+[[steps]]
+type = "/cost"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Deleted conversations or subagents sent \\d+ request attempts on this day"
+[[steps]]
+pause = 5
