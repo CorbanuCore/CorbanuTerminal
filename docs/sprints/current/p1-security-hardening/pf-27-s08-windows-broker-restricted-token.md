@@ -84,17 +84,19 @@ can still write the user's files, open the user's other processes, and ask anoth
 
 - [x] Planned (2026-10-08).
 - [x] Criteria 1–4 and 5 except the key path, with positive controls, on `windows-2022` and the real machine (PR #333).
+- [x] Real-Windows GLM 5.2 tmux run and SOP videos (2026-10-09).
 
 ## Remaining
 
 - [ ] 5 (part): key-path decision (Credential Manager is readable by the broker token).
-- [x] Real-Windows GLM 5.2 tmux run and SOP videos (2026-10-09).
 
 ## Verification
 
 - [x] Probes and suite on `windows-2022` and the real Windows machine (elevated and normal session), Credential
   Manager measured on both: done 2026-10-09.
+- [ ] Independent review verdict: REQUEST_CHANGES (2 blocking: B1, B2), then APPROVE after fixes.
 
 ## Exit evidence
 
 - [x] Outputs under `qa/security-levels/sprints/PF-27-S08/` (probes, gate run and videos).
+- [ ] Key-path decision for Travis: how the vault key reaches the broker (Credential Manager is readable by the broker token).
