@@ -40,6 +40,10 @@ provider-reported usage at OpenAI's published Standard rates is **$0.0062586**: 
 
 ## Real check (macOS)
 
+Run on commit `29204b2363` (the first commit of PR #369). The review fixes after it don't change how a Responses
+request on `gpt-5.6-luna` is priced. Ledgers written by that first commit are not supported by later builds of this
+branch if they hold an estimate with unknown input under a long-context tier (that case now reports missing usage).
+
 | Step | Evidence |
 | --- | --- |
 | `corbanu exec -m gpt-5.6-luna "Reply with exactly the word: ok"` with `CODEX_API_KEY` from the vault on the command only | [data/exec-luna-t1.jsonl](data/exec-luna-t1.jsonl) |

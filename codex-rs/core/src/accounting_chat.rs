@@ -357,6 +357,9 @@ pub(super) fn legacy_eligible(
 /// OpenAI's own Chat Completions API reports `cache_write_tokens` as a subset of
 /// `prompt_tokens` (a real `gpt-5.6-luna` response on 2026-10-09: 6,017 prompt,
 /// 6,014 written, then 6,014 cached; #361), so it is kept on the `openai` route.
+/// That route is identified by provider ID, as its prices are, so an `openai`
+/// provider pointed at another base URL gets the same reading; a report whose
+/// writes fall outside the prompt fails replay rather than being mispriced.
 ///
 /// Every other route leaves the cache-write count unknown, reported or not: the
 /// field's meaning is only established for OpenRouter and OpenAI (a subset of
