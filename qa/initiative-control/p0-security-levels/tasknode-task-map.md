@@ -24,7 +24,9 @@ sprints: [index](../../../docs/sprints/current/p0-security-levels/index.md).
   P0SEC-TN-01..09 Rewarded. P0SEC-TN-10 (PF-27-S06) is in the P1 hardening plan and its gate is partial: the GLM 5.2
   tmux run and videos wait for a Windows machine, and the task says so. P0SEC-TN-11 is initiative-control operations
   work, not a security sprint. Requests sent 09:20Z; tasks generated 09:22-09:24Z.
-- States below were read on 2026-10-08 at 09:25Z.
+- States below were read on 2026-10-08 at 09:25Z; P0SEC-TN-10..12 re-read 2026-10-09 (Rewarded).
+- Later work (PF-27-S06 rerun, PF-27-S07/S08, accounting, CI) is mapped in the sibling
+  [P1 security, accounting and CI task map](../p1-security-and-accounting/tasknode-task-map.md) (SECACCT-TN-01..08).
 
 ## Tasks
 
@@ -39,9 +41,9 @@ sprints: [index](../../../docs/sprints/current/p0-security-levels/index.md).
 | P0SEC-TN-07 | `task_627354898804e21841f81a559fe63462`<br>Compile the P0SEC-TN-07 Security TUI Lane Evidence Record | 3.5 PFT | Rewarded | PF-24-S03, PF-24-S02, PF-25-S01 | [#186](https://github.com/CorbanuCore/CorbanuTerminal/pull/186) `023355670a`, [#253](https://github.com/CorbanuCore/CorbanuTerminal/pull/253) `e4d17dbdc6`, [#258](https://github.com/CorbanuCore/CorbanuTerminal/pull/258) `b2d2583e0f`, [#260](https://github.com/CorbanuCore/CorbanuTerminal/pull/260) `bb609b449a` | [p0sec-tn-07-security-tui-evidence-20261007.md](../../../docs/research/tasknode-integration/p0sec-tn-07-security-tui-evidence-20261007.md) |
 | P0SEC-TN-08 | `task_4c84685243b6fd68facf8c2667fbaa15`<br>Compile the P0SEC-TN-08 Security Levels Convergence Evidence Record | 4 PFT | Rewarded | PF-41-S01, PF-13-S07 | [#259](https://github.com/CorbanuCore/CorbanuTerminal/pull/259) `8b3ac213c4`, [#242](https://github.com/CorbanuCore/CorbanuTerminal/pull/242) `8a8afb2384`, [#244](https://github.com/CorbanuCore/CorbanuTerminal/pull/244) `824ce30b05`, [#255](https://github.com/CorbanuCore/CorbanuTerminal/pull/255) `2bc2c0bd7f` | [p0sec-tn-08-convergence-evidence-20261007.md](../../../docs/research/tasknode-integration/p0sec-tn-08-convergence-evidence-20261007.md) |
 | P0SEC-TN-09 | `task_8e353c0cb1ee43239c5a7691668087ab`<br>Compile the P0SEC-TN-09 PF-25-S02 Sprint Evidence Record | 3 PFT | Rewarded | PF-25-S02 | [#261](https://github.com/CorbanuCore/CorbanuTerminal/pull/261) `43b21fc899` | [p0sec-tn-09-revocation-kill-switch-evidence-20261008.md](../../../docs/research/tasknode-integration/p0sec-tn-09-revocation-kill-switch-evidence-20261008.md) |
-| P0SEC-TN-10 | `task_1330fc0d84a8ee77e131023399bcb2aa`<br>Compile the P0SEC-TN-10 Windows Broker Partial-Gate Evidence Record | 3.5 PFT | Proposed | PF-27-S06 (P1 plan; gate partial) | [#267](https://github.com/CorbanuCore/CorbanuTerminal/pull/267) `36e342b9fb`, [#269](https://github.com/CorbanuCore/CorbanuTerminal/pull/269) `a71eb2ad71`, [#270](https://github.com/CorbanuCore/CorbanuTerminal/pull/270) `6cc330436b`, [#272](https://github.com/CorbanuCore/CorbanuTerminal/pull/272) `cce641e322`, [#277](https://github.com/CorbanuCore/CorbanuTerminal/pull/277) `ad96c55cb5` | [p0sec-tn-10-windows-broker-partial-gate-evidence-20261008.md](../../../docs/research/tasknode-integration/p0sec-tn-10-windows-broker-partial-gate-evidence-20261008.md) |
-| P0SEC-TN-11 | `task_1a565564946c12669f4a151f721f84c8`<br>Compile the P0SEC-TN-11 Owner/Manager Recovery Evidence Record | 3.5 PFT | Proposed | Initiative control (owner/manager loop) | [#263](https://github.com/CorbanuCore/CorbanuTerminal/pull/263) `e7a744d7f9`, [#265](https://github.com/CorbanuCore/CorbanuTerminal/pull/265) `003298a509`, [#271](https://github.com/CorbanuCore/CorbanuTerminal/pull/271) `f6fc0c83e7`, [#268](https://github.com/CorbanuCore/CorbanuTerminal/pull/268) `362007413c`, [#275](https://github.com/CorbanuCore/CorbanuTerminal/pull/275) `8d107f4c1d`, [#276](https://github.com/CorbanuCore/CorbanuTerminal/pull/276) `1d618c2fa7` | [p0sec-tn-11-owner-manager-recovery-evidence-20261008.md](../../../docs/research/tasknode-integration/p0sec-tn-11-owner-manager-recovery-evidence-20261008.md) |
-| P0SEC-TN-12 | `task_2b6a9c4ef14b857f571f0aedd66f6a95`<br>Compile the P0SEC-TN-12 Security Reel Evidence Record | 2.5 PFT | Proposed | Demo reel (all P0 sprints) | [#274](https://github.com/CorbanuCore/CorbanuTerminal/pull/274) `40f4acafe8` | [p0sec-tn-12-security-reel-evidence-20261008.md](../../../docs/research/tasknode-integration/p0sec-tn-12-security-reel-evidence-20261008.md) |
+| P0SEC-TN-10 | `task_1330fc0d84a8ee77e131023399bcb2aa`<br>Compile the P0SEC-TN-10 Windows Broker Partial-Gate Evidence Record | 3.5 PFT | Rewarded | PF-27-S06 (P1 plan; gate partial) | [#267](https://github.com/CorbanuCore/CorbanuTerminal/pull/267) `36e342b9fb`, [#269](https://github.com/CorbanuCore/CorbanuTerminal/pull/269) `a71eb2ad71`, [#270](https://github.com/CorbanuCore/CorbanuTerminal/pull/270) `6cc330436b`, [#272](https://github.com/CorbanuCore/CorbanuTerminal/pull/272) `cce641e322`, [#277](https://github.com/CorbanuCore/CorbanuTerminal/pull/277) `ad96c55cb5` | [p0sec-tn-10-windows-broker-partial-gate-evidence-20261008.md](../../../docs/research/tasknode-integration/p0sec-tn-10-windows-broker-partial-gate-evidence-20261008.md) |
+| P0SEC-TN-11 | `task_1a565564946c12669f4a151f721f84c8`<br>Compile the P0SEC-TN-11 Owner/Manager Recovery Evidence Record | 3.5 PFT | Rewarded | Initiative control (owner/manager loop) | [#263](https://github.com/CorbanuCore/CorbanuTerminal/pull/263) `e7a744d7f9`, [#265](https://github.com/CorbanuCore/CorbanuTerminal/pull/265) `003298a509`, [#271](https://github.com/CorbanuCore/CorbanuTerminal/pull/271) `f6fc0c83e7`, [#268](https://github.com/CorbanuCore/CorbanuTerminal/pull/268) `362007413c`, [#275](https://github.com/CorbanuCore/CorbanuTerminal/pull/275) `8d107f4c1d`, [#276](https://github.com/CorbanuCore/CorbanuTerminal/pull/276) `1d618c2fa7` | [p0sec-tn-11-owner-manager-recovery-evidence-20261008.md](../../../docs/research/tasknode-integration/p0sec-tn-11-owner-manager-recovery-evidence-20261008.md) |
+| P0SEC-TN-12 | `task_2b6a9c4ef14b857f571f0aedd66f6a95`<br>Compile the P0SEC-TN-12 Security Reel Evidence Record | 2.5 PFT | Rewarded | Demo reel (all P0 sprints) | [#274](https://github.com/CorbanuCore/CorbanuTerminal/pull/274) `40f4acafe8` | [p0sec-tn-12-security-reel-evidence-20261008.md](../../../docs/research/tasknode-integration/p0sec-tn-12-security-reel-evidence-20261008.md) |
 
 Request IDs:
 
@@ -90,8 +92,8 @@ Request IDs:
 - Smaller security follow-up PRs (for example #199, #200, #202, #203, #209, #219, #220, #226, #230-#232) are not in
   any task; they are fixes outside the 20 core sprint records.
 - Milestone gates (code-blind VM run, human sign-off, flag removal) are not claimed by any task here.
-- PF-27-S06's real-Windows gate rerun, videos and limits acceptance (all done 2026-10-08) are not yet claimed by
-  P0SEC-TN-10. PF-27-S07 (archived 2026-10-08, PR #316) is not in any task.
+- PF-27-S06's real-Windows gate rerun, videos and limits acceptance, and PF-27-S07, are claimed by SECACCT-TN-01 in
+  the [sibling map](../p1-security-and-accounting/tasknode-task-map.md), not by P0SEC-TN-10.
 
 ## Evidence log
 
@@ -105,3 +107,5 @@ Request IDs:
 | 2026-10-08 | 08 | PF-13-S07 route count settled from the v5 result files: 11 BLOCKED of 13 rows per run (sprint record and #255 say 10) | merge `b4c60a0589` (PR #266) |
 | 2026-10-08 | 01-09 | Verification answered; all nine Rewarded (27.5 PFT) | Task Node receipts (local) |
 | 2026-10-08 | 10-12 | Requests created; tasks generated (Proposed); evidence records added | this PR |
+| 2026-10-08 | 10-12 | Travis accepted; evidence submitted; verification answered; all three Rewarded (9.5 PFT) | Task Node receipts (local) |
+| 2026-10-09 | — | Round 4 tasks (SECACCT-TN-01..08) mapped in the sibling map | P1 security, accounting and CI map |
