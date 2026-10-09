@@ -358,7 +358,7 @@ async fn image_generation_rates_apply_only_to_openai_api_key_rates() -> anyhow::
         (
             "openrouter",
             PriceAuthority::ApiKeyRates,
-            true,
+            false,
             Rates::default(),
         ),
     ];
