@@ -13,6 +13,8 @@ worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-27-s08-20261008"
 branch: "sec/pf-27-s08-broker-token"
 base_commit: "df44211c88d285367f62cff59a0df8203865e3d6"
 depends_on: "PF-27-S07"
+merged_behind_flag: "isolated_credential_broker, secretless_agent_launch (default off)"
+gate_evidence: "qa/security-levels/sprints/PF-27-S08/README.md"
 created: 2026-10-08
 updated: 2026-10-08
 ---
@@ -79,18 +81,36 @@ can still write the user's files, open the user's other processes, and ask anoth
 - Credential Manager path, GLM 5.2 tmux run and SOP videos on the Windows machine.
 - Linux clippy on the RTX box; Opus 5.5 High review per slice.
 
+## Decisions
+
+- Token: a write-restricted, low-integrity restricted token (capability SID, logon SID, Everyone; no privileges;
+  Administrators and INTERACTIVE deny-only), not an AppContainer: it passes 2–5 as measured, and an AppContainer
+  refuses loopback upstreams, needs a registered profile and new ACL grants on the user's profile and vault.
+- Launch: the PF-27-S07 holder start, now under the broker token. A direct start (Core as parent, which would remove
+  the parent-process-spoofing signal) was measured not to work as built; see the evidence.
+- Key path (precondition): **open, for Travis.** The broker token can read Credential Manager (measured), so option
+  (c) is what ships; recommendation and alternatives in the evidence.
+
 ## Done
 
 - [x] Planned (2026-10-08).
+- [x] 1: broker token; containment `token+dacl+job`; Core refuses a broker without `token` (PR #333).
+- [x] 2: writes outside its runtime state denied in `%TEMP%` and `LocalLow` with positive controls (limit: delete in
+  low-integrity folders).
+- [x] 3: an ordinary process of the user and its threads refuse every tested right beyond query-limited.
+- [x] 4: WMI denied, Task Scheduler refused, out-of-process COM (`MMC20.Application`) denied, with controls.
+- [x] 5 (part): broker suite over pipes, DNS and TCP under the token, elevated and normal session.
 
 ## Remaining
 
-- [ ] Everything under Acceptance criteria.
+- [ ] 5 (part): key-path decision (Credential Manager is readable by the broker token).
+- [ ] Real-Windows GLM 5.2 tmux run and SOP videos.
 
 ## Verification
 
-- [ ] Probes and suite on `windows-2022`; Credential Manager path on a real Windows machine.
+- [x] Probes and suite on `windows-2022` and the real Windows machine (elevated and normal session); Credential
+  Manager measured on both.
 
 ## Exit evidence
 
-- [ ] Outputs under `qa/security-levels/sprints/PF-27-S08/`.
+- [ ] Outputs under `qa/security-levels/sprints/PF-27-S08/` (probes recorded; gate run and videos pending).
