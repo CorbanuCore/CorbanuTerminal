@@ -126,7 +126,7 @@ fn candidate_homes() -> Result<Vec<PathBuf>, String> {
 pub fn nested_origins(homes: Vec<PathBuf>) -> Vec<(PathBuf, NestedAgents)> {
     let mut origins: Vec<(PathBuf, NestedAgents)> = Vec::new();
     for home in homes {
-        if origins.iter().any(|(seen, _)| *seen == home) {
+        if origins.iter().any(|(seen, _)| *seen == home) || is_not_a_folder(&home) {
             continue;
         }
         let (stored, nested) = level::load_state(&home);
@@ -144,6 +144,21 @@ pub fn nested_origins(homes: Vec<PathBuf>) -> Vec<(PathBuf, NestedAgents)> {
         }
     }
     origins
+}
+
+/// Whether `home` is known to be something other than a folder, so it holds
+/// no level. On Linux the sandbox masks a denied home that does not exist
+/// (`~/.pfterminal`, say) by mounting an empty file there, which bubblewrap
+/// first creates on the real file system; while that command runs every
+/// process sees the file. Its unreadable "level" and failing probes must not
+/// make every launch on the account look nested. A home whose metadata cannot
+/// be read stays a candidate: that is what a sandbox denial looks like (a
+/// denial never reports "not a directory", which a placeholder parent does).
+fn is_not_a_folder(home: &Path) -> bool {
+    match std::fs::metadata(home) {
+        Ok(metadata) => !metadata.is_dir(),
+        Err(err) => err.kind() == io::ErrorKind::NotADirectory,
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
