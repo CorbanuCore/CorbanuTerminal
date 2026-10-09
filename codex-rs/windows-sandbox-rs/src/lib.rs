@@ -199,9 +199,9 @@ pub use deny_read_sessions::DENY_READ_SYNC_LOCK_WAIT;
 #[cfg(target_os = "windows")]
 pub use deny_read_sessions::DenyReadSessions;
 #[cfg(target_os = "windows")]
-pub use deny_read_sessions::ensure_registry as ensure_deny_read_session_registry;
-#[cfg(target_os = "windows")]
 pub use deny_read_sessions::Registration as DenyReadSessionRegistration;
+#[cfg(target_os = "windows")]
+pub use deny_read_sessions::ensure_registry as ensure_deny_read_session_registry;
 #[cfg(target_os = "windows")]
 pub use deny_read_sessions::register_this_process as register_deny_read_session;
 #[cfg(target_os = "windows")]

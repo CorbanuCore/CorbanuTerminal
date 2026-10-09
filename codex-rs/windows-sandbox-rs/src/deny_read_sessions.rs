@@ -181,8 +181,10 @@ pub fn ensure_registry(sandbox_group: Option<&str>) -> Result<PathBuf> {
         ),
     )?;
     let lock = registry.join(SYNC_LOCK_FILE);
-    if let Ok(existing) = open_no_follow(&lock, READ_CONTROL | FILE_READ_ATTRIBUTES, 0)
-        && !(is_plain_file(&existing)? && owner_is_trusted(&existing, false)?)
+    if let Ok(existing) =
+        open_no_follow(&lock, READ_CONTROL | FILE_READ_ATTRIBUTES, /*flags*/ 0)
+        && !(is_plain_file(&existing)?
+            && owner_is_trusted(&existing, /*trust_this_user*/ false)?)
     {
         drop(existing);
         std::fs::remove_file(&lock).with_context(|| format!("remove {}", lock.display()))?;
@@ -211,7 +213,7 @@ fn ensure_dir(dir: &Path, sddl: &str) -> Result<()> {
         Ok(existing) => {
             let trusted = existing.metadata()?.is_dir()
                 && !is_link(&existing)?
-                && owner_is_trusted(&existing, false)?;
+                && owner_is_trusted(&existing, /*trust_this_user*/ false)?;
             drop(existing);
             if trusted {
                 return descriptor.apply_to(dir);

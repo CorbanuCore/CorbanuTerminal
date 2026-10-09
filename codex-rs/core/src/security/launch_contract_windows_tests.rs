@@ -649,7 +649,10 @@ fn pf_27_s07_flag_off_launch_keeps_an_armed_contracts_denies() {
     let group = codex_windows_sandbox::LocalSid::from_string(group_sid).expect("group SID");
     // #323: no other session in this test's own registry.
     let registry = tempfile::tempdir().expect("session registry");
-    let sessions = codex_windows_sandbox::DenyReadSessions::in_test_registry(registry.path(), None);
+    let sessions = codex_windows_sandbox::DenyReadSessions::in_test_registry(
+        registry.path(),
+        /*own*/ None,
+    );
     let sync = |paths: &[std::path::PathBuf]| {
         // SAFETY: a valid SID for the call.
         unsafe {

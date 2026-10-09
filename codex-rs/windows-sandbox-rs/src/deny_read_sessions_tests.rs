@@ -25,33 +25,38 @@ fn register(registry: &Path) -> Registration {
 #[test]
 fn sec_win_323_a_sync_removes_only_while_no_other_session_lives() {
     let registry = tempfile::tempdir().expect("registry");
-    assert!(lock_out_other_sessions(&sessions(&registry, None)).is_some());
+    assert!(lock_out_other_sessions(&sessions(&registry, /*own*/ None)).is_some());
 
     let first = register(registry.path());
     let second = register(registry.path());
     assert_ne!(first.name(), second.name());
     // Another session lives: no removal, whoever asks.
-    assert!(lock_out_other_sessions(&sessions(&registry, None)).is_none());
+    assert!(lock_out_other_sessions(&sessions(&registry, /*own*/ None)).is_none());
     assert!(lock_out_other_sessions(&sessions(&registry, Some(&first))).is_none());
     drop(second);
     // Only the caller's own session is left.
     assert!(lock_out_other_sessions(&sessions(&registry, Some(&first))).is_some());
-    assert!(lock_out_other_sessions(&sessions(&registry, None)).is_none());
+    assert!(lock_out_other_sessions(&sessions(&registry, /*own*/ None)).is_none());
     drop(first);
-    assert!(lock_out_other_sessions(&sessions(&registry, None)).is_some());
+    assert!(lock_out_other_sessions(&sessions(&registry, /*own*/ None)).is_some());
 
     // A session that died without cleaning up (its file is not locked)
     // counts as gone, and its file is deleted.
     let dead = registry.path().join("session-1-dead.lock");
     std::fs::write(&dead, b"").expect("dead session file");
-    assert!(lock_out_other_sessions(&sessions(&registry, None)).is_some());
+    assert!(lock_out_other_sessions(&sessions(&registry, /*own*/ None)).is_some());
     assert!(!dead.exists(), "left a dead session's file");
 
     // No registry, or one that can't be read: nothing may be removed.
     assert!(lock_out_other_sessions(&DenyReadSessions::default()).is_none());
     let file = registry.path().join("a-file");
     std::fs::write(&file, b"").expect("file");
-    assert!(lock_out_other_sessions(&DenyReadSessions::in_test_registry(&file, None)).is_none());
+    assert!(
+        lock_out_other_sessions(&DenyReadSessions::in_test_registry(
+            &file, /*own*/ None
+        ))
+        .is_none()
+    );
 }
 
 /// A session that registers while a sync is between its check and its
@@ -59,12 +64,17 @@ fn sec_win_323_a_sync_removes_only_while_no_other_session_lives() {
 #[test]
 fn sec_win_323_registering_waits_for_a_sync_that_is_removing() {
     let registry = tempfile::tempdir().expect("registry");
-    let removing = lock_out_other_sessions(&sessions(&registry, None)).expect("no other session");
+    let removing =
+        lock_out_other_sessions(&sessions(&registry, /*own*/ None)).expect("no other session");
     let path = registry.path().to_path_buf();
     let (done_tx, done_rx) = std::sync::mpsc::channel();
     let registering = std::thread::spawn(move || {
-        let registration =
-            Registration::register(&path, true, Duration::from_secs(10)).expect("register");
+        let registration = Registration::register(
+            &path,
+            /*trust_this_user*/ true,
+            Duration::from_secs(10),
+        )
+        .expect("register");
         let _ = done_tx.send(());
         registration
     });
@@ -78,7 +88,7 @@ fn sec_win_323_registering_waits_for_a_sync_that_is_removing() {
         .recv_timeout(Duration::from_secs(5))
         .expect("registered once the sync was done");
     let registration = registering.join().expect("registering thread");
-    assert!(lock_out_other_sessions(&sessions(&registry, None)).is_none());
+    assert!(lock_out_other_sessions(&sessions(&registry, /*own*/ None)).is_none());
     assert!(lock_out_other_sessions(&sessions(&registry, Some(&registration))).is_some());
 }
 
@@ -94,7 +104,7 @@ fn sec_win_323_a_live_sessions_file_cannot_be_deleted_or_renamed() {
     eprintln!("sec-win-323: live session file deleted: {deleted}; renamed: {moved}");
     assert!(!deleted, "deleted a live session's file");
     assert!(!moved, "renamed a live session's file");
-    assert!(lock_out_other_sessions(&sessions(&registry, None)).is_none());
+    assert!(lock_out_other_sessions(&sessions(&registry, /*own*/ None)).is_none());
 }
 
 /// Review M2: a registry folder that is a link, or that the wrong user owns,
@@ -112,17 +122,27 @@ fn sec_win_323_a_linked_or_foreign_owned_registry_is_refused() {
         .output()
         .expect("mklink");
     assert!(status.status.success(), "{status:?}");
-    let linked = DenyReadSessions::in_test_registry(&link, None);
+    let linked = DenyReadSessions::in_test_registry(&link, /*own*/ None);
     assert!(
         lock_out_other_sessions(&linked).is_none(),
         "trusted a junction"
     );
     assert!(
-        Registration::register(&link, true, DENY_READ_SYNC_LOCK_WAIT).is_err(),
+        Registration::register(
+            &link,
+            /*trust_this_user*/ true,
+            DENY_READ_SYNC_LOCK_WAIT
+        )
+        .is_err(),
         "registered through a junction"
     );
     // The same folder, not through the link, is fine.
-    assert!(lock_out_other_sessions(&DenyReadSessions::in_test_registry(&target, None)).is_some());
+    assert!(
+        lock_out_other_sessions(&DenyReadSessions::in_test_registry(
+            &target, /*own*/ None
+        ))
+        .is_some()
+    );
 
     // A folder this user owns is not trusted outside tests: only one
     // Administrators or SYSTEM own is.
@@ -139,7 +159,12 @@ fn sec_win_323_a_linked_or_foreign_owned_registry_is_refused() {
         "trusted a user's folder"
     );
     assert!(
-        Registration::register(&owned, false, DENY_READ_SYNC_LOCK_WAIT).is_err(),
+        Registration::register(
+            &owned,
+            /*trust_this_user*/ false,
+            DENY_READ_SYNC_LOCK_WAIT
+        )
+        .is_err(),
         "registered in a user's folder"
     );
 }
@@ -175,7 +200,7 @@ fn sec_win_323_a_process_with_two_rule_sets_keeps_its_own_entries() {
     let (first, error) = process.view(
         Some(registry.path().to_path_buf()),
         Some("path:a".to_string()),
-        true,
+        /*trust_this_user*/ true,
     );
     assert!(error.is_none(), "{error:?}");
     assert!(first.own.is_some());
@@ -184,13 +209,13 @@ fn sec_win_323_a_process_with_two_rule_sets_keeps_its_own_entries() {
     let (again, _) = process.view(
         Some(registry.path().to_path_buf()),
         Some("path:a".to_string()),
-        true,
+        /*trust_this_user*/ true,
     );
     assert_eq!(again, first);
     let (second, _) = process.view(
         Some(registry.path().to_path_buf()),
         Some("path:b".to_string()),
-        true,
+        /*trust_this_user*/ true,
     );
     assert_eq!(second.own, None);
     assert!(
@@ -198,7 +223,11 @@ fn sec_win_323_a_process_with_two_rule_sets_keeps_its_own_entries() {
         "removed under one rule set what the other relies on"
     );
     // A launch without rules sees the same.
-    let (none, _) = process.view(Some(registry.path().to_path_buf()), None, true);
+    let (none, _) = process.view(
+        Some(registry.path().to_path_buf()),
+        /*rules*/ None,
+        /*trust_this_user*/ true,
+    );
     assert_eq!(none.own, None);
 }
 

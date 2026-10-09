@@ -64,7 +64,7 @@ struct Home {
 
 fn home() -> Home {
     let registry = tempfile::tempdir().expect("session registry");
-    let sessions = DenyReadSessions::in_test_registry(registry.path(), None);
+    let sessions = DenyReadSessions::in_test_registry(registry.path(), /*own*/ None);
     Home {
         _registry: Some(registry),
         ..home_in(sessions)
@@ -671,7 +671,7 @@ fn shared_secret() -> (tempfile::TempDir, PathBuf) {
 #[test]
 fn sec_win_323_another_homes_sync_keeps_an_armed_contracts_entry() {
     let registry = tempfile::tempdir().expect("session registry");
-    let sessions = DenyReadSessions::in_test_registry(registry.path(), None);
+    let sessions = DenyReadSessions::in_test_registry(registry.path(), /*own*/ None);
     let home_a = home_in(sessions.clone());
     let home_b = home_in(sessions);
     let group = LocalSid::from_string(SANDBOX_GROUP).expect("group SID");
@@ -714,7 +714,10 @@ fn sec_win_323_another_homes_sync_keeps_an_armed_contracts_entry() {
 #[test]
 fn sec_win_323_unarmed_sessions_keep_each_others_entries() {
     let registry = tempfile::tempdir().expect("session registry");
-    let home = home_in(DenyReadSessions::in_test_registry(registry.path(), None));
+    let home = home_in(DenyReadSessions::in_test_registry(
+        registry.path(),
+        /*own*/ None,
+    ));
     let group = LocalSid::from_string(SANDBOX_GROUP).expect("group SID");
     let (_profile, secret) = shared_secret();
     let unprotected = dacl_sddl(&secret);
