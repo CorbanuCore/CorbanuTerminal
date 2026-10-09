@@ -58,6 +58,7 @@ use windows_sys::Win32::Security::InitializeAcl;
 use windows_sys::Win32::Security::TOKEN_QUERY;
 use windows_sys::Win32::Storage::FileSystem::READ_CONTROL;
 use windows_sys::Win32::Storage::FileSystem::WRITE_DAC;
+use windows_sys::Win32::System::Pipes::PeekNamedPipe;
 use windows_sys::Win32::System::StationsAndDesktops::CloseDesktop;
 use windows_sys::Win32::System::StationsAndDesktops::CloseWindowStation;
 use windows_sys::Win32::System::StationsAndDesktops::GetProcessWindowStation;
@@ -288,6 +289,42 @@ impl Drop for WindowAccess {
                 let _ = self.replace(object, None);
             }
         }
+    }
+}
+
+/// In the runner, off the interactive window station: waits until the
+/// console host of a ConPTY it just created has started, or `timeout`
+/// passes (returns false). The host starts on the runner's desktop, Core's,
+/// whose entry Core removes once the runner reports its command started
+/// ([`WindowAccess::narrow_for_commands`]); a host still starting then
+/// would die. It writes its first output (terminal mode requests) once it
+/// runs; this peeks at `output_read` for it and leaves it there.
+pub fn wait_for_console_host_start(output_read: HANDLE, timeout: std::time::Duration) -> bool {
+    if current_window_station_name().is_some_and(|name| is_interactive_window_station(&name)) {
+        return true;
+    }
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        let mut available = 0u32;
+        // SAFETY: peeks without reading; `output_read` is a live pipe end.
+        let ok = unsafe {
+            PeekNamedPipe(
+                output_read,
+                ptr::null_mut(),
+                0,
+                ptr::null_mut(),
+                &mut available,
+                ptr::null_mut(),
+            )
+        };
+        if ok == 0 || available > 0 {
+            // A broken pipe means the host is gone; nothing to wait for.
+            return ok != 0;
+        }
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(2));
     }
 }
 

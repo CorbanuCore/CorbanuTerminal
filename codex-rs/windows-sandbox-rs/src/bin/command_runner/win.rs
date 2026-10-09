@@ -44,6 +44,7 @@ use codex_windows_sandbox::read_handle_loop;
 use codex_windows_sandbox::spawn_process_with_pipes;
 use codex_windows_sandbox::to_wide;
 use codex_windows_sandbox::token_mode_for_permission_profile;
+use codex_windows_sandbox::wait_for_console_host_start;
 use codex_windows_sandbox::write_frame;
 use std::ffi::OsStr;
 use std::fs::File;
@@ -79,6 +80,7 @@ const FS_HELPER_ARG: &str = "--codex-run-as-fs-helper";
 const READ_ACL_MUTEX_NAME: &str = "Local\\CodexSandboxReadAcl";
 const TERMINATION_WAIT_MS: u32 = 5_000;
 const WAIT_TIMEOUT: u32 = 0x0000_0102;
+const CONSOLE_HOST_START_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 struct IpcSpawnedProcess {
     log_dir: PathBuf,
@@ -314,6 +316,13 @@ fn spawn_ipc_process(req: &SpawnRequest) -> Result<IpcSpawnedProcess> {
         hpc_handle = conpty.raw_handle();
         let input_write = conpty.take_input_write();
         let output_read = conpty.take_output_read();
+        // #345: Core takes away the console host's desktop once we report the spawn.
+        if !wait_for_console_host_start(output_read, CONSOLE_HOST_START_TIMEOUT) {
+            log_note(
+                "runner: the console host did not start in time; reporting the spawn anyway",
+                Some(log_dir.as_path()),
+            );
+        }
         conpty_owner = Some(conpty);
         let stdin_handle = if req.stdin_open {
             Some(input_write)

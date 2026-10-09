@@ -361,6 +361,10 @@ pub use wfp::install_wfp_filters_for_account;
 #[cfg(target_os = "windows")]
 pub use wfp_setup::install_wfp_filters;
 #[cfg(target_os = "windows")]
+pub use window_station::WindowAccess;
+#[cfg(target_os = "windows")]
+pub use window_station::wait_for_console_host_start;
+#[cfg(target_os = "windows")]
 pub use windows_impl::CaptureResult;
 #[cfg(target_os = "windows")]
 pub use windows_impl::run_windows_sandbox_capture;
