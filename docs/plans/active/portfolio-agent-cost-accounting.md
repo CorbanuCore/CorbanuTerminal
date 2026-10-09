@@ -36,7 +36,11 @@ implementation_worktrees:
   09-20..10-03 work ([commit ledger](../../../qa/portfolio/agent-cost-accounting/pf-60-s03/commits-20260920-20261003.md)).
   Its listed code gaps closed in PR #291 with demo videos; an independent review of the 09-20..10-02 body found
   1 Blocker and 4 Majors, open in the sprint's Remaining list. Acceptance waits on Travis's decision
-  `acct-s03-acceptance-20260917`. **S04:** not started.
+  `acct-s03-acceptance-20260917`. **S05 (new, 2026-10-08):** Travis approved a collection-correctness sprint that runs
+  before S04 and fixes the review's Blocker and Majors 2-5. Billing basis is declared per provider with cited defaults.
+  The sprint is draft and blocked on his decision on "both" behaviour
+  ([options memo](../../../qa/portfolio/agent-cost-accounting/pf-60-s05/both-behaviour-options.md)).
+  **S04:** not started; depends on S03 and S05.
 - **Worktrees:** one active lane, `worktrees/pf60-s03-20261008` (branch `work/pf60-s03-20261008`). The September lane
   checkouts (acct-inspect, acct-chat, bootstrap-acct-ws) were removed after #138; the remaining `accounting-*`
   worktrees and `workstream/accounting-*` branches hold only commits already on main.
@@ -194,7 +198,7 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 
 ## Scope
 
-- In: Accounting contract and golden fixtures; Idempotent usage persistence and replay; Inspectable run and campaign totals; Cost-accounting acceptance and handoff.
+- In: Accounting contract and golden fixtures; Idempotent usage persistence and replay; Inspectable run and campaign totals; Collection correctness and declared billing basis; Cost-accounting acceptance and handoff.
 - Out: Changing prices, rebilling historical customers, collecting prompts, restoring legacy Plan allowances, or silently converting allowance to cash.
 
 ## Invariants
@@ -269,7 +273,8 @@ All records belong to the single feature **PF-60**. Dependencies are hard prereq
 | PF-60-S01 | [Accounting contract and golden fixtures](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s01-accounting-contract-and-golden-fixtures.md) | none | docs/research/agent-cost-accounting/contract.md | Accepted local contract/fixtures and reviewed handoff; archived |
 | PF-60-S02 | [Idempotent usage persistence and replay](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md) | PF-60-S01 | Four direct sampling paths received: Anthropic direct, Responses HTTP, Responses WebSocket and direct Chat, on the accepted persistence and replay substrate. Default no-install and collection OFF | The normal-library store is accepted history, not the next unit; that line was stale. Remaining and explicitly unqualified: Corbanu plan gateway economics, startup prewarm, auxiliary collection, legacy evidence acquisition and complete application coverage. Closure of the bounded sprint is a separate recorded manager decision |
 | PF-60-S03 | [Inspectable run and campaign totals](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md) | PF-60-S02 | `/cost` inspector, ranges, developer-only activation, coverage, pricing, stated charges, contention fixes | On main (#138); in progress, awaiting `acct-s03-acceptance-20260917` |
-| PF-60-S04 | [Cost-accounting acceptance and handoff](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s04-cost-accounting-acceptance-and-handoff.md) | PF-60-S03 | qa/portfolio/agent-cost-accounting/qualification.md | pending |
+| PF-60-S05 | [Collection correctness and declared billing basis](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s05-collection-correctness-and-billing-basis.md) | PF-60-S02 | Declared billing basis with cited defaults; subscription basis kept without a price; versioned ledger format; best-effort compaction, web search and image generation; guardian forks attributed | Draft, blocked on Travis's "both" decision; runs before S04 |
+| PF-60-S04 | [Cost-accounting acceptance and handoff](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s04-cost-accounting-acceptance-and-handoff.md) | PF-60-S03, PF-60-S05 | qa/portfolio/agent-cost-accounting/qualification.md | pending |
 
 ## Acceptance flows
 
@@ -284,7 +289,8 @@ All records belong to the single feature **PF-60**. Dependencies are hard prereq
 1. **Accounting contract and golden fixtures:** Every fixture has raw inputs, expected totals and provenance; no unknown value is rendered as zero.
 2. **Idempotent usage persistence and replay:** Replay each fixture twice and after process restart; persisted and reconstructed totals equal the approved fixture exactly.
 3. **Inspectable run and campaign totals:** The user can explain each displayed total using constituent requests without inspecting storage.
-4. **Cost-accounting acceptance and handoff:** All cost flows pass on one recorded binary; unknown/estimated values remain visibly distinct.
+4. **Collection correctness and declared billing basis:** Subscription work is never counted as spent, each provider's billing basis is declared rather than inferred, and accounting failures never discard a paid response.
+5. **Cost-accounting acceptance and handoff:** All cost flows pass on one recorded binary; unknown/estimated values remain visibly distinct.
 
 ## Independent functional execution — September 12
 
