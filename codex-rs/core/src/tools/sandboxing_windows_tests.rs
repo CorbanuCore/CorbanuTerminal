@@ -59,11 +59,6 @@ impl Drop for EnvGuard {
     }
 }
 
-fn absolute(path: &Path) -> AbsolutePathBuf {
-    AbsolutePathBuf::from_absolute_path(dunce::canonicalize(path).expect("canonical path"))
-        .expect("absolute path")
-}
-
 /// Prepares `cmd /C type secret.env & type public.txt` through the tool path
 /// agent commands use, under the unelevated sandbox.
 fn unelevated_tool_launch(
@@ -111,20 +106,16 @@ fn unelevated_tool_launch(
     )
 }
 
-async fn run(request: crate::sandboxing::ExecRequest) -> String {
-    let output = crate::sandboxing::execute_env(request, /*stdout_stream*/ None)
-        .await
-        .expect("unelevated sandbox run");
-    format!("{}{}", output.stdout.text, output.stderr.text)
-}
-
 #[tokio::test]
 #[serial_test::serial(codex_home)]
 async fn sec_win_300_unelevated_tool_launch_refuses_deny_read_profiles() {
     let codex_home_dir = tempfile::tempdir().expect("codex home");
     let workspace_dir = tempfile::tempdir().expect("workspace");
     let _codex_home = EnvGuard::set("CODEX_HOME", codex_home_dir.path());
-    let cwd = absolute(workspace_dir.path());
+    let cwd = AbsolutePathBuf::from_absolute_path(
+        dunce::canonicalize(workspace_dir.path()).expect("canonical workspace"),
+    )
+    .expect("absolute workspace");
     std::fs::write(cwd.join("secret.env"), SECRET).expect("secret file");
     std::fs::write(cwd.join("public.txt"), PUBLIC).expect("public file");
 
@@ -132,7 +123,13 @@ async fn sec_win_300_unelevated_tool_launch_refuses_deny_read_profiles() {
         .materialize_project_roots_with_workspace_roots(std::slice::from_ref(&cwd));
     // Control: the unelevated sandbox runs commands here, and without a deny
     // entry it reads both files.
-    let control = run(unelevated_tool_launch(&base, &cwd).expect("control launch")).await;
+    let control = crate::sandboxing::execute_env(
+        unelevated_tool_launch(&base, &cwd).expect("control launch"),
+        /*stdout_stream*/ None,
+    )
+    .await
+    .expect("unelevated sandbox run");
+    let control = format!("{}{}", control.stdout.text, control.stderr.text);
     eprintln!("sec-win-300 unelevated, no deny entry: {control}");
     assert!(
         control.contains(SECRET) && control.contains(PUBLIC),
