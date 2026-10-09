@@ -74,6 +74,7 @@ use windows_sys::Win32::Security::SE_DACL_PROTECTED;
 use windows_sys::Win32::Storage::FileSystem::SYNCHRONIZE;
 use windows_sys::Win32::System::Diagnostics::Debug::SetErrorMode;
 use windows_sys::Win32::System::Pipes::CreatePipe;
+use windows_sys::Win32::System::Threading::CREATE_BREAKAWAY_FROM_JOB;
 use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
 use windows_sys::Win32::System::Threading::CREATE_SUSPENDED;
 use windows_sys::Win32::System::Threading::CREATE_UNICODE_ENVIRONMENT;
@@ -346,12 +347,18 @@ fn launcher_pipe(child_reads: bool) -> anyhow::Result<(OwnedHandle, File)> {
 
 /// Starts the launcher with only its two pipe ends inherited.
 fn spawn_launcher(launcher_exe: &Path) -> anyhow::Result<(OwnedHandle, File, BufReader<File>)> {
-    spawn_helper(launcher_exe, LOGON_LAUNCH_ARG)
+    spawn_helper(launcher_exe, LOGON_LAUNCH_ARG, /*outlive_jobs*/ false)
 }
 
 /// Starts `exe` (the command runner) as this user in the helper mode `arg`,
-/// inheriting only its own two pipes; see the module docs.
-fn spawn_helper(exe: &Path, arg: &str) -> anyhow::Result<(OwnedHandle, File, BufReader<File>)> {
+/// inheriting only its own two pipes; see the module docs. With
+/// `outlive_jobs`, outside any job Core is in, when that job allows it (so
+/// ending Core's job does not end it).
+fn spawn_helper(
+    exe: &Path,
+    arg: &str,
+    outlive_jobs: bool,
+) -> anyhow::Result<(OwnedHandle, File, BufReader<File>)> {
     let launcher_exe = exe;
     let (child_stdin, stdin) = launcher_pipe(/*child_reads*/ true)?;
     let (child_stdout, stdout) = launcher_pipe(/*child_reads*/ false)?;
@@ -396,20 +403,30 @@ fn spawn_helper(exe: &Path, arg: &str) -> anyhow::Result<(OwnedHandle, File, Buf
     let mut info: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
     // SAFETY: every pointer refers to a live buffer above; the launcher
     // inherits from the holder, and only the two pipe ends in the list.
-    let ok = unsafe {
+    let create = |flags: u32, command_line: &mut Vec<u16>, info: &mut PROCESS_INFORMATION| unsafe {
         CreateProcessW(
             application.as_ptr(),
             command_line.as_mut_ptr(),
             ptr::null(),
             ptr::null(),
             /*binherithandles*/ 1,
-            CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT,
+            CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT | flags,
             environment.as_ptr().cast(),
             cwd.as_ref().map_or(ptr::null(), Vec::as_ptr),
             &startup.StartupInfo,
-            &mut info,
+            info,
         )
     };
+    let mut ok = if outlive_jobs {
+        create(CREATE_BREAKAWAY_FROM_JOB, &mut command_line, &mut info)
+    } else {
+        0
+    };
+    // A job that doesn't allow breaking away refuses it.
+    // SAFETY: read right after the call.
+    if !outlive_jobs || (ok == 0 && unsafe { GetLastError() } == ERROR_ACCESS_DENIED) {
+        ok = create(0, &mut command_line, &mut info);
+    }
     if ok == 0 {
         return Err(std::io::Error::last_os_error())
             .with_context(|| format!("start logon launcher {}", launcher_exe.display()));
@@ -520,6 +537,9 @@ pub const WINDOW_ACCESS_REAPER_ARG: &str = "--window-access-reaper";
 struct ReaperRequest {
     runner: usize,
     access: WindowAccessState,
+    /// Where the reaper logs edits that failed or went unlocked.
+    #[serde(default)]
+    log_dir: Option<PathBuf>,
 }
 
 /// #345: a runner's window access, held by a reaper process instead of Core
@@ -554,7 +574,11 @@ impl WindowAccessReaper {
         if !reaper_exe.is_absolute() || !reaper_exe.is_file() {
             anyhow::bail!("no runner at {} to reap with", reaper_exe.display());
         }
-        let (reaper, mut stdin, mut stdout) = spawn_helper(reaper_exe, WINDOW_ACCESS_REAPER_ARG)?;
+        let (reaper, mut stdin, mut stdout) = spawn_helper(
+            reaper_exe,
+            WINDOW_ACCESS_REAPER_ARG,
+            /*outlive_jobs*/ true,
+        )?;
         let result = (|| -> anyhow::Result<()> {
             let mut remote: HANDLE = 0;
             // SAFETY: `runner` is a live process handle; `reaper.0` is our own
@@ -577,6 +601,7 @@ impl WindowAccessReaper {
             let mut line = serde_json::to_vec(&ReaperRequest {
                 runner: remote as usize,
                 access: access.state().clone(),
+                log_dir: access.log_dir().map(Path::to_path_buf),
             })?;
             line.push(b'\n');
             stdin
@@ -631,9 +656,10 @@ pub fn run_window_access_reaper() -> anyhow::Result<()> {
         .context("read the reaper request")?;
     let request: ReaperRequest = serde_json::from_str(&line).context("parse the reaper request")?;
     let runner = OwnedHandle(request.runner as HANDLE);
-    let access = std::sync::Arc::new(std::sync::Mutex::new(Some(WindowAccess::from_state(
-        request.access,
-    ))));
+    let log_dir = request.log_dir;
+    let mut reaped = WindowAccess::from_state(request.access);
+    reaped.set_log_dir(log_dir.as_deref());
+    let access = std::sync::Arc::new(std::sync::Mutex::new(Some(reaped)));
     {
         let mut stdout = std::io::stdout().lock();
         writeln!(stdout, "{ACK}")?;
@@ -651,16 +677,27 @@ pub fn run_window_access_reaper() -> anyhow::Result<()> {
                 "narrow private" => false,
                 _ => continue,
             };
-            if let Ok(mut access) = narrowing.lock()
-                && let Some(access) = access.as_mut()
+            let mut access = narrowing
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if let Some(access) = access.as_mut()
+                && let Err(err) = access.narrow_for_commands(shared)
             {
-                let _ = access.narrow_for_commands(shared);
+                crate::logging::log_note(
+                    &format!("reaper: could not narrow the runner's window access: {err:#}"),
+                    log_dir.as_deref(),
+                );
             }
         }
     });
     // SAFETY: `runner` is the handle Core gave this process.
     unsafe { WaitForSingleObject(runner.0, INFINITE) };
-    drop(access.lock().ok().and_then(|mut access| access.take()));
+    drop(
+        access
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take(),
+    );
     // The stdin thread may still be blocked reading.
     std::process::exit(0);
 }

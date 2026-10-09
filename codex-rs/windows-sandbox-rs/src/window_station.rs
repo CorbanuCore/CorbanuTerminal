@@ -244,6 +244,10 @@ impl WindowAccess {
         self.log_dir = log_dir.map(Path::to_path_buf);
     }
 
+    pub(crate) fn log_dir(&self) -> Option<&Path> {
+        self.log_dir.as_deref()
+    }
+
     pub(crate) fn state(&self) -> &WindowAccessState {
         &self.state
     }
@@ -427,8 +431,11 @@ pub(crate) fn current_logon_sid() -> Result<Vec<u8>> {
 }
 
 /// Serializes DACL edits on window objects, in this process and, through a
-/// lock file in this user's local application data (which the sandbox's
-/// users can't open), across this user's processes.
+/// lock file in this user's local application data, across this user's
+/// processes (Core and the runners' reapers). Its folder's DACL is protected
+/// and grants only this user and SYSTEM: the elevated sandbox's read roots
+/// give its users inherited read on the profile's folders, which would let
+/// a sandboxed command open the file and hold its lock.
 /// Without it, two read-modify-write edits can lose one. Returns whether the
 /// cross-process lock was held: if it can't be had in time, the edit goes
 /// ahead with only this process's edits serialized.
@@ -448,9 +455,10 @@ fn dacl_lock_file() -> Option<File> {
     const FILE_SHARE_READ: u32 = 0x1;
     const FILE_SHARE_WRITE: u32 = 0x2;
     const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
-    let dir = local_app_data()?.join(DACL_LOCK_DIR);
-    std::fs::create_dir_all(&dir).ok()?;
-    let path = dir.join(DACL_LOCK_FILE);
+    let path = dacl_lock_path()?;
+    let dir = path.parent()?;
+    std::fs::create_dir_all(dir).ok()?;
+    protect_to_this_user(dir).ok()?;
     let open = |write: bool| {
         std::fs::OpenOptions::new()
             .read(true)
@@ -477,6 +485,104 @@ fn dacl_lock_file() -> Option<File> {
             Err(_) => return None,
         }
     }
+}
+
+/// This user's window-access lock file.
+pub(crate) fn dacl_lock_path() -> Option<PathBuf> {
+    Some(local_app_data()?.join(DACL_LOCK_DIR).join(DACL_LOCK_FILE))
+}
+
+/// Gives `dir` a protected DACL that grants only this user and SYSTEM,
+/// inherited by everything in it, unless it has one already.
+pub(crate) fn protect_to_this_user(dir: &Path) -> Result<()> {
+    use windows_sys::Win32::Security::Authorization::ConvertStringSecurityDescriptorToSecurityDescriptorW;
+    use windows_sys::Win32::Security::Authorization::GetNamedSecurityInfoW;
+    use windows_sys::Win32::Security::Authorization::SE_FILE_OBJECT;
+    use windows_sys::Win32::Security::Authorization::SetNamedSecurityInfoW;
+    use windows_sys::Win32::Security::GetSecurityDescriptorControl;
+    use windows_sys::Win32::Security::GetSecurityDescriptorDacl;
+    use windows_sys::Win32::Security::PROTECTED_DACL_SECURITY_INFORMATION;
+    use windows_sys::Win32::Security::SE_DACL_PROTECTED;
+    let path = to_wide(dir);
+    let mut current: *mut c_void = ptr::null_mut();
+    // SAFETY: reads `dir`'s DACL into a descriptor freed below.
+    let status = unsafe {
+        GetNamedSecurityInfoW(
+            path.as_ptr(),
+            SE_FILE_OBJECT,
+            DACL_SECURITY_INFORMATION,
+            ptr::null_mut(),
+            ptr::null_mut(),
+            ptr::null_mut(),
+            ptr::null_mut(),
+            &mut current,
+        )
+    };
+    if status != ERROR_SUCCESS {
+        anyhow::bail!("read {}'s DACL: {status}", dir.display());
+    }
+    let mut control = 0u16;
+    let mut revision = 0u32;
+    // SAFETY: `current` is a valid descriptor.
+    let protected = unsafe { GetSecurityDescriptorControl(current, &mut control, &mut revision) }
+        != 0
+        && control & SE_DACL_PROTECTED != 0;
+    // SAFETY: allocated by GetNamedSecurityInfoW.
+    unsafe { LocalFree(current as HLOCAL) };
+    if protected {
+        return Ok(());
+    }
+    let user = current_user_sid_string().context("this user's SID")?;
+    let sddl = to_wide(format!("D:P(A;OICI;FA;;;{user})(A;OICI;FA;;;SY)"));
+    let mut descriptor: *mut c_void = ptr::null_mut();
+    // SAFETY: parses `sddl` into a descriptor freed below.
+    if unsafe {
+        ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            sddl.as_ptr(),
+            1,
+            &mut descriptor,
+            ptr::null_mut(),
+        )
+    } == 0
+    {
+        return Err(std::io::Error::last_os_error()).context("protected descriptor");
+    }
+    let mut present = 0;
+    let mut dacl: *mut ACL = ptr::null_mut();
+    let mut defaulted = 0;
+    // SAFETY: `descriptor` is valid; `dacl` points into it.
+    let status = unsafe {
+        if GetSecurityDescriptorDacl(descriptor, &mut present, &mut dacl, &mut defaulted) == 0 {
+            u32::MAX
+        } else {
+            SetNamedSecurityInfoW(
+                path.as_ptr(),
+                SE_FILE_OBJECT,
+                DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                dacl,
+                ptr::null(),
+            )
+        }
+    };
+    // SAFETY: allocated above.
+    unsafe { LocalFree(descriptor as HLOCAL) };
+    if status != ERROR_SUCCESS {
+        anyhow::bail!("protect {}: {status}", dir.display());
+    }
+    Ok(())
+}
+
+fn current_user_sid_string() -> Option<String> {
+    // SAFETY: the token is closed right after reading its user.
+    let sid = unsafe {
+        let token = get_current_token_for_restriction().ok()?;
+        let sid = crate::token::get_user_sid_bytes(token);
+        CloseHandle(token);
+        sid.ok()?
+    };
+    crate::winutil::string_from_sid_bytes(&sid).ok()
 }
 
 /// This user's local application data folder (no environment needed: the

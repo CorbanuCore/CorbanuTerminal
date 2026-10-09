@@ -665,6 +665,7 @@ const PROBE_ENV: &str = "CODEX_SEC_WIN_345_PROBE";
 const PROBE_TEST: &str = "window_station::tests::window_station_probe_in_the_sandbox";
 const PROBE_LINE: &str = "sec-win-345 probe:";
 const PROBE_PRIVATE_ENV: &str = "CODEX_SEC_WIN_345_PROBE_PRIVATE";
+const PROBE_LOCK_ENV: &str = "CODEX_SEC_WIN_345_PROBE_LOCK";
 
 /// Not a test of its own: the command [`sec_win_345_sandboxed_commands_dont_get_the_runners_access`]
 /// runs in the elevated sandbox. Reports whether it can create a desktop on
@@ -708,8 +709,17 @@ fn window_station_probe_in_the_sandbox() {
     let logon = process_logon_sid_for_test(unsafe { GetCurrentProcess() });
     let logon = string_from_sid_bytes(&logon).expect("SID");
     let user = string_from_sid_bytes(&current_user_sid()).expect("SID");
+    // Core's window-access lock: a sandboxed command holding it would make
+    // Core's edits go unlocked.
+    let lock_file = std::env::var_os(PROBE_LOCK_ENV).map(|path| {
+        match std::fs::OpenOptions::new().read(true).open(path) {
+            Ok(_) => "opened".to_string(),
+            Err(err) => format!("{:?}", err.kind()),
+        }
+    });
     // One short line each: ConPTY wraps long ones.
     for (name, value) in [
+        ("lock_file", lock_file.unwrap_or_default()),
         ("create_desktop", access.0.to_string()),
         ("core_desktop", access.1.to_string()),
         ("child", format!("{child:x?}")),
@@ -759,6 +769,13 @@ fn sec_win_345_sandboxed_commands_dont_get_the_runners_access() {
         if private_desktop {
             env_map.insert(PROBE_PRIVATE_ENV.to_string(), "1".to_string());
         }
+        env_map.insert(
+            PROBE_LOCK_ENV.to_string(),
+            super::dacl_lock_path()
+                .expect("lock path")
+                .to_string_lossy()
+                .into_owned(),
+        );
         let command = vec![
             std::env::current_exe()
                 .expect("test binary")
@@ -856,6 +873,11 @@ fn sec_win_345_sandboxed_commands_dont_get_the_runners_access() {
             after = (allow_entries(&logon), allow_entries(&user));
         }
         eprintln!("sec-win-345: entries after the runner exited (logon, user): {after:x?}");
+        assert_eq!(
+            field("lock_file"),
+            "PermissionDenied",
+            "a sandboxed command could open Core's window-access lock"
+        );
         results.push((
             field("create_desktop"),
             field("core_desktop"),
