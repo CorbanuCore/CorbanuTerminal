@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-60-S03"
 title: "Inspectable run and campaign totals"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 3
@@ -14,10 +14,37 @@ branch: "work/pf60-s03-20261008"
 base_commit: "63ea3d0cbd0ccb54d352b25a12c3e07f9f934bff"
 depends_on: "PF-60-S02"
 created: 2026-09-09
-updated: 2026-10-08
+updated: 2026-10-09
 ---
 
 # PF-60-S03 — Inspectable run and campaign totals
+
+## Closure — 2026-10-09
+
+Completed. Travis **accepted** PF-60-S03 on 2026-10-09 (in chat with the coordinator), after the independent
+code-blind acceptance and its three targeted re-runs. Archived by the accounting integration owner.
+
+Evidence (all under `qa/portfolio/agent-cost-accounting/pf-60-s03/independent-acceptance-20261008/`):
+
+- [First run](../../../../qa/portfolio/agent-cost-accounting/pf-60-s03/independent-acceptance-20261008/README.md), PR #292: macOS and Linux, real GLM 5.2; every total exact to the micro-dollar; not
+  accepted on #286, #287 and #288 (#289 wording).
+- [Re-run 1](../../../../qa/portfolio/agent-cost-accounting/pf-60-s03/independent-acceptance-20261008/rerun-20261008/README.md), PR #311: #286 and #287 (Linux) pass; #288 still failing; #308 found.
+- [Re-run 2](../../../../qa/portfolio/agent-cost-accounting/pf-60-s03/independent-acceptance-20261008/rerun2-20261008/README.md), PR #315: #288 passes; #289 residuals R1–R3 and 13b still failing.
+- [Re-run 3](../../../../qa/portfolio/agent-cost-accounting/pf-60-s03/independent-acceptance-20261008/rerun3-20261008/README.md), PR #328: everything it covered passes on main `ccc38bfc03`
+  (#318, #322 included); no new defect.
+- Each run has its own code-blind Opus 5.5 High evidence review (`REVIEW.md` beside each README).
+- Fixes received: #299 (#287), #303 (#286), #291 and #305 (#288), #306 and #318 (#289), #322 (#308).
+- Demo videos: [index](../../../../qa/demos/index/PF-60-S03.md) (PR #332).
+
+Follow-ups (tracked, not blockers):
+
+- #287 residual: the clock-behind WARN says "recording at the ledger's time" while the request page shows the
+  recorded admission time.
+- #325: a rejected attempt is counted as billed; a bucket past the last recorded request reads "Partial".
+- The [body review](../../../../qa/portfolio/agent-cost-accounting/pf-60-s03/body-review-20261008/README.md)
+  findings, now owned by [PF-60-S05](../../current/portfolio-agent-cost-accounting/pf-60-s05-collection-correctness-and-billing-basis.md) (PR #330). Its mandate covers the Blocker, Majors 2–5 and Minor 10. Its
+  record excludes Minors 6, 7 and 9 and Nits 11–14; they stay open with no sprint yet.
+- Open limits carried from this record, not discharged: listed under Remaining.
 
 ## Execution mandate
 
@@ -76,25 +103,50 @@ updated: 2026-10-08
 - [x] **2026-10-08 #289 residuals from the second re-run (PR #315) fixed, PR #318.** R1/R1b and criterion 13b, decided here and open to Travis: `/cost` is developer-only and the 2026-09-16 answer keeps `/usage requests` unshipped, so a default build now answers every `/usage requests…` form with one line, "Per-request cost history is not part of this build.", and its `/usage` menu, `/usage` description, usage error and signed-out hint no longer mention it; no cost page, no next step. The alternative (keep the page, reword its next step) still shows a page that can never fill. R2: a bucket that reaches the read time and is short only at its end is "In progress — totals so far, recorded through …", titled "Cost so far", counted in the range total and given no next step; later buckets are "Not started yet"; buckets cut short by retention, the requested range or unverified days stay partial. Open follow-up: a bucket, past or current, that contains or ends after the last recorded request and is not "in progress" as defined here (e.g. yesterday, or the current hour, before any turn since) is still "Partial — excluded". R3: ranges state "daily totals kept since" from the same floor as the day pages (one `aggregate_day_floor` and one 365-day `REPLAY_MS` in `state/src/runtime/accounting.rs`; outside the frozen scope, as are `accounting_retention_atomic.rs`, `accounting_scope.rs`, `tui/src/slash_command.rs`, three new `*_default_build` menu snapshots and two edited snapshots). Regression tests in both feature sets.
 
 ## Remaining
-- [ ] **Independent functional acceptance 2026-10-08 ([record](../../../../qa/portfolio/agent-cost-accounting/pf-60-s03/independent-acceptance-20261008/README.md), PR #292): not accepted.** Open: #286 deleting a session erases its spend and the day then claims no other requests; #287 a clock behind the ledger checkpoint fails every request (fix in PR #299, another lane); #289 wording (fresh-home "Collection remains off", component lines, future buckets, default-build `/usage requests` date; residuals R1–R3 and 13b fixed by PR #318, re-run owed). #288 (no-usage label and next step) is fixed by #291 and #305. **Open findings of the 2026-10-08 body review** ([summary](../../../../qa/portfolio/agent-cost-accounting/pf-60-s03/body-review-20261008/README.md)): Blocker, `kimi-code` subscription work priced as pay-per-use spend (per-provider billing model needed); Majors, plan work with no catalogue price shown as "Pay per use", unversioned 09-21 byte change to stored prices/estimates, compaction/web search/image generation still fail after a paid response when observation fails, ephemeral and guardian-fork sessions uncollected silently; plus 5 Minors and 4 Nits. **From acct-sweep-64:** thread deletion and explicit maintenance still run the full sweep under the lock (~9 s per deleted conversation on the live ledger); no core test for an interrupt during a lease write; no test for two processes expiring at once; non-accounting writers still give up after 5 s.
-- [ ] Three TUI paths in the write scope overlap PF-83-S01 and were **released to this lane on 2026-09-15** because no PF-83 action held them: codex-rs/tui/src/app/event_dispatch.rs, codex-rs/tui/src/app_event.rs, codex-rs/tui/src/app/tests.rs. The release is recorded in that sprint. Re-check before launch rather than relying on this line, since PF-83 may re-reserve.
-- [ ] **Inherited from PF-60-S02 at its archival, transferred rather than discharged:** Corbanu plan gateway economics, startup prewarm, auxiliary collection, legacy evidence acquisition and complete application coverage all remain unqualified, and anonymous 365-day fencing is not permanent. Six leaky markers remain across the accounting suite (two in `accounting::policy_tests`, three in `accounting_anthropic`, one in `accounting_chat_native_mismatched_endpoint`); the three diagnosed in `acct-cleanup-04` showed no concrete fixture defect and were deliberately left rather than given speculative cleanup. Also inherited: the one disclosed review P3, that the provider-publication regression pins ordering against contributor emission rather than against the state lock.
-- [ ] **Disclosed limit, measured rather than estimated: the work budget's denominator is still whole-store rows.** So the number of inspections a call can afford falls as the store grows - around 100,000 rows a supervisor with seven subagents is refused, and past roughly 666,000 rows any day at all is refused, however small. Honest refusal, wrong denominator. The thresholds are pinned by a test so they stay facts. The correct fix is an index on owner and dispatch-day, which is a schema and migration change and a product decision rather than mine; it was deliberately not attempted. Also recorded: the lineage surface still decides ownership by untyped string equality, unlike the attempts surface.
-- [ ] **Disclosed from S03-B review and deferred:** the new candidate bound counts every thread with an attempt on the day, including unrelated ones, so a busy host can refuse a small root's day as TooLarge. It refuses rather than truncating and never invents an amount; a narrower bound needs the retained-reader rework this allocation excluded. Functional qualification of the S03-B views is also still open.
-- [ ] **Unblocked 2026-09-16: Travis answered `accounting-collection-activation-20260916` with developer-only activation.** The inspector's data paths could not be functionally qualified because collection had no activation outside tests - `Config::accounting` defaults to `Disabled`, is set non-`Disabled` only in four test modules, and has no TOML key, environment variable or command; the ledger is separately gated on being explicitly installed, so `/usage requests` had exactly one reachable output on any machine. The answer is an activation a developer can turn on deliberately and that is **unreachable in a shipped binary**, which is why the write scope above now includes `core/src/config/mod.rs`, `core/src/accounting.rs` and `state/src/runtime/accounting_native.rs` - owner-authorised new work, recorded here rather than added silently. Shipping `/usage requests` to users is explicitly **not** authorised by this answer and stays held. All four findings from the code-blind guest run are closed.
-- [ ] Qualify mixed raw/compact range explanations, separate oldest aggregate/cutoff facts, unknown populations and exact inspectable-bucket reconciliation; compact attribution and full-range totals remain unavailable.
-- [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
+
+All items are resolved, moved or carried as listed. Nothing here is closed by being moved.
+
+- [x] **Independent functional acceptance:** not accepted on 2026-10-08, then accepted by Travis on 2026-10-09 after three
+  re-runs. #286, #287, #288, #289 and #308 are closed; #287's WARN wording and #325 are follow-ups (see Closure).
+- [x] **Body review findings:** transferred to [PF-60-S05](../../current/portfolio-agent-cost-accounting/pf-60-s05-collection-correctness-and-billing-basis.md) as recorded in Closure. Minors 6, 7, 9 and Nits 11–14 are
+  open follow-ups with no sprint.
+- [x] **Carried, not discharged, from acct-sweep-64:** thread deletion and explicit maintenance still run the full sweep
+  under the lock (~9 s per deleted conversation on the live ledger); no core test for an interrupt during a lease
+  write; no test for two processes expiring at once; non-accounting writers still give up after 5 s.
+- [x] **PF-83 overlap:** PF-83-S01 is archived and its release of the three TUI paths is recorded there.
+- [x] **Carried, not discharged, from PF-60-S02:** Corbanu plan gateway economics, legacy evidence acquisition,
+  permanent anonymous 365-day fencing, the six leaky test markers and the provider-publication P3. Startup prewarm
+  and auxiliary paths are now collected (09-20..09-21 capture coverage, in Done); complete coverage is S05's audit
+  (AC9).
+- [x] **Carried disclosed limits:** the work budget's denominator is still whole-store rows (an owner/dispatch-day index
+  needs a schema and product decision); the S03-B candidate bound counts unrelated threads on the day; the lineage
+  surface still decides ownership by untyped string equality. Each refuses rather than inventing an amount.
+- [x] **Developer-only activation:** delivered (`developer-accounting` feature, debug builds only); shipping `/cost` stays
+  unauthorised.
+- [x] **Mixed raw/compact ranges:** qualified at their boundaries (Done, `5ece0338d`); compact attribution and
+  full-range totals remain unavailable by design.
+- [x] **Outputs, counterexamples, limits and handoff:** recorded in the acceptance records and in Closure; next are
+  PF-60-S05, then PF-60-S04.
 
 ## Verification
-- [ ] **Inherited from PF-60-S02:** [isolated code-blind functional execution](../../../../qa/code-blind-functional/isolated-execution.md) with real keys and negative controls, independent evidence review of that execution, and true-TUI qualification. S02 accepted an internal-stage N/A for its own increments only, which deferred these here; it did not discharge them. This sprint is the first user-facing unit, so they fall due.
+
+- [x] **Inherited from PF-60-S02, code-blind functional execution:** the independent code-blind acceptance and its three
+  re-runs used real Z.AI keys on macOS and Linux, each with an independent code-blind evidence review. These
+  were scratch-home runs, not the sealed-VM [isolated execution](../../../../qa/code-blind-functional/isolated-execution.md);
+  Travis accepted them as S03's qualification.
 - [x] Focused, as specified: `just test -p codex-tui usage` passes 91/91. Recorded because I had been receiving against a filter of my own - `accounting_inspect_` plus the state and tasknode packages - which added coverage but was not the gate written here. The union of both is 553/553 and is the number future receipts should use.
 - [x] Integration: `python3 docs/plans/check.py` and `python3 docs/sprints/check.py` pass and `git diff --check` is clean on the integration tip.
-- [ ] Resolve TUI applicability against the plan; record actual-key success, failure/cancel, recovery/resume and final binary evidence for every affected interactive path.
-- [ ] Record expected versus actual results and nonzero test counts; no unchecked assumption is converted into a pass.
+- [x] **TUI paths:** real interactive TUI sessions in every acceptance run (success, subagents, restart, deleted history,
+  clock behind, missing usage, default build); tmux test `tmux_cost_states_scope_other_conversations_and_missing_price_step`
+  (acct-scope-62); [demo videos](../../../../qa/demos/index/PF-60-S03.md).
+- [x] **Expected versus actual:** every acceptance run records a per-criterion verdict and recomputes every displayed
+  total from provider-reported usage; NOT VERIFIABLE items are recorded as such, not as passes.
 
 ## Exit evidence
 
-- [ ] Output commit/digest and input provenance recorded; checks linked to that final artifact/tree.
-- [ ] Named human/receiving owner accepts the bounded output; needed go/no-go decision is recorded.
-- [ ] Handoff includes changed scope, contracts, known gaps and required combined-tree evidence.
-- [ ] Done/Remaining ledgers updated honestly; archive accepted record under `docs/sprints/archive/portfolio-agent-cost-accounting/` and update plan backlinks.
+- [x] Output: main `ccc38bfc030122cc33ac84241e9be4c2987ef806` (re-run 3), with build commands and binary digests in
+  [its provenance table](../../../../qa/portfolio/agent-cost-accounting/pf-60-s03/independent-acceptance-20261008/rerun3-20261008/README.md).
+- [x] Travis accepted the bounded output on 2026-10-09; go: S05 next, then S04.
+- [x] Handoff: S05 owns the review's Blocker, Majors 2–5 and Minor 10; follow-ups and carried limits are in Closure and
+  Remaining.
+- [x] Archived under `docs/sprints/archive/portfolio-agent-cost-accounting/`; plan backlinks updated.
