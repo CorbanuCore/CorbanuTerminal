@@ -1,0 +1,55 @@
+  Attempt, components and original price
+  Requested UTC day: 2026-10-09
+  Provider: Kimi Code
+  Model: Kimi Code K3
+  Billing: Covered by your subscription (not billed per request)
+  Same work at API prices: not available
+  Tokens: 9,984 tokens
+  Paid usage beyond a plan (usage credits, Extra Usage or extra credits you bought) isn't visible here and is never counted as spent; check your provider's
+  usage page.
+  —— Details ——
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Request: e3e67665-2690-4223-a8a0-2d1f3d7a236d
+  Attempt: 6351e9e4-4cfb-44ee-8029-d2ef5641051b
+  Thread: 01a12205-6a7a-7c02-b6bc-0443abd33ce1
+  Turn: 01a12205-6c0a-7df0-b30d-737b64bf59ec
+  Provider: kimi-code
+  Model: k3
+  Opaque scope: a933279e-796c-4167-91f9-dfaff0007bad
+  Arithmetic dialect: Inclusive
+  Admission time: 2026-10-09T18:55:43.336Z
+  Retry predecessor: none
+  Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+  No recorded attempt here was billed per token.
+  Subscription capacity: 1 of 1 attempts, not billed per token
+  Plan consumption: unavailable — no plan rate or token total for 1 of 1 plan attempts
+  Same tokens at API rates: unavailable — the catalogue states no API price for 1 of 1 plan attempts
+  Plan rate at dispatch: not stated by the vendor
+  Billing basis: subscription
+  Input: 9964
+  Noncached input (derived for inclusive input): unknown — no retained numeric evidence
+  Cache read: 1024
+  Cache write: unknown — no retained numeric evidence
+  Output: 20
+  Reasoning (subset, not separately billed): 6
+  Total (not separately billed): 9984
+  Noncached input cost: unknown — no retained numeric evidence
+  Cache read cost: unknown — rate unavailable
+  Cache write cost: unknown — no retained numeric evidence
+  Output cost: unknown — rate unavailable
+  Known subtotal exact USD: none — subscription work is not billed per token
+  Price ID: 86e6ca41-1e70-4328-b30e-6173ebd43e04
+  Price source: NativeCatalog; reference 6fde66a5-ca31-5afd-aaa9-05edb006e9c8
+  Price currency/unit: Usd / PerMillionTokens
+  Price observed/approved: 2026-10-09T18:55:43.336Z / 2026-10-09T18:55:43.336Z
+  Price effective interval: [2026-10-09T18:55:43.336Z, unbounded)
+  Rate unavailable for Noncached input
+  Rate unavailable for Cache read
+  Rate unavailable for Cache write
+  Rate unavailable for Output
+  Evidence revision 11; source 24e1f65b-5fe6-443d-b35d-6b7decbe3ba5; sequence 11; presence patch
+  {"input":9964,"read":1024,"output":20,"reasoning":6,"total":9984}
+  Snapshot is not current; newer activity is unverified
+  Back
+  Refresh

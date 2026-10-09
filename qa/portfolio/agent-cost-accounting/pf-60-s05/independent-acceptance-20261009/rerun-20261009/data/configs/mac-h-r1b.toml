@@ -1,0 +1,7 @@
+model = "k3"
+model_provider = "kimi-code"
+model_reasoning_effort = "low"
+service_tier = "default"
+
+[projects."<scratch>/work/repo"]
+trust_level = "trusted"
