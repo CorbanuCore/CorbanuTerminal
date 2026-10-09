@@ -45,3 +45,39 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
         run: python3 .github/scripts/check_ci_results.py
+
+  # PR checks do not run this workflow, so a red main went unnoticed for 40
+  # runs. Keep one open issue while main is red (a comment per failed run,
+  # which notifies its subscribers) and close it on the next green run.
+  # Cancelled (superseded) runs change nothing.
+  report:
+    name: Report main status
+    needs: results
+    if: ${{ always() && (needs.results.result == 'failure' || needs.results.result == 'success') }}
+    runs-on: ubuntu-24.04
+    permissions:
+      issues: write
+    steps:
+      - name: Open, update or close the red-main issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RESULT: ${{ needs.results.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          title="postmerge-ci is failing on main"
+          number="$(gh issue list --state open --search "\"${title}\" in:title" --json number,title \
+            --jq "map(select(.title == \"${title}\")) | .[0].number // empty")"
+          if [[ "${RESULT}" == "failure" ]]; then
+            body="postmerge-ci failed on ${SHA::10}: ${RUN_URL}"
+            if [[ -n "${number}" ]]; then
+              gh issue comment "${number}" --body "${body}"
+            else
+              note="PR checks do not run postmerge-ci (full Linux tests, musl and Windows clippy). This issue closes itself on the next green run."
+              gh issue create --title "${title}" --body "${body}"$'\n\n'"${note}"
+            fi
+          elif [[ -n "${number}" ]]; then
+            gh issue close "${number}" --comment "postmerge-ci is green again on ${SHA::10}: ${RUN_URL}"
+          fi

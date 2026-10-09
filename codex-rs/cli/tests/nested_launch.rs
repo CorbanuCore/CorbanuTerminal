@@ -74,6 +74,15 @@ fn corbanu(home: &Path, cwd: &Path) -> Result<assert_cmd::Command> {
     corbanu_with_account(home, cwd, &cwd.join("no-account"))
 }
 
+/// The Aggressive-homes registry under `account`, the account database's home.
+fn registry_dir(account: &Path) -> PathBuf {
+    if cfg!(target_os = "macos") {
+        account.join("Library/Application Support/Corbanu/aggressive-homes")
+    } else {
+        account.join(".local/state/corbanu/aggressive-homes")
+    }
+}
+
 /// `account` stands in for the account database's home directory.
 fn corbanu_with_account(home: &Path, cwd: &Path, account: &Path) -> Result<assert_cmd::Command> {
     let mut command = assert_cmd::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?);
@@ -184,13 +193,7 @@ fn registered_origin_is_found_without_marker_or_home() -> Result<()> {
         return Ok(());
     };
     let account = TempDir::new()?;
-    let registry = if cfg!(target_os = "macos") {
-        account
-            .path()
-            .join("Library/Application Support/Corbanu/aggressive-homes")
-    } else {
-        account.path().join(".local/state/corbanu/aggressive-homes")
-    };
+    let registry = registry_dir(account.path());
     fs::create_dir_all(&registry)?;
     fs::write(
         registry.join("entry"),
@@ -224,13 +227,21 @@ async fn pass_mode_runs_exec_with_aggressive_enforced() -> Result<()> {
     };
     let home = TempDir::new()?;
     let root = TempDir::new()?;
-    let cwd = root.path().join("workspace");
-    let outside = root.path().join("outside");
+    // Resolved as the session resolves its folder (macOS temp folders sit
+    // behind a symlink), so paths below it compare as they do on Linux.
+    let root_path = root.path().canonicalize()?;
+    let cwd = root_path.join("workspace");
+    let outside = root_path.join("outside");
     fs::create_dir_all(&cwd)?;
     fs::create_dir_all(&outside)?;
     fs::create_dir_all(home.path().join("secrets"))?;
     let canary_path: PathBuf = home.path().join("secrets").join("probe.txt");
     fs::write(&canary_path, VAULT_CANARY)?;
+
+    // The origin's own Aggressive launch creates the registry before any
+    // agent command runs; the nested run checks it is there and read-only,
+    // because this workspace contains the account home `corbanu` gives it.
+    fs::create_dir_all(registry_dir(&cwd.join("no-account")))?;
 
     let outside_file = outside.join("written.txt");
     let server = create_mock_responses_server_sequence_unchecked(vec![

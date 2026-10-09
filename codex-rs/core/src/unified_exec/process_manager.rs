@@ -459,7 +459,7 @@ impl UnifiedExecProcessManager {
             )
         });
 
-        let transcript = Arc::new(tokio::sync::Mutex::new(HeadTailBuffer::default()));
+        let transcript = process.transcript();
         let event_ctx = ToolEventCtx::new(
             context.session.as_ref(),
             context.turn.as_ref(),
@@ -480,7 +480,7 @@ impl UnifiedExecProcessManager {
         );
         emitter.emit(event_ctx, ToolEventStage::Begin).await;
 
-        start_streaming_output(&process, context, Arc::clone(&transcript));
+        start_streaming_output(&process, context);
         let start = Instant::now();
         // Persist live sessions before the initial yield wait so interrupting the
         // turn cannot drop the last Arc and terminate the background process.
