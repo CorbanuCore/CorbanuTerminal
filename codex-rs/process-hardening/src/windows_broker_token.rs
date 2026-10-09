@@ -16,7 +16,10 @@
 //!   access. WMI refuses it; Task Scheduler does not show it the task folders.
 //!   (Untrusted integrity was measured too: the broker does not start.);
 //! - every privilege but `SeChangeNotifyPrivilege` removed, Administrators
-//!   (if present) made deny-only.
+//!   (if present) and INTERACTIVE made deny-only. INTERACTIVE because COM's
+//!   default launch permission grants it: without it the broker cannot launch
+//!   an out-of-process COM server that keeps the defaults (measured: with it,
+//!   `MMC20.Application` launched).
 //!
 //! Reads are unchanged: the broker still loads its image, reads the
 //! certificate store, resolves names and connects out (loopback too, which
@@ -80,6 +83,12 @@ use windows_sys::Win32::System::Threading::OpenProcessToken;
 const LOW_INTEGRITY_SID: &str = "S-1-16-4096";
 const LOW_INTEGRITY_RID: u32 = 0x1000;
 const ADMINISTRATORS_SID: &str = "S-1-5-32-544";
+/// INTERACTIVE: COM's default launch permission grants it (with
+/// Administrators and SYSTEM), so without it the broker cannot launch an
+/// out-of-process COM server that keeps the defaults.
+const INTERACTIVE_SID: &str = "S-1-5-4";
+/// Made deny-only in the broker token.
+const DENY_ONLY_SIDS: [&str; 2] = [ADMINISTRATORS_SID, INTERACTIVE_SID];
 const EVERYONE_SID: &str = "S-1-1-0";
 /// `SE_GROUP_LOGON_ID`.
 const SE_GROUP_LOGON_ID: u32 = 0xC000_0000;
@@ -126,11 +135,17 @@ pub(crate) fn create_broker_token(options: BrokerTokenOptions) -> io::Result<Own
     )?;
     let capability = LocalSid::from_string(&random_capability_sid()?)?;
     let everyone = LocalSid::from_string(EVERYONE_SID)?;
-    let administrators = LocalSid::from_string(ADMINISTRATORS_SID)?;
-    let disable = [SID_AND_ATTRIBUTES {
-        Sid: administrators.0,
-        Attributes: 0,
-    }];
+    let deny_only = DENY_ONLY_SIDS
+        .iter()
+        .map(|sid| LocalSid::from_string(sid))
+        .collect::<io::Result<Vec<_>>>()?;
+    let disable: Vec<SID_AND_ATTRIBUTES> = deny_only
+        .iter()
+        .map(|sid| SID_AND_ATTRIBUTES {
+            Sid: sid.0,
+            Attributes: 0,
+        })
+        .collect();
     let groups_buffer = token_information(base.as_raw_handle() as HANDLE, TokenGroups)?;
     let logon = groups(&groups_buffer)
         .iter()
@@ -185,7 +200,8 @@ pub(crate) fn create_broker_token(options: BrokerTokenOptions) -> io::Result<Own
 
 /// Checks that the current process runs under a broker token: low integrity
 /// or below, write-restricted to SIDs it does not otherwise hold, no
-/// privilege but `SeChangeNotifyPrivilege`, Administrators not enabled.
+/// privilege but `SeChangeNotifyPrivilege`, Administrators and INTERACTIVE
+/// deny-only.
 pub fn current_token_is_broker_token() -> io::Result<()> {
     let token = open_current_token(TOKEN_QUERY)?;
     let token = token.as_raw_handle() as HANDLE;
@@ -239,16 +255,17 @@ pub fn current_token_is_broker_token() -> io::Result<()> {
         return Err(io::Error::other("no capability among the restricting SIDs"));
     }
 
-    let administrators = LocalSid::from_string(ADMINISTRATORS_SID)?;
-    let administrators_usable = held.iter().any(|group| {
-        // SAFETY: both SIDs are live.
-        let is_administrators = unsafe { EqualSid(group.Sid, administrators.0) != 0 };
-        is_administrators
-            && (group.Attributes & SE_GROUP_ENABLED != 0
+    for deny_only in DENY_ONLY_SIDS {
+        let deny_only_sid = LocalSid::from_string(deny_only)?;
+        let usable = held.iter().any(|group| {
+            // SAFETY: both SIDs are live.
+            let same = unsafe { EqualSid(group.Sid, deny_only_sid.0) != 0 };
+            same && (group.Attributes & SE_GROUP_ENABLED != 0
                 || group.Attributes & SE_GROUP_USE_FOR_DENY_ONLY == 0)
-    });
-    if administrators_usable {
-        return Err(io::Error::other("Administrators is enabled"));
+        });
+        if usable {
+            return Err(io::Error::other(format!("{deny_only} is enabled")));
+        }
     }
 
     let privileges = token_information(token, TokenPrivileges)?;
