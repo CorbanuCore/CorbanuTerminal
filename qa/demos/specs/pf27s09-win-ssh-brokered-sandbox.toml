@@ -61,4 +61,12 @@ wait = "removed from the environment: ZAI_API_KEY"
 timeout = 60
 
 [[steps]]
+wait = "environment: none"
+timeout = 10
+
+[[steps]]
+wait = "held by the credential broker \\(host=api\\.z\\.ai"
+timeout = 10
+
+[[steps]]
 pause = 4.0

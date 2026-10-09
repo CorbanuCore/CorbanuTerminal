@@ -189,3 +189,31 @@ fn pf_27_s05_failed_broker_and_unbindable_urls_fail_closed() {
         assert!(error.contains("cannot be brokered"), "{base_url}: {error}");
     }
 }
+
+/// PF-27-S09: what the Windows sender puts on the pipe for a rewritten URL.
+#[test]
+fn pf_27_s09_pipe_request_target_keeps_the_signed_path_and_query() {
+    assert_eq!(
+        pipe_request_target("http://api.z.ai:443/api/paas/v4/chat/completions?x=1&y=2"),
+        Some((
+            "api.z.ai:443".to_string(),
+            "/api/paas/v4/chat/completions?x=1&y=2".to_string()
+        ))
+    );
+    // The broker URL is what `broker_request` produced for this request.
+    let rewrite =
+        BrokerRewrite::for_url("https://api.z.ai/api/paas/v4/models?page=2").expect("rewrite");
+    assert_eq!(
+        pipe_request_target(&rewrite.broker_url),
+        Some(("api.z.ai:443".to_string(), rewrite.path_and_query))
+    );
+    for url in [
+        "https://api.z.ai:443/v1",
+        "http://user:secret@api.z.ai:443/v1",
+        "http://user@api.z.ai:443/v1",
+        "http://api.z.ai:443/v1#fragment",
+        "not a url",
+    ] {
+        assert_eq!(pipe_request_target(url), None, "{url}");
+    }
+}

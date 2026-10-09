@@ -4,7 +4,7 @@
 # PF27_CANDIDATE=<corbanu.exe>: the key is in neither Core's environment nor its arguments.
 id = "pf27s09-win-vault-key-brokered"
 feature = "Windows model-client auth through the broker (normal session): a Z.AI key stored in the vault is read inside the broker; Core never decrypts it"
-expected = "The session answers. Core's environment has no ZAI_API_KEY; the vault holds the key; the log shows the broker holds the Z.AI credential and no key was handed over from the environment."
+expected = "The session answers. Core's environment has no ZAI_API_KEY; the vault holds the key; the log shows the broker holds the Z.AI credential (and no 'removed from the environment' line: nothing was handed over)."
 model = "glm-5.2"
 provider = "zai"
 cols = 120
@@ -45,6 +45,10 @@ key = "Enter"
 [[steps]]
 wait = "local.age"
 timeout = 30
+
+[[steps]]
+wait = "environment: none"
+timeout = 10
 
 [[steps]]
 type = "Reply with exactly one line: hello from the vault-backed session"

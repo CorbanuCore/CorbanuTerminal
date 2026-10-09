@@ -660,23 +660,17 @@ impl codex_http_client::ModelBrokerSender for PipeSender {
                 mut headers,
                 body,
             } = request;
-            let url = url::Url::parse(&url)
-                .map_err(|_| TransportError::Build("brokered request URL".to_string()))?;
-            let host = match (url.host_str(), url.port()) {
-                (Some(host), Some(port)) => format!("{host}:{port}"),
-                (Some(host), None) => host.to_string(),
-                (None, _) => {
-                    return Err(TransportError::Build("brokered request URL".to_string()));
-                }
-            };
-            let path_and_query = match url.query() {
-                Some(query) => format!("{}?{query}", url.path()),
-                None => url.path().to_string(),
-            };
+            let (host, path_and_query) = pipe_request_target(&url)
+                .ok_or_else(|| TransportError::Build("brokered request URL".to_string()))?;
+            // What the Unix socket client sends by default, reqwest's
+            // `Accept` included.
             for (name, value) in &default_headers {
                 if !headers.contains_key(name) {
                     headers.insert(name.clone(), value.clone());
                 }
+            }
+            if !headers.contains_key(http::header::ACCEPT) {
+                headers.insert(http::header::ACCEPT, http::HeaderValue::from_static("*/*"));
             }
             let response = broker
                 .send(codex_network_proxy::model_auth::ModelBrokerRequest {
@@ -698,6 +692,34 @@ impl codex_http_client::ModelBrokerSender for PipeSender {
             })
         })
     }
+}
+
+/// PF-27-S09: the `Host` value and origin-form target of a brokered request
+/// URL (`http://host:port/path?query`, as [`broker_request`] rewrote it).
+/// `None` for anything else, including a URL with user info, which the pipe
+/// could not carry (reqwest would turn it into an `Authorization` header).
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "used by the Windows sender and tests")
+)]
+fn pipe_request_target(url: &str) -> Option<(String, String)> {
+    let url = url::Url::parse(url).ok()?;
+    if url.scheme() != "http"
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.fragment().is_some()
+    {
+        return None;
+    }
+    let host = match (url.host_str()?, url.port()) {
+        (host, Some(port)) => format!("{host}:{port}"),
+        (host, None) => host.to_string(),
+    };
+    let path_and_query = match url.query() {
+        Some(query) => format!("{}?{query}", url.path()),
+        None => url.path().to_string(),
+    };
+    Some((host, path_and_query))
 }
 
 #[cfg(test)]

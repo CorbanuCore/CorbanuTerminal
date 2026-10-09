@@ -183,6 +183,7 @@ async fn pf_27_s05_broker_frame_requests_go_only_to_the_broker_socket() {
     use tokio::io::AsyncReadExt as _;
     use tokio::io::AsyncWriteExt as _;
     let _route = crate::model_broker_route::ROUTE_TEST_LOCK.lock().await;
+    let _uninstall = UninstallRoute;
 
     let network = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
     network.set_nonblocking(true).expect("nonblocking");
@@ -233,7 +234,15 @@ async fn pf_27_s05_broker_frame_requests_go_only_to_the_broker_socket() {
         "{seen}"
     );
     assert!(network.accept().is_err(), "nothing may reach the network");
-    crate::model_broker_route::uninstall_model_broker_route();
+}
+
+/// Removes the process-wide broker route when a test ends, even by panic.
+struct UninstallRoute;
+
+impl Drop for UninstallRoute {
+    fn drop(&mut self) {
+        crate::model_broker_route::uninstall_model_broker_route();
+    }
 }
 
 /// PF-27-S09: a sender standing in for the Windows broker's checked pipe.
@@ -282,6 +291,7 @@ impl crate::ModelBrokerSender for RecordingSender {
 async fn pf_27_s09_broker_frame_requests_go_only_to_the_broker_sender() {
     use futures::StreamExt as _;
     let _route = crate::model_broker_route::ROUTE_TEST_LOCK.lock().await;
+    let _uninstall = UninstallRoute;
     let network = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
     network.set_nonblocking(true).expect("nonblocking");
     let url = format!(
@@ -318,16 +328,19 @@ async fn pf_27_s09_broker_frame_requests_go_only_to_the_broker_sender() {
     {
         let seen = seen.lock().expect("seen");
         assert_eq!(seen.len(), 2);
-        assert_eq!(seen[0].method, Method::POST);
-        assert_eq!(seen[0].url, url);
-        assert_eq!(seen[0].body.as_ref(), br#"{"a":1}"#);
-        assert_eq!(
-            seen[0]
-                .headers
-                .get(crate::MODEL_BROKER_FRAME_HEADER)
-                .and_then(|value| value.to_str().ok()),
-            Some("signed-frame")
-        );
+        // Both the executed and the streamed request.
+        for request in seen.iter() {
+            assert_eq!(request.method, Method::POST);
+            assert_eq!(request.url, url);
+            assert_eq!(request.body.as_ref(), br#"{"a":1}"#);
+            assert_eq!(
+                request
+                    .headers
+                    .get(crate::MODEL_BROKER_FRAME_HEADER)
+                    .and_then(|value| value.to_str().ok()),
+                Some("signed-frame")
+            );
+        }
     }
     crate::install_model_broker_sender(sender(
         http::StatusCode::FORBIDDEN,
@@ -337,6 +350,12 @@ async fn pf_27_s09_broker_frame_requests_go_only_to_the_broker_sender() {
     let denied = transport.execute(framed.clone()).await;
     assert!(
         matches!(&denied, Err(TransportError::Http { status, body: Some(body), .. })
+            if *status == http::StatusCode::FORBIDDEN && body.contains("replay")),
+        "{denied:?}"
+    );
+    let denied = transport.stream(framed.clone()).await.err();
+    assert!(
+        matches!(&denied, Some(TransportError::Http { status, body: Some(body), .. })
             if *status == http::StatusCode::FORBIDDEN && body.contains("replay")),
         "{denied:?}"
     );
@@ -365,5 +384,4 @@ async fn pf_27_s09_broker_frame_requests_go_only_to_the_broker_sender() {
         Err(TransportError::Timeout)
     ));
     assert!(network.accept().is_err(), "nothing may reach the network");
-    crate::model_broker_route::uninstall_model_broker_route();
 }
