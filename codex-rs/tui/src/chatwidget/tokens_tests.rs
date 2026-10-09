@@ -356,7 +356,7 @@ fn accounting_inspect_range_partial_no_amount_and_explicit_coverage() {
     insta::assert_snapshot!(pages[0].text.join("\n"), @"
     Requested: [1970-01-01T00:00:00.001Z, 1970-01-01T01:00:00.000Z); timezone: UTC; grouping: Hour
     Retention: request detail kept since 1970-01-01T00:00:00.000Z; daily totals kept since 1970-01-01
-    Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost: unavailable — no settlement evidence.
+    Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns.
     Range: Unknown parent population: 0 inspectable attempts, excluded from range total
     Other conversations are not included in this view; /cost covers only the open conversation.
     Range total unavailable — partial or unavailable buckets excluded; no partial total.
@@ -1332,7 +1332,7 @@ fn accounting_inspect_partial_and_unknown_copy() {
         summary.contains("Cache write: not reported (1 attempt)"),
         "{summary}"
     );
-    assert!(summary.contains("Billed cost: unavailable"));
+    assert!(summary.contains(SYNTHETIC_NOT_STATED), "{summary}");
     assert!(summary.contains("Collection coverage: unknown"));
     assert!(
         attempt_text(&quote())
@@ -1594,7 +1594,6 @@ async fn accounting_inspect_maintenance_with_stale_raw_renders_refresh() -> anyh
             Recorded totals unavailable — stored contributions need refresh. Retry rereads only; no repair performed.
             Next step: select Refresh. If it stays unavailable, the recorded totals cannot be checked here; check your provider's bill.
             Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
-            Billed cost: unavailable — no settlement evidence
             Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
             ");
         }
@@ -1627,13 +1626,12 @@ async fn accounting_inspect_maintenance_with_current_contributions_renders_raw_t
     • synthetic · synthetic-model — Pay per use. 1 request, tokens not reported. Estimated cost: no price available.
     No other conversation recorded requests on this day.
     Next step for requests with no price: check the bill from synthetic. No published price covers them, so no cost is shown for them here.
-    Costs are estimates from published prices; your provider's bill is the final amount.
+    Costs are estimates from published prices; synthetic doesn't state its actual charge, so check the bill from synthetic.
     Select a provider below to see its requests.
     —— Details ——
     Estimated token cost: unknown
     Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
     Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
-    Billed cost: unavailable — no settlement evidence
     Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
     Day covered (UTC): [1970-04-11T00:00:00.000Z, 1970-04-12T00:00:00.000Z)
     Read at: 1970-04-11T00:00:00.000Z; ledger current to: 1970-04-11T00:00:00.000Z (0 ms behind)
@@ -1648,7 +1646,6 @@ async fn accounting_inspect_maintenance_with_current_contributions_renders_raw_t
     Total (not separately billed): not reported (1 attempt)
     Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
     Unknown parent population: 0 attempts, excluded from root total
-    Estimate versus billed difference: unknown — no settlement evidence
     ");
     // The fixture's day-100 attempt was admitted with no observations, so the
     // page must say it cannot complete the estimate rather than presenting the
@@ -1739,7 +1736,7 @@ fn accounting_inspect_coverage_never_claims_run_complete() {
     for caveat in [
         "Collection coverage: unknown",
         "resolved descendants only",
-        "Billed cost: unavailable",
+        SYNTHETIC_NOT_STATED,
         "other days",
         "Snapshot is not current; newer activity is unverified",
     ] {
@@ -1959,19 +1956,47 @@ fn accounting_zero_plan_usage_renders_money_unavailable() {
         @"Token cost: unavailable — no applicable price; recorded usage is not a zero-cost claim.");
 }
 
+/// The overview's one billing line for the `packet()` day, whose provider
+/// states no charge.
+const SYNTHETIC_NOT_STATED: &str = "Costs are estimates from published prices; synthetic doesn't state its actual charge, so check the bill from synthetic.";
+
 #[test]
 fn accounting_inspect_estimate_only_never_invents_billed_or_difference() {
     let pages = inspection_pages(Ok(breakdown_packet()));
+    // The first screen says it once, in its overview (one provider here is
+    // unnamed, so it names none); every other page with attempts says it once
+    // in its details, naming whose bill to check where it can.
+    let alpha = "Billed cost: not reported — alpha doesn't state its actual charge, so this is an estimate; check the bill from alpha.";
+    assert!(
+        pages[0].text.contains(
+            &"Costs are estimates from published prices; your provider's bill is the final amount."
+                .into()
+        ),
+        "{:#?}",
+        pages[0].text
+    );
+    assert!(!pages[0].text.iter().any(|s| s.starts_with("Billed cost:")));
     for page in &pages {
+        let billed: Vec<_> = page
+            .text
+            .iter()
+            .filter(|s| s.starts_with("Billed cost:"))
+            .collect();
+        assert!(billed.len() <= 1, "{}: {billed:?}", page.title);
         assert!(
-            page.text
-                .contains(&"Billed cost: unavailable — no settlement evidence".into())
+            billed.iter().all(|s| !s.starts_with("Billed cost: $")),
+            "{billed:?}"
         );
-        assert!(page.text.contains(
-            &"Estimate versus billed difference: unknown — no settlement evidence".into()
-        ));
-        assert!(!page.text.iter().any(|s| s.starts_with("Billed cost: $")));
+        assert!(
+            !page
+                .text
+                .iter()
+                .any(|s| s.contains("settlement") || s.contains("billed difference")),
+            "{}",
+            page.title
+        );
     }
+    assert!(pages.iter().any(|page| page.text.contains(&alpha.into())));
     assert!(
         pages[0]
             .text
@@ -2407,11 +2432,7 @@ fn accounting_inspect_first_screen_names_provider_model_and_billing_type() {
             "Select a provider below to see its requests.".to_string(),
         ]
     );
-    for technical in [
-        "Billed cost:",
-        "Collection coverage:",
-        "Known subtotal exact USD:",
-    ] {
+    for technical in ["Collection coverage:", "Known subtotal exact USD:"] {
         let at = root
             .text
             .iter()
@@ -2575,7 +2596,7 @@ fn accounting_inspect_states_the_providers_billed_charge() {
         !root
             .text
             .iter()
-            .any(|s| s == "Billed cost: unavailable — no settlement evidence")
+            .any(|s| s.starts_with("Billed cost: not reported"))
     );
     // The request page states it plainly, and no longer claims the
     // difference is unknowable next to a stated charge.
@@ -2606,7 +2627,7 @@ fn accounting_inspect_states_the_providers_billed_charge() {
             .count(),
         1
     );
-    // A request that stated nothing keeps the honest unavailable line.
+    // A request that stated nothing says its figure is only an estimate.
     let (_, page) = root
         .links
         .iter()
@@ -2615,7 +2636,7 @@ fn accounting_inspect_states_the_providers_billed_charge() {
     assert!(
         pages[*page]
             .text
-            .contains(&"Billed cost: unavailable — no settlement evidence".to_string())
+            .contains(&"Billed cost: not reported — alpha doesn't state its actual charge, so this is an estimate; check the bill from alpha.".to_string())
     );
 }
 

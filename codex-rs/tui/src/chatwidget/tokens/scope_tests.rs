@@ -230,6 +230,10 @@ const OTHERS_BLOCK: [&str; 5] = [
     "To see those requests, open that conversation with /resume and run /cost there.",
 ];
 
+/// The overview's one line on billing for a day of the two other
+/// conversations' requests: neither provider states its charge.
+const NOT_STATED: &str = "Costs are estimates from published prices; local-mock and OpenAI don't state their actual charge, so check the bill from local-mock and OpenAI.";
+
 // Point 1: an empty conversation on a day other conversations spent on says
 // what it covers, what it leaves out and what that cost, never a bare zero.
 #[test]
@@ -238,11 +242,7 @@ fn empty_conversation_states_its_scope_and_the_days_other_conversations() {
     let mut expected =
         vec!["This conversation on 2026-09-16 (UTC): no recorded requests.".to_string()];
     expected.extend(OTHERS_BLOCK.map(String::from));
-    expected.extend([
-        NEXT_STEP.to_string(),
-        "Costs are estimates from published prices; your provider's bill is the final amount."
-            .to_string(),
-    ]);
+    expected.extend([NEXT_STEP.to_string(), NOT_STATED.to_string()]);
     assert_eq!(first_screen(&pages[0]), expected);
     let details = &pages[0].text[expected.len() + 1..];
     assert_eq!(
@@ -348,8 +348,7 @@ fn mixed_provider_day_names_every_route_in_and_outside_the_conversation() {
     expected.extend(OTHERS_BLOCK.map(String::from));
     expected.extend([
         NEXT_STEP.to_string(),
-        "Costs are estimates from published prices; your provider's bill is the final amount."
-            .to_string(),
+        NOT_STATED.to_string(),
         "Select a provider below to see its requests.".to_string(),
     ]);
     assert_eq!(first_screen(&pages[0]), expected);
@@ -808,8 +807,7 @@ fn plan_work(id: u128, owner: ThreadId) -> ObservationQuote {
 // figures from other conversations share the screen.
 #[test]
 fn subscription_only_day_points_at_no_bill() {
-    const BILL: &str =
-        "Costs are estimates from published prices; your provider's bill is the final amount.";
+    const BILL: &str = NOT_STATED;
     const PLAN: &str = "Subscription work is not billed per request; any figure here is what it would cost at API prices.";
     let own = || vec![plan_work(/*id*/ 1, thread(/*n*/ 1))];
     let alone = first_screen(&own_day(own())[0]);

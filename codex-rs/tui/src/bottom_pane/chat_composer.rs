@@ -4823,6 +4823,27 @@ impl ChatComposer {
                 }
             }
         }
+        if self.draft.input_enabled
+            && mask_char.is_none()
+            && !textarea_rect.is_empty()
+            && let Some(hint) = self.slash_input().argument_hint(self.draft.textarea.text())
+        {
+            // The hint follows the typed `/name ` on its single line, as far
+            // as the line has room; typing an argument removes it.
+            let typed = u16::try_from(unicode_width::UnicodeWidthStr::width(
+                self.draft.textarea.text(),
+            ))
+            .unwrap_or(u16::MAX);
+            if typed < textarea_rect.width {
+                let rect = Rect {
+                    x: textarea_rect.x + typed,
+                    width: textarea_rect.width - typed,
+                    height: 1,
+                    ..textarea_rect
+                };
+                Line::from(Span::from(hint).dim()).render(rect, buf);
+            }
+        }
         if !self.draft.input_enabled || textarea_is_empty {
             let text = if self.draft.input_enabled {
                 self.placeholder_text.as_str().to_string()
@@ -5332,6 +5353,47 @@ mod tests {
             buf[(shell_label_x as u16, footer_y)].style().fg,
             Some(Color::LightRed)
         );
+    }
+
+    /// Whether `hint` is shown, dimmed, right after `text` on its composer row.
+    fn argument_hint_at(text: &str, hint: &str) -> bool {
+        let (mut composer, _rx) = new_test_composer();
+        composer.set_text_content(text.to_string(), Vec::new(), Vec::new());
+        composer.move_cursor_to_end();
+        let area = Rect::new(0, 0, 100, 20);
+        let mut buf = Buffer::empty(area);
+        composer.render(area, &mut buf);
+        let typed = format!("› {text}");
+        (0..area.height).any(|y| {
+            let row: String = (0..area.width).map(|x| buf[(x, y)].symbol()).collect();
+            if !row.starts_with(&format!("{typed}{hint}")) {
+                return false;
+            }
+            let x = u16::try_from(typed.chars().count()).unwrap();
+            assert!(buf[(x, y)].style().add_modifier.contains(Modifier::DIM));
+            true
+        })
+    }
+
+    #[test]
+    fn slash_command_argument_hint_shows_until_an_argument_is_typed() {
+        let hint = crate::slash_command::COST_ARGUMENT_HINT;
+        let shown = cfg!(feature = "developer-accounting");
+        assert_eq!(argument_hint_at("/cost ", hint), shown);
+        // Not before the space, and gone once an argument is typed.
+        for text in ["/cost", "/cost 2", "/cost 2026-10-09 ", "/diff "] {
+            let (mut composer, _rx) = new_test_composer();
+            composer.set_text_content(text.to_string(), Vec::new(), Vec::new());
+            let area = Rect::new(0, 0, 100, 20);
+            let mut buf = Buffer::empty(area);
+            composer.render(area, &mut buf);
+            let screen: String = buf
+                .content()
+                .iter()
+                .map(ratatui::buffer::Cell::symbol)
+                .collect();
+            assert!(!screen.contains(hint), "{text}");
+        }
     }
 
     fn plugin_mention_foreground_color(composer: &ChatComposer) -> Option<Color> {

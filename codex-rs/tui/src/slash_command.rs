@@ -4,6 +4,10 @@ use strum_macros::EnumIter;
 use strum_macros::EnumString;
 use strum_macros::IntoStaticStr;
 
+/// The forms `/cost` accepts; the full rules are in its usage message.
+pub(crate) const COST_ARGUMENT_HINT: &str =
+    "[YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)";
+
 /// Commands that can be invoked by starting a message with a leading slash.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString, EnumIter, AsRefStr, IntoStaticStr,
@@ -209,6 +213,15 @@ impl SlashCommand {
                 | SlashCommand::Telegram
                 | SlashCommand::Gpu
         )
+    }
+
+    /// A short, dimmed hint of the accepted arguments, shown in the composer
+    /// after the command and a space until the user types an argument.
+    pub fn argument_hint(self) -> Option<&'static str> {
+        match self {
+            SlashCommand::Cost => Some(COST_ARGUMENT_HINT),
+            _ => None,
+        }
     }
 
     /// Whether this command remains available inside an active side conversation.

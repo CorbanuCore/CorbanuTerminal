@@ -123,6 +123,21 @@ impl<'a> SlashInput<'a> {
         })
     }
 
+    /// The argument hint to show after `/name ` while no argument is typed yet.
+    pub(super) fn argument_hint(&self, text: &str) -> Option<&'static str> {
+        if !self.enabled || self.is_bash_mode || text.contains('\n') {
+            return None;
+        }
+        let (name, rest, rest_offset) = parse_slash_name(text)?;
+        if !rest.is_empty() || rest_offset == name.len() + 1 || name.contains('/') {
+            return None;
+        }
+        match self.command(name)? {
+            SlashCommandItem::Builtin(command) => command.argument_hint(),
+            SlashCommandItem::ServiceTier(_) => None,
+        }
+    }
+
     pub(super) fn should_parse_on_dequeue(&self, text: &str) -> bool {
         self.enabled && !text.starts_with(' ') && text.trim().starts_with('/')
     }
