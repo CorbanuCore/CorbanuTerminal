@@ -9,7 +9,9 @@ broker reads the vault key from Credential Manager itself, under its own PF-27-S
 - **Slice 1 (#363), the broker side** (`network-proxy`, `vault`, `arg0`):
   - **Env keys.** When Core hands a provider key to the broker, it overwrites the key in place in the process
     environment block (same-length `000…`). It also drops the key from the C runtime's tables and sweeps every
-    process heap: any `NAME=value` copy gets `0` characters, and bare copies in free blocks are zeroed.
+    process heap, giving each copy of the value `0` characters:
+    - `NAME=value` entries and copies in free blocks;
+    - bare copies in blocks in use, for values of 20 characters or more.
   - **Broker launch.** The broker's launch environment is built without copying the values Core withholds.
   - **Stored keys** are read inside the broker by the binary's resolver:
     - Core creates `secrets/.vault.lock` before the broker starts. It refuses reparse points and checks the path
@@ -29,12 +31,13 @@ broker reads the vault key from Credential Manager itself, under its own PF-27-S
 
 ## Measured
 
-On a real Windows 11 machine, 2026-10-09, using `C:\CorbanuQA\s09`. The final runs used `29203a1da9` (slice 2,
-with slice 1 merged in):
+On a real Windows 11 machine, 2026-10-09, using `C:\CorbanuQA\s09`. Slice 1 was tested at `3158a4a6b`; the final
+product runs and videos used `17af67d9a8` (slice 2, with slice 1 merged in):
 
 | What | Elevated (SSH) | Normal session (console, medium) |
 | --- | --- | --- |
-| network-proxy lib tests (including the `pf_27_s05` suite over pipes and 10 `pf_27_s09`), vault, arg0 | 319, 59, 9 passed | 319, 59 passed |
+| network-proxy lib tests (including the `pf_27_s05` suite over pipes and 11 `pf_27_s09`), vault, arg0 | 320, 59, 9 passed | 320, 59 passed |
+| `credential_broker` tests in parallel, as the PF-13 credential canary runs them | 5 of 5 runs passed (70 tests) | — |
 | http-client and Core `model_broker_auth` | 1 + 6 passed | 1 + 6 passed |
 | Memory scan, after Core's environment has grown: hits before → after hand-over | found (ASCII and UTF-16) → 0 | same |
 | Read-only lock probe under the broker token | write-open `PermissionDenied`; read-only lock works | same |
@@ -42,14 +45,20 @@ with slice 1 merged in):
 | `corbanu exec`, GLM 5.2, env key | answers; key handed over and removed; `token+dacl+job` | same |
 | `corbanu exec`, GLM 5.2, vault key | answers, with the vault key in the profile's file fallback (see limits) | answers, with the vault key in Credential Manager and no fallback file |
 | Elevated sandbox command (`whoami`) with brokered auth | `codexsandboxoffline` | not run (one-time admin setup needed) |
-| Heap sweep per handed-over key (debug build) | 117 ms | 114 ms |
+| Heap sweep per handed-over key (debug build) | 112 ms | 111 ms |
 
 - **Clippy `-D warnings`:** clean on Windows for network-proxy, vault, arg0, http-client and core, and on Linux on
   the RTX box for the same crates. Linux tests pass: network-proxy 298, vault 59, arg0 10, http-client 73, Core 5.
 - **Reviews (Opus 5.5 High):**
-  - slice 1: APPROVE, then a scoped re-review of the fixes and the roots change: APPROVE;
+  - slice 1: APPROVE, then two scoped re-reviews (the fixes and the roots change; the busy-block sweep): APPROVE;
   - slice 2: APPROVE.
   - The non-blocking findings were fixed, or are listed below.
+- **Canary flake, found and fixed in #363.** The PF-13 credential canary on `windows-2022` once found one leftover
+  key copy in the memory-scan child; that commit passed elsewhere.
+  - **Cause:** the C runtime frees its start-up copies of the environment unwiped. Reused memory can then keep the
+    value without its `NAME=` prefix, in a block that is in use.
+  - **Fix:** the sweep now covers bare copies in blocks in use.
+  - **Test:** a deterministic `pf_27_s09` test pins it.
 - **SOP videos:** GLM 5.2, leak-scanned (no key value, no key-shaped string), listed in
   [qa/demos/index/PF-27-S09.md](../../../demos/index/PF-27-S09.md):
   - env key in a normal session;
@@ -64,9 +73,13 @@ with slice 1 merged in):
   - A bare copy of the key that other Core code keeps in a live block (for example a `std::env::vars()` snapshot)
     is not found. The sweep only rewrites `NAME=value` entries and free blocks.
 - **The heap sweep is best effort.**
-  - It writes into other code's live blocks, but only where a whole `NAME=value` entry matches.
+  - It writes `0` characters into other code's live blocks wherever a whole value of 20 or more characters
+    matches. Any other copy of the key that Core held is lost on purpose, because Core must not use the key after
+    the hand-over.
+  - Between the check and the write, the owner of a live block could reuse those bytes, and the sweep would then
+    overwrite new data. The window is tiny, and it is not closed.
   - `HeapLock` does not lock a heap created with `HEAP_NO_SERIALIZE`, so walking one races with its owner.
-  - It costs about 115 ms per key at session start (debug build).
+  - It costs about 110 ms per key at session start (debug build).
 - **Over SSH there is no Credential Manager.** In an OpenSSH session authenticated with a key, the vault keeps its
   key in the profile's file fallback. This was already the case before this sprint. The broker reads that file the
   same way. In the console session the key is in Credential Manager and the broker reads it.

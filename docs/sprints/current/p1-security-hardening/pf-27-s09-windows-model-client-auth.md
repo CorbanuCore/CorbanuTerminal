@@ -68,7 +68,7 @@ Allocated 2026-10-09 to the broker lane; slice 2 is on `sec/pf-27-s09-core`.
 ## Done
 
 - [x] Planned (2026-10-08); allocated 2026-10-09 (broker lane).
-- [x] Slice 1 (#363), broker side: Windows env scrub (environment block, C runtime tables, heap sweep); no withheld
+- [x] Slice 1 (#363), broker side: Windows env scrub (environment block, C runtime tables, every heap copy); no withheld
   value in the broker's launch environment; stored keys read in the broker (lock by Core, read-only lock in the
   broker); checked pipe send; platform roots loaded read-only (the broker trusted none before).
 - [x] Slice 2, Core: the Windows start spawns the broker, hands over env keys and routes every frame-bearing
@@ -85,7 +85,7 @@ Allocated 2026-10-09 to the broker lane; slice 2 is on `sec/pf-27-s09-core`.
 
 - [x] Windows clippy and Linux clippy (RTX box) `-D warnings`. Focused tests elevated and in a normal session on the
   real Windows 11 machine, plus Linux and macOS. `windows-security-probes` on `windows-2022` (#363).
-- [x] Opus 5.5 High reviews: slice 1 APPROVE (and a scoped re-review), slice 2 APPROVE; findings fixed or recorded.
+- [x] Opus 5.5 High reviews: slice 1 APPROVE (and two scoped re-reviews), slice 2 APPROVE; findings fixed or recorded.
 - [ ] Travis accepts the gate evidence.
 
 ## Exit evidence
