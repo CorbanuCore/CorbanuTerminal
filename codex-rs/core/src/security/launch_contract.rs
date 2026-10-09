@@ -573,13 +573,13 @@ impl LaunchContract {
     /// not list, so an unprotected launch (a TUI workspace probe) would
     /// otherwise reopen the vault to commands that are already running.
     #[cfg(windows)]
-    pub(crate) fn windows_deny_read_paths(
+    pub(crate) fn windows_deny_read_targets(
         &self,
         cwd: &AbsolutePathBuf,
-    ) -> Result<Vec<AbsolutePathBuf>, String> {
+    ) -> Result<codex_windows_sandbox::DenyReadTargets, String> {
         let mut policy = FileSystemSandboxPolicy::restricted(self.protected_entries());
         policy.remove_skip_missing_path_entries();
-        codex_windows_sandbox::resolve_windows_deny_read_paths(&policy, cwd)
+        codex_windows_sandbox::resolve_windows_deny_read_targets(&policy, cwd)
     }
 
     /// Verifies that `profile` denies reading every protected path and writing
@@ -698,9 +698,10 @@ impl LaunchContract {
 
 /// PF-27-S07: a lock file in `CODEX_HOME` that every armed process holds
 /// shared for its lifetime, so a process with the flag off never removes the
-/// new-file deny under one that relies on it.
+/// new-file deny, or (#301) the sandbox's deny-read entries, under one that
+/// relies on them.
 #[cfg(windows)]
-const ARMED_LOCK_FILE: &str = ".secretless-launch.lock";
+const ARMED_LOCK_FILE: &str = codex_windows_sandbox::SECRETLESS_LAUNCH_LOCK_FILE;
 
 /// PF-27-S07: a contract's hold on the armed lock file.
 #[cfg(windows)]

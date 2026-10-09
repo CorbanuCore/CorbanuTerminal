@@ -37,7 +37,7 @@ struct RunnerTransportRequest {
     read_roots_override: Option<Vec<PathBuf>>,
     read_roots_include_platform_defaults: bool,
     write_roots_override: Option<Vec<PathBuf>>,
-    deny_read_paths_override: Vec<PathBuf>,
+    deny_read_override: crate::DenyReadTargets,
     deny_write_paths_override: Vec<PathBuf>,
     proxy_enforced: bool,
     proxy_settings_mode: crate::WindowsSandboxProxySettingsMode,
@@ -55,7 +55,7 @@ fn spawn_runner_transport_with_retry<T>(
         Option<&[PathBuf]>,
         bool,
         Option<&[PathBuf]>,
-        &[PathBuf],
+        &crate::DenyReadTargets,
         &[PathBuf],
         bool,
         crate::WindowsSandboxProxySettingsMode,
@@ -82,7 +82,7 @@ fn spawn_runner_transport_with_retry<T>(
                 request.read_roots_override.as_deref(),
                 request.read_roots_include_platform_defaults,
                 request.write_roots_override.as_deref(),
-                &request.deny_read_paths_override,
+                &request.deny_read_override,
                 &request.deny_write_paths_override,
                 request.proxy_enforced,
                 request.proxy_settings_mode,
@@ -122,16 +122,12 @@ pub(crate) async fn spawn_windows_sandbox_session_elevated_for_permission_profil
     read_roots_override: Option<&[PathBuf]>,
     read_roots_include_platform_defaults: bool,
     write_roots_override: Option<&[PathBuf]>,
-    deny_read_paths_override: &[AbsolutePathBuf],
+    deny_read_override: &crate::DenyReadTargets,
     deny_write_paths_override: &[AbsolutePathBuf],
     tty: bool,
     stdin_open: bool,
     use_private_desktop: bool,
 ) -> Result<SpawnedProcess> {
-    let deny_read_paths_override = deny_read_paths_override
-        .iter()
-        .map(AbsolutePathBuf::to_path_buf)
-        .collect::<Vec<_>>();
     let deny_write_paths_override = deny_write_paths_override
         .iter()
         .map(AbsolutePathBuf::to_path_buf)
@@ -150,7 +146,7 @@ pub(crate) async fn spawn_windows_sandbox_session_elevated_for_permission_profil
         read_roots_override,
         read_roots_include_platform_defaults,
         write_roots_override,
-        &deny_read_paths_override,
+        deny_read_override,
         &deny_write_paths_override,
         proxy_enforced,
         proxy_settings_mode,
@@ -181,7 +177,7 @@ pub(crate) async fn spawn_windows_sandbox_session_elevated_for_permission_profil
         read_roots_override: read_roots_override.map(<[PathBuf]>::to_vec),
         read_roots_include_platform_defaults,
         write_roots_override: write_roots_override.map(<[PathBuf]>::to_vec),
-        deny_read_paths_override,
+        deny_read_override: deny_read_override.clone(),
         deny_write_paths_override,
         proxy_enforced,
         proxy_settings_mode,

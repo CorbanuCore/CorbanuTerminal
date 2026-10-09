@@ -213,7 +213,9 @@ pub struct SetupRootOverrides {
     pub read_roots: Option<Vec<PathBuf>>,
     pub read_roots_include_platform_defaults: bool,
     pub write_roots: Option<Vec<PathBuf>>,
-    pub deny_read_paths: Option<Vec<PathBuf>>,
+    /// The launch's deny-read rules with their paths; `None` for a refresh
+    /// that does not carry them (it adds and removes no deny-read entry).
+    pub deny_read: Option<crate::DenyReadTargets>,
     pub deny_write_paths: Option<Vec<PathBuf>>,
 }
 
@@ -285,7 +287,7 @@ pub fn run_setup_refresh_with_extra_read_roots(
             read_roots: Some(read_roots),
             read_roots_include_platform_defaults: false,
             write_roots: Some(Vec::new()),
-            deny_read_paths: None,
+            deny_read: None,
             deny_write_paths: None,
         },
         /*offline_proxy_settings_override*/ None,
@@ -301,7 +303,6 @@ fn run_setup_refresh_inner(
         anyhow::bail!("unsupported filesystem permissions for Windows sandbox setup");
     }
     let (read_roots, write_roots) = build_payload_roots(&request, &overrides);
-    let deny_read_paths = build_payload_deny_read_paths(overrides.deny_read_paths);
     let deny_write_paths = build_payload_deny_write_paths(&request, overrides.deny_write_paths);
     let offline_proxy_settings =
         offline_proxy_settings_for_request(&request, offline_proxy_settings_override);
@@ -313,7 +314,8 @@ fn run_setup_refresh_inner(
         command_cwd: request.command_cwd.to_path_buf(),
         read_roots,
         write_roots,
-        deny_read_paths,
+        deny_read_paths: payload_deny_read_paths(overrides.deny_read.as_ref()),
+        deny_read: overrides.deny_read,
         deny_write_paths,
         proxy_ports: offline_proxy_settings.proxy_ports,
         allow_local_binding: offline_proxy_settings.allow_local_binding,
@@ -642,6 +644,10 @@ struct ElevationPayload {
     command_cwd: PathBuf,
     read_roots: Vec<PathBuf>,
     write_roots: Vec<PathBuf>,
+    #[serde(default)]
+    deny_read: Option<crate::DenyReadTargets>,
+    /// `deny_read`'s paths, flattened, for a setup helper that predates rules
+    /// (a mismatched copy found on `PATH`): it still applies them.
     #[serde(default)]
     deny_read_paths: Vec<PathBuf>,
     #[serde(default)]
@@ -1016,7 +1022,6 @@ fn run_elevated_setup_inner(
         )
     })?;
     let (read_roots, write_roots) = build_payload_roots(&request, &overrides);
-    let deny_read_paths = build_payload_deny_read_paths(overrides.deny_read_paths);
     let deny_write_paths = build_payload_deny_write_paths(&request, overrides.deny_write_paths);
     let offline_proxy_settings =
         offline_proxy_settings_for_request(&request, offline_proxy_settings_override);
@@ -1028,7 +1033,8 @@ fn run_elevated_setup_inner(
         command_cwd: request.command_cwd.to_path_buf(),
         read_roots,
         write_roots,
-        deny_read_paths,
+        deny_read_paths: payload_deny_read_paths(overrides.deny_read.as_ref()),
+        deny_read: overrides.deny_read,
         deny_write_paths,
         proxy_ports: offline_proxy_settings.proxy_ports,
         allow_local_binding: offline_proxy_settings.allow_local_binding,
@@ -1077,6 +1083,7 @@ pub fn run_elevated_provisioning_setup(
         command_cwd: codex_home.to_path_buf(),
         read_roots: Vec::new(),
         write_roots: Vec::new(),
+        deny_read: None,
         deny_read_paths: Vec::new(),
         deny_write_paths: Vec::new(),
         proxy_ports: settings.proxy_ports,
@@ -1148,10 +1155,14 @@ fn build_payload_deny_write_paths(
     deny_write_paths
 }
 
-fn build_payload_deny_read_paths(explicit_deny_read_paths: Option<Vec<PathBuf>>) -> Vec<PathBuf> {
-    // Keep the configured spelling here so the ACL layer can plan both the
-    // lexical path and any existing canonical target for reparse-point aliases.
-    explicit_deny_read_paths.unwrap_or_default()
+fn payload_deny_read_paths(deny_read: Option<&crate::DenyReadTargets>) -> Vec<PathBuf> {
+    deny_read.map_or_else(Vec::new, |deny_read| {
+        deny_read
+            .paths()
+            .into_iter()
+            .map(AbsolutePathBuf::into_path_buf)
+            .collect()
+    })
 }
 
 fn expand_user_profile_root(roots: Vec<PathBuf>) -> Vec<PathBuf> {
@@ -1940,7 +1951,7 @@ mod tests {
                 read_roots: Some(vec![readable_root.clone()]),
                 read_roots_include_platform_defaults: true,
                 write_roots: None,
-                deny_read_paths: None,
+                deny_read: None,
                 deny_write_paths: None,
             },
         );
@@ -1987,7 +1998,7 @@ mod tests {
                 read_roots: Some(vec![readable_root.clone()]),
                 read_roots_include_platform_defaults: false,
                 write_roots: None,
-                deny_read_paths: None,
+                deny_read: None,
                 deny_write_paths: None,
             },
         );
@@ -2043,7 +2054,7 @@ mod tests {
             read_roots: None,
             read_roots_include_platform_defaults: false,
             write_roots: Some(override_roots.clone()),
-            deny_read_paths: None,
+            deny_read: None,
             deny_write_paths: None,
         };
 
@@ -2163,19 +2174,6 @@ mod tests {
             canonical_windows_platform_default_roots()
                 .into_iter()
                 .all(|path| roots.contains(&path))
-        );
-    }
-
-    #[test]
-    fn build_payload_deny_read_paths_preserves_explicit_paths() {
-        let tmp = TempDir::new().expect("tempdir");
-        let existing = tmp.path().join("secret.env");
-        let missing = tmp.path().join("future.env");
-        fs::write(&existing, "secret").expect("write existing");
-
-        assert_eq!(
-            super::build_payload_deny_read_paths(Some(vec![existing.clone(), missing.clone()])),
-            vec![existing, missing]
         );
     }
 }

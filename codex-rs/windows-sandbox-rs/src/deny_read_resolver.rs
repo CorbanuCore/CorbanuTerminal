@@ -1,3 +1,5 @@
+use crate::deny_read_targets::DenyReadRule;
+use crate::deny_read_targets::DenyReadTargets;
 use codex_protocol::permissions::FileSystemAccessMode;
 use codex_protocol::permissions::FileSystemPath;
 use codex_protocol::permissions::FileSystemSandboxEntry;
@@ -24,49 +26,48 @@ pub fn resolve_windows_deny_read_paths(
     file_system_sandbox_policy: &FileSystemSandboxPolicy,
     cwd: &AbsolutePathBuf,
 ) -> Result<Vec<AbsolutePathBuf>, String> {
-    let mut paths = Vec::new();
-    let mut seen = HashSet::new();
+    Ok(resolve_windows_deny_read_targets(file_system_sandbox_policy, cwd)?.paths())
+}
 
+/// [`resolve_windows_deny_read_paths`], keeping which rule produced each
+/// path. Every configured rule is listed, including a glob that matches
+/// nothing now, so the persistent sync keeps its earlier entries (#304/S1).
+pub fn resolve_windows_deny_read_targets(
+    file_system_sandbox_policy: &FileSystemSandboxPolicy,
+    cwd: &AbsolutePathBuf,
+) -> Result<DenyReadTargets, String> {
+    let mut targets = DenyReadTargets::default();
     for path in file_system_sandbox_policy.get_unreadable_roots_with_cwd(cwd.as_path()) {
-        push_absolute_path(&mut paths, &mut seen, path.into_path_buf())?;
+        let path = absolute_path(path.as_path())?;
+        targets.add(DenyReadRule::Path(path.to_path_buf()), vec![path]);
     }
 
-    let unreadable_globs = file_system_sandbox_policy.get_unreadable_globs_with_cwd(cwd.as_path());
-    if unreadable_globs.is_empty() {
-        return Ok(paths);
+    for pattern in file_system_sandbox_policy.get_unreadable_globs_with_cwd(cwd.as_path()) {
+        let glob_policy = FileSystemSandboxPolicy::restricted(vec![FileSystemSandboxEntry {
+            path: FileSystemPath::GlobPattern {
+                pattern: pattern.clone(),
+            },
+            access: FileSystemAccessMode::Deny,
+            missing_path_behavior: None,
+        }]);
+        let mut paths = Vec::new();
+        if let Some(matcher) = ReadDenyMatcher::try_new(&glob_policy, cwd.as_path())? {
+            let scan_plan =
+                glob_scan_plan(&pattern, file_system_sandbox_policy.glob_scan_max_depth);
+            collect_existing_glob_matches(
+                &scan_plan.root,
+                &matcher,
+                &mut paths,
+                &mut HashSet::new(),
+                &mut HashSet::new(),
+                scan_plan.max_depth,
+                /*depth*/ 0,
+            )?;
+        }
+        targets.add(DenyReadRule::Glob(pattern), paths);
     }
 
-    let glob_policy = FileSystemSandboxPolicy::restricted(
-        unreadable_globs
-            .iter()
-            .map(|pattern| FileSystemSandboxEntry {
-                path: FileSystemPath::GlobPattern {
-                    pattern: pattern.clone(),
-                },
-                access: FileSystemAccessMode::Deny,
-                missing_path_behavior: None,
-            })
-            .collect(),
-    );
-    let Some(matcher) = ReadDenyMatcher::try_new(&glob_policy, cwd.as_path())? else {
-        return Ok(paths);
-    };
-
-    for pattern in unreadable_globs {
-        let mut seen_scan_dirs = HashSet::new();
-        let scan_plan = glob_scan_plan(&pattern, file_system_sandbox_policy.glob_scan_max_depth);
-        collect_existing_glob_matches(
-            &scan_plan.root,
-            &matcher,
-            &mut paths,
-            &mut seen,
-            &mut seen_scan_dirs,
-            scan_plan.max_depth,
-            /*depth*/ 0,
-        )?;
-    }
-
-    Ok(paths)
+    Ok(targets)
 }
 
 fn collect_existing_glob_matches(
@@ -128,12 +129,15 @@ fn push_absolute_path(
     seen: &mut HashSet<PathBuf>,
     path: PathBuf,
 ) -> Result<(), String> {
-    let absolute_path = AbsolutePathBuf::from_absolute_path(dunce::simplified(&path))
-        .map_err(|err| err.to_string())?;
+    let absolute_path = absolute_path(&path)?;
     if seen.insert(absolute_path.to_path_buf()) {
         paths.push(absolute_path);
     }
     Ok(())
+}
+
+fn absolute_path(path: &Path) -> Result<AbsolutePathBuf, String> {
+    AbsolutePathBuf::from_absolute_path(dunce::simplified(path)).map_err(|err| err.to_string())
 }
 
 fn glob_scan_plan(pattern: &str, configured_max_depth: Option<usize>) -> GlobScanPlan {

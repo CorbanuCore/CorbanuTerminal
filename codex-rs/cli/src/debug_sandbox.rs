@@ -495,6 +495,22 @@ async fn run_command_under_windows_session(
     }
 
     let empty_paths: &[AbsolutePathBuf] = &[];
+    // #304: the elevated backend's deny-read sync removes the entries of
+    // rules a launch does not list, so this launch lists (and enforces) the
+    // profile's rules. The legacy backend refuses deny-read profiles itself.
+    let deny_read = if backend_level == WindowsSandboxLevel::Elevated {
+        let (mut file_system, _) = permission_profile.to_runtime_permissions();
+        file_system.remove_skip_missing_path_entries();
+        match codex_windows_sandbox::resolve_windows_deny_read_targets(&file_system, &cwd) {
+            Ok(deny_read) => deny_read,
+            Err(err) => {
+                eprintln!("windows sandbox failed: {err}");
+                std::process::exit(1);
+            }
+        }
+    } else {
+        codex_windows_sandbox::DenyReadTargets::default()
+    };
     let spawned = spawn_windows_sandbox_session_for_level(WindowsSandboxSessionRequest {
         permission_profile,
         workspace_roots: workspace_roots.as_slice(),
@@ -510,7 +526,7 @@ async fn run_command_under_windows_session(
         read_roots_override: None,
         read_roots_include_platform_defaults: false,
         write_roots_override: None,
-        deny_read_paths_override: empty_paths,
+        deny_read_override: &deny_read,
         deny_write_paths_override: empty_paths,
         tty: false,
         stdin_open: true,

@@ -49,6 +49,7 @@ pub async fn spawn_process(request: SpawnRequest<'_>) -> Result<SpawnedProcess> 
             let codex_home = codex_utils_home_dir::find_codex_home()
                 .context("windows sandbox: failed to resolve codex_home")?;
             let empty_paths = &[];
+            let no_deny_read = codex_windows_sandbox::DenyReadTargets::default();
             let overrides = windows.filesystem_overrides;
 
             return codex_windows_sandbox::spawn_windows_sandbox_session_for_level(
@@ -72,9 +73,8 @@ pub async fn spawn_process(request: SpawnRequest<'_>) -> Result<SpawnedProcess> 
                         .is_some_and(|value| value.read_roots_include_platform_defaults),
                     write_roots_override: overrides
                         .and_then(|value| value.write_roots_override.as_deref()),
-                    deny_read_paths_override: overrides.map_or(empty_paths, |value| {
-                        value.additional_deny_read_paths.as_slice()
-                    }),
+                    deny_read_override: overrides
+                        .map_or(&no_deny_read, |value| &value.additional_deny_read),
                     deny_write_paths_override: overrides.map_or(empty_paths, |value| {
                         value.additional_deny_write_paths.as_slice()
                     }),
