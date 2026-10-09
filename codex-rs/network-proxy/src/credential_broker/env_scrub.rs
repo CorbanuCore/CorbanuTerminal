@@ -118,9 +118,10 @@ unsafe fn environ() -> *mut *mut libc::c_char {
 }
 
 /// Returns the value of `name` (UTF-8) and removes it from the environment,
-/// with its bytes overwritten in the process environment block and in the C
-/// runtime's copies. `None` when unset or empty (nothing is changed), or when
-/// the value is not valid Unicode (it is still removed and overwritten).
+/// with its bytes overwritten in the process environment block, in the C
+/// runtime's copies and in freed heap blocks. `None` when unset or empty
+/// (nothing is changed), or when the value is not valid Unicode (it is still
+/// removed and overwritten).
 #[cfg(windows)]
 pub(crate) fn take_env_var(name: &str) -> Option<Zeroizing<Vec<u8>>> {
     if name.is_empty() || name.contains(['=', '\0']) {
@@ -137,15 +138,24 @@ pub(crate) fn take_env_var(name: &str) -> Option<Zeroizing<Vec<u8>>> {
     // this crate's writers hold `env_write_lock`.
     unsafe { std::env::remove_var(name) };
     let mut utf8 = Zeroizing::new(Vec::with_capacity(value.len() * 3));
+    let mut valid = true;
     for unit in char::decode_utf16(value.iter().copied()) {
         let Ok(unit) = unit else {
-            return None;
+            valid = false;
+            break;
         };
         let mut buffer = [0_u8; 4];
         utf8.extend_from_slice(unit.encode_utf8(&mut buffer).as_bytes());
         buffer.fill(0);
     }
-    Some(utf8)
+    let mut wide = Zeroizing::new(Vec::with_capacity(value.len() * 2));
+    for unit in value.iter() {
+        wide.extend_from_slice(&unit.to_le_bytes());
+    }
+    // The C runtime and the loader copied the launch environment at start-up
+    // and freed the copies without wiping them.
+    windows_env::wipe_freed_heap_copies(&[wide.as_slice(), utf8.as_slice()]);
+    valid.then_some(utf8)
 }
 
 /// PF-27-S09: the Windows environment, read and overwritten without copies
@@ -217,6 +227,76 @@ mod windows_env {
             });
             let wide: Vec<u16> = name.encode_utf16().collect();
             overwrite_table(*__p__wenviron(), &wide, |entry: *mut u16| entry);
+        }
+    }
+
+    /// Overwrites every occurrence of a needle (at least 8 bytes) inside the
+    /// free blocks of this process's heaps: copies freed without being wiped
+    /// (the C runtime's start-up copies of the environment, for one). Each
+    /// heap is locked while it is walked. Only bytes inside a free block's
+    /// data that equal a whole needle are written, which no heap metadata can
+    /// be, so the heap stays consistent.
+    pub(super) fn wipe_freed_heap_copies(needles: &[&[u8]]) {
+        use windows_sys::Win32::System::Memory::GetProcessHeaps;
+        use windows_sys::Win32::System::Memory::HeapLock;
+        use windows_sys::Win32::System::Memory::HeapUnlock;
+        use windows_sys::Win32::System::Memory::HeapWalk;
+        use windows_sys::Win32::System::Memory::PROCESS_HEAP_ENTRY;
+        use windows_sys::Win32::System::Memory::PROCESS_HEAP_ENTRY_BUSY;
+        use windows_sys::Win32::System::Memory::PROCESS_HEAP_REGION;
+        use windows_sys::Win32::System::Memory::PROCESS_HEAP_UNCOMMITTED_RANGE;
+        let needles: Vec<&[u8]> = needles
+            .iter()
+            .copied()
+            .filter(|needle| needle.len() >= 8)
+            .collect();
+        if needles.is_empty() {
+            return;
+        }
+        // SAFETY: a size query, then a fill of at most `heaps.len()` handles.
+        let mut heaps = vec![0; unsafe { GetProcessHeaps(0, std::ptr::null_mut()) } as usize + 8];
+        let count = unsafe { GetProcessHeaps(heaps.len() as u32, heaps.as_mut_ptr()) } as usize;
+        heaps.truncate(count.min(heaps.len()));
+        let skip = PROCESS_HEAP_ENTRY_BUSY | PROCESS_HEAP_REGION | PROCESS_HEAP_UNCOMMITTED_RANGE;
+        for heap in heaps {
+            // SAFETY: a heap of this process; unlocked below.
+            if unsafe { HeapLock(heap) } == 0 {
+                continue;
+            }
+            // SAFETY: zeroed POD; a null `lpData` starts the walk.
+            let mut entry: PROCESS_HEAP_ENTRY = unsafe { std::mem::zeroed() };
+            // SAFETY: the heap is locked, so the walk and the free blocks it
+            // reports stay valid until `HeapUnlock`.
+            while unsafe { HeapWalk(heap, &mut entry) } != 0 {
+                if u32::from(entry.wFlags) & skip != 0 || entry.lpData.is_null() {
+                    continue;
+                }
+                // SAFETY: a free block's committed data, `cbData` bytes long.
+                let data = unsafe {
+                    std::slice::from_raw_parts_mut(entry.lpData.cast::<u8>(), entry.cbData as usize)
+                };
+                for needle in &needles {
+                    wipe(data, needle);
+                }
+            }
+            // SAFETY: locked above.
+            unsafe { HeapUnlock(heap) };
+        }
+    }
+
+    /// Zeroes every occurrence of `needle` in `data`.
+    fn wipe(data: &mut [u8], needle: &[u8]) {
+        let mut start = 0;
+        while start + needle.len() <= data.len() {
+            if data[start..start + needle.len()] == *needle {
+                for byte in &mut data[start..start + needle.len()] {
+                    // SAFETY: a valid byte of the block.
+                    unsafe { std::ptr::write_volatile(byte, 0) };
+                }
+                start += needle.len();
+            } else {
+                start += 1;
+            }
         }
     }
 
