@@ -24,6 +24,8 @@
 
 use crate::token::get_current_token_for_restriction;
 use crate::token::get_logon_sid_bytes;
+use crate::token::get_user_sid_bytes;
+use crate::winutil::string_from_sid_bytes;
 use crate::winutil::to_wide;
 use anyhow::Context;
 use anyhow::Result;
@@ -45,6 +47,7 @@ use windows_sys::Win32::Security::ACL_REVISION;
 use windows_sys::Win32::Security::ACL_SIZE_INFORMATION;
 use windows_sys::Win32::Security::AclSizeInformation;
 use windows_sys::Win32::Security::AddAce;
+use windows_sys::Win32::Security::Authorization::ConvertStringSecurityDescriptorToSecurityDescriptorW;
 use windows_sys::Win32::Security::Authorization::GetSecurityInfo;
 use windows_sys::Win32::Security::Authorization::SE_WINDOW_OBJECT;
 use windows_sys::Win32::Security::Authorization::SetSecurityInfo;
@@ -55,8 +58,10 @@ use windows_sys::Win32::Security::GetAclInformation;
 use windows_sys::Win32::Security::INHERIT_ONLY_ACE;
 use windows_sys::Win32::Security::INHERITED_ACE;
 use windows_sys::Win32::Security::InitializeAcl;
+use windows_sys::Win32::Security::SECURITY_ATTRIBUTES;
 use windows_sys::Win32::Security::TOKEN_QUERY;
 use windows_sys::Win32::Storage::FileSystem::READ_CONTROL;
+use windows_sys::Win32::Storage::FileSystem::SYNCHRONIZE;
 use windows_sys::Win32::Storage::FileSystem::WRITE_DAC;
 use windows_sys::Win32::System::Pipes::PeekNamedPipe;
 use windows_sys::Win32::System::StationsAndDesktops::CloseDesktop;
@@ -67,7 +72,7 @@ use windows_sys::Win32::System::StationsAndDesktops::GetUserObjectInformationW;
 use windows_sys::Win32::System::StationsAndDesktops::OpenDesktopW;
 use windows_sys::Win32::System::StationsAndDesktops::OpenWindowStationW;
 use windows_sys::Win32::System::StationsAndDesktops::UOI_NAME;
-use windows_sys::Win32::System::Threading::CreateMutexW;
+use windows_sys::Win32::System::Threading::CreateMutexExW;
 use windows_sys::Win32::System::Threading::GetCurrentThreadId;
 use windows_sys::Win32::System::Threading::OpenProcessToken;
 use windows_sys::Win32::System::Threading::ReleaseMutex;
@@ -106,9 +111,11 @@ pub(crate) const COMMAND_STATION_ACCESS: u32 =
 /// start there (measured likewise): read and write objects. No hooks,
 /// windows or menus.
 pub(crate) const DESKTOP_ACCESS: u32 = DESKTOP_READOBJECTS | DESKTOP_WRITEOBJECTS;
-/// Serializes window-object DACL edits across Core processes in a session.
-const DACL_MUTEX_NAME: &str = "Local\\CodexSandboxWindowAccess";
-const DACL_MUTEX_TIMEOUT_MS: u32 = 10_000;
+/// Serializes window-object DACL edits across Core processes (see
+/// [`with_dacl_lock`]); the user SID and window station follow.
+const DACL_MUTEX_PREFIX: &str = "Local\\CodexSandboxWindowAccess";
+/// Each edit takes well under a millisecond.
+const DACL_MUTEX_TIMEOUT_MS: u32 = 2_000;
 
 /// The name of this process's window station (`WinSta0` in an interactive
 /// session, `Service-0x0-<logon id>$` in an SSH session or a service).
@@ -328,6 +335,49 @@ pub fn wait_for_console_host_start(output_read: HANDLE, timeout: std::time::Dura
     }
 }
 
+/// Opens or creates this user's DACL-edit mutex for this window station.
+fn dacl_mutex() -> Option<HANDLE> {
+    let user = current_user_sid_string()?;
+    let station = current_window_station_name()?;
+    let name = to_wide(format!("{DACL_MUTEX_PREFIX}-{user}-{station}"));
+    let sddl = to_wide(format!("D:P(A;;GA;;;{user})(A;;GA;;;SY)"));
+    let mut descriptor: *mut c_void = ptr::null_mut();
+    // SAFETY: parses `sddl` into a descriptor freed below.
+    if unsafe {
+        ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            sddl.as_ptr(),
+            1,
+            &mut descriptor,
+            ptr::null_mut(),
+        )
+    } == 0
+    {
+        return None;
+    }
+    let attributes = SECURITY_ATTRIBUTES {
+        nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+        lpSecurityDescriptor: descriptor,
+        bInheritHandle: 0,
+    };
+    // SAFETY: opens or creates a named mutex with only the access waiting
+    // needs (a mutex made at another integrity level still opens).
+    let mutex = unsafe { CreateMutexExW(&attributes, name.as_ptr(), 0, SYNCHRONIZE) };
+    // SAFETY: allocated above.
+    unsafe { LocalFree(descriptor as HLOCAL) };
+    (mutex != 0).then_some(mutex)
+}
+
+fn current_user_sid_string() -> Option<String> {
+    // SAFETY: the token is closed right after reading its user.
+    let sid = unsafe {
+        let token = get_current_token_for_restriction().ok()?;
+        let sid = get_user_sid_bytes(token);
+        CloseHandle(token);
+        sid.ok()?
+    };
+    string_from_sid_bytes(&sid).ok()
+}
+
 /// The logon SID of `process`'s token (a process Core started).
 pub(crate) fn process_logon_sid(process: HANDLE) -> Result<Vec<u8>> {
     let mut token: HANDLE = 0;
@@ -354,17 +404,17 @@ pub(crate) fn current_logon_sid() -> Result<Vec<u8>> {
 }
 
 /// Serializes DACL edits on window objects, in this process and, through a
-/// named mutex in this session's namespace, across Core processes. Without
-/// it, two read-modify-write edits can lose one. If the named mutex can't be
-/// had (another user created it), only this process's edits are serialized.
+/// named mutex, across this user's Core processes on this window station.
+/// Without it, two read-modify-write edits can lose one. The mutex admits
+/// only this user and SYSTEM, so the elevated sandbox's commands can't hold
+/// it; if it can't be had (another user took the name), or isn't released
+/// in time, only this process's edits are serialized.
 fn with_dacl_lock<T>(edit: impl FnOnce() -> T) -> T {
     static LOCK: Mutex<()> = Mutex::new(());
     let _guard = LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let name = to_wide(DACL_MUTEX_NAME);
-    // SAFETY: opens or creates a named mutex; closed below.
-    let mutex = unsafe { CreateMutexW(ptr::null(), 0, name.as_ptr()) };
+    let mutex = dacl_mutex().unwrap_or(0);
     // SAFETY: waits on the mutex opened above (abandoned counts as owned).
     let owned = mutex != 0
         && matches!(
