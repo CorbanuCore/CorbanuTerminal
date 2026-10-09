@@ -177,6 +177,9 @@ pub(crate) fn take_env_var(name: &str) -> Option<Zeroizing<Vec<u8>>> {
         &[wide.as_slice()]
     };
     windows_env::wipe_heap_copies(name, patterns, &own);
+    // An environment block Windows replaced when the environment grew stays
+    // in private memory outside the heaps, with its `NAME=value` entries.
+    windows_env::wipe_private_entries(name, patterns);
     tracing::debug!(
         "environment sweep for one handed-over variable took {} ms",
         started.elapsed().as_millis()
@@ -268,6 +271,143 @@ mod windows_env {
             });
             let wide: Vec<u16> = name.encode_utf16().collect();
             overwrite_table(*__p__wenviron(), &wide, |entry: *mut u16| entry);
+        }
+    }
+
+    /// Gives every `name=value` entry (narrow or UTF-16) in this process's
+    /// private, committed, writable memory outside the heaps' locks `0`
+    /// characters for its value: an environment block Windows replaced when
+    /// the environment grew (it shares an allocation with the process
+    /// parameters, so it is never freed), copies on thread stacks. Memory is
+    /// read with `ReadProcessMemory` and written with `WriteProcessMemory`,
+    /// which fail instead of faulting if another thread releases a region
+    /// meanwhile; only whole entries are written.
+    pub(super) fn wipe_private_entries(name: &str, values: &[&[u8]]) {
+        use windows_sys::Win32::System::Diagnostics::Debug::ReadProcessMemory;
+        use windows_sys::Win32::System::Diagnostics::Debug::WriteProcessMemory;
+        use windows_sys::Win32::System::Memory::MEM_COMMIT;
+        use windows_sys::Win32::System::Memory::MEM_PRIVATE;
+        use windows_sys::Win32::System::Memory::MEMORY_BASIC_INFORMATION;
+        use windows_sys::Win32::System::Memory::PAGE_EXECUTE_READWRITE;
+        use windows_sys::Win32::System::Memory::PAGE_GUARD;
+        use windows_sys::Win32::System::Memory::PAGE_READWRITE;
+        use windows_sys::Win32::System::Memory::VirtualQuery;
+        use windows_sys::Win32::System::Threading::GetCurrentProcess;
+        const CHUNK: usize = 1 << 20;
+        let entries: Vec<(Zeroizing<Vec<u8>>, Vec<u8>, usize)> = values
+            .iter()
+            .filter(|value| value.len() >= 8)
+            .map(|value| {
+                let wide = value.len() > 1 && value[1] == 0;
+                let prefix: Vec<u8> = if wide {
+                    format!("{name}=")
+                        .encode_utf16()
+                        .flat_map(u16::to_le_bytes)
+                        .collect()
+                } else {
+                    format!("{name}=").into_bytes()
+                };
+                let zeros: Vec<u8> = if wide {
+                    std::iter::repeat_n([b'0', 0], value.len() / 2)
+                        .flatten()
+                        .collect()
+                } else {
+                    vec![b'0'; value.len()]
+                };
+                let mut entry = Zeroizing::new(prefix.clone());
+                entry.extend_from_slice(value);
+                (entry, zeros, prefix.len())
+            })
+            .collect();
+        let Some(longest) = entries.iter().map(|(entry, _, _)| entry.len()).max() else {
+            return;
+        };
+        let mut buffer = Zeroizing::new(vec![0_u8; CHUNK + longest]);
+        // The search buffers hold entries themselves.
+        let mut own: Vec<(usize, usize)> = entries
+            .iter()
+            .map(|(entry, _, _)| allocation(entry.as_ptr(), entry.capacity()))
+            .collect();
+        own.push(allocation(buffer.as_ptr(), buffer.capacity()));
+        // SAFETY: a pseudo-handle for this process.
+        let process = unsafe { GetCurrentProcess() };
+        let mut address = 0_usize;
+        loop {
+            // SAFETY: zeroed POD out-structure; queries this process.
+            let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
+            let written = unsafe {
+                VirtualQuery(
+                    address as *const std::ffi::c_void,
+                    &mut info,
+                    std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
+                )
+            };
+            let base = info.BaseAddress as usize;
+            let Some(end) = base.checked_add(info.RegionSize) else {
+                break;
+            };
+            if written == 0 || end <= address {
+                break;
+            }
+            let writable = info.State == MEM_COMMIT
+                && info.Type == MEM_PRIVATE
+                && info.Protect & (PAGE_READWRITE | PAGE_EXECUTE_READWRITE) != 0
+                && info.Protect & PAGE_GUARD == 0;
+            let mut offset = base;
+            while writable && offset < end {
+                // Chunks overlap by the longest entry so none is split.
+                let want = (end - offset).min(buffer.len());
+                let mut read = 0_usize;
+                // SAFETY: reads into `buffer`, which holds `want` bytes;
+                // fails instead of faulting on memory released meanwhile.
+                let ok = unsafe {
+                    ReadProcessMemory(
+                        process,
+                        offset as *const std::ffi::c_void,
+                        buffer.as_mut_ptr().cast(),
+                        want,
+                        &mut read,
+                    )
+                };
+                if ok == 0 && read == 0 {
+                    break;
+                }
+                for (entry, zeros, prefix) in &entries {
+                    let mut at = 0;
+                    while at + entry.len() <= read {
+                        if buffer[at] != entry[0] || buffer[at..at + entry.len()] != entry[..] {
+                            at += 1;
+                            continue;
+                        }
+                        let target = offset + at + prefix;
+                        if own
+                            .iter()
+                            .any(|(start, end)| target < *end && target + zeros.len() > *start)
+                        {
+                            at += entry.len();
+                            continue;
+                        }
+                        // SAFETY: writes `zeros` over the value at `target`,
+                        // just read; fails on memory released meanwhile.
+                        unsafe {
+                            WriteProcessMemory(
+                                process,
+                                target as *const std::ffi::c_void,
+                                zeros.as_ptr().cast(),
+                                zeros.len(),
+                                std::ptr::null_mut(),
+                            )
+                        };
+                        at += entry.len();
+                    }
+                }
+                buffer[..read].fill(0);
+                if want < buffer.len() {
+                    break;
+                }
+                offset += CHUNK;
+            }
+            address = end;
         }
     }
 
