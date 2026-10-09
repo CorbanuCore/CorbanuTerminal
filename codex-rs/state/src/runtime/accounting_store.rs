@@ -1003,6 +1003,11 @@ pub(super) async fn ledger_exists(conn: &mut SqliteConnection) -> anyhow::Result
 }
 
 // Caller owns BEGIN IMMEDIATE: schema and independent ledger commit together.
+//
+// A new ledger is installed in format 1, and an existing one is left in the
+// format it has: it is upgraded only when a record that needs a newer format is
+// first written (`require_format_on_connection`). An older build sharing the
+// state DB keeps reading the ledger until then.
 async fn install_on_connection(conn: &mut SqliteConnection) -> anyhow::Result<()> {
     if !ledger_exists(conn).await? {
         let objects: i64 = sqlx::query_scalar(
@@ -1012,28 +1017,31 @@ async fn install_on_connection(conn: &mut SqliteConnection) -> anyhow::Result<()
         .await?;
         ensure!(objects == 0, "unversioned accounting schema");
         crate::migrations::accounting_migrator()
-            .run_direct(/*target*/ None, conn, /*skip*/ false)
-            .await?;
-    } else if applied_format(conn).await? < current_format() {
-        // An older format is read as written; it is upgraded before this
-        // build writes anything to it. `validate_on_connection` first, so an
-        // unknown or damaged ledger is refused rather than migrated.
-        validate_on_connection(conn).await?;
-        crate::migrations::accounting_migrator()
-            .run_direct(/*target*/ None, conn, /*skip*/ false)
+            .run_direct(/*target*/ Some(1), conn, /*skip*/ false)
             .await?;
     }
+    validate_on_connection(conn).await
+}
+
+/// Upgrade the ledger to at least `format` before writing a record that needs
+/// it. Caller owns the write transaction, so the upgrade commits with the
+/// record or not at all. An unknown or damaged ledger is refused, not migrated.
+pub(crate) async fn require_format_on_connection(
+    conn: &mut SqliteConnection,
+    format: i64,
+) -> anyhow::Result<()> {
     validate_on_connection(conn).await?;
+    if applied_format(conn).await? < format {
+        crate::migrations::accounting_migrator()
+            .run_direct(/*target*/ Some(format), conn, /*skip*/ false)
+            .await?;
+        validate_on_connection(conn).await?;
+    }
     ensure!(
-        applied_format(conn).await? == current_format(),
+        applied_format(conn).await? >= format,
         "accounting ledger was not upgraded"
     );
     Ok(())
-}
-
-/// This build's ledger format: its number of accounting migrations.
-fn current_format() -> i64 {
-    crate::migrations::accounting_migrator().iter().count() as i64
 }
 
 async fn applied_format(conn: &mut SqliteConnection) -> anyhow::Result<i64> {
@@ -1074,6 +1082,22 @@ pub(super) async fn validate_on_connection(conn: &mut SqliteConnection) -> anyho
         !rows.is_empty() && expected.starts_with(&rows),
         "unsupported, failed or checksum-mismatched accounting migration"
     );
+    // A migration not yet applied must have left nothing behind: a ledger that
+    // claims an older format while holding a newer one's objects could hold
+    // records that format cannot express.
+    for migration in migrator.iter().skip(rows.len()) {
+        for name in created_objects(migration.sql.as_str()) {
+            let present: bool =
+                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name = ?)")
+                    .bind(name)
+                    .fetch_one(&mut *conn)
+                    .await?;
+            ensure!(
+                !present,
+                "accounting ledger holds objects of a later format: {name}"
+            );
+        }
+    }
     // Compare every owned table/index definition, not just a ledger claim.
     // SQLite preserves CREATE SQL; whitespace is not schema identity.
     for migration in migrator.iter().take(rows.len()) {
@@ -1104,6 +1128,15 @@ pub(super) async fn validate_on_connection(conn: &mut SqliteConnection) -> anyho
     }
     super::retention_fixture_on_connection(conn).await?;
     Ok(())
+}
+
+/// The names of the objects a migration's `CREATE` statements make.
+fn created_objects(sql: &str) -> Vec<&str> {
+    sql.split(';')
+        .map(str::trim)
+        .filter(|statement| statement.starts_with("CREATE "))
+        .filter_map(|statement| statement.split_whitespace().nth(2))
+        .collect()
 }
 
 #[cfg(test)]

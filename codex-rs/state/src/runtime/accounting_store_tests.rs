@@ -229,6 +229,7 @@ async fn accounting_inspect_schema_rejection_matrix() -> anyhow::Result<()> {
         "UPDATE _accounting_migrations SET checksum = X'00'",
         "UPDATE _accounting_migrations SET version = version + 10",
         "DELETE FROM _accounting_migrations WHERE version = 1",
+        "CREATE TABLE draft_accounting_ledger_format (version INTEGER PRIMARY KEY NOT NULL CHECK(version = 2))",
         "DELETE FROM _accounting_migrations",
         "DROP TABLE _accounting_migrations",
     ] {

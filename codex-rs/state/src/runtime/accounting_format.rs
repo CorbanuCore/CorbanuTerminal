@@ -3,8 +3,10 @@
 //! The format is the number of accounting migrations a ledger has applied.
 //! Format 1 is the original schema. Format 2 lets a price record state a
 //! `Local` or `Undeclared` basis and where its basis came from, and lets a
-//! compact day count that work. A build reads every format up to its own and
-//! upgrades older ledgers before writing; a ledger written in a newer format is
+//! compact day count that work. A build reads every format up to its own, and
+//! upgrades a ledger only when it first writes a record the ledger's format
+//! cannot express (so an older build sharing the state DB keeps working until
+//! then); a ledger written in a newer format is
 //! refused with `NewerLedgerFormat`, so the caller can stop collecting rather
 //! than misread records it does not understand.
 //!
@@ -135,6 +137,14 @@ impl<'a> QuoteBeforeBasis<'a> {
             subtotal_display: &quote.subtotal_display,
         })
     }
+}
+
+/// The ledger format a snapshot needs: 2 for a basis or source format 1
+/// cannot express, otherwise 1.
+pub(super) fn snapshot_format(snapshot: &Snapshot) -> i64 {
+    let format_two = matches!(snapshot.basis, Basis::Local | Basis::Undeclared)
+        || snapshot.basis_source != BasisSource::BuiltIn;
+    if format_two { 2 } else { 1 }
 }
 
 /// Whether `payload` is `snapshot` in one of its valid stored forms.

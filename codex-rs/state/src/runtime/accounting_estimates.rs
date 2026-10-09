@@ -542,6 +542,13 @@ impl Journal<'_> {
             None => quote_observations(&attempt, &observations, candidates)?,
         };
         if let Some(snapshot) = &quote.snapshot {
+            // A record a format-1 ledger cannot express upgrades the ledger in
+            // the same transaction that writes it.
+            let format = super::format::snapshot_format(snapshot);
+            if format > 1 {
+                crate::runtime::accounting::store::require_format_on_connection(conn, format)
+                    .await?;
+            }
             sqlx::query("INSERT INTO draft_accounting_price_snapshots VALUES (?, ?) ON CONFLICT(snapshot_id) DO NOTHING")
                 .bind(snapshot.id.to_string()).bind(serde_json::to_string(snapshot)?)
                 .execute(&mut *conn).await?;
