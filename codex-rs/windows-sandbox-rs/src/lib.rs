@@ -87,6 +87,8 @@ mod wfp;
 #[cfg(target_os = "windows")]
 mod wfp_setup;
 #[cfg(target_os = "windows")]
+mod window_station;
+#[cfg(target_os = "windows")]
 mod winutil;
 #[cfg(target_os = "windows")]
 mod workspace_acl;
