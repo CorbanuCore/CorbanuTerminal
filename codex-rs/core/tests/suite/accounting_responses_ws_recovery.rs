@@ -213,9 +213,9 @@ async fn accounting_responses_ws_native_cancel_before_and_after_dispatch() -> an
 #[tokio::test]
 async fn accounting_responses_ws_native_two_reopens_and_original_prices() -> anyhow::Result<()> {
     for (prefix, model) in [
-        (false, "gpt-5.6-sol"),
-        (true, "gpt-5.6-sol"),
-        (true, "gpt-6-astra"),
+        (false, "gpt-5.6-terra"),
+        (true, "gpt-5.6-terra"),
+        (true, "codex-auto-review"),
     ] {
         let server = MockServer::start().await;
         let mut gate = Gate::start().await?;
@@ -250,20 +250,20 @@ async fn accounting_responses_ws_native_two_reopens_and_original_prices() -> any
             .collect();
         let before = totals(&db, &records[0]).await?;
         if prefix {
-            // The turn's own money, plus the startup prewarm's $0.02997 - which
+            // The turn's own money, plus the startup prewarm's $0.011988 - which
             // exists only where the catalogue prices this model at all.
-            let priced = model == "gpt-5.6-sol";
+            let priced = model == "gpt-5.6-terra";
             assert_eq!(
                 before.known_usd,
                 with_prewarms(
-                    if priced { "0.00161" } else { "0" }
+                    if priced { "0.000644" } else { "0" }
                         .to_string()
                         .try_into()?,
                     usize::from(priced)
                 )?
             );
         }
-        assert_eq!(prices.is_empty(), model == "gpt-6-astra");
+        assert_eq!(prices.is_empty(), model == "codex-auto-review");
         let home = test.home.clone();
         let rollout = test.codex.rollout_path().unwrap();
         stop(&test).await;
@@ -503,7 +503,7 @@ async fn accounting_responses_ws_native_unknown_prices_and_no_usage() -> anyhow:
         let server = MockServer::start().await;
         let mut gate = Gate::start().await?;
         let test = builder(gate.endpoint.clone(), enabled(&gate.endpoint))
-            .with_config(|config| config.model = Some("gpt-6-astra".into()))
+            .with_config(|config| config.model = Some("codex-auto-review".into()))
             .build_with_auto_env(&server)
             .await?;
         submit(&test).await?;
@@ -638,7 +638,7 @@ async fn metadata_terminal_matrix(
                 let mut end = json!({"type":kind,"response":{"id":"same","error":{"code":"invalid_prompt","message":"fixture terminal"},"incomplete_details":{"reason":"max_output_tokens"}},"metadata":metadata});
                 if mask & 4 != 0 {
                     end["safety_buffering"] = json!({"use_cases":["cyber"],"reasons":["user_risk"],"retry_model":"gpt-fast-wire"});
-                    expected.push(json!({"type":"safety_buffering","model":"gpt-5.6-sol","use_cases":["cyber"],"reasons":["user_risk"],"show_buffering_ui":true,"faster_model":"gpt-fast-wire"}));
+                    expected.push(json!({"type":"safety_buffering","model":"gpt-5.6-terra","use_cases":["cyber"],"reasons":["user_risk"],"show_buffering_ui":true,"faster_model":"gpt-fast-wire"}));
                 }
                 if usage_kind != 0 {
                     end["response"]["usage"] = if usage_kind == 2 {
@@ -706,7 +706,7 @@ async fn metadata_terminal_matrix(
                             },
                             unknown: i64::from(usage_kind != 2) + i64::from(fallback),
                         }),
-                        known_usd: if usage_kind == 2 { "0.00161" } else { "0" }
+                        known_usd: if usage_kind == 2 { "0.000644" } else { "0" }
                             .to_string()
                             .try_into()?,
                         unknown_estimates: i64::from(usage_kind != 2) + i64::from(fallback),

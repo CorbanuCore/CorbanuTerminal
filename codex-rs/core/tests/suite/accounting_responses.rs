@@ -121,13 +121,13 @@ async fn accounting_responses_native_complete_and_partial_goldens() -> anyhow::R
             (&records[0].provider, &records[0].model, records[0].dialect),
             (
                 &"openai".to_string(),
-                &"gpt-5.6-sol".to_string(),
+                &"gpt-5.6-terra".to_string(),
                 Dialect::Inclusive
             )
         );
         let request = mock.single_request();
         assert_eq!(request.path(), "/v1/responses");
-        assert_eq!(request.body_json()["model"], "gpt-5.6-sol");
+        assert_eq!(request.body_json()["model"], "gpt-5.6-terra");
         let expected = [
             100,
             if write.is_some() { 80 } else { 0 },
@@ -146,9 +146,9 @@ async fn accounting_responses_native_complete_and_partial_goldens() -> anyhow::R
                     unknown: i64::from(write.is_none() && (i == 1 || i == 3))
                 }),
                 known_usd: if write.is_some() {
-                    "0.00161"
+                    "0.000644"
                 } else {
-                    "0.00121"
+                    "0.000484"
                 }
                 .to_string()
                 .try_into()?,
@@ -170,6 +170,101 @@ async fn accounting_responses_native_complete_and_partial_goldens() -> anyhow::R
         assert_eq!(prices[0].provider, "openai");
         stop(&test).await;
     }
+    Ok(())
+}
+
+/// #361: an OpenAI API-key conversation on GPT-5.6 Luna, priced at the
+/// Standard rates OpenAI publishes (developers.openai.com/api/docs/pricing,
+/// read 2026-10-09): $0.20 input, $0.02 cached input, $0.25 cache writes and
+/// $1.20 output per million tokens. The usage is the PF-60-S05 re-run's
+/// `captures/mac/mac-r1-t1-conv.txt`, whose published-rate recompute is
+/// $0.00625965: 9,594 input tokens, then 3 uncached input + 17,337 cache
+/// writes + 5 output tokens.
+#[tokio::test]
+async fn accounting_responses_luna_prices_cache_writes_at_the_published_rate() -> anyhow::Result<()>
+{
+    let server = MockServer::start().await;
+    let endpoint = format!("{}/v1", server.uri());
+    let first = json!({"input_tokens":9594,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},
+        "output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":9594});
+    let second = json!({"input_tokens":17340,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":17337},
+        "output_tokens":5,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":17345});
+    let mock = responses::mount_sse_sequence(&server, vec![success(first), success(second)]).await;
+    let test = builder(endpoint.clone(), enabled(&endpoint))
+        .with_config(|config| config.model = Some("gpt-5.6-luna".into()))
+        .build_with_auto_env(&server)
+        .await?;
+    test.submit_turn("first").await?;
+    test.submit_turn("second").await?;
+    assert_eq!(mock.requests().len(), 2);
+    let db = test.codex.state_db().unwrap();
+    let records = attempts(&db).await?;
+    assert_eq!(records.len(), 2);
+    let prices: Vec<Snapshot> = payloads(&db, "draft_accounting_price_snapshots").await?;
+    assert_eq!(prices.len(), 2);
+    for price in &prices {
+        assert_eq!(
+            price.rates,
+            Rates {
+                noncached: Some("0.2".to_string().try_into()?),
+                read: Some("0.02".to_string().try_into()?),
+                write: Some("0.25".to_string().try_into()?),
+                output: Some("1.2".to_string().try_into()?),
+            }
+        );
+    }
+    let total = totals(&db, &records[0]).await?;
+    assert_eq!(total.attempts, 2);
+    assert_eq!(total.unknown_estimates, 0);
+    // 9594*0.20 + 3*0.20 + 17337*0.25 + 5*1.20 per million tokens.
+    assert_eq!(total.known_usd, "0.00625965".to_string().try_into()?);
+    stop(&test).await;
+    Ok(())
+}
+
+/// #361: above 272K input tokens OpenAI prices the whole GPT-5.6 request at
+/// 2x input, cache and cache-write rates and 1.5x output. The tier needs
+/// ledger format 3, which the first such record upgrades the ledger to.
+#[tokio::test]
+async fn accounting_responses_long_context_request_prices_at_the_long_context_rates()
+-> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    let endpoint = format!("{}/v1", server.uri());
+    let usage = |input: i64| {
+        json!({"input_tokens":input,"input_tokens_details":{"cached_tokens":200000,"cache_write_tokens":1000},
+            "output_tokens":100,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":input + 100})
+    };
+    let mock = responses::mount_sse_sequence(
+        &server,
+        vec![success(usage(272_000)), success(usage(272_001))],
+    )
+    .await;
+    let test = builder(endpoint.clone(), enabled(&endpoint))
+        .with_config(|config| config.model = Some("gpt-5.6-luna".into()))
+        .build_with_auto_env(&server)
+        .await?;
+    test.submit_turn("at the threshold").await?;
+    let db = test.codex.state_db().unwrap();
+    let records = attempts(&db).await?;
+    // At the threshold: 71000*0.20 + 200000*0.02 + 1000*0.25 + 100*1.20.
+    assert_eq!(
+        totals(&db, &records[0]).await?.known_usd,
+        "0.01857".to_string().try_into()?
+    );
+    test.submit_turn("above the threshold").await?;
+    assert_eq!(mock.requests().len(), 2);
+    let records = attempts(&db).await?;
+    assert_eq!(records.len(), 2);
+    // Above: 71001*0.40 + 200000*0.04 + 1000*0.50 + 100*1.80 (0.0370804), plus the first.
+    let total = totals(&db, &records[0]).await?;
+    assert_eq!(total.unknown_estimates, 0);
+    assert_eq!(total.known_usd, "0.0556504".to_string().try_into()?);
+    let mut conn = connection(&db).await?;
+    let format: i64 = sqlx::query_scalar("SELECT count(*) FROM _accounting_migrations")
+        .fetch_one(&mut conn)
+        .await?;
+    assert_eq!(format, 3);
+    stop(&test).await;
     Ok(())
 }
 
@@ -209,7 +304,7 @@ async fn accounting_responses_native_separate_and_terminal_usage() -> anyhow::Re
 #[tokio::test]
 async fn accounting_responses_native_unknown_prices_and_tiers() -> anyhow::Result<()> {
     for (model, tier) in [
-        ("gpt-6-astra", None),
+        ("codex-auto-review", None),
         ("remote-only-fixture", None),
         ("gpt-5.6-sol", Some("priority")),
     ] {

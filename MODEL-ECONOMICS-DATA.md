@@ -7,10 +7,45 @@ rate, from vendor pricing pages and aggregator listings as of 2026-07-26.
 
 There is deliberately no `unknown` billing variant. A model is either
 `eligible` with exact `plan`, `plan_schedule`, `metered`, `auth_dependent`, or `local` billing,
-or `disabled` with an explicit reason and no billing object. `auth_dependent`
+or `disabled` with an explicit reason. A disabled row may still state its
+published API price (`billing`) so cost accounting can price manual use; that
+price is never used for spawn allocation. `auth_dependent`
 contains both exact subscription burn and API-key prices; the live spawn tool
 resolves the active side from authentication. Unverified rows in this document
 remain disabled until their billing and capability metadata is verified.
+
+## OpenAI API-key prices (read 2026-10-09, #361)
+
+Source: https://developers.openai.com/api/docs/pricing (Standard table) and
+https://developers.openai.com/api/docs/models/<slug>, read 2026-10-09. USD per
+1M tokens: input / cached input / cache writes / output. Cache writes are
+1.25x input where the sheet lists them; "-" means the sheet states none and the
+catalogue leaves them unpriced. Above 272K input tokens the models marked LC
+price the whole request at 2x input, cached and cache-write rates and 1.5x
+output (`long_context` in the catalogue). GPT-5.5 and GPT-5.4's pages state only
+2x input and 1.5x output ("for the full session"; applied per request here), so
+their cache reads above 272K are left unpriced. Fast (formerly Priority), Flex and
+Batch are not priced: those attempts show "no price", never the Standard rate.
+`python3 scripts/check_openai_api_prices.py` compares the catalogue with the page.
+
+| slug          |    in | cached | cache writes |   out | LC  |
+| ------------- | ----: | -----: | -----------: | ----: | :-: |
+| gpt-6-astra   | 10.00 |   1.00 |        12.50 | 50.00 | yes |
+| gpt-6-sol     |  2.00 |   0.20 |         2.50 | 10.00 | yes |
+| gpt-6-luna    |  0.10 |   0.01 |        0.125 |  0.50 | yes |
+| gpt-5.6-sol   |  4.00 |   0.40 |         5.00 | 20.00 | yes |
+| gpt-5.6-terra |  2.00 |   0.20 |         2.50 | 12.00 | yes |
+| gpt-5.6-luna  |  0.20 |   0.02 |         0.25 |  1.20 | yes |
+| gpt-5.5       |  5.00 |   0.50 |            - | 30.00 | yes |
+| gpt-5.4       |  2.50 |   0.25 |            - | 15.00 | yes |
+| gpt-5.4-mini  |  0.75 |  0.075 |            - |  4.50 | no  |
+| gpt-5.3-codex |  1.75 |  0.175 |            - | 14.00 | no  |
+| gpt-5.2       |  1.75 |  0.175 |            - | 14.00 | no  |
+
+GPT-5.6 Sol's rates are a promotion OpenAI offers "at least through November
+21, 2026" (regular: 5.00 / 0.50 / 30.00); the catalogue states no Sol API price
+after 2026-11-21T23:59:59.999Z until the page is read again (the earliest
+reading of "through November 21").
 
 Billing class:
 
@@ -31,9 +66,9 @@ Billing class:
 | ----------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------- | ------: | ------: | ------------: | :----: | ----: |
 | claude-opus-5-plan                        | claude-plan      | plan (burn 1.0x)                                                                         |       — |       — |             — |  yes   |  1.0M |
 | claude-fable-5-plan                       | claude-plan      | plan (burn 2.0x, 50% cap)                                                                |       — |       — |             — |  yes   |  1.0M |
-| gpt-5.6-sol                               | openai           | auth-dependent: plan 1.0x / API                                                          |    5.00 |   30.00 |          0.50 |  yes   |  372K |
-| gpt-5.6-terra                             | openai           | auth-dependent: plan 0.5x / API                                                          |    2.50 |   15.00 |          0.25 |  yes   |  372K |
-| gpt-5.6-luna                              | openai           | auth-dependent: plan 0.2x / API                                                          |    1.00 |    6.00 |          0.10 |  yes   |  372K |
+| gpt-5.6-sol                               | openai           | auth-dependent: plan 1.0x / API                                                          |    4.00 |   20.00 |          0.40 |  yes   |  372K |
+| gpt-5.6-terra                             | openai           | auth-dependent: plan 0.5x / API                                                          |    2.00 |   12.00 |          0.20 |  yes   |  372K |
+| gpt-5.6-luna                              | openai           | auth-dependent: plan 0.2x / API                                                          |    0.20 |    1.20 |          0.02 |  yes   |  372K |
 | claude-opus-5                             | anthropic        | metered                                                                                  |    5.00 |   25.00 |          0.50 |  yes   |  1.0M |
 | claude-fable-5                            | anthropic        | metered                                                                                  |   10.00 |   50.00 |          1.00 |  yes   |  1.0M |
 | gpt-5.5                                   | openai (API key) | metered                                                                                  |    5.00 |   30.00 |          0.50 |  yes   |  272K |

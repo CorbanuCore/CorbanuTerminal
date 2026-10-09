@@ -1587,10 +1587,17 @@ mod pf_27_s05 {
         };
         #[cfg(not(windows))]
         let places: Vec<String> = Vec::new();
+        #[cfg(windows)]
+        let parameters = format!(
+            "; process parameters at {:#x?}",
+            crate::credential_broker::env_scrub::process_parameters_allocation_for_test()
+        );
+        #[cfg(not(windows))]
+        let parameters = String::new();
         assert_eq!(
             hits,
             0,
-            "the raw key is still in Core's memory: {}",
+            "the raw key is still in Core's memory: {}{parameters}",
             places.join(" | ")
         );
     }

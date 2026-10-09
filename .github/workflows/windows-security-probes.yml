@@ -204,7 +204,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "PF-27-S08 broker token probes failed in a normal session" }
             $proxy = Get-TestExe @('-p', 'codex-network-proxy', '--lib')
             Assert-Tests $proxy 'pf_27_s06_windows_broker_uses_pipes' 1
-            Assert-Tests $proxy 'pf_27_s09' 11
+            Assert-Tests $proxy 'pf_27_s09' 12
             Assert-Tests $proxy 'pf_27_s05_raw_key_is_not_left_in_core_memory' 1
             & $medium -Program $proxy -Arguments @('credential_broker::isolated::', 'credential_broker::env_scrub::', 'native_certs::', '--nocapture', '--test-threads=1')
             if ($LASTEXITCODE -ne 0) { throw "the broker suite failed in a normal session" }

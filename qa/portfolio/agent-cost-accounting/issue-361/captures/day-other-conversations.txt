@@ -1,0 +1,18 @@
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     gpt-5.6-luna low   /model to change           │
+│ directory: <scratch>/…/work/repo │
+╰──────────────────────────────────────────────────────────╯
+  Cost — this conversation
+  Requested UTC day: 2026-10-09
+› Today (UTC) in this conversation: no recorded requests.
+  Other conversations on this day, not included above: 2 requests in 1 conversation.
+  • OpenAI · GPT-5.6-Luna — Pay per use. 2 requests, 26,936 tokens. Estimated cost: $0.006259 (rounded).
+  Other conversations' estimated cost: $0.006259 (rounded).
+  To see those requests, open that conversation with /resume and run /cost there.
+  Costs are estimates from published prices; OpenAI doesn't report its charges — check OpenAI's bill.
+  —— Details ——
+  No recorded attempts in this conversation or its subagents; collection coverage unknown.
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close

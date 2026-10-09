@@ -38,7 +38,9 @@ fn pf_27_s05_env_race_child_entry() {
     let workers: Vec<_> = (0..4)
         .map(|worker| {
             std::thread::spawn(move || {
-                for round in 0..2_000 {
+                // Fewer rounds on Windows, where each take also sweeps the
+                // process heaps and the parameters' allocation (PF-27-S09).
+                for round in 0..if cfg!(windows) { 300 } else { 2_000 } {
                     // A fresh name each round grows (and reallocates) `environ`.
                     let name = format!("PF27_S05_RACE_{worker}_{round}");
                     // Distinct values, formatted again only after the take:
@@ -190,4 +192,63 @@ fn pf_27_s09_take_env_var_overwrites_stale_copies_in_live_blocks() {
         planted(&live, 2000, placeholder.len()),
         unmask(&placeholder).into_bytes()
     );
+}
+
+/// PF-27-S09: a `NAME=value` entry outside the heaps, in an allocation the
+/// sweep is pointed at (in production: the process parameters' allocation,
+/// which keeps the environment block Windows replaced when the environment
+/// grew), gets `0` characters for its value.
+#[cfg(windows)]
+#[test]
+fn pf_27_s09_entries_outside_the_heaps_are_overwritten() {
+    use windows_sys::Win32::System::Memory::MEM_COMMIT;
+    use windows_sys::Win32::System::Memory::MEM_RELEASE;
+    use windows_sys::Win32::System::Memory::MEM_RESERVE;
+    use windows_sys::Win32::System::Memory::PAGE_READWRITE;
+    use windows_sys::Win32::System::Memory::VirtualAlloc;
+    use windows_sys::Win32::System::Memory::VirtualFree;
+    let mask = |plain: &str| plain.bytes().map(|byte| byte ^ 0x5a).collect::<Vec<u8>>();
+    let key = mask(&format!("sk-pf27s09-block-{:016x}", rand::random::<u64>()));
+    let name = format!("PF27_S09_BLOCK_{}", std::process::id());
+    // SAFETY: a fresh private page, released below.
+    let page = unsafe {
+        VirtualAlloc(
+            std::ptr::null(),
+            4096,
+            MEM_COMMIT | MEM_RESERVE,
+            PAGE_READWRITE,
+        )
+    }
+    .cast::<u16>();
+    assert!(!page.is_null(), "page");
+    let entry: Vec<u16> = format!("{name}=")
+        .encode_utf16()
+        .chain(key.iter().map(|byte| u16::from(byte ^ 0x5a)))
+        .chain(std::iter::once(0))
+        .collect();
+    let offset = 100;
+    // SAFETY: within the committed page.
+    unsafe { std::ptr::copy_nonoverlapping(entry.as_ptr(), page.add(offset), entry.len()) };
+    drop(entry);
+
+    let plain: String = key.iter().map(|byte| char::from(byte ^ 0x5a)).collect();
+    set_env_var_for_test(&name, &plain);
+    drop(plain);
+    let taken = take_env_var(&name).expect("value");
+    assert_eq!(mask(std::str::from_utf8(&taken).expect("utf-8")), key);
+    let wide: Vec<u8> = std::str::from_utf8(&taken)
+        .expect("utf-8")
+        .encode_utf16()
+        .flat_map(u16::to_le_bytes)
+        .collect();
+    super::windows_env::wipe_entries_in_allocation(page as usize, &name, &[&wide]);
+    drop((taken, wide));
+    assert!(super::windows_env::process_parameters_allocation().is_some());
+
+    let start = offset + name.len() + 1;
+    // SAFETY: within the committed page.
+    let left = unsafe { std::slice::from_raw_parts(page.add(start), key.len()) }.to_vec();
+    // SAFETY: allocated above.
+    unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) };
+    assert_eq!(left, vec![u16::from(b'0'); key.len()]);
 }

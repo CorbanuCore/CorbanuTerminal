@@ -161,7 +161,7 @@ async fn accounting_responses_native_outer_retry_prefix() -> anyhow::Result<()> 
     let patches = observations(&db).await?;
     assert_ne!(patches[0].source, patches[1].source);
     let day = totals(&db, &records[0]).await?;
-    assert_eq!(day.known_usd, "0.00322".to_string().try_into()?);
+    assert_eq!(day.known_usd, "0.001288".to_string().try_into()?);
     assert_eq!(
         day.measured[6],
         Metric {

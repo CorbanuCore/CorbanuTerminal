@@ -14,6 +14,7 @@ pub use super::pricing::Current;
 pub use super::pricing::DayTotals;
 pub use super::pricing::Decimal;
 pub use super::pricing::DisplayAmount;
+pub use super::pricing::LongContext;
 pub use super::pricing::Metric;
 pub use super::pricing::NewerLedgerFormat;
 pub use super::pricing::ObservationQuote;
