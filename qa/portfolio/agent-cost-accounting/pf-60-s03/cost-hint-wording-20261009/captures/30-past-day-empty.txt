@@ -1,12 +1,11 @@
-╭──────────────────────────────────────────────╮
-│ >_ Corbanu Terminal (v0.1.48)                │
-│                                              │
-│ model:     glm-5.2   /model to change        │
+╭───────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                 │
+│                                               │
+│ model:     glm-5.2   /model to change         │
 │ directory: <scratch>/ws │
-╰──────────────────────────────────────────────╯
+╰───────────────────────────────────────────────╯
 Read README.md and summarize it in one sentence.
-• README.md describes a tiny scratch project used to check the /cost screens.
-• You’re continuing from this point in a new conversation
+• This is a tiny scratch project used to check the /cost screens.
 Cost — this conversation
 Requested UTC day: 2026-10-01
 Unknown parent population: 0 attempts, excluded from root total
@@ -28,9 +27,9 @@ Collection coverage: unknown; recorded root and resolved descendants only. Unkno
 Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
 Snapshot is not current; newer activity is unverified
 Day covered (UTC): [2026-10-01T00:00:00.000Z, 2026-10-02T00:00:00.000Z)
-Read at: 2026-10-09T08:35:36.716Z; ledger current to: 2026-10-09T08:30:49.496Z (287220 ms behind)
-Retention: request detail kept since 2026-07-11T08:35:36.716Z; daily totals kept since 2025-10-10; oldest recorded
-day in this conversation none
+Read at: 2026-10-09T09:19:27.056Z; ledger current to: 2026-10-09T09:16:31.205Z (175851 ms behind)
+Retention: request detail kept since 2026-07-11T09:19:27.056Z; daily totals kept since 2025-10-10; oldest recorded
+day in this conversation 2026-10-09
 Known subtotal exact USD: none — no recorded attempts in this conversation
 Input: 0
 Noncached input (derived for inclusive input): 0

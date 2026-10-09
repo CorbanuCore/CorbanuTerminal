@@ -1,15 +1,15 @@
-╭──────────────────────────────────────────────╮
-│ >_ Corbanu Terminal (v0.1.48)                │
-│                                              │
-│ model:     glm-5.2   /model to change        │
+╭───────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                 │
+│                                               │
+│ model:     glm-5.2   /model to change         │
 │ directory: <scratch>/ws │
-╰──────────────────────────────────────────────╯
+╰───────────────────────────────────────────────╯
 Read README.md and summarize it in one sentence.
-• README.md describes a tiny scratch project used to check the /cost screens.
+• This is a tiny scratch project used to check the /cost screens.
 Provider: zai; Model: glm-5.2
 Requested UTC day: 2026-10-09
 Recorded attempts: 2
-Known estimate exact USD: 0.0353302
+Known estimate exact USD: 0.02937828
 —— Open ——
 → Request 1
 → Request 2
@@ -21,14 +21,13 @@ Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
 Provider: Z.AI
 Model: Z.AI GLM 5.2
 Billing: Pay per use
-Estimated cost: $0.035330 (rounded)
-Tokens: 25,118 tokens
+Estimated cost: $0.029378 (rounded)
+Tokens: 25,140 tokens
 —— Details ——
-Billed cost: not reported — Z.AI doesn't state its actual charge, so this is an estimate; check the bill from
-Z.AI.
+Billed cost: Z.AI doesn't report its charges, so any cost here is an estimate — check Z.AI's bill.
 Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
 Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
 Snapshot is not current; newer activity is unverified
 Day covered (UTC): [2026-10-09T00:00:00.000Z, 2026-10-10T00:00:00.000Z)
-Read at: 2026-10-09T08:32:58.917Z; ledger current to: 2026-10-09T08:30:49.496Z (129421 ms behind)
-Estimated token cost for recorded attempts: $0.035330 (rounded)
+Read at: 2026-10-09T09:17:24.732Z; ledger current to: 2026-10-09T09:16:31.205Z (53527 ms behind)
+Estimated token cost for recorded attempts: $0.029378 (rounded)

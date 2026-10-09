@@ -2704,7 +2704,7 @@ fn accounting_billed_line_names_whose_bill_to_check() {
     refused.usage = Usage::default();
     assert_eq!(
         line(&[refused]).unwrap(),
-        "Billed cost: none stated — OpenRouter reported no usage here; a refused request is normally not charged."
+        "Billed cost: none stated — OpenRouter reported no usage here; a refused request is normally not charged, but if it stopped mid-response, check OpenRouter's bill."
     );
     // No provider id: nothing to name.
     assert_eq!(

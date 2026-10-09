@@ -1,15 +1,15 @@
-╭──────────────────────────────────────────────╮
-│ >_ Corbanu Terminal (v0.1.48)                │
-│                                              │
-│ model:     glm-5.2   /model to change        │
+╭───────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                 │
+│                                               │
+│ model:     glm-5.2   /model to change         │
 │ directory: <scratch>/ws │
-╰──────────────────────────────────────────────╯
+╰───────────────────────────────────────────────╯
 Read README.md and summarize it in one sentence.
-• README.md describes a tiny scratch project used to check the /cost screens.
+• This is a tiny scratch project used to check the /cost screens.
 Recorded request range
 09T00:00:00.000Z): [2026-10-08T00:00:00.000Z, 2026-10-09T00:00:00.000Z)
 Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [2026-10-09T00:00:00.000Z, 2026-10-
-10T00:00:00.000Z): [2026-10-09T00:00:00.000Z, 2026-10-09T08:30:49.497Z)
+10T00:00:00.000Z): [2026-10-09T00:00:00.000Z, 2026-10-09T09:16:31.206Z)
 —— Open ——
 → Day [2026-10-08T00:00:00.000Z, 2026-10-09T00:00:00.000Z)
 → Day [2026-10-09T00:00:00.000Z, 2026-10-10T00:00:00.000Z) (in progress)
@@ -18,13 +18,12 @@ Close
 Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
 ↑↓ scroll · Enter open · Esc back/close
 Requested: [2026-10-08T00:00:00.000Z, 2026-10-10T00:00:00.000Z); timezone: UTC; grouping: Day
-Retention: request detail kept since 2026-07-11T08:34:39.066Z; daily totals kept since 2025-10-10
+Retention: request detail kept since 2026-07-11T09:18:52.328Z; daily totals kept since 2025-10-10
 Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate
 in bucket breakdowns.
 Range: Unknown parent population: 0 inspectable attempts, excluded from range total
 Other conversations are not included in this view; /cost covers only the open conversation.
-In progress — totals so far, recorded through 2026-10-09T08:30:49.496Z
-Estimated token cost for recorded attempts: $0.035330 (rounded)
-Billed cost: not reported — Z.AI doesn't state its actual charge, so this is an estimate; check the bill from
-Z.AI.
+In progress — totals so far, recorded through 2026-10-09T09:16:31.205Z
+Estimated token cost for recorded attempts: $0.029378 (rounded)
+Billed cost: Z.AI doesn't report its charges, so any cost here is an estimate — check Z.AI's bill.
 Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [2026-10-08T00:00:00.000Z, 2026-10-

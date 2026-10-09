@@ -1505,7 +1505,7 @@ impl BilledCharge {
 /// What the provider itself stated it charged for the pay-per-use attempts here,
 /// or None when none stated anything. Plan work is never billed per request.
 fn billed_charge(quotes: &[&ObservationQuote]) -> Option<BilledCharge> {
-    let per_use: Vec<&&ObservationQuote> = quotes.iter().filter(|q| !q.is_plan()).collect();
+    let per_use: Vec<&&ObservationQuote> = quotes.iter().filter(|q| has_bill(q)).collect();
     let mut charge = BilledCharge {
         sum: Decimal::default(),
         stated: 0,
@@ -1651,8 +1651,12 @@ fn billed_line(quotes: &[&ObservationQuote]) -> Option<String> {
                 .filter(|quote| has_bill(quote))
                 .map(|quote| quote.attempt.provider.as_str()),
         );
+        let bill = match names.as_slice() {
+            [one] => format!("{one}'s bill"),
+            _ => "their bills".to_string(),
+        };
         return Some(format!(
-            "Billed cost: none stated — {} reported no usage here; a refused request is normally not charged.",
+            "Billed cost: none stated — {} reported no usage here; a refused request is normally not charged, but if it stopped mid-response, check {bill}.",
             joined(&names)
         ));
     }
