@@ -178,8 +178,10 @@ pub(crate) fn take_env_var(name: &str) -> Option<Zeroizing<Vec<u8>>> {
     };
     windows_env::wipe_heap_copies(name, patterns, &own);
     // An environment block Windows replaced when the environment grew stays
-    // in private memory outside the heaps, with its `NAME=value` entries.
-    windows_env::wipe_private_entries(name, patterns);
+    // in the process parameters' allocation, with its `NAME=value` entries.
+    if let Some(base) = windows_env::process_parameters_allocation() {
+        windows_env::wipe_entries_in_allocation(base, name, patterns);
+    }
     tracing::debug!(
         "environment sweep for one handed-over variable took {} ms",
         started.elapsed().as_millis()
@@ -274,19 +276,45 @@ mod windows_env {
         }
     }
 
-    /// Gives every `name=value` entry (narrow or UTF-16) in this process's
-    /// private, committed, writable memory outside the heaps' locks `0`
-    /// characters for its value: an environment block Windows replaced when
-    /// the environment grew (it shares an allocation with the process
-    /// parameters, so it is never freed), copies on thread stacks. Memory is
-    /// read with `ReadProcessMemory` and written with `WriteProcessMemory`,
-    /// which fail instead of faulting if another thread releases a region
-    /// meanwhile; only whole entries are written.
-    pub(super) fn wipe_private_entries(name: &str, values: &[&[u8]]) {
+    /// The allocation holding this process's parameters (`PEB`
+    /// `ProcessParameters`). The launch environment block is part of it, so
+    /// when the environment grows and Windows moves it, the old block (with
+    /// every launch variable) is never freed.
+    pub(super) fn process_parameters_allocation() -> Option<usize> {
+        use windows_sys::Wdk::System::Threading::NtQueryInformationProcess;
+        use windows_sys::Wdk::System::Threading::ProcessBasicInformation;
+        use windows_sys::Win32::System::Threading::GetCurrentProcess;
+        use windows_sys::Win32::System::Threading::PROCESS_BASIC_INFORMATION;
+        // SAFETY: zeroed POD out-structure of the size passed.
+        let mut info: PROCESS_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
+        let mut len = 0_u32;
+        // SAFETY: queries this process into `info`.
+        let status = unsafe {
+            NtQueryInformationProcess(
+                GetCurrentProcess(),
+                ProcessBasicInformation,
+                (&mut info as *mut PROCESS_BASIC_INFORMATION).cast(),
+                std::mem::size_of::<PROCESS_BASIC_INFORMATION>() as u32,
+                &mut len,
+            )
+        };
+        if status != 0 || info.PebBaseAddress.is_null() {
+            return None;
+        }
+        // SAFETY: this process's PEB, which lives as long as the process.
+        let parameters = unsafe { (*info.PebBaseAddress).ProcessParameters } as usize;
+        (parameters != 0).then_some(parameters)
+    }
+
+    /// Gives every `name=value` entry (narrow or UTF-16) in the committed,
+    /// writable regions of the allocation containing `address` `0`
+    /// characters for its value. Memory is read with `ReadProcessMemory` and
+    /// written with `WriteProcessMemory`, which fail instead of faulting if a
+    /// region changes meanwhile; only whole entries are written.
+    pub(super) fn wipe_entries_in_allocation(address: usize, name: &str, values: &[&[u8]]) {
         use windows_sys::Win32::System::Diagnostics::Debug::ReadProcessMemory;
         use windows_sys::Win32::System::Diagnostics::Debug::WriteProcessMemory;
         use windows_sys::Win32::System::Memory::MEM_COMMIT;
-        use windows_sys::Win32::System::Memory::MEM_PRIVATE;
         use windows_sys::Win32::System::Memory::MEMORY_BASIC_INFORMATION;
         use windows_sys::Win32::System::Memory::PAGE_EXECUTE_READWRITE;
         use windows_sys::Win32::System::Memory::PAGE_GUARD;
@@ -331,26 +359,35 @@ mod windows_env {
         own.push(allocation(buffer.as_ptr(), buffer.capacity()));
         // SAFETY: a pseudo-handle for this process.
         let process = unsafe { GetCurrentProcess() };
-        let mut address = 0_usize;
-        loop {
+        let query = |at: usize| {
             // SAFETY: zeroed POD out-structure; queries this process.
             let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
             let written = unsafe {
                 VirtualQuery(
-                    address as *const std::ffi::c_void,
+                    at as *const std::ffi::c_void,
                     &mut info,
                     std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
                 )
+            };
+            (written != 0).then_some(info)
+        };
+        let Some(first) = query(address) else {
+            return;
+        };
+        let allocation_base = first.AllocationBase as usize;
+        let mut address = allocation_base;
+        loop {
+            let Some(info) = query(address) else {
+                break;
             };
             let base = info.BaseAddress as usize;
             let Some(end) = base.checked_add(info.RegionSize) else {
                 break;
             };
-            if written == 0 || end <= address {
+            if info.AllocationBase as usize != allocation_base || end <= address {
                 break;
             }
             let writable = info.State == MEM_COMMIT
-                && info.Type == MEM_PRIVATE
                 && info.Protect & (PAGE_READWRITE | PAGE_EXECUTE_READWRITE) != 0
                 && info.Protect & PAGE_GUARD == 0;
             let mut offset = base;

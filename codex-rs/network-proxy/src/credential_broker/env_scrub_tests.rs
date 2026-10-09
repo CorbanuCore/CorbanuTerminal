@@ -192,12 +192,13 @@ fn pf_27_s09_take_env_var_overwrites_stale_copies_in_live_blocks() {
     );
 }
 
-/// PF-27-S09: a `NAME=value` entry outside the heaps (here a page of its
-/// own, as the environment block Windows replaces when the environment grows)
-/// gets `0` characters for its value.
+/// PF-27-S09: a `NAME=value` entry outside the heaps, in an allocation the
+/// sweep is pointed at (in production: the process parameters' allocation,
+/// which keeps the environment block Windows replaced when the environment
+/// grew), gets `0` characters for its value.
 #[cfg(windows)]
 #[test]
-fn pf_27_s09_take_env_var_overwrites_entries_outside_the_heaps() {
+fn pf_27_s09_entries_outside_the_heaps_are_overwritten() {
     use windows_sys::Win32::System::Memory::MEM_COMMIT;
     use windows_sys::Win32::System::Memory::MEM_RELEASE;
     use windows_sys::Win32::System::Memory::MEM_RESERVE;
@@ -233,6 +234,14 @@ fn pf_27_s09_take_env_var_overwrites_entries_outside_the_heaps() {
     drop(plain);
     let taken = take_env_var(&name).expect("value");
     assert_eq!(mask(std::str::from_utf8(&taken).expect("utf-8")), key);
+    let wide: Vec<u8> = std::str::from_utf8(&taken)
+        .expect("utf-8")
+        .encode_utf16()
+        .flat_map(u16::to_le_bytes)
+        .collect();
+    super::windows_env::wipe_entries_in_allocation(page as usize, &name, &[&wide]);
+    drop((taken, wide));
+    assert!(super::windows_env::process_parameters_allocation().is_some());
 
     let start = offset + name.len() + 1;
     // SAFETY: within the committed page.
