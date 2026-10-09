@@ -60,6 +60,8 @@ use windows_sys::Win32::Security::GetTokenInformation;
 use windows_sys::Win32::Security::SID_AND_ATTRIBUTES;
 use windows_sys::Win32::Security::SetTokenInformation;
 use windows_sys::Win32::Security::TOKEN_DEFAULT_DACL;
+use windows_sys::Win32::Security::TOKEN_ADJUST_DEFAULT;
+use windows_sys::Win32::Security::TOKEN_ASSIGN_PRIMARY;
 use windows_sys::Win32::Security::TOKEN_DUPLICATE;
 use windows_sys::Win32::Security::TOKEN_GROUPS;
 use windows_sys::Win32::Security::TOKEN_INFORMATION_CLASS;
@@ -126,8 +128,11 @@ pub(crate) const BROKER_TOKEN: BrokerTokenOptions = BrokerTokenOptions {
 /// capability SID.
 pub(crate) fn create_broker_token(options: BrokerTokenOptions) -> io::Result<OwnedHandle> {
     let default_dacl = options.default_dacl;
+    // TOKEN_ASSIGN_PRIMARY: the restricted token is used as a primary token
+    // in CreateProcessAsUserW. TOKEN_ADJUST_DEFAULT: the restricted token's
+    // default DACL is set below, and that right is inherited from the base.
     let base = open_current_token(
-        TOKEN_DUPLICATE | TOKEN_QUERY,
+        TOKEN_DUPLICATE | TOKEN_QUERY | TOKEN_ASSIGN_PRIMARY | TOKEN_ADJUST_DEFAULT,
     )?;
     let capability = LocalSid::from_string(&random_capability_sid()?)?;
     let everyone = LocalSid::from_string(EVERYONE_SID)?;
