@@ -61,6 +61,12 @@ filter = 'test(rmcp_client) | test(humanlike_typing_1000_chars_appears_live_no_p
 slow-timeout = { period = "1m", terminate-after = 4 }
 
 [[profile.default.overrides]]
+# Holds the state DB's write lock for a whole turn; each thread-metadata write
+# waits out SQLite's 5 s busy timeout (#351).
+filter = 'package(codex-core) & test(a_turn_completes_while_another_process_holds_the_state_db)'
+slow-timeout = { period = "1m", terminate-after = 3 }
+
+[[profile.default.overrides]]
 filter = 'test(approval_matrix_covers_all_modes)'
 slow-timeout = { period = "30s", terminate-after = 2 }
 

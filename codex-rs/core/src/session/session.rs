@@ -1195,6 +1195,7 @@ impl Session {
                 network_approval: Arc::clone(&network_approval),
                 state_db: state_db_ctx.clone(),
                 accounting_notices: Default::default(),
+                state_db_fallback_noticed: Default::default(),
                 live_thread: live_thread_init.as_ref().cloned(),
                 thread_store: Arc::clone(&thread_store),
                 attestation_provider: attestation_provider.clone(),

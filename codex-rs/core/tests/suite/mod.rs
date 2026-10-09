@@ -155,6 +155,7 @@ mod skills;
 mod skills_extension;
 mod spawn_agent_description;
 mod sqlite_state;
+mod state_db_throttle_fallback;
 mod stream_error_allows_next_turn;
 mod stream_no_completed;
 mod subagent_notifications;

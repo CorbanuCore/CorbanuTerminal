@@ -1,10 +1,16 @@
 use super::*;
 use crate::runtime::busy_retry::retry_busy;
+use crate::runtime::busy_retry::retry_busy_within;
+use std::time::Duration;
 
-const RATE_LIMIT_STATUS: i64 = 429;
+pub(super) const RATE_LIMIT_STATUS: i64 = 429;
 const DEFAULT_COOLDOWN_CAP_MS: i64 = 5 * 60 * 1000;
+/// About how long a throttle step on the turn's path waits for a busy state DB
+/// before the turn goes on with this process's in-memory throttle. An attempt
+/// started just before the deadline still waits out SQLite's 5 s busy timeout.
+const PROVIDER_REQUEST_BUSY_WAIT: Duration = Duration::from_secs(10);
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ProviderRequestKey {
     pub provider_id: String,
     pub model: String,
@@ -25,6 +31,10 @@ pub struct ProviderRequestLease {
     pub key: ProviderRequestKey,
     pub owner: String,
     pub lease_until_ms: i64,
+    /// Whether the lease was (or may have been) written to the state DB, so
+    /// that releasing it must clear it there too. A lease taken while the
+    /// state DB was busy or read-only lives only in this process.
+    pub in_state_db: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -270,6 +280,7 @@ WHERE provider_id = ? AND model = ? AND key_fingerprint = ?
                 key: key.clone(),
                 owner: owner.to_string(),
                 lease_until_ms,
+                in_state_db: true,
             },
         ))
     }
@@ -407,28 +418,34 @@ WHERE provider_id = ? AND model = ? AND key_fingerprint = ? AND lease_owner = ?
 }
 
 impl StateRuntime {
+    // The state DB side of the provider-request throttle. Callers outside this
+    // crate go through `provider_request_fallback`, which falls back to this
+    // process's in-memory throttle when these fail.
+    //
     // Each write below is one short transaction that rolls back whole when the
-    // state DB is busy, so it is retried; see `retry_busy`. A busy state DB used
-    // to fail the turn with "failed to check provider request throttle state:
-    // ... database is locked" whenever another Corbanu process held the write
-    // lock past SQLite's 5 s busy timeout. A retry's clock reading moves on by
-    // the time spent waiting, so cooldowns and leases count from when the write
-    // lands.
+    // state DB is busy, so it is retried; see `retry_busy`. The steps on the
+    // turn's path wait about `PROVIDER_REQUEST_BUSY_WAIT`; releasing a lease
+    // off the turn's path waits the full busy deadline, so another process is
+    // not kept waiting on a lease nobody holds. A retry's clock
+    // reading moves on by the time spent waiting, so cooldowns and leases count
+    // from when the write lands.
 
-    pub async fn check_provider_request_cooldown(
+    pub(crate) async fn check_provider_request_cooldown(
         &self,
         key: &ProviderRequestKey,
         preflight: &ProviderRequestPreflight,
         now_ms: i64,
     ) -> anyhow::Result<Option<ProviderRequestBlock>> {
         let started = Instant::now();
-        retry_busy("check provider request cooldown", || {
-            self.check_provider_request_cooldown_once(key, preflight, since(now_ms, started))
-        })
+        retry_busy_within(
+            "check provider request cooldown",
+            PROVIDER_REQUEST_BUSY_WAIT,
+            || self.check_provider_request_cooldown_once(key, preflight, since(now_ms, started)),
+        )
         .await
     }
 
-    pub async fn try_acquire_provider_request_lease(
+    pub(crate) async fn try_acquire_provider_request_lease(
         &self,
         key: &ProviderRequestKey,
         preflight: &ProviderRequestPreflight,
@@ -437,32 +454,44 @@ impl StateRuntime {
         now_ms: i64,
     ) -> anyhow::Result<ProviderRequestLeaseDecision> {
         let started = Instant::now();
-        retry_busy("acquire provider request lease", || {
-            self.try_acquire_provider_request_lease_once(
-                key,
-                preflight,
-                owner,
-                lease_ttl_ms,
-                since(now_ms, started),
-            )
-        })
+        retry_busy_within(
+            "acquire provider request lease",
+            PROVIDER_REQUEST_BUSY_WAIT,
+            || {
+                self.try_acquire_provider_request_lease_once(
+                    key,
+                    preflight,
+                    owner,
+                    lease_ttl_ms,
+                    since(now_ms, started),
+                )
+            },
+        )
         .await
     }
 
-    pub async fn record_provider_request_result(
+    pub(crate) async fn record_provider_request_result(
         &self,
         lease: &ProviderRequestLease,
         result: ProviderRequestResult,
         now_ms: i64,
     ) -> anyhow::Result<u64> {
         let started = Instant::now();
-        retry_busy("record provider request result", || {
-            self.record_provider_request_result_once(lease, result.clone(), since(now_ms, started))
-        })
+        retry_busy_within(
+            "record provider request result",
+            PROVIDER_REQUEST_BUSY_WAIT,
+            || {
+                self.record_provider_request_result_once(
+                    lease,
+                    result.clone(),
+                    since(now_ms, started),
+                )
+            },
+        )
         .await
     }
 
-    pub async fn release_provider_request_lease(
+    pub(crate) async fn release_provider_request_lease(
         &self,
         lease: &ProviderRequestLease,
         now_ms: i64,
@@ -473,10 +502,26 @@ impl StateRuntime {
         })
         .await
     }
+
+    /// `release_provider_request_lease`, waiting only as long as a step on the
+    /// turn's path does.
+    pub(crate) async fn release_provider_request_lease_briefly(
+        &self,
+        lease: &ProviderRequestLease,
+        now_ms: i64,
+    ) -> anyhow::Result<u64> {
+        let started = Instant::now();
+        retry_busy_within(
+            "release provider request lease",
+            PROVIDER_REQUEST_BUSY_WAIT,
+            || self.release_provider_request_lease_once(lease, since(now_ms, started)),
+        )
+        .await
+    }
 }
 
 /// `now_ms`, read at `started`, moved on by the time elapsed since.
-fn since(now_ms: i64, started: Instant) -> i64 {
+pub(super) fn since(now_ms: i64, started: Instant) -> i64 {
     now_ms.saturating_add(i64::try_from(started.elapsed().as_millis()).unwrap_or(i64::MAX))
 }
 
@@ -501,7 +546,7 @@ fn block_from_row(
     })
 }
 
-fn default_cooldown_ms(consecutive_429_count: i64) -> i64 {
+pub(super) fn default_cooldown_ms(consecutive_429_count: i64) -> i64 {
     match consecutive_429_count {
         count if count <= 1 => 30_000,
         2 => 60_000,

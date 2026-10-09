@@ -86,6 +86,8 @@ pub(crate) struct SessionServices {
     pub(crate) state_db: Option<StateDbHandle>,
     /// Ledger notices already given in this session (PF-60-S05).
     pub(crate) accounting_notices: crate::accounting::SessionNotices,
+    /// Whether this session has said the state DB was busy or read-only (#351).
+    pub(crate) state_db_fallback_noticed: std::sync::atomic::AtomicBool,
     pub(crate) live_thread: Option<LiveThread>,
     pub(crate) thread_store: Arc<dyn ThreadStore>,
     pub(crate) attestation_provider: Option<Arc<dyn AttestationProvider>>,
