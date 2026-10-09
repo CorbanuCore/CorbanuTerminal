@@ -21,15 +21,9 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf13-s07-20261007"
     branch: "feat/pf-13-s07-qualification-20261007"
     base_commit: "64137b71894fb15fb9d6bf754dc69c41d4cb0406"
-<<<<<<< HEAD
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-27-s08-20261008"
-    branch: "sec/pf-27-s08-broker-token"
-    base_commit: "df44211c88d285367f62cff59a0df8203865e3d6"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-27-s09-20261009"
     branch: "sec/pf-27-s09-model-auth"
     base_commit: "5d283fde18b9924127d061f7c4f5b58211a3a50a"
-=======
->>>>>>> origin/main
 ---
 
 # P1 security hardening
