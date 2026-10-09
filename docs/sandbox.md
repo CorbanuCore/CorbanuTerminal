@@ -61,8 +61,9 @@ protects files registers itself in `C:\ProgramData\CorbanuTerminalSandbox`
 while it runs. The sandbox setup creates that folder, owned by Administrators,
 so updating to this version asks for Administrator approval once more. Until
 the setup has run, and while that folder is missing or owned by anyone else,
-no protection is removed, and with the secretless launch on, sandboxed
-commands are refused until you run the setup again. Sessions started by an
+no protection is removed; if that happens after the setup has run, sandboxed
+commands with the secretless launch on are refused until you run the setup
+again (it repairs the folder). Sessions started by an
 older version are not registered, so their protections aren't kept for them.
 
 **Over SSH.** The default sandbox also works when you start Corbanu Terminal
