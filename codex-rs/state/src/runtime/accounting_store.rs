@@ -413,19 +413,7 @@ impl<'a> AccountingStore<'a> {
             sqlx::query_scalar("SELECT version FROM _accounting_migrations ORDER BY version")
                 .fetch_all(&mut *conn)
                 .await?;
-        let supported = crate::migrations::accounting_migrator()
-            .iter()
-            .map(|migration| migration.version)
-            .max()
-            .unwrap_or(0);
-        match versions
-            .into_iter()
-            .filter(|version| *version > supported)
-            .max()
-        {
-            Some(found) => Err(NewerLedgerFormat { found, supported }.into()),
-            None => Ok(()),
-        }
+        refuse_newer(versions)
     }
 
     /// Install only when wholly absent, otherwise validate without schema repair.
@@ -1085,6 +1073,23 @@ async fn applied_format(conn: &mut SqliteConnection) -> anyhow::Result<i64> {
 
 /// Read-only version and physical-schema validation; no migration adoption/repair.
 ///
+/// `NewerLedgerFormat` when any applied migration is newer than this build's.
+fn refuse_newer(applied: impl IntoIterator<Item = i64>) -> anyhow::Result<()> {
+    let supported = crate::migrations::accounting_migrator()
+        .iter()
+        .map(|migration| migration.version)
+        .max()
+        .unwrap_or(0);
+    match applied
+        .into_iter()
+        .filter(|version| *version > supported)
+        .max()
+    {
+        Some(found) => Err(NewerLedgerFormat { found, supported }.into()),
+        None => Ok(()),
+    }
+}
+
 /// A ledger in an older format validates against the migrations it applied:
 /// it is read as written. One in a newer format is refused with
 /// `NewerLedgerFormat`.
@@ -1100,15 +1105,7 @@ pub(super) async fn validate_on_connection(conn: &mut SqliteConnection) -> anyho
         .iter()
         .map(|m| (m.version, true, m.checksum.to_vec()))
         .collect();
-    let supported = expected.last().map_or(0, |(version, _, _)| *version);
-    if let Some(found) = rows
-        .iter()
-        .map(|(version, _, _)| *version)
-        .filter(|version| *version > supported)
-        .max()
-    {
-        return Err(NewerLedgerFormat { found, supported }.into());
-    }
+    refuse_newer(rows.iter().map(|(version, _, _)| *version))?;
     ensure!(
         !rows.is_empty() && expected.starts_with(&rows),
         "unsupported, failed or checksum-mismatched accounting migration"

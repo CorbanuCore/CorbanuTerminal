@@ -291,9 +291,9 @@ pub(crate) async fn attach_turn(
         turn,
     )
     .await?;
-    if !matches!(turn_context.config.accounting, AccountingMode::Disabled)
-        && ledger_refused(session).await
-        && first_notice(&FORMAT_WARNED, session.thread_id)
+    let notices = &session.services.accounting_notices;
+    if notices.format.load(Ordering::Relaxed) == FORMAT_NEWER
+        && !notices.format_warned.swap(true, Ordering::Relaxed)
     {
         session
             .send_event(
@@ -313,53 +313,60 @@ pub(crate) async fn attach_turn(
 pub(crate) const NEWER_LEDGER_WARNING: &str = "Developer accounting is off for this session: this home's cost ledger was written by a newer Corbanu build. \
      Requests are sent as usual; /cost does not include them.";
 
-static FORMAT_REFUSED: std::sync::LazyLock<Mutex<std::collections::HashMap<ThreadId, bool>>> =
-    std::sync::LazyLock::new(Default::default);
-static FORMAT_WARNED: std::sync::LazyLock<Mutex<std::collections::HashSet<ThreadId>>> =
-    std::sync::LazyLock::new(Default::default);
-static EXCLUDED: std::sync::LazyLock<Mutex<std::collections::HashSet<ThreadId>>> =
-    std::sync::LazyLock::new(Default::default);
-
-/// Whether `thread` is noted in `set` for the first time.
-fn first_notice(
-    set: &std::sync::LazyLock<Mutex<std::collections::HashSet<ThreadId>>>,
-    thread: ThreadId,
-) -> bool {
-    set.lock().map_or(true, |mut set| set.insert(thread))
+/// Where a session's paid requests are recorded: the thread they are
+/// attributed to and the ledger that thread lives in.
+#[derive(Clone)]
+pub(crate) struct AccountingOwner {
+    pub(crate) thread: ThreadId,
+    pub(crate) db: codex_rollout::state_db::StateDbHandle,
 }
 
-/// Whether this session's ledger is in a format newer than this build's.
-/// Probed once per session; collection stays off for the session after that.
-async fn ledger_refused(session: &crate::session::session::Session) -> bool {
-    if let Some(refused) = FORMAT_REFUSED
-        .lock()
-        .ok()
-        .and_then(|cache| cache.get(&session.thread_id).copied())
-    {
-        return refused;
+/// What a session has already been told about its ledger; each notice is
+/// given once per session. Held on the session, so it ends with it.
+#[derive(Debug, Default)]
+pub(crate) struct SessionNotices {
+    /// `FORMAT_NEWER` once the ledger was found in a newer format.
+    pub(crate) format: std::sync::atomic::AtomicU8,
+    pub(crate) format_warned: std::sync::atomic::AtomicBool,
+    pub(crate) excluded: std::sync::atomic::AtomicBool,
+}
+
+const FORMAT_NEWER: u8 = 1;
+
+/// Whether the session's ledger is in a format newer than this build's. Once
+/// it is, collection stays off for the session. Anything else is probed again
+/// on the next turn - one read of the applied migrations - because another
+/// build sharing this home may upgrade the ledger at any time.
+async fn ledger_refused(
+    session: &crate::session::session::Session,
+    db: &codex_rollout::state_db::StateDbHandle,
+) -> bool {
+    let notices = &session.services.accounting_notices;
+    if notices.format.load(Ordering::Relaxed) == FORMAT_NEWER {
+        return true;
     }
-    let refused = match session.state_db() {
-        Some(runtime) => AccountingStore::check_format(&runtime)
-            .await
-            .err()
-            .is_some_and(|error| codex_state::accounting::is_newer_format(&error)),
-        None => false,
-    };
-    if refused {
-        tracing::warn!(
-            target: LOG_TARGET,
-            "accounting: ledger written in a newer format; collection off for this session"
-        );
+    match AccountingStore::check_format(db).await {
+        Ok(()) => false,
+        Err(error) if codex_state::accounting::is_newer_format(&error) => {
+            tracing::warn!(
+                target: LOG_TARGET,
+                "accounting: ledger written in a newer format; collection off for this session"
+            );
+            notices.format.store(FORMAT_NEWER, Ordering::Relaxed);
+            true
+        }
+        Err(_) => false,
     }
-    if let Ok(mut cache) = FORMAT_REFUSED.lock() {
-        cache.insert(session.thread_id, refused);
-    }
-    refused
 }
 
 /// Name, once per session, a session whose paid requests are not collected.
-fn excluded_once(thread: ThreadId, reason: &'static str) {
-    if first_notice(&EXCLUDED, thread) {
+fn excluded_once(session: &crate::session::session::Session, reason: &'static str) {
+    if !session
+        .services
+        .accounting_notices
+        .excluded
+        .swap(true, Ordering::Relaxed)
+    {
         // The module path is `LOG_TARGET`; a dotted field name cannot follow
         // an explicit target in this macro.
         tracing::warn!(
@@ -367,6 +374,39 @@ fn excluded_once(thread: ThreadId, reason: &'static str) {
             "accounting: this session's model requests are not recorded"
         );
     }
+}
+
+/// Why a session's requests are not recorded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Uncollected {
+    /// Not collected by design (an ephemeral session, a reviewer of a
+    /// conversation that is not persisted): named once in the log.
+    Excluded(&'static str),
+    /// The ledger could not be reached: each such turn warns that requests
+    /// went unrecorded.
+    Failed(&'static str),
+    /// The ledger is in a newer format: collection is off for the session.
+    NewerFormat,
+}
+
+/// The owner a collecting session records under. A session excluded by design
+/// is named once in the log; a ledger that cannot be reached is logged as a
+/// gap.
+pub(crate) async fn collecting_owner(
+    session: &crate::session::session::Session,
+) -> Result<AccountingOwner, Uncollected> {
+    let owner = session
+        .accounting_owner()
+        .await
+        .inspect_err(|why| match why {
+            Uncollected::Excluded(reason) => excluded_once(session, *reason),
+            Uncollected::Failed(cause) => gap("open sampling", cause),
+            Uncollected::NewerFormat => {}
+        })?;
+    if ledger_refused(session, &owner.db).await {
+        return Err(Uncollected::NewerFormat);
+    }
+    Ok(owner)
 }
 
 /// Bind collection for one unit of inference on one client session.
@@ -387,49 +427,53 @@ pub(crate) async fn attach_scopes(
     client_session: &crate::client::ModelClientSession,
     turn: String,
 ) -> Result<TurnScopes, CodexErr> {
-    // An ephemeral session persists no thread. A guardian review fork is
-    // recorded under the conversation it reviews for, labelled as a review;
-    // any other ephemeral session has no owner to attribute its attempts to,
-    // so it is left uncollected - named once in the log - and its turns run.
-    let owner = session.accounting_owner().await;
-    let turn = match owner {
-        Some(owner) if owner != session.thread_id => scoped_turn_label("review:", &turn),
+    // A persisted session records under its own thread. A guardian reviewer
+    // records under the conversation it reviews for, labelled as a review.
+    // Any other session has no owner to attribute its attempts to, so it is
+    // left uncollected - named once in the log - and its turns run.
+    // A ledger that cannot be reached leaves this turn's requests unrecorded;
+    // it never stops them.
+    let mut unrecorded = false;
+    let owner = if matches!(accounting, AccountingMode::Disabled) {
+        None
+    } else {
+        match collecting_owner(session).await {
+            Ok(owner) => Some(owner),
+            Err(Uncollected::Failed(_)) => {
+                unrecorded = true;
+                None
+            }
+            Err(Uncollected::Excluded(_) | Uncollected::NewerFormat) => None,
+        }
+    };
+    let turn = match &owner {
+        Some(owner) if owner.thread != session.thread_id => scoped_turn_label("review:", &turn),
         Some(_) | None => turn,
     };
-    let collecting = !matches!(accounting, AccountingMode::Disabled);
-    if owner.is_none() && collecting {
-        excluded_once(session.thread_id, "ephemeral_session");
-    }
-    let mode = if owner.is_none() || (collecting && ledger_refused(session).await) {
-        AccountingMode::Disabled
-    } else if matches!(accounting, AccountingMode::Provider { .. }) {
-        turn_mode(
+    let mode = match &owner {
+        None => AccountingMode::Disabled,
+        Some(_) if matches!(accounting, AccountingMode::Provider { .. }) => turn_mode(
             accounting,
             provider_id,
             provider,
             auth_mode,
             resolved_endpoint,
-        )
-    } else {
-        accounting.clone()
+        ),
+        Some(_) => accounting.clone(),
     };
     let collects_wire = |wire| collects(&mode, provider_id, provider, wire);
     // A sampling that cannot open leaves this turn's Messages requests
     // unrecorded; it never stops them.
-    let mut unrecorded = false;
     let anthropic = if collects_wire(codex_model_provider_info::WireApi::Anthropic) {
         let opened = async {
             session
                 .try_ensure_rollout_materialized()
                 .await
                 .map_err(|error| CodexErr::Fatal(failure("materialize rollout", error).into()))?;
-            let runtime = session.state_db().ok_or_else(|| {
-                CodexErr::Fatal(failure("open sampling", "no state database").into())
-            })?;
-            let owner = owner.ok_or_else(|| {
+            let owner = owner.as_ref().ok_or_else(|| {
                 CodexErr::Fatal(failure("open sampling", "no accounting owner").into())
             })?;
-            Sampling::start(runtime, owner, turn.clone(), &mode).await
+            Sampling::start(owner.db.clone(), owner.thread, turn.clone(), &mode).await
         }
         .await;
         match opened {
@@ -445,22 +489,31 @@ pub(crate) async fn attach_scopes(
     };
     let _anthropic_scope =
         SamplingScope::attach(Arc::clone(&client_session.accounting), anthropic.clone())?;
-    let owner = owner.unwrap_or(session.thread_id);
-    let responses = collects_wire(codex_model_provider_info::WireApi::Responses).then(|| {
-        responses::DeferredResponsesSampling::new_for(
-            Arc::clone(session),
-            owner,
-            turn.clone(),
-            mode.clone(),
-        )
-    });
+    let responses = owner
+        .clone()
+        .filter(|_| collects_wire(codex_model_provider_info::WireApi::Responses))
+        .map(|owner| {
+            responses::DeferredResponsesSampling::new_for(
+                Arc::clone(session),
+                owner,
+                turn.clone(),
+                mode.clone(),
+            )
+        });
     let _responses_scope = responses::Scope::attach(
         Arc::clone(&client_session.responses_accounting),
         responses.clone(),
     )?;
-    let chat = collects_wire(codex_model_provider_info::WireApi::Chat).then(|| {
-        chat::DeferredChatSampling::new_for(Arc::clone(session), owner, turn.clone(), mode.clone())
-    });
+    let chat = owner
+        .filter(|_| collects_wire(codex_model_provider_info::WireApi::Chat))
+        .map(|owner| {
+            chat::DeferredChatSampling::new_for(
+                Arc::clone(session),
+                owner,
+                turn.clone(),
+                mode.clone(),
+            )
+        });
     let _chat_scope =
         chat::Scope::attach(Arc::clone(&client_session.chat_accounting), chat.clone())?;
     Ok(TurnScopes {

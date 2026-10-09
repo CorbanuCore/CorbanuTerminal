@@ -893,3 +893,127 @@ async fn accounting_newer_ledger_format_turns_collection_off_once() -> anyhow::R
     stop(&test).await;
     Ok(())
 }
+
+/// PF-60-S05 AC8: a guardian approval review is paid inference for the
+/// conversation it reviews, so its request is recorded under that
+/// conversation's thread, labelled as a review, and the conversation's totals
+/// include it. The first review runs on the reusable trunk reviewer, which is
+/// a persisted thread of its own; it still records under the parent.
+#[cfg(not(target_os = "windows"))]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn accounting_guardian_review_is_recorded_under_the_reviewed_conversation()
+-> anyhow::Result<()> {
+    use codex_core::config::Constrained;
+    use codex_core::sandboxing::SandboxPermissions;
+    use codex_protocol::config_types::ApprovalsReviewer;
+    use codex_protocol::protocol::AskForApproval;
+    use codex_protocol::protocol::Op;
+    use codex_protocol::protocol::SandboxPolicy;
+    use codex_protocol::user_input::UserInput;
+    use core_test_support::responses::ev_assistant_message;
+    use core_test_support::responses::ev_completed;
+    use core_test_support::responses::ev_function_call;
+    use core_test_support::responses::ev_response_created;
+    use core_test_support::responses::sse;
+    core_test_support::skip_if_no_network!(Ok(()));
+    core_test_support::skip_if_sandbox!(Ok(()));
+
+    let server = MockServer::start().await;
+    let endpoint = format!("{}/v1", server.uri());
+    let approval_policy = AskForApproval::OnRequest;
+    let sandbox_policy = SandboxPolicy::WorkspaceWrite {
+        writable_roots: vec![],
+        network_access: false,
+        exclude_tmpdir_env_var: true,
+        exclude_slash_tmp: true,
+    };
+    let sandbox_for_config = sandbox_policy.clone();
+    let test = builder(endpoint.clone(), enabled(&endpoint))
+        .with_config(move |config| {
+            config.permissions.approval_policy = Constrained::allow_any(approval_policy);
+            config
+                .set_legacy_sandbox_policy(sandbox_for_config)
+                .expect("set sandbox policy");
+        })
+        .build_with_auto_env(&server)
+        .await?;
+    let output_file = test.cwd.path().join("guardian-denied.txt");
+    let tool_args = json!({
+        "cmd": format!("printf should-not-run > {}", output_file.display()),
+        "yield_time_ms": 1_000_u64,
+        "sandbox_permissions": SandboxPermissions::RequireEscalated,
+        "justification": "Exercise Guardian accounting.",
+    });
+    responses::mount_sse_sequence(
+        &server,
+        vec![
+            sse(vec![
+                ev_response_created("resp-parent-tool"),
+                ev_function_call(
+                    "exec-call",
+                    "exec_command",
+                    &serde_json::to_string(&tool_args)?,
+                ),
+                ev_completed("resp-parent-tool"),
+            ]),
+            sse(vec![
+                ev_response_created("resp-guardian"),
+                ev_assistant_message(
+                    "msg-guardian",
+                    &json!({
+                        "risk_level": "high",
+                        "user_authorization": "low",
+                        "outcome": "deny",
+                        "rationale": "Fixture denial.",
+                    })
+                    .to_string(),
+                ),
+                ev_completed("resp-guardian"),
+            ]),
+            sse(vec![
+                ev_response_created("resp-parent-after"),
+                ev_assistant_message("msg-parent-after", "denied"),
+                ev_completed("resp-parent-after"),
+            ]),
+        ],
+    )
+    .await;
+    test.codex
+        .submit(Op::UserInput {
+            items: vec![UserInput::Text {
+                text: "run a command the reviewer denies".into(),
+                text_elements: Vec::new(),
+            }],
+            final_output_json_schema: None,
+            responsesapi_client_metadata: None,
+            additional_context: Default::default(),
+            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                approval_policy: Some(approval_policy),
+                approvals_reviewer: Some(ApprovalsReviewer::AutoReview),
+                sandbox_policy: Some(sandbox_policy),
+                ..Default::default()
+            },
+        })
+        .await?;
+    core_test_support::wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
+    let db = test.codex.state_db().unwrap();
+    let records = wait_attempts(&db, /*count*/ 3).await?;
+    let parent = test.session_configured.thread_id;
+    assert_eq!(
+        records
+            .iter()
+            .map(|attempt| (
+                attempt.thread_id == parent,
+                attempt.turn.starts_with("review:")
+            ))
+            .collect::<Vec<_>>(),
+        vec![(true, false), (true, true), (true, false)],
+        "{records:#?}"
+    );
+    assert!(!output_file.exists());
+    stop(&test).await;
+    Ok(())
+}

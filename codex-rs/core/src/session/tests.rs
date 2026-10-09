@@ -6230,6 +6230,7 @@ pub(crate) async fn make_session_and_context_for_config(config: Config) -> (Sess
         managed_network_requirements_configured: false,
         network_approval: Arc::clone(&network_approval),
         state_db: None,
+        accounting_notices: Default::default(),
         live_thread: None,
         thread_store: Arc::new(codex_thread_store::LocalThreadStore::new(
             codex_thread_store::LocalThreadStoreConfig::from_config(config.as_ref()),
@@ -8474,6 +8475,7 @@ where
         managed_network_requirements_configured: false,
         network_approval: Arc::clone(&network_approval),
         state_db: state_db.clone(),
+        accounting_notices: Default::default(),
         live_thread: None,
         thread_store: Arc::new(codex_thread_store::LocalThreadStore::new(
             codex_thread_store::LocalThreadStoreConfig::from_config(config.as_ref()),

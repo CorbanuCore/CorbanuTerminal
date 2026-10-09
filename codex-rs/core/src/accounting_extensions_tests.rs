@@ -63,6 +63,7 @@ async fn accounting_extension_client_records_its_own_request() -> anyhow::Result
     )
     .await?;
     session.services.state_db = Some(db.clone());
+    crate::session::tests::open_thread_persistence(&mut session).await;
     let owner = Arc::new(session);
     db.upsert_thread(
         &ThreadMetadataBuilder::new(
@@ -198,6 +199,7 @@ async fn accounting_extension_client_without_its_session_records_nothing() -> an
     )
     .await?;
     session.services.state_db = Some(db.clone());
+    crate::session::tests::open_thread_persistence(&mut session).await;
     let owner = Arc::new(session);
     let accounting = ExtensionAccounting::new(Arc::downgrade(&owner));
     drop(owner);
@@ -295,6 +297,7 @@ async fn accounting_extension_client_binds_the_route_it_actually_sends_to() -> a
     )
     .await?;
     session.services.state_db = Some(db.clone());
+    crate::session::tests::open_thread_persistence(&mut session).await;
     let owner = Arc::new(session);
     db.upsert_thread(
         &ThreadMetadataBuilder::new(
@@ -386,6 +389,7 @@ async fn accounting_records_a_request_another_client_already_sent() -> anyhow::R
     )
     .await?;
     session.services.state_db = Some(db.clone());
+    crate::session::tests::open_thread_persistence(&mut session).await;
     let owner = Arc::new(session);
     db.upsert_thread(
         &ThreadMetadataBuilder::new(
@@ -484,6 +488,7 @@ async fn accounting_records_a_request_another_client_already_sent() -> anyhow::R
         let (mut session, _context) =
             crate::session::tests::make_session_and_context_for_config(config).await;
         session.services.state_db = Some(db.clone());
+        crate::session::tests::open_thread_persistence(&mut session).await;
         Arc::new(session)
     };
     db.upsert_thread(
@@ -552,6 +557,7 @@ async fn accounting_records_a_request_another_client_already_sent() -> anyhow::R
         let (mut session, _context) =
             crate::session::tests::make_session_and_context_for_config(config).await;
         session.services.state_db = Some(db.clone());
+        crate::session::tests::open_thread_persistence(&mut session).await;
         Arc::new(session)
     };
     assert!(
@@ -629,6 +635,7 @@ async fn accounting_store_failure_never_fails_search_or_image() -> anyhow::Resul
             )
             .await?;
             session.services.state_db = Some(db.clone());
+            crate::session::tests::open_thread_persistence(&mut session).await;
             let owner = Arc::new(session);
             db.upsert_thread(
                 &ThreadMetadataBuilder::new(

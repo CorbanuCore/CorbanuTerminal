@@ -792,13 +792,36 @@ async fn guardian_subagent_does_not_inherit_parent_exec_policy_rules() {
 }
 
 /// PF-60-S05 AC8: an ephemeral guardian review fork records its paid requests
-/// under the conversation it reviews for; any other ephemeral session has no
+/// under the conversation it reviews for, in that conversation's ledger, when
+/// that conversation is persisted; any other ephemeral session has no
 /// accounting owner.
 #[tokio::test]
-async fn accounting_owner_of_a_guardian_fork_is_the_reviewed_conversation() {
-    let (session, _turn) = crate::session::tests::make_session_and_context().await;
+async fn accounting_owner_of_a_guardian_fork_is_the_reviewed_conversation() -> anyhow::Result<()> {
+    let (mut session, _turn) = crate::session::tests::make_session_and_context().await;
     assert!(session.live_thread().is_none());
-    assert_eq!(session.accounting_owner().await, None);
+    assert_eq!(
+        session.accounting_owner().await.err(),
+        Some(crate::accounting::Uncollected::Excluded(
+            "ephemeral_session"
+        ))
+    );
+    // An ephemeral fork has no database of its own; its thread store is the
+    // reviewed conversation's, and so is its ledger.
+    let home = tempfile::tempdir()?;
+    let db = codex_state::StateRuntime::init(
+        codex_state::SqliteConfig::from_sqlite_home(
+            codex_utils_absolute_path::AbsolutePathBuf::try_from(home.path().to_path_buf())?,
+        ),
+        "openai".into(),
+    )
+    .await?;
+    session.services.state_db = None;
+    session.services.thread_store = Arc::new(codex_thread_store::LocalThreadStore::new(
+        codex_thread_store::LocalThreadStoreConfig::from_config(
+            session.get_config().await.as_ref(),
+        ),
+        Some(db.clone()),
+    ));
     let parent = codex_protocol::ThreadId::new();
     {
         let mut state = session.state.lock().await;
@@ -806,11 +829,79 @@ async fn accounting_owner_of_a_guardian_fork_is_the_reviewed_conversation() {
             SessionSource::SubAgent(SubAgentSource::Other(GUARDIAN_REVIEWER_NAME.to_string()));
         state.session_configuration.parent_thread_id = Some(parent);
     }
-    assert_eq!(session.accounting_owner().await, Some(parent));
+    // A reviewer of a conversation that is not persisted has nowhere to record.
+    assert_eq!(
+        session.accounting_owner().await.err(),
+        Some(crate::accounting::Uncollected::Excluded(
+            "parent_not_persisted"
+        ))
+    );
+    db.upsert_thread(
+        &codex_state::ThreadMetadataBuilder::new(
+            parent,
+            home.path().join("parent.jsonl"),
+            chrono::Utc::now(),
+            SessionSource::Cli,
+        )
+        .build("openai"),
+    )
+    .await?;
+    let owner = session
+        .accounting_owner()
+        .await
+        .map_err(|why| anyhow::anyhow!("{why:?}"))?;
+    assert_eq!(owner.thread, parent);
+    assert!(Arc::ptr_eq(&owner.db, &db));
     {
         let mut state = session.state.lock().await;
         state.session_configuration.session_source =
             SessionSource::SubAgent(SubAgentSource::Other("another-helper".to_string()));
     }
-    assert_eq!(session.accounting_owner().await, None);
+    assert_eq!(
+        session.accounting_owner().await.err(),
+        Some(crate::accounting::Uncollected::Excluded(
+            "ephemeral_session"
+        ))
+    );
+    Ok(())
+}
+
+/// PF-60-S05 AC9: a session whose paid requests are not collected says so in
+/// the log once, however many turns it runs.
+#[tokio::test]
+async fn an_uncollected_session_is_named_once() {
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::atomic::Ordering;
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+    struct Excluded(Arc<AtomicUsize>);
+    impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Excluded {
+        fn on_event(
+            &self,
+            event: &tracing::Event<'_>,
+            _: tracing_subscriber::layer::Context<'_, S>,
+        ) {
+            if event
+                .metadata()
+                .fields()
+                .field("accounting.excluded")
+                .is_some()
+            {
+                self.0.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+    }
+    let count = Arc::new(AtomicUsize::new(0));
+    let _guard = tracing_subscriber::registry()
+        .with(Excluded(Arc::clone(&count)))
+        .set_default();
+    let (session, _turn) = crate::session::tests::make_session_and_context().await;
+    for _ in 0..3 {
+        assert!(
+            crate::accounting::collecting_owner(&session)
+                .await
+                .is_err()
+        );
+    }
+    assert_eq!(count.load(Ordering::SeqCst), 1);
 }
