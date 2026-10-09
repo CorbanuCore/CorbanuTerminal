@@ -153,6 +153,7 @@ async fn sec_win_300_unelevated_tool_launch_refuses_deny_read_profiles() {
             },
         ),
     ];
+    let mut outcomes = Vec::new();
     for (label, path) in denies {
         let (mut file_system, _) = base.to_runtime_permissions();
         file_system.entries.push(FileSystemSandboxEntry {
@@ -174,14 +175,14 @@ async fn sec_win_300_unelevated_tool_launch_refuses_deny_read_profiles() {
             }
         };
         eprintln!("sec-win-300 unelevated, {label} deny on secret.env: {outcome}");
+        outcomes.push((label, outcome));
+    }
+    let refusal = format!(
+        "unsupported operation: {}",
+        codex_sandboxing::UNELEVATED_DENY_READ_REFUSAL
+    );
+    for (label, outcome) in outcomes {
         assert!(!outcome.contains(SECRET), "{label}: read a denied file");
-        assert_eq!(
-            outcome,
-            format!(
-                "unsupported operation: {}",
-                codex_sandboxing::UNELEVATED_DENY_READ_REFUSAL
-            ),
-            "{label}"
-        );
+        assert_eq!(outcome, refusal, "{label}");
     }
 }
