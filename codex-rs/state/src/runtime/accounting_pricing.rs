@@ -181,6 +181,8 @@ pub enum BasisSource {
 }
 
 impl BasisSource {
+    // serde's `skip_serializing_if` passes the field by reference.
+    #[allow(clippy::trivially_copy_pass_by_ref)]
     fn is_built_in(&self) -> bool {
         matches!(self, Self::BuiltIn)
     }

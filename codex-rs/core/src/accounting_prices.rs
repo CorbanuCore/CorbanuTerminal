@@ -191,6 +191,35 @@ pub(super) fn plan_original(
     )
 }
 
+/// A price record that states only the attempt's billing basis: subscription
+/// work the catalogue gives no figure for, local work, or work on a route with
+/// no declared basis. It carries no rates, so it never invents a number; it
+/// exists so the basis is bound to the attempt even without a price.
+pub(super) fn basis_only(
+    basis: Basis,
+    model: &str,
+    provider: &str,
+    scope: Uuid,
+    accepted_at: i64,
+) -> anyhow::Result<Vec<Snapshot>> {
+    let reference = serde_json::to_vec(&("basis-only-v1", provider, model, basis))?;
+    snapshot(
+        model,
+        provider,
+        scope,
+        accepted_at,
+        Rates {
+            noncached: None,
+            read: None,
+            write: None,
+            output: None,
+        },
+        reference,
+        basis,
+        /*plan_burn_millis*/ None,
+    )
+}
+
 /// The catalogue's billing for exactly this provider's row, or nothing.
 ///
 /// The slug must be unambiguous and the row must belong to the provider the

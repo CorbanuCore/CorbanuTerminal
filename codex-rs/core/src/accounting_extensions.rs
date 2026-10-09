@@ -140,8 +140,10 @@ impl ExtensionAccounting {
     ///   may be reported; this records them.
     ///
     /// No money is claimed. The credential is the reporting client's, not one
-    /// this session can attribute to a catalogue account, so the turn records
-    /// its tokens and states no economics.
+    /// this session can attribute to a catalogue account, so a pay-per-use
+    /// route records its tokens with no price. The route's declared basis is
+    /// still bound to the attempt: Claude subscription work reported here is
+    /// subscription work, never pay per use.
     pub async fn record_sent_request(&self, request: SentModelRequest) -> bool {
         let Some(owner) = self.owner.upgrade() else {
             return false;
@@ -152,13 +154,39 @@ impl ExtensionAccounting {
         let AccountingMode::Provider { scope, .. } = accounting else {
             return false;
         };
+        // The reporter's route is a built-in provider's own route (the server
+        // checked it), reached with the credential that provider is built for.
+        let declared = codex_model_provider_info::built_in_model_providers(
+            /*openai_base_url*/ None,
+        )
+        .get(&request.provider_id)
+        .map(|built_in| {
+            let credential =
+                codex_model_provider_info::BillingCredential::of(built_in, /*auth_mode*/ None);
+            codex_model_provider_info::declared_billing(
+                &request.provider_id,
+                built_in,
+                credential,
+                &request.endpoint,
+                /*at_built_in_route*/ true,
+            )
+        });
+        use codex_model_provider_info::BillingBasis;
+        let pricing = match declared.and_then(codex_model_provider_info::BillingDeclaration::basis)
+        {
+            Some(BillingBasis::Subscription) => crate::config::PriceAuthority::PlanRate,
+            Some(BillingBasis::PayPerUse) => crate::config::PriceAuthority::Unavailable,
+            Some(BillingBasis::Local) => crate::config::PriceAuthority::Local,
+            None => crate::config::PriceAuthority::Undeclared,
+        };
         let mode = AccountingMode::Provider {
             scope,
             provider_id: request.provider_id,
             wire_api: request.wire_api,
             approved_endpoint: request.endpoint.clone(),
             approved_query: None,
-            pricing: crate::config::PriceAuthority::Unavailable,
+            pricing,
+            basis_source: Default::default(),
         };
         if owner.try_ensure_rollout_materialized().await.is_err() {
             return false;

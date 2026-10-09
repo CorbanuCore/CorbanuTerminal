@@ -567,6 +567,7 @@ fn accounting_provider_held_plan_login_takes_the_plan_side() {
         approved_endpoint: endpoint.clone(),
         approved_query: None,
         pricing: PriceAuthority::Unavailable,
+        basis_source: Default::default(),
     };
     for auth in [None, Some(codex_protocol::auth::AuthMode::Chatgpt)] {
         let bound = super::super::turn_mode(&mode, "claude-plan", &provider, auth, &endpoint);

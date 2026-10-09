@@ -359,6 +359,32 @@
       },
       "type": "object"
     },
+    "BillingBasis": {
+      "description": "How work on a route is paid for.",
+      "oneOf": [
+        {
+          "description": "Covered by a membership or plan; never counted as money spent.",
+          "enum": [
+            "subscription"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Charged per request from a balance or card.",
+          "enum": [
+            "pay_per_use"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Runs on the user's own machine; no charge.",
+          "enum": [
+            "local"
+          ],
+          "type": "string"
+        }
+      ]
+    },
     "BundledSkillsConfig": {
       "additionalProperties": false,
       "properties": {
@@ -508,10 +534,10 @@
             "concurrent_reasoning_summaries": {
               "type": "boolean"
             },
-            "contained_external_agents": {
+            "connectors": {
               "type": "boolean"
             },
-            "connectors": {
+            "contained_external_agents": {
               "type": "boolean"
             },
             "current_time_reminder": {
@@ -1759,6 +1785,14 @@
         "base_url": {
           "description": "Base URL for the provider's OpenAI-compatible API.",
           "type": "string"
+        },
+        "billing": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/BillingBasis"
+            }
+          ],
+          "description": "How this provider's work is paid for: `subscription`, `pay_per_use` or `local`. Overrides the built-in declaration for unusual setups; when unset, the built-in table decides from the route and credential used, and an unknown route is shown as not declared."
         },
         "chat_completions_provider": {
           "description": "Optional `provider` object to include in Chat Completions request bodies. This is used by OpenRouter-compatible routes for provider routing preferences such as `order`, `sort`, `allow_fallbacks`, and `require_parameters`."
@@ -5226,10 +5260,10 @@
         "concurrent_reasoning_summaries": {
           "type": "boolean"
         },
-        "contained_external_agents": {
+        "connectors": {
           "type": "boolean"
         },
-        "connectors": {
+        "contained_external_agents": {
           "type": "boolean"
         },
         "current_time_reminder": {

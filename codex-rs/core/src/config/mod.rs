@@ -362,21 +362,32 @@ pub(crate) async fn test_config() -> Config {
     config
 }
 
-/// Which economics this client may state for a turn, decided by the route and
-/// the authentication actually used.
+/// Which economics this client may state for a turn, from the billing basis
+/// declared for the route and credential actually used
+/// (`codex_model_provider_info::declared_billing`).
 ///
-/// These are three situations, not two. Conflating "ran on a plan" with "ran
-/// under an API key somewhere this client cannot price" would book API-key spend
-/// as subscription capacity.
+/// Conflating "ran on a plan" with "ran under an API key somewhere this client
+/// cannot price" would book API-key spend as subscription capacity, so every
+/// basis is its own variant and none is inferred from the kind of login.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PriceAuthority {
-    /// Rates the provider charges per token for this route and this credential.
+    /// Pay per use: the rates the provider charges per token for this route
+    /// and this credential.
     ApiKeyRates,
-    /// Subscription capacity: the plan rate that applied, and any API equivalent
-    /// the catalogue states for the same row.
+    /// Subscription capacity at a built-in route: the plan rate that applied,
+    /// and any API equivalent the catalogue states for the same row.
     PlanRate,
-    /// Neither. Tokens are still recorded; no economics are claimed.
+    /// Subscription capacity off the built-in routes: subscription work with
+    /// no catalogue figure.
+    PlanBasis,
+    /// Pay per use with no rate this client can attribute. Tokens are still
+    /// recorded; no money is stated.
     Unavailable,
+    /// Runs on the user's own machine: no charge.
+    Local,
+    /// No basis is declared for this route and credential: neither money
+    /// spent nor subscription work.
+    Undeclared,
 }
 
 /// Application configuration loaded from disk and merged with overrides.
@@ -678,6 +689,8 @@ pub enum AccountingMode {
         /// here because the provider stores them in a `HashMap`.
         approved_query: Option<String>,
         pricing: PriceAuthority,
+        /// Where the basis behind `pricing` was declared.
+        basis_source: codex_state::accounting::BasisSource,
     },
     DirectAnthropic {
         scope: uuid::Uuid,

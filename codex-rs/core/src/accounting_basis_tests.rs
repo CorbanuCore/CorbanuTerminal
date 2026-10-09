@@ -1,0 +1,182 @@
+//! The declared billing basis decides a turn's economics (PF-60-S05).
+use super::*;
+use crate::config::AccountingMode;
+use crate::config::PriceAuthority;
+use codex_model_provider_info::BillingBasis;
+use codex_model_provider_info::ModelProviderInfo;
+use codex_protocol::auth::AuthMode;
+use codex_protocol::protocol::SessionSource;
+use codex_state::SqliteConfig;
+use codex_state::ThreadMetadataBuilder;
+use codex_state::accounting::Basis;
+use codex_state::accounting::BasisSource;
+use codex_state::accounting::Rates;
+use codex_state::accounting::Snapshot;
+use codex_utils_absolute_path::AbsolutePathBuf;
+use pretty_assertions::assert_eq;
+
+fn bound(
+    id: &str,
+    provider: &ModelProviderInfo,
+    auth: Option<AuthMode>,
+    endpoint: &str,
+) -> (PriceAuthority, BasisSource) {
+    let mode = AccountingMode::Provider {
+        scope: Uuid::new_v4(),
+        provider_id: id.into(),
+        wire_api: provider.wire_api,
+        approved_endpoint: endpoint.into(),
+        approved_query: None,
+        pricing: PriceAuthority::Unavailable,
+        basis_source: Default::default(),
+    };
+    let AccountingMode::Provider {
+        pricing,
+        basis_source,
+        ..
+    } = turn_mode(&mode, id, provider, auth, endpoint)
+    else {
+        panic!("{id}: provider mode must survive rebinding");
+    };
+    (pricing, basis_source)
+}
+
+fn built_in(id: &str) -> ModelProviderInfo {
+    codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None)[id].clone()
+}
+
+fn own_route(id: &str, auth: Option<AuthMode>) -> String {
+    built_in(id).to_api_provider(auth).unwrap().base_url
+}
+
+/// The declared table, not the kind of login, picks the economics. Each row
+/// would fail if inference from `AuthMode::ApiKey` or `provider.auth` came
+/// back (review Blocker 1 and Minor 10).
+#[test]
+fn declared_basis_decides_the_economics() {
+    let mut bedrock = built_in("amazon-bedrock");
+    bedrock.auth = Some(toml::from_str("command = \"print-token\"").unwrap());
+    let custom = ModelProviderInfo {
+        name: "custom".into(),
+        env_key: Some("CUSTOM_KEY".into()),
+        wire_api: codex_model_provider_info::WireApi::Chat,
+        ..ModelProviderInfo::default()
+    };
+    let cases = [
+        // Kimi Code membership through an environment key: subscription.
+        ("kimi-code", built_in("kimi-code"), Some(AuthMode::ApiKey), own_route("kimi-code", None), PriceAuthority::PlanRate),
+        ("zai-anthropic", built_in("zai-anthropic"), Some(AuthMode::ApiKey), own_route("zai-anthropic", None), PriceAuthority::PlanRate),
+        ("zai", built_in("zai"), Some(AuthMode::ApiKey), own_route("zai", None), PriceAuthority::ApiKeyRates),
+        ("claude-plan", built_in("claude-plan"), None, own_route("claude-plan", None), PriceAuthority::PlanRate),
+        // A command login on Bedrock is still pay per use; AWS routes carry no
+        // attributable catalogue rate.
+        ("amazon-bedrock", bedrock.clone(), None, own_route("amazon-bedrock", None), PriceAuthority::Unavailable),
+        ("ollama", built_in("ollama"), None, own_route("ollama", None), PriceAuthority::Local),
+        ("openai", built_in("openai"), Some(AuthMode::Chatgpt), own_route("openai", Some(AuthMode::Chatgpt)), PriceAuthority::PlanRate),
+        ("openai", built_in("openai"), Some(AuthMode::ApiKey), own_route("openai", Some(AuthMode::ApiKey)), PriceAuthority::ApiKeyRates),
+        // Option B: a custom provider follows the route it used.
+        ("my-glm", custom.clone(), None, "https://api.z.ai/api/coding/paas/v4".to_string(), PriceAuthority::PlanBasis),
+        ("my-llm", custom.clone(), None, "https://llm.example.com/v1".to_string(), PriceAuthority::Undeclared),
+        // A built-in credential moved off its route is judged by that route.
+        ("openai", built_in("openai"), Some(AuthMode::ApiKey), "https://relay.invalid/v1".to_string(), PriceAuthority::Undeclared),
+    ];
+    for (id, provider, auth, endpoint, expected) in cases {
+        assert_eq!(
+            bound(id, &provider, auth, &endpoint),
+            (expected, BasisSource::BuiltIn),
+            "{id} at {endpoint} with {auth:?}"
+        );
+    }
+}
+
+/// `model_providers.<id>.billing` overrides the table and is recorded as such.
+#[test]
+fn configured_basis_overrides_and_is_recorded() {
+    let mut zai = built_in("zai");
+    zai.billing = Some(BillingBasis::Subscription);
+    assert_eq!(
+        bound("zai", &zai, Some(AuthMode::ApiKey), &own_route("zai", None)),
+        (PriceAuthority::PlanRate, BasisSource::UserConfig)
+    );
+    let custom = ModelProviderInfo {
+        name: "custom".into(),
+        billing: Some(BillingBasis::Local),
+        ..ModelProviderInfo::default()
+    };
+    assert_eq!(
+        bound("my-box", &custom, None, "http://192.168.1.5:8000/v1"),
+        (PriceAuthority::Local, BasisSource::UserConfig)
+    );
+}
+
+fn mode(pricing: PriceAuthority, basis_source: BasisSource) -> AccountingMode {
+    AccountingMode::Provider {
+        scope: Uuid::new_v4(),
+        provider_id: "my-llm".into(),
+        wire_api: codex_model_provider_info::WireApi::Chat,
+        approved_endpoint: "https://llm.example.com/v1".into(),
+        approved_query: None,
+        pricing,
+        basis_source,
+    }
+}
+
+/// Every non-billed basis is bound to the attempt at admission as a record
+/// with no rates, with where it came from; pay per use with no price binds
+/// nothing, as before.
+#[tokio::test(flavor = "current_thread")]
+async fn admission_binds_the_basis_to_every_attempt() -> anyhow::Result<()> {
+    let home = tempfile::tempdir()?;
+    let db = StateRuntime::init(
+        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path())?),
+        "my-llm".into(),
+    )
+    .await?;
+    let owner = ThreadId::new();
+    db.upsert_thread(
+        &ThreadMetadataBuilder::new(
+            owner,
+            home.path().join("basis.jsonl"),
+            chrono::Utc::now(),
+            SessionSource::Cli,
+        )
+        .build("my-llm"),
+    )
+    .await?;
+    let cases = [
+        (PriceAuthority::Undeclared, BasisSource::BuiltIn, Some(Basis::Undeclared)),
+        (PriceAuthority::Local, BasisSource::UserConfig, Some(Basis::Local)),
+        (PriceAuthority::PlanBasis, BasisSource::UserConfig, Some(Basis::PlanEquivalent)),
+        (PriceAuthority::Unavailable, BasisSource::BuiltIn, None),
+    ];
+    for (pricing, source, expected) in cases {
+        let sampling =
+            Sampling::start(db.clone(), owner, format!("{pricing:?}"), &mode(pricing, source))
+                .await?;
+        sampling
+            .admit("some-model", "https://llm.example.com/v1/chat/completions")
+            .await?;
+        let quote = codex_state::accounting::AccountingStore::inspect_day(
+            &db,
+            owner,
+            chrono::Utc::now().timestamp_millis() / 86_400_000,
+            chrono::Utc::now().timestamp_millis(),
+        )
+        .await?;
+        let codex_state::accounting::InspectionDay::Ready(view) = quote else {
+            panic!("{quote:?}");
+        };
+        let snapshot: Option<Snapshot> = view
+            .requests
+            .values()
+            .flatten()
+            .find(|quote| quote.attempt.turn == format!("{pricing:?}"))
+            .and_then(|quote| quote.snapshot.clone());
+        assert_eq!(
+            snapshot.map(|s| (s.basis, s.rates, s.basis_source)),
+            expected.map(|basis| (basis, Rates::default(), source)),
+            "{pricing:?}"
+        );
+    }
+    Ok(())
+}

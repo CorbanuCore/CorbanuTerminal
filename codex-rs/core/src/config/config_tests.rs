@@ -1100,8 +1100,50 @@ supports_websockets = true
 
     assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
     assert!(err.to_string().contains(
-        "model_providers.amazon-bedrock only supports changing `base_url`, `auth`, `http_headers`, `aws.profile`, and `aws.region`; other non-default provider fields are not supported"
+        "model_providers.amazon-bedrock only supports changing `base_url`, `auth`, `http_headers`, `aws.profile`, `aws.region`, and `billing`; other non-default provider fields are not supported"
     ));
+}
+
+/// `model_providers.<id>.billing` declares a basis for a built-in provider,
+/// reserved IDs included, without replacing it (PF-60-S05 AC3).
+#[tokio::test]
+async fn load_config_accepts_a_billing_override_on_built_in_providers() {
+    let cfg = toml::from_str::<ConfigToml>(
+        r#"
+model_provider = "zai"
+
+[model_providers.zai]
+billing = "subscription"
+
+[model_providers.kimi-code]
+billing = "pay_per_use"
+"#,
+    )
+    .expect("billing-only overrides deserialize");
+    let config = Config::load_from_base_config_with_overrides(
+        cfg,
+        ConfigOverrides::default(),
+        tempdir().expect("tempdir").abs(),
+    )
+    .await
+    .expect("billing-only overrides load");
+    let built_in = codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None);
+    for (id, basis) in [
+        ("zai", codex_model_provider_info::BillingBasis::Subscription),
+        ("kimi-code", codex_model_provider_info::BillingBasis::PayPerUse),
+    ] {
+        assert_eq!(
+            config.model_providers[id],
+            ModelProviderInfo {
+                billing: Some(basis),
+                ..built_in[id].clone()
+            }
+        );
+    }
+    let error = toml::from_str::<ConfigToml>("[model_providers.zai]\nbilling = \"free\"\n")
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("billing"), "{error}");
 }
 
 #[test]

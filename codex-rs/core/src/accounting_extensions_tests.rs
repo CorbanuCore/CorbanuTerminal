@@ -50,6 +50,7 @@ async fn accounting_extension_client_records_its_own_request() -> anyhow::Result
         approved_endpoint: endpoint.clone(),
         approved_query: None,
         pricing: crate::config::PriceAuthority::Unavailable,
+        basis_source: Default::default(),
     };
     config.features.enable(Feature::Sqlite)?;
     let provider = config.model_provider.clone();
@@ -184,6 +185,7 @@ async fn accounting_extension_client_without_its_session_records_nothing() -> an
         approved_endpoint: endpoint.clone(),
         approved_query: None,
         pricing: crate::config::PriceAuthority::Unavailable,
+        basis_source: Default::default(),
     };
     config.features.enable(Feature::Sqlite)?;
     let provider = config.model_provider.clone();
@@ -281,6 +283,7 @@ async fn accounting_extension_client_binds_the_route_it_actually_sends_to() -> a
         approved_endpoint: stale.into(),
         approved_query: None,
         pricing: crate::config::PriceAuthority::Unavailable,
+        basis_source: Default::default(),
     };
     config.features.enable(Feature::Sqlite)?;
 
@@ -371,6 +374,7 @@ async fn accounting_records_a_request_another_client_already_sent() -> anyhow::R
         approved_endpoint: "https://api.openai.com/v1".into(),
         approved_query: None,
         pricing: crate::config::PriceAuthority::Unavailable,
+        basis_source: Default::default(),
     };
     config.features.enable(Feature::Sqlite)?;
 
@@ -439,6 +443,33 @@ async fn accounting_records_a_request_another_client_already_sent() -> anyhow::R
             .await?;
     assert_eq!(observations, 1);
 
+    // Claude subscription work reported through the bridge is subscription
+    // work: its declared basis is bound to the attempt even with no rates
+    // this session can attribute (PF-60-S05 AC4).
+    assert!(
+        ExtensionAccounting::new(Arc::downgrade(&owner))
+            .record_sent_request(SentModelRequest {
+                provider_id: codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID.into(),
+                endpoint: codex_model_provider_info::ANTHROPIC_BASE_URL.into(),
+                path: "messages".into(),
+                wire_api: codex_model_provider_info::WireApi::Anthropic,
+                model: codex_model_provider_info::CLAUDE_PLAN_MODEL.into(),
+                label: "pane".into(),
+                usage: Some(serde_json::json!({"input_tokens": 10, "output_tokens": 5})),
+            })
+            .await
+    );
+    let bases: Vec<(String, String)> = sqlx::query_as(
+        "SELECT json_extract(payload, '$.provider'), json_extract(payload, '$.basis')
+            FROM draft_accounting_price_snapshots ORDER BY 1",
+    )
+    .fetch_all(&pool)
+    .await?;
+    assert_eq!(
+        bases,
+        vec![("claude-plan".to_string(), "PlanEquivalent".to_string())]
+    );
+
     // A usage report the ledger rejects is not reported as recorded.
     let writer = db
         .sqlite()
@@ -460,7 +491,7 @@ async fn accounting_records_a_request_another_client_already_sent() -> anyhow::R
         sqlx::query_scalar("SELECT count(*) FROM draft_accounting_observations")
             .fetch_one(&pool)
             .await?;
-    assert_eq!(observations, 1);
+    assert_eq!(observations, 2);
 
     // A session that is not collecting records nothing, and says so rather
     // than failing the caller.
@@ -482,6 +513,6 @@ async fn accounting_records_a_request_another_client_already_sent() -> anyhow::R
         .fetch_one(&pool)
         .await?;
     // The rejected report's attempt was admitted before its usage failed.
-    assert_eq!(attempts_after, 2);
+    assert_eq!(attempts_after, 3);
     Ok(())
 }

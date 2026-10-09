@@ -513,6 +513,7 @@ async fn pf_60_s03_realtime_call_is_recorded() -> anyhow::Result<()> {
         approved_endpoint: endpoint.clone(),
         approved_query: None,
         pricing: crate::config::PriceAuthority::Unavailable,
+        basis_source: Default::default(),
     };
     config
         .features
