@@ -1166,6 +1166,7 @@ mod transport {
     use super::Broker;
     use super::serve_connection;
     use crate::credential_broker::isolated::pipe;
+    use crate::credential_broker::isolated::protocol::BROKER_CONTROL_PIPE_ENV;
     use std::sync::Arc;
     use tokio::net::windows::named_pipe::NamedPipeServer;
 
@@ -1180,8 +1181,17 @@ mod transport {
     }
 
     impl Endpoint {
+        /// PF-27-S08: binds the names Core chose (it then waits for them
+        /// instead of reading them from stdout, which the broker no longer
+        /// has); fresh ones otherwise.
         pub(super) async fn bind(_runtime_dir: &std::path::Path) -> anyhow::Result<Self> {
-            let (control_name, data_name) = pipe::pipe_names();
+            let chosen = std::env::var(BROKER_CONTROL_PIPE_ENV)
+                .ok()
+                .and_then(|control| Some((pipe::data_pipe_name(&control)?, control)));
+            let (control_name, data_name) = match chosen {
+                Some((data, control)) => (control, data),
+                None => pipe::pipe_names(),
+            };
             let control = pipe::PipeListener::bind(&control_name)?;
             let data = pipe::PipeListener::bind(&data_name)?;
             Ok(Self {

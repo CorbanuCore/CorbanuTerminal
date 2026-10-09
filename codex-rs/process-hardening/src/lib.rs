@@ -42,6 +42,8 @@ pub use windows_protected_spawn::protected_spawner_pid;
 #[cfg(windows)]
 pub use windows_protected_spawn::spawn_protected;
 #[cfg(windows)]
+pub use windows_protected_spawn::spawn_protected_detached;
+#[cfg(windows)]
 pub use windows_thread_creation::protect_new_objects_by_default;
 #[cfg(windows)]
 pub use windows_thread_creation::thread_creation_protected;

@@ -8,7 +8,6 @@
 #![allow(clippy::print_stderr, clippy::print_stdout)]
 
 use crate::windows_broker_token::BROKER_TOKEN;
-use crate::windows_broker_token::BrokerIntegrity;
 use crate::windows_broker_token::BrokerTokenOptions;
 use crate::windows_protected_spawn::Confinement;
 use crate::windows_protected_spawn::spawn_protected_with;
@@ -40,47 +39,6 @@ fn pf_27_s08_child_entry() {
     let line: Vec<String> = report.iter().map(|(k, v)| format!("{k}={v}")).collect();
     // Own line: libtest prints the test name without a newline first.
     println!("\n{REPORT_PREFIX}{}", line.join(","));
-}
-
-/// Temporary measurement: the same probes under an untrusted-integrity
-/// variant of the broker token (not asserted).
-#[test]
-fn pf_27_s08_diag_untrusted_variant() {
-    let untrusted = Confinement::Broker(BrokerTokenOptions {
-        integrity: BrokerIntegrity::Untrusted,
-        ..BROKER_TOKEN
-    });
-    eprintln!(
-        "pf27s08-diag untrusted token: {:?}",
-        try_run_child("token", &[], untrusted)
-    );
-    eprintln!(
-        "pf27s08-diag untrusted network: {:?}",
-        try_run_child("network", &[], untrusted)
-    );
-    let base = std::env::var_os("USERPROFILE")
-        .map(PathBuf::from)
-        .map(|home| home.join("AppData").join("LocalLow"))
-        .filter(|dir| dir.is_dir())
-        .map(|dir| dir.join(format!("pf27s08-diag-{}", std::process::id())));
-    if let Some(base) = base {
-        prepare_files(&base);
-        let dirs = OsString::from(format!("locallow={}", base.display()));
-        eprintln!(
-            "pf27s08-diag untrusted files: {:?}",
-            try_run_child("files", &[(DIRS_ENV, dirs)], untrusted)
-        );
-        let _ = std::fs::remove_dir_all(&base);
-    }
-    let target = format!("codex-pf27s08-diag-{}", std::process::id());
-    if credential::write(&target, b"pf27s08-synthetic-credential").is_ok() {
-        let env = [(CREDENTIAL_ENV, OsString::from(&target))];
-        eprintln!(
-            "pf27s08-diag untrusted credential: {:?}",
-            try_run_child("credential", &env, untrusted)
-        );
-        let _ = credential::delete(&target);
-    }
 }
 
 /// The broker token is low integrity, write-restricted to a SID the token
@@ -186,11 +144,14 @@ fn pf_27_s08_broker_still_reaches_the_network() {
     assert_eq!(confined["connect"], "ok", "{confined:?}");
 }
 
-/// The broker token cannot read Credential Manager. Control: the PF-27-S07
+/// Credential Manager under the broker token: measured, not asserted. It
+/// can read the user's generic credentials, as the macOS and Linux brokers
+/// can read the OS keyring (PF-27-S05); whether the Windows broker should is
+/// the open key-path decision in the PF-27-S08 record. Control: the PF-27-S07
 /// broker reads the same synthetic credential. Skipped where this session
 /// has no Credential Manager (a service logon without a profile).
 #[test]
-fn pf_27_s08_broker_cannot_read_credential_manager() {
+fn pf_27_s08_credential_manager_under_the_broker_token() {
     let target = format!("codex-pf27s08-probe-{}", std::process::id());
     if let Err(err) = credential::write(&target, b"pf27s08-synthetic-credential") {
         eprintln!("pf27s08: no Credential Manager in this session ({err}); skipped");
@@ -205,34 +166,29 @@ fn pf_27_s08_broker_cannot_read_credential_manager() {
 }
 
 /// The broker cannot ask WMI (`Win32_Process.Create`), Task Scheduler
-/// (`Schedule.Service`) or an out-of-process COM server (`MMC20.Application`)
-/// to run something. PowerShell runs the same script under the broker token
-/// (with a default DACL it can work with) and, as the positive control, under
-/// this process's own token; every mechanism the control can use must be
-/// denied, and the control must reach at least WMI and Task Scheduler.
+/// (`Schedule.Service`) or an out-of-process COM server (`MMC20.Application`,
+/// whose activation starts `mmc.exe`) to run something. The same script runs
+/// under the broker token (with a default DACL it can work with) and, as the
+/// positive control, under this process's own token. Every mechanism the
+/// control can use must fail confined, and the control must reach WMI.
+/// (`cscript`, because PowerShell at low integrity runs in constrained
+/// language mode and cannot make the calls at all.)
 #[test]
 fn pf_27_s08_broker_cannot_start_work_through_wmi_tasks_or_com() {
-    let control = run_powershell_probe(/*confined*/ false);
+    let control = run_script_probe(/*confined*/ false);
     eprintln!("pf27s08: WMI/tasks/COM control: {control:?}");
-    let confined = run_powershell_probe(/*confined*/ true);
+    let confined = run_script_probe(/*confined*/ true);
     eprintln!("pf27s08: WMI/tasks/COM under the broker token: {confined:?}");
+    assert_eq!(control.len(), 3, "{control:?}");
+    assert_eq!(confined.len(), 3, "{confined:?}");
     assert_eq!(
         control.get("wmi").map(String::as_str),
         Some("ok"),
         "{control:?}"
     );
-    assert_eq!(
-        control.get("task").map(String::as_str),
-        Some("ok"),
-        "{control:?}"
-    );
     for (name, outcome) in &control {
         if outcome == "ok" {
-            let confined_outcome = confined.get(name).map(String::as_str).unwrap_or("missing");
-            assert!(
-                confined_outcome.starts_with("denied"),
-                "{name}: {confined:?}"
-            );
+            assert_ne!(confined[name], "ok", "{name}: {confined:?}");
         }
     }
 }
@@ -493,52 +449,48 @@ mod credential {
     }
 }
 
-/// The PowerShell probe: one `name=outcome` per mechanism, where outcome is
-/// `ok`, `denied` (access denied in any of its forms) or `error:<detail>`.
-const POWERSHELL_PROBE: &str = r#"
-$ErrorActionPreference = 'Stop'
-$task = "codex-pf27s08-$PID"
-function Probe([string]$Name, [scriptblock]$Body) {
-  try { & $Body; return "$Name=ok" }
-  catch {
-    $e = $_.Exception
-    while ($e.InnerException) { $e = $e.InnerException }
-    $hr = '{0:x8}' -f $e.HResult
-    $message = ($e.Message -replace '[,=\r\n]', ' ')
-    if ($message.Length -gt 160) { $message = $message.Substring(0, 160) }
-    $denied = ($e -is [System.UnauthorizedAccessException]) -or
-      ($hr -in '80070005', '80041003') -or ($e.Message -match 'denied|ReturnValue 2$')
-    if ($denied) { return "$Name=denied:$hr $message" }
-    return "$Name=error:$hr $message"
-  }
-}
-$results = @()
-$results += Probe 'wmi' {
-  $r = ([wmiclass]'root\cimv2:Win32_Process').Create("$env:SystemRoot\System32\cmd.exe /d /c exit 0")
-  if ($r.ReturnValue -ne 0) { throw "ReturnValue $($r.ReturnValue)" }
-}
-$results += Probe 'task' {
-  $service = New-Object -ComObject Schedule.Service
-  $service.Connect()
-  $folder = $service.GetFolder('\')
-  $definition = $service.NewTask(0)
-  $action = $definition.Actions.Create(0)
-  $action.Path = "$env:SystemRoot\System32\cmd.exe"
-  $action.Arguments = '/d /c exit 0'
-  try {
-    $null = $folder.RegisterTaskDefinition($task, $definition, 6, $null, $null, 3)
-  } finally {
-    try { $folder.DeleteTask($task, 0) } catch {}
-  }
-}
-$results += Probe 'com' {
-  $mmc = [Activator]::CreateInstance([Type]::GetTypeFromProgID('MMC20.Application'))
-  $mmc.Quit()
-}
-"`npf27s08-report:" + ($results -join ',')
+/// The script probe: one `name=outcome` per mechanism, where outcome is
+/// `ok` or `failed:<hex error> <description>`.
+const SCRIPT_PROBE: &str = r#"
+On Error Resume Next
+Dim sysroot, task, out, svc, rc, pid, ts, folder, def, action, mmc
+sysroot = CreateObject("WScript.Shell").ExpandEnvironmentStrings("%SystemRoot%")
+task = "codex-pf27s08-" & WScript.Arguments(0)
+Function Outcome(name)
+  If Err.Number = 0 Then
+    Outcome = name & "=ok"
+  Else
+    Outcome = name & "=failed:" & Hex(Err.Number) & " " & _
+      Replace(Replace(Replace(Err.Description, ",", " "), "=", " "), vbCrLf, " ")
+  End If
+  Err.Clear
+End Function
+Set svc = GetObject("winmgmts:{impersonationLevel=impersonate}!\\.\root\cimv2")
+If Err.Number = 0 Then
+  rc = svc.Get("Win32_Process").Create(sysroot & "\System32\cmd.exe /d /c exit 0", Null, Null, pid)
+  If Err.Number = 0 And rc <> 0 Then Err.Raise 5, "Win32_Process.Create", "ReturnValue " & rc
+End If
+out = Outcome("wmi")
+Set ts = CreateObject("Schedule.Service")
+If Err.Number = 0 Then ts.Connect
+If Err.Number = 0 Then Set folder = ts.GetFolder("\")
+If Err.Number = 0 Then
+  Set def = ts.NewTask(0)
+  Set action = def.Actions.Create(0)
+  action.Path = sysroot & "\System32\cmd.exe"
+  action.Arguments = "/d /c exit 0"
+  folder.RegisterTaskDefinition task, def, 6, Null, Null, 3
+End If
+out = out & "," & Outcome("task")
+folder.DeleteTask task, 0
+Err.Clear
+Set mmc = CreateObject("MMC20.Application")
+If Err.Number = 0 Then mmc.Quit
+out = out & "," & Outcome("com")
+WScript.Echo vbCrLf & "pf27s08-report:" & out
 "#;
 
-fn run_powershell_probe(confined: bool) -> Report {
+fn run_script_probe(confined: bool) -> Report {
     use crate::windows_broker_token::BrokerDefaultDacl;
     use crate::windows_broker_token::create_broker_token;
     use std::collections::HashMap;
@@ -548,21 +500,17 @@ fn run_powershell_probe(confined: bool) -> Report {
     use windows_sys::Win32::System::Threading::TerminateProcess;
     use windows_sys::Win32::System::Threading::WaitForSingleObject;
 
+    let label = if confined { "confined" } else { "control" };
+    let script =
+        std::env::temp_dir().join(format!("pf27s08-probe-{}-{label}.vbs", std::process::id()));
+    std::fs::write(&script, SCRIPT_PROBE).expect("write the probe script");
     let system_root = std::env::var("SystemRoot").expect("SystemRoot");
-    let powershell = format!(r"{system_root}\System32\WindowsPowerShell\v1.0\powershell.exe");
-    let script: Vec<u8> = POWERSHELL_PROBE
-        .encode_utf16()
-        .flat_map(u16::to_le_bytes)
-        .collect();
     let argv = vec![
-        powershell,
-        "-NoLogo".to_string(),
-        "-NoProfile".to_string(),
-        "-NonInteractive".to_string(),
-        "-ExecutionPolicy".to_string(),
-        "Bypass".to_string(),
-        "-EncodedCommand".to_string(),
-        base64(&script),
+        format!(r"{system_root}\System32\cscript.exe"),
+        "//NoLogo".to_string(),
+        "//B".to_string(),
+        script.to_string_lossy().into_owned(),
+        format!("{}-{label}", std::process::id()),
     ];
     let env: HashMap<String, String> = std::env::vars()
         .filter(|(name, _)| !name.to_ascii_uppercase().starts_with("CODEX_PF27S08_"))
@@ -590,7 +538,7 @@ fn run_powershell_probe(confined: bool) -> Report {
         /*use_private_desktop*/ false,
         /*logs_base_dir*/ None,
     )
-    .expect("spawn PowerShell");
+    .expect("spawn cscript");
     let (sender, receiver) = std::sync::mpsc::channel::<Vec<u8>>();
     let reader = codex_windows_sandbox::read_handle_loop(spawned.stdout_read, move |chunk| {
         let _ = sender.send(chunk.to_vec());
@@ -607,23 +555,6 @@ fn run_powershell_probe(confined: bool) -> Report {
     }
     let _ = reader.join();
     let output: Vec<u8> = receiver.try_iter().flatten().collect();
+    let _ = std::fs::remove_file(&script);
     decode(&String::from_utf8_lossy(&output))
-}
-
-fn base64(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut text = String::new();
-    for chunk in bytes.chunks(3) {
-        let value = chunk.iter().enumerate().fold(0_u32, |acc, (i, byte)| {
-            acc | u32::from(*byte) << (16 - 8 * i)
-        });
-        for i in 0..4 {
-            if i <= chunk.len() {
-                text.push(char::from(ALPHABET[(value >> (18 - 6 * i)) as usize & 63]));
-            } else {
-                text.push('=');
-            }
-        }
-    }
-    text
 }

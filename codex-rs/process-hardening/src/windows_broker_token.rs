@@ -1,26 +1,32 @@
 //! PF-27-S08: the token the Windows credential broker runs under.
 //!
 //! A restricted copy of the starting process's token, chosen over an
-//! AppContainer (see the PF-27-S08 sprint record):
-//! - write-restricted to one random capability SID that no object grants, so
-//!   every write access check also needs an entry for that SID: the broker
-//!   can write only objects that name it (its own pipes);
-//! - low integrity, so the default no-write-up and (for processes and
-//!   threads) no-read-up labels of everything at medium or above refuse it
-//!   too: it cannot open the user's other processes or threads beyond
-//!   query-limited access, delete or rename the user's files through a
-//!   parent's `FILE_DELETE_CHILD` (which write restriction does not check),
-//!   or reach WMI, Task Scheduler or out-of-process COM servers, which refuse
-//!   low-integrity callers by default;
-//! - every privilege but `SeChangeNotifyPrivilege` removed, and
-//!   Administrators (if present) made deny-only.
+//! AppContainer (see the PF-27-S08 record and evidence):
+//! - write-restricted to a fresh random capability SID that no object grants,
+//!   plus the logon SID and Everyone. Every write access check then also
+//!   needs an entry for one of those: the broker can write only objects that
+//!   grant them, such as its own pipes (which name the capability SID). The
+//!   logon SID is there because the window station and desktop grant it and
+//!   a process that loads `user32` does not start without them (measured:
+//!   `0xC0000142`); Everyone because devices such as the network stack grant
+//!   it;
+//! - low integrity, so the default no-write-up label of everything at medium
+//!   or above refuses it too, and the no-read-up label of processes and
+//!   threads keeps it out of the user's other processes beyond query-limited
+//!   access. WMI refuses it; Task Scheduler does not show it the task folders.
+//!   (Untrusted integrity was measured too: the broker does not start.);
+//! - every privilege but `SeChangeNotifyPrivilege` removed, Administrators
+//!   (if present) made deny-only.
 //!
 //! Reads are unchanged: the broker still loads its image, reads the
-//! certificate store and resolves names, and normal network access works
-//! (loopback included, which an AppContainer would refuse). It cannot read
-//! Credential Manager either way, so stored keys reach it another way.
-//! Only a restricted version of the caller's own token, so starting a
-//! process with it needs no privilege.
+//! certificate store, resolves names and connects out (loopback too, which
+//! an AppContainer would refuse), and it can read Credential Manager. Known
+//! gap (as for the sandbox's write-restricted token, #158): write
+//! restriction does not cover `FILE_DELETE_CHILD`, so in a folder at low
+//! integrity that grants the user full control (`LocalLow`, `Temp\Low`) the
+//! broker can delete a file, though not create, change or rename one.
+//! Only a restricted version of the caller's own token, so starting a process
+//! with it needs no privilege.
 
 use crate::windows_process_access::SecurityDescriptor;
 use crate::windows_process_access::current_user_sid_string;
@@ -98,26 +104,15 @@ pub(crate) enum BrokerDefaultDacl {
     OwnedByCapability,
 }
 
-/// The broker token's integrity level.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BrokerIntegrity {
-    Low,
-    /// Probes only: below low.
-    #[cfg(test)]
-    Untrusted,
-}
-
 /// What the broker token is built from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BrokerTokenOptions {
     pub(crate) default_dacl: BrokerDefaultDacl,
-    pub(crate) integrity: BrokerIntegrity,
 }
 
 /// The broker's token.
 pub(crate) const BROKER_TOKEN: BrokerTokenOptions = BrokerTokenOptions {
     default_dacl: BrokerDefaultDacl::Protected,
-    integrity: BrokerIntegrity::Low,
 };
 
 /// A new primary token for the broker (see the module docs), with a fresh
@@ -169,7 +164,7 @@ pub(crate) fn create_broker_token(options: BrokerTokenOptions) -> io::Result<Own
     }
     // SAFETY: returned by the call above; owned from here on.
     let token = unsafe { OwnedHandle::from_raw_handle(raw as _) };
-    set_integrity(&token, options.integrity)?;
+    set_low_integrity(&token)?;
     let user = current_user_sid_string()?;
     let sddl = match default_dacl {
         BrokerDefaultDacl::Protected => thread_dacl_sddl(&user),
@@ -343,12 +338,8 @@ fn open_current_token(access: u32) -> io::Result<OwnedHandle> {
     Ok(unsafe { OwnedHandle::from_raw_handle(token as _) })
 }
 
-fn set_integrity(token: &OwnedHandle, integrity: BrokerIntegrity) -> io::Result<()> {
-    let low = LocalSid::from_string(match integrity {
-        BrokerIntegrity::Low => LOW_INTEGRITY_SID,
-        #[cfg(test)]
-        BrokerIntegrity::Untrusted => "S-1-16-0",
-    })?;
+fn set_low_integrity(token: &OwnedHandle) -> io::Result<()> {
+    let low = LocalSid::from_string(LOW_INTEGRITY_SID)?;
     let label = TOKEN_MANDATORY_LABEL {
         Label: SID_AND_ATTRIBUTES {
             Sid: low.0,

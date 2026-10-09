@@ -6,7 +6,6 @@
 
 use super::PipeListener;
 use super::client_pid;
-use super::connect_control;
 use super::connect_data;
 use super::pipe_dacl_sddl;
 use super::pipe_names;
@@ -64,6 +63,11 @@ fn pf_27_s06_pipe_names_and_dacl() {
     assert!(!valid_pipe_name(r"\\.\pipe\other-c", /*control*/ true));
     assert_ne!(pipe_names().0, control);
     assert_eq!(
+        super::data_pipe_name(&control).as_deref(),
+        Some(data.as_str())
+    );
+    assert_eq!(super::data_pipe_name(&data), None);
+    assert_eq!(
         pipe_dacl_sddl("S-1-5-21-1-2-3-1001", &[]),
         "D:P(A;;GA;;;S-1-5-21-1-2-3-1001)"
     );
@@ -98,7 +102,7 @@ async fn pf_27_s06_broker_pipe_serves_only_the_expected_client() {
     assert_eq!(report, "open=granted,served=no");
 
     let mut file =
-        tokio::task::spawn_blocking(move || connect_control(&control, std::process::id()))
+        tokio::task::spawn_blocking(move || connect_control_now(&control, std::process::id()))
             .await
             .expect("connect")
             .expect("expected client is accepted");
@@ -141,9 +145,9 @@ async fn pf_27_s06_client_checks_the_server_process() {
     let blocking_control = control.clone();
     let (wrong, right, other_name) = tokio::task::spawn_blocking(move || {
         (
-            connect_control(&blocking_control, wrong_pid).is_some(),
-            connect_control(&blocking_control, own_pid).is_some(),
-            connect_control(r"\\.\pipe\not-a-broker-c", own_pid).is_some(),
+            connect_control_now(&blocking_control, wrong_pid).is_some(),
+            connect_control_now(&blocking_control, own_pid).is_some(),
+            connect_control_now(r"\\.\pipe\not-a-broker-c", own_pid).is_some(),
         )
     })
     .await
@@ -170,7 +174,7 @@ async fn pf_27_s06_pipe_handles_are_not_inheritable() {
     let mut data_listener = PipeListener::bind(&data).expect("bind data");
     let blocking_control = control.clone();
     let control_client =
-        tokio::task::spawn_blocking(move || connect_control(&blocking_control, own_pid));
+        tokio::task::spawn_blocking(move || connect_control_now(&blocking_control, own_pid));
     let control_server = control_listener
         .accept(own_pid)
         .await
@@ -463,4 +467,14 @@ fn run_restricted_child(role: &str, name: &str) -> String {
     }
     let output = collect_report(&receiver);
     parse_report(&output)
+}
+
+/// Connects to a control pipe that is already bound.
+fn connect_control_now(name: &str, pid: u32) -> Option<super::ControlPipe> {
+    super::connect_control(
+        name,
+        pid,
+        std::time::Instant::now() + std::time::Duration::from_secs(5),
+        || true,
+    )
 }
