@@ -47,13 +47,13 @@ wait = "local.age"
 timeout = 30
 
 [[steps]]
-type = "Reply with exactly one line: answered with the key from the vault"
+type = "Reply with exactly one line: hello from the vault-backed session"
 
 [[steps]]
 key = "Enter"
 
 [[steps]]
-wait = "(?m)^. answered with the key from the vault"
+wait = "(?m)^. hello from the vault-backed session"
 timeout = 240
 compress = 3
 
