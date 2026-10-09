@@ -1,0 +1,22 @@
+  Bucket: [2026-10-05T00:00:00.000Z, 2026-10-12T00:00:00.000Z); effective coverage (requested ∩ aggregate retention ∩ snapshot): [2026-10-05T00:00:00.000Z, 2026-10-08T22:45:11.965Z)
+  In progress — totals so far, recorded through 2026-10-08T22:45:11.964Z
+  This conversation, so far in [2026-10-05T00:00:00.000Z, 2026-10-12T00:00:00.000Z) (UTC):
+  • Z.AI · Z.AI GLM 5.2 — Pay per use. 2 requests, 25,819 tokens. Estimated cost: $0.015922 (rounded).
+  ↑↓ scroll · Enter open · Esc back/close
+  Other conversations are not included in this view; /cost covers only the open conversation.
+  Costs are estimates from published prices; your provider's bill is the final amount.
+  Select a provider below to see its requests.
+  —— Details ——
+  Estimated token cost for recorded attempts: $0.015922 (rounded)
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts outside this bucket; this bucket is not their complete lifetime.
+  Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+  Bucket: Unknown parent population: 0 attempts, excluded from root total
+  Estimate versus billed difference: unknown — no settlement evidence
+  —— Open ——
+  → Z.AI · Z.AI GLM 5.2 — estimated $0.015922 (rounded) (2 requests)
+  → Request 1 · Z.AI · Z.AI GLM 5.2 · estimated $0.011934 (rounded)
+  → Request 2 · Z.AI · Z.AI GLM 5.2 · estimated $0.003987 (rounded)
+  → Root's own attempts (2 attempts)
+  → Descendant attempts (none)

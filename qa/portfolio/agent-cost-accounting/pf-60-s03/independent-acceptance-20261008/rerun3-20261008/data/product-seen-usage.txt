@@ -1,0 +1,4 @@
+nu-nousage: 63 SSE events traced; chunks carrying usage: 0
+dev-zai: 34 SSE events traced; chunks carrying usage: 2
+    2026-10-08T22:44:39.008305Z 2026100906443750bf7388ca4246c4 {"prompt_tokens": 12732, "completion_tokens": 21, "total_tokens": 12753, "prompt_tokens_details": {"cached_tokens": 5248}, "completion_tokens_details": {"reasoning_tokens": 8}}
+    2026-10-08T22:44:41.384832Z 20261009064439b2ad45a22df54e5b {"prompt_tokens": 13019, "completion_tokens": 47, "total_tokens": 13066, "prompt_tokens_details": {"cached_tokens": 12672}, "completion_tokens_details": {"reasoning_tokens": 0}}

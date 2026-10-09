@@ -1,0 +1,21 @@
+# Supplementary evidence (added after the independent review; collected 2026-10-09T05:02:17Z from the scratch homes, which were unchanged since the run)
+
+## 1. Default-build binary check (ps, taken during the run, before mac-289-r1-01; copied from the executor's run log)
+<scratch>/bin/corbanu-default resume 01a11db0-9edd-7aa2-8479-3f5600540c87
+
+## 2. Default home mh-def: stderr.log lines containing 401 (count) and its rollouts
+401 lines: 0
+<scratch>/homes/mh-def/sessions/2026/10/08/rollout-2026-10-08T15-44-36-01a11db0-9edd-7aa2-8479-3f5600540c87.jsonl
+
+## 3. macOS d1 delete (criterion 9), exact command as run (placeholder key, keyring off, disposable home), output in captures/mac/mac-c9-01.txt
+ZAI_API_KEY=placeholder-not-a-key CORBANU_TEST_NO_NATIVE_KEYRING=1 CODEX_HOME=<scratch>/homes/mh-dev CORBANU_HOME=<scratch>/homes/mh-dev PFTERMINAL_HOME=<scratch>/homes/mh-dev RUST_LOG=warn <scratch>/bin/corbanu-acct delete --force 01a11db0-9d96-7ec1-a06c-b8aaa7d185c7 < /dev/null
+
+## 4. RTX home h-del: rollouts remaining (after both deletes; listed during the run and again now)
+# during the run (executor run log):
+h-del/sessions/2026/10/08/rollout-2026-10-08T22-39-09-01a11dab-9f17-7430-946d-55b7e2d84f7e.jsonl
+h-del/sessions/2026/10/08/rollout-2026-10-08T22-39-53-01a11dac-4e45-7f93-a5e2-c51b49d76364.jsonl
+h-del/sessions/2026/10/08/rollout-2026-10-08T22-40-46-01a11dad-1cb8-73f1-9805-6ade88801a36.jsonl
+# now:
+h-del/sessions/2026/10/08/rollout-2026-10-08T22-39-09-01a11dab-9f17-7430-946d-55b7e2d84f7e.jsonl
+h-del/sessions/2026/10/08/rollout-2026-10-08T22-39-53-01a11dac-4e45-7f93-a5e2-c51b49d76364.jsonl
+h-del/sessions/2026/10/08/rollout-2026-10-08T22-40-46-01a11dad-1cb8-73f1-9805-6ade88801a36.jsonl

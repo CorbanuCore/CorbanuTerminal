@@ -1,0 +1,8 @@
+# key scan (rerun3). grep -rlF with the helper substituted directly on the grep command; only file counts are kept.
+committed record (this directory):        0 files
+macOS scratch logs, homes (incl. TUI log DBs), raw captures:        0 files
+RTX scratch logs, home h-del, raw captures (key piped over ssh stdin, read with IFS= read): 0 files
+
+# Re-scan before commit (after review corrections), key fed to grep -f via process substitution (not in argv):
+# ZAI_API_KEY="$(corbanu vault auth-helper provider/zai_api_key)" bash -c 'grep -rlF -f <(printf "%s\n" "$ZAI_API_KEY") <this dir> <scratch> | wc -l'
+0
