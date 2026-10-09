@@ -52,6 +52,7 @@ impl fmt::Debug for ModelProviderInfo {
             requires_openai_auth,
             supports_websockets,
             supports_standalone_web_search,
+            billing,
         } = self;
         f.debug_struct("ModelProviderInfo")
             .field("name", name)
@@ -89,6 +90,7 @@ impl fmt::Debug for ModelProviderInfo {
                 "supports_standalone_web_search",
                 supports_standalone_web_search,
             )
+            .field("billing", billing)
             .finish()
     }
 }

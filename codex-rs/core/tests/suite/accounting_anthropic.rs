@@ -45,6 +45,7 @@ async fn accounting_plan_identity_zero_usage_and_provider_switch() -> anyhow::Re
             approved_endpoint: endpoint.clone(),
             approved_query: None,
             pricing: PriceAuthority::Unavailable,
+            basis_source: Default::default(),
         };
         let test = builder(endpoint, mode)
             .with_config(move |config| {
@@ -105,9 +106,10 @@ async fn accounting_plan_identity_zero_usage_and_provider_switch() -> anyhow::Re
         for quote in quotes {
             assert_eq!(quote.usage.input, Some(if zero { 0 } else { 7 }));
             assert_eq!(quote.usage.output, Some(if zero { 0 } else { 3 }));
-            assert_eq!(quote.snapshot, None);
+            // Both fixture routes are mock servers no table declares.
+            assert_eq!(quote.basis(), codex_state::accounting::Basis::Undeclared);
             assert_eq!(quote.all_buckets_priced, None);
-            assert_eq!(quote.buckets, [BucketQuote::MissingRate; 4]);
+            assert_eq!(quote.known_subtotal, Decimal::default());
         }
         assert_eq!(server.received_requests().await.unwrap().len(), 1);
         assert_eq!(next_server.received_requests().await.unwrap().len(), 1);
@@ -1187,6 +1189,7 @@ async fn accounting_plan_turn_records_the_identity_the_catalogue_prices() -> any
         approved_endpoint: endpoint.clone(),
         approved_query: None,
         pricing: PriceAuthority::Unavailable,
+        basis_source: Default::default(),
     };
     let test = builder(endpoint, mode)
         .with_config(|config| {
@@ -1256,6 +1259,7 @@ async fn accounting_ephemeral_session_runs_turns_without_collecting() -> anyhow:
         approved_endpoint: endpoint.clone(),
         approved_query: None,
         pricing: PriceAuthority::Unavailable,
+        basis_source: Default::default(),
     };
     let test = builder(endpoint, mode)
         .with_config(|config| {

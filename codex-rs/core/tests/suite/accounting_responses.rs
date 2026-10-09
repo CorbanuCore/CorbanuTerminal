@@ -28,6 +28,7 @@ async fn accounting_chatgpt_subscription_off_route_collects_without_economics() 
         approved_endpoint: endpoint.clone(),
         approved_query: None,
         pricing: PriceAuthority::Unavailable,
+        basis_source: Default::default(),
     };
     let test = builder(endpoint, mode)
         .with_auth(codex_login::CodexAuth::from_external_chatgpt_tokens(
@@ -44,9 +45,12 @@ async fn accounting_chatgpt_subscription_off_route_collects_without_economics() 
     assert_eq!(records[0].provider, "openai");
     // This fixture talks to a wiremock endpoint, which is nobody's own route.
     // Tokens are still collected; no economics of either kind are claimed for a
-    // destination the catalogue quotes nothing for.
+    // destination no table declares: it is bound as not declared.
     let prices: Vec<Snapshot> = payloads(&db, "draft_accounting_price_snapshots").await?;
-    assert!(prices.is_empty());
+    assert_eq!(
+        prices.iter().map(|p| p.basis).collect::<Vec<_>>(),
+        vec![codex_state::accounting::Basis::Undeclared]
+    );
     wait_observations(&db, /*count*/ 1).await?;
     let total = totals(&db, &records[0]).await?;
     assert_eq!(total.measured[0].known, 100);
@@ -54,6 +58,7 @@ async fn accounting_chatgpt_subscription_off_route_collects_without_economics() 
     assert_eq!(total.unknown_estimates, 1);
     assert_eq!(total.equivalent_usd, Decimal::default());
     assert_eq!(total.plan_attempts, 0);
+    assert_eq!(total.undeclared_attempts, 1);
     assert_eq!(mock.requests().len(), 1);
     stop(&test).await;
     Ok(())
@@ -625,6 +630,7 @@ async fn accounting_agent_identity_session_collects() -> anyhow::Result<()> {
         approved_endpoint: endpoint.clone(),
         approved_query: None,
         pricing: PriceAuthority::Unavailable,
+        basis_source: Default::default(),
     };
     let test = builder(endpoint.clone(), mode)
         .with_auth(auth)

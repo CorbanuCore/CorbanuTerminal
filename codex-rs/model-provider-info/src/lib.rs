@@ -30,7 +30,16 @@ use std::fmt;
 use std::num::NonZeroU64;
 use std::time::Duration;
 
+mod billing;
 mod provider_debug;
+
+pub use billing::BillingBasis;
+pub use billing::BillingCredential;
+pub use billing::BillingDeclaration;
+pub use billing::built_in_basis;
+pub use billing::declared_billing;
+pub use billing::not_declared_next_step;
+pub use billing::route_basis;
 
 const DEFAULT_ANTHROPIC_REQUEST_BODY_MAX_BYTES: usize = 30_000_000;
 const DEFAULT_ANTHROPIC_RETRY_BODY_MAX_BYTES: usize = 15_000_000;
@@ -937,6 +946,12 @@ pub struct ModelProviderInfo {
     /// Whether this provider supports the standalone web-search endpoint.
     #[serde(default)]
     pub supports_standalone_web_search: bool,
+    /// How this provider's work is paid for: `subscription`, `pay_per_use` or
+    /// `local`. Overrides the built-in declaration for unusual setups; when
+    /// unset, the built-in table decides from the route and credential used,
+    /// and an unknown route is shown as not declared.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub billing: Option<BillingBasis>,
 }
 
 /// AWS SigV4 auth configuration for a model provider.
@@ -950,6 +965,16 @@ pub struct ModelProviderAwsAuthInfo {
 }
 
 impl ModelProviderInfo {
+    /// Whether this configured entry only declares a billing basis (and
+    /// nothing else), so it may name a built-in provider.
+    pub fn is_billing_override_only(&self) -> bool {
+        self.billing.is_some()
+            && Self {
+                billing: None,
+                ..self.clone()
+            } == Self::default()
+    }
+
     /// Return the provider's validated credential-source classification.
     pub fn credential_source(&self) -> ModelProviderCredentialSource<'_> {
         if self.requires_openai_auth {
@@ -1247,6 +1272,7 @@ impl ModelProviderInfo {
             requires_openai_auth: true,
             supports_websockets,
             supports_standalone_web_search: true,
+            billing: None,
         }
     }
 
@@ -1275,6 +1301,7 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
@@ -1316,6 +1343,7 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
@@ -1344,6 +1372,7 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
@@ -1376,6 +1405,7 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
@@ -1415,6 +1445,7 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
@@ -1443,6 +1474,7 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
@@ -1471,6 +1503,7 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
@@ -1499,6 +1532,7 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
@@ -1527,6 +1561,7 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
@@ -1555,6 +1590,7 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
@@ -1583,6 +1619,7 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
@@ -1611,6 +1648,7 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
@@ -1639,6 +1677,7 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
@@ -1667,6 +1706,7 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
@@ -1695,6 +1735,7 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
@@ -1723,6 +1764,7 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
@@ -1762,6 +1804,7 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
@@ -1966,7 +2009,15 @@ pub fn merge_configured_model_providers(
     configured_model_providers: HashMap<String, ModelProviderInfo>,
 ) -> Result<HashMap<String, ModelProviderInfo>, String> {
     for (key, mut provider) in configured_model_providers {
+        // A billing-only entry may name a built-in provider by an alias; it
+        // adjusts that provider.
+        let key = if provider.is_billing_override_only() {
+            canonical_provider_id(&key).to_string()
+        } else {
+            key
+        };
         if key == AMAZON_BEDROCK_PROVIDER_ID {
+            let billing_override = provider.billing.take();
             let base_url_override = provider.base_url.take();
             let auth_override = provider.auth.take();
             let aws_override = provider.aws.take();
@@ -1974,12 +2025,13 @@ pub fn merge_configured_model_providers(
             if provider != ModelProviderInfo::default() {
                 return Err(format!(
                     "model_providers.{AMAZON_BEDROCK_PROVIDER_ID} only supports changing \
-`base_url`, `auth`, `http_headers`, `aws.profile`, and `aws.region`; other non-default \
+`base_url`, `auth`, `http_headers`, `aws.profile`, `aws.region`, and `billing`; other non-default \
 provider fields are not supported"
                 ));
             }
 
             if let Some(built_in_provider) = model_providers.get_mut(AMAZON_BEDROCK_PROVIDER_ID) {
+                built_in_provider.billing = billing_override;
                 built_in_provider.base_url = base_url_override;
                 built_in_provider.auth = auth_override;
                 if let Some(aws_override) = aws_override {
@@ -2006,6 +2058,9 @@ fn apply_transport_overrides(
     built_in_provider: &mut ModelProviderInfo,
     configured_provider: ModelProviderInfo,
 ) {
+    if configured_provider.billing.is_some() {
+        built_in_provider.billing = configured_provider.billing;
+    }
     if configured_provider.request_max_retries.is_some() {
         built_in_provider.request_max_retries = configured_provider.request_max_retries;
     }
@@ -2083,6 +2138,7 @@ pub fn create_oss_provider_with_base_url(base_url: &str, wire_api: WireApi) -> M
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: false,
+        billing: None,
     }
 }
 

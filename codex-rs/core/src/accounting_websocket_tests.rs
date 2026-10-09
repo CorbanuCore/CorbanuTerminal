@@ -34,6 +34,7 @@ async fn accounting_responses_ws_subscription_uses_resolved_endpoint_without_api
         approved_endpoint: api.base_url.clone(),
         approved_query: None,
         pricing: PriceAuthority::Unavailable,
+        basis_source: Default::default(),
     };
     let fixture = Fixture::new(mode).await?;
     let provenance = Provenance::capture(&provider, Some(&auth), &api);
@@ -83,6 +84,60 @@ async fn accounting_responses_ws_subscription_uses_resolved_endpoint_without_api
     // Not the approved route: served unrecorded, and collection closes.
     assert!(!wrong.validate(&fixture.deferred, /*cached*/ None)?);
     assert!(fixture.deferred.check().is_err());
+    Ok(())
+}
+
+/// Subscription work keeps its basis when the catalogue gives it no figure
+/// (review Major 2): a ChatGPT turn on a model with no catalogue price, and a
+/// priority-tier turn, are each bound to a plan record with no rates, never to
+/// nothing (which reads as pay per use).
+#[tokio::test]
+async fn accounting_subscription_without_a_price_stays_subscription() -> anyhow::Result<()> {
+    let provider = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
+    let auth = CodexAuth::from_external_chatgpt_tokens(
+        "header.e30.synthetic",
+        "fixture",
+        /*chatgpt_plan_type*/ None,
+    )?;
+    let api = provider.to_api_provider(Some(auth.auth_mode()))?;
+    let mode = AccountingMode::Provider {
+        scope: Uuid::new_v4(),
+        provider_id: "openai".into(),
+        wire_api: codex_model_provider_info::WireApi::Responses,
+        approved_endpoint: api.base_url.clone(),
+        approved_query: None,
+        pricing: PriceAuthority::Unavailable,
+        basis_source: Default::default(),
+    };
+    let fixture = Fixture::new(mode).await?;
+    let sampling = fixture
+        .deferred
+        .resolve(&provider, Some(&auth), &api.url_for_path("responses"))
+        .await?
+        .unwrap();
+    for (model, tier) in [
+        ("gpt-6-astra", None),
+        ("remote-only", None),
+        ("gpt-5.6-sol", Some("priority")),
+    ] {
+        sampling
+            .admit_with_tier(model, &api.url_for_path("responses"), tier)
+            .await?;
+    }
+    let prices: Vec<Snapshot> = fixture.rows("draft_accounting_price_snapshots").await?;
+    assert_eq!(prices.len(), 3);
+    for price in &prices {
+        assert_eq!(
+            (price.basis, &price.rates, price.plan_burn_millis),
+            (
+                codex_state::accounting::Basis::PlanEquivalent,
+                &codex_state::accounting::Rates::default(),
+                None
+            ),
+            "{}",
+            price.model
+        );
+    }
     Ok(())
 }
 

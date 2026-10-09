@@ -27,6 +27,7 @@ async fn accounting_chat_custom_provider_collects_with_real_identity() -> anyhow
         approved_endpoint: endpoint.clone(),
         approved_query: None,
         pricing: PriceAuthority::Unavailable,
+        basis_source: Default::default(),
     };
     let test = builder(endpoint, mode)
         .with_config(|config| {
@@ -40,8 +41,13 @@ async fn accounting_chat_custom_provider_collects_with_real_identity() -> anyhow
     let records = attempts(&db).await?;
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].provider, "custom-plan");
+    // A custom provider at a route no table declares: tokens recorded, basis
+    // bound as not declared, no rates (PF-60-S05 option B).
     let prices: Vec<Snapshot> = payloads(&db, "draft_accounting_price_snapshots").await?;
-    assert!(prices.is_empty());
+    assert_eq!(
+        prices.iter().map(|p| p.basis).collect::<Vec<_>>(),
+        vec![codex_state::accounting::Basis::Undeclared]
+    );
     assert_eq!(observations(&db).await?.len(), 1);
     posts(&server, /*expected*/ 1).await;
     stop(&test).await;
@@ -546,6 +552,7 @@ async fn accounting_chat_completion_assessment_collects() -> anyhow::Result<()> 
         approved_endpoint: endpoint.clone(),
         approved_query: None,
         pricing: PriceAuthority::Unavailable,
+        basis_source: Default::default(),
     };
     let test = builder(endpoint.clone(), mode)
         .with_config(|config| {

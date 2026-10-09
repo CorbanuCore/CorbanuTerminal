@@ -279,7 +279,8 @@ impl DeferredResponsesSampling {
         // record this turn's economics under the wrong authority.
         if let Some(existing) = self.sampling.get()
             && matches!(mode, AccountingMode::Provider { .. })
-            && super::pricing_for(&mode) != existing.pricing
+            && (super::pricing_for(&mode) != existing.pricing
+                || super::basis_source_for(&mode) != existing.basis_source)
         {
             self.reject();
             return Err(CodexErr::Fatal(

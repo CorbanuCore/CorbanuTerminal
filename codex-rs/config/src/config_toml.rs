@@ -959,14 +959,17 @@ fn project_config_for_lookup_key(
 pub fn validate_reserved_model_provider_ids(
     model_providers: &HashMap<String, ModelProviderInfo>,
 ) -> Result<(), String> {
+    // An entry that only declares `billing` adjusts the built-in provider
+    // rather than replacing it.
     let mut conflicts = model_providers
-        .keys()
-        .filter(|key| {
+        .iter()
+        .filter(|(key, provider)| {
             key.as_str() != AMAZON_BEDROCK_PROVIDER_ID
                 && key.as_str() != AMBIENT_PROVIDER_ID
                 && RESERVED_MODEL_PROVIDER_IDS.contains(&key.as_str())
+                && !provider.is_billing_override_only()
         })
-        .map(|key| format!("`{key}`"))
+        .map(|(key, _)| format!("`{key}`"))
         .collect::<Vec<_>>();
     conflicts.sort_unstable();
     if conflicts.is_empty() {
@@ -1018,7 +1021,13 @@ pub fn validate_model_providers(
                     "model_providers.{key}: provider aws is only supported for `{AMAZON_BEDROCK_PROVIDER_ID}`"
                 ));
             }
-            if provider.name.trim().is_empty() {
+            // A built-in provider may be named with only `billing` set.
+            let built_in_billing = provider.is_billing_override_only()
+                && codex_model_provider_info::built_in_model_providers(
+                    /*openai_base_url*/ None,
+                )
+                .contains_key(codex_model_provider_info::canonical_provider_id(key));
+            if provider.name.trim().is_empty() && !built_in_billing {
                 return Err(format!(
                     "model_providers.{key}: provider name must not be empty"
                 ));

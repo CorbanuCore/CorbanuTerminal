@@ -358,6 +358,7 @@ fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
             approved_endpoint: endpoint.into(),
             approved_query: None,
             pricing: PriceAuthority::Unavailable,
+            basis_source: Default::default(),
         };
         let bound = super::turn_mode(&mode, id, &provider, Some(AuthMode::ApiKey), endpoint);
         let crate::config::AccountingMode::Provider {
@@ -386,11 +387,11 @@ fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
             matches!(
                 elsewhere,
                 crate::config::AccountingMode::Provider {
-                    pricing: PriceAuthority::Unavailable,
+                    pricing: PriceAuthority::Undeclared,
                     ..
                 }
             ),
-            "{id} off its own route must state no economics"
+            "{id} off its own route is not declared"
         );
     }
     let provider = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
@@ -403,6 +404,7 @@ fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
         approved_endpoint: "https://api.openai.com/v1".into(),
         approved_query: None,
         pricing: PriceAuthority::Unavailable,
+        basis_source: Default::default(),
     };
     // Each credential is checked at the route that credential actually resolves
     // to: a ChatGPT plan turn goes to the Codex route, an API key to the API one.
@@ -410,11 +412,13 @@ fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
         (Some(AuthMode::ApiKey), PriceAuthority::ApiKeyRates),
         (Some(AuthMode::Chatgpt), PriceAuthority::PlanRate),
         (Some(AuthMode::ChatgptAuthTokens), PriceAuthority::PlanRate),
-        (Some(AuthMode::Headers), PriceAuthority::PlanRate),
+        // Request headers are another OpenAI account credential: no row.
+        (Some(AuthMode::Headers), PriceAuthority::Undeclared),
         // No visible credential is not a subscription. Recording it as one would
-        // book a turn this client cannot attribute as plan capacity.
-        (None, PriceAuthority::Unavailable),
-        (Some(AuthMode::BedrockApiKey), PriceAuthority::Unavailable),
+        // book a turn this client cannot attribute as plan capacity; the table
+        // declares nothing for it.
+        (None, PriceAuthority::Undeclared),
+        (Some(AuthMode::BedrockApiKey), PriceAuthority::Undeclared),
     ] {
         let endpoint = provider
             .to_api_provider(auth)
@@ -524,37 +528,35 @@ fn accounting_every_built_in_provider_collects() {
             "{id} ({:?}) binds a mode that does not collect",
             provider.wire_api
         );
-        // Monetary rates follow the route, not a hand-picked pair of providers.
-        // Restricting them to openai and anthropic left every other metered
-        // provider recording tokens with no price at all, which is the same
-        // "accounting is unavailable here" the catalogue work set out to end.
-        // What disqualifies per-token rates is a credential this client cannot
-        // attribute to the account the catalogue quotes.
+        // Economics follow the declared basis for the provider's own route and
+        // the credential it is built to send (PF-60-S05): never the kind of
+        // login. Per-token rates need a credential this client can attribute.
         if let AccountingMode::Provider { pricing, .. } = bound {
-            let carries_own_credentials = provider.aws.is_some()
-                || provider.auth.is_some()
-                || provider.experimental_bearer_token.is_some();
-            // A provider holding its own plan credential states the plan side
-            // whatever OpenAI credential this profile happens to carry, because
-            // the Codex auth mode describes a different account entirely. The
-            // remaining own-credential shapes are still unattributable.
-            let expected = if provider.auth.is_some() {
-                PriceAuthority::PlanRate
-            } else if carries_own_credentials {
-                PriceAuthority::Unavailable
-            } else {
-                PriceAuthority::ApiKeyRates
-            };
-            assert_eq!(
-                pricing, expected,
-                "{id} pricing authority under API-key auth"
+            let credential = codex_model_provider_info::BillingCredential::of(
+                &provider,
+                Some(codex_protocol::auth::AuthMode::ApiKey),
             );
-            if !carries_own_credentials {
+            let declared = codex_model_provider_info::built_in_basis(&id, credential);
+            let attributable = provider.aws.is_none()
+                && provider.auth.is_none()
+                && provider.experimental_bearer_token.is_none();
+            use codex_model_provider_info::BillingBasis;
+            let expected = match declared {
+                Some(BillingBasis::Subscription) => PriceAuthority::PlanRate,
+                Some(BillingBasis::Local) => PriceAuthority::Local,
+                Some(BillingBasis::PayPerUse) if attributable => PriceAuthority::ApiKeyRates,
+                Some(BillingBasis::PayPerUse) => PriceAuthority::Unavailable,
+                None => PriceAuthority::Undeclared,
+            };
+            assert_eq!(pricing, expected, "{id} pricing authority at its own route");
+            if expected == PriceAuthority::ApiKeyRates {
                 priced_providers.push(id.clone());
             }
-            // And the authority is bound to that route: the same provider read
-            // through a different endpoint states no economics at all - not
-            // rates, and not a plan rate standing in for them.
+            // The basis is bound to the route: read through an endpoint no
+            // table declares, the same provider is not declared - not rates,
+            // and not a plan rate standing in for them. Bedrock's credentials
+            // reach only Bedrock, whose route is regional: pay per use with no
+            // attributable rate wherever it goes.
             let elsewhere = turn_mode(
                 &selected,
                 &id,
@@ -562,49 +564,18 @@ fn accounting_every_built_in_provider_collects() {
                 Some(codex_protocol::auth::AuthMode::ApiKey),
                 "https://relay.invalid/v1",
             );
-            assert!(
-                matches!(
-                    elsewhere,
-                    AccountingMode::Provider {
-                        pricing: PriceAuthority::Unavailable,
-                        ..
-                    }
-                ),
-                "{id} must not carry rates away from its own route"
-            );
-            // Subscription-style authentication on that provider's own route for
-            // that credential records the plan side instead, never per-token
-            // spend. A turn with no credential at all records neither.
-            let plan_auth = Some(codex_protocol::auth::AuthMode::Headers);
-            if let Ok(plan_route) = provider.to_api_provider(plan_auth) {
-                let on_plan = turn_mode(&selected, &id, &provider, plan_auth, &plan_route.base_url);
-                assert!(
-                    matches!(
-                        on_plan,
-                        AccountingMode::Provider {
-                            pricing: PriceAuthority::PlanRate,
-                            ..
-                        }
-                    ),
-                    "{id} on plan authentication must record the plan side"
-                );
-            }
-            // No Codex credential at all. For a provider whose own credential is
-            // a plan login - `claude-plan`'s command auth - that is exactly how a
-            // subscription turn arrives, and it must still take the plan side.
-            // For every other provider it is a turn this client cannot attribute.
-            let anonymous = turn_mode(&selected, &id, &provider, None, &endpoint);
-            let expected_anonymous = if provider.auth.is_some() {
-                PriceAuthority::PlanRate
-            } else {
+            let expected_elsewhere = if id == codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID
+            {
                 PriceAuthority::Unavailable
+            } else {
+                PriceAuthority::Undeclared
             };
             assert!(
                 matches!(
-                    anonymous,
-                    AccountingMode::Provider { pricing, .. } if pricing == expected_anonymous
+                    elsewhere,
+                    AccountingMode::Provider { pricing, .. } if pricing == expected_elsewhere
                 ),
-                "{id} with no Codex credential must state {expected_anonymous:?}"
+                "{id} must not carry its basis away from its own route"
             );
         }
         // And the per-turn dialect gate must admit it too, not just the selector.
@@ -629,7 +600,7 @@ fn accounting_every_built_in_provider_collects() {
     // so losing any of them is a visible change rather than a quiet one.
     priced_providers.sort();
     assert!(
-        priced_providers.len() >= 14,
+        priced_providers.len() >= 13,
         "pricing authority shrank to {priced_providers:?}"
     );
     for required in ["anthropic", "openai", "openrouter", "vercel", "deepseek"] {
@@ -1249,6 +1220,7 @@ fn claude_plan_states_the_plan_side_whatever_openai_credential_exists() {
         approved_endpoint: endpoint.clone(),
         approved_query: super::canonical_query(&provider),
         pricing: PriceAuthority::Unavailable,
+        basis_source: Default::default(),
     };
 
     for auth_mode in [
@@ -1276,8 +1248,8 @@ fn claude_plan_states_the_plan_side_whatever_openai_credential_exists() {
         );
     }
 
-    // And it is still bound to its own route: pointed elsewhere it claims
-    // nothing, an API key in the profile notwithstanding.
+    // And it is still bound to its own route: pointed elsewhere it is not
+    // declared, an API key in the profile notwithstanding.
     let elsewhere = turn_mode(
         &selected,
         CLAUDE_PLAN_PROVIDER_ID,
@@ -1288,7 +1260,7 @@ fn claude_plan_states_the_plan_side_whatever_openai_credential_exists() {
     assert!(matches!(
         elsewhere,
         AccountingMode::Provider {
-            pricing: PriceAuthority::Unavailable,
+            pricing: PriceAuthority::Undeclared,
             ..
         }
     ));
