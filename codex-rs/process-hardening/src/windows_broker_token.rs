@@ -98,37 +98,31 @@ pub(crate) enum BrokerDefaultDacl {
     OwnedByCapability,
 }
 
+/// The broker token's integrity level.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BrokerIntegrity {
+    Low,
+    /// Probes only: below low.
+    #[cfg(test)]
+    Untrusted,
+}
+
 /// What the broker token is built from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BrokerTokenOptions {
     pub(crate) default_dacl: BrokerDefaultDacl,
-    /// Also restrict to the logon SID, which the window station and desktop
-    /// grant: a process that loads `user32` needs them to start.
-    pub(crate) logon_sid: bool,
-    /// Also restrict to Everyone, which devices such as the network stack
-    /// grant.
-    pub(crate) everyone: bool,
-    pub(crate) low_integrity: bool,
+    pub(crate) integrity: BrokerIntegrity,
 }
 
 /// The broker's token.
 pub(crate) const BROKER_TOKEN: BrokerTokenOptions = BrokerTokenOptions {
     default_dacl: BrokerDefaultDacl::Protected,
-    logon_sid: true,
-    everyone: true,
-    low_integrity: true,
+    integrity: BrokerIntegrity::Low,
 };
 
 /// A new primary token for the broker (see the module docs), with a fresh
-/// capability SID and the given default DACL.
-pub(crate) fn create_broker_token(default_dacl: BrokerDefaultDacl) -> io::Result<OwnedHandle> {
-    create_broker_token_with(BrokerTokenOptions {
-        default_dacl,
-        ..BROKER_TOKEN
-    })
-}
-
-pub(crate) fn create_broker_token_with(options: BrokerTokenOptions) -> io::Result<OwnedHandle> {
+/// capability SID.
+pub(crate) fn create_broker_token(options: BrokerTokenOptions) -> io::Result<OwnedHandle> {
     let default_dacl = options.default_dacl;
     let base = open_current_token(
         TOKEN_DUPLICATE | TOKEN_QUERY | TOKEN_ASSIGN_PRIMARY | TOKEN_ADJUST_DEFAULT,
@@ -145,23 +139,15 @@ pub(crate) fn create_broker_token_with(options: BrokerTokenOptions) -> io::Resul
         .iter()
         .find(|group| group.Attributes & SE_GROUP_LOGON_ID == SE_GROUP_LOGON_ID)
         .map(|group| group.Sid);
-    let mut restrict = vec![SID_AND_ATTRIBUTES {
-        Sid: capability.0,
+    let logon = logon.ok_or_else(|| io::Error::other("the token has no logon SID"))?;
+    // The logon SID: the window station and desktop grant it, and a process
+    // that loads `user32` cannot start without them. Everyone: devices such
+    // as the network stack grant it. Low integrity still keeps both from
+    // writing anything of the user's at medium or above.
+    let restrict = [capability.0, logon, everyone.0].map(|sid| SID_AND_ATTRIBUTES {
+        Sid: sid,
         Attributes: 0,
-    }];
-    if options.logon_sid {
-        let sid = logon.ok_or_else(|| io::Error::other("the token has no logon SID"))?;
-        restrict.push(SID_AND_ATTRIBUTES {
-            Sid: sid,
-            Attributes: 0,
-        });
-    }
-    if options.everyone {
-        restrict.push(SID_AND_ATTRIBUTES {
-            Sid: everyone.0,
-            Attributes: 0,
-        });
-    }
+    });
     let mut raw: HANDLE = 0;
     // SAFETY: every array outlives the call; Administrators is ignored if
     // the token does not have it.
@@ -183,9 +169,7 @@ pub(crate) fn create_broker_token_with(options: BrokerTokenOptions) -> io::Resul
     }
     // SAFETY: returned by the call above; owned from here on.
     let token = unsafe { OwnedHandle::from_raw_handle(raw as _) };
-    if options.low_integrity {
-        set_low_integrity(&token)?;
-    }
+    set_integrity(&token, options.integrity)?;
     let user = current_user_sid_string()?;
     let sddl = match default_dacl {
         BrokerDefaultDacl::Protected => thread_dacl_sddl(&user),
@@ -359,8 +343,12 @@ fn open_current_token(access: u32) -> io::Result<OwnedHandle> {
     Ok(unsafe { OwnedHandle::from_raw_handle(token as _) })
 }
 
-fn set_low_integrity(token: &OwnedHandle) -> io::Result<()> {
-    let low = LocalSid::from_string(LOW_INTEGRITY_SID)?;
+fn set_integrity(token: &OwnedHandle, integrity: BrokerIntegrity) -> io::Result<()> {
+    let low = LocalSid::from_string(match integrity {
+        BrokerIntegrity::Low => LOW_INTEGRITY_SID,
+        #[cfg(test)]
+        BrokerIntegrity::Untrusted => "S-1-16-0",
+    })?;
     let label = TOKEN_MANDATORY_LABEL {
         Label: SID_AND_ATTRIBUTES {
             Sid: low.0,

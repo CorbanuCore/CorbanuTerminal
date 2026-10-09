@@ -64,6 +64,7 @@ const DEFAULT_DACL_ENV: &str = "CODEX_PF27S07_DEFAULT_DACL";
 const NEW_THREADS_ENV: &str = "CODEX_PF27S07_NEW_THREADS";
 const NEW_THREAD_IDS_ENV: &str = "CODEX_PF27S07_NEW_THREAD_IDS";
 const PARK_ENV: &str = "CODEX_PF27S07_PARK";
+const THREAD_IDS_ENV: &str = "CODEX_PF27S08_THREAD_IDS";
 const NEW_THREADS_MARKER: &str = "new-threads=";
 /// Synthetic value; only its presence in the target's memory is checked.
 const CANARY: &str = "pf27s06-synthetic-env-canary-7c41d9";
@@ -288,7 +289,9 @@ fn pf_27_s07_protected_spawn_is_unopenable_while_suspended() {
         &program,
         &args,
         &env,
-        crate::windows_protected_spawn::Confinement::BrokerToken,
+        crate::windows_protected_spawn::Confinement::Broker(
+            crate::windows_broker_token::BROKER_TOKEN,
+        ),
     )
     .expect("protected spawn");
     let target = Target {
@@ -333,7 +336,10 @@ fn pf_27_s08_broker_token_cannot_open_the_users_processes() {
             "{name}: {control:?}"
         );
     }
-    let confined = probe_started_protected(&target, Confinement::BrokerToken);
+    let confined = probe_started_protected(
+        &target,
+        Confinement::Broker(crate::windows_broker_token::BROKER_TOKEN),
+    );
     eprintln!("pf27s08: probe under the broker token: {confined:?}");
     assert_all_denied(&confined);
 }
@@ -345,6 +351,12 @@ fn probe_started_protected(
 ) -> Report {
     let mut command = child_command("probe");
     command.env(TARGET_PID_ENV, target.pid().to_string());
+    // A low-integrity process cannot list another process's threads.
+    let threads: Vec<String> = thread_ids(target.pid())
+        .iter()
+        .map(u32::to_string)
+        .collect();
+    command.env(THREAD_IDS_ENV, threads.join(";"));
     let (program, args, env) = protected_spawn_parts(&command);
     let (mut child, stdout) =
         crate::windows_protected_spawn::spawn_protected_with(&program, &args, &env, confinement)
@@ -485,13 +497,20 @@ fn child_command(role: &str) -> Command {
         .env_remove(DEFAULT_DACL_ENV)
         .env_remove(NEW_THREADS_ENV)
         .env_remove(NEW_THREAD_IDS_ENV)
-        .env_remove(PARK_ENV);
+        .env_remove(PARK_ENV)
+        .env_remove(THREAD_IDS_ENV);
     command
 }
 
 fn run_target() {
-    if std::env::var_os(DEFAULT_DACL_ENV).is_some() {
-        crate::protect_new_objects_by_default().expect("protect new objects");
+    if std::env::var_os(DEFAULT_DACL_ENV).is_some()
+        && let Err(err) = crate::protect_new_objects_by_default()
+    {
+        // The broker token cannot change its own default DACL; Core set it.
+        assert!(
+            crate::windows_broker_token::default_dacl_is_protected().unwrap_or(false),
+            "protect new objects: {err}"
+        );
     }
     if std::env::var_os(HARDEN_ENV).is_some() {
         if let Err(err) = restrict_current_process_access() {
@@ -804,7 +823,14 @@ fn run_probe() {
         };
         report.insert((*name).to_string(), outcome);
     }
-    let threads = thread_ids(pid);
+    let mut threads = thread_ids(pid);
+    if threads.is_empty() {
+        threads = std::env::var(THREAD_IDS_ENV)
+            .unwrap_or_default()
+            .split(';')
+            .filter_map(|tid| tid.parse().ok())
+            .collect();
+    }
     for (name, access) in THREAD_RIGHTS {
         report.insert((*name).to_string(), open_threads(&threads, *access));
     }

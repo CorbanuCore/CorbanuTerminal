@@ -11,7 +11,8 @@
 //! PF-27-S08: the process runs under the broker token
 //! (`windows_broker_token`), which already carries that default DACL.
 
-use crate::windows_broker_token::BrokerDefaultDacl;
+use crate::windows_broker_token::BROKER_TOKEN;
+use crate::windows_broker_token::BrokerTokenOptions;
 use crate::windows_broker_token::create_broker_token;
 use crate::windows_handle_holder::HandleHolder;
 use crate::windows_process_access::SecurityDescriptor;
@@ -152,7 +153,7 @@ pub fn spawn_protected(
     args: &[OsString],
     env: &[(OsString, OsString)],
 ) -> io::Result<(ProtectedChild, File)> {
-    spawn_protected_with(program, args, env, Confinement::BrokerToken)
+    spawn_protected_with(program, args, env, Confinement::Broker(BROKER_TOKEN))
 }
 
 /// What a protected child runs under.
@@ -162,8 +163,8 @@ pub(crate) enum Confinement {
     /// the protected thread DACL before the child runs.
     #[cfg_attr(not(test), allow(dead_code))]
     SameToken,
-    /// The broker token (PF-27-S08).
-    BrokerToken,
+    /// A broker token (PF-27-S08); the broker's is [`BROKER_TOKEN`].
+    Broker(BrokerTokenOptions),
 }
 
 pub(crate) fn spawn_protected_with(
@@ -191,7 +192,7 @@ pub(crate) fn spawn_protected_suspended(
     confinement: Confinement,
 ) -> io::Result<(ProtectedChild, File, OwnedHandle)> {
     let token = match confinement {
-        Confinement::BrokerToken => Some(create_broker_token(BrokerDefaultDacl::Protected)?),
+        Confinement::Broker(options) => Some(create_broker_token(options)?),
         Confinement::SameToken => None,
     };
     let user_sid = current_user_sid_string()?;
