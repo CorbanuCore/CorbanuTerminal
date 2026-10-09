@@ -239,7 +239,11 @@ fn sec_win_323_a_launch_without_rules_is_a_rule_set() {
     let one = crate::DenyReadTargets::from_exact_paths([path]);
     let rules = deny_read_rule_set(Some(&one)).expect("rules");
     assert!(!rules.is_empty());
-    assert_eq!(rules, rules.to_lowercase(), "keys as Windows compares paths");
+    assert_eq!(
+        rules,
+        rules.to_lowercase(),
+        "keys as Windows compares paths"
+    );
 }
 
 /// The elevated setup creates the machine-wide registry, owned by

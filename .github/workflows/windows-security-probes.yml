@@ -153,7 +153,7 @@ jobs:
             & $medium -Program $d1 -Arguments @('--nocapture', '--test-threads=1')
             if ($LASTEXITCODE -ne 0) { throw "#295 probe failed in a normal session" }
             $sandbox = Get-TestExe @('-p', 'codex-windows-sandbox', '--lib')
-            Assert-Tests $sandbox 'sec_win_' 24
+            Assert-Tests $sandbox 'sec_win_' 25
             & $medium -Program $sandbox -Arguments @('sec_win_', '--nocapture', '--test-threads=1')
             if ($LASTEXITCODE -ne 0) { throw "P1 hardening regressions failed in a normal session" }
             $hardening = Get-TestExe @('-p', 'codex-process-hardening', '--lib')
