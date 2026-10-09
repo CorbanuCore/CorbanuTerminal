@@ -1026,7 +1026,7 @@ pub fn validate_model_providers(
                 && codex_model_provider_info::built_in_model_providers(
                     /*openai_base_url*/ None,
                 )
-                .contains_key(key);
+                .contains_key(codex_model_provider_info::canonical_provider_id(key));
             if provider.name.trim().is_empty() && !built_in_billing {
                 return Err(format!(
                     "model_providers.{key}: provider name must not be empty"

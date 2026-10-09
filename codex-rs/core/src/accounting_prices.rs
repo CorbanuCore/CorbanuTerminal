@@ -197,12 +197,13 @@ pub(super) fn plan_original(
 /// exists so the basis is bound to the attempt even without a price.
 pub(super) fn basis_only(
     basis: Basis,
+    source: codex_state::accounting::BasisSource,
     model: &str,
     provider: &str,
     scope: Uuid,
     accepted_at: i64,
 ) -> anyhow::Result<Vec<Snapshot>> {
-    let reference = serde_json::to_vec(&("basis-only-v1", provider, model, basis))?;
+    let reference = serde_json::to_vec(&("basis-only-v1", provider, model, basis, source))?;
     snapshot(
         model,
         provider,
