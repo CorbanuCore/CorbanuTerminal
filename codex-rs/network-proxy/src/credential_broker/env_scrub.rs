@@ -242,9 +242,10 @@ mod windows_env {
         use windows_sys::Win32::System::Memory::HeapUnlock;
         use windows_sys::Win32::System::Memory::HeapWalk;
         use windows_sys::Win32::System::Memory::PROCESS_HEAP_ENTRY;
-        use windows_sys::Win32::System::Memory::PROCESS_HEAP_ENTRY_BUSY;
-        use windows_sys::Win32::System::Memory::PROCESS_HEAP_REGION;
-        use windows_sys::Win32::System::Memory::PROCESS_HEAP_UNCOMMITTED_RANGE;
+        // `PROCESS_HEAP_*` entry flags (`winbase.h`).
+        const PROCESS_HEAP_REGION: u32 = 0x1;
+        const PROCESS_HEAP_UNCOMMITTED_RANGE: u32 = 0x2;
+        const PROCESS_HEAP_ENTRY_BUSY: u32 = 0x4;
         let needles: Vec<&[u8]> = needles
             .iter()
             .copied()
