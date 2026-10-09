@@ -156,7 +156,9 @@ async fn accounting_chat_native_literal_partial_and_zero_goldens() -> anyhow::Re
         let prices: Vec<Snapshot> = payloads(&db, "draft_accounting_price_snapshots").await?;
         assert_eq!(prices.len(), 1);
         eprintln!("CHAT_PRICES {}", serde_json::to_string(&prices)?);
-        assert_eq!(prices[0].rates.write, None);
+        // The sheet's cache-write rate is stated; Chat usage reports no write
+        // count here, so the uncached bucket stays unknown rather than guessed.
+        assert_eq!(prices[0].rates.write, Some("2.5".to_string().try_into()?));
         assert_eq!(prices[0].effective_from_ms, rows[0].dispatched_at_ms);
         stop(&test).await;
     }
@@ -263,7 +265,7 @@ async fn accounting_chat_native_mismatched_endpoint_is_sent_unrecorded() -> anyh
 
 #[tokio::test]
 async fn accounting_chat_native_immutable_prices_and_unpriced_rows() -> anyhow::Result<()> {
-    for model in ["gpt-5.6-sol", "gpt-6-astra", "remote-only-fixture"] {
+    for model in ["gpt-5.6-terra", "codex-auto-review", "remote-only-fixture"] {
         let server = MockServer::start().await;
         let endpoint = format!("{}/v1", server.uri());
         mount(&server, success(usage())).await;
@@ -288,15 +290,15 @@ async fn accounting_chat_native_immutable_prices_and_unpriced_rows() -> anyhow::
                 .iter()
                 .filter(|snapshot| snapshot.rates != codex_state::accounting::Rates::default())
                 .count(),
-            usize::from(model == "gpt-5.6-sol")
+            usize::from(model == "gpt-5.6-terra")
         );
         assert_eq!(prices.len(), 1);
         let before = totals(&db, &rows[0]).await?;
         assert_eq!(before.unknown_estimates, 1);
         assert_eq!(
             before.known_usd,
-            if model == "gpt-5.6-sol" {
-                "0.00121"
+            if model == "gpt-5.6-terra" {
+                "0.000484"
             } else {
                 "0"
             }

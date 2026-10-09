@@ -179,6 +179,7 @@ fn test_model_info(
             provider_id: "openai".to_string(),
             capability: ModelCapabilityTier::Unclassified,
             reason: "No allocation economics for this synthetic runtime".to_string(),
+            billing: None,
         }),
         chat_completions: Default::default(),
         display_name: display_name.to_string(),

@@ -14,6 +14,7 @@ use codex_protocol::auth::AuthMode;
 use codex_protocol::openai_models::ChatReasoningEffortProtocol;
 use codex_protocol::openai_models::ChatReasoningProtocol;
 use codex_protocol::openai_models::InputModality;
+use codex_protocol::openai_models::LongContextRates;
 use codex_protocol::openai_models::MeteredRates;
 use codex_protocol::openai_models::ModelBilling;
 use codex_protocol::openai_models::ModelCapabilityTier;
@@ -785,6 +786,7 @@ async fn remote_model_overlay_preserves_bundled_orchestration_metadata() {
         provider_id: "attacker-provider".to_string(),
         capability: ModelCapabilityTier::Legacy,
         reason: "remote payload attempted to replace local policy".to_string(),
+        billing: None,
     });
     remote_models[0].supported_reasoning_levels = vec![ReasoningEffortPreset {
         effort: ReasoningEffort::Custom("untrusted-expensive-mode".to_string()),
@@ -815,9 +817,18 @@ async fn remote_model_overlay_preserves_bundled_orchestration_metadata() {
             capability: ModelCapabilityTier::Frontier,
             billing: ModelBilling::AuthDependent {
                 plan_relative_burn_millis: 1_000,
-                api_key_input_milli_usd_per_million_tokens: 5_000,
-                api_key_output_milli_usd_per_million_tokens: 30_000,
-                api_key_cached_input_milli_usd_per_million_tokens: Some(500),
+                api_key_input_milli_usd_per_million_tokens: 4_000,
+                api_key_output_milli_usd_per_million_tokens: 20_000,
+                api_key_cached_input_milli_usd_per_million_tokens: Some(400),
+                api_key_cache_write_milli_usd_per_million_tokens: Some(5_000),
+                api_key_long_context: Some(LongContextRates {
+                    above_input_tokens: 272_000,
+                    input_milli_usd_per_million_tokens: 8_000,
+                    output_milli_usd_per_million_tokens: 30_000,
+                    cached_input_milli_usd_per_million_tokens: Some(800),
+                    cache_write_milli_usd_per_million_tokens: Some(10_000),
+                }),
+                api_key_valid_through_utc: Some("2026-11-21T23:59:59Z".to_string()),
             },
         })
     );
@@ -2073,9 +2084,18 @@ fn bundled_orchestration_policy_distinguishes_gpt_5_6_tiers_and_disables_gpt_5_5
             capability: ModelCapabilityTier::Frontier,
             billing: ModelBilling::AuthDependent {
                 plan_relative_burn_millis: 1_000,
-                api_key_input_milli_usd_per_million_tokens: 5_000,
-                api_key_output_milli_usd_per_million_tokens: 30_000,
-                api_key_cached_input_milli_usd_per_million_tokens: Some(500),
+                api_key_input_milli_usd_per_million_tokens: 4_000,
+                api_key_output_milli_usd_per_million_tokens: 20_000,
+                api_key_cached_input_milli_usd_per_million_tokens: Some(400),
+                api_key_cache_write_milli_usd_per_million_tokens: Some(5_000),
+                api_key_long_context: Some(LongContextRates {
+                    above_input_tokens: 272_000,
+                    input_milli_usd_per_million_tokens: 8_000,
+                    output_milli_usd_per_million_tokens: 30_000,
+                    cached_input_milli_usd_per_million_tokens: Some(800),
+                    cache_write_milli_usd_per_million_tokens: Some(10_000),
+                }),
+                api_key_valid_through_utc: Some("2026-11-21T23:59:59Z".to_string()),
             },
         }
     );
@@ -2086,9 +2106,18 @@ fn bundled_orchestration_policy_distinguishes_gpt_5_6_tiers_and_disables_gpt_5_5
             capability: ModelCapabilityTier::Balanced,
             billing: ModelBilling::AuthDependent {
                 plan_relative_burn_millis: 500,
-                api_key_input_milli_usd_per_million_tokens: 2_500,
-                api_key_output_milli_usd_per_million_tokens: 15_000,
-                api_key_cached_input_milli_usd_per_million_tokens: Some(250),
+                api_key_input_milli_usd_per_million_tokens: 2_000,
+                api_key_output_milli_usd_per_million_tokens: 12_000,
+                api_key_cached_input_milli_usd_per_million_tokens: Some(200),
+                api_key_cache_write_milli_usd_per_million_tokens: Some(2_500),
+                api_key_long_context: Some(LongContextRates {
+                    above_input_tokens: 272_000,
+                    input_milli_usd_per_million_tokens: 4_000,
+                    output_milli_usd_per_million_tokens: 18_000,
+                    cached_input_milli_usd_per_million_tokens: Some(400),
+                    cache_write_milli_usd_per_million_tokens: Some(5_000),
+                }),
+                api_key_valid_through_utc: None,
             },
         }
     );
@@ -2099,9 +2128,18 @@ fn bundled_orchestration_policy_distinguishes_gpt_5_6_tiers_and_disables_gpt_5_5
             capability: ModelCapabilityTier::Fast,
             billing: ModelBilling::AuthDependent {
                 plan_relative_burn_millis: 200,
-                api_key_input_milli_usd_per_million_tokens: 1_000,
-                api_key_output_milli_usd_per_million_tokens: 6_000,
-                api_key_cached_input_milli_usd_per_million_tokens: Some(100),
+                api_key_input_milli_usd_per_million_tokens: 200,
+                api_key_output_milli_usd_per_million_tokens: 1_200,
+                api_key_cached_input_milli_usd_per_million_tokens: Some(20),
+                api_key_cache_write_milli_usd_per_million_tokens: Some(250),
+                api_key_long_context: Some(LongContextRates {
+                    above_input_tokens: 272_000,
+                    input_milli_usd_per_million_tokens: 400,
+                    output_milli_usd_per_million_tokens: 1_800,
+                    cached_input_milli_usd_per_million_tokens: Some(40),
+                    cache_write_milli_usd_per_million_tokens: Some(500),
+                }),
+                api_key_valid_through_utc: None,
             },
         }
     );
@@ -2112,6 +2150,20 @@ fn bundled_orchestration_policy_distinguishes_gpt_5_6_tiers_and_disables_gpt_5_5
             capability: ModelCapabilityTier::Legacy,
             reason: "superseded by GPT-5.6 and lower capability than Sol, Terra, and Luna"
                 .to_string(),
+            billing: Some(ModelBilling::Metered {
+                input_milli_usd_per_million_tokens: 5_000,
+                output_milli_usd_per_million_tokens: 30_000,
+                cached_input_milli_usd_per_million_tokens: Some(500),
+                cache_write_milli_usd_per_million_tokens: None,
+                long_context: Some(LongContextRates {
+                    above_input_tokens: 272_000,
+                    input_milli_usd_per_million_tokens: 10_000,
+                    output_milli_usd_per_million_tokens: 45_000,
+                    cached_input_milli_usd_per_million_tokens: Some(1_000),
+                    cache_write_milli_usd_per_million_tokens: None,
+                }),
+                valid_through_utc: None,
+            }),
         }
     );
 }
@@ -2142,13 +2194,17 @@ fn bundled_orchestration_states_published_rates_for_opus_5_5_and_gpt_6_sol() {
                 input_milli_usd_per_million_tokens: 4_000,
                 output_milli_usd_per_million_tokens: 20_000,
                 cached_input_milli_usd_per_million_tokens: Some(200),
+                cache_write_milli_usd_per_million_tokens: None,
+                long_context: None,
+                valid_through_utc: None,
             },
         })
     );
     assert_eq!(model("claude-opus-5-5").context_window, Some(1_000_000));
     assert_eq!(model("claude-opus-5-5").max_output_tokens, Some(128_000));
 
-    // OpenAI: $2 / $10 per million, cache reads $0.20 per million.
+    // OpenAI: $2 / $10 per million, cache reads $0.20, cache writes $2.50 per
+    // million; above 272K input tokens 2x input and cache rates, 1.5x output.
     //
     // Metered, not auth-dependent. OpenAI publishes those API rates and nothing
     // about subscription capacity for this model, and Codex rejects it outright
@@ -2165,6 +2221,15 @@ fn bundled_orchestration_states_published_rates_for_opus_5_5_and_gpt_6_sol() {
                 input_milli_usd_per_million_tokens: 2_000,
                 output_milli_usd_per_million_tokens: 10_000,
                 cached_input_milli_usd_per_million_tokens: Some(200),
+                cache_write_milli_usd_per_million_tokens: Some(2_500),
+                long_context: Some(LongContextRates {
+                    above_input_tokens: 272_000,
+                    input_milli_usd_per_million_tokens: 4_000,
+                    output_milli_usd_per_million_tokens: 15_000,
+                    cached_input_milli_usd_per_million_tokens: Some(400),
+                    cache_write_milli_usd_per_million_tokens: Some(5_000),
+                }),
+                valid_through_utc: None,
             },
         })
     );
@@ -2247,6 +2312,9 @@ fn bundled_models_json_contains_ambient_and_zai_models() {
             input_milli_usd_per_million_tokens: 1_400,
             output_milli_usd_per_million_tokens: 4_400,
             cached_input_milli_usd_per_million_tokens: Some(260),
+            cache_write_milli_usd_per_million_tokens: None,
+            long_context: None,
+            valid_through_utc: None,
         })
     );
     let preset = ModelPreset::from(zai_glm_5_3.clone());

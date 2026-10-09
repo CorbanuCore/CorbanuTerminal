@@ -748,3 +748,70 @@ fn local_and_undeclared_work_is_neither_spent_nor_subscription() {
     );
     assert_eq!(totals.known_usd, decimal("0.000153"));
 }
+
+/// A long-context tier prices the whole attempt above its threshold, the base
+/// rates price it at or below, and an unknown input prices nothing.
+#[test]
+fn long_context_tier_prices_whole_attempt_above_threshold() {
+    let mut a = attempt();
+    a.dialect = Dialect::Inclusive;
+    let mut s = snapshot();
+    s.rates = Rates {
+        noncached: Some(decimal("0.2")),
+        read: Some(decimal("0.02")),
+        write: Some(decimal("0.25")),
+        output: Some(decimal("1.2")),
+    };
+    s.long_context = Some(LongContext {
+        above_input_tokens: 100.try_into().unwrap(),
+        rates: Rates {
+            noncached: Some(decimal("0.4")),
+            read: Some(decimal("0.04")),
+            write: Some(decimal("0.5")),
+            output: Some(decimal("1.8")),
+        },
+    });
+    let quote = |patch: Value| {
+        quote_observations(&a, &[row(/*revision*/ 1, patch)], &[s.clone()]).unwrap()
+    };
+    // At the threshold: base rates. 40*0.2 + 50*0.02 + 10*0.25 + 5*1.2 per million.
+    let at = quote(json!({"input":100,"read":50,"write":10,"output":5}));
+    assert_eq!(at.all_buckets_priced, Some(decimal("0.0000175")));
+    // One token above: every bucket at the long-context rates.
+    let above = quote(json!({"input":101,"read":50,"write":10,"output":5}));
+    assert_eq!(above.all_buckets_priced, Some(decimal("0.0000324")));
+    assert_eq!(
+        above.buckets,
+        [
+            BucketQuote::Priced(decimal("0.0000164")),
+            BucketQuote::Priced(decimal("0.000002")),
+            BucketQuote::Priced(decimal("0.000005")),
+            BucketQuote::Priced(decimal("0.000009")),
+        ]
+    );
+    // Input unknown: either tier could apply, so nothing is priced.
+    let unknown = quote(json!({"read":50,"write":10,"output":5}));
+    assert_eq!(unknown.all_buckets_priced, None);
+    assert_eq!(unknown.known_subtotal, Decimal::default());
+    assert_eq!(
+        unknown.buckets,
+        [
+            BucketQuote::MissingUsage,
+            BucketQuote::MissingRate,
+            BucketQuote::MissingRate,
+            BucketQuote::MissingRate,
+        ]
+    );
+    // The tier needs ledger format 3 and is never read in the pre-basis form.
+    assert_eq!(s.ledger_format(), 3);
+    let payload = serde_json::to_string(&s).unwrap();
+    assert!(payload.contains("\"long_context\""));
+    assert_eq!(serde_json::from_str::<Snapshot>(&payload).unwrap(), s);
+    let mut plain = s.clone();
+    plain.long_context = None;
+    assert!(
+        !serde_json::to_string(&plain)
+            .unwrap()
+            .contains("long_context")
+    );
+}

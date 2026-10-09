@@ -39,7 +39,7 @@ async fn accounting_responses_ws_native_complete_and_partial_goldens() -> anyhow
             .await?;
         submit(&test).await?;
         let held = gate.next().await?;
-        assert_eq!(held.body["model"], "gpt-5.6-sol");
+        assert_eq!(held.body["model"], "gpt-5.6-terra");
         held.send(success(write)).await?;
         terminal(&test).await?;
         let db = test.codex.state_db().unwrap();
@@ -63,9 +63,9 @@ async fn accounting_responses_ws_native_complete_and_partial_goldens() -> anyhow
                     unknown: i64::from(write.is_none() && (i == 1 || i == 3))
                 }),
                 known_usd: if write.is_some() {
-                    "0.00161"
+                    "0.000644"
                 } else {
-                    "0.00121"
+                    "0.000484"
                 }
                 .to_string()
                 .try_into()?,
@@ -200,8 +200,8 @@ async fn accounting_responses_ws_native_ws_prefix_then_http_fallback() -> anyhow
     chain(&records);
     assert_eq!(
         totals(&db, &records[0]).await?.known_usd,
-        // The two turn attempts, plus the startup prewarm's own $0.02997.
-        "0.03319".to_string().try_into()?
+        // The two turn attempts, plus the startup prewarm's own $0.011988.
+        "0.013276".to_string().try_into()?
     );
     counts(&gate, (1, 1, 1, 1));
     stop(&test).await;

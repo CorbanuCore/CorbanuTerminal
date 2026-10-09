@@ -1,21 +1,22 @@
 use super::*;
+use codex_protocol::openai_models::ModelOrchestrationMetadata;
 use pretty_assertions::assert_eq;
 
 #[test]
 fn accounting_chat_prices_exact_source_and_unknown() -> anyhow::Result<()> {
     let scope = Uuid::new_v4();
     let source = "openai-chat-api-key-bundled-v1";
-    let first = chat_original("gpt-5.6-sol", "openai", scope, /*accepted_at*/ 1000)?.remove(0);
+    let first = chat_original("gpt-5.3-codex", "openai", scope, /*accepted_at*/ 1000)?.remove(0);
     let tuple = serde_json::to_vec(&(
         source,
         "openai",
-        "gpt-5.6-sol",
+        "gpt-5.3-codex",
         "api_key",
         "default",
         "USD/million",
-        5000,
-        30000,
-        Some(500),
+        1750,
+        14000,
+        Some(175),
     ))?;
     assert_eq!(
         first.source_reference,
@@ -24,9 +25,9 @@ fn accounting_chat_prices_exact_source_and_unknown() -> anyhow::Result<()> {
     assert_eq!(
         first.rates,
         Rates {
-            noncached: Some(rate(/*milli*/ 5000)?),
-            output: Some(rate(/*milli*/ 30000)?),
-            read: Some(rate(/*milli*/ 500)?),
+            noncached: Some(rate(/*milli*/ 1750)?),
+            output: Some(rate(/*milli*/ 14000)?),
+            read: Some(rate(/*milli*/ 175)?),
             write: None
         }
     );
@@ -39,11 +40,11 @@ fn accounting_chat_prices_exact_source_and_unknown() -> anyhow::Result<()> {
         ),
         (1000.try_into()?, 1000.try_into()?, 1000.try_into()?, None)
     );
-    let second = chat_original("gpt-5.6-sol", "openai", scope, /*accepted_at*/ 2000)?.remove(0);
+    let second = chat_original("gpt-5.3-codex", "openai", scope, /*accepted_at*/ 2000)?.remove(0);
     assert_ne!(first.id, second.id);
     assert_eq!(first.source_reference, second.source_reference);
     for model in [
-        "gpt-6-astra",
+        "gpt-6.1-sol",
         "remote-only",
         "Gpt-5.6-sol",
         "openai/gpt-5.6-sol",
@@ -71,6 +72,7 @@ fn accounting_chat_prices_exact_source_and_unknown() -> anyhow::Result<()> {
         provider_id: "openai".into(),
         capability: codex_protocol::openai_models::ModelCapabilityTier::Frontier,
         reason: "fixture".into(),
+        billing: None,
     });
     assert_eq!(billing_for(&[disabled], &row.slug, "openai"), None);
     for billing in [
@@ -100,6 +102,9 @@ fn accounting_chat_prices_exact_source_and_unknown() -> anyhow::Result<()> {
             input_milli_usd_per_million_tokens: 1,
             output_milli_usd_per_million_tokens: 2,
             cached_input_milli_usd_per_million_tokens: read,
+            cache_write_milli_usd_per_million_tokens: None,
+            long_context: None,
+            valid_through_utc: None,
         };
         let projected = billed(
             "fixture", "openai", &billing, scope, /*accepted_at*/ 1000, source,
@@ -119,7 +124,7 @@ fn accounting_chat_prices_exact_source_and_unknown() -> anyhow::Result<()> {
 fn accounting_responses_prices_exact_and_unknown() {
     let scope = Uuid::new_v4();
     let first = responses_original(
-        "gpt-5.6-sol",
+        "gpt-5.3-codex",
         "openai",
         scope,
         /*accepted_at*/ 1000,
@@ -128,7 +133,7 @@ fn accounting_responses_prices_exact_and_unknown() {
     .unwrap()
     .remove(0);
     let later = responses_original(
-        "gpt-5.6-sol",
+        "gpt-5.3-codex",
         "openai",
         scope,
         /*accepted_at*/ 2000,
@@ -139,9 +144,9 @@ fn accounting_responses_prices_exact_and_unknown() {
     assert_eq!(
         first.rates,
         Rates {
-            noncached: Some(rate(/*milli*/ 5000).unwrap()),
-            output: Some(rate(/*milli*/ 30000).unwrap()),
-            read: Some(rate(/*milli*/ 500).unwrap()),
+            noncached: Some(rate(/*milli*/ 1750).unwrap()),
+            output: Some(rate(/*milli*/ 14000).unwrap()),
+            read: Some(rate(/*milli*/ 175).unwrap()),
             write: None,
         }
     );
@@ -153,13 +158,13 @@ fn accounting_responses_prices_exact_and_unknown() {
     let source = serde_json::to_vec(&(
         "openai-responses-api-key-bundled-v1",
         "openai",
-        "gpt-5.6-sol",
+        "gpt-5.3-codex",
         "api_key",
         "default",
         "USD/million",
-        5000,
-        30000,
-        Some(500),
+        1750,
+        14000,
+        Some(175),
     ))
     .unwrap();
     assert_eq!(
@@ -167,7 +172,7 @@ fn accounting_responses_prices_exact_and_unknown() {
         Uuid::new_v5(&Uuid::NAMESPACE_OID, &source)
     );
     for model in [
-        "gpt-6-astra",
+        "gpt-6.1-sol",
         "remote-only",
         "Gpt-5.6-sol",
         "openai/gpt-5.6-sol",
@@ -211,6 +216,9 @@ fn accounting_responses_prices_exact_and_unknown() {
             input_milli_usd_per_million_tokens: 0,
             output_milli_usd_per_million_tokens: 0,
             cached_input_milli_usd_per_million_tokens: read,
+            cache_write_milli_usd_per_million_tokens: None,
+            long_context: None,
+            valid_through_utc: None,
         };
         let value = responses_project("fixture", scope, &billing, /*accepted_at*/ 1000)
             .unwrap()
@@ -371,6 +379,9 @@ fn accounting_price_authority_rejects_aliases_remote_and_non_metered_rows() {
         api_key_input_milli_usd_per_million_tokens: 5000,
         api_key_output_milli_usd_per_million_tokens: 25000,
         api_key_cached_input_milli_usd_per_million_tokens: None,
+        api_key_cache_write_milli_usd_per_million_tokens: None,
+        api_key_long_context: None,
+        api_key_valid_through_utc: None,
     };
     let priced = billed(
         "claude-opus-5",
@@ -404,6 +415,9 @@ fn accounting_price_projection_retains_absent_read_and_write_and_exact_milli() {
         input_milli_usd_per_million_tokens: 1,
         output_milli_usd_per_million_tokens: 2,
         cached_input_milli_usd_per_million_tokens: None,
+        cache_write_milli_usd_per_million_tokens: None,
+        long_context: None,
+        valid_through_utc: None,
     };
     let quote = billed(
         "fixture",
@@ -510,9 +524,10 @@ fn accounting_plan_projection_states_the_rate_and_only_stated_equivalents() {
         .unwrap()
         .remove(0);
     assert_eq!(both.plan_burn_millis, Some(200));
-    assert_eq!(both.rates.noncached, Some(rate(/*milli*/ 1000).unwrap()));
-    assert_eq!(both.rates.output, Some(rate(/*milli*/ 6000).unwrap()));
-    assert_eq!(both.rates.read, Some(rate(/*milli*/ 100).unwrap()));
+    assert_eq!(both.rates.noncached, Some(rate(/*milli*/ 200).unwrap()));
+    assert_eq!(both.rates.output, Some(rate(/*milli*/ 1200).unwrap()));
+    assert_eq!(both.rates.read, Some(rate(/*milli*/ 20).unwrap()));
+    assert_eq!(both.rates.write, Some(rate(/*milli*/ 250).unwrap()));
 
     // A metered row reached through a subscription: the vendor published API
     // rates and no plan figure, so the equivalent is stated and the plan rate
@@ -756,7 +771,8 @@ fn accounting_deepseek_states_the_rate_in_force_and_a_free_cache_write() -> anyh
     )?;
     assert_ne!(peak[0].source_reference, off_peak[0].source_reference);
 
-    let openai = chat_original("gpt-5.6-sol", "openai", scope, /*accepted_at*/ 1000)?.remove(0);
+    // A row whose sheet states no cache-write price leaves writes unpriced.
+    let openai = chat_original("gpt-5.4-mini", "openai", scope, /*accepted_at*/ 1000)?.remove(0);
     assert_eq!(openai.rates.write, None);
     Ok(())
 }
@@ -786,5 +802,176 @@ fn accounting_zai_api_states_published_rates_and_a_free_cache_write() -> anyhow:
             "{model}"
         );
     }
+    Ok(())
+}
+
+/// Milliseconds at a UTC instant.
+fn utc(text: &str) -> i64 {
+    chrono::DateTime::parse_from_rfc3339(text)
+        .expect("fixture instant")
+        .timestamp_millis()
+}
+
+/// #361: every OpenAI API-key row states the Standard rates OpenAI publishes,
+/// read 2026-10-09 from developers.openai.com/api/docs/pricing and each
+/// model's page: input, cached input, cache writes ("-" or unlisted means the
+/// sheet states none) and output in milli-USD per million tokens, and, where
+/// the page says prompts above 272K input tokens cost 2x input (cache rates
+/// included) and 1.5x output for the full request, that tier.
+#[test]
+fn openai_api_key_rates_match_the_published_sheet() -> anyhow::Result<()> {
+    let scope = Uuid::new_v4();
+    let read_on = utc("2026-10-09T19:00:00Z");
+    // (model, input, cached input, cache writes, output, long-context tier)
+    type Row = (&'static str, u32, u32, Option<u32>, u32, bool);
+    let sheet: [Row; 11] = [
+        ("gpt-6-astra", 10_000, 1_000, Some(12_500), 50_000, true),
+        ("gpt-6-sol", 2_000, 200, Some(2_500), 10_000, true),
+        ("gpt-6-luna", 100, 10, Some(125), 500, true),
+        ("gpt-5.6-sol", 4_000, 400, Some(5_000), 20_000, true),
+        ("gpt-5.6-terra", 2_000, 200, Some(2_500), 12_000, true),
+        ("gpt-5.6-luna", 200, 20, Some(250), 1_200, true),
+        ("gpt-5.5", 5_000, 500, None, 30_000, true),
+        ("gpt-5.4", 2_500, 250, None, 15_000, true),
+        ("gpt-5.4-mini", 750, 75, None, 4_500, false),
+        ("gpt-5.3-codex", 1_750, 175, None, 14_000, false),
+        ("gpt-5.2", 1_750, 175, None, 14_000, false),
+    ];
+    for (model, input, cached, write, output, long) in sheet {
+        for price in [
+            responses_original(model, "openai", scope, read_on, /*tier*/ None)?,
+            chat_original(model, "openai", scope, read_on)?,
+        ] {
+            let [price] = price.as_slice() else {
+                panic!("{model}: exactly one price");
+            };
+            assert_eq!(
+                price.rates,
+                Rates {
+                    noncached: Some(rate(input)?),
+                    read: Some(rate(cached)?),
+                    write: write.map(rate).transpose()?,
+                    output: Some(rate(output)?),
+                },
+                "{model}"
+            );
+            let tier = long
+                .then(|| -> anyhow::Result<LongContext> {
+                    Ok(LongContext {
+                        above_input_tokens: 272_000.try_into()?,
+                        rates: Rates {
+                            noncached: Some(rate(input * 2)?),
+                            read: Some(rate(cached * 2)?),
+                            write: write.map(|write| rate(write * 2)).transpose()?,
+                            output: Some(rate(output * 3 / 2)?),
+                        },
+                    })
+                })
+                .transpose()?;
+            assert_eq!(price.long_context, tier, "{model}");
+            assert_eq!(price.basis, Basis::Billed, "{model}");
+        }
+        // Fast (formerly Priority), Flex and unknown tiers have no Standard
+        // price here: no price, never the Standard one.
+        for tier in ["priority", "flex", "auto"] {
+            assert!(
+                responses_original(model, "openai", scope, read_on, Some(tier))?.is_empty(),
+                "{model} {tier}"
+            );
+        }
+    }
+    // GPT-5.6 Sol's promotional price holds "at least through November 21,
+    // 2026"; after that the catalogue states no price until it is re-read.
+    assert!(
+        !responses_original(
+            "gpt-5.6-sol",
+            "openai",
+            scope,
+            utc("2026-11-21T23:59:59Z"),
+            None
+        )?
+        .is_empty()
+    );
+    assert!(
+        responses_original(
+            "gpt-5.6-sol",
+            "openai",
+            scope,
+            utc("2026-11-22T00:00:00Z"),
+            None
+        )?
+        .is_empty()
+    );
+    // A stated cache write or tier extends the price identity; changing either
+    // changes it, so a record states exactly which sheet priced it.
+    let luna = responses_original("gpt-5.6-luna", "openai", scope, read_on, None)?.remove(0);
+    let v1 = (
+        "openai-responses-api-key-bundled-v1",
+        "openai",
+        "gpt-5.6-luna",
+        "api_key",
+        "default",
+        "USD/million",
+        200,
+        1200,
+        Some(20),
+    );
+    let reference = serde_json::to_vec(&(
+        v1,
+        "stated-v1",
+        Some(250),
+        Some((272_000, 400, 1800, Some(40), Some(500))),
+    ))?;
+    assert_eq!(
+        luna.source_reference,
+        Uuid::new_v5(&Uuid::NAMESPACE_OID, &reference)
+    );
+    Ok(())
+}
+
+/// A ChatGPT-login turn on an OpenAI row states the same published API price,
+/// cache writes and long-context tier included, as its not-spent equivalent.
+#[test]
+fn openai_plan_equivalent_states_cache_write_and_long_context() -> anyhow::Result<()> {
+    let scope = Uuid::new_v4();
+    let at = utc("2026-10-09T19:00:00Z");
+    let plan = plan_original("gpt-5.6-luna", "openai", scope, at, None)?.remove(0);
+    let billed = responses_original("gpt-5.6-luna", "openai", scope, at, None)?.remove(0);
+    assert_eq!(plan.basis, Basis::PlanEquivalent);
+    assert_eq!(plan.plan_burn_millis, Some(200));
+    assert_eq!(plan.rates, billed.rates);
+    assert_eq!(plan.long_context, billed.long_context);
+    Ok(())
+}
+
+/// A row that is not spawn-eligible still states its published price for
+/// accounting; one that states none stays unpriced.
+#[test]
+fn disabled_rows_state_their_published_price() -> anyhow::Result<()> {
+    let catalog = codex_models_manager::bundled_models_response()?;
+    let row = catalog
+        .models
+        .iter()
+        .find(|row| row.slug == "gpt-5.4-mini")
+        .expect("bundled row")
+        .clone();
+    assert!(
+        !row.orchestration
+            .as_ref()
+            .is_some_and(ModelOrchestrationMetadata::is_spawn_eligible)
+    );
+    assert_eq!(
+        billing_for(std::slice::from_ref(&row), "gpt-5.4-mini", "openai")
+            .and_then(|billing| billing.api_key_rates()),
+        Some((750, 4500, Some(75)))
+    );
+    let mut unpriced = row;
+    unpriced.orchestration = Some(ModelOrchestrationMetadata::Disabled {
+        provider_id: "openai".into(),
+        capability: codex_protocol::openai_models::ModelCapabilityTier::Legacy,
+        reason: "fixture".into(),
+        billing: None,
+    });
+    assert_eq!(billing_for(&[unpriced], "gpt-5.4-mini", "openai"), None);
     Ok(())
 }

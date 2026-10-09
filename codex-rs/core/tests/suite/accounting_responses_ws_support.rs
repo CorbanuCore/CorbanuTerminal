@@ -265,10 +265,10 @@ pub fn with_prewarm(
     for index in [1, 2, 3, 5] {
         totals.measured[index].unknown += 1;
     }
-    // 999 output at $30/M. The frame reports no cached-token detail, so the
+    // 999 output at $12/M. The frame reports no cached-token detail, so the
     // uncached bucket is unknown and only the output side is priced.
     let prewarm: codex_state::accounting::Decimal =
-        serde_json::from_value(serde_json::json!("0.02997")).expect("fixture prewarm subtotal");
+        serde_json::from_value(serde_json::json!("0.011988")).expect("fixture prewarm subtotal");
     totals.known_usd = totals
         .known_usd
         .add(prewarm)
@@ -325,13 +325,13 @@ pub async fn turn_observations(
 /// frame reports no cache or reasoning detail, so it is never fully priced.
 pub const PREWARM_UNKNOWN_ESTIMATES: i64 = 1;
 
-/// A day's known money after `count` further startup prewarms, each $0.02997.
+/// A day's known money after `count` further startup prewarms, each $0.011988.
 pub fn with_prewarms(
     known_usd: codex_state::accounting::Decimal,
     count: usize,
 ) -> anyhow::Result<codex_state::accounting::Decimal> {
     let prewarm: codex_state::accounting::Decimal =
-        serde_json::from_value(serde_json::json!("0.02997"))?;
+        serde_json::from_value(serde_json::json!("0.011988"))?;
     let mut total = known_usd;
     for _ in 0..count {
         total = total.add(prewarm)?;
