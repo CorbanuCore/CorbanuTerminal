@@ -322,6 +322,8 @@ pub(crate) fn apply_legacy_session_acl_rules(
                     .map(AbsolutePathBuf::from_absolute_path)
                     .collect::<std::io::Result<Vec<_>>>()?,
             );
+            // #323: this process relies on these entries from here on.
+            let sessions = crate::DenyReadSessions::for_this_process(/*register*/ true);
             if let Some(readonly_sid) = acl_sids.readonly_sid {
                 let Some(readonly_sid_str) = acl_sids.readonly_sid_str else {
                     anyhow::bail!("readonly capability SID string missing");
@@ -331,6 +333,7 @@ pub(crate) fn apply_legacy_session_acl_rules(
                     readonly_sid_str,
                     Some(&targets),
                     readonly_sid.as_ptr(),
+                    &sessions,
                 )?;
             } else {
                 for root_sid in acl_sids.write_root_sids {
@@ -339,6 +342,7 @@ pub(crate) fn apply_legacy_session_acl_rules(
                         &root_sid.sid_str,
                         Some(&targets),
                         root_sid.sid.as_ptr(),
+                        &sessions,
                     )?;
                 }
             }

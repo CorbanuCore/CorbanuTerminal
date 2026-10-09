@@ -96,6 +96,10 @@ struct Payload {
     /// predates rules: applied, never recorded or removed.
     #[serde(default)]
     deny_read_paths: Vec<PathBuf>,
+    /// #323: no entry is removed while another session listed here lives.
+    /// From a launcher that predates it: nothing is removed.
+    #[serde(default)]
+    deny_read_sessions: codex_windows_sandbox::DenyReadSessions,
     #[serde(default)]
     deny_write_paths: Vec<PathBuf>,
     proxy_ports: Vec<u16>,
@@ -790,6 +794,7 @@ fn run_setup_full(payload: &Payload, log: &mut dyn Write, sbx_dir: &Path) -> Res
                     &sandbox_group_sid_str,
                     payload.deny_read.as_ref(),
                     sandbox_group_psid,
+                    &payload.deny_read_sessions,
                 )
             }
         }

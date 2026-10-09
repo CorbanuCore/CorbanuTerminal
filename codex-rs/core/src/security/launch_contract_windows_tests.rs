@@ -647,6 +647,12 @@ fn pf_27_s07_flag_off_launch_keeps_an_armed_contracts_denies() {
     std::fs::create_dir(&vault).expect("vault dir");
     let group_sid = "S-1-5-21-2718281828-3141592653-1618033988-1001";
     let group = codex_windows_sandbox::LocalSid::from_string(group_sid).expect("group SID");
+    // #323: no other session in this test's own registry.
+    let registry = tempfile::tempdir().expect("session registry");
+    let sessions = codex_windows_sandbox::DenyReadSessions {
+        registry: Some(registry.path().to_path_buf()),
+        own: None,
+    };
     let sync = |paths: &[std::path::PathBuf]| {
         // SAFETY: a valid SID for the call.
         unsafe {
@@ -657,6 +663,7 @@ fn pf_27_s07_flag_off_launch_keeps_an_armed_contracts_denies() {
                     paths.iter().map(|path| absolute(path)),
                 )),
                 group.as_ptr(),
+                &sessions,
             )
         }
         .expect("sync");

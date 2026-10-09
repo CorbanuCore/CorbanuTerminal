@@ -315,6 +315,7 @@ fn run_setup_refresh_inner(
         read_roots,
         write_roots,
         deny_read_paths: payload_deny_read_paths(overrides.deny_read.as_ref()),
+        deny_read_sessions: payload_deny_read_sessions(overrides.deny_read.as_ref()),
         deny_read: overrides.deny_read,
         deny_write_paths,
         proxy_ports: offline_proxy_settings.proxy_ports,
@@ -650,6 +651,9 @@ struct ElevationPayload {
     /// (a mismatched copy found on `PATH`): it still applies them.
     #[serde(default)]
     deny_read_paths: Vec<PathBuf>,
+    /// #323: the other live sessions the sync must not remove entries under.
+    #[serde(default)]
+    deny_read_sessions: crate::DenyReadSessions,
     #[serde(default)]
     deny_write_paths: Vec<PathBuf>,
     proxy_ports: Vec<u16>,
@@ -1034,6 +1038,7 @@ fn run_elevated_setup_inner(
         read_roots,
         write_roots,
         deny_read_paths: payload_deny_read_paths(overrides.deny_read.as_ref()),
+        deny_read_sessions: payload_deny_read_sessions(overrides.deny_read.as_ref()),
         deny_read: overrides.deny_read,
         deny_write_paths,
         proxy_ports: offline_proxy_settings.proxy_ports,
@@ -1153,6 +1158,16 @@ fn build_payload_deny_write_paths(
         .collect();
     deny_write_paths.extend(allow_deny_paths.deny);
     deny_write_paths
+}
+
+/// #323: a launch with deny-read rules registers this process as a session
+/// that relies on their entries before its sync runs.
+fn payload_deny_read_sessions(
+    deny_read: Option<&crate::DenyReadTargets>,
+) -> crate::DenyReadSessions {
+    crate::DenyReadSessions::for_this_process(
+        deny_read.is_some_and(|targets| !targets.rules().is_empty()),
+    )
 }
 
 fn payload_deny_read_paths(deny_read: Option<&crate::DenyReadTargets>) -> Vec<PathBuf> {

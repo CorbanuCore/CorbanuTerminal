@@ -299,6 +299,7 @@ pub(crate) fn record_launch_denial(denied: &LaunchDenied) {
         LaunchDenied::WindowsUnelevatedSandbox => "unelevated Windows sandbox",
         LaunchDenied::WindowsSandboxNotSetUp => "Windows sandbox not set up",
         LaunchDenied::CodexHomeLockUnavailable => "CODEX_HOME lock unavailable",
+        LaunchDenied::DenyReadSessionUnavailable => "deny-read session registry unavailable",
         LaunchDenied::ProcessHardening => "process hardening failed",
         LaunchDenied::Unsandboxed => "command would run outside the OS sandbox",
         LaunchDenied::RemoteEnvironment => "remote environment cannot be checked",

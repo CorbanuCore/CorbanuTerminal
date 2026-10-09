@@ -9,6 +9,8 @@ use crate::acl::add_deny_read_ace;
 use crate::acl::add_deny_read_ace_for_new_files;
 use crate::acl::ensure_explicit_deny_read_ace;
 use crate::acl::has_explicit_deny_read_ace;
+use crate::deny_read_sessions::DenyReadSessions;
+use crate::deny_read_sessions::Registration;
 use crate::deny_read_targets::DenyReadRule;
 use crate::deny_read_targets::DenyReadTargets;
 use crate::resolve_windows_deny_read_targets;
@@ -50,6 +52,10 @@ const ARMED_LINE: &str = "sec-win-301: armed";
 
 struct Home {
     _dir: tempfile::TempDir,
+    /// The test's own session registry (#323), so no session elsewhere on
+    /// the machine keeps its syncs from removing entries.
+    _registry: Option<tempfile::TempDir>,
+    sessions: DenyReadSessions,
     codex_home: PathBuf,
     /// A protected directory, and a directory in it.
     secret: PathBuf,
@@ -57,6 +63,19 @@ struct Home {
 }
 
 fn home() -> Home {
+    let registry = tempfile::tempdir().expect("session registry");
+    let sessions = DenyReadSessions {
+        registry: Some(registry.path().to_path_buf()),
+        own: None,
+    };
+    Home {
+        _registry: Some(registry),
+        ..home_in(sessions)
+    }
+}
+
+/// A home whose syncs check `sessions`.
+fn home_in(sessions: DenyReadSessions) -> Home {
     let dir = tempfile::tempdir().expect("codex home");
     let codex_home = dunce::canonicalize(dir.path()).expect("canonical codex home");
     let secret = codex_home.join("vault-secret");
@@ -65,6 +84,8 @@ fn home() -> Home {
     std::fs::create_dir(&nested).expect("nested dir");
     Home {
         _dir: dir,
+        _registry: None,
+        sessions,
         codex_home,
         secret,
         nested,
@@ -91,6 +112,7 @@ fn sync_targets(home: &Home, targets: &DenyReadTargets, group: &LocalSid) {
             SANDBOX_GROUP,
             Some(targets),
             group.as_ptr(),
+            &home.sessions,
         )
     }
     .expect("sync deny-read ACLs");
@@ -558,6 +580,160 @@ fn sec_win_301_flag_off_session_keeps_denies_while_another_is_armed() {
     sync(&home, &[], &group);
     assert_eq!(dacl_sddl(&home.secret), unprotected);
     assert!(!recorded(&home));
+}
+
+const SESSION_REGISTRY_ENV: &str = "CODEX_SEC_WIN_323_REGISTRY";
+const SESSION_HOME_ENV: &str = "CODEX_SEC_WIN_323_ARMED_HOME";
+const SESSION_ENTRY: &str = "deny_read_state::tests::sec_win_323_live_session_entry";
+const SESSION_LINE: &str = "sec-win-323: live";
+
+/// Another Core process for the #323 tests: registered as a live session in
+/// the registry given, and with the contract armed on the home given (its
+/// lock held shared, as the launch contract holds it), until its stdin
+/// closes.
+#[test]
+fn sec_win_323_live_session_entry() {
+    let Some(registry) = std::env::var_os(SESSION_REGISTRY_ENV) else {
+        return;
+    };
+    let _armed = std::env::var_os(SESSION_HOME_ENV).map(|codex_home| {
+        const FILE_SHARE_READ: u32 = 0x1;
+        const FILE_SHARE_WRITE: u32 = 0x2;
+        let lock = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .open(Path::new(&codex_home).join(SECRETLESS_LAUNCH_LOCK_FILE))
+            .expect("lock file");
+        lock.try_lock_shared().expect("shared lock");
+        lock
+    });
+    let _session = register_session(Path::new(&registry));
+    let mut stdout = std::io::stdout();
+    writeln!(stdout, "{SESSION_LINE}").expect("report");
+    stdout.flush().expect("report");
+    let _ = std::io::stdin().read_to_end(&mut Vec::new());
+}
+
+/// This process's registration as a live session (#323).
+fn register_session(registry: &Path) -> Registration {
+    Registration::register(registry).expect("register the session")
+}
+
+/// Starts another process: a live session in `registry`, with the contract
+/// armed on `armed_home` if given.
+fn live_session(registry: &Path, armed_home: Option<&Path>) -> Child {
+    let mut command = Command::new(std::env::current_exe().expect("test binary"));
+    command
+        .args([SESSION_ENTRY, "--exact", "--nocapture", "--test-threads=1"])
+        .env(SESSION_REGISTRY_ENV, registry)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped());
+    if let Some(home) = armed_home {
+        command.env(SESSION_HOME_ENV, home);
+    }
+    let mut child = command.spawn().expect("start the other session");
+    let mut stdout = BufReader::new(child.stdout.take().expect("stdout"));
+    let mut line = String::new();
+    while !line.trim_end().ends_with(SESSION_LINE) {
+        line.clear();
+        let read = stdout.read_line(&mut line).expect("session output");
+        assert_ne!(read, 0, "the other session did not start");
+    }
+    std::thread::spawn(move || std::io::copy(&mut stdout, &mut std::io::sink()));
+    child
+}
+
+/// A protected path outside both homes (like `~/.netrc`).
+fn shared_secret() -> (tempfile::TempDir, PathBuf) {
+    let dir = tempfile::tempdir().expect("profile");
+    let secret = dunce::canonicalize(dir.path())
+        .expect("canonical profile")
+        .join("netrc-secret");
+    std::fs::create_dir(&secret).expect("secret dir");
+    (dir, secret)
+}
+
+/// #323: home B's launch added the entry on a path outside both homes; a
+/// contract armed on home A found it there and relies on it. B's next
+/// launch, without that rule, used to remove it while A's commands ran (A's
+/// lock is in A's home, not B's). Two homes, two processes.
+#[test]
+fn sec_win_323_another_homes_sync_keeps_an_armed_contracts_entry() {
+    let registry = tempfile::tempdir().expect("session registry");
+    let sessions = DenyReadSessions {
+        registry: Some(registry.path().to_path_buf()),
+        own: None,
+    };
+    let home_a = home_in(sessions.clone());
+    let home_b = home_in(sessions);
+    let group = LocalSid::from_string(SANDBOX_GROUP).expect("group SID");
+    let (_profile, secret) = shared_secret();
+    let unprotected = dacl_sddl(&secret);
+
+    // B launches first, with the rule: its entry.
+    sync(&home_b, std::slice::from_ref(&secret), &group);
+    assert!(explicit_deny(&secret, &group));
+    // A arms the contract in another process and launches with the same rule.
+    let mut session_a = live_session(registry.path(), Some(&home_a.codex_home));
+    sync(&home_a, std::slice::from_ref(&secret), &group);
+    let protected = dacl_sddl(&secret);
+
+    // B launches again without the rule while A runs.
+    sync(&home_b, &[], &group);
+    let kept = dacl_sddl(&secret) == protected;
+    let still_recorded = state(&home_b).contains("netrc-secret");
+
+    // A exits; B's next launch removes its entry.
+    drop(session_a.stdin.take());
+    assert!(session_a.wait().expect("session A").success());
+    sync(&home_b, &[], &group);
+    let removed = dacl_sddl(&secret) == unprotected;
+    eprintln!(
+        "sec-win-323: kept while A ran: {kept}; still recorded: {still_recorded}; removed after: {removed}"
+    );
+    assert!(
+        kept,
+        "removed an entry the armed contract on another home relies on"
+    );
+    assert!(still_recorded, "forgot an entry it did not remove");
+    assert!(removed, "never removed the entry");
+    assert!(!state(&home_b).contains("netrc-secret"));
+}
+
+/// #323 (the case from its discussion): two sessions on one home, neither
+/// armed, with different rules. Session 2's launch used to remove the entry
+/// session 1 added while session 1's commands may still run.
+#[test]
+fn sec_win_323_unarmed_sessions_keep_each_others_entries() {
+    let registry = tempfile::tempdir().expect("session registry");
+    let home = home_in(DenyReadSessions {
+        registry: Some(registry.path().to_path_buf()),
+        own: None,
+    });
+    let group = LocalSid::from_string(SANDBOX_GROUP).expect("group SID");
+    let (_profile, secret) = shared_secret();
+    let unprotected = dacl_sddl(&secret);
+
+    // Session 1 (another process) launches with the rule: the home's entry.
+    let mut session_1 = live_session(registry.path(), None);
+    sync(&home, std::slice::from_ref(&secret), &group);
+    let protected = dacl_sddl(&secret);
+    assert_ne!(protected, unprotected);
+
+    // Session 2, configured without it, launches while session 1 runs.
+    sync(&home, &[], &group);
+    let kept = dacl_sddl(&secret) == protected;
+
+    drop(session_1.stdin.take());
+    assert!(session_1.wait().expect("session 1").success());
+    sync(&home, &[], &group);
+    let removed = dacl_sddl(&secret) == unprotected;
+    eprintln!("sec-win-323: kept while session 1 ran: {kept}; removed after: {removed}");
+    assert!(kept, "removed an entry another live session relies on");
+    assert!(removed, "never removed the entry");
 }
 
 /// The entries of `path`'s DACL, in SDDL. The DACL's control flags are left
