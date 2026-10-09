@@ -41,6 +41,7 @@ use windows_sys::Win32::System::IO::CancelSynchronousIo;
 use windows_sys::Win32::System::Pipes::PeekNamedPipe;
 use windows_sys::Win32::System::Threading::GetCurrentProcess;
 use windows_sys::Win32::System::Threading::GetCurrentThread;
+use windows_sys::Win32::System::Threading::INFINITE;
 use windows_sys::Win32::System::Threading::TerminateProcess;
 use windows_sys::Win32::System::Threading::WaitForSingleObject;
 
@@ -304,6 +305,8 @@ pub(crate) fn spawn_runner_transport(
     let h_pipe_out =
         create_named_pipe(&pipe_out_name, PIPE_ACCESS_INBOUND, &sandbox_creds.username)?;
 
+    // Taken before the request moves into the transport.
+    let commands_use_this_desktop = !spawn_request.use_private_desktop;
     let runner_exe = find_runner_exe(codex_home, log_dir);
     let runner_cmdline = runner_exe
         .to_str()
@@ -315,7 +318,7 @@ pub(crate) fn spawn_runner_transport(
         quote_windows_arg(&format!("--pipe-in={pipe_in_name}")),
         quote_windows_arg(&format!("--pipe-out={pipe_out_name}"))
     );
-    let launched = match create_process_with_logon(
+    let mut launched = match create_process_with_logon(
         &LogonLaunchRequest {
             username: &sandbox_creds.username,
             password: &sandbox_creds.password,
@@ -342,12 +345,15 @@ pub(crate) fn spawn_runner_transport(
     }
     if let Some(err) = &launched.window_access_error {
         crate::logging::log_note(
-            &format!("runner may not start: could not grant its user this window station: {err}"),
+            &format!("runner may not start: could not give its logon this window station: {err}"),
             log_dir,
         );
     }
     let runner_process = launched.process;
     let expected_runner_pid = launched.pid;
+    // #345: removed when the runner exits, or on the failure paths below once
+    // it has been ended.
+    let window_access = launched.window_access.take();
 
     let connect_result = (|| -> Result<()> {
         connect_pipe_with_timeout(h_pipe_in, expected_runner_pid, "pipe-in")?;
@@ -357,7 +363,7 @@ pub(crate) fn spawn_runner_transport(
     .map_err(|err| match &launched.window_access_error {
         // #341: the likely reason the runner never connected.
         Some(access) => anyhow::anyhow!(
-            "{err:#} (could not give the sandbox's user access to this session's window station: {access})"
+            "{err:#} (could not give the runner's logon access to this session's window station: {access})"
         ),
         None => err,
     });
@@ -402,13 +408,44 @@ pub(crate) fn spawn_runner_transport(
         return Err(err);
     }
 
-    unsafe {
-        if runner_process != 0 {
-            // The runner has now connected both pipes *and* acknowledged the spawn request, so
-            // startup is complete. At that point the transport pipes become the only lifetime
-            // anchor we need to keep the session alive.
-            CloseHandle(runner_process);
+    let Some(mut window_access) = window_access else {
+        unsafe {
+            if runner_process != 0 {
+                // The runner has now connected both pipes *and* acknowledged the spawn request,
+                // so startup is complete. At that point the transport pipes become the only
+                // lifetime anchor we need to keep the session alive.
+                CloseHandle(runner_process);
+            }
         }
+        return Ok(transport);
+    };
+    // #345: the runner has created its desktop and started its command; leave the command
+    // only what it and its children need to start, and remove that once the runner exits.
+    if let Err(err) = window_access.narrow_for_commands(commands_use_this_desktop) {
+        crate::logging::log_note(
+            &format!("could not narrow the runner's window station access: {err:#}"),
+            log_dir,
+        );
+    }
+    let watch = thread::Builder::new()
+        .name("codex-runner-window-access".to_string())
+        .spawn(move || {
+            // SAFETY: the runner's process handle, owned by this thread from here on.
+            unsafe {
+                WaitForSingleObject(runner_process, INFINITE);
+                CloseHandle(runner_process);
+            }
+            drop(window_access);
+        });
+    if let Err(err) = watch {
+        // The closure, and with it the access, is dropped with the error: the access goes now
+        // rather than with the runner (its command has started already).
+        crate::logging::log_note(
+            &format!("could not watch the runner to remove its window station access: {err}"),
+            log_dir,
+        );
+        // SAFETY: the thread never started, so the handle is still ours.
+        unsafe { CloseHandle(runner_process) };
     }
 
     Ok(transport)

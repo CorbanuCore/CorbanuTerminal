@@ -1,6 +1,8 @@
 use crate::logging;
 use crate::token::get_current_token_for_restriction;
 use crate::token::get_logon_sid_bytes;
+use crate::window_station::WindowAccess;
+use crate::window_station::current_logon_sid;
 use crate::winutil::format_last_error;
 use crate::winutil::to_wide;
 use anyhow::Result;
@@ -56,6 +58,9 @@ const DESKTOP_ALL_ACCESS: u32 = DESKTOP_READOBJECTS
 
 pub struct LaunchDesktop {
     _private_desktop: Option<PrivateDesktop>,
+    /// #345: this process's logon's access to its own non-interactive
+    /// desktop, for commands started there; removed on drop.
+    _window_access: Option<WindowAccess>,
     startup_name: Vec<u16>,
 }
 
@@ -65,6 +70,13 @@ impl LaunchDesktop {
     /// window station), where a child sent to `Winsta0` fails to start (#341),
     /// this process's own window station and desktop, or a private desktop in
     /// that window station (where it is created).
+    ///
+    /// On this process's own non-interactive desktop, this process's logon
+    /// SID gets `DESKTOP_ACCESS` (read and write objects) there while the
+    /// value lives: the commands' restricted tokens have it as a restricting
+    /// SID, unlike the user SID the desktop grants, and fail to start
+    /// without it (#345). The elevated sandbox's runner can't change Core's
+    /// desktop; Core gave the runner's logon that access before starting it.
     pub fn prepare(use_private_desktop: bool, logs_base_dir: Option<&Path>) -> Result<Self> {
         let own_station = crate::window_station::current_window_station_name()
             .filter(|name| !crate::window_station::is_interactive_window_station(name));
@@ -74,16 +86,21 @@ impl LaunchDesktop {
             let startup_name = to_wide(format!("{station}\\{}", private_desktop.name));
             Ok(Self {
                 _private_desktop: Some(private_desktop),
+                _window_access: None,
                 startup_name,
             })
         } else {
-            let desktop = match own_station {
-                Some(_) => crate::window_station::current_desktop_name()
-                    .unwrap_or_else(|| "Default".to_string()),
-                None => "Default".to_string(),
+            let (desktop, window_access) = match own_station {
+                Some(_) => (
+                    crate::window_station::current_desktop_name()
+                        .unwrap_or_else(|| "Default".to_string()),
+                    grant_own_desktop(logs_base_dir),
+                ),
+                None => ("Default".to_string(), None),
             };
             Ok(Self {
                 _private_desktop: None,
+                _window_access: window_access,
                 startup_name: to_wide(format!("{station}\\{desktop}")),
             })
         }
@@ -91,6 +108,21 @@ impl LaunchDesktop {
 
     pub fn startup_info_desktop(&self) -> *mut u16 {
         self.startup_name.as_ptr() as *mut u16
+    }
+}
+
+/// See [`LaunchDesktop::prepare`]. A failure is logged, not fatal: the
+/// runner can't, and needs no, grant.
+fn grant_own_desktop(logs_base_dir: Option<&Path>) -> Option<WindowAccess> {
+    match current_logon_sid().and_then(|sid| WindowAccess::grant_desktop(&sid)) {
+        Ok(access) => access,
+        Err(err) => {
+            logging::debug_log(
+                &format!("could not give this logon its own desktop: {err:#}"),
+                logs_base_dir,
+            );
+            None
+        }
     }
 }
 
