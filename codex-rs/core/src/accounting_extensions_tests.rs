@@ -471,7 +471,12 @@ async fn accounting_records_a_request_another_client_already_sent() -> anyhow::R
     .await?;
     assert_eq!(
         bases,
-        vec![("claude-plan".to_string(), "PlanEquivalent".to_string())]
+        vec![
+            // The earlier pay-per-use report, with no price this session can
+            // attribute, is bound to its basis too.
+            ("ambient".to_string(), "Billed".to_string()),
+            ("claude-plan".to_string(), "PlanEquivalent".to_string()),
+        ]
     );
 
     // The user's `billing` for that provider applies to bridge reports too.

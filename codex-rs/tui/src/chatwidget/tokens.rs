@@ -440,9 +440,9 @@ fn estimate(totals: &codex_state::accounting::DayTotals) -> Vec<String> {
     // the attempt is complete and not plan work - so every plan attempt adds
     // one to `unknown_estimates`. Reporting that against every attempt made a
     // day of pure subscription work read as "2 of 2 attempts incomplete"
-    // directly above the lines stating that day's consumption exactly. Both
-    // subtractions are exact rather than defensive, and compacted days carry
-    // all three figures.
+    // directly above the lines stating that day's consumption exactly. Plan,
+    // local and undeclared attempts are each subtracted exactly rather than
+    // defensively, and compacted days carry every count.
     let known = totals.known_usd;
     let attempts = totals.per_use_attempts();
     let unknown = totals.per_use_unknown();
@@ -451,8 +451,14 @@ fn estimate(totals: &codex_state::accounting::DayTotals) -> Vec<String> {
     // it exactly, and there is no per-token spend that went missing. The same
     // totals back a whole day and a single attempt's page, so the sentence speaks
     // only for the attempts it was computed from, never for the day around them.
+    // Undeclared work is not known to be unbilled, so it is never described as
+    // not billed per token.
     if attempts == 0 {
-        let mut lines = vec!["No recorded attempt here was billed per token.".to_string()];
+        let mut lines = vec![if totals.undeclared_attempts > 0 {
+            UNDECLARED_COST.to_string()
+        } else {
+            "No recorded attempt here was billed per token.".to_string()
+        }];
         lines.extend(plan(totals));
         lines.extend(other_bases(totals));
         return lines;
@@ -494,7 +500,7 @@ fn other_bases(totals: &codex_state::accounting::DayTotals) -> Vec<String> {
     }
     if totals.undeclared_attempts > 0 {
         lines.push(format!(
-            "Billing basis not declared: {} of {} attempts, counted neither as spent nor as subscription work",
+            "Billing basis not declared: {} of {} attempts, counted neither as money spent nor as subscription work",
             totals.undeclared_attempts, totals.attempts
         ));
     }
@@ -1149,6 +1155,9 @@ fn inspection_pages_for(
         text.push("Estimates below cover inspectable attempts only; unavailable threads may have additional unknown costs.".into());
     }
     text.extend(estimate(u));
+    text.extend(scope::overflow_note(
+        ready.unknown_parent_requests.values().flatten(),
+    ));
     text.extend(
         context
             .iter()
@@ -1235,12 +1244,17 @@ fn inspection_pages_for(
         .other_conversations
         .iter()
         .flat_map(|others| others.requests.values().flatten())
-        .any(|quote| per_use(quote));
+        .any(per_use);
+    let outside_plan = ready
+        .other_conversations
+        .iter()
+        .flat_map(|others| others.requests.values().flatten())
+        .any(ObservationQuote::is_plan);
     let overview = plain_overview(
         heading,
         ready.requests.values().flatten(),
         outside,
-        outside_per_use,
+        (outside_per_use, outside_plan),
         next_step,
     );
     pages[0].text.splice(0..0, overview);
@@ -1349,8 +1363,10 @@ const COVERED: &str = "Covered by your subscription (not billed per request)";
 const PAY_PER_USE: &str = "Pay per use";
 const LOCAL: &str = "Local (runs on your own machine)";
 const LOCAL_FIGURE: &str = "No charge";
-const NOT_DECLARED: &str = "Billing basis not declared";
-const NOT_DECLARED_FIGURE: &str = "Not counted as spent or as subscription work";
+const NOT_DECLARED: &str = "Not declared";
+const NOT_DECLARED_FIGURE: &str = "Counted neither as money spent nor as subscription work";
+/// The cost of work whose basis is not declared: unknown, not "unbilled".
+const UNDECLARED_COST: &str = "Estimated token cost: unknown — the billing basis is not declared, so whether this work was billed per token is unknown; your provider's bill is the final amount.";
 /// Shown with subscription work only (option B): overflow is never counted.
 const OVERFLOW_NOTE: &str = "Paid usage beyond a plan (usage credits, Extra Usage or extra credits you bought) isn't visible here and is never counted as spent; check your provider's usage page.";
 
@@ -1363,6 +1379,11 @@ fn per_use(quote: &ObservationQuote) -> bool {
 /// How one attempt is paid for, and where that was declared.
 fn basis_text(quote: &ObservationQuote) -> String {
     use codex_state::accounting::Basis;
+    // Every attempt admitted since billing bases exist carries a record of its
+    // basis; one without is older, and is not given a basis after the fact.
+    let Some(snapshot) = quote.snapshot.as_ref() else {
+        return "not recorded (recorded before billing bases)".to_string();
+    };
     let basis = match quote.basis() {
         Basis::Billed if quote.is_plan() => "subscription",
         Basis::Billed => "pay per use",
@@ -1370,15 +1391,9 @@ fn basis_text(quote: &ObservationQuote) -> String {
         Basis::Local => "local, no charge",
         Basis::Undeclared => "not declared",
     };
-    match quote
-        .snapshot
-        .as_ref()
-        .map(|snapshot| snapshot.basis_source)
-    {
-        Some(codex_state::accounting::BasisSource::UserConfig) => {
-            format!("{basis} (set in your config)")
-        }
-        Some(codex_state::accounting::BasisSource::BuiltIn) | None => basis.to_string(),
+    match snapshot.basis_source {
+        codex_state::accounting::BasisSource::UserConfig => format!("{basis} (set in your config)"),
+        codex_state::accounting::BasisSource::BuiltIn => basis.to_string(),
     }
 }
 const NO_PRICE: &str = "Estimated cost: no price available";
@@ -1618,6 +1633,9 @@ fn short_cost(quotes: &[&ObservationQuote]) -> String {
             leading_charge(quotes, &t),
         ) {
             ((COVERED, _), _) => "covered by subscription".to_string(),
+            ((LOCAL, _), _) => "no charge (local)".to_string(),
+            ((NOT_DECLARED, _), _) => "billing basis not declared".to_string(),
+            (("Mixed", _), None) => "mixed billing bases".to_string(),
             (_, Some(billed)) => format!("billed {}", billed.text()),
             // Only the leading per-use figure is reworded; a subscription part
             // after it keeps its own words.
@@ -1756,7 +1774,7 @@ fn plain_overview<'a>(
     heading: String,
     quotes: impl IntoIterator<Item = &'a ObservationQuote>,
     outside: Vec<String>,
-    outside_per_use: bool,
+    (outside_per_use, outside_plan): (bool, bool),
     next_step: Vec<String>,
 ) -> Vec<String> {
     let groups = by_route(quotes);
@@ -1798,7 +1816,12 @@ fn plain_overview<'a>(
     }
     lines.extend(outside);
     lines.extend(next_step);
-    lines.extend(scope::overflow_note(all.iter().copied()));
+    // Subscription lines from other conversations on this screen get the note too.
+    if outside_plan && !all.iter().any(|quote| quote.is_plan()) {
+        lines.push(OVERFLOW_NOTE.to_string());
+    } else {
+        lines.extend(scope::overflow_note(all.iter().copied()));
+    }
     lines.push(
         if billed_figure(&all).is_some() {
             "Estimates use published prices; billed figures are what the provider stated with each response."
@@ -1807,11 +1830,20 @@ fn plain_overview<'a>(
             // suggest a charge the plan never makes. Pay-per-use figures from
             // other conversations on the screen keep the bill caveat.
             "Subscription work is not billed per request; any figure here is what it would cost at API prices."
-        } else if !outside_per_use && !all.is_empty() && !all.iter().any(|quote| per_use(quote)) {
-            // No bill exists for subscription work; pointing at one would
-            // suggest a charge the plan never makes. Pay-per-use figures from
-            // other conversations on the screen keep the bill caveat.
-            "Nothing here is billed per request; any subscription figure is what it would cost at API prices."
+        } else if !outside_per_use
+            && !all.is_empty()
+            && all.iter().all(|quote| {
+                !per_use(quote) && quote.basis() != codex_state::accounting::Basis::Undeclared
+            })
+        {
+            // Only subscription and local work: neither has a bill to point
+            // at. Undeclared work is not known to be unbilled, so any of it
+            // keeps the bill caveat below.
+            if all.iter().any(|quote| quote.is_plan()) {
+                "Nothing here is billed per request: local work has no charge, and any subscription figure is what it would cost at API prices."
+            } else {
+                "Local work runs on your own machine and has no charge."
+            }
         } else {
             "Costs are estimates from published prices; your provider's bill is the final amount."
         }
@@ -2039,6 +2071,7 @@ fn range_pages(
             .flat_map(|v| v.requests.values().flatten());
         let mut named = unpriced_rows(quotes.clone());
         named.extend(scope::no_price_next_step(quotes.clone()));
+        named.extend(scope::overflow_note(quotes.clone()));
         match codex_state::accounting::DayTotals::from_quotes(quotes) {
             Ok(total) => {
                 pages[0].text.extend(estimate(&total));

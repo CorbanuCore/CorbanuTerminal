@@ -203,9 +203,9 @@ fn mode(pricing: PriceAuthority, basis_source: BasisSource) -> AccountingMode {
     }
 }
 
-/// Every non-billed basis is bound to the attempt at admission as a record
-/// with no rates, with where it came from; pay per use with no price binds
-/// nothing, as before.
+/// Every basis is bound to the attempt at admission, with where it came from:
+/// a record with no rates when there is no price - pay per use included, so a
+/// user-declared pay-per-use route with no price still says it was declared.
 #[tokio::test(flavor = "current_thread")]
 async fn admission_binds_the_basis_to_every_attempt() -> anyhow::Result<()> {
     let home = tempfile::tempdir()?;
@@ -243,7 +243,11 @@ async fn admission_binds_the_basis_to_every_attempt() -> anyhow::Result<()> {
             BasisSource::UserConfig,
             Some(Basis::PlanEquivalent),
         ),
-        (PriceAuthority::Unavailable, BasisSource::BuiltIn, None),
+        (
+            PriceAuthority::Unavailable,
+            BasisSource::UserConfig,
+            Some(Basis::Billed),
+        ),
     ];
     for (pricing, source, expected) in cases {
         let sampling = Sampling::start(

@@ -1016,3 +1016,103 @@ fn declared_bases_read_as_declared() {
     );
     assert!(mixed.contains(&super::super::OVERFLOW_NOTE.to_string()));
 }
+
+/// PF-60-S05 AC4 / review Major 2: on a day mixing an unpriced subscription
+/// attempt, an unpriced pay-per-use attempt, local work and undeclared work,
+/// only the pay-per-use attempt "had no price", only its provider gets the
+/// check-the-bill step, and undeclared work is never called unbilled. Each
+/// attempt page states its basis and where it was declared.
+#[test]
+fn only_pay_per_use_work_can_lack_a_price() {
+    use codex_state::accounting::Basis;
+    use codex_state::accounting::BasisSource;
+    let owner = thread(/*n*/ 1);
+    let quotes = vec![
+        with_basis(
+            unpriced(/*id*/ 1, owner, "kimi-code", "k3"),
+            Basis::PlanEquivalent,
+            BasisSource::BuiltIn,
+        ),
+        with_basis(
+            unpriced(/*id*/ 2, owner, "my-gateway", "m1"),
+            Basis::Billed,
+            BasisSource::UserConfig,
+        ),
+        with_basis(
+            unpriced(/*id*/ 3, owner, "ollama", "llama"),
+            Basis::Local,
+            BasisSource::BuiltIn,
+        ),
+        with_basis(
+            unpriced(/*id*/ 4, owner, "my-llm", "x1"),
+            Basis::Undeclared,
+            BasisSource::BuiltIn,
+        ),
+    ];
+    let pages = own_day(quotes.clone());
+    let first = first_screen(&pages[0]);
+    let no_price: Vec<&String> = first
+        .iter()
+        .filter(|line| {
+            line.starts_with('•')
+                && (line.contains("had no price") || line.contains("no price available"))
+        })
+        .collect();
+    assert_eq!(no_price.len(), 1, "{first:#?}");
+    assert!(no_price[0].contains("my-gateway"), "{first:#?}");
+    let steps: Vec<&String> = first
+        .iter()
+        .filter(|line| line.starts_with("Next step for requests with no price"))
+        .collect();
+    assert_eq!(
+        steps,
+        vec![
+            "Next step for requests with no price: check the bill from my-gateway. No published price covers them, so no cost is shown for them here."
+        ],
+        "{first:#?}"
+    );
+    for line in &first {
+        assert!(!line.contains("check the bill from Kimi"), "{line}");
+        assert!(!line.contains("check the bill from ollama"), "{line}");
+    }
+
+    let attempt_text = |provider: &str| {
+        let quote = quotes
+            .iter()
+            .find(|quote| quote.attempt.provider == provider)
+            .unwrap();
+        super::super::attempt_text(quote)
+    };
+    let basis_line = |provider: &str| {
+        attempt_text(provider)
+            .into_iter()
+            .find(|line| line.starts_with("Billing basis:"))
+            .unwrap()
+    };
+    assert_eq!(basis_line("kimi-code"), "Billing basis: subscription");
+    assert_eq!(
+        basis_line("my-gateway"),
+        "Billing basis: pay per use (set in your config)"
+    );
+    assert_eq!(basis_line("ollama"), "Billing basis: local, no charge");
+    assert_eq!(basis_line("my-llm"), "Billing basis: not declared");
+    let undeclared = attempt_text("my-llm");
+    assert!(
+        !undeclared
+            .iter()
+            .any(|line| line.contains("billed per token.") && line.starts_with("No recorded")),
+        "{undeclared:#?}"
+    );
+    assert!(
+        undeclared
+            .iter()
+            .any(|line| line == super::super::UNDECLARED_COST),
+        "{undeclared:#?}"
+    );
+    // A record from before billing bases is not given one after the fact.
+    let old = unpriced(/*id*/ 5, owner, "openai", "gpt-5.4");
+    assert!(
+        super::super::attempt_text(&old)
+            .contains(&"Billing basis: not recorded (recorded before billing bases)".to_string())
+    );
+}

@@ -225,10 +225,16 @@ async fn accounting_responses_native_unknown_prices_and_tiers() -> anyhow::Resul
         let records = attempts(&db).await?;
         assert_eq!(mock.single_request().body_json()["model"], model);
         assert_eq!(records.len(), 1);
+        // No price: the attempt is bound only to its pay-per-use basis, by a
+        // record with no rates (PF-60-S05).
         assert!(
             payloads::<Snapshot>(&db, "draft_accounting_price_snapshots")
                 .await?
-                .is_empty()
+                .iter()
+                .all(
+                    |snapshot| snapshot.basis == codex_state::accounting::Basis::Billed
+                        && snapshot.rates == codex_state::accounting::Rates::default()
+                )
         );
         let before = totals(&db, &records[0]).await?;
         assert_eq!(
