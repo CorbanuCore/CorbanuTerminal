@@ -1,0 +1,4 @@
+│ directory: /private/tmp/…/ws         │
+╰──────────────────────────────────────╯
+› /cost [YYYY-MM-DD]  or  START END hou
+  Z.AI GLM 5.2 via zai standard · /priv…

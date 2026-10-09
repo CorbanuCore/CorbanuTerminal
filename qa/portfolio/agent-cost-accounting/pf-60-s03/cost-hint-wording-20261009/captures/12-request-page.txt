@@ -1,0 +1,27 @@
+╭──────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                │
+│                                              │
+│ model:     glm-5.2   /model to change        │
+│ directory: <scratch>/ws │
+╰──────────────────────────────────────────────╯
+Read README.md and summarize it in one sentence.
+• README.md describes a tiny scratch project used to check the /cost screens.
+Request
+Requested UTC day: 2026-10-09
+Provider: Z.AI
+Model: Z.AI GLM 5.2
+Billing: Pay per use
+Estimated cost: $0.017650 (rounded)
+Tokens: 12,526 tokens
+—— Details ——
+Billed cost: not reported — Z.AI doesn't state its actual charge, so this is an estimate; check the bill from
+Z.AI.
+Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+↑↓ scroll · Enter open · Esc back/close
+Request: 61874209-1717-47ce-918e-29d485610c39
+Snapshot is not current; newer activity is unverified
+—— Open ——
+→ Technical details (attempt 1)
+Back
+Refresh
+Close

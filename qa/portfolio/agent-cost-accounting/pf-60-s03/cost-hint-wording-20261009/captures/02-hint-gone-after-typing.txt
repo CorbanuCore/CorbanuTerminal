@@ -1,0 +1,8 @@
+╭──────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                │
+│                                              │
+│ model:     glm-5.2   /model to change        │
+│ directory: <scratch>/ws │
+╰──────────────────────────────────────────────╯
+› /cost 2026-10-09
+  Z.AI GLM 5.2 via zai standard · <scratch>/ws · Corbanu Terminal · TPS: -- tok/s

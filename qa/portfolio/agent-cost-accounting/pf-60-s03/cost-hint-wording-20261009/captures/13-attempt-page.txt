@@ -1,0 +1,60 @@
+╭──────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                │
+│                                              │
+│ model:     glm-5.2   /model to change        │
+│ directory: <scratch>/ws │
+╰──────────────────────────────────────────────╯
+Read README.md and summarize it in one sentence.
+• README.md describes a tiny scratch project used to check the /cost screens.
+Attempt, components and original price
+Requested UTC day: 2026-10-09
+Provider: Z.AI
+Model: Z.AI GLM 5.2
+Billing: Pay per use
+Estimated cost: $0.017650 (rounded)
+Tokens: 12,526 tokens
+—— Details ——
+Billed cost: not reported — Z.AI doesn't state its actual charge, so this is an estimate; check the bill from
+Z.AI.
+Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+↑↓ scroll · Enter open · Esc back/close
+Request: 61874209-1717-47ce-918e-29d485610c39
+Attempt: 0b091bc3-fdd3-44aa-ba7e-928e4f89a1aa
+Thread: 01a11fc9-0c5b-7713-848d-850070c5c1ad
+Turn: 01a11fc9-0e0f-7291-8773-7df122eb1f14
+Provider: zai
+Model: glm-5.2
+Opaque scope: 0daff93d-66a4-4584-a151-6d5e9f99a545
+Arithmetic dialect: Inclusive
+Admission time: 2026-10-09T08:30:32.690Z
+Retry predecessor: none
+Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+Estimated token cost for recorded attempts: $0.017650 (rounded)
+Input: 12488
+Noncached input (derived for inclusive input): 12488 (derived as input − cache read: cache writes were not
+reported, and this price charges nothing for cache writes)
+Cache read: 0 (reported)
+Cache write: not reported — this price charges nothing for cache writes
+Output: 38
+Reasoning (subset, not separately billed): 9
+Total (not separately billed): 12526
+Noncached input cost: $0.017483 (rounded); exact USD 0.0174832
+Cache read cost: $0.000000; exact USD 0
+Cache write cost: $0.000000; exact USD 0
+Output cost: $0.000167 (rounded); exact USD 0.0001672
+Known subtotal exact USD: 0.0176504
+Price ID: 9282dce0-fce1-45cb-a21f-0c12c4550fbf
+Price source: NativeCatalog; reference 29354527-a0e0-59c7-934b-8d0170caf339
+Price currency/unit: Usd / PerMillionTokens
+Price observed/approved: 2026-10-09T08:30:32.690Z / 2026-10-09T08:30:32.690Z
+Price effective interval: [2026-10-09T08:30:32.690Z, unbounded)
+Noncached input rate: 1.4 USD per million tokens
+Cache read rate: 0.26 USD per million tokens
+Cache write rate: 0 USD per million tokens
+Output rate: 4.4 USD per million tokens
+Evidence revision 11; source bd38b619-2114-433f-a80f-c42691756d51; sequence 11; presence patch
+{"input":12488,"read":0,"output":38,"reasoning":9,"total":12526}
+Snapshot is not current; newer activity is unverified
+Back
+Refresh
+Close
