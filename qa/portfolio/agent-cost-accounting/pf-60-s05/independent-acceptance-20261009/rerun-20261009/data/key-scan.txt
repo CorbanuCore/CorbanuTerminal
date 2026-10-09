@@ -1,0 +1,4 @@
+provider/kimi_api_key: 0 files
+claude-plan-test-token: 0 files
+openai-api-key: 0 files
+key-shaped (sk-…, sk-ant-…, Bearer <20+>): 0 files
