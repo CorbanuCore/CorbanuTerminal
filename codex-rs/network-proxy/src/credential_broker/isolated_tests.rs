@@ -1547,6 +1547,14 @@ mod pf_27_s05 {
             "the environment block still holds the key"
         );
         println!("PF27S05 memory hits_after={hits}");
+        #[cfg(windows)]
+        if hits > 0 {
+            for (form, needle) in [("ascii", &masked), ("utf-16", &wide_masked)] {
+                for place in memory_scan_tests::locate_in_writable_memory(needle) {
+                    println!("PF27S09 left ({form}) at {place}");
+                }
+            }
+        }
         assert_eq!(hits, 0, "the raw key is still in Core's memory");
     }
 

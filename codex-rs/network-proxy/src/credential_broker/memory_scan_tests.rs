@@ -37,6 +37,84 @@ pub(crate) fn count_in_writable_memory(masked: &[u8]) -> usize {
     hits
 }
 
+/// PF-27-S09 diagnostics: where the needle occurs (address, and on Windows
+/// the region and heap block holding it), for a failing scan.
+#[cfg(windows)]
+pub(crate) fn locate_in_writable_memory(masked: &[u8]) -> Vec<String> {
+    let mut buffer = vec![0_u8; CHUNK + masked.len()];
+    let mut found = Vec::new();
+    for (start, len) in writable_regions() {
+        let mut offset = 0;
+        while offset < len {
+            let want = (len - offset).min(CHUNK + masked.len() - 1);
+            let read = read_own_memory(start + offset, &mut buffer[..want]);
+            if read >= masked.len() {
+                for (index, window) in buffer[..read].windows(masked.len()).enumerate() {
+                    if window
+                        .iter()
+                        .zip(masked)
+                        .all(|(byte, masked)| byte ^ MASK == *masked)
+                    {
+                        found.push(start + offset + index);
+                    }
+                }
+            }
+            buffer.iter_mut().for_each(|byte| *byte = 0);
+            if want <= CHUNK {
+                break;
+            }
+            offset += CHUNK;
+        }
+    }
+    found.into_iter().map(describe).collect()
+}
+
+#[cfg(windows)]
+fn describe(address: usize) -> String {
+    use windows_sys::Win32::System::Memory::GetProcessHeaps;
+    use windows_sys::Win32::System::Memory::HeapWalk;
+    use windows_sys::Win32::System::Memory::MEMORY_BASIC_INFORMATION;
+    use windows_sys::Win32::System::Memory::PROCESS_HEAP_ENTRY;
+    use windows_sys::Win32::System::Memory::VirtualQuery;
+    // SAFETY: zeroed POD out-structure; queries this process.
+    let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
+    unsafe {
+        VirtualQuery(
+            address as *const std::ffi::c_void,
+            &mut info,
+            std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
+        )
+    };
+    let mut heaps = vec![0; 64];
+    // SAFETY: fills at most 64 handles.
+    let count = unsafe { GetProcessHeaps(64, heaps.as_mut_ptr()) } as usize;
+    let mut block = String::from("no heap block");
+    for (index, heap) in heaps.into_iter().take(count).enumerate() {
+        // SAFETY: zeroed POD; walks a heap of this process (unlocked: a
+        // diagnostic only).
+        let mut entry: PROCESS_HEAP_ENTRY = unsafe { std::mem::zeroed() };
+        while unsafe { HeapWalk(heap, &mut entry) } != 0 {
+            let start = entry.lpData as usize;
+            if (start..start + entry.cbData as usize).contains(&address) {
+                block = format!(
+                    "heap {index} block +{:#x} of {} bytes, flags {:#x}",
+                    address - start,
+                    entry.cbData,
+                    entry.wFlags
+                );
+            }
+        }
+    }
+    format!(
+        "{address:#x}: allocation {:#x} region {:#x}+{:#x} type {:#x} protect {:#x}; {block}",
+        info.AllocationBase as usize,
+        info.BaseAddress as usize,
+        info.RegionSize,
+        info.Type,
+        info.Protect
+    )
+}
+
 fn count(haystack: &[u8], masked: &[u8]) -> usize {
     haystack
         .windows(masked.len())
