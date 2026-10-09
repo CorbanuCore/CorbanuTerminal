@@ -199,19 +199,31 @@ pub(crate) fn grant_window_access(username: &str) -> Result<WindowAccessGrant> {
 /// True when `handle`'s DACL has an allow entry for `sid` with all of
 /// `access`, and no deny entry for `sid` that takes any of it away.
 pub(crate) fn object_grants(handle: isize, sid: &[u8], access: u32) -> Result<bool> {
+    Ok(object_access(handle, sid, access)? == AccessState::Granted)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AccessState {
+    Granted,
+    NotGranted,
+    /// A deny entry for the SID takes some of the access away.
+    Denied,
+}
+
+fn object_access(handle: isize, sid: &[u8], access: u32) -> Result<AccessState> {
     let (dacl, descriptor) = object_dacl(handle)?;
     // SAFETY: `dacl` belongs to `descriptor`, freed below.
-    let granted = unsafe { dacl_grants(dacl, sid, access) };
+    let state = unsafe { dacl_access(dacl, sid, access) };
     // SAFETY: allocated by GetSecurityInfo.
     unsafe { LocalFree(descriptor as HLOCAL) };
-    Ok(granted)
+    Ok(state)
 }
 
 /// Window-object entries are stored with specific rights; `GENERIC_ALL`
 /// counts as everything.
-unsafe fn dacl_grants(dacl: *mut ACL, sid: &[u8], access: u32) -> bool {
+unsafe fn dacl_access(dacl: *mut ACL, sid: &[u8], access: u32) -> AccessState {
     if dacl.is_null() {
-        return false;
+        return AccessState::NotGranted;
     }
     let mut info: ACL_SIZE_INFORMATION = unsafe { std::mem::zeroed() };
     let ok = unsafe {
@@ -223,7 +235,7 @@ unsafe fn dacl_grants(dacl: *mut ACL, sid: &[u8], access: u32) -> bool {
         )
     };
     if ok == 0 {
-        return false;
+        return AccessState::NotGranted;
     }
     let sid = sid.as_ptr() as *mut c_void;
     let mut allowed = 0u32;
@@ -233,6 +245,11 @@ unsafe fn dacl_grants(dacl: *mut ACL, sid: &[u8], access: u32) -> bool {
             continue;
         }
         let header = unsafe { &*(ace as *const ACE_HEADER) };
+        let allow = match header.AceType {
+            ACCESS_ALLOWED_ACE_TYPE => true,
+            ACCESS_DENIED_ACE_TYPE => false,
+            _ => continue,
+        };
         if header.AceFlags as u32 & INHERIT_ONLY_ACE != 0 {
             continue;
         }
@@ -247,13 +264,18 @@ unsafe fn dacl_grants(dacl: *mut ACL, sid: &[u8], access: u32) -> bool {
         } else {
             mask
         };
-        match header.AceType {
-            ACCESS_DENIED_ACE_TYPE if mask & access != 0 => return false,
-            ACCESS_ALLOWED_ACE_TYPE => allowed |= mask,
-            _ => {}
+        if !allow && mask & access != 0 {
+            return AccessState::Denied;
+        }
+        if allow {
+            allowed |= mask;
         }
     }
-    allowed & access == access
+    if allowed & access == access {
+        AccessState::Granted
+    } else {
+        AccessState::NotGranted
+    }
 }
 
 fn object_dacl(handle: isize) -> Result<(*mut ACL, *mut c_void)> {
@@ -285,8 +307,10 @@ fn object_dacl(handle: isize) -> Result<(*mut ACL, *mut c_void)> {
 fn grant_object_access(handle: isize, sid: &[u8], access: u32) -> Result<bool> {
     let mut changed = false;
     for _ in 0..2 {
-        if object_grants(handle, sid, access)? {
-            return Ok(changed);
+        match object_access(handle, sid, access)? {
+            AccessState::Granted => return Ok(changed),
+            AccessState::Denied => anyhow::bail!("a deny entry for the user is in the way"),
+            AccessState::NotGranted => {}
         }
         add_allow_entry(handle, sid, access)?;
         changed = true;

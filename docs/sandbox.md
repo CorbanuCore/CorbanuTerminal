@@ -56,7 +56,9 @@ affected.
 in a Windows OpenSSH session (or from a service). For that, Corbanu Terminal
 gives the sandbox's users the least access their command runner needs to
 start in the SSH session's window station and desktop (no hooks, windows or
-clipboard), until the SSH session ends. Earlier builds
+clipboard), until the SSH session ends. The grant is for the sandbox
+accounts, so the sandboxed commands hold it too (#345 tracks narrowing it to
+the runner). Earlier builds
 couldn't run any command there: each one failed after 15 seconds with
 `windows sandbox: timed out after 15000ms connecting runner pipe-in`, and the
 System event log showed `codex-command-runner ... (0xc0000142)`. If you see
