@@ -331,6 +331,9 @@ pub(crate) fn apply_legacy_session_acl_rules(
                     readonly_sid_str,
                     Some(&targets),
                     readonly_sid.as_ptr(),
+                    // Capability SIDs are this CODEX_HOME's own (#323).
+                    /*sessions*/
+                    None,
                 )?;
             } else {
                 for root_sid in acl_sids.write_root_sids {
@@ -339,6 +342,7 @@ pub(crate) fn apply_legacy_session_acl_rules(
                         &root_sid.sid_str,
                         Some(&targets),
                         root_sid.sid.as_ptr(),
+                        /*sessions*/ None,
                     )?;
                 }
             }

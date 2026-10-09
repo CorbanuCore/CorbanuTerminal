@@ -96,6 +96,10 @@ struct Payload {
     /// predates rules: applied, never recorded or removed.
     #[serde(default)]
     deny_read_paths: Vec<PathBuf>,
+    /// #323: no entry is removed while another session listed here lives.
+    /// From a launcher that predates it: nothing is removed.
+    #[serde(default)]
+    deny_read_sessions: codex_windows_sandbox::DenyReadSessions,
     #[serde(default)]
     deny_write_paths: Vec<PathBuf>,
     proxy_ports: Vec<u16>,
@@ -773,6 +777,16 @@ fn run_setup_full(payload: &Payload, log: &mut dyn Write, sbx_dir: &Path) -> Res
     let mut refresh_errors: Vec<String> = Vec::new();
     if !refresh_only {
         configure_offline_sandbox_network(payload, &offline_sid_str, log)?;
+        // #323: the registry of sessions that rely on deny-read entries.
+        // Without it, entries are kept and armed launches refused.
+        if let Err(err) =
+            codex_windows_sandbox::ensure_deny_read_session_registry(Some(&sandbox_group_sid_str))
+        {
+            log_line(
+                log,
+                &format!("deny-read session registry not set up: {err:#}"),
+            )?;
+        }
     }
 
     // Deny-read ACEs must be present before the sandboxed command starts. Apply
@@ -790,6 +804,7 @@ fn run_setup_full(payload: &Payload, log: &mut dyn Write, sbx_dir: &Path) -> Res
                     &sandbox_group_sid_str,
                     payload.deny_read.as_ref(),
                     sandbox_group_psid,
+                    Some(&payload.deny_read_sessions),
                 )
             }
         }

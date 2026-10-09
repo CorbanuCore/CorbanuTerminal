@@ -52,6 +52,20 @@ affected.
   has not run yet, the first sandboxed command asks for Administrator approval
   once.
 
+**Several sessions at once.** The default sandbox's read protections are
+shared by every Corbanu Terminal session on the computer, whatever its Corbanu
+home folder. When you remove a `deny` entry, its protection stays while any
+other session that may rely on it is still running, and goes with the first
+command you run after they have all ended. To track this, each session that
+protects files registers itself in `C:\ProgramData\CorbanuTerminalSandbox`
+while it runs. The sandbox setup creates that folder, owned by Administrators,
+so updating to this version asks for Administrator approval once more. Until
+the setup has run, and while that folder is missing or owned by anyone else,
+no protection is removed; if that happens after the setup has run, sandboxed
+commands with the secretless launch on are refused until you run the setup
+again (it repairs the folder). Sessions started by an
+older version are not registered, so their protections aren't kept for them.
+
 **Over SSH.** The default sandbox also works when you start Corbanu Terminal
 in a Windows OpenSSH session (or from a service). There, Corbanu Terminal
 gives the command runner's logon (the SSH session's own, not the sandbox

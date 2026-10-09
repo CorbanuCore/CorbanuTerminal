@@ -57,6 +57,8 @@ mod cap;
 #[cfg(target_os = "windows")]
 mod deny_read_acl;
 #[cfg(target_os = "windows")]
+mod deny_read_sessions;
+#[cfg(target_os = "windows")]
 mod deny_read_state;
 #[cfg(target_os = "windows")]
 mod desktop;
@@ -192,6 +194,16 @@ pub use deny_read_acl::apply_deny_read_acls;
 pub use deny_read_acl::plan_deny_read_acl_paths;
 pub use deny_read_resolver::resolve_windows_deny_read_paths;
 pub use deny_read_resolver::resolve_windows_deny_read_targets;
+#[cfg(target_os = "windows")]
+pub use deny_read_sessions::DENY_READ_SYNC_LOCK_WAIT;
+#[cfg(target_os = "windows")]
+pub use deny_read_sessions::DenyReadSessions;
+#[cfg(target_os = "windows")]
+pub use deny_read_sessions::Registration as DenyReadSessionRegistration;
+#[cfg(target_os = "windows")]
+pub use deny_read_sessions::ensure_registry as ensure_deny_read_session_registry;
+#[cfg(target_os = "windows")]
+pub use deny_read_sessions::register_this_process as register_deny_read_session;
 #[cfg(target_os = "windows")]
 pub use deny_read_state::SECRETLESS_LAUNCH_LOCK_FILE;
 #[cfg(target_os = "windows")]
