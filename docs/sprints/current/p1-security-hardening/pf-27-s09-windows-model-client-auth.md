@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-27-S09"
 title: "Windows model-client auth through the broker"
-status: in_progress
+status: ready
 plan_file: "docs/plans/active/p1-security-hardening.md"
 plan_feature: "PF-27"
 execution_order: 45
@@ -76,16 +76,39 @@ exception) or hand the broker an opened lock. The Windows broker reads no stored
 
 ## Done
 
-- [x] Planned (2026-10-08).
+- [x] Planned (2026-10-08); allocated 2026-10-09 (broker lane).
+- [x] Slice 1 (#363), broker side:
+  - Windows env scrub: environment block, C runtime tables, and a heap sweep;
+  - the broker's launch environment copies no withheld value;
+  - stored keys read in the broker (vault lock created by Core, read-only lock in the broker);
+  - checked pipe send;
+  - platform roots loaded read-only (the broker trusted none before).
+- [x] Slice 2, Core: the Windows start spawns the broker, hands over env keys and routes every frame-bearing request
+  through `PipeSender` to the checked pipe. Unsupported platforms still refuse.
+- [x] Criteria 1–4 measured on the real machine and in tests ([evidence](../../../../qa/security-levels/sprints/PF-27-S09/README.md)):
+  - 1: the route, refused with no broker;
+  - 2: handed over, scrubbed, memory scan 0 with positive controls;
+  - 3: vault key from Credential Manager under the broker token in the console session; ChatGPT refresh is
+    unit-level only;
+  - 4: fails closed when the broker cannot start or dies; flag off unchanged.
+- [x] Over SSH and in the console session: GLM 5.2 `corbanu exec` and SOP videos (env key, vault key, SSH with the
+  elevated sandbox).
 
 ## Remaining
 
-- [ ] Everything under Acceptance criteria.
+- [ ] Travis's acceptance with the known limits in the evidence README, then archive.
 
 ## Verification
 
-- [ ] Suites on `windows-2022`; tmux run and videos on a real Windows machine.
+- [x] Windows clippy and Linux clippy (RTX box) `-D warnings`. Focused tests elevated and in a normal session on the
+  real Windows 11 machine, plus Linux and macOS. `windows-security-probes` on `windows-2022` (#363).
+- [x] Opus 5.5 High reviews:
+  - slice 1: APPROVE, then a scoped re-review: APPROVE;
+  - slice 2: APPROVE;
+  - findings fixed or recorded as known limits.
+- [ ] Travis accepts the gate evidence.
 
 ## Exit evidence
 
-- [ ] Outputs under `qa/security-levels/sprints/PF-27-S09/`.
+- [x] Outputs under `qa/security-levels/sprints/PF-27-S09/`; videos in `qa/demos/index/PF-27-S09.md`.
+- [ ] Record archived after Travis's acceptance.
