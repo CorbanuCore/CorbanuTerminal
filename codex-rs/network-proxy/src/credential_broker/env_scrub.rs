@@ -23,6 +23,11 @@
 //! - A launch-environment value that `.env` loading already replaced is no
 //!   longer reachable through `environ`; its original bytes stay in the
 //!   launch block.
+//! - Windows: the C runtime copies the environment at start-up, keeping some
+//!   copies and freeing others unwiped, so the process heaps are swept too:
+//!   `NAME=value` entries anywhere and bare values in free blocks. A copy in
+//!   another form (a parsed string held elsewhere, memory outside the heaps)
+//!   is not found.
 
 #[cfg(unix)]
 use std::ffi::OsStr;
