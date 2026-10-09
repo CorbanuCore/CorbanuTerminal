@@ -697,10 +697,16 @@ fn window_station_probe_in_the_sandbox() {
     let logon = process_logon_sid_for_test(unsafe { GetCurrentProcess() });
     let logon = string_from_sid_bytes(&logon).expect("SID");
     let user = string_from_sid_bytes(&current_user_sid()).expect("SID");
-    println!(
-        "{PROBE_LINE} create_desktop={} core_desktop={} child={:x?} logon={logon} user={user}",
-        access.0, access.1, child
-    );
+    // One short line each: ConPTY wraps long ones.
+    for (name, value) in [
+        ("create_desktop", access.0.to_string()),
+        ("core_desktop", access.1.to_string()),
+        ("child", format!("{child:x?}")),
+        ("logon", logon),
+        ("user", user),
+    ] {
+        println!("{PROBE_LINE} {name}={value}");
+    }
 }
 
 /// #345: the commands the elevated sandbox's runner starts don't keep the
@@ -730,7 +736,8 @@ fn sec_win_345_sandboxed_commands_dont_get_the_runners_access() {
     let codex_home = tempfile::tempdir().expect("codex home");
     let cwd = std::env::current_dir().expect("cwd");
     let mut results = Vec::new();
-    for private_desktop in [true, false] {
+    // ConPTY too: its console host starts on the runner's desktop.
+    for (private_desktop, tty) in [(true, false), (false, false), (true, true)] {
         let env_map = std::collections::HashMap::from([
             (PROBE_ENV.to_string(), core_desktop.clone()),
             (
@@ -766,7 +773,7 @@ fn sec_win_345_sandboxed_commands_dont_get_the_runners_access() {
                 /*write_roots_override*/ None,
                 &crate::DenyReadTargets::default(),
                 &[],
-                /*tty*/ false,
+                tty,
                 /*stdin_open*/ false,
                 private_desktop,
             )
@@ -787,16 +794,27 @@ fn sec_win_345_sandboxed_commands_dont_get_the_runners_access() {
             assert_eq!(code, 0, "probe failed: {stdout}");
             stdout
         });
-        let line = stdout
+        // Under ConPTY the lines carry terminal escapes.
+        let report: Vec<String> = stdout
             .lines()
-            .find_map(|line| line.find(PROBE_LINE).map(|start| &line[start..]))
-            .unwrap_or_else(|| panic!("no probe report in {stdout}"))
-            .to_string();
-        eprintln!("sec-win-345: private desktop {private_desktop}: {line}");
+            .filter_map(|line| {
+                line.find(PROBE_LINE)
+                    .map(|start| &line[start + PROBE_LINE.len()..])
+            })
+            .map(|field| {
+                field
+                    .trim_start()
+                    .chars()
+                    .take_while(|c| c.is_ascii_alphanumeric() || "_=-()".contains(*c))
+                    .collect()
+            })
+            .collect();
+        eprintln!("sec-win-345: private desktop {private_desktop}, tty {tty}: {report:?}");
         let field = |name: &str| {
-            line.split_whitespace()
+            report
+                .iter()
                 .find_map(|part| part.strip_prefix(&format!("{name}=")))
-                .unwrap_or_else(|| panic!("no {name} in {line}"))
+                .unwrap_or_else(|| panic!("no {name} in {stdout:?}"))
                 .to_string()
         };
         let sid = |name: &str| {
@@ -830,22 +848,17 @@ fn sec_win_345_sandboxed_commands_dont_get_the_runners_access() {
         ));
     }
     let gone = ((vec![], vec![]), (vec![], vec![]));
+    let expected = |core_desktop: &str| {
+        (
+            "false".to_string(),
+            core_desktop.to_string(),
+            "Ok(0)".to_string(),
+            gone.clone(),
+        )
+    };
     assert_eq!(
         results,
-        vec![
-            (
-                "false".to_string(),
-                "false".to_string(),
-                "Ok(0)".to_string(),
-                gone.clone()
-            ),
-            (
-                "false".to_string(),
-                "true".to_string(),
-                "Ok(0)".to_string(),
-                gone
-            ),
-        ]
+        vec![expected("false"), expected("true"), expected("false")]
     );
 }
 
