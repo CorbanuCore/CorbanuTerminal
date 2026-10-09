@@ -398,8 +398,15 @@ pub(crate) async fn connect_data(name: &str, broker_pid: u32) -> io::Result<Name
     }
 }
 
-/// The process id of this process's parent (the controller that spawned
-/// the broker).
+/// The process id of the controller that spawned the broker. Started by
+/// `spawn_protected` (as Core does), Windows reports a process that held the
+/// broker's stdout as its parent (#320), and the controller's id is in the
+/// environment instead.
+fn controller_pid() -> Option<u32> {
+    codex_process_hardening::protected_spawner_pid().or_else(parent_pid)
+}
+
+/// The process id of this process's parent.
 fn parent_pid() -> Option<u32> {
     #[link(name = "ntdll")]
     unsafe extern "system" {
@@ -447,10 +454,10 @@ pub(crate) struct ParentProcess {
 }
 
 impl ParentProcess {
-    /// Opens this process's parent, refusing one created after this process
-    /// (its id was reused after the real parent exited).
+    /// Opens the controller that spawned this process, refusing one created
+    /// after this process (its id was reused after the controller exited).
     pub(crate) fn open() -> io::Result<Self> {
-        let pid = parent_pid().ok_or_else(|| io::Error::other("no parent process"))?;
+        let pid = controller_pid().ok_or_else(|| io::Error::other("no parent process"))?;
         // SAFETY: wait and query-limited access only; closed on drop.
         let handle = unsafe {
             OpenProcess(
