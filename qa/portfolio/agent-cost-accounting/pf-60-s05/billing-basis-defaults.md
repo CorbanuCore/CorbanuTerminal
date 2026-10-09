@@ -39,5 +39,19 @@ defaults.
   balance, so it is counted as spent. Reconciling free credit is out of scope.
 - Third-party guides describe the Z.AI and Kimi splits the same way as the sources above. Only official vendor pages are
   cited here.
-- If a user points a built-in provider at a different URL, the built-in default may no longer apply. Under today's rules
-  such a route is already unpriced. What its basis should be is part of the "both" decision (options A and B).
+- Option B (decided 2026-10-09): the basis follows the route and credential actually used. A provider reached at a
+  route or with a credential this table doesn't list is "billing basis not declared", with a next step naming
+  `model_providers.<id>.billing`; it is never guessed.
+
+## Additional routes (option B)
+
+These routes are not a built-in provider's default but are declared so a custom provider pointing at them gets the
+right basis without setup. Each was read on 2026-10-09.
+
+| Route | Credential | Basis | Source |
+| --- | --- | --- | --- |
+| `https://api.z.ai/api/coding/paas/v4` | Z.AI API key | subscription (GLM Coding Plan) | [Z.AI: other tools](https://docs.z.ai/scenario-example/develop-tools/others): the Coding Plan uses this endpoint "instead of the General API" |
+| `https://open.bigmodel.cn/api/coding/paas/v4` | BigModel API key | subscription (GLM Coding Plan) | [ZCode: connect models](https://zcode.z.ai/en/docs/configuration) |
+| `https://open.bigmodel.cn/api/paas/v4` | BigModel API key | pay per use | Same page: resource packages and prepaid balance use the general URL |
+| `https://api.moonshot.ai/v1` | Kimi Open Platform key | pay per use | [Kimi API overview](https://platform.kimi.ai/docs/api/overview); the membership and the platform are separate products (troubleshooting page above) |
+| `https://api.openai.com/v1` | OpenAI API key | pay per use | [Codex pricing](https://developers.openai.com/codex/pricing) |

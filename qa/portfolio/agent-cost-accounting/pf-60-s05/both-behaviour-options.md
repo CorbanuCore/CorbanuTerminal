@@ -1,7 +1,13 @@
 # PF-60-S05 open decision: "both" behaviour
 
-*2026-10-08. For Travis's decision. Nothing here is decided or implemented. PF-60-S05 stays blocked until an option is
-chosen.*
+*2026-10-08. Written for Travis's decision.*
+
+**Decided 2026-10-09: Travis chose option B.** The billing basis follows the credential and route actually used; the
+built-in table declares a basis per credential and route; an unknown route shows "billing basis not declared" with a
+next step instead of a guess; paid overflow is never counted as spent, and subscription work carries a plain note that
+overflow isn't visible; the per-provider `billing` override stays for unusual setups. His earlier requirements stand:
+(a) declared, not guessed from the auth type; (b) defaults that match the configuration users are expected to have
+([defaults table](billing-basis-defaults.md)). PF-60-S05's acceptance criterion 12 uses the wording below.
 
 ## The problem
 
@@ -92,6 +98,6 @@ still a declared rule rather than a guess from the type of login. Anything it ca
 instead of being given a wrong number. Overflow stays out of "spent", and the screen says so in plain words. Revisit
 option C only if a provider is found to signal reliably, per request, that overflow paid for it.
 
-If B is chosen, S05's acceptance criterion 12 becomes: for each built-in provider with more than one route or credential
+Option B was chosen, so S05's acceptance criterion 12 is: for each built-in provider with more than one route or credential
 in the table, a real request on each route is recorded with the declared basis; an unknown route shows "not declared";
 and the overflow note appears only on subscription work.
