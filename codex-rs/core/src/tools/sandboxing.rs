@@ -562,20 +562,32 @@ impl<'a> SandboxAttempt<'a> {
             options,
             workspace_roots,
         );
-        // #294: without this the elevated Windows sandbox applies none of the
-        // profile's deny entries, including the launch contract's. The
-        // unelevated backend keeps its earlier behaviour here (#300).
-        if exec_request.sandbox == SandboxType::WindowsRestrictedToken
-            && codex_sandboxing::windows_sandbox_uses_elevated_backend(
+        if exec_request.sandbox == SandboxType::WindowsRestrictedToken {
+            let sandbox_cwd = self.sandbox_cwd.to_abs_path()?;
+            if codex_sandboxing::windows_sandbox_uses_elevated_backend(
                 exec_request.windows_sandbox_level,
                 exec_request.network.is_some(),
-            )
-        {
-            crate::exec::attach_windows_sandbox_filesystem_overrides(
-                &mut exec_request,
-                &self.sandbox_cwd.to_abs_path()?,
-                contract,
-            )?;
+            ) {
+                // #294: without this the elevated Windows sandbox applies none
+                // of the profile's deny entries, including the contract's.
+                crate::exec::attach_windows_sandbox_filesystem_overrides(
+                    &mut exec_request,
+                    &sandbox_cwd,
+                    contract,
+                )?;
+            } else {
+                // #300: the unelevated backend cannot block reads, so a
+                // profile that denies some is refused, as in
+                // `process_exec_tool_call`, rather than run with its
+                // protected files readable.
+                codex_sandboxing::refuse_unenforceable_windows_read_restrictions(
+                    exec_request.sandbox,
+                    &exec_request.permission_profile,
+                    &sandbox_cwd,
+                    /*use_elevated_backend*/ false,
+                )
+                .map_err(CodexErr::UnsupportedOperation)?;
+            }
         }
         Ok(exec_request)
     }
@@ -651,3 +663,7 @@ impl<'a> SandboxAttempt<'a> {
 #[cfg(test)]
 #[path = "sandboxing_tests.rs"]
 mod tests;
+
+#[cfg(all(test, windows))]
+#[path = "sandboxing_windows_tests.rs"]
+mod windows_tests;

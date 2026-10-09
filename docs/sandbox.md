@@ -27,6 +27,15 @@ non-admin sandbox, Corbanu Terminal tells you once per session:
 
 The warning never blocks a command.
 
+**Files a profile protects from reading.** The non-admin sandbox can't stop a
+command from reading a file. So if your permission profile denies reading some
+files (`deny` entries in your config, or the protected paths a security level
+adds), Corbanu Terminal does not run the agent's commands in the non-admin
+sandbox. The command fails with a message that it was not run because this
+Windows sandbox mode can't block reading the protected files. Switch to the
+default sandbox, as below, to run it. Profiles without such entries are not
+affected.
+
 **How to switch to the default sandbox.**
 
 - In the TUI, run `/setup-default-sandbox` and approve the Administrator prompt.
