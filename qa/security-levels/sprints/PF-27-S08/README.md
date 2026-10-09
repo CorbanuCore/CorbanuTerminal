@@ -44,8 +44,12 @@ not start (`0xC0000142`, the window station and desktop refuse it).
 | 5 | Credential Manager read of a synthetic generic credential | **readable** | readable |
 | 5 | Credential Manager write and delete of a synthetic generic credential | **writable, deletable** | writable, deletable |
 
-Real Windows 11 machine, 2026-10-09, at commit `06a150a3ab` (`C:\CorbanuQA\s08`): process-hardening `pf_27_s08`
-7/7 elevated and in a normal session (interactive logon), network-proxy `credential_broker::isolated::` 25/25 both.
+Real Windows 11 machine, 2026-10-09, at commit `dbf8be6df5` (`C:\CorbanuQA\s08`): process-hardening `pf_27_s08`
+7/7 elevated and in a normal (medium-integrity) session, network-proxy `credential_broker::isolated::` 25/25 both.
+
+GLM 5.2 tmux SOP demo videos (leak-scanned, uploaded to the `demos` release, indexed in `qa/demos/index/PF-27-S08.md`):
+`pf27s08-win-broker-token` (the TUI logs `containment=token+dacl+job` and an agent command runs with the broker up)
+and `pf27s08-win-broker-token-probes` (every pf_27_s08 probe passes in a normal session).
 
 ## Launch mechanism and parent-process spoofing
 

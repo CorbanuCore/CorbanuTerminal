@@ -88,13 +88,13 @@ can still write the user's files, open the user's other processes, and ask anoth
 ## Remaining
 
 - [ ] 5 (part): key-path decision (Credential Manager is readable by the broker token).
-- [ ] Real-Windows GLM 5.2 tmux run and SOP videos.
+- [x] Real-Windows GLM 5.2 tmux run and SOP videos (2026-10-09).
 
 ## Verification
 
-- [ ] Probes and suite on `windows-2022` and the real Windows machine (elevated and normal session), Credential
-  Manager measured on both: done 2026-10-09; checked when the gate run passes.
+- [x] Probes and suite on `windows-2022` and the real Windows machine (elevated and normal session), Credential
+  Manager measured on both: done 2026-10-09.
 
 ## Exit evidence
 
-- [ ] Outputs under `qa/security-levels/sprints/PF-27-S08/` (probes recorded; gate run and videos pending).
+- [x] Outputs under `qa/security-levels/sprints/PF-27-S08/` (probes, gate run and videos).
