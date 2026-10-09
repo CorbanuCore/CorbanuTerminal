@@ -189,6 +189,13 @@ pub(crate) fn take_env_var(name: &str) -> Option<Zeroizing<Vec<u8>>> {
     valid.then_some(utf8)
 }
 
+/// The address of this process's parameters (diagnostics for a failing
+/// memory scan).
+#[cfg(all(test, windows))]
+pub(crate) fn process_parameters_allocation_for_test() -> Option<usize> {
+    windows_env::process_parameters_allocation()
+}
+
 /// PF-27-S09: the Windows environment, read and overwritten without copies
 /// that outlive the call.
 #[cfg(windows)]
@@ -306,7 +313,8 @@ mod windows_env {
         (parameters != 0).then_some(parameters)
     }
 
-    /// Gives every `name=value` entry (narrow or UTF-16) in the committed,
+    /// Gives every `name=value` entry (narrow or UTF-16, the name compared
+    /// ASCII case-insensitively) in the committed,
     /// writable regions of the allocation containing `address` `0`
     /// characters for its value. Memory is read with `ReadProcessMemory` and
     /// written with `WriteProcessMemory`, which fail instead of faulting if a
@@ -421,7 +429,12 @@ mod windows_env {
                 for (entry, zeros, prefix) in &entries {
                     let mut at = 0;
                     while at + entry.len() <= read {
-                        if buffer[at] != entry[0] || buffer[at..at + entry.len()] != entry[..] {
+                        // The name compared ASCII case-insensitively, as
+                        // Windows does; the value exactly.
+                        let matches = buffer[at].eq_ignore_ascii_case(&entry[0])
+                            && buffer[at..at + prefix].eq_ignore_ascii_case(&entry[..*prefix])
+                            && buffer[at + prefix..at + entry.len()] == entry[*prefix..];
+                        if !matches {
                             at += 1;
                             continue;
                         }
