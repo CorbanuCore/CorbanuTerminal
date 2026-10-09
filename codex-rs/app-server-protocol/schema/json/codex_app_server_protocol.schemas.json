@@ -12699,7 +12699,6 @@
             ]
           },
           "cached_input_milli_usd_per_million_tokens": {
-            "default": null,
             "format": "uint32",
             "minimum": 0.0,
             "type": [

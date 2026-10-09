@@ -5,6 +5,18 @@ this branch, disposable home) shows `/cost` "Known subtotal exact USD: 0.0062586
 provider-reported usage at OpenAI's published Standard rates is **$0.0062586**: equal to the micro-dollar, with no
 "had no price" attempt.
 
+## Classification
+
+- **Initiative.** Work under the active PF-60 product initiative
+  ([plan](../../../../docs/plans/active/portfolio-agent-cost-accounting.md)). Product spec heading **Product
+  measurement**, as the plan cites it: "No commercial performance numbers have been supplied." It fixes the PF-60-S05
+  AC10 failure found by the re-run: "Pay-per-use estimates match an independent recomputation at the provider's
+  published prices to the micro-dollar."
+- **Persistent state.** A price record with a long-context tier needs ledger format 3 (migration 0003). The first
+  OpenAI attempt on a model with a tier (GPT-5.6, GPT-6, GPT-5.5, GPT-5.4), API key or ChatGPT login, upgrades the
+  ledger. An older developer build sharing that state DB then refuses the ledger and turns collection off for its
+  session ("newer ledger format"), as with format 2. Nothing is deleted or re-priced. Release records must carry this.
+
 ## Prices
 
 - **Source.** https://developers.openai.com/api/docs/pricing (Standard table) and
@@ -18,6 +30,13 @@ provider-reported usage at OpenAI's published Standard rates is **$0.0062586**: 
 - **History.** Rates are bound to each attempt when it is admitted, so earlier records keep the rates they were
   priced at. A row that states a cache-write rate or a long-context tier gets a new price identity (`stated-v1`);
   other rows keep theirs.
+
+- **Chat Completions.** OpenAI's Chat API reports `prompt_tokens_details.cache_write_tokens` as a subset of the
+  prompt (real probe: [data/openai-chat-usage-probe.jsonl](data/openai-chat-usage-probe.jsonl), 6,017 prompt, 6,014
+  written, then 6,014 cached), so the `openai` Chat route now records it and prices writes too.
+- **Assumptions.** GPT-5.5 and GPT-5.4's pages state only "2x input and 1.5x output" above 272K, so their cache reads
+  above 272K are left unpriced. Sol's promotional price ends at the earliest reading of "through November 21, 2026"
+  (2026-11-21T23:59:59.999Z); after that Sol API-key work shows "no price" until the page is read again (#368).
 
 ## Real check (macOS)
 

@@ -385,7 +385,11 @@ fn priced_counts(usage: &Usage, dialect: Dialect, snapshot: Option<&Snapshot>) -
 /// The rates that price this attempt under `snapshot`: its long-context
 /// rates when the attempt's input is above the threshold, its base rates
 /// otherwise, and none when the snapshot has a threshold but the input is
-/// unknown, since either tier could apply.
+/// unknown, since either tier could apply (the quote reports that as missing
+/// usage, not a missing rate).
+///
+/// Whether cache writes are free (`priced_counts`) is read from the base rates
+/// only; a tier must never change it.
 ///
 /// This is pricing rules version 1 unchanged for every snapshot without a
 /// long-context tier; a snapshot with one exists only in ledger format 3,
@@ -443,11 +447,12 @@ fn quote_observations_under(
             selected = Some(snapshot);
         }
     }
-    let rates = selected
-        .and_then(|s| applied_rates(s, &usage))
-        .map_or([None; 4], |rates| {
-            [rates.noncached, rates.read, rates.write, rates.output]
-        });
+    let applied = selected.and_then(|s| applied_rates(s, &usage));
+    // A tier that cannot be chosen is a gap in the usage, not in the price.
+    let undecided = selected.is_some() && applied.is_none();
+    let rates = applied.map_or([None; 4], |rates| {
+        [rates.noncached, rates.read, rates.write, rates.output]
+    });
     let mut buckets = [BucketQuote::MissingUsage; 4];
     let mut known_subtotal = Decimal::default();
     let mut complete = true;
@@ -460,6 +465,7 @@ fn quote_observations_under(
             (None, _) => BucketQuote::MissingUsage,
             (Some(0), _) if selected.is_some() => BucketQuote::Priced(Decimal::default()),
             (Some(n), Some(rate)) => BucketQuote::Priced(rate.price(n)?),
+            (Some(_), None) if undecided => BucketQuote::MissingUsage,
             (Some(_), None) => BucketQuote::MissingRate,
         };
         if let BucketQuote::Priced(amount) = bucket {

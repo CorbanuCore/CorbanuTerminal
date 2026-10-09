@@ -5,7 +5,8 @@ Reads the Standard table embedded in https://developers.openai.com/api/docs/pric
 (or a saved copy of that page) and checks every `openai` row in
 codex-rs/models-manager/models.json that states an API-key price: input, cached
 input, cache writes and output, in USD per million tokens. A row the page lists
-but the catalogue leaves unpriced is reported too. Exit status 1 on any mismatch.
+but the catalogue leaves unpriced, or doesn't carry at all, is reported too. Exit status 1 on any
+mismatch.
 
 Long-context tiers and promotional end dates are stated in prose on each model's
 page (developers.openai.com/api/docs/models/<slug>), so this script prints them
@@ -98,7 +99,10 @@ def main() -> int:
         print("no Standard table found on the page", file=sys.stderr)
         return 2
     mismatches = 0
-    for slug, stated in sorted(catalogue_prices().items()):
+    catalogue = catalogue_prices()
+    for slug in sorted(set(published) - set(catalogue)):
+        print(f"{slug}: on the page, not in the catalogue")
+    for slug, stated in sorted(catalogue.items()):
         sheet = published.get(slug)
         if sheet is None:
             print(f"{slug}: not on the page; catalogue states {stated}")

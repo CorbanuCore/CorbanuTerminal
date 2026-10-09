@@ -789,19 +789,12 @@ fn long_context_tier_prices_whole_attempt_above_threshold() {
             BucketQuote::Priced(decimal("0.000009")),
         ]
     );
-    // Input unknown: either tier could apply, so nothing is priced.
+    // Input unknown: either tier could apply, so nothing is priced, and the
+    // gap is the missing input count, not a missing rate.
     let unknown = quote(json!({"read":50,"write":10,"output":5}));
     assert_eq!(unknown.all_buckets_priced, None);
     assert_eq!(unknown.known_subtotal, Decimal::default());
-    assert_eq!(
-        unknown.buckets,
-        [
-            BucketQuote::MissingUsage,
-            BucketQuote::MissingRate,
-            BucketQuote::MissingRate,
-            BucketQuote::MissingRate,
-        ]
-    );
+    assert_eq!(unknown.buckets, [BucketQuote::MissingUsage; 4]);
     // The tier needs ledger format 3 and is never read in the pre-basis form.
     assert_eq!(s.ledger_format(), 3);
     let payload = serde_json::to_string(&s).unwrap();

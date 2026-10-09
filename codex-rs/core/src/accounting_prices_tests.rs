@@ -861,7 +861,12 @@ fn openai_api_key_rates_match_the_published_sheet() -> anyhow::Result<()> {
                         above_input_tokens: 272_000.try_into()?,
                         rates: Rates {
                             noncached: Some(rate(input * 2)?),
-                            read: Some(rate(cached * 2)?),
+                            // GPT-5.5 and GPT-5.4's pages state 2x input and
+                            // 1.5x output only: cache reads above 272K have no
+                            // stated price.
+                            read: (!matches!(model, "gpt-5.5" | "gpt-5.4"))
+                                .then(|| rate(cached * 2))
+                                .transpose()?,
                             write: write.map(|write| rate(write * 2)).transpose()?,
                             output: Some(rate(output * 3 / 2)?),
                         },
@@ -887,7 +892,7 @@ fn openai_api_key_rates_match_the_published_sheet() -> anyhow::Result<()> {
             "gpt-5.6-sol",
             "openai",
             scope,
-            utc("2026-11-21T23:59:59Z"),
+            utc("2026-11-21T23:59:59.999Z"),
             None
         )?
         .is_empty()

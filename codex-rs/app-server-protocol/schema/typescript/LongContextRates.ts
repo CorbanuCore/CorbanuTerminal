@@ -11,4 +11,4 @@ export type LongContextRates = {
  * The rates apply when the request's input tokens (cached and cache
  * writes included) are strictly more than this.
  */
-above_input_tokens: number, input_milli_usd_per_million_tokens: number, output_milli_usd_per_million_tokens: number, cached_input_milli_usd_per_million_tokens: number | null, cache_write_milli_usd_per_million_tokens?: number, };
+above_input_tokens: number, input_milli_usd_per_million_tokens: number, output_milli_usd_per_million_tokens: number, cached_input_milli_usd_per_million_tokens?: number, cache_write_milli_usd_per_million_tokens?: number, };

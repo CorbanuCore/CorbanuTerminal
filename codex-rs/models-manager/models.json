@@ -2064,8 +2064,7 @@
           "long_context": {
             "above_input_tokens": 272000,
             "input_milli_usd_per_million_tokens": 10000,
-            "output_milli_usd_per_million_tokens": 45000,
-            "cached_input_milli_usd_per_million_tokens": 1000
+            "output_milli_usd_per_million_tokens": 45000
           }
         }
       },
@@ -2174,8 +2173,7 @@
           "long_context": {
             "above_input_tokens": 272000,
             "input_milli_usd_per_million_tokens": 5000,
-            "output_milli_usd_per_million_tokens": 22500,
-            "cached_input_milli_usd_per_million_tokens": 500
+            "output_milli_usd_per_million_tokens": 22500
           }
         }
       },
@@ -2657,7 +2655,7 @@
             "cached_input_milli_usd_per_million_tokens": 800,
             "cache_write_milli_usd_per_million_tokens": 10000
           },
-          "api_key_valid_through_utc": "2026-11-21T23:59:59Z"
+          "api_key_valid_through_utc": "2026-11-21T23:59:59.999Z"
         }
       },
       "display_name": "GPT-5.6-Sol",

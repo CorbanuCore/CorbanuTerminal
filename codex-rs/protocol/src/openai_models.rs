@@ -395,7 +395,8 @@ pub struct LongContextRates {
     pub above_input_tokens: u32,
     pub input_milli_usd_per_million_tokens: u32,
     pub output_milli_usd_per_million_tokens: u32,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub cached_input_milli_usd_per_million_tokens: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]

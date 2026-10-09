@@ -726,7 +726,7 @@ async fn accounting_chat_exact_final_endpoint_binding() -> anyhow::Result<()> {
 }
 
 #[test]
-fn accounting_chat_cache_writes_are_read_only_on_openrouter() -> anyhow::Result<()> {
+fn accounting_chat_cache_writes_are_read_only_on_openrouter_and_openai() -> anyhow::Result<()> {
     use codex_state::accounting::Presence;
     let usage = |write| ChatUsagePatch {
         input_tokens: ChatTokenPresence::Number(8499),
@@ -749,9 +749,27 @@ fn accounting_chat_cache_writes_are_read_only_on_openrouter() -> anyhow::Result<
         patch(usage(ChatTokenPresence::Null), "openrouter")?.write,
         Presence::Null
     );
+    // OpenAI reports writes as a subset of the prompt (#361): kept as reported,
+    // and an absent count stays unknown.
+    for (write, expected) in [
+        (
+            ChatTokenPresence::Number(300),
+            Presence::Number(300.try_into()?),
+        ),
+        (ChatTokenPresence::Null, Presence::Null),
+        (ChatTokenPresence::Missing, Presence::Missing),
+    ] {
+        assert_eq!(patch(usage(write), "openai")?.write, expected);
+    }
     // Every other route leaves the count unknown, reported or not: DeepSeek
     // bills written tokens as input, and a disjoint report would fail replay.
-    for provider in ["deepseek", "baseten", "zai", "custom-openrouter"] {
+    for provider in [
+        "deepseek",
+        "baseten",
+        "zai",
+        "custom-openrouter",
+        "openai-custom",
+    ] {
         for write in [
             ChatTokenPresence::Missing,
             ChatTokenPresence::Null,

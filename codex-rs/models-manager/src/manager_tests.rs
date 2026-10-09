@@ -828,7 +828,7 @@ async fn remote_model_overlay_preserves_bundled_orchestration_metadata() {
                     cached_input_milli_usd_per_million_tokens: Some(800),
                     cache_write_milli_usd_per_million_tokens: Some(10_000),
                 }),
-                api_key_valid_through_utc: Some("2026-11-21T23:59:59Z".to_string()),
+                api_key_valid_through_utc: Some("2026-11-21T23:59:59.999Z".to_string()),
             },
         })
     );
@@ -2095,7 +2095,7 @@ fn bundled_orchestration_policy_distinguishes_gpt_5_6_tiers_and_disables_gpt_5_5
                     cached_input_milli_usd_per_million_tokens: Some(800),
                     cache_write_milli_usd_per_million_tokens: Some(10_000),
                 }),
-                api_key_valid_through_utc: Some("2026-11-21T23:59:59Z".to_string()),
+                api_key_valid_through_utc: Some("2026-11-21T23:59:59.999Z".to_string()),
             },
         }
     );
@@ -2159,7 +2159,8 @@ fn bundled_orchestration_policy_distinguishes_gpt_5_6_tiers_and_disables_gpt_5_5
                     above_input_tokens: 272_000,
                     input_milli_usd_per_million_tokens: 10_000,
                     output_milli_usd_per_million_tokens: 45_000,
-                    cached_input_milli_usd_per_million_tokens: Some(1_000),
+                    // The page states 2x input and 1.5x output only.
+                    cached_input_milli_usd_per_million_tokens: None,
                     cache_write_milli_usd_per_million_tokens: None,
                 }),
                 valid_through_utc: None,
