@@ -161,6 +161,10 @@ pub unsafe fn sync_persistent_deny_read_acls(
         let rules = still_configured(&owned.rules);
         if rules.is_empty() {
             stale.push(owned);
+        } else if matches!(owned.object.path.symlink_metadata(), Err(err) if err.kind() == std::io::ErrorKind::NotFound)
+        {
+            // Nothing at its path: it can never be removed there, so the
+            // record goes (an object moved elsewhere keeps its entry).
         } else {
             recorded.push(OwnedDenyRead {
                 object: owned.object,
