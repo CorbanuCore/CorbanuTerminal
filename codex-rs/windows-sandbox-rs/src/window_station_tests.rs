@@ -602,6 +602,10 @@ fn sec_win_345_window_access_counts_narrows_and_removes_exactly() {
     ) {
         return;
     }
+    // The edits are serialized across processes, not just in this one.
+    let mutex = super::dacl_mutex().expect("the DACL-edit mutex");
+    // SAFETY: opened above.
+    unsafe { CloseHandle(mutex) };
     // Any SID the window station does not grant.
     let users = resolve_sid("Users").expect("Users SID");
     assert_eq!(allow_entries(&users), (vec![], vec![]));
