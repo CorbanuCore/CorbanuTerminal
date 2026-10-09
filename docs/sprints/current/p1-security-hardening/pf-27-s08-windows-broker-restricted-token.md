@@ -19,7 +19,6 @@ created: 2026-10-08
 updated: 2026-10-09
 ---
 
-
 # PF-27-S08 — Windows broker confined by its own restricted token or AppContainer
 
 Third of the four PF-27-S06 limits Travis approved fixing (2026-10-08). Unlike macOS and Linux (Seatbelt, Landlock),
@@ -89,7 +88,7 @@ their processes, or start work through WMI, Task Scheduler or out-of-process COM
 ## Verification
 
 - [x] Probes and suite on `windows-2022` and the real machine (elevated and normal session), 2026-10-09; rechecked
-  on main `2f3e04201f` (job 113944960637): `pf_27_s08` 7/7 and suite 25/25, both sessions.
+  on main `5d283fde18` (job 113966110399): `pf_27_s08` 7/7 and suite 25/25, both sessions.
 - [x] Opus 5.5 High review: REQUEST_CHANGES (B1, B2), fixed in #333; scoped re-review 2026-10-09 confirmed both,
   docs corrections from it applied (`workers-20261002/pf27s08-review-s2`).
 - [ ] Travis accepts the gate evidence.

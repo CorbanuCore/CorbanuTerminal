@@ -81,10 +81,9 @@ would need an AppContainer or new ACL grants). The accepted consequence is the f
 merge commit `d0544c1c91`, `windows-security-probes` and `corbanu-terminal-ci` are green. (Its `postmerge-ci` failed
 on an unrelated `app-server-protocol` schema fixture; postmerge is green again from `d9e851b380`.)
 
-Rechecked 2026-10-09 on main at `2f3e04201f` (the latest `windows-security-probes` run; nothing under
-`process-hardening/` or `network-proxy/` changed after it up to `c0e242c1a9`): run 37967366555, job 113944960637,
-`pf_27_s08` 7/7 elevated and 7/7 in a normal session, the broker suite over pipes 25/25 both, with the same
-measurements as the table above.
+Rechecked 2026-10-09 on main at `2f3e04201f` (run 37967366555, job 113944960637) and again at `5d283fde18` (run
+37973587031, job 113966110399): `pf_27_s08` 7/7 elevated and 7/7 in a normal session, the broker suite over pipes
+25/25 both, with the same measurements as the table above.
 
 ## Known limits
 
@@ -93,7 +92,8 @@ measurements as the table above.
   machine, elevated and normal session). Overwriting or deleting an existing credential (including the vault key)
   was not probed; Credential Manager has no per-credential access control, so assume it can. Mitigated by its
   other confinement: it cannot write the user's files, open their processes beyond query-limited and terminate,
-  start child processes (job), or start work through WMI, Task Scheduler or COM. Its network is not restricted, so a compromised broker could still send what it reads anywhere.
+  start child processes (job), or start work through WMI, Task Scheduler or COM. Its network is not restricted,
+  so a compromised broker could still send what it reads anywhere.
 - **Terminate.** Low integrity leaves `PROCESS_TERMINATE` (and query-limited) on the user's ordinary processes, so
   the broker can kill them (the terminal, an editor). Core is not affected: its protected DACL grants only
   query-limited and synchronize.
