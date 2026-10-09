@@ -264,7 +264,7 @@ fn wait_exit_code(process: HANDLE) -> u32 {
 }
 
 /// Starts `program` as this user on `desktop` and returns its exit code.
-fn run_on_desktop(program: &PathBuf, desktop: *mut u16) -> u32 {
+fn run_on_desktop(program: &std::path::Path, desktop: *mut u16) -> u32 {
     run_command_on_desktop(program, &program.to_string_lossy(), desktop)
 }
 
