@@ -17,10 +17,15 @@
 //! only its controller, and Core talks only to the broker it spawned. Any
 //! same-user process (the DACL grants the user everything, including adding
 //! instances) can connect and be dropped, which can delay Core (a denial of
-//! service, not a disclosure). Clients connect at identification-level
-//! impersonation, so a pipe server cannot act with Core's token. The broker
-//! holds a handle to its controller and exits with it, so the controller's
-//! process id cannot be reused while the broker serves it.
+//! service, not a disclosure). Because the broker runs at low integrity
+//! (PF-27-S08), its pipe objects get a low integrity label, so low-integrity
+//! processes of the user can now open them too (before, the implicit medium
+//! label blocked them); the capability ACE admits only processes with equal
+//! trust: the broker, its holder, and COM servers it launches under its own
+//! token. Clients connect at identification-level impersonation, so a pipe
+//! server cannot act with Core's token. The broker holds a handle to its
+//! controller and exits with it, so the controller's process id cannot be
+//! reused while the broker serves it.
 
 use rama_core::Service;
 use rama_core::error::BoxError;

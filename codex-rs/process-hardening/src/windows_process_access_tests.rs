@@ -94,6 +94,24 @@ const THREAD_RIGHTS: &[(&str, u32)] = &[
     ("thread_suspend", THREAD_SUSPEND_RESUME),
 ];
 
+/// PF-27-S08: further rights the broker-token probe also tries (reported
+/// with an `x_` prefix when `EXTRA_RIGHTS_ENV` is set).
+const EXTRA_PROCESS_RIGHTS: &[(&str, u32)] = &[
+    ("x_terminate", 0x0001),
+    ("x_create_process", 0x0080),
+    ("x_set_quota", 0x0100),
+    ("x_query_information", 0x0400),
+    ("x_query_limited_information", 0x1000),
+];
+const EXTRA_THREAD_RIGHTS: &[(&str, u32)] = &[
+    ("x_thread_terminate", 0x0001),
+    ("x_thread_set_information", 0x0020),
+    ("x_thread_impersonate", 0x0100),
+    ("x_thread_direct_impersonation", 0x0200),
+    ("x_thread_query_information", 0x0040),
+];
+const EXTRA_RIGHTS_ENV: &str = "CODEX_PF27S08_EXTRA_RIGHTS";
+
 type Report = BTreeMap<String, String>;
 
 #[test]
@@ -320,16 +338,29 @@ fn pf_27_s07_protected_spawn_is_unopenable_while_suspended() {
 
 /// PF-27-S08: under the broker token the broker cannot open an ordinary
 /// process of the user (or its threads) for any right that reads, injects
-/// into or re-ACLs it. Positive control: the same probe started protected
-/// with a copy of this process's token (the PF-27-S07 broker) gets them all.
+/// into, starts a child of, re-ACLs or impersonates it. Measured exceptions
+/// (low integrity leaves the execute-class rights): query-limited
+/// information, process terminate, thread terminate. Positive control: the
+/// same probe started protected with a copy of this process's token (the
+/// PF-27-S07 broker) gets every right.
 #[test]
 fn pf_27_s08_broker_token_cannot_open_the_users_processes() {
     use crate::windows_protected_spawn::Confinement;
+    const STILL_GRANTED: &[&str] = &[
+        "x_query_limited_information",
+        "x_terminate",
+        "x_thread_terminate",
+    ];
     let target = Target::spawn(/*harden*/ false);
     let control = probe_started_protected(&target, Confinement::SameToken);
     assert_eq!(control["vm_read"], "granted", "{control:?}");
     assert_eq!(control["environment"], "canary_found", "{control:?}");
-    for (name, _) in PROCESS_RIGHTS.iter().chain(THREAD_RIGHTS) {
+    let all_rights = PROCESS_RIGHTS
+        .iter()
+        .chain(THREAD_RIGHTS)
+        .chain(EXTRA_PROCESS_RIGHTS)
+        .chain(EXTRA_THREAD_RIGHTS);
+    for (name, _) in all_rights.clone() {
         assert_eq!(
             control[*name].split('@').next(),
             Some("granted"),
@@ -341,7 +372,20 @@ fn pf_27_s08_broker_token_cannot_open_the_users_processes() {
         Confinement::Broker(crate::windows_broker_token::BROKER_TOKEN),
     );
     eprintln!("pf27s08: probe under the broker token: {confined:?}");
-    assert_all_denied(&confined);
+    assert_eq!(confined["environment"], "unreadable", "{confined:?}");
+    assert_eq!(confined["vm_read"], "denied", "{confined:?}");
+    for (name, _) in all_rights {
+        let expected = if STILL_GRANTED.contains(name) {
+            "granted"
+        } else {
+            "denied"
+        };
+        assert_eq!(
+            confined[*name].split('@').next(),
+            Some(expected),
+            "{name}: {confined:?}"
+        );
+    }
 }
 
 /// The probe, started with `spawn_protected` under `confinement`.
@@ -357,6 +401,7 @@ fn probe_started_protected(
         .map(u32::to_string)
         .collect();
     command.env(THREAD_IDS_ENV, threads.join(";"));
+    command.env(EXTRA_RIGHTS_ENV, "1");
     let (program, args, env) = protected_spawn_parts(&command);
     let (mut child, stdout) =
         crate::windows_protected_spawn::spawn_protected_with(&program, &args, &env, confinement)
@@ -498,7 +543,8 @@ fn child_command(role: &str) -> Command {
         .env_remove(NEW_THREADS_ENV)
         .env_remove(NEW_THREAD_IDS_ENV)
         .env_remove(PARK_ENV)
-        .env_remove(THREAD_IDS_ENV);
+        .env_remove(THREAD_IDS_ENV)
+        .env_remove(EXTRA_RIGHTS_ENV);
     command
 }
 
@@ -833,6 +879,22 @@ fn run_probe() {
     }
     for (name, access) in THREAD_RIGHTS {
         report.insert((*name).to_string(), open_threads(&threads, *access));
+    }
+    if std::env::var_os(EXTRA_RIGHTS_ENV).is_some() {
+        for (name, access) in EXTRA_PROCESS_RIGHTS {
+            let outcome = match open_process(pid, *access) {
+                Ok(handle) => {
+                    // SAFETY: opened above.
+                    unsafe { CloseHandle(handle) };
+                    "granted".to_string()
+                }
+                Err(code) => access_from_error(code),
+            };
+            report.insert((*name).to_string(), outcome);
+        }
+        for (name, access) in EXTRA_THREAD_RIGHTS {
+            report.insert((*name).to_string(), open_threads(&threads, *access));
+        }
     }
     // PF-27-S07: the target's brand-new threads, one by one.
     let new_threads = std::env::var(NEW_THREAD_IDS_ENV).unwrap_or_default();

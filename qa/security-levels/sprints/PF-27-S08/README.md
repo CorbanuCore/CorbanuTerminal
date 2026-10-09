@@ -35,13 +35,14 @@ not start (`0xC0000142`, the window station and desktop refuse it).
 | 1 | token check, containment string | low, write-restricted, 1 capability, no privileges; `token+dacl+job` | `dacl+job`, refused by Core |
 | 2 | create, overwrite, append, attributes, rename, delete, mkdir in `%TEMP%` | all denied | all succeed |
 | 2 | same in `%USERPROFILE%\AppData\LocalLow` (low integrity) | all denied **except delete** | all succeed |
-| 3 | an ordinary process of the user: `VM_READ`, `VM_WRITE`, `VM_OPERATION`, `DUP_HANDLE`, `CREATE_THREAD`, `SUSPEND_RESUME`, `SET_INFORMATION`, `WRITE_DAC`, `WRITE_OWNER`; its threads: get/set context, suspend | all denied; environment unreadable | all granted |
+| 3 | an ordinary process of the user: `VM_READ`, `VM_WRITE`, `VM_OPERATION`, `DUP_HANDLE`, `CREATE_THREAD`, `SUSPEND_RESUME`, `SET_INFORMATION`, `WRITE_DAC`, `WRITE_OWNER`, `PROCESS_CREATE_PROCESS`, `SET_QUOTA`, `QUERY_INFORMATION`; its threads: get/set context, suspend, terminate, impersonate | all denied except **query-limited information, process terminate, thread terminate**; environment unreadable | all granted |
 | 4 | `Win32_Process.Create` (WMI) | `80041003` access denied | starts a process |
 | 4 | `Schedule.Service` register a task | refused (`80070003`, the root folder is not shown) | registered |
 | 4 | `MMC20.Application` activation (out-of-process COM, starts `mmc.exe`) | `800A0046` permission denied | starts `mmc.exe` (elevated; a normal session needs elevation for it) |
 | 5 | broker suite over pipes (PF-27-S04/PF-28-S02/PF-33-S02/PF-27-S06, 25 tests) | pass, elevated and normal session | — |
 | 5 | DNS and TCP to `github.com:443` | work | work |
 | 5 | Credential Manager read of a synthetic generic credential | **readable** | readable |
+| 5 | Credential Manager write and delete of a synthetic generic credential | **writable, deletable** | writable, deletable |
 
 Real Windows 11 machine, 2026-10-09, at commit `06a150a3ab` (`C:\CorbanuQA\s08`): process-hardening `pf_27_s08`
 7/7 elevated and in a normal session (interactive logon), network-proxy `credential_broker::isolated::` 25/25 both.
@@ -58,8 +59,10 @@ creation either. Fixing it needs a different token-object descriptor at creation
 
 ## Open decision for Travis: how the vault key reaches the broker
 
-The record assumed the broker's token could not read Credential Manager. Measured: it can (CI, and the real machine
-elevated and in a normal session). Options:
+The record assumed the broker's token could not read Credential Manager. Measured: it can read, write and delete
+the user's generic credentials (CI, and the real machine elevated and in a normal session). The write and delete
+probes were added from the review (item 4): if the broker can write to Credential Manager it can also overwrite or
+delete the vault key. Options:
 
 1. **(c) The broker reads Credential Manager itself** (recommended): the same as the macOS and Linux brokers, which
    read the OS keyring (PF-27-S05); PF-27-S09 ports S05 unchanged. Cost: a compromised broker can read the user's
@@ -73,11 +76,19 @@ Acceptance 5's "the broker's token reading Credential Manager is denied" is not 
 ## Known limits
 
 - **Delete in low-integrity folders.** Write restriction does not cover `FILE_DELETE_CHILD`, so in a folder at low
-  integrity that grants the user full control (`LocalLow`, `Temp\Low`) the broker can delete a file, though not
-  create, change or rename one (the same gap as the sandbox's write-restricted token, #158).
-- **COM servers with their own launch permissions.** Deny-only INTERACTIVE closes servers that keep COM's default
-  launch permission. A server whose AppID grants Everyone, Users or Authenticated Users launch rights would still
-  start, under the broker's token (outside its job).
+  integrity that grants the user full control (`LocalLow`, `Temp\Low`, and likely `%LOCALAPPDATA%\Packages\*`
+  and `INetCache\Low`) the broker can delete a file or tree bottom-up, though not create, change or rename one (the
+  same gap as the sandbox's write-restricted token, #158). Medium-labeled files inside a low folder can also be
+  deleted through `FILE_DELETE_CHILD`.
+- **COM servers callable by low-integrity clients.** The main barrier to out-of-process COM is the broker's low
+  integrity level: COM checks the caller's integrity against the server's launch and access permissions, so a
+  low-integrity client is refused unless those permissions carry a low label. A server configured to allow
+  low-integrity callers and to run as the interactive user, a service or a named account starts under that identity
+  (not the broker's token), and the broker can then call its methods — the classic way out of a low-integrity sandbox,
+  and outside both the token and the job. Already-running servers (checked by access permissions, not launch
+  permissions) and the general RPC/ALPC surface carry the same risk. Deny-only INTERACTIVE is a secondary close for
+  servers that keep COM's default launch permission (which grants INTERACTIVE); a server whose AppID grants Everyone,
+  Users or Authenticated Users launch rights would bypass it.
 - **Task Scheduler** refuses by hiding its folders from a low-integrity caller, not with access denied.
 - **Normal-session COM control.** `MMC20.Application` needs elevation there, so the COM row's positive control is the
   elevated run.

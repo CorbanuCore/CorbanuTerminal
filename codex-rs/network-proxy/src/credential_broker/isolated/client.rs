@@ -1021,9 +1021,10 @@ fn start_broker_process(
 }
 
 /// PF-27-S07: no other process of the user can open the broker at any point
-/// (`spawn_protected`). PF-27-S08: it runs under the broker token, which
-/// confines its writes and keeps it out of the user's other processes. No console, so console control events aimed at the
-/// TUI do not reach it either.
+/// confines its writes and keeps it out of the user's other processes. No
+/// confines its writes and keeps it out of the user's other processes. No
+/// console, so console control events aimed at the TUI do not reach it
+/// either.
 #[cfg(windows)]
 fn start_broker_process(
     program: &Path,

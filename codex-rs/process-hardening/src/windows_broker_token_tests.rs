@@ -145,11 +145,12 @@ fn pf_27_s08_broker_still_reaches_the_network() {
 }
 
 /// Credential Manager under the broker token: measured, not asserted. It
-/// can read the user's generic credentials, as the macOS and Linux brokers
-/// can read the OS keyring (PF-27-S05); whether the Windows broker should is
-/// the open key-path decision in the PF-27-S08 record. Control: the PF-27-S07
-/// broker reads the same synthetic credential. Skipped where this session
-/// has no Credential Manager (a service logon without a profile).
+/// can read, write and delete the user's generic credentials, as the macOS
+/// and Linux brokers can read the OS keyring (PF-27-S05); whether the
+/// Windows broker should is the open key-path decision in the PF-27-S08
+/// record. Control: the PF-27-S07 broker reads the same synthetic credential.
+/// Skipped where this session has no Credential Manager (a service logon
+/// without a profile).
 #[test]
 fn pf_27_s08_credential_manager_under_the_broker_token() {
     let target = format!("codex-pf27s08-probe-{}", std::process::id());
@@ -356,7 +357,25 @@ fn credential_report() -> Report {
         Ok(false) => "wrong_value".to_string(),
         Err(code) => format!("error:{code}"),
     };
-    Report::from([("read".to_string(), read)])
+    // PF-27-S08 review item: also measure whether the broker can write or
+    // delete the user's credentials (a write outside its runtime state).
+    let write_target = format!("{target}-write-{}", std::process::id());
+    let write = match credential::write(&write_target, b"pf27s08-write-probe") {
+        Ok(()) => {
+            let _ = credential::delete(&write_target);
+            "ok".to_string()
+        }
+        Err(code) => format!("error:{}", code.raw_os_error().unwrap_or(-1)),
+    };
+    let delete = match credential::delete(&format!("{target}-nope-{0}", std::process::id())) {
+        Ok(()) => "ok".to_string(),
+        Err(code) => format!("error:{}", code.raw_os_error().unwrap_or(-1)),
+    };
+    Report::from([
+        ("read".to_string(), read),
+        ("write".to_string(), write),
+        ("delete".to_string(), delete),
+    ])
 }
 
 /// Credential Manager calls (declared here: the crate's `windows-sys`
