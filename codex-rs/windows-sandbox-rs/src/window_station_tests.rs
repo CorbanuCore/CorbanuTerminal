@@ -100,13 +100,15 @@ fn enter_fresh_window_station() {
     let desktop_sddl = format!("D:(A;;CCDCLCSWDTLOSDRCWDWO;;;{user})(A;;CCDTLO;;;BA)");
     let suffix = SmallRng::from_entropy().r#gen::<u32>();
     let station = to_wide(format!("Service-0x0-{suffix:x}$"));
+    // Below, each object is created with the access its DACL grants this user
+    // (at medium integrity, nothing more is granted).
     let station_attributes = SecurityAttributes::from_sddl(&station_sddl);
     // SAFETY: creates a window station this process keeps until it exits.
     let handle = unsafe {
         CreateWindowStationW(
             station.as_ptr(),
             0,
-            0x000F_037F,
+            0x000F_006E,
             &station_attributes.attributes,
         )
     };
@@ -129,7 +131,7 @@ fn enter_fresh_window_station() {
             ptr::null(),
             ptr::null(),
             0,
-            0x000F_01FF,
+            0x000F_00CF,
             &desktop_attributes.attributes,
         )
     };
