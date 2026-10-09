@@ -771,3 +771,118 @@ async fn accounting_legacy_compaction_redirect_is_resent_unrecorded() -> anyhow:
     }
     Ok(())
 }
+
+/// PF-60-S05 AC7: compaction is best effort. With the ledger refusing the
+/// admission, or refusing the usage after the paid response arrived, the
+/// compaction still finishes, the provider's answer is used, and the turn
+/// warns once that a request went unrecorded.
+#[tokio::test]
+async fn accounting_store_failure_never_fails_compaction() -> anyhow::Result<()> {
+    for (table, recorded) in [
+        ("draft_accounting_attempts", 1),
+        ("draft_accounting_observations", 2),
+    ] {
+        let server = MockServer::start().await;
+        let endpoint = format!("{}/v1", server.uri());
+        responses::mount_sse_once(&server, success(usage(Some(0)))).await;
+        let compact = responses::mount_compact_json_once(
+            &server,
+            json!({
+                "output":[{"type":"compaction","encrypted_content":"synthetic-summary"}],
+                "usage":{"input_tokens":100,"output_tokens":40,"total_tokens":140}
+            }),
+        )
+        .await;
+        let test = builder(endpoint.clone(), enabled(&endpoint))
+            .with_config(|config| {
+                config
+                    .features
+                    .disable(codex_features::Feature::TokenBudget)
+                    .unwrap();
+                config
+                    .features
+                    .disable(codex_features::Feature::RemoteCompactionV2)
+                    .unwrap();
+            })
+            .build_with_auto_env(&server)
+            .await?;
+        test.submit_turn("fixture").await?;
+        let db = test.codex.state_db().unwrap();
+        wait_attempts(&db, /*count*/ 1).await?;
+        let mut conn = connection(&db).await?;
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "CREATE TRIGGER refuse_{table} BEFORE INSERT ON {table} BEGIN SELECT RAISE(ABORT, 'fixture-store-refusal'); END"
+        )))
+        .execute(&mut conn)
+        .await?;
+        test.codex
+            .submit(codex_protocol::protocol::Op::Compact)
+            .await?;
+        let events = terminal(&test).await?;
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(event, EventMsg::Warning(warning)
+                    if warning.message.starts_with("Developer accounting could not record")))
+                .count(),
+            1,
+            "{table}: {events:?}"
+        );
+        assert!(
+            !events.iter().any(|event| matches!(event, EventMsg::Error(_))),
+            "{table}: {events:?}"
+        );
+        assert_eq!(compact.single_request().path(), "/v1/responses/compact");
+        assert_eq!(attempts(&db).await?.len(), recorded, "{table}");
+        sqlx::Connection::close(conn).await?;
+        stop(&test).await;
+    }
+    Ok(())
+}
+
+/// PF-60-S05 AC6: a ledger in a newer format turns collection off for the
+/// session with one warning, and every turn still runs.
+#[tokio::test]
+async fn accounting_newer_ledger_format_turns_collection_off_once() -> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    let endpoint = format!("{}/v1", server.uri());
+    let first = responses::mount_sse_repeating(&server, success(usage(Some(0)))).await;
+    let test = builder(endpoint.clone(), enabled(&endpoint))
+        .build_with_auto_env(&server)
+        .await?;
+    let db = test.codex.state_db().unwrap();
+    let mut conn = connection(&db).await?;
+    sqlx::raw_sql(
+        "CREATE TABLE _accounting_migrations (version BIGINT PRIMARY KEY, description TEXT NOT NULL,
+            installed_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, success BOOLEAN NOT NULL,
+            checksum BLOB NOT NULL, execution_time BIGINT NOT NULL);
+         INSERT INTO _accounting_migrations (version, description, success, checksum, execution_time)
+            VALUES (99, 'future', 1, X'00', 0);",
+    )
+    .execute(&mut conn)
+    .await?;
+    sqlx::Connection::close(conn).await?;
+    let mut warnings = Vec::new();
+    for _ in 0..2 {
+        submit(&test).await?;
+        warnings.extend(terminal(&test).await?.into_iter().filter_map(|event| match event {
+            EventMsg::Warning(warning) => Some(warning.message),
+            _ => None,
+        }));
+    }
+    assert_eq!(
+        warnings,
+        vec!["Developer accounting is off for this session: this home's cost ledger was written by a newer Corbanu build. Requests are sent as usual; /cost does not include them.".to_string()]
+    );
+    assert_eq!(first.requests().len(), 2);
+    let mut conn = connection(&db).await?;
+    let attempts: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM sqlite_schema WHERE name = 'draft_accounting_attempts'",
+    )
+    .fetch_one(&mut conn)
+    .await?;
+    assert_eq!(attempts, 0, "nothing was written to the newer ledger");
+    sqlx::Connection::close(conn).await?;
+    stop(&test).await;
+    Ok(())
+}

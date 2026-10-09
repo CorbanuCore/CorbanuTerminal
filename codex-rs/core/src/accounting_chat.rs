@@ -20,6 +20,8 @@ pub(crate) type Slot = Arc<Mutex<Option<Arc<DeferredChatSampling>>>>;
 pub(crate) struct DeferredChatSampling {
     request: Uuid,
     session: Arc<Session>,
+    /// The thread its attempts are recorded under.
+    owner: codex_protocol::ThreadId,
     turn: String,
     mode: AccountingMode,
     sampling: OnceCell<Arc<Sampling>>,
@@ -86,10 +88,24 @@ impl Drop for Bootstrap<'_> {
 }
 
 impl DeferredChatSampling {
+    #[cfg(test)]
     pub(crate) fn new(session: Arc<Session>, turn: String, mode: AccountingMode) -> Arc<Self> {
+        let owner = session.thread_id;
+        Self::new_for(session, owner, turn, mode)
+    }
+
+    /// A sampling recorded under `owner`: the session's own thread, or the
+    /// conversation an ephemeral review fork works for.
+    pub(crate) fn new_for(
+        session: Arc<Session>,
+        owner: codex_protocol::ThreadId,
+        turn: String,
+        mode: AccountingMode,
+    ) -> Arc<Self> {
         Arc::new(Self {
             request: Uuid::new_v4(),
             session,
+            owner,
             turn,
             mode,
             sampling: OnceCell::new(),
@@ -237,7 +253,7 @@ impl DeferredChatSampling {
                 })?;
                 let sampling = Sampling::start_request(
                     runtime,
-                    self.session.thread_id,
+                    self.owner,
                     self.turn.clone(),
                     &mode,
                     self.request,

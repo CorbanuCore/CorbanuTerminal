@@ -1914,6 +1914,25 @@ impl Session {
     /// Read live rather than snapshotted: a session's provider can change, and
     /// a client that records against the identity it had at startup would
     /// attribute a request to a provider it no longer uses.
+    /// The thread this session's paid requests are recorded under: its own
+    /// when it is persisted; for an ephemeral guardian review fork, the
+    /// conversation it reviews for (PF-60-S05); otherwise none.
+    pub(crate) async fn accounting_owner(&self) -> Option<ThreadId> {
+        if self.live_thread().is_some() {
+            return Some(self.thread_id);
+        }
+        let state = self.state.lock().await;
+        let configuration = &state.session_configuration;
+        match &configuration.session_source {
+            SessionSource::SubAgent(codex_protocol::protocol::SubAgentSource::Other(name))
+                if name == crate::guardian::GUARDIAN_REVIEWER_NAME =>
+            {
+                configuration.parent_thread_id
+            }
+            _ => None,
+        }
+    }
+
     pub(crate) async fn accounting_binding(&self) -> (crate::config::AccountingMode, String) {
         let state = self.state.lock().await;
         let config = &state.session_configuration.original_config_do_not_use;

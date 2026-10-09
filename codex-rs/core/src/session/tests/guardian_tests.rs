@@ -790,3 +790,27 @@ async fn guardian_subagent_does_not_inherit_parent_exec_policy_rules() {
     );
     drop(io);
 }
+
+/// PF-60-S05 AC8: an ephemeral guardian review fork records its paid requests
+/// under the conversation it reviews for; any other ephemeral session has no
+/// accounting owner.
+#[tokio::test]
+async fn accounting_owner_of_a_guardian_fork_is_the_reviewed_conversation() {
+    let (session, _turn) = crate::session::tests::make_session_and_context().await;
+    assert!(session.live_thread().is_none());
+    assert_eq!(session.accounting_owner().await, None);
+    let parent = codex_protocol::ThreadId::new();
+    {
+        let mut state = session.state.lock().await;
+        state.session_configuration.session_source =
+            SessionSource::SubAgent(SubAgentSource::Other(GUARDIAN_REVIEWER_NAME.to_string()));
+        state.session_configuration.parent_thread_id = Some(parent);
+    }
+    assert_eq!(session.accounting_owner().await, Some(parent));
+    {
+        let mut state = session.state.lock().await;
+        state.session_configuration.session_source =
+            SessionSource::SubAgent(SubAgentSource::Other("another-helper".to_string()));
+    }
+    assert_eq!(session.accounting_owner().await, None);
+}

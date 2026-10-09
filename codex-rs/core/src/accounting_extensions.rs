@@ -107,11 +107,13 @@ impl ExtensionAccounting {
         if !crate::accounting::collects(&mode, &provider_id, provider, provider.wire_api) {
             return None;
         }
+        // A review fork records under the conversation it reviews for.
+        let thread = owner.accounting_owner().await.unwrap_or(owner.thread_id);
         owner.try_ensure_rollout_materialized().await.ok()?;
         let runtime = owner.state_db()?;
         let sampling = Sampling::start_at_path(
             runtime,
-            owner.thread_id,
+            thread,
             format!("{label}:{}", Uuid::new_v4()),
             &mode,
             path,
