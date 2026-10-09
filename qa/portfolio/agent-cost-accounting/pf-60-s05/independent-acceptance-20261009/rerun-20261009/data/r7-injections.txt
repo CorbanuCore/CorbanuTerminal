@@ -1,0 +1,12 @@
+# AC7 injections on home h-r7 (state DB pfterminal_state_5.sqlite), applied with the sqlite3 CLI while no corbanu process ran
+## Refusal before the request (runs r7-search-inj, r7-sws-inj)
+CREATE TRIGGER qa_refuse_attempts BEFORE INSERT ON draft_accounting_attempts BEGIN SELECT RAISE(ABORT, 'qa injected refusal'); END;
+draft_accounting_attempts rows before: 6; after both runs: 6
+## Refusal after the paid response (run r7-sws-post); qa_refuse_attempts dropped first
+CREATE TRIGGER qa_refuse_observations BEFORE INSERT ON draft_accounting_observations BEGIN SELECT RAISE(ABORT, 'qa injected observation refusal'); END;
+CREATE TRIGGER qa_refuse_observations_upd BEFORE UPDATE ON draft_accounting_observations BEGIN SELECT RAISE(ABORT, 'qa injected observation refusal'); END;
+before r7-sws-post: draft_accounting_attempts 6, draft_accounting_observations 5
+after r7-sws-post:  draft_accounting_attempts 10, draft_accounting_observations 5
+# First-run failure modes re-run on 5d283fde18 (home h-r8, gpt-5.4-mini, model_auto_compact_token_limit = 14600, exec resume --last)
+r8-t2-readonly: chmod a-w pfterminal_state_5.sqlite for the run, restored after; attempts 3 before and after
+r8-t3-busy: tools/hold_lock.py <db> 130 in a detached tmux session (data/r8-lock.txt: locked 19:27:58Z, released 19:30:08Z)

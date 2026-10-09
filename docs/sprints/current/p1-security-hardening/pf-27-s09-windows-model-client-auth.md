@@ -10,9 +10,9 @@ parallel_lane: "broker"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
-depends_on: "PF-27-S05, PF-27-S07"
+depends_on: "PF-27-S05, PF-27-S07, PF-27-S08"
 created: 2026-10-08
-updated: 2026-10-08
+updated: 2026-10-09
 ---
 
 # PF-27-S09 — Windows model-client auth through the broker
@@ -20,8 +20,12 @@ updated: 2026-10-08
 Fourth of the four PF-27-S06 limits Travis approved fixing (2026-10-08): the port of
 [PF-27-S05](../../archive/p0-security-levels/pf-27-s05-model-client-auth-broker.md) to Windows. Today
 `broker_model_auth` on Windows refuses every brokered request (`model_broker_auth.rs`, non-Unix branch). Plan
-only: nothing is implemented until this record is allocated. Runs after PF-27-S08; if S08 has landed, stored keys
-use its key path.
+only: nothing is implemented until this record is allocated. Runs after PF-27-S08 (merged in #333). Key path: Travis
+decided (c) on 2026-10-09: the broker reads the vault key from Credential Manager itself, under its PF-27-S08
+token, the same as the macOS and Linux brokers read the OS keyring, so S05's stored-key design ports as is. One
+Windows addition: every vault read opens `secrets/.vault.lock` for writing, which the S08 token cannot do on a
+medium-labeled file; grant it (capability-SID entry and low label, like S05's `prepare_vault_lock` Landlock
+exception) or hand the broker an opened lock. The Windows broker reads no stored keys yet (`server.rs`).
 
 ## Execution mandate
 
@@ -40,13 +44,14 @@ use its key path.
 
 - Core: `core/src/model_broker_auth.rs` (the `cfg(not(unix))` refusal becomes the Windows start).
 - Broker: `network-proxy/src/credential_broker/model_auth.rs` and `env_scrub.rs` (Unix-only today), `isolated/`.
+- Vault lock for the broker token: `isolated/server.rs` (`prepare_vault_lock`), `vault/src/lib.rs`.
 - Routing: `http-client/src/model_broker_route.rs`, `transport.rs` (named pipe instead of a Unix socket, with the
   PF-27-S06 server process-id check).
 - `model-provider/src/model_key_broker.rs`; stored-key reader in `arg0`.
 
 ## Preconditions
 
-- [ ] PF-27-S05 archived (done) and PF-27-S07 merged.
+- [ ] PF-27-S05 archived (done), PF-27-S07 archived (done), PF-27-S08 accepted (merged; awaiting Travis).
 - [ ] **Needs a real Windows machine** for the GLM 5.2 tmux run and SOP videos with a real provider key, and for
   stored keys through Credential Manager. Everything else runs on `windows-2022`.
 
@@ -56,7 +61,8 @@ use its key path.
    signed frame and goes only to the broker's pipe; with no broker installed it is refused, never sent direct.
 2. Env provider keys are handed to the broker and overwritten in Core's environment block; a same-user scan of
    Core's memory finds no raw key after hand-over (positive control before it).
-3. Stored provider keys are decrypted inside the broker; a ChatGPT sign-in refresh replaces the broker's copy.
+3. Stored provider keys are decrypted inside the broker, with the vault key read from Credential Manager by the
+   broker's own token (decision (c)); a ChatGPT sign-in refresh replaces the broker's copy.
 4. Fails closed before the broker runs and when it dies; flag off is unchanged.
 
 ## Test plan

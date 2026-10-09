@@ -381,6 +381,66 @@ pub(super) fn responses_original(
     )
 }
 
+/// The path, under the provider's base URL, of OpenAI's image generation endpoint.
+pub(super) const IMAGE_GENERATIONS_PATH: &str = "images/generations";
+
+/// OpenAI's published Standard rates for image generation, in milli-USD per
+/// million tokens: (model, text input, cached text input, image output).
+/// Source: developers.openai.com/api/docs/pricing, image models, read
+/// 2026-10-09. A generation request carries a text prompt and no input image,
+/// so its input is text and its output is image; image input ($8.00 for
+/// gpt-image-2) only arises on the edits endpoint, which is not priced here
+/// because one input rate cannot price a mix of text and image input.
+const OPENAI_IMAGE_GENERATION_RATES: [(&str, u32, u32, u32); 1] =
+    [("gpt-image-2", 5_000, 1_250, 30_000)];
+
+/// Standard-tier rates for one image generation request on an OpenAI API key,
+/// or nothing for a tier, model or provider the published table does not cover.
+pub(super) fn image_generation_original(
+    model: &str,
+    provider: &str,
+    scope: Uuid,
+    accepted_at: i64,
+    tier: Option<&str>,
+) -> anyhow::Result<Vec<Snapshot>> {
+    if provider != codex_model_provider_info::OPENAI_PROVIDER_ID
+        || !matches!(tier, None | Some("default"))
+    {
+        return Ok(Vec::new());
+    }
+    let Some(&(_, input, read, output)) = OPENAI_IMAGE_GENERATION_RATES
+        .iter()
+        .find(|(slug, ..)| *slug == model)
+    else {
+        return Ok(Vec::new());
+    };
+    let reference = serde_json::to_vec(&(
+        "openai-images-api-key-published-v1",
+        provider,
+        model,
+        IMAGE_GENERATIONS_PATH,
+        "USD/million",
+        input,
+        read,
+        output,
+    ))?;
+    snapshot(
+        model,
+        provider,
+        scope,
+        accepted_at,
+        Rates {
+            noncached: Some(rate(input)?),
+            read: Some(rate(read)?),
+            write: None,
+            output: Some(rate(output)?),
+        },
+        reference,
+        Basis::Billed,
+        /*plan_burn_millis*/ None,
+    )
+}
+
 pub(super) fn chat_original(
     model: &str,
     provider: &str,

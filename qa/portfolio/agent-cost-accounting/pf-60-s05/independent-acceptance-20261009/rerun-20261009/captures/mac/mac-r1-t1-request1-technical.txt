@@ -1,0 +1,51 @@
+  Attempt, components and original price
+  Requested UTC day: 2026-10-09
+  Provider: OpenAI
+  Model: GPT-5.6-Luna
+  Billing: Pay per use
+  Estimated cost: $0.009594
+  Tokens: 9,594 tokens
+  —— Details ——
+  Billed cost: OpenAI doesn't report its charges, so any cost here is an estimate — check OpenAI's bill.
+  Request: 9bf4cb03-c83a-4bce-8cce-1ae32db7c961
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Attempt: e9025fe2-574f-4bb9-8c15-f8dd1cf3ec11
+  Thread: 01a12203-7e64-7102-88f5-919f53c1a2cb
+  Turn: prewarm:0e5b0af1-c7e1-4c7b-b571-c5a7e352a9ad
+  Provider: openai
+  Model: gpt-5.6-luna
+  Opaque scope: c111318a-78f8-4ad3-9b36-b51cfbb25746
+  Arithmetic dialect: Inclusive
+  Admission time: 2026-10-09T18:53:37.835Z
+  Retry predecessor: none
+  Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+  Estimated token cost for recorded attempts: $0.009594
+  Billing basis: pay per use
+  Input: 9594
+  Noncached input (derived for inclusive input): 9594 (derived)
+  Cache read: 0 (reported)
+  Cache write: 0 (reported)
+  Output: 0 (reported)
+  Reasoning (subset, not separately billed): 0 (reported)
+  Total (not separately billed): 9594
+  Noncached input cost: $0.009594; exact USD 0.009594
+  Cache read cost: $0.000000; exact USD 0
+  Cache write cost: $0.000000; exact USD 0
+  Output cost: $0.000000; exact USD 0
+  Known subtotal exact USD: 0.009594
+  Price ID: 1aa82d1a-00b7-4908-8975-a02724ab9c1a
+  Price source: NativeCatalog; reference f4c38703-dba0-596a-8eb7-a60b48852e67
+  Price currency/unit: Usd / PerMillionTokens
+  Price observed/approved: 2026-10-09T18:53:37.835Z / 2026-10-09T18:53:37.835Z
+  Price effective interval: [2026-10-09T18:53:37.835Z, unbounded)
+  Noncached input rate: 1 USD per million tokens
+  Cache read rate: 0.1 USD per million tokens
+  Rate unavailable for Cache write
+  Output rate: 6 USD per million tokens
+  Evidence revision 3; source 6b5e770f-fdee-4387-afa2-9d942d63ae98; sequence 3; presence patch
+  {"input":9594,"read":0,"write":0,"output":0,"reasoning":0,"total":9594}
+  Snapshot is not current; newer activity is unverified
+  Back
+  Refresh
+  Close

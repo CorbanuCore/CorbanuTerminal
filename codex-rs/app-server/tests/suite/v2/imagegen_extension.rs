@@ -17,6 +17,8 @@ use codex_app_server_protocol::TurnStartResponse;
 use codex_app_server_protocol::UserInput as V2UserInput;
 use codex_config::types::AuthCredentialsStoreMode;
 use codex_features::Feature;
+use codex_login::AuthKeyringBackendKind;
+use codex_login::login_with_api_key;
 use core_test_support::responses;
 use core_test_support::skip_if_remote;
 use pretty_assertions::assert_eq;
@@ -175,6 +177,120 @@ async fn standalone_image_generation_returns_saved_path_hint_to_model() -> Resul
             .any(|text| text.contains("Generated images are saved to")),
         "standalone image generation should not emit the legacy developer-message hint"
     );
+
+    Ok(())
+}
+
+/// An OpenAI API key on the built-in provider is offered the image tool, and
+/// the image is generated through OpenAI's public Images API: the provider's
+/// own base URL (`/v1/images/generations`), authorized with that key.
+#[tokio::test]
+async fn standalone_image_generation_uses_the_images_api_with_an_openai_api_key() -> Result<()> {
+    let call_id = "image-run-api-key";
+    let server = responses::start_mock_server().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/images/generations"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "created": 1,
+            "data": [{"b64_json": RESULT}],
+            "usage": {
+                "input_tokens": 12,
+                "input_tokens_details": {"text_tokens": 12, "image_tokens": 0},
+                "output_tokens": 272,
+                "total_tokens": 284
+            },
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let response_mock = responses::mount_sse_sequence(
+        &server,
+        vec![
+            responses::sse(vec![
+                responses::ev_response_created("resp-1"),
+                responses::ev_function_call_with_namespace(
+                    call_id,
+                    "image_gen",
+                    "imagegen",
+                    &json!({"prompt": "paint a blue whale"}).to_string(),
+                ),
+                responses::ev_completed("resp-1"),
+            ]),
+            responses::sse(vec![
+                responses::ev_assistant_message("msg-1", "Done"),
+                responses::ev_completed("resp-2"),
+            ]),
+        ],
+    )
+    .await;
+
+    let codex_home = TempDir::new()?;
+    MockResponsesConfig::new(&server.uri())
+        .with_builtin_model_provider("openai")
+        .with_sandbox_mode("danger-full-access")
+        .with_root_config(&format!("openai_base_url = \"{}/v1\"", server.uri()))
+        .disable_feature(Feature::ResponsesWebsockets)
+        .disable_feature(Feature::ResponsesWebsocketsV2)
+        .write(codex_home.path())?;
+    login_with_api_key(
+        codex_home.path(),
+        "sk-image-test",
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+    )?;
+
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .with_env_overrides(&[("OPENAI_API_KEY", None)])
+        .build_initialized_with_timeout(DEFAULT_READ_TIMEOUT)
+        .await?;
+    start_image_generation_turn(&mut mcp, ThreadStartParams::default()).await?;
+    let completed = timeout(
+        DEFAULT_READ_TIMEOUT,
+        wait_for_image_generation_completed(&mut mcp),
+    )
+    .await??;
+    timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_notification_message("turn/completed"),
+    )
+    .await??;
+
+    let ThreadItem::ImageGeneration(ImageGenerationItem {
+        status,
+        saved_path: Some(saved_path),
+        ..
+    }) = completed.item
+    else {
+        panic!("expected completed image generation item with saved path");
+    };
+    assert_eq!(status, "completed");
+    assert_eq!(std::fs::read(&saved_path)?, TINY_PNG_BYTES);
+
+    let requests = response_mock.requests();
+    assert_eq!(requests.len(), 2);
+    assert!(
+        requests[0].body_contains_text("imagegen"),
+        "the image tool should be offered on an API key"
+    );
+    let image_request = server
+        .received_requests()
+        .await
+        .context("failed to fetch received requests")?
+        .into_iter()
+        .find(|request| request.url.path() == "/v1/images/generations")
+        .context("image generation request should be sent to the Images API")?;
+    assert_eq!(
+        image_request
+            .headers
+            .get("authorization")
+            .context("image request should carry the API key")?
+            .to_str()?,
+        "Bearer sk-image-test"
+    );
+    let body = image_request.body_json::<serde_json::Value>()?;
+    assert_eq!(body["model"], "gpt-image-2");
+    assert_eq!(body["prompt"], "paint a blue whale");
 
     Ok(())
 }

@@ -71,6 +71,7 @@ use crate::tools::router::ToolRouter;
 use codex_extension_api::ExtensionData;
 use codex_features::Feature;
 use codex_login::AuthManager;
+use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_protocol::account::PlanType;
 use codex_protocol::auth::AuthMode;
 use codex_protocol::config_types::WebSearchMode;
@@ -474,12 +475,16 @@ fn image_generation_available(turn_context: &TurnContext) -> bool {
     }
 
     let provider = turn_context.provider.info();
+    let auth_manager = turn_context.auth_manager.as_deref();
     provider.uses_openai_actor_authorization()
         || (provider.requires_openai_auth
-            && turn_context
-                .auth_manager
-                .as_deref()
-                .is_some_and(AuthManager::current_auth_uses_codex_backend))
+            && auth_manager.is_some_and(AuthManager::current_auth_uses_codex_backend))
+        // An OpenAI API key on the built-in provider reaches OpenAI's public
+        // Images API: `images/generations` under the same base URL and key as
+        // inference, billed to that key.
+        || (turn_context.config.model_provider_id == OPENAI_PROVIDER_ID
+            && provider.is_openai()
+            && auth_manager.and_then(AuthManager::get_api_auth_mode) == Some(AuthMode::ApiKey))
 }
 
 fn wait_agent_timeout_options(turn_context: &TurnContext) -> WaitAgentTimeoutOptions {

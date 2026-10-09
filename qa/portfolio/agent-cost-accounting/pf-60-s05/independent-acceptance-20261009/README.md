@@ -1,5 +1,7 @@
 # PF-60-S05 independent functional acceptance (2026-10-09)
 
+> **Re-run with real Kimi Code, Claude plan and OpenAI API-key credentials:** [rerun-20261009/](rerun-20261009/README.md).
+
 **Result.**
 
 - On real runs, the accounting changes behave as the sprint specifies on macOS and Linux. Every pay-per-use total I
