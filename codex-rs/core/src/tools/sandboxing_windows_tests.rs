@@ -1,7 +1,8 @@
 //! #300 on a real Windows host: an agent command launched through the tool
 //! path (`SandboxAttempt::env_for`) under the unelevated restricted-token
 //! sandbox must not read a file its profile denies. That backend cannot block
-//! reads, so the launch is refused. Run it in a normal (medium-integrity)
+//! reads, so the launch is refused up front with a message that says how to
+//! switch to the elevated sandbox. Run it in a normal (medium-integrity)
 //! session too: the unelevated sandbox is what such a session uses by default.
 
 // The probe's output is the evidence of the measured runs (`--nocapture`).
@@ -119,7 +120,7 @@ async fn run(request: crate::sandboxing::ExecRequest) -> String {
 
 #[tokio::test]
 #[serial_test::serial(codex_home)]
-async fn sec_win_300_unelevated_tool_launch_never_reads_a_denied_file() {
+async fn sec_win_300_unelevated_tool_launch_refuses_deny_read_profiles() {
     let codex_home_dir = tempfile::tempdir().expect("codex home");
     let workspace_dir = tempfile::tempdir().expect("workspace");
     let _codex_home = EnvGuard::set("CODEX_HOME", codex_home_dir.path());
@@ -129,19 +130,8 @@ async fn sec_win_300_unelevated_tool_launch_never_reads_a_denied_file() {
 
     let base = PermissionProfile::workspace_write()
         .materialize_project_roots_with_workspace_roots(std::slice::from_ref(&cwd));
-    let (mut file_system, _) = base.to_runtime_permissions();
-    file_system.entries.push(FileSystemSandboxEntry {
-        path: FileSystemPath::Path {
-            path: cwd.join("secret.env"),
-        },
-        access: FileSystemAccessMode::Deny,
-        missing_path_behavior: None,
-    });
-    let denying =
-        PermissionProfile::from_runtime_permissions(&file_system, NetworkSandboxPolicy::Restricted);
-
-    // Control: the unelevated sandbox runs commands here, and without the
-    // deny entry it reads both files.
+    // Control: the unelevated sandbox runs commands here, and without a deny
+    // entry it reads both files.
     let control = run(unelevated_tool_launch(&base, &cwd).expect("control launch")).await;
     eprintln!("sec-win-300 unelevated, no deny entry: {control}");
     assert!(
@@ -149,24 +139,49 @@ async fn sec_win_300_unelevated_tool_launch_never_reads_a_denied_file() {
         "{control}"
     );
 
-    match unelevated_tool_launch(&denying, &cwd) {
-        Err(refused) => {
-            eprintln!("sec-win-300 unelevated, secret.env denied: refused: {refused}");
-            assert_eq!(
-                refused.to_string(),
-                format!(
-                    "unsupported operation: {}",
-                    codex_sandboxing::UNELEVATED_DENY_READ_REFUSAL
-                )
-            );
-        }
-        Ok(request) => {
-            let output = run(request).await;
-            eprintln!("sec-win-300 unelevated, secret.env denied: ran: {output}");
-            assert!(
-                !output.contains(SECRET),
-                "the unelevated tool path read a denied file: {output}"
-            );
-        }
+    let denies = [
+        (
+            "exact path",
+            FileSystemPath::Path {
+                path: cwd.join("secret.env"),
+            },
+        ),
+        (
+            "glob",
+            FileSystemPath::GlobPattern {
+                pattern: "**/*.env".to_string(),
+            },
+        ),
+    ];
+    for (label, path) in denies {
+        let (mut file_system, _) = base.to_runtime_permissions();
+        file_system.entries.push(FileSystemSandboxEntry {
+            path,
+            access: FileSystemAccessMode::Deny,
+            missing_path_behavior: None,
+        });
+        let denying = PermissionProfile::from_runtime_permissions(
+            &file_system,
+            NetworkSandboxPolicy::Restricted,
+        );
+        let outcome = match unelevated_tool_launch(&denying, &cwd) {
+            Err(refused) => refused.to_string(),
+            Ok(request) => {
+                match crate::sandboxing::execute_env(request, /*stdout_stream*/ None).await {
+                    Ok(output) => format!("ran: {}{}", output.stdout.text, output.stderr.text),
+                    Err(err) => format!("failed at spawn: {err}"),
+                }
+            }
+        };
+        eprintln!("sec-win-300 unelevated, {label} deny on secret.env: {outcome}");
+        assert!(!outcome.contains(SECRET), "{label}: read a denied file");
+        assert_eq!(
+            outcome,
+            format!(
+                "unsupported operation: {}",
+                codex_sandboxing::UNELEVATED_DENY_READ_REFUSAL
+            ),
+            "{label}"
+        );
     }
 }
