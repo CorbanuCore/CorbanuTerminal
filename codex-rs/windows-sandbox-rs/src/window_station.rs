@@ -239,10 +239,6 @@ impl WindowAccess {
         Ok(())
     }
 
-    pub(crate) fn sid(&self) -> &[u8] {
-        &self.sid
-    }
-
     fn entry(&mut self, object: WindowObject) -> &mut Option<u32> {
         match object {
             WindowObject::Station => &mut self.station_entry,

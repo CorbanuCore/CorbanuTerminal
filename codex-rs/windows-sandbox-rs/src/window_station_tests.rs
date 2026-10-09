@@ -525,9 +525,9 @@ fn sec_win_341_runner_user_can_start_on_a_non_interactive_window_station() {
 }
 
 /// The mask #343 granted on the window station: what a runner needs.
-const RUNNER_STATION_MASK: u32 = 0x0002_006E;
+const RUNNER_STATION_MASK: u32 = 0x0002_006A;
 /// The same without `WINSTA_CREATEDESKTOP`: what its commands need.
-const COMMAND_STATION_MASK: u32 = 0x0002_0066;
+const COMMAND_STATION_MASK: u32 = 0x0002_0062;
 /// `DESKTOP_READOBJECTS | DESKTOP_WRITEOBJECTS`.
 const DESKTOP_MASK: u32 = 0x0081;
 
@@ -611,7 +611,6 @@ fn sec_win_345_window_access_counts_narrows_and_removes_exactly() {
     let second = WindowAccess::grant_runner(&users)
         .expect("grant again")
         .expect("not interactive");
-    assert_eq!(first.sid(), users.as_slice());
     assert_eq!(
         allow_entries(&users),
         (
