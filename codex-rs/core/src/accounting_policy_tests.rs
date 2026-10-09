@@ -412,7 +412,8 @@ fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
         (Some(AuthMode::ApiKey), PriceAuthority::ApiKeyRates),
         (Some(AuthMode::Chatgpt), PriceAuthority::PlanRate),
         (Some(AuthMode::ChatgptAuthTokens), PriceAuthority::PlanRate),
-        (Some(AuthMode::Headers), PriceAuthority::PlanRate),
+        // Request headers are another OpenAI account credential: no row.
+        (Some(AuthMode::Headers), PriceAuthority::Undeclared),
         // No visible credential is not a subscription. Recording it as one would
         // book a turn this client cannot attribute as plan capacity; the table
         // declares nothing for it.
@@ -553,7 +554,9 @@ fn accounting_every_built_in_provider_collects() {
             }
             // The basis is bound to the route: read through an endpoint no
             // table declares, the same provider is not declared - not rates,
-            // and not a plan rate standing in for them.
+            // and not a plan rate standing in for them. Bedrock's credentials
+            // reach only Bedrock, whose route is regional: pay per use with no
+            // attributable rate wherever it goes.
             let elsewhere = turn_mode(
                 &selected,
                 &id,
@@ -561,13 +564,16 @@ fn accounting_every_built_in_provider_collects() {
                 Some(codex_protocol::auth::AuthMode::ApiKey),
                 "https://relay.invalid/v1",
             );
+            let expected_elsewhere = if id == codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID
+            {
+                PriceAuthority::Unavailable
+            } else {
+                PriceAuthority::Undeclared
+            };
             assert!(
                 matches!(
                     elsewhere,
-                    AccountingMode::Provider {
-                        pricing: PriceAuthority::Undeclared,
-                        ..
-                    }
+                    AccountingMode::Provider { pricing, .. } if pricing == expected_elsewhere
                 ),
                 "{id} must not carry its basis away from its own route"
             );

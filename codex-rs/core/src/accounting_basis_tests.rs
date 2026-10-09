@@ -96,10 +96,26 @@ fn declared_basis_decides_the_economics() {
         // attributable catalogue rate.
         (
             "amazon-bedrock",
-            bedrock.clone(),
+            bedrock,
             None,
-            own_route("amazon-bedrock", None),
+            "https://bedrock-mantle.us-east-1.api.aws/openai/v1".to_string(),
             PriceAuthority::Unavailable,
+        ),
+        // Realtime: the ChatGPT sign-in at the API host is subscription work.
+        (
+            "openai",
+            built_in("openai"),
+            Some(AuthMode::Chatgpt),
+            "https://api.openai.com/v1".to_string(),
+            PriceAuthority::PlanBasis,
+        ),
+        // A credential with no declared row.
+        (
+            "openai",
+            built_in("openai"),
+            Some(AuthMode::Headers),
+            own_route("openai", Some(AuthMode::Headers)),
+            PriceAuthority::Undeclared,
         ),
         (
             "ollama",
@@ -132,7 +148,7 @@ fn declared_basis_decides_the_economics() {
         ),
         (
             "my-llm",
-            custom.clone(),
+            custom,
             None,
             "https://llm.example.com/v1".to_string(),
             PriceAuthority::Undeclared,
@@ -209,6 +225,8 @@ async fn admission_binds_the_basis_to_every_attempt() -> anyhow::Result<()> {
         .build("my-llm"),
     )
     .await?;
+    // One UTC day for every read; the cases run within it.
+    let day = chrono::Utc::now().timestamp_millis() / 86_400_000;
     let cases = [
         (
             PriceAuthority::Undeclared,
@@ -241,7 +259,7 @@ async fn admission_binds_the_basis_to_every_attempt() -> anyhow::Result<()> {
         let quote = codex_state::accounting::AccountingStore::inspect_day(
             &db,
             owner,
-            chrono::Utc::now().timestamp_millis() / 86_400_000,
+            day,
             chrono::Utc::now().timestamp_millis(),
         )
         .await?;
@@ -260,5 +278,35 @@ async fn admission_binds_the_basis_to_every_attempt() -> anyhow::Result<()> {
             "{pricing:?}"
         );
     }
+    // A changed declaration (each case above is a new one for the same
+    // provider) applies to new attempts only: every earlier attempt still
+    // reads with the basis it was admitted under (AC3).
+    let codex_state::accounting::InspectionDay::Ready(view) =
+        codex_state::accounting::AccountingStore::inspect_day(
+            &db,
+            owner,
+            day,
+            chrono::Utc::now().timestamp_millis(),
+        )
+        .await?
+    else {
+        panic!("expected the day");
+    };
+    let mut bases: Vec<(String, Basis)> = view
+        .requests
+        .values()
+        .flatten()
+        .map(|quote| (quote.attempt.turn.clone(), quote.basis()))
+        .collect();
+    bases.sort_by(|left, right| left.0.cmp(&right.0));
+    assert_eq!(
+        bases,
+        vec![
+            ("Local".to_string(), Basis::Local),
+            ("PlanBasis".to_string(), Basis::PlanEquivalent),
+            ("Unavailable".to_string(), Basis::Billed),
+            ("Undeclared".to_string(), Basis::Undeclared),
+        ]
+    );
     Ok(())
 }

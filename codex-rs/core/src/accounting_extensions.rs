@@ -157,29 +157,49 @@ impl ExtensionAccounting {
             return false;
         };
         // The reporter's route is a built-in provider's own route (the server
-        // checked it), reached with the credential that provider is built for.
-        let declared =
+        // checked it), reached with the credential that provider is built
+        // for. The session's own definition of that provider carries any
+        // `billing` the user configured.
+        let built_in =
             codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None)
-                .get(&request.provider_id)
-                .map(|built_in| {
-                    let credential = codex_model_provider_info::BillingCredential::of(
-                        built_in, /*auth_mode*/ None,
-                    );
-                    codex_model_provider_info::declared_billing(
-                        &request.provider_id,
-                        built_in,
-                        credential,
-                        &request.endpoint,
-                        /*at_built_in_route*/ true,
-                    )
-                });
+                .remove(&request.provider_id);
+        let declared = match (
+            owner.configured_model_provider(&request.provider_id).await,
+            built_in,
+        ) {
+            (configured, Some(built_in)) => {
+                let credential = codex_model_provider_info::BillingCredential::of(
+                    &built_in, /*auth_mode*/ None,
+                );
+                let provider = codex_model_provider_info::ModelProviderInfo {
+                    billing: configured.and_then(|provider| provider.billing),
+                    ..built_in
+                };
+                codex_model_provider_info::declared_billing(
+                    &request.provider_id,
+                    &provider,
+                    credential,
+                    &request.endpoint,
+                    /*at_built_in_route*/ true,
+                )
+            }
+            (_, None) => codex_model_provider_info::BillingDeclaration::NotDeclared,
+        };
         use codex_model_provider_info::BillingBasis;
-        let pricing = match declared.and_then(codex_model_provider_info::BillingDeclaration::basis)
-        {
+        let pricing = match declared.basis() {
             Some(BillingBasis::Subscription) => crate::config::PriceAuthority::PlanRate,
             Some(BillingBasis::PayPerUse) => crate::config::PriceAuthority::Unavailable,
             Some(BillingBasis::Local) => crate::config::PriceAuthority::Local,
             None => crate::config::PriceAuthority::Undeclared,
+        };
+        let basis_source = match declared {
+            codex_model_provider_info::BillingDeclaration::UserConfig(_) => {
+                codex_state::accounting::BasisSource::UserConfig
+            }
+            codex_model_provider_info::BillingDeclaration::BuiltIn(_)
+            | codex_model_provider_info::BillingDeclaration::NotDeclared => {
+                codex_state::accounting::BasisSource::BuiltIn
+            }
         };
         let mode = AccountingMode::Provider {
             scope,
@@ -188,7 +208,7 @@ impl ExtensionAccounting {
             approved_endpoint: request.endpoint.clone(),
             approved_query: None,
             pricing,
-            basis_source: Default::default(),
+            basis_source,
         };
         if owner.try_ensure_rollout_materialized().await.is_err() {
             return false;

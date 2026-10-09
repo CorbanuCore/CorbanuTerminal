@@ -52,8 +52,11 @@ pub enum BillingBasis {
 /// The kind of credential a request carries, as far as billing is concerned.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BillingCredential {
-    /// A ChatGPT account sign-in (or a token issued for one).
+    /// A ChatGPT account sign-in (or the tokens issued for one).
     ChatgptLogin,
+    /// Another OpenAI account credential (request headers, an agent identity
+    /// or a personal access token). No row declares a basis for it.
+    OtherAccountToken,
     /// An API key or bearer token the user supplied.
     ApiKey,
     /// The provider's own command-based login, such as Claude Plan's.
@@ -70,13 +73,10 @@ impl BillingCredential {
         match provider.credential_source() {
             ModelProviderCredentialSource::OpenAiAuth => match auth_mode {
                 Some(AuthMode::ApiKey) => Self::ApiKey,
+                Some(AuthMode::Chatgpt | AuthMode::ChatgptAuthTokens) => Self::ChatgptLogin,
                 Some(
-                    AuthMode::Chatgpt
-                    | AuthMode::ChatgptAuthTokens
-                    | AuthMode::Headers
-                    | AuthMode::AgentIdentity
-                    | AuthMode::PersonalAccessToken,
-                ) => Self::ChatgptLogin,
+                    AuthMode::Headers | AuthMode::AgentIdentity | AuthMode::PersonalAccessToken,
+                ) => Self::OtherAccountToken,
                 // A Bedrock key is not an OpenAI credential.
                 Some(AuthMode::BedrockApiKey) | None => Self::None,
             },
@@ -138,21 +138,58 @@ const BUILT_IN: &[(&str, BillingCredential, BillingBasis)] = &[
     (VERCEL_ANTHROPIC_PROVIDER_ID, C::ApiKey, PayPerUse),
     (VERCEL_ANTHROPIC_FAST_PROVIDER_ID, C::ApiKey, PayPerUse),
     (AMAZON_BEDROCK_PROVIDER_ID, C::Aws, PayPerUse),
-    (AMAZON_BEDROCK_PROVIDER_ID, C::ApiKey, PayPerUse),
     (AMAZON_BEDROCK_PROVIDER_ID, C::ProviderLogin, PayPerUse),
     (OLLAMA_OSS_PROVIDER_ID, C::None, Local),
     (LMSTUDIO_OSS_PROVIDER_ID, C::None, Local),
 ];
 
 /// Known routes that are not a built-in provider's default, for any provider
-/// pointed at them with an API key.
-const ROUTES: &[(&str, BillingBasis)] = &[
-    ("https://api.openai.com/v1", PayPerUse),
-    ("https://api.z.ai/api/coding/paas/v4", Subscription),
-    ("https://open.bigmodel.cn/api/coding/paas/v4", Subscription),
-    ("https://open.bigmodel.cn/api/paas/v4", PayPerUse),
-    ("https://api.moonshot.ai/v1", PayPerUse),
+/// pointed at them with the given credential.
+const ROUTES: &[(&str, BillingCredential, BillingBasis)] = &[
+    ("https://api.openai.com/v1", C::ApiKey, PayPerUse),
+    // Codex's realtime calls go to the API host with the ChatGPT sign-in;
+    // that usage is part of the ChatGPT plan (developers.openai.com/codex/pricing).
+    ("https://api.openai.com/v1", C::ChatgptLogin, Subscription),
+    (
+        "https://api.z.ai/api/coding/paas/v4",
+        C::ApiKey,
+        Subscription,
+    ),
+    (
+        "https://open.bigmodel.cn/api/coding/paas/v4",
+        C::ApiKey,
+        Subscription,
+    ),
+    ("https://open.bigmodel.cn/api/paas/v4", C::ApiKey, PayPerUse),
+    ("https://api.moonshot.ai/v1", C::ApiKey, PayPerUse),
 ];
+
+/// Credentials that only one built-in provider can send, whatever endpoint it
+/// resolves to: AWS signing and a command login on Bedrock, whose route is
+/// regional and resolved at runtime.
+fn provider_held(provider_id: &str, credential: BillingCredential) -> bool {
+    provider_id == AMAZON_BEDROCK_PROVIDER_ID && matches!(credential, C::Aws | C::ProviderLogin)
+}
+
+/// Whether `endpoint` is on this machine. Local work is declared only there:
+/// a local provider pointed at another host may be a paid service.
+fn on_this_machine(endpoint: &str) -> bool {
+    let rest = endpoint
+        .split_once("://")
+        .map_or(endpoint, |(_, rest)| rest);
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let host = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, host)| host);
+    let host = if host.starts_with('[') {
+        host.split_once(']')
+            .map_or(host, |(host, _)| host)
+            .trim_start_matches('[')
+    } else {
+        host.split(':').next().unwrap_or_default()
+    };
+    matches!(host, "localhost" | "127.0.0.1" | "::1")
+}
 
 /// The built-in table's basis for `provider_id` with `credential`.
 pub fn built_in_basis(provider_id: &str, credential: BillingCredential) -> Option<BillingBasis> {
@@ -169,8 +206,9 @@ pub fn built_in_basis(provider_id: &str, credential: BillingCredential) -> Optio
 /// a test keeps the table free of that.
 pub fn route_basis(endpoint: &str, credential: BillingCredential) -> Option<BillingBasis> {
     let endpoint = endpoint.trim_end_matches('/');
-    if credential == C::ApiKey
-        && let Some((_, basis)) = ROUTES.iter().find(|(route, _)| *route == endpoint)
+    if let Some((_, _, basis)) = ROUTES
+        .iter()
+        .find(|(route, accepted, _)| *route == endpoint && *accepted == credential)
     {
         return Some(*basis);
     }
@@ -186,9 +224,9 @@ pub fn route_basis(endpoint: &str, credential: BillingCredential) -> Option<Bill
 /// API key or with no credential. A provider-held login (Claude Plan) or AWS
 /// signing is declared only for the provider that holds it.
 fn default_routes() -> &'static [(String, BillingCredential, BillingBasis)] {
-    static ROUTES: std::sync::OnceLock<Vec<(String, BillingCredential, BillingBasis)>> =
+    static DEFAULTS: std::sync::OnceLock<Vec<(String, BillingCredential, BillingBasis)>> =
         std::sync::OnceLock::new();
-    ROUTES.get_or_init(|| {
+    DEFAULTS.get_or_init(|| {
         crate::built_in_model_providers(/*openai_base_url*/ None)
             .into_iter()
             .filter_map(|(id, provider)| {
@@ -220,10 +258,11 @@ pub fn declared_billing(
     if let Some(basis) = provider.billing {
         return BillingDeclaration::UserConfig(basis);
     }
-    at_built_in_route
+    (at_built_in_route || provider_held(provider_id, credential))
         .then(|| built_in_basis(provider_id, credential))
         .flatten()
         .or_else(|| route_basis(endpoint, credential))
+        .filter(|basis| *basis != Local || on_this_machine(endpoint))
         .map_or(BillingDeclaration::NotDeclared, BillingDeclaration::BuiltIn)
 }
 

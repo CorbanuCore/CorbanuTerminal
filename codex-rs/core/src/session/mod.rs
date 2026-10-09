@@ -1909,6 +1909,21 @@ impl Session {
         state.session_configuration.provider.clone()
     }
 
+    /// The session's configured definition of provider `id`, user overrides
+    /// such as `billing` included.
+    pub(crate) async fn configured_model_provider(
+        &self,
+        id: &str,
+    ) -> Option<codex_model_provider_info::ModelProviderInfo> {
+        let state = self.state.lock().await;
+        state
+            .session_configuration
+            .original_config_do_not_use
+            .model_providers
+            .get(id)
+            .cloned()
+    }
+
     /// The accounting mode and provider identity in force right now.
     ///
     /// Read live rather than snapshotted: a session's provider can change, and

@@ -19,8 +19,11 @@ on:
       - "codex-rs/core/src/security/**"
       - "codex-rs/core/src/exec.rs"
       - "codex-rs/core/src/tools/sandboxing.rs"
+      - "codex-rs/core/src/tools/sandboxing_windows_tests.rs"
+      - "codex-rs/core/src/tools/sandboxing_tests.rs"
       - "codex-rs/core/src/sandboxing/**"
       - "codex-rs/sandboxing/src/windows.rs"
+      - "codex-rs/sandboxing/src/lib.rs"
       - ".github/scripts/run-at-medium-integrity.ps1"
   push:
     branches: [main]
@@ -36,8 +39,11 @@ on:
       - "codex-rs/core/src/security/**"
       - "codex-rs/core/src/exec.rs"
       - "codex-rs/core/src/tools/sandboxing.rs"
+      - "codex-rs/core/src/tools/sandboxing_windows_tests.rs"
+      - "codex-rs/core/src/tools/sandboxing_tests.rs"
       - "codex-rs/core/src/sandboxing/**"
       - "codex-rs/sandboxing/src/windows.rs"
+      - "codex-rs/sandboxing/src/lib.rs"
       - ".github/scripts/run-at-medium-integrity.ps1"
 
 permissions:
@@ -90,7 +96,7 @@ jobs:
           bin_dir="${CARGO_TARGET_DIR}/debug"
           export CARGO_BIN_EXE_codex_windows_sandbox_setup="$(cygpath -w "${bin_dir}/codex-windows-sandbox-setup.exe")"
           export CARGO_BIN_EXE_codex_command_runner="$(cygpath -w "${bin_dir}/codex-command-runner.exe")"
-          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-core --lib -- pf_27_s06 pf_27_s07 --nocapture --test-threads=1
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-core --lib -- pf_27_s06 pf_27_s07 sec_win_300 --nocapture --test-threads=1
       # The runners are elevated, which hid #294/#295. This reruns those probes
       # with the token of an administrator's normal session (medium integrity).
       # Not covered here: a separate non-administrator account, and the
@@ -149,6 +155,10 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "#320 regressions failed in a normal session" }
             $core = Get-TestExe @('-p', 'codex-core', '--lib')
             Assert-Tests $core 'pf_27_s06_d2' 2
+            # #300: the unelevated sandbox, which a normal session uses by default.
+            Assert-Tests $core 'sec_win_300' 2
+            & $medium -Program $core -Arguments @('sec_win_300', '--nocapture', '--test-threads=1')
+            if ($LASTEXITCODE -ne 0) { throw "#300 regressions failed in a normal session" }
             # Each elevated setup resets the sandbox passwords, so record the
             # setup the normal-session run reuses right before it.
             New-Item -ItemType Directory -Force $env:CODEX_PF27S06_SETUP_SEED | Out-Null

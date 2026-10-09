@@ -470,6 +470,56 @@ async fn accounting_records_a_request_another_client_already_sent() -> anyhow::R
         vec![("claude-plan".to_string(), "PlanEquivalent".to_string())]
     );
 
+    // The user's `billing` for that provider applies to bridge reports too.
+    let overridden = {
+        let mut config = crate::session::tests::build_test_config(home.path()).await;
+        config.accounting = owner.accounting_binding().await.0;
+        config.features.enable(Feature::Sqlite)?;
+        if let Some(provider) = config
+            .model_providers
+            .get_mut(codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID)
+        {
+            provider.billing = Some(codex_model_provider_info::BillingBasis::Local);
+        }
+        let (mut session, _context) =
+            crate::session::tests::make_session_and_context_for_config(config).await;
+        session.services.state_db = Some(db.clone());
+        Arc::new(session)
+    };
+    db.upsert_thread(
+        &ThreadMetadataBuilder::new(
+            overridden.thread_id,
+            home.path().join("pane-override.jsonl"),
+            chrono::Utc::now(),
+            codex_protocol::protocol::SessionSource::Cli,
+        )
+        .build("openai"),
+    )
+    .await?;
+    assert!(
+        ExtensionAccounting::new(Arc::downgrade(&overridden))
+            .record_sent_request(SentModelRequest {
+                provider_id: codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID.into(),
+                endpoint: codex_model_provider_info::ANTHROPIC_BASE_URL.into(),
+                path: "messages".into(),
+                wire_api: codex_model_provider_info::WireApi::Anthropic,
+                model: codex_model_provider_info::CLAUDE_PLAN_MODEL.into(),
+                label: "pane".into(),
+                usage: Some(serde_json::json!({"input_tokens": 1, "output_tokens": 1})),
+            })
+            .await
+    );
+    let overridden_basis: Vec<(String, String)> = sqlx::query_as(
+        "SELECT json_extract(payload, '$.basis'), json_extract(payload, '$.basis_source')
+            FROM draft_accounting_price_snapshots WHERE json_extract(payload, '$.basis') = 'Local'",
+    )
+    .fetch_all(&pool)
+    .await?;
+    assert_eq!(
+        overridden_basis,
+        vec![("Local".to_string(), "UserConfig".to_string())]
+    );
+
     // A usage report the ledger rejects is not reported as recorded.
     let writer = db
         .sqlite()
@@ -491,7 +541,7 @@ async fn accounting_records_a_request_another_client_already_sent() -> anyhow::R
         sqlx::query_scalar("SELECT count(*) FROM draft_accounting_observations")
             .fetch_one(&pool)
             .await?;
-    assert_eq!(observations, 2);
+    assert_eq!(observations, 3);
 
     // A session that is not collecting records nothing, and says so rather
     // than failing the caller.
@@ -513,6 +563,6 @@ async fn accounting_records_a_request_another_client_already_sent() -> anyhow::R
         .fetch_one(&pool)
         .await?;
     // The rejected report's attempt was admitted before its usage failed.
-    assert_eq!(attempts_after, 3);
+    assert_eq!(attempts_after, 4);
     Ok(())
 }

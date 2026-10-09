@@ -498,3 +498,91 @@ fn pf_27_s06_env_for_requires_the_elevated_windows_sandbox() {
         Err(refused) => panic!("elevated launch refused: {refused}"),
     }
 }
+
+/// #300: the unelevated Windows sandbox cannot block reads, so the tool path
+/// (`env_for`) refuses a profile with deny-read entries, as
+/// `process_exec_tool_call` does. The same profile without the deny entry,
+/// and the elevated backend, are unaffected.
+#[test]
+fn sec_win_300_unelevated_tool_path_refuses_deny_read_profiles() {
+    use codex_protocol::config_types::WindowsSandboxLevel;
+    use codex_protocol::models::PermissionProfile;
+    use codex_protocol::permissions::NetworkSandboxPolicy;
+
+    let workspace_dir = tempfile::tempdir().expect("workspace");
+    let cwd = AbsolutePathBuf::from_absolute_path(
+        dunce::canonicalize(workspace_dir.path()).expect("canonical workspace"),
+    )
+    .expect("absolute cwd");
+    let secret = cwd.join("secret.env");
+    std::fs::write(&secret, "sec-win-300").expect("secret file");
+    let cwd_uri = PathUri::from_abs_path(&cwd);
+    let base = PermissionProfile::workspace_write()
+        .materialize_project_roots_with_workspace_roots(std::slice::from_ref(&cwd));
+    let (mut file_system, _) = base.to_runtime_permissions();
+    file_system.entries.push(FileSystemSandboxEntry {
+        path: FileSystemPath::Path {
+            path: secret.clone(),
+        },
+        access: FileSystemAccessMode::Deny,
+        missing_path_behavior: None,
+    });
+    let denying =
+        PermissionProfile::from_runtime_permissions(&file_system, NetworkSandboxPolicy::Restricted);
+    let manager = SandboxManager::new();
+    let launch = |permissions: &PermissionProfile, level: WindowsSandboxLevel| {
+        SandboxAttempt {
+            sandbox: SandboxType::WindowsRestrictedToken,
+            sandbox_requested: true,
+            permissions,
+            exec_server_permissions: permissions,
+            enforce_managed_network: false,
+            manager: &manager,
+            sandbox_cwd: &cwd_uri,
+            workspace_roots: std::slice::from_ref(&cwd_uri),
+            codex_linux_sandbox_exe: None,
+            use_legacy_landlock: false,
+            windows_sandbox_level: level,
+            windows_sandbox_private_desktop: false,
+            network_denial_cancellation_token: None,
+            network_proxy: None,
+        }
+        .env_for_with_contract(
+            /*contract*/ None,
+            SandboxCommand {
+                program: "cmd.exe".into(),
+                args: vec!["/D".to_string(), "/C".to_string(), "echo ok".to_string()],
+                cwd: cwd_uri.clone(),
+                env: HashMap::new(),
+                managed_network: None,
+                additional_permissions: None,
+            },
+            crate::sandboxing::ExecOptions {
+                expiration: crate::exec::ExecExpiration::DefaultTimeout,
+                capture_policy: crate::exec::ExecCapturePolicy::ShellTool,
+            },
+            /*network*/ None,
+            /*environment_id*/ None,
+        )
+    };
+
+    let refused = launch(&denying, WindowsSandboxLevel::RestrictedToken)
+        .expect_err("the unelevated tool path must refuse a deny-read profile");
+    assert_eq!(
+        refused.to_string(),
+        format!(
+            "unsupported operation: {}",
+            codex_sandboxing::UNELEVATED_DENY_READ_REFUSAL
+        )
+    );
+    launch(&base, WindowsSandboxLevel::RestrictedToken)
+        .expect("a profile without deny-read entries still runs unelevated");
+    let elevated = launch(&denying, WindowsSandboxLevel::Elevated)
+        .expect("the elevated backend enforces deny-read entries");
+    assert!(
+        elevated
+            .windows_sandbox_filesystem_overrides
+            .is_some_and(|overrides| overrides.additional_deny_read_paths.contains(&secret)),
+        "the elevated launch carries the deny entry"
+    );
+}
