@@ -254,11 +254,14 @@ mod windows_env {
         if needles.is_empty() {
             return;
         }
+        // Allocated before any heap is locked: nothing is allocated (and no
+        // heap changes shape) during a walk.
         // SAFETY: a size query, then a fill of at most `heaps.len()` handles.
         let mut heaps = vec![0; unsafe { GetProcessHeaps(0, std::ptr::null_mut()) } as usize + 8];
         let count = unsafe { GetProcessHeaps(heaps.len() as u32, heaps.as_mut_ptr()) } as usize;
         heaps.truncate(count.min(heaps.len()));
         let skip = PROCESS_HEAP_ENTRY_BUSY | PROCESS_HEAP_REGION | PROCESS_HEAP_UNCOMMITTED_RANGE;
+        let mut committed = CommittedPages::default();
         for heap in heaps {
             // SAFETY: a heap of this process; unlocked below.
             if unsafe { HeapLock(heap) } == 0 {
@@ -272,16 +275,79 @@ mod windows_env {
                 if u32::from(entry.wFlags) & skip != 0 || entry.lpData.is_null() {
                     continue;
                 }
-                // SAFETY: a free block's committed data, `cbData` bytes long.
-                let data = unsafe {
-                    std::slice::from_raw_parts_mut(entry.lpData.cast::<u8>(), entry.cbData as usize)
-                };
-                for needle in &needles {
-                    wipe(data, needle);
-                }
+                // Large free blocks may be partly decommitted: only the
+                // committed, writable pages are read.
+                let start = entry.lpData as usize;
+                let end = start.saturating_add(entry.cbData as usize);
+                // Nothing is allocated during the walk.
+                committed.for_each_writable(start, end, |from, to| {
+                    // SAFETY: committed, writable bytes of a free block.
+                    let data =
+                        unsafe { std::slice::from_raw_parts_mut(from as *mut u8, to - from) };
+                    for needle in &needles {
+                        wipe(data, needle);
+                    }
+                });
             }
             // SAFETY: locked above.
             unsafe { HeapUnlock(heap) };
+        }
+    }
+
+    /// The last region `VirtualQuery` reported, so blocks in one region
+    /// cost one query.
+    #[derive(Default)]
+    struct CommittedPages {
+        start: usize,
+        end: usize,
+        writable: bool,
+    }
+
+    impl CommittedPages {
+        /// Calls `visit` with each part of `[start, end)` that is committed
+        /// and writable.
+        fn for_each_writable(
+            &mut self,
+            mut start: usize,
+            end: usize,
+            mut visit: impl FnMut(usize, usize),
+        ) {
+            use windows_sys::Win32::System::Memory::MEM_COMMIT;
+            use windows_sys::Win32::System::Memory::MEMORY_BASIC_INFORMATION;
+            use windows_sys::Win32::System::Memory::PAGE_EXECUTE_READWRITE;
+            use windows_sys::Win32::System::Memory::PAGE_GUARD;
+            use windows_sys::Win32::System::Memory::PAGE_READWRITE;
+            use windows_sys::Win32::System::Memory::VirtualQuery;
+            while start < end {
+                if !(self.start..self.end).contains(&start) {
+                    // SAFETY: zeroed POD out-structure.
+                    let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
+                    // SAFETY: queries this process's address space.
+                    let written = unsafe {
+                        VirtualQuery(
+                            start as *const std::ffi::c_void,
+                            &mut info,
+                            std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
+                        )
+                    };
+                    let region_end = (info.BaseAddress as usize).saturating_add(info.RegionSize);
+                    if written == 0 || region_end <= start {
+                        break;
+                    }
+                    *self = Self {
+                        start: info.BaseAddress as usize,
+                        end: region_end,
+                        writable: info.State == MEM_COMMIT
+                            && info.Protect & (PAGE_READWRITE | PAGE_EXECUTE_READWRITE) != 0
+                            && info.Protect & PAGE_GUARD == 0,
+                    };
+                }
+                let to = end.min(self.end);
+                if self.writable {
+                    visit(start, to);
+                }
+                start = to;
+            }
         }
     }
 
