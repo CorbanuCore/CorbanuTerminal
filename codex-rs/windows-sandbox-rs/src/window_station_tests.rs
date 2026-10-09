@@ -59,6 +59,8 @@ use windows_sys::Win32::System::Threading::WaitForSingleObject;
 
 const ROLE_ENV: &str = "CODEX_SEC_WIN_341_ROLE";
 const ON_FRESH_STATION: &str = "sec-win-341: on a fresh window station";
+const NO_FRESH_STATION: &str =
+    "sec-win-341: a normal session cannot create a window station here; skipped";
 const STATUS_DLL_INIT_FAILED: u32 = 0xC000_0142;
 const READ_CONTROL_AND_WRITE_DAC: u32 = 0x0002_0000 | 0x0004_0000;
 /// The specific rights an SSH session's user has, and `READ_CONTROL`; no
@@ -68,10 +70,14 @@ const LIMITED_DESKTOP_ACCESS: u32 = super::DESKTOP_ACCESS;
 
 /// In the parent: reruns `test` alone in a child that has moved to a fresh
 /// window station, and checks it passed there. In that child: returns true,
-/// and the test body runs.
+/// and the test body runs. A normal (medium-integrity) session in session 0,
+/// as over SSH, may not create window stations: then the test is skipped.
 fn on_fresh_window_station(test: &str) -> bool {
     if std::env::var_os(ROLE_ENV).is_some() {
-        enter_fresh_window_station();
+        if !enter_fresh_window_station() {
+            eprintln!("{NO_FRESH_STATION}");
+            return false;
+        }
         eprintln!("{ON_FRESH_STATION}");
         return true;
     }
@@ -84,14 +90,18 @@ fn on_fresh_window_station(test: &str) -> bool {
     eprint!("{stderr}{}", String::from_utf8_lossy(&output.stdout));
     assert!(output.status.success(), "{}", output.status);
     // A rename would make the rerun match nothing and pass.
-    assert!(stderr.contains(ON_FRESH_STATION), "the rerun did not run");
+    assert!(
+        stderr.contains(ON_FRESH_STATION) || stderr.contains(NO_FRESH_STATION),
+        "the rerun did not run"
+    );
     false
 }
 
 /// Moves this process, and this thread, to a new window station with a
 /// `Default` desktop whose DACLs are those of a Windows OpenSSH session's
 /// (Windows 11 26200): this user, and Administrators for a few rights.
-fn enter_fresh_window_station() {
+/// Returns false when this session may not create one and is not elevated.
+fn enter_fresh_window_station() -> bool {
     let user = resolve_sid(&std::env::var("USERNAME").expect("USERNAME")).expect("user SID");
     let user = string_from_sid_bytes(&user).expect("user SID string");
     let station_sddl = format!(
@@ -112,7 +122,15 @@ fn enter_fresh_window_station() {
             &station_attributes.attributes,
         )
     };
-    assert_ne!(handle, 0, "{}", std::io::Error::last_os_error());
+    if handle == 0 {
+        let err = std::io::Error::last_os_error();
+        let elevated = crate::setup::is_elevated().expect("elevation");
+        assert!(
+            err.kind() == std::io::ErrorKind::PermissionDenied && !elevated,
+            "create a window station: {err}"
+        );
+        return false;
+    }
     // Like an SSH session's processes, this one holds its window station and
     // desktop without `WRITE_DAC`.
     // SAFETY: opens the window station created above; kept until exit.
@@ -146,6 +164,7 @@ fn enter_fresh_window_station() {
         "{}",
         std::io::Error::last_os_error()
     );
+    true
 }
 
 struct SecurityAttributes {
