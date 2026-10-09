@@ -10,5 +10,6 @@ with their dependencies, lanes and worktrees.
 - PF-27-S06 and PF-27-S07: completed 2026-10-08, accepted by Travis with known limits, and archived
   ([S06](../../archive/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md),
   [S07](../../archive/p1-security-hardening/pf-27-s07-windows-hardening-follow-ups.md)).
-- [PF-27-S08](pf-27-s08-windows-broker-restricted-token.md) (`in_progress`, broker lane) then S09 (draft).
+- [PF-27-S08](pf-27-s08-windows-broker-restricted-token.md) (`ready` for Travis's acceptance; key path (c) decided
+  2026-10-09), then S09 (draft).
 - Everything else: `draft` until allocated.
