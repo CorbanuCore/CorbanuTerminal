@@ -36,7 +36,11 @@
 - **Older forms are read as written.** Both stored forms of snapshots and estimates are accepted: today's, and the
   pre-09-21 form, only for records whose omitted fields hold their defaults.
 - **Upgrade only when needed.** A new ledger starts in format 1 and is upgraded in the same transaction that first
-  writes a record format 1 cannot express. An older developer build sharing the state DB keeps working until then.
+  writes a record format 1 cannot express (admission, observation or late import). An older developer build sharing
+  the state DB keeps working until then. After it, that older build has no format gate: it fails to open the ledger
+  and, since #299, sends its requests unrecorded with a gap warning on every turn. Release builds contain no
+  accounting and are unaffected. A developer ledger opened by the first, eager-upgrade commit of this slice
+  (`03bf8e6705`, never merged) is already format 2.
 - **Newer format refused by name.** A ledger with a migration this build doesn't know is refused with
   `NewerLedgerFormat` for reads and writes and left untouched. Core turns collection off on it with one warning
   (slice 3).

@@ -3165,3 +3165,16 @@ async fn expiry_interrupted_mid_sweep_resumes_to_the_full_sweeps_result() -> any
     runtime.close().await;
     Ok(())
 }
+
+/// The unapplied-migration check reads object names from `CREATE` statements;
+/// a migration whose statements it cannot see would make that check vacuous.
+#[test]
+fn every_accounting_migration_creates_named_objects() {
+    for migration in crate::migrations::accounting_migrator().iter() {
+        assert!(
+            !super::created_objects(migration.sql.as_str()).is_empty(),
+            "migration {} names no objects",
+            migration.version
+        );
+    }
+}

@@ -139,12 +139,15 @@ impl<'a> QuoteBeforeBasis<'a> {
     }
 }
 
-/// The ledger format a snapshot needs: 2 for a basis or source format 1
-/// cannot express, otherwise 1.
-pub(super) fn snapshot_format(snapshot: &Snapshot) -> i64 {
-    let format_two = matches!(snapshot.basis, Basis::Local | Basis::Undeclared)
-        || snapshot.basis_source != BasisSource::BuiltIn;
-    if format_two { 2 } else { 1 }
+impl Snapshot {
+    /// The ledger format this record needs: 2 for a basis or source format 1
+    /// cannot express, otherwise 1. Every path that stores a snapshot upgrades
+    /// the ledger to this first (`require_format_on_connection`).
+    pub(crate) fn ledger_format(&self) -> i64 {
+        let format_two = matches!(self.basis, Basis::Local | Basis::Undeclared)
+            || self.basis_source != BasisSource::BuiltIn;
+        if format_two { 2 } else { 1 }
+    }
 }
 
 /// Whether `payload` is `snapshot` in one of its valid stored forms.

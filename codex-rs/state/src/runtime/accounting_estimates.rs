@@ -544,7 +544,7 @@ impl Journal<'_> {
         if let Some(snapshot) = &quote.snapshot {
             // A record a format-1 ledger cannot express upgrades the ledger in
             // the same transaction that writes it.
-            let format = super::format::snapshot_format(snapshot);
+            let format = snapshot.ledger_format();
             if format > 1 {
                 crate::runtime::accounting::store::require_format_on_connection(conn, format)
                     .await?;

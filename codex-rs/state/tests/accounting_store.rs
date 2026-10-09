@@ -1651,6 +1651,7 @@ async fn ledger_written_before_plan_basis_validates_and_reads() -> anyhow::Resul
             read_at,
         )
         .await?;
+    assert_eq!(formats(runtime.clone()).await?, vec![1]);
     // A record format 1 cannot express upgrades the ledger as it is written.
     let mut local = attempt(10, read_at)?;
     local.thread_id = owner;

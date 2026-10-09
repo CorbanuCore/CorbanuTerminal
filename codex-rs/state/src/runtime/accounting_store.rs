@@ -1030,6 +1030,10 @@ pub(crate) async fn require_format_on_connection(
     conn: &mut SqliteConnection,
     format: i64,
 ) -> anyhow::Result<()> {
+    // Callers write inside a transaction that already validated the ledger.
+    if applied_format(conn).await? >= format {
+        return Ok(());
+    }
     validate_on_connection(conn).await?;
     if applied_format(conn).await? < format {
         crate::migrations::accounting_migrator()
@@ -1130,7 +1134,9 @@ pub(super) async fn validate_on_connection(conn: &mut SqliteConnection) -> anyho
     Ok(())
 }
 
-/// The names of the objects a migration's `CREATE` statements make.
+/// The names of the objects a migration's `CREATE` statements make. Every
+/// accounting migration starts with its `CREATE` statements (a test checks
+/// each yields at least one), so a leading comment cannot hide an object.
 fn created_objects(sql: &str) -> Vec<&str> {
     sql.split(';')
         .map(str::trim)
