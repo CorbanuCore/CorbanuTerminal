@@ -346,10 +346,7 @@ fn pf_27_s07_protected_spawn_is_unopenable_while_suspended() {
 #[test]
 fn pf_27_s08_broker_token_cannot_open_the_users_processes() {
     use crate::windows_protected_spawn::Confinement;
-    const STILL_GRANTED: &[&str] = &[
-        "x_query_limited_information",
-        "x_terminate",
-    ];
+    const STILL_GRANTED: &[&str] = &["x_query_limited_information", "x_terminate"];
     let target = Target::spawn(/*harden*/ false);
     let control = probe_started_protected(&target, Confinement::SameToken);
     assert_eq!(control["vm_read"], "granted", "{control:?}");
