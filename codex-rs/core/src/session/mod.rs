@@ -1924,6 +1924,64 @@ impl Session {
             .cloned()
     }
 
+    /// Where this session's paid requests are recorded (PF-60-S05): its own
+    /// thread when it is persisted; for a guardian reviewer - the reusable
+    /// trunk and its ephemeral forks alike - the conversation it reviews for,
+    /// in that conversation's ledger. `Err` says why there is none: a session
+    /// that is not collected by design, or a ledger that could not be reached.
+    pub(crate) async fn accounting_owner(
+        &self,
+    ) -> Result<crate::accounting::AccountingOwner, crate::accounting::Uncollected> {
+        use crate::accounting::Uncollected;
+        let guardian_parent = {
+            let state = self.state.lock().await;
+            let configuration = &state.session_configuration;
+            match &configuration.session_source {
+                SessionSource::SubAgent(codex_protocol::protocol::SubAgentSource::Other(name))
+                    if name == crate::guardian::GUARDIAN_REVIEWER_NAME =>
+                {
+                    Some(configuration.parent_thread_id)
+                }
+                _ => None,
+            }
+        };
+        let Some(parent) = guardian_parent else {
+            if self.live_thread().is_none() {
+                return Err(Uncollected::Excluded("ephemeral_session"));
+            }
+            let db = self
+                .state_db()
+                .ok_or(Uncollected::Failed("no state database"))?;
+            return Ok(crate::accounting::AccountingOwner {
+                thread: self.thread_id,
+                db,
+            });
+        };
+        let parent = parent.ok_or(Uncollected::Excluded("guardian_without_parent"))?;
+        // An ephemeral fork has no database of its own; it shares the
+        // parent's thread store, and so the parent's ledger.
+        let db = match self.state_db() {
+            Some(db) => Some(db),
+            None => match self
+                .services
+                .thread_store
+                .as_any()
+                .downcast_ref::<codex_thread_store::LocalThreadStore>()
+            {
+                Some(store) => store.state_db().await,
+                None => None,
+            },
+        }
+        .ok_or(Uncollected::Failed("no state database"))?;
+        // A reviewer of a conversation that is itself not persisted (exec
+        // --ephemeral, a side conversation) has no thread to record under.
+        match db.get_thread(parent).await {
+            Ok(Some(_)) => Ok(crate::accounting::AccountingOwner { thread: parent, db }),
+            Ok(None) => Err(Uncollected::Excluded("parent_not_persisted")),
+            Err(_) => Err(Uncollected::Failed("parent thread unreadable")),
+        }
+    }
+
     /// The accounting mode and provider identity in force right now.
     ///
     /// Read live rather than snapshotted: a session's provider can change, and

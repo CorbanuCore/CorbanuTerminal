@@ -107,11 +107,18 @@ impl ExtensionAccounting {
         if !crate::accounting::collects(&mode, &provider_id, provider, provider.wire_api) {
             return None;
         }
+        // Recorded where the session's turns are: its own thread, or for a
+        // guardian reviewer the conversation it reviews for, as a review.
+        let recorded = crate::accounting::collecting_owner(&owner).await.ok()?;
+        let label = if recorded.thread == owner.thread_id {
+            label.to_string()
+        } else {
+            format!("review:{label}")
+        };
         owner.try_ensure_rollout_materialized().await.ok()?;
-        let runtime = owner.state_db()?;
         let sampling = Sampling::start_at_path(
-            runtime,
-            owner.thread_id,
+            recorded.db,
+            recorded.thread,
             format!("{label}:{}", Uuid::new_v4()),
             &mode,
             path,
@@ -208,16 +215,21 @@ impl ExtensionAccounting {
             pricing,
             basis_source,
         };
+        let Ok(recorded) = crate::accounting::collecting_owner(&owner).await else {
+            return false;
+        };
         if owner.try_ensure_rollout_materialized().await.is_err() {
             return false;
         }
-        let Some(runtime) = owner.state_db() else {
-            return false;
+        let label = if recorded.thread == owner.thread_id {
+            request.label.clone()
+        } else {
+            format!("review:{}", request.label)
         };
         let Ok(sampling) = Sampling::start_at_path(
-            runtime,
-            owner.thread_id,
-            format!("{}:{}", request.label, Uuid::new_v4()),
+            recorded.db,
+            recorded.thread,
+            format!("{label}:{}", Uuid::new_v4()),
             &mode,
             &request.path,
         )

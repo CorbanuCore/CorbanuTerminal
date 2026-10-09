@@ -84,6 +84,8 @@ pub(crate) struct SessionServices {
     pub(crate) managed_network_requirements_configured: bool,
     pub(crate) network_approval: Arc<NetworkApprovalService>,
     pub(crate) state_db: Option<StateDbHandle>,
+    /// Ledger notices already given in this session (PF-60-S05).
+    pub(crate) accounting_notices: crate::accounting::SessionNotices,
     pub(crate) live_thread: Option<LiveThread>,
     pub(crate) thread_store: Arc<dyn ThreadStore>,
     pub(crate) attestation_provider: Option<Arc<dyn AttestationProvider>>,
