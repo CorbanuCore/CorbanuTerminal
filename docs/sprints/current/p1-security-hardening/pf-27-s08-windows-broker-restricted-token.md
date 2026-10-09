@@ -46,21 +46,14 @@ can still write the user's files, open the user's other processes, and ask anoth
   `broker_containment.rs` (containment report `token+dacl+job`).
 - `network-proxy/src/credential_broker/isolated/pipe.rs` and `server.rs`: pipe DACLs must admit the broker's token
   (AppContainer or restricting SID) and still only Core.
-- Stored keys: `arg0` stored-key reader, `secrets`/`keyring-store` on Windows (the vault key is in Credential
-  Manager, which an AppContainer or restricted token cannot read).
-- Reuse: `windows-sandbox-rs/src/token.rs` (restricted tokens, capability SIDs).
+- Stored keys: `arg0` stored-key reader, `secrets`/`keyring-store` on Windows (vault key in Credential Manager).
 
 ## Preconditions
 
-- [ ] PF-27-S07 merged.
-- [ ] **Needs a real Windows machine** for the Credential Manager path and for the tmux run and videos (the
-  `windows-2022` runner has no interactive logon, so its Credential Manager behaviour is not representative).
-  Token, pipe, file and process probes run on the runner.
-- [ ] Product decision: how the vault key reaches a broker that cannot read Credential Manager. Options:
-  (a) a one-shot helper under the user's token reads it and writes it into the broker's control pipe, then exits
-  (recommended: Core never holds it); (b) Core reads it and sends it (Core already opens the vault for other
-  features, PF-27-S05 limits); (c) grant the broker's token Credential Manager access (not possible for an
-  AppContainer).
+- [x] PF-27-S07 merged; a real Windows machine (used 2026-10-09).
+- [ ] Product decision: how the vault key reaches the broker: (a) a one-shot user-token helper writes it into the
+  broker's control pipe; (b) Core sends it; (c) the broker reads Credential Manager itself. Measured: the broker
+  token can read it, so (c) ships unless Travis picks (a)/(b) (which need a stronger token; see the evidence).
 
 ## Acceptance criteria
 
@@ -83,23 +76,14 @@ can still write the user's files, open the user's other processes, and ask anoth
 
 ## Decisions
 
-- Token: a write-restricted, low-integrity restricted token (capability SID, logon SID, Everyone; no privileges;
-  Administrators and INTERACTIVE deny-only), not an AppContainer: it passes 2–5 as measured, and an AppContainer
-  refuses loopback upstreams, needs a registered profile and new ACL grants on the user's profile and vault.
-- Launch: the PF-27-S07 holder start, now under the broker token. A direct start (Core as parent, which would remove
-  the parent-process-spoofing signal) was measured not to work as built; see the evidence.
-- Key path (precondition): **open, for Travis.** The broker token can read Credential Manager (measured), so option
-  (c) is what ships; recommendation and alternatives in the evidence.
+- Token: write-restricted, low-integrity restricted token, not an AppContainer; launch: the PF-27-S07 holder start
+  (a direct start was measured not to work as built). Reasons, measurements and limits: the evidence README.
+- Key path: **open, for Travis.** The broker token can read Credential Manager (measured), so (c) is what ships.
 
 ## Done
 
 - [x] Planned (2026-10-08).
-- [x] 1: broker token; containment `token+dacl+job`; Core refuses a broker without `token` (PR #333).
-- [x] 2: writes outside its runtime state denied in `%TEMP%` and `LocalLow` with positive controls (limit: delete in
-  low-integrity folders).
-- [x] 3: an ordinary process of the user and its threads refuse every tested right beyond query-limited.
-- [x] 4: WMI denied, Task Scheduler refused, out-of-process COM (`MMC20.Application`) denied, with controls.
-- [x] 5 (part): broker suite over pipes, DNS and TCP under the token, elevated and normal session.
+- [x] Criteria 1–4 and 5 except the key path, with positive controls, on `windows-2022` and the real machine (PR #333).
 
 ## Remaining
 
