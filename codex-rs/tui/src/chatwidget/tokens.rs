@@ -1053,7 +1053,7 @@ fn inspection_pages_for(
         let mut text = if provider_group {
             plain_header(&quotes)
         } else {
-            billed_line(&quotes).into_iter().collect()
+            Vec::new()
         };
         text.extend(freshness.iter().cloned());
         text.extend(
@@ -1074,6 +1074,9 @@ fn inspection_pages_for(
                 }
             }
             Err(_) => text.push("Estimate unavailable — exact arithmetic overflow".into()),
+        }
+        if !provider_group {
+            text.extend(billed_line(&quotes));
         }
         // In send order, numbered as on the first screen.
         let links = quotes
@@ -1528,23 +1531,30 @@ fn billed_detail(figure: &str) -> String {
     format!("Billed cost: {figure} — as stated by the provider with each response")
 }
 
-/// The pay-per-use providers among `quotes` that stated no charge, as a
-/// clause ("Z.ai doesn't state its actual charge") and their joined names for
-/// the bill to check. `None` when there are none or one is unnamed.
-fn unstated_charge<'a>(
-    quotes: impl IntoIterator<Item = &'a ObservationQuote>,
-) -> Option<(String, String)> {
-    // In provider order, as the route lines above list them.
-    let mut ids = std::collections::BTreeSet::new();
-    for quote in quotes {
-        if quote.is_plan() || quote.usage.billed_usd.is_some() {
-            continue;
-        }
-        if quote.attempt.provider.trim().is_empty() {
-            return None;
-        }
-        ids.insert(quote.attempt.provider.as_str());
-    }
+/// Whether a provider states what it charged with each response. Only these
+/// routes record `billed_usd` (core `accounting_chat.rs`,
+/// `accounting_responses.rs` and `accounting.rs`); keep the lists in step.
+fn states_charges(provider_id: &str) -> bool {
+    matches!(
+        provider_id,
+        codex_model_provider_info::OPENROUTER_PROVIDER_ID
+            | codex_model_provider_info::VERCEL_PROVIDER_ID
+            | codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID
+            | codex_model_provider_info::PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID
+    )
+}
+
+/// Whether an attempt can appear on a provider's bill: not subscription work,
+/// and not a model run on the user's own machine.
+fn has_bill(quote: &ObservationQuote) -> bool {
+    !quote.is_plan() && quote.basis() != codex_state::accounting::Basis::Local
+}
+
+/// Display names in provider-id order, as the route lines list them.
+fn provider_names<'a>(ids: impl IntoIterator<Item = &'a str>) -> Vec<String> {
+    let mut ids: Vec<&str> = ids.into_iter().collect();
+    ids.sort_unstable();
+    ids.dedup();
     let mut names: Vec<String> = Vec::new();
     for id in ids {
         let name = provider_name(id);
@@ -1552,24 +1562,72 @@ fn unstated_charge<'a>(
             names.push(name);
         }
     }
-    match names.as_slice() {
-        [] => None,
-        [one] => Some((
-            format!("{one} doesn't state its actual charge"),
-            one.clone(),
-        )),
-        [rest @ .., last] => {
-            let joined = format!("{} and {last}", rest.join(", "));
-            Some((format!("{joined} don't state their actual charge"), joined))
-        }
+    names
+}
+
+fn joined(names: &[String]) -> String {
+    match names {
+        [] => String::new(),
+        [one] => one.clone(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
     }
 }
 
+/// Why the pay-per-use work among `quotes` has no stated charge, naming the
+/// providers ("Z.AI doesn't report its charges"), and whose bill to check
+/// ("Z.AI's bill"). A provider that reports charges but stated none here is
+/// not said never to report them. `None` when every attempt stated a charge,
+/// or one has no provider id.
+fn unstated_charge<'a>(
+    quotes: impl IntoIterator<Item = &'a ObservationQuote>,
+) -> Option<(String, String)> {
+    let mut never = Vec::new();
+    let mut silent = Vec::new();
+    for quote in quotes {
+        if !has_bill(quote) || quote.usage.billed_usd.is_some() {
+            continue;
+        }
+        let id = quote.attempt.provider.as_str();
+        if id.trim().is_empty() {
+            return None;
+        }
+        if states_charges(id) {
+            silent.push(id);
+        } else {
+            never.push(id);
+        }
+    }
+    let never = provider_names(never);
+    let silent = provider_names(silent);
+    let mut clauses = Vec::new();
+    if !never.is_empty() {
+        clauses.push(if never.len() == 1 {
+            format!("{} doesn't report its charges", never[0])
+        } else {
+            format!("{} don't report their charges", joined(&never))
+        });
+    }
+    if !silent.is_empty() {
+        clauses.push(format!(
+            "{} stated no charge for this work",
+            joined(&silent)
+        ));
+    }
+    let bill = match (never.as_slice(), silent.as_slice()) {
+        ([], []) => return None,
+        ([one], []) | ([], [one]) => format!("{one}'s bill"),
+        ([one], [other]) if one == other => format!("{one}'s bill"),
+        _ => "their bills".to_string(),
+    };
+    Some((clauses.join(" and "), bill))
+}
+
 /// A page's one billed-cost line: the provider's own charge where it stated
-/// one with its responses, else that the figure here is only an estimate and
-/// whose bill has the real amount. `None` for a page with no attempts.
+/// one with its responses, else that any cost shown is only an estimate and
+/// whose bill has the real amount. `None` for a page with nothing that can be
+/// billed: subscription work is not billed per request, and its pages say so.
 fn billed_line(quotes: &[&ObservationQuote]) -> Option<String> {
-    if quotes.is_empty() {
+    if !quotes.iter().any(|quote| has_bill(quote)) {
         return None;
     }
     if let Some(billed) = billed_figure(quotes) {
@@ -1581,14 +1639,28 @@ fn billed_line(quotes: &[&ObservationQuote]) -> Option<String> {
     {
         return Some("Billed cost: unavailable — exact arithmetic overflow".into());
     }
-    if quotes.iter().all(|quote| quote.is_plan()) {
-        return Some(format!("Billed cost: none — {}", lower_first(COVERED)));
+    // Only refused attempts from providers that report charges: nothing was
+    // charged that the provider would have stated.
+    if quotes.iter().filter(|quote| has_bill(quote)).all(|quote| {
+        states_charges(&quote.attempt.provider)
+            && quote.usage == codex_state::accounting::Usage::default()
+    }) {
+        let names = provider_names(
+            quotes
+                .iter()
+                .filter(|quote| has_bill(quote))
+                .map(|quote| quote.attempt.provider.as_str()),
+        );
+        return Some(format!(
+            "Billed cost: none stated — {} reported no usage here; a refused request is normally not charged.",
+            joined(&names)
+        ));
     }
     Some(match unstated_charge(quotes.iter().copied()) {
-        Some((clause, names)) => format!(
-            "Billed cost: not reported — {clause}, so this is an estimate; check the bill from {names}."
-        ),
-        None => "Billed cost: not reported — the provider doesn't state its actual charge, so this is an estimate; check your provider's bill.".into(),
+        Some((clause, bill)) => {
+            format!("Billed cost: {clause}, so any cost here is an estimate — check {bill}.")
+        }
+        None => "Billed cost: not reported, so any cost here is an estimate — check your provider's bill.".into(),
     })
 }
 
@@ -1790,8 +1862,8 @@ fn plain_overview<'a>(
             // This page's one statement that the figures are estimates: it
             // names whose bill has the real amount where it can.
             match unstated_charge(all.iter().chain(&outside_per_use).copied()) {
-                Some((clause, names)) => format!(
-                    "Costs are estimates from published prices; {clause}, so check the bill from {names}."
+                Some((clause, bill)) => format!(
+                    "Costs are estimates from published prices; {clause} — check {bill}."
                 ),
                 None => "Costs are estimates from published prices; your provider's bill is the final amount.".to_string(),
             }

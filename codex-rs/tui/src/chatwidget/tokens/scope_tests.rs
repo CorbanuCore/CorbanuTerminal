@@ -232,7 +232,7 @@ const OTHERS_BLOCK: [&str; 5] = [
 
 /// The overview's one line on billing for a day of the two other
 /// conversations' requests: neither provider states its charge.
-const NOT_STATED: &str = "Costs are estimates from published prices; local-mock and OpenAI don't state their actual charge, so check the bill from local-mock and OpenAI.";
+const NOT_STATED: &str = "Costs are estimates from published prices; local-mock and OpenAI don't report their charges — check their bills.";
 
 // Point 1: an empty conversation on a day other conversations spent on says
 // what it covers, what it leaves out and what that cost, never a bare zero.

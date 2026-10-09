@@ -125,11 +125,13 @@ impl<'a> SlashInput<'a> {
 
     /// The argument hint to show after `/name ` while no argument is typed yet.
     pub(super) fn argument_hint(&self, text: &str) -> Option<&'static str> {
-        if !self.enabled || self.is_bash_mode || text.contains('\n') {
+        // One line of plain spaces, so the typed width is the drawn width.
+        if !self.enabled || self.is_bash_mode || text.contains(['\n', '\t']) {
             return None;
         }
-        let (name, rest, rest_offset) = parse_slash_name(text)?;
-        if !rest.is_empty() || rest_offset == name.len() + 1 || name.contains('/') {
+        let (name, rest, _rest_offset) = parse_slash_name(text)?;
+        let typed_space = text.len() > name.len() + 1;
+        if !rest.is_empty() || !typed_space || name.contains('/') {
             return None;
         }
         match self.command(name)? {

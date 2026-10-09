@@ -1626,7 +1626,7 @@ async fn accounting_inspect_maintenance_with_current_contributions_renders_raw_t
     • synthetic · synthetic-model — Pay per use. 1 request, tokens not reported. Estimated cost: no price available.
     No other conversation recorded requests on this day.
     Next step for requests with no price: check the bill from synthetic. No published price covers them, so no cost is shown for them here.
-    Costs are estimates from published prices; synthetic doesn't state its actual charge, so check the bill from synthetic.
+    Costs are estimates from published prices; synthetic doesn't report its charges — check synthetic's bill.
     Select a provider below to see its requests.
     —— Details ——
     Estimated token cost: unknown
@@ -1958,7 +1958,7 @@ fn accounting_zero_plan_usage_renders_money_unavailable() {
 
 /// The overview's one billing line for the `packet()` day, whose provider
 /// states no charge.
-const SYNTHETIC_NOT_STATED: &str = "Costs are estimates from published prices; synthetic doesn't state its actual charge, so check the bill from synthetic.";
+const SYNTHETIC_NOT_STATED: &str = "Costs are estimates from published prices; synthetic doesn't report its charges — check synthetic's bill.";
 
 #[test]
 fn accounting_inspect_estimate_only_never_invents_billed_or_difference() {
@@ -1966,7 +1966,7 @@ fn accounting_inspect_estimate_only_never_invents_billed_or_difference() {
     // The first screen says it once, in its overview (one provider here is
     // unnamed, so it names none); every other page with attempts says it once
     // in its details, naming whose bill to check where it can.
-    let alpha = "Billed cost: not reported — alpha doesn't state its actual charge, so this is an estimate; check the bill from alpha.";
+    let alpha = "Billed cost: alpha doesn't report its charges, so any cost here is an estimate — check alpha's bill.";
     assert!(
         pages[0].text.contains(
             &"Costs are estimates from published prices; your provider's bill is the final amount."
@@ -2562,8 +2562,12 @@ fn accounting_inspect_states_the_providers_billed_charge() {
     let InspectionDay::Ready(mut view) = breakdown_packet() else {
         unreachable!()
     };
-    // alpha/one states its charge; alpha/two does not.
+    // OpenRouter states its charges: here on model one's response, not on
+    // model two's.
     for quote in view.requests.values_mut().flatten() {
+        if quote.attempt.provider == "alpha" {
+            quote.attempt.provider = "openrouter".into();
+        }
         if quote.attempt.model == "one" {
             quote.usage.billed_usd = Some(decimal("0.0123312"));
         }
@@ -2575,16 +2579,16 @@ fn accounting_inspect_states_the_providers_billed_charge() {
     let line = root
         .text
         .iter()
-        .find(|s| s.starts_with("• alpha · one"))
+        .find(|s| s.starts_with("• OpenRouter · one"))
         .unwrap();
     assert!(
-        line.ends_with(&format!(" Billed by alpha: {billed}.")),
+        line.ends_with(&format!(" Billed by OpenRouter: {billed}.")),
         "{line}"
     );
     let other = root
         .text
         .iter()
-        .find(|s| s.starts_with("• alpha · two"))
+        .find(|s| s.starts_with("• OpenRouter · two"))
         .unwrap();
     assert!(!other.contains("Billed"), "{other}");
     // Only one of the day's three pay-per-use attempts stated a charge.
@@ -2592,18 +2596,13 @@ fn accounting_inspect_states_the_providers_billed_charge() {
         "Billed cost: at least {billed} (1 of 3 attempts stated a charge) — as stated by the provider with each response"
     );
     assert!(root.text.contains(&detail), "{:?}", root.text);
-    assert!(
-        !root
-            .text
-            .iter()
-            .any(|s| s.starts_with("Billed cost: not reported"))
-    );
+    assert!(!root.text.iter().any(|s| s.contains("report its charges")));
     // The request page states it plainly, and no longer claims the
     // difference is unknowable next to a stated charge.
     let (_, page) = root
         .links
         .iter()
-        .find(|(label, _)| label.starts_with("Request ") && label.contains("alpha · one"))
+        .find(|(label, _)| label.starts_with("Request ") && label.contains("OpenRouter · one"))
         .unwrap();
     let request = &pages[*page];
     assert!(
@@ -2627,16 +2626,124 @@ fn accounting_inspect_states_the_providers_billed_charge() {
             .count(),
         1
     );
-    // A request that stated nothing says its figure is only an estimate.
+    // A request whose response stated nothing says so, without claiming
+    // OpenRouter never reports its charges.
     let (_, page) = root
         .links
         .iter()
-        .find(|(label, _)| label.starts_with("Request ") && label.contains("alpha · two"))
+        .find(|(label, _)| label.starts_with("Request ") && label.contains("OpenRouter · two"))
         .unwrap();
     assert!(
         pages[*page]
             .text
-            .contains(&"Billed cost: not reported — alpha doesn't state its actual charge, so this is an estimate; check the bill from alpha.".to_string())
+            .contains(&"Billed cost: OpenRouter stated no charge for this work, so any cost here is an estimate — check OpenRouter's bill.".to_string())
+    );
+}
+
+/// Every page with work that can be billed has exactly one billing line; the
+/// first screen's is its overview estimate line, so its details add none.
+#[test]
+fn accounting_inspect_one_billing_line_per_page() {
+    let pages = inspection_pages(Ok(breakdown_packet()));
+    let overview_lines = pages[0]
+        .text
+        .iter()
+        .filter(|s| s.starts_with("Costs are estimates") || s.starts_with("Billed cost:"))
+        .count();
+    assert_eq!(overview_lines, 1, "{:#?}", pages[0].text);
+    for page in &pages[1..] {
+        let lines = page
+            .text
+            .iter()
+            .filter(|s| s.starts_with("Billed cost:"))
+            .count();
+        // Every page past the first covers at least one pay-per-use attempt.
+        assert_eq!(lines, 1, "{}: {:#?}", page.title, page.text);
+    }
+}
+
+fn billed_quote(provider: &str) -> ObservationQuote {
+    let mut quote = quote();
+    quote.attempt.provider = provider.into();
+    quote
+}
+
+#[test]
+fn accounting_billed_line_names_whose_bill_to_check() {
+    let line = |quotes: &[ObservationQuote]| billed_line(&quotes.iter().collect::<Vec<_>>());
+    // A provider that never states its charge.
+    assert_eq!(
+        line(&[billed_quote("zai")]).unwrap(),
+        "Billed cost: Z.AI doesn't report its charges, so any cost here is an estimate — check Z.AI's bill."
+    );
+    // One that does, but stated none on these responses.
+    assert_eq!(
+        line(&[billed_quote("openrouter")]).unwrap(),
+        "Billed cost: OpenRouter stated no charge for this work, so any cost here is an estimate — check OpenRouter's bill."
+    );
+    // Both kinds, and several names.
+    assert_eq!(
+        line(&[billed_quote("zai"), billed_quote("openrouter")]).unwrap(),
+        "Billed cost: Z.AI doesn't report its charges and OpenRouter stated no charge for this work, so any cost here is an estimate — check their bills."
+    );
+    assert_eq!(
+        line(&[billed_quote("c"), billed_quote("a"), billed_quote("b")]).unwrap(),
+        "Billed cost: a, b and c don't report their charges, so any cost here is an estimate — check their bills."
+    );
+    // The Corbanu API's two routes are one provider.
+    assert_eq!(
+        line(&[
+            billed_quote("pfterminal-plan"),
+            billed_quote("pfterminal-plan-anthropic")
+        ])
+        .unwrap(),
+        "Billed cost: Corbanu API stated no charge for this work, so any cost here is an estimate — check Corbanu API's bill."
+    );
+    // A refused attempt that reported nothing was normally not charged.
+    let mut refused = billed_quote("openrouter");
+    refused.usage = Usage::default();
+    assert_eq!(
+        line(&[refused]).unwrap(),
+        "Billed cost: none stated — OpenRouter reported no usage here; a refused request is normally not charged."
+    );
+    // No provider id: nothing to name.
+    assert_eq!(
+        line(&[billed_quote("")]).unwrap(),
+        "Billed cost: not reported, so any cost here is an estimate — check your provider's bill."
+    );
+    // Subscription work has no bill to check, and an empty page no line.
+    let mut plan = billed_quote("claude-plan");
+    plan.plan_burn_millis = Some(1000);
+    assert_eq!(line(&[plan]), None);
+    assert_eq!(line(&[]), None);
+}
+
+/// A complete range states the billing basis once on its overview; a partial
+/// one shows no total, so no billing line either.
+#[test]
+fn accounting_inspect_range_overview_billing_line_only_with_a_total() {
+    let current = || {
+        let InspectionDay::Ready(mut view) = packet() else {
+            unreachable!()
+        };
+        view.read_at_ms = view.coverage.completed_as_of_ms;
+        InspectionDay::Ready(view)
+    };
+    let complete = inspection_pages(Ok(range_packet(/*partial*/ false, current())));
+    assert!(
+        complete[0].text.contains(
+            &"Billed cost: synthetic doesn't report its charges, so any cost here is an estimate — check synthetic's bill."
+                .to_string()
+        ),
+        "{:#?}",
+        complete[0].text
+    );
+    let partial = inspection_pages(Ok(range_packet(/*partial*/ true, current())));
+    assert!(
+        !partial[0]
+            .text
+            .iter()
+            .any(|s| s.starts_with("Billed cost:"))
     );
 }
 
