@@ -333,6 +333,9 @@ impl IsolatedBrokerClient {
         tracing::info!(
             %containment,
             broker_dir = %socket_path.parent().unwrap_or(&socket_path).display(),
+            // Not secret: pipe names can be listed (#390 demo squatter).
+            data_endpoint = %socket_path.display(),
+            broker_pid,
             "isolated credential broker started"
         );
         if protocol_version != CONTROL_PROTOCOL_VERSION

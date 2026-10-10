@@ -5,6 +5,7 @@
 //! unelevated Windows sandbox gives agent commands, or as a handle scanner.
 
 use super::PipeListener;
+use super::SinglePipeListener;
 use super::answer_peer_challenge;
 use super::client_pid;
 use super::connect_control;
@@ -201,13 +202,13 @@ fn serve_proof(name: &str, expected_pid: u32) -> tokio::task::JoinHandle<()> {
 async fn pf_27_s06_pipe_handles_are_not_inheritable() {
     let (control, data) = pipe_names();
     let own_pid = std::process::id();
-    let control_listener = PipeListener::bind_single(&control).expect("bind control");
+    let control_listener = SinglePipeListener::bind(&control).expect("bind control");
     let mut data_listener = PipeListener::bind(&data).expect("bind data");
     let blocking_control = control.clone();
     let control_client =
         tokio::task::spawn_blocking(move || connect_control(&blocking_control, own_pid));
     let control_server = control_listener
-        .accept_single(own_pid)
+        .accept(own_pid)
         .await
         .expect("accept control");
     let control_client = control_client.await.expect("join").expect("control client");
@@ -245,6 +246,52 @@ async fn pf_27_s06_pipe_handles_are_not_inheritable() {
     unsafe { CloseHandle(duplicate) };
     let without = run_scan_child(&nonce);
     assert_eq!((with_duplicate, without), (1, 0));
+}
+
+/// #390: the control pipe has one instance at most, so no process can add
+/// one; a foreign client that connects first is dropped unread and the
+/// controller is still served (the instance is reused before tokio sees it).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn sec_390_control_pipe_drops_a_foreign_client_and_serves_the_controller() {
+    let (control, _) = pipe_names();
+    let own_pid = std::process::id();
+    let listener = SinglePipeListener::bind(&control).expect("bind");
+    assert!(SinglePipeListener::bind(&control).is_err());
+    assert_eq!(
+        super::create_instance(&control, /*first*/ false)
+            .err()
+            .and_then(|error| error.raw_os_error()),
+        Some(super::ERROR_PIPE_BUSY),
+        "another instance was added"
+    );
+    let accept = tokio::spawn(listener.accept(own_pid));
+    let report = tokio::task::spawn_blocking({
+        let control = control.clone();
+        move || run_same_user_child("connect", &control)
+    })
+    .await
+    .expect("child");
+    assert_eq!(report, "open=granted,served=no");
+
+    let client = tokio::task::spawn_blocking({
+        let control = control.clone();
+        move || connect_control(&control, own_pid)
+    })
+    .await
+    .expect("join")
+    .expect("the controller connects");
+    let mut server = accept.await.expect("join").expect("accept the controller");
+    assert_eq!(client_pid(&server), Some(own_pid));
+    server.write_all(GREETING).await.expect("greet");
+    let greeting = tokio::task::spawn_blocking(move || {
+        let mut client = client;
+        let mut buffer = vec![0_u8; GREETING.len()];
+        client.read_exact(&mut buffer).map(|()| buffer)
+    })
+    .await
+    .expect("join")
+    .expect("read");
+    assert_eq!(greeting, GREETING);
 }
 
 /// Accepts clients from `expected_pid` and greets each one.

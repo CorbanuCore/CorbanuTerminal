@@ -532,9 +532,16 @@ async fn pf_27_s04_pf_27_s01_wrong_os_peer_is_disconnected_before_any_request() 
         panic!("expected a brokered route");
     };
 
+    // On Windows Core cannot tell a broker that hangs up on it from a pipe
+    // squatter that does (#390); either way nothing is sent.
+    let expected = if cfg!(windows) {
+        IsolatedBrokerError::PipeSquatted
+    } else {
+        IsolatedBrokerError::Unavailable
+    };
     assert_eq!(
         route.forward(request("/echo", &dummy)).await.err(),
-        Some(IsolatedBrokerError::Unavailable)
+        Some(expected)
     );
 }
 

@@ -1258,7 +1258,7 @@ mod transport {
 
     pub(super) struct Endpoint {
         control_name: String,
-        control: Option<pipe::PipeListener>,
+        control: Option<pipe::SinglePipeListener>,
         data_name: String,
         data: Option<pipe::PipeListener>,
     }
@@ -1267,7 +1267,7 @@ mod transport {
         pub(super) async fn bind(_runtime_dir: &std::path::Path) -> anyhow::Result<Self> {
             let (control_name, data_name) = pipe::pipe_names();
             // #390: one control instance at most, so none can be added.
-            let control = pipe::PipeListener::bind_single(&control_name)?;
+            let control = pipe::SinglePipeListener::bind(&control_name)?;
             let data = pipe::PipeListener::bind(&data_name)?;
             Ok(Self {
                 control_name,
@@ -1285,8 +1285,8 @@ mod transport {
             self.data_name.clone()
         }
 
-        /// Accepts the controller on the control pipe, its only instance;
-        /// another client first fails the broker (#390).
+        /// Accepts the controller on the control pipe, its only instance
+        /// (#390); other clients are dropped unread.
         pub(super) async fn accept_controller(
             &mut self,
             parent_pid: u32,
@@ -1295,7 +1295,7 @@ mod transport {
                 .control
                 .take()
                 .ok_or(std::io::ErrorKind::NotConnected)?;
-            listener.accept_single(parent_pid).await
+            listener.accept(parent_pid).await
         }
 
         pub(super) fn serve(&mut self, broker: Arc<Broker>) -> tokio::task::JoinHandle<()> {

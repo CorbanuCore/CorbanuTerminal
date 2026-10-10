@@ -640,7 +640,7 @@ async fn sec_390_an_added_instance_reports_the_first_creator() {
 async fn sec_390_joined_squatter_gets_only_a_challenge() {
     let own_pid = std::process::id();
     let (control, data) = names_for(&random_nonce());
-    let control_listener = pipe::PipeListener::bind_single(&control).expect("bind control");
+    let control_listener = pipe::SinglePipeListener::bind(&control).expect("bind control");
     for mode in [Mode::Join, Mode::MaxOne, Mode::First] {
         let squatter = Squatter::start(&[&control], mode, /*wait*/ false);
         assert_eq!(
@@ -773,6 +773,14 @@ async fn sec_390_squat_after_broker_death_and_restart() {
         assert!(served > 0, "{mode:?}: no request reached the broker");
         let connections = squatter.stop();
         assert_only_challenges(&connections);
+        // The production send path reached the added instance and refused it.
+        assert!(
+            connections
+                .iter()
+                .any(|connection| connection.pid == std::process::id()
+                    && connection.bytes == PIPE_CHALLENGE_BYTES),
+            "{mode:?}: the squatter never got Core's challenge: {connections:?}"
+        );
         eprintln!(
             "sec_390 restart race ({mode:?}): {served} served, {refused} refused as squatted; joined squatter saw {} connection(s), challenge bytes only",
             connections.len()

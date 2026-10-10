@@ -63,7 +63,10 @@ use std::ffi::c_void;
 use std::io;
 use std::os::windows::fs::OpenOptionsExt as _;
 use std::os::windows::io::AsRawHandle;
+use std::os::windows::io::FromRawHandle as _;
+use std::os::windows::io::IntoRawHandle as _;
 use std::os::windows::io::OwnedHandle;
+use std::os::windows::io::RawHandle;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::Context;
@@ -81,24 +84,37 @@ use tokio::net::windows::named_pipe::PipeMode;
 use tokio::net::windows::named_pipe::ServerOptions;
 use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::Foundation::ERROR_BROKEN_PIPE;
+use windows_sys::Win32::Foundation::ERROR_FILE_NOT_FOUND;
 use windows_sys::Win32::Foundation::ERROR_IO_PENDING;
+use windows_sys::Win32::Foundation::ERROR_PIPE_CONNECTED;
 use windows_sys::Win32::Foundation::FILETIME;
 use windows_sys::Win32::Foundation::GetLastError;
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::Foundation::HLOCAL;
+use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
 use windows_sys::Win32::Foundation::LocalFree;
 use windows_sys::Win32::Security::Authorization::ConvertStringSecurityDescriptorToSecurityDescriptorW;
 use windows_sys::Win32::Security::Authorization::SDDL_REVISION_1;
 use windows_sys::Win32::Security::PSECURITY_DESCRIPTOR;
 use windows_sys::Win32::Security::SECURITY_ATTRIBUTES;
+use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_FIRST_PIPE_INSTANCE;
 use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OVERLAPPED;
+use windows_sys::Win32::Storage::FileSystem::PIPE_ACCESS_DUPLEX;
 use windows_sys::Win32::Storage::FileSystem::ReadFile;
 use windows_sys::Win32::Storage::FileSystem::WriteFile;
 use windows_sys::Win32::System::IO::CancelIoEx;
 use windows_sys::Win32::System::IO::GetOverlappedResult;
 use windows_sys::Win32::System::IO::OVERLAPPED;
+use windows_sys::Win32::System::Pipes::ConnectNamedPipe;
+use windows_sys::Win32::System::Pipes::CreateNamedPipeW;
+use windows_sys::Win32::System::Pipes::DisconnectNamedPipe;
 use windows_sys::Win32::System::Pipes::GetNamedPipeClientProcessId;
 use windows_sys::Win32::System::Pipes::GetNamedPipeServerProcessId;
+use windows_sys::Win32::System::Pipes::PIPE_READMODE_BYTE;
+use windows_sys::Win32::System::Pipes::PIPE_REJECT_REMOTE_CLIENTS;
+use windows_sys::Win32::System::Pipes::PIPE_TYPE_BYTE;
+use windows_sys::Win32::System::Pipes::PIPE_WAIT;
+use windows_sys::Win32::System::Pipes::WaitNamedPipeW;
 use windows_sys::Win32::System::Threading::CreateEventW;
 use windows_sys::Win32::System::Threading::GetCurrentProcess;
 use windows_sys::Win32::System::Threading::GetProcessTimes;
@@ -123,6 +139,8 @@ const BUSY_RETRY: Duration = Duration::from_millis(10);
 /// How long either side waits for the other's part of the data-pipe peer
 /// challenge (#390).
 const PEER_PROOF_TIMEOUT: Duration = Duration::from_secs(1);
+/// Buffer size of the control pipe (tokio's default for its pipes).
+const SINGLE_PIPE_BUFFER: u32 = 65_536;
 /// Tests only (#390): the nonce the broker uses for its pipe names, so a
 /// probe can claim them first. Read only in test builds.
 #[cfg(test)]
@@ -171,27 +189,8 @@ impl PipeListener {
     /// [`io::ErrorKind::AddrInUse`] when another process holds it (#390).
     /// Never joins an existing pipe.
     pub(crate) fn bind(name: &str) -> io::Result<Self> {
-        Self::bind_with(name, /*single*/ false)
-    }
-
-    /// Like [`Self::bind`], for a pipe of one instance at most (the control
-    /// pipe), so no other process can add one (#390).
-    pub(crate) fn bind_single(name: &str) -> io::Result<Self> {
-        Self::bind_with(name, /*single*/ true)
-    }
-
-    fn bind_with(name: &str, single: bool) -> io::Result<Self> {
-        let listening = create_instance(name, /*first*/ true, single).map_err(|error| {
-            // FILE_FLAG_FIRST_PIPE_INSTANCE on an existing name fails with
-            // ERROR_ACCESS_DENIED; a name at its instance limit, busy.
-            match error.raw_os_error() {
-                Some(ERROR_ACCESS_DENIED | ERROR_PIPE_BUSY) => io::Error::new(
-                    io::ErrorKind::AddrInUse,
-                    "credential broker pipe name is held by another process",
-                ),
-                _ => error,
-            }
-        })?;
+        let listening =
+            create_instance(name, /*first*/ true).map_err(|error| name_taken(name, error))?;
         Ok(Self {
             name: name.to_string(),
             listening,
@@ -205,15 +204,14 @@ impl PipeListener {
     pub(crate) async fn accept(&mut self, expected_pid: u32) -> io::Result<NamedPipeServer> {
         loop {
             self.listening.connect().await?;
-            let next =
-                match create_instance(&self.name, /*first*/ false, /*single*/ false) {
-                    Ok(next) => next,
-                    Err(error) => {
-                        // Never leave an unchecked client connected.
-                        let _ = self.listening.disconnect();
-                        return Err(error);
-                    }
-                };
+            let next = match create_instance(&self.name, /*first*/ false) {
+                Ok(next) => next,
+                Err(error) => {
+                    // Never leave an unchecked client connected.
+                    let _ = self.listening.disconnect();
+                    return Err(error);
+                }
+            };
             let connected = std::mem::replace(&mut self.listening, next);
             if client_pid(&connected) == Some(expected_pid) {
                 return Ok(connected);
@@ -222,23 +220,9 @@ impl PipeListener {
             let _ = connected.disconnect();
         }
     }
-
-    /// Waits for one client of a [`Self::bind_single`] pipe, which must be
-    /// `expected_pid`; another client fails it with
-    /// [`io::ErrorKind::PermissionDenied`]. The instance is never reused:
-    /// data read ahead from another client could reach the next one.
-    pub(crate) async fn accept_single(self, expected_pid: u32) -> io::Result<NamedPipeServer> {
-        self.listening.connect().await?;
-        if client_pid(&self.listening) == Some(expected_pid) {
-            return Ok(self.listening);
-        }
-        tracing::warn!("credential broker pipe: refused a client that is not the controller");
-        let _ = self.listening.disconnect();
-        Err(io::ErrorKind::PermissionDenied.into())
-    }
 }
 
-fn create_instance(name: &str, first: bool, single: bool) -> io::Result<NamedPipeServer> {
+fn create_instance(name: &str, first: bool) -> io::Result<NamedPipeServer> {
     let descriptor = OwnerOnlyDescriptor::new()?;
     let mut attributes = SECURITY_ATTRIBUTES {
         nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
@@ -253,10 +237,6 @@ fn create_instance(name: &str, first: bool, single: bool) -> io::Result<NamedPip
         .first_pipe_instance(first)
         .reject_remote_clients(true)
         .pipe_mode(PipeMode::Byte);
-    if single {
-        // Windows enforces the first instance's limit on every later one.
-        options.max_instances(1);
-    }
     // SAFETY: `attributes` and the descriptor it points to outlive the call.
     unsafe {
         options.create_with_security_attributes_raw(
@@ -264,6 +244,144 @@ fn create_instance(name: &str, first: bool, single: bool) -> io::Result<NamedPip
             (&mut attributes as *mut SECURITY_ATTRIBUTES).cast::<c_void>(),
         )
     }
+}
+
+/// #390: a first-instance create failed. FILE_FLAG_FIRST_PIPE_INSTANCE on an
+/// existing name fails with ERROR_ACCESS_DENIED, a name at its instance limit
+/// with ERROR_PIPE_BUSY; either is [`io::ErrorKind::AddrInUse`] only when the
+/// name really exists, so other failures keep their own error.
+fn name_taken(name: &str, error: io::Error) -> io::Error {
+    if matches!(
+        error.raw_os_error(),
+        Some(ERROR_ACCESS_DENIED | ERROR_PIPE_BUSY)
+    ) && pipe_exists(name)
+    {
+        io::Error::new(
+            io::ErrorKind::AddrInUse,
+            "credential broker pipe name is held by another process",
+        )
+    } else {
+        error
+    }
+}
+
+/// Whether a pipe of this name exists, without connecting to it.
+fn pipe_exists(name: &str) -> bool {
+    let wide: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+    // SAFETY: `wide` is NUL-terminated. Waiting 1 ms connects to nothing.
+    let available = unsafe { WaitNamedPipeW(wide.as_ptr(), 1) };
+    // SAFETY: reads this thread's last error.
+    available != 0 || unsafe { GetLastError() } != ERROR_FILE_NOT_FOUND
+}
+
+/// #390: server side of the control pipe, which allows one instance at most
+/// (Windows enforces the first instance's limit), so no other process can
+/// add one. Its handle is not given to tokio until the controller is
+/// connected: tokio reads ahead from a connected pipe, so an instance it has
+/// seen could pass another client's bytes to the next one.
+pub(crate) struct SinglePipeListener {
+    handle: OwnedHandle,
+}
+
+impl SinglePipeListener {
+    /// Creates the one instance; fails like [`PipeListener::bind`].
+    pub(crate) fn bind(name: &str) -> io::Result<Self> {
+        let descriptor = OwnerOnlyDescriptor::new()?;
+        let attributes = SECURITY_ATTRIBUTES {
+            nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+            lpSecurityDescriptor: descriptor.0,
+            // Never inheritable: no child of the broker or Core receives it.
+            bInheritHandle: 0,
+        };
+        let wide: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+        // SAFETY: `wide` is NUL-terminated; `attributes` and its descriptor
+        // outlive the call.
+        let handle = unsafe {
+            CreateNamedPipeW(
+                wide.as_ptr(),
+                PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED | FILE_FLAG_FIRST_PIPE_INSTANCE,
+                PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
+                /*nMaxInstances*/ 1,
+                SINGLE_PIPE_BUFFER,
+                SINGLE_PIPE_BUFFER,
+                /*nDefaultTimeOut*/ 0,
+                &attributes,
+            )
+        };
+        if handle == INVALID_HANDLE_VALUE {
+            return Err(name_taken(name, io::Error::last_os_error()));
+        }
+        // SAFETY: a fresh handle that nothing else owns.
+        let handle = unsafe { OwnedHandle::from_raw_handle(handle as RawHandle) };
+        Ok(Self { handle })
+    }
+
+    /// Waits for the client whose process id is `expected_pid`. Another
+    /// client is disconnected before anything is read from it, and the
+    /// instance waits again (blocking; call from a blocking thread).
+    pub(crate) fn accept_blocking(self, expected_pid: u32) -> io::Result<OwnedHandle> {
+        let raw = self.handle.as_raw_handle() as HANDLE;
+        loop {
+            connect_blocking(raw)?;
+            let mut pid = 0_u32;
+            // SAFETY: a valid pipe handle and out pointer.
+            let known = unsafe { GetNamedPipeClientProcessId(raw, &mut pid) } != 0;
+            if known && pid == expected_pid {
+                return Ok(self.handle);
+            }
+            tracing::warn!(
+                "credential broker pipe: dropped a control client that is not the controller"
+            );
+            // SAFETY: a valid pipe handle; discards the client unread.
+            if unsafe { DisconnectNamedPipe(raw) } == 0 {
+                return Err(io::Error::last_os_error());
+            }
+        }
+    }
+
+    /// [`Self::accept_blocking`] on a blocking thread, then the connected
+    /// instance for async use.
+    pub(crate) async fn accept(self, expected_pid: u32) -> io::Result<NamedPipeServer> {
+        let handle = tokio::task::spawn_blocking(move || self.accept_blocking(expected_pid))
+            .await
+            .map_err(io::Error::other)??;
+        // SAFETY: an overlapped pipe server handle, owned and handed over.
+        unsafe { NamedPipeServer::from_raw_handle(handle.into_raw_handle()) }
+    }
+}
+
+/// Waits until a client connects to `pipe`, an overlapped server handle.
+fn connect_blocking(pipe: HANDLE) -> io::Result<()> {
+    // SAFETY: a manual-reset event for this operation; closed below.
+    let event = unsafe { CreateEventW(std::ptr::null(), 1, 0, std::ptr::null()) };
+    if event == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: zeroed POD with the event set.
+    let mut overlapped: OVERLAPPED = unsafe { std::mem::zeroed() };
+    overlapped.hEvent = event;
+    // SAFETY: `overlapped` outlives the operation: GetOverlappedResult waits.
+    let result = unsafe {
+        if ConnectNamedPipe(pipe, &mut overlapped) != 0 {
+            Ok(())
+        } else {
+            match GetLastError() {
+                ERROR_PIPE_CONNECTED => Ok(()),
+                ERROR_IO_PENDING => {
+                    let mut transferred = 0_u32;
+                    if GetOverlappedResult(pipe, &overlapped, &mut transferred, 1) != 0 {
+                        Ok(())
+                    } else {
+                        Err(io::Error::last_os_error())
+                    }
+                }
+                _ => Err(io::Error::last_os_error()),
+            }
+        }
+    };
+    // SAFETY: created above.
+    unsafe { CloseHandle(event) };
+    result
 }
 
 /// `D:P(A;;GA;;;<current user>)` plus the current token's capability SIDs,
@@ -349,7 +467,8 @@ enum Attempt<T> {
     /// Another process serves the instance reached; it was closed unused.
     Refused,
     /// The server let go before its process could be read; nothing was
-    /// sent (the broker refusing this process, for one).
+    /// sent. The broker never drops its controller, so this counts as
+    /// refused.
     Dropped(io::Error),
     Busy,
     Failed(io::Error),
@@ -407,7 +526,10 @@ pub(crate) fn connect_control(name: &str, broker_pid: u32) -> io::Result<Control
                 refused = true;
                 squatted_pipe_error()
             }
-            Attempt::Dropped(error) => error,
+            Attempt::Dropped(error) => {
+                refused = true;
+                error
+            }
             Attempt::Busy => io::Error::from_raw_os_error(ERROR_PIPE_BUSY),
             Attempt::Failed(error) => return Err(deadline_error(refused, error)),
         };
@@ -550,25 +672,34 @@ pub(crate) async fn connect_data(
             .open(name);
         let last = match open_attempt(opened, broker_pid) {
             Attempt::Served(mut client) => {
-                match peer_proof(&mut client, broker_pid, mac, deadline).await {
-                    PeerProof::Proven => return Ok(client),
-                    // The server hung up: the broker refusing this process,
-                    // or a squatter; either way nothing was sent.
-                    PeerProof::Closed(error) => error,
-                    PeerProof::Wrong => {
-                        tracing::warn!(
-                            "credential broker pipe: refused a pipe server that could not prove the channel key; no request was sent"
-                        );
-                        refused = true;
-                        squatted_pipe_error()
-                    }
+                let outcome = peer_proof(&mut client, broker_pid, mac, deadline).await;
+                if matches!(outcome, PeerProof::Proven) {
+                    return Ok(client);
                 }
+                // The broker never hangs up on its controller or fails its
+                // proof, so each of these counts as refused; nothing was sent.
+                refused = true;
+                match outcome {
+                    PeerProof::Proven | PeerProof::Wrong => tracing::warn!(
+                        "credential broker pipe: refused a pipe server whose proof of the channel key failed; no request was sent"
+                    ),
+                    PeerProof::TimedOut => tracing::warn!(
+                        "credential broker pipe: refused a pipe server that did not prove the channel key in time; no request was sent"
+                    ),
+                    PeerProof::Closed => tracing::warn!(
+                        "credential broker pipe: a pipe server hung up before proving the channel key; no request was sent"
+                    ),
+                }
+                squatted_pipe_error()
             }
             Attempt::Refused => {
                 refused = true;
                 squatted_pipe_error()
             }
-            Attempt::Dropped(error) => error,
+            Attempt::Dropped(error) => {
+                refused = true;
+                error
+            }
             Attempt::Busy => io::Error::from_raw_os_error(ERROR_PIPE_BUSY),
             Attempt::Failed(error) => return Err(deadline_error(refused, error)),
         };
@@ -583,9 +714,11 @@ pub(crate) async fn connect_data(
 enum PeerProof {
     Proven,
     /// It closed the connection without answering.
-    Closed(io::Error),
-    /// It answered wrongly, or not in time.
+    Closed,
+    /// Its answer does not verify.
     Wrong,
+    /// It did not answer in time (a starved broker would too).
+    TimedOut,
 }
 
 /// Core's side of the data-pipe peer challenge (#390): sends a fresh random
@@ -612,8 +745,9 @@ async fn peer_proof(
         {
             PeerProof::Proven
         }
-        Ok(Err(error)) => PeerProof::Closed(error),
-        Ok(Ok(_)) | Err(_) => PeerProof::Wrong,
+        Ok(Err(_)) => PeerProof::Closed,
+        Ok(Ok(_)) => PeerProof::Wrong,
+        Err(_) => PeerProof::TimedOut,
     }
 }
 
