@@ -1,0 +1,36 @@
+== [corbanu] W1 no caller home
+   caller env: 
+   wrapper handed over: argv0=corbanu CORBANU_HOME=<unset> PFTERMINAL_HOME=<unset> CODEX_HOME=$S/inst/home CORBANU_DEBUG_HOME=<unset>
+== [corbanu] W2 caller CORBANU_HOME=homeB
+   caller env: CORBANU_HOME=$S/s01/hB
+   wrapper handed over: argv0=corbanu CORBANU_HOME=$S/s01/hB PFTERMINAL_HOME=<unset> CODEX_HOME=<unset> CORBANU_DEBUG_HOME=<unset>
+== [corbanu] W3 caller CODEX_HOME=homeB
+   caller env: CODEX_HOME=$S/s01/hB
+   wrapper handed over: argv0=corbanu CORBANU_HOME=<unset> PFTERMINAL_HOME=<unset> CODEX_HOME=$S/s01/hB CORBANU_DEBUG_HOME=<unset>
+== [corbanu] W4 caller PFTERMINAL_HOME=homeP
+   caller env: PFTERMINAL_HOME=$S/s01/hP
+   wrapper handed over: argv0=corbanu CORBANU_HOME=<unset> PFTERMINAL_HOME=$S/s01/hP CODEX_HOME=<unset> CORBANU_DEBUG_HOME=<unset>
+== [corbanu] W5 caller CORBANU_HOME=homeA CODEX_HOME=homeB
+   caller env: CORBANU_HOME=$S/s01/hA CODEX_HOME=$S/s01/hB
+   wrapper handed over: argv0=corbanu CORBANU_HOME=$S/s01/hA PFTERMINAL_HOME=<unset> CODEX_HOME=$S/s01/hB CORBANU_DEBUG_HOME=<unset>
+== [corbanu-debug] W1 no caller home
+   caller env: 
+   wrapper handed over: argv0=corbanu-debug CORBANU_HOME=<unset> PFTERMINAL_HOME=<unset> CODEX_HOME=$S/inst/home-debug CORBANU_DEBUG_HOME=<unset>
+== [corbanu-debug] W2 caller CORBANU_HOME=homeB
+   caller env: CORBANU_HOME=$S/s01/hB
+   wrapper handed over: argv0=corbanu-debug CORBANU_HOME=$S/s01/hB PFTERMINAL_HOME=<unset> CODEX_HOME=$S/inst/home-debug CORBANU_DEBUG_HOME=<unset>
+== [corbanu-debug] W3 caller CODEX_HOME=homeB
+   caller env: CODEX_HOME=$S/s01/hB
+   wrapper handed over: argv0=corbanu-debug CORBANU_HOME=<unset> PFTERMINAL_HOME=<unset> CODEX_HOME=$S/s01/hB CORBANU_DEBUG_HOME=<unset>
+== [corbanu-debug] W4 caller PFTERMINAL_HOME=homeP
+   caller env: PFTERMINAL_HOME=$S/s01/hP
+   wrapper handed over: argv0=corbanu-debug CORBANU_HOME=<unset> PFTERMINAL_HOME=$S/s01/hP CODEX_HOME=$S/inst/home-debug CORBANU_DEBUG_HOME=<unset>
+== [corbanu-debug] W5 caller CORBANU_HOME=homeA CODEX_HOME=homeB
+   caller env: CORBANU_HOME=$S/s01/hA CODEX_HOME=$S/s01/hB
+   wrapper handed over: argv0=corbanu-debug CORBANU_HOME=$S/s01/hA PFTERMINAL_HOME=<unset> CODEX_HOME=$S/s01/hB CORBANU_DEBUG_HOME=<unset>
+== [corbanu-debug] W6 caller CORBANU_DEBUG_HOME=homeD
+   caller env: CORBANU_DEBUG_HOME=$S/s01/hD
+   wrapper handed over: argv0=corbanu-debug CORBANU_HOME=<unset> PFTERMINAL_HOME=<unset> CODEX_HOME=<unset> CORBANU_DEBUG_HOME=$S/s01/hD
+== [corbanu-debug] W7 caller CORBANU_DEBUG_HOME=homeD + CORBANU_HOME=homeB
+   caller env: CORBANU_DEBUG_HOME=$S/s01/hD CORBANU_HOME=$S/s01/hB
+   wrapper handed over: argv0=corbanu-debug CORBANU_HOME=$S/s01/hB PFTERMINAL_HOME=<unset> CODEX_HOME=<unset> CORBANU_DEBUG_HOME=$S/s01/hD

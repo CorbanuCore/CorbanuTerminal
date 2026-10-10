@@ -176,6 +176,13 @@ pub(crate) fn current_values(config: &Config) -> CurrentValues {
         }
     );
 
+    let model_keys = if config.features.enabled(Feature::BrokerModelAuth) {
+        "held by the isolated credential broker (broker_model_auth on)"
+    } else {
+        "Corbanu reads provider keys itself (broker_model_auth off)"
+    }
+    .to_string();
+
     let changing_roles = config
         .agent_roles
         .iter()
@@ -191,7 +198,7 @@ pub(crate) fn current_values(config: &Config) -> CurrentValues {
         )
     };
 
-    [sandbox, approvals, network, vault, children]
+    [sandbox, approvals, network, vault, model_keys, children]
 }
 
 /// Secret-like name fragments whose variables reach agent commands: the fixed

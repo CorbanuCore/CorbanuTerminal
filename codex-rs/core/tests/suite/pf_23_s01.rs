@@ -719,6 +719,12 @@ async fn pf_23_s03_stored_level_survives_restart_over_a_lower_config() -> anyhow
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
     let (home, evading, _) = canary_home()?;
+    // #391: the stored Aggressive level would turn broker_model_auth on, and
+    // the mock model server is plain HTTP; this test is about the sandbox.
+    std::fs::write(
+        home.path().join("config.toml"),
+        "[features]\nbroker_model_auth = false\n",
+    )?;
     std::fs::write(
         home.path().join("security_state.json"),
         r#"{"version":1,"level":"aggressive","revocations":{"schema_version":1,"generation":0,"kill_switch_active":false}}"#,

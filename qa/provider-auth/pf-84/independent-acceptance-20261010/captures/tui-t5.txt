@@ -1,0 +1,75 @@
+
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:       loading   /model to change                  │
+│ directory:   /Volumes/…/Corbanu/tmp/pf84acc-scratch/work │
+│ permissions: YOLO mode                                   │
+╰──────────────────────────────────────────────────────────╯
+
+
+› Run /review on my current changes
+
+  Z.AI GLM 5.3 Flash via zai default · /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/work · Corbanu Terminal · TPS: -- tok/s
+
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:       glm-5.3-flash   /model to change            │
+│ directory:   /Volumes/…/Corbanu/tmp/pf84acc-scratch/work │
+│ permissions: YOLO mode                                   │
+╰──────────────────────────────────────────────────────────╯
+
+
+› Run the shell command: sh /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s01/worker-doctor.sh -- then show me its complete output verbatim in a code block
+  and say which home the worker used.
+
+
+• Ran sh /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s01/worker-doctor.sh --
+  └ tool shell inherited: CORBANU_HOME=/Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s02/hG CODEX_HOME=/Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/
+    s02/hG
+    … +4 lines (ctrl + t to view transcript)
+          "status": "warning",
+            "sqlite home": "/Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s01/hB (dir)",
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• tool shell inherited: CORBANU_HOME=/Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s02/hG CODEX_HOME=/Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s02/
+  hG
+  warning: CORBANU_HOME (/Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s01/hB) overrides CODEX_HOME (/Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s02/
+  hG); using /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s01/hB. To use another home, set CORBANU_HOME to it.
+    "overallStatus": "warning",
+          "sqlite home": "/Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s01/hB"
+        "status": "warning",
+          "sqlite home": "/Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s01/hB (dir)",
+
+  The worker used /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s01/hB because CORBANU_HOME overrode CODEX_HOME.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Now run the shell command: sh /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s01/worker-exec.sh -- and show me its complete output verbatim in a code
+  block.
+
+
+• Ran sh /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s01/worker-exec.sh --
+  └ ERROR: unexpected status 401 Unauthorized: Incorrect API key provided: sk-proj-*****************************************6bb0. You can find your API key at
+    https://platform.openai.com/account/api-keys., url: wss://api.openai.com/v1/responses, cf-ray: a48526895b0dda5d-DFW, request id:
+    req_ec3193053af64690828b5085f86a1aea, auth error: 401, auth error code: invalid_api_key
+    warning: CORBANU_HOME (/Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s01/hB) overrides CODEX_HOME (/Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/
+    s02/hG); using /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s01/hB. To use another home, set CORBANU_HOME to it.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• ERROR: unexpected status 401 Unauthorized: Incorrect API key provided: sk-proj-*****************************************6bb0. You can find your API key at
+  https://platform.openai.com/account/api-keys., url: wss://api.openai.com/v1/responses, cf-ray: a48526895b0dda5d-DFW, request id:
+  req_ec3193053af64690828b5085f86a1aea, auth error: 401, auth error code: invalid_api_key
+  warning: CORBANU_HOME (/Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s01/hB) overrides CODEX_HOME (/Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s02/
+  hG); using /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s01/hB. To use another home, set CORBANU_HOME to it.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Token usage: total=14,635 input=13,964 (+ 17,536 cached) output=671 (reasoning 72)
+To continue this session, run corbanu resume 01a1257c-a893-7292-88dc-926796d111ff
+TUI_EXITED rc=0
+
+

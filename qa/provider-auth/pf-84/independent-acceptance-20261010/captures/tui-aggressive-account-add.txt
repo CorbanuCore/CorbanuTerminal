@@ -1,0 +1,47 @@
+
+⚠ Security level Aggressive is enforced, but the protected boundary is unverified (Aggressive was saved without a preflight; choose it again in /
+  security). Earlier conversations cannot be resumed.
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:     glm-5.3-flash   /model to change             │
+│ directory: /Volumes/CorbanuDrive/…/pf84acc-scratch/work │
+╰─────────────────────────────────────────────────────────╯
+
+• You ran printf fake-aggr-shell-0001 | corbanu account add zai shellacct; echo rc=$?
+  └ Saved zai account `shellacct` (api_key).
+    rc=0
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Run exactly this shell command and show its output verbatim: printf fake-aggr-agent-0002 | corbanu account add zai agentacct; echo rc=$?
+
+
+✔ You approved Corbanu to run printf fake-aggr-agent-0002 | corbanu account add zai agentacct; echo rc=$? this time
+
+• Ran printf fake-aggr-agent-0002 | corbanu account add zai agentacct; echo rc=$?
+  └ /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/pathbin/corbanu: line 2: /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/pathbin/calls.log:
+    Operation not permitted
+    … +2 lines (ctrl + t to view transcript)
+    s02/hS/security_level.toml). It reads stored credentials, which Aggressive keeps from agent commands.
+    rc=1
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/pathbin/corbanu: line 2: /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/pathbin/calls.log:
+  Operation not permitted
+  WARNING: proceeding, even though we could not create PATH aliases: Operation not permitted (os error 1)
+  `corbanu account` was started by an agent command while security level Aggressive is enforced (/Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/
+  s02/hS/security_level.toml). It reads stored credentials, which Aggressive keeps from agent commands.
+  rc=1
+
+─ Worked for 1m 05s ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Summarize recent commits
+
+  Z.AI GLM 5.3 Flash via zai default · /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/work · Corbanu Terminal · TPS: 5.0 tok/s
+
+

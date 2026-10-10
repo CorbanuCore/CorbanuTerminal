@@ -1,0 +1,60 @@
+== C1 default account (env MOCK_API_KEY set) (exit 1)
+   args: 
+   | Reply with exactly: pong
+   | warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s02/hM/config.toml.
+   | warning: Model metadata for `mock-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.
+   | ERROR: unexpected status 401 Unauthorized: mock: invalid api key, url: http://127.0.0.1:18484/v1/responses
+   | ERROR: unexpected status 401 Unauthorized: mock: invalid api key, url: http://127.0.0.1:18484/v1/responses
+   mock saw 1 request(s): ['env']
+   canary values in output: none
+== C2 -c provider_accounts.mockp=acct-a, env also set (exit 1)
+   args: -c provider_accounts.mockp="acct-a"
+   | Reply with exactly: pong
+   | warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s02/hM/config.toml.
+   | warning: Model metadata for `mock-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.
+   | ERROR: unexpected status 401 Unauthorized: mock: invalid api key, url: http://127.0.0.1:18484/v1/responses
+   | ERROR: unexpected status 401 Unauthorized: mock: invalid api key, url: http://127.0.0.1:18484/v1/responses
+   mock saw 1 request(s): ['acct-a']
+   canary values in output: none
+== C3 -c provider_accounts.mockp=acct-b, env also set (exit 1)
+   args: -c provider_accounts.mockp="acct-b"
+   | Reply with exactly: pong
+   | warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s02/hM/config.toml.
+   | warning: Model metadata for `mock-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.
+   | ERROR: unexpected status 401 Unauthorized: mock: invalid api key, url: http://127.0.0.1:18484/v1/responses
+   | ERROR: unexpected status 401 Unauthorized: mock: invalid api key, url: http://127.0.0.1:18484/v1/responses
+   mock saw 1 request(s): ['acct-b']
+   canary values in output: none
+== C4 unknown account ghost, env also set (exit 1)
+   args: -c provider_accounts.mockp="ghost"
+   | Reply with exactly: pong
+   | warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s02/hM/config.toml.
+   | warning: Model metadata for `mock-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.
+   | ERROR: Fatal error: account `ghost` of provider `mockp` has no stored API key; add it with `corbanu account add mockp ghost` or choose another account
+   | ERROR: Fatal error: account `ghost` of provider `mockp` has no stored API key; add it with `corbanu account add mockp ghost` or choose another account
+   mock saw 0 request(s): []
+   canary values in output: none
+== C5 invalid account name Bad_Name (exit 1)
+   args: -c provider_accounts.mockp="Bad_Name"
+   | Error: provider_accounts.mockp: invalid account name: use 1-32 lowercase letters, digits or '-', starting with a letter or digit
+   mock saw 0 request(s): []
+   canary values in output: none
+== C6 explicit default selector (exit 1)
+   args: -c provider_accounts.mockp="default"
+   | Reply with exactly: pong
+   | warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s02/hM/config.toml.
+   | warning: Model metadata for `mock-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.
+   | ERROR: unexpected status 401 Unauthorized: mock: invalid api key, url: http://127.0.0.1:18484/v1/responses
+   | ERROR: unexpected status 401 Unauthorized: mock: invalid api key, url: http://127.0.0.1:18484/v1/responses
+   mock saw 1 request(s): ['env']
+   canary values in output: none
+== C7 flag OFF + selector acct-a (expect today's behaviour: env key) (exit 1)
+   args: --disable named_accounts -c provider_accounts.mockp="acct-a"
+   | session id: 01a1256f-83cb-75e1-9f7d-48b11340169f
+   | Reply with exactly: pong
+   | warning: `[provider_accounts]` is ignored because the `named_accounts` feature is off; every provider uses its default account.
+   | warning: `[provider_accounts]` is ignored because the `named_accounts` feature is off; every provider uses its default account.
+   | warning: Model metadata for `mock-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.
+   | ERROR: unexpected status 401 Unauthorized: mock: invalid api key, url: http://127.0.0.1:18484/v1/responses
+   mock saw 1 request(s): ['env']
+   canary values in output: none
