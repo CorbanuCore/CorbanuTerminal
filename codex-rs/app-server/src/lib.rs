@@ -715,6 +715,17 @@ pub async fn run_main_with_transport_options(
             "remote control is disabled by managed requirements",
         ));
     }
+    // Older builds logged sandboxed command lines verbatim (#398), and
+    // feedback uploads attach the current sandbox log.
+    #[cfg(target_os = "windows")]
+    std::thread::spawn({
+        let sandbox_dir = codex_windows_sandbox::sandbox_dir(&config.codex_home);
+        move || {
+            if let Err(err) = codex_state::scrub_sandbox_logs_once(&sandbox_dir) {
+                tracing::warn!("failed to scrub old secrets from the sandbox logs: {err}");
+            }
+        }
+    });
     let installation_id = resolve_installation_id(&config.codex_home).await?;
     let transport_shutdown_token = CancellationToken::new();
     let mut transport_accept_handles = Vec::<JoinHandle<()>>::new();

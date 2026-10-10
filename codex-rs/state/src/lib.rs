@@ -24,6 +24,7 @@ mod sqlite;
 mod telemetry;
 
 pub use log_scrub::scrub_log_file_once;
+pub use log_scrub::scrub_sandbox_logs_once;
 pub use model::LogEntry;
 pub use model::LogQuery;
 pub use model::LogRow;

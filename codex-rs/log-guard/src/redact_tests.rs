@@ -129,6 +129,13 @@ fn keeps_redacted_values_and_ordinary_text() {
         "has_access_token=true refresh_token: None",
         "url=https://api.example.com/v1/models?key=REDACTED&api-version=REDACTED",
         "task-runner-AAAAAAAAAAAAAAAAAAAAAAAAA",
+        // #398: ordinary command lines and token counters.
+        "START: cargo test -p codex-core --token-file token.txt --passive",
+        r#"["git", "-c", "user.name=x", "push", "https://github.com/o/r.git"]"#,
+        "input_tokens=10 output_tokens: 5 max_output_tokens=100 total_tokens=15",
+        r#"TokenUsage { input_tokens: 1, cached_input_tokens: 0 }"#,
+        "psql -U postgres -h db:5432 && ssh -p 22 host && curl http://host:8080/a@b",
+        "env_names=[\"CORBANU_SENTINEL_API_KEY\"]",
     ] {
         assert!(
             matches!(redact_credentials(text), Cow::Borrowed(_)),
@@ -151,4 +158,77 @@ fn writer_redacts_each_write() {
         String::from_utf8(out).unwrap(),
         "a authorization: REDACTED\nplain line\n"
     );
+}
+
+/// #398: credentials typed into a command line, as sandbox command logs
+/// (`START: <argv joined>`) and `Debug` argument lists record them.
+#[test]
+fn redacts_credentials_in_command_lines() {
+    let cases = [
+        (
+            r#"START: curl -H "Authorization: Bearer fake-cmd-0001" https://api"#,
+            r#"START: curl -H "Authorization: REDACTED" https://api"#,
+        ),
+        (
+            "START: curl -H Authorization: Bearer fake-cmd-0002 https://api",
+            "START: curl -H Authorization: REDACTED https://api",
+        ),
+        (
+            r#"START: curl -H "X-Api-Key: fake-cmd-0003" https://api"#,
+            r#"START: curl -H "X-Api-Key: REDACTED" https://api"#,
+        ),
+        (
+            "START: curl https://api/v1?model=m&api_key=fake-cmd-0004",
+            "START: curl https://api/v1?model=m&api_key=REDACTED",
+        ),
+        (
+            "START: mysql --user=root --password=fake-cmd-0005 db",
+            "START: mysql --user=root --password=REDACTED db",
+        ),
+        (
+            "START: tool --password fake-cmd-0006 --token=fake-cmd-0007 -v",
+            "START: tool --password REDACTED --token=REDACTED -v",
+        ),
+        (
+            r#"START: tool --api-key "fake cmd 0008" --secret='fake-cmd-0009'"#,
+            r#"START: tool --api-key "REDACTED" --secret='REDACTED'"#,
+        ),
+        (
+            r#"command=["tool", "--client-secret", "fake-cmd-0010", "-v"]"#,
+            r#"command=["tool", "--client-secret", "REDACTED", "-v"]"#,
+        ),
+        (
+            "pwsh -Command Connect-Thing -Token fake-cmd-0011 -Force",
+            "pwsh -Command Connect-Thing -Token REDACTED -Force",
+        ),
+        (
+            "START: curl -u admin:fake-cmd-0012 https://host",
+            "START: curl -u admin:REDACTED https://host",
+        ),
+        (
+            "START: git clone https://oauth2:fake-cmd-0013@gitlab.example/r.git",
+            "START: git clone https://oauth2:REDACTED@gitlab.example/r.git",
+        ),
+        (
+            "START: bash -c OPENAI_API_KEY=fake-cmd-0014 GH_TOKEN='fake cmd 0015' run",
+            "START: bash -c OPENAI_API_KEY=REDACTED GH_TOKEN='REDACTED' run",
+        ),
+        (
+            r#"START: pwsh -c $env:AWS_SECRET_ACCESS_KEY = "fake-cmd-0016"; set DB_PASSWORD=fake-cmd-0017"#,
+            r#"START: pwsh -c $env:AWS_SECRET_ACCESS_KEY = "REDACTED"; set DB_PASSWORD=REDACTED"#,
+        ),
+        (
+            "START: git push https://ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA@github.com/o/r",
+            "START: git push https://REDACTED@github.com/o/r",
+        ),
+        (
+            "START: openssl enc -pass pass:fake-cmd-0018 -in f",
+            "START: openssl enc -pass REDACTED -in f",
+        ),
+    ];
+    for (input, expected) in cases {
+        assert_eq!(redact_credentials(input), expected);
+        assert!(contains_credentials(input), "{input}");
+    }
+    assert!(!contains_credentials("START: cargo test -p codex-core"));
 }

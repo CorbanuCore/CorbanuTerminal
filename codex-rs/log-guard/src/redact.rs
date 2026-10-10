@@ -11,8 +11,16 @@ use tracing_subscriber::fmt::MakeWriter;
 
 const REDACTED: &[u8] = b"REDACTED";
 
-/// Headers and fields whose value is a credential.
-const CREDENTIAL_NAMES: &str = "proxy-authorization|authorization|x-api-key|api-key|x-goog-api-key|x-amz-security-token|x-amz-sso_bearer_token|ocp-apim-subscription-key|x-auth-token|private-token|x-access-token|access_token|refresh_token|id_token";
+/// Headers, fields and command-line options (`--password=x`) whose value is
+/// a credential.
+const CREDENTIAL_NAMES: &str = "proxy-authorization|authorization|x-api-key|api-key|api_key|apikey|x-goog-api-key|x-amz-security-token|x-amz-sso_bearer_token|ocp-apim-subscription-key|x-auth-token|auth-token|auth_token|private-token|x-access-token|access-token|access_token|refresh-token|refresh_token|id_token|token|password|passwd|secret|client-secret|client_secret";
+/// Command-line options whose value follows as the next argument
+/// (`--password x`, `-Token x`, `["--api-key", "x"]`).
+const CREDENTIAL_OPTIONS: &str = "password|passwd|pass|token|api-key|api_key|apikey|secret|client-secret|client_secret|access-token|access_token|auth-token|auth_token|refresh-token|refresh_token|private-token|bearer";
+/// Environment variable name endings (`OPENAI_API_KEY=x`,
+/// `$env:GITHUB_TOKEN = 'x'`, `"AWS_SECRET_ACCESS_KEY": "x"`).
+const CREDENTIAL_ENV_SUFFIXES: &str =
+    "api_?key|token|secret|secret_?key|access_key|password|passwd|passphrase|pat|credentials?";
 /// Authorization schemes kept in front of a redacted value.
 const SCHEMES: [&[u8]; 5] = [b"bearer", b"basic", b"token", b"digest", b"negotiate"];
 /// Start of a name: a word boundary or an escaped line break.
@@ -30,6 +38,14 @@ const WRAPPED: usize = 1;
 static PATTERNS: LazyLock<Vec<String>> = LazyLock::new(|| {
     let names = CREDENTIAL_NAMES;
     let token = r#"[^\s"'\\,;&(){}\[\]]"#;
+    let options = CREDENTIAL_OPTIONS;
+    let env = CREDENTIAL_ENV_SUFFIXES;
+    // Start of a command-line option: line or argument start, or a `Debug`
+    // list's quote or separator.
+    let option_start = r#"(?:^|[\s"'\[(,=])-{1,2}"#;
+    // Option/value separator: `=`, whitespace, or `", "` between `Debug`
+    // list items.
+    let option_separator = r#"(?:=|\\*["']?(?:[ \t]*,)?[ \t]+)"#;
     vec![
         // UNQUOTED: `authorization: Bearer x`, `api-key=x`,
         // `Authorization: Token token="x"`: an optional scheme and one
@@ -61,6 +77,24 @@ static PATTERNS: LazyLock<Vec<String>> = LazyLock::new(|| {
         // Credential parameters in URL queries and form bodies.
         r#"(?i-u)[?&](?:api[-_]?key|key|access[-_]?token|refresh[-_]?token|id[-_]?token|token|sig|signature|code|code[-_]verifier|client[-_]secret|client[-_]assertion|password|x-amz-security-token|x-amz-signature)=(?P<v>[^&#\s"'<>\\]+)"#
             .to_string(),
+        // Command-line options: `--password x`, `--token="a b"`,
+        // `["--api-key", "x"]`; quoted values to the closing quote.
+        format!(r#"(?i-u){option_start}(?:{options}){option_separator}\\*["']?(?P<v>[^\s"'\\]+)"#),
+        format!(r#"(?i-u){option_start}(?:{options}){option_separator}\\*["'](?P<v>[^"'\\\r\n]+)"#),
+        // User credentials: `curl -u user:x`, `--proxy-user=user:x`.
+        r#"(?-u)(?:^|[\s"'\[(,])(?:-u|-U|--user|--proxy-user)(?:=|\\*["']?(?:[ \t]*,)?[ \t]+)?\\*["']?[^\s"'\\:]*:(?P<v>[^\s"'\\]+)"#
+            .to_string(),
+        // Environment assignments (`OPENAI_API_KEY=x`) and quoted values
+        // (`GITHUB_TOKEN='a b'`, `"GITHUB_TOKEN": "a b"`).
+        format!(r#"(?i-u)\b(?:[a-z][a-z0-9_]*_)?(?:{env})[ \t]*=[ \t]*(?P<v>[^\s"'\\&;,]+)"#),
+        format!(
+            r#"(?i-u)\b(?:[a-z][a-z0-9_]*_)?(?:{env})\\*["']?[ \t]*(?::|=)[ \t]*\\*["'](?P<v>[^"'\\\r\n]+)"#
+        ),
+        // URL userinfo passwords: `https://user:x@host`.
+        r#"(?i-u)\b[a-z][a-z0-9+.-]*://[^\s/@:"'\\]*:(?P<v>[^\s/@"'\\]+)@"#.to_string(),
+        // GitHub, GitLab, Slack, Google, Hugging Face and AWS key formats.
+        r"(?-u)\b(?P<v>gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|glpat-[A-Za-z0-9_-]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|hf_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16})"
+            .to_string(),
     ]
 });
 
@@ -79,8 +113,9 @@ static REGEX_SET: LazyLock<RegexSet> = LazyLock::new(|| {
     RegexSet::new(PATTERNS.iter()).expect("credential patterns compile")
 });
 
-/// Values other redaction already replaced; kept so redacted forms stay
-/// readable (`"set-cookie": "REDACTED"`, `Sensitive` header values). Only
+/// Values other redaction already replaced, and flags such as
+/// `has_access_token=true`; kept so redacted forms stay readable
+/// (`"set-cookie": "REDACTED"`, `Sensitive` header values). Only
 /// an exact marker, alone or after a scheme, counts, so a marker can't hide
 /// a credential next to it.
 fn is_redacted(value: &[u8]) -> bool {
@@ -97,6 +132,8 @@ fn is_redacted(value: &[u8]) -> bool {
             b"[redacted]",
             b"Sensitive",
             b"None",
+            b"true",
+            b"false",
         ]
         .contains(&word)
             || word.iter().all(|byte| *byte == b'*')
@@ -141,7 +178,10 @@ fn type_name_contents(text: &[u8], value: Range<usize>) -> Option<Range<usize>> 
     Some(start..start + len)
 }
 
-fn credential_spans(text: &[u8]) -> Vec<Range<usize>> {
+/// Sorted, non-overlapping byte ranges of the credential-shaped values
+/// [`redact_credentials_bytes`] replaces. Each range starts and ends next
+/// to an ASCII byte or the text's edge.
+pub fn credential_spans(text: &[u8]) -> Vec<Range<usize>> {
     let matched = REGEX_SET.matches(text);
     // Where WRAPPED matched, it redacts a type name's quoted contents.
     let wrapped_starts: Vec<usize> = if matched.matched(UNQUOTED) && matched.matched(WRAPPED) {
@@ -204,6 +244,11 @@ pub fn redact_credentials_bytes(text: &[u8]) -> Cow<'_, [u8]> {
     }
     redacted.extend_from_slice(&text[position..]);
     Cow::Owned(redacted)
+}
+
+/// Whether `text` holds a value [`redact_credentials`] would hide.
+pub fn contains_credentials(text: &str) -> bool {
+    !credential_spans(text.as_bytes()).is_empty()
 }
 
 /// [`redact_credentials_bytes`] for text.

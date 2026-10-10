@@ -428,15 +428,17 @@ impl ExecPolicyManager {
                     },
                     None => ExecApprovalRequirement::NeedsApproval {
                         reason: derive_prompt_reason(command, &evaluation),
-                        proposed_execpolicy_amendment: requested_amendment.or_else(|| {
-                            if auto_amendment_allowed {
-                                try_derive_execpolicy_amendment_for_prompt_rules(
-                                    &evaluation.matched_rules,
-                                )
-                            } else {
-                                None
-                            }
-                        }),
+                        proposed_execpolicy_amendment: without_credentials(
+                            requested_amendment.or_else(|| {
+                                if auto_amendment_allowed {
+                                    try_derive_execpolicy_amendment_for_prompt_rules(
+                                        &evaluation.matched_rules,
+                                    )
+                                } else {
+                                    None
+                                }
+                            }),
+                        ),
                     },
                 }
             }
@@ -456,7 +458,9 @@ impl ExecPolicyManager {
                         })
                 }),
                 proposed_execpolicy_amendment: if auto_amendment_allowed {
-                    try_derive_execpolicy_amendment_for_allow_rules(&evaluation.matched_rules)
+                    without_credentials(try_derive_execpolicy_amendment_for_allow_rules(
+                        &evaluation.matched_rules,
+                    ))
                 } else {
                     None
                 },
@@ -478,18 +482,24 @@ impl ExecPolicyManager {
                         "exec policy update semaphore closed".to_string(),
                     ),
                 })?;
-        let policy_path = default_policy_path(codex_home);
-        spawn_blocking({
-            let policy_path = policy_path.clone();
-            let prefix = amendment.command.clone();
-            move || blocking_append_allow_prefix_rule(&policy_path, &prefix)
-        })
-        .await
-        .map_err(|source| ExecPolicyUpdateError::JoinBlockingTask { source })?
-        .map_err(|source| ExecPolicyUpdateError::AppendRule {
-            path: policy_path,
-            source,
-        })?;
+        // A rule holding a credential (#398) applies for this session only:
+        // the rules file would keep it in plain text.
+        if contains_credentials(&amendment.command) {
+            tracing::warn!("not saving an exec policy rule that contains a credential");
+        } else {
+            let policy_path = default_policy_path(codex_home);
+            spawn_blocking({
+                let policy_path = policy_path.clone();
+                let prefix = amendment.command.clone();
+                move || blocking_append_allow_prefix_rule(&policy_path, &prefix)
+            })
+            .await
+            .map_err(|source| ExecPolicyUpdateError::JoinBlockingTask { source })?
+            .map_err(|source| ExecPolicyUpdateError::AppendRule {
+                path: policy_path,
+                source,
+            })?;
+        }
 
         let current_policy = self.current();
         let match_options = MatchOptions {
@@ -1132,6 +1142,19 @@ fn try_derive_execpolicy_amendment_for_allow_rules(
             } => Some(ExecPolicyAmendment::from(command.clone())),
             _ => None,
         })
+}
+
+/// Whether a command (or prefix) carries a credential the log redaction
+/// would hide (#398).
+fn contains_credentials(command: &[String]) -> bool {
+    codex_log_guard::contains_credentials(&command.join(" "))
+}
+
+/// `amendment` unless it carries a credential: approving it would save the
+/// credential in the rules file (#398). The user can still approve the
+/// command once or for the session.
+fn without_credentials(amendment: Option<ExecPolicyAmendment>) -> Option<ExecPolicyAmendment> {
+    amendment.filter(|amendment| !contains_credentials(&amendment.command))
 }
 
 fn derive_requested_execpolicy_amendment_from_prefix_rule(

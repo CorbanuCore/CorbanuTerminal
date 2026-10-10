@@ -25,6 +25,15 @@ disallowed-methods = [
     { path = "sqlx::Connection::connect_with", reason = "Create SQLite connections through codex-state's sqlite shim." },
     { path = "sqlx::ConnectOptions::connect", reason = "Create SQLite connections through codex-state's sqlite shim." },
     { path = "sqlx::migrate::MigrateDatabase::create_database", reason = "Create SQLite databases through codex-state's sqlite shim." },
+    # Every process-wide tracing subscriber must cap credential-logging library targets (#380, #398).
+    { path = "tracing::subscriber::set_global_default", reason = "Install global subscribers with codex_log_guard::guard(subscriber).try_init()." },
+    { path = "tracing::dispatcher::set_global_default", reason = "Install global subscribers with codex_log_guard::guard(subscriber).try_init()." },
+    { path = "tracing_subscriber::util::SubscriberInitExt::init", reason = "Install global subscribers with codex_log_guard::guard(subscriber).init()." },
+    { path = "tracing_subscriber::util::SubscriberInitExt::try_init", reason = "Install global subscribers with codex_log_guard::guard(subscriber).try_init()." },
+    { path = "tracing_subscriber::fmt::init", reason = "Install global subscribers with codex_log_guard::guard(subscriber).try_init()." },
+    { path = "tracing_subscriber::fmt::try_init", reason = "Install global subscribers with codex_log_guard::guard(subscriber).try_init()." },
+    { path = "tracing_subscriber::fmt::SubscriberBuilder::init", reason = "Install global subscribers with codex_log_guard::guard(subscriber).init()." },
+    { path = "tracing_subscriber::fmt::SubscriberBuilder::try_init", reason = "Install global subscribers with codex_log_guard::guard(subscriber).try_init()." },
 ]
 
 # Increase the size threshold for result_large_err to accommodate

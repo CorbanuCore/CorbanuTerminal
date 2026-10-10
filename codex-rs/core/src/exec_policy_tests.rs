@@ -1706,6 +1706,69 @@ async fn append_execpolicy_amendment_updates_policy_and_file() {
     );
 }
 
+/// #398: an approved rule holding a credential applies for the session but
+/// is never written to the rules file.
+#[tokio::test]
+async fn append_execpolicy_amendment_keeps_credentials_out_of_the_file() {
+    let codex_home = tempdir().expect("create temp dir");
+    let prefix = vec![
+        "curl".to_string(),
+        "-H".to_string(),
+        "Authorization: Bearer fake-398-rule-0001".to_string(),
+    ];
+    let manager = ExecPolicyManager::default();
+
+    manager
+        .append_amendment_and_update(codex_home.path(), &ExecPolicyAmendment::from(prefix))
+        .await
+        .expect("update policy");
+
+    let mut command = vec![
+        "curl".to_string(),
+        "-H".to_string(),
+        "Authorization: Bearer fake-398-rule-0001".to_string(),
+    ];
+    command.push("https://api.example".to_string());
+    assert_eq!(
+        manager
+            .current()
+            .check(&command, &|_| Decision::Prompt)
+            .decision,
+        Decision::Allow
+    );
+    assert!(!default_policy_path(codex_home.path()).exists());
+}
+
+/// #398: a command carrying a credential gets no "don't ask again"
+/// proposal, which would save it in the rules file.
+#[tokio::test]
+async fn credential_commands_get_no_execpolicy_amendment_proposal() {
+    assert_exec_approval_requirement_for_command(
+        ExecApprovalRequirementScenario {
+            policy_src: None,
+            command: vec![
+                "curl".to_string(),
+                "--password".to_string(),
+                "fake-398-proposal-0002".to_string(),
+                "https://api.example".to_string(),
+            ],
+            approval_policy: AskForApproval::OnRequest,
+            permission_profile: PermissionProfile::workspace_write(),
+            sandbox_permissions: SandboxPermissions::RequireEscalated,
+            prefix_rule: Some(vec![
+                "curl".to_string(),
+                "--password".to_string(),
+                "fake-398-proposal-0002".to_string(),
+            ]),
+        },
+        ExecApprovalRequirement::NeedsApproval {
+            reason: None,
+            proposed_execpolicy_amendment: None,
+        },
+    )
+    .await;
+}
+
 #[tokio::test]
 async fn append_execpolicy_amendment_rejects_empty_prefix() {
     let codex_home = tempdir().expect("create temp dir");

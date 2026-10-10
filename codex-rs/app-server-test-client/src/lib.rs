@@ -2375,9 +2375,10 @@ impl TestClientTracing {
         if let Some(provider) = otel_provider.as_ref()
             && traces_enabled
         {
-            let _ = tracing_subscriber::registry()
-                .with(provider.tracing_layer())
-                .try_init();
+            let _ = codex_log_guard::guard(
+                tracing_subscriber::registry().with(provider.tracing_layer()),
+            )
+            .try_init();
         }
         Ok(Self {
             traces_enabled,
