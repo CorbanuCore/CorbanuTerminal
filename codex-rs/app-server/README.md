@@ -2142,7 +2142,7 @@ Codex supports these authentication modes. The current mode is surfaced in `acco
 - `account/login/completed` (notify) — emitted when a login attempt finishes (success or error).
 - `account/login/cancel` — cancel a pending managed ChatGPT login by `loginId`.
 - `account/logout` — sign out; triggers `account/updated` on success.
-- `account/updated` (notify) — emitted whenever auth mode changes (`authMode`: `apikey`, `bedrockApiKey`, `chatgpt`, `personalAccessToken`, or `null`) and includes the current ChatGPT `planType` when available. `apiKeyEnvVar` names the environment variable an API key is read from (for example `OPENAI_API_KEY`), or is `null`.
+- `account/updated` (notify) — emitted whenever auth mode changes (`authMode`: `apikey`, `bedrockApiKey`, `chatgpt`, `personalAccessToken`, or `null`) and includes the current ChatGPT `planType` when available. `apiKeyEnvVar` names the environment variable the OpenAI API key is read from (for example `OPENAI_API_KEY`), or is `null`; like `authMode`, it describes the OpenAI credential whatever the active provider.
 - `account/rateLimits/read` — fetch ChatGPT rate limits, an optional effective monthly credit limit, whether spend control has been reached, and the earned rate-limit resets currently available, including expiry details when provided by the backend. Rate-limit updates arrive via `account/rateLimits/updated` (notify); reset-credit data is snapshot-only.
 - `account/rateLimitResetCredit/consume` — consume one earned reset using a caller-provided idempotency key, optionally selecting a reset-credit ID returned by `account/rateLimits/read`.
 - `account/usage/read` — fetch ChatGPT account token-activity summary and daily buckets.
@@ -2172,7 +2172,7 @@ Field notes:
 
 - `refreshToken` (bool): set `true` to force a token refresh.
 - `email` is `null` when the ChatGPT account does not have an email address.
-- For `apiKey`, `envVar` names the environment variable the key is read from (for example `OPENAI_API_KEY` when no sign-in or key is saved), or is `null` for a saved key. The first model request a thread bills to the `OPENAI_API_KEY` fallback also emits a thread-scoped `warning` notification, once per switch to it.
+- For `apiKey`, `envVar` names the environment variable the key is read from (for example `OPENAI_API_KEY` when no sign-in or key is saved), or is `null` for a saved key or a provider that doesn't use OpenAI sign-in. The first model turn, review or compaction a root thread bills to the `OPENAI_API_KEY` fallback also emits a thread-scoped `warning` notification, and again whenever the credential switches back to it. Sub-agent threads and realtime sessions don't emit it.
 - `requiresOpenaiAuth` reflects the active provider; when `false`, Codex can run without OpenAI credentials.
 - Amazon Bedrock reports `usesCodexManagedCredentials: true` when it uses a Bedrock API key managed by Codex. It reports `false` for external credential paths, including the AWS credential chain and configured command auth. This identifies whether Codex-managed credentials are selected; it does not validate that the credential source can resolve credentials.
 

@@ -1639,14 +1639,19 @@ pub(crate) fn build_prompt(
 }
 
 /// Tells the user, once per switch, that requests are billed to the
-/// `OPENAI_API_KEY` from their environment. The provider filters that fallback
-/// out for non-OpenAI providers, so they never see this.
-async fn notify_openai_api_key_env_fallback(sess: &Session, turn_context: &TurnContext) {
-    let in_use = turn_context
-        .provider
-        .auth()
-        .await
-        .is_some_and(|auth| auth.is_openai_api_key_env_fallback());
+/// `OPENAI_API_KEY` from their environment. Only providers that use OpenAI
+/// sign-in send that key. Sub-agents (review, compaction, spawned agents)
+/// stay quiet: their root thread has already announced it.
+pub(crate) async fn notify_openai_api_key_env_fallback(sess: &Session, turn_context: &TurnContext) {
+    if turn_context.session_source.is_non_root_agent() {
+        return;
+    }
+    let in_use = turn_context.provider.info().uses_first_party_openai_auth()
+        && turn_context
+            .provider
+            .auth()
+            .await
+            .is_some_and(|auth| auth.is_openai_api_key_env_fallback());
     let newly_in_use = sess
         .state
         .lock()

@@ -1115,7 +1115,7 @@ impl AccountRequestProcessor {
         self.refresh_token_if_requested(do_refresh).await;
 
         let config = self.load_latest_config().await;
-        let uses_openai_key = config.model_provider.env_key.is_none();
+        let uses_openai_key = config.model_provider.uses_first_party_openai_auth();
         let provider =
             create_model_provider(config.model_provider, Some(self.auth_manager.clone()));
         let account_state = match provider.account_state() {

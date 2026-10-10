@@ -975,6 +975,17 @@ impl ModelProviderInfo {
             } == Self::default()
     }
 
+    /// Whether requests authenticate only through OpenAI sign-in (saved
+    /// sign-ins and keys, session tokens and the `OPENAI_API_KEY` fallback),
+    /// with no provider key variable, bearer token, auth command or AWS auth.
+    pub fn uses_first_party_openai_auth(&self) -> bool {
+        self.requires_openai_auth
+            && self.env_key.is_none()
+            && self.experimental_bearer_token.is_none()
+            && self.auth.is_none()
+            && self.aws.is_none()
+    }
+
     /// Return the provider's validated credential-source classification.
     pub fn credential_source(&self) -> ModelProviderCredentialSource<'_> {
         if self.requires_openai_auth {

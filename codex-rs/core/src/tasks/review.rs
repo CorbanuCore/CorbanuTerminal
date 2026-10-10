@@ -62,6 +62,8 @@ impl SessionTask for ReviewTask {
             /*inc*/ 1,
             &[],
         );
+        // The review runs as a sub-agent, which stays quiet; announce here.
+        crate::session::turn::notify_openai_api_key_env_fallback(&session.session, &ctx).await;
 
         let mut user_input = Vec::new();
         for item in input {
