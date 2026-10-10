@@ -31,10 +31,19 @@ jobs:
           python-version: "3.13"
       - name: Install codespell
         shell: bash
-        run: >-
-          python -m pip install --disable-pip-version-check --no-deps
-          --only-binary :all: --require-hashes
-          -r .github/codespell-requirements.txt
+        # The pin lives in this workflow, not a repository file: pull_request
+        # runs use the merged workflow but check out the PR head, so a PR
+        # branched before this change has no requirements file to read.
+        # 2.4.3 is what codespell-project/actions-codespell@v2.2 resolved
+        # (codespell[toml]>=2.2.4) when this was pinned.
+        run: |
+          set -euo pipefail
+          req="${RUNNER_TEMP}/codespell-requirements.txt"
+          printf '%s\n' \
+            'codespell==2.4.3 --hash=sha256:af2505b335e8573dbd2d384d1c4ef498f4006f4ba2d6fceca01e55b91f52628a' \
+            > "${req}"
+          python -m pip install --disable-pip-version-check --no-deps \
+            --only-binary :all: --require-hashes -r "${req}"
       - name: Codespell
         shell: bash
         run: |
