@@ -202,6 +202,12 @@ guest (increment-33), with one intermittent refusal recorded in F05.
 - Credentials reach an isolated guest only through the owner-approved path for
   that guest; never print or log them.
 
+Owner amendment, October 10, 2026: GLM 5.2 used Z.AI credit too fast, so these
+cases, per-sprint GLM tmux runs and GLM worker fallbacks now use GLM 5.3 Flash
+(`-m glm-5.3-flash -c model_provider="zai"`). Record Flash refusals the same
+way. Use GLM 5.2 only with a recorded reason, such as Flash being unable to
+complete a case. Evidence recorded on GLM 5.2 before this date stays valid.
+
 Use [the workflow and artifact templates](qa/code-blind-functional/README.md)
 and its handoff checker. The checker validates traceability, not the truth of
 screenshots, independent context or declared results; the evidence-check agent

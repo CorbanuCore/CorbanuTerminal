@@ -78,7 +78,7 @@ Paths are under `codex-rs/`, at `63ea3d0cbd`.
 - [ ] tmux SOP: in a disposable home, add a second Claude Plan account and a second
   ZAI key, switch the session account, restart, and check durability. Cancel is
   inert. Send text and Enter separately.
-- [ ] GLM run: `-m glm-5.2 -c model_provider="zai"` with the default ZAI account
+- [ ] GLM run: `-m glm-5.3-flash -c model_provider="zai"` with the default ZAI account
   replying and the session switched to a fake second key giving a 401.
 - [ ] Videos: `pf84-add-account.toml`, `pf84-switch-account.toml`, `pf84-no-duplicate-rows.toml`.
 - [ ] One independent review (Opus 5.5 High).

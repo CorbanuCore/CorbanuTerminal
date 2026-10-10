@@ -79,7 +79,7 @@ Specs live in `qa/demos/specs/<id>.toml`; see the two examples there.
 | Key | Meaning |
 | --- | --- |
 | `id`, `feature`, `expected` | File-name slug, title-card heading and the expected result in one or two sentences |
-| `model`, `provider` | Passed as `-m` and `-c model_provider=`. Use `glm-5.2` / `zai` (policy for functional cases) |
+| `model`, `provider` | Passed as `-m` and `-c model_provider=`. Use `glm-5.3-flash` / `zai` (policy for functional cases since 2026-10-10) |
 | `[credentials]` | `ENV_VAR = "<vault label>"`, e.g. `ZAI_API_KEY = "provider/zai_api_key"`. Override with `--credential VAR=vault:LABEL` or `VAR=file:PATH` |
 | `config` | Contents of the disposable `config.toml`. The workspace is trusted automatically |
 | `[fixtures]` | Workspace files to create (`"path" = "content"`) |
