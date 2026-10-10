@@ -21,9 +21,6 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf13-s07-20261007"
     branch: "feat/pf-13-s07-qualification-20261007"
     base_commit: "64137b71894fb15fb9d6bf754dc69c41d4cb0406"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-27-s09-20261009"
-    branch: "sec/pf-27-s09-model-auth"
-    base_commit: "5d283fde18b9924127d061f7c4f5b58211a3a50a"
 ---
 
 # P1 security hardening
@@ -66,7 +63,8 @@ Open when P0 closed on 2026-10-08. Nothing here is done; each item names where i
 | PF-83 TUI bug: `zai-anthropic` `glm-5.2` lacked a max-output limit | P0 TUI lane | Catalog fix on main (`fa4d24eafb`); verify on the next candidate |
 | PF-27-S06 unplaced follow-ups | [PF-27-S06](../../sprints/archive/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md) (archived 2026-10-08) | File tools other than patches under the Windows launch contract; elevated-sandbox profile reads (`~/.git-credentials`, `.ssh`, `.npmrc`, `.config/gh`) |
 | PF-27-S06/S07 Windows follow-ups | [S06](../../sprints/archive/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md), [S07](../../sprints/archive/p1-security-hardening/pf-27-s07-windows-hardening-follow-ups.md) (archived 2026-10-08, accepted with known limits) | #300 decided fail closed, being implemented; #301/#304 decided rule-driven removal, draft PR #326; #323 open; #307 and #320 fixed (PRs #321, #327); PF-27-S08/S09 planned |
-| PF-27-S08 follow-ups | [PF-27-S08](../../sprints/archive/p1-security-hardening/pf-27-s08-windows-broker-restricted-token.md) (archived 2026-10-09, accepted with known limits) | PF-27-S09 (stored-key reader, model auth) in progress, PR #363; S09 must give the broker access to `secrets/.vault.lock` or hand it an opened lock |
+| PF-27-S09 follow-ups | [PF-27-S09](../../sprints/archive/p1-security-hardening/pf-27-s09-windows-model-client-auth.md) (archived 2026-10-10, accepted with known limits; `broker_model_auth` still default off) | #389 console-session Credential Manager acceptance run; #390 exclusive pipe-squat probe; #391 `broker_model_auth` default-on decision |
+| PF-27-S08 follow-ups | [PF-27-S08](../../sprints/archive/p1-security-hardening/pf-27-s08-windows-broker-restricted-token.md) (archived 2026-10-09, accepted with known limits) | PF-27-S09 (stored-key reader, model auth) completed and archived 2026-10-10; Core creates `secrets/.vault.lock` and the broker locks it read-only (PR #363) |
 
 ## User pain
 
@@ -110,9 +108,9 @@ unbuilt controls read "not available".
 | Windows-host gate owner | released | released | released | PF-27-S06 completed and archived 2026-10-08 |
 | broker lane worker | released | released | released | PF-27-S07 completed and archived 2026-10-08 |
 | broker lane worker (2026-10-08) | released | released | released | PF-27-S08 completed and archived 2026-10-09 |
-| broker lane worker (2026-10-09) | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf-27-s09-20261009` | `sec/pf-27-s09-model-auth` | `5d283fde18b9` | PF-27-S09 (`ready`, awaiting Travis) |
+| broker lane worker (2026-10-09) | released | released | released | PF-27-S09 completed and archived 2026-10-10 |
 
-Lanes: **broker** (Windows hardening PF-27-S09; S06–S08 archived), **windows-host** (real-Windows gate runs; free),
+Lanes: **broker** (free; Windows hardening PF-27-S06–S09 archived), **windows-host** (real-Windows gate runs; free),
 **qualification** (PF-13-S07 and the milestone runs). Lanes and coordinates are revised by the integration owner
 as work starts; each executable record's coordinates must appear in front matter.
 
@@ -156,7 +154,7 @@ archived except PF-13-S07, which now lives here.
 | 42 | [PF-27-S06](../../sprints/archive/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md) | Windows broker and secretless launch (completed and archived 2026-10-08; accepted with known limits; PR #312) | PF-27-S02 |
 | 43 | [PF-27-S07](../../sprints/archive/p1-security-hardening/pf-27-s07-windows-hardening-follow-ups.md) | Windows hardening follow-ups: new threads protected at creation, `CODEX_HOME` deny removed on flag-off (completed and archived 2026-10-08; accepted with known limits; PR #316) | PF-27-S06 |
 | 44 | [PF-27-S08](../../sprints/archive/p1-security-hardening/pf-27-s08-windows-broker-restricted-token.md) | Windows broker confined by its own restricted token or AppContainer (completed and archived 2026-10-09; accepted with known limits; PRs #333, #360) | PF-27-S07 |
-| 45 | [PF-27-S09](../../sprints/current/p1-security-hardening/pf-27-s09-windows-model-client-auth.md) | Windows model-client auth through the broker | PF-27-S05, PF-27-S07 |
+| 45 | [PF-27-S09](../../sprints/archive/p1-security-hardening/pf-27-s09-windows-model-client-auth.md) | Windows model-client auth through the broker (completed and archived 2026-10-10; accepted with known limits; PRs #363, #379, acceptance #384) | PF-27-S05, PF-27-S07 |
 | 46 | [PF-31-S01](../../sprints/current/p1-security-hardening/pf-31-s01-pinned-retriever-isolation.md) | Pinned retriever artifact and sandbox | PF-33-S02, PF-27-S02, PF-31-S04 |
 | 47 | [PF-31-S02](../../sprints/current/p1-security-hardening/pf-31-s02-bounded-fetch-no-fallback.md) | Bounded fetch adapter with no host fallback | PF-31-S01, PF-30-S01 |
 | 48 | [PF-31-S03](../../sprints/current/p1-security-hardening/pf-31-s03-download-quarantine-promotion.md) | Download quarantine and human file promotion | PF-31-S02, PF-24-S01 |
@@ -220,7 +218,7 @@ PF-35's qualification baseline, carried from the P0 plan. Changing a target need
 ## Implementation sequence
 
 1. Qualification lane: Aggressive milestone (code-blind run, sign-off), then PF-13-S07 archive; Moderate milestone.
-2. Broker lane in parallel: PF-27-S09 (PF-27-S06 and S07 completed 2026-10-08, S08 2026-10-09).
+2. Broker lane: PF-27-S06 to S09 completed (S06 and S07 2026-10-08, S08 2026-10-09, S09 2026-10-10); free.
 3. The deferred features in the map order above, each under the per-sprint gate.
 4. Flag removal milestone, then PF-26-S04 → S02 → S03.
 

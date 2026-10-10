@@ -50,7 +50,7 @@ Received and archived by the P1 integration owner; code in PR #333, decision and
 
 Follow-ups (linked, not blockers):
 
-- [PF-27-S09](../../current/p1-security-hardening/pf-27-s09-windows-model-client-auth.md) (Windows stored-key
+- [PF-27-S09](pf-27-s09-windows-model-client-auth.md) (Windows stored-key
   reader and model auth): in progress, PR #363.
 - The vault lock S09 needs: each vault read opens `secrets/.vault.lock` for writing, which the S08 token cannot do;
   S09 grants the broker access to it or hands it an opened lock.

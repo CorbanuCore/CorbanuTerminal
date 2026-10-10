@@ -23,7 +23,7 @@ updated: 2026-10-08
 
 Travis approved fixing the four limits PF-27-S06 documented (2026-10-08). This sprint fixes the two that need no
 real Windows machine; the other two are [PF-27-S08](pf-27-s08-windows-broker-restricted-token.md) (the broker's
-own token) and [PF-27-S09](../../current/p1-security-hardening/pf-27-s09-windows-model-client-auth.md) (Windows model auth). All slices merged (the
+own token) and [PF-27-S09](pf-27-s09-windows-model-client-auth.md) (Windows model auth). All slices merged (the
 one-line `config/mod.rs` hook merged with slice 1, PF-60-S03 holds that file). The real-Windows gate run passed
 (2026-10-08).
 
@@ -40,7 +40,7 @@ Follow-ups (linked, not blockers):
 - #320 (`spawn_protected` stdout pipe briefly inheritable, the "broker stdout inheritance" limit): fixed by PR #327.
 - #323 (an armed contract's deny entries vs. another `CODEX_HOME`'s sync): open.
 - [PF-27-S08](pf-27-s08-windows-broker-restricted-token.md) and
-  [PF-27-S09](../../current/p1-security-hardening/pf-27-s09-windows-model-client-auth.md): planned.
+  [PF-27-S09](pf-27-s09-windows-model-client-auth.md): planned.
 
 ## Execution mandate
 
