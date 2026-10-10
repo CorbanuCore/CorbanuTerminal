@@ -765,14 +765,7 @@ fn attempt_text(q: &ObservationQuote) -> Vec<String> {
     let priced = q.snapshot.as_ref().filter(|s| {
         s.plan_burn_millis.is_some()
             || s.long_context.is_some()
-            || [
-                s.rates.noncached,
-                s.rates.read,
-                s.rates.write,
-                s.rates.output,
-            ]
-            .iter()
-            .any(Option::is_some)
+            || s.rates != codex_state::accounting::Rates::default()
     });
     if q.snapshot.is_some() && priced.is_none() {
         lines.push(format!(

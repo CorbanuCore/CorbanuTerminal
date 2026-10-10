@@ -1499,8 +1499,13 @@ fn accounting_inspect_priced_or_plan_rate_request_keeps_price_metadata() {
         native_snapshot(one_rate, "PlanEquivalent", None, None),
     ] {
         let mut q = quote();
+        // A request copies the plan rate from its record.
+        q.plan_burn_millis = snapshot.plan_burn_millis;
         q.snapshot = Some(snapshot);
         let text = attempt_text(&q).join("\n");
+        if q.plan_burn_millis.is_some() {
+            assert!(text.contains("Plan rate at dispatch: 1x"), "{text}");
+        }
         for present in &PRICE_METADATA[..5] {
             assert!(text.contains(present), "{present}\n{text}");
         }
