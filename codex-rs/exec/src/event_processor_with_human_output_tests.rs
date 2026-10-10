@@ -305,6 +305,7 @@ fn turn_completed_recovers_final_message_from_turn_items() {
         final_message_rendered: false,
         emit_final_message_on_shutdown: false,
         last_total_token_usage: None,
+        shown_config_warnings: Vec::new(),
     };
 
     let status = processor.process_server_notification(ServerNotification::TurnCompleted(
@@ -353,6 +354,7 @@ fn turn_completed_overwrites_stale_final_message_from_turn_items() {
         final_message_rendered: true,
         emit_final_message_on_shutdown: false,
         last_total_token_usage: None,
+        shown_config_warnings: Vec::new(),
     };
 
     let status = processor.process_server_notification(ServerNotification::TurnCompleted(
@@ -402,6 +404,7 @@ fn turn_completed_preserves_streamed_final_message_when_turn_items_are_empty() {
         final_message_rendered: false,
         emit_final_message_on_shutdown: false,
         last_total_token_usage: None,
+        shown_config_warnings: Vec::new(),
     };
 
     let status = processor.process_server_notification(ServerNotification::TurnCompleted(
@@ -446,6 +449,7 @@ fn turn_failed_clears_stale_final_message() {
         final_message_rendered: true,
         emit_final_message_on_shutdown: true,
         last_total_token_usage: None,
+        shown_config_warnings: Vec::new(),
     };
 
     let status = processor.process_server_notification(ServerNotification::TurnCompleted(
@@ -491,6 +495,7 @@ fn turn_interrupted_clears_stale_final_message() {
         final_message_rendered: true,
         emit_final_message_on_shutdown: true,
         last_total_token_usage: None,
+        shown_config_warnings: Vec::new(),
     };
 
     let status = processor.process_server_notification(ServerNotification::TurnCompleted(
@@ -516,4 +521,45 @@ fn turn_interrupted_clears_stale_final_message() {
     assert_eq!(processor.final_message, None);
     assert!(!processor.final_message_rendered);
     assert!(!processor.emit_final_message_on_shutdown);
+}
+
+/// #419: the session repeats its config's startup warnings; a repeat of a
+/// config warning already printed is consumed instead of printed again.
+#[test]
+fn session_repeat_of_a_config_warning_is_consumed_once() {
+    let mut processor = EventProcessorWithHumanOutput {
+        bold: Style::new(),
+        cyan: Style::new(),
+        dimmed: Style::new(),
+        green: Style::new(),
+        italic: Style::new(),
+        magenta: Style::new(),
+        red: Style::new(),
+        yellow: Style::new(),
+        show_agent_reasoning: true,
+        show_raw_agent_reasoning: false,
+        last_message_path: None,
+        final_message: None,
+        final_message_rendered: false,
+        emit_final_message_on_shutdown: false,
+        last_total_token_usage: None,
+        shown_config_warnings: Vec::new(),
+    };
+    let warning = "`[provider_accounts]` is ignored".to_string();
+    processor.process_server_notification(ServerNotification::ConfigWarning(
+        codex_app_server_protocol::ConfigWarningNotification {
+            summary: warning.clone(),
+            details: None,
+            path: None,
+            range: None,
+        },
+    ));
+    assert_eq!(processor.shown_config_warnings, vec![warning.clone()]);
+    processor.process_server_notification(ServerNotification::Warning(
+        codex_app_server_protocol::WarningNotification {
+            thread_id: None,
+            message: warning,
+        },
+    ));
+    assert!(processor.shown_config_warnings.is_empty());
 }

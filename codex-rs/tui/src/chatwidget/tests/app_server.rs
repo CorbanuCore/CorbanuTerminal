@@ -830,6 +830,7 @@ async fn live_app_server_guardian_warning_notification_renders_message() {
 #[tokio::test]
 async fn live_app_server_config_warning_prefixes_summary() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.thread_id = Some(ThreadId::new());
 
     chat.handle_server_notification(
         ServerNotification::ConfigWarning(ConfigWarningNotification {
@@ -848,6 +849,61 @@ async fn live_app_server_config_warning_prefixes_summary() {
         rendered.contains("Invalid configuration; using defaults."),
         "expected config warning summary, got {rendered}"
     );
+}
+
+/// #419: a config warning that arrives before the session header is shown
+/// after it (a startup redraw cannot hide it), and the session's repeat of
+/// the same warning is not shown a second time.
+#[tokio::test]
+async fn startup_config_warning_is_shown_once_after_the_session_header() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    let summary = "`[provider_accounts]` is ignored because the `named_accounts` feature is off";
+    chat.handle_server_notification(
+        ServerNotification::ConfigWarning(ConfigWarningNotification {
+            summary: summary.to_string(),
+            details: None,
+            path: None,
+            range: None,
+        }),
+        /*replay_kind*/ None,
+    );
+    assert!(drain_insert_history(&mut rx).is_empty());
+
+    chat.handle_thread_session(crate::session_state::ThreadSessionState {
+        thread_id: ThreadId::new(),
+        forked_from_id: None,
+        fork_parent_title: None,
+        thread_name: None,
+        model: "test-model".to_string(),
+        model_provider_id: "test-provider".to_string(),
+        service_tier: None,
+        approval_policy: AskForApproval::Never,
+        approvals_reviewer: ApprovalsReviewer::User,
+        permission_profile: PermissionProfile::read_only(),
+        active_permission_profile: None,
+        cwd: test_path_buf("/home/user/project").abs(),
+        runtime_workspace_roots: Vec::new(),
+        instruction_source_paths: Vec::new(),
+        reasoning_effort: Some(ReasoningEffortConfig::default()),
+        collaboration_mode: None,
+        personality: None,
+        message_history: None,
+        network_proxy: None,
+        rollout_path: None,
+    });
+    chat.handle_server_notification(
+        ServerNotification::Warning(codex_app_server_protocol::WarningNotification {
+            thread_id: None,
+            message: summary.to_string(),
+        }),
+        /*replay_kind*/ None,
+    );
+    let warnings = drain_insert_history(&mut rx)
+        .iter()
+        .map(|cell| lines_to_single_string(cell))
+        .filter(|text| text.contains(summary))
+        .count();
+    assert_eq!(warnings, 1);
 }
 
 #[tokio::test]

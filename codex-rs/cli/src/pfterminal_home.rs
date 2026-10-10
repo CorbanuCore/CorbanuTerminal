@@ -22,28 +22,72 @@ pub(crate) fn current_entrypoint_is_corbanu() -> bool {
 }
 
 pub(crate) fn configure_for_entrypoint(entrypoint: &str) -> anyhow::Result<()> {
-    let home = match entrypoint {
-        "pfterminal" | "corbanu" => return Ok(()),
-        "pfterminal-debug" | "corbanu-debug" => resolve_home(
-            std::env::var_os(CORBANU_DEBUG_HOME_ENV).map(PathBuf::from),
-            std::env::var_os(LEGACY_DEBUG_HOME_ENV).map(PathBuf::from),
-            std::env::var_os("CODEX_HOME").map(PathBuf::from),
-            dirs::home_dir(),
-        ),
-        _ => return Ok(()),
+    if !matches!(entrypoint, "pfterminal-debug" | "corbanu-debug") {
+        return Ok(());
     }
-    .with_context(|| format!("could not resolve the isolated home for {entrypoint}"))?;
+    let var = |name: &str| std::env::var(name).ok().filter(|value| !value.is_empty());
+    let variables = [
+        (CORBANU_DEBUG_HOME_ENV, var(CORBANU_DEBUG_HOME_ENV)),
+        (LEGACY_DEBUG_HOME_ENV, var(LEGACY_DEBUG_HOME_ENV)),
+        ("CORBANU_HOME", var("CORBANU_HOME")),
+        ("PFTERMINAL_HOME", var("PFTERMINAL_HOME")),
+        ("CODEX_HOME", var("CODEX_HOME")),
+    ];
+    let Some(home) = debug_home(&variables, dirs::home_dir())
+        .with_context(|| format!("could not resolve the isolated home for {entrypoint}"))?
+    else {
+        // A caller-set CORBANU_HOME/PFTERMINAL_HOME/CODEX_HOME is used as
+        // `corbanu` uses it (#418); the shared resolver reports conflicts.
+        return Ok(());
+    };
+    let borrowed = variables
+        .each_ref()
+        .map(|(name, value)| (*name, value.as_deref()));
+    if let Some(warning) = codex_core::config::home_variables_conflict(&borrowed) {
+        #[allow(clippy::print_stderr)]
+        {
+            eprintln!("{warning}");
+        }
+    }
 
     // This runs at process entry, before the async runtime or any worker threads exist.
-    // This process is specifically the isolated debug entrypoint. Stable-home
-    // variables must not outrank its selected debug home when the shared home
-    // resolver runs later.
+    // A debug home (chosen or default) must not be outranked by stable-home
+    // variables when the shared home resolver runs later.
     unsafe {
         std::env::remove_var("CORBANU_HOME");
         std::env::remove_var("PFTERMINAL_HOME");
         std::env::set_var("CODEX_HOME", home);
     }
     Ok(())
+}
+
+/// The debug entrypoint's home: `CORBANU_DEBUG_HOME`, then
+/// `PFTERMINAL_DEBUG_HOME`, else `Ok(None)` when a stable-home variable is
+/// set (it is kept, like the release `corbanu`), else the default debug home.
+fn debug_home(
+    variables: &[(&str, Option<String>); 5],
+    user_home: Option<PathBuf>,
+) -> Option<Option<PathBuf>> {
+    let [
+        (_, corbanu_debug),
+        (_, legacy_debug),
+        (_, corbanu),
+        (_, pfterminal),
+        (_, codex),
+    ] = variables;
+    if corbanu_debug.is_none()
+        && legacy_debug.is_none()
+        && (corbanu.is_some() || pfterminal.is_some() || codex.is_some())
+    {
+        return Some(None);
+    }
+    resolve_home(
+        corbanu_debug.as_ref().map(PathBuf::from),
+        legacy_debug.as_ref().map(PathBuf::from),
+        /*codex_override*/ None,
+        user_home,
+    )
+    .map(Some)
 }
 
 /// Exit with the repair when macOS privacy protection blocks the Corbanu home.
@@ -157,6 +201,58 @@ mod tests {
                 Some(user_home),
             ),
             Some(corbanu_override),
+        );
+    }
+
+    fn variables(
+        corbanu_debug: Option<&str>,
+        corbanu: Option<&str>,
+        codex: Option<&str>,
+    ) -> [(&'static str, Option<String>); 5] {
+        [
+            (CORBANU_DEBUG_HOME_ENV, corbanu_debug.map(str::to_string)),
+            (LEGACY_DEBUG_HOME_ENV, None),
+            ("CORBANU_HOME", corbanu.map(str::to_string)),
+            ("PFTERMINAL_HOME", None),
+            ("CODEX_HOME", codex.map(str::to_string)),
+        ]
+    }
+
+    /// #418: `corbanu-debug` keeps a caller-set `CORBANU_HOME` (or
+    /// `CODEX_HOME`) like `corbanu`, instead of replacing it with the debug home.
+    #[test]
+    fn debug_entrypoint_keeps_a_caller_set_stable_home() {
+        let user_home = Some(PathBuf::from("/home/tester"));
+        for vars in [
+            variables(None, Some("/homes/b"), None),
+            variables(None, Some("/homes/b"), Some("/homes/c")),
+            variables(None, None, Some("/homes/c")),
+        ] {
+            assert_eq!(debug_home(&vars, user_home.clone()), Some(None));
+        }
+        assert_eq!(
+            debug_home(&variables(None, None, None), user_home),
+            Some(Some(PathBuf::from("/home/tester/.corbanu-debug")))
+        );
+    }
+
+    /// #418: a debug home outranks `CORBANU_HOME`, and the conflict is reported.
+    #[test]
+    fn debug_home_outranks_corbanu_home_with_one_warning() {
+        let vars = variables(Some("/homes/d"), Some("/homes/b"), None);
+        assert_eq!(
+            debug_home(&vars, Some(PathBuf::from("/home/tester"))),
+            Some(Some(PathBuf::from("/homes/d")))
+        );
+        let borrowed = vars
+            .each_ref()
+            .map(|(name, value)| (*name, value.as_deref()));
+        assert_eq!(
+            codex_core::config::home_variables_conflict(&borrowed).as_deref(),
+            Some(
+                "warning: CORBANU_DEBUG_HOME (/homes/d) overrides CORBANU_HOME (/homes/b); \
+                 using /homes/d. To use another home, set CORBANU_DEBUG_HOME to it."
+            )
         );
     }
 

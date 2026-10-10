@@ -341,38 +341,25 @@ struct ConfiguredModelProvider {
     account_error: Option<String>,
 }
 
-/// PF-84: a named account of an `auth.command` provider must be enrolled
-/// (checked from vault metadata). Claude Plan's helper checks its own accounts.
+/// PF-84: a named account of an `auth.command` provider (including Claude
+/// Plan) must be enrolled, checked from vault metadata, so an unenrolled
+/// account fails at once instead of spawning its command on every retry.
 fn command_account_error(
     provider_info: &ModelProviderInfo,
     account_home: Option<&std::path::Path>,
 ) -> Option<String> {
+    provider_info.auth.as_ref()?;
     let account = provider_info.account.as_ref()?;
-    if provider_info.auth.is_none() || provider_info.is_claude_plan() {
-        return None;
-    }
-    let configured = match account_home {
-        Some(home) => codex_login::provider_account_holds(
-            home,
-            &account.provider_id,
-            &account.name,
-            codex_login::ProviderAccountKind::Command,
-        ),
-        None => Ok(false),
-    };
-    match configured {
-        Ok(true) => None,
-        Ok(false) => Some(format!(
-            "account `{name}` of provider `{id}` is not configured; add it with \
-             `corbanu account add {id} {name} --kind command` or choose another account",
-            name = account.name,
-            id = account.provider_id,
-        )),
-        Err(error) => Some(format!(
-            "account `{}` of provider `{}` is unavailable: {error}",
+    let Some(home) = account_home else {
+        return Some(format!(
+            "account `{}` of provider `{}` is not configured; choose another account",
             account.name, account.provider_id
-        )),
-    }
+        ));
+    };
+    crate::auth::external_bearer_account(provider_info, Some(home))?
+        .ensure_enrolled()
+        .err()
+        .map(|error| error.to_string())
 }
 
 impl ConfiguredModelProvider {
@@ -523,12 +510,15 @@ impl ModelProvider for ConfiguredModelProvider {
                 // once more and use the recovered credential.
                 validate_provider_auth_command_for_account(
                     command_auth,
-                    self.info
-                        .account
-                        .as_ref()
-                        .map(|account| account.name.as_str()),
+                    crate::auth::external_bearer_account(&self.info, self.account_home.as_deref())
+                        .as_ref(),
                 )
-                .await?;
+                .await
+                .map_err(|error| match error.kind() {
+                    // PF-84: an outdated helper refused the account; retrying cannot help.
+                    std::io::ErrorKind::Unsupported => CodexErr::Fatal(error.to_string()),
+                    _ => error.into(),
+                })?;
                 auth = self.auth().await;
                 if auth.is_none() {
                     return Err(std::io::Error::other(format!(

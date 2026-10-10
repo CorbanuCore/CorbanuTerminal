@@ -1105,6 +1105,7 @@ async fn external_bearer_command_receives_the_named_account() {
                 provider_id: "custom".to_string(),
                 name: name.to_string(),
                 registry_home: None,
+                server: crate::auth::ExternalBearerAccountServer::Command,
             }),
         );
         async move {
@@ -1140,10 +1141,107 @@ async fn external_bearer_command_never_runs_for_an_unenrolled_account() {
             provider_id: "custom".to_string(),
             name: "work".to_string(),
             registry_home: Some(empty_home.path().to_path_buf()),
+            server: crate::auth::ExternalBearerAccountServer::Command,
         }),
     );
     assert!(manager.auth().await.is_none());
     assert!(!canary.exists(), "the command must not run");
+}
+
+/// PF-84 (#419): an unenrolled Claude Plan account never spawns the helper.
+#[cfg(unix)]
+#[tokio::test]
+async fn claude_plan_helper_never_runs_for_an_unenrolled_account() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let canary = tempdir.path().join("ran");
+    let config: ModelProviderAuthInfo = serde_json::from_value(json!({
+        "command": "/bin/sh",
+        "args": ["-c", format!("touch {} && printf token", canary.display())],
+        "timeout_ms": 10_000,
+        "refresh_interval_ms": 0,
+        "cwd": tempdir.path(),
+    }))
+    .expect("provider auth config should deserialize");
+    let empty_home = tempfile::tempdir().unwrap();
+    let account = crate::auth::ExternalBearerAccount {
+        provider_id: "claude-plan".to_string(),
+        name: "ghost".to_string(),
+        registry_home: Some(empty_home.path().to_path_buf()),
+        server: crate::auth::ExternalBearerAccountServer::ClaudePlanHelper,
+    };
+    let manager = AuthManager::external_bearer_only_for_account(
+        config.clone(),
+        ExternalBearerCachePolicy::FreshPerRequest,
+        Some(account.clone()),
+    );
+    assert!(manager.auth().await.is_none());
+    let error = crate::validate_provider_auth_command_for_account(&config, Some(&account))
+        .await
+        .expect_err("an unenrolled account must be refused");
+    assert!(error.to_string().contains("--kind claude-token"), "{error}");
+    assert!(!canary.exists(), "the helper must not run");
+}
+
+/// PF-84 (#414): Corbanu's Claude helper gets the account in argv, so a
+/// helper that predates named accounts (and ignores
+/// `CORBANU_PROVIDER_ACCOUNT`) fails instead of serving the default account.
+#[cfg(unix)]
+#[tokio::test]
+async fn claude_plan_helper_that_predates_named_accounts_is_refused() {
+    let tempdir = tempfile::tempdir().unwrap();
+    // Like a pre-PF-84 `corbanu internal-claude-oauth-token`: no options, and
+    // always the default account's token.
+    let old_helper = "if [ $# -gt 0 ]; then echo \"error: unexpected argument '$1' found\" >&2; exit 2; fi; printf default-account-token";
+    let current_helper = "[ \"$1 $2 $3 $4\" = \"--account $CORBANU_PROVIDER_ACCOUNT --enable named_accounts\" ] && printf \"account-%s\" \"$2\"";
+    let auth = |script: &str| -> ModelProviderAuthInfo {
+        serde_json::from_value(json!({
+            "command": "/bin/sh",
+            "args": ["-c", script, "corbanu"],
+            "timeout_ms": 10_000,
+            "refresh_interval_ms": 0,
+            "cwd": tempdir.path(),
+        }))
+        .expect("provider auth config should deserialize")
+    };
+    let account = crate::auth::ExternalBearerAccount {
+        provider_id: "claude-plan".to_string(),
+        name: "work".to_string(),
+        registry_home: None,
+        server: crate::auth::ExternalBearerAccountServer::ClaudePlanHelper,
+    };
+    let token = |config: ModelProviderAuthInfo,
+                 account: Option<crate::auth::ExternalBearerAccount>| {
+        let manager = AuthManager::external_bearer_only_for_account(
+            config,
+            ExternalBearerCachePolicy::FreshPerRequest,
+            account,
+        );
+        async move {
+            manager
+                .auth()
+                .await
+                .and_then(|auth| auth.api_key().map(str::to_string))
+        }
+    };
+
+    assert_eq!(token(auth(old_helper), Some(account.clone())).await, None);
+    let error =
+        crate::validate_provider_auth_command_for_account(&auth(old_helper), Some(&account))
+            .await
+            .expect_err("an outdated helper must be refused");
+    assert!(
+        error.to_string().contains("predates named accounts"),
+        "{error}"
+    );
+    assert_eq!(
+        token(auth(current_helper), Some(account)).await.as_deref(),
+        Some("account-work")
+    );
+    // The default account keeps today's argv.
+    assert_eq!(
+        token(auth(old_helper), None).await.as_deref(),
+        Some("default-account-token")
+    );
 }
 
 #[tokio::test]

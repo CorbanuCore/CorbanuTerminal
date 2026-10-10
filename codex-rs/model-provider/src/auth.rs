@@ -210,20 +210,10 @@ pub(crate) fn auth_manager_for_provider(
     let cache_policy = external_bearer_cache_policy(auth_manager.as_deref(), provider);
     match provider.auth.clone() {
         Some(config) => {
-            let account = provider.account.as_ref().map(|account| {
-                codex_login::auth::ExternalBearerAccount {
-                    provider_id: account.provider_id.clone(),
-                    name: account.name.clone(),
-                    // Claude Plan's helper checks its own accounts.
-                    registry_home: (!provider.is_claude_plan())
-                        .then(|| {
-                            auth_manager
-                                .as_deref()
-                                .map(|m| m.codex_home().to_path_buf())
-                        })
-                        .flatten(),
-                }
-            });
+            let account = external_bearer_account(
+                provider,
+                auth_manager.as_deref().map(AuthManager::codex_home),
+            );
             Some(AuthManager::external_bearer_only_for_account(
                 config,
                 cache_policy,
@@ -232,6 +222,25 @@ pub(crate) fn auth_manager_for_provider(
         }
         None => auth_manager,
     }
+}
+
+/// PF-84: the named account `provider`'s auth command must serve, checked
+/// against the registry in `registry_home` before the command runs.
+pub(crate) fn external_bearer_account(
+    provider: &ModelProviderInfo,
+    registry_home: Option<&std::path::Path>,
+) -> Option<codex_login::auth::ExternalBearerAccount> {
+    let account = provider.account.as_ref()?;
+    Some(codex_login::auth::ExternalBearerAccount {
+        provider_id: account.provider_id.clone(),
+        name: account.name.clone(),
+        registry_home: registry_home.map(std::path::Path::to_path_buf),
+        server: if provider.is_claude_plan() {
+            codex_login::auth::ExternalBearerAccountServer::ClaudePlanHelper
+        } else {
+            codex_login::auth::ExternalBearerAccountServer::Command
+        },
+    })
 }
 
 fn external_bearer_cache_policy(

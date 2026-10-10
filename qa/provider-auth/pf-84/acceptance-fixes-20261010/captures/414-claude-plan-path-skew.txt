@@ -1,0 +1,24 @@
+Saved claude-plan account `fake` (claude_oauth_token).
+Saved claude-plan account `real` (claude_oauth_token).
+claude-plan	fake	claude_oauth_token
+claude-plan	real	claude_oauth_token
+== parent=before PATH-helper=pre account=fake (default token in CLAUDE_CODE_OAUTH_TOKEN) exit=0 helper-calls=6
+   | pong
+   first call: argv=[internal-claude-oauth-token] CORBANU_PROVIDER_ACCOUNT=fake
+== parent=after PATH-helper=pre account=fake (default token in CLAUDE_CODE_OAUTH_TOKEN) exit=1 helper-calls=8
+   | ERROR: Fatal error: provider auth command `corbanu` predates named accounts, so account `fake` was refused instead of using the default account; update it or put a current `corbanu` first on PATH
+   first call: argv=[internal-claude-oauth-token --account fake --enable named_accounts] CORBANU_PROVIDER_ACCOUNT=fake
+== parent=after PATH-helper=after account=fake (default token in CLAUDE_CODE_OAUTH_TOKEN) exit=1 helper-calls=10
+   | ERROR: unexpected status 401 Unauthorized: OAuth access token is invalid., url: https://api.anthropic.com/v1/messages, cf-ray: a4895364d9f18bef-DFW
+   first call: argv=[internal-claude-oauth-token --account fake --enable named_accounts] CORBANU_PROVIDER_ACCOUNT=fake
+== parent=after PATH-helper=after account=real (default token in CLAUDE_CODE_OAUTH_TOKEN) exit=0 helper-calls=6
+   | pong
+   first call: argv=[internal-claude-oauth-token --account real --enable named_accounts] CORBANU_PROVIDER_ACCOUNT=real
+== parent=before PATH-helper=after account=ghost (default token in CLAUDE_CODE_OAUTH_TOKEN) exit=1 helper-calls=28
+   | ERROR: Reconnecting... 1/5
+   | ERROR: Reconnecting... 2/5
+   | ERROR: Reconnecting... 3/5
+   first call: argv=[internal-claude-oauth-token] CORBANU_PROVIDER_ACCOUNT=ghost
+== parent=after PATH-helper=after account=ghost (default token in CLAUDE_CODE_OAUTH_TOKEN) exit=1 helper-calls=0
+   | ERROR: Fatal error: account `ghost` of provider `claude-plan` is not configured; add it with `corbanu account add claude-plan ghost --kind claude-token (or --kind claude-config-dir)` or choose another account
+DONE-414

@@ -1,0 +1,6 @@
+== before add --value relative/dir: exit=0 | Saved claude-plan account `cfg` (claude_config_dir).
+== before add --value no-such-dir: exit=0 | Saved claude-plan account `cfg` (claude_config_dir).
+== before kind mismatch: Error: provider `zai` does not take a claude_oauth_token account
+== after add --value relative/dir: exit=1 | Error: --value must be the absolute path of an existing Claude Code config directory; relative/dir is not
+== after add --value no-such-dir: exit=1 | Error: --value must be the absolute path of an existing Claude Code config directory; no-such-dir is not
+== after kind mismatch: Error: provider `zai` does not take `claude_oauth_token` accounts

@@ -76,6 +76,14 @@ prints one warning naming the home it uses; to use another home, set
 home. A worker that sets only `CODEX_HOME` gets the warning too, because the
 inherited `CORBANU_HOME` still wins.
 
+`corbanu-debug` uses its own debug home: `CORBANU_DEBUG_HOME`, then
+`PFTERMINAL_DEBUG_HOME`, and otherwise `$HOME/.corbanu-debug`. A
+`CORBANU_HOME`, `PFTERMINAL_HOME` or `CODEX_HOME` you set yourself is kept,
+just as `corbanu` keeps it, so `CORBANU_HOME=<other home> corbanu-debug ...`
+runs on that home. If a debug home variable and a stable home variable name
+different directories, the debug home wins and `corbanu-debug` prints one
+warning naming it.
+
 ### Claude Plan
 
 On first run, choose **Provider: Anthropic Claude Account** to enter this flow

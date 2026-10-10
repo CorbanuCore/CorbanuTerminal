@@ -1,0 +1,23 @@
+== exec before: 2 '[provider_accounts] is ignored' warning line(s)
+== exec after: 1 '[provider_accounts] is ignored' warning line(s)
+TUI (same home, before/after):
+== before
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:     glm-5.3-flash   /model to change             │
+│ directory: /Volumes/CorbanuDrive/…/pf84fix-scratch/work │
+╰─────────────────────────────────────────────────────────╯
+⚠ `[provider_accounts]` is ignored because the `named_accounts` feature is off; every provider uses its default account.
+› Improve documentation in @filename
+  Z.AI GLM 5.3 Flash via zai default · <scratch>/work · Corbanu Terminal · TPS: -- tok/s
+== after
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:     glm-5.3-flash   /model to change             │
+│ directory: /Volumes/CorbanuDrive/…/pf84fix-scratch/work │
+╰─────────────────────────────────────────────────────────╯
+⚠ `[provider_accounts]` is ignored because the `named_accounts` feature is off; every provider uses its default account.
+› Summarize recent commits
+  Z.AI GLM 5.3 Flash via zai default · <scratch>/work · Corbanu Terminal · TPS: -- tok/s

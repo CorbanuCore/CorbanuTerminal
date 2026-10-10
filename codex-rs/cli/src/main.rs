@@ -1623,7 +1623,7 @@ async fn cli_main(
             account_cmd::run_account_command(account_cli).await?;
         }
         Some(Subcommand::InternalClaudeOauthToken { account }) => {
-            run_internal_claude_oauth_token(account).await?;
+            run_internal_claude_oauth_token(account, root_config_overrides.clone()).await?;
         }
         Some(Subcommand::InternalClaudeLoginHealth { source_id }) => {
             let source_id =
@@ -2420,7 +2420,10 @@ async fn run_vault_command(command: VaultCommand) -> anyhow::Result<()> {
     }
 }
 
-async fn run_internal_claude_oauth_token(account: Option<String>) -> anyhow::Result<()> {
+async fn run_internal_claude_oauth_token(
+    account: Option<String>,
+    config_overrides: CliConfigOverrides,
+) -> anyhow::Result<()> {
     let codex_home = find_codex_home()?;
     let account = account.or_else(|| {
         std::env::var(codex_login::PROVIDER_ACCOUNT_ENV_VAR)
@@ -2433,10 +2436,38 @@ async fn run_internal_claude_oauth_token(account: Option<String>) -> anyhow::Res
         .transpose()?
         .flatten();
     let access_token = match named {
-        Some(name) => claude_oauth::resolve_claude_account_access_token(&codex_home, &name).await?,
+        Some(name) => {
+            // PF-84 (#415): with the feature off, a named account is refused,
+            // never served and never replaced by the default account.
+            ensure_named_accounts_enabled(config_overrides, &name).await?;
+            claude_oauth::resolve_claude_account_access_token(&codex_home, &name).await?
+        }
         None => claude_oauth::resolve_claude_oauth_access_token(&codex_home).await?,
     };
     std::io::stdout().write_all(access_token.as_bytes())?;
+    Ok(())
+}
+
+async fn ensure_named_accounts_enabled(
+    config_overrides: CliConfigOverrides,
+    name: &codex_vault::ProviderAccountName,
+) -> anyhow::Result<()> {
+    let cli_kv_overrides = config_overrides
+        .parse_overrides()
+        .map_err(anyhow::Error::msg)?;
+    let config = ConfigBuilder::default()
+        .cli_overrides(cli_kv_overrides)
+        .build()
+        .await?;
+    if !config
+        .features
+        .enabled(codex_features::Feature::NamedAccounts)
+    {
+        anyhow::bail!(
+            "Claude account `{name}` was requested, but named accounts are off; enable them \
+             with `[features] named_accounts = true` or `--enable named_accounts`"
+        );
+    }
     Ok(())
 }
 
