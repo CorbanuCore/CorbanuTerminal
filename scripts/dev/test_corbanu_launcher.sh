@@ -17,8 +17,8 @@ EOF
 chmod +x "$work/bin/corbanu"
 
 run() {
-  env -i PATH=/usr/bin:/bin HOME="$work" CORBANU_WORK_DIR="$work" \
-    CORBANU_WORKSPACE_DIR="$work" "$@" /bin/sh "$launcher"
+  env -i PATH=/usr/bin:/bin HOME="$work" CORBANU_LAUNCHER_WORK_DIR="$work" \
+    CORBANU_LAUNCHER_WORKSPACE_DIR="$work" "$@" /bin/sh "$launcher"
 }
 check() {
   if [ "$1" != "$2" ]; then
@@ -32,3 +32,4 @@ check "$(run)" "$work/default-home||$work/default-home" "no caller home uses the
 check "$(run CORBANU_HOME=/worker)" "/worker||" "caller CORBANU_HOME is kept"
 check "$(run CODEX_HOME=/worker)" "||/worker" "caller CODEX_HOME is kept"
 check "$(run CORBANU_HOME=/a CODEX_HOME=/b)" "/a||/b" "caller conflict is passed through for the binary to report"
+check "$(run PFTERMINAL_HOME=/worker)" "|/worker|" "caller PFTERMINAL_HOME is kept"

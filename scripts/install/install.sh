@@ -1125,13 +1125,14 @@ write_visible_command_wrapper() {
   target="$2"
   codex_home="$3"
   tmp_script="$4"
+  # Home variables the target binary honours before CODEX_HOME; a caller who
+  # set any of them keeps it (PF-84-S01).
+  caller_homes="$5"
 
   rm -f "$tmp_script"
   {
     printf '#!/bin/sh\n'
-    # Keep any home the caller chose (PF-84-S01): an inherited CORBANU_HOME or
-    # PFTERMINAL_HOME already outranks CODEX_HOME in the binary.
-    printf 'if [ -z "${CORBANU_HOME:-}${PFTERMINAL_HOME:-}${CODEX_HOME:-}" ]; then\n'
+    printf 'if [ -z "%s${CODEX_HOME:-}" ]; then\n' "$caller_homes"
     printf '  export CODEX_HOME=%s\n' "$(shell_quote "$codex_home")"
     printf 'fi\n'
     printf 'exec %s "$@"\n' "$(shell_quote "$target")"
@@ -1156,7 +1157,8 @@ update_visible_command() {
     exit 1
   fi
 
-  write_visible_command_wrapper "$BIN_PATH" "$CURRENT_LINK/$terminal_relative_path" "$CODEX_HOME_DIR" "$tmp_script"
+  write_visible_command_wrapper "$BIN_PATH" "$CURRENT_LINK/$terminal_relative_path" "$CODEX_HOME_DIR" "$tmp_script" \
+    '${CORBANU_HOME:-}${PFTERMINAL_HOME:-}'
   remove_managed_debug_wrapper "$LEGACY_BIN_PATH"
   remove_managed_debug_wrapper "$LEGACY_DEBUG_BIN_PATH"
 
@@ -1167,7 +1169,8 @@ update_visible_command() {
         "$DEBUG_BIN_PATH" \
         "$CURRENT_LINK/$debug_terminal_relative_path" \
         "$DEBUG_CODEX_HOME_DIR" \
-        "$debug_tmp_script"
+        "$debug_tmp_script" \
+        '${CORBANU_DEBUG_HOME:-}${PFTERMINAL_DEBUG_HOME:-}'
       debug_launchers_installed="true"
     else
       warn "release has no debug binary; skipping corbanu-debug launcher"

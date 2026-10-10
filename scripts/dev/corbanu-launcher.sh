@@ -7,8 +7,8 @@
 # CODEX_HOME) is kept. activate.sh exports the default home unconditionally, so
 # without this a worker started as `CORBANU_HOME=<other> corbanu ...` silently
 # ran on the default home and its account.
-CORBANU_WORK_DIR="${CORBANU_WORK_DIR:-/Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal}"
-CORBANU_WORKSPACE_DIR="${CORBANU_WORKSPACE_DIR:-/Volumes/CorbanuDrive/Corbanu}"
+CORBANU_WORK_DIR="${CORBANU_LAUNCHER_WORK_DIR:-/Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal}"
+CORBANU_WORKSPACE_DIR="${CORBANU_LAUNCHER_WORKSPACE_DIR:-/Volumes/CorbanuDrive/Corbanu}"
 if ! cat "$CORBANU_WORK_DIR/activate.sh" >/dev/null 2>&1; then
   echo "corbanu: macOS is blocking access to CorbanuDrive." >&2
   if [ -n "$SSH_CONNECTION" ]; then

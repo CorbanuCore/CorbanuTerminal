@@ -18,7 +18,7 @@ ZAI_API_KEY = "provider/zai_api_key"
 [fixtures]
 "worker-b.sh" = """
 #!/bin/sh
-CORBANU_HOME="$PWD/../homeB" RUST_LOG=error sh ../work/corbanu-launcher.sh exec --skip-git-repo-check \\
+CORBANU_HOME="$PWD/../homeB" CORBANU_LAUNCHER_WORK_DIR="$PWD/../work" RUST_LOG=error sh ../work/corbanu-launcher.sh exec --skip-git-repo-check \\
   -c model_provider=openai -m gpt-5.4 "Reply with the word pong" 2>&1 | grep -E '^ERROR: |^pong' | head -1
 """
 

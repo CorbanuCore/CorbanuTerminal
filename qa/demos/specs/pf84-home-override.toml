@@ -21,7 +21,7 @@ ZAI_API_KEY = "provider/zai_api_key"
 "check-homes.sh" = """
 #!/bin/sh
 echo "== launcher, CORBANU_HOME=homeB =="
-CORBANU_HOME="$PWD/../homeB" sh ../work/corbanu-launcher.sh doctor 2>&1 | grep 'config.toml'
+CORBANU_HOME="$PWD/../homeB" CORBANU_LAUNCHER_WORK_DIR="$PWD/../work" sh ../work/corbanu-launcher.sh doctor 2>&1 | grep -E '^warning|config.toml'
 echo "== CORBANU_HOME=homeA, CODEX_HOME=homeB =="
 CORBANU_HOME="$PWD/../homeA" CODEX_HOME="$PWD/../homeB" ../work/bin/corbanu doctor 2>&1 | grep -E '^warning|config.toml'
 """
