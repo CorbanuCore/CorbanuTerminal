@@ -95,7 +95,6 @@ Refs are at `origin/main` `63ea3d0cbd`, from multiacct1; paths are under `codex-
 ## Exit evidence
 
 - [ ] Implementation commit and PR recorded.
-- [ ] Test output, canary scan, tmux log and video path linked.
-- [ ] Code-blind handoff checker passes, or limited-testing agreement recorded.
+- [ ] Test output, canary scan, tmux log, video path and code-blind checker (or limited-testing agreement) linked.
 - [ ] `Done` and `Remaining` ledgers reflect reality.
 - [ ] Completed record moved to `docs/sprints/archive/unified-provider-auth/`.
