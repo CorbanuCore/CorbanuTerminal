@@ -1924,42 +1924,85 @@ impl Session {
             .cloned()
     }
 
-    /// Where this session's paid requests are recorded (PF-60-S05): its own
-    /// thread when it is persisted; for a guardian reviewer - the reusable
-    /// trunk and its ephemeral forks alike - the conversation it reviews for,
-    /// in that conversation's ledger. `Err` says why there is none: a session
-    /// that is not collected by design, or a ledger that could not be reached.
+    /// Where this session's paid requests are recorded (PF-60-S05, PF-60-S04).
+    ///
+    /// A persisted session records under its own thread. A session with no
+    /// thread of its own records under the conversation it works for, in that
+    /// conversation's ledger, with a turn label saying what it is:
+    /// - a guardian reviewer (the reusable trunk and its ephemeral forks): the
+    ///   conversation it reviews for, as `review:`;
+    /// - a memory consolidation agent: the conversation that started it, as
+    ///   `consolidation:`;
+    /// - any other ephemeral fork (in the TUI, `/side`): the conversation it
+    ///   was forked from, as `side:`.
+    ///
+    /// `Err` says why there is none: a session that is not collected by design
+    /// (`exec --ephemeral`, or work for a conversation that is itself not
+    /// persisted), or a ledger that could not be reached.
     pub(crate) async fn accounting_owner(
         &self,
     ) -> Result<crate::accounting::AccountingOwner, crate::accounting::Uncollected> {
         use crate::accounting::Uncollected;
-        let guardian_parent = {
+        let (guardian_parent, forked_from) = {
             let state = self.state.lock().await;
             let configuration = &state.session_configuration;
-            match &configuration.session_source {
+            let guardian_parent = match &configuration.session_source {
                 SessionSource::SubAgent(codex_protocol::protocol::SubAgentSource::Other(name))
                     if name == crate::guardian::GUARDIAN_REVIEWER_NAME =>
                 {
                     Some(configuration.parent_thread_id)
                 }
                 _ => None,
-            }
+            };
+            (guardian_parent, configuration.forked_from_thread_id)
         };
-        let Some(parent) = guardian_parent else {
-            if self.live_thread().is_none() {
-                return Err(Uncollected::Excluded("ephemeral_session"));
-            }
+        if let Some(parent) = guardian_parent {
+            let parent = parent.ok_or(Uncollected::Excluded("guardian_without_parent"))?;
+            return self.accounting_owner_elsewhere(parent, "review:").await;
+        }
+        if self.live_thread().is_some() {
             let db = self
                 .state_db()
                 .ok_or(Uncollected::Failed("no state database"))?;
             return Ok(crate::accounting::AccountingOwner {
                 thread: self.thread_id,
                 db,
+                label_prefix: "",
             });
-        };
-        let parent = parent.ok_or(Uncollected::Excluded("guardian_without_parent"))?;
-        // An ephemeral fork has no database of its own; it shares the
-        // parent's thread store, and so the parent's ledger.
+        }
+        if let Some(started_by) = self.services.accounting_started_by.get() {
+            // The conversation that started this worker may not have written
+            // its rollout yet; it owns the work, so it is materialized the
+            // way its own stage-one memory requests materialize it.
+            let started_by = started_by
+                .upgrade()
+                .ok_or(Uncollected::Excluded("starting_conversation_closed"))?;
+            if started_by.live_thread().is_none() {
+                return Err(Uncollected::Excluded("parent_not_persisted"));
+            }
+            started_by
+                .try_ensure_rollout_materialized()
+                .await
+                .map_err(|_| Uncollected::Failed("starting conversation not materialized"))?;
+            return self
+                .accounting_owner_elsewhere(started_by.thread_id, "consolidation:")
+                .await;
+        }
+        if let Some(parent) = forked_from {
+            return self.accounting_owner_elsewhere(parent, "side:").await;
+        }
+        Err(Uncollected::Excluded("ephemeral_session"))
+    }
+
+    /// `parent`'s ledger, for a session with no thread of its own that works
+    /// for `parent`. Such a session has no database of its own; it shares the
+    /// parent's thread store, and so the parent's ledger.
+    async fn accounting_owner_elsewhere(
+        &self,
+        parent: ThreadId,
+        label_prefix: &'static str,
+    ) -> Result<crate::accounting::AccountingOwner, crate::accounting::Uncollected> {
+        use crate::accounting::Uncollected;
         let db = match self.state_db() {
             Some(db) => Some(db),
             None => match self
@@ -1973,10 +2016,14 @@ impl Session {
             },
         }
         .ok_or(Uncollected::Failed("no state database"))?;
-        // A reviewer of a conversation that is itself not persisted (exec
+        // Work for a conversation that is itself not persisted (exec
         // --ephemeral, a side conversation) has no thread to record under.
         match db.get_thread(parent).await {
-            Ok(Some(_)) => Ok(crate::accounting::AccountingOwner { thread: parent, db }),
+            Ok(Some(_)) => Ok(crate::accounting::AccountingOwner {
+                thread: parent,
+                db,
+                label_prefix,
+            }),
             Ok(None) => Err(Uncollected::Excluded("parent_not_persisted")),
             Err(_) => Err(Uncollected::Failed("parent thread unreadable")),
         }

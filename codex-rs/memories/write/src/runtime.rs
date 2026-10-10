@@ -335,6 +335,10 @@ impl MemoryStartupContext {
             })
             .await?;
 
+        // Consolidation is paid inference on this conversation's behalf; it
+        // has no thread of its own, so its requests are recorded under this
+        // one (PF-60-S04), like the stage-one requests that fed it.
+        thread.record_model_requests_under(&self.thread);
         let agent = SpawnedConsolidationAgent { thread_id, thread };
         if let Err(err) = agent
             .thread
