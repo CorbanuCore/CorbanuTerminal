@@ -639,7 +639,8 @@ fn runtime_rows(input: &InspectorInput, facts: &RuntimeFacts) -> Vec<Row> {
                 "installed: this process",
             ),
             // #391: Aggressive turns it on where the broker runs, so off
-            // there means config turned it off.
+            // there means config turned it off, or the level was chosen
+            // after this process started.
             other if aggressive_brokers => required(control(
                 "Model key broker",
                 other,

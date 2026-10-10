@@ -20,10 +20,16 @@ they are a separate, later decision.
   requirements. A project's `.codex/config.toml` doesn't count, so a repository
   can't turn off the Aggressive default, even when your own config turns the
   broker on.
-- **When a change applies:** the level counts as this process first saw it for
-  that home. Choosing Aggressive mid-session takes effect at the next start, so
-  a config rebuilt mid-session never makes a running session brokered without a
-  broker.
+- **When a change applies:** a level from config layers (`[security] level`, a
+  project layer, `-c`) applies on every load. A new session then starts the
+  broker. The level `/security` saves on disk (its level file and Core's
+  confirmed record) counts as this process first saw it for that home.
+  Choosing Aggressive mid-session therefore takes effect at the next start, and
+  a config rebuilt mid-session never makes a running session brokered without
+  a broker.
+- **Managed policy:** a requirement that pins the feature still wins. When it
+  pins the broker on, the fail-closed message says so instead of suggesting a
+  config change.
 - **What the broker holds:** provider API keys from the environment or the
   vault. Sign-in tokens are still read by Core and then handed to the broker.
   Command, AWS and header sign-ins aren't brokered. Realtime and websockets are
@@ -51,6 +57,13 @@ they are a separate, later decision.
   - the fail-closed message for both origins and causes;
   - a real broker that can't start on Unix and Windows: refused, and env keys
     scrubbed.
+- `codex-core` test binary `sec_391_level_cache` (a normal build): a level
+  saved mid-process waits for the restart, while a config-layer level applies
+  at once.
+- `codex-exec` `suite::aggressive_broker_default` (the real binary): under
+  Aggressive the provider key is handed to the broker by default (or every
+  request is refused if the broker can't start), and
+  `-c features.broker_model_auth=false` wins.
 - `codex-tui` `security::inspector::tests::sec_391_*` and
   `security::current::tests::model_keys_row_reports_the_broker_setting`, plus
   the updated `/security` snapshots.

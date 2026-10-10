@@ -209,6 +209,12 @@ fn sec_391_not_started_message_names_the_setting_and_the_level() {
             vec!["/security", "Aggressive"],
         ),
         (
+            StartFailure::Unavailable,
+            BrokerModelAuthOrigin::Policy,
+            vec!["did not start", "required by a managed policy"],
+            vec!["/security", "Aggressive", "`broker_model_auth = false`"],
+        ),
+        (
             StartFailure::PipeSquatted,
             BrokerModelAuthOrigin::AggressiveLevel,
             vec![
@@ -223,7 +229,7 @@ fn sec_391_not_started_message_names_the_setting_and_the_level() {
         assert!(broker.unavailable_reason().is_some());
         let error = refusal(&broker, "https://api.z.ai/api/paas/v4", held_value());
         assert!(error.contains("nothing is sent without it"), "{error}");
-        assert!(error.contains("`broker_model_auth = false`"), "{error}");
+        assert!(error.contains("broker_model_auth"), "{error}");
         for text in present {
             assert!(error.contains(text), "{cause:?} {origin:?} {text}: {error}");
         }

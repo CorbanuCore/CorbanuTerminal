@@ -54,6 +54,8 @@ pub enum BrokerModelAuthOrigin {
     Config,
     /// Security level Aggressive turned it on; nothing sets it explicitly.
     AggressiveLevel,
+    /// A managed requirement pins it on.
+    Policy,
 }
 
 /// Operating systems where Aggressive turns the broker on by default: the
@@ -74,19 +76,28 @@ pub(crate) fn level_broker_setting(
     (level == SecurityLevel::Aggressive && supported).then(|| explicit.unwrap_or(true))
 }
 
-/// #391: the level that decides the default for `codex_home`: the stricter of
-/// Core's level and the level `/security` stored, as this process first saw
-/// them. A level chosen while Corbanu runs takes effect at the next start,
-/// so a config rebuilt mid-session never makes a running session brokered
-/// without a broker.
+/// #391: the level that decides the default for `codex_home`: the stricter
+/// of the `configured` level (config layers, read on every load) and the
+/// level `/security` saved on disk (its level file and Core's confirmed
+/// record), as this process first saw that. A level saved while Corbanu runs
+/// takes effect at the next start, so a config rebuilt mid-session never
+/// makes a running session brokered without a broker.
 pub(crate) fn level_for_defaults(
     codex_home: &std::path::Path,
-    core_level: SecurityLevel,
+    configured: SecurityLevel,
 ) -> SecurityLevel {
-    let level = core_level.max(stored_security_level(codex_home));
+    configured.max(saved_level(codex_home))
+}
+
+fn saved_level(codex_home: &std::path::Path) -> SecurityLevel {
+    let read = || {
+        crate::security::recovery::recover(codex_home, SecurityLevel::Permissive)
+            .level
+            .max(stored_security_level(codex_home))
+    };
     if cfg!(test) {
-        // Core's unit tests load many levels for one home path pattern.
-        return level;
+        // Core's unit tests save and load levels in one process.
+        return read();
     }
     static SEEN: std::sync::OnceLock<Mutex<HashMap<std::path::PathBuf, SecurityLevel>>> =
         std::sync::OnceLock::new();
@@ -95,7 +106,7 @@ pub(crate) fn level_for_defaults(
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .entry(codex_home.to_path_buf())
-        .or_insert(level)
+        .or_insert_with(read)
 }
 
 /// The level `/security` stored for this home (Corbanu Terminal enforces it
@@ -119,9 +130,9 @@ pub async fn install_for_config(config: &Config) {
     {
         return;
     }
-    if cfg!(test) && config.broker_model_auth_origin == BrokerModelAuthOrigin::AggressiveLevel {
-        // Core's unit tests load Aggressive configs in one shared process
-        // (see `Config::load_config_with_layer_stack`).
+    if cfg!(test) && !codex_model_provider::model_key_broker_required() {
+        // Core's unit tests: only a process a config marked brokered starts
+        // one (see `Config::load_config_with_layer_stack`).
         return;
     }
     static INSTALL: tokio::sync::OnceCell<()> = tokio::sync::OnceCell::const_new();
@@ -211,6 +222,9 @@ fn remedy(origin: BrokerModelAuthOrigin) -> &'static str {
         BrokerModelAuthOrigin::Config => {
             "broker_model_auth is on in your configuration. To send model requests without the \
              broker, set `broker_model_auth = false` under [features] in config.toml, then restart"
+        }
+        BrokerModelAuthOrigin::Policy => {
+            "broker_model_auth is required by a managed policy; ask its administrator to change it"
         }
     }
 }

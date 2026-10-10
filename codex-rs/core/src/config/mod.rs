@@ -3570,12 +3570,10 @@ impl Config {
         // PF-23-S03: the level of every layer and a confirmed level stored by
         // the trusted controller are floors; an unreadable store enforces
         // Aggressive and says so.
-        let recovery = crate::security::recovery::recover(
-            codex_home.as_path(),
-            security_settings
-                .level
-                .max(layered_security_floor(&config_layer_stack)),
-        );
+        let configured_level = security_settings
+            .level
+            .max(layered_security_floor(&config_layer_stack));
+        let recovery = crate::security::recovery::recover(codex_home.as_path(), configured_level);
         if let Some(warning) = recovery.warning() {
             startup_warnings.push(warning);
         }
@@ -3700,7 +3698,7 @@ impl Config {
             Feature::BrokerModelAuth,
         );
         let level_broker = crate::model_broker_auth::level_broker_setting(
-            crate::model_broker_auth::level_for_defaults(codex_home.as_path(), security_level),
+            crate::model_broker_auth::level_for_defaults(codex_home.as_path(), configured_level),
             crate::model_broker_auth::LEVEL_DEFAULT_SUPPORTED,
             explicit_broker,
         );
@@ -3712,15 +3710,20 @@ impl Config {
             feature_requirements,
             &mut startup_warnings,
         )?;
-        let broker_model_auth_origin =
-            if level_broker == Some(true)
-                && explicit_broker.is_none()
-                && features.enabled(Feature::BrokerModelAuth)
-            {
-                crate::model_broker_auth::BrokerModelAuthOrigin::AggressiveLevel
+        let broker_model_auth_origin = {
+            use crate::model_broker_auth::BrokerModelAuthOrigin;
+            let mut without = features.get().clone();
+            without.disable(Feature::BrokerModelAuth);
+            if !features.enabled(Feature::BrokerModelAuth) {
+                BrokerModelAuthOrigin::Config
+            } else if features.can_set(&without).is_err() {
+                BrokerModelAuthOrigin::Policy
+            } else if level_broker == Some(true) && explicit_broker.is_none() {
+                BrokerModelAuthOrigin::AggressiveLevel
             } else {
-                crate::model_broker_auth::BrokerModelAuthOrigin::Config
-            };
+                BrokerModelAuthOrigin::Config
+            }
+        };
         let secretless_agent_launch = features.enabled(Feature::SecretlessAgentLaunch);
         if secretless_agent_launch {
             // PF-27-S02: arm the launch contract for this process, and never
@@ -3741,7 +3744,8 @@ impl Config {
             crate::security::launch_contract::release_codex_home_when_unarmed(&codex_home);
         }
         // Core's unit tests load Aggressive configs in one shared process;
-        // the level's setting must not make that whole process brokered.
+        // the level's setting must not make that whole process brokered (nor
+        // start its broker: `install_for_config` follows this mark there).
         let level_default_in_unit_test = cfg!(test) && level_broker.is_some();
         if features.enabled(Feature::BrokerModelAuth) && !level_default_in_unit_test {
             // PF-27-S05: this process brokers provider credentials from now on;

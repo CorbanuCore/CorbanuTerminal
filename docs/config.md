@@ -175,9 +175,11 @@ onboarding or `/vault`.
 
 ### Model key broker (`broker_model_auth`)
 
-With `broker_model_auth` on, provider API keys from the environment or the vault
-are held by a separate credential broker process, and the broker sends every
-model request for Corbanu. Corbanu never reads those keys itself. If the broker
+With `broker_model_auth` on, provider API keys are held by a separate
+credential broker process, and the broker sends every model request for
+Corbanu. Keys saved in the vault are read only by the broker. Keys in the
+environment are moved to the broker when the session starts and removed from
+Corbanu's environment. If the broker
 can't start, model requests are refused, never sent directly, and the error
 message names the setting and how to turn it off.
 
@@ -187,7 +189,8 @@ Limits:
   are still read by Corbanu and then passed to the broker.
 - Command, AWS and header-based provider sign-ins aren't brokered.
 - Realtime conversations and websockets are off.
-- Plain-HTTP or IPv6-literal provider URLs can't be brokered and are refused.
+- Provider URLs that use plain HTTP, an IPv6 address or a query string can't be
+  brokered, so those requests are refused.
 
 The default depends on the security level:
 
