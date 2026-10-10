@@ -2358,10 +2358,13 @@ dependencies = [
  "aws-sigv4",
  "aws-types",
  "bytes",
+ "codex-log-guard",
  "http 1.4.0",
  "pretty_assertions",
  "thiserror 2.0.18",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -2661,6 +2664,7 @@ dependencies = [
  "codex-code-mode",
  "codex-code-mode-protocol",
  "codex-code-mode-runtime",
+ "codex-log-guard",
  "codex-protocol",
  "codex-utils-cargo-bin",
  "futures",

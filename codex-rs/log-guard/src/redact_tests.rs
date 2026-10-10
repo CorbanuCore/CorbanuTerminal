@@ -27,6 +27,42 @@ fn redacts_credential_headers_in_every_log_shape() {
             r#"{\"proxy-authorization\": \"Basic ZmFrZQ==\"}"#,
             r#"{\"proxy-authorization\": \"REDACTED\"}"#,
         ),
+        // Values inside wrapper types and tuples (aws-smithy, Option, Vec).
+        (
+            r#"{"authorization": HeaderValue { _private: H0("AWS4-HMAC-SHA256 Credential=AKID/x, Signature=fake") }}"#,
+            r#"{"authorization": HeaderValue { _private: H0("REDACTED") }}"#,
+        ),
+        (
+            r#"x-api-key: Some("fake-key-0004")"#,
+            r#"x-api-key: Some("REDACTED")"#,
+        ),
+        (
+            "authorization: AWS4-HMAC-SHA256 Credential=AKID/x, SignedHeaders=host, Signature=fake\n",
+            "authorization: REDACTED\n",
+        ),
+        (
+            r#"[("api-key", "fake-azure-0005"), ("accept", "*/*")]"#,
+            r#"[("api-key", "REDACTED"), ("accept", "*/*")]"#,
+        ),
+        // A SigV4 canonical request.
+        (
+            "host:bedrock\nx-amz-security-token:fake-session-0006\n",
+            "host:bedrock\nx-amz-security-token:REDACTED\n",
+        ),
+        // A marker hides nothing after it; unquoted values end at one token.
+        (
+            "authorization: <redacted> x-api-key: fake-real-0007",
+            "authorization: <redacted> x-api-key: REDACTED",
+        ),
+        (
+            "authorization=required model=gpt-5",
+            "authorization=REDACTED model=gpt-5",
+        ),
+        // URL query credentials.
+        (
+            "Trying to contact wss://host/v1/realtime?model=gpt&api_key=fake-q-0008 now",
+            "Trying to contact wss://host/v1/realtime?model=gpt&api_key=REDACTED now",
+        ),
         // Bearer tokens, key formats and JWTs anywhere.
         (
             "retrying with Bearer fake-bearer-token-0002 now",
@@ -56,6 +92,8 @@ fn keeps_redacted_values_and_ordinary_text() {
         "uses bearer auth for the provider",
         "authorization server metadata discovered",
         "cookies: 3, max_tokens=100",
+        r#"auth.header_name="authorization" auth_mode="ApiKey""#,
+        "url=https://api.example.com/v1/models?key=REDACTED&api-version=REDACTED",
         "task-runner-AAAAAAAAAAAAAAAAAAAAAAAAA",
     ] {
         assert!(

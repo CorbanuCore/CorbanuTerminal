@@ -4,6 +4,7 @@ use std::sync::Mutex;
 use std::sync::Once;
 
 use pretty_assertions::assert_eq;
+use tracing::Event;
 use tracing::Level;
 use tracing::Subscriber;
 use tracing::level_filters::LevelFilter;
@@ -11,7 +12,9 @@ use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::fmt::MakeWriter;
+use tracing_subscriber::layer::Context;
 use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::registry::LookupSpan;
 
 use super::*;
 
@@ -150,6 +153,14 @@ fn caps_match_crates_and_their_modules_only() {
         ("rustls::client", Level::TRACE, true),
         ("ureq_proto::util", Level::TRACE, true),
         ("rama_http_core::proto::h1", Level::TRACE, true),
+        ("aws_sigv4::http_request::sign", Level::TRACE, true),
+        (
+            "aws_smithy_runtime::client::orchestrator",
+            Level::TRACE,
+            true,
+        ),
+        ("aws_config::profile", Level::DEBUG, false),
+        ("codex_aws_auth", Level::TRACE, false),
         ("opentelemetry-otlp", Level::DEBUG, true),
         ("opentelemetry-otlp", Level::INFO, false),
         ("rmcp::transport::auth", Level::DEBUG, true),
@@ -177,4 +188,39 @@ fn max_level_hint_is_the_inner_subscribers() {
     let expected = subscriber.max_level_hint();
     assert_eq!(guard(subscriber).max_level_hint(), expected);
     assert_eq!(expected, Some(LevelFilter::WARN));
+}
+
+/// Records the name of each event's span, as layers such as
+/// `tracing_opentelemetry` look spans up through the registry.
+struct EventSpans(Arc<Mutex<Vec<String>>>);
+
+impl<S: Subscriber + for<'a> LookupSpan<'a>> Layer<S> for EventSpans {
+    fn on_event(&self, event: &Event<'_>, ctx: Context<'_, S>) {
+        if let Some(span) = ctx.event_span(event) {
+            self.0.lock().unwrap().push(span.name().to_string());
+        }
+    }
+}
+
+#[test]
+fn spans_current_span_and_downcasts_pass_through() {
+    let names = Arc::new(Mutex::new(Vec::new()));
+    let subscriber = guard(tracing_subscriber::registry().with(EventSpans(Arc::clone(&names))));
+    tracing::subscriber::with_default(subscriber, || {
+        assert!(tracing::dispatcher::get_default(|dispatch| {
+            dispatch
+                .downcast_ref::<tracing_subscriber::Registry>()
+                .is_some()
+        }));
+        let span = tracing::info_span!("outer");
+        let _entered = span.enter();
+        assert_eq!(
+            tracing::Span::current()
+                .metadata()
+                .map(tracing::Metadata::name),
+            Some("outer")
+        );
+        tracing::info!("inside");
+    });
+    assert_eq!(*names.lock().unwrap(), vec!["outer".to_string()]);
 }

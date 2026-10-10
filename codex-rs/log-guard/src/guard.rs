@@ -32,6 +32,9 @@ const TARGET_CAPS: &[(&str, Level)] = &[
     // The network proxy's HTTP stack (a hyper/h2 fork) carries injected
     // credentials.
     ("rama_*", Level::DEBUG),
+    // aws-sigv4 logs the canonical request, `x-amz-security-token` value
+    // included, and aws-smithy-runtime every request, at TRACE.
+    ("aws_*", Level::DEBUG),
     // Logs `OTEL_EXPORTER_OTLP_HEADERS` values at DEBUG.
     ("opentelemetry-otlp", Level::INFO),
     ("opentelemetry_otlp", Level::INFO),

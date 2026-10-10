@@ -246,6 +246,86 @@ mod tests {
         );
     }
 
+    /// Every event as the logs database and `/feedback` capture them
+    /// (TRACE for every target, no `RUST_LOG` needed).
+    #[derive(Clone, Default)]
+    struct CaptureAll(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+    impl std::io::Write for CaptureAll {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl CaptureAll {
+        fn subscriber(&self) -> impl tracing::Subscriber + Send + Sync + use<> {
+            use tracing_subscriber::Layer;
+            use tracing_subscriber::layer::SubscriberExt;
+            let writer = self.clone();
+            tracing_subscriber::registry().with(
+                tracing_subscriber::fmt::layer()
+                    .with_writer(move || writer.clone())
+                    .with_ansi(false)
+                    .with_filter(
+                        tracing_subscriber::filter::Targets::new()
+                            .with_default(tracing::Level::TRACE),
+                    ),
+            )
+        }
+
+        fn contains(&self, needle: &str) -> bool {
+            String::from_utf8_lossy(&self.0.lock().unwrap()).contains(needle)
+        }
+    }
+
+    /// #380 review: aws-sigv4 logs the canonical request, session token
+    /// included, at TRACE on every signed request.
+    #[tokio::test]
+    async fn guarded_sinks_never_see_the_session_token() {
+        const SESSION_TOKEN: &str = "fake-aws-session-token-380-7c2d41";
+        let sign = || async {
+            test_context(Some(SESSION_TOKEN))
+                .sign_at(
+                    test_request(),
+                    UNIX_EPOCH + Duration::from_secs(1_700_000_000),
+                )
+                .await
+                .expect("request should sign")
+        };
+
+        // Parallel tests without a subscriber can register these callsites
+        // as `never`: sign once so they exist, then rebuild their interest.
+        sign().await;
+        tracing::callsite::rebuild_interest_cache();
+
+        let unguarded = CaptureAll::default();
+        {
+            let _default = tracing::subscriber::set_default(unguarded.subscriber());
+            sign().await;
+        }
+        assert!(
+            unguarded.contains(SESSION_TOKEN),
+            "control: aws-sigv4 should log the token at TRACE"
+        );
+
+        let guarded = CaptureAll::default();
+        let signed = {
+            let _default =
+                tracing::subscriber::set_default(codex_log_guard::guard(guarded.subscriber()));
+            sign().await
+        };
+        assert_eq!(
+            signing::header_value(&signed.headers, "x-amz-security-token"),
+            Some(SESSION_TOKEN.to_string())
+        );
+        assert!(!guarded.contains(SESSION_TOKEN), "session token was logged");
+    }
+
     #[tokio::test]
     async fn load_rejects_empty_service_name() {
         let err = AwsAuthContext::load(AwsAuthConfig {
