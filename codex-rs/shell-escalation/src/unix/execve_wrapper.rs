@@ -2,7 +2,6 @@
 
 use clap::Parser;
 use tracing_subscriber::EnvFilter;
-use tracing_subscriber::util::SubscriberInitExt;
 
 #[derive(Parser)]
 pub struct ExecveWrapperCli {

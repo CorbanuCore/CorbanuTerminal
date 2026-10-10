@@ -80,7 +80,6 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 use tracing::info_span;
 use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
 use tungstenite::Message;
 use tungstenite::WebSocket;
 use tungstenite::connect;
