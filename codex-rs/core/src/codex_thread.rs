@@ -232,8 +232,9 @@ impl CodexThread {
     /// Record the paid model requests of an internal worker started on this
     /// conversation's behalf - memory consolidation, which has no thread of
     /// its own - under this conversation (PF-60-S04). Apply to the worker's
-    /// start options, so the owner is bound before its first request. Ignored
-    /// for a worker that persists a thread of its own.
+    /// start options, so the owner is bound before its first request. Call it
+    /// only on the conversation the worker serves. Ignored for a worker that
+    /// persists a thread of its own.
     pub fn record_worker_requests_here(&self, worker: &mut crate::StartThreadOptions) {
         worker
             .thread_extension_init

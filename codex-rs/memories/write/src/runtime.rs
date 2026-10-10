@@ -333,6 +333,9 @@ impl MemoryStartupContext {
             ..StartThreadOptions::new(config)
         };
         self.thread.record_worker_requests_here(&mut options);
+        // The worker's requests are recorded under this conversation's thread,
+        // so make sure it exists before the worker's first request.
+        self.thread.ensure_rollout_materialized().await;
         let NewThread {
             thread_id, thread, ..
         } = self.thread_manager.start_thread(options).await?;
