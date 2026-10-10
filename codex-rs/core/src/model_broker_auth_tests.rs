@@ -583,7 +583,7 @@ async fn sec_391_managed_requirement_wins_and_is_named() {
             .codex_home(home.path().to_path_buf())
             .fallback_cwd(Some(home.path().to_path_buf()))
             .cloud_config_bundle(
-                CloudConfigBundleFixture::loader_with_enterprise_requirement(&format!(
+                CloudConfigBundleFixture::loader_with_enterprise_requirement(format!(
                     "[features]\nbroker_model_auth = {pin}\n"
                 )),
             )
