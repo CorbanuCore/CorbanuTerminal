@@ -1,6 +1,7 @@
 use codex_utils_absolute_path::AbsolutePathBuf;
 use dirs::home_dir;
 use std::path::PathBuf;
+use std::sync::Once;
 
 const DEFAULT_HOME_DIR: &str = ".corbanu";
 const LEGACY_HOME_DIR: &str = ".pfterminal";
@@ -24,12 +25,57 @@ pub fn find_codex_home() -> std::io::Result<AbsolutePathBuf> {
     let codex_home_env = std::env::var("CODEX_HOME")
         .ok()
         .filter(|val| !val.is_empty());
+    if let Some(warning) = home_override_conflict(
+        corbanu_home_env.as_deref(),
+        pfterminal_home_env.as_deref(),
+        codex_home_env.as_deref(),
+    ) {
+        static WARNED: Once = Once::new();
+        WARNED.call_once(|| eprintln!("{warning}"));
+    }
     find_codex_home_from_env(
         corbanu_home_env.as_deref(),
         pfterminal_home_env.as_deref(),
         codex_home_env.as_deref(),
         home_dir(),
     )
+}
+
+/// Describes home variables that name different directories, so an inherited
+/// `CORBANU_HOME` cannot silently beat a caller's `CODEX_HOME`. Precedence is
+/// unchanged; the message names only variables and paths.
+fn home_override_conflict(
+    corbanu_home_env: Option<&str>,
+    pfterminal_home_env: Option<&str>,
+    codex_home_env: Option<&str>,
+) -> Option<String> {
+    let set: Vec<(&str, &str)> = [
+        ("CORBANU_HOME", corbanu_home_env),
+        ("PFTERMINAL_HOME", pfterminal_home_env),
+        ("CODEX_HOME", codex_home_env),
+    ]
+    .into_iter()
+    .filter_map(|(name, value)| value.map(|value| (name, value)))
+    .collect();
+    let (winner, winner_value) = *set.first()?;
+    let same_dir = |value: &str| {
+        let canonical =
+            |value: &str| std::fs::canonicalize(value).unwrap_or_else(|_| PathBuf::from(value));
+        canonical(value) == canonical(winner_value)
+    };
+    let ignored: Vec<String> = set[1..]
+        .iter()
+        .filter(|(_, value)| !same_dir(value))
+        .map(|(name, value)| format!("{name} ({value})"))
+        .collect();
+    if ignored.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "warning: {winner} ({winner_value}) overrides {}; using {winner_value}. \
+         Set every home variable to the same path, or unset {winner}.",
+        ignored.join(" and ")
+    ))
 }
 
 fn find_codex_home_from_env(
@@ -100,6 +146,7 @@ mod tests {
     use super::DEFAULT_HOME_DIR;
     use super::LEGACY_HOME_DIR;
     use super::find_codex_home_from_env;
+    use super::home_override_conflict;
     use codex_utils_absolute_path::AbsolutePathBuf;
     use pretty_assertions::assert_eq;
     use std::fs;
@@ -264,5 +311,40 @@ mod tests {
         .expect("resolve Corbanu home");
         assert_eq!(resolved.as_path(), corbanu_home);
         assert_eq!(fs::read_to_string(sentinel).expect("sentinel"), "preserve");
+    }
+
+    #[test]
+    fn matching_home_variables_do_not_warn() {
+        let temp_home = TempDir::new().expect("temp home");
+        let home = temp_home.path().to_str().expect("utf-8 path");
+        assert_eq!(
+            home_override_conflict(Some(home), /*pfterminal_home_env*/ None, Some(home)),
+            None
+        );
+        assert_eq!(
+            home_override_conflict(
+                /*corbanu_home_env*/ None,
+                /*pfterminal_home_env*/ None,
+                Some(home)
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn conflicting_home_variables_name_the_winner() {
+        let warning = home_override_conflict(
+            Some("/homes/coordinator"),
+            /*pfterminal_home_env*/ None,
+            Some("/homes/worker"),
+        );
+        assert_eq!(
+            warning.as_deref(),
+            Some(
+                "warning: CORBANU_HOME (/homes/coordinator) overrides CODEX_HOME (/homes/worker); \
+                 using /homes/coordinator. Set every home variable to the same path, or unset \
+                 CORBANU_HOME."
+            )
+        );
     }
 }

@@ -1129,7 +1129,9 @@ write_visible_command_wrapper() {
   rm -f "$tmp_script"
   {
     printf '#!/bin/sh\n'
-    printf 'if [ -z "${CODEX_HOME:-}" ]; then\n'
+    # Keep any home the caller chose (PF-84-S01): an inherited CORBANU_HOME or
+    # PFTERMINAL_HOME already outranks CODEX_HOME in the binary.
+    printf 'if [ -z "${CORBANU_HOME:-}${PFTERMINAL_HOME:-}${CODEX_HOME:-}" ]; then\n'
     printf '  export CODEX_HOME=%s\n' "$(shell_quote "$codex_home")"
     printf 'fi\n'
     printf 'exec %s "$@"\n' "$(shell_quote "$target")"

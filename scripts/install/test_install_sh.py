@@ -157,6 +157,38 @@ class InstallShTest(unittest.TestCase):
             )
             self.assertTrue(os.access(host_path, os.X_OK))
 
+    def test_release_wrapper_keeps_a_caller_selected_home(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            archive_path, checksum_path, metadata_json = create_package_release(root)
+            result, _requests = run_installer_in(
+                root,
+                VERSION,
+                metadata_json=metadata_json,
+                archive_path=archive_path,
+                checksum_path=checksum_path,
+                force_macos=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            current = root / "pfterminal-home" / "packages" / "standalone" / "current"
+            target = (current / "bin" / "corbanu").resolve()
+            target.write_text(
+                '#!/bin/sh\nprintf "%s|%s\\n" "${CORBANU_HOME:-}" "${CODEX_HOME:-}"\n',
+                encoding="utf-8",
+            )
+            wrapper = root / "install-bin" / "corbanu"
+
+            def homes(**overrides: str) -> str:
+                env = {"PATH": "/usr/bin:/bin", **overrides}
+                return subprocess.run(
+                    [str(wrapper)], env=env, capture_output=True, check=True, text=True
+                ).stdout.strip()
+
+            default_home = str(root / "pfterminal-home")
+            self.assertEqual(homes(), f"|{default_home}")
+            self.assertEqual(homes(CORBANU_HOME="/worker/home"), "/worker/home|")
+            self.assertEqual(homes(CODEX_HOME="/worker/home"), "|/worker/home")
+
     def test_package_without_debug_binary_removes_managed_stale_launchers(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

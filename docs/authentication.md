@@ -65,6 +65,13 @@ reuses a lone `$HOME/.pfterminal` in place, and otherwise creates
 `$HOME/.corbanu`. This keeps account auth, vault data, sessions, and logs
 separate from a stock Codex install using `$HOME/.codex`.
 
+The `corbanu` launcher never replaces a home you set yourself, so
+`CORBANU_HOME=<other home> corbanu exec ...` really runs on that home. If the
+home variables name different directories (for example a worker shell that
+inherited `CORBANU_HOME` and set only `CODEX_HOME`), Corbanu Terminal prints one
+warning naming the variable it uses. Set all of them to the same path, or unset
+the one you do not want.
+
 ### Claude Plan
 
 On first run, choose **Provider: Anthropic Claude Account** to enter this flow
