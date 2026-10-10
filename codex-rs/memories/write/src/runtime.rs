@@ -322,18 +322,23 @@ impl MemoryStartupContext {
         config: Config,
         prompt: Vec<UserInput>,
     ) -> anyhow::Result<SpawnedConsolidationAgent> {
+        // Consolidation is paid inference on this conversation's behalf with
+        // no thread of its own: its requests are recorded under this one
+        // (PF-60-S04), like the stage-one requests that fed it.
+        let mut options = StartThreadOptions {
+            session_source: Some(SessionSource::Internal(
+                InternalSessionSource::MemoryConsolidation,
+            )),
+            thread_source: Some(ThreadSource::MemoryConsolidation),
+            ..StartThreadOptions::new(config)
+        };
+        self.thread.record_worker_requests_here(&mut options);
+        // The worker's requests are recorded under this conversation's thread,
+        // so make sure it exists before the worker's first request.
+        self.thread.ensure_rollout_materialized().await;
         let NewThread {
             thread_id, thread, ..
-        } = self
-            .thread_manager
-            .start_thread(StartThreadOptions {
-                session_source: Some(SessionSource::Internal(
-                    InternalSessionSource::MemoryConsolidation,
-                )),
-                thread_source: Some(ThreadSource::MemoryConsolidation),
-                ..StartThreadOptions::new(config)
-            })
-            .await?;
+        } = self.thread_manager.start_thread(options).await?;
 
         let agent = SpawnedConsolidationAgent { thread_id, thread };
         if let Err(err) = agent

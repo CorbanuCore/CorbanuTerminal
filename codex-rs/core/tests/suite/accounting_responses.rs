@@ -1120,3 +1120,78 @@ async fn accounting_guardian_review_is_recorded_under_the_reviewed_conversation(
     stop(&test).await;
     Ok(())
 }
+
+/// PF-60-S04: a side conversation - an ephemeral fork of a persisted
+/// conversation, `/side` in the TUI - is paid inference for that conversation.
+/// Its request is recorded under the conversation's thread, labelled `side:`,
+/// and counts in the conversation's totals; the conversation's own requests
+/// keep their labels.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn accounting_side_conversation_is_recorded_under_its_conversation() -> anyhow::Result<()> {
+    use codex_protocol::protocol::Op;
+    use codex_protocol::user_input::UserInput;
+    let server = MockServer::start().await;
+    let endpoint = format!("{}/v1", server.uri());
+    responses::mount_sse_sequence(
+        &server,
+        vec![success(usage(Some(0))), success(usage(Some(0)))],
+    )
+    .await;
+    let test = builder(endpoint.clone(), enabled(&endpoint))
+        .build_with_auto_env(&server)
+        .await?;
+    test.submit_turn("main conversation").await?;
+    let db = test.codex.state_db().unwrap();
+    wait_attempts(&db, /*count*/ 1).await?;
+    let mut side_config = test.config.clone();
+    side_config.ephemeral = true;
+    let side = test
+        .thread_manager
+        .fork_thread(
+            codex_core::ForkSnapshot::Interrupted,
+            side_config,
+            test.codex.rollout_path().unwrap(),
+            /*thread_source*/ None,
+            /*parent_trace*/ None,
+        )
+        .await?;
+    side.thread
+        .submit(Op::UserInput {
+            items: vec![UserInput::Text {
+                text: "side question".into(),
+                text_elements: Vec::new(),
+            }],
+            final_output_json_schema: None,
+            responsesapi_client_metadata: None,
+            additional_context: Default::default(),
+            thread_settings: Default::default(),
+        })
+        .await?;
+    core_test_support::wait_for_event(&side.thread, |event| {
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
+    let records = wait_attempts(&db, /*count*/ 2).await?;
+    let parent = test.session_configured.thread_id;
+    assert_ne!(side.thread_id, parent);
+    assert_eq!(
+        records
+            .iter()
+            .map(|attempt| (
+                attempt.thread_id == parent,
+                attempt.turn.starts_with("side:")
+            ))
+            .collect::<Vec<_>>(),
+        vec![(true, false), (true, true)],
+        "{records:#?}"
+    );
+    wait_observations(&db, /*count*/ 2).await?;
+    // The conversation's day counts both requests' tokens, each once.
+    let total = totals(&db, &records[0]).await?;
+    assert_eq!(total.measured[0].known, 200);
+    assert_eq!(total.measured[4].known, 80);
+    test.thread_manager
+        .shutdown_all_threads_bounded(std::time::Duration::from_secs(3))
+        .await;
+    Ok(())
+}

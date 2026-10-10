@@ -207,6 +207,115 @@ async fn phase2_retries_when_clean_workspace_is_missing_artifacts() -> anyhow::R
     Ok(())
 }
 
+/// PF-60-S04: memory consolidation is paid inference with no thread of its
+/// own. Its request is recorded under the conversation that started it,
+/// labelled `consolidation:`, instead of going unrecorded.
+#[tokio::test]
+async fn pf_60_s04_consolidation_is_recorded_under_the_starting_conversation() -> anyhow::Result<()>
+{
+    let server = start_mock_server().await;
+    let home = Arc::new(TempDir::new()?);
+    let db = init_state_db(&home).await?;
+    let memory_root = home.path().join("memories");
+    seed_stage1_output(
+        db.as_ref(),
+        home.path(),
+        chrono::Utc::now(),
+        "raw memory",
+        "rollout summary",
+        "consolidation-accounting",
+    )
+    .await?;
+    let raw_memories = db
+        .memories()
+        .get_phase2_input_selection(/*n*/ 1, /*max_unused_days*/ 1)
+        .await?;
+    sync_rollout_summaries_from_memories(&memory_root, &raw_memories, raw_memories.len()).await?;
+    rebuild_raw_memories_file_from_memories(&memory_root, &raw_memories, raw_memories.len())
+        .await?;
+    seed_extension_instructions(&memory_root).await?;
+    reset_git_repository(&memory_root).await?;
+    let phase2 = mount_sse_once(
+        &server,
+        sse(vec![
+            ev_response_created("resp-phase2-accounting"),
+            ev_assistant_message("msg-phase2-accounting", "phase2 complete"),
+            ev_completed("resp-phase2-accounting"),
+        ]),
+    )
+    .await;
+    let endpoint = format!("{}/v1", server.uri());
+    let test = test_codex()
+        .with_home(home.clone())
+        .with_auth(CodexAuth::from_api_key("synthetic-memories-accounting"))
+        .with_config(move |config| {
+            config
+                .features
+                .enable(Feature::Sqlite)
+                .expect("test config should allow feature update");
+            config.memories = startup_test_memories_config();
+            config.model_provider_id = "openai".into();
+            config.model_provider = ModelProviderInfo {
+                request_max_retries: Some(1),
+                stream_max_retries: Some(1),
+                ..ModelProviderInfo::create_openai_provider(Some(endpoint.clone()))
+            };
+            config.accounting = codex_core::config::AccountingMode::DirectOpenAiResponsesHttp {
+                scope: uuid::Uuid::new_v4(),
+                approved_endpoint: endpoint,
+            };
+        })
+        .build(&server)
+        .await?;
+
+    // Memory startup runs after a turn with user input, when the
+    // conversation that starts it is persisted.
+    let owner = test.session_configured.thread_id;
+    db.upsert_thread(
+        &codex_state::ThreadMetadataBuilder::new(
+            owner,
+            home.path().join("owner.jsonl"),
+            chrono::Utc::now(),
+            SessionSource::Cli,
+        )
+        .build("openai"),
+    )
+    .await?;
+    trigger_memories_startup(&test).await;
+    wait_for_single_request(&phase2).await;
+
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let turns = loop {
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        let read = codex_state::accounting::AccountingStore::inspect_day(
+            db.as_ref(),
+            owner,
+            now_ms / 86_400_000,
+            now_ms,
+        )
+        .await;
+        let turns = match read {
+            Ok(codex_state::accounting::InspectionDay::Ready(view)) => view
+                .requests
+                .values()
+                .flatten()
+                .map(|quote| (quote.attempt.thread_id, quote.attempt.turn.clone()))
+                .collect::<Vec<_>>(),
+            _ => Vec::new(),
+        };
+        if !turns.is_empty() || Instant::now() > deadline {
+            break turns;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    };
+    assert_eq!(turns.len(), 1, "{turns:?}");
+    assert_eq!(turns[0].0, owner);
+    assert!(turns[0].1.starts_with("consolidation:"), "{turns:?}");
+
+    shutdown_test_codex(&test).await?;
+    Ok(())
+}
+
 #[tokio::test]
 async fn memories_startup_phase2_prunes_old_extension_resources() -> anyhow::Result<()> {
     let server = start_mock_server().await;

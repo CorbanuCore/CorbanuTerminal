@@ -850,7 +850,7 @@ async fn accounting_owner_of_a_guardian_fork_is_the_reviewed_conversation() -> a
         .accounting_owner()
         .await
         .map_err(|why| anyhow::anyhow!("{why:?}"))?;
-    assert_eq!(owner.thread, parent);
+    assert_eq!((owner.thread, owner.label_prefix), (parent, "review:"));
     assert!(Arc::ptr_eq(&owner.db, &db));
     {
         let mut state = session.state.lock().await;
@@ -862,6 +862,182 @@ async fn accounting_owner_of_a_guardian_fork_is_the_reviewed_conversation() -> a
         Some(crate::accounting::Uncollected::Excluded(
             "ephemeral_session"
         ))
+    );
+    Ok(())
+}
+
+/// A session with no database of its own whose thread store is `db`'s, as an
+/// ephemeral fork's or an internal worker's is.
+async fn ephemeral_session_on(db: &Arc<codex_state::StateRuntime>) -> Session {
+    let (mut session, _turn) = crate::session::tests::make_session_and_context().await;
+    assert!(session.live_thread().is_none());
+    session.services.state_db = None;
+    session.services.thread_store = Arc::new(codex_thread_store::LocalThreadStore::new(
+        codex_thread_store::LocalThreadStoreConfig::from_config(
+            session.get_config().await.as_ref(),
+        ),
+        Some(Arc::clone(db)),
+    ));
+    session
+}
+
+async fn persist_thread(
+    db: &codex_state::StateRuntime,
+    home: &std::path::Path,
+    thread: codex_protocol::ThreadId,
+) -> anyhow::Result<()> {
+    db.upsert_thread(
+        &codex_state::ThreadMetadataBuilder::new(
+            thread,
+            home.join(format!("{thread}.jsonl")),
+            chrono::Utc::now(),
+            SessionSource::Cli,
+        )
+        .build("openai"),
+    )
+    .await?;
+    Ok(())
+}
+
+/// PF-60-S04: a side conversation - an ephemeral fork of a persisted
+/// conversation - records under the conversation it was forked from, labelled
+/// `side:`; a memory consolidation agent records under the conversation that
+/// started it, labelled `consolidation:`. Neither records when that
+/// conversation is not persisted, and an ephemeral session that is neither
+/// stays excluded. A guardian reviewer stays `review:`, and a persisted
+/// session always records under its own thread.
+#[tokio::test]
+async fn accounting_owner_of_side_and_consolidation_sessions() -> anyhow::Result<()> {
+    use crate::accounting::Uncollected;
+    let home = tempfile::tempdir()?;
+    let db = codex_state::StateRuntime::init(
+        codex_state::SqliteConfig::from_sqlite_home(
+            codex_utils_absolute_path::AbsolutePathBuf::try_from(home.path().to_path_buf())?,
+        ),
+        "openai".into(),
+    )
+    .await?;
+
+    // Side conversation.
+    let side = ephemeral_session_on(&db).await;
+    assert_eq!(
+        side.accounting_owner().await.err(),
+        Some(Uncollected::Excluded("ephemeral_session"))
+    );
+    let parent = codex_protocol::ThreadId::new();
+    side.state
+        .lock()
+        .await
+        .session_configuration
+        .forked_from_thread_id = Some(parent);
+    assert_eq!(
+        side.accounting_owner().await.err(),
+        Some(Uncollected::Excluded("parent_not_persisted"))
+    );
+    persist_thread(&db, home.path(), parent).await?;
+    let owner = side
+        .accounting_owner()
+        .await
+        .map_err(|why| anyhow::anyhow!("{why:?}"))?;
+    assert_eq!((owner.thread, owner.label_prefix), (parent, "side:"));
+
+    // Consolidation: recorded under the conversation that started it, ahead
+    // of any fork origin, and only once that conversation is persisted.
+    let consolidation = ephemeral_session_on(&db).await;
+    let starter = codex_protocol::ThreadId::new();
+    consolidation
+        .state
+        .lock()
+        .await
+        .session_configuration
+        .forked_from_thread_id = Some(parent);
+    consolidation
+        .services
+        .thread_extension_data
+        .insert(crate::accounting::StartedBy(starter));
+    assert_eq!(
+        consolidation.accounting_owner().await.err(),
+        Some(Uncollected::Excluded("parent_not_persisted"))
+    );
+    persist_thread(&db, home.path(), starter).await?;
+    let owner = consolidation
+        .accounting_owner()
+        .await
+        .map_err(|why| anyhow::anyhow!("{why:?}"))?;
+    assert_eq!(
+        (owner.thread, owner.label_prefix),
+        (starter, "consolidation:")
+    );
+
+    // A guardian reviewer stays a review even when it is also a fork.
+    let reviewer = ephemeral_session_on(&db).await;
+    {
+        let mut state = reviewer.state.lock().await;
+        state.session_configuration.session_source =
+            SessionSource::SubAgent(SubAgentSource::Other(GUARDIAN_REVIEWER_NAME.to_string()));
+        state.session_configuration.parent_thread_id = Some(starter);
+        state.session_configuration.forked_from_thread_id = Some(parent);
+    }
+    let owner = reviewer
+        .accounting_owner()
+        .await
+        .map_err(|why| anyhow::anyhow!("{why:?}"))?;
+    assert_eq!((owner.thread, owner.label_prefix), (starter, "review:"));
+
+    // A persisted fork, or a persisted session carrying a starter, records
+    // under its own thread, unlabelled.
+    let (mut persisted, _turn) = crate::session::tests::make_session_and_context().await;
+    let config = persisted.get_config().await;
+    let store: Arc<dyn codex_thread_store::ThreadStore> =
+        Arc::new(codex_thread_store::InMemoryThreadStore::default());
+    persisted.services.live_thread = Some(
+        LiveThread::create(
+            Arc::clone(&store),
+            CreateThreadParams {
+                session_id: persisted.session_id(),
+                thread_id: persisted.thread_id,
+                extra_config: None,
+                forked_from_id: Some(parent),
+                parent_thread_id: None,
+                source: SessionSource::Cli,
+                thread_source: None,
+                originator: "test_originator".to_string(),
+                base_instructions: BaseInstructions::default(),
+                dynamic_tools: Vec::new(),
+                selected_capability_roots: Vec::new(),
+                multi_agent_version: None,
+                history_mode: Default::default(),
+                subagent_history_start_ordinal: None,
+                history_base: None,
+                initial_window_id: Uuid::now_v7().to_string(),
+                metadata: ThreadPersistenceMetadata {
+                    cwd: Some(config.cwd.to_path_buf()),
+                    model_provider: config.model_provider_id.clone(),
+                    memory_mode: ThreadMemoryMode::Disabled,
+                },
+            },
+        )
+        .await?,
+    );
+    persisted.services.thread_store = store;
+    persisted.services.state_db = Some(Arc::clone(&db));
+    persisted
+        .state
+        .lock()
+        .await
+        .session_configuration
+        .forked_from_thread_id = Some(parent);
+    persisted
+        .services
+        .thread_extension_data
+        .insert(crate::accounting::StartedBy(starter));
+    let owner = persisted
+        .accounting_owner()
+        .await
+        .map_err(|why| anyhow::anyhow!("{why:?}"))?;
+    assert_eq!(
+        (owner.thread, owner.label_prefix),
+        (persisted.thread_id, "")
     );
     Ok(())
 }

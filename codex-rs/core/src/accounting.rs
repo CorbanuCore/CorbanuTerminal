@@ -319,7 +319,16 @@ pub(crate) const NEWER_LEDGER_WARNING: &str = "Developer accounting is off for t
 pub(crate) struct AccountingOwner {
     pub(crate) thread: ThreadId,
     pub(crate) db: codex_rollout::state_db::StateDbHandle,
+    /// Prefixed to the turn label of work recorded for another conversation
+    /// (`review:`, `consolidation:`, `side:`); empty for a session's own.
+    pub(crate) label_prefix: &'static str,
 }
+
+/// The conversation an internal worker with no thread of its own (memory
+/// consolidation) was started by; its paid requests are recorded there
+/// (PF-60-S04). Attached to the worker's thread extension data when it is
+/// built, through [`crate::CodexThread::record_worker_requests_here`].
+pub(crate) struct StartedBy(pub(crate) ThreadId);
 
 /// What a session has already been told about its ledger; each notice is
 /// given once per session. Held on the session, so it ends with it.
@@ -427,8 +436,9 @@ pub(crate) async fn attach_scopes(
     client_session: &crate::client::ModelClientSession,
     turn: String,
 ) -> Result<TurnScopes, CodexErr> {
-    // A persisted session records under its own thread. A guardian reviewer
-    // records under the conversation it reviews for, labelled as a review.
+    // A persisted session records under its own thread. A guardian reviewer,
+    // a memory consolidation agent or a side conversation records under the
+    // conversation it works for, labelled as such (`Session::accounting_owner`).
     // Any other session has no owner to attribute its attempts to, so it is
     // left uncollected - named once in the log - and its turns run.
     // A ledger that cannot be reached leaves this turn's requests unrecorded;
@@ -466,7 +476,9 @@ pub(crate) async fn attach_scopes(
         }
     };
     let turn = match &owner {
-        Some(owner) if owner.thread != session.thread_id => scoped_turn_label("review:", &turn),
+        Some(owner) if !owner.label_prefix.is_empty() => {
+            scoped_turn_label(owner.label_prefix, &turn)
+        }
         Some(_) | None => turn,
     };
     let mode = if owner.is_some() {
