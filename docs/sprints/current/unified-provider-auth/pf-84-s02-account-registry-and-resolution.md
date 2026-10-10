@@ -7,7 +7,7 @@ plan_feature: "PF-84"
 execution_order: 24
 owner: "Codex PF-84 account-registry worker"
 parallel_lane: "account-registry"
-write_scope: "codex-rs/vault/, codex-rs/login/, codex-rs/cli/, codex-rs/network-proxy/, codex-rs/model-provider-info/, codex-rs/model-provider/, codex-rs/features/, codex-rs/config/, codex-rs/core/, codex-rs/arg0/, codex-rs/tui/, codex-rs/state/, codex-rs/telegram/, codex-rs/provider-auth/, codex-rs/memories/, codex-rs/app-server/, codex-rs/exec/, docs/provider-accounts.md, qa/demos/specs/pf84-account-isolation.toml, docs/sprints/current/unified-provider-auth/pf-84-s02-account-registry-and-resolution.md"
+write_scope: "codex-rs/vault/, codex-rs/login/, codex-rs/cli/, codex-rs/network-proxy/, codex-rs/model-provider-info/, codex-rs/model-provider/, codex-rs/features/, codex-rs/config/, codex-rs/core/, codex-rs/arg0/, codex-rs/tui/, codex-rs/state/, codex-rs/telegram/, codex-rs/provider-auth/, codex-rs/memories/, codex-rs/app-server/, codex-rs/exec/, docs/provider-accounts.md, mkdocs.yml, qa/demos/specs/pf84-account-isolation.toml, qa/demos/specs/pf84-account-isolation-kimi.toml, qa/demos/index/PF-84-S02.md, docs/sprints/current/unified-provider-auth/pf-84-s02-account-registry-and-resolution.md"
 integration_gate: "Codex PF-84 lane owner merges to main after just test -p codex-vault -p codex-login -p codex-cli -p codex-network-proxy -p codex-model-provider-info -p codex-model-provider (with and without developer-accounting), RTX clippy and the tmux/GLM run"
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s02-accounts"
 branch: "feat/pf-84-s02-account-registry"

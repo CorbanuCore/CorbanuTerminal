@@ -7,7 +7,7 @@ plan_feature: "PF-84"
 execution_order: 23
 owner: "Codex PF-84 home-hygiene worker"
 parallel_lane: "home-hygiene"
-write_scope: "codex-rs/utils/home-dir/, scripts/install/install.sh, scripts/install/test_install_sh.py, scripts/dev/corbanu-launcher.sh, scripts/dev/test_corbanu_launcher.sh, docs/authentication.md, qa/demos/specs/pf84-home-override.toml, docs/sprints/current/unified-provider-auth/pf-84-s01-home-override-hygiene.md"
+write_scope: "codex-rs/utils/home-dir/, scripts/install/install.sh, scripts/install/test_install_sh.py, scripts/dev/corbanu-launcher.sh, scripts/dev/test_corbanu_launcher.sh, docs/authentication.md, qa/demos/specs/pf84-home-override.toml, qa/demos/specs/pf84-home-override-openai.toml, qa/demos/index/PF-84-S01.md, docs/sprints/current/unified-provider-auth/pf-84-s01-home-override-hygiene.md"
 integration_gate: "Codex PF-84 lane owner merges to main after just test -p codex-utils-home-dir, python3 -m pytest scripts/install/test_install_sh.py, sh scripts/dev/test_corbanu_launcher.sh, RTX clippy and the tmux/GLM run"
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s01-home"
 branch: "feat/pf-84-s01-home-override"
