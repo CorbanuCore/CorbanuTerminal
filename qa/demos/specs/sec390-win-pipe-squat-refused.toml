@@ -63,10 +63,11 @@ wait = "(?i)possible pipe\\s+squatting"
 timeout = 240
 compress = 3
 
+# Core retries the turn (each attempt is refused) and then stops.
 [[steps]]
 wait = "\\A(?![\\s\\S]*esc to interrupt)"
-timeout = 120
-compress = 2
+timeout = 420
+compress = 3
 
 [[steps]]
 type = '''!(Get-Content ../logs/squat390.log | Select-String 'data pipe: connection' | Select-Object -Last 4).Line; "HTTP or key received: " + $(if (Select-String -Path ../logs/squat390.log -Pattern 'HTTP request: YES|key: YES' -Quiet) { 'YES' } else { 'none' })'''
