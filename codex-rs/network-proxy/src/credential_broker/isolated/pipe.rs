@@ -86,6 +86,7 @@ use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::Foundation::ERROR_BROKEN_PIPE;
 use windows_sys::Win32::Foundation::ERROR_FILE_NOT_FOUND;
 use windows_sys::Win32::Foundation::ERROR_IO_PENDING;
+use windows_sys::Win32::Foundation::ERROR_NO_DATA;
 use windows_sys::Win32::Foundation::ERROR_PIPE_CONNECTED;
 use windows_sys::Win32::Foundation::FILETIME;
 use windows_sys::Win32::Foundation::GetLastError;
@@ -321,17 +322,30 @@ impl SinglePipeListener {
     /// instance waits again (blocking; call from a blocking thread).
     pub(crate) fn accept_blocking(self, expected_pid: u32) -> io::Result<OwnedHandle> {
         let raw = self.handle.as_raw_handle() as HANDLE;
+        let mut dropped = 0_u64;
         loop {
-            connect_blocking(raw)?;
-            let mut pid = 0_u32;
-            // SAFETY: a valid pipe handle and out pointer.
-            let known = unsafe { GetNamedPipeClientProcessId(raw, &mut pid) } != 0;
-            if known && pid == expected_pid {
-                return Ok(self.handle);
+            // A client that connected and closed before the wait is dropped
+            // like a foreign one: the controller keeps its connection open.
+            if connect_blocking(raw)? {
+                let mut pid = 0_u32;
+                // SAFETY: a valid pipe handle and out pointer.
+                let known = unsafe { GetNamedPipeClientProcessId(raw, &mut pid) } != 0;
+                if known && pid == expected_pid {
+                    if dropped > 0 {
+                        tracing::warn!(
+                            dropped,
+                            "credential broker pipe: dropped control clients that were not the controller"
+                        );
+                    }
+                    return Ok(self.handle);
+                }
             }
-            tracing::warn!(
-                "credential broker pipe: dropped a control client that is not the controller"
-            );
+            if dropped == 0 {
+                tracing::warn!(
+                    "credential broker pipe: dropped a control client that is not the controller"
+                );
+            }
+            dropped += 1;
             // SAFETY: a valid pipe handle; discards the client unread.
             if unsafe { DisconnectNamedPipe(raw) } == 0 {
                 return Err(io::Error::last_os_error());
@@ -350,8 +364,9 @@ impl SinglePipeListener {
     }
 }
 
-/// Waits until a client connects to `pipe`, an overlapped server handle.
-fn connect_blocking(pipe: HANDLE) -> io::Result<()> {
+/// Waits until a client connects to `pipe`, an overlapped server handle:
+/// `true` while it is connected, `false` if it already closed again.
+fn connect_blocking(pipe: HANDLE) -> io::Result<bool> {
     // SAFETY: a manual-reset event for this operation; closed below.
     let event = unsafe { CreateEventW(std::ptr::null(), 1, 0, std::ptr::null()) };
     if event == 0 {
@@ -363,14 +378,15 @@ fn connect_blocking(pipe: HANDLE) -> io::Result<()> {
     // SAFETY: `overlapped` outlives the operation: GetOverlappedResult waits.
     let result = unsafe {
         if ConnectNamedPipe(pipe, &mut overlapped) != 0 {
-            Ok(())
+            Ok(true)
         } else {
             match GetLastError() {
-                ERROR_PIPE_CONNECTED => Ok(()),
+                ERROR_PIPE_CONNECTED => Ok(true),
+                ERROR_NO_DATA => Ok(false),
                 ERROR_IO_PENDING => {
                     let mut transferred = 0_u32;
                     if GetOverlappedResult(pipe, &overlapped, &mut transferred, 1) != 0 {
-                        Ok(())
+                        Ok(true)
                     } else {
                         Err(io::Error::last_os_error())
                     }
@@ -530,7 +546,12 @@ pub(crate) fn connect_control(name: &str, broker_pid: u32) -> io::Result<Control
                 refused = true;
                 error
             }
-            Attempt::Busy => io::Error::from_raw_os_error(ERROR_PIPE_BUSY),
+            // The control pipe has one instance and Core is its only
+            // client, so busy means another client holds it.
+            Attempt::Busy => {
+                refused = true;
+                io::Error::from_raw_os_error(ERROR_PIPE_BUSY)
+            }
             Attempt::Failed(error) => return Err(deadline_error(refused, error)),
         };
         if std::time::Instant::now() >= deadline {

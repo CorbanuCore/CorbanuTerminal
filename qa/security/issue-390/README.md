@@ -58,5 +58,8 @@ Follow-up to PF-27-S09 (acceptance Limits 4). Real machine: Windows 11,
   every connect attempt reach it until Core's deadline passes, so turns fail
   closed. This is a denial of service, not a disclosure, as PF-27-S06 already
   accepted.
+- **Control-pipe flood:** a same-user process that keeps reconnecting to the
+  single control instance before Core connects can likewise stop the broker
+  from starting. Core reports that as pipe squatting too.
 - **Error label:** a broker that hangs up on Core, or doesn't answer within
   1 s, is also reported as possible pipe squatting.

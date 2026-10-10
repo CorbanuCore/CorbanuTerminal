@@ -249,8 +249,9 @@ async fn pf_27_s06_pipe_handles_are_not_inheritable() {
 }
 
 /// #390: the control pipe has one instance at most, so no process can add
-/// one; a foreign client that connects first is dropped unread and the
-/// controller is still served (the instance is reused before tokio sees it).
+/// one. A client that connects and closes before the broker waits, and a
+/// foreign client that stays connected, are dropped unread; the controller
+/// is still served (the instance is reused before tokio sees it).
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn sec_390_control_pipe_drops_a_foreign_client_and_serves_the_controller() {
     let (control, _) = pipe_names();
@@ -264,6 +265,17 @@ async fn sec_390_control_pipe_drops_a_foreign_client_and_serves_the_controller()
         Some(super::ERROR_PIPE_BUSY),
         "another instance was added"
     );
+    // Connects and closes before the broker waits (ERROR_NO_DATA).
+    drop(
+        std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&control)
+            .expect("open and close"),
+    );
+    // A failed assertion must not leave the runtime waiting on the accept:
+    // one more connection from this process ends it.
+    let _unblock = Unblock(control.clone());
     let accept = tokio::spawn(listener.accept(own_pid));
     let report = tokio::task::spawn_blocking({
         let control = control.clone();
@@ -271,7 +283,6 @@ async fn sec_390_control_pipe_drops_a_foreign_client_and_serves_the_controller()
     })
     .await
     .expect("child");
-    assert_eq!(report, "open=granted,served=no");
 
     let client = tokio::task::spawn_blocking({
         let control = control.clone();
@@ -281,6 +292,7 @@ async fn sec_390_control_pipe_drops_a_foreign_client_and_serves_the_controller()
     .expect("join")
     .expect("the controller connects");
     let mut server = accept.await.expect("join").expect("accept the controller");
+    assert_eq!(report, "open=granted,served=no");
     assert_eq!(client_pid(&server), Some(own_pid));
     server.write_all(GREETING).await.expect("greet");
     let greeting = tokio::task::spawn_blocking(move || {
@@ -292,6 +304,18 @@ async fn sec_390_control_pipe_drops_a_foreign_client_and_serves_the_controller()
     .expect("join")
     .expect("read");
     assert_eq!(greeting, GREETING);
+}
+
+/// Opens the pipe once when dropped, so a pending accept returns.
+struct Unblock(String);
+
+impl Drop for Unblock {
+    fn drop(&mut self) {
+        let _ = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&self.0);
+    }
 }
 
 /// Accepts clients from `expected_pid` and greets each one.
