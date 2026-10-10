@@ -530,10 +530,10 @@ impl AppServerSession {
             feedback_audience,
             account_has_chatgpt_account,
         ) = match account.account {
-            Some(Account::ApiKey {}) => (
+            Some(Account::ApiKey { env_var }) => (
                 None,
                 Some(TelemetryAuthMode::ApiKey),
-                Some(StatusAccountDisplay::ApiKey),
+                Some(StatusAccountDisplay::ApiKey { env_var }),
                 None,
                 FeedbackAudience::External,
                 false,
@@ -1829,9 +1829,12 @@ pub(crate) async fn start_thread_with_request_handle(
 pub(crate) fn status_account_display_from_auth_mode(
     auth_mode: Option<AuthMode>,
     plan_type: Option<codex_protocol::account::PlanType>,
+    api_key_env_var: Option<String>,
 ) -> Option<StatusAccountDisplay> {
     match auth_mode {
-        Some(AuthMode::ApiKey) => Some(StatusAccountDisplay::ApiKey),
+        Some(AuthMode::ApiKey) => Some(StatusAccountDisplay::ApiKey {
+            env_var: api_key_env_var,
+        }),
         Some(AuthMode::Chatgpt)
         | Some(AuthMode::ChatgptAuthTokens)
         | Some(AuthMode::AgentIdentity)
@@ -3817,6 +3820,7 @@ requires_openai_auth = false
         let business = status_account_display_from_auth_mode(
             Some(AuthMode::Chatgpt),
             Some(codex_protocol::account::PlanType::EnterpriseCbpUsageBased),
+            /*api_key_env_var*/ None,
         );
         assert!(matches!(
             business,
@@ -3829,6 +3833,7 @@ requires_openai_auth = false
         let team = status_account_display_from_auth_mode(
             Some(AuthMode::Chatgpt),
             Some(codex_protocol::account::PlanType::SelfServeBusinessUsageBased),
+            /*api_key_env_var*/ None,
         );
         assert!(matches!(
             team,
@@ -3841,6 +3846,7 @@ requires_openai_auth = false
         let business_prolite = status_account_display_from_auth_mode(
             Some(AuthMode::Chatgpt),
             Some(codex_protocol::account::PlanType::SelfServeBusinessProLite),
+            /*api_key_env_var*/ None,
         );
         assert!(matches!(
             business_prolite,
@@ -3849,5 +3855,19 @@ requires_openai_auth = false
                 plan: Some(ref plan),
             }) if plan == "Business"
         ));
+    }
+
+    #[test]
+    fn status_account_display_from_auth_mode_keeps_the_api_key_source() {
+        assert_eq!(
+            status_account_display_from_auth_mode(
+                Some(AuthMode::ApiKey),
+                /*plan_type*/ None,
+                Some("OPENAI_API_KEY".to_string()),
+            ),
+            Some(StatusAccountDisplay::ApiKey {
+                env_var: Some("OPENAI_API_KEY".to_string()),
+            })
+        );
     }
 }

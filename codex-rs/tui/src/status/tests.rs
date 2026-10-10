@@ -1643,7 +1643,7 @@ async fn status_snapshot_uses_command_backed_provider_account_identity() {
     config.model_provider = ModelProviderInfo::create_claude_plan_provider();
     set_workspace_cwd(&mut config, test_path_buf("/workspace/tests").abs());
 
-    let account = StatusAccountDisplay::ApiKey;
+    let account = StatusAccountDisplay::ApiKey { env_var: None };
     let usage = TokenUsage::default();
     let now = chrono::Local
         .with_ymd_and_hms(2024, 1, 2, 3, 4, 5)
@@ -1716,6 +1716,78 @@ async fn status_snapshot_shows_missing_limits_message() {
     }
     let sanitized = sanitize_directory(rendered_lines).join("\n");
     assert_snapshot!(sanitized);
+}
+
+#[tokio::test]
+async fn status_snapshot_names_openai_api_key_from_environment() {
+    let temp_home = TempDir::new().expect("temp home");
+    let mut config = test_config(&temp_home).await;
+    config.model = Some("gpt-5.4".to_string());
+    set_workspace_cwd(&mut config, test_path_buf("/workspace/tests").abs());
+
+    let account = StatusAccountDisplay::ApiKey {
+        env_var: Some("OPENAI_API_KEY".to_string()),
+    };
+    let usage = TokenUsage::default();
+    let now = chrono::Local
+        .with_ymd_and_hms(2024, 2, 3, 4, 5, 6)
+        .single()
+        .expect("timestamp");
+    let composite = new_status_output(
+        &config,
+        Some(&account),
+        /*token_info*/ None,
+        &usage,
+        &None,
+        /*thread_name*/ None,
+        /*forked_from*/ None,
+        /*rate_limits*/ None,
+        /*plan_type*/ None,
+        now,
+        "gpt-5.4",
+        /*collaboration_mode*/ None,
+        /*reasoning_effort_override*/ None,
+    );
+    let mut rendered_lines = render_lines(&composite.display_lines(/*width*/ 100));
+    if cfg!(windows) {
+        for line in &mut rendered_lines {
+            *line = line.replace('\\', "/");
+        }
+    }
+    let sanitized = sanitize_directory(rendered_lines).join("\n");
+    assert_snapshot!(sanitized);
+}
+
+#[tokio::test]
+async fn status_does_not_name_openai_api_key_for_other_providers() {
+    let temp_home = TempDir::new().expect("temp home");
+    let mut config = test_config(&temp_home).await;
+    // A local provider that never receives the OPENAI_API_KEY fallback.
+    config.model_provider.requires_openai_auth = false;
+    set_workspace_cwd(&mut config, test_path_buf("/workspace/tests").abs());
+
+    let account = StatusAccountDisplay::ApiKey {
+        env_var: Some("OPENAI_API_KEY".to_string()),
+    };
+    let composite = new_status_output(
+        &config,
+        Some(&account),
+        /*token_info*/ None,
+        &TokenUsage::default(),
+        &None,
+        /*thread_name*/ None,
+        /*forked_from*/ None,
+        /*rate_limits*/ None,
+        /*plan_type*/ None,
+        chrono::Local::now(),
+        "local-model",
+        /*collaboration_mode*/ None,
+        /*reasoning_effort_override*/ None,
+    );
+    let rendered = render_lines(&composite.display_lines(/*width*/ 120)).join("\n");
+
+    assert!(!rendered.contains("from your environment"), "{rendered}");
+    assert!(rendered.contains("OpenAI API key configured"), "{rendered}");
 }
 
 #[tokio::test]

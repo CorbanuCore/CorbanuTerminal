@@ -125,6 +125,19 @@ replaces a sign-in or changes how usage is billed. After `corbanu logout`,
 though, requests fall back to `OPENAI_API_KEY` if it is set (pay per use);
 unset it to stop that. `corbanu login status` reports saved credentials only.
 
+When a model turn, `/review` or compaction is billed to `OPENAI_API_KEY`,
+Corbanu says so the first time in each thread (a new thread, such as `/new`,
+says it again), and again if the credential switches to it mid-thread: a notice
+in the TUI, a `warning:` line on stderr in `corbanu exec` (a warning item with
+`--json`), and a thread `warning` notification in the app server. A review or
+compaction announces on the thread that started it. A spawned agent, which may
+use a different provider from its parent, announces in its own thread
+(`corbanu exec` prints only its main thread's notices). Realtime voice sessions
+don't show it. `/status` shows the
+variable as the account source. A saved sign-in, `CODEX_API_KEY` or a session
+sign-in shows no notice, and neither do providers that don't use OpenAI
+sign-in.
+
 `OPENAI_API_KEY` is sent only to providers that use OpenAI sign-in, never to
 local or custom endpoints, and it is ignored when
 `forced_login_method = "chatgpt"`. With no credential, a rejected request says

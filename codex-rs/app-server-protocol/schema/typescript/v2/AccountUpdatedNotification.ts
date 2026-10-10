@@ -4,4 +4,9 @@
 import type { AuthMode } from "../AuthMode";
 import type { PlanType } from "../PlanType";
 
-export type AccountUpdatedNotification = { authMode: AuthMode | null, planType: PlanType | null, };
+export type AccountUpdatedNotification = { authMode: AuthMode | null, planType: PlanType | null,
+/**
+ * For API key auth, the environment variable the key is read from (for
+ * example `OPENAI_API_KEY`), or `null` for a saved key.
+ */
+apiKeyEnvVar: string | null, };

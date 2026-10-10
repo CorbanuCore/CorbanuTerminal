@@ -8045,7 +8045,7 @@ async fn native_spawn_auth_guard_blocks_unauthenticated_openai() {
 async fn native_spawn_auth_guard_accepts_openai_api_key_auth() {
     let mut app = make_test_app().await;
     app.chat_widget.update_account_state(
-        Some(StatusAccountDisplay::ApiKey),
+        Some(StatusAccountDisplay::ApiKey { env_var: None }),
         /*plan_type*/ None,
         /*has_chatgpt_account*/ false,
         /*has_codex_backend_auth*/ false,

@@ -108,6 +108,7 @@ impl App {
                     status_account_display_from_auth_mode(
                         notification.auth_mode,
                         notification.plan_type,
+                        notification.api_key_env_var.clone(),
                     ),
                     notification.plan_type,
                     notification

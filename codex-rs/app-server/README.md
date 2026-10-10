@@ -2142,7 +2142,7 @@ Codex supports these authentication modes. The current mode is surfaced in `acco
 - `account/login/completed` (notify) — emitted when a login attempt finishes (success or error).
 - `account/login/cancel` — cancel a pending managed ChatGPT login by `loginId`.
 - `account/logout` — sign out; triggers `account/updated` on success.
-- `account/updated` (notify) — emitted whenever auth mode changes (`authMode`: `apikey`, `bedrockApiKey`, `chatgpt`, `personalAccessToken`, or `null`) and includes the current ChatGPT `planType` when available.
+- `account/updated` (notify) — emitted whenever auth mode changes (`authMode`: `apikey`, `bedrockApiKey`, `chatgpt`, `personalAccessToken`, or `null`) and includes the current ChatGPT `planType` when available. `apiKeyEnvVar` names the environment variable the OpenAI API key is read from (for example `OPENAI_API_KEY`), or is `null`; like `authMode`, it describes the OpenAI credential whatever the active provider.
 - `account/rateLimits/read` — fetch ChatGPT rate limits, an optional effective monthly credit limit, whether spend control has been reached, and the earned rate-limit resets currently available, including expiry details when provided by the backend. Rate-limit updates arrive via `account/rateLimits/updated` (notify); reset-credit data is snapshot-only.
 - `account/rateLimitResetCredit/consume` — consume one earned reset using a caller-provided idempotency key, optionally selecting a reset-credit ID returned by `account/rateLimits/read`.
 - `account/usage/read` — fetch ChatGPT account token-activity summary and daily buckets.
@@ -2172,6 +2172,7 @@ Field notes:
 
 - `refreshToken` (bool): set `true` to force a token refresh.
 - `email` is `null` when the ChatGPT account does not have an email address.
+- For `apiKey`, `envVar` names the environment variable the key is read from (for example `OPENAI_API_KEY` when no sign-in or key is saved), or is `null` for a saved key or a provider that doesn't use OpenAI sign-in. The first model turn, review or compaction a thread bills to the `OPENAI_API_KEY` fallback also emits a thread-scoped `warning` notification, and again whenever the credential switches back to it. Spawned agent threads announce for themselves; review and compaction sub-sessions, internal sessions and realtime sessions don't emit it.
 - `requiresOpenaiAuth` reflects the active provider; when `false`, Codex can run without OpenAI credentials.
 - Amazon Bedrock reports `usesCodexManagedCredentials: true` when it uses a Bedrock API key managed by Codex. It reports `false` for external credential paths, including the AWS credential chain and configured command auth. This identifies whether Codex-managed credentials are selected; it does not validate that the credential source can resolve credentials.
 
@@ -2192,7 +2193,7 @@ Field notes:
 3. Notifications:
    ```json
    { "method": "account/login/completed", "params": { "loginId": null, "success": true, "error": null } }
-   { "method": "account/updated", "params": { "authMode": "apikey", "planType": null } }
+   { "method": "account/updated", "params": { "authMode": "apikey", "planType": null, "apiKeyEnvVar": null } }
    ```
 
 ### 3) Log in with ChatGPT (browser flow)
@@ -2211,7 +2212,7 @@ Field notes:
 3. Wait for notifications:
    ```json
    { "method": "account/login/completed", "params": { "loginId": "<uuid>", "success": true, "error": null } }
-   { "method": "account/updated", "params": { "authMode": "chatgpt", "planType": "plus" } }
+   { "method": "account/updated", "params": { "authMode": "chatgpt", "planType": "plus", "apiKeyEnvVar": null } }
    ```
 
 ### 3) Log in with an Amazon Bedrock API key
@@ -2233,7 +2234,7 @@ This experimental flow requires the client to initialize with `experimentalApi: 
 3. Notifications:
    ```json
    { "method": "account/login/completed", "params": { "loginId": null, "success": true, "error": null } }
-   { "method": "account/updated", "params": { "authMode": "bedrockApiKey", "planType": null } }
+   { "method": "account/updated", "params": { "authMode": "bedrockApiKey", "planType": null, "apiKeyEnvVar": null } }
    ```
 
 Codex stores the key and region as the primary Codex auth, replacing any previously stored login, and writes `model_provider = "amazon-bedrock"` to the active user config. Existing loaded sessions keep their current provider selection, so clients should restart the app-server before sending more model requests. This limitation will be addressed in a follow-up.
@@ -2249,7 +2250,7 @@ Codex stores the key and region as the primary Codex auth, replacing any previou
 3. Wait for notifications:
    ```json
    { "method": "account/login/completed", "params": { "loginId": "<uuid>", "success": true, "error": null } }
-   { "method": "account/updated", "params": { "authMode": "chatgpt", "planType": "plus" } }
+   { "method": "account/updated", "params": { "authMode": "chatgpt", "planType": "plus", "apiKeyEnvVar": null } }
    ```
 
 ### 5) Cancel a ChatGPT login
@@ -2264,7 +2265,7 @@ Codex stores the key and region as the primary Codex auth, replacing any previou
 ```json
 { "method": "account/logout", "id": 6 }
 { "id": 6, "result": {} }
-{ "method": "account/updated", "params": { "authMode": null, "planType": null } }
+{ "method": "account/updated", "params": { "authMode": null, "planType": null, "apiKeyEnvVar": null } }
 ```
 
 When using a Codex-managed Bedrock key, logout removes the key and clears `model_provider` if it is still set to `"amazon-bedrock"`. When using AWS-managed credentials, manage them through AWS or switch providers before logging out.

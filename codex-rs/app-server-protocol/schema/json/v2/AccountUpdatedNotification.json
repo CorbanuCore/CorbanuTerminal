@@ -77,6 +77,14 @@
     }
   },
   "properties": {
+    "apiKeyEnvVar": {
+      "default": null,
+      "description": "For API key auth, the environment variable the key is read from (for example `OPENAI_API_KEY`), or `null` for a saved key.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "authMode": {
       "anyOf": [
         {

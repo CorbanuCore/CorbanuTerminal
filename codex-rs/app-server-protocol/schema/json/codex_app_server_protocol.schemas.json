@@ -6090,6 +6090,14 @@
         "oneOf": [
           {
             "properties": {
+              "envVar": {
+                "default": null,
+                "description": "The environment variable the key is read from (for example `OPENAI_API_KEY`), or `null` for a saved key.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
               "type": {
                 "enum": [
                   "apiKey"
@@ -6251,6 +6259,14 @@
       "AccountUpdatedNotification": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "properties": {
+          "apiKeyEnvVar": {
+            "default": null,
+            "description": "For API key auth, the environment variable the key is read from (for example `OPENAI_API_KEY`), or `null` for a saved key.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "authMode": {
             "anyOf": [
               {

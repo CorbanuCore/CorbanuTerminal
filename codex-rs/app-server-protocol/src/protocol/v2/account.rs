@@ -20,7 +20,16 @@ use std::collections::HashMap;
 pub enum Account {
     #[serde(rename = "apiKey", rename_all = "camelCase")]
     #[ts(rename = "apiKey", rename_all = "camelCase")]
-    ApiKey {},
+    ApiKey {
+        /// The environment variable the key is read from (for example
+        /// `OPENAI_API_KEY`), or `null` for a saved key.
+        #[serde(default)]
+        #[schemars(
+            required,
+            schema_with = "crate::protocol::serde_helpers::nullable_string_schema"
+        )]
+        env_var: Option<String>,
+    },
 
     #[serde(rename = "chatgpt", rename_all = "camelCase")]
     #[ts(rename = "chatgpt", rename_all = "camelCase")]
@@ -44,7 +53,7 @@ pub enum Account {
 impl From<ProviderAccount> for Account {
     fn from(account: ProviderAccount) -> Self {
         match account {
-            ProviderAccount::ApiKey => Self::ApiKey {},
+            ProviderAccount::ApiKey => Self::ApiKey { env_var: None },
             ProviderAccount::Chatgpt { email, plan_type } => Self::Chatgpt { email, plan_type },
             ProviderAccount::AmazonBedrock {
                 uses_codex_managed_credentials,
@@ -513,6 +522,10 @@ pub struct GetAccountResponse {
 pub struct AccountUpdatedNotification {
     pub auth_mode: Option<AuthMode>,
     pub plan_type: Option<PlanType>,
+    /// For API key auth, the environment variable the key is read from (for
+    /// example `OPENAI_API_KEY`), or `null` for a saved key.
+    #[serde(default)]
+    pub api_key_env_var: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]

@@ -921,6 +921,11 @@ pub const OPENAI_API_KEY_ENV_VAR: &str = "OPENAI_API_KEY";
 pub const CODEX_API_KEY_ENV_VAR: &str = "CODEX_API_KEY";
 pub const CODEX_ACCESS_TOKEN_ENV_VAR: &str = "CODEX_ACCESS_TOKEN";
 
+/// Shown once per session when a request is authorised by the `OPENAI_API_KEY`
+/// fallback, and again whenever the credential in use switches back to it.
+pub const OPENAI_API_KEY_ENV_FALLBACK_NOTICE: &str = "Using OPENAI_API_KEY from your \
+    environment — billed per use to that API key. Sign in or unset it to change.";
+
 /// Whether `OPENAI_API_KEY` is the last-resort OpenAI credential.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum OpenAiApiKeyEnv {

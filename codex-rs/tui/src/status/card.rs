@@ -737,7 +737,13 @@ fn status_account_value(
             (None, Some(plan)) => plan.clone(),
             (None, None) => "ChatGPT".to_string(),
         },
-        StatusAccountDisplay::ApiKey => {
+        // Only providers that use OpenAI sign-in send the environment key.
+        StatusAccountDisplay::ApiKey {
+            env_var: Some(env_var),
+        } if provider.uses_first_party_openai_auth() => {
+            format!("{env_var} from your environment (billed per use)")
+        }
+        StatusAccountDisplay::ApiKey { .. } => {
             "OpenAI API key configured (run corbanu login to use ChatGPT)".to_string()
         }
     })
