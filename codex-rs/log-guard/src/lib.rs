@@ -27,5 +27,6 @@ pub use redact::RedactingMakeWriter;
 pub use redact::RedactingWriter;
 pub use redact::contains_credentials;
 pub use redact::credential_spans;
+pub use redact::redact_command;
 pub use redact::redact_credentials;
 pub use redact::redact_credentials_bytes;

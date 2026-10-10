@@ -1718,10 +1718,11 @@ async fn append_execpolicy_amendment_keeps_credentials_out_of_the_file() {
     ];
     let manager = ExecPolicyManager::default();
 
-    manager
+    let scope = manager
         .append_amendment_and_update(codex_home.path(), &ExecPolicyAmendment::from(prefix))
         .await
         .expect("update policy");
+    assert_eq!(scope, AmendmentScope::Session);
 
     let mut command = vec![
         "curl".to_string(),
@@ -1737,6 +1738,52 @@ async fn append_execpolicy_amendment_keeps_credentials_out_of_the_file() {
         Decision::Allow
     );
     assert!(!default_policy_path(codex_home.path()).exists());
+}
+
+/// #398: the auto-derived proposal (the whole command, no `prefix_rule`)
+/// is dropped too when the command carries a credential.
+#[tokio::test]
+async fn credential_commands_get_no_derived_execpolicy_amendment_proposal() {
+    // The credential-free versions of these are
+    // `heredoc_redirect_without_escalation_runs_inside_sandbox` and
+    // `heredoc_redirect_with_escalation_requires_approval`, which propose
+    // the whole command.
+    let command = vec![
+        "zsh".to_string(),
+        "-lc".to_string(),
+        "cat <<'EOF' > /some/important/folder/test.txt\nAuthorization: Bearer fake-398-derived-0003\nEOF"
+            .to_string(),
+    ];
+    assert_exec_approval_requirement_for_command(
+        ExecApprovalRequirementScenario {
+            policy_src: None,
+            command: command.clone(),
+            approval_policy: AskForApproval::OnRequest,
+            permission_profile: PermissionProfile::workspace_write(),
+            sandbox_permissions: SandboxPermissions::UseDefault,
+            prefix_rule: None,
+        },
+        ExecApprovalRequirement::Skip {
+            bypass_sandbox: false,
+            proposed_execpolicy_amendment: None,
+        },
+    )
+    .await;
+    assert_exec_approval_requirement_for_command(
+        ExecApprovalRequirementScenario {
+            policy_src: Some(r#"prefix_rule(pattern=["cat"], decision="allow")"#.to_string()),
+            command,
+            approval_policy: AskForApproval::OnRequest,
+            permission_profile: PermissionProfile::workspace_write(),
+            sandbox_permissions: SandboxPermissions::RequireEscalated,
+            prefix_rule: None,
+        },
+        ExecApprovalRequirement::NeedsApproval {
+            reason: None,
+            proposed_execpolicy_amendment: None,
+        },
+    )
+    .await;
 }
 
 /// #398: a command carrying a credential gets no "don't ask again"

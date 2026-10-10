@@ -156,3 +156,17 @@ fn sandbox_command_logs_are_masked_once() -> io::Result<()> {
     assert_eq!(scrub_sandbox_logs_once(&dir.join("missing"))?, Some(0));
     Ok(())
 }
+
+/// The early builds' log in `CODEX_HOME` is masked too.
+#[test]
+fn legacy_sandbox_command_log_is_masked() -> io::Result<()> {
+    let codex_home = temp_dir()?;
+    let sandbox_dir = codex_home.join(".sandbox");
+    std::fs::create_dir_all(&sandbox_dir)?;
+    let legacy = codex_home.join("sandbox_commands.rust.log");
+    std::fs::write(&legacy, "START: tool --password fake-old-legacy-0005\n")?;
+
+    assert_eq!(scrub_sandbox_logs_once(&sandbox_dir)?, Some(1));
+    assert!(!std::fs::read_to_string(&legacy)?.contains("fake-old"));
+    Ok(())
+}

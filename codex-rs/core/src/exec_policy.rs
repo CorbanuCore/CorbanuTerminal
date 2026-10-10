@@ -472,7 +472,7 @@ impl ExecPolicyManager {
         &self,
         codex_home: &Path,
         amendment: &ExecPolicyAmendment,
-    ) -> Result<(), ExecPolicyUpdateError> {
+    ) -> Result<AmendmentScope, ExecPolicyUpdateError> {
         let _update_guard =
             self.update_lock
                 .acquire()
@@ -484,8 +484,9 @@ impl ExecPolicyManager {
                 })?;
         // A rule holding a credential (#398) applies for this session only:
         // the rules file would keep it in plain text.
-        if contains_credentials(&amendment.command) {
+        let scope = if contains_credentials(&amendment.command) {
             tracing::warn!("not saving an exec policy rule that contains a credential");
+            AmendmentScope::Session
         } else {
             let policy_path = default_policy_path(codex_home);
             spawn_blocking({
@@ -499,7 +500,8 @@ impl ExecPolicyManager {
                 path: policy_path,
                 source,
             })?;
-        }
+            AmendmentScope::Saved
+        };
 
         let current_policy = self.current();
         let match_options = MatchOptions {
@@ -515,13 +517,13 @@ impl ExecPolicyManager {
                 is_policy_match(rule_match) && rule_match.decision() == Decision::Allow
             });
         if already_allowed {
-            return Ok(());
+            return Ok(scope);
         }
 
         let mut updated_policy = current_policy.as_ref().clone();
         updated_policy.add_prefix_rule(&amendment.command, Decision::Allow)?;
         self.policy.store(Arc::new(updated_policy));
-        Ok(())
+        Ok(scope)
     }
 
     pub(crate) async fn append_network_rule_and_update(
@@ -1142,6 +1144,16 @@ fn try_derive_execpolicy_amendment_for_allow_rules(
             } => Some(ExecPolicyAmendment::from(command.clone())),
             _ => None,
         })
+}
+
+/// Where an approved exec policy amendment applies.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AmendmentScope {
+    /// Written to the rules file: future sessions use it too.
+    Saved,
+    /// It carries a credential (#398), so it was not written and applies to
+    /// this session only.
+    Session,
 }
 
 /// Whether a command (or prefix) carries a credential the log redaction

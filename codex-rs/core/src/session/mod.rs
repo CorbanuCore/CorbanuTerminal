@@ -2558,7 +2558,7 @@ impl Session {
     pub(crate) async fn persist_execpolicy_amendment(
         &self,
         amendment: &ExecPolicyAmendment,
-    ) -> Result<(), ExecPolicyUpdateError> {
+    ) -> Result<crate::exec_policy::AmendmentScope, ExecPolicyUpdateError> {
         let codex_home = self
             .state
             .lock()
@@ -2570,9 +2570,7 @@ impl Session {
         self.services
             .exec_policy
             .append_amendment_and_update(&codex_home, amendment)
-            .await?;
-
-        Ok(())
+            .await
     }
 
     pub(crate) async fn turn_context_for_sub_id(&self, sub_id: &str) -> Option<Arc<TurnContext>> {

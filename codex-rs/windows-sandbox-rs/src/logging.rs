@@ -3,6 +3,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
+use codex_log_guard::redact_command;
 use codex_log_guard::redact_credentials;
 use codex_log_guard::redact_credentials_bytes;
 use codex_utils_string::take_bytes_at_char_boundary;
@@ -24,11 +25,11 @@ fn exe_label() -> &'static str {
     })
 }
 
-/// The command line as logged: credentials redacted (#398) before
-/// truncation, so a cut can't leave part of a value unrecognised.
+/// The command line as logged: credentials redacted (#398), argument by
+/// argument and before truncation, so neither a value holding spaces nor a
+/// cut can leave part of one unrecognised.
 fn preview(command: &[String]) -> String {
-    let joined = command.join(" ");
-    let redacted = redact_credentials(&joined);
+    let redacted = redact_command(command);
     take_bytes_at_char_boundary(&redacted, LOG_COMMAND_PREVIEW_LIMIT).to_string()
 }
 
@@ -88,7 +89,11 @@ impl Write for RedactedLogWriter {
         self.pending.extend_from_slice(buf);
         if let Some(end) = self.pending.iter().rposition(|byte| *byte == b'\n') {
             let lines: Vec<u8> = self.pending.drain(..=end).collect();
-            self.write_redacted(&lines)?;
+            if let Err(err) = self.write_redacted(&lines) {
+                // The caller may retry `buf`; keep none of it.
+                self.pending.clear();
+                return Err(err);
+            }
         }
         Ok(buf.len())
     }
@@ -227,6 +232,16 @@ mod tests {
             &format!("runner failed: {}", curl.join(" ")),
             Some(tempdir.path()),
         );
+        // Values holding spaces, as their own arguments.
+        let spaced = command(&[
+            "tool",
+            "--password=fake-398-spaced-0010 two words",
+            "--token",
+            "fake-398-spaced-0011 more words",
+            "-H",
+            "X-Api-Key: fake-398-spaced-0012 tail",
+        ]);
+        log_start(&spaced, Some(tempdir.path()));
 
         let log = read_only_log(tempdir.path());
         assert!(
@@ -236,6 +251,15 @@ mod tests {
         assert!(log.contains("SUCCESS: mysql --password=REDACTED"), "{log}");
         assert!(log.contains("FAILURE: "), "{log}");
         assert!(log.contains("runner failed: curl.exe"), "{log}");
+        assert!(
+            log.contains(
+                "START: tool --password=REDACTED --token REDACTED -H X-Api-Key: REDACTED\n"
+            ),
+            "{log}"
+        );
+        for word in ["two words", "more words", "tail"] {
+            assert!(!log.contains(word), "{word} leaked: {log}");
+        }
         for secret in secrets {
             // No secret, nor the start of one a truncation could leave.
             assert!(!log.contains(&secret[..12]), "{secret} leaked: {log}");
@@ -252,13 +276,17 @@ mod tests {
             writer.write_all(b"setup: tool --password ").unwrap();
             writer.write_all(b"fake-398-split-0006\nnext ").unwrap();
             writer
-                .write_all(b"line OPENAI_API_KEY=fake-398-partial-0007")
+                .write_all(b"line X-Api-Key: fake-398-multi-0008\nthird PGPASSWORD=")
+                .unwrap();
+            writer.write_all(b"fake-398-multi-0009\n").unwrap();
+            writer
+                .write_all(b"last OPENAI_API_KEY=fake-398-partial-0007")
                 .unwrap();
         }
         let log = read_only_log(tempdir.path());
         assert_eq!(
             log,
-            "setup: tool --password REDACTED\nnext line OPENAI_API_KEY=REDACTED"
+            "setup: tool --password REDACTED\nnext line X-Api-Key: REDACTED\nthird PGPASSWORD=REDACTED\nlast OPENAI_API_KEY=REDACTED"
         );
     }
 

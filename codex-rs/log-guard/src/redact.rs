@@ -11,16 +11,21 @@ use tracing_subscriber::fmt::MakeWriter;
 
 const REDACTED: &[u8] = b"REDACTED";
 
-/// Headers, fields and command-line options (`--password=x`) whose value is
+/// Headers, fields and command-line options (`--api-key=x`) whose value is
 /// a credential.
-const CREDENTIAL_NAMES: &str = "proxy-authorization|authorization|x-api-key|api-key|api_key|apikey|x-goog-api-key|x-amz-security-token|x-amz-sso_bearer_token|ocp-apim-subscription-key|x-auth-token|auth-token|auth_token|private-token|x-access-token|access-token|access_token|refresh-token|refresh_token|id_token|token|password|passwd|secret|client-secret|client_secret";
+const CREDENTIAL_NAMES: &str = "proxy-authorization|authorization|x-api-key|api-key|api_key|apikey|x-goog-api-key|x-amz-security-token|x-amz-sso_bearer_token|ocp-apim-subscription-key|x-auth-token|auth-token|auth_token|private-token|x-access-token|access-token|access_token|refresh-token|refresh_token|id_token|client-secret|client_secret";
+/// Bare words that name a credential but also start ordinary messages
+/// (`Failed to refresh token: 401`): after `:` only a value of 8 or more
+/// characters is redacted. Their `=` forms are [`CREDENTIAL_ENV_SUFFIXES`].
+const BARE_CREDENTIAL_NAMES: &str = "token|password|passwd|secret";
 /// Command-line options whose value follows as the next argument
 /// (`--password x`, `-Token x`, `["--api-key", "x"]`).
-const CREDENTIAL_OPTIONS: &str = "password|passwd|pass|token|api-key|api_key|apikey|secret|client-secret|client_secret|access-token|access_token|auth-token|auth_token|refresh-token|refresh_token|private-token|bearer";
-/// Environment variable name endings (`OPENAI_API_KEY=x`,
-/// `$env:GITHUB_TOKEN = 'x'`, `"AWS_SECRET_ACCESS_KEY": "x"`).
+const CREDENTIAL_OPTIONS: &str = "password|passwd|pass|passin|passout|token|api-key|api_key|apikey|secret|client-secret|client_secret|access-token|access_token|auth-token|auth_token|refresh-token|refresh_token|private-token|bearer|oauth2-bearer";
+/// Endings of environment variable and setting names (`OPENAI_API_KEY=x`,
+/// `PGPASSWORD=x`, `_authToken=x`, `$env:GITHUB_TOKEN = 'x'`,
+/// `"AWS_SECRET_ACCESS_KEY": "x"`).
 const CREDENTIAL_ENV_SUFFIXES: &str =
-    "api_?key|token|secret|secret_?key|access_key|password|passwd|passphrase|pat|credentials?";
+    "api_?key|token|secret|secret_?key|access_key|password|passwd|passphrase|_pwd|credentials?";
 /// Authorization schemes kept in front of a redacted value.
 const SCHEMES: [&[u8]; 5] = [b"bearer", b"basic", b"token", b"digest", b"negotiate"];
 /// Start of a name: a word boundary or an escaped line break.
@@ -43,9 +48,10 @@ static PATTERNS: LazyLock<Vec<String>> = LazyLock::new(|| {
     // Start of a command-line option: line or argument start, or a `Debug`
     // list's quote or separator.
     let option_start = r#"(?:^|[\s"'\[(,=])-{1,2}"#;
-    // Option/value separator: `=`, whitespace, or `", "` between `Debug`
-    // list items.
-    let option_separator = r#"(?:=|\\*["']?(?:[ \t]*,)?[ \t]+)"#;
+    // Option/value separator: `=`, whitespace, or `", "` / `","` between
+    // `Debug` or JSON list items.
+    let option_separator = r#"(?:=|\\*["']?[ \t]*,[ \t]*|\\*["']?[ \t]+)"#;
+    let bare = BARE_CREDENTIAL_NAMES;
     vec![
         // UNQUOTED: `authorization: Bearer x`, `api-key=x`,
         // `Authorization: Token token="x"`: an optional scheme and one
@@ -62,6 +68,12 @@ static PATTERNS: LazyLock<Vec<String>> = LazyLock::new(|| {
         ),
         // Quoted values, to the closing quote: `"x-api-key": "x y"`.
         format!(r#"(?i-u){NAME_START}(?:{names}){SEPARATOR}\\*["'](?P<v>[^"'\\\r\n]+)"#),
+        // A quoted header argument, to the closing quote:
+        // `-H "X-Api-Key: a b"`.
+        format!(r#"(?i-u)\\*["'](?:{names})[ \t]*:[ \t]*(?P<v>[^"'\\\r\n]+)"#),
+        // Bare names after `:`, with a value long enough to be one:
+        // `password: hunter2!`.
+        format!(r#"(?i-u){NAME_START}(?:{bare})\\*["']?[ \t]*:[ \t]*(?P<v>[^\s"'\\,;(){{}}\[\]]{{8,}})"#),
         // Tuples: `("api-key", "x")`.
         format!(
             r#"(?i-u)\\*["'](?:{names}|set-cookie|cookie)\\*["'][ \t]*,[ \t]*\\*["'](?P<v>[^"'\\\r\n]+)"#
@@ -84,19 +96,35 @@ static PATTERNS: LazyLock<Vec<String>> = LazyLock::new(|| {
         // `["--api-key", "x"]`; quoted values to the closing quote.
         format!(r#"(?i-u){option_start}(?:{options}){option_separator}\\*["']?(?P<v>[^\s"'\\]+)"#),
         format!(r#"(?i-u){option_start}(?:{options}){option_separator}\\*["'](?P<v>[^"'\\\r\n]+)"#),
-        // User credentials: `curl -u user:x`, `--proxy-user=user:x`.
-        r#"(?-u)(?:^|[\s"'\[(,])(?:-u|-U|--user|--proxy-user)(?:=|\\*["']?(?:[ \t]*,)?[ \t]+)?\\*["']?[^\s"'\\:]*:(?P<v>[^\s"'\\]+)"#
+        // A quoted argument holding an option or assignment, to the closing
+        // quote: `"--password=a b"`, `"OPENAI_API_KEY=a b"`.
+        format!(
+            r#"(?i-u)\\*["'](?:-{{1,2}}(?:{options})|[a-z0-9_]*(?:{env}))=(?P<v>[^"'\\\r\n]+)"#
+        ),
+        // User credentials: `curl -u user:x`, `--proxy-user=user:x`; not
+        // `-u 1000:1000`.
+        r#"(?-u)(?:^|[\s"'\[(,])(?:-u|-U|--user|--proxy-user)(?:=|\\*["']?[ \t]*,[ \t]*|\\*["']?[ \t]+)?\\*["']?[^\s"'\\:]*:(?P<v>[^\s"'\\]*[^\s"'\\0-9][^\s"'\\]*)"#
+            .to_string(),
+        // Passwords attached to short options: `mysql -pSECRET`,
+        // `sshpass -p x`, `docker login -p x`.
+        r#"(?-u)\b(?:mysql|mysqldump|mysqladmin|mariadb)\b[^\r\n]*?[\s"'](?:-p|--password=)(?P<v>[^\s"'\\]+)"#
+            .to_string(),
+        r#"(?-u)\b(?:sshpass|docker[ \t]+login|podman[ \t]+login)\b[^\r\n]*?[\s"']-p[ \t]*\\*["']?(?P<v>[^\s"'\\]+)"#
+            .to_string(),
+        // `aws configure set aws_secret_access_key x`.
+        r#"(?i-u)\b(?:aws_secret_access_key|aws_session_token)\\*["']?(?:[ \t]*,)?[ \t]+\\*["']?(?P<v>[^\s"'\\=:][^\s"'\\]*)"#
             .to_string(),
         // Environment assignments (`OPENAI_API_KEY=x`) and quoted values
         // (`GITHUB_TOKEN='a b'`, `"GITHUB_TOKEN": "a b"`).
-        format!(r#"(?i-u)\b(?:[a-z][a-z0-9_]*_)?(?:{env})[ \t]*=[ \t]*(?P<v>[^\s"'\\&;,]+)"#),
+        format!(r#"(?i-u)\b[a-z0-9_]*(?:{env})[ \t]*=[ \t]*(?P<v>[^\s"'\\&;,]+)"#),
         format!(
-            r#"(?i-u)\b(?:[a-z][a-z0-9_]*_)?(?:{env})\\*["']?[ \t]*(?::|=)[ \t]*\\*["'](?P<v>[^"'\\\r\n]+)"#
+            r#"(?i-u)\b[a-z0-9_]*(?:{env})\\*["']?[ \t]*(?::|=)[ \t]*\\*["'](?P<v>[^"'\\\r\n]+)"#
         ),
         // URL userinfo passwords: `https://user:x@host`.
         r#"(?i-u)\b[a-z][a-z0-9+.-]*://[^\s/@:"'\\]*:(?P<v>[^\s/@"'\\]+)@"#.to_string(),
-        // GitHub, GitLab, Slack, Google, Hugging Face and AWS key formats.
-        r"(?-u)\b(?P<v>gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|glpat-[A-Za-z0-9_-]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|hf_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16})"
+        // GitHub, GitLab, Slack, Google, Hugging Face, npm, Stripe and AWS
+        // key formats.
+        r"(?-u)\b(?P<v>gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|glpat-[A-Za-z0-9_-]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|hf_[A-Za-z0-9]{30,}|npm_[A-Za-z0-9]{36}|[rs]k_(?:live|test)_[A-Za-z0-9]{16,}|AKIA[0-9A-Z]{16})"
             .to_string(),
     ]
 });
@@ -247,6 +275,48 @@ pub fn redact_credentials_bytes(text: &[u8]) -> Cow<'_, [u8]> {
     }
     redacted.extend_from_slice(&text[position..]);
     Cow::Owned(redacted)
+}
+
+/// An argument that is wholly a credential assignment or header:
+/// `--password=a b`, `Authorization: Bearer a b`, `$env:GH_TOKEN=a b`.
+/// Group `k` is kept; the rest is the value.
+static CREDENTIAL_ARGUMENT: LazyLock<regex::Regex> = LazyLock::new(|| {
+    #[expect(clippy::expect_used)]
+    regex::Regex::new(
+        r"(?i)^(?P<k>(?:-{1,2}|\$env:)?[a-z0-9_.-]*(?:authorization|api[-_]?key|apikey|token|secret|password|passwd|passphrase|credentials?|cookie)[ \t]*[:=][ \t]*)\S",
+    )
+    .expect("credential argument pattern compiles")
+});
+/// An option whose value is the next argument (`--password`, `-Token`).
+static CREDENTIAL_OPTION: LazyLock<regex::Regex> = LazyLock::new(|| {
+    #[expect(clippy::expect_used)]
+    regex::Regex::new(&format!("(?i)^-{{1,2}}(?:{CREDENTIAL_OPTIONS})$"))
+        .expect("credential option pattern compiles")
+});
+
+/// `argv` joined with spaces for a command log, credentials redacted.
+///
+/// Arguments are redacted one by one before joining, so a value holding
+/// spaces (`["--password=a b"]`, `["--token", "a b"]`) is hidden whole, and
+/// then the joined line passes through [`redact_credentials`] for shapes
+/// inside shell scripts (`["bash", "-lc", "curl -H ..."]`).
+pub fn redact_command(argv: &[String]) -> String {
+    let mut redacted = Vec::with_capacity(argv.len());
+    let mut value_is_credential = false;
+    for argument in argv {
+        if value_is_credential {
+            redacted.push("REDACTED".to_string());
+        } else if let Some(key) = CREDENTIAL_ARGUMENT
+            .captures(argument)
+            .and_then(|captures| captures.name("k"))
+        {
+            redacted.push(format!("{}REDACTED", key.as_str()));
+        } else {
+            redacted.push(argument.clone());
+        }
+        value_is_credential = CREDENTIAL_OPTION.is_match(argument);
+    }
+    redact_credentials(&redacted.join(" ")).into_owned()
 }
 
 /// Whether `text` holds a value [`redact_credentials`] would hide.

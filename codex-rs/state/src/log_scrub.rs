@@ -215,14 +215,22 @@ pub fn scrub_log_file_once(path: &Path) -> io::Result<Option<usize>> {
 /// Marker written in the Windows sandbox log directory once its daily logs
 /// have been scrubbed.
 const SANDBOX_LOGS_SCRUB_MARKER: &str = ".sandbox-logs.scrub-v1";
+/// The Windows sandbox command log of early builds, in `CODEX_HOME`.
+const LEGACY_SANDBOX_COMMAND_LOG: &str = "sandbox_commands.rust.log";
 
 /// Mask, once, the credentials that older builds wrote into the Windows
-/// sandbox's daily command logs (`sandbox.<date>.log` in `sandbox_dir`,
-/// #398): command lines were logged verbatim, and `/feedback` attaches the
-/// current log. Values are masked as by [`scrub_log_file_once`], with the
-/// command-line shapes `codex_log_guard` now redacts as well. A missing
-/// directory counts as done without a marker. Returns the number of values
-/// masked, or `None` when the marker shows this was done before.
+/// sandbox's command logs (#398): command lines were logged verbatim, and
+/// `/feedback` attaches the current log. Covers the daily
+/// `sandbox.<date>.log` files in `sandbox_dir` and the older
+/// `sandbox_commands.rust.log` there and in its parent (`CODEX_HOME`).
+/// Values are masked as by [`scrub_log_file_once`], with the command-line
+/// shapes `codex_log_guard` now redacts as well. A file that fails is
+/// skipped and the marker is not written, so the next start retries. A
+/// missing directory counts as done without a marker. Returns the number of
+/// values masked, or `None` when the marker shows this was done before.
+///
+/// The sandbox can write to `sandbox_dir`, so sandboxed code could create
+/// the marker first; it can read these logs anyway.
 pub fn scrub_sandbox_logs_once(sandbox_dir: &Path) -> io::Result<Option<usize>> {
     let marker = sandbox_dir.join(SANDBOX_LOGS_SCRUB_MARKER);
     if marker.exists() {
@@ -233,16 +241,33 @@ pub fn scrub_sandbox_logs_once(sandbox_dir: &Path) -> io::Result<Option<usize>> 
         Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(Some(0)),
         Err(err) => return Err(err),
     };
+    let mut paths: Vec<PathBuf> = entries
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| {
+                    (name.starts_with("sandbox.") || name.starts_with("sandbox_commands"))
+                        && name.ends_with(".log")
+                })
+        })
+        .collect();
+    if let Some(codex_home) = sandbox_dir.parent() {
+        paths.push(codex_home.join(LEGACY_SANDBOX_COMMAND_LOG));
+    }
     let mut masked = 0;
-    for entry in entries {
-        let path = entry?.path();
-        let is_sandbox_log = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .is_some_and(|name| name.starts_with("sandbox.") && name.ends_with(".log"));
-        if is_sandbox_log && path.is_file() {
-            masked += scrub_log_file_in_place(&path, command_log_spans)?;
+    let mut first_error = None;
+    for path in paths {
+        match scrub_log_file_in_place(&path, command_log_spans) {
+            Ok(count) => masked += count,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+            Err(err) => {
+                first_error.get_or_insert(err);
+            }
         }
+    }
+    if let Some(err) = first_error {
+        return Err(err);
     }
     File::create(marker)?;
     Ok(Some(masked))

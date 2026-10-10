@@ -34,6 +34,12 @@ disallowed-methods = [
     { path = "tracing_subscriber::fmt::try_init", reason = "Install global subscribers with codex_log_guard::guard(subscriber).try_init()." },
     { path = "tracing_subscriber::fmt::SubscriberBuilder::init", reason = "Install global subscribers with codex_log_guard::guard(subscriber).init()." },
     { path = "tracing_subscriber::fmt::SubscriberBuilder::try_init", reason = "Install global subscribers with codex_log_guard::guard(subscriber).try_init()." },
+    { path = "log::set_logger", reason = "`log` records reach the guarded tracing subscriber through its bridge; don't install another logger." },
+    { path = "log::set_boxed_logger", reason = "`log` records reach the guarded tracing subscriber through its bridge; don't install another logger." },
+    { path = "env_logger::init", reason = "`log` records reach the guarded tracing subscriber through its bridge; don't install another logger." },
+    { path = "env_logger::try_init", reason = "`log` records reach the guarded tracing subscriber through its bridge; don't install another logger." },
+    { path = "env_logger::Builder::init", reason = "`log` records reach the guarded tracing subscriber through its bridge; don't install another logger." },
+    { path = "env_logger::Builder::try_init", reason = "`log` records reach the guarded tracing subscriber through its bridge; don't install another logger." },
 ]
 
 # Increase the size threshold for result_large_err to accommodate
