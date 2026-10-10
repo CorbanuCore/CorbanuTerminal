@@ -20,7 +20,7 @@ const CREDENTIAL_NAMES: &str = "proxy-authorization|authorization|x-api-key|api-
 const BARE_CREDENTIAL_NAMES: &str = "token|password|passwd|secret";
 /// Command-line options whose value follows as the next argument
 /// (`--password x`, `-Token x`, `["--api-key", "x"]`).
-const CREDENTIAL_OPTIONS: &str = "password|passwd|pass|passin|passout|token|api-key|api_key|apikey|secret|client-secret|client_secret|access-token|access_token|auth-token|auth_token|refresh-token|refresh_token|private-token|bearer|oauth2-bearer";
+const CREDENTIAL_OPTIONS: &str = "password|passwd|pass|pass(?:in|out)|token|api-key|api_key|apikey|secret|client-secret|client_secret|access-token|access_token|auth-token|auth_token|refresh-token|refresh_token|private-token|bearer|oauth2-bearer";
 /// Endings of environment variable and setting names (`OPENAI_API_KEY=x`,
 /// `PGPASSWORD=x`, `_authToken=x`, `$env:GITHUB_TOKEN = 'x'`,
 /// `"AWS_SECRET_ACCESS_KEY": "x"`).
