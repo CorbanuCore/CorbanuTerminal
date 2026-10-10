@@ -508,7 +508,8 @@ async fn sec_391_project_config_cannot_turn_the_aggressive_default_off() {
     use crate::config::ConfigOverrides;
     use codex_config::LoaderOverrides;
     let root = tempfile::tempdir().expect("root");
-    let root_path = root.path().canonicalize().expect("canonical root");
+    // No `\\?\` prefix on Windows, so the trust key matches the folder.
+    let root_path = dunce::canonicalize(root.path()).expect("canonical root");
     let project = root_path.join("project");
     std::fs::create_dir_all(project.join(".git")).expect("project");
     std::fs::create_dir_all(project.join(".codex")).expect("project config dir");
@@ -526,7 +527,7 @@ async fn sec_391_project_config_cannot_turn_the_aggressive_default_off() {
                 home.join("config.toml"),
                 format!(
                     "[security]\nversion = 1\nlevel = \"aggressive\"\n\n[projects.{:?}]\ntrust_level = \"trusted\"\n{user_features}",
-                    project.display().to_string()
+                    codex_config::loader::project_trust_key(&project)
                 ),
             )
             .expect("user config");
