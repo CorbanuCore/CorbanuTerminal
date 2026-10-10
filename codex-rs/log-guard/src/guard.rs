@@ -78,6 +78,28 @@ pub struct Guarded<S> {
     inner: S,
 }
 
+/// The only sanctioned way to install a global subscriber: `clippy.toml`
+/// disallows `set_global_default` and `SubscriberInitExt::{init, try_init}`
+/// everywhere else, so a binary can't install one that skips [`guard`].
+/// These shadow the `SubscriberInitExt` methods, so `guard(s).try_init()`
+/// resolves here.
+impl<S> Guarded<S>
+where
+    S: Subscriber + Send + Sync + 'static,
+{
+    /// [`SubscriberInitExt::try_init`](tracing_subscriber::util::SubscriberInitExt::try_init).
+    pub fn try_init(self) -> Result<(), tracing_subscriber::util::TryInitError> {
+        #[expect(clippy::disallowed_methods)]
+        tracing_subscriber::util::SubscriberInitExt::try_init(self)
+    }
+
+    /// [`SubscriberInitExt::init`](tracing_subscriber::util::SubscriberInitExt::init).
+    pub fn init(self) {
+        #[expect(clippy::disallowed_methods)]
+        tracing_subscriber::util::SubscriberInitExt::init(self);
+    }
+}
+
 impl<S: Subscriber> Subscriber for Guarded<S> {
     fn on_register_dispatch(&self, subscriber: &Dispatch) {
         self.inner.on_register_dispatch(subscriber);

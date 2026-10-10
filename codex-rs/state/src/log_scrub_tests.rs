@@ -126,3 +126,47 @@ fn missing_log_file_counts_as_scrubbed() -> io::Result<()> {
     assert!(log_file_scrub_marker(&path).exists());
     Ok(())
 }
+
+/// #398: older builds logged sandboxed command lines verbatim.
+#[test]
+fn sandbox_command_logs_are_masked_once() -> io::Result<()> {
+    let dir = temp_dir()?;
+    let leaked = "[2026-10-01 10:00:00.000 codex.exe] START: curl.exe -H \"Authorization: Bearer fake-old-bearer-0001\" --password fake-old-pass-0002 -u admin:fake-old-user-0003 https://x/?api_key=fake-old-query-0004\n";
+    let clean = "[2026-10-01 10:00:01.000 codex.exe] SUCCESS: cmd.exe /c echo ok\n";
+    let log = dir.join("sandbox.2026-10-01.log");
+    let other = dir.join("setup_marker.json");
+    std::fs::write(&log, format!("{clean}{leaked}"))?;
+    std::fs::write(&other, leaked)?;
+
+    assert_eq!(scrub_sandbox_logs_once(&dir)?, Some(4));
+    let masked = std::fs::read_to_string(&log)?;
+    assert_eq!(masked.len(), clean.len() + leaked.len());
+    assert!(masked.starts_with(clean), "{masked}");
+    assert!(!masked.contains("fake-old"), "{masked}");
+    assert!(
+        masked.contains("START: curl.exe -H \"Authorization: ****"),
+        "{masked}"
+    );
+    assert_eq!(std::fs::read_to_string(&other)?, leaked);
+
+    // The marker makes later starts skip the directory.
+    std::fs::write(&log, leaked)?;
+    assert_eq!(scrub_sandbox_logs_once(&dir)?, None);
+    assert_eq!(std::fs::read_to_string(&log)?, leaked);
+    assert_eq!(scrub_sandbox_logs_once(&dir.join("missing"))?, Some(0));
+    Ok(())
+}
+
+/// The early builds' log in `CODEX_HOME` is masked too.
+#[test]
+fn legacy_sandbox_command_log_is_masked() -> io::Result<()> {
+    let codex_home = temp_dir()?;
+    let sandbox_dir = codex_home.join(".sandbox");
+    std::fs::create_dir_all(&sandbox_dir)?;
+    let legacy = codex_home.join("sandbox_commands.rust.log");
+    std::fs::write(&legacy, "START: tool --password fake-old-legacy-0005\n")?;
+
+    assert_eq!(scrub_sandbox_logs_once(&sandbox_dir)?, Some(1));
+    assert!(!std::fs::read_to_string(&legacy)?.contains("fake-old"));
+    Ok(())
+}

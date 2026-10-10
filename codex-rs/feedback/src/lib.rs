@@ -614,6 +614,13 @@ impl FeedbackSnapshot {
                         .map(|s| s.to_string_lossy().to_string())
                         .unwrap_or_else(|| "extra-log.log".to_string())
                 });
+            // Older builds wrote sandboxed command lines verbatim (#398), and
+            // one may still be writing to the current day's file.
+            let data = if filename == WINDOWS_SANDBOX_LOG_ATTACHMENT_FILENAME {
+                codex_log_guard::redact_credentials_bytes(&data).into_owned()
+            } else {
+                data
+            };
             let content_type = match Path::new(&filename)
                 .extension()
                 .and_then(|extension| extension.to_str())

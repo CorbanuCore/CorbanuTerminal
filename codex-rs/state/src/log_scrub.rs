@@ -197,7 +197,7 @@ pub fn scrub_log_file_once(path: &Path) -> io::Result<Option<usize>> {
     if marker.exists() {
         return Ok(None);
     }
-    let masked = match scrub_log_file_in_place(path) {
+    let masked = match scrub_log_file_in_place(path, secret_spans) {
         Ok(masked) => masked,
         Err(err) if err.kind() == io::ErrorKind::NotFound => 0,
         Err(err) => return Err(err),
@@ -212,7 +212,88 @@ pub fn scrub_log_file_once(path: &Path) -> io::Result<Option<usize>> {
     Ok(Some(masked))
 }
 
-fn scrub_log_file_in_place(path: &Path) -> io::Result<usize> {
+/// Marker written in the Windows sandbox log directory once its daily logs
+/// have been scrubbed.
+const SANDBOX_LOGS_SCRUB_MARKER: &str = ".sandbox-logs.scrub-v1";
+/// The Windows sandbox command log of early builds, in `CODEX_HOME`.
+const LEGACY_SANDBOX_COMMAND_LOG: &str = "sandbox_commands.rust.log";
+
+/// Mask, once, the credentials that older builds wrote into the Windows
+/// sandbox's command logs (#398): command lines were logged verbatim, and
+/// `/feedback` attaches the current log. Covers the daily
+/// `sandbox.<date>.log` files in `sandbox_dir` and the older
+/// `sandbox_commands.rust.log` there and in its parent (`CODEX_HOME`).
+/// Values are masked as by [`scrub_log_file_once`], with the command-line
+/// shapes `codex_log_guard` now redacts as well. A file that fails is
+/// skipped and the marker is not written, so the next start retries. A
+/// missing directory counts as done without a marker. Returns the number of
+/// values masked, or `None` when the marker shows this was done before.
+///
+/// The sandbox can write to `sandbox_dir`, so sandboxed code could create
+/// the marker first; it can read these logs anyway.
+pub fn scrub_sandbox_logs_once(sandbox_dir: &Path) -> io::Result<Option<usize>> {
+    let marker = sandbox_dir.join(SANDBOX_LOGS_SCRUB_MARKER);
+    if marker.exists() {
+        return Ok(None);
+    }
+    let entries = match std::fs::read_dir(sandbox_dir) {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(Some(0)),
+        Err(err) => return Err(err),
+    };
+    let mut paths: Vec<PathBuf> = entries
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| {
+                    (name.starts_with("sandbox.") || name.starts_with("sandbox_commands"))
+                        && name.ends_with(".log")
+                })
+        })
+        .collect();
+    if let Some(codex_home) = sandbox_dir.parent() {
+        paths.push(codex_home.join(LEGACY_SANDBOX_COMMAND_LOG));
+    }
+    let mut masked = 0;
+    let mut first_error = None;
+    for path in paths {
+        match scrub_log_file_in_place(&path, command_log_spans) {
+            Ok(count) => masked += count,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+            Err(err) => {
+                first_error.get_or_insert(err);
+            }
+        }
+    }
+    if let Some(err) = first_error {
+        return Err(err);
+    }
+    File::create(marker)?;
+    Ok(Some(masked))
+}
+
+/// [`secret_spans`] plus the command-line credential shapes of
+/// `codex_log_guard` (`--password x`, `curl -u user:x`).
+fn command_log_spans(text: &[u8]) -> Vec<Range<usize>> {
+    let mut spans = secret_spans(text);
+    spans.extend(codex_log_guard::credential_spans(text));
+    spans.retain(|span| !is_redacted(&text[span.clone()]));
+    spans.sort_by_key(|span| (span.start, span.end));
+    let mut merged: Vec<Range<usize>> = Vec::with_capacity(spans.len());
+    for span in spans {
+        match merged.last_mut() {
+            Some(last) if span.start <= last.end => last.end = last.end.max(span.end),
+            _ => merged.push(span),
+        }
+    }
+    merged
+}
+
+fn scrub_log_file_in_place(
+    path: &Path,
+    spans_of: fn(&[u8]) -> Vec<Range<usize>>,
+) -> io::Result<usize> {
     let file = File::open(path)?;
     let scrub_len = file.metadata()?.len();
     let mut reader = BufReader::new(file).take(scrub_len);
@@ -229,7 +310,7 @@ fn scrub_log_file_in_place(path: &Path) -> io::Result<usize> {
         if read == 0 {
             break;
         }
-        let spans = secret_spans(&line);
+        let spans = spans_of(&line);
         if !spans.is_empty() {
             // Another process truncated or replaced the file: writing past
             // its new end would bring old (masked) bytes back. (A rewrite

@@ -522,11 +522,22 @@ pub async fn exec_approval(
             .persist_execpolicy_amendment(proposed_execpolicy_amendment)
             .await
         {
-            Ok(()) => {
+            Ok(crate::exec_policy::AmendmentScope::Saved) => {
                 sess.record_execpolicy_amendment_message(
                     &event_turn_id,
                     proposed_execpolicy_amendment,
                 )
+                .await;
+            }
+            Ok(crate::exec_policy::AmendmentScope::Session) => {
+                let message = "This command contains a credential, so the approval applies to \
+                               this session only and was not saved to your rules."
+                    .to_string();
+                let warning = EventMsg::Warning(WarningEvent { message });
+                sess.send_event_raw(Event {
+                    id: event_turn_id.clone(),
+                    msg: warning,
+                })
                 .await;
             }
             Err(err) => {

@@ -1298,3 +1298,153 @@ fn legacy_tty_cmd_default_desktop_emits_output_and_accepts_input() {
         assert!(stdout.contains("second"), "stdout={stdout:?}");
     });
 }
+
+/// Sentinel credentials for #398, typed into a sandboxed command line the
+/// way a model or user would: a bearer header, an API-key header, a
+/// password option and an API-key query parameter.
+const CREDENTIAL_SENTINELS: [&str; 4] = [
+    "fake-398-bearer-1a2b3c4d5e",
+    "fake-398-xapikey-6f7a8b9c",
+    "fake-398-password-0d1e2f3a",
+    "fake-398-query-4b5c6d7e",
+];
+
+fn credential_command_line() -> String {
+    let [bearer, api_key, password, query] = CREDENTIAL_SENTINELS;
+    format!(
+        "echo SBX-398-RAN & rem curl -H \"Authorization: Bearer {bearer}\" -H \"X-Api-Key: {api_key}\" --password={password} https://api.example/v1?api_key={query}"
+    )
+}
+
+fn assert_sandbox_log_redacted(codex_home: &Path, stdout: &str) {
+    assert!(stdout.contains("SBX-398-RAN"), "stdout={stdout:?}");
+    let log = sandbox_log(codex_home);
+    assert!(
+        log.lines()
+            .any(|line| line.contains("START: ") && line.contains("Authorization: REDACTED")),
+        "the command should be logged with the credential redacted:\n{log}"
+    );
+    for secret in CREDENTIAL_SENTINELS {
+        assert!(
+            !log.contains(secret),
+            "{secret} reached the sandbox log:\n{log}"
+        );
+    }
+}
+
+/// #398: a sandboxed command's credentials never reach the sandbox command
+/// log on the legacy (restricted token) path.
+#[test]
+fn legacy_command_log_redacts_credentials() {
+    let _guard = legacy_process_test_guard();
+    let runtime = current_thread_runtime();
+    runtime.block_on(async move {
+        let cwd = sandbox_cwd();
+        let codex_home = sandbox_home("legacy-398-redact");
+        let spawned = spawn_windows_sandbox_session_legacy(
+            &PermissionProfile::workspace_write(),
+            workspace_roots_for(cwd.as_path()).as_slice(),
+            codex_home.path(),
+            vec![
+                system32_exe("cmd.exe").display().to_string(),
+                "/d".to_string(),
+                "/c".to_string(),
+                credential_command_line(),
+            ],
+            cwd.as_path(),
+            HashMap::new(),
+            Some(5_000),
+            &[],
+            &[],
+            /*tty*/ false,
+            /*stdin_open*/ false,
+            /*use_private_desktop*/ true,
+        )
+        .await
+        .expect("spawn legacy credential command");
+        let (stdout, exit_code) =
+            collect_stdout_and_exit(spawned, codex_home.path(), Duration::from_secs(10)).await;
+        let stdout = String::from_utf8_lossy(&stdout);
+        assert_eq!(exit_code, 0, "stdout={stdout:?}");
+        assert_sandbox_log_redacted(codex_home.path(), &stdout);
+    });
+}
+
+/// #398: the same on the elevated (sandbox user) path, whose command
+/// runner writes the log too.
+#[test]
+fn elevated_command_log_redacts_credentials() {
+    let _guard = legacy_process_test_guard();
+    let runtime = current_thread_runtime();
+    runtime.block_on(async move {
+        let cwd = sandbox_cwd();
+        let codex_home = sandbox_home("elevated-398-redact");
+        let spawned = spawn_windows_sandbox_session_elevated_for_permission_profile(
+            &PermissionProfile::workspace_write(),
+            workspace_roots_for(cwd.as_path()).as_slice(),
+            codex_home.path(),
+            vec![
+                system32_exe("cmd.exe").display().to_string(),
+                "/d".to_string(),
+                "/c".to_string(),
+                credential_command_line(),
+            ],
+            cwd.as_path(),
+            HashMap::new(),
+            /*proxy_enforced*/ false,
+            /*network_proxy_restricting_sid*/ None,
+            Some(5_000),
+            /*read_roots_override*/ None,
+            /*read_roots_include_platform_defaults*/ true,
+            /*write_roots_override*/ None,
+            &crate::DenyReadTargets::default(),
+            &[],
+            /*tty*/ false,
+            /*stdin_open*/ false,
+            /*use_private_desktop*/ true,
+        )
+        .await
+        .expect("spawn elevated credential command");
+        let (stdout, exit_code) =
+            collect_stdout_and_exit(spawned, codex_home.path(), Duration::from_secs(10)).await;
+        let stdout = String::from_utf8_lossy(&stdout);
+        assert_eq!(exit_code, 0, "stdout={stdout:?}");
+        assert_sandbox_log_redacted(codex_home.path(), &stdout);
+    });
+}
+
+/// #398: and on the one-shot capture path (`run_windows_sandbox_capture`),
+/// which logs START and SUCCESS itself.
+#[test]
+fn legacy_capture_command_log_redacts_credentials() {
+    let _guard = legacy_process_test_guard();
+    let cwd = sandbox_cwd();
+    let codex_home = sandbox_home("capture-398-redact");
+    let result = run_windows_sandbox_capture(
+        &PermissionProfile::workspace_write(),
+        workspace_roots_for(cwd.as_path()).as_slice(),
+        codex_home.path(),
+        vec![
+            system32_exe("cmd.exe").display().to_string(),
+            "/d".to_string(),
+            "/c".to_string(),
+            credential_command_line(),
+        ],
+        cwd.as_path(),
+        HashMap::new(),
+        Some(10_000),
+        /*cancellation*/ None,
+        /*use_private_desktop*/ true,
+    )
+    .expect("run legacy capture credential command");
+    let stdout = String::from_utf8_lossy(&result.stdout);
+    assert_eq!(result.exit_code, 0, "stdout={stdout:?}");
+    assert_sandbox_log_redacted(codex_home.path(), &stdout);
+    assert!(
+        sandbox_log(codex_home.path())
+            .lines()
+            .any(|line| line.contains("SUCCESS: ") && line.contains("--password=REDACTED")),
+        "{}",
+        sandbox_log(codex_home.path())
+    );
+}

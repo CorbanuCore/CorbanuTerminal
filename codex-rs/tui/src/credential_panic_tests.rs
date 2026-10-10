@@ -72,11 +72,14 @@ fn production_panic_hook_does_not_log_scoped_credentials() {
                 .expect("initialize vault hook first");
         }
         color_eyre::install().expect("production previous hook");
-        tracing_subscriber::fmt()
-            .with_ansi(false)
-            .with_writer(std::io::stderr)
-            .try_init()
-            .expect("production log capture");
+        codex_log_guard::guard(
+            tracing_subscriber::fmt()
+                .with_ansi(false)
+                .with_writer(std::io::stderr)
+                .finish(),
+        )
+        .try_init()
+        .expect("production log capture");
         super::install_panic_hook();
         super::tui::set_panic_hook();
         let error = vault

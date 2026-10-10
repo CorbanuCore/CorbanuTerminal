@@ -30,7 +30,6 @@ use supports_color::Stream as SupportStream;
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
-use tracing_subscriber::util::SubscriberInitExt;
 use util::append_error_log;
 use util::format_relative_time;
 use util::set_user_agent_suffix;

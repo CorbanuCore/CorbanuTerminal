@@ -48,6 +48,7 @@ use super::progress::turn_usage_summary_from_stdout;
 use super::progress::unix_epoch_ms;
 use super::progress::usage_status_from_summary;
 use super::turn_types::ClaudeCommandPlan;
+use super::turn_types::ClaudePaneToolEvent;
 use super::turn_types::ClaudePaneTurnAudit;
 use super::turn_types::ClaudePaneTurnOutput;
 use super::turn_types::DeferredClaudePlanAuth;
@@ -1263,7 +1264,15 @@ pub(crate) fn write_turn_audit(
         reasoning_events: output.reasoning_events.clone(),
         tool_use_count: output.tool_events.len(),
         tool_names: output.tool_names.clone(),
-        tool_events: output.tool_events.clone(),
+        // Previews can hold Bash command lines (#398).
+        tool_events: output
+            .tool_events
+            .iter()
+            .map(|event| ClaudePaneToolEvent {
+                name: event.name.clone(),
+                preview: codex_log_guard::redact_credentials(&event.preview).into_owned(),
+            })
+            .collect(),
     };
     let bytes =
         serde_json::to_vec_pretty(&audit).context("failed to serialize Claude turn audit")?;

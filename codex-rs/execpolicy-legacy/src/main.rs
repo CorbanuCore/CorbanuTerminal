@@ -60,6 +60,10 @@ pub struct ExecArg {
 }
 
 fn main() -> Result<()> {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "a standalone dev CLI that logs policy parsing to its own stderr"
+    )]
     env_logger::init();
 
     let args = Args::parse();
