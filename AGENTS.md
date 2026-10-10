@@ -205,6 +205,7 @@ cases, per-sprint GLM tmux runs and GLM worker fallbacks now use GLM 5.3 Flash
 (`-m glm-5.3-flash -c model_provider="zai"`). Record Flash refusals the same
 way. Use GLM 5.2 only with a recorded reason, such as Flash being unable to
 complete a case. Evidence recorded on GLM 5.2 before this date stays valid.
+
 - Credentials reach an isolated guest only through the owner-approved path for
   that guest; never print or log them.
 
