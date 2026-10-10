@@ -2,7 +2,7 @@
 sprint_id: "PF-84-S03"
 title: "Account selection per session, CLI and worker"
 status: draft
-plan_file: "docs/plans/proposed/unified-provider-auth.md"
+plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-84"
 execution_order: 25
 owner: "UNALLOCATED"
@@ -32,7 +32,7 @@ updated: 2026-10-08
 
 ## Plan linkage
 
-- Plan: [Unified provider onboarding and management](../../../plans/proposed/unified-provider-auth.md)
+- Plan: [Unified provider onboarding and management](../../../plans/active/unified-provider-auth.md)
 - Feature: `PF-84`
 - Acceptance advanced: "Worker on another account" and "CLI account".
 

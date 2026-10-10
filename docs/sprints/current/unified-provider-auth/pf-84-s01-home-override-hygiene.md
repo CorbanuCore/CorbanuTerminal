@@ -1,20 +1,20 @@
 ---
 sprint_id: "PF-84-S01"
 title: "Home override hygiene for per-account workers"
-status: draft
-plan_file: "docs/plans/proposed/unified-provider-auth.md"
+status: ready
+plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-84"
 execution_order: 23
-owner: "UNALLOCATED"
-parallel_lane: "UNALLOCATED"
-write_scope: "UNALLOCATED"
-integration_gate: "UNALLOCATED"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+owner: "Codex PF-84 home-hygiene worker"
+parallel_lane: "home-hygiene"
+write_scope: "codex-rs/utils/home-dir/, scripts/install/install.sh, scripts/install/test_install_sh.py, scripts/dev/corbanu-launcher.sh, scripts/dev/test_corbanu_launcher.sh, docs/authentication.md, qa/demos/specs/pf84-home-override.toml, docs/sprints/current/unified-provider-auth/pf-84-s01-home-override-hygiene.md"
+integration_gate: "Codex PF-84 lane owner merges to main after just test -p codex-utils-home-dir, python3 -m pytest scripts/install/test_install_sh.py, sh scripts/dev/test_corbanu_launcher.sh, RTX clippy and the tmux/GLM run"
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s01-home"
+branch: "feat/pf-84-s01-home-override"
+base_commit: "051f9747225776a5d85ad00c2e5d0a8f5f4036bf"
 depends_on: "none"
 created: 2026-10-08
-updated: 2026-10-08
+updated: 2026-10-10
 ---
 
 # PF-84-S01 — Home override hygiene for per-account workers
@@ -32,7 +32,7 @@ updated: 2026-10-08
 
 ## Plan linkage
 
-- Plan: [Unified provider onboarding and management](../../../plans/proposed/unified-provider-auth.md)
+- Plan: [Unified provider onboarding and management](../../../plans/active/unified-provider-auth.md)
 - Feature: `PF-84`
 - Acceptance advanced: "Wrapper/home override" flow.
 
@@ -53,10 +53,10 @@ updated: 2026-10-08
 
 ## Preconditions
 
-- [ ] Plan is active.
-- [ ] Dependencies are completed.
-- [ ] Worktree, branch, and base commit are exact and match the plan.
-- [ ] If parallel, owner/lane/scopes are disjoint and the receiving integration gate is recorded.
+- [x] Plan is active.
+- [x] Dependencies are completed.
+- [x] Worktree, branch, and base commit are exact and match the plan.
+- [x] If parallel, owner/lane/scopes are disjoint and the receiving integration gate is recorded.
 
 ## Done
 

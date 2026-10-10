@@ -2,7 +2,7 @@
 sprint_id: "PF-84-S04"
 title: "Account management in /providers and onboarding"
 status: draft
-plan_file: "docs/plans/proposed/unified-provider-auth.md"
+plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-84"
 execution_order: 26
 owner: "UNALLOCATED"
@@ -31,7 +31,7 @@ updated: 2026-10-08
 
 ## Plan linkage
 
-- Plan: [Unified provider onboarding and management](../../../plans/proposed/unified-provider-auth.md)
+- Plan: [Unified provider onboarding and management](../../../plans/active/unified-provider-auth.md)
 - Feature: `PF-84`
 - Acceptance advanced: "Add second account", "Session account switch", "One row per account".
 

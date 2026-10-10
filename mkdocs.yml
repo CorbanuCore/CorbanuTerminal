@@ -259,7 +259,7 @@ nav:
           - P0 Security Levels: plans/completed/main-2026-10-08-p0-security-levels.md
           - P0 Security History (to 2026-10-06): plans/history/p0-security-levels-2026-10-06.md
           - P1 Security Hardening: plans/active/p1-security-hardening.md
-          - Unified Provider Onboarding: plans/proposed/unified-provider-auth.md
+          - Unified Provider Onboarding: plans/active/unified-provider-auth.md
           - Security Source Reconciliation: plans/security-source-reconciliation.md
           - OpenClaw Source Review: plans/openclaw-source-review-2026-08-28.md
           - Architecture refinements: plans/security-architecture-refinements-2026-08-28.md

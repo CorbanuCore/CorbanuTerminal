@@ -28,7 +28,7 @@ The machine source of truth is the front matter in each lifecycle directory.
 | Slot | Initiative | Priority | Deadline | Owner |
 | ---: | --- | --- | --- | --- |
 | 1 of 3 | [P1 security hardening](active/p1-security-hardening.md): deferred features plus P0's carried-forward milestones, 3 lanes; activated 2026-10-08 after [P0 security](completed/main-2026-10-08-p0-security-levels.md) closed | P1 | TBD | Jim Ricketts; Codex security coordinator integrates |
-| 2 of 3 | [Accounting](active/portfolio-agent-cost-accounting.md) | P1 | TBD | Codex accounting lane; Travis accepts |
+| 2 of 3 | [Unified provider onboarding](active/unified-provider-auth.md): PF-84 named accounts per provider, 2 lanes; activated 2026-10-10 after accounting completed | P1 | TBD | Codex PF-84 lane owner; Travis accepts |
 | 3 of 3 | [Task Node integration](active/initiative-delivery-control.md) | P1 | TBD | Codex Task Node lane; Travis accepts |
 
 Run `python3 docs/plans/check.py` to validate lifecycle placement, required active

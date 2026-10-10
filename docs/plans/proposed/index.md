@@ -11,9 +11,9 @@ slot and do not authorize implementation.
 ## September 9 transcript portfolio
 
 September 11: accounting is now [active workstream 2](../active/portfolio-agent-cost-accounting.md),
-with S01 selected for kickoff. The other 15 portfolio initiatives remain draft;
-[provider onboarding](unified-provider-auth.md) is deferred without changing its
-completed evidence. [Current three-stream allocation](../main-workstreams-2026-09-11.md).
+with S01 selected for kickoff. The other 15 portfolio initiatives remain draft.
+On 2026-10-10 [provider onboarding](../active/unified-provider-auth.md) was
+activated in the accounting slot for PF-84 named accounts. [Current three-stream allocation](../main-workstreams-2026-09-11.md).
 
 The [portfolio map](../portfolio-2026-09-09.md) covers Alex's product discussion
 and adjacent/enabling ideas. After the [September 10 follow-up](../call-followup-2026-09-10.md),

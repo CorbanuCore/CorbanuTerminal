@@ -2,7 +2,7 @@
 sprint_id: "PF-58-S01"
 title: "Credential-scoped runtime health and keyboard reauthentication"
 status: draft
-plan_file: "docs/plans/proposed/unified-provider-auth.md"
+plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-58"
 execution_order: 22
 owner: "Codex /root"
@@ -29,7 +29,7 @@ remaining qualification returns to draft, preserving implementation and the spen
 
 ## Plan linkage
 
-- Plan: [Unified provider auth](../../../plans/proposed/unified-provider-auth.md), feature PF-58.
+- Plan: [Unified provider auth](../../../plans/active/unified-provider-auth.md), feature PF-58.
 - Product heading: **Shipping MVP — LIVE**; excerpt: “Encrypted `/vault`, masked entry, metadata-only inspection, and operational credential use without placing raw values in chat.”
 - User authorized generalizing reauth on 2026-09-05 after the misleading Active label.
 
