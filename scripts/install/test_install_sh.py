@@ -157,6 +157,51 @@ class InstallShTest(unittest.TestCase):
             )
             self.assertTrue(os.access(host_path, os.X_OK))
 
+    def test_release_wrapper_keeps_a_caller_selected_home(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            archive_path, checksum_path, metadata_json = create_package_release(
+                root, debug_binaries=("corbanu-debug",)
+            )
+            result, _requests = run_installer_in(
+                root,
+                VERSION,
+                metadata_json=metadata_json,
+                archive_path=archive_path,
+                checksum_path=checksum_path,
+                force_macos=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            current = root / "pfterminal-home" / "packages" / "standalone" / "current"
+            for binary in ("corbanu", "corbanu-debug"):
+                (current / "bin" / binary).resolve().write_text(
+                    '#!/bin/sh\nprintf "%s|%s\\n" "${CORBANU_HOME:-}" "${CODEX_HOME:-}"\n',
+                    encoding="utf-8",
+                )
+
+            def homes(binary: str, **overrides: str) -> str:
+                env = {"PATH": "/usr/bin:/bin", **overrides}
+                return subprocess.run(
+                    [str(root / "install-bin" / binary)],
+                    env=env,
+                    capture_output=True,
+                    check=True,
+                    text=True,
+                ).stdout.strip()
+
+            default_home = str(root / "pfterminal-home")
+            self.assertEqual(homes("corbanu"), f"|{default_home}")
+            self.assertEqual(homes("corbanu", CORBANU_HOME="/worker"), "/worker|")
+            self.assertEqual(homes("corbanu", PFTERMINAL_HOME="/worker"), "|")
+            self.assertEqual(homes("corbanu", CODEX_HOME="/worker"), "|/worker")
+            # The debug binary ignores CORBANU_HOME, so its wrapper still
+            # supplies the debug home unless a debug home was chosen.
+            debug_home = f"{default_home}-debug"
+            self.assertEqual(
+                homes("corbanu-debug", CORBANU_HOME="/worker"), f"/worker|{debug_home}"
+            )
+            self.assertEqual(homes("corbanu-debug", CORBANU_DEBUG_HOME="/dbg"), "|")
+
     def test_package_without_debug_binary_removes_managed_stale_launchers(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

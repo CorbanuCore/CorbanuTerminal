@@ -1,0 +1,41 @@
+# PF-84-S01 on a second provider (OpenAI API key): a worker started through the
+# launcher with home B uses home B's account. Home B holds a fake OpenAI key, so
+# the expected 401 proves which account was used; the default demo home has no
+# OpenAI credential at all. Record like pf84-home-override.toml.
+id = "pf84-home-override-openai"
+feature = "PF-84-S01: a launcher worker uses its own home's OpenAI account"
+expected = "corbanu exec started through the launcher with home B sends home B's (fake) OpenAI key and gets a 401, instead of falling back to the default home."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"worker-b.sh" = """
+#!/bin/sh
+CORBANU_HOME="$PWD/../homeB" CORBANU_LAUNCHER_WORK_DIR="$PWD/../work" RUST_LOG=error sh ../work/corbanu-launcher.sh exec --skip-git-repo-check \\
+  -c model_provider=openai -m gpt-5.4 "Reply with the word pong" 2>&1 | grep -E '^ERROR: |^pong' | head -1
+"""
+
+[[steps]]
+run = "mkdir -p {run}/homeA {run}/homeB {run}/work/bin && cp \"$(git -C {run} rev-parse --show-toplevel)/scripts/dev/corbanu-launcher.sh\" {run}/work/ && printf 'export CORBANU_HOME=%s\\nexport CODEX_HOME=%s\\n' {home} {home} > {run}/work/activate.sh && ln -s {bin} {run}/work/bin/corbanu && printf pf84-fake-openai-key-0001 | CORBANU_HOME={run}/homeB {bin} login --with-api-key >/dev/null 2>&1 && echo ready"
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run `sh worker-b.sh` and show me its output verbatim in a code block."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "401"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 4.0

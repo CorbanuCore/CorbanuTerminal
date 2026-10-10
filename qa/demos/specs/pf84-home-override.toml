@@ -1,0 +1,47 @@
+# PF-84-S01: a worker started through the dev launcher with its own home runs
+# on that home, and conflicting home variables are reported. The launcher is
+# the checked-in scripts/dev/corbanu-launcher.sh with a stub activate.sh that,
+# like the real one, exports the default home. Record from the repository root:
+#   python3 scripts/demo_video.py record qa/demos/specs/pf84-home-override.toml \
+#     --bin <candidate> --sprint PF-84-S01 --publish
+id = "pf84-home-override"
+feature = "PF-84-S01: the launcher keeps a worker's home; conflicts are reported"
+expected = "The GLM agent starts corbanu through the launcher with home B and it uses home B; with two different home variables corbanu prints one warning naming the home it uses."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"check-homes.sh" = """
+#!/bin/sh
+echo "== launcher, CORBANU_HOME=homeB =="
+CORBANU_HOME="$PWD/../homeB" CORBANU_LAUNCHER_WORK_DIR="$PWD/../work" sh ../work/corbanu-launcher.sh doctor 2>&1 | grep -E '^warning|config.toml'
+echo "== CORBANU_HOME=homeA, CODEX_HOME=homeB =="
+CORBANU_HOME="$PWD/../homeA" CODEX_HOME="$PWD/../homeB" ../work/bin/corbanu doctor 2>&1 | grep -E '^warning|config.toml'
+"""
+
+[[steps]]
+run = "mkdir -p {run}/homeA {run}/homeB {run}/work/bin && cp \"$(git -C {run} rev-parse --show-toplevel)/scripts/dev/corbanu-launcher.sh\" {run}/work/ && printf 'export CORBANU_HOME=%s\\nexport CODEX_HOME=%s\\n' {home} {home} > {run}/work/activate.sh && ln -s {bin} {run}/work/bin/corbanu && echo ready"
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run `sh check-homes.sh` and show me its output verbatim in a code block."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "warning: CORBANU_HOME"
+timeout = 120
+compress = 3
+[[steps]]
+wait = "homeB/config\\.toml"
+[[steps]]
+pause = 4.0
