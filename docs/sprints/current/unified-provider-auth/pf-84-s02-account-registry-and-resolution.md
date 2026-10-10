@@ -79,7 +79,7 @@ Refs are at `origin/main` `63ea3d0cbd`, from multiacct1; paths are under `codex-
   never yields B's value. A failed B never falls back to A or to `default`.
 - [ ] Migration: a fixture copy of a single-account home resolves identically
   before and after, and its vault bytes stay unchanged until the first named-account write.
-- [ ] tmux + GLM run (`-m glm-5.2 -c model_provider="zai"`): default ZAI account
+- [ ] tmux + GLM run (`-m glm-5.3-flash -c model_provider="zai"`): default ZAI account
   replies; a named ZAI account holding a fake key gets a 401 (multiacct1 method).
 - [ ] Video: `qa/demos/specs/pf84-account-isolation.toml` via `scripts/demo_video.py ... --sprint PF-84-S02 --publish`.
 - [ ] One independent review (Opus 5.5 High).

@@ -42,7 +42,7 @@ milestones and open items (carried forward when Travis closed it on 2026-10-08).
 | Status | **Active**, slot 1 of 3 (from 2026-10-08, replacing P0 `/security` levels) |
 | Authoritative decision | Travis, 2026-10-08: close P0, activate this plan in its slot; 2026-10-06 decision 3 defines its scope |
 | Delivery owner / integration owner | Jim Ricketts / Codex /root security coordinator |
-| Delivery gate | Unchanged from P0: per-sprint gate (focused tests, GLM 5.2 tmux run, Opus 5.5 High review, SOP videos); code-blind VM run and human sign-off at milestones |
+| Delivery gate | Unchanged from P0: per-sprint gate (focused tests, GLM tmux run on `glm-5.3-flash` since 2026-10-10, Opus 5.5 High review, SOP videos); code-blind VM run and human sign-off at milestones |
 | Target release / deadline | TBD / TBD (none set by Travis) |
 
 ## Carried forward from P0
@@ -235,7 +235,7 @@ PF-35's qualification baseline, carried from the P0 plan. Changing a target need
 
 ## True-TUI evidence
 
-Per sprint: GLM 5.2 tmux run and SOP videos (`qa/demos/README.md`). Per milestone: isolated code-blind execution
+Per sprint: GLM tmux run (`glm-5.3-flash` since 2026-10-10) and SOP videos (`qa/demos/README.md`). Per milestone: isolated code-blind execution
 with schema-2 receipts and a separate evidence check ([workflow](../../../qa/code-blind-functional/README.md)).
 Windows records need a real Windows machine for this step.
 

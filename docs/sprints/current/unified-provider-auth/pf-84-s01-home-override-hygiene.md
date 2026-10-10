@@ -75,7 +75,7 @@ updated: 2026-10-08
 - [ ] tmux (`docs/tmuxHarness.md`, `test-tui` skill): disposable homes A and B,
   `CORBANU_TEST_NO_NATIVE_KEYRING=1`. Start the wrapper with home B, check
   the status line shows home B, and send text and Enter separately.
-- [ ] GLM run: the same flow driven by `-m glm-5.2 -c model_provider="zai"`. The ZAI
+- [ ] GLM run: the same flow driven by `-m glm-5.3-flash -c model_provider="zai"`. The ZAI
   key comes only from `ZAI_API_KEY="$(corbanu vault auth-helper provider/zai_api_key)"`.
 - [ ] Video: `python3 scripts/demo_video.py record qa/demos/specs/pf84-home-override.toml --bin <candidate> --sprint PF-84-S01 --publish`.
 - [ ] One independent review (Opus 5.5 High); findings dispositioned.

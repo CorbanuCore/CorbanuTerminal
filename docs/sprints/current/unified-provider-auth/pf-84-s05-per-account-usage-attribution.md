@@ -70,7 +70,7 @@ Paths are under `codex-rs/`, at `63ea3d0cbd`.
 - [ ] Focused: `just test -p codex-core -p codex-state -p codex-tui` (accounting, migration, snapshot).
 - [ ] tmux SOP: a coordinator on account A and a spawned worker on account B each make
   requests, and the usage view shows two rows with the right counts.
-- [ ] GLM run: `-m glm-5.2 -c model_provider="zai"` on two ZAI accounts (one real,
+- [ ] GLM run: `-m glm-5.3-flash -c model_provider="zai"` on two ZAI accounts (one real,
   one fake). Only the real one accrues tokens, and the fake one records the failure.
 - [ ] Video: `pf84-usage-by-account.toml` (`--sprint PF-84-S05 --publish`).
 - [ ] One independent review (Opus 5.5 High).

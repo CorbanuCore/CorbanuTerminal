@@ -81,7 +81,7 @@ Paths are under `codex-rs/`, at `63ea3d0cbd`.
 - [ ] Out-of-process: a tmux worker runs `corbanu exec --account fake ...` and
   gets a 401; `--account default` replies. Runs through the installed-style
   wrapper too (S01 fix).
-- [ ] GLM run drives the coordinator: `-m glm-5.2 -c model_provider="zai"`.
+- [ ] GLM run drives the coordinator: `-m glm-5.3-flash -c model_provider="zai"`.
 - [ ] Videos: `pf84-spawn-account.toml`, `pf84-exec-account.toml` (`--sprint PF-84-S03 --publish`).
 - [ ] One independent review (Opus 5.5 High).
 
