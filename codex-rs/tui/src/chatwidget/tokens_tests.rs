@@ -1418,6 +1418,101 @@ fn accounting_inspect_request_attempt_price_detail() {
     }
 }
 
+/// A price record in the shape the native catalogue binds: `rates`, `basis`,
+/// `basis_source` and `plan_burn_millis` as given.
+fn native_snapshot(
+    rates: serde_json::Value,
+    basis: &str,
+    basis_source: Option<&str>,
+    plan_burn_millis: Option<i64>,
+) -> codex_state::accounting::Snapshot {
+    let mut value = serde_json::json!({
+        "id":Uuid::from_u128(6),"provider":"synthetic","model":"synthetic-model","scope":Uuid::from_u128(5),
+        "currency":"USD","unit":"PerMillionTokens","rates":rates,
+        "source_reference":Uuid::from_u128(7),"source_kind":"NativeCatalog",
+        "observed_at_ms":0,"approved_at_ms":0,"effective_from_ms":0,"effective_end_ms":null,
+        "basis":basis
+    });
+    if let Some(source) = basis_source {
+        value["basis_source"] = serde_json::json!(source);
+    }
+    if let Some(burn) = plan_burn_millis {
+        value["plan_burn_millis"] = serde_json::json!(burn);
+    }
+    serde_json::from_value(value).unwrap()
+}
+
+const PRICE_METADATA: [&str; 6] = [
+    "Price ID",
+    "Price source",
+    "Price currency/unit",
+    "Price observed/approved",
+    "Price effective interval",
+    "Rate unavailable for",
+];
+
+/// PF-60-S04: a request whose record states only its billing basis - no rate
+/// and no plan rate - has no price, so its detail says so instead of showing a
+/// price source, price metadata and per-rate gaps as if a price existed.
+#[test]
+fn accounting_inspect_basis_only_request_shows_no_price_metadata() {
+    let none = serde_json::json!({"noncached":null,"read":null,"write":null,"output":null});
+    for (basis, source, shown) in [
+        ("PlanEquivalent", None, "subscription"),
+        ("Billed", None, "pay per use"),
+        ("Local", None, "local, no charge"),
+        ("Undeclared", None, "not declared"),
+        (
+            "PlanEquivalent",
+            Some("UserConfig"),
+            "subscription (set in your config)",
+        ),
+    ] {
+        let mut q = quote();
+        q.snapshot = Some(native_snapshot(none.clone(), basis, source, None));
+        let text = attempt_text(&q).join("\n");
+        assert!(text.contains(&format!("Billing basis: {shown}")), "{text}");
+        assert!(
+            text.contains(&format!(
+                "Price: none recorded — this request records only its billing basis ({shown})"
+            )),
+            "{text}"
+        );
+        for absent in PRICE_METADATA
+            .iter()
+            .chain(&["no dispatch-time price snapshot"])
+        {
+            assert!(!text.contains(absent), "{basis}: {absent}\n{text}");
+        }
+    }
+}
+
+/// PF-60-S04: a record that states any price - an API rate, or only a plan
+/// rate (a subscription row with no API twin) - keeps its full price block.
+#[test]
+fn accounting_inspect_priced_or_plan_rate_request_keeps_price_metadata() {
+    let none = serde_json::json!({"noncached":null,"read":null,"write":null,"output":null});
+    let one_rate = serde_json::json!({"noncached":"1","read":null,"write":null,"output":null});
+    for snapshot in [
+        native_snapshot(none, "PlanEquivalent", None, Some(1000)),
+        native_snapshot(one_rate.clone(), "Billed", None, None),
+        native_snapshot(one_rate, "PlanEquivalent", None, None),
+    ] {
+        let mut q = quote();
+        // A request copies the plan rate from its record.
+        q.plan_burn_millis = snapshot.plan_burn_millis;
+        q.snapshot = Some(snapshot);
+        let text = attempt_text(&q).join("\n");
+        if q.plan_burn_millis.is_some() {
+            assert!(text.contains("Plan rate at dispatch: 1x"), "{text}");
+        }
+        for present in &PRICE_METADATA[..5] {
+            assert!(text.contains(present), "{present}\n{text}");
+        }
+        assert!(!text.contains("Price: none recorded"), "{text}");
+    }
+}
+
 #[tokio::test]
 async fn accounting_inspect_narrow_and_long_fields() {
     for width in [40, 80] {
