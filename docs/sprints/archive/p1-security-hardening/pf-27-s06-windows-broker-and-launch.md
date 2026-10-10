@@ -45,7 +45,7 @@ Follow-ups (linked, not blockers):
 - #307 (launcher pipe inheritance) fixed by PR #321; #320 (`spawn_protected` stdout pipe) fixed by PR #327.
 - #323 (an armed contract's deny entries vs. another `CODEX_HOME`'s sync): open.
 - [PF-27-S08](pf-27-s08-windows-broker-restricted-token.md) (broker token) and
-  [PF-27-S09](../../current/p1-security-hardening/pf-27-s09-windows-model-client-auth.md) (model auth): planned.
+  [PF-27-S09](pf-27-s09-windows-model-client-auth.md) (model auth): planned.
 - Unplaced: file tools other than patches under the Windows contract; elevated-sandbox profile reads
   (`~/.git-credentials`, `.ssh`, `.npmrc`, `.config/gh`); both in the plan's carried-forward table.
 
@@ -91,7 +91,7 @@ Follow-ups (linked, not blockers):
 - [x] `pf_27_s06` tests run on every PR touching this code (`windows-security-probes` workflow); Linux clippy clean
   on the RTX box; Opus 5.5 High reviews per slice, all approved (2-3 rounds each).
 - [x] Travis approved fixing the four documented limits (2026-10-08): [PF-27-S07](pf-27-s07-windows-hardening-follow-ups.md)
-  (new threads, `CODEX_HOME` deny), [S08](pf-27-s08-windows-broker-restricted-token.md) (broker token), [S09](../../current/p1-security-hardening/pf-27-s09-windows-model-client-auth.md) (model auth).
+  (new threads, `CODEX_HOME` deny), [S08](pf-27-s08-windows-broker-restricted-token.md) (broker token), [S09](pf-27-s09-windows-model-client-auth.md) (model auth).
 - [x] Both gate defects fixed (#298 for #294, #302 for #295), each with a regression test that fails before and passes
   after on the real machine; `windows-security-probes` also runs them at medium integrity.
 - [x] Travis accepted the sprint with its known limits (2026-10-08); follow-ups placed under Closure.
