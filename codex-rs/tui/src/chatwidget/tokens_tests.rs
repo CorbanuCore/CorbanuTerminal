@@ -1418,6 +1418,47 @@ fn accounting_inspect_request_attempt_price_detail() {
     }
 }
 
+/// PF-60-S04: a request whose record states only its billing basis - no rate
+/// at all - has no price, so its detail says so instead of showing a price
+/// source, price metadata and per-rate gaps as if a price existed.
+#[test]
+fn accounting_inspect_basis_only_request_shows_no_price_metadata() {
+    for (basis, shown) in [
+        ("PlanEquivalent", "subscription"),
+        ("Billed", "pay per use"),
+        ("Local", "local, no charge"),
+        ("Undeclared", "not declared"),
+    ] {
+        let mut q = quote();
+        q.snapshot = Some(serde_json::from_value(serde_json::json!({
+            "id":Uuid::from_u128(6),"provider":"synthetic","model":"synthetic-model","scope":Uuid::from_u128(5),
+            "currency":"USD","unit":"PerMillionTokens","rates":{"noncached":null,"read":null,"write":null,"output":null},
+            "source_reference":Uuid::from_u128(7),"source_kind":"ProviderPublished",
+            "observed_at_ms":0,"approved_at_ms":0,"effective_from_ms":0,"effective_end_ms":null,
+            "basis":basis
+        })).unwrap());
+        let text = attempt_text(&q).join("\n");
+        assert!(text.contains(&format!("Billing basis: {shown}")), "{text}");
+        assert!(
+            text.contains(&format!(
+                "Price: none recorded — this request records only its billing basis ({shown})"
+            )),
+            "{text}"
+        );
+        for absent in [
+            "Price ID",
+            "Price source",
+            "Price currency/unit",
+            "Price observed/approved",
+            "Price effective interval",
+            "Rate unavailable for",
+            "no dispatch-time price snapshot",
+        ] {
+            assert!(!text.contains(absent), "{basis}: {absent}\n{text}");
+        }
+    }
+}
+
 #[tokio::test]
 async fn accounting_inspect_narrow_and_long_fields() {
     for width in [40, 80] {

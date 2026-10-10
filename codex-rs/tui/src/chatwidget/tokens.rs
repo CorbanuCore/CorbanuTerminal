@@ -759,7 +759,25 @@ fn attempt_text(q: &ObservationQuote) -> Vec<String> {
             |t| known_exact(&t, EstimateGaps::of([q]))
         )
     ));
-    if let Some(s) = &q.snapshot {
+    // A record that states no rate only binds the request's billing basis
+    // (PF-60-S05): it is not a price, so it gets no price metadata.
+    let priced = q.snapshot.as_ref().filter(|s| {
+        s.long_context.is_some()
+            || [
+                s.rates.noncached,
+                s.rates.read,
+                s.rates.write,
+                s.rates.output,
+            ]
+            .iter()
+            .any(Option::is_some)
+    });
+    if q.snapshot.is_some() && priced.is_none() {
+        lines.push(format!(
+            "Price: none recorded — this request records only its billing basis ({})",
+            basis_text(q)
+        ));
+    } else if let Some(s) = priced {
         lines.extend([
             format!("Price ID: {}", s.id),
             format!(
