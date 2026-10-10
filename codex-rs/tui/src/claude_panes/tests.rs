@@ -2813,7 +2813,56 @@ fn claude_provider_picker_labels_are_compact() {
     );
     assert_eq!(
         ClaudeProviderProfileKind::ClaudePlan.status_model_label(),
-        "Opus 5 Claude Plan"
+        "Opus 5.5 Claude Plan"
+    );
+}
+
+#[test]
+fn claude_plan_pane_label_names_the_pinned_model_it_serves() {
+    let (dir, pane) = pane(ClaudeProviderProfileKind::ClaudePlan);
+    let plan =
+        build_claude_command_plan(&pane, "hello".to_string(), dir.path()).expect("command plan");
+    let model_arg = plan
+        .args
+        .iter()
+        .position(|arg| arg == "--model")
+        .and_then(|index| plan.args.get(index + 1))
+        .expect("--model argument");
+
+    // The pane asks Claude Code for an exact model, not the moving `opus`
+    // alias, and its label names that model.
+    assert_eq!(model_arg, "claude-opus-5-5");
+    assert_eq!(plan.provider_model, "claude-opus-5-5");
+    assert_eq!(
+        ClaudeProviderProfileKind::ClaudePlan.status_model_label(),
+        "Opus 5.5 Claude Plan"
+    );
+}
+
+#[test]
+fn saved_claude_plan_pane_titles_move_to_the_current_label() {
+    use super::persistence::current_profile_title;
+    use super::persistence::spawn_identity_from_title;
+    let profile = ClaudeProviderProfileKind::ClaudePlan;
+
+    assert_eq!(
+        current_profile_title(
+            "Claude Code Burzum [troll] - Opus 5 Claude Plan".to_string(),
+            profile
+        ),
+        "Claude Code Burzum [troll] - Opus 5.5 Claude Plan"
+    );
+    assert_eq!(
+        current_profile_title("Claude Code - Claude Plan".to_string(), profile),
+        "Claude Code - Opus 5.5 Claude Plan"
+    );
+    assert_eq!(
+        current_profile_title("My review pane".to_string(), profile),
+        "My review pane"
+    );
+    assert_eq!(
+        spawn_identity_from_title("Claude Code Burzum [troll] - Opus 5 Claude Plan", profile),
+        (Some(SpawnRole::Troll), Some("Burzum".to_string()))
     );
 }
 
@@ -3283,7 +3332,7 @@ fn claude_spawn_pane_title_includes_role() {
             /*spawn_role*/ None,
             /*spawn_nickname*/ None
         ),
-        "Claude Code - Opus 5 Claude Plan"
+        "Claude Code - Opus 5.5 Claude Plan"
     );
 }
 
@@ -3310,7 +3359,7 @@ fn create_pane_with_role_sets_spawn_role_and_title() {
     assert_eq!(pane.spawn_nickname.as_deref(), Some("Burzum"));
     assert_eq!(
         pane.title,
-        "Claude Code Burzum [troll] - Opus 5 Claude Plan"
+        "Claude Code Burzum [troll] - Opus 5.5 Claude Plan"
     );
 }
 

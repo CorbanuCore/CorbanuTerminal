@@ -191,6 +191,9 @@ pub(crate) enum ClaudeCodePlanStatus {
     EnvironmentToken {
         available: bool,
     },
+    /// No method is saved, so Claude Plan requests use `CLAUDE_CODE_OAUTH_TOKEN`
+    /// first, as `corbanu exec` and Claude panes do (#366).
+    EnvironmentTokenWithoutSelection,
     SelectionRequired {
         existing_source_detected: bool,
     },
@@ -217,6 +220,7 @@ pub(crate) async fn current_status_with_timeout(
             timeout,
             Path::new("claude"),
             /*health_executable*/ None,
+            std::env::var("CLAUDE_CODE_OAUTH_TOKEN").ok().as_deref(),
         ),
     )
     .await
@@ -228,19 +232,23 @@ async fn current_status_with_executables(
     timeout: Duration,
     claude_executable: &Path,
     health_executable: Option<&Path>,
+    environment_token: Option<&str>,
 ) -> ClaudeCodePlanStatus {
+    let environment_available = environment_token.is_some_and(|token| !token.trim().is_empty());
     let codex_home = codex_home.to_path_buf();
     let stored = tokio::task::spawn_blocking(move || {
+        let explicit_selection_present =
+            codex_vault::claude_auth_selection_sentinel_path(&codex_home).exists();
         let vault = Vault::new(codex_home);
         let selection = vault.load_claude_auth_selection()?;
         let managed_stored = matches!(
             vault.managed_claude_subscription_token_status()?,
             codex_vault::ManagedClaudeTokenStatus::Stored { .. }
         );
-        Ok::<_, codex_vault::VaultError>((selection, managed_stored))
+        Ok::<_, codex_vault::VaultError>((selection, managed_stored, explicit_selection_present))
     })
     .await;
-    let Ok(Ok((selection, managed_stored))) = stored else {
+    let Ok(Ok((selection, managed_stored, explicit_selection_present))) = stored else {
         return ClaudeCodePlanStatus::Error;
     };
     if selection
@@ -304,11 +312,16 @@ async fn current_status_with_executables(
                 _ => ClaudeCodePlanStatus::Error,
             }
         }
+        // With no saved choice the request path keeps the documented
+        // env-first behavior (`resolve_claude_oauth_access_token`): a nonblank
+        // token is used before any other source, so it is not ambiguous. Once a
+        // choice was ever saved (the sentinel), the request path fails closed
+        // instead, so a choice is still required here.
+        None if environment_available && !explicit_selection_present => {
+            ClaudeCodePlanStatus::EnvironmentTokenWithoutSelection
+        }
         None => {
             let login = status_with_timeout(claude_executable, timeout).await;
-            let environment_available = std::env::var("CLAUDE_CODE_OAUTH_TOKEN")
-                .ok()
-                .is_some_and(|token| !token.trim().is_empty());
             ClaudeCodePlanStatus::SelectionRequired {
                 existing_source_detected: managed_stored
                     || environment_available
@@ -847,6 +860,7 @@ async fn verify_login_inner(
         ClaudeCodePlanStatus::Checking
         | ClaudeCodePlanStatus::ManagedToken { .. }
         | ClaudeCodePlanStatus::EnvironmentToken { .. }
+        | ClaudeCodePlanStatus::EnvironmentTokenWithoutSelection
         | ClaudeCodePlanStatus::SelectionRequired { .. }
         | ClaudeCodePlanStatus::InvalidSelection
         | ClaudeCodePlanStatus::NeedsReauthorization
@@ -892,6 +906,7 @@ pub(crate) async fn select_existing_claude_code_login(
         | ClaudeCodePlanStatus::Error
         | ClaudeCodePlanStatus::ManagedToken { .. }
         | ClaudeCodePlanStatus::EnvironmentToken { .. }
+        | ClaudeCodePlanStatus::EnvironmentTokenWithoutSelection
         | ClaudeCodePlanStatus::SelectionRequired { .. }
         | ClaudeCodePlanStatus::InvalidSelection
         | ClaudeCodePlanStatus::NeedsReauthorization

@@ -31,6 +31,7 @@ use codex_provider_auth::ProviderStatusCatalog;
 use codex_provider_auth::ProviderStatusResolver;
 use codex_provider_auth::ProviderStatusSnapshot;
 
+use crate::chatwidget::claude_code_login::ClaudeCodePlanStatus;
 use crate::legacy_core::config::Config;
 
 type ManagedSnapshot = std::io::Result<codex_login::ProviderApiKeyStorageMetadataSnapshot>;
@@ -55,64 +56,63 @@ impl Default for ProviderAccountMetadata {
 impl ProviderAccountMetadata {
     pub(crate) async fn discover(config: &Config) -> Self {
         let codex_home = config.codex_home.to_path_buf();
+        // Match the TUI's own runtime auth: CODEX_API_KEY is read only by
+        // `corbanu exec`, while OPENAI_API_KEY is a fallback everywhere.
         let openai = codex_login::openai_auth_metadata_from_config(
-            config, /*enable_codex_api_key_env*/ true,
+            config, /*enable_codex_api_key_env*/ false,
         );
         let claude_status = crate::chatwidget::claude_code_login::current_status_with_timeout(
             codex_home.as_path(),
             std::time::Duration::from_secs(10),
         );
         let (openai, claude_status) = tokio::join!(openai, claude_status);
-        let claude = match claude_status {
-            crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::ManagedToken {
-                stored: true,
-            } => ClaudeCredentialMetadata::Configured {
-                source: codex_provider_auth::ClaudeCredentialSource::Managed,
-            },
-            crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::EnvironmentToken {
-                available: true,
-            } => ClaudeCredentialMetadata::Configured {
-                source: codex_provider_auth::ClaudeCredentialSource::Environment,
-            },
-            crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::SignedIn { .. } => {
-                ClaudeCredentialMetadata::Configured {
-                    source: codex_provider_auth::ClaudeCredentialSource::ClaudeCodeLogin,
-                }
-            }
-            crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::ManagedToken {
-                stored: false,
-            }
-            | crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::EnvironmentToken {
-                available: false,
-            }
-            | crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::InvalidSelection
-            | crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::NeedsReauthorization => {
-                ClaudeCredentialMetadata::RecoveryRequired {
-                    reason: codex_provider_auth::ProviderRecoveryReason::UnhealthyClaudeSelection,
-                }
-            }
-            crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::SelectionRequired {
-                existing_source_detected: true,
-            } => ClaudeCredentialMetadata::RecoveryRequired {
-                reason: codex_provider_auth::ProviderRecoveryReason::AmbiguousClaudeSources,
-            },
-            crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::SelectionRequired {
-                existing_source_detected: false,
-            }
-            | crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::SignedOut => {
-                ClaudeCredentialMetadata::NotConfigured
-            }
-            crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::Checking
-            | crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::Unavailable
-            | crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::Error => {
-                ClaudeCredentialMetadata::Unavailable
-            }
-        };
+        let claude = claude_credential_metadata(claude_status);
         Self {
             openai,
             claude,
             corbanu: CorbanuPlanMetadata::NotConfigured,
         }
+    }
+}
+
+/// Maps the `/providers` Claude status to the metadata that gates Claude Plan
+/// models and panes.
+fn claude_credential_metadata(status: ClaudeCodePlanStatus) -> ClaudeCredentialMetadata {
+    match status {
+        ClaudeCodePlanStatus::ManagedToken { stored: true } => {
+            ClaudeCredentialMetadata::Configured {
+                source: codex_provider_auth::ClaudeCredentialSource::Managed,
+            }
+        }
+        ClaudeCodePlanStatus::EnvironmentToken { available: true }
+        | ClaudeCodePlanStatus::EnvironmentTokenWithoutSelection => {
+            ClaudeCredentialMetadata::Configured {
+                source: codex_provider_auth::ClaudeCredentialSource::Environment,
+            }
+        }
+        ClaudeCodePlanStatus::SignedIn { .. } => ClaudeCredentialMetadata::Configured {
+            source: codex_provider_auth::ClaudeCredentialSource::ClaudeCodeLogin,
+        },
+        ClaudeCodePlanStatus::ManagedToken { stored: false }
+        | ClaudeCodePlanStatus::EnvironmentToken { available: false }
+        | ClaudeCodePlanStatus::InvalidSelection
+        | ClaudeCodePlanStatus::NeedsReauthorization => {
+            ClaudeCredentialMetadata::RecoveryRequired {
+                reason: codex_provider_auth::ProviderRecoveryReason::UnhealthyClaudeSelection,
+            }
+        }
+        ClaudeCodePlanStatus::SelectionRequired {
+            existing_source_detected: true,
+        } => ClaudeCredentialMetadata::RecoveryRequired {
+            reason: codex_provider_auth::ProviderRecoveryReason::AmbiguousClaudeSources,
+        },
+        ClaudeCodePlanStatus::SelectionRequired {
+            existing_source_detected: false,
+        }
+        | ClaudeCodePlanStatus::SignedOut => ClaudeCredentialMetadata::NotConfigured,
+        ClaudeCodePlanStatus::Checking
+        | ClaudeCodePlanStatus::Unavailable
+        | ClaudeCodePlanStatus::Error => ClaudeCredentialMetadata::Unavailable,
     }
 }
 

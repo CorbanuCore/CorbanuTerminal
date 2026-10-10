@@ -109,6 +109,20 @@ instructions and are not silently replaced by vault credentials.
 See [credential recovery](features/model-providers.md#credential-recovery-pf-58-candidate)
 and the [candidate qualification record](../qa/provider-auth/pf-58/README.md).
 
+### OpenAI API keys
+
+The built-in `openai` provider reads these sources, first match wins:
+
+1. `CODEX_API_KEY` (`corbanu exec` only);
+2. a ChatGPT sign-in or API key saved with `corbanu login` / `/providers`;
+3. `OPENAI_API_KEY`.
+
+`OPENAI_API_KEY` works the same in `corbanu exec`, the TUI and the app
+server. A saved sign-in comes first, so a key exported in your shell never
+replaces it or changes how usage is billed. `OPENAI_API_KEY` is ignored when
+`forced_login_method = "chatgpt"`. With no source, a rejected request says to
+set `OPENAI_API_KEY` or run `corbanu login`.
+
 ## Provider Keys
 
 Built-in providers use these key names:

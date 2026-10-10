@@ -5044,7 +5044,7 @@ async fn direct_six_orc_turn_reports_are_visible_to_claude_troll_context() {
         .spawn_context_for_user_pane(&troll_pane_id)
         .expect("Troll pane should receive spawn context");
     assert!(context.contains("Snaga [orc]; status=completed; has_new_report=true"));
-    assert!(context.contains("Claude Code Ghash [orc] - Opus 5 Claude Plan; status=success"));
+    assert!(context.contains("Claude Code Ghash [orc] - Opus 5.5 Claude Plan; status=success"));
 }
 
 #[tokio::test]
@@ -5265,7 +5265,7 @@ async fn bound_claude_nazgul_context_auto_nests_orphans_under_single_claude_trol
         .spawn_context_for_user_pane("claude-nazgul")
         .expect("bound Claude pane should receive spawn context");
 
-    assert!(context.contains("Claude Code Burzum [troll] - Opus 5 Claude Plan; role=Troll"));
+    assert!(context.contains("Claude Code Burzum [troll] - Opus 5.5 Claude Plan; role=Troll"));
     assert!(context.contains("  - Snaga [orc]; status=idle"));
     assert!(!context.contains("Unassigned Orcs"));
 }
@@ -5326,7 +5326,7 @@ async fn claude_orc_completion_is_reported_to_parent_troll_context() {
         .spawn_context_for_user_pane(&troll_pane_id)
         .expect("Troll pane should receive spawn context");
     assert!(context.contains("Recent child reports delivered to this pane:"));
-    assert!(context.contains("Claude Code Snaga [orc] - Opus 5 Claude Plan"));
+    assert!(context.contains("Claude Code Snaga [orc] - Opus 5.5 Claude Plan"));
     assert!(context.contains("status=idle"));
     assert!(context.contains("result=Implemented the mock website and npm run build passed."));
 }
@@ -7400,7 +7400,7 @@ async fn claude_orc_completion_uses_core_edge_message_not_native_prompt_reinject
         .spawn_context_for_thread(troll_thread_id)
         .expect("Troll should receive live lifecycle context");
     assert!(!context.contains("Recent child reports delivered to this pane:"));
-    assert!(context.contains("Claude Code Snaga [orc] - Opus 5 Claude Plan"));
+    assert!(context.contains("Claude Code Snaga [orc] - Opus 5.5 Claude Plan"));
     assert!(context.contains("status=idle"));
     assert!(!context.contains("result=Finished the latency benchmark table and saved the output."));
 }

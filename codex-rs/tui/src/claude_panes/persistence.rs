@@ -93,6 +93,7 @@ pub(crate) fn restore_claude_pane_from_dir(
         .map(|metadata| metadata.title.clone())
         .or_else(|| audit.map(|audit| audit.pane_title.clone()))
         .unwrap_or_else(|| profile.profile().title.to_string());
+    let title = current_profile_title(title, profile);
     let (fallback_role, fallback_nickname) = spawn_identity_from_title(&title, profile);
     let spawn_role = persisted
         .as_ref()
@@ -285,7 +286,9 @@ pub(crate) fn legacy_profile_from_audit(
     audit: &ClaudePaneTurnAudit,
 ) -> Option<ClaudeProviderProfileKind> {
     match audit.provider.as_str() {
-        "Claude Code - Claude Plan" => Some(ClaudeProviderProfileKind::ClaudePlan),
+        "Claude Code - Claude Plan" | "Claude Code - Opus 5 Claude Plan" => {
+            Some(ClaudeProviderProfileKind::ClaudePlan)
+        }
         _ => None,
     }
 }
@@ -341,10 +344,27 @@ pub(crate) fn title_prefix_without_profile_suffix(
     if let Some(prefix) = title.strip_suffix(&suffix) {
         return Some(prefix);
     }
-    if profile == ClaudeProviderProfileKind::ClaudePlan {
-        return title.strip_suffix(" - Claude Plan");
+    profile
+        .legacy_status_model_labels()
+        .iter()
+        .find_map(|label| title.strip_suffix(&format!(" - {label}")))
+}
+
+/// Replaces a retired profile label at the end of a saved pane title with the
+/// current one; other titles are returned unchanged.
+pub(crate) fn current_profile_title(title: String, profile: ClaudeProviderProfileKind) -> String {
+    let current_suffix = format!(" - {}", profile.status_model_label());
+    if title.ends_with(&current_suffix) {
+        return title;
     }
-    None
+    match profile
+        .legacy_status_model_labels()
+        .iter()
+        .find_map(|label| title.strip_suffix(&format!(" - {label}")))
+    {
+        Some(prefix) => format!("{prefix}{current_suffix}"),
+        None => title,
+    }
 }
 
 pub(crate) fn spawn_role_persisted_value(role: SpawnRole) -> String {

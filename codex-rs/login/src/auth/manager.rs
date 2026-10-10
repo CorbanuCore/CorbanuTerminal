@@ -205,6 +205,9 @@ impl PartialEq for CodexAuth {
 #[derive(Debug, Clone)]
 pub struct ApiKeyAuth {
     api_key: String,
+    /// The environment variable the key was read from, when it did not come
+    /// from Corbanu's own storage.
+    env_var: Option<&'static str>,
 }
 
 #[derive(Debug, Clone)]
@@ -806,7 +809,24 @@ impl CodexAuth {
     pub fn from_api_key(api_key: &str) -> Self {
         Self::ApiKey(ApiKeyAuth {
             api_key: api_key.to_owned(),
+            env_var: None,
         })
+    }
+
+    /// An API key read from `env_var` rather than from stored credentials.
+    pub fn from_api_key_env(api_key: &str, env_var: &'static str) -> Self {
+        Self::ApiKey(ApiKeyAuth {
+            api_key: api_key.to_owned(),
+            env_var: Some(env_var),
+        })
+    }
+
+    /// The environment variable an API key login was read from, if any.
+    pub fn api_key_env_var(&self) -> Option<&'static str> {
+        match self {
+            Self::ApiKey(auth) => auth.env_var,
+            _ => None,
+        }
     }
 }
 
@@ -895,6 +915,25 @@ pub const OPENAI_API_KEY_ENV_VAR: &str = "OPENAI_API_KEY";
 pub const CODEX_API_KEY_ENV_VAR: &str = "CODEX_API_KEY";
 pub const CODEX_ACCESS_TOKEN_ENV_VAR: &str = "CODEX_ACCESS_TOKEN";
 
+/// Whether `OPENAI_API_KEY` is the last-resort OpenAI credential.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OpenAiApiKeyEnv {
+    /// Used only when no external or stored OpenAI credential exists.
+    Fallback,
+    /// Not read: storage-only loads, and configs that require ChatGPT login.
+    Ignore,
+}
+
+impl OpenAiApiKeyEnv {
+    fn for_forced_login_method(forced_login_method: Option<ForcedLoginMethod>) -> Self {
+        if forced_login_method == Some(ForcedLoginMethod::Chatgpt) {
+            Self::Ignore
+        } else {
+            Self::Fallback
+        }
+    }
+}
+
 pub fn read_openai_api_key_from_env() -> Option<String> {
     env::var(OPENAI_API_KEY_ENV_VAR)
         .ok()
@@ -915,6 +954,9 @@ pub fn read_codex_access_token_from_env() -> Option<String> {
 }
 
 fn auth_uses_api_key_from_env(auth: &CodexAuth) -> bool {
+    if auth.api_key_env_var().is_some() {
+        return true;
+    }
     let Some(api_key) = auth.api_key() else {
         return false;
     };
@@ -1558,9 +1600,10 @@ async fn enforce_login_restrictions_with_agent_identity_authapi_base_url(
     config: &AuthConfig,
     agent_identity_authapi_base_url: Option<&str>,
 ) -> std::io::Result<()> {
-    let Some(auth) = load_auth(
+    let Some(auth) = load_auth_with_openai_api_key_env(
         &config.codex_home,
         /*enable_codex_api_key_env*/ true,
+        OpenAiApiKeyEnv::for_forced_login_method(config.forced_login_method),
         config.auth_credentials_store_mode,
         /*forced_chatgpt_workspace_id*/ None,
         config.chatgpt_base_url.as_deref(),
@@ -1746,6 +1789,7 @@ fn logout_all_stores(
     Ok(removed_ephemeral || removed_managed || removed_provider)
 }
 
+/// Loads auth without the `OPENAI_API_KEY` fallback.
 #[allow(clippy::too_many_arguments)]
 async fn load_auth(
     codex_home: &Path,
@@ -1757,13 +1801,53 @@ async fn load_auth(
     agent_identity_authapi_base_url: Option<&str>,
     auth_route_config: &AuthRouteConfig,
 ) -> std::io::Result<Option<CodexAuth>> {
-    // API key via env var takes precedence over any other auth method.
+    load_auth_with_openai_api_key_env(
+        codex_home,
+        enable_codex_api_key_env,
+        OpenAiApiKeyEnv::Ignore,
+        auth_credentials_store_mode,
+        forced_chatgpt_workspace_id,
+        chatgpt_base_url,
+        keyring_backend_kind,
+        agent_identity_authapi_base_url,
+        auth_route_config,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn load_auth_with_openai_api_key_env(
+    codex_home: &Path,
+    enable_codex_api_key_env: bool,
+    openai_api_key_env: OpenAiApiKeyEnv,
+    auth_credentials_store_mode: AuthCredentialsStoreMode,
+    forced_chatgpt_workspace_id: Option<&[String]>,
+    chatgpt_base_url: Option<&str>,
+    keyring_backend_kind: AuthKeyringBackendKind,
+    agent_identity_authapi_base_url: Option<&str>,
+    auth_route_config: &AuthRouteConfig,
+) -> std::io::Result<Option<CodexAuth>> {
+    // Precedence (docs/authentication.md, "OpenAI API keys"): CODEX_API_KEY
+    // (exec only), then external or stored OpenAI credentials, then
+    // OPENAI_API_KEY. A shell-exported OPENAI_API_KEY therefore never replaces
+    // a ChatGPT sign-in or a saved key, so it can't switch the billing basis.
     if enable_codex_api_key_env && let Some(api_key) = read_codex_api_key_from_env() {
-        return Ok(Some(CodexAuth::from_api_key(api_key.as_str())));
+        return Ok(Some(CodexAuth::from_api_key_env(
+            api_key.as_str(),
+            CODEX_API_KEY_ENV_VAR,
+        )));
     }
     if enable_codex_api_key_env && let Some(api_key) = read_ambient_api_key_from_env() {
-        return Ok(Some(CodexAuth::from_api_key(api_key.as_str())));
+        return Ok(Some(CodexAuth::from_api_key_env(
+            api_key.as_str(),
+            AMBIENT_API_KEY_ENV_VAR,
+        )));
     }
+    let openai_api_key_env_auth = || match openai_api_key_env {
+        OpenAiApiKeyEnv::Fallback => read_openai_api_key_from_env()
+            .map(|api_key| CodexAuth::from_api_key_env(api_key.as_str(), OPENAI_API_KEY_ENV_VAR)),
+        OpenAiApiKeyEnv::Ignore => None,
+    };
 
     // External ChatGPT auth tokens live in the in-memory (ephemeral) store. Always check this
     // first so external auth takes precedence over any persisted credentials.
@@ -1813,7 +1897,7 @@ async fn load_auth(
 
     // If the caller explicitly requested ephemeral auth, there is no persisted fallback.
     if auth_credentials_store_mode == AuthCredentialsStoreMode::Ephemeral {
-        return Ok(None);
+        return Ok(openai_api_key_env_auth());
     }
 
     // Fall back to the configured persistent store (file/keyring/auto) for managed auth.
@@ -1830,7 +1914,7 @@ async fn load_auth(
             keyring_backend_kind,
         )? {
             Some(auth) => auth,
-            None => return Ok(None),
+            None => return Ok(openai_api_key_env_auth()),
         },
     };
 
@@ -2362,6 +2446,7 @@ pub struct AuthManager {
     inner: RwLock<CachedAuth>,
     auth_change_tx: watch::Sender<u64>,
     enable_codex_api_key_env: bool,
+    openai_api_key_env: OpenAiApiKeyEnv,
     auth_credentials_store_mode: AuthCredentialsStoreMode,
     keyring_backend_kind: AuthKeyringBackendKind,
     forced_chatgpt_workspace_id: RwLock<Option<Vec<String>>>,
@@ -2419,6 +2504,12 @@ pub trait AuthManagerConfig {
 
     /// Returns route-selection settings for auth-owned clients.
     fn auth_route_config(&self) -> AuthRouteConfig;
+
+    /// Returns the login method the configuration requires, if any. A required
+    /// ChatGPT login stops `OPENAI_API_KEY` from being used as a fallback.
+    fn forced_login_method(&self) -> Option<ForcedLoginMethod> {
+        None
+    }
 }
 
 impl Debug for AuthManager {
@@ -2466,11 +2557,36 @@ impl AuthManager {
         keyring_backend_kind: AuthKeyringBackendKind,
         auth_route_config: AuthRouteConfig,
     ) -> Self {
+        Self::new_with_openai_api_key_env(
+            codex_home,
+            enable_codex_api_key_env,
+            OpenAiApiKeyEnv::Fallback,
+            auth_credentials_store_mode,
+            forced_chatgpt_workspace_id,
+            chatgpt_base_url,
+            keyring_backend_kind,
+            auth_route_config,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn new_with_openai_api_key_env(
+        codex_home: PathBuf,
+        enable_codex_api_key_env: bool,
+        openai_api_key_env: OpenAiApiKeyEnv,
+        auth_credentials_store_mode: AuthCredentialsStoreMode,
+        forced_chatgpt_workspace_id: Option<Vec<String>>,
+        chatgpt_base_url: Option<String>,
+        keyring_backend_kind: AuthKeyringBackendKind,
+        auth_route_config: AuthRouteConfig,
+    ) -> Self {
         let agent_identity_authapi_base_url =
             agent_identity_authapi_base_url(chatgpt_base_url.as_deref()).ok();
-        let managed_auth = load_auth(
+        let managed_auth = load_auth_with_openai_api_key_env(
             &codex_home,
             enable_codex_api_key_env,
+            openai_api_key_env,
             auth_credentials_store_mode,
             forced_chatgpt_workspace_id.as_deref(),
             chatgpt_base_url.as_deref(),
@@ -2490,6 +2606,7 @@ impl AuthManager {
             }),
             auth_change_tx,
             enable_codex_api_key_env,
+            openai_api_key_env,
             auth_credentials_store_mode,
             keyring_backend_kind,
             forced_chatgpt_workspace_id: RwLock::new(forced_chatgpt_workspace_id),
@@ -2517,6 +2634,7 @@ impl AuthManager {
             inner: RwLock::new(cached),
             auth_change_tx,
             enable_codex_api_key_env: false,
+            openai_api_key_env: OpenAiApiKeyEnv::Ignore,
             auth_credentials_store_mode: AuthCredentialsStoreMode::File,
             keyring_backend_kind: AuthKeyringBackendKind::default(),
             forced_chatgpt_workspace_id: RwLock::new(None),
@@ -2543,6 +2661,7 @@ impl AuthManager {
             inner: RwLock::new(cached),
             auth_change_tx,
             enable_codex_api_key_env: false,
+            openai_api_key_env: OpenAiApiKeyEnv::Ignore,
             auth_credentials_store_mode: AuthCredentialsStoreMode::File,
             keyring_backend_kind: AuthKeyringBackendKind::default(),
             forced_chatgpt_workspace_id: RwLock::new(None),
@@ -2573,6 +2692,7 @@ impl AuthManager {
             inner: RwLock::new(cached),
             auth_change_tx,
             enable_codex_api_key_env: false,
+            openai_api_key_env: OpenAiApiKeyEnv::Ignore,
             auth_credentials_store_mode: AuthCredentialsStoreMode::File,
             keyring_backend_kind: AuthKeyringBackendKind::default(),
             forced_chatgpt_workspace_id: RwLock::new(None),
@@ -2608,6 +2728,7 @@ impl AuthManager {
             }),
             auth_change_tx,
             enable_codex_api_key_env: false,
+            openai_api_key_env: OpenAiApiKeyEnv::Ignore,
             auth_credentials_store_mode: AuthCredentialsStoreMode::File,
             keyring_backend_kind: AuthKeyringBackendKind::default(),
             forced_chatgpt_workspace_id: RwLock::new(None),
@@ -2840,9 +2961,10 @@ impl AuthManager {
         }
 
         let forced_chatgpt_workspace_id = self.forced_chatgpt_workspace_id();
-        load_auth(
+        load_auth_with_openai_api_key_env(
             &self.codex_home,
             self.enable_codex_api_key_env,
+            self.openai_api_key_env,
             self.auth_credentials_store_mode,
             forced_chatgpt_workspace_id.as_deref(),
             self.chatgpt_base_url.as_deref(),
@@ -2953,16 +3075,19 @@ impl AuthManager {
         config: &impl AuthManagerConfig,
         enable_codex_api_key_env: bool,
     ) -> Arc<Self> {
-        Self::shared(
-            config.codex_home(),
-            enable_codex_api_key_env,
-            config.cli_auth_credentials_store_mode(),
-            config.forced_chatgpt_workspace_id(),
-            Some(config.chatgpt_base_url()),
-            config.auth_keyring_backend_kind(),
-            config.auth_route_config(),
+        Arc::new(
+            Self::new_with_openai_api_key_env(
+                config.codex_home(),
+                enable_codex_api_key_env,
+                OpenAiApiKeyEnv::for_forced_login_method(config.forced_login_method()),
+                config.cli_auth_credentials_store_mode(),
+                config.forced_chatgpt_workspace_id(),
+                Some(config.chatgpt_base_url()),
+                config.auth_keyring_backend_kind(),
+                config.auth_route_config(),
+            )
+            .await,
         )
-        .await
     }
 
     pub fn unauthorized_recovery(self: &Arc<Self>) -> UnauthorizedRecovery {
@@ -3152,7 +3277,9 @@ impl AuthManager {
         let Some(auth) = self.auth_cached() else {
             return OpenAiAuthMetadata::Missing;
         };
-        if self.enable_codex_api_key_env && auth_uses_api_key_from_env(&auth) {
+        if auth.api_key_env_var().is_some()
+            || (self.enable_codex_api_key_env && auth_uses_api_key_from_env(&auth))
+        {
             return OpenAiAuthMetadata::EnvironmentApiKey;
         }
         if auth.is_external_chatgpt_tokens() {
