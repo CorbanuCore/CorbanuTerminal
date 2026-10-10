@@ -58,6 +58,38 @@ fn redacts_credential_headers_in_every_log_shape() {
             "authorization=required model=gpt-5",
             "authorization=REDACTED model=gpt-5",
         ),
+        // Round-2 review: values after a type-like word, quoted values with
+        // spaces, quoted token parameters, markers after a value.
+        (
+            "x-api-key=abcd1234secret (from env)",
+            "x-api-key=REDACTED (from env)",
+        ),
+        (
+            "authorization: Bearer abc123secretxyz {retry}",
+            "authorization: REDACTED {retry}",
+        ),
+        (
+            r#"x-api-key=KEY123 (source "env")"#,
+            r#"x-api-key=REDACTED (source "REDACTED")"#,
+        ),
+        (r#""x-api-key": "abc def""#, r#""x-api-key": "REDACTED""#),
+        (
+            r#"Authorization: Token token="abc123""#,
+            "Authorization: REDACTED",
+        ),
+        ("cookie: sid=abc123 REDACTED", "cookie: REDACTED"),
+        (
+            r#"("authorization", "secret REDACTED")"#,
+            r#"("authorization", "REDACTED")"#,
+        ),
+        (
+            r#"{"access_token":"fake-at-0009","token_type":"bearer"}"#,
+            r#"{"access_token":"REDACTED","token_type":"bearer"}"#,
+        ),
+        (
+            "grant_type=refresh_token&refresh_token=fake-rt-0010&client_assertion=fake-ca",
+            "grant_type=refresh_token&refresh_token=REDACTED&client_assertion=REDACTED",
+        ),
         // URL query credentials.
         (
             "Trying to contact wss://host/v1/realtime?model=gpt&api_key=fake-q-0008 now",
@@ -93,6 +125,8 @@ fn keeps_redacted_values_and_ordinary_text() {
         "authorization server metadata discovered",
         "cookies: 3, max_tokens=100",
         r#"auth.header_name="authorization" auth_mode="ApiKey""#,
+        r#"api-key: Some(Sensitive), "x-request-id": "req-1""#,
+        "has_access_token=true refresh_token: None",
         "url=https://api.example.com/v1/models?key=REDACTED&api-version=REDACTED",
         "task-runner-AAAAAAAAAAAAAAAAAAAAAAAAA",
     ] {

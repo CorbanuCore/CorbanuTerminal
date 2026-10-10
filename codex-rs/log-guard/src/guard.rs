@@ -35,6 +35,9 @@ const TARGET_CAPS: &[(&str, Level)] = &[
     // aws-sigv4 logs the canonical request, `x-amz-security-token` value
     // included, and aws-smithy-runtime every request, at TRACE.
     ("aws_*", Level::DEBUG),
+    // Logs the ECS container authorization token at WARN when it is
+    // malformed (a trailing newline is enough).
+    ("aws_config::ecs", Level::ERROR),
     // Logs `OTEL_EXPORTER_OTLP_HEADERS` values at DEBUG.
     ("opentelemetry-otlp", Level::INFO),
     ("opentelemetry_otlp", Level::INFO),

@@ -10,3 +10,15 @@
 | 6 | Nit | Fixed. Credential query parameters (`key`, `api_key`, `access_token`, `token`, `sig`, `code`, `client_secret`, `password`, `x-amz-*`) are redacted. |
 | 7 | Nit | `code-mode-host` is guarded. A source-scanning CI check is not added (it can't read the workspace under Bazel); noted as a follow-up. The Windows sandbox command log is outside #380. |
 | 8 | Nit | Added a test that spans, `Span::current()` and registry downcasts pass through `Guarded`. The HTTP tests stay as canaries. |
+
+# Round 2 (Opus 5.5 High, approve with fixes)
+
+| # | Severity | Disposition |
+| - | -------- | ----------- |
+| 1 | Should-fix | Fixed. A type name is skipped only when it is directly followed by `(` or ` {` and the wrapper pattern matched the same occurrence; otherwise its bracketed contents are redacted (`Secret(x)` → `Secret(REDACTED)`). The three review strings are tests. |
+| 2 | Should-fix | Fixed. `aws_config::ecs` is capped at ERROR, with cap-table rows. |
+| 3 | Nit | Fixed. The two-word form needs a known scheme first. |
+| 4 | Nit | Fixed. Quoted values are redacted to the closing quote; unquoted tokens may contain quoted segments (`token="x"`). |
+| 5 | Nit | Fixed. The wrapper window stops at `)` and `}`. |
+| 6 | Nit | Fixed. `refresh_token`, `id_token`, `code_verifier`, `client_assertion` query/form names, and `access_token`/`refresh_token`/`id_token` as field names. `None` counts as a marker so `refresh_token: None` stays readable. |
+| 7 | Nit | Fixed. The README names the tested commit; the functional scan was re-run on the final tree. |

@@ -160,6 +160,8 @@ fn caps_match_crates_and_their_modules_only() {
             true,
         ),
         ("aws_config::profile", Level::DEBUG, false),
+        ("aws_config::ecs", Level::WARN, true),
+        ("aws_config::ecs", Level::ERROR, false),
         ("codex_aws_auth", Level::TRACE, false),
         ("opentelemetry-otlp", Level::DEBUG, true),
         ("opentelemetry-otlp", Level::INFO, false),
