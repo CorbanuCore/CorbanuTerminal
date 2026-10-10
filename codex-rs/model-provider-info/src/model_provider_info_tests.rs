@@ -1866,3 +1866,25 @@ fn named_account_follows_a_correction_only_to_a_route_with_the_same_key() {
         None
     );
 }
+
+#[test]
+fn a_correction_keeps_the_target_providers_own_account() {
+    let own = NamedProviderAccount {
+        provider_id: "anthropic".to_string(),
+        name: "work".to_string(),
+    };
+    let mut original = ModelProviderInfo::create_zai_provider();
+    original.account = Some(NamedProviderAccount {
+        provider_id: "zai".to_string(),
+        name: "work".to_string(),
+    });
+    let mut target = ModelProviderInfo::create_anthropic_provider();
+    target.account = Some(own.clone());
+    assert_eq!(
+        target
+            .with_account_from(&original)
+            .expect("own account")
+            .account,
+        Some(own)
+    );
+}

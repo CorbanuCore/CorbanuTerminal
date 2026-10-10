@@ -233,3 +233,41 @@ fn subscription_material_is_refused_by_generic_vault_access() {
         "canary-key"
     );
 }
+
+#[test]
+fn an_entry_of_another_type_is_not_account_material() {
+    let (_dir, vault) = test_vault();
+    vault
+        .add(AddCredential {
+            label: "provider/zai/accounts/work/api_key".to_string(),
+            credential_type: CredentialType::ManualSecret,
+            provider: None,
+            notes: None,
+            revocation_notes: None,
+            secret: "canary-hand-added".to_string(),
+        })
+        .expect("hand-added entry");
+    assert_eq!(
+        vault
+            .read_provider_account("zai", &name("work"), ProviderAccountKind::ApiKey)
+            .expect("read"),
+        None
+    );
+}
+
+#[test]
+fn scoped_broker_reads_refuse_named_subscription_material() {
+    let (_dir, vault) = test_vault();
+    vault
+        .write_provider_account(
+            "claude-plan",
+            &name("work"),
+            ProviderAccountKind::ClaudeOauthToken,
+            "canary-token",
+        )
+        .expect("write token");
+    assert!(matches!(
+        vault.read_scoped_secret("provider/claude-plan/accounts/work/claude_oauth_token"),
+        Err(crate::ScopedCredentialError::CredentialTypeDenied)
+    ));
+}

@@ -178,4 +178,24 @@ mod tests {
             "provider_accounts.openai: provider `openai` does not support named accounts yet"
         );
     }
+
+    #[test]
+    fn aws_providers_fail_closed() {
+        let mut model_providers = HashMap::from([(
+            "amazon-bedrock".to_string(),
+            ModelProviderInfo::create_amazon_bedrock_provider(/*aws*/ None),
+        )]);
+        let error = apply_provider_accounts(
+            &mut model_providers,
+            Some(&accounts(&[("amazon-bedrock", "work")])),
+            /*named_accounts_enabled*/ true,
+            &mut Vec::new(),
+        )
+        .expect_err("aws accounts are not supported yet");
+        assert!(
+            error
+                .to_string()
+                .ends_with("does not support named accounts yet")
+        );
+    }
 }

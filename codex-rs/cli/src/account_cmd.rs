@@ -199,7 +199,7 @@ fn account_value(kind: AccountKindArg, value: Option<String>) -> anyhow::Result<
         if std::io::stdin().is_terminal() {
             bail!(
                 "pipe the secret in instead of typing it, for example \
-                 `pbpaste | corbanu account add <provider> <name>`"
+                 `cat key.txt | corbanu account add <provider> <name>`"
             );
         }
         let mut secret = Zeroizing::new(String::new());

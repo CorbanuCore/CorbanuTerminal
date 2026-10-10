@@ -1182,6 +1182,10 @@ impl ModelProviderInfo {
     /// otherwise the correction is refused rather than silently switching the
     /// session to the other provider's default account.
     pub fn with_account_from(mut self, original: &ModelProviderInfo) -> Result<Self, String> {
+        if self.account.is_some() {
+            // The target's own `[provider_accounts]` selection wins.
+            return Ok(self);
+        }
         match &original.account {
             None => Ok(self),
             Some(account) if self.env_key.is_some() && self.env_key == original.env_key => {

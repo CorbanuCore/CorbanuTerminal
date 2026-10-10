@@ -54,33 +54,24 @@ pub fn provider_account_api_key(
     )
 }
 
-/// PF-84: the AWS profile name a named account uses (not secret).
-pub fn provider_account_aws_profile(
+/// PF-84: whether a named account holds `kind`, from vault metadata only (no
+/// secret is decrypted). A missing account is `Ok(false)`.
+pub fn provider_account_holds(
     codex_home: &Path,
     provider_id: &str,
     account_name: &str,
-) -> std::io::Result<Option<String>> {
-    read_provider_account_kind(
-        &Vault::new(codex_home.to_path_buf()),
-        provider_id,
-        account_name,
-        codex_vault::ProviderAccountKind::AwsProfile,
-    )
-}
-
-/// PF-84: whether an `auth.command` provider has the named account enrolled.
-pub fn provider_command_account_is_configured(
-    codex_home: &Path,
-    provider_id: &str,
-    account_name: &str,
+    kind: codex_vault::ProviderAccountKind,
 ) -> std::io::Result<bool> {
-    read_provider_account_kind(
-        &Vault::new(codex_home.to_path_buf()),
-        provider_id,
-        account_name,
-        codex_vault::ProviderAccountKind::Command,
-    )
-    .map(|marker| marker.is_some())
+    let name = codex_vault::ProviderAccountName::parse(account_name)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?;
+    let vault = Vault::new(codex_home.to_path_buf());
+    if vault.key_storage() == VaultKeyStorage::NotInitialized {
+        return Ok(false);
+    }
+    vault
+        .provider_account_kinds(provider_id, &name)
+        .map(|kinds| kinds.contains(&kind))
+        .map_err(std::io::Error::other)
 }
 
 fn read_provider_account_kind(
