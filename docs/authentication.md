@@ -129,8 +129,11 @@ When a model turn, `/review` or compaction is billed to `OPENAI_API_KEY`,
 Corbanu says so the first time in each thread (a new thread, such as `/new`,
 says it again), and again if the credential switches to it mid-thread: a notice
 in the TUI, a `warning:` line on stderr in `corbanu exec` (a warning item with
-`--json`), and a thread `warning` notification in the app server. Sub-agents
-don't repeat it, and realtime voice sessions don't show it. `/status` shows the
+`--json`), and a thread `warning` notification in the app server. A review or
+compaction announces on the thread that started it. A spawned agent, which may
+use a different provider from its parent, announces in its own thread
+(`corbanu exec` prints only its main thread's notices). Realtime voice sessions
+don't show it. `/status` shows the
 variable as the account source. A saved sign-in, `CODEX_API_KEY` or a session
 sign-in shows no notice, and neither do providers that don't use OpenAI
 sign-in.

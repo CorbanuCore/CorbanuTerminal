@@ -2,13 +2,17 @@
 
 use anyhow::Result;
 use codex_core::CodexThread;
+use codex_core::StartThreadOptions;
 use codex_login::CodexAuth;
 use codex_login::OPENAI_API_KEY_ENV_FALLBACK_NOTICE;
 use codex_login::OPENAI_API_KEY_ENV_VAR;
+use codex_protocol::AgentPath;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::Op;
 use codex_protocol::protocol::ReviewRequest;
 use codex_protocol::protocol::ReviewTarget;
+use codex_protocol::protocol::SessionSource;
+use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::user_input::UserInput;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
@@ -72,16 +76,7 @@ async fn notices_per_step(auth: CodexAuth, openai: bool, steps: &[Step]) -> Resu
     let mut notices = Vec::new();
     for step in steps {
         let op = match step {
-            Step::Turn => Op::UserInput {
-                items: vec![UserInput::Text {
-                    text: "say ok".to_string(),
-                    text_elements: Vec::new(),
-                }],
-                final_output_json_schema: None,
-                responsesapi_client_metadata: None,
-                additional_context: Default::default(),
-                thread_settings: Default::default(),
-            },
+            Step::Turn => user_turn(),
             Step::Review => Op::Review {
                 review_request: ReviewRequest {
                     target: ReviewTarget::Custom {
@@ -96,6 +91,19 @@ async fn notices_per_step(auth: CodexAuth, openai: bool, steps: &[Step]) -> Resu
     }
     assert_eq!(requests.requests().len(), steps.len());
     Ok(notices)
+}
+
+fn user_turn() -> Op {
+    Op::UserInput {
+        items: vec![UserInput::Text {
+            text: "say ok".to_string(),
+            text_elements: Vec::new(),
+        }],
+        final_output_json_schema: None,
+        responsesapi_client_metadata: None,
+        additional_context: Default::default(),
+        thread_settings: Default::default(),
+    }
 }
 
 async fn submit_and_count_notices(codex: &CodexThread, op: Op) -> Result<usize> {
@@ -178,5 +186,58 @@ async fn openai_api_key_env_fallback_is_not_announced_for_other_providers() -> R
     .await?;
 
     assert_eq!(notices, vec![0, 0]);
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn spawned_agent_on_openai_announces_when_its_root_does_not() -> Result<()> {
+    skip_if_no_network!(Ok(()));
+
+    let server = start_mock_server().await;
+    let responses = (0..3)
+        .map(|index| {
+            sse(vec![
+                ev_assistant_message(&format!("msg-{index}"), "ok"),
+                ev_completed(&format!("resp-{index}")),
+            ])
+        })
+        .collect();
+    let requests = mount_sse_sequence(&server, responses).await;
+    // The root runs on a provider without OpenAI sign-in, so it never
+    // announces; the spawned child runs on OpenAI and bills the fallback.
+    let test = test_codex()
+        .with_auth(env_fallback())
+        .with_config(|config| {
+            config.model_provider.name = "Local".to_string();
+            config.model_provider.requires_openai_auth = false;
+        })
+        .build(&server)
+        .await?;
+    let mut child_config = test.config.clone();
+    child_config.model_provider.requires_openai_auth = true;
+    let mut child_options = StartThreadOptions::new(child_config);
+    child_options.session_source = Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+        parent_thread_id: test.session_configured.thread_id,
+        depth: 1,
+        agent_path: Some(AgentPath::try_from("/root/worker").map_err(anyhow::Error::msg)?),
+        agent_nickname: Some("worker".to_string()),
+        agent_role: Some("worker".to_string()),
+        agent_class: None,
+    }));
+    let child = test
+        .thread_manager
+        .start_thread(child_options)
+        .await?
+        .thread;
+
+    let root_notices = submit_and_count_notices(&test.codex, user_turn()).await?;
+    let child_notices = [
+        submit_and_count_notices(&child, user_turn()).await?,
+        submit_and_count_notices(&child, user_turn()).await?,
+    ];
+
+    assert_eq!(root_notices, 0);
+    assert_eq!(child_notices, [1, 0]);
+    assert_eq!(requests.requests().len(), 3);
     Ok(())
 }

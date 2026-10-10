@@ -1640,10 +1640,23 @@ pub(crate) fn build_prompt(
 
 /// Tells the user, once per switch, that requests are billed to the
 /// `OPENAI_API_KEY` from their environment. Only providers that use OpenAI
-/// sign-in send that key. Sub-agents (review, compaction, spawned agents)
-/// stay quiet: their root thread has already announced it.
+/// sign-in send that key. Root threads and spawned agents (which may use a
+/// different provider from their parent) announce in their own thread. Review
+/// and compaction sub-sessions and internal sessions stay quiet: the review and
+/// compact tasks announce on the thread that started them.
 pub(crate) async fn notify_openai_api_key_env_fallback(sess: &Session, turn_context: &TurnContext) {
-    if turn_context.session_source.is_non_root_agent() {
+    use codex_protocol::protocol::SessionSource;
+    use codex_protocol::protocol::SubAgentSource;
+    if matches!(
+        turn_context.session_source,
+        SessionSource::Internal(_)
+            | SessionSource::SubAgent(
+                SubAgentSource::Review
+                    | SubAgentSource::Compact
+                    | SubAgentSource::MemoryConsolidation
+                    | SubAgentSource::Other(_)
+            )
+    ) {
         return;
     }
     let in_use = turn_context.provider.info().uses_first_party_openai_auth()

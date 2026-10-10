@@ -2172,7 +2172,7 @@ Field notes:
 
 - `refreshToken` (bool): set `true` to force a token refresh.
 - `email` is `null` when the ChatGPT account does not have an email address.
-- For `apiKey`, `envVar` names the environment variable the key is read from (for example `OPENAI_API_KEY` when no sign-in or key is saved), or is `null` for a saved key or a provider that doesn't use OpenAI sign-in. The first model turn, review or compaction a root thread bills to the `OPENAI_API_KEY` fallback also emits a thread-scoped `warning` notification, and again whenever the credential switches back to it. Sub-agent threads and realtime sessions don't emit it.
+- For `apiKey`, `envVar` names the environment variable the key is read from (for example `OPENAI_API_KEY` when no sign-in or key is saved), or is `null` for a saved key or a provider that doesn't use OpenAI sign-in. The first model turn, review or compaction a thread bills to the `OPENAI_API_KEY` fallback also emits a thread-scoped `warning` notification, and again whenever the credential switches back to it. Spawned agent threads announce for themselves; review and compaction sub-sessions, internal sessions and realtime sessions don't emit it.
 - `requiresOpenaiAuth` reflects the active provider; when `false`, Codex can run without OpenAI credentials.
 - Amazon Bedrock reports `usesCodexManagedCredentials: true` when it uses a Bedrock API key managed by Codex. It reports `false` for external credential paths, including the AWS credential chain and configured command auth. This identifies whether Codex-managed credentials are selected; it does not validate that the credential source can resolve credentials.
 
