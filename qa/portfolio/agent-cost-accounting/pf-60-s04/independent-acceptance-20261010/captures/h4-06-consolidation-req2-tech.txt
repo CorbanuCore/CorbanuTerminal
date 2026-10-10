@@ -1,0 +1,101 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     k3   /model to change            │
+│ directory: ~/corbanu-rtx/pf60s04-ia/work/ws │
+╰─────────────────────────────────────────────╯
+
+› My favourite colour is teal and I prefer short answers. Reply with the single word NOTED.
+• NOTED
+■ Conversation interrupted - tell the model what to do differently. Something went wrong? Hit `/feedback` to report the issue.
+  Attempt, components and original price
+  Requested UTC day: 2026-10-10
+› Provider: Kimi Code
+  Model: Kimi Code K3
+  Billing: Covered by your subscription (not billed per request)
+  Same work at API prices: not available
+  Tokens: 14,946 tokens
+  Paid usage beyond a plan (usage credits, Extra Usage or extra credits you bought) isn't visible here and is never counted as spent; check your provider's
+  usage page.
+  —— Details ——
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Provider: Kimi Code
+› Model: Kimi Code K3
+› Billing: Covered by your subscription (not billed per request)
+› Same work at API prices: not available
+› Tokens: 14,946 tokens
+› Paid usage beyond a plan (usage credits, Extra Usage or extra credits you bought) isn't visible here and is never counted as spent; check your provider's
+› usage page.
+› —— Details ——
+› Request: 7971db5b-5355-4d45-bb34-7c0b6aa01ae2
+  Request: 7971db5b-5355-4d45-bb34-7c0b6aa01ae2
+› Attempt: d369cb12-f0ef-4d72-a223-3b371057a721
+  Attempt: d369cb12-f0ef-4d72-a223-3b371057a721
+› Thread: 01a12468-99a5-77b2-8c7e-2cf5ac88a589
+  Thread: 01a12468-99a5-77b2-8c7e-2cf5ac88a589
+› Turn: consolidation:01a12468-a6f9-7193-ae98-a106b3b3ab7e
+  Turn: consolidation:01a12468-a6f9-7193-ae98-a106b3b3ab7e
+› Provider: kimi-code
+  Provider: kimi-code
+› Model: k3
+  Model: k3
+› Opaque scope: 4c1182fc-21c8-4afa-b9c0-be3f31af41d1
+  Opaque scope: 4c1182fc-21c8-4afa-b9c0-be3f31af41d1
+› Arithmetic dialect: Inclusive
+  Arithmetic dialect: Inclusive
+› Admission time: 2026-10-10T06:03:20.806Z
+  Admission time: 2026-10-10T06:03:20.806Z
+› Retry predecessor: none
+  Retry predecessor: none
+› Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+  Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+› No recorded attempt here was billed per token.
+  No recorded attempt here was billed per token.
+› Subscription capacity: 1 of 1 attempts, not billed per token
+  Subscription capacity: 1 of 1 attempts, not billed per token
+› Plan consumption: unavailable — no plan rate or token total for 1 of 1 plan attempts
+  Plan consumption: unavailable — no plan rate or token total for 1 of 1 plan attempts
+› Same tokens at API rates: unavailable — the catalogue states no API price for 1 of 1 plan attempts
+  Same tokens at API rates: unavailable — the catalogue states no API price for 1 of 1 plan attempts
+› Plan rate at dispatch: not stated by the vendor
+  Plan rate at dispatch: not stated by the vendor
+› Billing basis: subscription
+  Billing basis: subscription
+› Input: 14740
+  Input: 14740
+› Noncached input (derived for inclusive input): unknown — no retained numeric evidence
+  Noncached input (derived for inclusive input): unknown — no retained numeric evidence
+› Cache read: 1536
+  Cache read: 1536
+› Cache write: unknown — no retained numeric evidence
+  Cache write: unknown — no retained numeric evidence
+› Output: 206
+  Output: 206
+› Reasoning (subset, not separately billed): 15
+  Reasoning (subset, not separately billed): 15
+› Total (not separately billed): 14946
+  Total (not separately billed): 14946
+› Noncached input cost: unknown — no retained numeric evidence
+  Noncached input cost: unknown — no retained numeric evidence
+› Cache read cost: unknown — rate unavailable
+  Cache read cost: unknown — rate unavailable
+› Cache write cost: unknown — no retained numeric evidence
+  Cache write cost: unknown — no retained numeric evidence
+› Output cost: unknown — rate unavailable
+  Output cost: unknown — rate unavailable
+› Known subtotal exact USD: none — subscription work is not billed per token
+  Known subtotal exact USD: none — subscription work is not billed per token
+› Price: none recorded — this request records only its billing basis (subscription)
+  Price: none recorded — this request records only its billing basis (subscription)
+› Evidence revision 49; source 7b20e449-92fc-42de-aab7-2cf18dad6390; sequence 49; presence patch
+  Evidence revision 49; source 7b20e449-92fc-42de-aab7-2cf18dad6390; sequence 49; presence patch
+› {"input":14740,"read":1536,"output":206,"reasoning":15,"total":14946}
+  {"input":14740,"read":1536,"output":206,"reasoning":15,"total":14946}
+› Snapshot is not current; newer activity is unverified
+  Snapshot is not current; newer activity is unverified
+› Back
+  Back
+› Refresh
+  Refresh
+› Close

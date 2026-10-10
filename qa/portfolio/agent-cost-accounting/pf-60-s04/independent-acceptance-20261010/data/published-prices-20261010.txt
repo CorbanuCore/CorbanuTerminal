@@ -1,0 +1,24 @@
+Published list prices used for the independent recompute (USD per 1M tokens), checked 2026-10-10.
+
+OpenAI gpt-5.4 (API key, short context < 272K input)
+  Standard:          input 2.50, cached input 0.25, output 15.00
+  Fast (ex-Priority): input 5.00, cached input 0.50, output 30.00
+  Sources: OpenAI pricing tables as reproduced by economize.cloud (gpt-5.4 page, Standard and Fast columns),
+  benchlm.ai "OpenAI API Pricing (October 2026)" (price source: OpenAI pricing), aipricing.guru, morphllm.com.
+  Conflict noted: pricepertoken.com lists 1.25 / 7.50 (equal to OpenAI's Batch rates); not used.
+  The WebSocket prewarm reports service_tier "auto"; it is costed at Standard (the served default tier).
+
+OpenAI gpt-5.6-luna / gpt-5.6-terra (API key, Standard): input, cached input, cache write, output
+  luna  0.20 / 0.02 / 0.25 / 1.20      terra  2.00 / 0.20 / 2.50 / 12.00
+  Source: developers.openai.com/api/docs/pricing fetched 2026-10-10 (data/openai-pricing-20261010.txt; gpt-5.4 rows
+  there confirm 2.50 / 0.25 / 15 Standard and 5 / 0.50 / 30 Fast).
+
+Z.AI GLM-5.3-Flash (built-in `zai`, general API endpoint)
+  input 0.15, cached input 0.03, output 0.50 (cached input storage: limited-time free)
+  Source: docs.z.ai/guides/overview/pricing (official), Z.AI's launch post (2026-08-26), cellcog.ai (launch promo ended 2026-09-09).
+  Conflict noted: developer.puter.com lists 0.08 / 0.25; not used (the official page and three others say 0.15 / 0.50).
+
+Not recomputed as money (subscription; never spent):
+  Kimi Code k3 (kimi-code)  - membership; token counts compared only.
+  Claude Plan claude-opus-5-5 (claude-plan) - subscription; token counts compared; the "same work at API prices" figure was
+  checked only for internal arithmetic against the rates the request's technical page states (4 / 0.20 / 8 / 20).

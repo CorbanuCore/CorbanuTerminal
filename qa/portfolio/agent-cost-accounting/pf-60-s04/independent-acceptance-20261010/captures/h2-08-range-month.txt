@@ -1,0 +1,58 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/corbanu-rtx/pf60s04-ia/work/ws │
+╰─────────────────────────────────────────────╯
+
+› Use the spawn_agent tool twice: a sub-agent on model k3 (provider kimi-code) with the message 'Reply with the single word KIMI.', and a sub-agent on model
+  claude-opus-5-5-plan (provider claude-plan) with the message 'Reply with the single word CLAUDE.'. Wait for both, then reply with the single word DONE.
+• DONE
+■ Restored a legacy /spawn hierarchy in read-only mode. Existing panes remain inspectable, but Corbanu Terminal will not dispatch or replay work until you
+create a new CrewSpec-backed crew.
+  Recorded request range
+› Requested: [2026-09-01T00:00:00.000Z, 2026-11-01T00:00:00.000Z); timezone: UTC; grouping: Month
+  Retention: request detail kept since 2026-07-12T05:57:25.713Z; daily totals kept since 2025-10-11
+  Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns.
+  Range: Unknown parent population: 0 inspectable attempts, excluded from range total
+  Other conversations are not included in this view; /cost covers only the open conversation.
+  In progress — totals so far, recorded through 2026-10-10T05:54:24.619Z
+  Estimated token cost for recorded attempts: $1.001880 (rounded)
+  Subscription capacity: 3 of 39 attempts, not billed per token
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Requested: [2026-09-01T00:00:00.000Z, 2026-11-01T00:00:00.000Z); timezone: UTC; grouping: Month
+› Retention: request detail kept since 2026-07-12T05:57:25.713Z; daily totals kept since 2025-10-11
+› Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns.
+› Range: Unknown parent population: 0 inspectable attempts, excluded from range total
+› Other conversations are not included in this view; /cost covers only the open conversation.
+› In progress — totals so far, recorded through 2026-10-10T05:54:24.619Z
+› Estimated token cost for recorded attempts: $1.001880 (rounded)
+› Subscription capacity: 3 of 39 attempts, not billed per token
+› Plan consumption: 11,051 tokens at the plan rate, plus 2 attempts with no stateable figure
+  Plan consumption: 11,051 tokens at the plan rate, plus 2 attempts with no stateable figure
+› Same tokens at API rates: $0.048146 (rounded) known, plus 2 of 3 plan attempts the catalogue does not price
+  Same tokens at API rates: $0.048146 (rounded) known, plus 2 of 3 plan attempts the catalogue does not price
+› Billed cost: OpenAI and Z.AI don't report their charges, so any cost here is an estimate — check their bills.
+  Billed cost: OpenAI and Z.AI don't report their charges, so any cost here is an estimate — check their bills.
+› Paid usage beyond a plan (usage credits, Extra Usage or extra credits you bought) isn't visible here and is never counted as spent; check your provider's
+  Paid usage beyond a plan (usage credits, Extra Usage or extra credits you bought) isn't visible here and is never counted as spent; check your provider's
+› usage page.
+  usage page.
+› Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [2026-09-01T00:00:00.000Z, 2026-10-01T00:00:00.000Z): [2026-09-01T00:00:00.000Z, 2026-
+  Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [2026-09-01T00:00:00.000Z, 2026-10-01T00:00:00.000Z): [2026-09-01T00:00:00.000Z, 2026-
+› 10-01T00:00:00.000Z)
+  10-01T00:00:00.000Z)
+› Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [2026-10-01T00:00:00.000Z, 2026-11-01T00:00:00.000Z): [2026-10-01T00:00:00.000Z, 2026-
+  Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [2026-10-01T00:00:00.000Z, 2026-11-01T00:00:00.000Z): [2026-10-01T00:00:00.000Z, 2026-
+› 10-10T05:54:24.620Z)
+  10-10T05:54:24.620Z)
+› —— Open ——
+  —— Open ——
+› → Month [2026-09-01T00:00:00.000Z, 2026-10-01T00:00:00.000Z)
+  → Month [2026-09-01T00:00:00.000Z, 2026-10-01T00:00:00.000Z)
+› → Month [2026-10-01T00:00:00.000Z, 2026-11-01T00:00:00.000Z) (in progress)
+  → Month [2026-10-01T00:00:00.000Z, 2026-11-01T00:00:00.000Z) (in progress)
+› Refresh
+  Refresh
+› Close

@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a12470-7792-7202-8bcd-a6f47b4aab48"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"EPH"}}
+{"type":"turn.completed","usage":{"input_tokens":5996,"cached_input_tokens":832,"cache_write_input_tokens":0,"output_tokens":20,"reasoning_output_tokens":16}}
