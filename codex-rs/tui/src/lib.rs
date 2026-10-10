@@ -1432,11 +1432,18 @@ pub async fn run_main(
     // keeps every byte offset, so it runs beside this process's appends.
     std::thread::spawn({
         let log_dir = config.log_dir.clone();
+        #[cfg(target_os = "windows")]
+        let sandbox_dir = codex_windows_sandbox::sandbox_dir(&config.codex_home);
         move || {
             for name in [TUI_LOG_FILE_NAME, "codex-login.log"] {
                 if let Err(err) = codex_state::scrub_log_file_once(&log_dir.join(name)) {
                     tracing::warn!("failed to scrub old secrets from {name}: {err}");
                 }
+            }
+            // Older builds logged sandboxed command lines verbatim (#398).
+            #[cfg(target_os = "windows")]
+            if let Err(err) = codex_state::scrub_sandbox_logs_once(&sandbox_dir) {
+                tracing::warn!("failed to scrub old secrets from the sandbox logs: {err}");
             }
         }
     });

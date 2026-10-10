@@ -94,7 +94,8 @@ fn init_test_tracing() -> &'static TestTracing {
         global::set_text_map_propagator(TraceContextPropagator::new());
         let subscriber =
             tracing_subscriber::registry().with(tracing_opentelemetry::layer().with_tracer(tracer));
-        tracing::subscriber::set_global_default(subscriber)
+        codex_log_guard::guard(subscriber)
+            .try_init()
             .expect("global tracing subscriber should only be installed once");
         TestTracing { exporter, provider }
     })

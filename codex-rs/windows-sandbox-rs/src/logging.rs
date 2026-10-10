@@ -3,6 +3,9 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
+use codex_log_guard::redact_command;
+use codex_log_guard::redact_credentials;
+use codex_log_guard::redact_credentials_bytes;
 use codex_utils_string::take_bytes_at_char_boundary;
 use tracing_appender::rolling::RollingFileAppender;
 use tracing_appender::rolling::Rotation;
@@ -22,13 +25,12 @@ fn exe_label() -> &'static str {
     })
 }
 
+/// The command line as logged: credentials redacted (#398), argument by
+/// argument and before truncation, so neither a value holding spaces nor a
+/// cut can leave part of one unrecognised.
 fn preview(command: &[String]) -> String {
-    let joined = command.join(" ");
-    if joined.len() <= LOG_COMMAND_PREVIEW_LIMIT {
-        joined
-    } else {
-        take_bytes_at_char_boundary(&joined, LOG_COMMAND_PREVIEW_LIMIT).to_string()
-    }
+    let redacted = redact_command(command);
+    take_bytes_at_char_boundary(&redacted, LOG_COMMAND_PREVIEW_LIMIT).to_string()
 }
 
 pub fn log_file_path_for_utc_date(base_dir: &Path, date: chrono::NaiveDate) -> PathBuf {
@@ -47,7 +49,10 @@ pub fn current_log_file_path_for_codex_home(codex_home: &Path) -> PathBuf {
     current_log_file_path(&crate::sandbox_dir(codex_home))
 }
 
-pub fn log_writer(base_dir: &Path) -> Option<RollingFileAppender> {
+/// The daily sandbox log. Every line passes through the credential
+/// redaction of the `tracing` sinks (#398): lines carry command lines and
+/// error text.
+pub fn log_writer(base_dir: &Path) -> Option<RedactedLogWriter> {
     if !base_dir.is_dir() {
         return None;
     }
@@ -59,6 +64,53 @@ pub fn log_writer(base_dir: &Path) -> Option<RollingFileAppender> {
         .max_log_files(MAX_LOG_FILES)
         .build(base_dir)
         .ok()
+        .map(|inner| RedactedLogWriter {
+            inner,
+            pending: Vec::new(),
+        })
+}
+
+/// Buffers writes into whole lines and redacts each before writing it, so
+/// `writeln!` pieces can't split a credential from its name. A partial
+/// last line is written on flush or drop.
+pub struct RedactedLogWriter {
+    inner: RollingFileAppender,
+    pending: Vec<u8>,
+}
+
+impl RedactedLogWriter {
+    fn write_redacted(&mut self, line: &[u8]) -> std::io::Result<()> {
+        self.inner.write_all(&redact_credentials_bytes(line))
+    }
+}
+
+impl Write for RedactedLogWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.pending.extend_from_slice(buf);
+        if let Some(end) = self.pending.iter().rposition(|byte| *byte == b'\n') {
+            let lines: Vec<u8> = self.pending.drain(..=end).collect();
+            if let Err(err) = self.write_redacted(&lines) {
+                // The caller may retry `buf`; keep none of it.
+                self.pending.clear();
+                return Err(err);
+            }
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        if !self.pending.is_empty() {
+            let partial = std::mem::take(&mut self.pending);
+            self.write_redacted(&partial)?;
+        }
+        self.inner.flush()
+    }
+}
+
+impl Drop for RedactedLogWriter {
+    fn drop(&mut self) {
+        let _ = self.flush();
+    }
 }
 
 fn append_line(line: &str, base_dir: Option<&Path>) {
@@ -88,7 +140,7 @@ pub fn log_failure(command: &[String], detail: &str, base_dir: Option<&Path>) {
 pub fn debug_log(msg: &str, base_dir: Option<&Path>) {
     if std::env::var("SBX_DEBUG").ok().as_deref() == Some("1") {
         append_line(&format!("DEBUG: {msg}"), base_dir);
-        eprintln!("{msg}");
+        eprintln!("{}", redact_credentials(msg));
     }
 }
 
@@ -135,6 +187,107 @@ mod tests {
 
         let log = std::fs::read_to_string(log_path).expect("read log");
         assert!(log.contains("hello daily log"));
+    }
+
+    fn read_only_log(dir: &Path) -> String {
+        let entries = std::fs::read_dir(dir)
+            .expect("read log dir")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("read entries");
+        assert_eq!(entries.len(), 1);
+        std::fs::read_to_string(entries[0].path()).expect("read log")
+    }
+
+    /// #398: credentials typed into a sandboxed command never reach the
+    /// sandbox log, including one the 200-byte preview would cut in half.
+    #[test]
+    fn command_log_lines_redact_credentials() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let secrets = [
+            "fake-398-bearer-0001",
+            "fake-398-password-0002",
+            "fake-398-xapikey-0003",
+            "fake-398-query-0004",
+            // An OpenAI-format key is only recognised whole: truncating
+            // before redacting would leave its first 16 bytes.
+            "sk-proj-FAKE398STRADDLE0005AAAAAAAAAA",
+        ];
+        let command =
+            |args: &[&str]| -> Vec<String> { args.iter().map(ToString::to_string).collect() };
+        let curl = command(&[
+            "curl.exe",
+            "-H",
+            &format!("Authorization: Bearer {}", secrets[0]),
+            "-H",
+            &format!("X-Api-Key: {}", secrets[2]),
+            &format!("https://api.example/v1?api_key={}", secrets[3]),
+        ]);
+        let mysql = command(&["mysql", &format!("--password={}", secrets[1])]);
+        let padding = "x".repeat(LOG_COMMAND_PREVIEW_LIMIT - " tool ".len() - 16);
+        let straddle = command(&[&padding, "tool", secrets[4]]);
+        log_start(&curl, Some(tempdir.path()));
+        log_success(&mysql, Some(tempdir.path()));
+        log_failure(&straddle, "exit code 1", Some(tempdir.path()));
+        log_note(
+            &format!("runner failed: {}", curl.join(" ")),
+            Some(tempdir.path()),
+        );
+        // Values holding spaces, as their own arguments.
+        let spaced = command(&[
+            "tool",
+            "--password=fake-398-spaced-0010 two words",
+            "--token",
+            "fake-398-spaced-0011 more words",
+            "-H",
+            "X-Api-Key: fake-398-spaced-0012 tail",
+        ]);
+        log_start(&spaced, Some(tempdir.path()));
+
+        let log = read_only_log(tempdir.path());
+        assert!(
+            log.contains("START: curl.exe -H Authorization: REDACTED"),
+            "{log}"
+        );
+        assert!(log.contains("SUCCESS: mysql --password=REDACTED"), "{log}");
+        assert!(log.contains("FAILURE: "), "{log}");
+        assert!(log.contains("runner failed: curl.exe"), "{log}");
+        assert!(
+            log.contains(
+                "START: tool --password=REDACTED --token REDACTED -H X-Api-Key: REDACTED\n"
+            ),
+            "{log}"
+        );
+        for word in ["two words", "more words", "tail"] {
+            assert!(!log.contains(word), "{word} leaked: {log}");
+        }
+        for secret in secrets {
+            // No secret, nor the start of one a truncation could leave.
+            assert!(!log.contains(&secret[..12]), "{secret} leaked: {log}");
+        }
+    }
+
+    /// Writers built by `log_writer` (the setup helper's) redact whole
+    /// lines, however `writeln!` splits them.
+    #[test]
+    fn log_writer_redacts_lines_split_across_writes() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        {
+            let mut writer = log_writer(tempdir.path()).expect("log writer");
+            writer.write_all(b"setup: tool --password ").unwrap();
+            writer.write_all(b"fake-398-split-0006\nnext ").unwrap();
+            writer
+                .write_all(b"line X-Api-Key: fake-398-multi-0008\nthird PGPASSWORD=")
+                .unwrap();
+            writer.write_all(b"fake-398-multi-0009\n").unwrap();
+            writer
+                .write_all(b"last OPENAI_API_KEY=fake-398-partial-0007")
+                .unwrap();
+        }
+        let log = read_only_log(tempdir.path());
+        assert_eq!(
+            log,
+            "setup: tool --password REDACTED\nnext line X-Api-Key: REDACTED\nthird PGPASSWORD=REDACTED\nlast OPENAI_API_KEY=REDACTED"
+        );
     }
 
     #[test]

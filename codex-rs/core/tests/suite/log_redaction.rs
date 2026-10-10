@@ -482,3 +482,74 @@ async fn http_api_key_never_reaches_trace_logs() -> anyhow::Result<()> {
     );
     Ok(())
 }
+
+/// #398: credentials typed into a model-requested command line (a bearer
+/// header, an API-key header, password options and an API-key query
+/// parameter) never reach the log sinks when the command runs under the
+/// platform sandbox (Seatbelt on macOS, the Linux sandbox helper on Linux).
+/// The command is still logged, with the values redacted.
+#[tokio::test]
+async fn sandboxed_command_line_credentials_never_reach_trace_logs() -> anyhow::Result<()> {
+    core_test_support::skip_if_sandbox!(Ok(()));
+    const SECRETS: [&str; 5] = [
+        "fake-398-bearer-0001-5c1e9a",
+        "fake-398-xapikey-0002-7d2f0b",
+        "fake-398-password-0003-8e3a1c",
+        "fake-398-query-0004-9f4b2d",
+        "fake-398-passarg-0005-0a5c3e",
+    ];
+    let [bearer, api_key, password, query, password_arg] = SECRETS;
+
+    let (sinks, guard) = TraceSinks::install().await?;
+    let server = start_mock_server().await;
+    let mut builder = test_codex();
+    let fixture = builder.build(&server).await?;
+    let call_id = "sandboxed-credential-command";
+    // `:` ignores its arguments: the command line, not a request, matters.
+    let command = format!(
+        "echo SBX-398-RAN; : curl -H 'Authorization: Bearer {bearer}' -H 'X-Api-Key: {api_key}' --password={password} 'https://api.example/v1?api_key={query}' --password {password_arg}"
+    );
+    let args = serde_json::json!({ "command": command, "timeout_ms": 10_000 });
+    mount_sse_once(
+        &server,
+        sse(vec![
+            ev_response_created("resp-1"),
+            ev_function_call(call_id, "shell_command", &serde_json::to_string(&args)?),
+            ev_completed("resp-1"),
+        ]),
+    )
+    .await;
+    let second = mount_sse_once(
+        &server,
+        sse(vec![
+            ev_assistant_message("msg-1", "done"),
+            ev_completed("resp-2"),
+        ]),
+    )
+    .await;
+    fixture
+        .submit_turn_with_permission_profile("run it", PermissionProfile::workspace_write())
+        .await?;
+    let output = second
+        .single_request()
+        .function_call_output_text(call_id)
+        .context("function_call_output present for shell_command call")?;
+    assert!(output.contains("SBX-398-RAN"), "{output}");
+
+    let log_text = sinks
+        .assert_clean(guard, &["spawn_child_async"], &SECRETS)
+        .await?;
+    let spawn_line = log_text
+        .lines()
+        .find(|line| line.contains("spawn_child_async") && line.contains("SBX-398-RAN"))
+        .context("the sandboxed command should be logged")?;
+    assert!(
+        spawn_line.contains("Authorization: REDACTED")
+            && spawn_line.contains("--password=REDACTED")
+            && spawn_line.contains("api_key=REDACTED"),
+        "{spawn_line}"
+    );
+    #[cfg(target_os = "macos")]
+    assert!(spawn_line.contains("sandbox-exec"), "{spawn_line}");
+    Ok(())
+}

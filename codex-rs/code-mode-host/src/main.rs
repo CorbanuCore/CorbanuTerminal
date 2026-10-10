@@ -1,5 +1,4 @@
 use clap::Parser;
-use tracing_subscriber::util::SubscriberInitExt;
 
 #[derive(Debug, Parser)]
 struct Cli {

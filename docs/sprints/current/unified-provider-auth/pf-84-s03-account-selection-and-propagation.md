@@ -1,20 +1,20 @@
 ---
 sprint_id: "PF-84-S03"
 title: "Account selection per session, CLI and worker"
-status: draft
+status: in_progress
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-84"
 execution_order: 25
-owner: "UNALLOCATED"
-parallel_lane: "UNALLOCATED"
-write_scope: "UNALLOCATED"
-integration_gate: "UNALLOCATED"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+owner: "Codex PF-84 lane owner"
+parallel_lane: "account-selection"
+write_scope: "codex-rs/core/, codex-rs/exec/, codex-rs/tui/, codex-rs/cli/, codex-rs/app-server/, codex-rs/app-server-protocol/, codex-rs/app-server-client/, codex-rs/app-server-test-client/, codex-rs/protocol/, codex-rs/model-provider-info/, codex-rs/model-provider/, codex-rs/login/, codex-rs/vault/, codex-rs/config/, codex-rs/features/, codex-rs/rollout/, codex-rs/state/, codex-rs/thread-store/, codex-rs/telegram/, docs/provider-accounts.md, qa/provider-auth/pf-84/s03-gate.md, qa/demos/specs/pf84-spawn-account.toml, qa/demos/specs/pf84-exec-account.toml, qa/demos/index/PF-84-S03.md, docs/sprints/current/unified-provider-auth/pf-84-s03-account-selection-and-propagation.md, docs/sprints/current/unified-provider-auth/index.md"
+integration_gate: "Codex PF-84 lane owner merges to main after just test -p codex-core -p codex-exec -p codex-cli -p codex-app-server (with and without developer-accounting), Linux clippy -D warnings, the tmux/GLM run and one Opus 5.5 High review"
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s03-select"
+branch: "feat/pf-84-s03-account-selection"
+base_commit: "0fa45b54f0ca65a6ce3485c27281624cb6f8b2cb"
 depends_on: "PF-84-S02"
 created: 2026-10-08
-updated: 2026-10-08
+updated: 2026-10-10
 ---
 
 # PF-84-S03 — Account selection per session, CLI and worker
@@ -53,11 +53,11 @@ Paths are under `codex-rs/`, at `63ea3d0cbd`.
 
 ## Preconditions
 
-- [ ] Plan is active.
-- [ ] Dependencies are completed.
-- [ ] Worktree, branch, and base commit are exact and match the plan.
-- [ ] If parallel, owner/lane/scopes are disjoint and the receiving integration gate is recorded.
-- [ ] Decision D3 (model-chosen spawn account and security levels) recorded in the plan.
+- [x] Plan is active.
+- [x] Dependencies are completed (PF-84-S02 merged behind `named_accounts`, `0fa45b54f0`).
+- [x] Worktree, branch, and base commit are exact and match the plan.
+- [x] If parallel, owner/lane/scopes are disjoint and the receiving integration gate is recorded.
+- [x] Decision D3 (model-chosen spawn account and security levels) recorded in the plan.
 
 ## Done
 
