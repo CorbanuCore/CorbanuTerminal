@@ -174,6 +174,14 @@ fn redacts_credentials_in_command_lines() {
             "START: curl -H Authorization: REDACTED https://api",
         ),
         (
+            r#"START: curl -H "Authorization: Bearer fake-cmd-0019" -H "X-Api-Key: fake-cmd-0020" -d "{}""#,
+            r#"START: curl -H "Authorization: REDACTED" -H "X-Api-Key: REDACTED" -d "{}""#,
+        ),
+        (
+            r#"curl -H \"Authorization: Bearer fake-cmd-0021\" -H \"X-Api-Key: fake-cmd-0022\""#,
+            r#"curl -H \"Authorization: REDACTED\" -H \"X-Api-Key: REDACTED\""#,
+        ),
+        (
             r#"START: curl -H "X-Api-Key: fake-cmd-0003" https://api"#,
             r#"START: curl -H "X-Api-Key: REDACTED" https://api"#,
         ),

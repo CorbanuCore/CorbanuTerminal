@@ -49,9 +49,12 @@ static PATTERNS: LazyLock<Vec<String>> = LazyLock::new(|| {
     vec![
         // UNQUOTED: `authorization: Bearer x`, `api-key=x`,
         // `Authorization: Token token="x"`: an optional scheme and one
-        // token, or a whole SigV4 authorization.
+        // token, or a whole SigV4 authorization. A quoted part continues
+        // the value only after `=`, so a value that ends at a closing quote
+        // can't swallow the next quoted argument (#398:
+        // `-H "Authorization: Bearer x" -H "X-Api-Key: y"`).
         format!(
-            r#"(?i-u){NAME_START}(?:{names}){SEPARATOR}(?P<v>aws4-hmac-sha256[^\r\n"'\\]*|(?:(?:bearer|basic|token|digest|negotiate)[ \t]+)?{token}(?:{token}|\\*"[^"\\\r\n]*\\*")*)"#
+            r#"(?i-u){NAME_START}(?:{names}){SEPARATOR}(?P<v>aws4-hmac-sha256[^\r\n"'\\]*|(?:(?:bearer|basic|token|digest|negotiate)[ \t]+)?{token}(?:=\\*"[^"\\\r\n]*\\*"|{token})*)"#
         ),
         // WRAPPED: `x-api-key: Some("x")`, `"authorization": HeaderValue {{ _private: H0("x") }}`.
         format!(
