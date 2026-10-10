@@ -828,6 +828,12 @@ impl CodexAuth {
             _ => None,
         }
     }
+
+    /// Whether this is the ambient `OPENAI_API_KEY` fallback. Model providers
+    /// send it only on the first-party OpenAI auth path.
+    pub fn is_openai_api_key_env_fallback(&self) -> bool {
+        self.api_key_env_var() == Some(OPENAI_API_KEY_ENV_VAR)
+    }
 }
 
 impl ManagedChatGptAgentIdentityBinding {
@@ -2547,7 +2553,8 @@ impl AuthManager {
     /// Create a new manager loading the initial auth using the provided
     /// preferred auth method. Errors loading auth are swallowed; `auth()` will
     /// simply return `None` in that case so callers can treat it as an
-    /// unauthenticated state.
+    /// unauthenticated state. `OPENAI_API_KEY` is not read; model sessions use
+    /// [`AuthManager::shared_from_config`], which adds it as a fallback.
     pub async fn new(
         codex_home: PathBuf,
         enable_codex_api_key_env: bool,
@@ -2560,7 +2567,7 @@ impl AuthManager {
         Self::new_with_openai_api_key_env(
             codex_home,
             enable_codex_api_key_env,
-            OpenAiApiKeyEnv::Fallback,
+            OpenAiApiKeyEnv::Ignore,
             auth_credentials_store_mode,
             forced_chatgpt_workspace_id,
             chatgpt_base_url,
@@ -3270,6 +3277,11 @@ impl AuthManager {
     /// Returns the effective backend auth mode for the current authentication.
     pub fn auth_mode(&self) -> Option<AuthMode> {
         self.auth_cached().as_ref().map(CodexAuth::auth_mode)
+    }
+
+    /// Whether `OPENAI_API_KEY` is read as the last-resort OpenAI credential.
+    pub fn openai_api_key_env_enabled(&self) -> bool {
+        self.openai_api_key_env == OpenAiApiKeyEnv::Fallback
     }
 
     /// Inspect the primary OpenAI auth boundary without returning credential material.

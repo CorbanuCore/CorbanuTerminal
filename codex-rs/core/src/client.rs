@@ -6634,6 +6634,9 @@ async fn handle_unauthorized(
 const MISSING_OPENAI_CREDENTIALS_MESSAGE: &str = "OpenAI rejected the request because no OpenAI \
     credential was found. Set OPENAI_API_KEY (`corbanu exec` also reads CODEX_API_KEY, which \
     takes precedence), or sign in with `corbanu login`";
+/// The same, when `forced_login_method = "chatgpt"` turns the key variables off.
+const MISSING_OPENAI_SIGN_IN_MESSAGE: &str = "OpenAI rejected the request because no ChatGPT \
+    sign-in was found. This configuration requires one: run `corbanu login`";
 
 fn with_missing_openai_credentials_hint(err: CodexErr, provider: &SharedModelProvider) -> CodexErr {
     let info = provider.info();
@@ -6642,9 +6645,18 @@ fn with_missing_openai_credentials_hint(err: CodexErr, provider: &SharedModelPro
         && info.experimental_bearer_token.is_none()
         && info.auth.is_none()
         && info.aws.is_none();
-    let has_auth = provider
-        .auth_manager()
+    let manager = provider.auth_manager();
+    let has_auth = manager
+        .as_ref()
         .is_some_and(|manager| manager.auth_cached().is_some());
+    let message = if manager
+        .as_ref()
+        .is_some_and(|manager| !manager.openai_api_key_env_enabled())
+    {
+        MISSING_OPENAI_SIGN_IN_MESSAGE
+    } else {
+        MISSING_OPENAI_CREDENTIALS_MESSAGE
+    };
     match err.details() {
         codex_protocol::error::CodexErrorDetails::UnexpectedStatus(unexpected)
             if uses_openai_login_only
@@ -6653,7 +6665,7 @@ fn with_missing_openai_credentials_hint(err: CodexErr, provider: &SharedModelPro
                 && unexpected.user_message.is_none() =>
         {
             let mut unexpected = unexpected.clone();
-            unexpected.user_message = Some(MISSING_OPENAI_CREDENTIALS_MESSAGE.to_string());
+            unexpected.user_message = Some(message.to_string());
             CodexErr::UnexpectedStatus(unexpected)
         }
         _ => err,

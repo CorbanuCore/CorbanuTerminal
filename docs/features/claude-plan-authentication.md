@@ -111,8 +111,9 @@ current platform store is used, including a macOS file-only legacy profile when
 the corresponding Keychain record is absent. This holds everywhere: `corbanu
 exec`, the TUI, and Claude panes. In `/providers` the Claude row then reads
 "Ready · CLAUDE_CODE_OAUTH_TOKEN from the environment", and Claude Plan models
-and panes run without saving the token. To bind that exact token so a later
-change fails closed, choose it explicitly through recovery (below). Once you successfully choose a
+and panes run without saving the token. Nothing binds the token in this state:
+a different value in the environment is simply used. Choosing a method in
+`/providers` replaces this behavior with that exact method. Once you successfully choose a
 method in `/providers`, that exact source is persisted; a failure never falls
 through to the environment or another store.
 

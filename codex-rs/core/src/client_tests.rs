@@ -2744,6 +2744,34 @@ async fn openai_unauthorized_without_credentials_names_the_variables_to_set() {
 }
 
 #[tokio::test]
+async fn openai_unauthorized_without_env_fallback_asks_for_a_sign_in() {
+    let home = TempDir::new().expect("home");
+    // Plain `AuthManager::new` doesn't read OPENAI_API_KEY, like a config
+    // with `forced_login_method = "chatgpt"`.
+    let manager = Arc::new(
+        AuthManager::new(
+            home.path().to_path_buf(),
+            /*enable_codex_api_key_env*/ false,
+            codex_login::AuthCredentialsStoreMode::File,
+            /*forced_chatgpt_workspace_id*/ None,
+            /*chatgpt_base_url*/ None,
+            codex_login::AuthKeyringBackendKind::Direct,
+            codex_login::test_support::transport_default_auth_route_config(),
+        )
+        .await,
+    );
+    let provider = create_model_provider(
+        ModelProviderInfo::create_openai_provider(/*base_url*/ None),
+        Some(manager),
+    );
+
+    let message = openai_unauthorized_error(&provider).await;
+
+    assert!(message.contains("run `corbanu login`"), "{message}");
+    assert!(!message.contains("OPENAI_API_KEY"), "{message}");
+}
+
+#[tokio::test]
 async fn openai_unauthorized_with_credentials_keeps_the_provider_error() {
     let provider = create_model_provider(
         ModelProviderInfo::create_openai_provider(/*base_url*/ None),

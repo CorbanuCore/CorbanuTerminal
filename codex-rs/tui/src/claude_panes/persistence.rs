@@ -350,19 +350,14 @@ pub(crate) fn title_prefix_without_profile_suffix(
         .find_map(|label| title.strip_suffix(&format!(" - {label}")))
 }
 
-/// Replaces a retired profile label at the end of a saved pane title with the
-/// current one; other titles are returned unchanged.
+/// Replaces a retired label that named a model the pane no longer serves
+/// with the current one; other titles are returned unchanged.
 pub(crate) fn current_profile_title(title: String, profile: ClaudeProviderProfileKind) -> String {
-    let current_suffix = format!(" - {}", profile.status_model_label());
-    if title.ends_with(&current_suffix) {
-        return title;
-    }
     match profile
-        .legacy_status_model_labels()
-        .iter()
-        .find_map(|label| title.strip_suffix(&format!(" - {label}")))
+        .relabelled_status_model_label()
+        .and_then(|label| title.strip_suffix(&format!(" - {label}")))
     {
-        Some(prefix) => format!("{prefix}{current_suffix}"),
+        Some(prefix) => format!("{prefix} - {}", profile.status_model_label()),
         None => title,
     }
 }
