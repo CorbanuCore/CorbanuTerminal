@@ -13,6 +13,7 @@ pub(crate) mod response_scrub;
 #[cfg(any(unix, windows))]
 pub use isolated::CODEX_CREDENTIAL_BROKER_ARG1;
 #[cfg(any(unix, windows))]
+pub use isolated::StoredKeyAccount;
 pub use isolated::StoredKeyResolver;
 #[cfg(any(unix, windows))]
 pub use isolated::run_credential_broker_main;

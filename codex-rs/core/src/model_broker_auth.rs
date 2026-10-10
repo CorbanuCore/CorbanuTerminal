@@ -138,6 +138,16 @@ pub(crate) enum BrokerModelAuthError {
         allow(dead_code, reason = "only the broker reports it")
     )]
     MissingKey { env: String },
+    /// PF-84: never falls back to the default key or an environment variable.
+    #[error(
+        "account `{name}` of provider `{provider_id}` has no stored API key; add it with \
+         `corbanu account add {provider_id} {name}` or choose another account"
+    )]
+    #[cfg_attr(
+        not(any(unix, windows)),
+        allow(dead_code, reason = "only the broker reports it")
+    )]
+    MissingAccountKey { provider_id: String, name: String },
     #[error("the credential broker could not read the stored provider key: {0}")]
     #[cfg_attr(
         not(any(unix, windows)),
@@ -308,9 +318,11 @@ impl ModelKeyBroker for CoreModelKeyBroker {
             BrokeredKeySource::ProviderKey {
                 provider_key_id,
                 env_vars,
+                account,
             } => Source::ProviderKey {
                 provider_key_id,
                 env_vars,
+                account,
             },
             BrokeredKeySource::Value { key, slot } => Source::Value {
                 value: Zeroizing::new(key.value),
@@ -333,6 +345,7 @@ enum Source {
             allow(dead_code, reason = "only the broker reads it")
         )]
         env_vars: Vec<String>,
+        account: Option<codex_model_provider_info::NamedProviderAccount>,
     },
     Value {
         value: Zeroizing<String>,
@@ -391,14 +404,20 @@ fn credential_for(
         let state = lock();
         let (slot, version) = match source {
             Source::ProviderKey {
-                provider_key_id, ..
+                provider_key_id,
+                account,
+                ..
             } => {
                 // A key saved or deleted in this process takes effect.
                 let mut version = [0_u8; 32];
                 version[..8].copy_from_slice(
                     &codex_login::provider_api_key_storage_revision().to_le_bytes(),
                 );
-                (format!("provider:{provider_key_id}"), version)
+                let slot = match account {
+                    Some(account) => format!("provider:{provider_key_id}@{account}"),
+                    None => format!("provider:{provider_key_id}"),
+                };
+                (slot, version)
             }
             Source::Value { value, slot } => {
                 use sha2::Digest as _;
@@ -432,8 +451,11 @@ fn credential_for(
     let credential = match register(&handle, &key.0, source) {
         Ok(credential) => credential,
         Err(error) => {
-            if matches!(error, BrokerModelAuthError::MissingKey { .. })
-                && let Some(stale) = lock().credentials.remove(&key)
+            if matches!(
+                error,
+                BrokerModelAuthError::MissingKey { .. }
+                    | BrokerModelAuthError::MissingAccountKey { .. }
+            ) && let Some(stale) = lock().credentials.remove(&key)
             {
                 // The key was deleted: drop the broker's old copy too.
                 unregister(&stale.credential);
@@ -513,15 +535,31 @@ fn register(
         Source::ProviderKey {
             provider_key_id,
             env_vars,
-        } => broker
-            .register_stored(wire, provider_key_id, env_vars)
-            .map_err(map_error)?
-            .ok_or_else(|| BrokerModelAuthError::MissingKey {
-                env: env_vars
-                    .first()
-                    .cloned()
-                    .unwrap_or_else(|| provider_key_id.clone()),
-            }),
+            account,
+        } => {
+            let stored_account =
+                account
+                    .as_ref()
+                    .map(|account| codex_network_proxy::StoredKeyAccount {
+                        provider_id: account.provider_id.clone(),
+                        name: account.name.clone(),
+                    });
+            broker
+                .register_stored(wire, provider_key_id, env_vars, stored_account.as_ref())
+                .map_err(map_error)?
+                .ok_or_else(|| match account {
+                    Some(account) => BrokerModelAuthError::MissingAccountKey {
+                        provider_id: account.provider_id.clone(),
+                        name: account.name.clone(),
+                    },
+                    None => BrokerModelAuthError::MissingKey {
+                        env: env_vars
+                            .first()
+                            .cloned()
+                            .unwrap_or_else(|| provider_key_id.clone()),
+                    },
+                })
+        }
         Source::Value { value, .. } => broker.register(wire, value).map_err(map_error),
     }
 }

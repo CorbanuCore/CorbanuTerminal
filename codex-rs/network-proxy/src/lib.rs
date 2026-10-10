@@ -60,6 +60,7 @@ pub use credential_broker::ScopedCredentialRoute;
 pub use credential_broker::ScopedCredentialRouteError;
 pub use credential_broker::ScopedCredentialUse;
 #[cfg(any(unix, windows))]
+pub use credential_broker::StoredKeyAccount;
 pub use credential_broker::StoredKeyResolver;
 pub use credential_broker::brokered_credential_dummy_env_keys;
 pub use credential_broker::brokered_credential_env_keys;

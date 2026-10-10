@@ -56,7 +56,16 @@ fn pf_27_s04_pf_27_s01_isolated_broker_child_entry() {
 /// PF-27-S05 stand-in for the vault resolver the binary supplies: reads
 /// `<home>/pf27-store/<id>`; an `<id>.fail` file reports the store as
 /// unavailable.
-fn test_stored_key(home: &std::path::Path, id: &str) -> std::io::Result<Option<String>> {
+fn test_stored_key(
+    home: &std::path::Path,
+    id: &str,
+    account: Option<&crate::StoredKeyAccount>,
+) -> std::io::Result<Option<String>> {
+    // PF-84: a named account's key is `<id>@<provider>.<name>`.
+    let id = &match account {
+        Some(account) => format!("{id}@{}.{}", account.provider_id, account.name),
+        None => id.to_string(),
+    };
     // PF-27-S09: `VAULT_<LABEL>` reads the real encrypted vault, as the
     // binary's resolver does.
     #[cfg(windows)]
@@ -1332,7 +1341,7 @@ mod pf_27_s05 {
         let bound = binding(upstream.port, "/v1", ModelAuthHeader::Bearer);
 
         let credential = broker
-            .register_stored(bound.clone(), "ZAI_API_KEY", &[])
+            .register_stored(bound.clone(), "ZAI_API_KEY", &[], None)
             .expect("register")
             .expect("stored key");
         let response = signed(&credential, upstream.port, "/v1/responses").await;
@@ -1344,28 +1353,68 @@ mod pf_27_s05 {
         // Nothing stored, an unreadable store, a malformed id.
         assert!(
             broker
-                .register_stored(bound.clone(), "MISSING_API_KEY", &[])
+                .register_stored(bound.clone(), "MISSING_API_KEY", &[], None)
                 .expect("register")
                 .is_none()
         );
         assert_eq!(
             broker
-                .register_stored(bound.clone(), "BROKEN_API_KEY", &[])
+                .register_stored(bound.clone(), "BROKEN_API_KEY", &[], None)
                 .err(),
             Some(ModelCredentialBrokerError::StoreUnavailable)
         );
         assert_eq!(
             broker
-                .register_stored(bound.clone(), "../ZAI_API_KEY", &[])
+                .register_stored(bound.clone(), "../ZAI_API_KEY", &[], None)
                 .err(),
             Some(ModelCredentialBrokerError::Rejected)
         );
         // A broker started without a store home reads no stored keys.
         assert!(
             model_broker(&upstream)
-                .register_stored(bound, "ZAI_API_KEY", &[])
+                .register_stored(bound, "ZAI_API_KEY", &[], None)
                 .expect("register")
                 .is_none()
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn pf_84_named_account_key_is_read_only_from_that_account() {
+        let upstream = start_upstream().await;
+        let home = tempfile::tempdir().expect("home");
+        let store = home.path().join("pf27-store");
+        std::fs::create_dir(&store).expect("store");
+        std::fs::write(store.join("ZAI_API_KEY"), "canary-default").expect("default key");
+        std::fs::write(store.join("ZAI_API_KEY@zai.work"), MODEL_KEY).expect("work key");
+        let broker = store_broker(&upstream, home.path());
+        let bound = binding(upstream.port, "/v1", ModelAuthHeader::Bearer);
+        let account = |name: &str| crate::StoredKeyAccount {
+            provider_id: "zai".to_string(),
+            name: name.to_string(),
+        };
+
+        let credential = broker
+            .register_stored(bound.clone(), "ZAI_API_KEY", &[], Some(&account("work")))
+            .expect("register")
+            .expect("work key");
+        let response = signed(&credential, upstream.port, "/v1/responses").await;
+        assert_eq!(
+            response.try_into_string().await.expect("body"),
+            format!("Bearer {MODEL_KEY}")
+        );
+        // A missing account never falls back to the default key.
+        assert!(
+            broker
+                .register_stored(bound.clone(), "ZAI_API_KEY", &[], Some(&account("absent")))
+                .expect("register")
+                .is_none()
+        );
+        // A malformed account is refused.
+        assert_eq!(
+            broker
+                .register_stored(bound, "ZAI_API_KEY", &[], Some(&account("../work")))
+                .err(),
+            Some(ModelCredentialBrokerError::Rejected)
         );
     }
 
@@ -1392,6 +1441,7 @@ mod pf_27_s05 {
                 binding(upstream.port, "/v1", ModelAuthHeader::Bearer),
                 "PF27_S05_NEVER_SET_KEY",
                 &taken,
+                None,
             )
             .expect("register")
             .expect("stashed key");
@@ -1553,6 +1603,7 @@ mod pf_27_s05 {
                     binding(port, "/v1", ModelAuthHeader::Bearer),
                     MEMORY_KEY_ENV,
                     &taken,
+                    None,
                 )
                 .expect("register")
                 .expect("stashed key");
@@ -1847,7 +1898,7 @@ mod pf_27_s05 {
             // Core created the lock the broker token cannot create.
             assert!(home.path().join("secrets").join(".vault.lock").is_file());
             let credential = broker
-                .register_stored(bound.clone(), "VAULT_ZAI", &[])
+                .register_stored(bound.clone(), "VAULT_ZAI", &[], None)
                 .expect("the broker reads the vault")
                 .expect("stored key");
             let response = signed(&credential, upstream.port, "/v1/responses").await;
@@ -1858,7 +1909,9 @@ mod pf_27_s05 {
             // A label the vault does not hold is reported as unavailable,
             // never as some other key.
             assert_eq!(
-                broker.register_stored(bound, "VAULT_MISSING", &[]).err(),
+                broker
+                    .register_stored(bound, "VAULT_MISSING", &[], None)
+                    .err(),
                 Some(ModelCredentialBrokerError::StoreUnavailable)
             );
         });

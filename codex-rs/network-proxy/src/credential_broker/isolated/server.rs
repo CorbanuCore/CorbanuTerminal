@@ -23,6 +23,7 @@ use super::protocol::MAX_STASHED_ENV;
 use super::protocol::ModelAuthHeader;
 use super::protocol::ModelBindingWire;
 use super::protocol::ProviderId;
+use super::protocol::StoredKeyAccount;
 use super::protocol::decode_key;
 use super::protocol::encode_hex;
 use super::protocol::valid_env_name;
@@ -94,7 +95,10 @@ const PARENT_CHECK_INTERVAL: std::time::Duration = std::time::Duration::from_sec
 /// PF-27-S05: reads the provider key stored for `provider_key_id` under a
 /// Corbanu home (encrypted vault, then the legacy file) inside the broker, so
 /// Core never decrypts it. Supplied by the binary, which links the vault.
-pub type StoredKeyResolver = fn(&std::path::Path, &str) -> std::io::Result<Option<String>>;
+/// PF-84: with an account, only that named account's key is read (never the
+/// default key or an environment variable).
+pub type StoredKeyResolver =
+    fn(&std::path::Path, &str, Option<&StoredKeyAccount>) -> std::io::Result<Option<String>>;
 
 /// Entry point for `corbanu --codex-run-as-credential-broker`.
 pub fn run_credential_broker_main() -> ! {
@@ -602,7 +606,8 @@ impl Broker {
                 binding,
                 provider_key_id,
                 env_names,
-            } => self.register_stored(binding, provider_key_id, env_names),
+                account,
+            } => self.register_stored(binding, provider_key_id, env_names, account.as_ref()),
             ControlRequest::Unregister { reference } => {
                 let Ok(reference) = CredentialReference::from_sha256_hex(reference.clone()) else {
                     return ControlResponse::Error {
@@ -700,16 +705,20 @@ impl Broker {
         binding: &ModelBindingWire,
         provider_key_id: &str,
         env_names: &[String],
+        account: Option<&StoredKeyAccount>,
     ) -> ControlResponse {
         if !valid_env_name(provider_key_id)
             || env_names.len() > MAX_STASHED_ENV
             || !env_names.iter().all(|name| valid_env_name(name))
+            || account.is_some_and(|account| !account.validate())
         {
             return ControlResponse::Error {
                 code: ControlErrorCode::Malformed,
             };
         }
         let stashed = match self.state.lock() {
+            // PF-84: a named account never takes the default's env key.
+            Ok(_) if account.is_some() => None,
             Ok(state) => env_names
                 .iter()
                 .find_map(|name| state.env_stash.get(name).cloned()),
@@ -727,7 +736,7 @@ impl Broker {
                         code: ControlErrorCode::NotFound,
                     };
                 };
-                match resolver(home, provider_key_id) {
+                match resolver(home, provider_key_id, account) {
                     Ok(Some(value)) if !value.trim().is_empty() => Zeroizing::new(value),
                     Ok(Some(value)) => {
                         drop(Zeroizing::new(value));

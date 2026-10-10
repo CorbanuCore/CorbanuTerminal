@@ -19,6 +19,7 @@ pub(crate) use client::IsolatedBrokerLauncher;
 pub(crate) use client::IsolatedBrokerOptions;
 pub(crate) use client::StoredRegistration;
 pub(crate) use client::user_runtime_dir;
+pub use protocol::StoredKeyAccount;
 pub use server::StoredKeyResolver;
 #[cfg(windows)]
 pub(crate) use server::prepare_vault_lock;

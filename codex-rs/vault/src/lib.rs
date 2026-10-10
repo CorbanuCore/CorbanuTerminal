@@ -54,6 +54,7 @@ use zeroize::Zeroizing;
 mod capability;
 mod claude_auth;
 mod credential_panic;
+mod provider_accounts;
 
 pub use capability::ScopedCredentialCallbackError;
 pub use capability::ScopedCredentialError;
@@ -85,6 +86,16 @@ pub use claude_auth::credentials_file_claude_auth_source_id;
 pub use claude_auth::macos_keychain_claude_auth_source_id;
 pub use claude_auth::resolve_claude_auth_source;
 pub use credential_panic::scoped_credential_callback_active;
+pub use provider_accounts::DEFAULT_PROVIDER_ACCOUNT;
+pub use provider_accounts::ProviderAccountError;
+pub use provider_accounts::ProviderAccountKind;
+pub use provider_accounts::ProviderAccountMeta;
+pub use provider_accounts::ProviderAccountName;
+use provider_accounts::is_provider_managed_account_label;
+pub use provider_accounts::parse_provider_account_label;
+pub use provider_accounts::parse_provider_account_selection;
+pub use provider_accounts::provider_account_label;
+pub use provider_accounts::validate_provider_account_provider_id;
 
 #[cfg(test)]
 mod tests;
@@ -364,7 +375,7 @@ impl Vault {
         } = entry;
         let label = normalize_label(&entry_label)?;
         let secret = Zeroizing::new(secret);
-        if label == MANAGED_CLAUDE_TOKEN_LABEL {
+        if label == MANAGED_CLAUDE_TOKEN_LABEL || is_provider_managed_account_label(&label) {
             return Err(VaultError::ProviderManagedCredential { label });
         }
         if secret.trim().is_empty() {
@@ -413,7 +424,7 @@ impl Vault {
         revocation_notes: Option<Option<String>>,
     ) -> Result<VaultCredentialMeta, VaultError> {
         let label = normalize_label(label)?;
-        if label == MANAGED_CLAUDE_TOKEN_LABEL {
+        if label == MANAGED_CLAUDE_TOKEN_LABEL || is_provider_managed_account_label(&label) {
             drop(secret.map(Zeroizing::new));
             return Err(VaultError::ProviderManagedCredential { label });
         }
@@ -543,7 +554,9 @@ impl Vault {
     /// explicit user action (`/vault credential reveal` / `/vault credential export`).
     pub fn reveal(&self, label: &str) -> Result<String, VaultError> {
         let normalized = normalize_label(label)?;
-        if normalized == MANAGED_CLAUDE_TOKEN_LABEL {
+        if normalized == MANAGED_CLAUDE_TOKEN_LABEL
+            || is_provider_managed_account_label(&normalized)
+        {
             return Err(VaultError::ProviderManagedCredential { label: normalized });
         }
         self.with_storage_lock(|| {
@@ -582,7 +595,9 @@ impl Vault {
             });
         }
         let normalized = normalize_label(label)?;
-        if normalized == MANAGED_CLAUDE_TOKEN_LABEL {
+        if normalized == MANAGED_CLAUDE_TOKEN_LABEL
+            || is_provider_managed_account_label(&normalized)
+        {
             return Err(VaultError::ProviderManagedCredential { label: normalized });
         }
         self.with_storage_lock(|| {

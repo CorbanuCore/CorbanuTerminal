@@ -2731,6 +2731,16 @@ impl AuthManager {
         config: ModelProviderAuthInfo,
         cache_policy: ExternalBearerCachePolicy,
     ) -> Arc<Self> {
+        Self::external_bearer_only_for_account(config, cache_policy, /*account*/ None)
+    }
+
+    /// PF-84: like [`Self::external_bearer_only_with_cache_policy`], for a
+    /// named account the command receives in `CORBANU_PROVIDER_ACCOUNT`.
+    pub fn external_bearer_only_for_account(
+        config: ModelProviderAuthInfo,
+        cache_policy: ExternalBearerCachePolicy,
+        account: Option<String>,
+    ) -> Arc<Self> {
         let (auth_change_tx, _auth_change_rx) = watch::channel(0);
         Arc::new(Self {
             codex_home: PathBuf::from("non-existent"),
@@ -2752,6 +2762,7 @@ impl AuthManager {
             external_auth: RwLock::new(Some(Arc::new(BearerTokenRefresher::new(
                 config,
                 cache_policy,
+                account,
             )) as Arc<dyn ExternalAuth>)),
             provider_api_key_cache: RwLock::new(ProviderApiKeyCache::new()),
             // External bearer auth refreshes by running the provider's command and never makes
@@ -3313,6 +3324,20 @@ impl AuthManager {
             AuthMode::Headers | AuthMode::AgentIdentity => OpenAiAuthMetadata::ExternallyManaged,
             AuthMode::BedrockApiKey => OpenAiAuthMetadata::Unsupported,
         }
+    }
+
+    /// PF-84: the API key of one named account (vault only, uncached, no
+    /// environment or default-account fallback).
+    pub fn provider_account_api_key(
+        &self,
+        provider_id: &str,
+        account_name: &str,
+    ) -> std::io::Result<Option<String>> {
+        super::provider_key_vault::provider_account_api_key(
+            &self.codex_home,
+            provider_id,
+            account_name,
+        )
     }
 
     pub fn provider_api_key(&self, provider_key_id: &str) -> std::io::Result<Option<String>> {

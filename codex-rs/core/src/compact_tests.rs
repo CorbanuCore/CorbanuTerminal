@@ -269,6 +269,7 @@ fn build_compacted_history_preserves_user_message_passthrough_metadata() {
 #[test]
 fn should_use_remote_compact_task_for_azure_provider() {
     let provider = ModelProviderInfo {
+        account: None,
         name: "Azure".into(),
         base_url: Some("https://example.com/openai".into()),
         env_key: Some("AZURE_OPENAI_API_KEY".into()),

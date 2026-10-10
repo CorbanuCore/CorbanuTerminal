@@ -53,6 +53,7 @@ nav:
       - Install: install.md
       - Getting Started: getting-started.md
       - Authentication: authentication.md
+      - "Named Accounts per Provider": provider-accounts.md
       - Configuration: config.md
       - Example Config: example-config.md
       - Slash Commands: slash_commands.md

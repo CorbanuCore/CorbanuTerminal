@@ -63,7 +63,8 @@ pub(crate) fn nested_launch_kind(
         // Reaches a running app server or daemon socket, as a host would.
         Subcommand::StdioToUds(_) => ("stdio-to-uds", Host),
         Subcommand::Vault(_) => ("vault", Credentials),
-        Subcommand::InternalClaudeOauthToken => ("internal-claude-oauth-token", Credentials),
+        Subcommand::Account(_) => ("account", Credentials),
+        Subcommand::InternalClaudeOauthToken { .. } => ("internal-claude-oauth-token", Credentials),
         Subcommand::InternalGpuEndpointToken { .. } => ("internal-gpu-endpoint-token", Credentials),
         Subcommand::InternalGpuController(_) => ("internal-gpu-controller", Credentials),
         Subcommand::InternalClaudeLoginHealth { .. } => {

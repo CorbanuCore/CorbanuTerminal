@@ -181,6 +181,7 @@ mod network_proxy_spec;
 mod otel;
 mod permission_profile_catalog;
 mod permissions;
+mod provider_accounts;
 mod requirements;
 mod resolved_permission_profile;
 #[cfg(test)]
@@ -4143,9 +4144,15 @@ impl Config {
             provider.chat_completions_provider = Some(openrouter_provider);
         }
 
-        let model_providers =
+        let mut model_providers =
             merge_configured_model_providers(built_in_model_providers, cfg.model_providers)
                 .map_err(|message| std::io::Error::new(std::io::ErrorKind::InvalidData, message))?;
+        provider_accounts::apply_provider_accounts(
+            &mut model_providers,
+            cfg.provider_accounts.as_ref(),
+            features.enabled(Feature::NamedAccounts),
+            &mut startup_warnings,
+        )?;
 
         let provider_came_from_override = model_provider.is_some();
         let model_came_from_override = model.is_some();

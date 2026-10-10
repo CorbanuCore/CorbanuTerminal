@@ -307,6 +307,12 @@ pub struct ConfigToml {
     #[serde(default, deserialize_with = "deserialize_model_providers")]
     pub model_providers: HashMap<String, ModelProviderInfo>,
 
+    /// PF-84 (`named_accounts` feature): the account each provider uses,
+    /// keyed by provider id, for example `zai = "work"`. Unlisted providers
+    /// and `"default"` use today's credentials.
+    #[serde(default)]
+    pub provider_accounts: Option<BTreeMap<String, String>>,
+
     /// Maximum number of bytes to include from an AGENTS.md project doc file.
     #[serde(default = "default_project_doc_max_bytes")]
     pub project_doc_max_bytes: Option<usize>,

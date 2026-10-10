@@ -287,6 +287,9 @@ pub enum Feature {
     WorkspaceDependencies,
     /// Let a human choose a `/security` level (Permissive or Aggressive).
     SecurityLevels,
+    /// PF-84: named accounts per provider (`[provider_accounts]`,
+    /// `corbanu account`).
+    NamedAccounts,
 
     // Removed
     /// Removed compatibility flag retained as a no-op so old configs can
@@ -1543,6 +1546,12 @@ pub const FEATURES: &[FeatureSpec] = &[
     FeatureSpec {
         id: Feature::SecurityLevels,
         key: "security_levels",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
+    },
+    FeatureSpec {
+        id: Feature::NamedAccounts,
+        key: "named_accounts",
         stage: Stage::UnderDevelopment,
         default_enabled: false,
     },

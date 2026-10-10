@@ -42,6 +42,7 @@ name = "Ollama"
 base_url = "http://localhost:11434/v1"
         "#;
     let expected_provider = ModelProviderInfo {
+        account: None,
         name: "Ollama".into(),
         base_url: Some("http://localhost:11434/v1".into()),
         env_key: None,
@@ -81,6 +82,7 @@ env_key = "AZURE_OPENAI_API_KEY"
 query_params = { api-version = "2025-04-01-preview" }
         "#;
     let expected_provider = ModelProviderInfo {
+        account: None,
         name: "Azure".into(),
         base_url: Some("https://xxxxx.openai.azure.com/openai".into()),
         env_key: Some("AZURE_OPENAI_API_KEY".into()),
@@ -124,6 +126,7 @@ env_http_headers = { "X-Example-Env-Header" = "EXAMPLE_ENV_VAR" }
 supports_standalone_web_search = true
         "#;
     let expected_provider = ModelProviderInfo {
+        account: None,
         name: "Example".into(),
         base_url: Some("https://example.com".into()),
         env_key: Some("API_KEY".into()),
@@ -291,6 +294,7 @@ fn test_header_auth_uses_chatgpt_codex_base_url() {
 #[test]
 fn test_supports_remote_compaction_for_azure_name() {
     let provider = ModelProviderInfo {
+        account: None,
         name: "Azure".into(),
         base_url: Some("https://example.com/openai".into()),
         env_key: Some("AZURE_OPENAI_API_KEY".into()),
@@ -323,6 +327,7 @@ fn test_supports_remote_compaction_for_azure_name() {
 #[test]
 fn test_supports_remote_compaction_for_non_openai_non_azure_provider() {
     let provider = ModelProviderInfo {
+        account: None,
         name: "Example".into(),
         base_url: Some("https://example.com/v1".into()),
         env_key: Some("API_KEY".into()),
@@ -432,6 +437,7 @@ fn test_create_amazon_bedrock_provider() {
     assert_eq!(
         ModelProviderInfo::create_amazon_bedrock_provider(/*aws*/ None),
         ModelProviderInfo {
+            account: None,
             name: "Amazon Bedrock".to_string(),
             base_url: None,
             env_key: None,
@@ -484,6 +490,7 @@ fn test_create_ambient_provider() {
     assert_eq!(
         ModelProviderInfo::create_ambient_provider(),
         ModelProviderInfo {
+            account: None,
             name: "Ambient".to_string(),
             base_url: Some(AMBIENT_BASE_URL.to_string()),
             env_key: Some(AMBIENT_API_KEY_ENV_VAR.to_string()),
@@ -578,6 +585,7 @@ fn test_create_zai_provider() {
     assert_eq!(
         ModelProviderInfo::create_zai_provider(),
         ModelProviderInfo {
+            account: None,
             name: "Z.AI".to_string(),
             base_url: Some(ZAI_BASE_URL.to_string()),
             env_key: Some(ZAI_API_KEY_ENV_VAR.to_string()),
@@ -612,6 +620,7 @@ fn test_create_anthropic_provider() {
     assert_eq!(
         ModelProviderInfo::create_anthropic_provider(),
         ModelProviderInfo {
+            account: None,
             name: "Anthropic".to_string(),
             base_url: Some(ANTHROPIC_BASE_URL.to_string()),
             env_key: Some(ANTHROPIC_API_KEY_ENV_VAR.to_string()),
@@ -652,6 +661,7 @@ fn test_create_claude_plan_provider() {
     assert_eq!(
         ModelProviderInfo::create_claude_plan_provider(),
         ModelProviderInfo {
+            account: None,
             name: "Claude Plan".to_string(),
             base_url: Some(ANTHROPIC_BASE_URL.to_string()),
             env_key: None,
@@ -1811,6 +1821,21 @@ fn debug_redacts_credentials_and_keeps_names() {
     };
     assert_eq!(
         format!("{provider:?}"),
-        "ModelProviderInfo { name: \"Example\", base_url: Some(\"https://<redacted>@example.com/v1?<redacted>\"), env_key: None, env_key_instructions: None, experimental_bearer_token: Some(\"<redacted>\"), auth: None, aws: None, wire_api: Responses, query_params: Some({\"key\": \"<redacted>\"}), http_headers: Some({\"Authorization\": \"<redacted>\", \"X-Version\": \"<redacted>\"}), env_http_headers: Some({\"X-Project\": \"PROJECT_ENV\"}), chat_completions_provider: None, request_max_retries: None, stream_max_retries: None, stream_idle_timeout_ms: None, stream_actionable_timeout_ms: None, stream_long_failure_retry_threshold_ms: None, stream_long_failure_max_retries: None, runtime_policy: ProviderRuntimePolicy { request_body_max_bytes: 30000000, retry_request_body_max_bytes: 15000000, web_search_max_uses: None }, websocket_connect_timeout_ms: None, requires_openai_auth: false, supports_websockets: false, supports_standalone_web_search: false, billing: None }"
+        "ModelProviderInfo { name: \"Example\", base_url: Some(\"https://<redacted>@example.com/v1?<redacted>\"), env_key: None, env_key_instructions: None, experimental_bearer_token: Some(\"<redacted>\"), auth: None, aws: None, wire_api: Responses, query_params: Some({\"key\": \"<redacted>\"}), http_headers: Some({\"Authorization\": \"<redacted>\", \"X-Version\": \"<redacted>\"}), env_http_headers: Some({\"X-Project\": \"PROJECT_ENV\"}), chat_completions_provider: None, request_max_retries: None, stream_max_retries: None, stream_idle_timeout_ms: None, stream_actionable_timeout_ms: None, stream_long_failure_retry_threshold_ms: None, stream_long_failure_max_retries: None, runtime_policy: ProviderRuntimePolicy { request_body_max_bytes: 30000000, retry_request_body_max_bytes: 15000000, web_search_max_uses: None }, websocket_connect_timeout_ms: None, requires_openai_auth: false, supports_websockets: false, supports_standalone_web_search: false, billing: None, account: None }"
+    );
+}
+
+#[test]
+fn named_account_never_falls_back_to_the_environment_key() {
+    let mut provider = ModelProviderInfo::create_zai_provider();
+    provider.account = Some(NamedProviderAccount {
+        provider_id: "zai".to_string(),
+        name: "work".to_string(),
+    });
+    let error = provider.api_key().expect_err("named account has no env fallback");
+    assert_eq!(
+        error.to_string(),
+        "Fatal error: account `work` of provider `zai` has no stored API key; add it with \
+         `corbanu account add zai work` or choose another account"
     );
 }

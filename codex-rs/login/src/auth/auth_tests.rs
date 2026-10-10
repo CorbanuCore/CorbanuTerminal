@@ -1083,6 +1083,37 @@ async fn external_bearer_only_auth_manager_uses_cached_provider_token() {
     assert_eq!(manager.get_api_auth_mode(), Some(AuthMode::ApiKey));
 }
 
+/// PF-84: a named account reaches the provider command only as
+/// `CORBANU_PROVIDER_ACCOUNT`; the default account never inherits one.
+#[cfg(unix)]
+#[tokio::test]
+async fn external_bearer_command_receives_the_named_account() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let config: ModelProviderAuthInfo = serde_json::from_value(json!({
+        "command": "/bin/sh",
+        "args": ["-c", "printf 'account-%s' \"${CORBANU_PROVIDER_ACCOUNT:-none}\""],
+        "timeout_ms": 10_000,
+        "refresh_interval_ms": 60000,
+        "cwd": tempdir.path(),
+    }))
+    .expect("provider auth config should deserialize");
+    let token = |account: Option<&str>| {
+        let manager = AuthManager::external_bearer_only_for_account(
+            config.clone(),
+            ExternalBearerCachePolicy::FreshPerRequest,
+            account.map(str::to_string),
+        );
+        async move {
+            manager
+                .auth()
+                .await
+                .and_then(|auth| auth.api_key().map(str::to_string))
+        }
+    };
+    assert_eq!(token(Some("work")).await.as_deref(), Some("account-work"));
+    assert_eq!(token(None).await.as_deref(), Some("account-none"));
+}
+
 #[tokio::test]
 async fn fresh_per_request_external_bearer_never_reuses_the_previous_token() {
     let script = ProviderAuthScript::new(&["first-source-token", "second-source-token"]).unwrap();

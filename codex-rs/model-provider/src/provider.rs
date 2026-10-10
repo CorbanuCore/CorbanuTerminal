@@ -9,7 +9,7 @@ use codex_api::Provider;
 use codex_api::SharedAuthProvider;
 use codex_login::AuthManager;
 use codex_login::CodexAuth;
-use codex_login::validate_provider_auth_command;
+use codex_login::validate_provider_auth_command_for_account;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::ANTHROPIC_DEFAULT_MODEL;
 use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
@@ -352,6 +352,19 @@ impl ConfiguredModelProvider {
                 crate::model_key_broker::BROKERED_KEY_PLACEHOLDER,
             ));
         }
+        // PF-84: a named account reads only its own stored key.
+        if let Some(account) = self.info.account.as_ref() {
+            return self
+                .auth_manager
+                .as_ref()
+                .and_then(|auth_manager| {
+                    auth_manager
+                        .provider_account_api_key(&account.provider_id, &account.name)
+                        .ok()
+                })
+                .flatten()
+                .map(|api_key| CodexAuth::from_api_key(&api_key));
+        }
         if let Ok(api_key) = std::env::var(provider_key_id)
             && !api_key.trim().is_empty()
         {
@@ -455,7 +468,14 @@ impl ModelProvider for ConfiguredModelProvider {
                 // command through its validating path so the actionable helper error reaches
                 // the user. A transient first failure may recover here, in which case resolve
                 // once more and use the recovered credential.
-                validate_provider_auth_command(command_auth).await?;
+                validate_provider_auth_command_for_account(
+                    command_auth,
+                    self.info
+                        .account
+                        .as_ref()
+                        .map(|account| account.name.as_str()),
+                )
+                .await?;
                 auth = self.auth().await;
                 if auth.is_none() {
                     return Err(std::io::Error::other(format!(
@@ -672,6 +692,7 @@ mod tests {
 
     fn provider_for(base_url: String) -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: "mock".into(),
             base_url: Some(base_url),
             env_key: None,
