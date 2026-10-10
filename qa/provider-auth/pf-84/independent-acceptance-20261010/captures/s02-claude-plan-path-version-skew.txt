@@ -1,0 +1,5 @@
+== session selects claude-plan account fake; CLAUDE_CODE_OAUTH_TOKEN=<real default token>; PATH corbanu = candidate 0fa45b54f0 (exit 1)
+   | ERROR: unexpected status 401 Unauthorized: OAuth access token is invalid., url: https://api.anthropic.com/v1/messages, cf-ray: a48532d92b96d138-DFW
+== session selects claude-plan account fake; CLAUDE_CODE_OAUTH_TOKEN=<real default token>; PATH corbanu = pre-PF-84 build 44b527f11f (exit 0)
+   | pong
+   auth-command calls via pre-PF-84 corbanu:    6 argv=[internal-claude-oauth-token] CORBANU_PROVIDER_ACCOUNT=fake

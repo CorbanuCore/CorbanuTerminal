@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "$(date +%s) security $*" >> /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/shim/security.log
+exit 44
