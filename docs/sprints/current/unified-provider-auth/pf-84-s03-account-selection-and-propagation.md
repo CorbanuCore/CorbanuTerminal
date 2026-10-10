@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-84-S03"
 title: "Account selection per session, CLI and worker"
-status: in_progress
+status: ready
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-84"
 execution_order: 25
@@ -15,6 +15,8 @@ base_commit: "0fa45b54f0ca65a6ce3485c27281624cb6f8b2cb"
 depends_on: "PF-84-S02"
 created: 2026-10-08
 updated: 2026-10-10
+merged_behind_flag: "named_accounts"
+gate_evidence: "qa/provider-auth/pf-84/s03-gate.md"
 ---
 
 # PF-84-S03 — Account selection per session, CLI and worker
@@ -62,28 +64,26 @@ Paths are under `codex-rs/`, at `63ea3d0cbd`.
 ## Done
 
 - [x] Sprint record created and linked to one plan feature.
+- [x] Thread config carries the account; spawned children (including role children and
+  `thread/spawnAgent` workers) inherit it unless overridden.
+- [x] Spawn `account` accepts configured names of the child's provider only; the spawn result
+  shows `account`; D3 approval under Aggressive (level in force), refused with approvals off.
+- [x] `--account` on exec, the TUI and resume; missing accounts are refused at thread start.
+- [x] Resume uses the recorded account; a removed account blocks with recovery text.
+- [x] TUI worker preflight checks the worker's own account (S02 known limit).
+- [x] Gate passed; dispositions in the [gate evidence](../../../../qa/provider-auth/pf-84/s03-gate.md).
 
 ## Remaining
 
-- [ ] Thread config carries `account`; children inherit it unless overridden.
-- [ ] Spawn `account` accepts configured names for the target provider only.
-  The spawn event shows provider/account; D3 applies under `/security`.
-- [ ] `corbanu exec --account` and `-c provider_accounts.<id>=<name>`.
-- [ ] Resume uses the recorded account, or blocks with recovery if it is gone.
-- [ ] Code-blind functional design frozen before test-result disclosure, or non-user-facing N/A reason recorded.
+- [ ] Independent code-blind functional design and execution (acceptance step, not the implementer).
 
 ## Verification
 
-- [ ] Focused: `just test -p codex-core -p codex-exec -p codex-cli` (spawn, CLI, resume).
-- [ ] tmux SOP (`docs/tmuxHarness.md`): coordinator on ZAI `default` spawns a
-  subagent with `account = "fake"`. The child gets a 401, the coordinator keeps
-  replying, and the parent account is unchanged.
-- [ ] Out-of-process: a tmux worker runs `corbanu exec --account fake ...` and
-  gets a 401; `--account default` replies. Runs through the installed-style
-  wrapper too (S01 fix).
-- [ ] GLM run drives the coordinator: `-m glm-5.3-flash -c model_provider="zai"`.
-- [ ] Videos: `pf84-spawn-account.toml`, `pf84-exec-account.toml` (`--sprint PF-84-S03 --publish`).
-- [ ] One independent review (Opus 5.5 High).
+- [x] Focused `just test` (core, exec, cli, app-server, model-provider, TUI filters); macOS clippy.
+- [x] tmux + GLM 5.3 Flash: spawn on `fake` (401, coordinator still replies); launcher workers
+  `--account main|fake|gone` and resume; Kimi second provider; TUI `--account`.
+- [x] Videos ([index](../../../../qa/demos/index/PF-84-S03.md)); Opus 5.5 High review + one follow-up.
+- [ ] Linux clippy on the RTX box (offline 2026-10-10; the PR's Ubuntu clippy job stands in).
 
 ## Security notes
 
@@ -93,8 +93,8 @@ Paths are under `codex-rs/`, at `63ea3d0cbd`.
 
 ## Exit evidence
 
-- [ ] Implementation commit and PR recorded.
-- [ ] Test output, tmux logs and video paths linked.
+- [x] Implementation commit and PR recorded (gate evidence).
+- [x] Test output, tmux logs and video paths linked.
 - [ ] Code-blind handoff checker passes, or limited-testing agreement recorded.
-- [ ] `Done` and `Remaining` ledgers reflect reality.
+- [x] `Done` and `Remaining` ledgers reflect reality.
 - [ ] Completed record moved to `docs/sprints/archive/unified-provider-auth/`.
