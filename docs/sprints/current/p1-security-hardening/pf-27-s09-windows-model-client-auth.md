@@ -68,7 +68,7 @@ Allocated 2026-10-09 to the broker lane; slice 2 is on `sec/pf-27-s09-core`.
 ## Done
 
 - [x] Planned (2026-10-08); allocated 2026-10-09 (broker lane).
-- [x] Slice 1 (#363), broker side: Windows env scrub (environment block, C runtime tables, every heap copy); no withheld
+- [x] Slice 1 (#363, merged), broker side: Windows env scrub (environment block, C runtime tables, every heap copy); no withheld
   value in the broker's launch environment; stored keys read in the broker (lock by Core, read-only lock in the
   broker); checked pipe send; platform roots loaded read-only (the broker trusted none before).
 - [x] Slice 2, Core: the Windows start spawns the broker, hands over env keys and routes every frame-bearing

@@ -27,7 +27,7 @@ broker reads the vault key from Credential Manager itself, under its own PF-27-S
   - **Platform roots** now load read-only. Under the broker token, `schannel` could not open the root store for
     writing, so the broker trusted no root. Brokered HTTPS then failed with `UnknownIssuer`, which only the real
     machine showed.
-- **Slice 2, Core** (`core`, `http-client`):
+- **Slice 2, Core** (`core`, `http-client`; this PR):
   - The Windows start spawns the broker, hands over the env keys and installs a `ModelBrokerSender` (`PipeSender`)
     as the route for every frame-bearing request.
   - reqwest's named-pipe connector cannot check the server process, so the sender uses slice 1's checked pipe.
