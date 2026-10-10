@@ -1,0 +1,88 @@
+# #390 (Windows): a same-user process squats the live credential broker's named
+# pipes (qa/security/issue-390/squat390.ps1). It cannot add a control-pipe
+# instance; on the data pipe its 200 added instances get only Core's 32-byte
+# challenge, never a request or signed frame, and Core fails closed with a clear error.
+id = "sec390-win-pipe-squat-refused"
+feature = "#390: Core refuses a squatter on the Windows broker's named pipes and fails closed"
+expected = "The squatter cannot add a control-pipe instance; its data-pipe instances receive only 32-byte challenges (no HTTP request, no signed frame); the turn fails with the pipe-squatting error and nothing is sent directly."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[windows]
+sandbox = "elevated"
+
+[features]
+broker_model_auth = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Do you trust the contents of this directory"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+# Off screen: start the squatter against this run's broker (named in this
+# run's log) and wait until it has added its data-pipe instances.
+[[steps]]
+run = '''root="$(git -C ../../.. rev-parse --show-toplevel)"; log="$(cygpath -w ../logs/squat390.log)"; powershell.exe -NoProfile -Command "Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','$(cygpath -w "$root/qa/security/issue-390/squat390.ps1")','-Log','$log','-TuiLog','$(cygpath -w ../logs/codex-tui.log)'"; for i in $(seq 1 150); do grep -q "data pipe: added" ../logs/squat390.log 2>/dev/null && exit 0; sleep 0.2; done; cat ../logs/squat390.log; exit 1'''
+timeout = 45
+
+[[steps]]
+type = "!Get-Content ../logs/squat390.log"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "control pipe: could not add an instance: All pipe instances are busy"
+timeout = 20
+
+[[steps]]
+pause = 2.0
+
+[[steps]]
+type = "Reply with exactly one word: pong"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "(?i)possible pipe\\s+squatting"
+timeout = 240
+compress = 3
+
+# Core retries the turn (each attempt is refused) and then stops.
+[[steps]]
+wait = "\\A(?![\\s\\S]*esc to interrupt)"
+timeout = 420
+compress = 3
+
+[[steps]]
+type = '''!(Get-Content ../logs/squat390.log | Select-String 'data pipe: connection' | Select-Object -Last 4).Line; "HTTP request or frame received: " + $(if (Select-String -Path ../logs/squat390.log -Pattern 'HTTP request: YES|frame: YES' -Quiet) { 'YES' } else { 'none' })'''
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "received 32 bytes; HTTP request: no; frame: no"
+timeout = 20
+
+[[steps]]
+wait = "HTTP request or frame received: none"
+timeout = 10
+
+[[steps]]
+pause = 4.0
+

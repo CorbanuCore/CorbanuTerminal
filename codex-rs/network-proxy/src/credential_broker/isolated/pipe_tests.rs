@@ -5,12 +5,15 @@
 //! unelevated Windows sandbox gives agent commands, or as a handle scanner.
 
 use super::PipeListener;
+use super::SinglePipeListener;
+use super::answer_peer_challenge;
 use super::client_pid;
 use super::connect_control;
 use super::connect_data;
 use super::pipe_dacl_sddl;
 use super::pipe_names;
 use super::valid_pipe_name;
+use codex_secret_broker::BrokerChannelMac;
 use codex_windows_sandbox::ConsoleMode;
 use codex_windows_sandbox::StderrMode;
 use codex_windows_sandbox::StdinMode;
@@ -74,7 +77,7 @@ fn pf_27_s06_pipe_names_and_dacl() {
 }
 
 /// A second process creating the same name as the first instance fails:
-/// the broker's pipe cannot be squatted or joined.
+/// nobody can create the broker's pipe before it.
 #[tokio::test]
 async fn pf_27_s06_pipe_name_cannot_be_claimed_twice() {
     let (control, _) = pipe_names();
@@ -141,22 +144,55 @@ async fn pf_27_s06_client_checks_the_server_process() {
     let blocking_control = control.clone();
     let (wrong, right, other_name) = tokio::task::spawn_blocking(move || {
         (
-            connect_control(&blocking_control, wrong_pid).is_some(),
-            connect_control(&blocking_control, own_pid).is_some(),
-            connect_control(r"\\.\pipe\not-a-broker-c", own_pid).is_some(),
+            connect_control(&blocking_control, wrong_pid).is_ok(),
+            connect_control(&blocking_control, own_pid).is_ok(),
+            connect_control(r"\\.\pipe\not-a-broker-c", own_pid).is_ok(),
         )
     })
     .await
     .expect("connect");
     assert_eq!((wrong, right, other_name), (false, true, false));
 
-    let wrong = connect_data(&data, wrong_pid).await;
+    // The data server greets instead of proving the channel key (#390).
+    let key = mac();
+    let wrong = connect_data(&data, wrong_pid, &key).await;
     assert_eq!(
         wrong.err().map(|error| error.kind()),
         Some(std::io::ErrorKind::PermissionDenied)
     );
-    assert!(connect_data(&data, own_pid).await.is_ok());
-    assert!(connect_data(&control, own_pid).await.is_err());
+    let unproven = connect_data(&data, own_pid, &key).await;
+    assert!(
+        unproven.as_ref().is_err_and(super::is_squatted_pipe_error),
+        "{unproven:?}"
+    );
+    let (_, proving) = pipe_names();
+    let _proving_server = serve_proof(&proving, own_pid);
+    assert!(connect_data(&proving, own_pid, &key).await.is_ok());
+    assert!(
+        connect_data(&proving, own_pid, &BrokerChannelMac::from_secret([1; 32]))
+            .await
+            .is_err_and(|error| super::is_squatted_pipe_error(&error))
+    );
+    assert!(connect_data(&control, own_pid, &key).await.is_err());
+}
+
+fn mac() -> BrokerChannelMac {
+    BrokerChannelMac::from_secret([9; 32])
+}
+
+/// Accepts clients from `expected_pid` and answers each one's peer
+/// challenge under [`mac`], as the broker does.
+fn serve_proof(name: &str, expected_pid: u32) -> tokio::task::JoinHandle<()> {
+    let mut listener = PipeListener::bind(name).expect("bind");
+    tokio::spawn(async move {
+        while let Ok(mut connection) = listener.accept(expected_pid).await {
+            tokio::spawn(async move {
+                let _ = answer_peer_challenge(&mut connection, &mac(), expected_pid).await;
+                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                drop(connection);
+            });
+        }
+    })
 }
 
 /// No broker pipe handle is inheritable, measured in a child spawned the way
@@ -166,7 +202,7 @@ async fn pf_27_s06_client_checks_the_server_process() {
 async fn pf_27_s06_pipe_handles_are_not_inheritable() {
     let (control, data) = pipe_names();
     let own_pid = std::process::id();
-    let mut control_listener = PipeListener::bind(&control).expect("bind control");
+    let control_listener = SinglePipeListener::bind(&control).expect("bind control");
     let mut data_listener = PipeListener::bind(&data).expect("bind data");
     let blocking_control = control.clone();
     let control_client =
@@ -178,13 +214,15 @@ async fn pf_27_s06_pipe_handles_are_not_inheritable() {
     let control_client = control_client.await.expect("join").expect("control client");
     let data_client = tokio::spawn({
         let data = data.clone();
-        async move { connect_data(&data, own_pid).await }
+        async move { connect_data(&data, own_pid, &mac()).await }
     });
-    let data_server = data_listener.accept(own_pid).await.expect("accept data");
+    let mut data_server = data_listener.accept(own_pid).await.expect("accept data");
+    answer_peer_challenge(&mut data_server, &mac(), own_pid)
+        .await
+        .expect("answer");
     let data_client = data_client.await.expect("join").expect("data client");
 
     for handle in [
-        control_listener.listening.as_raw_handle(),
         control_server.as_raw_handle(),
         control_client.as_raw_handle(),
         data_listener.listening.as_raw_handle(),
@@ -208,6 +246,88 @@ async fn pf_27_s06_pipe_handles_are_not_inheritable() {
     unsafe { CloseHandle(duplicate) };
     let without = run_scan_child(&nonce);
     assert_eq!((with_duplicate, without), (1, 0));
+}
+
+/// #390: the control pipe has one instance at most, so no process can add
+/// one. A client that connects and closes before the broker waits, and a
+/// foreign client that stays connected, are dropped unread; the controller
+/// is still served (the instance is reused before tokio sees it).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn sec_390_control_pipe_drops_a_foreign_client_and_serves_the_controller() {
+    let (control, _) = pipe_names();
+    let own_pid = std::process::id();
+    let listener = SinglePipeListener::bind(&control).expect("bind");
+    assert!(SinglePipeListener::bind(&control).is_err());
+    assert_eq!(
+        super::create_instance(&control, /*first*/ false)
+            .err()
+            .and_then(|error| error.raw_os_error()),
+        Some(super::ERROR_PIPE_BUSY),
+        "another instance was added"
+    );
+    // Connects and closes before the broker waits (ERROR_NO_DATA).
+    drop(
+        std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&control)
+            .expect("open and close"),
+    );
+    // A failed assertion must not leave the runtime waiting on the accept:
+    // one more connection from this process ends it.
+    let _unblock = Unblock(control.clone());
+    let accept = tokio::spawn(listener.accept(own_pid));
+    // Let the broker's first wait drop the closed client before the child
+    // opens the one instance.
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let report = tokio::task::spawn_blocking({
+        let control = control.clone();
+        move || run_same_user_child("connect", &control)
+    })
+    .await
+    .expect("child");
+
+    let client = tokio::task::spawn_blocking({
+        let control = control.clone();
+        move || connect_control(&control, own_pid)
+    })
+    .await
+    .expect("join")
+    .expect("the controller connects");
+    let mut server = accept.await.expect("join").expect("accept the controller");
+    assert_eq!(report, "open=granted,served=no");
+    assert_eq!(client_pid(&server), Some(own_pid));
+    server.write_all(GREETING).await.expect("greet");
+    let greeting = tokio::task::spawn_blocking(move || {
+        let mut client = client;
+        let mut buffer = vec![0_u8; GREETING.len()];
+        client.read_exact(&mut buffer).map(|()| buffer)
+    })
+    .await
+    .expect("join")
+    .expect("read");
+    assert_eq!(greeting, GREETING);
+}
+
+/// Opens the pipe once when dropped, so a pending accept returns.
+struct Unblock(String);
+
+impl Drop for Unblock {
+    fn drop(&mut self) {
+        // Retried: the one instance may be busy with a client being dropped.
+        for _ in 0..40 {
+            let opened = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&self.0);
+            match opened {
+                Err(error) if error.raw_os_error() == Some(super::ERROR_PIPE_BUSY) => {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+                _ => return,
+            }
+        }
+    }
 }
 
 /// Accepts clients from `expected_pid` and greets each one.
