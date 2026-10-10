@@ -2,7 +2,7 @@
 sprint_id: "PF-60-S02"
 title: "Idempotent usage persistence and replay"
 status: completed
-plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
+plan_file: "docs/plans/completed/main-2026-10-10-portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 2
 owner: "Astra High accounting direct-Chat lane (Fable manager receiving)"
@@ -29,7 +29,7 @@ September 15: Fable's verified `acct-chat-design-01` allocation ([direct Chat Co
 
 ## Plan linkage
 
-- Plan: [Unified agent cost and usage accounting](../../../plans/active/portfolio-agent-cost-accounting.md); feature `PF-60`.
+- Plan: [Unified agent cost and usage accounting](../../../plans/completed/main-2026-10-10-portfolio-agent-cost-accounting.md); feature `PF-60`.
 - Exact product heading: **Measurement targets**; excerpt: “No commercial performance numbers have been supplied. The following metrics must be instrumented, with targets set through the decision rights defined above.”
 - Acceptance: replay each fixture twice and after restart; persisted and reconstructed totals equal the approved fixture exactly. S01 is accepted/archived; S03 remains dependent.
 

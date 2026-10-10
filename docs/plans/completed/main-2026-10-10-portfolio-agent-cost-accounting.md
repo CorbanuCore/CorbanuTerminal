@@ -1,6 +1,6 @@
 ---
 title: "2. Accounting — unified agent cost and usage"
-status: active
+status: completed
 change_class: product-initiative
 priority: P1
 owner: "Codex accounting contract lane; Travis Good accountable"
@@ -8,7 +8,7 @@ parallel_sprint_limit: 1
 integration_owner: "Codex management; Travis Good accepts the contract"
 activation_authority: "Travis Good"
 activation_basis: "Travis selected accounting September 11 and requested an Astra High subagent after the main planning merge; contract and synthetic fixtures first, no runtime enablement"
-target_release: "TBD"
+target_release: "None: developer-only (debug builds with developer-accounting); release linkage carried to the follow-up plan"
 deadline: "TBD"
 created: 2026-09-09
 updated: 2026-10-10
@@ -27,7 +27,23 @@ implementation_worktrees:
 
 # 2. Accounting — unified agent cost and usage
 
-## Current state (2026-10-08)
+## Closing note (2026-10-10)
+
+**Completed by Travis's decision on 2026-10-10**, freeing active slot 2. All five PF-60 sprints are accepted and
+archived; S04, the last, was accepted on 2026-10-10 with known limits after its independent code-blind acceptance
+(PR #397). The same day Travis lifted S05's waiver (a) (OpenAI API-key estimates now recompute exactly) and accepted
+the remaining gaps on condition that each is carried into a future sprint.
+
+- **Exception, as for P0 security:** closed without a release. Collection and `/cost` are on main, developer-only
+  (debug builds with `developer-accounting`); shipping them to users is not authorised. The `main-2026-10-10` prefix
+  names the tree, not a release.
+- **Carried forward:** every accepted gap, the open release linkage and S05's waiver (b) (enforced isolation gate)
+  are in the draft [accounting follow-ups plan](../proposed/portfolio-agent-cost-accounting-followups.md), sprints PF-60-S06 to PF-60-S10, each with acceptance criteria
+  and an issue. It needs Travis's activation and a free slot; nothing there is authorised yet.
+- **Open accounting issues not assigned to a follow-up sprint** are listed in that plan's "Dependencies, decisions,
+  and blockers" for Travis to place.
+
+## Current state (2026-10-10, at close)
 
 - **All accounting work is on main.** PR #138 merged the integration branch on 2026-10-04 (merge `3ecc3c4066`);
   `integrate/management-workstreams-20260911` has nothing left that main lacks.
@@ -45,11 +61,15 @@ implementation_worktrees:
   and credential (option B). Known gaps (ChatGPT login, image generation, realtime, Kimi Open Platform, BigModel,
   mutation tests) and follow-ups (#352, #359, #361/#369, #365, #366, #370) are in the
   [archived record](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s05-collection-correctness-and-billing-basis.md).
-  **S04:** ready for acceptance (2026-10-10). Both S05 hand-overs are closed (#383 `/side` and consolidation
-  recorded; #385 no price metadata on unpriced requests), and every cost flow passed on one recorded binary
-  ([qualification](../../../qa/portfolio/agent-cost-accounting/qualification.md)). The OpenAI API-key estimate is exact,
-  so waiver (a) can be lifted. Next: independent code-blind acceptance, then Travis.
-- **Worktrees:** S04 in `worktrees/pf60-s04-20261010` (branch `work/pf60-s04-20261010`). The S05 lane,
+  Waiver (a) was lifted on 2026-10-10 (addendum in S05's Closure).
+  **S04:** done and archived. Travis accepted it on 2026-10-10 with known limits, after the independent code-blind
+  acceptance (#397). Both S05 hand-overs are closed (#383 `/side` and consolidation recorded; #385 no price metadata
+  on unpriced requests), and every cost flow passed on one recorded binary
+  ([qualification](../../../qa/portfolio/agent-cost-accounting/qualification.md)) and again independently.
+  Known limits and their follow-up sprints are in the
+  [archived record](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s04-cost-accounting-acceptance-and-handoff.md).
+- **Worktrees:** none active. The S04 lane, `worktrees/pf60-s04-20261010` (branch `work/pf60-s04-20261010`), was
+  released at S04's archive; it and the S05 lane stay in front matter as the last recorded lanes. The S05 lane,
   `worktrees/pf60-s05-20261009` (branch `work/pf60-s05-20261009`), was released at S05's archive. The S03 lane,
   `worktrees/pf60-s03-20261008` (branch `work/pf60-s03-20261008`), was released at S03's archive. The September lane
   checkouts (acct-inspect, acct-chat, bootstrap-acct-ws) were removed after #138; the remaining `accounting-*`
@@ -184,7 +204,7 @@ subsequently integrated; current evidence and next native scope are recorded abo
 
 ## Activation record
 
-- Status: active; slot 2/3; target release/date not promised.
+- Status: completed 2026-10-10 (was active, slot 2/3, from September 11); no release (see Closing note).
 - Authority: Travis's September 11 workstream selection and Astra High kickoff request.
 - Codex owns contract preparation; Travis approved the v1 defaults in this task on September 11, including vocabulary, retention/replay, exact USD estimates and unknown handling.
 - S01 handoff and archive are complete. S02 starts with test-only native-state persistence, not billing, a collector, production migration or live prices.
@@ -224,7 +244,7 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 | --- | --- | --- | --- | --- |
 | Codex accounting lane (PF-60-S03 catch-up, tests, demos; released 2026-10-09 at S03 archive) | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf60-s03-20261008` | `work/pf60-s03-20261008` | `63ea3d0cbd0ccb54d352b25a12c3e07f9f934bff` | S03 ledger, regression tests, unavailable-backend next steps, demo videos; small PRs to main |
 | Codex accounting lane (PF-60-S05 collection correctness; released 2026-10-09 at S05 archive) | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf60-s05-20261009` | `work/pf60-s05-20261009` | `7ac8fcb6cb5eb568a62161ec190d5f04ba1fee2a` | S05 write scope (declared basis, ledger format, best effort, guardian attribution); slice PRs to main |
-| Codex accounting lane (PF-60-S04 acceptance and handoff) | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf60-s04-20261010` | `work/pf60-s04-20261010` | `5e2298a12900b07c1e55805dba8d79854eb803cd` | S04 write scope (side/consolidation attribution, basis-only request detail, qualification, demos); slice PRs to main |
+| Codex accounting lane (PF-60-S04 acceptance and handoff; released 2026-10-10 at S04 archive) | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf60-s04-20261010` | `work/pf60-s04-20261010` | `5e2298a12900b07c1e55805dba8d79854eb803cd` | S04 write scope (side/consolidation attribution, basis-only request detail, qualification, demos); slice PRs to main |
 | Codex management / Travis acceptance | none | main | n/a | Shared plan; S03 accepted 2026-10-09 |
 
 The September lanes (direct Chat, Responses WebSocket, contract goldens, inspection) are consumed history; their
@@ -286,7 +306,9 @@ All records belong to the single feature **PF-60**. Dependencies are hard prereq
 | PF-60-S02 | [Idempotent usage persistence and replay](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md) | PF-60-S01 | Four direct sampling paths received: Anthropic direct, Responses HTTP, Responses WebSocket and direct Chat, on the accepted persistence and replay substrate. Default no-install and collection OFF | The normal-library store is accepted history, not the next unit; that line was stale. Remaining and explicitly unqualified: Corbanu plan gateway economics, startup prewarm, auxiliary collection, legacy evidence acquisition and complete application coverage. Closure of the bounded sprint is a separate recorded manager decision |
 | PF-60-S03 | [Inspectable run and campaign totals](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md) | PF-60-S02 | `/cost` inspector, ranges, developer-only activation, coverage, pricing, stated charges, contention fixes | Accepted by Travis 2026-10-09 after independent code-blind acceptance (#292, #311, #315, #328); archived. Follow-ups #287, #325 |
 | PF-60-S05 | [Collection correctness and declared billing basis](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s05-collection-correctness-and-billing-basis.md) | PF-60-S02 | Declared billing basis with cited defaults; subscription basis kept without a price; versioned ledger format; best-effort compaction, web search and image generation; guardian forks attributed | Accepted by Travis 2026-10-09 with waivers (AC10 OpenAI API-key estimate until #361/#369; AC11 isolation gate) after independent code-blind acceptance (#355, #362); archived. Follow-ups #352, #359, #361, #365, #366, #370 |
-| PF-60-S04 | [Cost-accounting acceptance and handoff](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s04-cost-accounting-acceptance-and-handoff.md) | PF-60-S03, PF-60-S05 | qa/portfolio/agent-cost-accounting/qualification.md | Ready for acceptance (2026-10-10): lane qualification passed on one binary; awaiting code-blind acceptance and Travis |
+| PF-60-S04 | [Cost-accounting acceptance and handoff](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s04-cost-accounting-acceptance-and-handoff.md) | PF-60-S03, PF-60-S05 | qa/portfolio/agent-cost-accounting/qualification.md | Accepted by Travis 2026-10-10 with known limits after independent code-blind acceptance (#397); S05 waiver (a) lifted; archived. PRs #382, #383, #385, #393. Follow-up #396 |
+
+Follow-ups PF-60-S06 to PF-60-S10 are drafts in the [accounting follow-ups plan](../proposed/portfolio-agent-cost-accounting-followups.md#sprint-execution-map).
 
 ## Acceptance flows
 
@@ -324,14 +346,17 @@ are unchanged. See the linked rollout table for this lane's next acceptance.
 
 ## True-TUI evidence
 
-Required for applicable runtime/rehearsal journeys: use the final built candidate in an isolated actual PTY with `RUST_LOG=trace` and private log directory. Send literal input and Enter separately. Exercise the success, failure/cancel and recovery/resume rows above; capture reachable controls, exact model/provider, binary hash, base SHA, keys, checkpoints and cleanup. A tester may use only public user controls; fixture setup is a separate operator role. Shell repair of auth or hidden state invalidates user recovery proof. Corbanu `exec`, a model review and snapshots alone do not qualify these flows. Result: pending.
+Required for applicable runtime/rehearsal journeys: use the final built candidate in an isolated actual PTY with `RUST_LOG=trace` and private log directory. Send literal input and Enter separately. Exercise the success, failure/cancel and recovery/resume rows above; capture reachable controls, exact model/provider, binary hash, base SHA, keys, checkpoints and cleanup. A tester may use only public user controls; fixture setup is a separate operator role. Shell repair of auth or hidden state invalidates user recovery proof. Corbanu `exec`, a model review and snapshots alone do not qualify these flows. Result: **pass**, 2026-10-10, on main
+`1e9cd464b9` ([qualification](../../../qa/portfolio/agent-cost-accounting/qualification.md)) and independently on
+`b1e20a8ec6` ([independent acceptance](../../../qa/portfolio/agent-cost-accounting/pf-60-s04/independent-acceptance-20261010/README.md)):
+success, cancel, missing price, retry, reopen, kill -9 and restart, history and date bounds with real keys through tmux.
 
 ## Live-repository applicability
 
 | Repository | Applicability for this scope | Checkout/base | Result |
 | --- | --- | --- | --- |
-| TensorCash | Required where the selected runtime/QA journey affects live repository work | UNALLOCATED; resolve before qualification | pending |
-| Isometric Game | Required where the selected runtime/QA journey affects live repository work | UNALLOCATED; resolve before qualification | pending |
+| TensorCash | Required where the selected runtime/QA journey affects live repository work | Not reachable (`agtico/tensorcash` does not resolve for this account) | NOT VERIFIABLE; carried to PF-60-S09 |
+| Isometric Game | Required where the selected runtime/QA journey affects live repository work | n/a | Not applicable: accounting doesn't change repository work (S04 qualification) |
 
 Release-level live-repository gates remain intact regardless of this plan's bounded applicability.
 
@@ -339,7 +364,8 @@ Release-level live-repository gates remain intact regardless of this plan's boun
 
 Travis approved S01's v1 defaults on September 11 in this task; the linked manager
 handoff records the exact decision and candidate. Native/runtime human testing
-is still pending. Agent review never substitutes for that later acceptance.
+was accepted sprint by sprint: S03 and S05 on 2026-10-09, S04 on 2026-10-10 (Travis, in chat with the
+coordinator), each after an independent code-blind acceptance. Agent review never substitutes for that acceptance.
 
 ## Documentation
 
@@ -356,13 +382,16 @@ Research outputs stay under the declared research/QA paths. Finished-feature doc
 
 ## Release linkage
 
-Target release and `qa/release/<version>/` are unresolved. Required final-tree tests, true-TUI, applicable live repositories, named human acceptance and due benchmarks block release.
+None. Closed without a release by Travis's decision (2026-10-10), as P0 security was: collection is developer-only and
+shipping `/cost` is not authorised. Release linkage, and the live-repository and isolation gates a release would need,
+are carried to the [follow-up plan](../proposed/portfolio-agent-cost-accounting-followups.md).
 
 ## Completion
 
-- [ ] All sprint outputs are accepted and linked; no expected evidence is invented.
-- [ ] Scope, inputs, dependencies, exact allocation and authority are current.
-- [ ] Automated/artifact checks and applicable actual-key tests pass.
-- [ ] Named human accepts the exact candidate or decision package.
-- [ ] Any implementation has finished docs, release linkage and all required release/benchmark evidence.
-- [ ] Remaining implementation ideas are separately gated; no hard gate is silently waived.
+- [x] All sprint outputs are accepted and linked; no expected evidence is invented (S01–S05 archived, 2026-10-10).
+- [x] Scope, inputs, dependencies, exact allocation and authority are current (no lane active at close).
+- [x] Automated/artifact checks and applicable actual-key tests pass (S04 qualification and independent acceptance).
+- [x] Named human accepts: Travis accepted S04 on 2026-10-10 and closed the plan the same day.
+- [x] Remaining ideas are separately gated: the [follow-up plan](../proposed/portfolio-agent-cost-accounting-followups.md) is a draft; no hard gate is silently waived.
+- Not done here, carried to the follow-up plan: release linkage and finished user docs (collection is developer-only);
+  the enforced isolation gate (S05 waiver (b)); the NOT VERIFIABLE flows; the accepted gaps listed in S04's Closure.

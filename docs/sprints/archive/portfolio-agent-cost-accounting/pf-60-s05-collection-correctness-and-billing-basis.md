@@ -2,7 +2,7 @@
 sprint_id: "PF-60-S05"
 title: "Collection correctness and declared billing basis"
 status: completed
-plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
+plan_file: "docs/plans/completed/main-2026-10-10-portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 4
 owner: "Codex accounting lane (acct-s05); Travis Good accepts"
@@ -61,6 +61,16 @@ Follow-ups (tracked, not blockers):
 - Also carried: a user-declared `pay_per_use` route upgrades the ledger to format 2, which older developer builds
   won't write; real-ledger partial reads (identical on the S03 build) per the first run's AC6 caveats.
 
+### Addendum — 2026-10-10: waiver (a) lifted
+
+Travis lifted waiver (a) on 2026-10-10 (in chat with the coordinator), when he accepted PF-60-S04. After #369
+merged, both the S04 lane run and the S04 independent code-blind acceptance recomputed the OpenAI API-key totals
+exactly at published prices: 13 `gpt-5.4` requests, $0.270659 ([qualification](../../../../qa/portfolio/agent-cost-accounting/qualification.md));
+12 `gpt-5.4` requests plus 5 `gpt-5.6-luna`/`-terra` requests with cache writes, the two models #361 failed on
+([independent acceptance](../../../../qa/portfolio/agent-cost-accounting/pf-60-s04/independent-acceptance-20261010/README.md), PR #397).
+AC10 now passes for OpenAI API-key routes; the record above is unchanged. Waiver (b) still stands; the enforced
+isolation gate is carried to [PF-60-S10](../../../plans/proposed/portfolio-agent-cost-accounting-followups.md#sprint-execution-map) (#404).
+
 ## Execution mandate
 
 - **Goal 1 (Blocker):** Kimi Code membership work is never recorded or shown as money spent.
@@ -87,7 +97,7 @@ Follow-ups (tracked, not blockers):
 
 ## Plan linkage
 
-- Plan: [Unified agent cost and usage accounting](../../../plans/active/portfolio-agent-cost-accounting.md); feature `PF-60`. Plan acceptance advanced: a missing price, or a denied provider, produces no invented zero and no double charge; unknown and estimated values stay visibly distinct.
+- Plan: [Unified agent cost and usage accounting](../../../plans/completed/main-2026-10-10-portfolio-agent-cost-accounting.md); feature `PF-60`. Plan acceptance advanced: a missing price, or a denied provider, produces no invented zero and no double charge; unknown and estimated values stay visibly distinct.
 
 ## Code boundaries
 
