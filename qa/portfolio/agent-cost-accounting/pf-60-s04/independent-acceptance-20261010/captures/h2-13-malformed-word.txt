@@ -1,0 +1,50 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/corbanu-rtx/pf60s04-ia/work/ws │
+╰─────────────────────────────────────────────╯
+
+
+› Use the spawn_agent tool twice: a sub-agent on model k3 (provider kimi-code) with the message 'Reply with the single word KIMI.', and a sub-agent on model
+  claude-opus-5-5-plan (provider claude-plan) with the message 'Reply with the single word CLAUDE.'. Wait for both, then reply with the single word DONE.
+
+
+• DONE
+
+■ Restored a legacy /spawn hierarchy in read-only mode. Existing panes remain inspectable, but Corbanu Terminal will not dispatch or replay work until you
+create a new CrewSpec-backed crew.
+
+■ 2026-10-12 is after today (2026-10-10, UTC); there is nothing recorded for it yet. Run /cost for today.
+
+■ Range refused: reversed range: end precedes start. Usage: /cost START END hour|day|week|month
+
+■ Range refused: future start is unavailable. Usage: /cost START END hour|day|week|month
+
+■ Usage: /cost [YYYY-MM-DD] (UTC, no future dates). Custom: /cost START END hour|day|week|month; dates or UTC timestamps ending Z; end exclusive.
+
+■ Usage: /cost [YYYY-MM-DD] (UTC, no future dates). Custom: /cost START END hour|day|week|month; dates or UTC timestamps ending Z; end exclusive.
+
+
+› Explain this codebase
+
+  Z.AI GLM 5.3 Flash via zai default · ~/corbanu-rtx/pf60s04-ia/work/ws · Corbanu Terminal · TPS: -- tok/s · Main [default]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

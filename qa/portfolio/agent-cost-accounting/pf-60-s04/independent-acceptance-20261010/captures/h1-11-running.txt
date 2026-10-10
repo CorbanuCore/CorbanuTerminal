@@ -1,0 +1,50 @@
+• DONE
+
+
+› Write the numbers from 1 to 300 in words, one per line, with no other text.
+
+
+• one
+  two
+  three
+  four
+  five
+  six
+  seven
+  eight
+  nine
+  ten
+  eleven
+  twelve
+  thirteen
+  fourteen
+  fifteen
+  sixteen
+  seventeen
+  eighteen
+  nineteen
+  twenty
+  twenty-one
+  twenty-two
+  twenty-three
+  twenty-four
+  twenty-five
+  twenty-six
+  twenty-seven
+  twenty-eight
+  twenty-nine
+  thirty
+  thirty-one
+  thirty-two
+  thirty-three
+  thirty-four
+  thirty-five
+  thirty-six
+  thirty-seven
+  thirty-eight
+  thirty-nine
+
+
+› Write tests for @filename
+
+  gpt-5.4 low · ~/corbanu-rtx/pf60s04-ia/work/ws · Corbanu Terminal · TPS: ~51.9 tok/s · Main [default]

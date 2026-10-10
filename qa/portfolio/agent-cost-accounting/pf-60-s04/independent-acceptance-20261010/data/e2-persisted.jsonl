@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a12471-1996-7a31-9ae7-870a0b90af43"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"KEPT"}}
+{"type":"turn.completed","usage":{"input_tokens":6611,"cached_input_tokens":576,"cache_write_input_tokens":0,"output_tokens":24,"reasoning_output_tokens":20}}

@@ -1,0 +1,5 @@
+### e1 exec --ephemeral: accounting log lines
+2026-10-10T06:11:52.907242Z  WARN codex_core::accounting: accounting: this session's model requests are not recorded accounting.excluded="ephemeral_session"
+### e2 persisted control: accounting WARN lines
+0
+### h5 accounting tables after e1 only: none (sqlite_master had no accounting table); after e2: see ledger-dumps h5

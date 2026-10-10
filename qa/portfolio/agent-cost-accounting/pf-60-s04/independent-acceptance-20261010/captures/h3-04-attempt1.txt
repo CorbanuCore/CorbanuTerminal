@@ -1,0 +1,86 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/corbanu-rtx/pf60s04-ia/work/ws │
+╰─────────────────────────────────────────────╯
+
+› Reply with the single word RETRIED.
+• RETRIED
+  Attempt, components and original price
+  Requested UTC day: 2026-10-10
+› Provider: zai-retry
+  Model: Z.AI GLM 5.3 Flash
+  Billing: Pay per use
+  Estimated cost: no price available
+  Next step for requests with no price: check the bill from zai-retry. No published price covers them, so no cost is shown for them here.
+  Tokens: tokens not reported
+  —— Details ——
+  Billed cost: zai-retry doesn't report its charges, so any cost here is an estimate — check zai-retry's bill.
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Provider: zai-retry
+› Model: Z.AI GLM 5.3 Flash
+› Billing: Pay per use
+› Estimated cost: no price available
+› Next step for requests with no price: check the bill from zai-retry. No published price covers them, so no cost is shown for them here.
+› Tokens: tokens not reported
+› —— Details ——
+› Billed cost: zai-retry doesn't report its charges, so any cost here is an estimate — check zai-retry's bill.
+› Request: e9eb7321-e13b-4aee-9b5d-ea3b76f01c34
+  Request: e9eb7321-e13b-4aee-9b5d-ea3b76f01c34
+› Attempt: cc527f8d-55c9-4786-8224-bdbae2b1e91d
+  Attempt: cc527f8d-55c9-4786-8224-bdbae2b1e91d
+› Thread: 01a12465-4435-7fa1-9624-e114326bc8f5
+  Thread: 01a12465-4435-7fa1-9624-e114326bc8f5
+› Turn: 01a12465-50f1-7130-a4ac-1bee63de87e7
+  Turn: 01a12465-50f1-7130-a4ac-1bee63de87e7
+› Model: glm-5.3-flash
+  Model: glm-5.3-flash
+› Opaque scope: 919cb57e-faca-4cec-8afb-e3c3bee328ca
+  Opaque scope: 919cb57e-faca-4cec-8afb-e3c3bee328ca
+› Arithmetic dialect: Inclusive
+  Arithmetic dialect: Inclusive
+› Admission time: 2026-10-10T05:59:42.249Z
+  Admission time: 2026-10-10T05:59:42.249Z
+› Retry predecessor: none
+  Retry predecessor: none
+› Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+  Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+› Token cost: unavailable — no applicable price; recorded usage is not a zero-cost claim.
+  Token cost: unavailable — no applicable price; recorded usage is not a zero-cost claim.
+› Billing basis: pay per use (set in your config)
+  Billing basis: pay per use (set in your config)
+› Input: unknown — no retained numeric evidence
+  Input: unknown — no retained numeric evidence
+› Noncached input (derived for inclusive input): unknown — no retained numeric evidence
+  Noncached input (derived for inclusive input): unknown — no retained numeric evidence
+› Cache read: unknown — no retained numeric evidence
+  Cache read: unknown — no retained numeric evidence
+› Cache write: unknown — no retained numeric evidence
+  Cache write: unknown — no retained numeric evidence
+› Output: unknown — no retained numeric evidence
+  Output: unknown — no retained numeric evidence
+› Reasoning (subset, not separately billed): unknown — no retained numeric evidence
+  Reasoning (subset, not separately billed): unknown — no retained numeric evidence
+› Total (not separately billed): unknown — no retained numeric evidence
+  Total (not separately billed): unknown — no retained numeric evidence
+› Noncached input cost: unknown — no retained numeric evidence
+  Noncached input cost: unknown — no retained numeric evidence
+› Cache read cost: unknown — no retained numeric evidence
+  Cache read cost: unknown — no retained numeric evidence
+› Cache write cost: unknown — no retained numeric evidence
+  Cache write cost: unknown — no retained numeric evidence
+› Output cost: unknown — no retained numeric evidence
+  Output cost: unknown — no retained numeric evidence
+› Known subtotal exact USD: none — no price for these attempts
+  Known subtotal exact USD: none — no price for these attempts
+› Price: none recorded — this request records only its billing basis (pay per use (set in your config))
+  Price: none recorded — this request records only its billing basis (pay per use (set in your config))
+› Snapshot is not current; newer activity is unverified
+  Snapshot is not current; newer activity is unverified
+› Back
+  Back
+› Refresh
+  Refresh
+› Close

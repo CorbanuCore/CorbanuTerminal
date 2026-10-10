@@ -168,10 +168,18 @@ impl UpstreamClient {
 
     /// PF-27-S06: HTTP over the credential broker's data pipe, one fresh
     /// connection per request, each checked to be served by `broker_pid`.
+    /// The broker must prove it holds `mac`'s key on each connection;
+    /// `squatted` is set when only another server answered (#390).
     #[cfg(windows)]
-    pub(crate) fn named_pipe(name: &str, broker_pid: u32) -> Self {
-        let transport =
-            crate::credential_broker::isolated::pipe::PipeConnector::new(name, broker_pid);
+    pub(crate) fn named_pipe(
+        name: &str,
+        broker_pid: u32,
+        mac: std::sync::Arc<codex_secret_broker::BrokerChannelMac>,
+        squatted: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    ) -> Self {
+        let transport = crate::credential_broker::isolated::pipe::PipeConnector::new(
+            name, broker_pid, mac, squatted,
+        );
         Self {
             connector: HttpConnector::new(transport).boxed(),
             proxy_config: ProxyConfig::default(),

@@ -16,6 +16,9 @@ use zeroize::Zeroize;
 pub const IPC_PROTOCOL_VERSION: u32 = 1;
 pub const MAX_FRAME_BYTES: usize = 16 * 1024;
 const MAC_BYTES: usize = 32;
+/// Length of a pipe peer challenge and of its proof (#390).
+pub const PIPE_CHALLENGE_BYTES: usize = 32;
+pub const PIPE_PROOF_BYTES: usize = MAC_BYTES;
 const MAX_ID_BYTES: usize = 128;
 const MAX_PATH_BYTES: usize = 1_024;
 const MAX_HOST_BYTES: usize = 253;
@@ -436,6 +439,53 @@ impl BrokerChannelMac {
             credential: payload.credential,
             request: payload.request,
         })
+    }
+
+    /// #390: the broker's answer to a controller's challenge on one Windows
+    /// data-pipe connection, bound to both process ids as the broker sees
+    /// them. A same-user process can add instances of a live pipe that
+    /// report the broker's process id, so the controller sends a request
+    /// only after this answer checks out. The leading `u32::MAX` length can
+    /// never start a frame, so no frame tag equals a proof.
+    pub fn pipe_peer_proof(
+        &self,
+        challenge: &[u8; PIPE_CHALLENGE_BYTES],
+        client_pid: u32,
+        server_pid: u32,
+    ) -> [u8; MAC_BYTES] {
+        self.pipe_peer_mac(challenge, client_pid, server_pid)
+            .finalize()
+            .into_bytes()
+            .into()
+    }
+
+    /// Checks [`Self::pipe_peer_proof`] in constant time.
+    pub fn verify_pipe_peer_proof(
+        &self,
+        challenge: &[u8; PIPE_CHALLENGE_BYTES],
+        client_pid: u32,
+        server_pid: u32,
+        proof: &[u8],
+    ) -> bool {
+        self.pipe_peer_mac(challenge, client_pid, server_pid)
+            .verify_slice(proof)
+            .is_ok()
+    }
+
+    fn pipe_peer_mac(
+        &self,
+        challenge: &[u8; PIPE_CHALLENGE_BYTES],
+        client_pid: u32,
+        server_pid: u32,
+    ) -> HmacSha256 {
+        #[expect(clippy::expect_used, reason = "HMAC accepts keys of any length")]
+        let mut mac = HmacSha256::new_from_slice(&self.0).expect("HMAC key");
+        mac.update(&u32::MAX.to_be_bytes());
+        mac.update(b"corbanu broker data pipe peer v1");
+        mac.update(challenge);
+        mac.update(&client_pid.to_be_bytes());
+        mac.update(&server_pid.to_be_bytes());
+        mac
     }
 
     fn seal(&self, payload: Vec<u8>) -> Result<SignedBrokerFrame, BrokerFrameError> {

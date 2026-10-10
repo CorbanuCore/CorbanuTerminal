@@ -44,6 +44,13 @@ pub enum ModelCredentialBrokerError {
     /// vault or the OS keyring is unavailable).
     #[error("credential broker could not read the stored provider key")]
     StoreUnavailable,
+    /// #390 (Windows): another process holds or serves the broker's named
+    /// pipe; Core refused it and sent it nothing.
+    #[error(
+        "another process holds or serves the credential broker's named pipe (possible pipe \
+         squatting); it was refused and nothing was sent to it"
+    )]
+    PipeSquatted,
 }
 
 impl From<IsolatedBrokerError> for ModelCredentialBrokerError {
@@ -53,6 +60,7 @@ impl From<IsolatedBrokerError> for ModelCredentialBrokerError {
             IsolatedBrokerError::Spawn
             | IsolatedBrokerError::Control
             | IsolatedBrokerError::Unavailable => Self::Unavailable,
+            IsolatedBrokerError::PipeSquatted => Self::PipeSquatted,
         }
     }
 }
@@ -283,6 +291,11 @@ impl ModelCredentialBroker {
     #[cfg(test)]
     pub(crate) fn kill_for_test(&self) {
         self.client.kill_for_test();
+    }
+
+    #[cfg(all(test, windows))]
+    pub(crate) fn pid_for_test(&self) -> Option<u32> {
+        self.client.pid_for_test()
     }
 }
 

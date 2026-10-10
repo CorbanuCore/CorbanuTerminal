@@ -179,7 +179,7 @@ fn pf_27_s09_windows_broker_that_cannot_start_fails_closed_and_scrubs_keys() {
 
 #[test]
 fn pf_27_s05_failed_broker_and_unbindable_urls_fail_closed() {
-    let failed = CoreModelKeyBroker::new(BrokerHandle::Failed);
+    let failed = CoreModelKeyBroker::new(BrokerHandle::Failed(BrokerModelAuthError::Unavailable));
     let error = refusal(&failed, "https://api.z.ai/api/paas/v4", provider_key());
     assert!(error.contains("unavailable"), "{error}");
 
@@ -215,5 +215,22 @@ fn pf_27_s09_pipe_request_target_keeps_the_signed_path_and_query() {
         "not a url",
     ] {
         assert_eq!(pipe_request_target(url), None, "{url}");
+    }
+}
+
+/// #390: a broker refused because another process holds or serves its named
+/// pipe fails every credential use with a message that says so; nothing is
+/// sent directly.
+#[test]
+fn sec_390_squatted_broker_pipe_fails_closed_with_a_clear_error() {
+    let squatted =
+        CoreModelKeyBroker::new(BrokerHandle::Failed(BrokerModelAuthError::PipeSquatted));
+    for source in [provider_key(), held_value()] {
+        let error = refusal(&squatted, "https://api.z.ai/api/paas/v4", source);
+        assert!(
+            error.contains("held or served by another process"),
+            "{error}"
+        );
+        assert!(error.contains("sent nothing"), "{error}");
     }
 }

@@ -2,12 +2,12 @@
 sprint_id: "PF-60-S03"
 title: "Inspectable run and campaign totals"
 status: completed
-plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
+plan_file: "docs/plans/completed/main-2026-10-10-portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 3
 owner: "Astra High accounting inspection lane; Fable receives and integrates; Travis remains product acceptance authority"
 parallel_lane: "accounting-pf60-s03-inspection"
-write_scope: "codex-rs/core/src/config/mod.rs, codex-rs/core/src/accounting.rs, codex-rs/state/src/runtime/accounting_native.rs, qa/portfolio/agent-cost-accounting/pf-60-s03/, codex-rs/state/src/runtime/accounting_store.rs, codex-rs/state/src/runtime/accounting_estimates.rs, codex-rs/state/src/runtime/accounting_lifecycle.rs, codex-rs/state/src/runtime/accounting_pricing.rs, codex-rs/state/src/runtime/accounting_store_tests.rs, codex-rs/state/tests/accounting_store.rs, codex-rs/tui/src/chatwidget/usage.rs, codex-rs/tui/src/chatwidget/tokens.rs, codex-rs/tui/src/chatwidget/tokens_tests.rs, codex-rs/tui/src/chatwidget/tokens/scope.rs, codex-rs/tui/src/chatwidget/tokens/scope_tests.rs, codex-rs/tui/tests/suite/cost_scope.rs, qa/demos/specs/, qa/demos/index/PF-60-S03.md, docs/plans/active/portfolio-agent-cost-accounting.md, codex-rs/tui/src/chatwidget.rs, codex-rs/tui/src/chatwidget/constructor.rs, codex-rs/tui/src/chatwidget/slash_dispatch.rs, codex-rs/tui/src/chatwidget/tests/usage.rs, codex-rs/tui/src/chatwidget/tests/slash_commands.rs, codex-rs/tui/src/app_event.rs, codex-rs/tui/src/app/event_dispatch.rs, codex-rs/tui/src/app/tests.rs, codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu.snap, codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu_without_resets.snap, codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu_before_reset_refresh.snap, codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_with_invalid_view_reports_usage.snap"
+write_scope: "codex-rs/core/src/config/mod.rs, codex-rs/core/src/accounting.rs, codex-rs/state/src/runtime/accounting_native.rs, qa/portfolio/agent-cost-accounting/pf-60-s03/, codex-rs/state/src/runtime/accounting_store.rs, codex-rs/state/src/runtime/accounting_estimates.rs, codex-rs/state/src/runtime/accounting_lifecycle.rs, codex-rs/state/src/runtime/accounting_pricing.rs, codex-rs/state/src/runtime/accounting_store_tests.rs, codex-rs/state/tests/accounting_store.rs, codex-rs/tui/src/chatwidget/usage.rs, codex-rs/tui/src/chatwidget/tokens.rs, codex-rs/tui/src/chatwidget/tokens_tests.rs, codex-rs/tui/src/chatwidget/tokens/scope.rs, codex-rs/tui/src/chatwidget/tokens/scope_tests.rs, codex-rs/tui/tests/suite/cost_scope.rs, qa/demos/specs/, qa/demos/index/PF-60-S03.md, docs/plans/completed/main-2026-10-10-portfolio-agent-cost-accounting.md, codex-rs/tui/src/chatwidget.rs, codex-rs/tui/src/chatwidget/constructor.rs, codex-rs/tui/src/chatwidget/slash_dispatch.rs, codex-rs/tui/src/chatwidget/tests/usage.rs, codex-rs/tui/src/chatwidget/tests/slash_commands.rs, codex-rs/tui/src/app_event.rs, codex-rs/tui/src/app/event_dispatch.rs, codex-rs/tui/src/app/tests.rs, codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu.snap, codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu_without_resets.snap, codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu_before_reset_refresh.snap, codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_with_invalid_view_reports_usage.snap"
 integration_gate: "Fable receives onto integrate/management-workstreams-20260911 after S02 archival and an explicit PF-83 overlap handoff on the three shared TUI paths; audits literal scope and size against the frozen allocation, takes one independent Opus 5.0 High review plus necessary scoped correction, and reruns the combined state, TUI and accounting gates on the receiving tree. True-TUI proof and independent code-blind design and execution are owed by this sprint and are not deferred silently."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf60-s03-20261008"
 branch: "work/pf60-s03-20261008"
@@ -43,7 +43,7 @@ Follow-ups (tracked, not blockers):
   recorded admission time.
 - #325: a rejected attempt is counted as billed; a bucket past the last recorded request reads "Partial".
 - The [body review](../../../../qa/portfolio/agent-cost-accounting/pf-60-s03/body-review-20261008/README.md)
-  findings, now owned by [PF-60-S05](../../current/portfolio-agent-cost-accounting/pf-60-s05-collection-correctness-and-billing-basis.md) (PR #330). Its mandate covers the Blocker, Majors 2–5 and Minor 10. Its
+  findings, now owned by [PF-60-S05](pf-60-s05-collection-correctness-and-billing-basis.md) (PR #330). Its mandate covers the Blocker, Majors 2–5 and Minor 10. Its
   record excludes Minors 6, 7 and 9 and Nits 11–14; they stay open with no sprint yet.
 - Open limits carried from this record, not discharged: listed under Remaining.
 
@@ -55,9 +55,9 @@ Follow-ups (tracked, not blockers):
 
 ## Plan linkage
 
-- Plan: [Unified agent cost and usage accounting](../../../plans/active/portfolio-agent-cost-accounting.md)
+- Plan: [Unified agent cost and usage accounting](../../../plans/completed/main-2026-10-10-portfolio-agent-cost-accounting.md)
 - Feature: `PF-60`; acceptance: The user can explain each displayed total using constituent requests without inspecting storage.
-- Upstream/allocation: [plan record](../../../plans/active/portfolio-agent-cost-accounting.md#native-lifecycle-and-upstream-touch-record).
+- Upstream/allocation: [plan record](../../../plans/completed/main-2026-10-10-portfolio-agent-cost-accounting.md#native-lifecycle-and-upstream-touch-record).
 
 ## Code boundaries
 
@@ -109,7 +109,7 @@ All items are resolved, moved or carried as listed. Nothing here is closed by be
 
 - [x] **Independent functional acceptance:** not accepted on 2026-10-08, then accepted by Travis on 2026-10-09 after three
   re-runs. #286, #287, #288, #289 and #308 are closed; #287's WARN wording and #325 are follow-ups (see Closure).
-- [x] **Body review findings:** transferred to [PF-60-S05](../../current/portfolio-agent-cost-accounting/pf-60-s05-collection-correctness-and-billing-basis.md) as recorded in Closure. Minors 6, 7, 9 and Nits 11–14 are
+- [x] **Body review findings:** transferred to [PF-60-S05](pf-60-s05-collection-correctness-and-billing-basis.md) as recorded in Closure. Minors 6, 7, 9 and Nits 11–14 are
   open follow-ups with no sprint.
 - [x] **Carried, not discharged, from acct-sweep-64:** thread deletion and explicit maintenance still run the full sweep
   under the lock (~9 s per deleted conversation on the live ledger); no core test for an interrupt during a lease

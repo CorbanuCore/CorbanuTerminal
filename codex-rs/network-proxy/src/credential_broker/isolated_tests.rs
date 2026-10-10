@@ -532,9 +532,16 @@ async fn pf_27_s04_pf_27_s01_wrong_os_peer_is_disconnected_before_any_request() 
         panic!("expected a brokered route");
     };
 
+    // On Windows Core cannot tell a broker that hangs up on it from a pipe
+    // squatter that does (#390); either way nothing is sent.
+    let expected = if cfg!(windows) {
+        IsolatedBrokerError::PipeSquatted
+    } else {
+        IsolatedBrokerError::Unavailable
+    };
     assert_eq!(
         route.forward(request("/echo", &dummy)).await.err(),
-        Some(IsolatedBrokerError::Unavailable)
+        Some(expected)
     );
 }
 
@@ -1084,6 +1091,11 @@ async fn pf_33_s02_unpinned_broker_resolves_and_pins_keep_the_private_peer_check
         .expect("broker response");
     assert_eq!(denial(&response), Some("upstream_failed"));
 }
+
+// #390: pipe squats of the Windows broker's named pipes.
+#[cfg(windows)]
+#[path = "pipe_squat_tests.rs"]
+mod sec_390;
 
 // PF-27-S05 model auth; on Windows since PF-27-S09 (named pipes).
 #[cfg(any(unix, windows))]
