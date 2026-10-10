@@ -1,0 +1,40 @@
+# PF-84-S03: the interactive TUI takes `--account` too. The session starts on
+# the named Z.AI account `fake` (a fake key) while the default account holds
+# the real key, so the visible 401 proves the session used `fake` and never
+# fell back to the default key. Record with
+#   python3 scripts/demo_video.py record qa/demos/specs/pf84-tui-account.toml \
+#     --bin <candidate> --sprint PF-84-S03 --publish
+id = "pf84-tui-account"
+feature = "PF-84-S03: corbanu --account runs the TUI session on a named account"
+expected = "With --account fake the first request gets a visible 401 instead of using the default account's real key."
+model = "glm-5.3-flash"
+provider = "zai"
+args = ["--account", "fake"]
+config = """
+suppress_unstable_features_warning = true
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+[features]
+named_accounts = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+run = "printf pf84-fake-zai-key-0004 | {bin} account add zai fake >/dev/null && echo enrolled"
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Reply with the single word pong"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "401"
+timeout = 120
+compress = 3
+[[steps]]
+pause = 4.0
