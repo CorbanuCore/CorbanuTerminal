@@ -1085,6 +1085,11 @@ async fn pf_33_s02_unpinned_broker_resolves_and_pins_keep_the_private_peer_check
     assert_eq!(denial(&response), Some("upstream_failed"));
 }
 
+// #390: pipe squats of the Windows broker's named pipes.
+#[cfg(windows)]
+#[path = "pipe_squat_tests.rs"]
+mod sec_390;
+
 // PF-27-S05 model auth; on Windows since PF-27-S09 (named pipes).
 #[cfg(any(unix, windows))]
 mod pf_27_s05 {

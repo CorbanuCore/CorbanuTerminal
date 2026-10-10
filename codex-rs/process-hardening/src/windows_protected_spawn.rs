@@ -131,6 +131,13 @@ impl ProtectedChild {
     }
 }
 
+/// The process handle, e.g. to keep the process id from being reused (#390).
+impl std::os::windows::io::AsHandle for ProtectedChild {
+    fn as_handle(&self) -> std::os::windows::io::BorrowedHandle<'_> {
+        std::os::windows::io::AsHandle::as_handle(&self.process)
+    }
+}
+
 /// Starts `program` with `args` and exactly the environment `env`, never
 /// openable by another process of the user (short of `SYSTEM` or a
 /// debug-privileged administrator): process and first thread are created

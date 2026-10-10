@@ -54,6 +54,7 @@ use std::process::Child;
 use std::process::Command;
 #[cfg(unix)]
 use std::process::Stdio;
+use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicU64;
@@ -164,6 +165,10 @@ pub(crate) enum IsolatedBrokerError {
     Unavailable,
     #[error("credential broker request carries no checked DNS answers")]
     Unpinned,
+    /// #390 (Windows): another process holds or serves the broker's pipe;
+    /// nothing was sent to it.
+    #[error("credential broker pipe is held or served by another process")]
+    PipeSquatted,
 }
 
 type LineReceiver = mpsc::Receiver<std::io::Result<Zeroizing<Vec<u8>>>>;
@@ -183,13 +188,18 @@ struct ControlChannel {
 pub(crate) struct IsolatedBrokerClient {
     control: Mutex<ControlChannel>,
     child: Mutex<Option<Child>>,
-    mac: BrokerChannelMac,
+    mac: Arc<BrokerChannelMac>,
     controller_instance: String,
     broker_instance: String,
     socket_path: PathBuf,
     /// The broker's process id; on Windows each data connection checks it.
     #[cfg_attr(unix, allow(dead_code))]
     broker_pid: u32,
+    /// #390: a handle to the broker process, held while this client lives
+    /// (the reaper may drop the `Child` earlier), so `broker_pid` cannot be
+    /// reused by a process that then claims the freed pipe names.
+    #[cfg(windows)]
+    _broker_process: std::os::windows::io::OwnedHandle,
     #[cfg_attr(not(test), allow(dead_code))]
     containment: String,
     run_generation: AtomicU64,
@@ -233,15 +243,39 @@ impl IsolatedBrokerClient {
             kill_and_reap(child);
             return Err(IsolatedBrokerError::Spawn);
         };
-        let control_stream =
-            receive_json::<BrokerBootstrap>(&bootstrap_lines, launcher.skip_harness_preamble)
-                .ok()
-                .and_then(|bootstrap| {
-                    connect_control(&bootstrap, runtime_dir.as_deref(), child.id())
+        #[cfg(windows)]
+        let broker_process = {
+            use std::os::windows::io::AsHandle as _;
+            match child.as_handle().try_clone_to_owned() {
+                Ok(handle) => handle,
+                Err(_) => {
+                    kill_and_reap(child);
+                    return Err(IsolatedBrokerError::Spawn);
+                }
+            }
+        };
+        let control_stream = receive_json::<BrokerBootstrap>(
+            &bootstrap_lines,
+            launcher.skip_harness_preamble,
+        )
+        .and_then(|bootstrap| {
+            if bootstrap.pipe_taken {
+                tracing::warn!(
+                    "isolated credential broker refused: another process holds its pipe name"
+                );
+                return Err(IsolatedBrokerError::PipeSquatted);
+            }
+            connect_control(&bootstrap, runtime_dir.as_deref(), child.id())
+        });
+        let control_stream = match control_stream {
+            Ok(control_stream) => control_stream,
+            Err(error) => {
+                kill_and_reap(child);
+                return Err(match error {
+                    IsolatedBrokerError::PipeSquatted => IsolatedBrokerError::PipeSquatted,
+                    _ => IsolatedBrokerError::Spawn,
                 });
-        let Some(control_stream) = control_stream else {
-            kill_and_reap(child);
-            return Err(IsolatedBrokerError::Spawn);
+            }
         };
         let lines = control_stream
             .try_clone()
@@ -312,11 +346,13 @@ impl IsolatedBrokerClient {
         Ok(Self {
             control: Mutex::new(control),
             child: Mutex::new(Some(child)),
-            mac: BrokerChannelMac::from_secret(*key),
+            mac: Arc::new(BrokerChannelMac::from_secret(*key)),
             controller_instance,
             broker_instance,
             socket_path,
             broker_pid,
+            #[cfg(windows)]
+            _broker_process: broker_process,
             containment,
             run_generation: AtomicU64::new(run_generation),
             next_sequence: AtomicU64::new(1),
@@ -336,9 +372,35 @@ impl IsolatedBrokerClient {
 
     /// PF-27-S09: HTTP over the broker's data pipe, every connection checked
     /// to be served by the broker process (PF-27-S06).
-    #[cfg(windows)]
+    #[cfg(all(test, windows))]
     pub(crate) fn data_pipe_client(&self) -> UpstreamClient {
-        UpstreamClient::named_pipe(&self.socket_path.to_string_lossy(), self.broker_pid)
+        self.data_pipe_client_reporting().0
+    }
+
+    /// HTTP over the broker's data pipe, every connection checked to be
+    /// served by the broker process, and a flag set when a connection found
+    /// the pipe served only by another process (#390).
+    #[cfg(windows)]
+    fn data_pipe_client_reporting(&self) -> (UpstreamClient, Arc<AtomicBool>) {
+        let squatted = Arc::new(AtomicBool::new(false));
+        let client = UpstreamClient::named_pipe(
+            &self.socket_path.to_string_lossy(),
+            self.broker_pid,
+            self.mac.clone(),
+            squatted.clone(),
+        );
+        (client, squatted)
+    }
+
+    /// The error for a failed request to the broker.
+    fn send_error(&self, squatted: bool) -> IsolatedBrokerError {
+        if !self.is_alive() {
+            self.fail(IsolatedBrokerError::Unavailable)
+        } else if squatted {
+            IsolatedBrokerError::PipeSquatted
+        } else {
+            IsolatedBrokerError::Unavailable
+        }
     }
 
     /// OS containment the broker reported for itself (PF-27-S02).
@@ -568,19 +630,16 @@ impl IsolatedBrokerClient {
             HeaderValue::from_str(operation.host()).map_err(|_| IsolatedBrokerError::Rejected)?,
         );
         #[cfg(unix)]
-        let upstream = UpstreamClient::unix_socket(&self.socket_path.to_string_lossy());
+        let (upstream, squatted) = (
+            UpstreamClient::unix_socket(&self.socket_path.to_string_lossy()),
+            Arc::new(AtomicBool::new(false)),
+        );
         #[cfg(windows)]
-        let upstream = self.data_pipe_client();
+        let (upstream, squatted) = self.data_pipe_client_reporting();
         upstream
             .serve(Request::from_parts(parts, body))
             .await
-            .map_err(|_| {
-                if self.is_alive() {
-                    IsolatedBrokerError::Unavailable
-                } else {
-                    self.fail(IsolatedBrokerError::Unavailable)
-                }
-            })
+            .map_err(|_| self.send_error(squatted.load(Ordering::Acquire)))
     }
 
     /// PF-27-S09: sends an already signed request over the data pipe.
@@ -592,13 +651,11 @@ impl IsolatedBrokerClient {
         if !self.is_alive() {
             return Err(IsolatedBrokerError::Unavailable);
         }
-        self.data_pipe_client().serve(request).await.map_err(|_| {
-            if self.is_alive() {
-                IsolatedBrokerError::Unavailable
-            } else {
-                self.fail(IsolatedBrokerError::Unavailable)
-            }
-        })
+        let (upstream, squatted) = self.data_pipe_client_reporting();
+        upstream
+            .serve(request)
+            .await
+            .map_err(|_| self.send_error(squatted.load(Ordering::Acquire)))
     }
 
     /// Signs a frame for an arbitrary binding, for cross-run qualification.
@@ -888,16 +945,27 @@ pub(crate) fn user_runtime_dir() -> Option<PathBuf> {
 
 /// PF-27-S06: opens the control pipe named in the bootstrap line, if it is a
 /// broker control pipe served by the broker process this controller spawned.
+/// A pipe served only by another process is [`IsolatedBrokerError::PipeSquatted`]
+/// (#390); nothing is written to it.
 #[cfg(windows)]
 fn connect_control(
     bootstrap: &BrokerBootstrap,
     _runtime_dir: Option<&Path>,
     broker_pid: u32,
-) -> Option<ControlStream> {
+) -> Result<ControlStream, IsolatedBrokerError> {
     if bootstrap.protocol_version != CONTROL_PROTOCOL_VERSION {
-        return None;
+        return Err(IsolatedBrokerError::Spawn);
     }
-    super::pipe::connect_control(&bootstrap.control_socket, broker_pid)
+    super::pipe::connect_control(&bootstrap.control_socket, broker_pid).map_err(|error| {
+        if super::pipe::is_squatted_pipe_error(&error) {
+            tracing::warn!(
+                "isolated credential broker refused: its control pipe is served by another process"
+            );
+            IsolatedBrokerError::PipeSquatted
+        } else {
+            IsolatedBrokerError::Spawn
+        }
+    })
 }
 
 /// Connects to the control socket named in the bootstrap line, but only if
@@ -905,6 +973,15 @@ fn connect_control(
 /// its OS peer is the broker process this controller spawned.
 #[cfg(unix)]
 fn connect_control(
+    bootstrap: &BrokerBootstrap,
+    runtime_dir: Option<&Path>,
+    broker_pid: u32,
+) -> Result<UnixStream, IsolatedBrokerError> {
+    connect_unix_control(bootstrap, runtime_dir, broker_pid).ok_or(IsolatedBrokerError::Spawn)
+}
+
+#[cfg(unix)]
+fn connect_unix_control(
     bootstrap: &BrokerBootstrap,
     runtime_dir: Option<&Path>,
     broker_pid: u32,

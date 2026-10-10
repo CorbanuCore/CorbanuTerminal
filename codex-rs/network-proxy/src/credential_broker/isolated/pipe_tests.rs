@@ -5,12 +5,14 @@
 //! unelevated Windows sandbox gives agent commands, or as a handle scanner.
 
 use super::PipeListener;
+use super::answer_peer_challenge;
 use super::client_pid;
 use super::connect_control;
 use super::connect_data;
 use super::pipe_dacl_sddl;
 use super::pipe_names;
 use super::valid_pipe_name;
+use codex_secret_broker::BrokerChannelMac;
 use codex_windows_sandbox::ConsoleMode;
 use codex_windows_sandbox::StderrMode;
 use codex_windows_sandbox::StdinMode;
@@ -74,7 +76,7 @@ fn pf_27_s06_pipe_names_and_dacl() {
 }
 
 /// A second process creating the same name as the first instance fails:
-/// the broker's pipe cannot be squatted or joined.
+/// nobody can create the broker's pipe before it.
 #[tokio::test]
 async fn pf_27_s06_pipe_name_cannot_be_claimed_twice() {
     let (control, _) = pipe_names();
@@ -141,22 +143,55 @@ async fn pf_27_s06_client_checks_the_server_process() {
     let blocking_control = control.clone();
     let (wrong, right, other_name) = tokio::task::spawn_blocking(move || {
         (
-            connect_control(&blocking_control, wrong_pid).is_some(),
-            connect_control(&blocking_control, own_pid).is_some(),
-            connect_control(r"\\.\pipe\not-a-broker-c", own_pid).is_some(),
+            connect_control(&blocking_control, wrong_pid).is_ok(),
+            connect_control(&blocking_control, own_pid).is_ok(),
+            connect_control(r"\\.\pipe\not-a-broker-c", own_pid).is_ok(),
         )
     })
     .await
     .expect("connect");
     assert_eq!((wrong, right, other_name), (false, true, false));
 
-    let wrong = connect_data(&data, wrong_pid).await;
+    // The data server greets instead of proving the channel key (#390).
+    let key = mac();
+    let wrong = connect_data(&data, wrong_pid, &key).await;
     assert_eq!(
         wrong.err().map(|error| error.kind()),
         Some(std::io::ErrorKind::PermissionDenied)
     );
-    assert!(connect_data(&data, own_pid).await.is_ok());
-    assert!(connect_data(&control, own_pid).await.is_err());
+    let unproven = connect_data(&data, own_pid, &key).await;
+    assert!(
+        unproven.as_ref().is_err_and(super::is_squatted_pipe_error),
+        "{unproven:?}"
+    );
+    let (_, proving) = pipe_names();
+    let _proving_server = serve_proof(&proving, own_pid);
+    assert!(connect_data(&proving, own_pid, &key).await.is_ok());
+    assert!(
+        connect_data(&proving, own_pid, &BrokerChannelMac::from_secret([1; 32]))
+            .await
+            .is_err_and(|error| super::is_squatted_pipe_error(&error))
+    );
+    assert!(connect_data(&control, own_pid, &key).await.is_err());
+}
+
+fn mac() -> BrokerChannelMac {
+    BrokerChannelMac::from_secret([9; 32])
+}
+
+/// Accepts clients from `expected_pid` and answers each one's peer
+/// challenge under [`mac`], as the broker does.
+fn serve_proof(name: &str, expected_pid: u32) -> tokio::task::JoinHandle<()> {
+    let mut listener = PipeListener::bind(name).expect("bind");
+    tokio::spawn(async move {
+        while let Ok(mut connection) = listener.accept(expected_pid).await {
+            tokio::spawn(async move {
+                let _ = answer_peer_challenge(&mut connection, &mac(), expected_pid).await;
+                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                drop(connection);
+            });
+        }
+    })
 }
 
 /// No broker pipe handle is inheritable, measured in a child spawned the way
@@ -166,25 +201,27 @@ async fn pf_27_s06_client_checks_the_server_process() {
 async fn pf_27_s06_pipe_handles_are_not_inheritable() {
     let (control, data) = pipe_names();
     let own_pid = std::process::id();
-    let mut control_listener = PipeListener::bind(&control).expect("bind control");
+    let control_listener = PipeListener::bind_single(&control).expect("bind control");
     let mut data_listener = PipeListener::bind(&data).expect("bind data");
     let blocking_control = control.clone();
     let control_client =
         tokio::task::spawn_blocking(move || connect_control(&blocking_control, own_pid));
     let control_server = control_listener
-        .accept(own_pid)
+        .accept_single(own_pid)
         .await
         .expect("accept control");
     let control_client = control_client.await.expect("join").expect("control client");
     let data_client = tokio::spawn({
         let data = data.clone();
-        async move { connect_data(&data, own_pid).await }
+        async move { connect_data(&data, own_pid, &mac()).await }
     });
-    let data_server = data_listener.accept(own_pid).await.expect("accept data");
+    let mut data_server = data_listener.accept(own_pid).await.expect("accept data");
+    answer_peer_challenge(&mut data_server, &mac(), own_pid)
+        .await
+        .expect("answer");
     let data_client = data_client.await.expect("join").expect("data client");
 
     for handle in [
-        control_listener.listening.as_raw_handle(),
         control_server.as_raw_handle(),
         control_client.as_raw_handle(),
         data_listener.listening.as_raw_handle(),
