@@ -1,11 +1,12 @@
-# squat390.ps1 -Log <file> -Marker <text> [-Instances 200] [-WaitSeconds 120]
-# #390 demo squatter: a same-user process that waits for the pipes of the
-# Corbanu credential broker started under a Corbanu whose command line holds
-# -Marker (other brokers on the machine are left alone), tries to add an
-# instance to the control pipe, and adds -Instances instances to the data pipe. Each connection it gets is logged with
+# squat390.ps1 -Log <file> -Since <time> [-Instances 200] [-WaitSeconds 120]
+# #390 demo squatter: a same-user process that waits for the pipes of the one
+# Corbanu credential broker started after -Since (the broker's parent process
+# is not Core, so it is found by its start time; with several such brokers it
+# gives up and touches none), tries to add an instance to the control pipe,
+# and adds -Instances instances to the data pipe. Each connection it gets is logged with
 # the client's process id, the bytes received and whether they held an HTTP
 # request or a bearer key. It never sends anything. Stop it with Stop-Process.
-param([string]$Log, [string]$Marker, [int]$Instances = 200, [int]$WaitSeconds = 120)
+param([string]$Log, [datetime]$Since, [int]$Instances = 200, [int]$WaitSeconds = 120)
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @"
 using System;
@@ -73,33 +74,34 @@ public static class Squat390 {
 [Squat390]::LogPath = $Log
 Set-Content -Path $Log -Value "squatter pid $PID started"
 $deadline = (Get-Date).AddSeconds($WaitSeconds)
-function Test-Ancestry([uint32]$ProcessId) {
-  for ($depth = 0; $depth -lt 5 -and $ProcessId -ne 0; $depth++) {
-    $process = Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId"
-    if (-not $process) { return $false }
-    if ($process.CommandLine -and $process.CommandLine.Contains($Marker)) { return $true }
-    $ProcessId = $process.ParentProcessId
-  }
-  return $false
-}
 $control = $null; $data = $null
 do {
-  $nonces = [IO.Directory]::GetFiles('\\.\pipe\') | ForEach-Object { Split-Path $_ -Leaf } |
+  $found = @()
+  $nonces = [IO.Directory]::GetFiles('\\.\pipe\') | ForEach-Object { [IO.Path]::GetFileName($_) } |
     Where-Object { $_ -like 'corbanu-cbk-*-b' } | ForEach-Object { $_.Substring(0, $_.Length - 2) }
   foreach ($nonce in $nonces) {
-    if (Test-Ancestry ([Squat390]::ServerPid("$nonce-b"))) { $control = "$nonce-c"; $data = "$nonce-b"; break }
+    $server = [Squat390]::ServerPid("$nonce-b")
+    $process = if ($server) { Get-CimInstance Win32_Process -Filter "ProcessId = $server" }
+    if ($process -and $process.Name -like 'corbanu*' -and $process.CreationDate -ge $Since) { $found += $nonce }
   }
-  if ($data) { break }
+  if ($found.Count -gt 1) { [Squat390]::Log("several brokers started since $Since; touching none"); exit 1 }
+  if ($found.Count -eq 1) { $control = "$($found[0])-c"; $data = "$($found[0])-b"; break }
   Start-Sleep -Milliseconds 300
 } while ((Get-Date) -lt $deadline)
-if (-not $data) { [Squat390]::Log('no broker pipes found for this run'); exit 1 }
+if (-not $data) { [Squat390]::Log('no broker started since then'); exit 1 }
 [Squat390]::Log("found broker pipes $control and $data")
 try {
   $extra = New-Object IO.Pipes.NamedPipeServerStream($control, [IO.Pipes.PipeDirection]::InOut, -1)
   [Squat390]::Log('control pipe: ADDED an instance')
 } catch {
-  [Squat390]::Log("control pipe: could not add an instance: $($_.Exception.InnerException.Message)$($_.Exception.Message)")
+  $reason = if ($_.Exception.InnerException) { $_.Exception.InnerException.Message } else { $_.Exception.Message }
+  [Squat390]::Log("control pipe: could not add an instance: $($reason.Trim())")
 }
 [Squat390]::Start($data, $Instances)
+# Clients reach the longest-listening instance first (measured). One client
+# visit makes the broker replace its listening instance, which then queues
+# behind ours.
+Start-Sleep -Seconds 1
+[void][Squat390]::ServerPid($data)
 [Squat390]::Log("data pipe: added $Instances instances")
 while ($true) { Start-Sleep 1 }

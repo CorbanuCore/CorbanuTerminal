@@ -36,7 +36,7 @@ wait = "Corbanu Terminal \\(v"
 # Off screen: start the squatter against this run's broker and wait until it
 # has added its data-pipe instances.
 [[steps]]
-run = '''root="$(git -C ../../.. rev-parse --show-toplevel)"; log="$(cygpath -w ../logs/squat390.log)"; powershell.exe -NoProfile -Command "Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','$(cygpath -w "$root/qa/security/issue-390/squat390.ps1")','-Log','$log','-Marker','$(basename "$(cd .. && pwd)")'"; for i in $(seq 1 150); do grep -q "data pipe: added" ../logs/squat390.log 2>/dev/null && exit 0; sleep 0.2; done; cat ../logs/squat390.log; exit 1'''
+run = '''root="$(git -C ../../.. rev-parse --show-toplevel)"; log="$(cygpath -w ../logs/squat390.log)"; powershell.exe -NoProfile -Command "Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','$(cygpath -w "$root/qa/security/issue-390/squat390.ps1")','-Log','$log','-Since','$(date -r ../launch.sh -Iseconds)'"; for i in $(seq 1 150); do grep -q "data pipe: added" ../logs/squat390.log 2>/dev/null && exit 0; sleep 0.2; done; cat ../logs/squat390.log; exit 1'''
 timeout = 45
 
 [[steps]]
