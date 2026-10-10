@@ -186,14 +186,7 @@ impl AccountRequestProcessor {
     }
 
     fn current_account_updated_notification(&self) -> AccountUpdatedNotification {
-        let auth = self.auth_manager.auth_cached();
-        AccountUpdatedNotification {
-            auth_mode: auth
-                .as_ref()
-                .map(CodexAuth::api_auth_mode)
-                .map(auth_mode_to_api),
-            plan_type: auth.as_ref().and_then(CodexAuth::account_plan_type),
-        }
+        account_updated_notification(self.auth_manager.auth_cached().as_ref())
     }
 
     async fn load_latest_config(&self) -> Config {
@@ -938,13 +931,7 @@ impl AccountRequestProcessor {
                 auth.clone(),
             )
             .await;
-            let payload_v2 = AccountUpdatedNotification {
-                auth_mode: auth
-                    .as_ref()
-                    .map(CodexAuth::api_auth_mode)
-                    .map(auth_mode_to_api),
-                plan_type: auth.as_ref().and_then(CodexAuth::account_plan_type),
-            };
+            let payload_v2 = account_updated_notification(auth.as_ref());
             outgoing
                 .send_server_notification(ServerNotification::AccountUpdated(payload_v2))
                 .await;
@@ -1008,6 +995,7 @@ impl AccountRequestProcessor {
                 .map(|auth_mode| AccountUpdatedNotification {
                     auth_mode,
                     plan_type: None,
+                    api_key_env_var: api_key_env_var(self.auth_manager.auth_cached().as_ref()),
                 });
         self.outgoing
             .send_result(request_id, result.map(|_| LogoutAccountResponse {}))
@@ -1127,13 +1115,23 @@ impl AccountRequestProcessor {
         self.refresh_token_if_requested(do_refresh).await;
 
         let config = self.load_latest_config().await;
+        let uses_openai_key = config.model_provider.env_key.is_none();
         let provider =
             create_model_provider(config.model_provider, Some(self.auth_manager.clone()));
         let account_state = match provider.account_state() {
             Ok(account_state) => account_state,
             Err(err) => return Err(invalid_request(err.to_string())),
         };
-        let account = account_state.account.map(Account::from);
+        let account = account_state
+            .account
+            .map(Account::from)
+            .map(|account| match account {
+                // Name the variable when the OpenAI key comes from the environment.
+                Account::ApiKey { .. } if uses_openai_key => Account::ApiKey {
+                    env_var: api_key_env_var(self.auth_manager.auth_cached().as_ref()),
+                },
+                account => account,
+            });
 
         Ok(GetAccountResponse {
             account,
@@ -1418,6 +1416,20 @@ fn workspace_message_type_from_backend(
 
 fn workspace_messages_feature_disabled(err: &BackendRequestError) -> bool {
     err.status().is_some_and(|status| status.as_u16() == 404)
+}
+
+fn account_updated_notification(auth: Option<&CodexAuth>) -> AccountUpdatedNotification {
+    AccountUpdatedNotification {
+        auth_mode: auth.map(CodexAuth::api_auth_mode).map(auth_mode_to_api),
+        plan_type: auth.and_then(CodexAuth::account_plan_type),
+        api_key_env_var: api_key_env_var(auth),
+    }
+}
+
+/// The environment variable an OpenAI API key was read from, if any.
+fn api_key_env_var(auth: Option<&CodexAuth>) -> Option<String> {
+    auth.and_then(CodexAuth::api_key_env_var)
+        .map(str::to_string)
 }
 
 #[cfg(test)]

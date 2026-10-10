@@ -43,6 +43,9 @@ pub(crate) struct SessionState {
     pub(crate) pending_session_start_sources: VecDeque<codex_hooks::SessionStartSource>,
     granted_permissions_by_environment_id: HashMap<String, AdditionalPermissionProfile>,
     next_turn_is_first: bool,
+    /// Whether the latest model request was authorised by the `OPENAI_API_KEY`
+    /// fallback; the notice is shown only when this turns on.
+    openai_api_key_env_fallback_in_use: bool,
 }
 
 impl SessionState {
@@ -75,7 +78,16 @@ impl SessionState {
             pending_session_start_sources: VecDeque::new(),
             granted_permissions_by_environment_id: HashMap::new(),
             next_turn_is_first: true,
+            openai_api_key_env_fallback_in_use: false,
         }
+    }
+
+    /// Records whether the current request uses the `OPENAI_API_KEY` fallback and
+    /// returns true when it newly does (first use, or a switch back to it).
+    pub(crate) fn note_openai_api_key_env_fallback(&mut self, in_use: bool) -> bool {
+        let newly_in_use = in_use && !self.openai_api_key_env_fallback_in_use;
+        self.openai_api_key_env_fallback_in_use = in_use;
+        newly_in_use
     }
 
     // History helpers

@@ -208,6 +208,7 @@ async fn assert_account_updated(
         AccountUpdatedNotification {
             auth_mode,
             plan_type: None,
+            api_key_env_var: None,
         }
     );
     Ok(())
@@ -2403,10 +2404,48 @@ async fn get_account_with_api_key() -> Result<()> {
         timeout(DEFAULT_READ_TIMEOUT, mcp.read_response(request_id)).await??;
 
     let expected = GetAccountResponse {
-        account: Some(Account::ApiKey {}),
+        account: Some(Account::ApiKey { env_var: None }),
         requires_openai_auth: true,
     };
     assert_eq!(received, expected);
+    Ok(())
+}
+
+#[tokio::test]
+async fn get_account_names_openai_api_key_from_environment() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    create_config_toml(
+        codex_home.path(),
+        CreateConfigTomlParams {
+            requires_openai_auth: Some(true),
+            ..Default::default()
+        },
+    )?;
+
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .without_auto_env()
+        .with_env_overrides(&[("OPENAI_API_KEY", Some("sk-env-fallback"))])
+        .build_initialized_with_timeout(DEFAULT_READ_TIMEOUT)
+        .await?;
+
+    let request_id = mcp
+        .send_get_account_request(GetAccountParams {
+            refresh_token: false,
+        })
+        .await?;
+    let received: GetAccountResponse =
+        timeout(DEFAULT_READ_TIMEOUT, mcp.read_response(request_id)).await??;
+
+    assert_eq!(
+        received,
+        GetAccountResponse {
+            account: Some(Account::ApiKey {
+                env_var: Some("OPENAI_API_KEY".to_string()),
+            }),
+            requires_openai_auth: true,
+        }
+    );
     Ok(())
 }
 

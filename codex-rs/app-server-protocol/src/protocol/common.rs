@@ -3191,12 +3191,20 @@ mod tests {
 
     #[test]
     fn account_serializes_fields_in_camel_case() -> Result<()> {
-        let api_key = v2::Account::ApiKey {};
+        let api_key = v2::Account::ApiKey {
+            env_var: Some("OPENAI_API_KEY".to_string()),
+        };
         assert_eq!(
             json!({
                 "type": "apiKey",
+                "envVar": "OPENAI_API_KEY",
             }),
             serde_json::to_value(&api_key)?,
+        );
+        // Older servers omit `envVar`.
+        assert_eq!(
+            serde_json::from_value::<v2::Account>(json!({ "type": "apiKey" }))?,
+            v2::Account::ApiKey { env_var: None },
         );
 
         let chatgpt = v2::Account::Chatgpt {

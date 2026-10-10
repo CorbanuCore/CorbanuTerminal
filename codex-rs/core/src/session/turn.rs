@@ -1638,6 +1638,31 @@ pub(crate) fn build_prompt(
     }
 }
 
+/// Tells the user, once per switch, that requests are billed to the
+/// `OPENAI_API_KEY` from their environment. The provider filters that fallback
+/// out for non-OpenAI providers, so they never see this.
+async fn notify_openai_api_key_env_fallback(sess: &Session, turn_context: &TurnContext) {
+    let in_use = turn_context
+        .provider
+        .auth()
+        .await
+        .is_some_and(|auth| auth.is_openai_api_key_env_fallback());
+    let newly_in_use = sess
+        .state
+        .lock()
+        .await
+        .note_openai_api_key_env_fallback(in_use);
+    if newly_in_use {
+        sess.send_event(
+            turn_context,
+            EventMsg::Warning(WarningEvent {
+                message: codex_login::OPENAI_API_KEY_ENV_FALLBACK_NOTICE.to_string(),
+            }),
+        )
+        .await;
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 #[allow(deprecated)]
 #[instrument(level = "trace",
@@ -1661,6 +1686,7 @@ async fn run_sampling_request(
     let sampling_started_at = Instant::now();
     let turn_context = Arc::clone(&step_context.turn);
     let router = Arc::clone(&step_context.tool_router);
+    notify_openai_api_key_env_fallback(&sess, &turn_context).await;
 
     // Accounting observes this turn's requests; it never stops one. A turn whose
     // collection cannot attach, or fails later, runs unrecorded and says so.

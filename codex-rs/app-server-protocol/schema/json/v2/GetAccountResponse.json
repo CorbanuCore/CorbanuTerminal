@@ -5,6 +5,14 @@
       "oneOf": [
         {
           "properties": {
+            "envVar": {
+              "default": null,
+              "description": "The environment variable the key is read from (for example `OPENAI_API_KEY`), or `null` for a saved key.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "type": {
               "enum": [
                 "apiKey"

@@ -36,6 +36,19 @@ async fn clear_connector_selection_removes_entries() {
 }
 
 #[tokio::test]
+async fn openai_api_key_env_fallback_notice_fires_on_each_switch_to_it() {
+    let session_configuration = make_session_configuration_for_tests().await;
+    let mut state = SessionState::new(session_configuration);
+
+    // First request on the fallback, then later requests on it.
+    assert!(state.note_openai_api_key_env_fallback(/*in_use*/ true));
+    assert!(!state.note_openai_api_key_env_fallback(/*in_use*/ true));
+    // Signed in mid-session, then logged out again.
+    assert!(!state.note_openai_api_key_env_fallback(/*in_use*/ false));
+    assert!(state.note_openai_api_key_env_fallback(/*in_use*/ true));
+}
+
+#[tokio::test]
 async fn set_rate_limits_defaults_limit_id_to_codex_when_missing() {
     let session_configuration = make_session_configuration_for_tests().await;
     let mut state = SessionState::new(session_configuration);

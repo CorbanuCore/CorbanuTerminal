@@ -42,6 +42,7 @@ pub use auth::ExternalAuthRefreshContext;
 pub use auth::ExternalAuthRefreshReason;
 pub use auth::ExternalBearerCachePolicy;
 pub use auth::KIMI_CODE_API_KEY_ENV_VAR;
+pub use auth::OPENAI_API_KEY_ENV_FALLBACK_NOTICE;
 pub use auth::OPENAI_API_KEY_ENV_VAR;
 pub use auth::OpenAiAuthMetadata;
 pub use auth::ProviderApiKeyStorageMetadata;

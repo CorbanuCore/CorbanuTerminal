@@ -737,9 +737,12 @@ fn status_account_value(
             (None, Some(plan)) => plan.clone(),
             (None, None) => "ChatGPT".to_string(),
         },
-        StatusAccountDisplay::ApiKey => {
+        StatusAccountDisplay::ApiKey { env_var: None } => {
             "OpenAI API key configured (run corbanu login to use ChatGPT)".to_string()
         }
+        StatusAccountDisplay::ApiKey {
+            env_var: Some(env_var),
+        } => format!("{env_var} from your environment (billed per use)"),
     })
 }
 

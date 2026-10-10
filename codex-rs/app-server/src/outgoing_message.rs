@@ -860,6 +860,7 @@ mod tests {
         let notification = ServerNotification::AccountUpdated(AccountUpdatedNotification {
             auth_mode: Some(AuthMode::Chatgpt),
             plan_type: Some(PlanType::SelfServeBusinessProLite),
+            api_key_env_var: None,
         });
 
         assert_eq!(
@@ -867,7 +868,8 @@ mod tests {
                 "method": "account/updated",
                 "params": {
                     "authMode": "chatgpt",
-                    "planType": "self_serve_business_prolite"
+                    "planType": "self_serve_business_prolite",
+                    "apiKeyEnvVar": null
                 },
             }),
             serde_json::to_value(notification)
