@@ -158,9 +158,14 @@ nav:
           - Draft September 9 Portfolio:
               - Overview: plans/portfolio-2026-09-09.md
               - "PF-60 — Unified agent cost and usage accounting":
-                  - Plan: plans/active/portfolio-agent-cost-accounting.md
-                  - "PF-60-S02 — Idempotent usage persistence and replay": sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md
-                  - "PF-60-S04 — Cost-accounting acceptance and handoff": sprints/current/portfolio-agent-cost-accounting/pf-60-s04-cost-accounting-acceptance-and-handoff.md
+                  - Plan: plans/completed/main-2026-10-10-portfolio-agent-cost-accounting.md
+              - "PF-60 follow-ups — Accounting follow-ups after PF-60":
+                  - Plan: plans/proposed/portfolio-agent-cost-accounting-followups.md
+                  - "PF-60-S06 — Side-conversation and temporary-fork attribution": sprints/current/portfolio-agent-cost-accounting-followups/pf-60-s06-side-and-fork-attribution.md
+                  - "PF-60-S07 — Price catalogue refresh (#368)": sprints/current/portfolio-agent-cost-accounting-followups/pf-60-s07-price-catalogue-refresh.md
+                  - "PF-60-S08 — /cost page clarity and reopen warm-up cost": sprints/current/portfolio-agent-cost-accounting-followups/pf-60-s08-cost-page-clarity-and-reopen-warmup.md
+                  - "PF-60-S09 — Verification paths for unverified flows": sprints/current/portfolio-agent-cost-accounting-followups/pf-60-s09-verification-paths-for-unverified-flows.md
+                  - "PF-60-S10 — Isolated code-blind acceptance of the follow-ups": sprints/current/portfolio-agent-cost-accounting-followups/pf-60-s10-isolated-code-blind-acceptance.md
               - "PF-61 — Plan and model-serving backend reconciliation":
                   - Plan: plans/proposed/portfolio-plan-backend-reconciliation.md
                   - "PF-61-S01 — Repository and deployment truth map": sprints/current/portfolio-plan-backend-reconciliation/pf-61-s01-repository-and-deployment-truth-map.md
