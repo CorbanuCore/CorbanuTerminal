@@ -126,7 +126,7 @@ pub(crate) fn account_failure(snapshot: &ProviderAuthFlowSnapshot) -> Option<Acc
 pub(crate) fn claude_recovery_message(reason: CR) -> &'static str {
     match reason {
         CR::AmbiguousSources => {
-            "More than one Claude credential was found. Explicitly choose the source to use."
+            "Claude credentials were found, but no method is selected. Explicitly choose the source to use."
         }
         CR::MissingSelection => {
             "The selected Claude credential is missing. Choose a source to restore access."

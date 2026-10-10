@@ -344,3 +344,19 @@ fn command_provider(path: &std::path::Path) -> ModelProviderInfo {
         ..Default::default()
     }
 }
+
+#[test]
+fn unselected_claude_environment_token_is_configured_not_ambiguous() {
+    assert_eq!(
+        claude_credential_metadata(ClaudeCodePlanStatus::EnvironmentTokenWithoutSelection),
+        ClaudeCredentialMetadata::Configured {
+            source: codex_provider_auth::ClaudeCredentialSource::Environment,
+        }
+    );
+    assert_eq!(
+        claude_credential_metadata(ClaudeCodePlanStatus::EnvironmentToken { available: false }),
+        ClaudeCredentialMetadata::RecoveryRequired {
+            reason: codex_provider_auth::ProviderRecoveryReason::UnhealthyClaudeSelection,
+        }
+    );
+}

@@ -38,8 +38,12 @@ pub(crate) async fn resolve(
     openai: Option<OpenAiAuthMetadata>,
 ) -> StartupProviderResolution {
     let mut account = ProviderAccountMetadata::discover(config).await;
+    // The app server reports an OPENAI_API_KEY fallback as a plain API key;
+    // keep discovery's finer "environment" source for that case.
     if config.model_provider_id == codex_model_provider_info::OPENAI_PROVIDER_ID
         && let Some(openai) = openai
+        && !(openai == OpenAiAuthMetadata::ApiKey
+            && account.openai == OpenAiAuthMetadata::EnvironmentApiKey)
     {
         account.openai = openai;
     }

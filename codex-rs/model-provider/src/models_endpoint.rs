@@ -60,7 +60,9 @@ impl OpenAiModelsEndpoint {
 
     async fn auth(&self) -> Option<CodexAuth> {
         match self.auth_manager.as_ref() {
-            Some(auth_manager) => auth_manager.auth().await,
+            Some(auth_manager) => {
+                crate::provider::auth_for_provider(auth_manager.auth().await, &self.provider_info)
+            }
             None => None,
         }
     }

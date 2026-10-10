@@ -3,6 +3,7 @@ use super::HANDOFF_STREAM_TRUNCATION_MARKER;
 use super::RealtimeHandoffState;
 use super::RealtimeSessionKind;
 use super::RealtimeStreamedItem;
+use super::realtime_api_key;
 use super::realtime_delegation_from_handoff;
 use super::realtime_request_headers;
 use super::realtime_text_from_handoff_request;
@@ -592,4 +593,28 @@ async fn pf_60_s03_realtime_call_is_recorded() -> anyhow::Result<()> {
         "turns recorded: {turns:?}"
     );
     Ok(())
+}
+
+#[test]
+fn realtime_sends_the_openai_api_key_env_fallback_only_to_openai() {
+    let env_fallback =
+        codex_login::CodexAuth::from_api_key_env("sk-env", codex_login::OPENAI_API_KEY_ENV_VAR);
+    let oss = codex_model_provider_info::create_oss_provider_with_base_url(
+        "http://localhost:11434/v1",
+        codex_model_provider_info::WireApi::Responses,
+    );
+    let openai = codex_model_provider_info::ModelProviderInfo::create_openai_provider(
+        /*base_url*/ None,
+    );
+
+    assert!(realtime_api_key(Some(&env_fallback), &oss).is_err());
+    assert_eq!(
+        realtime_api_key(Some(&env_fallback), &openai).expect("openai key"),
+        "sk-env"
+    );
+    let stored = codex_login::CodexAuth::from_api_key("sk-stored");
+    assert_eq!(
+        realtime_api_key(Some(&stored), &oss).expect("stored key"),
+        "sk-stored"
+    );
 }

@@ -2813,8 +2813,140 @@ fn claude_provider_picker_labels_are_compact() {
     );
     assert_eq!(
         ClaudeProviderProfileKind::ClaudePlan.status_model_label(),
-        "Opus 5 Claude Plan"
+        "Opus 5.5 Claude Plan"
     );
+}
+
+#[test]
+fn claude_plan_pane_label_names_the_pinned_model_it_serves() {
+    let (dir, pane) = pane(ClaudeProviderProfileKind::ClaudePlan);
+    let plan =
+        build_claude_command_plan(&pane, "hello".to_string(), dir.path()).expect("command plan");
+    let model_arg = plan
+        .args
+        .iter()
+        .position(|arg| arg == "--model")
+        .and_then(|index| plan.args.get(index + 1))
+        .expect("--model argument");
+
+    // The pane asks Claude Code for an exact model, not the moving `opus`
+    // alias, and its label names that model.
+    assert_eq!(model_arg, "claude-opus-5-5");
+    assert_eq!(plan.provider_model, "claude-opus-5-5");
+    assert_eq!(
+        ClaudeProviderProfileKind::ClaudePlan.status_model_label(),
+        "Opus 5.5 Claude Plan"
+    );
+}
+
+#[test]
+fn saved_claude_plan_pane_titles_move_to_the_current_label() {
+    use super::persistence::current_profile_title;
+    use super::persistence::spawn_identity_from_title;
+    let profile = ClaudeProviderProfileKind::ClaudePlan;
+
+    assert_eq!(
+        current_profile_title(
+            "Claude Code Burzum [troll] - Opus 5 Claude Plan".to_string(),
+            profile
+        ),
+        "Claude Code Burzum [troll] - Opus 5.5 Claude Plan"
+    );
+    assert_eq!(
+        current_profile_title("Review - Claude Plan".to_string(), profile),
+        "Review - Claude Plan"
+    );
+    assert_eq!(
+        current_profile_title("My review pane".to_string(), profile),
+        "My review pane"
+    );
+    assert_eq!(
+        spawn_identity_from_title("Claude Code Burzum [troll] - Opus 5 Claude Plan", profile),
+        (Some(SpawnRole::Troll), Some("Burzum".to_string()))
+    );
+}
+
+#[test]
+fn saved_pane_with_the_old_opus_5_label_restores_relabelled() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let pane_id = "claude-opus5-label-pane";
+    let artifact_dir = codex_home.path().join("panes").join(pane_id);
+    std::fs::create_dir_all(&artifact_dir).expect("artifact dir");
+    let artifact_path = artifact_dir.join("turn-0001.jsonl");
+    let audit_path = artifact_dir.join("turn-0001.audit.json");
+    std::fs::write(
+        &artifact_path,
+        serde_json::json!({
+            "type": "result",
+            "subtype": "success",
+            "result": "legacy Claude Plan result",
+            "session_id": "22222222-3333-4444-8555-666666666666"
+        })
+        .to_string(),
+    )
+    .expect("artifact");
+    std::fs::write(
+        &audit_path,
+        serde_json::json!({
+            "pane_id": pane_id,
+            "pane_title": "Claude Code Burzum [troll] - Opus 5 Claude Plan",
+            "provider": "Claude Code - Opus 5 Claude Plan",
+            "model": "opus",
+            "session_id": "22222222-3333-4444-8555-666666666666",
+            "turn_index": 1,
+            "command_mode": "new-session",
+            "max_turns": null,
+            "artifact_path": artifact_path,
+            "audit_path": audit_path,
+            "timeout_ms": null,
+            "started_at_unix_ms": current_unix_ms_i64(),
+            "ended_at_unix_ms": current_unix_ms_i64(),
+            "last_progress_elapsed_ms": null,
+            "duration_ms": 123,
+            "usage": null,
+            "usage_status": "untrusted",
+            "terminal_reason": null,
+            "status": "success",
+            "error_summary": null,
+            "reasoning_event_count": 0,
+            "reasoning_events": [],
+            "tool_use_count": 0,
+            "tool_names": [],
+            "tool_events": []
+        })
+        .to_string(),
+    )
+    .expect("audit");
+
+    let layout = PaneLayoutState {
+        version: PANE_LAYOUT_VERSION,
+        codex_thread_id: Some("019f0657-1d67-7103-9d65-89e71587347d".to_string()),
+        active_user_pane_id: None,
+        spawn_nazgul_pane_id: None,
+        claude_pane_ids: vec![pane_id.to_string()],
+        spawn_parent_by_node: BTreeMap::new(),
+        ..Default::default()
+    };
+    let restored = ClaudePaneRegistry::restore_from_disk(codex_home.path(), Some(&layout));
+    assert_eq!(restored.panes().len(), 1);
+    let pane = &restored.panes()[0];
+    assert_eq!(pane.id, pane_id);
+    assert_eq!(pane.profile, ClaudeProviderProfileKind::ClaudePlan);
+    assert_eq!(pane.spawn_role, Some(SpawnRole::Troll));
+    assert_eq!(pane.spawn_nickname.as_deref(), Some("Burzum"));
+    assert_eq!(
+        pane.title,
+        "Claude Code Burzum [troll] - Opus 5.5 Claude Plan"
+    );
+    assert_eq!(
+        pane.claude_session_id.as_deref(),
+        Some("22222222-3333-4444-8555-666666666666")
+    );
+    assert_eq!(
+        pane.latest_result_message.as_deref(),
+        Some("legacy Claude Plan result")
+    );
+    assert_eq!(pane.next_turn_index, 2);
 }
 
 #[test]
@@ -3283,7 +3415,7 @@ fn claude_spawn_pane_title_includes_role() {
             /*spawn_role*/ None,
             /*spawn_nickname*/ None
         ),
-        "Claude Code - Opus 5 Claude Plan"
+        "Claude Code - Opus 5.5 Claude Plan"
     );
 }
 
@@ -3310,7 +3442,7 @@ fn create_pane_with_role_sets_spawn_role_and_title() {
     assert_eq!(pane.spawn_nickname.as_deref(), Some("Burzum"));
     assert_eq!(
         pane.title,
-        "Claude Code Burzum [troll] - Opus 5 Claude Plan"
+        "Claude Code Burzum [troll] - Opus 5.5 Claude Plan"
     );
 }
 

@@ -263,6 +263,18 @@ fn provider_uses_first_party_auth_path(provider: &ModelProviderInfo) -> bool {
         && provider.aws.is_none()
 }
 
+/// Drops the ambient `OPENAI_API_KEY` fallback for providers that don't use
+/// OpenAI sign-in (local OSS servers, custom endpoints), so a key exported in
+/// the shell is never sent to them. Saved logins keep their existing behavior.
+pub(crate) fn auth_for_provider(
+    auth: Option<CodexAuth>,
+    provider: &ModelProviderInfo,
+) -> Option<CodexAuth> {
+    auth.filter(|auth| {
+        !auth.is_openai_api_key_env_fallback() || provider_uses_first_party_auth_path(provider)
+    })
+}
+
 fn configured_provider_helper_model(info: &ModelProviderInfo) -> Option<&'static str> {
     // Provider identity is a transport contract, not a credential-variable convention. Custom
     // providers may intentionally reuse a built-in key variable, and must not thereby inherit a
@@ -430,7 +442,7 @@ impl ModelProvider for ConfiguredModelProvider {
                 return self.provider_env_auth(provider_key_id);
             }
 
-            auth_manager.auth().await
+            auth_for_provider(auth_manager.auth().await, &self.info)
         })
     }
 
@@ -741,6 +753,48 @@ mod tests {
             .expect("auth should resolve");
 
         assert!(auth.auth.to_auth_headers().is_empty());
+    }
+
+    #[tokio::test]
+    async fn openai_api_key_env_fallback_reaches_only_first_party_openai_auth() {
+        let env_fallback = || {
+            Some(AuthManager::from_auth_for_testing(
+                CodexAuth::from_api_key_env("sk-env", codex_login::OPENAI_API_KEY_ENV_VAR),
+            ))
+        };
+        let oss = create_model_provider(
+            create_oss_provider_with_base_url("http://localhost:11434/v1", WireApi::Responses),
+            env_fallback(),
+        );
+        let openai = create_model_provider(
+            ModelProviderInfo::create_openai_provider(/*base_url*/ None),
+            env_fallback(),
+        );
+
+        assert!(oss.auth().await.is_none());
+        assert!(
+            oss.api_auth()
+                .await
+                .expect("oss auth")
+                .to_auth_headers()
+                .is_empty()
+        );
+        assert_eq!(
+            openai
+                .auth()
+                .await
+                .and_then(|auth| auth.api_key().map(str::to_string)),
+            Some("sk-env".to_string())
+        );
+
+        // A saved key keeps its existing behavior on other providers.
+        let stored = create_model_provider(
+            create_oss_provider_with_base_url("http://localhost:11434/v1", WireApi::Responses),
+            Some(AuthManager::from_auth_for_testing(CodexAuth::from_api_key(
+                "sk-stored",
+            ))),
+        );
+        assert!(stored.auth().await.is_some());
     }
 
     #[test]

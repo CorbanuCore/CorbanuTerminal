@@ -7,7 +7,6 @@ use super::*;
 
 /// Upper bound for fixture subprocesses that are expected to answer. These tests assert the
 /// answer, not its latency, so a loaded CI runner must not turn them into timeout checks.
-#[cfg(unix)]
 const FIXTURE_SUCCESS_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Writes an executable fixture script from a child process.
@@ -532,6 +531,7 @@ async fn providers_status_reports_selected_login_reauthorization_need() {
         FIXTURE_SUCCESS_TIMEOUT,
         &fake_claude,
         Some(&fake_claude),
+        /*environment_token*/ None,
     )
     .await;
 
@@ -558,6 +558,7 @@ async fn providers_status_reports_health_probe_timeout_as_error() {
         Duration::from_millis(25),
         Path::new("claude"),
         Some(&hanging_health),
+        /*environment_token*/ None,
     )
     .await;
 
@@ -591,10 +592,79 @@ async fn providers_status_preserves_unavailable_claude_after_a_healthy_probe() {
         FIXTURE_SUCCESS_TIMEOUT,
         &temp_dir.path().join("missing-claude"),
         Some(&healthy_probe),
+        /*environment_token*/ None,
     )
     .await;
 
     assert_eq!(status, ClaudeCodePlanStatus::Unavailable);
+}
+
+#[tokio::test]
+async fn unselected_environment_token_is_ready_like_exec() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+
+    let status = current_status_with_executables(
+        temp_dir.path(),
+        FIXTURE_SUCCESS_TIMEOUT,
+        &temp_dir.path().join("missing-claude"),
+        /*health_executable*/ None,
+        Some("fixture-environment-token"),
+    )
+    .await;
+
+    assert_eq!(
+        status,
+        ClaudeCodePlanStatus::EnvironmentTokenWithoutSelection
+    );
+}
+
+#[tokio::test]
+async fn blank_environment_token_still_requires_a_method() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+
+    let status = current_status_with_executables(
+        temp_dir.path(),
+        FIXTURE_SUCCESS_TIMEOUT,
+        &temp_dir.path().join("missing-claude"),
+        /*health_executable*/ None,
+        Some("  "),
+    )
+    .await;
+
+    assert_eq!(
+        status,
+        ClaudeCodePlanStatus::SelectionRequired {
+            existing_source_detected: false
+        }
+    );
+}
+
+#[tokio::test]
+async fn environment_token_after_a_lost_selection_still_requires_a_method() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    // A saved choice leaves the sentinel; without the choice itself the
+    // request path fails closed, so the token must not be reported as ready.
+    std::fs::write(
+        codex_vault::claude_auth_selection_sentinel_path(temp_dir.path()),
+        "",
+    )
+    .expect("write sentinel");
+
+    let status = current_status_with_executables(
+        temp_dir.path(),
+        FIXTURE_SUCCESS_TIMEOUT,
+        &temp_dir.path().join("missing-claude"),
+        /*health_executable*/ None,
+        Some("fixture-environment-token"),
+    )
+    .await;
+
+    assert_eq!(
+        status,
+        ClaudeCodePlanStatus::SelectionRequired {
+            existing_source_detected: true
+        }
+    );
 }
 
 #[tokio::test]

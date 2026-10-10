@@ -1867,6 +1867,204 @@ async fn load_auth_reads_ambient_api_key_from_env() {
     assert_eq!(auth.api_key(), Some("ambient-env"));
 }
 
+async fn manager_with_openai_api_key_env(
+    codex_home: &Path,
+    enable_codex_api_key_env: bool,
+) -> AuthManager {
+    AuthManager::new_with_openai_api_key_env(
+        codex_home.to_path_buf(),
+        enable_codex_api_key_env,
+        OpenAiApiKeyEnv::Fallback,
+        AuthCredentialsStoreMode::File,
+        /*forced_chatgpt_workspace_id*/ None,
+        /*chatgpt_base_url*/ None,
+        AuthKeyringBackendKind::Direct,
+        crate::test_support::transport_default_auth_route_config(),
+    )
+    .await
+}
+
+#[tokio::test]
+#[serial(codex_auth_env)]
+async fn openai_api_key_env_is_used_when_nothing_is_stored() {
+    let codex_home = tempdir().unwrap();
+    let _access_token_guard = remove_access_token_env_var();
+    let _codex_api_key_guard = EnvVarGuard::remove(CODEX_API_KEY_ENV_VAR);
+    let _ambient_api_key_guard = EnvVarGuard::remove(AMBIENT_API_KEY_ENV_VAR);
+    let _openai_api_key_guard = EnvVarGuard::set(OPENAI_API_KEY_ENV_VAR, "sk-openai-env");
+
+    // exec (CODEX_API_KEY enabled) and the TUI/app-server (disabled) agree.
+    for enable_codex_api_key_env in [true, false] {
+        let manager =
+            manager_with_openai_api_key_env(codex_home.path(), enable_codex_api_key_env).await;
+        let auth = manager.auth_cached().expect("OPENAI_API_KEY should load");
+
+        assert_eq!(auth.api_key(), Some("sk-openai-env"));
+        assert_eq!(auth.api_key_env_var(), Some(OPENAI_API_KEY_ENV_VAR));
+        assert_eq!(
+            manager.openai_auth_metadata(),
+            OpenAiAuthMetadata::EnvironmentApiKey
+        );
+    }
+}
+
+#[tokio::test]
+#[serial(codex_auth_env)]
+async fn stored_openai_login_takes_precedence_over_openai_api_key_env() {
+    let codex_home = tempdir().unwrap();
+    let _access_token_guard = remove_access_token_env_var();
+    let _codex_api_key_guard = EnvVarGuard::remove(CODEX_API_KEY_ENV_VAR);
+    let _ambient_api_key_guard = EnvVarGuard::remove(AMBIENT_API_KEY_ENV_VAR);
+    let _openai_api_key_guard = EnvVarGuard::set(OPENAI_API_KEY_ENV_VAR, "sk-openai-env");
+    login_with_api_key(
+        codex_home.path(),
+        "sk-stored",
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("seed api key");
+
+    let manager = manager_with_openai_api_key_env(codex_home.path(), true).await;
+    let auth = manager.auth_cached().expect("stored auth should load");
+
+    assert_eq!(auth.api_key(), Some("sk-stored"));
+    assert_eq!(auth.api_key_env_var(), None);
+    assert_eq!(manager.openai_auth_metadata(), OpenAiAuthMetadata::ApiKey);
+}
+
+#[tokio::test]
+#[serial(codex_auth_env)]
+async fn codex_api_key_env_takes_precedence_over_openai_api_key_env() {
+    let codex_home = tempdir().unwrap();
+    let _access_token_guard = remove_access_token_env_var();
+    let _ambient_api_key_guard = EnvVarGuard::remove(AMBIENT_API_KEY_ENV_VAR);
+    let _codex_api_key_guard = EnvVarGuard::set(CODEX_API_KEY_ENV_VAR, "sk-codex-env");
+    let _openai_api_key_guard = EnvVarGuard::set(OPENAI_API_KEY_ENV_VAR, "sk-openai-env");
+
+    let manager = manager_with_openai_api_key_env(codex_home.path(), true).await;
+    let auth = manager.auth_cached().expect("CODEX_API_KEY should load");
+
+    assert_eq!(auth.api_key(), Some("sk-codex-env"));
+    assert_eq!(auth.api_key_env_var(), Some(CODEX_API_KEY_ENV_VAR));
+}
+
+struct TestAuthManagerConfig {
+    codex_home: PathBuf,
+    forced_login_method: Option<ForcedLoginMethod>,
+    auth_credentials_store_mode: AuthCredentialsStoreMode,
+}
+
+impl AuthManagerConfig for TestAuthManagerConfig {
+    fn codex_home(&self) -> PathBuf {
+        self.codex_home.clone()
+    }
+
+    fn cli_auth_credentials_store_mode(&self) -> AuthCredentialsStoreMode {
+        self.auth_credentials_store_mode
+    }
+
+    fn auth_keyring_backend_kind(&self) -> AuthKeyringBackendKind {
+        AuthKeyringBackendKind::Direct
+    }
+
+    fn forced_chatgpt_workspace_id(&self) -> Option<Vec<String>> {
+        None
+    }
+
+    fn chatgpt_base_url(&self) -> String {
+        "https://chatgpt.com/backend-api/".to_string()
+    }
+
+    fn auth_route_config(&self) -> AuthRouteConfig {
+        crate::test_support::transport_default_auth_route_config()
+    }
+
+    fn forced_login_method(&self) -> Option<ForcedLoginMethod> {
+        self.forced_login_method
+    }
+}
+
+#[tokio::test]
+#[serial(codex_auth_env)]
+async fn shared_from_config_reads_openai_api_key_env_unless_chatgpt_login_is_required() {
+    let codex_home = tempdir().unwrap();
+    let _access_token_guard = remove_access_token_env_var();
+    let _codex_api_key_guard = EnvVarGuard::remove(CODEX_API_KEY_ENV_VAR);
+    let _ambient_api_key_guard = EnvVarGuard::remove(AMBIENT_API_KEY_ENV_VAR);
+    let _openai_api_key_guard = EnvVarGuard::set(OPENAI_API_KEY_ENV_VAR, "sk-openai-env");
+    let config = |forced_login_method, auth_credentials_store_mode| TestAuthManagerConfig {
+        codex_home: codex_home.path().to_path_buf(),
+        forced_login_method,
+        auth_credentials_store_mode,
+    };
+
+    for mode in [
+        AuthCredentialsStoreMode::File,
+        AuthCredentialsStoreMode::Ephemeral,
+    ] {
+        let manager = AuthManager::shared_from_config(&config(None, mode), false).await;
+        assert!(manager.openai_api_key_env_enabled());
+        assert_eq!(
+            manager
+                .auth_cached()
+                .and_then(|auth| auth.api_key_env_var()),
+            Some(OPENAI_API_KEY_ENV_VAR)
+        );
+    }
+
+    let forced = AuthManager::shared_from_config(
+        &config(
+            Some(ForcedLoginMethod::Chatgpt),
+            AuthCredentialsStoreMode::File,
+        ),
+        true,
+    )
+    .await;
+    assert!(!forced.openai_api_key_env_enabled());
+    assert!(forced.auth_cached().is_none());
+
+    // Plain constructors (cloud tasks, cloud config) don't read it.
+    let plain = AuthManager::new(
+        codex_home.path().to_path_buf(),
+        false,
+        AuthCredentialsStoreMode::File,
+        /*forced_chatgpt_workspace_id*/ None,
+        /*chatgpt_base_url*/ None,
+        AuthKeyringBackendKind::Direct,
+        crate::test_support::transport_default_auth_route_config(),
+    )
+    .await;
+    assert!(plain.auth_cached().is_none());
+}
+
+#[tokio::test]
+#[serial(codex_auth_env)]
+async fn required_chatgpt_login_ignores_openai_api_key_env() {
+    let codex_home = tempdir().unwrap();
+    let _access_token_guard = remove_access_token_env_var();
+    let _codex_api_key_guard = EnvVarGuard::remove(CODEX_API_KEY_ENV_VAR);
+    let _ambient_api_key_guard = EnvVarGuard::remove(AMBIENT_API_KEY_ENV_VAR);
+    let _openai_api_key_guard = EnvVarGuard::set(OPENAI_API_KEY_ENV_VAR, "sk-openai-env");
+    let config = build_config(
+        codex_home.path(),
+        Some(ForcedLoginMethod::Chatgpt),
+        /*forced_chatgpt_workspace_id*/ None,
+    )
+    .await;
+
+    super::enforce_login_restrictions(&config)
+        .await
+        .expect("an ignored OPENAI_API_KEY is not a login-method violation");
+    assert_eq!(
+        OpenAiApiKeyEnv::for_forced_login_method(Some(ForcedLoginMethod::Chatgpt)),
+        OpenAiApiKeyEnv::Ignore
+    );
+    assert_eq!(
+        OpenAiApiKeyEnv::for_forced_login_method(Some(ForcedLoginMethod::Api)),
+        OpenAiApiKeyEnv::Fallback
+    );
+}
+
 #[tokio::test]
 #[serial(codex_auth_env)]
 async fn enforce_login_restrictions_logs_out_for_method_mismatch() {

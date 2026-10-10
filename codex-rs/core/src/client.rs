@@ -6624,7 +6624,52 @@ async fn handle_unauthorized(
         debug.auth_error_code.as_deref(),
     );
 
-    Err(provider.map_api_error(ApiError::Transport(transport)))
+    Err(with_missing_openai_credentials_hint(
+        provider.map_api_error(ApiError::Transport(transport)),
+        provider,
+    ))
+}
+
+/// Names what to set when OpenAI rejects a request that carried no credential (#365).
+const MISSING_OPENAI_CREDENTIALS_MESSAGE: &str = "OpenAI rejected the request because no OpenAI \
+    credential was found. Set OPENAI_API_KEY (`corbanu exec` also reads CODEX_API_KEY, which \
+    takes precedence), or sign in with `corbanu login`";
+/// The same, when `forced_login_method = "chatgpt"` turns the key variables off.
+const MISSING_OPENAI_SIGN_IN_MESSAGE: &str = "OpenAI rejected the request because no ChatGPT \
+    sign-in was found. This configuration requires one: run `corbanu login`";
+
+fn with_missing_openai_credentials_hint(err: CodexErr, provider: &SharedModelProvider) -> CodexErr {
+    let info = provider.info();
+    let uses_openai_login_only = info.requires_openai_auth
+        && info.env_key.is_none()
+        && info.experimental_bearer_token.is_none()
+        && info.auth.is_none()
+        && info.aws.is_none();
+    let manager = provider.auth_manager();
+    let has_auth = manager
+        .as_ref()
+        .is_some_and(|manager| manager.auth_cached().is_some());
+    let message = if manager
+        .as_ref()
+        .is_some_and(|manager| !manager.openai_api_key_env_enabled())
+    {
+        MISSING_OPENAI_SIGN_IN_MESSAGE
+    } else {
+        MISSING_OPENAI_CREDENTIALS_MESSAGE
+    };
+    match err.details() {
+        codex_protocol::error::CodexErrorDetails::UnexpectedStatus(unexpected)
+            if uses_openai_login_only
+                && !has_auth
+                && unexpected.status == StatusCode::UNAUTHORIZED
+                && unexpected.user_message.is_none() =>
+        {
+            let mut unexpected = unexpected.clone();
+            unexpected.user_message = Some(message.to_string());
+            CodexErr::UnexpectedStatus(unexpected)
+        }
+        _ => err,
+    }
 }
 
 fn api_error_http_status(error: &ApiError) -> Option<u16> {

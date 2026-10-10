@@ -50,8 +50,14 @@ the provider's native login mechanism. Raw provider keys must not be inserted
 into prompts, visible chat history, pane transcripts, or model-readable
 metadata.
 
+The **Opus 5.5 Claude Plan** profile asks Claude Code for `claude-opus-5-5`
+by its exact ID, so the label always names the model the pane is served.
+Saved panes created under the older "Opus 5 Claude Plan" label reopen with the
+current label.
+
 Claude Plan uses the exact long-lived subscription-token or Claude Code login
-source selected in `/providers`. See
+source selected in `/providers`. With no method selected, a nonblank
+`CLAUDE_CODE_OAUTH_TOKEN` is used, as `corbanu exec` uses it. See
 [Reliable Claude Plan authentication](claude-plan-authentication.md).
 The pane plan stores only a deferred auth descriptor. Immediately before Claude
 starts, Corbanu resolves the selected source through the same trusted helper as

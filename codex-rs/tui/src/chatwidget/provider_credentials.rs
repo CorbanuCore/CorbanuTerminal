@@ -432,6 +432,9 @@ fn claude_status_description(status: &ClaudeCodePlanStatus) -> String {
         ClaudeCodePlanStatus::EnvironmentToken { available: false } => {
             "Recovery needed · selected environment token is missing".to_string()
         }
+        ClaudeCodePlanStatus::EnvironmentTokenWithoutSelection => {
+            "Ready · CLAUDE_CODE_OAUTH_TOKEN from the environment".to_string()
+        }
         ClaudeCodePlanStatus::SelectionRequired {
             existing_source_detected: true,
         } => "Choose method · existing credentials detected".to_string(),
@@ -854,6 +857,10 @@ mod tests {
                 existing_source_detected: true,
             }),
             "Choose method · existing credentials detected"
+        );
+        assert_eq!(
+            claude_status_description(&ClaudeCodePlanStatus::EnvironmentTokenWithoutSelection),
+            "Ready · CLAUDE_CODE_OAUTH_TOKEN from the environment"
         );
         assert_eq!(
             claude_status_description(&ClaudeCodePlanStatus::InvalidSelection),

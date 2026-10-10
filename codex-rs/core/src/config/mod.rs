@@ -1467,6 +1467,10 @@ impl AuthManagerConfig for Config {
     fn auth_route_config(&self) -> AuthRouteConfig {
         Config::auth_route_config(self)
     }
+
+    fn forced_login_method(&self) -> Option<ForcedLoginMethod> {
+        self.forced_login_method
+    }
 }
 
 #[derive(Clone, Default)]

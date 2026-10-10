@@ -2708,6 +2708,87 @@ async fn bedrock_unauthorized_error_uses_provider_mapping() {
     );
 }
 
+async fn openai_unauthorized_error(provider: &SharedModelProvider) -> String {
+    let mut auth_recovery = None;
+    super::handle_unauthorized(
+        TransportError::Http {
+            status: http::StatusCode::UNAUTHORIZED,
+            url: Some("wss://api.openai.com/v1/responses".to_string()),
+            headers: None,
+            body: Some(
+                r#"{"error":{"message":"Missing bearer or basic authentication in header"}}"#
+                    .to_string(),
+            ),
+        },
+        &mut auth_recovery,
+        &test_session_telemetry(),
+        provider,
+    )
+    .await
+    .expect_err("401 should fail")
+    .to_string()
+}
+
+#[tokio::test]
+async fn openai_unauthorized_without_credentials_names_the_variables_to_set() {
+    let provider = create_model_provider(
+        ModelProviderInfo::create_openai_provider(/*base_url*/ None),
+        /*auth_manager*/ None,
+    );
+
+    let message = openai_unauthorized_error(&provider).await;
+
+    assert!(message.contains("Set OPENAI_API_KEY"), "{message}");
+    assert!(message.contains("CODEX_API_KEY"), "{message}");
+    assert!(message.contains("corbanu login"), "{message}");
+}
+
+#[tokio::test]
+async fn openai_unauthorized_without_env_fallback_asks_for_a_sign_in() {
+    let home = TempDir::new().expect("home");
+    // Plain `AuthManager::new` doesn't read OPENAI_API_KEY, like a config
+    // with `forced_login_method = "chatgpt"`.
+    let manager = Arc::new(
+        AuthManager::new(
+            home.path().to_path_buf(),
+            /*enable_codex_api_key_env*/ false,
+            codex_login::AuthCredentialsStoreMode::File,
+            /*forced_chatgpt_workspace_id*/ None,
+            /*chatgpt_base_url*/ None,
+            codex_login::AuthKeyringBackendKind::Direct,
+            codex_login::test_support::transport_default_auth_route_config(),
+        )
+        .await,
+    );
+    let provider = create_model_provider(
+        ModelProviderInfo::create_openai_provider(/*base_url*/ None),
+        Some(manager),
+    );
+
+    let message = openai_unauthorized_error(&provider).await;
+
+    assert!(message.contains("run `corbanu login`"), "{message}");
+    assert!(!message.contains("OPENAI_API_KEY"), "{message}");
+}
+
+#[tokio::test]
+async fn openai_unauthorized_with_credentials_keeps_the_provider_error() {
+    let provider = create_model_provider(
+        ModelProviderInfo::create_openai_provider(/*base_url*/ None),
+        Some(AuthManager::from_auth_for_testing(CodexAuth::from_api_key(
+            "sk-test",
+        ))),
+    );
+
+    let message = openai_unauthorized_error(&provider).await;
+
+    assert!(
+        message.contains("Missing bearer or basic authentication"),
+        "{message}"
+    );
+    assert!(!message.contains("Set OPENAI_API_KEY"), "{message}");
+}
+
 #[tokio::test]
 async fn dropped_backpressured_response_stream_traces_cancelled_partial_output()
 -> anyhow::Result<()> {

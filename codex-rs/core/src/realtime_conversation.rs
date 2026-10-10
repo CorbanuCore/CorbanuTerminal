@@ -1611,7 +1611,11 @@ fn realtime_api_key(auth: Option<&CodexAuth>, provider: &ModelProviderInfo) -> C
         return Ok(token);
     }
 
-    if let Some(api_key) = auth.and_then(CodexAuth::api_key) {
+    // The ambient OPENAI_API_KEY fallback goes only to OpenAI, as below (#365).
+    if let Some(api_key) = auth
+        .filter(|auth| !auth.is_openai_api_key_env_fallback() || provider.is_openai())
+        .and_then(CodexAuth::api_key)
+    {
         return Ok(api_key.to_string());
     }
 
