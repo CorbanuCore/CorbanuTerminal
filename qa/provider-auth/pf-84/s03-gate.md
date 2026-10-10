@@ -64,7 +64,12 @@ prompt (10). Accepted with reasons: v1 `resume_agent` resumes a closed child on 
 account (7, does not widen access); prefix-less `--account` on resume is qualified with the
 config's provider (8, documented; use `<provider>:<name>`).
 
-Pass 2 (scoped follow-up on `047d9e1039`): see below.
+Pass 2 (scoped follow-up on `047d9e1039`, integrator-authorized extension): **approve**, no
+blocking findings. Its note 6 (a prefix-less `providerAccount` on a running-thread resume
+reported a false mismatch) is fixed by normalizing the request first. Follow-ups recorded,
+not blocking: tests for a mid-session level raise under D3, `thread/spawnAgent` inheritance
+and the running-thread mismatch; a recorded provider removed from config fails the resume
+with "unknown provider" (fail closed); the error relabel matches the prefix text.
 
 ## Known limits
 

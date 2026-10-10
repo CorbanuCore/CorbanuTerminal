@@ -82,8 +82,13 @@ fn collect_resume_override_mismatches(
             config_snapshot.model_provider_id
         ));
     }
-    if let Some(requested_account) = request.provider_account.as_deref()
-        && config_snapshot.provider_account.as_deref() != Some(requested_account)
+    if let Some(requested_account) = request.provider_account.as_deref().map(|selection| {
+        let (provider_id, name) = codex_core::config::split_account_selection(
+            selection,
+            &config_snapshot.model_provider_id,
+        );
+        format!("{provider_id}:{name}")
+    }) && config_snapshot.provider_account.as_deref() != Some(requested_account.as_str())
     {
         mismatch_details.push(format!(
             "provider_account requested={requested_account} active={:?}",
