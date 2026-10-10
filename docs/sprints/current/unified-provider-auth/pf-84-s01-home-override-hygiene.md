@@ -7,7 +7,7 @@ plan_feature: "PF-84"
 execution_order: 23
 owner: "Codex PF-84 home-hygiene worker"
 parallel_lane: "home-hygiene"
-write_scope: "codex-rs/utils/home-dir/, scripts/install/install.sh, scripts/install/test_install_sh.py, scripts/dev/corbanu-launcher.sh, scripts/dev/test_corbanu_launcher.sh, docs/authentication.md, qa/demos/specs/pf84-home-override.toml, qa/demos/specs/pf84-home-override-openai.toml, qa/demos/index/PF-84-S01.md, docs/sprints/current/unified-provider-auth/pf-84-s01-home-override-hygiene.md"
+write_scope: "codex-rs/utils/home-dir/, scripts/install/install.sh, scripts/install/test_install_sh.py, scripts/dev/corbanu-launcher.sh, scripts/dev/test_corbanu_launcher.sh, docs/authentication.md, qa/demos/specs/pf84-home-override.toml, qa/demos/specs/pf84-home-override-openai.toml, qa/demos/index/PF-84-S01.md, qa/provider-auth/pf-84/s01-gate.md, docs/sprints/current/unified-provider-auth/pf-84-s01-home-override-hygiene.md"
 integration_gate: "Codex PF-84 lane owner merges to main after just test -p codex-utils-home-dir, python3 -m pytest scripts/install/test_install_sh.py, sh scripts/dev/test_corbanu_launcher.sh, RTX clippy and the tmux/GLM run"
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s01-home"
 branch: "feat/pf-84-s01-home-override"
@@ -61,24 +61,26 @@ updated: 2026-10-10
 ## Done
 
 - [x] Sprint record created and linked to one plan feature.
+- [x] Conflict warning in `find_codex_home`, once per process, paths only.
+- [x] Both wrappers keep a caller-set home; `scripts/dev/corbanu-launcher.sh` checked in; documented in `docs/authentication.md`.
+- [x] Regression: a launcher worker with `CORBANU_HOME=homeB` uses homeB's account (fake OpenAI key -> 401).
+- [x] Focused tests (home-dir, installer wrappers, launcher shell test); RTX Linux clippy clean.
+- [x] tmux + GLM 5.3 Flash runs with real keys sent; OpenAI second-provider run; videos published.
+- [x] Independent Opus 5.5 High review; findings dispositioned in the [gate evidence](../../../../qa/provider-auth/pf-84/s01-gate.md).
 
 ## Remaining
 
-- [ ] Add the conflict warning in `find_codex_home` (paths only, no secrets).
-- [ ] Make both wrappers preserve a caller-set home; document in `docs/authentication.md`.
-- [ ] Regression: the wrapper with `CORBANU_HOME=<home2>` resolves home2 (fingerprint check).
-- [ ] Code-blind functional design frozen before test-result disclosure, or non-user-facing N/A reason recorded.
+- [ ] Independent code-blind functional design and execution (acceptance step, not the implementer).
 
 ## Verification
 
-- [ ] Focused test: `just test -p codex-utils-home-dir` plus the wrapper shell test.
-- [ ] tmux (`docs/tmuxHarness.md`, `test-tui` skill): disposable homes A and B,
-  `CORBANU_TEST_NO_NATIVE_KEYRING=1`. Start the wrapper with home B, check
-  the status line shows home B, and send text and Enter separately.
-- [ ] GLM run: the same flow driven by `-m glm-5.3-flash -c model_provider="zai"`. The ZAI
-  key comes only from `ZAI_API_KEY="$(corbanu vault auth-helper provider/zai_api_key)"`.
-- [ ] Video: `python3 scripts/demo_video.py record qa/demos/specs/pf84-home-override.toml --bin <candidate> --sprint PF-84-S01 --publish`.
-- [ ] One independent review (Opus 5.5 High); findings dispositioned.
+- [x] Focused test: `just test -p codex-utils-home-dir` plus the wrapper shell test.
+- [x] tmux via `scripts/demo_video.py` (`docs/tmuxHarness.md` rules): disposable homes A and B,
+  `CORBANU_TEST_NO_NATIVE_KEYRING=1`; doctor output shows home B; text and Enter sent separately.
+- [x] GLM run on `-m glm-5.3-flash -c model_provider="zai"` with the vault-helper ZAI key.
+- [x] Videos: `pf84-home-override`, `pf84-home-override-openai` (index `qa/demos/index/PF-84-S01.md`).
+- [x] One independent review (Opus 5.5 High); findings dispositioned.
+- [ ] Independent code-blind acceptance run linked (then Travis sign-off).
 
 ## Security notes
 
@@ -88,8 +90,8 @@ updated: 2026-10-10
 
 ## Exit evidence
 
-- [ ] Implementation commit and PR recorded.
-- [ ] Final-tree test output, tmux log and video path linked.
+- [x] Implementation commit and PR recorded (code `84f2797b62`; PR in the gate evidence).
+- [x] Final-tree test output, tmux log and video path linked.
 - [ ] Code-blind handoff checker passes, or limited-testing agreement recorded.
-- [ ] `Done` and `Remaining` ledgers reflect reality.
+- [x] `Done` and `Remaining` ledgers reflect reality.
 - [ ] Completed record moved to `docs/sprints/archive/unified-provider-auth/`.
