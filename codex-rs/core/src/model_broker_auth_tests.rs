@@ -456,3 +456,62 @@ fn sec_390_squatted_broker_pipe_fails_closed_with_a_clear_error() {
         assert!(error.contains("sent nothing"), "{error}");
     }
 }
+
+/// #391: a project's `.codex/config.toml` cannot turn the broker off under
+/// Aggressive (a repository may raise protection, never lower it), while the
+/// person's own config can.
+#[tokio::test]
+async fn sec_391_project_config_cannot_turn_the_aggressive_default_off() {
+    use crate::config::ConfigBuilder;
+    use crate::config::ConfigOverrides;
+    use codex_config::LoaderOverrides;
+    let root = tempfile::tempdir().expect("root");
+    let root_path = root.path().canonicalize().expect("canonical root");
+    let project = root_path.join("project");
+    std::fs::create_dir_all(project.join(".git")).expect("project");
+    std::fs::create_dir_all(project.join(".codex")).expect("project config dir");
+    std::fs::write(
+        project.join(".codex/config.toml"),
+        "[features]\nbroker_model_auth = false\n",
+    )
+    .expect("project config");
+    let load = |user_features: &'static str| {
+        let home = root_path.join(format!("home-{}", user_features.len()));
+        let project = project.clone();
+        async move {
+            std::fs::create_dir_all(&home).expect("home");
+            std::fs::write(
+                home.join("config.toml"),
+                format!(
+                    "[security]\nversion = 1\nlevel = \"aggressive\"\n\n[projects.{:?}]\ntrust_level = \"trusted\"\n{user_features}",
+                    project.display().to_string()
+                ),
+            )
+            .expect("user config");
+            let config = ConfigBuilder::default()
+                .codex_home(home)
+                .harness_overrides(ConfigOverrides {
+                    cwd: Some(project),
+                    ..Default::default()
+                })
+                .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
+                .build()
+                .await
+                .expect("config");
+            assert!(
+                config
+                    .config_layer_stack
+                    .layers_high_to_low()
+                    .iter()
+                    .any(|layer| matches!(
+                        layer.name,
+                        codex_config::ConfigLayerSource::Project { .. }
+                    )),
+                "the project layer loads"
+            );
+            config.features.enabled(codex_features::Feature::BrokerModelAuth)
+        }
+    };
+    assert_eq!(load("").await, LEVEL_DEFAULT_SUPPORTED);
+    assert!(!load("\n[features]\nbroker_model_auth = false\n").await);
+}

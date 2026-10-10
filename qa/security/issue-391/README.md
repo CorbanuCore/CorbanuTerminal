@@ -15,8 +15,10 @@ they are a separate, later decision.
   project layer, or the confirmed `security_state.json`) and the level stored
   by `/security` (`security_level.toml`). An unreadable store counts as
   Aggressive, as it already does elsewhere.
-- **An explicit setting still wins:** `[features] broker_model_auth`, a `-c`
-  override, `--enable` or `--disable`, and managed requirements.
+- **An explicit setting still wins:** `[features] broker_model_auth` in your
+  own config, a `-c` override, `--enable` or `--disable`, and managed
+  requirements. A project's `.codex/config.toml` doesn't count, so a repository
+  can't turn off the Aggressive default. It can still turn the broker on.
 - **Fail closed:** if the broker can't start, every model request is refused and
   nothing is sent directly. When the level turned the broker on, the message
   names `broker_model_auth`, says to choose Permissive in `/security`, and gives
@@ -35,6 +37,7 @@ they are a separate, later decision.
   - the default matrix: level x OS x explicit setting;
   - config loading: Core level, stored `/security` level, config off and
     `-c` off;
+  - a project's config can't turn the default off;
   - the fail-closed message for both origins and causes;
   - a real broker that can't start on Unix and Windows: refused, and env keys
     scrubbed.

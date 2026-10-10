@@ -3696,7 +3696,11 @@ impl Config {
         let broker_by_level = crate::model_broker_auth::level_turns_on_broker(
             security_level.max(stored_security_level(codex_home.as_path())),
             crate::model_broker_auth::LEVEL_DEFAULT_SUPPORTED,
-            explicit_feature_setting(cfg.features.as_ref(), Feature::BrokerModelAuth),
+            explicit_feature_setting(
+                &config_layer_stack,
+                cfg.features.as_ref(),
+                Feature::BrokerModelAuth,
+            ),
         );
         if broker_by_level {
             configured_features.enable(Feature::BrokerModelAuth);
@@ -5380,15 +5384,38 @@ fn stored_security_level(codex_home: &Path) -> SecurityLevel {
     }
 }
 
-/// The value config sets for `feature` (by its key or a legacy alias), if
-/// any; like `Features::apply_map`, the last entry in key order wins.
-fn explicit_feature_setting(features: Option<&FeaturesToml>, feature: Feature) -> Option<bool> {
-    features?
-        .entries()
+/// The value the person's own configuration sets for `feature` (by its key
+/// or a legacy alias): config files, launch flags and managed layers, the
+/// highest precedence first. A project's `.codex` folder does not count, so a
+/// repository cannot lower a level's default. A stack without layers (config
+/// built directly from a `ConfigToml`) reads `features`.
+fn explicit_feature_setting(
+    stack: &ConfigLayerStack,
+    features: Option<&FeaturesToml>,
+    feature: Feature,
+) -> Option<bool> {
+    let is_feature = |key: &str| codex_features::feature_for_key(key) == Some(feature);
+    let layers = stack.layers_high_to_low();
+    if layers.is_empty() {
+        return features?
+            .entries()
+            .into_iter()
+            .filter(|(key, _)| is_feature(key))
+            .map(|(_, enabled)| enabled)
+            .next_back();
+    }
+    layers
         .into_iter()
-        .filter(|(key, _)| codex_features::feature_for_key(key) == Some(feature))
-        .map(|(_, enabled)| enabled)
-        .next_back()
+        .filter(|layer| !matches!(layer.name, ConfigLayerSource::Project { .. }))
+        .find_map(|layer| {
+            layer
+                .config
+                .get("features")?
+                .as_table()?
+                .iter()
+                .filter(|(key, _)| is_feature(key))
+                .find_map(|(_, value)| value.as_bool())
+        })
 }
 
 pub(crate) fn layered_security_floor(stack: &ConfigLayerStack) -> SecurityLevel {

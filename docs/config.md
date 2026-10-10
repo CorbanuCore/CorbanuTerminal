@@ -189,7 +189,9 @@ The default depends on the security level:
 | Aggressive (chosen in `/security` or set as `[security] level`) | on, on macOS, Linux and Windows |
 
 On other systems it stays off, because the broker isn't supported there. A value
-you set yourself always wins over the level's default:
+you set yourself always wins over the level's default. A project's
+`.codex/config.toml` can turn the broker on, but it can't turn off the
+Aggressive default:
 
 ```toml
 [features]
