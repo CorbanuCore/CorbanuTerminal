@@ -1,0 +1,74 @@
+### h1 (codex-tui.log, raw provider events)
+2026-10-10T05:37:35.023 resp_0aaacdb1bea0143c016ac9cf1ec63887d08 responses gpt-5.4-2026-03-05         tier=auto in=10146 cached=0 write=0 out=0 tokens=10146 usd=0.025365
+2026-10-10T05:38:08.488 resp_0aaacdb1bea0143c016ac9cf3e12a087d09 responses gpt-5.4-2026-03-05         tier=default in=12799 cached=0 write=0 out=118 tokens=12917 usd=0.0337675
+2026-10-10T05:38:11.685 resp_0aaacdb1bea0143c016ac9cf4093a487d0a responses gpt-5.4-2026-03-05         tier=default in=15850 cached=12672 write=0 out=252 tokens=16102 usd=0.014893
+2026-10-10T05:38:13.184 msg_011Cft1xCKjSAB6JTiMng6hy             anthropic claude-opus-5-5            tier=None in=15118 cached=0 write=15114 out=8 tokens=15126 usd=n/a
+2026-10-10T05:38:13.837 resp_0aaacdb1bea0143c016ac9cf43da2c87d08 responses gpt-5.4-2026-03-05         tier=default in=16238 cached=15744 write=0 out=128 tokens=16366 usd=0.007091
+2026-10-10T05:38:15.400 chatcmpl-0YIHZjIKQHREKFa6PbMit90o        chat      k3                         tier=None in=7855 cached=1024 write=0 out=40 tokens=7895 usd=n/a
+2026-10-10T05:38:15.554 resp_0aaacdb1bea0143c016ac9cf45ebfc87d08 responses gpt-5.4-2026-03-05         tier=default in=16475 cached=15744 write=0 out=116 tokens=16591 usd=0.0075035
+2026-10-10T05:38:16.428 20261010133812ef5f286034634df6           chat      glm-5.3-flash              tier=None in=7992 cached=576 write=0 out=4 tokens=7996 usd=0.00113168
+2026-10-10T05:38:17.625 resp_0aaacdb1bea0143c016ac9cf487fd887d09 responses gpt-5.4-2026-03-05         tier=default in=16692 cached=15744 write=0 out=58 tokens=16750 usd=0.007176
+2026-10-10T05:38:20.466 chatcmpl-6pzgzGpuBEWVKRFtETI2XiXA        chat      k3                         tier=None in=346 cached=0 write=0 out=90 tokens=436 usd=n/a
+2026-10-10T05:38:21.300 resp_0aaacdb1bea0143c016ac9cf4c890887d0a responses gpt-5.4-2026-03-05         tier=default in=16853 cached=15744 write=0 out=5 tokens=16858 usd=0.0067835
+2026-10-10T05:44:34.408 resp_02d223b2abd8d783016ac9d0c232d487d0a responses gpt-5.4-2026-03-05         tier=auto in=9649 cached=0 write=0 out=0 tokens=9649 usd=0.0241225
+2026-10-10T05:44:35.730 resp_02d223b2abd8d783016ac9d0c287e487d0b responses gpt-5.4-2026-03-05         tier=default in=16483 cached=2432 write=0 out=5 tokens=16488 usd=0.0358105
+2026-10-10T05:48:31.270 resp_03e29c7b4fe2d558016ac9d1af0b4887d09 responses gpt-5.4-2026-03-05         tier=auto in=10146 cached=0 write=0 out=0 tokens=10146 usd=0.025365
+2026-10-10T05:49:07.961 resp_03e29c7b4fe2d558016ac9d1d2fd7887d09 responses gpt-5.4-2026-03-05         tier=default in=16799 cached=15744 write=0 out=7 tokens=16806 usd=0.0066785
+2026-10-10T05:49:26.101 resp_01bd2154bdf4878a016ac9d1e5edd087d0b responses gpt-5.4-2026-03-05         tier=auto in=10146 cached=0 write=0 out=0 tokens=10146 usd=0.025365
+2026-10-10T05:50:15.320 resp_01c2a5d530b6df6f016ac9d21704b087d09 responses gpt-5.4-2026-03-05         tier=priority in=10146 cached=0 write=0 out=0 tokens=10146 usd=0.05073
+2026-10-10T05:50:23.940 resp_01c2a5d530b6df6f016ac9d21dd24c87d09 responses gpt-5.4-2026-03-05         tier=priority in=16807 cached=2432 write=0 out=5 tokens=16812 usd=0.073241
+TOTAL model=claude-opus-5-5 tier=None: requests=1 tokens=15126 usd=n/a
+TOTAL model=glm-5.3-flash tier=None: requests=1 tokens=7996 usd=0.00113168
+TOTAL model=gpt-5.4-2026-03-05 tier=auto: requests=4 tokens=40087 usd=0.1002175
+TOTAL model=gpt-5.4-2026-03-05 tier=default: requests=8 tokens=128878 usd=0.1197035
+TOTAL model=gpt-5.4-2026-03-05 tier=priority: requests=2 tokens=26958 usd=0.123971
+TOTAL model=k3 tier=None: requests=2 tokens=8331 usd=n/a
+PAY-PER-USE (priced rows) usd=0.34502368
+
+### h2 (codex-tui.log, raw provider events)
+2026-10-10T05:52:55.134 2026101013524725771c008bfc4589           chat      glm-5.3-flash              tier=None in=8342 cached=576 write=0 out=107 tokens=8449 usd=0.00123568
+2026-10-10T05:52:57.277 msg_011Cft35KW9cbVCBTLVxhmug             anthropic claude-opus-5-5            tier=None in=11043 cached=5172 write=5867 out=8 tokens=11051 usd=n/a
+2026-10-10T05:52:58.968 chatcmpl-o6MJA1QK6ROvcaVin79fvzdI        chat      k3                         tier=None in=5238 cached=2304 write=0 out=62 tokens=5300 usd=n/a
+2026-10-10T05:53:00.507 2026101013525554b97a206e774eef           chat      glm-5.3-flash              tier=None in=8528 cached=1280 write=0 out=75 tokens=8603 usd=0.0011631
+2026-10-10T05:53:05.844 2026101013530038be9c90a11b42fb           chat      glm-5.3-flash              tier=None in=8698 cached=8512 write=0 out=57 tokens=8755 usd=0.00031176
+2026-10-10T05:53:07.390 chatcmpl-2bn6VEhJILJt9xqw4O08muy5        chat      k3                         tier=None in=346 cached=346 write=0 out=74 tokens=420 usd=n/a
+2026-10-10T05:53:11.757 2026101013530795c1124e31544c2e           chat      glm-5.3-flash              tier=None in=8850 cached=8640 write=0 out=3 tokens=8853 usd=0.0002922
+TOTAL model=claude-opus-5-5 tier=None: requests=1 tokens=11051 usd=n/a
+TOTAL model=glm-5.3-flash tier=None: requests=4 tokens=34660 usd=0.00300274
+TOTAL model=k3 tier=None: requests=2 tokens=5720 usd=n/a
+PAY-PER-USE (priced rows) usd=0.00300274
+
+### h3 (codex-tui.log, raw provider events)
+2026-10-10T05:59:51.440 20261010135942fb9631a7b90c4f23           chat      glm-5.3-flash              tier=None in=5538 cached=576 write=0 out=34 tokens=5572 usd=0.00077858
+TOTAL model=glm-5.3-flash tier=None: requests=1 tokens=5572 usd=0.00077858
+PAY-PER-USE (priced rows) usd=0.00077858
+
+### h4 (codex-tui.log, raw provider events)
+2026-10-10T06:03:25.713 chatcmpl-R4YeiDJUR8vLpLwpKZUrE0uO        chat      k3                         tier=None in=7877 cached=1792 write=0 out=31 tokens=7908 usd=n/a
+2026-10-10T06:03:29.099 chatcmpl-Lpn87pImEleThOLDVp3kFs0W        chat      k3                         tier=None in=14740 cached=1536 write=0 out=206 tokens=14946 usd=n/a
+2026-10-10T06:06:20.114 chatcmpl-M1g5OULnu4WIIM8PAUs8EoqY        chat      k3                         tier=None in=7866 cached=7680 write=0 out=26 tokens=7892 usd=n/a
+2026-10-10T06:06:24.038 chatcmpl-b9EdAwoaLy8XHmrPYB6Q6t5h        chat      k3                         tier=None in=344 cached=0 write=0 out=68 tokens=412 usd=n/a
+TOTAL model=k3 tier=None: requests=4 tokens=31158 usd=n/a
+PAY-PER-USE (priced rows) usd=0
+
+### h6 (codex-tui.log, raw provider events)
+2026-10-10T06:23:06.194 resp_061e481c42b11154016ac9d9c9fd5c87d0a responses gpt-5.6-luna               tier=auto in=10552 cached=0 write=0 out=0 tokens=10552 usd=0.0021104
+2026-10-10T06:23:10.277 resp_061e481c42b11154016ac9d9cd270087d0b responses gpt-5.6-luna               tier=default in=13646 cached=0 write=13643 out=6 tokens=13652 usd=0.00341855
+2026-10-10T06:23:16.778 resp_061e481c42b11154016ac9d9d40fe887d0b responses gpt-5.6-luna               tier=default in=13661 cached=13643 write=15 out=6 tokens=13667 usd=0.00028441
+2026-10-10T06:24:14.380 resp_0d8f666e82417600016ac9da0e332887d09 responses gpt-5.6-terra              tier=auto in=10552 cached=0 write=0 out=0 tokens=10552 usd=0.021104
+2026-10-10T06:24:21.683 resp_0d8f666e82417600016ac9da13a08087d0a responses gpt-5.6-terra              tier=default in=13726 cached=0 write=13723 out=6 tokens=13732 usd=0.0343855
+TOTAL model=gpt-5.6-luna tier=auto: requests=1 tokens=10552 usd=0.0021104
+TOTAL model=gpt-5.6-luna tier=default: requests=2 tokens=27319 usd=0.00370296
+TOTAL model=gpt-5.6-terra tier=auto: requests=1 tokens=10552 usd=0.021104
+TOTAL model=gpt-5.6-terra tier=default: requests=1 tokens=13732 usd=0.0343855
+PAY-PER-USE (priced rows) usd=0.06130286
+
+### h5 exec --ephemeral (e1)
+2026-10-10T06:11:58.121 20261010141153e7ba51b521c8473d           chat      glm-5.3-flash              tier=None in=5996 cached=832 write=0 out=20 tokens=6016 usd=0.00080956
+TOTAL model=glm-5.3-flash tier=None: requests=1 tokens=6016 usd=0.00080956
+PAY-PER-USE (priced rows) usd=0.00080956
+
+### h5 exec persisted control (e2)
+2026-10-10T06:12:41.962 20261010141234c99b19e219794d11           chat      glm-5.3-flash              tier=None in=6611 cached=576 write=0 out=24 tokens=6635 usd=0.00093453
+TOTAL model=glm-5.3-flash tier=None: requests=1 tokens=6635 usd=0.00093453
+PAY-PER-USE (priced rows) usd=0.00093453

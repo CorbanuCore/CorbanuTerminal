@@ -1,0 +1,50 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     k3   /model to change            │
+│ directory: ~/corbanu-rtx/pf60s04-ia/work/ws │
+╰─────────────────────────────────────────────╯
+
+
+› Reply with the single word HELLO.
+
+
+• HELLO
+Token usage: total=624 input=530 (+ 7,680 cached) output=94 (reasoning 45)
+To continue this session, run corbanu resume 01a1246a-7758-73a3-96cf-d1aa9e7a287a
+EXITED 0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
