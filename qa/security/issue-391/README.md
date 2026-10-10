@@ -54,7 +54,9 @@ they are a separate, later decision.
   - config loading: Core level, stored `/security` level, config off and
     `-c` off;
   - a project's config can't turn the default off;
-  - the fail-closed message for both origins and causes;
+  - the fail-closed message for each origin (level, config, policy) and cause;
+  - a managed requirement wins both ways, and a pin that keeps the broker on
+    is named;
   - a real broker that can't start on Unix and Windows: refused, and env keys
     scrubbed.
 - `codex-core` test binary `sec_391_level_cache` (a normal build): a level

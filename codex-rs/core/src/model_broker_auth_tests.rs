@@ -565,3 +565,38 @@ async fn sec_391_project_config_cannot_turn_the_aggressive_default_off() {
         assert!(load("\n[features]\nbroker_model_auth = true\n").await);
     }
 }
+
+/// #391: a managed requirement wins over the level, both ways, and a pin
+/// that keeps the broker on is named in the refusal message.
+#[tokio::test]
+async fn sec_391_managed_requirement_wins_and_is_named() {
+    use crate::config::ConfigBuilder;
+    use codex_config::test_support::CloudConfigBundleFixture;
+    let load = |pin: bool| async move {
+        let home = tempfile::tempdir().expect("home");
+        std::fs::write(
+            home.path().join("config.toml"),
+            "[security]\nversion = 1\nlevel = \"aggressive\"\n",
+        )
+        .expect("config");
+        let config = ConfigBuilder::without_managed_config_for_tests()
+            .codex_home(home.path().to_path_buf())
+            .fallback_cwd(Some(home.path().to_path_buf()))
+            .cloud_config_bundle(
+                CloudConfigBundleFixture::loader_with_enterprise_requirement(&format!(
+                    "[features]\nbroker_model_auth = {pin}\n"
+                )),
+            )
+            .build()
+            .await
+            .expect("config");
+        (
+            config
+                .features
+                .enabled(codex_features::Feature::BrokerModelAuth),
+            config.broker_model_auth_origin,
+        )
+    };
+    assert_eq!(load(false).await, (false, BrokerModelAuthOrigin::Config));
+    assert_eq!(load(true).await, (true, BrokerModelAuthOrigin::Policy));
+}

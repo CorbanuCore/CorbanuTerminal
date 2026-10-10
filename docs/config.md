@@ -200,8 +200,9 @@ The default depends on the security level:
 | Aggressive (chosen in `/security` or set as `[security] level`) | on, on macOS, Linux and Windows |
 
 On other systems it stays off, because the broker isn't supported there. A value
-you set yourself always wins over the level's default. A project's
-`.codex/config.toml` doesn't change it under Aggressive:
+you set yourself always wins over the level's default; only a managed policy
+outranks it. A project's `.codex/config.toml` doesn't change it under
+Aggressive:
 
 ```toml
 [features]
@@ -209,8 +210,9 @@ broker_model_auth = false   # or true, at any level
 ```
 
 `-c features.broker_model_auth=false` and `--disable broker_model_auth` work
-the same way. A level you choose while Corbanu is running takes effect when
-Corbanu restarts. Under Aggressive with the broker off, Corbanu shows a startup
+the same way. A level you choose in `/security` while Corbanu is running takes
+effect when Corbanu restarts; a `[security] level` in config applies from the
+next new session. Under Aggressive with the broker off, Corbanu shows a startup
 warning and `/security` reports the level as partial.
 
 <a id="shell-environment"></a>

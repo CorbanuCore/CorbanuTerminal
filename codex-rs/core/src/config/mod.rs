@@ -3712,11 +3712,9 @@ impl Config {
         )?;
         let broker_model_auth_origin = {
             use crate::model_broker_auth::BrokerModelAuthOrigin;
-            let mut without = features.get().clone();
-            without.disable(Feature::BrokerModelAuth);
             if !features.enabled(Feature::BrokerModelAuth) {
                 BrokerModelAuthOrigin::Config
-            } else if features.can_set(&without).is_err() {
+            } else if features.pinned(Feature::BrokerModelAuth) == Some(true) {
                 BrokerModelAuthOrigin::Policy
             } else if level_broker == Some(true) && explicit_broker.is_none() {
                 BrokerModelAuthOrigin::AggressiveLevel
