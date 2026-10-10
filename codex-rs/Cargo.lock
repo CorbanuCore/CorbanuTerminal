@@ -2875,6 +2875,7 @@ dependencies = [
  "codex-sandboxing",
  "codex-secret-broker",
  "codex-security-audit",
+ "codex-security-level",
  "codex-security-policy",
  "codex-shell-command",
  "codex-shell-escalation",

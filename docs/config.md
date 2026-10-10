@@ -171,6 +171,36 @@ Do not put long-lived provider keys in `experimental_bearer_token` unless you
 are intentionally running an automation-only setup. For interactive use, use
 onboarding or `/vault`.
 
+<a id="model-key-broker"></a>
+
+### Model key broker (`broker_model_auth`)
+
+With `broker_model_auth` on, Corbanu hands your provider keys and sign-in
+tokens to a separate credential broker process. The broker sends every model
+request for Corbanu, so Corbanu itself never holds the raw key. If the broker
+can't start, model requests are refused, never sent directly. The error message
+names the setting and how to turn it off.
+
+The default depends on the security level:
+
+| Level | Default |
+| --- | --- |
+| Permissive, Moderate | off |
+| Aggressive (chosen in `/security` or set as `[security] level`) | on, on macOS, Linux and Windows |
+
+On other systems it stays off, because the broker isn't supported there. A value
+you set yourself always wins over the level's default:
+
+```toml
+[features]
+broker_model_auth = false   # or true, at any level
+```
+
+`-c features.broker_model_auth=false` and `--disable broker_model_auth` work
+the same way. Changes take effect when Corbanu restarts. Under Aggressive with
+the broker off, Corbanu shows a startup warning and `/security` marks the model
+key broker as not protecting.
+
 <a id="shell-environment"></a>
 
 ## Shell Environment

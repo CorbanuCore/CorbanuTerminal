@@ -69,7 +69,7 @@ async fn workspace_write_rows_name_the_escape_route() {
         false,
     )
     .await;
-    let [sandbox, approvals, network, vault, _] = current_values(&open);
+    let [sandbox, approvals, network, vault, _, _] = current_values(&open);
     assert_eq!(
         [sandbox, approvals, network, vault],
         [
@@ -89,7 +89,7 @@ async fn workspace_write_rows_name_the_escape_route() {
         false,
     )
     .await;
-    let [_, _, network, _, _] = current_values(&closed);
+    let [_, _, network, _, _, _] = current_values(&closed);
     assert_eq!(
         network,
         "off inside the sandbox, on for commands that run outside it; web search live"
@@ -109,7 +109,9 @@ async fn aggressive_rows_claim_only_what_is_enforced() {
         true,
     )
     .await;
-    let [sandbox, approvals, network, vault, children] = current_values(&config);
+    // #391: the stored level the launch path reads turns the model key
+    // broker on; these overrides alone do not (see the next test).
+    let [sandbox, approvals, network, vault, _, children] = current_values(&config);
     assert_eq!(
         [sandbox, approvals, network, vault, children],
         [
@@ -122,6 +124,27 @@ async fn aggressive_rows_claim_only_what_is_enforced() {
             "the vault store and sign-in file are unreadable to agent commands; secret-like environment variables are removed; login profiles and shell snapshots are not used".to_string(),
             "spawned agents get this session's values".to_string(),
         ]
+    );
+}
+
+/// #391: the model keys row reports whether the broker holds them.
+#[tokio::test]
+async fn model_keys_row_reports_the_broker_setting() {
+    let home = tempfile::tempdir().unwrap();
+    let cwd = tempfile::tempdir().unwrap();
+    let mut config = build(home.path(), cwd.path(), "", false).await;
+    assert_eq!(
+        current_values(&config)[4],
+        "Corbanu reads provider keys itself (broker_model_auth off)"
+    );
+    // Enabled after loading, so this test process is not marked brokered.
+    config
+        .features
+        .enable(Feature::BrokerModelAuth)
+        .expect("enable the broker");
+    assert_eq!(
+        current_values(&config)[4],
+        "held by the isolated credential broker (broker_model_auth on)"
     );
 }
 
@@ -224,7 +247,7 @@ request_permissions_tool = {request_tools}
 "#
         )
     };
-    let [_, _, network, vault, _] =
+    let [_, _, network, vault, _, _] =
         current_values(&build(home.path(), cwd.path(), &user_config(true), false).await);
     assert_eq!(
         [network, vault.split("; ").next().unwrap().to_string()],
@@ -233,7 +256,7 @@ request_permissions_tool = {request_tools}
             "the vault store and sign-in file are unreadable (unless an approved permission request grants access) to agent commands".to_string(),
         ]
     );
-    let [sandbox, _, network, _, _] =
+    let [sandbox, _, network, _, _, _] =
         current_values(&build(home.path(), cwd.path(), &user_config(false), false).await);
     assert_eq!(
         [sandbox, network],

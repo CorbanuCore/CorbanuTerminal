@@ -912,6 +912,8 @@ pub const FEATURES: &[FeatureSpec] = &[
         stage: Stage::UnderDevelopment,
         default_enabled: false,
     },
+    // #391: security level Aggressive turns it on unless config sets it
+    // (`codex_core::config`); this default covers the other levels.
     FeatureSpec {
         id: Feature::BrokerModelAuth,
         key: "broker_model_auth",

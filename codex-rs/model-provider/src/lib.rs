@@ -26,6 +26,7 @@ pub use model_key_broker::BrokeredAuthRequest;
 pub use model_key_broker::BrokeredKeySource;
 pub use model_key_broker::ModelKeyBroker;
 pub use model_key_broker::install_model_key_broker;
+pub use model_key_broker::model_key_broker_failed;
 pub use model_key_broker::model_key_broker_installed;
 pub use model_key_broker::model_key_broker_required;
 pub use model_key_broker::require_model_key_broker;

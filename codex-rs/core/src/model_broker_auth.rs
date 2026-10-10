@@ -17,6 +17,10 @@
 //! start or has died, a provider URL the broker cannot bind (plain HTTP, an
 //! IPv6 literal, a query), a missing key, and platforms without the broker
 //! all fail the request. The broker is never restarted within a process.
+//!
+//! #391: security level Aggressive turns the feature on by default where the
+//! broker runs (macOS, Linux, Windows); an explicit setting still wins (see
+//! [`level_turns_on_broker`]).
 
 use crate::config::Config;
 use codex_api::AuthError;
@@ -29,6 +33,7 @@ use codex_model_provider::BrokeredKeySource;
 use codex_model_provider::ModelKeyBroker;
 use codex_model_provider::ProviderApiKeyHeader;
 use codex_protocol::error::CodexErr;
+use codex_security_policy::SecurityLevel;
 use http::HeaderMap;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -40,6 +45,32 @@ type Credential = codex_network_proxy::model_auth::ModelCredential;
 #[cfg(not(any(unix, windows)))]
 #[derive(Clone)]
 enum Credential {}
+
+/// What turned `broker_model_auth` on for a configuration (#391).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum BrokerModelAuthOrigin {
+    /// Off, or set by config or a launch flag.
+    #[default]
+    Config,
+    /// Security level Aggressive turned it on; nothing sets it explicitly.
+    AggressiveLevel,
+}
+
+/// Operating systems where Aggressive turns the broker on by default: the
+/// model-auth broker is qualified on macOS and Linux (PF-27-S05) and Windows
+/// (PF-27-S09). Elsewhere it stays off unless config turns it on.
+pub(crate) const LEVEL_DEFAULT_SUPPORTED: bool =
+    cfg!(any(target_os = "macos", target_os = "linux", windows));
+
+/// #391: whether `level` turns `broker_model_auth` on. Only Aggressive does,
+/// only on a `supported` OS, and never over an `explicit` setting.
+pub(crate) fn level_turns_on_broker(
+    level: SecurityLevel,
+    supported: bool,
+    explicit: Option<bool>,
+) -> bool {
+    level == SecurityLevel::Aggressive && supported && explicit.is_none()
+}
 
 /// Installs the process's broker when `config` enables `broker_model_auth`.
 /// Idempotent; the first enabled configuration's settings win.
@@ -55,13 +86,14 @@ pub async fn install_for_config(config: &Config) {
     }
     static INSTALL: tokio::sync::OnceCell<()> = tokio::sync::OnceCell::const_new();
     let settings = BrokerSettings::for_config(config);
+    let origin = settings.origin;
     INSTALL
         .get_or_init(|| async move {
             // Starting the broker and handing over keys are blocking calls.
             let broker = tokio::task::spawn_blocking(move || CoreModelKeyBroker::start(settings))
                 .await
                 .unwrap_or_else(|_| {
-                    CoreModelKeyBroker::new(BrokerHandle::Failed(BrokerModelAuthError::Unavailable))
+                    CoreModelKeyBroker::not_started(StartFailure::Unavailable, origin)
                 });
             codex_model_provider::install_model_key_broker(Arc::new(broker));
         })
@@ -80,6 +112,8 @@ struct BrokerSettings {
     store_home: std::path::PathBuf,
     /// Every provider-key variable a configured provider may read.
     env_names: Vec<String>,
+    /// For the message when the broker cannot start.
+    origin: BrokerModelAuthOrigin,
 }
 
 impl BrokerSettings {
@@ -101,6 +135,7 @@ impl BrokerSettings {
             program: config.codex_self_exe.clone(),
             store_home: config.codex_home.to_path_buf(),
             env_names,
+            origin: config.broker_model_auth_origin,
         }
     }
 }
@@ -116,11 +151,49 @@ enum BrokerHandle {
     Unsupported,
 }
 
+/// Why the broker did not start (#391).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum StartFailure {
+    Unavailable,
+    /// #390 (Windows): another process holds or serves its named pipe.
+    #[cfg_attr(not(any(unix, windows)), allow(dead_code))]
+    PipeSquatted,
+}
+
+fn not_started_message(cause: StartFailure, origin: BrokerModelAuthOrigin) -> String {
+    let cause = match cause {
+        StartFailure::Unavailable => "the isolated credential broker did not start",
+        StartFailure::PipeSquatted => {
+            "the isolated credential broker's named pipe is held or served by another process \
+             (possible pipe squatting), so Corbanu refused it and sent nothing"
+        }
+    };
+    let remedy = match origin {
+        BrokerModelAuthOrigin::AggressiveLevel => {
+            "Security level Aggressive turns broker_model_auth on. Restart Corbanu to try again. \
+             To send model requests without the broker, choose Permissive in /security, or set \
+             `broker_model_auth = false` under [features] in config.toml, then restart"
+        }
+        BrokerModelAuthOrigin::Config => {
+            "broker_model_auth is on in your configuration. Restart Corbanu to try again. To send \
+             model requests without the broker, set `broker_model_auth = false` under [features] \
+             in config.toml, then restart"
+        }
+    };
+    format!("model requests are refused: {cause}; nothing is sent without it. {remedy}")
+}
+
 /// Why a brokered request could not be authorized.
 #[derive(Clone, Debug, thiserror::Error, PartialEq, Eq)]
 pub(crate) enum BrokerModelAuthError {
     #[error("the isolated credential broker is unavailable; restart Corbanu to start a new one")]
     Unavailable,
+    /// #391: the broker did not start; every model request is refused.
+    #[error("{}", not_started_message(*.cause, *.origin))]
+    NotStarted {
+        cause: StartFailure,
+        origin: BrokerModelAuthOrigin,
+    },
     #[error(
         "broker_model_auth: the credential broker is not available on this platform; \
          turn broker_model_auth off to use provider keys and sign-in"
@@ -236,6 +309,14 @@ impl CoreModelKeyBroker {
         }
     }
 
+    /// A broker that did not start: every brokered request fails (#391).
+    fn not_started(cause: StartFailure, origin: BrokerModelAuthOrigin) -> Self {
+        Self::new(BrokerHandle::Failed(BrokerModelAuthError::NotStarted {
+            cause,
+            origin,
+        }))
+    }
+
     /// The broker for platforms without one: every brokered request fails.
     #[cfg_attr(all(any(unix, windows), not(test)), allow(dead_code))]
     pub(crate) fn unsupported() -> Self {
@@ -266,12 +347,15 @@ impl CoreModelKeyBroker {
                 // Core no longer uses these keys; child processes must not
                 // inherit them either.
                 codex_network_proxy::model_auth::scrub_env_keys(&settings.env_names);
-                return Self::new(BrokerHandle::Failed(match error {
-                    codex_network_proxy::model_auth::ModelCredentialBrokerError::PipeSquatted => {
-                        BrokerModelAuthError::PipeSquatted
-                    }
-                    _ => BrokerModelAuthError::Unavailable,
-                }));
+                return Self::not_started(
+                    match error {
+                        codex_network_proxy::model_auth::ModelCredentialBrokerError::PipeSquatted => {
+                            StartFailure::PipeSquatted
+                        }
+                        _ => StartFailure::Unavailable,
+                    },
+                    settings.origin,
+                );
             }
         };
         match broker.take_env_keys(&settings.env_names) {
@@ -284,7 +368,7 @@ impl CoreModelKeyBroker {
                 // The keys are gone from the environment either way; a
                 // broker that refused one is not trusted with any.
                 tracing::warn!("credential broker refused an environment key: {error}");
-                return Self::new(BrokerHandle::Failed(BrokerModelAuthError::Unavailable));
+                return Self::not_started(StartFailure::Unavailable, settings.origin);
             }
         }
         #[cfg(unix)]
@@ -308,6 +392,19 @@ impl CoreModelKeyBroker {
 }
 
 impl ModelKeyBroker for CoreModelKeyBroker {
+    fn started(&self) -> bool {
+        #[cfg(any(unix, windows))]
+        {
+            let state = self
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            matches!(state.handle, BrokerHandle::Running(_))
+        }
+        #[cfg(not(any(unix, windows)))]
+        false
+    }
+
     /// Registers the credential now (a blocking control-channel call, like the
     /// stored-key read it replaces) so a failure ends the turn at once.
     fn auth(

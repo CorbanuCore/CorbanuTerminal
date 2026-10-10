@@ -30,6 +30,7 @@ fn current() -> CurrentValues {
         "on-request (reviewer: you)",
         "on for agent commands; web search live",
         "the vault store and sign-in file are readable to agent commands; secret-like environment variables are passed through (KEY, SECRET, TOKEN, VAULT, PASSWORD, PASSPHRASE, CREDENTIAL); login profiles or shell snapshots are used",
+        "Corbanu reads provider keys itself (broker_model_auth off)",
         "spawned agents get this session's values",
     ]
     .map(str::to_string)

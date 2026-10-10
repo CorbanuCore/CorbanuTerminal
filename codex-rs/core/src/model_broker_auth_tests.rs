@@ -148,20 +148,22 @@ fn pf_27_s05_non_unix_start_is_the_refusing_broker() {
         program: None,
         store_home: std::env::temp_dir(),
         env_names: Vec::new(),
+        origin: BrokerModelAuthOrigin::Config,
     });
     let error = refusal(&broker, "https://api.z.ai/api/paas/v4", held_value());
     assert!(error.contains("not available on this platform"), "{error}");
 }
 
-/// PF-27-S09: on Windows a broker that cannot start fails every credential
-/// use (nothing is sent directly), and the provider keys it would have been
-/// handed are still removed from Core's environment.
-#[cfg(windows)]
+/// PF-27-S09 / #391: a broker that cannot start fails every credential use
+/// (nothing is sent directly) with a message naming the setting and how to
+/// change level, and the provider keys it would have been handed are still
+/// removed from Core's environment.
+#[cfg(any(unix, windows))]
 #[test]
-fn pf_27_s09_windows_broker_that_cannot_start_fails_closed_and_scrubs_keys() {
-    let name = format!("PF27_S09_CORE_KEY_{}", std::process::id());
+fn sec_391_broker_that_cannot_start_fails_closed_and_scrubs_keys() {
+    let name = format!("SEC391_CORE_KEY_{}", std::process::id());
     // SAFETY: a variable unique to this test; nothing else reads it.
-    unsafe { std::env::set_var(&name, "synthetic-pf27s09-core-key") };
+    unsafe { std::env::set_var(&name, "synthetic-sec391-core-key") };
     let home = tempfile::tempdir().expect("home");
     let broker = CoreModelKeyBroker::start(BrokerSettings {
         runtime_dir: home.path().join("run"),
@@ -169,11 +171,231 @@ fn pf_27_s09_windows_broker_that_cannot_start_fails_closed_and_scrubs_keys() {
         program: Some(home.path().join("missing-corbanu.exe")),
         store_home: home.path().to_path_buf(),
         env_names: vec![name.clone()],
+        origin: BrokerModelAuthOrigin::AggressiveLevel,
     });
     assert_eq!(std::env::var_os(&name), None);
+    assert!(!broker.started());
     for source in [provider_key(), held_value()] {
         let error = refusal(&broker, "https://api.z.ai/api/paas/v4", source);
-        assert!(error.contains("unavailable"), "{error}");
+        for expected in [
+            "model requests are refused: the isolated credential broker did not start",
+            "Security level Aggressive turns broker_model_auth on",
+            "choose Permissive in /security",
+            "`broker_model_auth = false`",
+        ] {
+            assert!(error.contains(expected), "{expected}: {error}");
+        }
+    }
+}
+
+/// #391: the fail-closed message names the setting, and says how to change
+/// level only when the level turned it on.
+#[test]
+fn sec_391_not_started_message_names_the_setting_and_the_level() {
+    for (cause, origin, present, absent) in [
+        (
+            StartFailure::Unavailable,
+            BrokerModelAuthOrigin::AggressiveLevel,
+            vec!["did not start", "Security level Aggressive", "/security"],
+            vec![],
+        ),
+        (
+            StartFailure::Unavailable,
+            BrokerModelAuthOrigin::Config,
+            vec![
+                "did not start",
+                "broker_model_auth is on in your configuration",
+            ],
+            vec!["/security", "Aggressive"],
+        ),
+        (
+            StartFailure::PipeSquatted,
+            BrokerModelAuthOrigin::AggressiveLevel,
+            vec![
+                "held or served by another process",
+                "sent nothing",
+                "Security level Aggressive",
+            ],
+            vec![],
+        ),
+    ] {
+        let broker = CoreModelKeyBroker::not_started(cause, origin);
+        assert!(!broker.started());
+        let error = refusal(&broker, "https://api.z.ai/api/paas/v4", held_value());
+        assert!(error.contains("nothing is sent without it"), "{error}");
+        assert!(error.contains("`broker_model_auth = false`"), "{error}");
+        for text in present {
+            assert!(error.contains(text), "{cause:?} {origin:?} {text}: {error}");
+        }
+        for text in absent {
+            assert!(
+                !error.contains(text),
+                "{cause:?} {origin:?} {text}: {error}"
+            );
+        }
+    }
+    assert!(!CoreModelKeyBroker::unsupported().started());
+}
+
+/// #391: the default matrix (level x OS x explicit setting). Only Aggressive
+/// on an OS where the broker runs turns `broker_model_auth` on, and an
+/// explicit setting always wins.
+#[test]
+fn sec_391_default_matrix_level_os_and_explicit_setting() {
+    use SecurityLevel::Aggressive;
+    use SecurityLevel::Moderate;
+    use SecurityLevel::Permissive;
+    // (level, OS runs the broker, explicit setting, feature on, by level)
+    let cases = [
+        (Permissive, true, None, false, false),
+        (Permissive, true, Some(true), true, false),
+        (Permissive, true, Some(false), false, false),
+        (Permissive, false, None, false, false),
+        (Permissive, false, Some(true), true, false),
+        (Moderate, true, None, false, false),
+        (Moderate, true, Some(true), true, false),
+        (Moderate, true, Some(false), false, false),
+        (Moderate, false, None, false, false),
+        (Aggressive, true, None, true, true),
+        (Aggressive, true, Some(true), true, false),
+        (Aggressive, true, Some(false), false, false),
+        (Aggressive, false, None, false, false),
+        (Aggressive, false, Some(true), true, false),
+        (Aggressive, false, Some(false), false, false),
+    ];
+    for (level, supported, explicit, on, by_level) in cases {
+        let turned_on = level_turns_on_broker(level, supported, explicit);
+        assert_eq!(
+            (explicit.unwrap_or(turned_on), turned_on),
+            (on, by_level),
+            "{level:?} supported={supported} explicit={explicit:?}"
+        );
+    }
+    // macOS and Linux (PF-27-S05) and Windows (PF-27-S09) run the broker.
+    assert_eq!(
+        LEVEL_DEFAULT_SUPPORTED,
+        cfg!(any(target_os = "macos", target_os = "linux", windows))
+    );
+}
+
+/// #391 through config loading: Core's level, the stored `/security` level,
+/// a config setting and a launch flag (`-c`) on this OS.
+#[tokio::test]
+async fn sec_391_config_load_applies_the_aggressive_default() {
+    use crate::config::ConfigBuilder;
+    use codex_config::LoaderOverrides;
+    let expected_on = LEVEL_DEFAULT_SUPPORTED;
+    let level_origin = if expected_on {
+        BrokerModelAuthOrigin::AggressiveLevel
+    } else {
+        BrokerModelAuthOrigin::Config
+    };
+    let load = |config_toml: String, stored_aggressive: bool, cli: Vec<(String, toml::Value)>| async move {
+        let home = tempfile::tempdir().expect("home");
+        std::fs::write(home.path().join("config.toml"), config_toml).expect("config");
+        if stored_aggressive {
+            std::fs::write(
+                home.path().join("security_level.toml"),
+                "version = 1\nlevel = \"aggressive\"\n",
+            )
+            .expect("stored level");
+        }
+        let config = ConfigBuilder::default()
+            .codex_home(home.path().to_path_buf())
+            .cli_overrides(cli)
+            .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
+            .build()
+            .await
+            .expect("config");
+        (
+            config.security_level,
+            config
+                .features
+                .enabled(codex_features::Feature::BrokerModelAuth),
+            config.broker_model_auth_origin,
+        )
+    };
+    let level =
+        |level: SecurityLevel| format!("[security]\nversion = 1\nlevel = \"{}\"\n", level.as_str());
+    let off = "\n[features]\nbroker_model_auth = false\n";
+    let flag_off = || {
+        vec![(
+            "features.broker_model_auth".to_string(),
+            toml::Value::Boolean(false),
+        )]
+    };
+    for (name, config_toml, stored, cli, expected) in [
+        (
+            "permissive",
+            level(SecurityLevel::Permissive),
+            false,
+            Vec::new(),
+            (
+                SecurityLevel::Permissive,
+                false,
+                BrokerModelAuthOrigin::Config,
+            ),
+        ),
+        (
+            "moderate",
+            level(SecurityLevel::Moderate),
+            false,
+            Vec::new(),
+            (
+                SecurityLevel::Moderate,
+                false,
+                BrokerModelAuthOrigin::Config,
+            ),
+        ),
+        (
+            "aggressive",
+            level(SecurityLevel::Aggressive),
+            false,
+            Vec::new(),
+            (SecurityLevel::Aggressive, expected_on, level_origin),
+        ),
+        (
+            "aggressive, config off",
+            level(SecurityLevel::Aggressive) + off,
+            false,
+            Vec::new(),
+            (
+                SecurityLevel::Aggressive,
+                false,
+                BrokerModelAuthOrigin::Config,
+            ),
+        ),
+        (
+            "aggressive, -c off",
+            level(SecurityLevel::Aggressive),
+            false,
+            flag_off(),
+            (
+                SecurityLevel::Aggressive,
+                false,
+                BrokerModelAuthOrigin::Config,
+            ),
+        ),
+        (
+            "stored /security aggressive",
+            String::new(),
+            true,
+            Vec::new(),
+            (SecurityLevel::Permissive, expected_on, level_origin),
+        ),
+        (
+            "stored /security aggressive, config off",
+            off.to_string(),
+            true,
+            Vec::new(),
+            (
+                SecurityLevel::Permissive,
+                false,
+                BrokerModelAuthOrigin::Config,
+            ),
+        ),
+    ] {
+        assert_eq!(load(config_toml, stored, cli).await, expected, "{name}");
     }
 }
 

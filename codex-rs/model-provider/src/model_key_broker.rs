@@ -90,6 +90,12 @@ pub trait ModelKeyBroker: Send + Sync {
         &self,
         request: BrokeredAuthRequest,
     ) -> codex_protocol::error::Result<SharedAuthProvider>;
+
+    /// Whether the broker process started; one that did not refuses every
+    /// credential use (#391).
+    fn started(&self) -> bool {
+        true
+    }
 }
 
 static MODEL_KEY_BROKER: OnceLock<Arc<dyn ModelKeyBroker>> = OnceLock::new();
@@ -137,6 +143,12 @@ pub fn install_model_key_broker(broker: Arc<dyn ModelKeyBroker>) -> bool {
 /// Whether provider credentials in this process are brokered.
 pub fn model_key_broker_installed() -> bool {
     model_key_broker().is_some()
+}
+
+/// Whether this process's installed broker did not start (#391); its
+/// credential uses are all refused.
+pub fn model_key_broker_failed() -> bool {
+    model_key_broker().is_some_and(|broker| !broker.started())
 }
 
 pub(crate) fn model_key_broker() -> Option<Arc<dyn ModelKeyBroker>> {

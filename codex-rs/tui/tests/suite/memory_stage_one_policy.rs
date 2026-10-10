@@ -56,7 +56,7 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
                 if cancel_pending && body.contains(CANARY) { response.set_delay(Duration::from_secs(30)) } else { response }
             }).mount(&server).await;
         let config = format!(
-            "model = \"gpt-5.4\"\nmodel_provider = \"openai\"\nopenai_base_url = \"{}/v1\"\ncli_auth_credentials_store = \"file\"\ncheck_for_update_on_startup = false\nsuppress_unstable_features_warning = true\nlog_dir = {:?}\n[features]\nsqlite = true\nmemories = true\n[memories]\ngenerate_memories = true\nmin_rollout_idle_hours = 0\n[security]\nversion = 1\nlevel = \"{level}\"\n[projects.{}]\ntrust_level = \"trusted\"\n[tui]\nanimations = false\n",
+            "model = \"gpt-5.4\"\nmodel_provider = \"openai\"\nopenai_base_url = \"{}/v1\"\ncli_auth_credentials_store = \"file\"\ncheck_for_update_on_startup = false\nsuppress_unstable_features_warning = true\nlog_dir = {:?}\n[features]\nsqlite = true\nmemories = true\nbroker_model_auth = false\n[memories]\ngenerate_memories = true\nmin_rollout_idle_hours = 0\n[security]\nversion = 1\nlevel = \"{level}\"\n[projects.{}]\ntrust_level = \"trusted\"\n[tui]\nanimations = false\n",
             server.uri(),
             home.path().join("logs"),
             serde_json::to_string(&repo.display().to_string())?

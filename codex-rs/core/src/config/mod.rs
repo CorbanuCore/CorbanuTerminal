@@ -755,6 +755,9 @@ pub struct Config {
     /// User-facing security posture composed with the existing permission system.
     pub security_level: SecurityLevel,
 
+    /// What turned `broker_model_auth` on (#391).
+    pub broker_model_auth_origin: crate::model_broker_auth::BrokerModelAuthOrigin,
+
     /// Effective permission configuration for shell tool execution.
     pub permissions: Permissions,
 
@@ -3678,7 +3681,7 @@ impl Config {
             web_search_request: override_tools_web_search_request,
         };
 
-        let configured_features = Features::from_sources(
+        let mut configured_features = Features::from_sources(
             FeatureConfigSource {
                 features: cfg.features.as_ref(),
                 experimental_use_unified_exec_tool: cfg.experimental_use_unified_exec_tool,
@@ -3688,11 +3691,27 @@ impl Config {
             },
             feature_overrides,
         );
+        // #391: Aggressive (Core's level or the stored `/security` level)
+        // turns `broker_model_auth` on unless something sets it explicitly.
+        let broker_by_level = crate::model_broker_auth::level_turns_on_broker(
+            security_level.max(stored_security_level(codex_home.as_path())),
+            crate::model_broker_auth::LEVEL_DEFAULT_SUPPORTED,
+            explicit_feature_setting(cfg.features.as_ref(), Feature::BrokerModelAuth),
+        );
+        if broker_by_level {
+            configured_features.enable(Feature::BrokerModelAuth);
+        }
         let mut features = ManagedFeatures::from_configured_with_warnings(
             configured_features,
             feature_requirements,
             &mut startup_warnings,
         )?;
+        let broker_model_auth_origin =
+            if broker_by_level && features.enabled(Feature::BrokerModelAuth) {
+                crate::model_broker_auth::BrokerModelAuthOrigin::AggressiveLevel
+            } else {
+                crate::model_broker_auth::BrokerModelAuthOrigin::Config
+            };
         let secretless_agent_launch = features.enabled(Feature::SecretlessAgentLaunch);
         if secretless_agent_launch {
             // PF-27-S02: arm the launch contract for this process, and never
@@ -3712,7 +3731,12 @@ impl Config {
         if !secretless_agent_launch {
             crate::security::launch_contract::release_codex_home_when_unarmed(&codex_home);
         }
-        if features.enabled(Feature::BrokerModelAuth) {
+        // Core's unit tests load Aggressive configs in one shared process;
+        // the level default must not make that whole process brokered.
+        let level_default_in_unit_test = cfg!(test)
+            && broker_model_auth_origin
+                == crate::model_broker_auth::BrokerModelAuthOrigin::AggressiveLevel;
+        if features.enabled(Feature::BrokerModelAuth) && !level_default_in_unit_test {
             // PF-27-S05: this process brokers provider credentials from now on;
             // until its broker runs, they are not sent at all.
             codex_model_provider::require_model_key_broker();
@@ -4739,6 +4763,7 @@ impl Config {
             workspace_roots_explicit,
             startup_warnings,
             security_level,
+            broker_model_auth_origin,
             permissions: Permissions {
                 approval_policy: constrained_approval_policy.value,
                 permission_profile_state,
@@ -5346,6 +5371,26 @@ pub async fn apply_agent_role_to_config(
 /// PF-23-S03: the strictest security level any enabled config layer sets.
 /// A later layer (a repository's `.codex/config.toml`, a profile, a `-c`
 /// override) can raise the level but never lower it.
+/// The level `/security` stored for this home (Corbanu Terminal enforces it at
+/// launch); unreadable state reads as Aggressive, never as Permissive.
+fn stored_security_level(codex_home: &Path) -> SecurityLevel {
+    match codex_security_level::level::load(codex_home).enforced() {
+        codex_security_level::level::ChosenLevel::Permissive => SecurityLevel::Permissive,
+        codex_security_level::level::ChosenLevel::Aggressive => SecurityLevel::Aggressive,
+    }
+}
+
+/// The value config sets for `feature` (by its key or a legacy alias), if
+/// any; like `Features::apply_map`, the last entry in key order wins.
+fn explicit_feature_setting(features: Option<&FeaturesToml>, feature: Feature) -> Option<bool> {
+    features?
+        .entries()
+        .into_iter()
+        .filter(|(key, _)| codex_features::feature_for_key(key) == Some(feature))
+        .map(|(_, enabled)| enabled)
+        .next_back()
+}
+
 pub(crate) fn layered_security_floor(stack: &ConfigLayerStack) -> SecurityLevel {
     stack
         .layers_high_to_low()

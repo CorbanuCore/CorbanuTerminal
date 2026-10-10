@@ -36,7 +36,7 @@ pub(crate) const PROFILE_ID: &str = "corbanu-aggressive";
 const SECRET_ENV_PATTERNS: [&str; 4] = ["*VAULT*", "*PASSWORD*", "*PASSPHRASE*", "*CREDENTIAL*"];
 
 /// One row of the mapping table, as shown before confirmation.
-pub(crate) const ROWS: [(&str, &str); 5] = [
+pub(crate) const ROWS: [(&str, &str); 6] = [
     (
         "Sandbox",
         "write only in the current folder (where the Corbanu home and the nested-launch registry stay read-only): no extra writable folders, no /tmp or $TMPDIR; approved commands stay inside it too; escalation and permission-request tools are off",
@@ -50,11 +50,21 @@ pub(crate) const ROWS: [(&str, &str); 5] = [
         "Vault",
         "the vault store and sign-in file are unreadable to agent commands, and direct `corbanu vault …` commands are refused; secret-like environment variables (KEY, SECRET, TOKEN, VAULT, PASSWORD, PASSPHRASE, CREDENTIAL) are removed, and login profiles and shell snapshots are not used",
     ),
+    (MODEL_KEYS_LABEL, MODEL_KEYS_ROW),
     (
         "Child agents",
         "spawned agents get the same values; custom roles that would change them are refused at start; Claude panes are refused because Claude Code runs outside the sandbox, unless contained_external_agents and secretless_agent_launch run them in it, asking you before every command, file edit and web request (reading files stays automatic) (Claude Code sign-in still runs)",
     ),
 ];
+
+const MODEL_KEYS_LABEL: &str = "Model keys";
+
+/// #391: Aggressive turns `broker_model_auth` on where the broker runs.
+const MODEL_KEYS_ROW: &str = if cfg!(any(target_os = "macos", target_os = "linux", windows)) {
+    "provider keys and sign-ins are held by the isolated credential broker, which sends model requests for Corbanu; if it cannot start, model requests are refused, never sent directly (broker_model_auth; `broker_model_auth = false` in your config keeps it off)"
+} else {
+    "unchanged: the credential broker does not run on this system, so Corbanu reads provider keys itself (broker_model_auth)"
+};
 
 /// The nested-launch line shown under the rows.
 pub(crate) fn nested_row(nested: super::level::NestedAgents) -> &'static str {

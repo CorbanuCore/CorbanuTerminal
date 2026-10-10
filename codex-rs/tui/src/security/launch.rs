@@ -212,6 +212,15 @@ impl LaunchPlan {
                     "Security level Aggressive was saved, but Core's level was not confirmed with it, so Core's protections are not on. Choose Aggressive again in /security.".to_string(),
                 );
             }
+            // #391: Aggressive turns broker_model_auth on where the broker
+            // runs; only an explicit setting keeps it off.
+            if cfg!(any(target_os = "macos", target_os = "linux", windows))
+                && !config.features.enabled(Feature::BrokerModelAuth)
+            {
+                config.startup_warnings.push(
+                    "Security level Aggressive: broker_model_auth is off in your configuration, so Corbanu reads provider keys itself instead of the credential broker.".to_string(),
+                );
+            }
             if !self.replaced_flags.is_empty() {
                 config.startup_warnings.push(format!(
                     "Security level Aggressive ignored {}.",
