@@ -61,20 +61,35 @@ pub(crate) fn apply_explicit_provider_account(
     named_accounts_enabled: bool,
 ) -> std::io::Result<()> {
     let (provider_id, name) = split_account_selection(selection, session_provider_id);
+    let invalid = |message: String| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("--account {provider_id}:{name}: {message}"),
+        )
+    };
     if !named_accounts_enabled {
         if parse_provider_account_selection(name).is_ok_and(|name| name.is_none()) {
             return Ok(());
         }
-        return Err(invalid_selection(
-            provider_id,
-            "named accounts need the `named_accounts` feature (`--enable named_accounts`)"
+        return Err(invalid(
+            "named accounts need the `named_accounts` feature (`--enable named_accounts`); \
+             `--account default` uses the default credentials"
                 .to_string(),
         ));
     }
-    let provider = model_providers.get_mut(provider_id).ok_or_else(|| {
-        invalid_selection(provider_id, format!("unknown provider `{provider_id}`"))
-    })?;
-    stamp_provider_account(provider_id, provider, name)
+    let provider = model_providers
+        .get_mut(provider_id)
+        .ok_or_else(|| invalid(format!("unknown provider `{provider_id}`")))?;
+    stamp_provider_account(provider_id, provider, name).map_err(|error| {
+        let message = error.to_string();
+        let prefix = format!("provider_accounts.{provider_id}: ");
+        invalid(
+            message
+                .strip_prefix(&prefix)
+                .unwrap_or(&message)
+                .to_string(),
+        )
+    })
 }
 
 /// Splits `[<provider>:]<name>`; the provider defaults to the session's.
@@ -329,11 +344,11 @@ mod tests {
                 error("openai:work", true, &mut model_providers),
             ],
             [
-                "provider_accounts.zai: named accounts need the `named_accounts` feature \
-                 (`--enable named_accounts`)"
+                "--account zai:work: named accounts need the `named_accounts` feature \
+                 (`--enable named_accounts`); `--account default` uses the default credentials"
                     .to_string(),
-                "provider_accounts.gone: unknown provider `gone`".to_string(),
-                "provider_accounts.openai: provider `openai` does not support named accounts yet"
+                "--account gone:work: unknown provider `gone`".to_string(),
+                "--account openai:work: provider `openai` does not support named accounts yet"
                     .to_string(),
             ]
         );

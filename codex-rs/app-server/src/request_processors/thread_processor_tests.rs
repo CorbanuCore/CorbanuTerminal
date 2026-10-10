@@ -797,6 +797,7 @@ mod thread_processor_behavior_tests {
             parent_thread_id: None,
             thread_source: None,
             originator: "test_originator".to_string(),
+            provider_account: None,
         };
 
         assert_eq!(
@@ -869,16 +870,28 @@ mod thread_processor_behavior_tests {
 
     #[test]
     fn resume_restores_the_newest_recorded_provider_account() {
+        let history = [
+            turn_context("kimi", Some("work")),
+            turn_context("zai", Some("fake")),
+        ];
         assert_eq!(
             [
-                recorded_provider_account(&[turn_context("zai", None)]),
-                recorded_provider_account(&[
-                    turn_context("zai", Some("work")),
-                    turn_context("kimi", Some("default")),
-                    turn_context("zai", None),
-                ]),
+                recorded_provider_account(&history, /*resumed_provider_id*/ None),
+                recorded_provider_account(&history, Some("zai")),
+                // The thread resumes on another provider: the account stays put.
+                recorded_provider_account(&history, Some("kimi")),
+                // The newest turn recorded no account (named accounts were off).
+                recorded_provider_account(
+                    &[turn_context("zai", Some("fake")), turn_context("zai", None)],
+                    Some("zai"),
+                ),
             ],
-            [None, Some("kimi:default".to_string())]
+            [
+                Some("zai:fake".to_string()),
+                Some("zai:fake".to_string()),
+                None,
+                None,
+            ]
         );
     }
 

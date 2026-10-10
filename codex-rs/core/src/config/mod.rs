@@ -4190,16 +4190,25 @@ impl Config {
         } else {
             requested_model_provider_id
         };
-        let provider_account_override =
-            provider_account_override.filter(|selection| !selection.trim().is_empty());
-        if let Some(selection) = provider_account_override.as_deref() {
-            provider_accounts::apply_explicit_provider_account(
-                &mut model_providers,
-                &model_provider_id,
-                selection,
-                features.enabled(Feature::NamedAccounts),
-            )?;
-        }
+        // Kept qualified by the provider it was validated against, so a thread
+        // later started or resumed on another provider cannot reinterpret it.
+        let provider_account_override = match provider_account_override
+            .as_deref()
+            .map(str::trim)
+            .filter(|selection| !selection.is_empty())
+        {
+            Some(selection) => {
+                provider_accounts::apply_explicit_provider_account(
+                    &mut model_providers,
+                    &model_provider_id,
+                    selection,
+                    features.enabled(Feature::NamedAccounts),
+                )?;
+                let (provider_id, name) = split_account_selection(selection, &model_provider_id);
+                Some(format!("{provider_id}:{name}"))
+            }
+            None => None,
+        };
         let model_provider = model_providers
             .get(&model_provider_id)
             .ok_or_else(|| {

@@ -39,7 +39,12 @@ pub(crate) async fn apply_spawn_agent_account(
     let provider_id = config.model_provider_id.clone();
     let mut provider = config.model_provider.clone();
     if let Err(error) = stamp_provider_account(&provider_id, &mut provider, requested) {
-        return refuse(error.to_string());
+        let message = error.to_string();
+        let prefix = format!("provider_accounts.{provider_id}: ");
+        return refuse(format!(
+            "spawn_agent account: {}",
+            message.strip_prefix(&prefix).unwrap_or(&message)
+        ));
     }
     if let Some(message) = selected_account_error(config.codex_home.as_path(), &provider) {
         let names = configured_account_names(config.codex_home.as_path(), &provider_id);
@@ -56,7 +61,18 @@ pub(crate) async fn apply_spawn_agent_account(
     if provider.account == config.model_provider.account {
         return Ok(());
     }
-    if turn.config.security_level == SecurityLevel::Aggressive {
+    // The level in force, including a stricter one committed during the
+    // session or inherited from the parent; an unreadable policy counts as
+    // Aggressive.
+    let level = session
+        .services
+        .agent_control
+        .effective_security_policy()
+        .snapshot_for_agent(session.thread_id)
+        .map_or(SecurityLevel::Aggressive, |policy| {
+            turn.config.security_level.max(policy.level)
+        });
+    if level == SecurityLevel::Aggressive {
         let shown = provider
             .account
             .as_ref()

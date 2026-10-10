@@ -82,6 +82,14 @@ fn collect_resume_override_mismatches(
             config_snapshot.model_provider_id
         ));
     }
+    if let Some(requested_account) = request.provider_account.as_deref()
+        && config_snapshot.provider_account.as_deref() != Some(requested_account)
+    {
+        mismatch_details.push(format!(
+            "provider_account requested={requested_account} active={:?}",
+            config_snapshot.provider_account
+        ));
+    }
     if let Some(requested_service_tier) = request.service_tier.as_ref()
         && requested_service_tier != &config_snapshot.service_tier
     {
@@ -227,17 +235,22 @@ fn latest_persisted_thread_runtime(history: &[RolloutItem]) -> Option<PersistedT
     })
 }
 
-/// PF-84: `<provider>:<account>` from the newest turn context that recorded
-/// an account (only recorded while named accounts are on).
-fn recorded_provider_account(history: &[RolloutItem]) -> Option<String> {
-    history.iter().rev().find_map(|item| match item {
-        RolloutItem::TurnContext(codex_protocol::protocol::TurnContextItem {
-            model_provider: Some(provider_id),
-            provider_account: Some(account),
-            ..
-        }) => Some(format!("{provider_id}:{account}")),
+/// PF-84: `<provider>:<account>` from the newest turn context, when it
+/// recorded an account (only while named accounts are on) for the provider
+/// the thread resumes on.
+fn recorded_provider_account(
+    history: &[RolloutItem],
+    resumed_provider_id: Option<&str>,
+) -> Option<String> {
+    let turn_context = history.iter().rev().find_map(|item| match item {
+        RolloutItem::TurnContext(turn_context) => Some(turn_context),
         _ => None,
-    })
+    })?;
+    let provider_id = turn_context.model_provider.as_deref()?;
+    let account = turn_context.provider_account.as_deref()?;
+    resumed_provider_id
+        .is_none_or(|resumed| resumed == provider_id)
+        .then(|| format!("{provider_id}:{account}"))
 }
 
 fn apply_persisted_thread_runtime(
@@ -684,6 +697,14 @@ impl ThreadRequestProcessor {
             agent_class,
             mut thread,
         } = params;
+        // PF-84: a worker inherits its parent's live account unless the
+        // request names one.
+        if thread.provider_account.is_none()
+            && let Ok(parent_id) = ThreadId::from_string(&parent_thread_id)
+            && let Ok(parent) = self.thread_manager.get_thread(parent_id).await
+        {
+            thread.provider_account = parent.config_snapshot().await.provider_account;
+        }
         thread.spawn_agent_parent_thread_id = Some(parent_thread_id);
         thread.spawn_agent_role = Some(agent_role);
         thread.thread_source = Some(codex_app_server_protocol::ThreadSource::Subagent);
@@ -3658,6 +3679,16 @@ impl ThreadRequestProcessor {
                 &mut typesafe_overrides,
             )
             .await;
+        // PF-84: resume on the recorded account unless one was chosen
+        // explicitly; only when the thread resumes on the recorded provider.
+        if typesafe_overrides.provider_account.is_none()
+            && let InitialHistory::Resumed(resumed_history) = &thread_history
+        {
+            typesafe_overrides.provider_account = recorded_provider_account(
+                &resumed_history.history,
+                typesafe_overrides.model_provider.as_deref(),
+            );
+        }
 
         // Derive a Config using the same logic as new conversation, honoring overrides if provided.
         let mut config = match self
@@ -3935,13 +3966,6 @@ impl ThreadRequestProcessor {
         );
         let had_explicit_model_override =
             has_model_resume_override(request_overrides.as_ref(), typesafe_overrides);
-        // PF-84: resume on the recorded account unless one was chosen
-        // explicitly. It is qualified by the recorded provider, so it is
-        // harmless when the resume also switches to another provider.
-        if typesafe_overrides.provider_account.is_none() {
-            typesafe_overrides.provider_account =
-                recorded_provider_account(&resumed_history.history);
-        }
         merge_persisted_service_tier(
             &resumed_history.history,
             request_overrides.as_ref(),
