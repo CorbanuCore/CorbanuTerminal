@@ -6633,7 +6633,7 @@ async fn handle_unauthorized(
 /// Names what to set when OpenAI rejects a request that carried no credential (#365).
 const MISSING_OPENAI_CREDENTIALS_MESSAGE: &str = "OpenAI rejected the request because no OpenAI \
     credential was found. Set OPENAI_API_KEY (`corbanu exec` also reads CODEX_API_KEY, which \
-    takes precedence), or sign in with `corbanu login`.";
+    takes precedence), or sign in with `corbanu login`";
 
 fn with_missing_openai_credentials_hint(err: CodexErr, provider: &SharedModelProvider) -> CodexErr {
     let info = provider.info();
