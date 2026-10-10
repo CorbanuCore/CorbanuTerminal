@@ -21,6 +21,9 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf13-s07-20261007"
     branch: "feat/pf-13-s07-qualification-20261007"
     base_commit: "64137b71894fb15fb9d6bf754dc69c41d4cb0406"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-27-s09-20261009"
+    branch: "sec/pf-27-s09-model-auth"
+    base_commit: "5d283fde18b9924127d061f7c4f5b58211a3a50a"
 ---
 
 # P1 security hardening
@@ -107,6 +110,7 @@ unbuilt controls read "not available".
 | Windows-host gate owner | released | released | released | PF-27-S06 completed and archived 2026-10-08 |
 | broker lane worker | released | released | released | PF-27-S07 completed and archived 2026-10-08 |
 | broker lane worker (2026-10-08) | released | released | released | PF-27-S08 completed and archived 2026-10-09 |
+| broker lane worker (2026-10-09) | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf-27-s09-20261009` | `sec/pf-27-s09-model-auth` | `5d283fde18b9` | PF-27-S09 (`in_progress`) |
 
 Lanes: **broker** (Windows hardening PF-27-S09; S06–S08 archived), **windows-host** (real-Windows gate runs; free),
 **qualification** (PF-13-S07 and the milestone runs). Lanes and coordinates are revised by the integration owner

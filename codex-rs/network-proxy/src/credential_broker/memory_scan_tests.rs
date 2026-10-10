@@ -37,6 +37,98 @@ pub(crate) fn count_in_writable_memory(masked: &[u8]) -> usize {
     hits
 }
 
+/// PF-27-S09 diagnostics: where the needle occurs (address, and on Windows
+/// the region and heap block holding it), for a failing scan.
+#[cfg(windows)]
+pub(crate) fn locate_in_writable_memory(masked: &[u8]) -> Vec<String> {
+    let mut buffer = vec![0_u8; CHUNK + masked.len()];
+    let mut found = Vec::new();
+    for (start, len) in writable_regions() {
+        let mut offset = 0;
+        while offset < len {
+            let want = (len - offset).min(CHUNK + masked.len() - 1);
+            let read = read_own_memory(start + offset, &mut buffer[..want]);
+            if read >= masked.len() {
+                for (index, window) in buffer[..read].windows(masked.len()).enumerate() {
+                    if window
+                        .iter()
+                        .zip(masked)
+                        .all(|(byte, masked)| byte ^ MASK == *masked)
+                    {
+                        found.push(start + offset + index);
+                    }
+                }
+            }
+            buffer.iter_mut().for_each(|byte| *byte = 0);
+            if want <= CHUNK {
+                break;
+            }
+            offset += CHUNK;
+        }
+    }
+    found.into_iter().map(describe).collect()
+}
+
+#[cfg(windows)]
+fn describe(address: usize) -> String {
+    use windows_sys::Win32::System::Memory::GetProcessHeaps;
+    use windows_sys::Win32::System::Memory::HeapWalk;
+    use windows_sys::Win32::System::Memory::MEMORY_BASIC_INFORMATION;
+    use windows_sys::Win32::System::Memory::PROCESS_HEAP_ENTRY;
+    use windows_sys::Win32::System::Memory::VirtualQuery;
+    // SAFETY: zeroed POD out-structure; queries this process.
+    let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
+    unsafe {
+        VirtualQuery(
+            address as *const std::ffi::c_void,
+            &mut info,
+            std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
+        )
+    };
+    let mut heaps = vec![0; 64];
+    // SAFETY: fills at most 64 handles.
+    let count = unsafe { GetProcessHeaps(64, heaps.as_mut_ptr()) } as usize;
+    let mut block = String::from("no heap block");
+    for (index, heap) in heaps.into_iter().take(count).enumerate() {
+        // SAFETY: zeroed POD; walks a heap of this process (unlocked: a
+        // diagnostic only).
+        let mut entry: PROCESS_HEAP_ENTRY = unsafe { std::mem::zeroed() };
+        while unsafe { HeapWalk(heap, &mut entry) } != 0 {
+            let start = entry.lpData as usize;
+            if (start..start + entry.cbData as usize).contains(&address) {
+                block = format!(
+                    "heap {index} block +{:#x} of {} bytes, flags {:#x}",
+                    address - start,
+                    entry.cbData,
+                    entry.wFlags
+                );
+            }
+        }
+    }
+    // The 24 bytes before the match (a variable name, if it is an
+    // environment copy), printable ASCII only.
+    let mut before = [0_u8; 24];
+    read_own_memory(address.saturating_sub(24), &mut before);
+    let before: String = before
+        .iter()
+        .map(|byte| {
+            if byte.is_ascii_graphic() {
+                *byte as char
+            } else {
+                '.'
+            }
+        })
+        .collect();
+    format!(
+        "{address:#x} after {before:?}: allocation {:#x} region {:#x}+{:#x} type {:#x} protect {:#x}; {block}",
+        info.AllocationBase as usize,
+        info.BaseAddress as usize,
+        info.RegionSize,
+        info.Type,
+        info.Protect
+    )
+}
+
 fn count(haystack: &[u8], masked: &[u8]) -> usize {
     haystack
         .windows(masked.len())
@@ -175,4 +267,66 @@ fn read_own_memory(address: usize, buffer: &mut [u8]) -> usize {
     } else {
         0
     }
+}
+
+#[cfg(windows)]
+fn writable_regions() -> Vec<(usize, usize)> {
+    use windows_sys::Win32::System::Memory::MEM_COMMIT;
+    use windows_sys::Win32::System::Memory::MEMORY_BASIC_INFORMATION;
+    use windows_sys::Win32::System::Memory::PAGE_EXECUTE_READWRITE;
+    use windows_sys::Win32::System::Memory::PAGE_EXECUTE_WRITECOPY;
+    use windows_sys::Win32::System::Memory::PAGE_GUARD;
+    use windows_sys::Win32::System::Memory::PAGE_READWRITE;
+    use windows_sys::Win32::System::Memory::PAGE_WRITECOPY;
+    use windows_sys::Win32::System::Memory::VirtualQuery;
+    let writable =
+        PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
+    let mut regions = Vec::new();
+    let mut address = 0_usize;
+    loop {
+        // SAFETY: zeroed POD out-structure.
+        let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
+        // SAFETY: queries this process's address space; `info` is valid.
+        let written = unsafe {
+            VirtualQuery(
+                address as *const std::ffi::c_void,
+                &mut info,
+                std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
+            )
+        };
+        if written == 0 || info.RegionSize == 0 {
+            break;
+        }
+        if info.State == MEM_COMMIT
+            && info.Protect & writable != 0
+            && info.Protect & PAGE_GUARD == 0
+        {
+            regions.push((info.BaseAddress as usize, info.RegionSize));
+        }
+        match (info.BaseAddress as usize).checked_add(info.RegionSize) {
+            Some(next) if next > address => address = next,
+            _ => break,
+        }
+    }
+    regions
+}
+
+#[cfg(windows)]
+fn read_own_memory(address: usize, buffer: &mut [u8]) -> usize {
+    use windows_sys::Win32::System::Diagnostics::Debug::ReadProcessMemory;
+    use windows_sys::Win32::System::Threading::GetCurrentProcess;
+    let mut read = 0_usize;
+    // SAFETY: the kernel copies at most `buffer.len()` bytes into `buffer`
+    // and reports failure instead of faulting on pages that changed.
+    let ok = unsafe {
+        ReadProcessMemory(
+            GetCurrentProcess(),
+            address as *const std::ffi::c_void,
+            buffer.as_mut_ptr().cast(),
+            buffer.len(),
+            &mut read,
+        )
+    };
+    // A partial copy (a page decommitted meanwhile) still reports its bytes.
+    if ok != 0 || read > 0 { read } else { 0 }
 }

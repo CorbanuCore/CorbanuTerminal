@@ -101,16 +101,13 @@ pub fn arg0_dispatch() -> Option<Arg0PathEntryGuard> {
     }
 
     let argv1 = args.next().unwrap_or_default();
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     if argv1 == codex_network_proxy::CODEX_CREDENTIAL_BROKER_ARG1 {
         // PF-27-S04 isolated credential broker; never returns. PF-27-S05:
-        // stored provider keys are decrypted here, never in Core.
+        // stored provider keys are decrypted here, never in Core (on Windows
+        // since PF-27-S09, the vault key read from Credential Manager under
+        // the broker's own token).
         codex_network_proxy::run_credential_broker_main_with(Some(broker_stored_provider_key));
-    }
-    // PF-27-S06: the Windows broker (named pipes); it reads no stored keys.
-    #[cfg(windows)]
-    if argv1 == codex_network_proxy::CODEX_CREDENTIAL_BROKER_ARG1 {
-        codex_network_proxy::run_credential_broker_main();
     }
     #[cfg(unix)]
     if argv1 == CODEX_ARG0_EXEC_HELPER_ARG1 {
@@ -306,7 +303,7 @@ const ILLEGAL_ENV_VAR_PREFIX: &str = "CODEX_";
 /// PF-27-S05: the broker's reader for stored provider keys (encrypted vault,
 /// then the legacy file), with the same precedence and deletion rules Core
 /// used before.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn broker_stored_provider_key(
     codex_home: &Path,
     provider_key_id: &str,

@@ -8,7 +8,6 @@
 use super::protocol::BROKER_ERROR_HEADER;
 use super::protocol::BROKER_RUNTIME_DIR_ENV;
 use super::protocol::BROKER_SESSION_ID;
-#[cfg(unix)]
 use super::protocol::BROKER_STORE_HOME_ENV;
 use super::protocol::BROKER_TASK_ID;
 use super::protocol::BrokerBootstrap;
@@ -130,16 +129,17 @@ pub fn run_credential_broker_main_with(resolver: Option<StoredKeyResolver>) -> !
         (containment, resolver.zip(store_home))
     };
     // PF-27-S06/S08: checks the broker token Core started it under, then
-    // applies the process DACL and a no-child-process job. Stored provider
-    // keys (PF-27-S05 model auth) are not read by the Windows broker.
+    // applies the process DACL and a no-child-process job. PF-27-S09: stored
+    // provider keys are read here too, the vault key from Credential Manager
+    // under the broker token (Travis's key-path decision (c)). The token
+    // cannot create the vault lock; Core creates it before the broker starts
+    // (`ModelCredentialBroker::spawn`), and a vault read locks it through a
+    // read-only handle.
     #[cfg(windows)]
-    let (containment, stored_keys) = {
-        let _ = resolver;
-        (
-            codex_process_hardening::contain_credential_broker(&runtime_dir),
-            None,
-        )
-    };
+    let (containment, stored_keys) = (
+        codex_process_hardening::contain_credential_broker(&runtime_dir),
+        resolver.zip(store_home()),
+    );
     let Ok(runtime) = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
@@ -206,8 +206,66 @@ pub(crate) fn prepare_vault_lock(home: &std::path::Path) -> Option<std::path::Pa
         .then_some(lock)
 }
 
+/// PF-27-S09: Windows counterpart of the Unix `prepare_vault_lock`, run by
+/// Core before it starts the broker, whose token cannot create files in the
+/// user's profile. A `secrets` directory or lock file that is a reparse point
+/// (symlink or junction) is refused, and the opened file must be the lock in
+/// `home`'s own `secrets` directory (a directory swapped meanwhile is caught).
+#[cfg(windows)]
+pub(crate) fn prepare_vault_lock(home: &std::path::Path) -> Option<std::path::PathBuf> {
+    use std::os::windows::fs::OpenOptionsExt as _;
+    use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT;
+    let home = std::fs::canonicalize(home).ok()?;
+    let dir = home.join("secrets");
+    match std::fs::symlink_metadata(&dir) {
+        Ok(meta) if meta.is_dir() => {}
+        Ok(_) => return None,
+        Err(_) => std::fs::create_dir(&dir).ok()?,
+    }
+    let lock = dir.join(".vault.lock");
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(&lock)
+        .ok()?;
+    let opened_is_lock = file.metadata().is_ok_and(|meta| meta.is_file())
+        && final_path(&file).is_some_and(|path| path.eq_ignore_ascii_case(lock.as_os_str()));
+    opened_is_lock.then_some(lock)
+}
+
+/// The path Windows reports for an open file (`\\?\` form, like
+/// `std::fs::canonicalize`).
+#[cfg(windows)]
+fn final_path(file: &std::fs::File) -> Option<std::ffi::OsString> {
+    use std::os::windows::ffi::OsStringExt as _;
+    use std::os::windows::io::AsRawHandle as _;
+    use windows_sys::Win32::Storage::FileSystem::GetFinalPathNameByHandleW;
+    let mut buffer = vec![0_u16; 1024];
+    loop {
+        // SAFETY: `buffer` holds `buffer.len()` units; flags 0: normalized,
+        // with a drive letter.
+        let len = unsafe {
+            GetFinalPathNameByHandleW(
+                file.as_raw_handle() as _,
+                buffer.as_mut_ptr(),
+                buffer.len() as u32,
+                0,
+            )
+        } as usize;
+        if len == 0 {
+            return None;
+        }
+        if len < buffer.len() {
+            return Some(std::ffi::OsString::from_wide(&buffer[..len]));
+        }
+        buffer.resize(len + 1, 0);
+    }
+}
+
 /// The Corbanu home named by the controller, if it is an absolute directory.
-#[cfg(unix)]
 fn store_home() -> Option<std::path::PathBuf> {
     std::env::var_os(BROKER_STORE_HOME_ENV)
         .map(std::path::PathBuf::from)

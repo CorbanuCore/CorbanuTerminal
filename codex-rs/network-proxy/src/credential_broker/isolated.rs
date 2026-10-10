@@ -17,10 +17,11 @@ pub(crate) use client::IsolatedBrokerClient;
 pub(crate) use client::IsolatedBrokerError;
 pub(crate) use client::IsolatedBrokerLauncher;
 pub(crate) use client::IsolatedBrokerOptions;
-#[cfg(unix)]
 pub(crate) use client::StoredRegistration;
 pub(crate) use client::user_runtime_dir;
 pub use server::StoredKeyResolver;
+#[cfg(windows)]
+pub(crate) use server::prepare_vault_lock;
 pub use server::run_credential_broker_main;
 pub use server::run_credential_broker_main_with;
 

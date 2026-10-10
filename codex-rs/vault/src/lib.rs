@@ -629,13 +629,23 @@ impl Vault {
         std::fs::create_dir_all(&secrets_dir)
             .context("failed to create vault secrets directory")?;
         let lock_path = secrets_dir.join(VAULT_LOCK_FILE_NAME);
-        let lock_file = OpenOptions::new()
+        let lock_file = match OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
             .truncate(false)
             .open(&lock_path)
-            .with_context(|| format!("failed to open vault lock {}", lock_path.display()))?;
+        {
+            // PF-27-S09: the Windows credential broker's token cannot write
+            // the user's files. A read-only handle locks the existing lock
+            // file just as exclusively; writes to the vault itself still fail.
+            #[cfg(windows)]
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+                OpenOptions::new().read(true).open(&lock_path)
+            }
+            opened => opened,
+        }
+        .with_context(|| format!("failed to open vault lock {}", lock_path.display()))?;
         lock_file
             .lock()
             .with_context(|| format!("failed to lock vault {}", lock_path.display()))?;

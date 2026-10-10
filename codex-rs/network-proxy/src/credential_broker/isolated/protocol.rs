@@ -16,7 +16,6 @@ pub(crate) const CONTROL_PROTOCOL_VERSION: u32 = 4;
 /// Environment variable naming the broker's runtime parent directory.
 pub(crate) const BROKER_RUNTIME_DIR_ENV: &str = "CODEX_CREDENTIAL_BROKER_RUNTIME_DIR";
 /// PF-27-S05: the Corbanu home whose stored provider keys the broker reads.
-#[cfg(unix)]
 pub(crate) const BROKER_STORE_HOME_ENV: &str = "CODEX_CREDENTIAL_BROKER_STORE_HOME";
 /// Most environment variables Core may hand over (PF-27-S05).
 pub(crate) const MAX_STASHED_ENV: usize = 64;

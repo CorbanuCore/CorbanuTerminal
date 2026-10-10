@@ -1,7 +1,7 @@
 name: windows-security-probes
 
-# PF-27-S06/S07/S08: measured Windows containment probes and broker transport
-# tests. They run real processes, tokens, ACLs and named pipes, so they need a
+# PF-27-S06/S07/S08/S09: measured Windows containment probes and broker
+# transport tests. They run real processes, tokens, ACLs and named pipes, so they need a
 # Windows host.
 
 on:
@@ -16,6 +16,13 @@ on:
       - "codex-rs/windows-sandbox-rs/**"
       - "codex-rs/network-proxy/src/credential_broker/**"
       - "codex-rs/network-proxy/src/credential_broker.rs"
+      - "codex-rs/network-proxy/src/native_certs.rs"
+      - "codex-rs/network-proxy/src/upstream*.rs"
+      - "codex-rs/network-proxy/Cargo.toml"
+      - "codex-rs/secrets/src/**"
+      - "codex-rs/login/src/auth/**"
+      - "codex-rs/vault/src/lib.rs"
+      - "codex-rs/arg0/src/lib.rs"
       - "codex-rs/core/src/security/**"
       - "codex-rs/core/src/exec.rs"
       - "codex-rs/core/src/tools/sandboxing.rs"
@@ -36,6 +43,13 @@ on:
       - "codex-rs/windows-sandbox-rs/**"
       - "codex-rs/network-proxy/src/credential_broker/**"
       - "codex-rs/network-proxy/src/credential_broker.rs"
+      - "codex-rs/network-proxy/src/native_certs.rs"
+      - "codex-rs/network-proxy/src/upstream*.rs"
+      - "codex-rs/network-proxy/Cargo.toml"
+      - "codex-rs/secrets/src/**"
+      - "codex-rs/login/src/auth/**"
+      - "codex-rs/vault/src/lib.rs"
+      - "codex-rs/arg0/src/lib.rs"
       - "codex-rs/core/src/security/**"
       - "codex-rs/core/src/exec.rs"
       - "codex-rs/core/src/tools/sandboxing.rs"
@@ -100,7 +114,9 @@ jobs:
       - name: Broker transport probes and broker suite over named pipes
         if: ${{ !cancelled() }}
         shell: bash
-        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-network-proxy "credential_broker::isolated::" -- --nocapture --test-threads=1
+        # PF-27-S09: model auth over the pipes, vault reads and platform roots
+        # under the broker token, and the environment scrub with its memory scan.
+        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-network-proxy --lib -- "credential_broker::isolated::" "credential_broker::env_scrub::" "native_certs::" --nocapture --test-threads=1
       - name: Launch contract probes under the elevated sandbox
         if: ${{ !cancelled() }}
         shell: bash
@@ -171,7 +187,9 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "PF-27-S08 broker token probes failed in a normal session" }
             $proxy = Get-TestExe @('-p', 'codex-network-proxy', '--lib')
             Assert-Tests $proxy 'pf_27_s06_windows_broker_uses_pipes' 1
-            & $medium -Program $proxy -Arguments @('credential_broker::isolated::', '--nocapture', '--test-threads=1')
+            Assert-Tests $proxy 'pf_27_s09' 12
+            Assert-Tests $proxy 'pf_27_s05_raw_key_is_not_left_in_core_memory' 1
+            & $medium -Program $proxy -Arguments @('credential_broker::isolated::', 'credential_broker::env_scrub::', 'native_certs::', '--nocapture', '--test-threads=1')
             if ($LASTEXITCODE -ne 0) { throw "the broker suite failed in a normal session" }
             $core = Get-TestExe @('-p', 'codex-core', '--lib')
             Assert-Tests $core 'pf_27_s06_d2' 2
