@@ -1,0 +1,88 @@
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                   │
+│                                                 │
+│ model:     deepseek-v4-flash   /model to change │
+│ directory: ~/corbanu-rtx/pf60s04-qual/work/ws   │
+╰─────────────────────────────────────────────────╯
+
+› Reply with the single word RETRIED.
+• RETRIED
+  Cost — this conversation
+  Requested UTC day: 2026-10-10
+› Today (UTC) in this conversation:
+  • deepseek-retry · DeepSeek V4 Flash 0731 (Direct) — Pay per use. 1 request, 6,015+ tokens. Estimated cost: no price available.
+  No other conversation recorded requests on this day.
+  Next step for requests with no price: check the bill from deepseek-retry. No published price covers them, so no cost is shown for them here.
+  Costs are estimates from published prices; deepseek-retry doesn't report its charges — check deepseek-retry's bill.
+  Select a provider below to see its requests.
+  —— Details ——
+  Estimated token cost: unknown
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Today (UTC) in this conversation:
+› • deepseek-retry · DeepSeek V4 Flash 0731 (Direct) — Pay per use. 1 request, 6,015+ tokens. Estimated cost: no price available.
+› No other conversation recorded requests on this day.
+› Next step for requests with no price: check the bill from deepseek-retry. No published price covers them, so no cost is shown for them here.
+› Costs are estimates from published prices; deepseek-retry doesn't report its charges — check deepseek-retry's bill.
+› Select a provider below to see its requests.
+› —— Details ——
+› Estimated token cost: unknown
+› Full recorded estimate: unavailable (2 of 2 billed attempts incomplete)
+  Full recorded estimate: unavailable (2 of 2 billed attempts incomplete)
+› Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+› Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+› Snapshot is not current; newer activity is unverified
+  Snapshot is not current; newer activity is unverified
+› Attempts with no price for any recorded tokens: 1 on deepseek-retry · DeepSeek V4 Flash 0731 (Direct) (deepseek-retry/deepseek-v4-flash). No money is
+  Attempts with no price for any recorded tokens: 1 on deepseek-retry · DeepSeek V4 Flash 0731 (Direct) (deepseek-retry/deepseek-v4-flash). No money is
+› stated for those attempts, which is not a zero-cost claim, and says nothing about the other attempts on the same model. A price can be absent because
+  stated for those attempts, which is not a zero-cost claim, and says nothing about the other attempts on the same model. A price can be absent because
+› the catalogue states no rate for the row, because this route's credential or service tier is not one the quoted rates apply to, or because no rate was in
+  the catalogue states no rate for the row, because this route's credential or service tier is not one the quoted rates apply to, or because no rate was in
+› effect at dispatch.
+  effect at dispatch.
+› Day covered (UTC): [2026-10-10T00:00:00.000Z, 2026-10-11T00:00:00.000Z)
+  Day covered (UTC): [2026-10-10T00:00:00.000Z, 2026-10-11T00:00:00.000Z)
+› Read at: 2026-10-10T04:05:49.109Z; ledger current to: 2026-10-10T04:05:20.709Z (28400 ms behind)
+  Read at: 2026-10-10T04:05:49.109Z; ledger current to: 2026-10-10T04:05:20.709Z (28400 ms behind)
+› Retention: request detail kept since 2026-07-12T04:05:49.109Z; daily totals kept since 2025-10-11; oldest recorded day in this conversation 2026-10-10
+  Retention: request detail kept since 2026-07-12T04:05:49.109Z; daily totals kept since 2025-10-11; oldest recorded day in this conversation 2026-10-10
+› Known subtotal exact USD: none — no price for these attempts
+  Known subtotal exact USD: none — no price for these attempts
+› Input: 5,889 + not reported by 1 attempt
+  Input: 5,889 + not reported by 1 attempt
+› Noncached input (derived for inclusive input): not reported (2 attempts)
+  Noncached input (derived for inclusive input): not reported (2 attempts)
+› Cache read: 3,200 + not reported by 1 attempt
+  Cache read: 3,200 + not reported by 1 attempt
+› Cache write: not reported (2 attempts)
+  Cache write: not reported (2 attempts)
+› Output: 126 + not reported by 1 attempt
+  Output: 126 + not reported by 1 attempt
+› Reasoning (subset, not separately billed): 122 + not reported by 1 attempt
+  Reasoning (subset, not separately billed): 122 + not reported by 1 attempt
+› Total (not separately billed): 6,015 + not reported by 1 attempt
+  Total (not separately billed): 6,015 + not reported by 1 attempt
+› Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+  Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+› Unknown parent population: 0 attempts, excluded from root total
+  Unknown parent population: 0 attempts, excluded from root total
+› —— Open ——
+  —— Open ——
+› → deepseek-retry · DeepSeek V4 Flash 0731 (Direct) — no price available (1 request)
+  → deepseek-retry · DeepSeek V4 Flash 0731 (Direct) — no price available (1 request)
+› → Request 1 · deepseek-retry · DeepSeek V4 Flash 0731 (Direct) · no price available
+  → Request 1 · deepseek-retry · DeepSeek V4 Flash 0731 (Direct) · no price available
+› → Root's own attempts (2 attempts)
+  → Root's own attempts (2 attempts)
+› → Descendant attempts (none)
+  → Descendant attempts (none)
+› → Unknown provider/model attribution (none)
+  → Unknown provider/model attribution (none)
+› → Unknown parent population (none)
+  → Unknown parent population (none)
+› Refresh
+  Refresh
+› Close

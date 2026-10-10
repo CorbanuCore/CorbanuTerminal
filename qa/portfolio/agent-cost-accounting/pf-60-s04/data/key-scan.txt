@@ -1,0 +1,13 @@
+Key scan, 2026-10-10 (values fed to grep from the vault on the consuming command; never printed).
+RTX qualification homes, captures, logs and pre-qualification smoke captures:
+  provider/zai_api_key: 0 files
+  provider/kimi_api_key: 0 files
+  claude-plan-test-token: 0 files
+  openai-api-key: 1 file - homes/smoke/auth.json, a pre-qualification smoke home where `corbanu login --with-api-key`
+    was tried before #381 landed (disposable; deleted with the scratch). Not in any qualification home (q1-q4).
+  provider/deepseek_api_key: 0 files
+  key-shaped strings (sk-…, sk-ant-…, Bearer …): only inside downloaded plugin documentation under homes/*/.tmp/plugins
+    and one base64 fragment inside an encrypted reasoning blob in homes/q1/logs/codex-tui.log (preceded by
+    base64 characters; not a credential).
+Committed evidence (this folder, qualification.md, demo specs) and the demo run directories (casts, logs, homes):
+  all five vault values: 0 files; key-shaped strings in casts: 0.

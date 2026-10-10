@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-60-S04"
 title: "Cost-accounting acceptance and handoff"
-status: in_progress
+status: ready
 plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 5
@@ -19,7 +19,7 @@ updated: 2026-10-10
 
 # PF-60-S04 — Cost-accounting acceptance and handoff
 
-**Status: in progress** (activated 2026-10-10; S03 and S05 are completed and archived). Travis asked for the accounting work to finish sprint by sprint with demo videos. This sprint closes two gaps S05 handed over, then qualifies every cost flow on one recorded binary and hands off.
+**Status: ready for acceptance** (activated 2026-10-10; lane work done 2026-10-10; not archived). Travis asked for the accounting work to finish sprint by sprint with demo videos. Both S05 hand-overs are closed, and every cost flow passed on one recorded binary ([qualification](../../../../qa/portfolio/agent-cost-accounting/qualification.md)). Next: the independent code-blind acceptance, then Travis.
 
 ## Execution mandate
 
@@ -48,32 +48,31 @@ updated: 2026-10-10
 ## Done
 
 - [x] Draft sprint created and linked to one feature.
-- [x] 2026-10-10 Activated with gaps (i)-(iv) folded in.
+- [x] 2026-10-10 Activated with gaps (i)-(iv) folded in (PR #382, `bda1b29d90`).
+- [x] 2026-10-10 **Slice A (gap i), PR #383 (`be411b5ed7`):** `/side` conversations record under their fork origin (`side:`) and memory consolidation under the conversation that started it (`consolidation:`, bound when the worker is built). Review: round 1 requested changes, round 2 APPROVE.
+- [x] 2026-10-10 **Slice B (gap ii), PR #385 (`1e9cd464b9`):** a basis-only request's detail shows "Price: none recorded — this request records only its billing basis (…)" with no price metadata; plan-rate records keep it. Review: round 1 requested changes, round 2 APPROVE.
+- [x] 2026-10-10 **Qualification** on one recorded binary (main `1e9cd464b9`, Linux debug, sha256 `cb378c27…a1d58`), with real keys through tmux: three-provider parent/child journeys (OpenAI `gpt-5.4` parent with Kimi, Claude and DeepSeek children; GLM 5.2 parent with Kimi and Claude children), `/side`, consolidation, cancellation, missing price, duplicate retry, reopen, kill -9 and restart, history, date bounds. Pay-per-use figures recompute exactly; seeded history matches its goldens ([qualification](../../../../qa/portfolio/agent-cost-accounting/qualification.md)).
+- [x] 2026-10-10 **(iii)** OpenAI API-key estimate exact on 13 real requests: recommend lifting S05 waiver (a). **(iv)** #368 recorded as limitations.
+- [x] 2026-10-10 Five demo videos ([index](../../../../qa/demos/index/PF-60-S04.md)); narrated reel built, not published.
 
 ## Remaining
 
-- [ ] **Slice A (gap i):** side conversations and memory consolidation recorded under their conversation; regression tests.
-- [ ] **Slice B (gap ii):** basis-only request detail without "Price source"; regression tests.
-- [ ] Build one debug binary (`developer-accounting`) from the final main commit and record its commit and digest.
-- [ ] Three-provider parent/child journeys (Claude plan, GLM 5.2 on `zai`, Kimi k3 on `kimi-code`, plus OpenAI `gpt-5.4` on an API key) through the tmux harness with actual keys.
-- [ ] Cancellation, missing price, duplicate retry, restart/resume, historical inspection and `/cost` date bounds; reconcile against golden totals.
-- [ ] AC10 re-check (iii); #368 limitations (iv).
-- [ ] Write `qualification.md`: expected vs actual, counterexamples, limitations, handoff; demo videos and the narrated reel (built, not published).
-- [ ] Independent code-blind acceptance, then Travis's named acceptance; archive.
+- [ ] Independent code-blind acceptance of the qualification record, then Travis's named acceptance (waiver (a) decision); archive.
 
 ## Verification
 
-- [ ] Slice A: from `codex-rs`, `just test -p codex-core --features developer-accounting -E 'test(accounting) | test(guardian)'` and `just test -p codex-core -E 'test(accounting) | test(guardian)'`; `just test -p codex-memories-write`.
-- [ ] Slice B: from `codex-rs`, `just test -p codex-tui --features developer-accounting -E 'test(tokens) | test(cost) | test(accounting)'` and `just test -p codex-tui -E 'test(tokens) | test(cost)'`.
-- [ ] Each slice: Linux `cargo clippy --all-targets -- -D warnings` for the touched crates, with and without `developer-accounting`, on the RTX box; one Opus 5.5 High read-only review.
-- [ ] Focused tmux: from `codex-rs`, `CORBANU_TMUX_REQUIRED=1 just test -p codex-tui --test all tmux --retries 0`.
-- [ ] Integration: from repo root, `python3 docs/plans/check.py; python3 docs/sprints/check.py`; `git diff --check`.
-- [ ] True TUI on the recorded binary: actual-key success, cancel, recovery/resume and historical inspection for every affected path.
-- [ ] Expected versus actual results and nonzero test counts recorded; no unchecked assumption is converted into a pass.
+- [x] Slice A: `just test -p codex-core --features developer-accounting -E 'test(accounting) | test(guardian)'` 329/329; without the feature 324/324; `just test -p codex-memories-write` 48/48.
+- [x] Slice B: `just test -p codex-tui --features developer-accounting -E 'test(tokens) | test(cost) | test(accounting)'` 126/126; `just test -p codex-tui -E 'test(tokens) | test(cost)'` 113/113.
+- [x] Each slice: Linux clippy `-D warnings` on the RTX box, with and without `developer-accounting`, 0/0 on the final heads; Opus 5.5 High review rounds ending in APPROVE.
+- [x] Focused tmux: `CORBANU_TMUX_REQUIRED=1 just test -p codex-tui --test all tmux --retries 0` on `1e9cd464b9` (RTX; the recipe ran directly, as `just` isn't installed there): 71/71, 24 skipped.
+- [x] Integration: `python3 docs/plans/check.py; python3 docs/sprints/check.py`; `git diff --check`: clean.
+- [x] True TUI on the recorded binary: success, cancel, recovery/resume (kill -9) and historical inspection with actual keys.
+- [x] Expected versus actual results and nonzero test counts recorded in the qualification; nothing unchecked converted into a pass.
+- [ ] Independent code-blind acceptance: an executor who reads only this record, the qualification and in-product help re-runs the flows with real keys and records pass/fail per flow; a code-blind reviewer audits it.
 
 ## Exit evidence
 
-- [ ] Output commit/digest and input provenance recorded; checks linked to that final tree.
+- [x] Output commit/digest and input provenance recorded; checks linked to that final tree ([build receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s04/data/build-receipt.txt)).
 - [ ] Independent code-blind acceptance recorded; Travis accepts the bounded output.
-- [ ] Handoff includes changed scope, contracts, known gaps and required combined-tree evidence.
+- [x] Handoff includes changed scope, contracts, known gaps and required combined-tree evidence (qualification, "Handoff").
 - [ ] Done/Remaining ledgers updated honestly; accepted record archived under `docs/sprints/archive/portfolio-agent-cost-accounting/` and plan backlinks updated.

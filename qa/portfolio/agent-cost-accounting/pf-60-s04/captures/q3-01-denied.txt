@@ -1,0 +1,50 @@
+╭───────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                 │
+│                                               │
+│ model:     glm-5.2   /model to change         │
+│ directory: ~/corbanu-rtx/pf60s04-qual/work/ws │
+╰───────────────────────────────────────────────╯
+
+
+› Reply with the single word GLM.
+
+
+• GLM
+
+
+› Run /review on my current changes
+
+  Z.AI GLM 5.2 via zai standard · ~/corbanu-rtx/pf60s04-qual/work/ws · Corbanu Terminal · TPS: 2.3 tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

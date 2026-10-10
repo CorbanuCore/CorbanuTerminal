@@ -1,0 +1,175 @@
+  What explains the durability of double-entry bookkeeping is its unusual combination of simplicity and power. Its central rule is easy to state, but its
+  consequences are profound. Because every entry has a counterpart, errors are easier to detect. Because accounts are classified systematically, performance can
+  be analyzed. Because books can be closed and balanced, periodic statements become possible. Balance sheets and income statements, fundamental to modern
+  finance, rest directly on this structure. Even when users no longer write journal entries by hand, they still inhabit a world designed by double-entry logic.
+
+  The history of double-entry bookkeeping is therefore the history of a method that gradually became an institution. Born in the needs of medieval commerce,
+  refined in the city-states of Italy, codified by Pacioli, and spread by trade, print, and education, it became one of the main operating languages of economic
+  life. Its success lay not in glamour but in reliability. It enabled merchants to manage complexity, investors to trust reports, managers to evaluate
+  operations, and states and corporations to administer large systems over time.
+  In retrospect, double-entry bookkeeping can be seen as a foundational technology of modernity. It did for economic organization what maps did for navigation
+  and clocks did for time discipline: it imposed structure on a difficult domain and made large-scale coordination possible. That is why its history matters. It
+  shows how a method of writing things down can alter what people are able to build, govern, and imagine.
+› Write a 3000-word essay on the history of the abacus. Do not use any tools.
+■ Conversation interrupted - tell the model what to do differently. Something went wrong? Hit `/feedback` to report the issue.
+› Reply with the single word KILLED.
+• KILLED
+■ Restored a legacy /spawn hierarchy in read-only mode. Existing panes remain inspectable, but Corbanu Terminal will not dispatch or replay work until you
+create a new CrewSpec-backed crew.
+› Reply with the single word PRIORITY.
+• PRIORITY
+  Cost — this conversation
+  Requested UTC day: 2026-10-10
+› Today (UTC) in this conversation:
+  • Claude Plan · Claude Opus 5.5 Plan — Covered by your subscription (not billed per request). 1 request, 15,126 tokens. Same work at API prices: $0.032886
+  (rounded).
+  • DeepSeek · DeepSeek V4 Flash 0731 (Direct) — Pay per use. 1 request, 9,232 tokens. Estimated cost: $0.001390 (rounded).
+  • Kimi Code · Kimi Code K3 — Covered by your subscription (not billed per request). 2 requests, 8,353 tokens. Same work at API prices: not available.
+  • OpenAI · gpt-5.4 — Pay per use. 16 requests, 221,596+ tokens. Estimated cost: at least $0.270659 (2 attempts had no price, 1 had incomplete usage).
+  Pay-per-use total — estimated cost: at least $0.272049 (rounded) (2 attempts had no price, 1 had incomplete usage)
+  Subscription work — same work at API prices: at least $0.032886 (rounded)
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Today (UTC) in this conversation:
+› • Claude Plan · Claude Opus 5.5 Plan — Covered by your subscription (not billed per request). 1 request, 15,126 tokens. Same work at API prices: $0.032886
+› (rounded).
+› • DeepSeek · DeepSeek V4 Flash 0731 (Direct) — Pay per use. 1 request, 9,232 tokens. Estimated cost: $0.001390 (rounded).
+› • Kimi Code · Kimi Code K3 — Covered by your subscription (not billed per request). 2 requests, 8,353 tokens. Same work at API prices: not available.
+› • OpenAI · gpt-5.4 — Pay per use. 16 requests, 221,596+ tokens. Estimated cost: at least $0.270659 (2 attempts had no price, 1 had incomplete usage).
+› Pay-per-use total — estimated cost: at least $0.272049 (rounded) (2 attempts had no price, 1 had incomplete usage)
+› Subscription work — same work at API prices: at least $0.032886 (rounded)
+› Other conversations on this day, not included above: 1 request in 1 conversation.
+  Other conversations on this day, not included above: 1 request in 1 conversation.
+› • OpenAI · gpt-5.4 — Pay per use. 1 request, 10,146 tokens. Estimated cost: $0.025365.
+  • OpenAI · gpt-5.4 — Pay per use. 1 request, 10,146 tokens. Estimated cost: $0.025365.
+› Other conversations' estimated cost: $0.025365.
+  Other conversations' estimated cost: $0.025365.
+› To see those requests, open that conversation with /resume and run /cost there.
+  To see those requests, open that conversation with /resume and run /cost there.
+› Next step for requests with no price: check the bill from OpenAI. No published price covers them, so no cost is shown for them here.
+  Next step for requests with no price: check the bill from OpenAI. No published price covers them, so no cost is shown for them here.
+› Next step for requests with incomplete usage: check the bill from OpenAI. Their provider did not report every token count, so the estimate is missing or
+  Next step for requests with incomplete usage: check the bill from OpenAI. Their provider did not report every token count, so the estimate is missing or
+› only a lower bound.
+  only a lower bound.
+› Paid usage beyond a plan (usage credits, Extra Usage or extra credits you bought) isn't visible here and is never counted as spent; check your provider's
+  Paid usage beyond a plan (usage credits, Extra Usage or extra credits you bought) isn't visible here and is never counted as spent; check your provider's
+› usage page.
+  usage page.
+› Costs are estimates from published prices; DeepSeek and OpenAI don't report their charges — check their bills.
+  Costs are estimates from published prices; DeepSeek and OpenAI don't report their charges — check their bills.
+› Select a provider below to see its requests.
+  Select a provider below to see its requests.
+› —— Details ——
+  —— Details ——
+› Known estimated token cost: $0.272049 (rounded) + unknown costs
+  Known estimated token cost: $0.272049 (rounded) + unknown costs
+› Full recorded estimate: unavailable (3 of 17 billed attempts incomplete)
+  Full recorded estimate: unavailable (3 of 17 billed attempts incomplete)
+› Subscription capacity: 3 of 20 attempts, not billed per token
+  Subscription capacity: 3 of 20 attempts, not billed per token
+› Plan consumption: 15,126 tokens at the plan rate, plus 2 attempts with no stateable figure
+  Plan consumption: 15,126 tokens at the plan rate, plus 2 attempts with no stateable figure
+› Same tokens at API rates: $0.032886 (rounded) known, plus 2 of 3 plan attempts the catalogue does not price
+  Same tokens at API rates: $0.032886 (rounded) known, plus 2 of 3 plan attempts the catalogue does not price
+› Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+› Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+› Snapshot is not current; newer activity is unverified
+  Snapshot is not current; newer activity is unverified
+› Attempts with no price for any recorded tokens: 2 on OpenAI · gpt-5.4 (openai/gpt-5.4). No money is stated for those attempts, which is not a zero-cost
+  Attempts with no price for any recorded tokens: 2 on OpenAI · gpt-5.4 (openai/gpt-5.4). No money is stated for those attempts, which is not a zero-cost
+› claim, and says nothing about the other attempts on the same model. A price can be absent because the catalogue states no rate for the row, because this
+  claim, and says nothing about the other attempts on the same model. A price can be absent because the catalogue states no rate for the row, because this
+› route's credential or service tier is not one the quoted rates apply to, or because no rate was in effect at dispatch.
+  route's credential or service tier is not one the quoted rates apply to, or because no rate was in effect at dispatch.
+› Day covered (UTC): [2026-10-10T00:00:00.000Z, 2026-10-11T00:00:00.000Z)
+  Day covered (UTC): [2026-10-10T00:00:00.000Z, 2026-10-11T00:00:00.000Z)
+› Read at: 2026-10-10T04:04:21.786Z; ledger current to: 2026-10-10T04:03:53.587Z (28199 ms behind)
+  Read at: 2026-10-10T04:04:21.786Z; ledger current to: 2026-10-10T04:03:53.587Z (28199 ms behind)
+› Retention: request detail kept since 2026-07-12T04:04:21.786Z; daily totals kept since 2025-10-11; oldest recorded day in this conversation 2026-10-10
+  Retention: request detail kept since 2026-07-12T04:04:21.786Z; daily totals kept since 2025-10-11; oldest recorded day in this conversation 2026-10-10
+› Known subtotal exact USD: 0.2720492
+  Known subtotal exact USD: 0.2720492
+› Input: 250,826 + not reported by 1 attempt
+  Input: 250,826 + not reported by 1 attempt
+› Noncached input (derived for inclusive input): 106,675 + not reported by 4 attempts — costed as input − cache read for 1 attempt, whose price charges
+  Noncached input (derived for inclusive input): 106,675 + not reported by 4 attempts — costed as input − cache read for 1 attempt, whose price charges
+› nothing for cache writes
+  nothing for cache writes
+› Cache read: 123,948 + not reported by 2 attempts
+  Cache read: 123,948 + not reported by 2 attempts
+› Cache write: 3,806 + not reported by 4 attempts — free at the price of 1 attempt, so nothing was charged
+  Cache write: 3,806 + not reported by 4 attempts — free at the price of 1 attempt, so nothing was charged
+› Output: 3,481 + not reported by 1 attempt
+  Output: 3,481 + not reported by 1 attempt
+› Reasoning (subset, not separately billed): 587 + not reported by 2 attempts
+  Reasoning (subset, not separately billed): 587 + not reported by 2 attempts
+› Total (not separately billed): 254,307 + not reported by 1 attempt
+  Total (not separately billed): 254,307 + not reported by 1 attempt
+› Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+  Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+› Unknown parent population: 0 attempts, excluded from root total
+  Unknown parent population: 0 attempts, excluded from root total
+› —— Open ——
+  —— Open ——
+› → Claude Plan · Claude Opus 5.5 Plan — covered by subscription (1 request)
+  → Claude Plan · Claude Opus 5.5 Plan — covered by subscription (1 request)
+› → DeepSeek · DeepSeek V4 Flash 0731 (Direct) — estimated $0.001390 (rounded) (1 request)
+  → DeepSeek · DeepSeek V4 Flash 0731 (Direct) — estimated $0.001390 (rounded) (1 request)
+› → Kimi Code · Kimi Code K3 — covered by subscription (2 requests)
+  → Kimi Code · Kimi Code K3 — covered by subscription (2 requests)
+› → OpenAI · gpt-5.4 — estimated at least $0.270659 (2 attempts had no price, 1 had incomplete usage) (16 requests)
+  → OpenAI · gpt-5.4 — estimated at least $0.270659 (2 attempts had no price, 1 had incomplete usage) (16 requests)
+› → Request 1 · OpenAI · gpt-5.4 · estimated $0.025365
+  → Request 1 · OpenAI · gpt-5.4 · estimated $0.025365
+› → Request 2 · OpenAI · gpt-5.4 · estimated $0.033705
+  → Request 2 · OpenAI · gpt-5.4 · estimated $0.033705
+› → Request 3 · OpenAI · gpt-5.4 · estimated $0.019200 (rounded)
+  → Request 3 · OpenAI · gpt-5.4 · estimated $0.019200 (rounded)
+› → Request 4 · Kimi Code · Kimi Code K3 · covered by subscription
+  → Request 4 · Kimi Code · Kimi Code K3 · covered by subscription
+› → Request 5 · OpenAI · gpt-5.4 · estimated $0.007771
+  → Request 5 · OpenAI · gpt-5.4 · estimated $0.007771
+› → Request 6 · DeepSeek · DeepSeek V4 Flash 0731 (Direct) · estimated $0.001390 (rounded)
+  → Request 6 · DeepSeek · DeepSeek V4 Flash 0731 (Direct) · estimated $0.001390 (rounded)
+› → Request 7 · Claude Plan · Claude Opus 5.5 Plan · covered by subscription
+  → Request 7 · Claude Plan · Claude Opus 5.5 Plan · covered by subscription
+› → Request 8 · OpenAI · gpt-5.4 · estimated $0.008264 (rounded)
+  → Request 8 · OpenAI · gpt-5.4 · estimated $0.008264 (rounded)
+› → Request 9 · Kimi Code · Kimi Code K3 · covered by subscription
+  → Request 9 · Kimi Code · Kimi Code K3 · covered by subscription
+› → Request 10 · OpenAI · gpt-5.4 · estimated $0.007104 (rounded)
+  → Request 10 · OpenAI · gpt-5.4 · estimated $0.007104 (rounded)
+› → Request 11 · OpenAI · gpt-5.4 · estimated $0.005497
+  → Request 11 · OpenAI · gpt-5.4 · estimated $0.005497
+› → Request 12 · OpenAI · gpt-5.4 · estimated $0.025365
+  → Request 12 · OpenAI · gpt-5.4 · estimated $0.025365
+› → Request 13 · OpenAI · gpt-5.4 · estimated $0.024122 (rounded)
+  → Request 13 · OpenAI · gpt-5.4 · estimated $0.024122 (rounded)
+› → Request 14 · OpenAI · gpt-5.4 · estimated $0.036086 (rounded)
+  → Request 14 · OpenAI · gpt-5.4 · estimated $0.036086 (rounded)
+› → Request 15 · OpenAI · gpt-5.4 · estimated $0.047143
+  → Request 15 · OpenAI · gpt-5.4 · estimated $0.047143
+› → Request 16 · OpenAI · gpt-5.4 · usage incomplete
+  → Request 16 · OpenAI · gpt-5.4 · usage incomplete
+› → Request 17 · OpenAI · gpt-5.4 · estimated $0.005672 (rounded)
+  → Request 17 · OpenAI · gpt-5.4 · estimated $0.005672 (rounded)
+› → Request 18 · OpenAI · gpt-5.4 · estimated $0.025365
+  → Request 18 · OpenAI · gpt-5.4 · estimated $0.025365
+› → Request 19 · OpenAI · gpt-5.4 · no price available
+  → Request 19 · OpenAI · gpt-5.4 · no price available
+› → Request 20 · OpenAI · gpt-5.4 · no price available
+  → Request 20 · OpenAI · gpt-5.4 · no price available
+› → Root's own attempts (16 attempts)
+  → Root's own attempts (16 attempts)
+› → Descendant attempts (4 attempts)
+  → Descendant attempts (4 attempts)
+› → Unknown provider/model attribution (none)
+  → Unknown provider/model attribution (none)
+› → Unknown parent population (none)
+  → Unknown parent population (none)
+› Refresh
+  Refresh
+› Close

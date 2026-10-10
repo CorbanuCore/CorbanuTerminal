@@ -45,9 +45,10 @@ implementation_worktrees:
   and credential (option B). Known gaps (ChatGPT login, image generation, realtime, Kimi Open Platform, BigModel,
   mutation tests) and follow-ups (#352, #359, #361/#369, #365, #366, #370) are in the
   [archived record](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s05-collection-correctness-and-billing-basis.md).
-  **S04:** in progress since 2026-10-10. It closes two S05 hand-overs (`/side` and memory consolidation unrecorded;
-  a "Price source" line on unpriced requests), re-checks waiver (a) now that #369 landed, records #368 as
-  limitations, then qualifies every cost flow on one recorded binary.
+  **S04:** ready for acceptance (2026-10-10). Both S05 hand-overs are closed (#383 `/side` and consolidation
+  recorded; #385 no price metadata on unpriced requests), and every cost flow passed on one recorded binary
+  ([qualification](../../../qa/portfolio/agent-cost-accounting/qualification.md)). The OpenAI API-key estimate is exact,
+  so waiver (a) can be lifted. Next: independent code-blind acceptance, then Travis.
 - **Worktrees:** S04 in `worktrees/pf60-s04-20261010` (branch `work/pf60-s04-20261010`). The S05 lane,
   `worktrees/pf60-s05-20261009` (branch `work/pf60-s05-20261009`), was released at S05's archive. The S03 lane,
   `worktrees/pf60-s03-20261008` (branch `work/pf60-s03-20261008`), was released at S03's archive. The September lane
@@ -285,7 +286,7 @@ All records belong to the single feature **PF-60**. Dependencies are hard prereq
 | PF-60-S02 | [Idempotent usage persistence and replay](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md) | PF-60-S01 | Four direct sampling paths received: Anthropic direct, Responses HTTP, Responses WebSocket and direct Chat, on the accepted persistence and replay substrate. Default no-install and collection OFF | The normal-library store is accepted history, not the next unit; that line was stale. Remaining and explicitly unqualified: Corbanu plan gateway economics, startup prewarm, auxiliary collection, legacy evidence acquisition and complete application coverage. Closure of the bounded sprint is a separate recorded manager decision |
 | PF-60-S03 | [Inspectable run and campaign totals](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md) | PF-60-S02 | `/cost` inspector, ranges, developer-only activation, coverage, pricing, stated charges, contention fixes | Accepted by Travis 2026-10-09 after independent code-blind acceptance (#292, #311, #315, #328); archived. Follow-ups #287, #325 |
 | PF-60-S05 | [Collection correctness and declared billing basis](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s05-collection-correctness-and-billing-basis.md) | PF-60-S02 | Declared billing basis with cited defaults; subscription basis kept without a price; versioned ledger format; best-effort compaction, web search and image generation; guardian forks attributed | Accepted by Travis 2026-10-09 with waivers (AC10 OpenAI API-key estimate until #361/#369; AC11 isolation gate) after independent code-blind acceptance (#355, #362); archived. Follow-ups #352, #359, #361, #365, #366, #370 |
-| PF-60-S04 | [Cost-accounting acceptance and handoff](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s04-cost-accounting-acceptance-and-handoff.md) | PF-60-S03, PF-60-S05 | qa/portfolio/agent-cost-accounting/qualification.md | In progress (2026-10-10) |
+| PF-60-S04 | [Cost-accounting acceptance and handoff](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s04-cost-accounting-acceptance-and-handoff.md) | PF-60-S03, PF-60-S05 | qa/portfolio/agent-cost-accounting/qualification.md | Ready for acceptance (2026-10-10): lane qualification passed on one binary; awaiting code-blind acceptance and Travis |
 
 ## Acceptance flows
 
