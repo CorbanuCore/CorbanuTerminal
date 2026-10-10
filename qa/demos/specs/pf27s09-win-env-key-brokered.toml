@@ -1,0 +1,72 @@
+# PF-27-S09 (Windows, normal session): Core hands ZAI_API_KEY to the broker, which
+# signs nothing for Core: every model request goes to the broker's checked pipe.
+id = "pf27s09-win-env-key-brokered"
+feature = "Windows model-client auth through the broker (normal session): Core hands ZAI_API_KEY to the broker and answers through its pipe"
+expected = "The session answers. Core's environment no longer holds ZAI_API_KEY; the log shows the broker (token+dacl+job) took the key and holds the Z.AI credential."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "read-only"
+suppress_unstable_features_warning = true
+
+[windows]
+sandbox = "unelevated"
+
+[features]
+broker_model_auth = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Do you trust the contents of this directory"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Reply with exactly one line: answered through the Windows broker"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "(?m)^. answered through the Windows broker"
+timeout = 240
+compress = 3
+
+[[steps]]
+wait = "\\A(?![\\s\\S]*esc to interrupt)"
+timeout = 120
+compress = 1
+
+[[steps]]
+type = '''!"ZAI_API_KEY in Core's environment: " + $(if ($env:ZAI_API_KEY) { 'SET' } else { 'none' }); (sls -Path ../logs/codex-tui.log -Pattern 'containment=\S+|removed from the environment: \w+|held by the credential broker \(host=[^,]+').Matches.Value | Sort-Object -Unique'''
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "removed from the environment: ZAI_API_KEY"
+timeout = 60
+
+[[steps]]
+wait = "environment: none"
+timeout = 10
+
+[[steps]]
+wait = "held by the credential broker \\(host=api\\.z\\.ai"
+timeout = 10
+
+[[steps]]
+pause = 4.0

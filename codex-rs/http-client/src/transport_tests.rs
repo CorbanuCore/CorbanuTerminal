@@ -175,9 +175,15 @@ impl Write for TestLogWriter {
 /// goes to the broker's socket.
 #[cfg(unix)]
 #[tokio::test]
+#[expect(
+    clippy::await_holding_invalid_type,
+    reason = "the broker route is process-wide; tests that install one run one at a time"
+)]
 async fn pf_27_s05_broker_frame_requests_go_only_to_the_broker_socket() {
     use tokio::io::AsyncReadExt as _;
     use tokio::io::AsyncWriteExt as _;
+    let _route = crate::model_broker_route::ROUTE_TEST_LOCK.lock().await;
+    let _uninstall = UninstallRoute;
 
     let network = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
     network.set_nonblocking(true).expect("nonblocking");
@@ -228,5 +234,154 @@ async fn pf_27_s05_broker_frame_requests_go_only_to_the_broker_socket() {
         "{seen}"
     );
     assert!(network.accept().is_err(), "nothing may reach the network");
-    crate::model_broker_route::uninstall_model_broker_client();
+}
+
+/// Removes the process-wide broker route when a test ends, even by panic.
+struct UninstallRoute;
+
+impl Drop for UninstallRoute {
+    fn drop(&mut self) {
+        crate::model_broker_route::uninstall_model_broker_route();
+    }
+}
+
+/// PF-27-S09: a sender standing in for the Windows broker's checked pipe.
+struct RecordingSender {
+    seen: Arc<Mutex<Vec<crate::ModelBrokerRequest>>>,
+    status: http::StatusCode,
+    chunks: Vec<&'static str>,
+    /// Never end the body after the chunks.
+    hang: bool,
+}
+
+impl crate::ModelBrokerSender for RecordingSender {
+    fn send(&self, request: crate::ModelBrokerRequest) -> crate::ModelBrokerFuture {
+        self.seen.lock().expect("seen").push(request);
+        let status = self.status;
+        let chunks: Vec<Result<bytes::Bytes, TransportError>> = self
+            .chunks
+            .iter()
+            .map(|chunk| Ok(bytes::Bytes::from_static(chunk.as_bytes())))
+            .collect();
+        let hang = self.hang;
+        Box::pin(async move {
+            let body = futures::stream::iter(chunks);
+            let bytes = if hang {
+                body.chain(futures::stream::pending()).boxed()
+            } else {
+                body.boxed()
+            };
+            Ok(crate::ModelBrokerResponse {
+                status,
+                headers: http::HeaderMap::new(),
+                bytes,
+            })
+        })
+    }
+}
+
+/// PF-27-S09: with a sender installed (the Windows route), a frame-bearing
+/// request goes to it, never to the network; execute and stream both work,
+/// error statuses keep their shape, and the request timeout still applies.
+#[tokio::test]
+#[expect(
+    clippy::await_holding_invalid_type,
+    reason = "the broker route is process-wide; tests that install one run one at a time"
+)]
+async fn pf_27_s09_broker_frame_requests_go_only_to_the_broker_sender() {
+    use futures::StreamExt as _;
+    let _route = crate::model_broker_route::ROUTE_TEST_LOCK.lock().await;
+    let _uninstall = UninstallRoute;
+    let network = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    network.set_nonblocking(true).expect("nonblocking");
+    let url = format!(
+        "http://127.0.0.1:{}/v1/responses",
+        network.local_addr().expect("addr").port()
+    );
+    let transport = ReqwestTransport::new(test_reqwest_client());
+    let mut framed =
+        Request::new(Method::POST, url.clone()).with_json(&serde_json::json!({"a": 1}));
+    framed.headers.insert(
+        crate::MODEL_BROKER_FRAME_HEADER,
+        http::HeaderValue::from_static("signed-frame"),
+    );
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let sender = |status, chunks, hang| {
+        Arc::new(RecordingSender {
+            seen: seen.clone(),
+            status,
+            chunks,
+            hang,
+        })
+    };
+
+    crate::install_model_broker_sender(sender(http::StatusCode::OK, vec!["o", "k"], false));
+    let response = transport.execute(framed.clone()).await.expect("brokered");
+    assert_eq!(response.body.as_ref(), b"ok");
+    let streamed = transport.stream(framed.clone()).await.expect("streamed");
+    let body: Vec<u8> = streamed
+        .bytes
+        .map(|chunk| chunk.expect("chunk").to_vec())
+        .concat()
+        .await;
+    assert_eq!(body, b"ok");
+    {
+        let seen = seen.lock().expect("seen");
+        assert_eq!(seen.len(), 2);
+        // Both the executed and the streamed request.
+        for request in seen.iter() {
+            assert_eq!(request.method, Method::POST);
+            assert_eq!(request.url, url);
+            assert_eq!(request.body.as_ref(), br#"{"a":1}"#);
+            assert_eq!(
+                request
+                    .headers
+                    .get(crate::MODEL_BROKER_FRAME_HEADER)
+                    .and_then(|value| value.to_str().ok()),
+                Some("signed-frame")
+            );
+        }
+    }
+    crate::install_model_broker_sender(sender(
+        http::StatusCode::FORBIDDEN,
+        vec!["credential broker denied: replay\n"],
+        false,
+    ));
+    let denied = transport.execute(framed.clone()).await;
+    assert!(
+        matches!(&denied, Err(TransportError::Http { status, body: Some(body), .. })
+            if *status == http::StatusCode::FORBIDDEN && body.contains("replay")),
+        "{denied:?}"
+    );
+    let denied = transport.stream(framed.clone()).await.err();
+    assert!(
+        matches!(&denied, Some(TransportError::Http { status, body: Some(body), .. })
+            if *status == http::StatusCode::FORBIDDEN && body.contains("replay")),
+        "{denied:?}"
+    );
+
+    crate::install_model_broker_sender(sender(http::StatusCode::OK, vec!["first"], true));
+    let mut timed = framed.clone();
+    timed.timeout = Some(std::time::Duration::from_millis(200));
+    let mut streamed = transport.stream(timed.clone()).await.expect("streamed");
+    assert_eq!(
+        streamed
+            .bytes
+            .next()
+            .await
+            .expect("chunk")
+            .expect("ok")
+            .as_ref(),
+        b"first"
+    );
+    assert!(matches!(
+        streamed.bytes.next().await,
+        Some(Err(TransportError::Timeout))
+    ));
+    assert!(streamed.bytes.next().await.is_none());
+    assert!(matches!(
+        transport.execute(timed).await,
+        Err(TransportError::Timeout)
+    ));
+    assert!(network.accept().is_err(), "nothing may reach the network");
 }

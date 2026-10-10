@@ -23,6 +23,11 @@ on:
       - "codex-rs/login/src/auth/**"
       - "codex-rs/vault/src/lib.rs"
       - "codex-rs/arg0/src/lib.rs"
+      - "codex-rs/http-client/src/model_broker_route.rs"
+      - "codex-rs/http-client/src/transport.rs"
+      - "codex-rs/http-client/src/transport_tests.rs"
+      - "codex-rs/core/src/model_broker_auth.rs"
+      - "codex-rs/core/src/model_broker_auth_tests.rs"
       - "codex-rs/core/src/security/**"
       - "codex-rs/core/src/exec.rs"
       - "codex-rs/core/src/tools/sandboxing.rs"
@@ -50,6 +55,11 @@ on:
       - "codex-rs/login/src/auth/**"
       - "codex-rs/vault/src/lib.rs"
       - "codex-rs/arg0/src/lib.rs"
+      - "codex-rs/http-client/src/model_broker_route.rs"
+      - "codex-rs/http-client/src/transport.rs"
+      - "codex-rs/http-client/src/transport_tests.rs"
+      - "codex-rs/core/src/model_broker_auth.rs"
+      - "codex-rs/core/src/model_broker_auth_tests.rs"
       - "codex-rs/core/src/security/**"
       - "codex-rs/core/src/exec.rs"
       - "codex-rs/core/src/tools/sandboxing.rs"
@@ -117,6 +127,13 @@ jobs:
         # PF-27-S09: model auth over the pipes, vault reads and platform roots
         # under the broker token, and the environment scrub with its memory scan.
         run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-network-proxy --lib -- "credential_broker::isolated::" "credential_broker::env_scrub::" "native_certs::" --nocapture --test-threads=1
+      - name: Core model auth through the broker (PF-27-S09)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-http-client --lib -- broker_frame_requests --nocapture --test-threads=1
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-core --lib -- model_broker_auth:: --nocapture --test-threads=1
       - name: Launch contract probes under the elevated sandbox
         if: ${{ !cancelled() }}
         shell: bash

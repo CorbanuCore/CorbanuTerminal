@@ -110,7 +110,7 @@ unbuilt controls read "not available".
 | Windows-host gate owner | released | released | released | PF-27-S06 completed and archived 2026-10-08 |
 | broker lane worker | released | released | released | PF-27-S07 completed and archived 2026-10-08 |
 | broker lane worker (2026-10-08) | released | released | released | PF-27-S08 completed and archived 2026-10-09 |
-| broker lane worker (2026-10-09) | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf-27-s09-20261009` | `sec/pf-27-s09-model-auth` | `5d283fde18b9` | PF-27-S09 (`in_progress`) |
+| broker lane worker (2026-10-09) | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf-27-s09-20261009` | `sec/pf-27-s09-model-auth` | `5d283fde18b9` | PF-27-S09 (`ready`, awaiting Travis) |
 
 Lanes: **broker** (Windows hardening PF-27-S09; S06–S08 archived), **windows-host** (real-Windows gate runs; free),
 **qualification** (PF-13-S07 and the milestone runs). Lanes and coordinates are revised by the integration owner

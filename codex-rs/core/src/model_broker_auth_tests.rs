@@ -139,7 +139,7 @@ fn pf_27_s05_platform_without_broker_refuses_every_credential() {
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 #[test]
 fn pf_27_s05_non_unix_start_is_the_refusing_broker() {
     let broker = CoreModelKeyBroker::start(BrokerSettings {
@@ -153,6 +153,30 @@ fn pf_27_s05_non_unix_start_is_the_refusing_broker() {
     assert!(error.contains("not available on this platform"), "{error}");
 }
 
+/// PF-27-S09: on Windows a broker that cannot start fails every credential
+/// use (nothing is sent directly), and the provider keys it would have been
+/// handed are still removed from Core's environment.
+#[cfg(windows)]
+#[test]
+fn pf_27_s09_windows_broker_that_cannot_start_fails_closed_and_scrubs_keys() {
+    let name = format!("PF27_S09_CORE_KEY_{}", std::process::id());
+    // SAFETY: a variable unique to this test; nothing else reads it.
+    unsafe { std::env::set_var(&name, "synthetic-pf27s09-core-key") };
+    let home = tempfile::tempdir().expect("home");
+    let broker = CoreModelKeyBroker::start(BrokerSettings {
+        runtime_dir: home.path().join("run"),
+        scrub_responses: false,
+        program: Some(home.path().join("missing-corbanu.exe")),
+        store_home: home.path().to_path_buf(),
+        env_names: vec![name.clone()],
+    });
+    assert_eq!(std::env::var_os(&name), None);
+    for source in [provider_key(), held_value()] {
+        let error = refusal(&broker, "https://api.z.ai/api/paas/v4", source);
+        assert!(error.contains("unavailable"), "{error}");
+    }
+}
+
 #[test]
 fn pf_27_s05_failed_broker_and_unbindable_urls_fail_closed() {
     let failed = CoreModelKeyBroker::new(BrokerHandle::Failed);
@@ -163,5 +187,33 @@ fn pf_27_s05_failed_broker_and_unbindable_urls_fail_closed() {
     for base_url in ["http://localhost:11434/v1", "https://[::1]/v1"] {
         let error = refusal(&CoreModelKeyBroker::unsupported(), base_url, held_value());
         assert!(error.contains("cannot be brokered"), "{base_url}: {error}");
+    }
+}
+
+/// PF-27-S09: what the Windows sender puts on the pipe for a rewritten URL.
+#[test]
+fn pf_27_s09_pipe_request_target_keeps_the_signed_path_and_query() {
+    assert_eq!(
+        pipe_request_target("http://api.z.ai:443/api/paas/v4/chat/completions?x=1&y=2"),
+        Some((
+            "api.z.ai:443".to_string(),
+            "/api/paas/v4/chat/completions?x=1&y=2".to_string()
+        ))
+    );
+    // The broker URL is what `broker_request` produced for this request.
+    let rewrite =
+        BrokerRewrite::for_url("https://api.z.ai/api/paas/v4/models?page=2").expect("rewrite");
+    assert_eq!(
+        pipe_request_target(&rewrite.broker_url),
+        Some(("api.z.ai:443".to_string(), rewrite.path_and_query))
+    );
+    for url in [
+        "https://api.z.ai:443/v1",
+        "http://user:secret@api.z.ai:443/v1",
+        "http://user@api.z.ai:443/v1",
+        "http://api.z.ai:443/v1#fragment",
+        "not a url",
+    ] {
+        assert_eq!(pipe_request_target(url), None, "{url}");
     }
 }
