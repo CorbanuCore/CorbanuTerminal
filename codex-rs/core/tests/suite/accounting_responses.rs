@@ -1186,6 +1186,10 @@ async fn accounting_side_conversation_is_recorded_under_its_conversation() -> an
         "{records:#?}"
     );
     wait_observations(&db, /*count*/ 2).await?;
+    // The conversation's day counts both requests' tokens, each once.
+    let total = totals(&db, &records[0]).await?;
+    assert_eq!(total.measured[0].known, 200);
+    assert_eq!(total.measured[4].known, 80);
     test.thread_manager
         .shutdown_all_threads_bounded(std::time::Duration::from_secs(3))
         .await;

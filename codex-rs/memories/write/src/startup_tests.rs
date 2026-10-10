@@ -268,10 +268,22 @@ async fn pf_60_s04_consolidation_is_recorded_under_the_starting_conversation() -
         .build(&server)
         .await?;
 
+    // Memory startup runs after a turn with user input, when the
+    // conversation that starts it is persisted.
+    let owner = test.session_configured.thread_id;
+    db.upsert_thread(
+        &codex_state::ThreadMetadataBuilder::new(
+            owner,
+            home.path().join("owner.jsonl"),
+            chrono::Utc::now(),
+            SessionSource::Cli,
+        )
+        .build("openai"),
+    )
+    .await?;
     trigger_memories_startup(&test).await;
     wait_for_single_request(&phase2).await;
 
-    let owner = test.session_configured.thread_id;
     let deadline = Instant::now() + Duration::from_secs(20);
     let turns = loop {
         let now_ms = chrono::Utc::now().timestamp_millis();

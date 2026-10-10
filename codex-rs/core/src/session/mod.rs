@@ -1932,9 +1932,11 @@ impl Session {
     /// - a guardian reviewer (the reusable trunk and its ephemeral forks): the
     ///   conversation it reviews for, as `review:`;
     /// - a memory consolidation agent: the conversation that started it, as
-    ///   `consolidation:`;
-    /// - any other ephemeral fork (in the TUI, `/side`): the conversation it
-    ///   was forked from, as `side:`.
+    ///   `consolidation:` (bound when the session is built, so its first
+    ///   request, a startup prewarm included, already has its owner);
+    /// - any other ephemeral fork - in the TUI, a `/side` conversation; the
+    ///   label names that case - the conversation it was forked from, as
+    ///   `side:`.
     ///
     /// `Err` says why there is none: a session that is not collected by design
     /// (`exec --ephemeral`, or work for a conversation that is itself not
@@ -1970,22 +1972,13 @@ impl Session {
                 label_prefix: "",
             });
         }
-        if let Some(started_by) = self.services.accounting_started_by.get() {
-            // The conversation that started this worker may not have written
-            // its rollout yet; it owns the work, so it is materialized the
-            // way its own stage-one memory requests materialize it.
-            let started_by = started_by
-                .upgrade()
-                .ok_or(Uncollected::Excluded("starting_conversation_closed"))?;
-            if started_by.live_thread().is_none() {
-                return Err(Uncollected::Excluded("parent_not_persisted"));
-            }
-            started_by
-                .try_ensure_rollout_materialized()
-                .await
-                .map_err(|_| Uncollected::Failed("starting conversation not materialized"))?;
+        if let Some(started_by) = self
+            .services
+            .thread_extension_data
+            .get::<crate::accounting::StartedBy>()
+        {
             return self
-                .accounting_owner_elsewhere(started_by.thread_id, "consolidation:")
+                .accounting_owner_elsewhere(started_by.0, "consolidation:")
                 .await;
         }
         if let Some(parent) = forked_from {

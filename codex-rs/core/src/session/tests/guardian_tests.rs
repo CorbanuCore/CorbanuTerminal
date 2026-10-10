@@ -904,7 +904,8 @@ async fn persist_thread(
 /// `side:`; a memory consolidation agent records under the conversation that
 /// started it, labelled `consolidation:`. Neither records when that
 /// conversation is not persisted, and an ephemeral session that is neither
-/// stays excluded.
+/// stays excluded. A guardian reviewer stays `review:`, and a persisted
+/// session always records under its own thread.
 #[tokio::test]
 async fn accounting_owner_of_side_and_consolidation_sessions() -> anyhow::Result<()> {
     use crate::accounting::Uncollected;
@@ -940,42 +941,63 @@ async fn accounting_owner_of_side_and_consolidation_sessions() -> anyhow::Result
         .map_err(|why| anyhow::anyhow!("{why:?}"))?;
     assert_eq!((owner.thread, owner.label_prefix), (parent, "side:"));
 
-    // Consolidation started by a conversation that is not persisted, then
-    // closed.
+    // Consolidation: recorded under the conversation that started it, ahead
+    // of any fork origin, and only once that conversation is persisted.
     let consolidation = ephemeral_session_on(&db).await;
-    let (unpersisted, _turn) = crate::session::tests::make_session_and_context().await;
-    let unpersisted = Arc::new(unpersisted);
-    assert!(
-        consolidation
-            .services
-            .accounting_started_by
-            .set(Arc::downgrade(&unpersisted))
-            .is_ok()
-    );
+    let starter = codex_protocol::ThreadId::new();
+    consolidation
+        .state
+        .lock()
+        .await
+        .session_configuration
+        .forked_from_thread_id = Some(parent);
+    consolidation
+        .services
+        .thread_extension_data
+        .insert(crate::accounting::StartedBy(starter));
     assert_eq!(
         consolidation.accounting_owner().await.err(),
         Some(Uncollected::Excluded("parent_not_persisted"))
     );
-    drop(unpersisted);
+    persist_thread(&db, home.path(), starter).await?;
+    let owner = consolidation
+        .accounting_owner()
+        .await
+        .map_err(|why| anyhow::anyhow!("{why:?}"))?;
     assert_eq!(
-        consolidation.accounting_owner().await.err(),
-        Some(Uncollected::Excluded("starting_conversation_closed"))
+        (owner.thread, owner.label_prefix),
+        (starter, "consolidation:")
     );
 
-    // Consolidation started by a persisted conversation: recorded under it,
-    // ahead of any fork origin.
-    let (mut starter, _turn) = crate::session::tests::make_session_and_context().await;
-    let config = starter.get_config().await;
+    // A guardian reviewer stays a review even when it is also a fork.
+    let reviewer = ephemeral_session_on(&db).await;
+    {
+        let mut state = reviewer.state.lock().await;
+        state.session_configuration.session_source =
+            SessionSource::SubAgent(SubAgentSource::Other(GUARDIAN_REVIEWER_NAME.to_string()));
+        state.session_configuration.parent_thread_id = Some(starter);
+        state.session_configuration.forked_from_thread_id = Some(parent);
+    }
+    let owner = reviewer
+        .accounting_owner()
+        .await
+        .map_err(|why| anyhow::anyhow!("{why:?}"))?;
+    assert_eq!((owner.thread, owner.label_prefix), (starter, "review:"));
+
+    // A persisted fork, or a persisted session carrying a starter, records
+    // under its own thread, unlabelled.
+    let (mut persisted, _turn) = crate::session::tests::make_session_and_context().await;
+    let config = persisted.get_config().await;
     let store: Arc<dyn codex_thread_store::ThreadStore> =
         Arc::new(codex_thread_store::InMemoryThreadStore::default());
-    starter.services.live_thread = Some(
+    persisted.services.live_thread = Some(
         LiveThread::create(
             Arc::clone(&store),
             CreateThreadParams {
-                session_id: starter.session_id(),
-                thread_id: starter.thread_id,
+                session_id: persisted.session_id(),
+                thread_id: persisted.thread_id,
                 extra_config: None,
-                forked_from_id: None,
+                forked_from_id: Some(parent),
                 parent_thread_id: None,
                 source: SessionSource::Cli,
                 thread_source: None,
@@ -997,30 +1019,25 @@ async fn accounting_owner_of_side_and_consolidation_sessions() -> anyhow::Result
         )
         .await?,
     );
-    starter.services.thread_store = store;
-    let starter = Arc::new(starter);
-    persist_thread(&db, home.path(), starter.thread_id).await?;
-    let consolidation = ephemeral_session_on(&db).await;
-    consolidation
+    persisted.services.thread_store = store;
+    persisted.services.state_db = Some(Arc::clone(&db));
+    persisted
         .state
         .lock()
         .await
         .session_configuration
         .forked_from_thread_id = Some(parent);
-    assert!(
-        consolidation
-            .services
-            .accounting_started_by
-            .set(Arc::downgrade(&starter))
-            .is_ok()
-    );
-    let owner = consolidation
+    persisted
+        .services
+        .thread_extension_data
+        .insert(crate::accounting::StartedBy(starter));
+    let owner = persisted
         .accounting_owner()
         .await
         .map_err(|why| anyhow::anyhow!("{why:?}"))?;
     assert_eq!(
         (owner.thread, owner.label_prefix),
-        (starter.thread_id, "consolidation:")
+        (persisted.thread_id, "")
     );
     Ok(())
 }

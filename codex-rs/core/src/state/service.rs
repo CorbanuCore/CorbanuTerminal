@@ -86,11 +86,6 @@ pub(crate) struct SessionServices {
     pub(crate) state_db: Option<StateDbHandle>,
     /// Ledger notices already given in this session (PF-60-S05).
     pub(crate) accounting_notices: crate::accounting::SessionNotices,
-    /// For an internal worker with no thread of its own (memory
-    /// consolidation): the conversation that started it, which its paid
-    /// requests are recorded under (PF-60-S04). Set before its first turn.
-    pub(crate) accounting_started_by:
-        std::sync::OnceLock<std::sync::Weak<crate::session::session::Session>>,
     /// Whether this session has said the state DB was busy or read-only (#351).
     pub(crate) state_db_fallback_noticed: std::sync::atomic::AtomicBool,
     pub(crate) live_thread: Option<LiveThread>,

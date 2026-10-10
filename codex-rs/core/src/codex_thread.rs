@@ -229,17 +229,15 @@ impl CodexThread {
             .await
     }
 
-    /// Record this thread's paid model requests under `started_by`, the
-    /// conversation that started it (PF-60-S04). For an internal worker with
-    /// no thread of its own - memory consolidation - whose requests would
-    /// otherwise go unrecorded. Call before its first turn; only the first
-    /// call takes effect.
-    pub fn record_model_requests_under(&self, started_by: &CodexThread) {
-        let _ = self
-            .session
-            .services
-            .accounting_started_by
-            .set(Arc::downgrade(&started_by.session));
+    /// Record the paid model requests of an internal worker started on this
+    /// conversation's behalf - memory consolidation, which has no thread of
+    /// its own - under this conversation (PF-60-S04). Apply to the worker's
+    /// start options, so the owner is bound before its first request. Ignored
+    /// for a worker that persists a thread of its own.
+    pub fn record_worker_requests_here(&self, worker: &mut crate::StartThreadOptions) {
+        worker
+            .thread_extension_init
+            .insert(crate::accounting::StartedBy(self.session.thread_id));
     }
 
     pub(crate) fn new(

@@ -324,6 +324,12 @@ pub(crate) struct AccountingOwner {
     pub(crate) label_prefix: &'static str,
 }
 
+/// The conversation an internal worker with no thread of its own (memory
+/// consolidation) was started by; its paid requests are recorded there
+/// (PF-60-S04). Attached to the worker's thread extension data when it is
+/// built, through [`crate::CodexThread::record_worker_requests_here`].
+pub(crate) struct StartedBy(pub(crate) ThreadId);
+
 /// What a session has already been told about its ledger; each notice is
 /// given once per session. Held on the session, so it ends with it.
 #[derive(Debug, Default)]
