@@ -36,7 +36,7 @@ The proposed priorities and effort ranges are planning hypotheses. Existing P0 s
 | Feature | Plan | Group | New sprints | Planned endpoint | Recording anchor |
 | --- | --- | --- | ---: | --- | --- |
 | Existing security/auth | [P0 security](completed/main-2026-10-08-p0-security-levels.md) plus newer provider-auth work | Terminal | 0 | Existing implementation and qualification; no duplicate plan | 01:57:29–02:02:41 |
-| PF-60 | [Unified agent cost and usage accounting](active/portfolio-agent-cost-accounting.md) | Terminal | 4 | Bounded delivery | 01:58:15–02:02:41 |
+| PF-60 | [Unified agent cost and usage accounting](completed/main-2026-10-10-portfolio-agent-cost-accounting.md) | Terminal | 4 | Bounded delivery | 01:58:15–02:02:41 |
 | PF-61 | [Plan and model-serving backend reconciliation](proposed/portfolio-plan-backend-reconciliation.md) | Terminal | 3 | Evidence / go-no-go | 01:58:15–02:02:41 |
 | PF-62 | [Compute referrals and provider onboarding discovery](proposed/portfolio-compute-referrals.md) | Terminal | 3 | Evidence / go-no-go | 01:58:15–02:02:41 |
 | PF-63 | [Repeatable cross-harness quality, runtime and cost benchmarks](proposed/portfolio-recurring-benchmarks.md) | Terminal | 3 | Bounded delivery | 01:49:00–01:51:57 and 01:58:15–02:02:41 |

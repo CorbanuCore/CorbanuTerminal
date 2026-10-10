@@ -2,7 +2,7 @@
 sprint_id: "PF-60-S01"
 title: "Accounting contract and golden fixtures"
 status: completed
-plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
+plan_file: "docs/plans/completed/main-2026-10-10-portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 1
 owner: "Astra High accounting kickoff"
@@ -34,9 +34,9 @@ contract/fixture completion, not accounting runtime, release or live enablement.
 
 ## Plan linkage
 
-- Plan: [Unified agent cost and usage accounting](../../../plans/active/portfolio-agent-cost-accounting.md)
+- Plan: [Unified agent cost and usage accounting](../../../plans/completed/main-2026-10-10-portfolio-agent-cost-accounting.md)
 - Feature: `PF-60`; acceptance: Every fixture has raw inputs, expected totals and provenance; no unknown value is rendered as zero.
-- Upstream/allocation: [plan record](../../../plans/active/portfolio-agent-cost-accounting.md#native-lifecycle-and-upstream-touch-record).
+- Upstream/allocation: [plan record](../../../plans/completed/main-2026-10-10-portfolio-agent-cost-accounting.md#native-lifecycle-and-upstream-touch-record).
 
 ## Code boundaries
 
