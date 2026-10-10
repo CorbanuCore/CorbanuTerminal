@@ -572,11 +572,11 @@ async fn sec_391_project_config_cannot_turn_the_aggressive_default_off() {
 async fn sec_391_managed_requirement_wins_and_is_named() {
     use crate::config::ConfigBuilder;
     use codex_config::test_support::CloudConfigBundleFixture;
-    let load = |pin: bool| async move {
+    let load = |pin: bool, user: &'static str| async move {
         let home = tempfile::tempdir().expect("home");
         std::fs::write(
             home.path().join("config.toml"),
-            "[security]\nversion = 1\nlevel = \"aggressive\"\n",
+            format!("[security]\nversion = 1\nlevel = \"aggressive\"\n{user}"),
         )
         .expect("config");
         let config = ConfigBuilder::without_managed_config_for_tests()
@@ -597,6 +597,17 @@ async fn sec_391_managed_requirement_wins_and_is_named() {
             config.broker_model_auth_origin,
         )
     };
-    assert_eq!(load(false).await, (false, BrokerModelAuthOrigin::Config));
-    assert_eq!(load(true).await, (true, BrokerModelAuthOrigin::Policy));
+    assert_eq!(
+        load(false, "").await,
+        (false, BrokerModelAuthOrigin::Config)
+    );
+    // A pin that keeps the broker on would mark this shared test process
+    // brokered where the level sets nothing (no broker on this OS).
+    if LEVEL_DEFAULT_SUPPORTED {
+        assert_eq!(load(true, "").await, (true, BrokerModelAuthOrigin::Policy));
+        assert_eq!(
+            load(true, "\n[features]\nbroker_model_auth = false\n").await,
+            (true, BrokerModelAuthOrigin::Policy)
+        );
+    }
 }
