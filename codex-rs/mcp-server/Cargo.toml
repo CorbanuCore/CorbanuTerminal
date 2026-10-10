@@ -26,6 +26,7 @@ codex-image-generation-extension = { workspace = true }
 codex-exec-server = { workspace = true }
 codex-extension-api = { workspace = true }
 codex-git-attribution = { workspace = true }
+codex-log-guard = { workspace = true }
 codex-login = { workspace = true }
 codex-protocol = { workspace = true }
 codex-security-level = { workspace = true }

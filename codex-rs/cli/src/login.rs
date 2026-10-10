@@ -91,7 +91,7 @@ fn init_login_file_logging(config: &Config) -> Option<WorkerGuard> {
     let env_filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("codex_cli=info,codex_core=info,codex_login=info"));
     let file_layer = tracing_subscriber::fmt::layer()
-        .with_writer(non_blocking)
+        .with_writer(codex_log_guard::RedactingMakeWriter::new(non_blocking))
         .with_target(true)
         .with_ansi(false)
         .with_filter(env_filter);
@@ -99,7 +99,9 @@ fn init_login_file_logging(config: &Config) -> Option<WorkerGuard> {
     // Direct `codex login` otherwise relies on ephemeral stderr and browser output.
     // Persist the same login targets to a file so support can inspect auth failures
     // without reproducing them through TUI or app-server.
-    if let Err(err) = tracing_subscriber::registry().with(file_layer).try_init() {
+    if let Err(err) =
+        codex_log_guard::guard(tracing_subscriber::registry().with(file_layer)).try_init()
+    {
         eprintln!(
             "Warning: failed to initialize login log file {}: {err}",
             log_path.display()

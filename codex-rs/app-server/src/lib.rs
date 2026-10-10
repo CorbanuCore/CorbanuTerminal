@@ -658,12 +658,12 @@ pub async fn run_main_with_transport_options(
     let stderr_fmt: StderrLogLayer = match log_format_from_env() {
         LogFormat::Json => tracing_subscriber::fmt::layer()
             .json()
-            .with_writer(std::io::stderr)
+            .with_writer(codex_log_guard::RedactingMakeWriter::new(std::io::stderr))
             .with_span_events(tracing_subscriber::fmt::format::FmtSpan::FULL)
             .with_filter(EnvFilter::from_default_env())
             .boxed(),
         LogFormat::Default => tracing_subscriber::fmt::layer()
-            .with_writer(std::io::stderr)
+            .with_writer(codex_log_guard::RedactingMakeWriter::new(std::io::stderr))
             .with_span_events(tracing_subscriber::fmt::format::FmtSpan::FULL)
             .with_filter(EnvFilter::from_default_env())
             .boxed(),
@@ -677,14 +677,16 @@ pub async fn run_main_with_transport_options(
         .map(|layer| layer.with_filter(log_db::default_filter()));
     let otel_logger_layer = otel.as_ref().and_then(|o| o.logger_layer());
     let otel_tracing_layer = otel.as_ref().and_then(|o| o.tracing_layer());
-    let _ = tracing_subscriber::registry()
-        .with(stderr_fmt)
-        .with(feedback_layer)
-        .with(feedback_metadata_layer)
-        .with(log_db_layer)
-        .with(otel_logger_layer)
-        .with(otel_tracing_layer)
-        .try_init();
+    let _ = codex_log_guard::guard(
+        tracing_subscriber::registry()
+            .with(stderr_fmt)
+            .with(feedback_layer)
+            .with(feedback_metadata_layer)
+            .with(log_db_layer)
+            .with(otel_logger_layer)
+            .with(otel_tracing_layer),
+    )
+    .try_init();
     for warning in &config_warnings {
         match &warning.details {
             Some(details) => error!("{} {}", warning.summary, details),

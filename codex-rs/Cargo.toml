@@ -77,6 +77,7 @@ members = [
     "linux-pidfd-spawn",
     "lmstudio",
     "login",
+    "log-guard",
     "codex-mcp",
     "mcp-server",
     "memories/read",
@@ -227,6 +228,7 @@ codex-hooks = { path = "hooks" }
 codex-keyring-store = { path = "keyring-store" }
 codex-linux-sandbox = { path = "linux-sandbox" }
 codex-lmstudio = { path = "lmstudio" }
+codex-log-guard = { path = "log-guard" }
 codex-login = { path = "login" }
 codex-message-history = { path = "message-history" }
 codex-memories-extension = { path = "ext/memories" }
@@ -506,6 +508,8 @@ toml = "0.9.5"
 toml_edit = "0.24.0"
 tracing = "0.1.44"
 tracing-appender = "0.2.3"
+tracing-core = "0.1.36"
+tracing-log = "0.2.0"
 tracing-opentelemetry = "0.32.0"
 tracing-subscriber = "0.3.22"
 tracing-test = "0.2.5"

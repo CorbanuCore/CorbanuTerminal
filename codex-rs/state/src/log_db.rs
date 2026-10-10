@@ -19,6 +19,7 @@
 //! # }
 //! ```
 
+use std::borrow::Cow;
 use std::future::Future;
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -228,8 +229,13 @@ where
             .clone()
             .or_else(|| event_thread_id(event, &ctx));
         let feedback_log_body = format_feedback_log_body(event, &ctx);
-        // PF-28-S01: the log database is a diagnostic sink.
+        // PF-28-S01: the log database is a diagnostic sink. #380: no
+        // credential header, whatever library logged it.
         let gate = |text: String| {
+            let text = match codex_log_guard::redact_credentials(&text) {
+                Cow::Borrowed(_) => text,
+                Cow::Owned(redacted) => redacted,
+            };
             codex_secret_broker::output_gate::scrub_if_armed(
                 codex_secret_broker::output_gate::OutputSink::Diagnostic,
                 &text,

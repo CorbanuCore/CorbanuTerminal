@@ -30,6 +30,7 @@ use supports_color::Stream as SupportStream;
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::util::SubscriberInitExt;
 use util::append_error_log;
 use util::format_relative_time;
 use util::set_user_agent_suffix;
@@ -763,15 +764,18 @@ pub async fn run_main(cli: Cli, _codex_linux_sandbox_exe: Option<PathBuf>) -> an
 
     // Very minimal logging setup; mirrors other crates' pattern.
     let default_level = "error";
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .or_else(|_| EnvFilter::try_new(default_level))
-                .unwrap_or_else(|_| EnvFilter::new(default_level)),
-        )
-        .with_ansi(std::io::stderr().is_terminal())
-        .with_writer(std::io::stderr)
-        .try_init();
+    let _ = codex_log_guard::guard(
+        tracing_subscriber::fmt()
+            .with_env_filter(
+                EnvFilter::try_from_default_env()
+                    .or_else(|_| EnvFilter::try_new(default_level))
+                    .unwrap_or_else(|_| EnvFilter::new(default_level)),
+            )
+            .with_ansi(std::io::stderr().is_terminal())
+            .with_writer(codex_log_guard::RedactingMakeWriter::new(std::io::stderr))
+            .finish(),
+    )
+    .try_init();
 
     info!("Launching Cloud Tasks list UI");
     let BackendContext {

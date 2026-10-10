@@ -293,15 +293,21 @@ pub struct FeedbackWriter {
 
 impl Write for FeedbackWriter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        // #380: no credential header, whatever library logged it.
+        let redacted = codex_log_guard::redact_credentials_bytes(buf);
         // PF-28-S01: feedback uploads never carry a managed secret.
         let gated = codex_secret_broker::output_gate::active().and_then(|gate| {
             gate.scrub_bytes(
                 codex_secret_broker::output_gate::OutputSink::Diagnostic,
-                buf,
+                &redacted,
             )
         });
         let mut guard = self.inner.ring.lock().map_err(|_| io::ErrorKind::Other)?;
-        guard.push_bytes(gated.as_ref().map_or(buf, |(bytes, _)| bytes.as_slice()));
+        guard.push_bytes(
+            gated
+                .as_ref()
+                .map_or(redacted.as_ref(), |(bytes, _)| bytes.as_slice()),
+        );
         Ok(buf.len())
     }
 
