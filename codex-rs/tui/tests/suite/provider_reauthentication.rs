@@ -42,6 +42,48 @@ async fn tmux_reauth_openai_environment_key_preserves_external_ownership() -> Re
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn tmux_reauth_openai_api_key_environment_preserves_external_ownership() -> Result<()> {
+    // #365: OPENAI_API_KEY is an external OpenAI credential in the TUI too.
+    if !TmuxServer::should_run("#365 OPENAI_API_KEY environment ownership")? {
+        return Ok(());
+    }
+    let fixture = Fixture::new("reauth-openai-api-key-env", /*openai_auth*/ false).await?;
+    let tmux = fixture.tmux()?;
+    let canary = synthetic_canary("openai-environment");
+    let command = CommandSpec::new(&fixture.binary)
+        .env("CODEX_HOME", fixture.home.path())
+        .env("CORBANU_HOME", fixture.home.path())
+        .env("PFTERMINAL_HOME", fixture.home.path())
+        .env("OPENAI_API_KEY", &canary)
+        .env("PF54_PRIMARY_KEY", "pf58-primary-fixture")
+        .env("RUST_LOG", "trace")
+        .arg("--no-alt-screen")
+        .arg("-C")
+        .arg(&fixture.repo_root);
+    let session = tmux.new_session(
+        SessionSpec::new(
+            "issue365-openai-env",
+            TerminalSize::new(/*columns*/ 140, /*rows*/ 44),
+            command,
+        )
+        .current_dir(&fixture.repo_root),
+    )?;
+    let pane = session.primary_pane();
+    wait_chat_ready(pane)?;
+    open_manager(pane)?;
+    focus_label(pane, "OpenAI")?;
+    pane.send_literal("r")?;
+    let capture = pane.wait_stable_contains("A vault key cannot override it", READY_TIMEOUT)?;
+    ensure!(!capture.contains("Replace the saved API key"));
+    pane.send_key(TmuxKey::Escape)?;
+    capture_success("reauth-openai-api-key-env", &fixture, pane, &[&canary])?;
+    close_manager(pane)?;
+    exit_tui(pane)?;
+    session.wait_for_exit(READY_TIMEOUT)?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tmux_reauth_openai_account_cancel_then_request_without_model_change() -> Result<()> {
     if !TmuxServer::should_run("PF-58 OpenAI account recovery")? {
         return Ok(());

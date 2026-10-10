@@ -56,10 +56,8 @@ impl Default for ProviderAccountMetadata {
 impl ProviderAccountMetadata {
     pub(crate) async fn discover(config: &Config) -> Self {
         let codex_home = config.codex_home.to_path_buf();
-        // Match the TUI's own runtime auth: CODEX_API_KEY is read only by
-        // `corbanu exec`, while OPENAI_API_KEY is a fallback everywhere.
         let openai = codex_login::openai_auth_metadata_from_config(
-            config, /*enable_codex_api_key_env*/ false,
+            config, /*enable_codex_api_key_env*/ true,
         );
         let claude_status = crate::chatwidget::claude_code_login::current_status_with_timeout(
             codex_home.as_path(),
