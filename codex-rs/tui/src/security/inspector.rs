@@ -338,7 +338,8 @@ pub(crate) fn sections(
                 label,
                 State::Resolved,
                 value.clone(),
-                if launch_checked {
+                // The launch check leaves the model key broker to config.
+                if launch_checked && label != super::aggressive::MODEL_KEYS_LABEL {
                     "resolved: session config, checked at launch"
                 } else {
                     "resolved: session config"

@@ -3692,18 +3692,20 @@ impl Config {
             feature_overrides,
         );
         // #391: Aggressive (Core's level or the stored `/security` level)
-        // turns `broker_model_auth` on unless something sets it explicitly.
-        let broker_by_level = crate::model_broker_auth::level_turns_on_broker(
-            security_level.max(stored_security_level(codex_home.as_path())),
-            crate::model_broker_auth::LEVEL_DEFAULT_SUPPORTED,
-            explicit_feature_setting(
-                &config_layer_stack,
-                cfg.features.as_ref(),
-                Feature::BrokerModelAuth,
-            ),
+        // turns `broker_model_auth` on unless the person's own configuration
+        // sets it; a project layer cannot turn it off.
+        let explicit_broker = explicit_feature_setting(
+            &config_layer_stack,
+            cfg.features.as_ref(),
+            Feature::BrokerModelAuth,
         );
-        if broker_by_level {
-            configured_features.enable(Feature::BrokerModelAuth);
+        let level_broker = crate::model_broker_auth::level_broker_setting(
+            crate::model_broker_auth::level_for_defaults(codex_home.as_path(), security_level),
+            crate::model_broker_auth::LEVEL_DEFAULT_SUPPORTED,
+            explicit_broker,
+        );
+        if let Some(enabled) = level_broker {
+            configured_features.set_enabled(Feature::BrokerModelAuth, enabled);
         }
         let mut features = ManagedFeatures::from_configured_with_warnings(
             configured_features,
@@ -3711,7 +3713,10 @@ impl Config {
             &mut startup_warnings,
         )?;
         let broker_model_auth_origin =
-            if broker_by_level && features.enabled(Feature::BrokerModelAuth) {
+            if level_broker == Some(true)
+                && explicit_broker.is_none()
+                && features.enabled(Feature::BrokerModelAuth)
+            {
                 crate::model_broker_auth::BrokerModelAuthOrigin::AggressiveLevel
             } else {
                 crate::model_broker_auth::BrokerModelAuthOrigin::Config
@@ -3736,10 +3741,8 @@ impl Config {
             crate::security::launch_contract::release_codex_home_when_unarmed(&codex_home);
         }
         // Core's unit tests load Aggressive configs in one shared process;
-        // the level default must not make that whole process brokered.
-        let level_default_in_unit_test = cfg!(test)
-            && broker_model_auth_origin
-                == crate::model_broker_auth::BrokerModelAuthOrigin::AggressiveLevel;
+        // the level's setting must not make that whole process brokered.
+        let level_default_in_unit_test = cfg!(test) && level_broker.is_some();
         if features.enabled(Feature::BrokerModelAuth) && !level_default_in_unit_test {
             // PF-27-S05: this process brokers provider credentials from now on;
             // until its broker runs, they are not sent at all.
@@ -5372,18 +5375,6 @@ pub async fn apply_agent_role_to_config(
     crate::agent::role::apply_role_to_config(config, role_name).await
 }
 
-/// PF-23-S03: the strictest security level any enabled config layer sets.
-/// A later layer (a repository's `.codex/config.toml`, a profile, a `-c`
-/// override) can raise the level but never lower it.
-/// The level `/security` stored for this home (Corbanu Terminal enforces it at
-/// launch); unreadable state reads as Aggressive, never as Permissive.
-fn stored_security_level(codex_home: &Path) -> SecurityLevel {
-    match codex_security_level::level::load(codex_home).enforced() {
-        codex_security_level::level::ChosenLevel::Permissive => SecurityLevel::Permissive,
-        codex_security_level::level::ChosenLevel::Aggressive => SecurityLevel::Aggressive,
-    }
-}
-
 /// The value the person's own configuration sets for `feature` (by its key
 /// or a legacy alias): config files, launch flags and managed layers, the
 /// highest precedence first. A project's `.codex` folder does not count, so a
@@ -5418,6 +5409,9 @@ fn explicit_feature_setting(
         })
 }
 
+/// PF-23-S03: the strictest security level any enabled config layer sets.
+/// A later layer (a repository's `.codex/config.toml`, a profile, a `-c`
+/// override) can raise the level but never lower it.
 pub(crate) fn layered_security_floor(stack: &ConfigLayerStack) -> SecurityLevel {
     stack
         .layers_high_to_low()

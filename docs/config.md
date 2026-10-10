@@ -175,11 +175,19 @@ onboarding or `/vault`.
 
 ### Model key broker (`broker_model_auth`)
 
-With `broker_model_auth` on, Corbanu hands your provider keys and sign-in
-tokens to a separate credential broker process. The broker sends every model
-request for Corbanu, so Corbanu itself never holds the raw key. If the broker
-can't start, model requests are refused, never sent directly. The error message
-names the setting and how to turn it off.
+With `broker_model_auth` on, provider API keys from the environment or the vault
+are held by a separate credential broker process, and the broker sends every
+model request for Corbanu. Corbanu never reads those keys itself. If the broker
+can't start, model requests are refused, never sent directly, and the error
+message names the setting and how to turn it off.
+
+Limits:
+
+- Sign-in tokens (ChatGPT sign-in, API-key login, `experimental_bearer_token`)
+  are still read by Corbanu and then passed to the broker.
+- Command, AWS and header-based provider sign-ins aren't brokered.
+- Realtime conversations and websockets are off.
+- Plain-HTTP or IPv6-literal provider URLs can't be brokered and are refused.
 
 The default depends on the security level:
 
@@ -190,8 +198,7 @@ The default depends on the security level:
 
 On other systems it stays off, because the broker isn't supported there. A value
 you set yourself always wins over the level's default. A project's
-`.codex/config.toml` can turn the broker on, but it can't turn off the
-Aggressive default:
+`.codex/config.toml` doesn't change it under Aggressive:
 
 ```toml
 [features]
@@ -199,9 +206,9 @@ broker_model_auth = false   # or true, at any level
 ```
 
 `-c features.broker_model_auth=false` and `--disable broker_model_auth` work
-the same way. Changes take effect when Corbanu restarts. Under Aggressive with
-the broker off, Corbanu shows a startup warning and `/security` marks the model
-key broker as not protecting.
+the same way. A level you choose while Corbanu is running takes effect when
+Corbanu restarts. Under Aggressive with the broker off, Corbanu shows a startup
+warning and `/security` reports the level as partial.
 
 <a id="shell-environment"></a>
 

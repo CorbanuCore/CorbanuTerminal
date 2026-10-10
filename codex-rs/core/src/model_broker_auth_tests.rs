@@ -174,7 +174,7 @@ fn sec_391_broker_that_cannot_start_fails_closed_and_scrubs_keys() {
         origin: BrokerModelAuthOrigin::AggressiveLevel,
     });
     assert_eq!(std::env::var_os(&name), None);
-    assert!(!broker.started());
+    assert!(broker.unavailable_reason().is_some());
     for source in [provider_key(), held_value()] {
         let error = refusal(&broker, "https://api.z.ai/api/paas/v4", source);
         for expected in [
@@ -220,7 +220,7 @@ fn sec_391_not_started_message_names_the_setting_and_the_level() {
         ),
     ] {
         let broker = CoreModelKeyBroker::not_started(cause, origin);
-        assert!(!broker.started());
+        assert!(broker.unavailable_reason().is_some());
         let error = refusal(&broker, "https://api.z.ai/api/paas/v4", held_value());
         assert!(error.contains("nothing is sent without it"), "{error}");
         assert!(error.contains("`broker_model_auth = false`"), "{error}");
@@ -234,48 +234,77 @@ fn sec_391_not_started_message_names_the_setting_and_the_level() {
             );
         }
     }
-    assert!(!CoreModelKeyBroker::unsupported().started());
+    assert_eq!(
+        CoreModelKeyBroker::unsupported().unavailable_reason(),
+        Some("the broker does not run on this system; model requests are refused")
+    );
 }
 
-/// #391: the default matrix (level x OS x explicit setting). Only Aggressive
-/// on an OS where the broker runs turns `broker_model_auth` on, and an
-/// explicit setting always wins.
+/// #391: the default matrix (level x OS x the person's own setting x a
+/// project's setting). Only Aggressive on an OS where the broker runs turns
+/// `broker_model_auth` on; the person's own setting always wins, and a
+/// project layer cannot turn the Aggressive default off.
 #[test]
 fn sec_391_default_matrix_level_os_and_explicit_setting() {
     use SecurityLevel::Aggressive;
     use SecurityLevel::Moderate;
     use SecurityLevel::Permissive;
-    // (level, OS runs the broker, explicit setting, feature on, by level)
-    let cases = [
-        (Permissive, true, None, false, false),
-        (Permissive, true, Some(true), true, false),
-        (Permissive, true, Some(false), false, false),
-        (Permissive, false, None, false, false),
-        (Permissive, false, Some(true), true, false),
-        (Moderate, true, None, false, false),
-        (Moderate, true, Some(true), true, false),
-        (Moderate, true, Some(false), false, false),
-        (Moderate, false, None, false, false),
-        (Aggressive, true, None, true, true),
-        (Aggressive, true, Some(true), true, false),
-        (Aggressive, true, Some(false), false, false),
-        (Aggressive, false, None, false, false),
-        (Aggressive, false, Some(true), true, false),
-        (Aggressive, false, Some(false), false, false),
-    ];
-    for (level, supported, explicit, on, by_level) in cases {
-        let turned_on = level_turns_on_broker(level, supported, explicit);
-        assert_eq!(
-            (explicit.unwrap_or(turned_on), turned_on),
-            (on, by_level),
-            "{level:?} supported={supported} explicit={explicit:?}"
-        );
+    // The feature's value as config loading resolves it: the level's
+    // setting, else the merged config (project layers outrank the user's).
+    let resolve = |level, supported, own: Option<bool>, project: Option<bool>| {
+        level_broker_setting(level, supported, own)
+            .unwrap_or_else(|| project.or(own).unwrap_or(false))
+    };
+    for level in [Permissive, Moderate, Aggressive] {
+        for supported in [true, false] {
+            for own in [None, Some(true), Some(false)] {
+                for project in [None, Some(true), Some(false)] {
+                    let expected = if level == Aggressive && supported {
+                        own.unwrap_or(true)
+                    } else {
+                        project.or(own).unwrap_or(false)
+                    };
+                    assert_eq!(
+                        resolve(level, supported, own, project),
+                        expected,
+                        "{level:?} supported={supported} own={own:?} project={project:?}"
+                    );
+                }
+            }
+        }
     }
+    // Spot checks of the rows that matter most.
+    assert_eq!(level_broker_setting(Aggressive, true, None), Some(true));
+    assert_eq!(
+        level_broker_setting(Aggressive, true, Some(false)),
+        Some(false)
+    );
+    assert_eq!(level_broker_setting(Aggressive, false, None), None);
+    assert_eq!(level_broker_setting(Moderate, true, None), None);
+    assert_eq!(level_broker_setting(Permissive, true, None), None);
+    assert!(resolve(Aggressive, true, Some(true), Some(false)));
+    assert!(!resolve(Aggressive, true, Some(false), Some(true)));
     // macOS and Linux (PF-27-S05) and Windows (PF-27-S09) run the broker.
     assert_eq!(
         LEVEL_DEFAULT_SUPPORTED,
         cfg!(any(target_os = "macos", target_os = "linux", windows))
     );
+}
+
+/// #391: a provider URL the broker cannot bind names the level when the
+/// level turned the broker on.
+#[test]
+fn sec_391_unbindable_url_names_the_level() {
+    let broker =
+        CoreModelKeyBroker::unsupported().with_origin(BrokerModelAuthOrigin::AggressiveLevel);
+    let error = refusal(&broker, "http://localhost:11434/v1", held_value());
+    for expected in [
+        "cannot be brokered",
+        "Security level Aggressive turns broker_model_auth on",
+        "choose Permissive in /security",
+    ] {
+        assert!(error.contains(expected), "{expected}: {error}");
+    }
 }
 
 /// #391 through config loading: Core's level, the stored `/security` level,
@@ -382,6 +411,13 @@ async fn sec_391_config_load_applies_the_aggressive_default() {
             true,
             Vec::new(),
             (SecurityLevel::Permissive, expected_on, level_origin),
+        ),
+        (
+            "moderate, stored /security aggressive",
+            level(SecurityLevel::Moderate),
+            true,
+            Vec::new(),
+            (SecurityLevel::Moderate, expected_on, level_origin),
         ),
         (
             "stored /security aggressive, config off",
@@ -509,9 +545,16 @@ async fn sec_391_project_config_cannot_turn_the_aggressive_default_off() {
                     )),
                 "the project layer loads"
             );
-            config.features.enabled(codex_features::Feature::BrokerModelAuth)
+            config
+                .features
+                .enabled(codex_features::Feature::BrokerModelAuth)
         }
     };
     assert_eq!(load("").await, LEVEL_DEFAULT_SUPPORTED);
     assert!(!load("\n[features]\nbroker_model_auth = false\n").await);
+    // The person's explicit `true` also beats the project's `false`. Only on
+    // an OS with the broker: elsewhere it would mark this process brokered.
+    if LEVEL_DEFAULT_SUPPORTED {
+        assert!(load("\n[features]\nbroker_model_auth = true\n").await);
+    }
 }

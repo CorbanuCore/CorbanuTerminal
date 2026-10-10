@@ -18,13 +18,23 @@ they are a separate, later decision.
 - **An explicit setting still wins:** `[features] broker_model_auth` in your
   own config, a `-c` override, `--enable` or `--disable`, and managed
   requirements. A project's `.codex/config.toml` doesn't count, so a repository
-  can't turn off the Aggressive default. It can still turn the broker on.
+  can't turn off the Aggressive default, even when your own config turns the
+  broker on.
+- **When a change applies:** the level counts as this process first saw it for
+  that home. Choosing Aggressive mid-session takes effect at the next start, so
+  a config rebuilt mid-session never makes a running session brokered without a
+  broker.
+- **What the broker holds:** provider API keys from the environment or the
+  vault. Sign-in tokens are still read by Core and then handed to the broker.
+  Command, AWS and header sign-ins aren't brokered. Realtime and websockets are
+  off (PF-27-S05 limits).
 - **Fail closed:** if the broker can't start, every model request is refused and
   nothing is sent directly. When the level turned the broker on, the message
   names `broker_model_auth`, says to choose Permissive in `/security`, and gives
   the config line that turns the broker off. When config turned it on, the
-  message gives only the config line. A broker that dies later still reports
-  the existing "unavailable; restart" error.
+  message gives only the config line. The same applies to a provider URL the
+  broker can't bind. A broker that dies later still reports the existing
+  "unavailable; restart" error.
 - **`/security` view:** the Aggressive review adds a "Model keys" row, showing
   the current value next to the Aggressive value. The inspector shows a broker
   that didn't start as degraded. A broker that config turned off under

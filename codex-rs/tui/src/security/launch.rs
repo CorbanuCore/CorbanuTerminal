@@ -218,7 +218,7 @@ impl LaunchPlan {
                 && !config.features.enabled(Feature::BrokerModelAuth)
             {
                 config.startup_warnings.push(
-                    "Security level Aggressive: broker_model_auth is off in your configuration, so Corbanu reads provider keys itself instead of the credential broker.".to_string(),
+                    "Security level Aggressive: broker_model_auth is off (set in your configuration or by policy), so Corbanu reads provider keys itself instead of the credential broker.".to_string(),
                 );
             }
             if !self.replaced_flags.is_empty() {

@@ -57,11 +57,12 @@ pub(crate) const ROWS: [(&str, &str); 6] = [
     ),
 ];
 
-const MODEL_KEYS_LABEL: &str = "Model keys";
+/// Not checked by [`verify`]: the person's own config may keep it off.
+pub(crate) const MODEL_KEYS_LABEL: &str = "Model keys";
 
 /// #391: Aggressive turns `broker_model_auth` on where the broker runs.
 const MODEL_KEYS_ROW: &str = if cfg!(any(target_os = "macos", target_os = "linux", windows)) {
-    "provider keys and sign-ins are held by the isolated credential broker, which sends model requests for Corbanu; if it cannot start, model requests are refused, never sent directly (broker_model_auth; `broker_model_auth = false` in your config keeps it off)"
+    "provider API keys from the environment or the vault are held by the isolated credential broker, which sends model requests for Corbanu (sign-in tokens are passed to it; command, AWS and header sign-ins are not brokered; realtime and websockets are off); if it cannot start, model requests are refused, never sent directly (broker_model_auth; `broker_model_auth = false` in your own config keeps it off)"
 } else {
     "unchanged: the credential broker does not run on this system, so Corbanu reads provider keys itself (broker_model_auth)"
 };
@@ -78,7 +79,7 @@ pub(crate) fn nested_row(nested: super::level::NestedAgents) -> &'static str {
     }
 }
 
-pub(crate) const UNCHANGED: &str = "Unchanged: model and provider, MCP servers, apps and hooks (they run outside the sandbox), wallet scopes, and commands you have already allowed permanently (they skip the prompt but stay sandboxed). `corbanu exec` that you start yourself and IDE sessions are not covered yet.";
+pub(crate) const UNCHANGED: &str = "Unchanged: model and provider, MCP servers, apps and hooks (they run outside the sandbox), wallet scopes, and commands you have already allowed permanently (they skip the prompt but stay sandboxed). `corbanu exec` that you start yourself and IDE sessions are not covered yet, except that they also hold provider keys in the credential broker.";
 
 /// Role config keys (dotted) that would give a spawned child different values.
 const ROLE_KEYS: [&str; 15] = [

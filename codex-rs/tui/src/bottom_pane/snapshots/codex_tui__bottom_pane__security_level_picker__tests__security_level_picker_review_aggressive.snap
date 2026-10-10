@@ -28,10 +28,12 @@ at launch.
     variables (KEY, SECRET, TOKEN, VAULT, PASSWORD, PASSPHRASE, CREDENTIAL) are
     removed, and login profiles and shell snapshots are not used
 • Model keys now: Corbanu reads provider keys itself (broker_model_auth off)
-  Aggressive: provider keys and sign-ins are held by the isolated credential
-    broker, which sends model requests for Corbanu; if it cannot start, model
+  Aggressive: provider API keys from the environment or the vault are held by
+    the isolated credential broker, which sends model requests for Corbanu
+    (sign-in tokens are passed to it; command, AWS and header sign-ins are not
+    brokered; realtime and websockets are off); if it cannot start, model
     requests are refused, never sent directly (broker_model_auth;
-    `broker_model_auth = false` in your config keeps it off)
+    `broker_model_auth = false` in your own config keeps it off)
 • Child agents now: spawned agents get this session's values
   Aggressive: spawned agents get the same values; custom roles that would change
     them are refused at start; Claude panes are refused because Claude Code runs
@@ -47,7 +49,8 @@ start.
 Unchanged: model and provider, MCP servers, apps and hooks (they run outside the
 sandbox), wallet scopes, and commands you have already allowed permanently (they
 skip the prompt but stay sandboxed). `corbanu exec` that you start yourself and
-IDE sessions are not covered yet.
+IDE sessions are not covered yet, except that they also hold provider keys in
+the credential broker.
 The rows above take effect when you restart Corbanu Terminal (you can restart
 right after saving); this session keeps its current settings until then. Your
 config.toml is not modified.

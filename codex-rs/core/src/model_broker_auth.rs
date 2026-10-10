@@ -19,8 +19,8 @@
 //! all fail the request. The broker is never restarted within a process.
 //!
 //! #391: security level Aggressive turns the feature on by default where the
-//! broker runs (macOS, Linux, Windows); an explicit setting still wins (see
-//! [`level_turns_on_broker`]).
+//! broker runs (macOS, Linux, Windows); the person's own setting still wins
+//! (see [`level_broker_setting`]).
 
 use crate::config::Config;
 use codex_api::AuthError;
@@ -62,14 +62,49 @@ pub enum BrokerModelAuthOrigin {
 pub(crate) const LEVEL_DEFAULT_SUPPORTED: bool =
     cfg!(any(target_os = "macos", target_os = "linux", windows));
 
-/// #391: whether `level` turns `broker_model_auth` on. Only Aggressive does,
-/// only on a `supported` OS, and never over an `explicit` setting.
-pub(crate) fn level_turns_on_broker(
+/// #391: the `broker_model_auth` value `level` sets, or `None` to keep
+/// config's merged value. Aggressive on a `supported` OS sets it on unless
+/// the person's own configuration sets it (`explicit`, which leaves out
+/// project layers, so a repository cannot turn it off).
+pub(crate) fn level_broker_setting(
     level: SecurityLevel,
     supported: bool,
     explicit: Option<bool>,
-) -> bool {
-    level == SecurityLevel::Aggressive && supported && explicit.is_none()
+) -> Option<bool> {
+    (level == SecurityLevel::Aggressive && supported).then(|| explicit.unwrap_or(true))
+}
+
+/// #391: the level that decides the default for `codex_home`: the stricter of
+/// Core's level and the level `/security` stored, as this process first saw
+/// them. A level chosen while Corbanu runs takes effect at the next start,
+/// so a config rebuilt mid-session never makes a running session brokered
+/// without a broker.
+pub(crate) fn level_for_defaults(
+    codex_home: &std::path::Path,
+    core_level: SecurityLevel,
+) -> SecurityLevel {
+    let level = core_level.max(stored_security_level(codex_home));
+    if cfg!(test) {
+        // Core's unit tests load many levels for one home path pattern.
+        return level;
+    }
+    static SEEN: std::sync::OnceLock<Mutex<HashMap<std::path::PathBuf, SecurityLevel>>> =
+        std::sync::OnceLock::new();
+    *SEEN
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .entry(codex_home.to_path_buf())
+        .or_insert(level)
+}
+
+/// The level `/security` stored for this home (Corbanu Terminal enforces it
+/// at launch); unreadable state reads as Aggressive, never as Permissive.
+fn stored_security_level(codex_home: &std::path::Path) -> SecurityLevel {
+    match codex_security_level::level::load(codex_home).enforced() {
+        codex_security_level::level::ChosenLevel::Permissive => SecurityLevel::Permissive,
+        codex_security_level::level::ChosenLevel::Aggressive => SecurityLevel::Aggressive,
+    }
 }
 
 /// Installs the process's broker when `config` enables `broker_model_auth`.
@@ -82,6 +117,11 @@ pub async fn install_for_config(config: &Config) {
         || codex_model_provider::model_key_broker_required())
         || codex_model_provider::model_key_broker_installed()
     {
+        return;
+    }
+    if cfg!(test) && config.broker_model_auth_origin == BrokerModelAuthOrigin::AggressiveLevel {
+        // Core's unit tests load Aggressive configs in one shared process
+        // (see `Config::load_config_with_layer_stack`).
         return;
     }
     static INSTALL: tokio::sync::OnceCell<()> = tokio::sync::OnceCell::const_new();
@@ -160,6 +200,21 @@ pub(crate) enum StartFailure {
     PipeSquatted,
 }
 
+/// How to send requests without the broker, for this origin.
+fn remedy(origin: BrokerModelAuthOrigin) -> &'static str {
+    match origin {
+        BrokerModelAuthOrigin::AggressiveLevel => {
+            "Security level Aggressive turns broker_model_auth on. To send model requests \
+             without the broker, choose Permissive in /security, or set \
+             `broker_model_auth = false` under [features] in config.toml, then restart"
+        }
+        BrokerModelAuthOrigin::Config => {
+            "broker_model_auth is on in your configuration. To send model requests without the \
+             broker, set `broker_model_auth = false` under [features] in config.toml, then restart"
+        }
+    }
+}
+
 fn not_started_message(cause: StartFailure, origin: BrokerModelAuthOrigin) -> String {
     let cause = match cause {
         StartFailure::Unavailable => "the isolated credential broker did not start",
@@ -168,19 +223,11 @@ fn not_started_message(cause: StartFailure, origin: BrokerModelAuthOrigin) -> St
              (possible pipe squatting), so Corbanu refused it and sent nothing"
         }
     };
-    let remedy = match origin {
-        BrokerModelAuthOrigin::AggressiveLevel => {
-            "Security level Aggressive turns broker_model_auth on. Restart Corbanu to try again. \
-             To send model requests without the broker, choose Permissive in /security, or set \
-             `broker_model_auth = false` under [features] in config.toml, then restart"
-        }
-        BrokerModelAuthOrigin::Config => {
-            "broker_model_auth is on in your configuration. Restart Corbanu to try again. To send \
-             model requests without the broker, set `broker_model_auth = false` under [features] \
-             in config.toml, then restart"
-        }
-    };
-    format!("model requests are refused: {cause}; nothing is sent without it. {remedy}.")
+    format!(
+        "model requests are refused: {cause}; nothing is sent without it. Restart Corbanu to try \
+         again. {}.",
+        remedy(origin)
+    )
 }
 
 /// Why a brokered request could not be authorized.
@@ -200,10 +247,14 @@ pub(crate) enum BrokerModelAuthError {
     )]
     Unsupported,
     #[error(
-        "broker_model_auth: the provider base URL `{0}` cannot be brokered (it needs HTTPS with a \
-         DNS name or IPv4 address and no query); turn broker_model_auth off to use it"
+        "the provider base URL `{url}` cannot be brokered (it needs HTTPS with a DNS name or IPv4 \
+         address and no query). {}.",
+        remedy(*.origin)
     )]
-    Unbindable(String),
+    Unbindable {
+        url: String,
+        origin: BrokerModelAuthOrigin,
+    },
     #[error(
         "no API key for this provider: set {env} or save the key with /providers \
          (broker_model_auth reads it inside the credential broker)"
@@ -294,6 +345,8 @@ struct BrokerState {
 /// The process's [`ModelKeyBroker`].
 pub(crate) struct CoreModelKeyBroker {
     state: Arc<Mutex<BrokerState>>,
+    /// What turned the broker on, for refusal messages.
+    origin: BrokerModelAuthOrigin,
 }
 
 impl CoreModelKeyBroker {
@@ -306,7 +359,13 @@ impl CoreModelKeyBroker {
                 credentials: HashMap::new(),
                 fingerprint_salt: salt,
             })),
+            origin: BrokerModelAuthOrigin::Config,
         }
+    }
+
+    fn with_origin(mut self, origin: BrokerModelAuthOrigin) -> Self {
+        self.origin = origin;
+        self
     }
 
     /// A broker that did not start: every brokered request fails (#391).
@@ -315,6 +374,7 @@ impl CoreModelKeyBroker {
             cause,
             origin,
         }))
+        .with_origin(origin)
     }
 
     /// The broker for platforms without one: every brokered request fails.
@@ -387,22 +447,26 @@ impl CoreModelKeyBroker {
             broker: broker.clone(),
             default_headers: codex_login::default_client::default_headers(),
         }));
-        Self::new(BrokerHandle::Running(broker))
+        Self::new(BrokerHandle::Running(broker)).with_origin(settings.origin)
     }
 }
 
 impl ModelKeyBroker for CoreModelKeyBroker {
-    fn started(&self) -> bool {
-        #[cfg(any(unix, windows))]
-        {
-            let state = self
-                .state
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            matches!(state.handle, BrokerHandle::Running(_))
+    fn unavailable_reason(&self) -> Option<&'static str> {
+        let state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        match state.handle {
+            #[cfg(any(unix, windows))]
+            BrokerHandle::Running(_) => None,
+            BrokerHandle::Failed(_) => {
+                Some("the broker did not start; model requests are refused, never sent directly")
+            }
+            BrokerHandle::Unsupported => {
+                Some("the broker does not run on this system; model requests are refused")
+            }
         }
-        #[cfg(not(any(unix, windows)))]
-        false
     }
 
     /// Registers the credential now (a blocking control-channel call, like the
@@ -418,8 +482,12 @@ impl ModelKeyBroker for CoreModelKeyBroker {
             extra_headers,
         } = request;
         let fatal = |error: BrokerModelAuthError| CodexErr::Fatal(error.to_string());
-        let binding = binding_for_base_url(&base_url, header)
-            .ok_or_else(|| fatal(BrokerModelAuthError::Unbindable(base_url.clone())))?;
+        let binding = binding_for_base_url(&base_url, header).ok_or_else(|| {
+            fatal(BrokerModelAuthError::Unbindable {
+                url: base_url.clone(),
+                origin: self.origin,
+            })
+        })?;
         let source = match source {
             BrokeredKeySource::ProviderKey {
                 provider_key_id,

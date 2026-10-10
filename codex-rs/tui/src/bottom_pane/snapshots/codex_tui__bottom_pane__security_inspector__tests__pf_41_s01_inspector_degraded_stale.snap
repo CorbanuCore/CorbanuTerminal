@@ -19,7 +19,7 @@ This session
   [set] Approvals: session value 1 [resolved: session config, checked at launch]
   [set] Network: session value 2 [resolved: session config, checked at launch]
   [set] Vault: session value 3 [resolved: session config, checked at launch]
-  [set] Model keys: session value 4 [resolved: session config, checked at launch]
+  [set] Model keys: session value 4 [resolved: session config]
   [set] Child agents: session value 5 [resolved: session config, checked at launch]
   [set] Sandbox backend: macOS Seatbelt [resolved: platform]
   [set] Egress destinations: proxy destination policy on (url_destination_policy) [resolved:

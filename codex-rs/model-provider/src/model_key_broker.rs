@@ -91,10 +91,10 @@ pub trait ModelKeyBroker: Send + Sync {
         request: BrokeredAuthRequest,
     ) -> codex_protocol::error::Result<SharedAuthProvider>;
 
-    /// Whether the broker process started; one that did not refuses every
-    /// credential use (#391).
-    fn started(&self) -> bool {
-        true
+    /// Why every credential use is refused (the broker did not start, or
+    /// does not run here), or `None` (#391).
+    fn unavailable_reason(&self) -> Option<&'static str> {
+        None
     }
 }
 
@@ -145,10 +145,10 @@ pub fn model_key_broker_installed() -> bool {
     model_key_broker().is_some()
 }
 
-/// Whether this process's installed broker did not start (#391); its
-/// credential uses are all refused.
-pub fn model_key_broker_failed() -> bool {
-    model_key_broker().is_some_and(|broker| !broker.started())
+/// Why this process's installed broker refuses every credential use (#391),
+/// or `None`.
+pub fn model_key_broker_unavailable() -> Option<&'static str> {
+    model_key_broker().and_then(|broker| broker.unavailable_reason())
 }
 
 pub(crate) fn model_key_broker() -> Option<Arc<dyn ModelKeyBroker>> {
