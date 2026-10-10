@@ -1,20 +1,20 @@
 ---
 sprint_id: "PF-84-S02"
 title: "Named account registry, storage and credential resolution"
-status: draft
-plan_file: "docs/plans/proposed/unified-provider-auth.md"
+status: ready
+plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-84"
 execution_order: 24
-owner: "UNALLOCATED"
-parallel_lane: "UNALLOCATED"
-write_scope: "UNALLOCATED"
-integration_gate: "UNALLOCATED"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+owner: "Codex PF-84 account-registry worker"
+parallel_lane: "account-registry"
+write_scope: "codex-rs/vault/, codex-rs/login/, codex-rs/cli/, codex-rs/network-proxy/, codex-rs/model-provider-info/, codex-rs/model-provider/, codex-rs/features/, codex-rs/config/, codex-rs/core/, codex-rs/arg0/, codex-rs/tui/, codex-rs/state/, codex-rs/telegram/, codex-rs/provider-auth/, codex-rs/memories/, codex-rs/app-server/, codex-rs/exec/, docs/provider-accounts.md, mkdocs.yml, qa/demos/specs/pf84-account-isolation.toml, qa/demos/specs/pf84-account-isolation-kimi.toml, qa/demos/index/PF-84-S02.md, docs/sprints/current/unified-provider-auth/pf-84-s02-account-registry-and-resolution.md"
+integration_gate: "Codex PF-84 lane owner merges to main after just test -p codex-vault -p codex-login -p codex-cli -p codex-network-proxy -p codex-model-provider-info -p codex-model-provider (with and without developer-accounting), RTX clippy and the tmux/GLM run"
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s02-accounts"
+branch: "feat/pf-84-s02-account-registry"
+base_commit: "051f9747225776a5d85ad00c2e5d0a8f5f4036bf"
 depends_on: "none"
 created: 2026-10-08
-updated: 2026-10-08
+updated: 2026-10-10
 ---
 
 # PF-84-S02 — Named account registry, storage and credential resolution
@@ -31,7 +31,7 @@ updated: 2026-10-08
 
 ## Plan linkage
 
-- Plan: [Unified provider onboarding and management](../../../plans/proposed/unified-provider-auth.md)
+- Plan: [Unified provider onboarding and management](../../../plans/active/unified-provider-auth.md)
 - Feature: `PF-84`
 - Acceptance advanced: "Existing single-account migration" and "Account isolation".
 
@@ -53,11 +53,11 @@ Refs are at `origin/main` `63ea3d0cbd`, from multiacct1; paths are under `codex-
 
 ## Preconditions
 
-- [ ] Plan is active.
-- [ ] Dependencies are completed.
-- [ ] Worktree, branch, and base commit are exact and match the plan.
-- [ ] If parallel, owner/lane/scopes are disjoint and the receiving integration gate is recorded.
-- [ ] Reconcile with P0 PF-76-S01 (provider persistence per named profile) if it has been allocated.
+- [x] Plan is active.
+- [x] Dependencies are completed.
+- [x] Worktree, branch, and base commit are exact and match the plan.
+- [x] If parallel, owner/lane/scopes are disjoint and the receiving integration gate is recorded.
+- [x] Reconcile with P0 PF-76-S01: reconciled in the plan 2026-10-10 (profiles select named accounts).
 
 ## Done
 
@@ -70,6 +70,7 @@ Refs are at `origin/main` `63ea3d0cbd`, from multiacct1; paths are under `codex-
 - [ ] Named ChatGPT logins live in the vault: no extra `Codex Auth` item, no extra `auth.json`.
 - [ ] `auth.command` gets `CORBANU_PROVIDER_ACCOUNT=<name>`; AWS takes `aws.profile` per account.
 - [ ] `internal-claude-oauth-token --account <name>`; unknown account fails closed.
+- [ ] Default-off `named_accounts` flag; `[provider_accounts]` config selector; `corbanu account list|add|remove` (secrets from stdin only).
 - [ ] Code-blind functional design frozen before test-result disclosure, or N/A reason recorded.
 
 ## Verification
@@ -94,7 +95,6 @@ Refs are at `origin/main` `63ea3d0cbd`, from multiacct1; paths are under `codex-
 ## Exit evidence
 
 - [ ] Implementation commit and PR recorded.
-- [ ] Test output, canary scan, tmux log and video path linked.
-- [ ] Code-blind handoff checker passes, or limited-testing agreement recorded.
+- [ ] Test output, canary scan, tmux log, video path and code-blind checker (or limited-testing agreement) linked.
 - [ ] `Done` and `Remaining` ledgers reflect reality.
 - [ ] Completed record moved to `docs/sprints/archive/unified-provider-auth/`.

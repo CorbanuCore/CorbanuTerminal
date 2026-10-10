@@ -1,0 +1,50 @@
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                   │
+│                                                 │
+│ model:     gpt-5.6-terra low   /model to change │
+│ directory: ~/corbanu-rtx/pf60s04-ia/work/ws     │
+╰─────────────────────────────────────────────────╯
+
+
+› Reply with the single word LUNA.
+
+
+• LUNA
+
+
+› /model/exit
+
+
+• LUNA
+
+⚠ This session was recorded with model `gpt-5.6-luna` but is resuming with `gpt-5.6-terra`. Consider switching back to `gpt-5.6-luna` as it may affect Codex
+  performance.
+
+
+› Reply with the single word TERRA.
+
+
+⚠ Code Mode is unavailable because failed to spawn code-mode host <rtx-home>/corbanu-rtx/pf60s04-ia/bin/codex-code-mode-host: host executable was not found.
+  Code mode will fail closed; enable `features.code_mode_host` and install `codex-code-mode-host`.
+
+• TERRA
+
+
+  Request
+  Requested UTC day: 2026-10-10
+
+› Provider: OpenAI
+  Model: GPT-5.6-Terra
+  Billing: Pay per use
+  Estimated cost: $0.034386 (rounded)
+  Tokens: 13,732 tokens
+  —— Details ——
+  Billed cost: OpenAI doesn't report its charges, so any cost here is an estimate — check OpenAI's bill.
+  Request: ae2ed2b6-d1bc-4620-b558-155413c1048c
+
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+
+
+
+

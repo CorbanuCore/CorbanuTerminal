@@ -1,0 +1,76 @@
+Steps run outside the TUI driver (times UTC, 2026-10-10; remote paths relative to <rtx-home>/corbanu-rtx/pf60s04-ia)
+05:22-05:31  git archive b1e20a8ec6 | ssh ... tar -x -C src; build.sh (data/build-receipt.txt)
+05:36        homes h1-h5 created with the config.toml files below; scratch git workspace work/ws (one commit)
+05:54:10-05:55:07  after h2's /exit, before its resume:
+             ledger_dump.py homes/h2/pfterminal_state_5.sqlite > logs/h2-ledger-before-seed.txt   (8 lines: 7 rows)
+             CORBANU_TEST_NO_NATIVE_KEYRING=1 bin/accounting_demo_seed homes/h2 history 01a1245e-ee6f-7931-8f41-387419f53ada
+               -> "seeded history"; ledger_dump afterwards: 39 rows (7 live + 32 seeded)
+05:59        nohup python3 retry_proxy.py --port 18765 --upstream api.z.ai --log logs/retry-proxy.jsonl --fail-first 1
+             (stopped with pkill after the h3 run)
+06:07        printf '\n[memories]\nmin_rollout_idle_hours = 0\n' >> homes/h4/config.toml  (after the 06:03 consolidation; no effect)
+06:11-06:12  ephem.sh e1 (--ephemeral) and e2 (persisted control), Z.AI key over ssh stdin (logged in keys-sent.log)
+06:12-06:30  tmux-suite.sh (data/tmux-suite.txt)
+06:22        curl developers.openai.com/api/docs/pricing -> data/openai-pricing-20261010.txt (page then deleted)
+06:23        homes/h6 created (config below)
+after runs   recompute_ia.py, ledger_dump.py, day_totals.py, usage_raw.py over the homes' codex-tui.log / state DBs
+             (outputs in data/); keyscan.sh (data/key-scan.txt)
+
+git diff --stat 1e9cd464b9 b1e20a8ec6 -- codex-rs  (lane's recorded commit vs this candidate):
+  [0 lines of output: no codex-rs file changed]
+
+Home configs (final state):
+### h1/config.toml
+model = "gpt-5.4"
+model_provider = "openai"
+model_reasoning_effort = "low"
+service_tier = "default"
+
+[projects."<rtx-home>/corbanu-rtx/pf60s04-ia/work/ws"]
+trust_level = "trusted"
+### h2/config.toml
+model = "glm-5.3-flash"
+model_provider = "zai"
+service_tier = "default"
+
+[projects."<rtx-home>/corbanu-rtx/pf60s04-ia/work/ws"]
+trust_level = "trusted"
+### h3/config.toml
+model = "glm-5.3-flash"
+model_provider = "zai-retry"
+
+[model_providers.zai-retry]
+name = "zai-retry"
+base_url = "http://127.0.0.1:18765/api/paas/v4"
+env_key = "ZAI_API_KEY"
+wire_api = "chat"
+billing = "pay_per_use"
+
+[projects."<rtx-home>/corbanu-rtx/pf60s04-ia/work/ws"]
+trust_level = "trusted"
+### h4/config.toml
+model = "k3"
+model_provider = "kimi-code"
+service_tier = "default"
+
+[features]
+memories = true
+
+[projects."<rtx-home>/corbanu-rtx/pf60s04-ia/work/ws"]
+trust_level = "trusted"
+
+[memories]
+min_rollout_idle_hours = 0
+### h5/config.toml
+model = "glm-5.3-flash"
+model_provider = "zai"
+
+[projects."<rtx-home>/corbanu-rtx/pf60s04-ia/work/ws"]
+trust_level = "trusted"
+### h6/config.toml
+model = "gpt-5.6-luna"
+model_provider = "openai"
+model_reasoning_effort = "low"
+service_tier = "default"
+
+[projects."<rtx-home>/corbanu-rtx/pf60s04-ia/work/ws"]
+trust_level = "trusted"

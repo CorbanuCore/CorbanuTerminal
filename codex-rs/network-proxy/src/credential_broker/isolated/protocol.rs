@@ -255,6 +255,10 @@ impl Drop for ControlRequest {
 pub(crate) struct BrokerBootstrap {
     pub(crate) protocol_version: u32,
     pub(crate) control_socket: String,
+    /// #390: the broker could not create its pipes because another process
+    /// holds a name (`control_socket` is then empty), and exits.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub(crate) pipe_taken: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

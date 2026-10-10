@@ -1,8 +1,8 @@
 ---
 sprint_id: "PF-60-S04"
 title: "Cost-accounting acceptance and handoff"
-status: ready
-plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
+status: completed
+plan_file: "docs/plans/completed/main-2026-10-10-portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 5
 owner: "Codex accounting lane (acct-s04); Codex coordinator receives; Travis Good accepts"
@@ -19,7 +19,47 @@ updated: 2026-10-10
 
 # PF-60-S04 — Cost-accounting acceptance and handoff
 
-**Status: ready for acceptance** (activated 2026-10-10; lane work done 2026-10-10; not archived). Travis asked for the accounting work to finish sprint by sprint with demo videos. Both S05 hand-overs are closed, and every cost flow passed on one recorded binary ([qualification](../../../../qa/portfolio/agent-cost-accounting/qualification.md)). Next: the independent code-blind acceptance, then Travis.
+**Status: completed** (accepted by Travis 2026-10-10 with known limits; see Closure). Travis asked for the accounting work to finish sprint by sprint with demo videos. Both S05 hand-overs are closed, and every cost flow passed on one recorded binary ([qualification](../../../../qa/portfolio/agent-cost-accounting/qualification.md)) and again in the independent code-blind acceptance. This was the last PF-60 sprint.
+
+## Closure — 2026-10-10
+
+Completed. Travis **accepted** PF-60-S04 on 2026-10-10 (in chat with the coordinator), with the documented known
+limits, after the independent code-blind acceptance (PR #397, merge `d5004cfedf`). Archived by the accounting
+integration owner.
+
+**Decisions (Travis, 2026-10-10):**
+
+- Accept S04. The acceptance run's NOT VERIFIABLE items stand as known limits: ChatGPT login, image generation,
+  realtime and TensorCash. No enforced isolation gate was used, as in S05's waiver (b).
+- Lift S05's waiver (a): the lane run and the independent run both recomputed the OpenAI API-key totals exactly
+  (recorded as an addendum in [S05's Closure](pf-60-s05-collection-correctness-and-billing-basis.md)).
+- Accept the remaining gaps, each carried into a draft follow-up sprint (below).
+
+**Evidence:**
+
+- [Qualification on one recorded binary](../../../../qa/portfolio/agent-cost-accounting/qualification.md), main
+  `1e9cd464b9`; [demo index](../../../../qa/demos/index/PF-60-S04.md).
+- [Independent code-blind acceptance](../../../../qa/portfolio/agent-cost-accounting/pf-60-s04/independent-acceptance-20261010/README.md),
+  main `b1e20a8ec6` (same codex-rs as `1e9cd464b9`): every exercised criterion PASS and every pay-per-use total recomputed exactly; code-blind
+  Opus 5.5 High [review](../../../../qa/portfolio/agent-cost-accounting/pf-60-s04/independent-acceptance-20261010/REVIEW.md):
+  "Supported with corrections" (applied).
+- PRs: #382 (`bda1b29d90`, activation), #383 (`be411b5ed7`, slice A), #385 (`1e9cd464b9`, slice B), #393
+  (`b1e20a8ec6`, qualification and demos), #397 (`d5004cfedf`, independent acceptance).
+
+**Known limits (carried, not discharged), each in a [follow-up sprint](../../../plans/proposed/portfolio-agent-cost-accounting-followups.md#sprint-execution-map):**
+
+| Limit | Issue | Follow-up |
+| --- | --- | --- |
+| Guardian reviews of a `/side` conversation, and sub-agents started from one, are not recorded | #400 | PF-60-S06 |
+| The `side:` label also covers other temporary forks, not only `/side` | #401 | PF-60-S06 |
+| #368 price items: OpenRouter per-endpoint pricing, Moonshot/BigModel routes, `gpt-6.1-sol`, Sol promotion end 2026-11-21, DeepSeek holidays | #368 | PF-60-S07 |
+| Unpriced request page shows "Cache write cost: $0.000000" | #396 | PF-60-S08 |
+| Every OpenAI reopen sends a paid warm-up request (~$0.025 on `gpt-5.4`) | #403 | PF-60-S08 |
+| "(pay per use (set in your config))" nested parentheses | #396 | PF-60-S08 |
+| NOT VERIFIABLE: ChatGPT login, image generation, realtime, TensorCash | #402 | PF-60-S09 |
+| No enforced isolation gate (S05 waiver (b), repeated here) | #404 | PF-60-S10 |
+
+Collection stays developer-only (`developer-accounting`, debug builds); shipping `/cost` to users is not authorised.
 
 ## Execution mandate
 
@@ -32,7 +72,7 @@ updated: 2026-10-10
 
 ## Plan linkage
 
-- Plan: [Unified agent cost and usage accounting](../../../plans/active/portfolio-agent-cost-accounting.md); feature `PF-60`; acceptance: all cost flows pass on one recorded binary; unknown/estimated values remain visibly distinct.
+- Plan: [Unified agent cost and usage accounting](../../../plans/completed/main-2026-10-10-portfolio-agent-cost-accounting.md); feature `PF-60`; acceptance: all cost flows pass on one recorded binary; unknown/estimated values remain visibly distinct.
 
 ## Code boundaries
 
@@ -55,9 +95,12 @@ updated: 2026-10-10
 - [x] 2026-10-10 **(iii)** OpenAI API-key estimate exact on 13 real requests: recommend lifting S05 waiver (a). **(iv)** #368 recorded as limitations.
 - [x] 2026-10-10 Five demo videos ([index](../../../../qa/demos/index/PF-60-S04.md)); narrated reel built, not published.
 
+- [x] 2026-10-10 **Independent code-blind acceptance** (PR #397): every exercised criterion PASS; #396 filed.
+- [x] 2026-10-10 **Travis accepted** with known limits and lifted S05 waiver (a); follow-ups drafted; archived (Closure).
+
 ## Remaining
 
-- [ ] Independent code-blind acceptance of the qualification record, then Travis's named acceptance (waiver (a) decision); archive.
+- [x] Independent code-blind acceptance, then Travis's named acceptance (waiver (a) decision); archive: done 2026-10-10 (Closure).
 
 ## Verification
 
@@ -68,11 +111,11 @@ updated: 2026-10-10
 - [x] Integration: `python3 docs/plans/check.py; python3 docs/sprints/check.py`; `git diff --check`: clean.
 - [x] True TUI on the recorded binary: success, cancel, recovery/resume (kill -9) and historical inspection with actual keys.
 - [x] Expected versus actual results and nonzero test counts recorded in the qualification; nothing unchecked converted into a pass.
-- [ ] Independent code-blind acceptance: an executor who reads only this record, the qualification and in-product help re-runs the flows with real keys and records pass/fail per flow; a code-blind reviewer audits it.
+- [x] Independent code-blind acceptance: an executor who reads only this record, the qualification and in-product help re-runs the flows with real keys and records pass/fail per flow; a code-blind reviewer audits it. — Done, PR #397: every exercised criterion PASS; ChatGPT login, image generation, realtime and TensorCash NOT VERIFIABLE; enforced isolation gate not used (known limit).
 
 ## Exit evidence
 
 - [x] Output commit/digest and input provenance recorded; checks linked to that final tree ([build receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s04/data/build-receipt.txt)).
-- [ ] Independent code-blind acceptance recorded; Travis accepts the bounded output.
+- [x] Independent code-blind acceptance recorded; Travis accepts the bounded output. — PR #397; accepted 2026-10-10.
 - [x] Handoff includes changed scope, contracts, known gaps and required combined-tree evidence (qualification, "Handoff").
-- [ ] Done/Remaining ledgers updated honestly; accepted record archived under `docs/sprints/archive/portfolio-agent-cost-accounting/` and plan backlinks updated.
+- [x] Done/Remaining ledgers updated honestly; accepted record archived under `docs/sprints/archive/portfolio-agent-cost-accounting/` and plan backlinks updated. — 2026-10-10.

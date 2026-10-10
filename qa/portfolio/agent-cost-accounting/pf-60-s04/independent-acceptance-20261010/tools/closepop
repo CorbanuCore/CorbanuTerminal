@@ -1,0 +1,4 @@
+#!/bin/bash
+# local. usage: closepop <session>: press Esc only while a /cost popup is open (Esc on an idle composer would fork)
+s=$1; Q=$(dirname "$0")/q
+for i in 1 2 3 4 5 6 7 8; do $Q sh "tmux -L ia-$s capture-pane -p -t $s | grep -q 'Esc back/close'" || exit 0; $Q $s key Escape; sleep 0.3; done

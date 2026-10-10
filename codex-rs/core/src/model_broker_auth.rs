@@ -60,7 +60,9 @@ pub async fn install_for_config(config: &Config) {
             // Starting the broker and handing over keys are blocking calls.
             let broker = tokio::task::spawn_blocking(move || CoreModelKeyBroker::start(settings))
                 .await
-                .unwrap_or_else(|_| CoreModelKeyBroker::new(BrokerHandle::Failed));
+                .unwrap_or_else(|_| {
+                    CoreModelKeyBroker::new(BrokerHandle::Failed(BrokerModelAuthError::Unavailable))
+                });
             codex_model_provider::install_model_key_broker(Arc::new(broker));
         })
         .await;
@@ -107,8 +109,8 @@ impl BrokerSettings {
 enum BrokerHandle {
     #[cfg(any(unix, windows))]
     Running(codex_network_proxy::model_auth::ModelCredentialBroker),
-    /// The broker could not start; it is not retried.
-    Failed,
+    /// The broker could not start, for this reason; it is not retried.
+    Failed(BrokerModelAuthError),
     /// No broker on this platform (PF-27-S06).
     #[cfg_attr(any(unix, windows), allow(dead_code))]
     Unsupported,
@@ -160,6 +162,18 @@ pub(crate) enum BrokerModelAuthError {
         allow(dead_code, reason = "only the broker reports it")
     )]
     Rejected,
+    /// #390 (Windows): another process holds or serves the broker's named
+    /// pipe; it was refused before anything was sent.
+    #[error(
+        "the isolated credential broker's named pipe is held or served by another process \
+         (possible pipe squatting), so Corbanu refused it and sent nothing; no request is sent \
+         without the broker. Close that process and restart Corbanu"
+    )]
+    #[cfg_attr(
+        not(any(unix, windows)),
+        allow(dead_code, reason = "only the broker reports it")
+    )]
+    PipeSquatted,
 }
 
 /// Where a credential may be sent: one HTTPS origin and a path prefix.
@@ -262,7 +276,12 @@ impl CoreModelKeyBroker {
                 // Core no longer uses these keys; child processes must not
                 // inherit them either.
                 codex_network_proxy::model_auth::scrub_env_keys(&settings.env_names);
-                return Self::new(BrokerHandle::Failed);
+                return Self::new(BrokerHandle::Failed(match error {
+                    codex_network_proxy::model_auth::ModelCredentialBrokerError::PipeSquatted => {
+                        BrokerModelAuthError::PipeSquatted
+                    }
+                    _ => BrokerModelAuthError::Unavailable,
+                }));
             }
         };
         match broker.take_env_keys(&settings.env_names) {
@@ -275,7 +294,7 @@ impl CoreModelKeyBroker {
                 // The keys are gone from the environment either way; a
                 // broker that refused one is not trusted with any.
                 tracing::warn!("credential broker refused an environment key: {error}");
-                return Self::new(BrokerHandle::Failed);
+                return Self::new(BrokerHandle::Failed(BrokerModelAuthError::Unavailable));
             }
         }
         #[cfg(unix)]
@@ -512,7 +531,7 @@ fn register(
     use codex_network_proxy::model_auth::ModelCredentialBrokerError;
     let broker = match handle {
         BrokerHandle::Running(broker) => broker,
-        BrokerHandle::Failed => return Err(BrokerModelAuthError::Unavailable),
+        BrokerHandle::Failed(error) => return Err(error.clone()),
         BrokerHandle::Unsupported => return Err(BrokerModelAuthError::Unsupported),
     };
     let wire = ModelCredentialBinding {
@@ -530,6 +549,7 @@ fn register(
         ModelCredentialBrokerError::StoreUnavailable => {
             BrokerModelAuthError::Store("the vault or the OS keyring is unavailable")
         }
+        ModelCredentialBrokerError::PipeSquatted => BrokerModelAuthError::PipeSquatted,
     };
     match source {
         Source::ProviderKey {
@@ -571,7 +591,7 @@ fn register(
     _source: &Source,
 ) -> Result<Credential, BrokerModelAuthError> {
     match handle {
-        BrokerHandle::Failed => Err(BrokerModelAuthError::Unavailable),
+        BrokerHandle::Failed(error) => Err(error.clone()),
         BrokerHandle::Unsupported => Err(BrokerModelAuthError::Unsupported),
     }
 }

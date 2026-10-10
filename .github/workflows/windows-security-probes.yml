@@ -19,6 +19,8 @@ on:
       - "codex-rs/network-proxy/src/native_certs.rs"
       - "codex-rs/network-proxy/src/upstream*.rs"
       - "codex-rs/network-proxy/Cargo.toml"
+      - "codex-rs/secret-broker/src/ipc.rs"
+      - "codex-rs/secret-broker/src/ipc_tests.rs"
       - "codex-rs/secrets/src/**"
       - "codex-rs/login/src/auth/**"
       - "codex-rs/vault/src/lib.rs"
@@ -51,6 +53,8 @@ on:
       - "codex-rs/network-proxy/src/native_certs.rs"
       - "codex-rs/network-proxy/src/upstream*.rs"
       - "codex-rs/network-proxy/Cargo.toml"
+      - "codex-rs/secret-broker/src/ipc.rs"
+      - "codex-rs/secret-broker/src/ipc_tests.rs"
       - "codex-rs/secrets/src/**"
       - "codex-rs/login/src/auth/**"
       - "codex-rs/vault/src/lib.rs"
@@ -126,6 +130,8 @@ jobs:
         shell: bash
         # PF-27-S09: model auth over the pipes, vault reads and platform roots
         # under the broker token, and the environment scrub with its memory scan.
+        # #390: pipe squats (exclusive before start, added instances, after a
+        # broker death and restart) in `credential_broker::isolated::tests::sec_390`.
         run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-network-proxy --lib -- "credential_broker::isolated::" "credential_broker::env_scrub::" "native_certs::" --nocapture --test-threads=1
       - name: Core model auth through the broker (PF-27-S09)
         if: ${{ !cancelled() }}
@@ -206,6 +212,9 @@ jobs:
             Assert-Tests $proxy 'pf_27_s06_windows_broker_uses_pipes' 1
             Assert-Tests $proxy 'pf_27_s09' 12
             Assert-Tests $proxy 'pf_27_s05_raw_key_is_not_left_in_core_memory' 1
+            # Six #390 probes plus the entry point their child processes run.
+            Assert-Tests $proxy 'credential_broker::isolated::tests::sec_390::' 7
+            Assert-Tests $proxy 'sec_390_control_pipe_drops_a_foreign_client' 1
             & $medium -Program $proxy -Arguments @('credential_broker::isolated::', 'credential_broker::env_scrub::', 'native_certs::', '--nocapture', '--test-threads=1')
             if ($LASTEXITCODE -ne 0) { throw "the broker suite failed in a normal session" }
             $core = Get-TestExe @('-p', 'codex-core', '--lib')

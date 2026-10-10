@@ -285,17 +285,34 @@ async fn run_broker(
     // stale parent (reparented to init or launchd) means the controller died.
     let parent = transport::Parent::open().context("find the controller process")?;
     let parent_pid = parent.pid;
-    let mut endpoint = transport::Endpoint::bind(&runtime_dir).await?;
-
     // PF-27-S02: stdout carries only the (non-secret) control socket path.
     // Secrets never cross a descriptor the controller created, so a process
     // that inherits one during the macOS close-on-exec window gets nothing.
     let mut stdout = tokio::io::stdout();
+    let mut endpoint = match transport::Endpoint::bind(&runtime_dir).await {
+        Ok(endpoint) => endpoint,
+        Err(error) => {
+            // #390: a name held by another process is reported, never joined.
+            if name_taken(&error) {
+                write_json_line(
+                    &mut stdout,
+                    &BrokerBootstrap {
+                        protocol_version: CONTROL_PROTOCOL_VERSION,
+                        control_socket: String::new(),
+                        pipe_taken: true,
+                    },
+                )
+                .await?;
+            }
+            return Err(error);
+        }
+    };
     write_json_line(
         &mut stdout,
         &BrokerBootstrap {
             protocol_version: CONTROL_PROTOCOL_VERSION,
             control_socket: endpoint.control_name(),
+            pipe_taken: false,
         },
     )
     .await?;
@@ -397,6 +414,15 @@ async fn run_broker(
     accept.abort();
     drop(endpoint);
     Ok(())
+}
+
+/// True when binding failed because another process holds a pipe name
+/// (Windows; Unix sockets live in a fresh private directory).
+fn name_taken(error: &anyhow::Error) -> bool {
+    cfg!(windows)
+        && error
+            .downcast_ref::<std::io::Error>()
+            .is_some_and(|error| error.kind() == std::io::ErrorKind::AddrInUse)
 }
 
 fn upstream_client(
@@ -1241,7 +1267,7 @@ mod transport {
 
     pub(super) struct Endpoint {
         control_name: String,
-        control: Option<pipe::PipeListener>,
+        control: Option<pipe::SinglePipeListener>,
         data_name: String,
         data: Option<pipe::PipeListener>,
     }
@@ -1249,7 +1275,8 @@ mod transport {
     impl Endpoint {
         pub(super) async fn bind(_runtime_dir: &std::path::Path) -> anyhow::Result<Self> {
             let (control_name, data_name) = pipe::pipe_names();
-            let control = pipe::PipeListener::bind(&control_name)?;
+            // #390: one control instance at most, so none can be added.
+            let control = pipe::SinglePipeListener::bind(&control_name)?;
             let data = pipe::PipeListener::bind(&data_name)?;
             Ok(Self {
                 control_name,
@@ -1267,13 +1294,13 @@ mod transport {
             self.data_name.clone()
         }
 
-        /// Accepts the controller on the control pipe; afterwards no instance
-        /// of that pipe listens any more.
+        /// Accepts the controller on the control pipe, its only instance
+        /// (#390); other clients are dropped unread.
         pub(super) async fn accept_controller(
             &mut self,
             parent_pid: u32,
         ) -> std::io::Result<NamedPipeServer> {
-            let mut listener = self
+            let listener = self
                 .control
                 .take()
                 .ok_or(std::io::ErrorKind::NotConnected)?;
@@ -1288,11 +1315,22 @@ mod transport {
                 };
                 loop {
                     match listener.accept(broker.controller_pid).await {
-                        Ok(stream) => {
-                            tokio::spawn(serve_connection(
-                                pipe::PipeStream::new(stream),
-                                broker.clone(),
-                            ));
+                        Ok(mut stream) => {
+                            let broker = broker.clone();
+                            tokio::spawn(async move {
+                                // #390: prove the channel key before Core
+                                // sends its request.
+                                if pipe::answer_peer_challenge(
+                                    &mut stream,
+                                    &broker.mac,
+                                    broker.controller_pid,
+                                )
+                                .await
+                                .is_ok()
+                                {
+                                    serve_connection(pipe::PipeStream::new(stream), broker).await;
+                                }
+                            });
                         }
                         Err(_) => tokio::time::sleep(ACCEPT_RETRY_DELAY).await,
                     }
