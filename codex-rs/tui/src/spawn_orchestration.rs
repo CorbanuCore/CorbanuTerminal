@@ -2376,11 +2376,28 @@ impl App {
         } else {
             self.config.model_providers.get(provider_id)
         };
+        // PF-84: check the worker's own account. A missing named account is
+        // refused before its command could run; a configured one is tested
+        // with that account, never the default account's command.
+        if let Some(provider) = provider
+            && let Some(message) = codex_model_provider::selected_account_error(
+                self.config.codex_home.as_path(),
+                provider,
+            )
+        {
+            return Err(eyre!(
+                "Cannot run a native Corbanu Terminal worker on provider `{provider_id}`: {message}"
+            ));
+        }
         if let Some(provider) = provider
             && let Some(auth) = provider.auth.as_ref()
         {
             let provider_name = provider_display_name(provider_id, provider.name.as_str());
-            codex_login::validate_provider_auth_command(auth)
+            let account = provider
+                .account
+                .as_ref()
+                .map(|account| account.name.as_str());
+            codex_login::validate_provider_auth_command_for_account(auth, account)
                 .await
                 .map_err(|err| {
                     eyre!(

@@ -969,6 +969,7 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                     .multi_agent_v2
                     .expose_spawn_agent_model_overrides,
                 usage_hint_text: turn_context.config.multi_agent_v2.usage_hint_text.clone(),
+                expose_account: turn_context.config.features.enabled(Feature::NamedAccounts),
             };
             registry.register_trusted(override_tool_exposure(
                 multi_agent_v2_handler(
@@ -1041,6 +1042,7 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                 hide_agent_type_model_reasoning: false,
                 expose_spawn_agent_model_overrides: true,
                 usage_hint_text: turn_context.config.multi_agent_v2.usage_hint_text.clone(),
+                expose_account: turn_context.config.features.enabled(Feature::NamedAccounts),
             };
             registry.add_with_exposure(SpawnAgentHandler::new(spawn_options.clone()), exposure);
             registry.add_with_exposure(SendInputHandler, exposure);

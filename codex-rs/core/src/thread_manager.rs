@@ -1849,6 +1849,14 @@ impl ThreadManagerState {
         supports_openai_form_elicitation: bool,
         user_shell_override: Option<crate::shell::Shell>,
     ) -> CodexResult<NewThread> {
+        // PF-84: a session, resumed thread or spawned agent never starts on a
+        // named account that is missing; it is refused, never run on another.
+        if let Some(message) = crate::config::selected_account_error(
+            config.codex_home.as_path(),
+            &config.model_provider,
+        ) {
+            return Err(CodexErr::InvalidRequest(message));
+        }
         let source_changed_during_startup = Arc::new(AtomicBool::new(false));
         {
             let mut starting = self

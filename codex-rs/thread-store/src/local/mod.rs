@@ -801,6 +801,7 @@ mod tests {
                 file_system_sandbox_policy: None,
                 model: model.to_string(),
                 model_provider: Some(model_provider.to_string()),
+                provider_account: None,
                 comp_hash: None,
                 personality: None,
                 collaboration_mode: None,

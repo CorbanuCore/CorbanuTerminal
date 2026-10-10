@@ -43,6 +43,12 @@ pub struct Cli {
     #[arg(long = "output-schema", value_name = "FILE", global = true)]
     pub output_schema: Option<PathBuf>,
 
+    /// Named account for this session (`<name>` for the session's provider,
+    /// or `<provider>:<name>`). Needs the `named_accounts` feature; a missing
+    /// account is an error, never the default account.
+    #[arg(long = "account", value_name = "[PROVIDER:]NAME", global = true)]
+    pub account: Option<String>,
+
     #[clap(skip)]
     pub config_overrides: CliConfigOverrides,
 

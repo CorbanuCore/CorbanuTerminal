@@ -182,6 +182,10 @@ mod otel;
 mod permission_profile_catalog;
 mod permissions;
 mod provider_accounts;
+pub use codex_model_provider::selected_account_error;
+pub(crate) use provider_accounts::configured_account_names;
+pub use provider_accounts::split_account_selection;
+pub(crate) use provider_accounts::stamp_provider_account;
 mod requirements;
 mod resolved_permission_profile;
 #[cfg(test)]
@@ -755,6 +759,10 @@ pub struct Config {
 
     /// User-facing security posture composed with the existing permission system.
     pub security_level: SecurityLevel,
+
+    /// PF-84: the explicit `--account` selection this config was loaded with,
+    /// forwarded with thread start and resume so it beats a recorded account.
+    pub provider_account_override: Option<String>,
 
     /// Effective permission configuration for shell tool execution.
     pub permissions: Permissions,
@@ -2887,6 +2895,10 @@ pub struct ConfigOverrides {
     /// Explicit absolute runtime workspace roots for this session. When set,
     /// this is the full runtime root list rather than an additive override.
     pub workspace_roots: Option<Vec<AbsolutePathBuf>>,
+    /// PF-84: an explicit account selection (`--account [<provider>:]<name>`).
+    /// It beats `[provider_accounts]`; without a provider prefix it applies
+    /// to the session's provider.
+    pub provider_account: Option<String>,
 }
 
 fn dedupe_absolute_paths(paths: &mut Vec<AbsolutePathBuf>) {
@@ -3637,6 +3649,7 @@ impl Config {
             bypass_hook_trust,
             additional_writable_roots,
             workspace_roots: workspace_roots_override,
+            provider_account: provider_account_override,
         } = overrides;
         let bypass_hook_trust = bypass_hook_trust.unwrap_or_default();
 
@@ -4177,6 +4190,16 @@ impl Config {
         } else {
             requested_model_provider_id
         };
+        let provider_account_override =
+            provider_account_override.filter(|selection| !selection.trim().is_empty());
+        if let Some(selection) = provider_account_override.as_deref() {
+            provider_accounts::apply_explicit_provider_account(
+                &mut model_providers,
+                &model_provider_id,
+                selection,
+                features.enabled(Feature::NamedAccounts),
+            )?;
+        }
         let model_provider = model_providers
             .get(&model_provider_id)
             .ok_or_else(|| {
@@ -4751,6 +4774,7 @@ impl Config {
             workspace_roots_explicit,
             startup_warnings,
             security_level,
+            provider_account_override,
             permissions: Permissions {
                 approval_policy: constrained_approval_policy.value,
                 permission_profile_state,

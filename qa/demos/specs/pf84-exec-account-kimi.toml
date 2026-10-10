@@ -1,0 +1,61 @@
+# PF-84-S03 on a second provider (Kimi, real key from provider/kimi_api_key for the default account). Out-of-process workers choose their account with
+# `corbanu exec --account`, started through the installed-style launcher
+# (S01). The GLM coordinator (default Z.AI account, real key from the vault
+# helper, never shown) runs the workers. The named account `fake` holds a fake
+# key, so its 401 proves the account was used. Resume reuses the recorded
+# account unless `--account` overrides it, and a missing account is refused.
+# Record with
+#   python3 scripts/demo_video.py record qa/demos/specs/pf84-exec-account-kimi.toml \
+#     --bin <candidate> --sprint PF-84-S03 --publish
+id = "pf84-exec-account-kimi"
+feature = "PF-84-S03: the same on Kimi (second provider)"
+expected = "--account default replies pong; --account fake gets a 401; resuming that session without --account stays on fake (401); resume --account default replies pong; --account gone is refused as not configured."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+[features]
+named_accounts = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+KIMI_API_KEY = "provider/kimi_api_key"
+
+[fixtures]
+"workers.sh" = """
+#!/bin/sh
+w() {
+  label=$1; shift
+  echo "== $label =="
+  CORBANU_LAUNCHER_WORK_DIR="$PWD/../work" RUST_LOG=error sh ../work/corbanu-launcher.sh \\
+    exec --skip-git-repo-check -c model_provider=kimi-code -m k3 "$@" > last.log 2>&1
+  grep -iE '^pong|401|not configured' last.log | head -1
+}
+w "exec --account default" --account default "Reply with the single word pong"
+w "exec --account fake" --account fake "Reply with the single word pong"
+id=$(grep -oE 'session id: [0-9a-f-]+' last.log | head -1 | sed 's/.*: //')
+w "exec resume <fake session> (recorded account: fake)" resume "$id" "Reply with the single word pong"
+w "exec resume <fake session> --account default" resume "$id" --account default "Reply with the single word pong"
+w "exec --account gone" --account gone "Reply with the single word pong"
+"""
+
+[[steps]]
+run = "mkdir -p {run}/work/bin && cp \"$(git -C {run} rev-parse --show-toplevel)/scripts/dev/corbanu-launcher.sh\" {run}/work/ && printf 'export CORBANU_HOME=%s\\nexport CODEX_HOME=%s\\n' {home} {home} > {run}/work/activate.sh && ln -s {bin} {run}/work/bin/corbanu && printf pf84-fake-kimi-key-0003 | {bin} account add kimi-code fake >/dev/null && echo enrolled"
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run `sh workers.sh` and show me its output verbatim in a code block."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "== exec --account gone ==[\\s\\S]*not configured"
+timeout = 300
+compress = 4
+[[steps]]
+pause = 4.0

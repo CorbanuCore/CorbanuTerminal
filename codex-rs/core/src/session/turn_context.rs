@@ -688,6 +688,17 @@ impl TurnContext {
             file_system_sandbox_policy: self.non_legacy_file_system_sandbox_policy(),
             model: self.model_info.slug.clone(),
             model_provider: Some(self.config.model_provider_id.clone()),
+            provider_account: self
+                .config
+                .features
+                .enabled(Feature::NamedAccounts)
+                .then(|| {
+                    self.provider
+                        .info()
+                        .account
+                        .as_ref()
+                        .map_or_else(|| "default".to_string(), |account| account.name.clone())
+                }),
             comp_hash: self.model_info.comp_hash.clone(),
             personality: self.personality,
             collaboration_mode: Some(self.collaboration_mode()),

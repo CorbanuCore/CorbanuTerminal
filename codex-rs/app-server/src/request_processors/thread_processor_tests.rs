@@ -753,6 +753,7 @@ mod thread_processor_behavior_tests {
             path: None,
             model: None,
             model_provider: None,
+            provider_account: None,
             service_tier: Some(Some("priority".to_string())),
             cwd: None,
             runtime_workspace_roots: None,
@@ -849,6 +850,36 @@ mod thread_processor_behavior_tests {
                 },
             },
         ))]
+    }
+
+    fn turn_context(model_provider: &str, provider_account: Option<&str>) -> RolloutItem {
+        let mut item = serde_json::json!({
+            "cwd": test_path_buf("/tmp/persisted-workspace"),
+            "approval_policy": "never",
+            "sandbox_policy": {"type": "danger-full-access"},
+            "model": "glm-5.3-flash",
+            "model_provider": model_provider,
+            "summary": "auto",
+        });
+        if let Some(account) = provider_account {
+            item["provider_account"] = serde_json::Value::String(account.to_string());
+        }
+        RolloutItem::TurnContext(serde_json::from_value(item).expect("turn context"))
+    }
+
+    #[test]
+    fn resume_restores_the_newest_recorded_provider_account() {
+        assert_eq!(
+            [
+                recorded_provider_account(&[turn_context("zai", None)]),
+                recorded_provider_account(&[
+                    turn_context("zai", Some("work")),
+                    turn_context("kimi", Some("default")),
+                    turn_context("zai", None),
+                ]),
+            ],
+            [None, Some("kimi:default".to_string())]
+        );
     }
 
     #[test]

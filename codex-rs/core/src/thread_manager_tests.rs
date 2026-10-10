@@ -429,6 +429,39 @@ async fn shutdown_all_threads_bounded_submits_shutdown_to_every_thread() {
 }
 
 #[tokio::test]
+async fn start_thread_refuses_a_missing_named_account() {
+    let temp_dir = tempdir().expect("tempdir");
+    let mut config = test_config().await;
+    config.codex_home = temp_dir.path().join("codex-home").abs();
+    config.cwd = config.codex_home.abs();
+    std::fs::create_dir_all(&config.codex_home).expect("create codex home");
+    config.model_provider = ModelProviderInfo::create_zai_provider();
+    config.model_provider.account = Some(codex_model_provider_info::NamedProviderAccount {
+        provider_id: "zai".to_string(),
+        name: "gone".to_string(),
+    });
+
+    let manager = ThreadManager::with_models_provider_and_home_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        config.codex_home.to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+    );
+    let Err(error) = manager.start_thread(StartThreadOptions::new(config)).await else {
+        panic!("a missing named account must not start a thread");
+    };
+    let CodexErrorDetails::InvalidRequest(message) = error.details() else {
+        panic!("expected an invalid request, got {error}");
+    };
+    assert_eq!(
+        message,
+        &("account `gone` of provider `zai` is not configured; add it with \
+         `corbanu account add zai gone` or pick another with `--account` (see `corbanu account list`)"
+            .to_string())
+    );
+}
+
+#[tokio::test]
 async fn code_mode_session_provider_is_shared_across_threads() {
     let temp_dir = tempdir().expect("tempdir");
     let mut config = test_config().await;

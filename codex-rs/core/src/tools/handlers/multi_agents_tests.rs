@@ -34,6 +34,7 @@ use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
 use codex_model_provider_info::KIMI_CODE_K3_MODEL;
 use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
+use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::ZAI_PROVIDER_ID;
@@ -6590,4 +6591,102 @@ async fn build_agent_resume_config_clears_base_instructions() {
         .set_permission_profile(turn.permission_profile())
         .expect("permission profile set");
     assert_eq!(config, expected);
+}
+
+/// PF-84-S03: a parent on Z.AI whose spawn names `account`.
+async fn spawn_with_account(
+    named_accounts: bool,
+    configure: impl FnOnce(&mut crate::config::Config, &mut TurnContext),
+    account: &str,
+) -> Result<(), FunctionCallError> {
+    let (mut session, mut turn) = make_session_and_context().await;
+    let provider_info = ModelProviderInfo::create_zai_provider();
+    let mut config = (*turn.config).clone();
+    config.model_provider_id = "zai".to_string();
+    config.model_provider = provider_info.clone();
+    config
+        .features
+        .enable(Feature::MultiAgentV2)
+        .expect("test config should allow feature update");
+    if named_accounts {
+        config
+            .features
+            .enable(Feature::NamedAccounts)
+            .expect("test config should allow feature update");
+    }
+    configure(&mut config, &mut turn);
+    turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
+    set_turn_config(&mut turn, config);
+    let manager = thread_manager();
+    let root = manager
+        .start_thread((*turn.config).clone())
+        .await
+        .expect("root thread should start");
+    session.services.agent_control = manager.agent_control();
+    session.thread_id = root.thread_id;
+    SpawnAgentHandlerV2::default()
+        .handle(invocation(
+            Arc::new(session),
+            Arc::new(turn),
+            "spawn_agent",
+            function_payload(json!({
+                "message": "say pong",
+                "task_name": "worker",
+                "fork_turns": "none",
+                "account": account,
+            })),
+        ))
+        .await
+        .map(drop)
+}
+
+#[tokio::test]
+async fn spawn_account_needs_the_named_accounts_feature() {
+    let result = spawn_with_account(/*named_accounts*/ false, |_, _| {}, "work").await;
+    assert_eq!(
+        result,
+        Err(FunctionCallError::RespondToModel(
+            "spawn_agent `account` needs the `named_accounts` feature; omit it to use the parent's account.".to_string()
+        ))
+    );
+}
+
+#[tokio::test]
+async fn spawn_account_must_be_configured_for_the_child_provider() {
+    let result = spawn_with_account(/*named_accounts*/ true, |_, _| {}, "gone").await;
+    assert_eq!(
+        result,
+        Err(FunctionCallError::RespondToModel(
+            "account `gone` of provider `zai` is not configured; add it with `corbanu account add zai gone` or pick another with `--account` (see `corbanu account list`). Configured accounts of `zai`: none besides `default`. Do not retry on another account without the user's consent.".to_string()
+        ))
+    );
+}
+
+#[tokio::test]
+async fn aggressive_spawn_account_switch_needs_an_approval() {
+    let result = spawn_with_account(
+        /*named_accounts*/ true,
+        |config, turn| {
+            config.security_level = codex_security_policy::SecurityLevel::Aggressive;
+            turn.approval_policy
+                .set(AskForApproval::Never)
+                .expect("approval policy should be set");
+            codex_vault::Vault::new(config.codex_home.to_path_buf())
+                .write_provider_account(
+                    "zai",
+                    &codex_vault::ProviderAccountName::parse("work").expect("name"),
+                    codex_vault::ProviderAccountKind::ApiKey,
+                    "canary-spawn-work",
+                )
+                .expect("write account");
+        },
+        "work",
+    )
+    .await;
+    assert_eq!(
+        result,
+        Err(FunctionCallError::RespondToModel(
+            "Running a spawned agent on account `work` of `zai` needs the user's approval under the Aggressive security level, and approvals are off.".to_string()
+        ))
+    );
 }

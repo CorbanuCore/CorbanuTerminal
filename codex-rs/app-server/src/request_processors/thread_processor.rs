@@ -227,6 +227,19 @@ fn latest_persisted_thread_runtime(history: &[RolloutItem]) -> Option<PersistedT
     })
 }
 
+/// PF-84: `<provider>:<account>` from the newest turn context that recorded
+/// an account (only recorded while named accounts are on).
+fn recorded_provider_account(history: &[RolloutItem]) -> Option<String> {
+    history.iter().rev().find_map(|item| match item {
+        RolloutItem::TurnContext(codex_protocol::protocol::TurnContextItem {
+            model_provider: Some(provider_id),
+            provider_account: Some(account),
+            ..
+        }) => Some(format!("{provider_id}:{account}")),
+        _ => None,
+    })
+}
+
 fn apply_persisted_thread_runtime(
     request_overrides: &mut Option<HashMap<String, serde_json::Value>>,
     typesafe_overrides: &mut ConfigOverrides,
@@ -1311,6 +1324,7 @@ impl ThreadRequestProcessor {
         let ThreadStartParams {
             model,
             model_provider,
+            provider_account,
             allow_provider_model_fallback,
             service_tier,
             cwd,
@@ -1370,6 +1384,7 @@ impl ThreadRequestProcessor {
         );
         typesafe_overrides.ephemeral = ephemeral;
         typesafe_overrides.allow_provider_model_fallback = allow_provider_model_fallback;
+        typesafe_overrides.provider_account = provider_account;
         let listener_task_context = ListenerTaskContext {
             thread_manager: Arc::clone(&self.thread_manager),
             thread_state_manager: self.thread_state_manager.clone(),
@@ -3562,6 +3577,7 @@ impl ThreadRequestProcessor {
             path,
             model,
             model_provider,
+            provider_account,
             service_tier,
             cwd,
             runtime_workspace_roots,
@@ -3632,6 +3648,7 @@ impl ThreadRequestProcessor {
             developer_instructions,
             personality,
         );
+        typesafe_overrides.provider_account = provider_account;
         let has_explicit_model_resume_override =
             has_model_resume_override(request_overrides.as_ref(), &typesafe_overrides);
         let persisted_reasoning_effort = self
@@ -3918,6 +3935,11 @@ impl ThreadRequestProcessor {
         );
         let had_explicit_model_override =
             has_model_resume_override(request_overrides.as_ref(), typesafe_overrides);
+        // PF-84: resume on the recorded account unless one was chosen explicitly.
+        if typesafe_overrides.provider_account.is_none() && !had_explicit_model_override {
+            typesafe_overrides.provider_account =
+                recorded_provider_account(&resumed_history.history);
+        }
         merge_persisted_service_tier(
             &resumed_history.history,
             request_overrides.as_ref(),
