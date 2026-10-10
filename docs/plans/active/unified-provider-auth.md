@@ -290,6 +290,9 @@ though, for four reasons:
   `corbanu account list|add|remove` CLI that reads secrets from stdin. Both are
   needed to enroll and exercise accounts before the S04 UI; S03 adds the
   explicit selectors (`--account`, spawn, session, resume).
+- S02 amendment (2026-10-10): named OpenAI sign-ins (API-key login, ChatGPT) and AWS
+  profiles move to S04, where their sign-in flows live; selecting such an account
+  fails closed until then.
 
 **Decisions (recommended defaults adopted 2026-10-10; Travis may revisit).**
 Travis did not answer D1-D3 explicitly when approving the work, so the plan's
