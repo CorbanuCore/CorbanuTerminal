@@ -1,0 +1,15 @@
+#!/bin/bash
+# local. usage: tech <session> <request-number> <capture-name> [/cost args]
+# Reopens /cost, moves to "→ Request N" (Up from the first line wraps to Close; the page ends with six fixed rows),
+# opens it, then its technical details, and saves every distinct screen while scrolling.
+s=$1; n=$2; name=$3; shift 3; Q=$(dirname "$0")/q
+total=$($Q sh "grep -c '^› → Request ' ~/corbanu-rtx/pf60s04-qual/cap/${TECH_LIST:-q1-02-cost}.txt")
+# Esc only while a popup is open: Esc on an idle composer edits the previous message (and forks).
+for i in 1 2 3 4; do $Q sh "tmux -L q-$s capture-pane -p -t $s | grep -q 'Esc back/close'" || break; $Q $s key Escape; done
+$Q $s text "/cost $*"; $Q $s key Enter; $Q $s wait "Today \(UTC\) in this conversation|This conversation on" 30 >/dev/null
+$Q $s key Up $(( 6 + total - n + 1 ))
+$Q $s wait "› → Request $n " 10 || exit 1
+$Q $s key Enter; $Q $s wait "Billing:" 15 >/dev/null; $Q $s cap "$name-request" >/dev/null
+$Q $s key Up 4; $Q $s wait "› → Technical details" 10 || exit 1
+$Q $s key Enter; $Q $s wait "Attempt, components and original price" 15 >/dev/null
+$Q $s scroll "$name" 75

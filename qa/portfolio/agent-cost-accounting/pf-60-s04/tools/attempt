@@ -1,0 +1,9 @@
+#!/bin/bash
+# local. usage: attempt <session> <request-n> <attempt-k> <name>: open /cost → Request n → Technical details (attempt k)
+s=$1; n=$2; k=$3; name=$4; Q=$(dirname "$0")/q
+for i in 1 2 3 4 5 6; do $Q sh "tmux -L q-$s capture-pane -p -t $s | grep -q 'Esc back/close'" || break; $Q $s key Escape; done
+$Q $s text "/cost"; $Q $s key Enter; $Q $s wait "Today" 30 >/dev/null
+for i in $(seq 1 40); do $Q sh "tmux -L q-$s capture-pane -p -t $s | grep -q '^› → Request $n '" && break; $Q $s key Up; done
+$Q $s key Enter; $Q $s wait "Billing:" 15 >/dev/null
+for i in $(seq 1 12); do $Q sh "tmux -L q-$s capture-pane -p -t $s | grep -q '^› → Technical details (attempt $k)'" && break; $Q $s key Up; done
+$Q $s key Enter; $Q $s wait "Attempt, components" 15 >/dev/null; $Q $s scroll "$name" 70

@@ -1,0 +1,22 @@
+q1               2026-10-10T03:47:16.881 resp_06574fa0d24c28ec016ac9b544a57487d responses  in= 10146 cached=     0 write=     0 out=   0 tier=auto usd=0.025365
+q1               2026-10-10T03:47:28.388 resp_06574fa0d24c28ec016ac9b54d447c87d responses  in= 12798 cached=     0 write=     0 out= 114 tier=default usd=0.033705
+q1               2026-10-10T03:47:37.840 resp_06574fa0d24c28ec016ac9b550799487d responses  in= 15845 cached= 12672 write=     0 out= 540 tier=default usd=0.0192005
+q1               2026-10-10T03:47:39.353 546d53b4-89c7-45f1-a24a-5f87b18c76e0   responses  in=  9220 cached=     0 write=     0 out=  12 tier=default usd=0.02323
+q1               2026-10-10T03:47:40.073 resp_06574fa0d24c28ec016ac9b559fcb887d responses  in= 16522 cached= 15744 write=     0 out= 126 tier=default usd=0.007771
+q1               2026-10-10T03:47:42.344 resp_06574fa0d24c28ec016ac9b55c25c487d responses  in= 16833 cached= 15744 write=     0 out= 107 tier=default usd=0.0082635
+q1               2026-10-10T03:47:43.079 chatcmpl-px0Cgq6k5bDAtRr1KxhnJqB7      chat       in=  7855 cached=  1024 write=     0 out=  59 tier=None usd=0.0182185
+q1               2026-10-10T03:47:47.368 chatcmpl-zgO0JdGimZt99eYiUVdHFpIW      chat       in=   346 cached=     0 write=     0 out=  93 tier=None usd=0.00226
+q1               2026-10-10T03:47:49.563 resp_06574fa0d24c28ec016ac9b563742087d responses  in= 17045 cached= 16768 write=     0 out= 148 tier=default usd=0.0071045
+q1               2026-10-10T03:47:50.369 resp_06574fa0d24c28ec016ac9b5659fb087d responses  in= 17260 cached= 16768 write=     0 out=   5 tier=default usd=0.005497
+q1               2026-10-10T03:50:23.484 resp_0c3ea50c5898a830016ac9b5ff4f7087d responses  in= 10146 cached=     0 write=     0 out=   0 tier=auto usd=0.025365
+q1               2026-10-10T03:51:49.760 resp_0296673d1170b2ca016ac9b655961487d responses  in= 10146 cached=     0 write=     0 out=   0 tier=auto usd=0.025365
+q1               2026-10-10T03:55:34.136 resp_0cbefec9d8a811ad016ac9b735fa7c87d responses  in=  9649 cached=     0 write=     0 out=   0 tier=auto usd=0.0241225
+q1               2026-10-10T03:55:35.485 resp_0cbefec9d8a811ad016ac9b73643a887d responses  in= 16593 cached=  2432 write=     0 out=   5 tier=default usd=0.0360855
+q1               2026-10-10T03:58:52.282 resp_0296673d1170b2ca016ac9b7ca5c2487d responses  in= 16834 cached= 12672 write=     0 out=2238 tier=default usd=0.047143
+q1               2026-10-10T04:02:08.346 resp_06574fa0d24c28ec016ac9b8bf3e3c87d responses  in= 19161 cached= 18816 write=     0 out=   7 tier=default usd=0.0056715
+q1               2026-10-10T04:02:33.563 resp_0a26f71c885f4e32016ac9b8d94dd487d responses  in= 10146 cached=     0 write=     0 out=   0 tier=auto usd=0.025365
+q1               2026-10-10T04:03:41.961 resp_01188b77fe710f7c016ac9b91dcf0087d responses  in= 10146 cached=     0 write=     0 out=   0 tier=priority usd=0.025365
+q1               2026-10-10T04:03:53.576 resp_01188b77fe710f7c016ac9b9285b9087d responses  in= 19163 cached=     0 write=     0 out=  19 tier=priority usd=0.0481925
+q1               2026-10-10T03:47:39.302 msg_011CfssXBZDXQqz2XFaHryR1           anthropic  in= 15118 cached= 11308 write=  3806 out=   8 tier=None usd=0.012472
+TOTAL q1: requests=20 input=260972 cached=123948 output=3481 tokens=264453 usd=0.425762
+GRAND: requests=20 tokens=264453 usd=0.425762

@@ -1,0 +1,135 @@
+  disclosure, and legal responsibility. Similar developments occurred elsewhere as industrial capitalism matured.
+
+  In the twentieth century, double-entry bookkeeping became universal in formal business life. Corporations, governments, nonprofits, and small firms all relied
+  on it, though often through increasingly specialized systems. Accounting principles developed to address revenue recognition, consolidation, taxation, and
+  reporting standards. Computers later transformed the mechanics of bookkeeping, automating posting, reconciliation, and reporting. Yet the underlying logic
+  remained the same as that used by Renaissance merchants: each transaction has corresponding effects, and a coherent system must preserve balance.
+  What explains the durability of double-entry bookkeeping is its unusual combination of simplicity and power. Its central rule is easy to state, but its
+  consequences are profound. Because every entry has a counterpart, errors are easier to detect. Because accounts are classified systematically, performance can
+  be analyzed. Because books can be closed and balanced, periodic statements become possible. Balance sheets and income statements, fundamental to modern
+  finance, rest directly on this structure. Even when users no longer write journal entries by hand, they still inhabit a world designed by double-entry logic.
+  The history of double-entry bookkeeping is therefore the history of a method that gradually became an institution. Born in the needs of medieval commerce,
+  refined in the city-states of Italy, codified by Pacioli, and spread by trade, print, and education, it became one of the main operating languages of economic
+  life. Its success lay not in glamour but in reliability. It enabled merchants to manage complexity, investors to trust reports, managers to evaluate
+  operations, and states and corporations to administer large systems over time.
+  In retrospect, double-entry bookkeeping can be seen as a foundational technology of modernity. It did for economic organization what maps did for navigation
+  and clocks did for time discipline: it imposed structure on a difficult domain and made large-scale coordination possible. That is why its history matters. It
+  shows how a method of writing things down can alter what people are able to build, govern, and imagine.
+› Write a 3000-word essay on the history of the abacus. Do not use any tools.
+• The history of the abacus is the history of one of humanity’s oldest and most durable thinking tools. Long before electronic calculators, mechanical adding
+  machines, or digital computers, people needed reliable ways to count goods, assess taxes, measure land, record debts, and conduct trade. Fingers and spoken
+  numbers were enough for simple tasks, but growing societies required methods that were faster, more systematic, and less dependent on memory. The abacus
+  emerged from that need. It was not a single invention produced at one moment by one civilization. Rather, it was a family of counting devices and calculation
+  practices that developed across many cultures over thousands of years. In its different forms, the abacus helped merchants, scribes, officials, teachers,
+  engineers, and students perform arithmetic with speed and confidence. Its long career reveals not only the history of calculation, but also the history of
+  education, commerce, administration, and the human effort to extend the mind through material tools.
+■ Conversation interrupted - tell the model what to do differently. Something went wrong? Hit `/feedback` to report the issue.
+  Attempt, components and original price
+  Requested UTC day: 2026-10-10
+› Provider: OpenAI
+  Model: gpt-5.4
+  Billing: Pay per use
+  Estimated cost: not available — usage incomplete
+  Next step for requests with incomplete usage: check the bill from OpenAI. Their provider did not report every token count, so the estimate is missing or
+  only a lower bound.
+  Tokens: tokens not reported
+  —— Details ——
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Provider: OpenAI
+› Model: gpt-5.4
+› Billing: Pay per use
+› Estimated cost: not available — usage incomplete
+› Next step for requests with incomplete usage: check the bill from OpenAI. Their provider did not report every token count, so the estimate is missing or
+› only a lower bound.
+› Tokens: tokens not reported
+› —— Details ——
+› Billed cost: OpenAI doesn't report its charges, so any cost here is an estimate — check OpenAI's bill.
+  Billed cost: OpenAI doesn't report its charges, so any cost here is an estimate — check OpenAI's bill.
+› Request: f9a34516-35a7-41c8-9f79-dee63a026ea3
+  Request: f9a34516-35a7-41c8-9f79-dee63a026ea3
+› Attempt: e8180206-bce1-4316-8abd-31f6e425b420
+  Attempt: e8180206-bce1-4316-8abd-31f6e425b420
+› Thread: 01a123ec-106c-71a0-b0cc-ea1a36d48b7c
+  Thread: 01a123ec-106c-71a0-b0cc-ea1a36d48b7c
+› Turn: 01a123f7-0d39-76c2-9f02-a783d16696a4
+  Turn: 01a123f7-0d39-76c2-9f02-a783d16696a4
+› Provider: openai
+  Provider: openai
+› Opaque scope: b43a8f30-7b55-4303-ae13-b27f693a6d34
+  Opaque scope: b43a8f30-7b55-4303-ae13-b27f693a6d34
+› Arithmetic dialect: Inclusive
+  Arithmetic dialect: Inclusive
+› Admission time: 2026-10-10T03:59:15.824Z
+  Admission time: 2026-10-10T03:59:15.824Z
+› Retry predecessor: none
+  Retry predecessor: none
+› Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+  Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+› Estimated token cost: unknown
+  Estimated token cost: unknown
+› Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
+  Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
+› Billing basis: pay per use
+  Billing basis: pay per use
+› Input: unknown — no retained numeric evidence
+  Input: unknown — no retained numeric evidence
+› Noncached input (derived for inclusive input): unknown — no retained numeric evidence
+  Noncached input (derived for inclusive input): unknown — no retained numeric evidence
+› Cache read: unknown — no retained numeric evidence
+  Cache read: unknown — no retained numeric evidence
+› Cache write: unknown — no retained numeric evidence
+  Cache write: unknown — no retained numeric evidence
+› Output: unknown — no retained numeric evidence
+  Output: unknown — no retained numeric evidence
+› Reasoning (subset, not separately billed): unknown — no retained numeric evidence
+  Reasoning (subset, not separately billed): unknown — no retained numeric evidence
+› Total (not separately billed): unknown — no retained numeric evidence
+  Total (not separately billed): unknown — no retained numeric evidence
+› Noncached input cost: unknown — no retained numeric evidence
+  Noncached input cost: unknown — no retained numeric evidence
+› Cache read cost: unknown — no retained numeric evidence
+  Cache read cost: unknown — no retained numeric evidence
+› Cache write cost: unknown — no retained numeric evidence
+  Cache write cost: unknown — no retained numeric evidence
+› Output cost: unknown — no retained numeric evidence
+  Output cost: unknown — no retained numeric evidence
+› Known subtotal exact USD: none — usage incomplete for these attempts
+  Known subtotal exact USD: none — usage incomplete for these attempts
+› Price ID: 840688df-1c06-45dd-b66c-75d1396734e3
+  Price ID: 840688df-1c06-45dd-b66c-75d1396734e3
+› Price source: NativeCatalog; reference addc1fee-6ac0-5af8-a2b3-5095828a6e82
+  Price source: NativeCatalog; reference addc1fee-6ac0-5af8-a2b3-5095828a6e82
+› Price currency/unit: Usd / PerMillionTokens
+  Price currency/unit: Usd / PerMillionTokens
+› Price observed/approved: 2026-10-10T03:59:15.824Z / 2026-10-10T03:59:15.824Z
+  Price observed/approved: 2026-10-10T03:59:15.824Z / 2026-10-10T03:59:15.824Z
+› Price effective interval: [2026-10-10T03:59:15.824Z, unbounded)
+  Price effective interval: [2026-10-10T03:59:15.824Z, unbounded)
+› Noncached input rate: 2.5 USD per million tokens
+  Noncached input rate: 2.5 USD per million tokens
+› Cache read rate: 0.25 USD per million tokens
+  Cache read rate: 0.25 USD per million tokens
+› Rate unavailable for Cache write
+  Rate unavailable for Cache write
+› Output rate: 15 USD per million tokens
+  Output rate: 15 USD per million tokens
+› Long-context price: above 272000 input tokens, the whole request is priced at:
+  Long-context price: above 272000 input tokens, the whole request is priced at:
+›   Noncached input rate: 5 USD per million tokens
+    Noncached input rate: 5 USD per million tokens
+›   Rate unavailable for Cache read
+    Rate unavailable for Cache read
+›   Rate unavailable for Cache write
+    Rate unavailable for Cache write
+›   Output rate: 22.5 USD per million tokens
+    Output rate: 22.5 USD per million tokens
+› Long-context price: input unknown, so no rate applies
+  Long-context price: input unknown, so no rate applies
+› Snapshot is not current; newer activity is unverified
+  Snapshot is not current; newer activity is unverified
+› Back
+  Back
+› Refresh
+  Refresh
+› Close

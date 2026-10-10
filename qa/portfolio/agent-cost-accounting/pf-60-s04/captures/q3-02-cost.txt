@@ -1,0 +1,78 @@
+╭───────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                 │
+│                                               │
+│ model:     glm-5.2   /model to change         │
+│ directory: ~/corbanu-rtx/pf60s04-qual/work/ws │
+╰───────────────────────────────────────────────╯
+
+› Reply with the single word GLM.
+• GLM
+  Cost — this conversation
+  Requested UTC day: 2026-10-10
+› Today (UTC) in this conversation:
+  • Z.AI · Z.AI GLM 5.2 — Pay per use. 1 request, 8,155 tokens. Estimated cost: $0.011426.
+  No other conversation recorded requests on this day.
+  Costs are estimates from published prices; Z.AI doesn't report its charges — check Z.AI's bill.
+  Select a provider below to see its requests.
+  —— Details ——
+  Estimated token cost for recorded attempts: $0.011426
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Today (UTC) in this conversation:
+› • Z.AI · Z.AI GLM 5.2 — Pay per use. 1 request, 8,155 tokens. Estimated cost: $0.011426.
+› No other conversation recorded requests on this day.
+› Costs are estimates from published prices; Z.AI doesn't report its charges — check Z.AI's bill.
+› Select a provider below to see its requests.
+› —— Details ——
+› Estimated token cost for recorded attempts: $0.011426
+› Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+› Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+› Snapshot is not current; newer activity is unverified
+  Snapshot is not current; newer activity is unverified
+› Day covered (UTC): [2026-10-10T00:00:00.000Z, 2026-10-11T00:00:00.000Z)
+  Day covered (UTC): [2026-10-10T00:00:00.000Z, 2026-10-11T00:00:00.000Z)
+› Read at: 2026-10-10T04:10:58.635Z; ledger current to: 2026-10-10T04:10:52.052Z (6583 ms behind)
+  Read at: 2026-10-10T04:10:58.635Z; ledger current to: 2026-10-10T04:10:52.052Z (6583 ms behind)
+› Retention: request detail kept since 2026-07-12T04:10:58.635Z; daily totals kept since 2025-10-11; oldest recorded day in this conversation 2026-10-10
+  Retention: request detail kept since 2026-07-12T04:10:58.635Z; daily totals kept since 2025-10-11; oldest recorded day in this conversation 2026-10-10
+› Known subtotal exact USD: 0.011426
+  Known subtotal exact USD: 0.011426
+› Input: 8,152
+  Input: 8,152
+› Noncached input (derived for inclusive input): not reported (1 attempt) — costed as input − cache read for 1 attempt, whose price charges nothing for
+  Noncached input (derived for inclusive input): not reported (1 attempt) — costed as input − cache read for 1 attempt, whose price charges nothing for
+› cache writes
+  cache writes
+› Cache read: 0
+  Cache read: 0
+› Cache write: not reported (1 attempt) — free at the price of 1 attempt, so nothing was charged
+  Cache write: not reported (1 attempt) — free at the price of 1 attempt, so nothing was charged
+› Output: 3
+  Output: 3
+› Reasoning (subset, not separately billed): 1
+  Reasoning (subset, not separately billed): 1
+› Total (not separately billed): 8,155
+  Total (not separately billed): 8,155
+› Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+  Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+› Unknown parent population: 0 attempts, excluded from root total
+  Unknown parent population: 0 attempts, excluded from root total
+› —— Open ——
+  —— Open ——
+› → Z.AI · Z.AI GLM 5.2 — estimated $0.011426 (1 request)
+  → Z.AI · Z.AI GLM 5.2 — estimated $0.011426 (1 request)
+› → Request 1 · Z.AI · Z.AI GLM 5.2 · estimated $0.011426
+  → Request 1 · Z.AI · Z.AI GLM 5.2 · estimated $0.011426
+› → Root's own attempts (1 attempt)
+  → Root's own attempts (1 attempt)
+› → Descendant attempts (none)
+  → Descendant attempts (none)
+› → Unknown provider/model attribution (none)
+  → Unknown provider/model attribution (none)
+› → Unknown parent population (none)
+  → Unknown parent population (none)
+› Refresh
+  Refresh
+› Close

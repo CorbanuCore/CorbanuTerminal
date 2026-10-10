@@ -1,0 +1,11 @@
+## python3 qa/portfolio/agent-cost-accounting/pf-60-s01/test_contract.py -v (commit 1e9cd464b9)
+Ran 48 tests in 0.074s
+OK
+
+## just test -p codex-state -E 'test(golden) | test(accounting_contract)'
+PASS [   0.531s] (1/6) codex-state::accounting_late_import accounting_late_import_native_family_literal_golden_and_young_reconstruction
+PASS [   0.550s] (2/6) codex-state::accounting_store accounting_inspect_public_literal_partial_goldens
+PASS [   0.768s] (4/6) codex-state::accounting_contract_golden accounting_contract_golden_compact_original_bundle_parity
+PASS [   0.903s] (5/6) codex-state::accounting_contract_golden accounting_contract_golden_raw_replay_and_two_reopens
+PASS [   0.946s] (6/6) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_presence_numeric_and_exact_price_goldens
+Summary [   0.949s] 6 tests run: 6 passed (1 leaky), 398 skipped

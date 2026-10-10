@@ -1,0 +1,90 @@
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                   │
+│                                                 │
+│ model:     deepseek-v4-flash   /model to change │
+│ directory: ~/corbanu-rtx/pf60s04-qual/work/ws   │
+╰─────────────────────────────────────────────────╯
+
+› Reply with the single word RETRIED.
+• RETRIED
+  Attempt, components and original price
+  Requested UTC day: 2026-10-10
+› Provider: deepseek-retry
+  Model: DeepSeek V4 Flash 0731 (Direct)
+  Billing: Pay per use
+  Estimated cost: no price available
+  Next step for requests with no price: check the bill from deepseek-retry. No published price covers them, so no cost is shown for them here.
+  Tokens: 6,015 tokens
+  —— Details ——
+  Billed cost: deepseek-retry doesn't report its charges, so any cost here is an estimate — check deepseek-retry's bill.
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Provider: deepseek-retry
+› Model: DeepSeek V4 Flash 0731 (Direct)
+› Billing: Pay per use
+› Estimated cost: no price available
+› Next step for requests with no price: check the bill from deepseek-retry. No published price covers them, so no cost is shown for them here.
+› Tokens: 6,015 tokens
+› —— Details ——
+› Billed cost: deepseek-retry doesn't report its charges, so any cost here is an estimate — check deepseek-retry's bill.
+› Request: 2afdeb17-9aef-4b90-a9e5-c2544f622367
+  Request: 2afdeb17-9aef-4b90-a9e5-c2544f622367
+› Attempt: 406654cc-3535-4e2b-b3af-1edac95b5b61
+  Attempt: 406654cc-3535-4e2b-b3af-1edac95b5b61
+› Thread: 01a123fc-74b8-7ca2-9ffb-1020c4d0636b
+  Thread: 01a123fc-74b8-7ca2-9ffb-1020c4d0636b
+› Turn: 01a123fc-97d8-7382-b9d8-03c444903cbb
+  Turn: 01a123fc-97d8-7382-b9d8-03c444903cbb
+› Model: deepseek-v4-flash
+  Model: deepseek-v4-flash
+› Opaque scope: 2efdedc0-5783-4da5-b84c-73cc3c4b008f
+  Opaque scope: 2efdedc0-5783-4da5-b84c-73cc3c4b008f
+› Arithmetic dialect: Inclusive
+  Arithmetic dialect: Inclusive
+› Admission time: 2026-10-10T04:05:19.248Z
+  Admission time: 2026-10-10T04:05:19.248Z
+› Retry predecessor: 8f767154-e0c8-4621-90f3-485a76668b57
+  Retry predecessor: 8f767154-e0c8-4621-90f3-485a76668b57
+› Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+  Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+› Token cost: unavailable — no applicable price; recorded usage is not a zero-cost claim.
+  Token cost: unavailable — no applicable price; recorded usage is not a zero-cost claim.
+› Billing basis: pay per use (set in your config)
+  Billing basis: pay per use (set in your config)
+› Input: 5889
+  Input: 5889
+› Noncached input (derived for inclusive input): unknown — no retained numeric evidence
+  Noncached input (derived for inclusive input): unknown — no retained numeric evidence
+› Cache read: 3200
+  Cache read: 3200
+› Cache write: unknown — no retained numeric evidence
+  Cache write: unknown — no retained numeric evidence
+› Output: 126
+  Output: 126
+› Reasoning (subset, not separately billed): 122
+  Reasoning (subset, not separately billed): 122
+› Total (not separately billed): 6015
+  Total (not separately billed): 6015
+› Noncached input cost: unknown — no retained numeric evidence
+  Noncached input cost: unknown — no retained numeric evidence
+› Cache read cost: unknown — rate unavailable
+  Cache read cost: unknown — rate unavailable
+› Cache write cost: unknown — no retained numeric evidence
+  Cache write cost: unknown — no retained numeric evidence
+› Output cost: unknown — rate unavailable
+  Output cost: unknown — rate unavailable
+› Known subtotal exact USD: none — no price for these attempts
+  Known subtotal exact USD: none — no price for these attempts
+› Price: none recorded — this request records only its billing basis (pay per use (set in your config))
+  Price: none recorded — this request records only its billing basis (pay per use (set in your config))
+› Evidence revision 127; source dc1ba2c0-59bd-41e1-a91a-53887abdccc3; sequence 127; presence patch
+  Evidence revision 127; source dc1ba2c0-59bd-41e1-a91a-53887abdccc3; sequence 127; presence patch
+› {"input":5889,"read":3200,"output":126,"reasoning":122,"total":6015}
+  {"input":5889,"read":3200,"output":126,"reasoning":122,"total":6015}
+› Snapshot is not current; newer activity is unverified
+  Snapshot is not current; newer activity is unverified
+› Back
+  Back
+› Refresh
+  Refresh
+› Close

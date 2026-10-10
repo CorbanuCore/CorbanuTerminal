@@ -1,0 +1,50 @@
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                   │
+│                                                 │
+│ model:     deepseek-v4-flash   /model to change │
+│ directory: ~/corbanu-rtx/pf60s04-qual/work/ws   │
+╰─────────────────────────────────────────────────╯
+
+
+› Reply with the single word RETRIED.
+
+
+• RETRIED
+
+
+› Summarize recent commits
+
+  DeepSeek V4 Flash 0731 (Direct) via deepseek-retry default · ~/corbanu-rtx/pf60s04-qual/work/ws · Corbanu Terminal · TPS: 139.6 tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

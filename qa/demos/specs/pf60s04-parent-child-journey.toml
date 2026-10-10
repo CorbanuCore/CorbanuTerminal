@@ -1,0 +1,40 @@
+# PF-60-S04: a parent conversation and two sub-agents on different providers and billing bases. A real Kimi Code
+# K3 parent (subscription) spawns one child on DeepSeek V4 Flash (pay per use) and one on Kimi Code K3. /cost on
+# the parent counts its own requests and its children's once, keeps subscription work and pay-per-use money apart,
+# and lists the children as descendant attempts. No seeding.
+id = "pf60s04-parent-child-journey"
+feature = "/cost on a parent conversation with two sub-agents on two providers (Kimi Code subscription, DeepSeek pay per use)"
+expected = "/cost lists Kimi Code as covered by the subscription and DeepSeek as pay per use with an estimate; the pay-per-use total counts only DeepSeek. The descendants' attempts are counted once, under this conversation."
+model = "k3"
+provider = "kimi-code"
+rows = 48
+config = """
+suppress_unstable_features_warning = true
+"""
+
+[credentials]
+KIMI_API_KEY = "provider/kimi_api_key"
+DEEPSEEK_API_KEY = "provider/deepseek_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "Use spawn_agent twice: a sub-agent on model deepseek-v4-flash with the message 'Reply with the single word ONE.', and a sub-agent on model k3 with the message 'Reply with the single word TWO.'. Wait for both, then reply with the single word DONE."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*DONE\\W*$"
+timeout = 300
+compress = 4
+[[steps]]
+pause = 1.5
+[[steps]]
+type = "/cost"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "DeepSeek .* Pay per use"
+[[steps]]
+wait = "Pay-per-use total — estimated cost: \\$"
+[[steps]]
+pause = 5

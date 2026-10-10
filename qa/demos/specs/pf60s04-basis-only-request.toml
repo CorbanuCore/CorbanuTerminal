@@ -1,0 +1,64 @@
+# PF-60-S04 gap (ii): a request whose record states only its billing basis (Kimi Code membership work, which the
+# catalogue gives no figure for) has no price. Its technical page now says so in one line instead of showing a
+# "Price source" and price metadata as if a price existed. One real Kimi Code K3 turn; no seeding.
+id = "pf60s04-basis-only-request"
+feature = "/cost technical page of a subscription request with no price: one plain line, no 'Price source'"
+expected = "The request's technical page shows 'Billing basis: subscription' and 'Price: none recorded — this request records only its billing basis (subscription)', with no Price ID, Price source or rate lines."
+model = "k3"
+provider = "kimi-code"
+rows = 46
+config = """
+suppress_unstable_features_warning = true
+"""
+
+[credentials]
+KIMI_API_KEY = "provider/kimi_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "Reply with the single word READY."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*READY\\W*$"
+timeout = 180
+compress = 3
+[[steps]]
+type = "/cost"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Kimi Code K3 — Covered by your subscription"
+[[steps]]
+pause = 3
+# Up from the first line wraps to Close; eight steps up is "Request 1", the turn's own request.
+[[steps]]
+key = "Up"
+repeat = 8
+[[steps]]
+wait = "› → Request 1 · Kimi Code"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Billing: Covered by your subscription"
+[[steps]]
+key = "Up"
+repeat = 4
+[[steps]]
+wait = "› → Technical details"
+[[steps]]
+pause = 1
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Attempt, components and original price"
+[[steps]]
+key = "Down"
+repeat = 37
+[[steps]]
+wait = "› Price: none recorded — this request records only its billing basis \\(subscription\\)"
+[[steps]]
+pause = 5
