@@ -70,6 +70,8 @@ Paths are under `codex-rs/`, at `63ea3d0cbd`.
 - [ ] Add, rename, remove, session-select and set-default actions. Removing the
   current account needs a replacement first, as in PF-54.
 - [ ] Onboarding offers "Add another account" after a provider succeeds.
+- [ ] Moved from S02 (2026-10-10): named ChatGPT/OpenAI sign-ins kept in the vault (no extra
+  `Codex Auth` item or `auth.json`) and AWS profiles per account; both fail closed until then.
 - [ ] Code-blind functional design frozen before test-result disclosure, or non-user-facing N/A reason recorded.
 
 ## Verification

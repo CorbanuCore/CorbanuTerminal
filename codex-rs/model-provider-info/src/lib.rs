@@ -952,6 +952,29 @@ pub struct ModelProviderInfo {
     /// and an unknown route is shown as not declared.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub billing: Option<BillingBasis>,
+    /// PF-84: the named account this provider's credential is resolved from.
+    /// `None` is the `default` account (today's credentials). Set at runtime
+    /// from `[provider_accounts]` or an explicit selection, never from a
+    /// provider definition.
+    #[serde(skip)]
+    #[schemars(skip)]
+    pub account: Option<NamedProviderAccount>,
+}
+
+/// PF-84: a selected named account of one provider. Holds names only, never
+/// credential material.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct NamedProviderAccount {
+    /// The provider id the account belongs to (the `model_providers` key).
+    pub provider_id: String,
+    /// The validated, non-`default` account name.
+    pub name: String,
+}
+
+impl std::fmt::Display for NamedProviderAccount {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.provider_id, self.name)
+    }
 }
 
 /// AWS SigV4 auth configuration for a model provider.
@@ -1154,10 +1177,44 @@ impl ModelProviderInfo {
         })
     }
 
+    /// PF-84: `self` replaces `original` after a model/provider correction. A
+    /// named account moves with it when both routes use the same API key;
+    /// otherwise the correction is refused rather than silently switching the
+    /// session to the other provider's default account.
+    pub fn with_account_from(mut self, original: &ModelProviderInfo) -> Result<Self, String> {
+        if self.account.is_some() {
+            // The target's own `[provider_accounts]` selection wins.
+            return Ok(self);
+        }
+        match &original.account {
+            None => Ok(self),
+            Some(account) if self.env_key.is_some() && self.env_key == original.env_key => {
+                self.account = Some(account.clone());
+                Ok(self)
+            }
+            Some(account) => Err(format!(
+                "account `{name}` of provider `{id}` cannot follow the model to another \
+                 provider; select an account for that provider or pick a model `{id}` serves",
+                name = account.name,
+                id = account.provider_id,
+            )),
+        }
+    }
+
     /// If `env_key` is Some, returns the API key for this provider if present
     /// (and non-empty) in the environment. If `env_key` is required but
     /// cannot be found, returns an error.
     pub fn api_key(&self) -> CodexResult<Option<String>> {
+        // PF-84: a named account never reads the provider's environment key;
+        // reaching here means its own stored key was not found.
+        if let (Some(account), Some(_)) = (&self.account, &self.env_key) {
+            return Err(CodexErr::Fatal(format!(
+                "account `{name}` of provider `{id}` has no stored API key; add it with \
+                 `corbanu account add {id} {name}` or choose another account",
+                name = account.name,
+                id = account.provider_id,
+            )));
+        }
         match &self.env_key {
             Some(env_key) => {
                 let api_key = api_key_from_environment(&self.api_key_env_vars(), |name| {
@@ -1242,6 +1299,7 @@ impl ModelProviderInfo {
         // falling back conservatively to SSE for custom endpoints.
         let supports_websockets = base_url.is_none();
         ModelProviderInfo {
+            account: None,
             name: OPENAI_PROVIDER_NAME.into(),
             base_url,
             env_key: None,
@@ -1289,6 +1347,7 @@ impl ModelProviderInfo {
 
     pub fn create_anthropic_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: ANTHROPIC_PROVIDER_NAME.into(),
             base_url: Some(ANTHROPIC_BASE_URL.into()),
             env_key: Some(ANTHROPIC_API_KEY_ENV_VAR.into()),
@@ -1318,6 +1377,7 @@ impl ModelProviderInfo {
 
     pub fn create_claude_plan_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: CLAUDE_PLAN_PROVIDER_NAME.into(),
             base_url: Some(ANTHROPIC_BASE_URL.into()),
             env_key: None,
@@ -1360,6 +1420,7 @@ impl ModelProviderInfo {
 
     pub fn create_ambient_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: AMBIENT_PROVIDER_NAME.into(),
             base_url: Some(AMBIENT_BASE_URL.into()),
             env_key: Some(AMBIENT_API_KEY_ENV_VAR.into()),
@@ -1389,6 +1450,7 @@ impl ModelProviderInfo {
 
     pub fn create_pfterminal_plan_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: PLAN_NAME.into(),
             base_url: Some(
                 std::env::var(CORBANU_API_BASE_URL_ENV_VAR)
@@ -1433,6 +1495,7 @@ impl ModelProviderInfo {
 
     pub fn create_kimi_code_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: KIMI_CODE_PROVIDER_NAME.into(),
             base_url: Some(KIMI_CODE_BASE_URL.into()),
             env_key: Some(KIMI_CODE_API_KEY_ENV_VAR.into()),
@@ -1462,6 +1525,7 @@ impl ModelProviderInfo {
 
     pub fn create_zai_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: ZAI_PROVIDER_NAME.into(),
             base_url: Some(ZAI_BASE_URL.into()),
             env_key: Some(ZAI_API_KEY_ENV_VAR.into()),
@@ -1491,6 +1555,7 @@ impl ModelProviderInfo {
 
     pub fn create_zai_anthropic_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: ZAI_ANTHROPIC_PROVIDER_NAME.into(),
             base_url: Some(ZAI_ANTHROPIC_BASE_URL.into()),
             env_key: Some(ZAI_API_KEY_ENV_VAR.into()),
@@ -1520,6 +1585,7 @@ impl ModelProviderInfo {
 
     pub fn create_openrouter_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: OPENROUTER_PROVIDER_NAME.into(),
             base_url: Some(OPENROUTER_BASE_URL.into()),
             env_key: Some(OPENROUTER_API_KEY_ENV_VAR.into()),
@@ -1549,6 +1615,7 @@ impl ModelProviderInfo {
 
     pub fn create_deepseek_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: DEEPSEEK_PROVIDER_NAME.into(),
             base_url: Some(DEEPSEEK_BASE_URL.into()),
             env_key: Some(DEEPSEEK_API_KEY_ENV_VAR.into()),
@@ -1578,6 +1645,7 @@ impl ModelProviderInfo {
 
     pub fn create_openrouter_anthropic_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: OPENROUTER_ANTHROPIC_PROVIDER_NAME.into(),
             base_url: Some(OPENROUTER_BASE_URL.into()),
             env_key: Some(OPENROUTER_API_KEY_ENV_VAR.into()),
@@ -1607,6 +1675,7 @@ impl ModelProviderInfo {
 
     pub fn create_meta_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: META_PROVIDER_NAME.into(),
             base_url: Some(META_BASE_URL.into()),
             env_key: Some(META_API_KEY_ENV_VAR.into()),
@@ -1636,6 +1705,7 @@ impl ModelProviderInfo {
 
     pub fn create_baseten_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: BASETEN_PROVIDER_NAME.into(),
             base_url: Some(BASETEN_BASE_URL.into()),
             env_key: Some(BASETEN_API_KEY_ENV_VAR.into()),
@@ -1665,6 +1735,7 @@ impl ModelProviderInfo {
 
     pub fn create_baseten_anthropic_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: BASETEN_ANTHROPIC_PROVIDER_NAME.into(),
             base_url: Some(BASETEN_BASE_URL.into()),
             env_key: Some(BASETEN_API_KEY_ENV_VAR.into()),
@@ -1694,6 +1765,7 @@ impl ModelProviderInfo {
 
     pub fn create_vercel_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: VERCEL_PROVIDER_NAME.into(),
             base_url: Some(VERCEL_BASE_URL.into()),
             env_key: Some(VERCEL_API_KEY_ENV_VAR.into()),
@@ -1723,6 +1795,7 @@ impl ModelProviderInfo {
 
     pub fn create_vercel_anthropic_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: VERCEL_ANTHROPIC_PROVIDER_NAME.into(),
             base_url: Some(VERCEL_BASE_URL.into()),
             env_key: Some(VERCEL_API_KEY_ENV_VAR.into()),
@@ -1752,6 +1825,7 @@ impl ModelProviderInfo {
 
     pub fn create_vercel_anthropic_fast_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: VERCEL_ANTHROPIC_FAST_PROVIDER_NAME.into(),
             base_url: Some(VERCEL_BASE_URL.into()),
             env_key: Some(VERCEL_API_KEY_ENV_VAR.into()),
@@ -1783,6 +1857,7 @@ impl ModelProviderInfo {
         aws: Option<ModelProviderAwsAuthInfo>,
     ) -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: AMAZON_BEDROCK_PROVIDER_NAME.into(),
             // The runtime provider derives the regional Mantle endpoint when
             // this is unset. A configured value is therefore unambiguously an
@@ -2132,6 +2207,7 @@ pub fn create_oss_provider(default_provider_port: u16, wire_api: WireApi) -> Mod
 
 pub fn create_oss_provider_with_base_url(base_url: &str, wire_api: WireApi) -> ModelProviderInfo {
     ModelProviderInfo {
+        account: None,
         name: OSS_PROVIDER_NAME.into(),
         base_url: Some(base_url.into()),
         env_key: None,

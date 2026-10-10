@@ -27,12 +27,15 @@ pub enum ExternalBearerCachePolicy {
 }
 
 impl BearerTokenRefresher {
+    /// `account` (PF-84) is the named account the command must serve; it is
+    /// passed as `CORBANU_PROVIDER_ACCOUNT` and never inherited otherwise.
     pub(crate) fn new(
         config: ModelProviderAuthInfo,
         cache_policy: ExternalBearerCachePolicy,
+        account: Option<ExternalBearerAccount>,
     ) -> Self {
         Self {
-            state: Arc::new(ExternalBearerAuthState::new(config, cache_policy)),
+            state: Arc::new(ExternalBearerAuthState::new(config, cache_policy, account)),
         }
     }
 
@@ -115,16 +118,57 @@ impl fmt::Debug for BearerTokenRefresher {
     }
 }
 
+/// PF-84: the named account an `auth.command` provider serves.
+#[derive(Clone, Debug)]
+pub struct ExternalBearerAccount {
+    pub provider_id: String,
+    pub name: String,
+    /// The home whose registry must hold a `command` entry for this account
+    /// before the command runs. `None` when the command checks the account
+    /// itself (Claude Plan's helper).
+    pub registry_home: Option<PathBuf>,
+}
+
+impl ExternalBearerAccount {
+    fn ensure_enrolled(&self) -> io::Result<()> {
+        let Some(home) = self.registry_home.as_deref() else {
+            return Ok(());
+        };
+        let enrolled = super::provider_key_vault::provider_account_holds(
+            home,
+            &self.provider_id,
+            &self.name,
+            codex_vault::ProviderAccountKind::Command,
+        )?;
+        if enrolled {
+            Ok(())
+        } else {
+            Err(io::Error::other(format!(
+                "account `{name}` of provider `{id}` is not configured; add it with \
+                 `corbanu account add {id} {name} --kind command` or choose another account",
+                name = self.name,
+                id = self.provider_id,
+            )))
+        }
+    }
+}
+
 struct ExternalBearerAuthState {
     config: ModelProviderAuthInfo,
+    account: Option<ExternalBearerAccount>,
     cache_policy: ExternalBearerCachePolicy,
     cached_token: Mutex<Option<CachedExternalBearerToken>>,
 }
 
 impl ExternalBearerAuthState {
-    fn new(config: ModelProviderAuthInfo, cache_policy: ExternalBearerCachePolicy) -> Self {
+    fn new(
+        config: ModelProviderAuthInfo,
+        cache_policy: ExternalBearerCachePolicy,
+        account: Option<ExternalBearerAccount>,
+    ) -> Self {
         Self {
             config,
+            account,
             cache_policy,
             cached_token: Mutex::new(None),
         }
@@ -147,7 +191,15 @@ impl ExternalBearerAuthState {
         mut revision_before: Option<Vec<u8>>,
     ) -> io::Result<(String, Option<Vec<u8>>)> {
         for _ in 0..3 {
-            let access_token = run_provider_auth_command(&self.config, force_refresh).await?;
+            if let Some(account) = &self.account {
+                account.ensure_enrolled()?;
+            }
+            let access_token = run_provider_auth_command(
+                &self.config,
+                force_refresh,
+                self.account.as_ref().map(|account| account.name.as_str()),
+            )
+            .await?;
             let revision_after = self.cache_revision();
             if !matches!(
                 &self.cache_policy,
@@ -170,9 +222,13 @@ struct CachedExternalBearerToken {
     revision: Option<Vec<u8>>,
 }
 
+/// PF-84: names the account a provider auth command must serve.
+pub const PROVIDER_ACCOUNT_ENV_VAR: &str = "CORBANU_PROVIDER_ACCOUNT";
+
 async fn run_provider_auth_command(
     config: &ModelProviderAuthInfo,
     force_refresh: bool,
+    account: Option<&str>,
 ) -> io::Result<String> {
     let program = resolve_provider_auth_program(&config.command, &config.cwd)?;
     let mut command = Command::new(&program);
@@ -183,6 +239,10 @@ async fn run_provider_auth_command(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    match account {
+        Some(account) => command.env(PROVIDER_ACCOUNT_ENV_VAR, account),
+        None => command.env_remove(PROVIDER_ACCOUNT_ENV_VAR),
+    };
     if force_refresh {
         command.env("PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH", "1");
     } else {
@@ -239,7 +299,15 @@ async fn run_provider_auth_command(
 /// Verifies that a provider's external bearer-token command can currently
 /// produce a usable token without exposing that token to the caller.
 pub async fn validate_provider_auth_command(config: &ModelProviderAuthInfo) -> io::Result<()> {
-    run_provider_auth_command(config, /*force_refresh*/ false)
+    validate_provider_auth_command_for_account(config, /*account*/ None).await
+}
+
+/// PF-84: [`validate_provider_auth_command`] for a named account.
+pub async fn validate_provider_auth_command_for_account(
+    config: &ModelProviderAuthInfo,
+    account: Option<&str>,
+) -> io::Result<()> {
+    run_provider_auth_command(config, /*force_refresh*/ false, account)
         .await
         .map(drop)
 }

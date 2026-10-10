@@ -23,6 +23,7 @@ use super::isolated::protocol::BROKER_STORE_HOME_ENV;
 use super::isolated::protocol::FRAME_HEADER;
 pub use super::isolated::protocol::ModelAuthHeader;
 use super::isolated::protocol::ModelBindingWire;
+pub use super::isolated::protocol::StoredKeyAccount;
 use codex_secret_broker::CredentialReference;
 use codex_secret_broker::ProviderRequestOperation;
 use std::fmt;
@@ -218,14 +219,17 @@ impl ModelCredentialBroker {
         binding: ModelCredentialBinding,
         provider_key_id: &str,
         env_names: &[String],
+        account: Option<&StoredKeyAccount>,
     ) -> Result<Option<ModelCredential>, ModelCredentialBrokerError> {
         if !self.client.is_alive() {
             return Err(ModelCredentialBrokerError::Unavailable);
         }
-        match self
-            .client
-            .register_model_stored(binding.wire(), provider_key_id, env_names)?
-        {
+        match self.client.register_model_stored(
+            binding.wire(),
+            provider_key_id,
+            env_names,
+            account,
+        )? {
             StoredRegistration::Registered(reference) => Ok(Some(ModelCredential {
                 client: self.client.clone(),
                 reference,

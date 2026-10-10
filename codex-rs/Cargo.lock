@@ -2495,6 +2495,7 @@ dependencies = [
  "codex-rollout",
  "codex-rollout-trace",
  "codex-sandboxing",
+ "codex-security-policy",
  "codex-state",
  "codex-stdio-to-uds",
  "codex-tasknode-session",

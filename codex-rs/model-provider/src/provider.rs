@@ -9,7 +9,7 @@ use codex_api::Provider;
 use codex_api::SharedAuthProvider;
 use codex_login::AuthManager;
 use codex_login::CodexAuth;
-use codex_login::validate_provider_auth_command;
+use codex_login::validate_provider_auth_command_for_account;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::ANTHROPIC_DEFAULT_MODEL;
 use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
@@ -334,14 +334,62 @@ pub fn create_model_provider(
 struct ConfiguredModelProvider {
     info: ModelProviderInfo,
     auth_manager: Option<Arc<AuthManager>>,
+    /// PF-84: the Corbanu home holding the named-account registry (the
+    /// command-auth manager has no home of its own).
+    account_home: Option<PathBuf>,
+    /// PF-84: why the selected command account cannot be used.
+    account_error: Option<String>,
+}
+
+/// PF-84: a named account of an `auth.command` provider must be enrolled
+/// (checked from vault metadata). Claude Plan's helper checks its own accounts.
+fn command_account_error(
+    provider_info: &ModelProviderInfo,
+    account_home: Option<&std::path::Path>,
+) -> Option<String> {
+    let account = provider_info.account.as_ref()?;
+    if provider_info.auth.is_none() || provider_info.is_claude_plan() {
+        return None;
+    }
+    let configured = match account_home {
+        Some(home) => codex_login::provider_account_holds(
+            home,
+            &account.provider_id,
+            &account.name,
+            codex_login::ProviderAccountKind::Command,
+        ),
+        None => Ok(false),
+    };
+    match configured {
+        Ok(true) => None,
+        Ok(false) => Some(format!(
+            "account `{name}` of provider `{id}` is not configured; add it with \
+             `corbanu account add {id} {name} --kind command` or choose another account",
+            name = account.name,
+            id = account.provider_id,
+        )),
+        Err(error) => Some(format!(
+            "account `{}` of provider `{}` is unavailable: {error}",
+            account.name, account.provider_id
+        )),
+    }
 }
 
 impl ConfiguredModelProvider {
     fn new(provider_info: ModelProviderInfo, auth_manager: Option<Arc<AuthManager>>) -> Self {
+        let account_home = auth_manager
+            .as_ref()
+            .map(|auth_manager| auth_manager.codex_home().to_path_buf());
+        let account_error = command_account_error(&provider_info, account_home.as_deref());
+        // PF-84: the account-bound manager itself refuses an unenrolled
+        // account before running the command; `account_error` only gives
+        // requests the precise message early.
         let auth_manager = auth_manager_for_provider(auth_manager, &provider_info);
         Self {
             info: provider_info,
             auth_manager,
+            account_home,
+            account_error,
         }
     }
 
@@ -351,6 +399,21 @@ impl ConfiguredModelProvider {
             return Some(CodexAuth::from_api_key(
                 crate::model_key_broker::BROKERED_KEY_PLACEHOLDER,
             ));
+        }
+        // PF-84: a named account reads only its own stored key.
+        if let Some(account) = self.info.account.as_ref() {
+            return self
+                .auth_manager
+                .as_ref()
+                .and_then(|auth_manager| {
+                    auth_manager
+                        .provider_account_api_key(&account.provider_id, &account.name)
+                        .unwrap_or_else(|error| {
+                            tracing::warn!(%error, "named account key unavailable");
+                            None
+                        })
+                })
+                .map(|api_key| CodexAuth::from_api_key(&api_key));
         }
         if let Ok(api_key) = std::env::var(provider_key_id)
             && !api_key.trim().is_empty()
@@ -446,6 +509,9 @@ impl ModelProvider for ConfiguredModelProvider {
         &self,
     ) -> ModelProviderFuture<'_, codex_protocol::error::Result<SharedAuthProvider>> {
         Box::pin(async move {
+            if let Some(message) = &self.account_error {
+                return Err(CodexErr::Fatal(message.clone()));
+            }
             let mut auth = self.auth().await;
             if auth.is_none()
                 && let Some(command_auth) = self.info.auth.as_ref()
@@ -455,7 +521,14 @@ impl ModelProvider for ConfiguredModelProvider {
                 // command through its validating path so the actionable helper error reaches
                 // the user. A transient first failure may recover here, in which case resolve
                 // once more and use the recovered credential.
-                validate_provider_auth_command(command_auth).await?;
+                validate_provider_auth_command_for_account(
+                    command_auth,
+                    self.info
+                        .account
+                        .as_ref()
+                        .map(|account| account.name.as_str()),
+                )
+                .await?;
                 auth = self.auth().await;
                 if auth.is_none() {
                     return Err(std::io::Error::other(format!(
@@ -476,6 +549,24 @@ impl ModelProvider for ConfiguredModelProvider {
             // PF-27-S05: Core does not read the key to check for it; a missing
             // key is reported when a request is made.
             Some(ProviderAccount::ApiKey)
+        } else if let (Some(account), Some(_)) = (self.info.account.as_ref(), &self.info.env_key) {
+            // PF-84: only the named account's own key counts.
+            self.account_home
+                .as_deref()
+                .and_then(|home| {
+                    codex_login::provider_account_holds(
+                        home,
+                        &account.provider_id,
+                        &account.name,
+                        codex_login::ProviderAccountKind::ApiKey,
+                    )
+                    .inspect_err(
+                        |error| tracing::warn!(%error, "named account registry unavailable"),
+                    )
+                    .ok()
+                })
+                .filter(|holds| *holds)
+                .map(|_| ProviderAccount::ApiKey)
         } else if let Some(provider_key_id) = self.info.env_key.as_deref() {
             let stored_key = self
                 .auth_manager
@@ -672,6 +763,7 @@ mod tests {
 
     fn provider_for(base_url: String) -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: "mock".into(),
             base_url: Some(base_url),
             env_key: None,

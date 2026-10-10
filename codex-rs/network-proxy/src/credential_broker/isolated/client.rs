@@ -16,6 +16,7 @@ use super::protocol::HostBindingWire;
 use super::protocol::MAX_CONTROL_LINE_BYTES;
 use super::protocol::ModelBindingWire;
 use super::protocol::ProviderId;
+use super::protocol::StoredKeyAccount;
 use super::protocol::encode_hex;
 use super::protocol::valid_id;
 use crate::connect_policy::PinnedPeers;
@@ -463,11 +464,13 @@ impl IsolatedBrokerClient {
         binding: ModelBindingWire,
         provider_key_id: &str,
         env_names: &[String],
+        account: Option<&StoredKeyAccount>,
     ) -> Result<StoredRegistration, IsolatedBrokerError> {
         let response = self.call(&ControlRequest::RegisterModelStored {
             binding,
             provider_key_id: provider_key_id.to_string(),
             env_names: env_names.to_vec(),
+            account: account.cloned(),
         })?;
         match response {
             ControlResponse::Error {

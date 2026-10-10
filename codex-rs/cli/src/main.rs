@@ -44,6 +44,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use supports_color::Stream;
 
+mod account_cmd;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod app_cmd;
 mod claude_oauth;
@@ -144,9 +145,18 @@ enum Subcommand {
     /// Internal vault helpers for Corbanu Terminal integrations.
     Vault(VaultCommand),
 
+    /// Manage named accounts per provider (`named_accounts` feature).
+    Account(account_cmd::AccountCommand),
+
     /// Internal: print the active Claude Code OAuth token for the Corbanu Terminal-native Claude Plan provider.
     #[clap(hide = true, name = "internal-claude-oauth-token")]
-    InternalClaudeOauthToken,
+    InternalClaudeOauthToken {
+        /// PF-84: a named Claude account instead of the home's selection.
+        /// Defaults to `CORBANU_PROVIDER_ACCOUNT`, which Corbanu sets for its
+        /// provider auth commands.
+        #[arg(long)]
+        account: Option<String>,
+    },
 
     /// Internal: verify the platform-owned Claude Code login without printing credential data.
     #[clap(hide = true, name = "internal-claude-login-health")]
@@ -1600,8 +1610,20 @@ async fn cli_main(
             );
             run_vault_command(vault_cli).await?;
         }
-        Some(Subcommand::InternalClaudeOauthToken) => {
-            run_internal_claude_oauth_token().await?;
+        Some(Subcommand::Account(mut account_cli)) => {
+            reject_remote_mode_for_subcommand(
+                root_remote.as_deref(),
+                root_remote_auth_token_env.as_deref(),
+                "account",
+            )?;
+            prepend_config_flags(
+                &mut account_cli.config_overrides,
+                root_config_overrides.clone(),
+            );
+            account_cmd::run_account_command(account_cli).await?;
+        }
+        Some(Subcommand::InternalClaudeOauthToken { account }) => {
+            run_internal_claude_oauth_token(account).await?;
         }
         Some(Subcommand::InternalClaudeLoginHealth { source_id }) => {
             let source_id =
@@ -2398,9 +2420,22 @@ async fn run_vault_command(command: VaultCommand) -> anyhow::Result<()> {
     }
 }
 
-async fn run_internal_claude_oauth_token() -> anyhow::Result<()> {
+async fn run_internal_claude_oauth_token(account: Option<String>) -> anyhow::Result<()> {
     let codex_home = find_codex_home()?;
-    let access_token = claude_oauth::resolve_claude_oauth_access_token(&codex_home).await?;
+    let account = account.or_else(|| {
+        std::env::var(codex_login::PROVIDER_ACCOUNT_ENV_VAR)
+            .ok()
+            .filter(|value| !value.is_empty())
+    });
+    let named = account
+        .as_deref()
+        .map(codex_vault::parse_provider_account_selection)
+        .transpose()?
+        .flatten();
+    let access_token = match named {
+        Some(name) => claude_oauth::resolve_claude_account_access_token(&codex_home, &name).await?,
+        None => claude_oauth::resolve_claude_oauth_access_token(&codex_home).await?,
+    };
     std::io::stdout().write_all(access_token.as_bytes())?;
     Ok(())
 }
@@ -2693,7 +2728,7 @@ fn unsupported_subcommand_name_for_strict_config(
         | Some(Subcommand::Fork(_))
         | Some(Subcommand::Telegram(_))
         | Some(Subcommand::Doctor(_))
-        | Some(Subcommand::InternalClaudeOauthToken)
+        | Some(Subcommand::InternalClaudeOauthToken { .. })
         | Some(Subcommand::InternalClaudeLoginHealth { .. })
         | Some(Subcommand::InternalGpuEndpointToken { .. })
         | Some(Subcommand::InternalGpuController(_)) => None,
@@ -2709,6 +2744,7 @@ fn unsupported_subcommand_name_for_strict_config(
         Some(Subcommand::Login(_)) => Some("login"),
         Some(Subcommand::Logout(_)) => Some("logout"),
         Some(Subcommand::Vault(_)) => Some("vault"),
+        Some(Subcommand::Account(_)) => Some("account"),
         Some(Subcommand::Tasknode(_)) => Some("tasknode"),
         Some(Subcommand::ClaudePaneSmoke(_)) => Some("claude-pane-smoke"),
         Some(Subcommand::ClaudePaneWorkflowSuite(_)) => Some("claude-pane-workflow-suite"),

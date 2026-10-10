@@ -307,7 +307,16 @@ const ILLEGAL_ENV_VAR_PREFIX: &str = "CODEX_";
 fn broker_stored_provider_key(
     codex_home: &Path,
     provider_key_id: &str,
+    account: Option<&codex_network_proxy::StoredKeyAccount>,
 ) -> std::io::Result<Option<String>> {
+    // PF-84: a named account reads only its own key.
+    if let Some(account) = account {
+        return codex_login::provider_account_api_key(
+            codex_home,
+            &account.provider_id,
+            &account.name,
+        );
+    }
     codex_login::provider_api_key_from_auth_storage(
         codex_home,
         provider_key_id,

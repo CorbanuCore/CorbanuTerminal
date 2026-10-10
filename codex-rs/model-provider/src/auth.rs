@@ -209,10 +209,27 @@ pub(crate) fn auth_manager_for_provider(
 ) -> Option<Arc<AuthManager>> {
     let cache_policy = external_bearer_cache_policy(auth_manager.as_deref(), provider);
     match provider.auth.clone() {
-        Some(config) => Some(AuthManager::external_bearer_only_with_cache_policy(
-            config,
-            cache_policy,
-        )),
+        Some(config) => {
+            let account = provider.account.as_ref().map(|account| {
+                codex_login::auth::ExternalBearerAccount {
+                    provider_id: account.provider_id.clone(),
+                    name: account.name.clone(),
+                    // Claude Plan's helper checks its own accounts.
+                    registry_home: (!provider.is_claude_plan())
+                        .then(|| {
+                            auth_manager
+                                .as_deref()
+                                .map(|m| m.codex_home().to_path_buf())
+                        })
+                        .flatten(),
+                }
+            });
+            Some(AuthManager::external_bearer_only_for_account(
+                config,
+                cache_policy,
+                account,
+            ))
+        }
         None => auth_manager,
     }
 }
@@ -370,16 +387,22 @@ fn brokered_auth_request(
         // sign-in login used for this provider is brokered below with the
         // provider's header, as direct auth would send it.
         if matches!(auth, None | Some(CodexAuth::ApiKey(_))) {
-            let env_vars = provider
-                .api_key_env_vars()
-                .into_iter()
-                .map(str::to_string)
-                .collect();
+            // PF-84: a named account's key comes only from that account.
+            let env_vars = if provider.account.is_some() {
+                Vec::new()
+            } else {
+                provider
+                    .api_key_env_vars()
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect()
+            };
             return request(
                 header,
                 BrokeredKeySource::ProviderKey {
                     provider_key_id,
                     env_vars,
+                    account: provider.account.clone(),
                 },
                 HeaderMap::new(),
             );
@@ -846,6 +869,31 @@ mod tests {
     use crate::model_key_broker::test_support::with_recording_broker;
 
     #[test]
+    fn pf_84_named_account_key_is_brokered_without_env_keys() {
+        with_recording_broker(|broker| {
+            let mut zai = ModelProviderInfo::create_zai_provider();
+            zai.account = Some(codex_model_provider_info::NamedProviderAccount {
+                provider_id: "zai".to_string(),
+                name: "work".to_string(),
+            });
+            resolve_provider_auth(/*auth*/ None, &zai).expect("brokered auth");
+            let uses = broker.uses.lock().expect("uses");
+            assert_eq!(uses.len(), 1);
+            let crate::model_key_broker::BrokeredKeySource::ProviderKey {
+                provider_key_id,
+                env_vars,
+                account,
+            } = &uses[0].source
+            else {
+                panic!("expected a named provider key: {:?}", uses[0]);
+            };
+            assert_eq!(provider_key_id, zai.env_key.as_deref().expect("env key"));
+            assert!(env_vars.is_empty(), "a named account never takes env keys");
+            assert_eq!(account, &zai.account);
+        });
+    }
+
+    #[test]
     fn pf_27_s05_brokered_provider_keys_are_named_not_read() {
         with_recording_broker(|broker| {
             let zai = ModelProviderInfo::create_zai_provider();
@@ -867,6 +915,7 @@ mod tests {
                 let crate::model_key_broker::BrokeredKeySource::ProviderKey {
                     provider_key_id,
                     env_vars,
+                    account: None,
                 } = &request.source
                 else {
                     panic!("expected a named provider key: {request:?}");

@@ -42,6 +42,9 @@ pub enum BrokeredKeySource {
     ProviderKey {
         provider_key_id: String,
         env_vars: Vec<String>,
+        /// PF-84: read this named account's key instead; `env_vars` is then
+        /// empty because a named account never takes an environment key.
+        account: Option<codex_model_provider_info::NamedProviderAccount>,
     },
     /// A value Core already holds. `slot` names what a refreshed value of the
     /// same credential replaces (a ChatGPT access token); `None` for keys.
@@ -55,10 +58,13 @@ impl std::fmt::Debug for BrokeredKeySource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::ProviderKey {
-                provider_key_id, ..
+                provider_key_id,
+                account,
+                ..
             } => f
                 .debug_struct("ProviderKey")
                 .field("provider_key_id", provider_key_id)
+                .field("account", account)
                 .finish_non_exhaustive(),
             Self::Value { key, slot } => f
                 .debug_struct("Value")

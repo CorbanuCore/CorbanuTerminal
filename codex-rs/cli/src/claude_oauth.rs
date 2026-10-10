@@ -171,6 +171,44 @@ const CURRENT_PLATFORM_STORE: PlatformCredentialStore = PlatformCredentialStore:
 #[cfg(not(target_os = "macos"))]
 const CURRENT_PLATFORM_STORE: PlatformCredentialStore = PlatformCredentialStore::CredentialsFile;
 
+/// PF-84: the token of one named Claude account: its stored subscription
+/// token, else the Claude Code login in the account's own config directory.
+/// Never the home's selection, `CLAUDE_CODE_OAUTH_TOKEN` or another account.
+pub(crate) async fn resolve_claude_account_access_token(
+    codex_home: &Path,
+    name: &codex_vault::ProviderAccountName,
+) -> Result<Zeroizing<String>> {
+    const CLAUDE_PLAN_PROVIDER_ID: &str = "claude-plan";
+    let vault = Vault::new(codex_home.to_path_buf());
+    if let Some(token) = vault
+        .read_provider_account(
+            CLAUDE_PLAN_PROVIDER_ID,
+            name,
+            codex_vault::ProviderAccountKind::ClaudeOauthToken,
+        )
+        .context("failed to read the Claude account")?
+    {
+        return Ok(token);
+    }
+    if let Some(config_dir) = vault
+        .read_provider_account(
+            CLAUDE_PLAN_PROVIDER_ID,
+            name,
+            codex_vault::ProviderAccountKind::ClaudeConfigDir,
+        )
+        .context("failed to read the Claude account")?
+    {
+        let config_dir =
+            claude_config_dir_for_profile(Path::new(""), Some(PathBuf::from(config_dir.as_str())))?;
+        let store = preferred_platform_store(&config_dir, /*security*/ None).await?;
+        return resolve_claude_code_login_access_token(&config_dir, store).await;
+    }
+    Err(anyhow!(
+        "Claude account `{name}` is not configured; add it with \
+         `corbanu account add claude-plan {name} --kind claude-token` or choose another account"
+    ))
+}
+
 pub(crate) async fn resolve_claude_oauth_access_token(
     codex_home: &Path,
 ) -> Result<Zeroizing<String>> {

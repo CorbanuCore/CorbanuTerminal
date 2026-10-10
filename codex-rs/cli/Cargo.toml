@@ -63,6 +63,7 @@ codex-api = { workspace = true }
 codex-chatgpt = { workspace = true }
 codex-cloud-config = { workspace = true }
 codex-cloud-tasks = { path = "../cloud-tasks" }
+codex-security-policy = { workspace = true }
 codex-utils-cli = { workspace = true }
 dirs = { workspace = true }
 codex-config = { workspace = true }

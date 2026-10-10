@@ -99,6 +99,7 @@ fn brokered_request(base_url: &str, source: BrokeredKeySource) -> BrokeredAuthRe
 
 fn provider_key() -> BrokeredKeySource {
     BrokeredKeySource::ProviderKey {
+        account: None,
         provider_key_id: "ZAI_API_KEY".to_string(),
         env_vars: vec!["ZAI_API_KEY".to_string()],
     }
