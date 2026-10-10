@@ -277,6 +277,9 @@ async fn sec_390_control_pipe_drops_a_foreign_client_and_serves_the_controller()
     // one more connection from this process ends it.
     let _unblock = Unblock(control.clone());
     let accept = tokio::spawn(listener.accept(own_pid));
+    // Let the broker's first wait drop the closed client before the child
+    // opens the one instance.
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
     let report = tokio::task::spawn_blocking({
         let control = control.clone();
         move || run_same_user_child("connect", &control)
@@ -311,10 +314,19 @@ struct Unblock(String);
 
 impl Drop for Unblock {
     fn drop(&mut self) {
-        let _ = std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(&self.0);
+        // Retried: the one instance may be busy with a client being dropped.
+        for _ in 0..40 {
+            let opened = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&self.0);
+            match opened {
+                Err(error) if error.raw_os_error() == Some(super::ERROR_PIPE_BUSY) => {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+                _ => return,
+            }
+        }
     }
 }
 
