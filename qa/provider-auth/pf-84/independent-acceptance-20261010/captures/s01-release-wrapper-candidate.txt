@@ -1,0 +1,31 @@
+== [corbanu -> candidate binary] V1 no caller home
+   caller env: 
+   home used: inst/home; warnings: 0
+== [corbanu -> candidate binary] V2 caller CORBANU_HOME=homeB
+   caller env: CORBANU_HOME=$S/s01/hB
+   home used: s01/hB; warnings: 0
+== [corbanu -> candidate binary] V3 caller CODEX_HOME=homeB
+   caller env: CODEX_HOME=$S/s01/hB
+   home used: s01/hB; warnings: 0
+== [corbanu-debug -> candidate binary] V1 no caller home
+   caller env: 
+   home used: inst/home-debug; warnings: 0
+== [corbanu-debug -> candidate binary] V2 caller CORBANU_HOME=homeB
+   caller env: CORBANU_HOME=$S/s01/hB
+   home used: inst/home-debug; warnings: 0
+== [corbanu-debug -> candidate binary] V3 caller CODEX_HOME=homeB
+   caller env: CODEX_HOME=$S/s01/hB
+   home used: s01/hB; warnings: 0
+== [corbanu -> candidate binary] V4 caller CORBANU_HOME=homeA CODEX_HOME=homeB
+   caller env: CORBANU_HOME=$S/s01/hA CODEX_HOME=$S/s01/hB
+   home used: s01/hA; warnings: 1
+   | warning: CORBANU_HOME ($S/s01/hA) overrides CODEX_HOME ($S/s01/hB); using $S/s01/hA. To use another home, set CORBANU_HOME to it.
+== [corbanu-debug -> candidate binary] V4 caller CORBANU_HOME=homeA CODEX_HOME=homeB
+   caller env: CORBANU_HOME=$S/s01/hA CODEX_HOME=$S/s01/hB
+   home used: s01/hB; warnings: 0
+== [corbanu-debug -> candidate binary] V5 caller CORBANU_DEBUG_HOME=homeD
+   caller env: CORBANU_DEBUG_HOME=$S/s01/hD
+   home used: s01/hD; warnings: 0
+== [corbanu-debug -> candidate binary] V6 caller CORBANU_DEBUG_HOME=homeD + CORBANU_HOME=homeB
+   caller env: CORBANU_DEBUG_HOME=$S/s01/hD CORBANU_HOME=$S/s01/hB
+   home used: s01/hD; warnings: 0

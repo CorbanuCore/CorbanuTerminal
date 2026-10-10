@@ -1,0 +1,13 @@
+model = "mock-model"
+model_provider = "mockp"
+
+[features]
+named_accounts = true
+
+[model_providers.mockp]
+name = "Mock canary provider"
+base_url = "http://127.0.0.1:18484/v1"
+env_key = "MOCK_API_KEY"
+wire_api = "responses"
+request_max_retries = 0
+stream_max_retries = 0

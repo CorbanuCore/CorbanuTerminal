@@ -1,0 +1,29 @@
+secrets checked: 13 (4 real keys, rest synthetic canaries); files scanned: 34018
+  real:ZAI: CLEAN
+  real:KIMI: CLEAN
+  real:OPENAI: FOUND in 2 file(s): $S/s02/hO/auth.json, $S/launcher/coordhome/auth.json
+  real:CLAUDE: CLEAN
+  canary:acct-a: CLEAN
+  canary:acct-b: CLEAN
+  canary:env: CLEAN
+  canary:default: CLEAN
+  canary:cmd:default: CLEAN
+  canary:cmd:work: CLEAN
+  canary:cmd:ghost: CLEAN
+  canary:claude-fake-token: CLEAN
+  canary:cfgdir-token: FOUND in 2 file(s): $S/leakscan.py, $S/s02/internal-token.sh
+--- repo evidence directory (qa/provider-auth/pf-84/independent-acceptance-20261010):
+secrets checked: 13 (4 real keys, rest synthetic canaries); files scanned: 55
+  real:ZAI: CLEAN
+  real:KIMI: CLEAN
+  real:OPENAI: CLEAN
+  real:CLAUDE: CLEAN
+  canary:acct-a: CLEAN
+  canary:acct-b: CLEAN
+  canary:env: CLEAN
+  canary:default: CLEAN
+  canary:cmd:default: CLEAN
+  canary:cmd:work: CLEAN
+  canary:cmd:ghost: CLEAN
+  canary:claude-fake-token: CLEAN
+  canary:cfgdir-token: FOUND in 2 file(s): /Volumes/CorbanuDrive/Corbanu/worktrees/pf84-indep-accept-20261010/qa/provider-auth/pf-84/independent-acceptance-20261010/scripts/leakscan.py, /Volumes/CorbanuDrive/Corbanu/worktrees/pf84-indep-accept-20261010/qa/provider-auth/pf-84/independent-acceptance-20261010/scripts/s02/internal-token.sh

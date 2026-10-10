@@ -1,0 +1,22 @@
+coordinator home (activate.sh stand-in) = $S/launcher/coordhome holds a REAL OpenAI API key; homeB = $S/s01/hB holds a FAKE OpenAI key
+== R1 launcher, no caller home -> coordinator home (real key) (exit 0)
+   caller env: 
+   | pong
+== R2 launcher, caller CORBANU_HOME=homeB -> must use homeB (401) (exit 1)
+   caller env: CORBANU_HOME=$S/s01/hB
+   | 2026-10-10T10:58:23.014722Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses
+   | 2026-10-10T10:58:23.523769Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses
+   | ERROR: unexpected status 401 Unauthorized: Incorrect API key provided: sk-proj-*****************************************6bb0. You can find your API key at https://platform.openai.com/account/api-keys., url: wss://api.openai.com/v1/responses, cf-ray: a4851c10996b0dc1-DFW, request id: req_08fe14cf1d6e46879acc863a85ec996d, auth error: 401, auth error code: invalid_api_key
+== R3 launcher, caller CODEX_HOME=homeB only -> must use homeB (401) (exit 1)
+   caller env: CODEX_HOME=$S/s01/hB
+   | 2026-10-10T10:58:24.294067Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses
+   | 2026-10-10T10:58:24.977305Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses
+   | ERROR: unexpected status 401 Unauthorized: Incorrect API key provided: sk-proj-*****************************************6bb0. You can find your API key at https://platform.openai.com/account/api-keys., url: wss://api.openai.com/v1/responses, cf-ray: a4851c19ab571e3c-DFW, request id: req_bb6327ba36294dd088e1d6585306f025, auth error: 401, auth error code: invalid_api_key
+== R4 launcher, tool-shell shape: CODEX_HOME=coordhome + CORBANU_HOME=homeB -> homeB (401) + one warning (exit 1)
+   caller env: CODEX_HOME=$S/launcher/coordhome CORBANU_HOME=$S/s01/hB
+   | 2026-10-10T10:58:25.770180Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses
+   | 2026-10-10T10:58:26.280705Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses
+   | ERROR: unexpected status 401 Unauthorized: Incorrect API key provided: sk-proj-*****************************************6bb0. You can find your API key at https://platform.openai.com/account/api-keys., url: wss://api.openai.com/v1/responses, cf-ray: a4851c21bb99f0a2-DFW, request id: req_85b53516c77844fabfa8efceb759d3ef, auth error: 401, auth error code: invalid_api_key
+   | warning: CORBANU_HOME ($S/s01/hB) overrides CODEX_HOME ($S/launcher/coordhome); using $S/s01/hB. To use another home, set CORBANU_HOME to it.
+home-conflict warning lines in full exec run (R4 shape): 1
+homeB fake OpenAI key suffix (synthetic key): 6bb0

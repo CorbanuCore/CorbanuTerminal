@@ -1,0 +1,32 @@
+== Q1 default account (exit 1)
+   args: 
+   | 2026-10-10T10:51:05.249495Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized: mock: invalid api key, url: http://127.0.0.1:18484/v1/models?client_version=REDACTED
+   | 2026-10-10T10:51:05.252753Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized: mock: invalid api key, url: http://127.0.0.1:18484/v1/models?client_version=REDACTED
+   | ERROR: unexpected status 401 Unauthorized: mock: invalid api key, url: http://127.0.0.1:18484/v1/responses
+   | warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s02/hQ/config.toml.
+   auth.command invocations: 3 ->    3 account=<unset>;
+   mock saw 4 request(s), bearers: ['cmd:default']
+== Q2 enrolled named account work (exit 1)
+   args: -c provider_accounts.cmdp="work"
+   | 2026-10-10T10:51:05.791295Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized: mock: invalid api key, url: http://127.0.0.1:18484/v1/models?client_version=REDACTED
+   | 2026-10-10T10:51:05.800218Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized: mock: invalid api key, url: http://127.0.0.1:18484/v1/models?client_version=REDACTED
+   | ERROR: unexpected status 401 Unauthorized: mock: invalid api key, url: http://127.0.0.1:18484/v1/responses
+   | warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s02/hQ/config.toml.
+   auth.command invocations: 3 ->    3 account=work;
+   mock saw 4 request(s), bearers: ['cmd:work']
+== Q3 unenrolled account ghost (exit 1)
+   args: -c provider_accounts.cmdp="ghost"
+   | 2026-10-10T10:51:06.714114Z ERROR codex_login::auth::manager: Failed to resolve external auth: account `ghost` of provider `cmdp` is not configured; add it with `corbanu account add cmdp ghost --kind command` or choose another account
+   | 2026-10-10T10:51:06.724012Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized: mock: invalid api key, url: http://127.0.0.1:18484/v1/models?client_version=REDACTED
+   | 2026-10-10T10:51:06.844119Z ERROR codex_login::auth::manager: Failed to resolve external auth: account `ghost` of provider `cmdp` is not configured; add it with `corbanu account add cmdp ghost --kind command` or choose another account
+   | 2026-10-10T10:51:06.846151Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized: mock: invalid api key, url: http://127.0.0.1:18484/v1/models?client_version=REDACTED
+   auth.command invocations: 0 -> 
+   mock saw 2 request(s), bearers: ['NONE']
+== Q4 flag off + selector work (exit 1)
+   args: --disable named_accounts -c provider_accounts.cmdp="work"
+   | 2026-10-10T10:51:07.646592Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized: mock: invalid api key, url: http://127.0.0.1:18484/v1/models?client_version=REDACTED
+   | 2026-10-10T10:51:07.650610Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized: mock: invalid api key, url: http://127.0.0.1:18484/v1/models?client_version=REDACTED
+   | ERROR: unexpected status 401 Unauthorized: mock: invalid api key, url: http://127.0.0.1:18484/v1/responses
+   | warning: `[provider_accounts]` is ignored because the `named_accounts` feature is off; every provider uses its default account.
+   auth.command invocations: 3 ->    3 account=<unset>;
+   mock saw 4 request(s), bearers: ['cmd:default']

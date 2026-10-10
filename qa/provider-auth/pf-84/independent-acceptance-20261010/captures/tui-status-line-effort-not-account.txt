@@ -1,0 +1,4 @@
+Status line 'via zai <x>': <x> follows model_reasoning_effort, not the account (home G, no prompt sent)
+  -c model_reasoning_effort=high -c provider_accounts.zai=fake  ->  Z.AI GLM 5.3 Flash via zai high 
+  -c model_reasoning_effort=low -c provider_accounts.zai=main  ->  Z.AI GLM 5.3 Flash via zai low 
+  -c model_reasoning_effort=medium -c provider_accounts.zai=ghost  ->  Z.AI GLM 5.3 Flash via zai medium 

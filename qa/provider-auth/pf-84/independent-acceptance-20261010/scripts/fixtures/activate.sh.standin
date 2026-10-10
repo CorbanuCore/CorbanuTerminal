@@ -1,0 +1,4 @@
+# scratch stand-in for .codex-work/corbanu-terminal/activate.sh: exports the coordinator home unconditionally
+export CORBANU_HOME="/Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/launcher/coordhome"
+export CODEX_HOME="/Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/launcher/coordhome"
+export PATH="/Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/bin:$PATH"
