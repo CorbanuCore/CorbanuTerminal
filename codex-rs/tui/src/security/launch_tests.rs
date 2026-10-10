@@ -3,6 +3,15 @@ use pretty_assertions::assert_eq;
 use super::*;
 use crate::security::level::NestedAgents;
 
+/// #391: a stored Aggressive level turns `broker_model_auth` on, which makes
+/// the whole test process brokered; these tests are about other rows.
+fn broker_off() -> (String, toml::Value) {
+    (
+        "features.broker_model_auth".to_string(),
+        toml::Value::Boolean(false),
+    )
+}
+
 #[test]
 fn absent_state_changes_no_launch_input_or_file() {
     let home = tempfile::tempdir().unwrap();
@@ -74,6 +83,7 @@ async fn finish_refuses_a_config_that_misses_a_row() {
     // Built without the overrides, as a launch path that skipped them would.
     let mut config = crate::legacy_core::config::ConfigBuilder::default()
         .codex_home(home.path().to_path_buf())
+        .cli_overrides(vec![broker_off()])
         .loader_overrides(codex_config::LoaderOverrides::without_managed_config_for_tests())
         .build()
         .await
@@ -96,6 +106,7 @@ async fn finish_refuses_a_broken_rules_file() {
     let mut cli = Vec::new();
     let mut plan = LaunchPlan::prepare(home.path(), &mut cli).unwrap();
     plan.extend_env_overrides(&ShellEnvironmentPolicyToml::default(), &mut cli);
+    cli.push(broker_off());
     let mut overrides = ConfigOverrides {
         cwd: Some(cwd.path().to_path_buf()),
         ..Default::default()

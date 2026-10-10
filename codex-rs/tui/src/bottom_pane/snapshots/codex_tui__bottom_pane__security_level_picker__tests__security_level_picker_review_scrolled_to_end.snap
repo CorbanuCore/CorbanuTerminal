@@ -2,13 +2,13 @@
 source: tui/src/bottom_pane/security_level_picker_tests.rs
 expression: rendered
 ---
-    server`) is refused.
 Press n to switch between refuse and pass. Nested launches read this when they
 start.
 Unchanged: model and provider, MCP servers, apps and hooks (they run outside the
 sandbox), wallet scopes, and commands you have already allowed permanently (they
 skip the prompt but stay sandboxed). `corbanu exec` that you start yourself and
-IDE sessions are not covered yet.
+IDE sessions are not covered yet, except that they also hold provider keys in
+the credential broker.
 The rows above take effect when you restart Corbanu Terminal (you can restart
 right after saving); this session keeps its current settings until then. Your
 config.toml is not modified.

@@ -28,6 +28,7 @@ pub use model_key_broker::ModelKeyBroker;
 pub use model_key_broker::install_model_key_broker;
 pub use model_key_broker::model_key_broker_installed;
 pub use model_key_broker::model_key_broker_required;
+pub use model_key_broker::model_key_broker_unavailable;
 pub use model_key_broker::require_model_key_broker;
 pub use provider::DEFAULT_APPROVAL_REVIEW_PREFERRED_MODEL;
 pub use provider::DEFAULT_MEMORY_CONSOLIDATION_PREFERRED_MODEL;
