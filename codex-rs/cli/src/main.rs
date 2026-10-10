@@ -44,8 +44,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use supports_color::Stream;
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
 mod account_cmd;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 mod app_cmd;
 mod claude_oauth;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
