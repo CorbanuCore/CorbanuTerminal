@@ -1,0 +1,70 @@
+# OPENAI_API_KEY fallback notice: with no saved sign-in or key, the first
+# request billed to OPENAI_API_KEY shows a notice, and /status names the source.
+# Record with:
+#   export CORBANU_TEST_NO_NATIVE_KEYRING=1
+#   python3 scripts/demo_video.py record qa/demos/specs/openai-env-key-notice.toml \
+#     --bin "$CARGO_TARGET_DIR/debug/corbanu" --sprint openai-env-notice --publish
+id = "openai-env-key-notice"
+feature = "Visible notice when requests are billed to OPENAI_API_KEY from the environment"
+expected = "The first turn shows the OPENAI_API_KEY notice once; the second turn doesn't repeat it; /status shows the key's source."
+model = "gpt-5.4"
+provider = "openai"
+config = """
+suppress_unstable_features_warning = true
+"""
+
+[credentials]
+OPENAI_API_KEY = "openai-api-key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+timeout = 60
+
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Reply with exactly: OK"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Using OPENAI_API_KEY from your environment"
+timeout = 120
+compress = 2
+
+[[steps]]
+wait = "• OK"
+timeout = 120
+compress = 2
+
+[[steps]]
+pause = 3.0
+
+[[steps]]
+type = "Reply with exactly: SECOND"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "• SECOND"
+timeout = 120
+compress = 2
+
+[[steps]]
+pause = 2.0
+
+[[steps]]
+type = "/status"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "OPENAI_API_KEY from your environment \\(billed per use\\)"
+timeout = 30
+
+[[steps]]
+pause = 4.0
