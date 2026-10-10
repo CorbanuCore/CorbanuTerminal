@@ -1,12 +1,14 @@
 //! Secrets never reach the TUI's log sinks: the trace-level log file, the
-//! `/feedback` buffer and the logs database (#179, #196).
+//! `/feedback` buffer and the logs database (#179, #196, #380).
 #![cfg(not(target_os = "windows"))]
 
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::Once;
 
 use anyhow::Context;
+use codex_login::CodexAuth;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::ExecCommandEndEvent;
@@ -27,13 +29,19 @@ use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
+use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
-use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::layer::SubscriberExt;
 
-/// The TUI's log sinks: a trace-level file with span events, the feedback
-/// buffer (uploaded by /feedback) and the logs database.
+/// A user's `RUST_LOG` that asks for everything, including the HTTP and
+/// websocket libraries by name (#380).
+const RUST_LOG_TRACE: &str = "trace,tungstenite=trace,tokio_tungstenite=trace,hyper=trace,hyper_util=trace,h2=trace,reqwest=trace,rustls=trace";
+
+/// The TUI's log sinks, guarded and redacted as the TUI installs them: a
+/// file filtered by [`RUST_LOG_TRACE`] with span events, the feedback buffer
+/// (uploaded by /feedback) and the logs database. `log` records (tungstenite,
+/// reqwest) are bridged as the binaries' `try_init` does.
 ///
 /// The sinks are installed with `set_default`, so they see events from this
 /// thread only. Use a current-thread runtime so every spawned task logs
@@ -61,21 +69,30 @@ impl TraceSinks {
         .await?;
         let log_db = codex_state::log_db::start(Arc::clone(&state_db));
         let feedback = codex_feedback::CodexFeedback::new();
-        let subscriber = tracing_subscriber::registry()
-            .with(
-                tracing_subscriber::fmt::layer()
-                    .with_writer(Mutex::new(log_file))
-                    .with_target(true)
-                    .with_ansi(false)
-                    .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
-                    .with_filter(LevelFilter::TRACE),
-            )
-            .with(feedback.logger_layer())
-            .with(
-                log_db
-                    .clone()
-                    .with_filter(codex_state::log_db::default_filter()),
-            );
+        static BRIDGE_LOG_RECORDS: Once = Once::new();
+        BRIDGE_LOG_RECORDS.call_once(|| {
+            // Another test's subscriber may have installed the bridge already.
+            let _ = tracing_log::LogTracer::init();
+        });
+        let subscriber = codex_log_guard::guard(
+            tracing_subscriber::registry()
+                .with(
+                    tracing_subscriber::fmt::layer()
+                        .with_writer(codex_log_guard::RedactingMakeWriter::new(Mutex::new(
+                            log_file,
+                        )))
+                        .with_target(true)
+                        .with_ansi(false)
+                        .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+                        .with_filter(EnvFilter::new(RUST_LOG_TRACE)),
+                )
+                .with(feedback.logger_layer())
+                .with(
+                    log_db
+                        .clone()
+                        .with_filter(codex_state::log_db::default_filter()),
+                ),
+        );
         let guard = tracing::subscriber::set_default(subscriber);
         Ok((
             Self {
@@ -369,6 +386,99 @@ async fn websocket_handshake_response_headers_never_reach_logs() -> anyhow::Resu
     assert!(
         log_text.contains("\"set-cookie\": \"REDACTED\""),
         "the handshake headers should be logged with values redacted"
+    );
+    Ok(())
+}
+
+/// No line of the trace log is tungstenite's handshake request, whatever
+/// redaction did to its header values.
+fn assert_no_handshake_request(log_text: &str) {
+    assert!(
+        !log_text
+            .lines()
+            .any(|line| line.contains("tungstenite::handshake::client") && line.contains("Request")),
+        "tungstenite's handshake request reached the trace log"
+    );
+}
+
+/// #380: with `RUST_LOG=trace`, tungstenite logs the websocket upgrade
+/// request at TRACE, `Authorization: Bearer <key>` included. The API key
+/// must reach the server and no log sink.
+#[tokio::test]
+async fn websocket_api_key_never_reaches_trace_logs() -> anyhow::Result<()> {
+    const API_KEY: &str = "fake-ws-api-key-380-0001-6be0c2f1";
+
+    let (sinks, guard) = TraceSinks::install().await?;
+    let server = start_websocket_server_with_headers(vec![WebSocketConnectionConfig {
+        requests: vec![
+            vec![ev_response_created("warm-1"), ev_completed("warm-1")],
+            vec![
+                ev_response_created("resp-1"),
+                ev_assistant_message("msg-1", "done"),
+                ev_completed("resp-1"),
+            ],
+        ],
+        response_headers: Vec::new(),
+        accept_delay: None,
+        close_after_requests: false,
+    }])
+    .await;
+    let mut builder = test_codex().with_auth(CodexAuth::from_api_key(API_KEY));
+    let fixture = builder.build_with_websocket_server(&server).await?;
+    fixture.submit_turn("hi").await?;
+    let handshakes = server.handshakes();
+    assert_eq!(
+        handshakes
+            .iter()
+            .map(|handshake| handshake.header("authorization"))
+            .collect::<Vec<_>>(),
+        vec![Some(format!("Bearer {API_KEY}"))]
+    );
+    server.shutdown().await;
+
+    let log_text = sinks
+        .assert_clean(guard, &["successfully connected to websocket"], &[API_KEY])
+        .await?;
+    // The bridge delivered tungstenite's records; only TRACE was dropped.
+    assert!(
+        log_text.contains("Client handshake done."),
+        "tungstenite's DEBUG records should reach the trace log"
+    );
+    assert_no_handshake_request(&log_text);
+    Ok(())
+}
+
+/// #380: the same API key on the HTTP (SSE) transport, sent by reqwest,
+/// hyper and h2 under the same `RUST_LOG`.
+#[tokio::test]
+async fn http_api_key_never_reaches_trace_logs() -> anyhow::Result<()> {
+    const API_KEY: &str = "fake-http-api-key-380-0002-0d93a7e4";
+
+    let (sinks, guard) = TraceSinks::install().await?;
+    let server = start_mock_server().await;
+    let response = mount_sse_once(
+        &server,
+        sse(vec![
+            ev_response_created("resp-1"),
+            ev_assistant_message("msg-1", "done"),
+            ev_completed("resp-1"),
+        ]),
+    )
+    .await;
+    let mut builder = test_codex().with_auth(CodexAuth::from_api_key(API_KEY));
+    let fixture = builder.build(&server).await?;
+    fixture.submit_turn("hi").await?;
+    assert_eq!(
+        response.single_request().header("authorization"),
+        Some(format!("Bearer {API_KEY}"))
+    );
+
+    let log_text = sinks
+        .assert_clean(guard, &["Request completed"], &[API_KEY])
+        .await?;
+    assert!(
+        log_text.contains("reqwest::"),
+        "reqwest's bridged records should reach the trace log"
     );
     Ok(())
 }

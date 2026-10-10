@@ -1416,14 +1416,16 @@ pub async fn run_main(
         .clone()
         .map(|layer| layer.with_filter(log_db::default_filter()));
 
-    let _ = tracing_subscriber::registry()
-        .with(tui_file_layer)
-        .with(feedback_layer)
-        .with(feedback_metadata_layer)
-        .with(log_db_layer)
-        .with(otel_logger_layer)
-        .with(otel_tracing_layer)
-        .try_init();
+    let _ = codex_log_guard::guard(
+        tracing_subscriber::registry()
+            .with(tui_file_layer)
+            .with(feedback_layer)
+            .with(feedback_metadata_layer)
+            .with(log_db_layer)
+            .with(otel_logger_layer)
+            .with(otel_tracing_layer),
+    )
+    .try_init();
 
     // Older builds wrote credentials to these files (#179, #196). Masking
     // keeps every byte offset, so it runs beside this process's appends.

@@ -2087,6 +2087,7 @@ dependencies = [
  "codex-hooks",
  "codex-http-client",
  "codex-image-generation-extension",
+ "codex-log-guard",
  "codex-login",
  "codex-mcp",
  "codex-mcp-extension",
@@ -2357,10 +2358,13 @@ dependencies = [
  "aws-sigv4",
  "aws-types",
  "bytes",
+ "codex-log-guard",
  "http 1.4.0",
  "pretty_assertions",
  "thiserror 2.0.18",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -2477,6 +2481,7 @@ dependencies = [
  "codex-home",
  "codex-http-client",
  "codex-install-context",
+ "codex-log-guard",
  "codex-login",
  "codex-mcp",
  "codex-mcp-server",
@@ -2586,6 +2591,7 @@ dependencies = [
  "codex-core",
  "codex-git-utils",
  "codex-http-client",
+ "codex-log-guard",
  "codex-login",
  "codex-model-provider",
  "codex-tui",
@@ -2658,6 +2664,7 @@ dependencies = [
  "codex-code-mode",
  "codex-code-mode-protocol",
  "codex-code-mode-runtime",
+ "codex-log-guard",
  "codex-protocol",
  "codex-utils-cargo-bin",
  "futures",
@@ -2846,6 +2853,7 @@ dependencies = [
  "codex-image-generation-extension",
  "codex-install-context",
  "codex-keyring-store",
+ "codex-log-guard",
  "codex-login",
  "codex-mcp",
  "codex-memories-extension",
@@ -2933,6 +2941,7 @@ dependencies = [
  "toml 0.9.11+spec-1.1.0",
  "toml_edit 0.24.0+spec-1.1.0",
  "tracing",
+ "tracing-log",
  "tracing-opentelemetry",
  "tracing-subscriber",
  "tracing-test",
@@ -3073,6 +3082,7 @@ dependencies = [
  "codex-core",
  "codex-feedback",
  "codex-git-utils",
+ "codex-log-guard",
  "codex-login",
  "codex-model-provider-info",
  "codex-otel",
@@ -3302,6 +3312,7 @@ name = "codex-feedback"
 version = "0.1.48"
 dependencies = [
  "anyhow",
+ "codex-log-guard",
  "codex-login",
  "codex-protocol",
  "codex-secret-broker",
@@ -3600,6 +3611,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-log-guard"
+version = "0.1.48"
+dependencies = [
+ "log",
+ "pretty_assertions",
+ "regex",
+ "tracing",
+ "tracing-core",
+ "tracing-log",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "codex-login"
 version = "0.1.48"
 dependencies = [
@@ -3721,6 +3745,7 @@ dependencies = [
  "codex-git-attribution",
  "codex-home",
  "codex-image-generation-extension",
+ "codex-log-guard",
  "codex-login",
  "codex-protocol",
  "codex-security-level",
@@ -4396,6 +4421,7 @@ version = "0.1.48"
 dependencies = [
  "anyhow",
  "clap",
+ "codex-log-guard",
  "codex-protocol",
  "codex-utils-absolute-path",
  "libc",
@@ -4454,6 +4480,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "codex-git-utils",
+ "codex-log-guard",
  "codex-protocol",
  "codex-secret-broker",
  "codex-utils-absolute-path",
@@ -4646,6 +4673,7 @@ dependencies = [
  "codex-http-client",
  "codex-install-context",
  "codex-keyring-store",
+ "codex-log-guard",
  "codex-login",
  "codex-mcp",
  "codex-message-history",

@@ -21,7 +21,7 @@ pub(crate) fn init(
     config: Option<&codex_core::config::Config>,
 ) -> (impl Send + Sync, codex_exec_server::ExecServerTelemetry) {
     let fmt_layer = tracing_subscriber::fmt::layer()
-        .with_writer(std::io::stderr)
+        .with_writer(codex_log_guard::RedactingMakeWriter::new(std::io::stderr))
         .with_filter(stderr_env_filter());
     let otel = match config {
         Some(config) => codex_core::otel_init::build_provider(
@@ -46,11 +46,13 @@ pub(crate) fn init(
         .cloned()
         .map(codex_exec_server::ExecServerTelemetry::new)
         .unwrap_or_default();
-    let _ = tracing_subscriber::registry()
-        .with(fmt_layer)
-        .with(otel_tracing_layer)
-        .with(otel_logger_layer)
-        .try_init();
+    let _ = codex_log_guard::guard(
+        tracing_subscriber::registry()
+            .with(fmt_layer)
+            .with(otel_tracing_layer)
+            .with(otel_logger_layer),
+    )
+    .try_init();
     tracing::callsite::rebuild_interest_cache();
     (otel, telemetry)
 }

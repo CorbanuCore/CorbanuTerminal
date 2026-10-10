@@ -17,3 +17,4 @@ mod provider_key_env;
 mod resume;
 mod sandbox;
 mod server_error_exit;
+mod trace_log_credentials;

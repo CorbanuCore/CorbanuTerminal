@@ -338,7 +338,7 @@ pub async fn run_main_enforced(
     };
     let fmt_layer = tracing_subscriber::fmt::layer()
         .with_ansi(stderr_with_ansi)
-        .with_writer(std::io::stderr)
+        .with_writer(codex_log_guard::RedactingMakeWriter::new(std::io::stderr))
         .with_filter(exec_stderr_env_filter());
 
     let sandbox_mode = if dangerously_bypass_approvals_and_sandbox {
@@ -611,11 +611,13 @@ pub async fn run_main_enforced(
 
     let otel_tracing_layer = otel.as_ref().and_then(|o| o.tracing_layer());
 
-    let _ = tracing_subscriber::registry()
-        .with(fmt_layer)
-        .with(otel_tracing_layer)
-        .with(otel_logger_layer)
-        .try_init();
+    let _ = codex_log_guard::guard(
+        tracing_subscriber::registry()
+            .with(fmt_layer)
+            .with(otel_tracing_layer)
+            .with(otel_logger_layer),
+    )
+    .try_init();
 
     let exec_span = exec_root_span();
     if let Some(context) = traceparent_context_from_env() {

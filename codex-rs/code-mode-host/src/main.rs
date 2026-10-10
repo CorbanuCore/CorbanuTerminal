@@ -1,4 +1,5 @@
 use clap::Parser;
+use tracing_subscriber::util::SubscriberInitExt;
 
 #[derive(Debug, Parser)]
 struct Cli {
@@ -13,11 +14,14 @@ struct Cli {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
-        .with_writer(std::io::stderr)
-        .with_ansi(false)
-        .init();
+    codex_log_guard::guard(
+        tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::INFO)
+            .with_writer(codex_log_guard::RedactingMakeWriter::new(std::io::stderr))
+            .with_ansi(false)
+            .finish(),
+    )
+    .init();
 
     codex_code_mode_host::run_main(&Cli::parse().listen).await
 }

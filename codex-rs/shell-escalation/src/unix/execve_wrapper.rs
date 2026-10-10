@@ -2,6 +2,7 @@
 
 use clap::Parser;
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::util::SubscriberInitExt;
 
 #[derive(Parser)]
 pub struct ExecveWrapperCli {
@@ -13,11 +14,14 @@ pub struct ExecveWrapperCli {
 
 #[tokio::main]
 pub async fn main_execve_wrapper() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .with_writer(std::io::stderr)
-        .with_ansi(false)
-        .init();
+    codex_log_guard::guard(
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .with_writer(codex_log_guard::RedactingMakeWriter::new(std::io::stderr))
+            .with_ansi(false)
+            .finish(),
+    )
+    .init();
 
     let ExecveWrapperCli { file, argv } = ExecveWrapperCli::parse();
     let exit_code = crate::run_shell_escalation_execve_wrapper(file, argv).await?;
