@@ -654,6 +654,9 @@
             "multi_agent_v2": {
               "$ref": "#/definitions/FeatureToml_for_MultiAgentV2ConfigToml"
             },
+            "named_accounts": {
+              "type": "boolean"
+            },
             "network_proxy": {
               "$ref": "#/definitions/FeatureToml_for_NetworkProxyConfigToml"
             },
@@ -5380,6 +5383,9 @@
         "multi_agent_v2": {
           "$ref": "#/definitions/FeatureToml_for_MultiAgentV2ConfigToml"
         },
+        "named_accounts": {
+          "type": "boolean"
+        },
         "network_proxy": {
           "$ref": "#/definitions/FeatureToml_for_NetworkProxyConfigToml"
         },
@@ -5883,6 +5889,14 @@
       "additionalProperties": {
         "$ref": "#/definitions/ProjectConfig"
       },
+      "type": "object"
+    },
+    "provider_accounts": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": null,
+      "description": "PF-84 (`named_accounts` feature): the account each provider uses, keyed by provider id, for example `zai = \"work\"`. Unlisted providers and `\"default\"` use today's credentials.",
       "type": "object"
     },
     "realtime": {

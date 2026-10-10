@@ -75,6 +75,7 @@ pub use auth::provider_api_key_id_from_vault_label;
 pub use auth::provider_api_key_metadata_from_auth_storage;
 pub use auth::provider_api_key_metadata_snapshot_from_auth_storage;
 pub use auth::provider_api_key_storage_revision;
+pub use auth::provider_command_account_is_configured;
 pub use auth::read_ambient_api_key_from_env;
 pub use auth::read_codex_access_token_from_env;
 pub use auth::read_openai_api_key_from_env;

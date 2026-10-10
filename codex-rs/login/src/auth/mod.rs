@@ -25,3 +25,4 @@ pub use external_bearer::validate_provider_auth_command_for_account;
 pub use manager::*;
 pub use provider_key_vault::provider_account_api_key;
 pub use provider_key_vault::provider_account_aws_profile;
+pub use provider_key_vault::provider_command_account_is_configured;

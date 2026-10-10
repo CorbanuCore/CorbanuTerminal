@@ -170,7 +170,9 @@ impl Vault {
     fn read_scoped_secret(&self, label: &str) -> Result<Zeroizing<String>, ScopedCredentialError> {
         let normalized =
             super::normalize_label(label).map_err(|_| ScopedCredentialError::InvalidCapability)?;
-        if normalized == crate::MANAGED_CLAUDE_TOKEN_LABEL {
+        if normalized == crate::MANAGED_CLAUDE_TOKEN_LABEL
+            || crate::is_provider_managed_account_label(&normalized)
+        {
             return Err(ScopedCredentialError::CredentialTypeDenied);
         }
         self.with_storage_lock(|| {

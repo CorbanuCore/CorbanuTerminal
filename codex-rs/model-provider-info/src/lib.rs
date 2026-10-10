@@ -1177,6 +1177,26 @@ impl ModelProviderInfo {
         })
     }
 
+    /// PF-84: `self` replaces `original` after a model/provider correction. A
+    /// named account moves with it when both routes use the same API key;
+    /// otherwise the correction is refused rather than silently switching the
+    /// session to the other provider's default account.
+    pub fn with_account_from(mut self, original: &ModelProviderInfo) -> Result<Self, String> {
+        match &original.account {
+            None => Ok(self),
+            Some(account) if self.env_key.is_some() && self.env_key == original.env_key => {
+                self.account = Some(account.clone());
+                Ok(self)
+            }
+            Some(account) => Err(format!(
+                "account `{name}` of provider `{id}` cannot follow the model to another \
+                 provider; select an account for that provider or pick a model `{id}` serves",
+                name = account.name,
+                id = account.provider_id,
+            )),
+        }
+    }
+
     /// If `env_key` is Some, returns the API key for this provider if present
     /// (and non-empty) in the environment. If `env_key` is required but
     /// cannot be found, returns an error.

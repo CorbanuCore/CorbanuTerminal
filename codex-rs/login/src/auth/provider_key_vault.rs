@@ -68,6 +68,21 @@ pub fn provider_account_aws_profile(
     )
 }
 
+/// PF-84: whether an `auth.command` provider has the named account enrolled.
+pub fn provider_command_account_is_configured(
+    codex_home: &Path,
+    provider_id: &str,
+    account_name: &str,
+) -> std::io::Result<bool> {
+    read_provider_account_kind(
+        &Vault::new(codex_home.to_path_buf()),
+        provider_id,
+        account_name,
+        codex_vault::ProviderAccountKind::Command,
+    )
+    .map(|marker| marker.is_some())
+}
+
 fn read_provider_account_kind(
     vault: &Vault,
     provider_id: &str,

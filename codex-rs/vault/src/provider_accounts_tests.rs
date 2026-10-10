@@ -44,7 +44,7 @@ fn names_follow_the_frozen_grammar() {
     ] {
         assert_eq!(
             ProviderAccountName::parse(invalid),
-            Err(ProviderAccountError::InvalidName(invalid.to_string()))
+            Err(ProviderAccountError::InvalidName)
         );
     }
     assert_eq!(
@@ -80,9 +80,7 @@ fn labels_round_trip_and_reject_other_labels() {
     }
     assert_eq!(
         provider_account_label("Bad Id", &name("work"), ProviderAccountKind::ApiKey),
-        Err(ProviderAccountError::InvalidProviderId(
-            "Bad Id".to_string()
-        ))
+        Err(ProviderAccountError::InvalidProviderId)
     );
 }
 

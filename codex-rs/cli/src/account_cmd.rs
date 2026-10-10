@@ -1,6 +1,7 @@
 //! PF-84: `corbanu account` manages named accounts per provider. It shows
 //! names and kinds only and reads secret values from stdin, never argv.
 
+use std::io::IsTerminal;
 use std::io::Read;
 use std::io::Write;
 
@@ -14,6 +15,9 @@ use codex_vault::ProviderAccountKind;
 use codex_vault::ProviderAccountName;
 use codex_vault::Vault;
 use zeroize::Zeroizing;
+
+/// Named Claude accounts are served by the built-in Claude Plan provider only.
+const CLAUDE_PLAN_PROVIDER_ID: &str = "claude-plan";
 
 #[derive(Debug, clap::Parser)]
 pub struct AccountCommand {
@@ -40,7 +44,7 @@ enum AccountSubcommand {
         /// What the account holds.
         #[arg(long, value_enum, default_value_t = AccountKindArg::ApiKey)]
         kind: AccountKindArg,
-        /// The value for non-secret kinds (`claude-config-dir`, `aws-profile`).
+        /// The value for the non-secret `claude-config-dir` kind.
         #[arg(long)]
         value: Option<String>,
     },
@@ -56,8 +60,6 @@ enum AccountKindArg {
     ClaudeToken,
     /// The `CLAUDE_CONFIG_DIR` of a Claude Code login (`--value`).
     ClaudeConfigDir,
-    /// An AWS profile name (`--value`).
-    AwsProfile,
     /// An account of an `auth.command` provider; the command receives its name
     /// in `CORBANU_PROVIDER_ACCOUNT`.
     Command,
@@ -69,7 +71,6 @@ impl AccountKindArg {
             Self::ApiKey => ProviderAccountKind::ApiKey,
             Self::ClaudeToken => ProviderAccountKind::ClaudeOauthToken,
             Self::ClaudeConfigDir => ProviderAccountKind::ClaudeConfigDir,
-            Self::AwsProfile => ProviderAccountKind::AwsProfile,
             Self::Command => ProviderAccountKind::Command,
         }
     }
@@ -174,9 +175,10 @@ fn ensure_kind_fits_provider(
         .get(provider_id)
         .with_context(|| format!("unknown provider `{provider_id}`"))?;
     let fits = match kind {
-        AccountKindArg::ApiKey => provider.env_key.is_some(),
-        AccountKindArg::ClaudeToken | AccountKindArg::ClaudeConfigDir => provider.is_claude_plan(),
-        AccountKindArg::AwsProfile => provider.aws.is_some(),
+        AccountKindArg::ApiKey => provider.env_key.is_some() && provider.aws.is_none(),
+        AccountKindArg::ClaudeToken | AccountKindArg::ClaudeConfigDir => {
+            provider_id == CLAUDE_PLAN_PROVIDER_ID
+        }
         AccountKindArg::Command => provider.auth.is_some() && !provider.is_claude_plan(),
     };
     if !fits {
@@ -192,6 +194,13 @@ fn account_value(kind: AccountKindArg, value: Option<String>) -> anyhow::Result<
     if kind.reads_stdin() {
         if value.is_some() {
             bail!("secret values are read from stdin, never from --value");
+        }
+        // Typing a secret into a terminal would echo it on screen.
+        if std::io::stdin().is_terminal() {
+            bail!(
+                "pipe the secret in instead of typing it, for example \
+                 `pbpaste | corbanu account add <provider> <name>`"
+            );
         }
         let mut secret = Zeroizing::new(String::new());
         std::io::stdin()

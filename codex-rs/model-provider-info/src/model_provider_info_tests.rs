@@ -1832,10 +1832,37 @@ fn named_account_never_falls_back_to_the_environment_key() {
         provider_id: "zai".to_string(),
         name: "work".to_string(),
     });
-    let error = provider.api_key().expect_err("named account has no env fallback");
+    let error = provider
+        .api_key()
+        .expect_err("named account has no env fallback");
     assert_eq!(
         error.to_string(),
         "Fatal error: account `work` of provider `zai` has no stored API key; add it with \
          `corbanu account add zai work` or choose another account"
+    );
+}
+
+#[test]
+fn named_account_follows_a_correction_only_to_a_route_with_the_same_key() {
+    let account = NamedProviderAccount {
+        provider_id: "zai".to_string(),
+        name: "work".to_string(),
+    };
+    let mut original = ModelProviderInfo::create_zai_provider();
+    original.account = Some(account.clone());
+    let sibling = ModelProviderInfo::create_zai_provider()
+        .with_account_from(&original)
+        .expect("same key");
+    assert_eq!(sibling.account, Some(account));
+    let error = ModelProviderInfo::create_anthropic_provider()
+        .with_account_from(&original)
+        .expect_err("different key");
+    assert!(error.starts_with("account `work` of provider `zai` cannot follow"));
+    assert_eq!(
+        ModelProviderInfo::create_anthropic_provider()
+            .with_account_from(&ModelProviderInfo::create_zai_provider())
+            .expect("no account")
+            .account,
+        None
     );
 }

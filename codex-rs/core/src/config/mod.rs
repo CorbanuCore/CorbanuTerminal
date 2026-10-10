@@ -4267,6 +4267,11 @@ impl Config {
                     .map(|info| (corrected, info.clone()))
             }) {
                 Some((corrected, info)) => {
+                    let info = info
+                        .with_account_from(&model_provider)
+                        .map_err(|message| {
+                            std::io::Error::new(std::io::ErrorKind::InvalidInput, message)
+                        })?;
                 tracing::warn!(
                     model = model.as_deref().unwrap_or_default(),
                     stored_provider = %model_provider_id,

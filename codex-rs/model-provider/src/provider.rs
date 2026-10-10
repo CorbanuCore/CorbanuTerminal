@@ -334,14 +334,54 @@ pub fn create_model_provider(
 struct ConfiguredModelProvider {
     info: ModelProviderInfo,
     auth_manager: Option<Arc<AuthManager>>,
+    /// PF-84: the Corbanu home holding the named-account registry (the
+    /// command-auth manager has no home of its own).
+    account_home: Option<PathBuf>,
 }
 
 impl ConfiguredModelProvider {
     fn new(provider_info: ModelProviderInfo, auth_manager: Option<Arc<AuthManager>>) -> Self {
+        let account_home = auth_manager
+            .as_ref()
+            .map(|auth_manager| auth_manager.codex_home().to_path_buf());
         let auth_manager = auth_manager_for_provider(auth_manager, &provider_info);
         Self {
             info: provider_info,
             auth_manager,
+            account_home,
+        }
+    }
+
+    /// PF-84: a named account of an `auth.command` provider must be enrolled;
+    /// an unknown name never reaches the command. (Claude Plan's helper checks
+    /// its own accounts.)
+    fn ensure_command_account_configured(&self) -> codex_protocol::error::Result<()> {
+        let Some(account) = self.info.account.as_ref() else {
+            return Ok(());
+        };
+        if self.info.auth.is_none() || self.info.is_claude_plan() {
+            return Ok(());
+        }
+        let configured = self.account_home.as_deref().is_some_and(|home| {
+            codex_login::provider_command_account_is_configured(
+                home,
+                &account.provider_id,
+                &account.name,
+            )
+            .unwrap_or_else(|error| {
+                tracing::warn!(%error, "named account registry unavailable");
+                false
+            })
+        });
+        if configured {
+            Ok(())
+        } else {
+            Err(CodexErr::Fatal(format!(
+                "account `{name}` of provider `{id}` is not configured; add it with \
+                 `corbanu account add {id} {name} --kind command` or choose another account",
+                name = account.name,
+                id = account.provider_id,
+            )))
         }
     }
 
@@ -360,9 +400,11 @@ impl ConfiguredModelProvider {
                 .and_then(|auth_manager| {
                     auth_manager
                         .provider_account_api_key(&account.provider_id, &account.name)
-                        .ok()
+                        .unwrap_or_else(|error| {
+                            tracing::warn!(%error, "named account key unavailable");
+                            None
+                        })
                 })
-                .flatten()
                 .map(|api_key| CodexAuth::from_api_key(&api_key));
         }
         if let Ok(api_key) = std::env::var(provider_key_id)
@@ -459,6 +501,7 @@ impl ModelProvider for ConfiguredModelProvider {
         &self,
     ) -> ModelProviderFuture<'_, codex_protocol::error::Result<SharedAuthProvider>> {
         Box::pin(async move {
+            self.ensure_command_account_configured()?;
             let mut auth = self.auth().await;
             if auth.is_none()
                 && let Some(command_auth) = self.info.auth.as_ref()
@@ -496,6 +539,17 @@ impl ModelProvider for ConfiguredModelProvider {
             // PF-27-S05: Core does not read the key to check for it; a missing
             // key is reported when a request is made.
             Some(ProviderAccount::ApiKey)
+        } else if let (Some(account), Some(_)) = (self.info.account.as_ref(), &self.info.env_key) {
+            // PF-84: only the named account's own key counts.
+            self.auth_manager
+                .as_ref()
+                .and_then(|auth_manager| {
+                    auth_manager
+                        .provider_account_api_key(&account.provider_id, &account.name)
+                        .ok()
+                        .flatten()
+                })
+                .map(|_| ProviderAccount::ApiKey)
         } else if let Some(provider_key_id) = self.info.env_key.as_deref() {
             let stored_key = self
                 .auth_manager

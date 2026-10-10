@@ -396,8 +396,12 @@ pub(crate) async fn apply_requested_spawn_agent_model_overrides(
                 corrected_provider = corrected,
                 "correcting inherited provider for spawn_agent model switch"
             );
+            let info = info
+                .clone()
+                .with_account_from(&config.model_provider)
+                .map_err(FunctionCallError::RespondToModel)?;
             config.model_provider_id = corrected.to_string();
-            config.model_provider = info.clone();
+            config.model_provider = info;
         }
         if let Some(reasoning_effort) = requested_reasoning_effort {
             validate_spawn_agent_reasoning_effort(

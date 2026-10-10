@@ -50,6 +50,15 @@ pub(crate) fn apply_provider_accounts(
             Some(name) => {
                 validate_provider_account_provider_id(provider_id)
                     .map_err(|error| invalid(error.to_string()))?;
+                // The Claude account helper serves the built-in Claude Plan only.
+                if !supports_named_accounts(provider)
+                    || (provider.is_claude_plan()
+                        && provider_id != codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID)
+                {
+                    return Err(invalid(format!(
+                        "provider `{provider_id}` does not support named accounts yet"
+                    )));
+                }
                 Some(NamedProviderAccount {
                     provider_id: provider_id.clone(),
                     name: name.as_str().to_string(),
@@ -61,16 +70,29 @@ pub(crate) fn apply_provider_accounts(
     Ok(())
 }
 
+/// API-key providers and `auth.command` providers (including Claude Plan).
+/// OpenAI sign-in and AWS providers are not supported yet, so selecting an
+/// account for them fails instead of silently using the default credential.
+fn supports_named_accounts(provider: &ModelProviderInfo) -> bool {
+    provider.aws.is_none()
+        && !provider.requires_openai_auth
+        && (provider.env_key.is_some() || provider.auth.is_some())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
 
     fn providers() -> HashMap<String, ModelProviderInfo> {
-        ["zai", "kimi"]
-            .into_iter()
-            .map(|id| (id.to_string(), ModelProviderInfo::default()))
-            .collect()
+        HashMap::from([
+            ("zai".to_string(), ModelProviderInfo::create_zai_provider()),
+            ("kimi".to_string(), ModelProviderInfo::create_zai_provider()),
+            (
+                "openai".to_string(),
+                ModelProviderInfo::create_openai_provider(/*base_url*/ None),
+            ),
+        ])
     }
 
     fn accounts(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
@@ -138,6 +160,22 @@ mod tests {
             error
                 .to_string()
                 .starts_with("provider_accounts.zai: invalid account name")
+        );
+    }
+
+    #[test]
+    fn providers_without_account_support_fail_closed() {
+        let mut model_providers = providers();
+        let error = apply_provider_accounts(
+            &mut model_providers,
+            Some(&accounts(&[("openai", "work")])),
+            /*named_accounts_enabled*/ true,
+            &mut Vec::new(),
+        )
+        .expect_err("openai sign-in accounts are not supported yet");
+        assert_eq!(
+            error.to_string(),
+            "provider_accounts.openai: provider `openai` does not support named accounts yet"
         );
     }
 }

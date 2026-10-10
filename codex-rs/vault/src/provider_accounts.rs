@@ -34,15 +34,15 @@ const MAX_PROVIDER_ID_BYTES: usize = 48;
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ProviderAccountError {
     #[error(
-        "invalid account name {0:?}: use 1-32 lowercase letters, digits or '-', starting with a letter or digit"
+        "invalid account name: use 1-32 lowercase letters, digits or '-', starting with a letter or digit"
     )]
-    InvalidName(String),
+    InvalidName,
     #[error("`default` names today's credentials; choose another account name")]
     ReservedName,
     #[error(
-        "provider id {0:?} cannot hold named accounts: use lowercase letters, digits, '-', '_' or '.'"
+        "this provider id cannot hold named accounts: use lowercase letters, digits, '-', '_' or '.'"
     )]
-    InvalidProviderId(String),
+    InvalidProviderId,
 }
 
 /// A validated, non-default account name: `[a-z0-9][a-z0-9-]{0,31}`.
@@ -62,7 +62,7 @@ impl ProviderAccountName {
         let valid_rest =
             bytes.all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-');
         if !valid_first || !valid_rest || name.len() > MAX_ACCOUNT_NAME_BYTES {
-            return Err(ProviderAccountError::InvalidName(name.to_string()));
+            return Err(ProviderAccountError::InvalidName);
         }
         Ok(Self(name.to_string()))
     }
@@ -108,9 +108,7 @@ pub fn validate_provider_account_provider_id(
     if valid {
         Ok(())
     } else {
-        Err(ProviderAccountError::InvalidProviderId(
-            provider_id.to_string(),
-        ))
+        Err(ProviderAccountError::InvalidProviderId)
     }
 }
 
@@ -207,7 +205,7 @@ pub fn parse_provider_account_label(
 }
 
 /// Whether generic vault reveal/edit must refuse this label.
-pub(crate) fn is_provider_managed_account_label(label: &str) -> bool {
+pub fn is_provider_managed_account_label(label: &str) -> bool {
     parse_provider_account_label(label).is_some_and(|(_, _, kind)| kind.is_provider_managed())
 }
 
@@ -266,7 +264,14 @@ impl Vault {
     ) -> Result<Option<Zeroizing<String>>, VaultError> {
         let label = account_label(provider_id, name, kind)?;
         self.with_storage_lock(|| {
-            if !self.load_index()?.credentials.contains_key(&label) {
+            // An entry of another type under this label (for example one added
+            // by hand through `/vault`) is not this account's material.
+            let index = self.load_index()?;
+            if index
+                .credentials
+                .get(&label)
+                .is_none_or(|meta| meta.credential_type != kind.credential_type())
+            {
                 return Ok(None);
             }
             Ok(self

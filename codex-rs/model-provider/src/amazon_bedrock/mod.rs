@@ -41,9 +41,6 @@ pub(crate) struct AmazonBedrockModelProvider {
     pub(crate) info: ModelProviderInfo,
     pub(crate) aws: ModelProviderAwsAuthInfo,
     auth_manager: Option<Arc<AuthManager>>,
-    /// PF-84: why the selected named account cannot be used; requests fail
-    /// with it instead of falling back to the default account.
-    account_error: Option<String>,
 }
 
 impl AmazonBedrockModelProvider {
@@ -52,62 +49,21 @@ impl AmazonBedrockModelProvider {
         auth_manager: Option<Arc<AuthManager>>,
     ) -> Self {
         let auth_manager = auth_manager_for_provider(auth_manager, &provider_info);
-        let mut aws = provider_info
+        let aws = provider_info
             .aws
             .clone()
             .unwrap_or(ModelProviderAwsAuthInfo {
                 profile: None,
                 region: None,
             });
-        let mut account_error = None;
-        if let Some(account) = provider_info.account.as_ref()
-            && !provider_info.has_command_auth()
-        {
-            let profile = auth_manager.as_ref().map(|auth_manager| {
-                codex_login::provider_account_aws_profile(
-                    auth_manager.codex_home(),
-                    &account.provider_id,
-                    &account.name,
-                )
-            });
-            match profile {
-                Some(Ok(Some(profile))) => aws.profile = Some(profile),
-                Some(Ok(None)) | None => {
-                    account_error = Some(format!(
-                        "account `{name}` of provider `{id}` has no AWS profile; add it with \
-                         `corbanu account add {id} {name} --kind aws-profile --value <profile>`",
-                        name = account.name,
-                        id = account.provider_id,
-                    ));
-                }
-                Some(Err(error)) => {
-                    account_error = Some(format!(
-                        "account `{}` of provider `{}` is unavailable: {error}",
-                        account.name, account.provider_id
-                    ));
-                }
-            }
-        }
         Self {
             info: provider_info,
             aws,
             auth_manager,
-            account_error,
-        }
-    }
-
-    fn account_check(&self) -> Result<()> {
-        match &self.account_error {
-            Some(message) => Err(CodexErr::Fatal(message.clone())),
-            None => Ok(()),
         }
     }
 
     fn managed_auth(&self) -> Option<BedrockApiKeyAuth> {
-        // PF-84: the stored Bedrock API key belongs to the default account.
-        if self.info.account.is_some() {
-            return None;
-        }
         self.auth_manager
             .as_ref()
             .and_then(|auth_manager| auth_manager.auth_cached())
@@ -140,7 +96,6 @@ impl AmazonBedrockModelProvider {
     }
 
     async fn runtime_base_url(&self) -> Result<Option<String>> {
-        self.account_check()?;
         if let Some(base_url) = self.info.base_url.clone() {
             return Ok(Some(base_url));
         }
@@ -151,7 +106,6 @@ impl AmazonBedrockModelProvider {
     }
 
     async fn api_auth(&self) -> Result<SharedAuthProvider> {
-        self.account_check()?;
         if self.info.has_command_auth() {
             let auth = self.auth().await;
             return resolve_configured_provider_auth(auth.as_ref(), &self.info);
