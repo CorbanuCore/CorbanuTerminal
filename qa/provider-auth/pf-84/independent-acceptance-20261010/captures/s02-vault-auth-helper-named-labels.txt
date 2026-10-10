@@ -1,0 +1,4 @@
+vault auth-helper provider/zai/accounts/main/api_key (home s02/hG): exit=0 stdout_bytes=49 stderr=
+vault auth-helper provider/zai_api_key (home s02/hG): exit=0 stdout_bytes=49 stderr=
+vault auth-helper provider/claude-plan/accounts/real/claude_oauth_token (home s02/hC): exit=1 stdout_bytes=0 stderr=Error: credential labeled "provider/claude-plan/accounts/real/claude_oauth_token" can only be used by its provider integration 
+vault auth-helper provider/claude-plan/accounts/cfgacct/claude_config_dir (home s02/hP): exit=0 stdout_bytes=65 stderr=

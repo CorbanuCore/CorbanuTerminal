@@ -1,0 +1,20 @@
+home G config.toml (selector in the config table, no -c):
+   | model = "glm-5.3-flash"
+   | model_provider = "zai"
+   | suppress_unstable_features_warning = true
+   | 
+   | [features]
+   | named_accounts = true
+   | 
+   | [projects."/Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/work"]
+   | trust_level = "trusted"
+   | 
+   | [provider_accounts]
+   | zai = "fake"
+== T1 [provider_accounts] zai = "fake" in config.toml (exit 1)
+   | ERROR: unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: a8fc5035-74ba-4544-a40d-5af62aaf6e6f
+   | {"tag":"corbanu_call_metrics","call_index":1,"attempt_number":1,"request_byte_size":29440,"ms_to_response_headers":437,"ms_to_first_sse_byte":null,"ms_to_first_parsed_data_event":null,"ms_to_first_actionable_event":null,"total_stream_ms":437,"comment_frame_count":0,"parsed_event_count":0,"x_request_id":null,"generation_id":null,"provider":null,"finish_reason":"error: http 401 Unauthorized: Some(\"{\\\"error\\\":{\\\"code\\\":\\\"401\\\",\\\"message\\\":\\\"token expired or incorrect\\\"}}\")","retry_linkage":{"same_turn_attempt_index":1}}
+== T2 same config, -c provider_accounts.zai="main" overrides it (exit 0)
+   | pong
+   | session id: 01a1258c-c470-75d3-b833-bdbc94724016
+   | tokens used

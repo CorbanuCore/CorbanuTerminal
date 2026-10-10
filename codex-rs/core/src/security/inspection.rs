@@ -201,7 +201,9 @@ pub fn observe(
             codex_model_provider::model_key_broker_required(),
             codex_model_provider::model_key_broker_installed(),
         ) {
-            (_, true) => ControlFacts::Enforcing,
+            // #391: installed, but every model request is refused.
+            (_, true) => codex_model_provider::model_key_broker_unavailable()
+                .map_or(ControlFacts::Enforcing, ControlFacts::Degraded),
             (true, false) => {
                 ControlFacts::Degraded("no broker is running; provider keys are not sent")
             }

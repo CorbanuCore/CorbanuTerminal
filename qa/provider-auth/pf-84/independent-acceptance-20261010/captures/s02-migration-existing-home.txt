@@ -1,0 +1,30 @@
+M0 home G created by PRE-PF-84 build 44b527f11f (onboarding stored the Z.AI key in the vault; pre build replied pong)
+   local.age sha256[:16]=70ddf16616d0ad88 size=617  config.toml sha256[:16]=97adc9a10c0cf6be  secrets/ entries: .vault.lock keyring-fallback local.age 
+M1 candidate, flag OFF (config untouched): exec
+   | pong
+   local.age sha256[:16]=70ddf16616d0ad88 size=617  config.toml sha256[:16]=97adc9a10c0cf6be  secrets/ entries: .vault.lock keyring-fallback local.age 
+M2 candidate, flag ON via --enable: exec on default account
+   | pong
+   local.age sha256[:16]=70ddf16616d0ad88 size=617  config.toml sha256[:16]=97adc9a10c0cf6be  secrets/ entries: .vault.lock keyring-fallback local.age 
+M3 candidate, flag ON: account list
+   | No named accounts. Every provider uses its default account.
+   local.age sha256[:16]=70ddf16616d0ad88 size=617  config.toml sha256[:16]=97adc9a10c0cf6be  secrets/ entries: .vault.lock keyring-fallback local.age 
+M4 candidate, flag ON: explicit default selector
+   | pong
+   local.age sha256[:16]=70ddf16616d0ad88 size=617  config.toml sha256[:16]=97adc9a10c0cf6be  secrets/ entries: .vault.lock keyring-fallback local.age 
+M5 first named write: add fake named account 'side'
+   | Saved zai account `side` (api_key).
+   local.age sha256[:16]=f33254c8f8f79c32 size=959  config.toml sha256[:16]=97adc9a10c0cf6be  secrets/ entries: .vault.lock keyring-fallback local.age 
+M6 default still resolves after the named write (flag on, then off)
+   | pong
+   | pong
+M7 named side -> 401 (isolated from default)
+   | ERROR: unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: ecf1c424-c32f-4a2c-9bce-bfb5a7977f93
+   | {"tag":"corbanu_call_metrics","call_index":1,"attempt_number":1,"request_byte_size":29440,"ms_to_response_headers":419,"ms_to_first_sse_byte":null,"ms_to_first_parsed_data_event":null,"ms_to_first_actionable_event":null,"total_stream_ms":419,"comment_frame_count":0,"parsed_event_count":0,"x_request_id":null,"generation_id":null,"provider":null,"finish_reason":"error: http 401 Unauthorized: Some(\"{\\\"error\\\":{\\\"code\\\":\\\"401\\\",\\\"message\\\":\\\"token expired or incorrect\\\"}}\")","retry_linkage":{"same_turn_attempt_index":1}}
+M8 PRE build still reads the home after the named write (downgrade safety)
+   | pong
+M9 remove 'side'
+   | Removed zai account `side`.
+   | No named accounts. Every provider uses its default account.
+   local.age sha256[:16]=ea8926bec9b650a8 size=617  config.toml sha256[:16]=97adc9a10c0cf6be  secrets/ entries: .vault.lock keyring-fallback local.age 
+   | pong

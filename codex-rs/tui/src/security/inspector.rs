@@ -338,7 +338,8 @@ pub(crate) fn sections(
                 label,
                 State::Resolved,
                 value.clone(),
-                if launch_checked {
+                // The launch check leaves the model key broker to config.
+                if launch_checked && label != super::aggressive::MODEL_KEYS_LABEL {
                     "resolved: session config, checked at launch"
                 } else {
                     "resolved: session config"
@@ -593,6 +594,8 @@ fn runtime_rows(input: &InspectorInput, facts: &RuntimeFacts) -> Vec<Row> {
     // Core gates at the stricter of the session's configured level and
     // its live policy.
     let core_protected = input.configured.max(core_level(facts)) != SecurityLevel::Permissive;
+    let aggressive_brokers = in_force(input, facts) == SecurityLevel::Aggressive
+        && cfg!(any(target_os = "macos", target_os = "linux", windows));
     let control = |label: &str, facts: ControlFacts, on: &str, off: &str| match facts {
         ControlFacts::Enforcing => row(label, State::Enforcing, on, "observed: this process"),
         ControlFacts::Off => row(label, State::Off, off, "observed: this process"),
@@ -635,6 +638,15 @@ fn runtime_rows(input: &InspectorInput, facts: &RuntimeFacts) -> Vec<Row> {
                 "installed; its health is not probed",
                 "installed: this process",
             ),
+            // #391: Aggressive turns it on where the broker runs, so off
+            // there means config turned it off, or the level was chosen
+            // after this process started.
+            other if aggressive_brokers => required(control(
+                "Model key broker",
+                other,
+                "provider keys are brokered",
+                "off: Core reads provider keys itself (broker_model_auth is off in config, or this process started before Aggressive)",
+            )),
             other => control(
                 "Model key broker",
                 other,

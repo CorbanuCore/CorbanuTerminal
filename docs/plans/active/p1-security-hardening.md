@@ -12,7 +12,7 @@ activation_basis: "Travis Good's 2026-10-06 decision 3 (deferred security featur
 target_release: "TBD"
 deadline: "TBD"
 created: 2026-10-06
-updated: 2026-10-08
+updated: 2026-10-10
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "P0 /security levels"
@@ -63,7 +63,7 @@ Open when P0 closed on 2026-10-08. Nothing here is done; each item names where i
 | PF-83 TUI bug: `zai-anthropic` `glm-5.2` lacked a max-output limit | P0 TUI lane | Catalog fix on main (`fa4d24eafb`); verify on the next candidate |
 | PF-27-S06 unplaced follow-ups | [PF-27-S06](../../sprints/archive/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md) (archived 2026-10-08) | File tools other than patches under the Windows launch contract; elevated-sandbox profile reads (`~/.git-credentials`, `.ssh`, `.npmrc`, `.config/gh`) |
 | PF-27-S06/S07 Windows follow-ups | [S06](../../sprints/archive/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md), [S07](../../sprints/archive/p1-security-hardening/pf-27-s07-windows-hardening-follow-ups.md) (archived 2026-10-08, accepted with known limits) | #300 decided fail closed, being implemented; #301/#304 decided rule-driven removal, draft PR #326; #323 open; #307 and #320 fixed (PRs #321, #327); PF-27-S08/S09 planned |
-| PF-27-S09 follow-ups | [PF-27-S09](../../sprints/archive/p1-security-hardening/pf-27-s09-windows-model-client-auth.md) (archived 2026-10-10, accepted with known limits; `broker_model_auth` still default off) | #389 console-session Credential Manager acceptance run; #390 exclusive pipe-squat probe; #391 `broker_model_auth` default-on decision |
+| PF-27-S09 follow-ups | [PF-27-S09](../../sprints/archive/p1-security-hardening/pf-27-s09-windows-model-client-auth.md) (archived 2026-10-10, accepted with known limits) | #389 passed with limits (PR #395); #390 fixed (PR #399); #391: `broker_model_auth` is on by default under Aggressive on macOS, Linux and Windows, an explicit setting wins, and it fails closed ([evidence](../../../qa/security/issue-391/README.md)). The flag stays default off for Permissive and Moderate, a separate later decision |
 | PF-27-S08 follow-ups | [PF-27-S08](../../sprints/archive/p1-security-hardening/pf-27-s08-windows-broker-restricted-token.md) (archived 2026-10-09, accepted with known limits) | PF-27-S09 (stored-key reader, model auth) completed and archived 2026-10-10; Core creates `secrets/.vault.lock` and the broker locks it read-only (PR #363) |
 
 ## User pain

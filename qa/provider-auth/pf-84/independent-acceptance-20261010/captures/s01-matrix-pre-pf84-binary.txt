@@ -1,0 +1,36 @@
+== 1 CORBANU_HOME only
+   env: CORBANU_HOME=$S/s01/hA
+   home used: s01/hA
+   stderr warnings: 0
+== 2 CODEX_HOME only
+   env: CODEX_HOME=$S/s01/hB
+   home used: s01/hB
+   stderr warnings: 0
+== 3 CORBANU_HOME=A CODEX_HOME=B
+   env: CORBANU_HOME=$S/s01/hA CODEX_HOME=$S/s01/hB
+   home used: s01/hA
+   stderr warnings: 0
+== 4 PFTERMINAL_HOME=P CODEX_HOME=B
+   env: PFTERMINAL_HOME=$S/s01/hP CODEX_HOME=$S/s01/hB
+   home used: s01/hP
+   stderr warnings: 0
+== 5 CORBANU_HOME=A PFTERMINAL_HOME=P
+   env: CORBANU_HOME=$S/s01/hA PFTERMINAL_HOME=$S/s01/hP
+   home used: s01/hA
+   stderr warnings: 0
+== 6 all three differ
+   env: CORBANU_HOME=$S/s01/hA PFTERMINAL_HOME=$S/s01/hP CODEX_HOME=$S/s01/hB
+   home used: s01/hA
+   stderr warnings: 0
+== 7 same path, trailing slash
+   env: CORBANU_HOME=$S/s01/hA CODEX_HOME=$S/s01/hA/
+   home used: s01/hA
+   stderr warnings: 0
+== 8 same path via symlink
+   env: CORBANU_HOME=$S/s01/hA CODEX_HOME=$S/s01/hA-link
+   home used: s01/hA
+   stderr warnings: 0
+== 9 CODEX_HOME names missing dir
+   env: CORBANU_HOME=$S/s01/hA CODEX_HOME=$S/s01/does-not-exist
+   home used: s01/hA
+   stderr warnings: 0

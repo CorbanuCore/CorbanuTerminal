@@ -171,6 +171,50 @@ Do not put long-lived provider keys in `experimental_bearer_token` unless you
 are intentionally running an automation-only setup. For interactive use, use
 onboarding or `/vault`.
 
+<a id="model-key-broker"></a>
+
+### Model key broker (`broker_model_auth`)
+
+With `broker_model_auth` on, provider API keys are held by a separate
+credential broker process, and the broker sends every model request for
+Corbanu. Keys saved in the vault are read only by the broker. Keys in the
+environment are moved to the broker when the session starts and removed from
+Corbanu's environment. If the broker
+can't start, model requests are refused, never sent directly, and the error
+message names the setting and how to turn it off.
+
+Limits:
+
+- Sign-in tokens (ChatGPT sign-in, API-key login, `experimental_bearer_token`)
+  are still read by Corbanu and then passed to the broker.
+- Command, AWS and header-based provider sign-ins aren't brokered.
+- Realtime conversations and websockets are off.
+- Provider URLs that use plain HTTP, an IPv6 address or a query string can't be
+  brokered, so those requests are refused.
+
+The default depends on the security level:
+
+| Level                                                           | Default                         |
+| --------------------------------------------------------------- | ------------------------------- |
+| Permissive, Moderate                                            | off                             |
+| Aggressive (chosen in `/security` or set as `[security] level`) | on, on macOS, Linux and Windows |
+
+On other systems it stays off, because the broker isn't supported there. A value
+you set yourself always wins over the level's default; only a managed policy
+outranks it. A project's `.codex/config.toml` doesn't change it under
+Aggressive:
+
+```toml
+[features]
+broker_model_auth = false   # or true, at any level
+```
+
+`-c features.broker_model_auth=false` and `--disable broker_model_auth` work
+the same way. A level you choose in `/security` while Corbanu is running takes
+effect when Corbanu restarts; a `[security] level` in config applies from the
+next new session. Under Aggressive with the broker off, Corbanu shows a startup
+warning and `/security` reports the level as partial.
+
 <a id="shell-environment"></a>
 
 ## Shell Environment

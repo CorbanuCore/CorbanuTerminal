@@ -756,6 +756,9 @@ pub struct Config {
     /// User-facing security posture composed with the existing permission system.
     pub security_level: SecurityLevel,
 
+    /// What turned `broker_model_auth` on (#391).
+    pub broker_model_auth_origin: crate::model_broker_auth::BrokerModelAuthOrigin,
+
     /// Effective permission configuration for shell tool execution.
     pub permissions: Permissions,
 
@@ -3568,12 +3571,10 @@ impl Config {
         // PF-23-S03: the level of every layer and a confirmed level stored by
         // the trusted controller are floors; an unreadable store enforces
         // Aggressive and says so.
-        let recovery = crate::security::recovery::recover(
-            codex_home.as_path(),
-            security_settings
-                .level
-                .max(layered_security_floor(&config_layer_stack)),
-        );
+        let configured_level = security_settings
+            .level
+            .max(layered_security_floor(&config_layer_stack));
+        let recovery = crate::security::recovery::recover(codex_home.as_path(), configured_level);
         if let Some(warning) = recovery.warning() {
             startup_warnings.push(warning);
         }
@@ -3679,7 +3680,7 @@ impl Config {
             web_search_request: override_tools_web_search_request,
         };
 
-        let configured_features = Features::from_sources(
+        let mut configured_features = Features::from_sources(
             FeatureConfigSource {
                 features: cfg.features.as_ref(),
                 experimental_use_unified_exec_tool: cfg.experimental_use_unified_exec_tool,
@@ -3689,11 +3690,39 @@ impl Config {
             },
             feature_overrides,
         );
+        // #391: Aggressive (Core's level or the stored `/security` level)
+        // turns `broker_model_auth` on unless the person's own configuration
+        // sets it; a project layer cannot turn it off.
+        let explicit_broker = explicit_feature_setting(
+            &config_layer_stack,
+            cfg.features.as_ref(),
+            Feature::BrokerModelAuth,
+        );
+        let level_broker = crate::model_broker_auth::level_broker_setting(
+            crate::model_broker_auth::level_for_defaults(codex_home.as_path(), configured_level),
+            crate::model_broker_auth::LEVEL_DEFAULT_SUPPORTED,
+            explicit_broker,
+        );
+        if let Some(enabled) = level_broker {
+            configured_features.set_enabled(Feature::BrokerModelAuth, enabled);
+        }
         let mut features = ManagedFeatures::from_configured_with_warnings(
             configured_features,
             feature_requirements,
             &mut startup_warnings,
         )?;
+        let broker_model_auth_origin = {
+            use crate::model_broker_auth::BrokerModelAuthOrigin;
+            if !features.enabled(Feature::BrokerModelAuth) {
+                BrokerModelAuthOrigin::Config
+            } else if features.pinned(Feature::BrokerModelAuth) == Some(true) {
+                BrokerModelAuthOrigin::Policy
+            } else if level_broker == Some(true) && explicit_broker.is_none() {
+                BrokerModelAuthOrigin::AggressiveLevel
+            } else {
+                BrokerModelAuthOrigin::Config
+            }
+        };
         let secretless_agent_launch = features.enabled(Feature::SecretlessAgentLaunch);
         if secretless_agent_launch {
             // PF-27-S02: arm the launch contract for this process, and never
@@ -3713,7 +3742,11 @@ impl Config {
         if !secretless_agent_launch {
             crate::security::launch_contract::release_codex_home_when_unarmed(&codex_home);
         }
-        if features.enabled(Feature::BrokerModelAuth) {
+        // Core's unit tests load Aggressive configs in one shared process;
+        // the level's setting must not make that whole process brokered (nor
+        // start its broker: `install_for_config` follows this mark there).
+        let level_default_in_unit_test = cfg!(test) && level_broker.is_some();
+        if features.enabled(Feature::BrokerModelAuth) && !level_default_in_unit_test {
             // PF-27-S05: this process brokers provider credentials from now on;
             // until its broker runs, they are not sent at all.
             codex_model_provider::require_model_key_broker();
@@ -4751,6 +4784,7 @@ impl Config {
             workspace_roots_explicit,
             startup_warnings,
             security_level,
+            broker_model_auth_origin,
             permissions: Permissions {
                 approval_policy: constrained_approval_policy.value,
                 permission_profile_state,
@@ -5355,6 +5389,40 @@ pub async fn apply_agent_role_to_config(
     role_name: Option<&str>,
 ) -> Result<(), String> {
     crate::agent::role::apply_role_to_config(config, role_name).await
+}
+
+/// The value the person's own configuration sets for `feature` (by its key
+/// or a legacy alias): config files, launch flags and managed layers, the
+/// highest precedence first. A project's `.codex` folder does not count, so a
+/// repository cannot lower a level's default. A stack without layers (config
+/// built directly from a `ConfigToml`) reads `features`.
+fn explicit_feature_setting(
+    stack: &ConfigLayerStack,
+    features: Option<&FeaturesToml>,
+    feature: Feature,
+) -> Option<bool> {
+    let is_feature = |key: &str| codex_features::feature_for_key(key) == Some(feature);
+    let layers = stack.layers_high_to_low();
+    if layers.is_empty() {
+        return features?
+            .entries()
+            .into_iter()
+            .filter(|(key, _)| is_feature(key))
+            .map(|(_, enabled)| enabled)
+            .next_back();
+    }
+    layers
+        .into_iter()
+        .filter(|layer| !matches!(layer.name, ConfigLayerSource::Project { .. }))
+        .find_map(|layer| {
+            layer
+                .config
+                .get("features")?
+                .as_table()?
+                .iter()
+                .filter(|(key, _)| is_feature(key))
+                .find_map(|(_, value)| value.as_bool())
+        })
 }
 
 /// PF-23-S03: the strictest security level any enabled config layer sets.

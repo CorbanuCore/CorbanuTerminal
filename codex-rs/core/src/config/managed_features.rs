@@ -90,6 +90,11 @@ impl ManagedFeatures {
         self.value.get()
     }
 
+    /// The value a managed requirement pins `feature` to, if any.
+    pub fn pinned(&self, feature: Feature) -> Option<bool> {
+        self.pinned_features.get(&feature).copied()
+    }
+
     fn normalize_and_validate(&self, candidate: Features) -> ConstraintResult<Features> {
         let normalized = normalize_candidate(candidate, &self.pinned_features);
         self.value.can_set(&normalized)?;

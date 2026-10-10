@@ -1,0 +1,11 @@
+# ISSUE-391 demo videos
+
+Recorded with `scripts/demo_video.py`; see [the demo SOP](../README.md).
+Videos are assets on the [`demos` prerelease](https://github.com/CorbanuCore/CorbanuTerminal/releases/tag/demos).
+
+| Date | Demo | Feature | Commit | Model | Length | Video |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-10 | `sec391-aggressive-broker-default` | #391: Aggressive holds the model key in the credential broker by default | `295c20b8004f` | glm-5.3-flash | 53s | [mp4](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-391-sec391-aggressive-broker-default-295c20b8004f-2026-10-10.mp4) · [cast](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-391-sec391-aggressive-broker-default-295c20b8004f-2026-10-10.cast) |
+| 2026-10-10 | `sec391-aggressive-broker-fails-closed` | #391: under Aggressive, a broker that cannot start fails closed | `295c20b8004f` | glm-5.3-flash | 27s | [mp4](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-391-sec391-aggressive-broker-fails-closed-295c20b8004f-2026-10-10.mp4) · [cast](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-391-sec391-aggressive-broker-fails-closed-295c20b8004f-2026-10-10.cast) |
+| 2026-10-10 | `sec391-win-aggressive-broker-default` | #391 (Windows): Aggressive holds the model key in the credential broker by default | `295c20b8004f` | glm-5.3-flash | 42s | [mp4](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-391-sec391-win-aggressive-broker-default-295c20b8004f-2026-10-10.mp4) · [cast](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-391-sec391-win-aggressive-broker-default-295c20b8004f-2026-10-10.cast) |
+| 2026-10-10 | `sec391-win-aggressive-broker-fails-closed` | #391 (Windows): under Aggressive, a broker that cannot start fails closed | `295c20b8004f` | glm-5.3-flash | 15s | [mp4](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-391-sec391-win-aggressive-broker-fails-closed-295c20b8004f-2026-10-10.mp4) · [cast](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-391-sec391-win-aggressive-broker-fails-closed-295c20b8004f-2026-10-10.cast) |

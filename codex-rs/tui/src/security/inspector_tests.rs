@@ -64,7 +64,8 @@ pub(crate) fn healthy(root: ThreadId) -> RuntimeFacts {
         denials: Vec::new(),
         launch_contract: ContractFacts::Armed { hardened: true },
         output_gate: ControlFacts::Enforcing,
-        model_broker: ControlFacts::Off,
+        // #391: Aggressive turns the model key broker on.
+        model_broker: ControlFacts::Enforcing,
     }
 }
 
@@ -123,6 +124,43 @@ fn pf_41_s01_green_only_when_every_required_control_is_observed() {
     );
 }
 
+/// #391: Aggressive turns the model key broker on where it runs, so a broker
+/// that config turned off leaves Aggressive partial; Permissive needs none.
+#[test]
+fn sec_391_model_key_broker_off_under_aggressive_is_partial() {
+    let facts = RuntimeFacts {
+        model_broker: ControlFacts::Off,
+        ..healthy(ThreadId::new())
+    };
+    let input = input(ChosenLevel::Aggressive);
+    let saved = saved(ChosenLevel::Aggressive);
+    let off = sections(&input, &saved, &facts, NOW);
+    let broker = find(&off, "Model key broker");
+    assert_eq!(
+        (broker.state, broker.value.as_str()),
+        (
+            State::Off,
+            "off: Core reads provider keys itself (broker_model_auth is off in config, or this process started before Aggressive)"
+        )
+    );
+    let expected = if cfg!(any(target_os = "macos", target_os = "linux", windows)) {
+        Badge::Partial("Aggressive", vec!["Model key broker".to_string()])
+    } else {
+        Badge::Protected("Aggressive")
+    };
+    assert_eq!(badge(&input, &saved, &facts, &off, NOW), expected);
+
+    // A broker that did not start is degraded.
+    let failed = RuntimeFacts {
+        model_broker: ControlFacts::Degraded(
+            "the broker did not start; model requests are refused, never sent directly",
+        ),
+        ..facts
+    };
+    let degraded = sections(&input, &saved, &failed, NOW);
+    assert_eq!(find(&degraded, "Model key broker").state, State::Degraded);
+}
+
 #[test]
 fn pf_41_s01_core_lagging_behind_the_launch_level_is_degraded() {
     let input = input(ChosenLevel::Aggressive);
@@ -173,7 +211,7 @@ fn pf_41_s01_stale_health_and_broker_crash_are_degraded() {
         )
     );
 
-    // An installed broker is not observed healthy, and is not required.
+    // An installed broker is not observed healthy, and not counted as missing.
     let installed = RuntimeFacts {
         model_broker: ControlFacts::Enforcing,
         ..facts.clone()
