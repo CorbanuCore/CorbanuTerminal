@@ -7,7 +7,6 @@ use super::*;
 
 /// Upper bound for fixture subprocesses that are expected to answer. These tests assert the
 /// answer, not its latency, so a loaded CI runner must not turn them into timeout checks.
-#[cfg(unix)]
 const FIXTURE_SUCCESS_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Writes an executable fixture script from a child process.
