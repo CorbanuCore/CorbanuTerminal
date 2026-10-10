@@ -180,7 +180,7 @@ fn not_started_message(cause: StartFailure, origin: BrokerModelAuthOrigin) -> St
              in config.toml, then restart"
         }
     };
-    format!("model requests are refused: {cause}; nothing is sent without it. {remedy}")
+    format!("model requests are refused: {cause}; nothing is sent without it. {remedy}.")
 }
 
 /// Why a brokered request could not be authorized.
