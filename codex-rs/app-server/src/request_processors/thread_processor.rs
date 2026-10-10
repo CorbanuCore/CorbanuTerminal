@@ -3935,8 +3935,10 @@ impl ThreadRequestProcessor {
         );
         let had_explicit_model_override =
             has_model_resume_override(request_overrides.as_ref(), typesafe_overrides);
-        // PF-84: resume on the recorded account unless one was chosen explicitly.
-        if typesafe_overrides.provider_account.is_none() && !had_explicit_model_override {
+        // PF-84: resume on the recorded account unless one was chosen
+        // explicitly. It is qualified by the recorded provider, so it is
+        // harmless when the resume also switches to another provider.
+        if typesafe_overrides.provider_account.is_none() {
             typesafe_overrides.provider_account =
                 recorded_provider_account(&resumed_history.history);
         }
