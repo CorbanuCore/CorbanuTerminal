@@ -18,6 +18,7 @@ pub use bedrock_api_key::BedrockApiKeyAuth;
 pub use bedrock_api_key::login_with_bedrock_api_key;
 pub use error::RefreshTokenFailedError;
 pub use error::RefreshTokenFailedReason;
+pub use external_bearer::ExternalBearerAccount;
 pub use external_bearer::ExternalBearerCachePolicy;
 pub use external_bearer::PROVIDER_ACCOUNT_ENV_VAR;
 pub use external_bearer::validate_provider_auth_command;

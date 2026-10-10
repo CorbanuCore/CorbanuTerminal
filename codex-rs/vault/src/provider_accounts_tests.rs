@@ -253,6 +253,7 @@ fn an_entry_of_another_type_is_not_account_material() {
             .expect("read"),
         None
     );
+    assert_eq!(vault.list_provider_accounts().expect("list"), Vec::new());
 }
 
 #[test]

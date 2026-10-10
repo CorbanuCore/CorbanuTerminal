@@ -32,7 +32,7 @@ impl BearerTokenRefresher {
     pub(crate) fn new(
         config: ModelProviderAuthInfo,
         cache_policy: ExternalBearerCachePolicy,
-        account: Option<String>,
+        account: Option<ExternalBearerAccount>,
     ) -> Self {
         Self {
             state: Arc::new(ExternalBearerAuthState::new(config, cache_policy, account)),
@@ -118,9 +118,44 @@ impl fmt::Debug for BearerTokenRefresher {
     }
 }
 
+/// PF-84: the named account an `auth.command` provider serves.
+#[derive(Clone, Debug)]
+pub struct ExternalBearerAccount {
+    pub provider_id: String,
+    pub name: String,
+    /// The home whose registry must hold a `command` entry for this account
+    /// before the command runs. `None` when the command checks the account
+    /// itself (Claude Plan's helper).
+    pub registry_home: Option<PathBuf>,
+}
+
+impl ExternalBearerAccount {
+    fn ensure_enrolled(&self) -> io::Result<()> {
+        let Some(home) = self.registry_home.as_deref() else {
+            return Ok(());
+        };
+        let enrolled = super::provider_key_vault::provider_account_holds(
+            home,
+            &self.provider_id,
+            &self.name,
+            codex_vault::ProviderAccountKind::Command,
+        )?;
+        if enrolled {
+            Ok(())
+        } else {
+            Err(io::Error::other(format!(
+                "account `{name}` of provider `{id}` is not configured; add it with \
+                 `corbanu account add {id} {name} --kind command` or choose another account",
+                name = self.name,
+                id = self.provider_id,
+            )))
+        }
+    }
+}
+
 struct ExternalBearerAuthState {
     config: ModelProviderAuthInfo,
-    account: Option<String>,
+    account: Option<ExternalBearerAccount>,
     cache_policy: ExternalBearerCachePolicy,
     cached_token: Mutex<Option<CachedExternalBearerToken>>,
 }
@@ -129,7 +164,7 @@ impl ExternalBearerAuthState {
     fn new(
         config: ModelProviderAuthInfo,
         cache_policy: ExternalBearerCachePolicy,
-        account: Option<String>,
+        account: Option<ExternalBearerAccount>,
     ) -> Self {
         Self {
             config,
@@ -156,9 +191,15 @@ impl ExternalBearerAuthState {
         mut revision_before: Option<Vec<u8>>,
     ) -> io::Result<(String, Option<Vec<u8>>)> {
         for _ in 0..3 {
-            let access_token =
-                run_provider_auth_command(&self.config, force_refresh, self.account.as_deref())
-                    .await?;
+            if let Some(account) = &self.account {
+                account.ensure_enrolled()?;
+            }
+            let access_token = run_provider_auth_command(
+                &self.config,
+                force_refresh,
+                self.account.as_ref().map(|account| account.name.as_str()),
+            )
+            .await?;
             let revision_after = self.cache_revision();
             if !matches!(
                 &self.cache_policy,

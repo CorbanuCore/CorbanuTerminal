@@ -209,14 +209,27 @@ pub(crate) fn auth_manager_for_provider(
 ) -> Option<Arc<AuthManager>> {
     let cache_policy = external_bearer_cache_policy(auth_manager.as_deref(), provider);
     match provider.auth.clone() {
-        Some(config) => Some(AuthManager::external_bearer_only_for_account(
-            config,
-            cache_policy,
-            provider
-                .account
-                .as_ref()
-                .map(|account| account.name.clone()),
-        )),
+        Some(config) => {
+            let account = provider.account.as_ref().map(|account| {
+                codex_login::auth::ExternalBearerAccount {
+                    provider_id: account.provider_id.clone(),
+                    name: account.name.clone(),
+                    // Claude Plan's helper checks its own accounts.
+                    registry_home: (!provider.is_claude_plan())
+                        .then(|| {
+                            auth_manager
+                                .as_deref()
+                                .map(|m| m.codex_home().to_path_buf())
+                        })
+                        .flatten(),
+                }
+            });
+            Some(AuthManager::external_bearer_only_for_account(
+                config,
+                cache_policy,
+                account,
+            ))
+        }
         None => auth_manager,
     }
 }

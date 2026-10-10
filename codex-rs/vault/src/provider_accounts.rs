@@ -223,7 +223,9 @@ impl Vault {
         let mut accounts: BTreeMap<(String, ProviderAccountName), Vec<ProviderAccountKind>> =
             BTreeMap::new();
         for entry in self.list()? {
-            if let Some((provider_id, name, kind)) = parse_provider_account_label(&entry.label) {
+            if let Some((provider_id, name, kind)) = parse_provider_account_label(&entry.label)
+                && entry.credential_type == kind.credential_type()
+            {
                 accounts.entry((provider_id, name)).or_default().push(kind);
             }
         }

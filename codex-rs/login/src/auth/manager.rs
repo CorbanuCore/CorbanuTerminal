@@ -2739,7 +2739,7 @@ impl AuthManager {
     pub fn external_bearer_only_for_account(
         config: ModelProviderAuthInfo,
         cache_policy: ExternalBearerCachePolicy,
-        account: Option<String>,
+        account: Option<super::external_bearer::ExternalBearerAccount>,
     ) -> Arc<Self> {
         let (auth_change_tx, _auth_change_rx) = watch::channel(0);
         Arc::new(Self {

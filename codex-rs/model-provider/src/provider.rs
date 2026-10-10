@@ -381,13 +381,10 @@ impl ConfiguredModelProvider {
             .as_ref()
             .map(|auth_manager| auth_manager.codex_home().to_path_buf());
         let account_error = command_account_error(&provider_info, account_home.as_deref());
-        // PF-84: an unenrolled command account never gets a manager, so its
-        // name never reaches the command.
-        let auth_manager = if account_error.is_some() {
-            None
-        } else {
-            auth_manager_for_provider(auth_manager, &provider_info)
-        };
+        // PF-84: the account-bound manager itself refuses an unenrolled
+        // account before running the command; `account_error` only gives
+        // requests the precise message early.
+        let auth_manager = auth_manager_for_provider(auth_manager, &provider_info);
         Self {
             info: provider_info,
             auth_manager,
