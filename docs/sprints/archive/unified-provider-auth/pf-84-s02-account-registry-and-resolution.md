@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-84-S02"
 title: "Named account registry, storage and credential resolution"
-status: ready
+status: completed
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-84"
 execution_order: 24
@@ -14,12 +14,29 @@ branch: "feat/pf-84-s02-account-registry"
 base_commit: "051f9747225776a5d85ad00c2e5d0a8f5f4036bf"
 depends_on: "none"
 created: 2026-10-08
-updated: 2026-10-10
+updated: 2026-10-11
 merged_behind_flag: "named_accounts"
 gate_evidence: "qa/provider-auth/pf-84/s02-gate.md"
 ---
 
 # PF-84-S02 — Named account registry, storage and credential resolution
+
+## Closure — 2026-10-11
+
+Completed. Travis **accepted** PF-84-S02 on 2026-10-11 (in chat with the coordinator) behind the default-off `named_accounts` flag; the flag stays off. Both acceptance runs were source-blind, not the full isolated code-blind run; Travis accepted on that evidence, which is recorded here as the limited-testing agreement. Archived by the PF-84 integration worker.
+
+Evidence:
+
+- [Gate evidence](../../../../qa/provider-auth/pf-84/s02-gate.md) (tests, tmux/GLM 5.3 Flash runs, review dispositions, videos).
+- [S01/S02 independent acceptance](../../../../qa/provider-auth/pf-84/independent-acceptance-20261010/README.md) (PR #420, [review](../../../../qa/provider-auth/pf-84/independent-acceptance-20261010/REVIEW.md)): 12 pass, S02-3b (#414), S02-9b (#415) and S02-14 (#416) failed, S02-15 not verifiable.
+- [acceptance fixes #414–#419](../../../../qa/provider-auth/pf-84/acceptance-fixes-20261010/README.md) (PR #422); the [S03 independent acceptance and S02 re-check](../../../../qa/provider-auth/pf-84/independent-acceptance-s03-20261010/README.md) (PR #429, [review](../../../../qa/provider-auth/pf-84/independent-acceptance-s03-20261010/REVIEW.md)) re-ran S02-3b, S02-9b and S02-14: all pass.
+- PRs: #407, #409 (implementation), #420 (acceptance), #422 (#414–#419 fixes), #429 (re-check).
+
+Follow-ups (tracked, not blockers):
+
+- S02-15 stays open: which model routes count as "siblings" for model correction was not verifiable from
+  outside; it needs someone to name a sibling route pair.
+- Named ChatGPT/OpenAI sign-ins and AWS profiles still fail closed; they moved to PF-84-S06 (decision D4).
 
 ## Execution mandate
 
@@ -74,7 +91,7 @@ Refs are at `origin/main` `63ea3d0cbd`, from multiacct1; paths are under `codex-
 
 ## Remaining
 
-- [ ] Independent code-blind functional design and execution (acceptance step, not the implementer).
+- [x] Independent acceptance: a source-blind run instead of the isolated code-blind run (PRs #420 and #429); Travis accepted it 2026-10-11 as limited testing.
 
 ## Verification
 
@@ -82,7 +99,7 @@ Refs are at `origin/main` `63ea3d0cbd`, from multiacct1; paths are under `codex-
 - [x] tmux + GLM run (`-m glm-5.3-flash -c model_provider="zai"`) with the 401 proof.
 - [x] Videos: `pf84-account-isolation`, `pf84-account-isolation-kimi` (`qa/demos/index/PF-84-S02.md`).
 - [x] One independent review (Opus 5.5 High).
-- [ ] Independent code-blind acceptance run linked (then Travis sign-off).
+- [x] Independent acceptance run linked (PRs #420 and #429); Travis signed off 2026-10-11.
 
 ## Security notes
 
@@ -95,6 +112,6 @@ Refs are at `origin/main` `63ea3d0cbd`, from multiacct1; paths are under `codex-
 
 - [x] Implementation commit and PR recorded (gate evidence).
 - [x] Test output, canary scan, tmux log and video paths linked.
-- [ ] Code-blind checker (or limited-testing agreement) linked.
+- [x] Limited-testing agreement recorded (Closure, 2026-10-11).
 - [x] `Done` and `Remaining` ledgers reflect reality.
-- [ ] Completed record moved to `docs/sprints/archive/unified-provider-auth/`.
+- [x] Completed record moved to `docs/sprints/archive/unified-provider-auth/`.

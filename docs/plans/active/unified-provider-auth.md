@@ -12,7 +12,7 @@ activation_basis: "The user's 2026-09-01 P1 decision to supersede the remaining 
 target_release: "TBD"
 deadline: "TBD"
 created: 2026-08-30
-updated: 2026-10-10
+updated: 2026-10-11
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "Shipping MVP — LIVE"
@@ -431,9 +431,9 @@ credential scope. PF-84 does not change profile semantics.
 
 | Owner | Worktree | Branch | Base commit | Scope |
 | --- | --- | --- | --- | --- |
-| Codex PF-84 home-hygiene worker | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s01-home` | `feat/pf-84-s01-home-override` | `051f9747225776a5d85ad00c2e5d0a8f5f4036bf` | PF-84-S01, lane `home-hygiene`. |
-| Codex PF-84 account-registry worker | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s02-accounts` | `feat/pf-84-s02-account-registry` | `051f9747225776a5d85ad00c2e5d0a8f5f4036bf` | PF-84-S02, lane `account-registry`. |
-| Codex PF-84 lane owner | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s03-select` | `feat/pf-84-s03-account-selection` | `0fa45b54f0ca65a6ce3485c27281624cb6f8b2cb` | PF-84-S03, lane `account-selection` (serial after S02, merged behind `named_accounts`). |
+| Codex PF-84 home-hygiene worker | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s01-home` | `feat/pf-84-s01-home-override` | `051f9747225776a5d85ad00c2e5d0a8f5f4036bf` | PF-84-S01, lane `home-hygiene` (completed, archived 2026-10-11). |
+| Codex PF-84 account-registry worker | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s02-accounts` | `feat/pf-84-s02-account-registry` | `051f9747225776a5d85ad00c2e5d0a8f5f4036bf` | PF-84-S02, lane `account-registry` (completed, archived 2026-10-11). |
+| Codex PF-84 lane owner | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s03-select` | `feat/pf-84-s03-account-selection` | `0fa45b54f0ca65a6ce3485c27281624cb6f8b2cb` | PF-84-S03, lane `account-selection` (serial after S02, merged behind `named_accounts`; completed, archived 2026-10-11). |
 | Codex PF-84 lane owner | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s04-providers` | `feat/pf-84-s04-provider-accounts-ui` | `0558c52cc320422d1fc187f4a98afff7a1530286` | PF-84-S04, lane `account-ui` (serial after S03, merged behind `named_accounts`). |
 | GPT-5.6 Sol high implementation agent (historical) | `/home/pfrpc/repos/worktrees/corbanu-main-f7356a94e0` | `feat/unified-provider-auth` | `f7356a94e032234022a462d65b576a7de2854859` | Serial implementation of PF-48 through PF-56 only. |
 | Codex primary agent | same receiving worktree | same branch | same base | Feature completeness, integration decisions, scope control, review budget, final-tree verification, and TMUX acceptance. |
@@ -525,9 +525,9 @@ OpenAI schema, provider authorization or credential format is rewritten.
 | `PF-58` | Credential-scoped runtime health and keyboard reauthentication | [PF-58-S01](../../sprints/current/unified-provider-auth/pf-58-s01-credential-health-and-reauth.md) | Draft residual qualification; implementation human-accepted for main integration September 11; historical blocked cases retained |
 | `PF-57` | Reconciled release credential-lifecycle regressions | [PF-57-S02](../../sprints/archive/unified-provider-auth/pf-57-s02-reconciliation-auth-repairs.md) | completed; [Astra repair evidence](../../../qa/release/0.1.38/astra-fixes.md) |
 | `PF-57` | Reconcile Travis's provider UX/catalog changes with repaired release | [PF-57-S03](../../sprints/archive/unified-provider-auth/pf-57-s03-travis-release-reconciliation.md) | completed; [combined-tree evidence](../../../qa/release/0.1.38/travis-reconciliation.md) at `c37eb277d9` |
-| `PF-84` | Home override hygiene (wrapper pitfall) | [PF-84-S01](../../sprints/current/unified-provider-auth/pf-84-s01-home-override-hygiene.md) | ready (lane home-hygiene) |
-| `PF-84` | Named account registry, storage and resolution | [PF-84-S02](../../sprints/current/unified-provider-auth/pf-84-s02-account-registry-and-resolution.md) | ready (lane account-registry) |
-| `PF-84` | Account selection per session, CLI and worker | [PF-84-S03](../../sprints/current/unified-provider-auth/pf-84-s03-account-selection-and-propagation.md) | ready (lane account-selection) |
+| `PF-84` | Home override hygiene (wrapper pitfall) | [PF-84-S01](../../sprints/archive/unified-provider-auth/pf-84-s01-home-override-hygiene.md) | completed; accepted by Travis 2026-10-11 ([gate](../../../qa/provider-auth/pf-84/s01-gate.md), [acceptance](../../../qa/provider-auth/pf-84/independent-acceptance-20261010/README.md)) |
+| `PF-84` | Named account registry, storage and resolution | [PF-84-S02](../../sprints/archive/unified-provider-auth/pf-84-s02-account-registry-and-resolution.md) | completed; accepted 2026-10-11 behind `named_accounts` (flag off); S02-15 open ([gate](../../../qa/provider-auth/pf-84/s02-gate.md)) |
+| `PF-84` | Account selection per session, CLI and worker | [PF-84-S03](../../sprints/archive/unified-provider-auth/pf-84-s03-account-selection-and-propagation.md) | completed; accepted 2026-10-11 behind `named_accounts` with limits: #425, #426 and #428 must be resolved before the flag is removed ([gate](../../../qa/provider-auth/pf-84/s03-gate.md), [acceptance](../../../qa/provider-auth/pf-84/independent-acceptance-s03-20261010/README.md)) |
 | `PF-84` | `/providers` account management; duplicate-row fix | [PF-84-S04](../../sprints/current/unified-provider-auth/pf-84-s04-provider-account-management-ui.md) | in progress (lane account-ui) |
 | `PF-84` | Per-account usage and rate-limit attribution | [PF-84-S05](../../sprints/current/unified-provider-auth/pf-84-s05-per-account-usage-attribution.md) | draft; unallocated |
 | `PF-84` | Named AWS profile and ChatGPT/OpenAI sign-in accounts | [PF-84-S06](../../sprints/current/unified-provider-auth/pf-84-s06-aws-and-chatgpt-accounts.md) | draft; unallocated (D4) |
@@ -725,7 +725,7 @@ see the [reconciliation evidence](../../../qa/release/0.1.38/travis-reconciliati
 | Review remediation | regression | Codex primary integration agent | PF-57 | Completed: fresh onboarding occurs only when the current provider is unconfigured and no ready configured interactive alternative exists; established inactive, unavailable, recovery-required, removed, or missing-current profiles enter chat blocked until explicit recovery. Onboarding caches status, compatible-model persistence precedes selection completion, local/status-only providers remain usable, and command auth stays lazy. Dead legacy UI cleanup remains nonblocking follow-up work. |
 | D1 PF-84 storage | product | Travis | PF-84-S02 | **Recommended default adopted 2026-10-10; Travis may revisit.** one vault per home with account-qualified labels (no new keychain items). Alternative: a home per account (proven, but splits vault, sessions and usage). |
 | D2 PF-84 import | product | Travis | PF-84-S04 | **Recommended default adopted 2026-10-10; Travis may revisit.** no automatic import from per-home workaround homes; re-enroll. |
-| D3 PF-84 model-chosen account | security | Travis | PF-84-S03 | **Recommended default adopted 2026-10-10; Travis may revisit.** spawn `account` limited to configured names, shown in the spawn event; requires approval under `/security` Aggressive. |
+| D3 PF-84 model-chosen account | security | Travis | PF-84-S03 | **Recommended default adopted 2026-10-10.** spawn `account` limited to configured names, shown in the spawn event; requires approval under `/security` Aggressive, refused with approvals off. **#428 decided 2026-10-11 by Travis (option 1):** "Aggressive" also covers every state the TUI shows as Aggressive while Core's level stays lower ("Aggressive enforced, boundary unverified", "Active in this session: Aggressive"). Implemented by #432 (refused with approvals off). |
 | D4 PF-84 ChatGPT and AWS accounts | product | Travis | PF-84-S06 | **Decided 2026-10-11 by Travis (option (a))**: new S06 after S05, AWS profile accounts first, then ChatGPT/OpenAI sign-in accounts. Open points listed in the S06 record. |
 | PF-76-S01 overlap | integration | plan owner | PF-84-S02 | Reconciled 2026-10-10: PF-76 stores a profile's sign-in as a PF-84 named account selected by `[profiles.<name>.provider_accounts]`; see the PF-84 section. |
 
