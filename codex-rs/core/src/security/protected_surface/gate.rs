@@ -184,7 +184,24 @@ pub(crate) async fn ask_human(
     call_id: &str,
     question: String,
 ) -> bool {
-    let id = format!("{QUESTION_PREFIX}_{call_id}");
+    ask_human_answer(session, turn, call_id, question).await == Some(true)
+}
+
+/// The id of the question [`ask_human`] asks for `call_id`.
+pub(crate) fn question_id(call_id: &str) -> String {
+    format!("{QUESTION_PREFIX}_{call_id}")
+}
+
+/// [`ask_human`], telling an answer (`Some(true)` for "Allow once",
+/// `Some(false)` for any other) from no answer at all (`None`): the client
+/// cannot ask, such as `corbanu exec`, or the question was dismissed.
+pub(crate) async fn ask_human_answer(
+    session: &Session,
+    turn: &TurnContext,
+    call_id: &str,
+    question: String,
+) -> Option<bool> {
+    let id = question_id(call_id);
     let option = |label: &str, description: &str| RequestUserInputQuestionOption {
         label: label.to_string(),
         description: description.to_string(),
@@ -207,7 +224,7 @@ pub(crate) async fn ask_human(
         .request_user_input(turn, call_id.to_string(), args)
         .await
         .and_then(|mut response| response.answers.remove(&id))
-        .is_some_and(|answer| answer.answers == [ALLOW])
+        .map(|answer| answer.answers == [ALLOW])
 }
 
 /// PF-23-S01 dispatch-boundary check: an unclassified route, or a policy

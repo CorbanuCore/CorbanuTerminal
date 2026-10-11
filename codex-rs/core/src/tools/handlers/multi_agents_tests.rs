@@ -6614,8 +6614,8 @@ async fn spawn_with_account(
 }
 
 /// [`spawn_with_account`] with a turn that can ask the human: a security
-/// question is answered with `answer` (`Allow once` or `Cancel`). Also returns
-/// whether a question was asked.
+/// question is answered with `answer` (`Allow once`, `Cancel`, or empty for no
+/// answer). Also returns whether a question was asked.
 async fn spawn_with_account_answering(
     named_accounts: bool,
     configure: impl FnOnce(&mut crate::config::Config, &mut TurnContext),
@@ -6706,14 +6706,20 @@ async fn spawn_with_account_answering(
                     };
                     if let (Some(pending), Some(answer)) = (pending, answer) {
                         asked = true;
-                        let response = codex_protocol::request_user_input::RequestUserInputResponse {
-                            answers: std::collections::HashMap::from([(
-                                "security_post_taint_call-1".to_string(),
+                        // An empty answer stands for a client that cannot ask
+                        // (`corbanu exec` rejects the request with no answers).
+                        let answers = if answer.is_empty() {
+                            std::collections::HashMap::new()
+                        } else {
+                            std::collections::HashMap::from([(
+                                crate::security::protected_surface::question_id("call-1"),
                                 codex_protocol::request_user_input::RequestUserInputAnswer {
                                     answers: vec![answer.to_string()],
                                 },
-                            )]),
+                            )])
                         };
+                        let response =
+                            codex_protocol::request_user_input::RequestUserInputResponse { answers };
                         let _ = pending.send(response);
                     }
                 }
@@ -6885,6 +6891,16 @@ async fn tui_aggressive_spawn_account_switch_asks_the_human() {
             (
                 Err(FunctionCallError::RespondToModel(
                     "The user declined running the spawned agent on account `work` of `zai`. Do not retry on another account without the user's consent.".to_string(),
+                )),
+                Vec::new(),
+                true,
+            ),
+        ),
+        (
+            "",
+            (
+                Err(FunctionCallError::RespondToModel(
+                    "Running a spawned agent on account `work` of `zai` needs the user's approval under the Aggressive security level, and no answer was given (this session cannot ask, or the question was dismissed). Do not retry on another account without the user's consent.".to_string(),
                 )),
                 Vec::new(),
                 true,

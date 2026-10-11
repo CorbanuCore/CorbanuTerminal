@@ -13,7 +13,7 @@ use crate::config::configured_account_names;
 use crate::config::selected_account_error;
 use crate::config::stamp_provider_account;
 use crate::function_tool::FunctionCallError;
-use crate::security::protected_surface::ask_human;
+use crate::security::protected_surface::ask_human_answer;
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
 use codex_features::Feature;
@@ -91,11 +91,22 @@ pub(crate) async fn apply_spawn_agent_account(
             "Allow the spawned agent to run on account `{shown}` of `{provider_id}` instead \
              of the parent's account?"
         );
-        if !ask_human(session, turn, call_id, question).await {
-            return refuse(format!(
-                "The user declined running the spawned agent on account `{shown}` of \
-                 `{provider_id}`. Do not retry on another account without the user's consent."
-            ));
+        match ask_human_answer(session, turn, call_id, question).await {
+            Some(true) => {}
+            Some(false) => {
+                return refuse(format!(
+                    "The user declined running the spawned agent on account `{shown}` of \
+                     `{provider_id}`. Do not retry on another account without the user's consent."
+                ));
+            }
+            None => {
+                return refuse(format!(
+                    "Running a spawned agent on account `{shown}` of `{provider_id}` needs the \
+                     user's approval under the Aggressive security level, and no answer was \
+                     given (this session cannot ask, or the question was dismissed). Do not \
+                     retry on another account without the user's consent."
+                ));
+            }
         }
     }
     config.model_provider = provider;

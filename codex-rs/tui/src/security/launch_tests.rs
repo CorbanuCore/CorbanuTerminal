@@ -185,7 +185,7 @@ fn security_confirm_second_permissive_launch_keeps_the_running_aggressive_rules(
 async fn shown_aggressive_states_gate_spawn_account_switches_in_core() {
     for state in [
         "level file missing, Aggressive rules present",
-        "Aggressive saved without a preflight",
+        "Aggressive saved without a preflight, preflight feature on (boundary unverified)",
         "Permissive saved for the next start",
     ] {
         let home = tempfile::tempdir().unwrap();
@@ -202,6 +202,12 @@ async fn shown_aggressive_states_gate_spawn_account_switches_in_core() {
         }
         plan.extend_env_overrides(&ShellEnvironmentPolicyToml::default(), &mut cli);
         cli.push(broker_off());
+        if state.ends_with("(boundary unverified)") {
+            cli.push((
+                "features.protected_mode_preflight".to_string(),
+                toml::Value::Boolean(true),
+            ));
+        }
         let mut overrides = ConfigOverrides {
             cwd: Some(cwd.path().to_path_buf()),
             ..Default::default()
