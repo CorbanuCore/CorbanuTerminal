@@ -557,7 +557,7 @@ impl ChatWidget {
         self.warning_display_state.config_warning_shown(summary);
     }
 
-    pub(super) fn show_deferred_config_warnings(&mut self) {
+    pub(crate) fn show_deferred_config_warnings(&mut self) {
         for (summary, message) in self.warning_display_state.take_pending_config_warnings() {
             self.on_warning(message);
             self.warning_display_state.config_warning_shown(summary);

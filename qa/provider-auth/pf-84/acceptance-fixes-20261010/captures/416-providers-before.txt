@@ -12,7 +12,7 @@
 
 ⚠ Z.AI (zai) credential was rejected. Open /providers, select Z.AI, and press r to recover. Other providers are unchanged.
 
-■ unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: 03e78ecd-59f9-4764-a38f-ca2e7cad540d
+■ unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: b237ccb1-0e93-4053-b6c2-f025e868e22b
 
   Providers
   Configure providers and control whether they are eligible for use.

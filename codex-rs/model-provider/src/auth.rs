@@ -235,7 +235,12 @@ pub(crate) fn external_bearer_account(
         provider_id: account.provider_id.clone(),
         name: account.name.clone(),
         registry_home: registry_home.map(std::path::Path::to_path_buf),
-        server: if provider.is_claude_plan() {
+        server: if provider.is_claude_plan()
+            && provider
+                .auth
+                .as_ref()
+                .is_some_and(codex_login::auth::is_claude_plan_token_helper)
+        {
             codex_login::auth::ExternalBearerAccountServer::ClaudePlanHelper
         } else {
             codex_login::auth::ExternalBearerAccountServer::Command

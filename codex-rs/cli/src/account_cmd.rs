@@ -182,10 +182,10 @@ fn ensure_kind_fits_provider(
         AccountKindArg::Command => provider.auth.is_some() && !provider.is_claude_plan(),
     };
     if !fits {
-        bail!(
-            "provider `{provider_id}` does not take `{}` accounts",
-            kind.kind().as_str()
-        );
+        let kind = clap::ValueEnum::to_possible_value(&kind)
+            .map(|value| value.get_name().to_string())
+            .unwrap_or_else(|| kind.kind().as_str().to_string());
+        bail!("provider `{provider_id}` does not take `--kind {kind}` accounts");
     }
     Ok(())
 }

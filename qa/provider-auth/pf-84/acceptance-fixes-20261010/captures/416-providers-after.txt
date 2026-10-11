@@ -12,7 +12,7 @@
 
 ⚠ Z.AI (zai) account `fake` was rejected. Replace its key with `corbanu account add zai fake` (reads stdin), or choose another account. The default Z.AI credential is unchanged.
 
-■ unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: faa0eb2f-8370-460c-b1a6-e239c801355d
+■ unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: 48a769fa-7222-4c46-a840-4be665786cf4
 
   Providers
   Configure providers and control whether they are eligible for use.

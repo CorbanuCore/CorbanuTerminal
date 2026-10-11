@@ -267,6 +267,7 @@ pub(crate) fn build_claude_command_plan(
                 .context("failed to locate Corbanu for Claude Plan authentication")?,
             cwd: pane.cwd.clone(),
             claude_config_dir_override: absolute_claude_config_dir_override()?,
+            account: None,
         })
     } else {
         None

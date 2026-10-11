@@ -14,7 +14,7 @@ Real credentials came from the operator vault through the installed signed `corb
 
 | Issue | Before | After | Evidence |
 | --- | --- | --- | --- |
-| #414 | Account `fake`, old helper on PATH: `pong` from the **default** account. | The helper gets `--account fake --enable named_accounts` in argv. An old helper rejects it and the turn fails with a Fatal error that names the cause. `fake` with a current helper gets a 401, and `real` answers `pong`. | [414](captures/414-claude-plan-path-skew.txt) |
+| #414 | Account `fake`, old helper on PATH: `pong` from the **default** account. | The helper gets `--account fake --enable named_accounts` in argv. An old helper rejects it and the turn fails with a Fatal error naming the cause. An S02-era helper (`origin/main`) and the current helper both serve the named account: `fake` gets 401 and `real` answers `pong`. Claude panes pass the selected account the same way (unit test). | [414](captures/414-claude-plan-path-skew.txt) |
 | #415 | `--disable named_accounts` still prints `fake`'s token. | Exit 1, empty stdout, "named accounts are off". | [415](captures/415-internal-token-flag-off.txt) |
 | #416 | The hint says "Open /providers … press r", and `/providers` then marks the default Z.AI key "needs attention". | The hint names account `fake` and `corbanu account add zai fake`. `/providers` still shows the default as configured. Run on GLM 5.3 Flash. | [before](captures/416-before.txt), [after](captures/416-after.txt), [providers before](captures/416-providers-before.txt) / [after](captures/416-providers-after.txt) |
 | #417 | A home with only named accounts plus `-c provider_accounts.zai="main"` gets default-key onboarding. | Opens the chat directly, and GLM 5.3 Flash answers `pong`. | [before](captures/417-before.txt), [after](captures/417-after.txt) |
@@ -24,4 +24,6 @@ Real credentials came from the operator vault through the installed signed `corb
 | #419.3 | An unenrolled Claude account spawns the helper 28 times. | 0 spawns; it fails at once as not configured. | [414](captures/414-claude-plan-path-skew.txt), `ghost` rows |
 | #419.4/5 | A relative or missing config dir is accepted. The error reads "does not take a claude_oauth_token account". | Both dirs are refused at add time, and resolving one gives a clear error. The message reads "does not take `claude_oauth_token` accounts". | [419.4/5](captures/419-4-5-account-add.txt) |
 
-The scripts are in [`scripts/`](scripts/), and `<scratch>` stands for the scratch directory. The disposable homes holding real keys were deleted after the run.
+The scripts are in [`scripts/`](scripts/). `runall.sh` runs the CLI checks and `tui-all.sh` runs the TUI checks. `<scratch>` stands for the scratch directory. The disposable homes holding real keys were deleted after the run.
+
+Independent review (Opus 5.5 High, read-only) and dispositions: [REVIEW.md](REVIEW.md).

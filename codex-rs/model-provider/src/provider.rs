@@ -352,7 +352,7 @@ fn command_account_error(
     let account = provider_info.account.as_ref()?;
     let Some(home) = account_home else {
         return Some(format!(
-            "account `{}` of provider `{}` is not configured; choose another account",
+            "account `{}` of provider `{}` cannot be verified: no Corbanu home is available",
             account.name, account.provider_id
         ));
     };
@@ -510,8 +510,10 @@ impl ModelProvider for ConfiguredModelProvider {
                 // once more and use the recovered credential.
                 validate_provider_auth_command_for_account(
                     command_auth,
-                    crate::auth::external_bearer_account(&self.info, self.account_home.as_deref())
-                        .as_ref(),
+                    self.info
+                        .account
+                        .as_ref()
+                        .map(|account| account.name.as_str()),
                 )
                 .await
                 .map_err(|error| match error.kind() {

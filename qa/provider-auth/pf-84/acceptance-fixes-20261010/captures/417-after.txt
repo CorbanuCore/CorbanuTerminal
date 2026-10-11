@@ -12,7 +12,7 @@
 
 • pong
 
-› Run /review on my current changes
+› Find and fix a bug in @filename
 
-  Z.AI GLM 5.3 Flash via zai default · <scratch>/work · Corbanu Terminal · TPS: 0.5 tok/s
+  Z.AI GLM 5.3 Flash via zai default · <scratch>/work · Corbanu Terminal · TPS: 0.6 tok/s
 

@@ -1,4 +1,5 @@
 use anyhow::Context;
+use std::ffi::OsString;
 use std::path::PathBuf;
 
 const CORBANU_DEBUG_HOME_ENV: &str = "CORBANU_DEBUG_HOME";
@@ -25,7 +26,7 @@ pub(crate) fn configure_for_entrypoint(entrypoint: &str) -> anyhow::Result<()> {
     if !matches!(entrypoint, "pfterminal-debug" | "corbanu-debug") {
         return Ok(());
     }
-    let var = |name: &str| std::env::var(name).ok().filter(|value| !value.is_empty());
+    let var = |name: &str| std::env::var_os(name).filter(|value| !value.is_empty());
     let variables = [
         (CORBANU_DEBUG_HOME_ENV, var(CORBANU_DEBUG_HOME_ENV)),
         (LEGACY_DEBUG_HOME_ENV, var(LEGACY_DEBUG_HOME_ENV)),
@@ -40,7 +41,15 @@ pub(crate) fn configure_for_entrypoint(entrypoint: &str) -> anyhow::Result<()> {
         // `corbanu` uses it (#418); the shared resolver reports conflicts.
         return Ok(());
     };
-    let borrowed = variables
+    let lossy = variables.each_ref().map(|(name, value)| {
+        (
+            *name,
+            value
+                .as_ref()
+                .map(|value| value.to_string_lossy().into_owned()),
+        )
+    });
+    let borrowed = lossy
         .each_ref()
         .map(|(name, value)| (*name, value.as_deref()));
     if let Some(warning) = codex_core::config::home_variables_conflict(&borrowed) {
@@ -65,7 +74,7 @@ pub(crate) fn configure_for_entrypoint(entrypoint: &str) -> anyhow::Result<()> {
 /// `PFTERMINAL_DEBUG_HOME`, else `Ok(None)` when a stable-home variable is
 /// set (it is kept, like the release `corbanu`), else the default debug home.
 fn debug_home(
-    variables: &[(&str, Option<String>); 5],
+    variables: &[(&str, Option<OsString>); 5],
     user_home: Option<PathBuf>,
 ) -> Option<Option<PathBuf>> {
     let [
@@ -208,13 +217,13 @@ mod tests {
         corbanu_debug: Option<&str>,
         corbanu: Option<&str>,
         codex: Option<&str>,
-    ) -> [(&'static str, Option<String>); 5] {
+    ) -> [(&'static str, Option<OsString>); 5] {
         [
-            (CORBANU_DEBUG_HOME_ENV, corbanu_debug.map(str::to_string)),
+            (CORBANU_DEBUG_HOME_ENV, corbanu_debug.map(OsString::from)),
             (LEGACY_DEBUG_HOME_ENV, None),
-            ("CORBANU_HOME", corbanu.map(str::to_string)),
+            ("CORBANU_HOME", corbanu.map(OsString::from)),
             ("PFTERMINAL_HOME", None),
-            ("CODEX_HOME", codex.map(str::to_string)),
+            ("CODEX_HOME", codex.map(OsString::from)),
         ]
     }
 
@@ -244,11 +253,11 @@ mod tests {
             debug_home(&vars, Some(PathBuf::from("/home/tester"))),
             Some(Some(PathBuf::from("/homes/d")))
         );
-        let borrowed = vars
+        let lossy = vars
             .each_ref()
-            .map(|(name, value)| (*name, value.as_deref()));
+            .map(|(name, value)| (*name, value.as_ref().and_then(|value| value.to_str())));
         assert_eq!(
-            codex_core::config::home_variables_conflict(&borrowed).as_deref(),
+            codex_core::config::home_variables_conflict(&lossy).as_deref(),
             Some(
                 "warning: CORBANU_DEBUG_HOME (/homes/d) overrides CORBANU_HOME (/homes/b); \
                  using /homes/d. To use another home, set CORBANU_DEBUG_HOME to it."

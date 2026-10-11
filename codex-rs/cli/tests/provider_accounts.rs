@@ -121,7 +121,7 @@ fn account_add_validates_claude_config_dirs_and_names_the_kind() -> Result<()> {
         .assert()
         .failure()
         .stderr(contains(
-            "provider `zai` does not take `claude_oauth_token` accounts",
+            "provider `zai` does not take `--kind claude-token` accounts",
         ));
     Ok(())
 }

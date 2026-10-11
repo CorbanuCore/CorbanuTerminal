@@ -1175,8 +1175,8 @@ async fn claude_plan_helper_never_runs_for_an_unenrolled_account() {
         Some(account.clone()),
     );
     assert!(manager.auth().await.is_none());
-    let error = crate::validate_provider_auth_command_for_account(&config, Some(&account))
-        .await
+    let error = account
+        .ensure_enrolled()
         .expect_err("an unenrolled account must be refused");
     assert!(error.to_string().contains("--kind claude-token"), "{error}");
     assert!(!canary.exists(), "the helper must not run");
@@ -1188,33 +1188,42 @@ async fn claude_plan_helper_never_runs_for_an_unenrolled_account() {
 #[cfg(unix)]
 #[tokio::test]
 async fn claude_plan_helper_that_predates_named_accounts_is_refused() {
+    use std::os::unix::fs::PermissionsExt;
+
     let tempdir = tempfile::tempdir().unwrap();
-    // Like a pre-PF-84 `corbanu internal-claude-oauth-token`: no options, and
-    // always the default account's token.
-    let old_helper = "if [ $# -gt 0 ]; then echo \"error: unexpected argument '$1' found\" >&2; exit 2; fi; printf default-account-token";
-    let current_helper = "[ \"$1 $2 $3 $4\" = \"--account $CORBANU_PROVIDER_ACCOUNT --enable named_accounts\" ] && printf \"account-%s\" \"$2\"";
-    let auth = |script: &str| -> ModelProviderAuthInfo {
+    let helper = |name: &str, body: &str| -> ModelProviderAuthInfo {
+        let path = tempdir.path().join(name);
+        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
         serde_json::from_value(json!({
-            "command": "/bin/sh",
-            "args": ["-c", script, "corbanu"],
+            "command": path,
+            "args": [crate::auth::CLAUDE_PLAN_TOKEN_HELPER_SUBCOMMAND],
             "timeout_ms": 10_000,
             "refresh_interval_ms": 0,
             "cwd": tempdir.path(),
         }))
         .expect("provider auth config should deserialize")
     };
-    let account = crate::auth::ExternalBearerAccount {
-        provider_id: "claude-plan".to_string(),
-        name: "work".to_string(),
-        registry_home: None,
-        server: crate::auth::ExternalBearerAccountServer::ClaudePlanHelper,
-    };
-    let token = |config: ModelProviderAuthInfo,
-                 account: Option<crate::auth::ExternalBearerAccount>| {
+    // Like a pre-PF-84 `corbanu internal-claude-oauth-token`: no options, and
+    // always the default account's token.
+    let old_helper = helper(
+        "old-corbanu",
+        "if [ $# -gt 1 ]; then echo \"error: unexpected argument '$2' found\" >&2; exit 2; fi; printf default-account-token",
+    );
+    let current_helper = helper(
+        "corbanu",
+        "[ \"$*\" = \"internal-claude-oauth-token --account $CORBANU_PROVIDER_ACCOUNT --enable named_accounts\" ] && printf \"account-%s\" \"$CORBANU_PROVIDER_ACCOUNT\"",
+    );
+    let token = |config: &ModelProviderAuthInfo, account: Option<&str>| {
         let manager = AuthManager::external_bearer_only_for_account(
-            config,
+            config.clone(),
             ExternalBearerCachePolicy::FreshPerRequest,
-            account,
+            account.map(|name| crate::auth::ExternalBearerAccount {
+                provider_id: "claude-plan".to_string(),
+                name: name.to_string(),
+                registry_home: None,
+                server: crate::auth::ExternalBearerAccountServer::ClaudePlanHelper,
+            }),
         );
         async move {
             manager
@@ -1224,22 +1233,22 @@ async fn claude_plan_helper_that_predates_named_accounts_is_refused() {
         }
     };
 
-    assert_eq!(token(auth(old_helper), Some(account.clone())).await, None);
-    let error =
-        crate::validate_provider_auth_command_for_account(&auth(old_helper), Some(&account))
-            .await
-            .expect_err("an outdated helper must be refused");
+    assert_eq!(token(&old_helper, Some("work")).await, None);
+    let error = crate::validate_provider_auth_command_for_account(&old_helper, Some("work"))
+        .await
+        .expect_err("an outdated helper must be refused");
+    assert_eq!(error.kind(), std::io::ErrorKind::Unsupported);
     assert!(
         error.to_string().contains("predates named accounts"),
         "{error}"
     );
     assert_eq!(
-        token(auth(current_helper), Some(account)).await.as_deref(),
+        token(&current_helper, Some("work")).await.as_deref(),
         Some("account-work")
     );
     // The default account keeps today's argv.
     assert_eq!(
-        token(auth(old_helper), None).await.as_deref(),
+        token(&old_helper, None).await.as_deref(),
         Some("default-account-token")
     );
 }

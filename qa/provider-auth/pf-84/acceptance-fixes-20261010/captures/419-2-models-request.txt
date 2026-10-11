@@ -2,3 +2,4 @@
    | ERROR: Fatal error: account `ghost` of provider `cmdp` is not configured; add it with `corbanu account add cmdp ghost --kind command` or choose another account
 == after: requests=0 (0 GET /models, 0 without Authorization) auth-command runs=0
    | ERROR: Fatal error: account `ghost` of provider `cmdp` is not configured; add it with `corbanu account add cmdp ghost --kind command` or choose another account
+ALLDONE

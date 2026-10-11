@@ -374,6 +374,20 @@ impl ClaudePaneRegistry {
         prompt: String,
         codex_home: &Path,
     ) -> Result<PreparedClaudePaneTurn> {
+        self.prepare_turn_for_account(
+            pane_id, prompt, codex_home, /*claude_plan_account*/ None,
+        )
+    }
+
+    /// PF-84: like [`Self::prepare_turn`]; a Claude Plan pane uses the named
+    /// account `[provider_accounts]` selects, never the default one.
+    pub(crate) fn prepare_turn_for_account(
+        &mut self,
+        pane_id: &str,
+        prompt: String,
+        codex_home: &Path,
+        claude_plan_account: Option<&str>,
+    ) -> Result<PreparedClaudePaneTurn> {
         if let Some(reason) = crate::security::level::external_agent_block_reason() {
             return Err(anyhow!(reason));
         }
@@ -391,7 +405,10 @@ impl ClaudePaneRegistry {
             .try_lock_owned()
             .map_err(|_| anyhow!("Claude pane `{}` is already running", pane.title))?;
 
-        let plan = build_claude_command_plan(pane, prompt, codex_home)?;
+        let mut plan = build_claude_command_plan(pane, prompt, codex_home)?;
+        if let Some(deferred) = plan.deferred_claude_plan_auth.as_mut() {
+            deferred.account = claude_plan_account.map(str::to_string);
+        }
         let cancel_token = CancellationToken::new();
         pane.status = ClaudePaneStatus::Running;
         pane.live_turn = Some(ClaudePaneLiveTurn::starting());

@@ -13,7 +13,7 @@ printf 'sk-ant-''oat01-pf84fix-fake-not-a-token' | env -i HOME=$S/fakehome PATH=
 printf '%s' "$CLAUDE_CODE_OAUTH_TOKEN" | env -i HOME=$S/fakehome PATH=/usr/bin:/bin CORBANU_TEST_NO_NATIVE_KEYRING=1 CORBANU_HOME=$HC $H account add claude-plan real --kind claude-token
 env -i HOME=$S/fakehome PATH=/usr/bin:/bin CORBANU_TEST_NO_NATIVE_KEYRING=1 CORBANU_HOME=$HC $H account list
 P="Reply with exactly the word pong and nothing else."
-for c in "before path-pre fake" "after path-pre fake" "after path-after fake" "after path-after real" "before path-after ghost" "after path-after ghost"; do
+for c in "before path-pre fake" "after path-pre fake" "after path-before fake" "after path-before real" "after path-after fake" "after path-after real" "before path-after ghost" "after path-after ghost"; do
   set -- $c
   : > $S/$2/calls.log
   out=$(run $1 $2 exec --skip-git-repo-check -m claude-opus-5-5-plan -c model_provider='"claude-plan"' -c provider_accounts.claude-plan="\"$3\"" "$P" 2>&1); rc=$?

@@ -133,7 +133,7 @@ fn named_account_rejection_warning(
         .is_some_and(codex_model_provider_info::ModelProviderInfo::is_claude_plan)
     {
         format!(
-            "Replace its token with `corbanu account add {id} {name} --kind claude-token` (reads stdin)"
+            "Replace its token with `corbanu account add {id} {name} --kind claude-token` (reads stdin) or sign in again in its Claude Code config directory"
         )
     } else if provider.is_some_and(|provider| provider.auth.is_some()) {
         format!("Check what the provider's auth command returns for account `{name}`")
