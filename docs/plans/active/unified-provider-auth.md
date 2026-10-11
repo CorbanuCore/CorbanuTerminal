@@ -524,7 +524,7 @@ OpenAI schema, provider authorization or credential format is rewritten.
 | `PF-84` | Home override hygiene (wrapper pitfall) | [PF-84-S01](../../sprints/current/unified-provider-auth/pf-84-s01-home-override-hygiene.md) | ready (lane home-hygiene) |
 | `PF-84` | Named account registry, storage and resolution | [PF-84-S02](../../sprints/current/unified-provider-auth/pf-84-s02-account-registry-and-resolution.md) | ready (lane account-registry) |
 | `PF-84` | Account selection per session, CLI and worker | [PF-84-S03](../../sprints/current/unified-provider-auth/pf-84-s03-account-selection-and-propagation.md) | ready (lane account-selection) |
-| `PF-84` | `/providers` account management; duplicate-row fix | [PF-84-S04](../../sprints/current/unified-provider-auth/pf-84-s04-provider-account-management-ui.md) | in progress (lane account-ui) |
+| `PF-84` | `/providers` account management; duplicate-row fix | [PF-84-S04](../../sprints/current/unified-provider-auth/pf-84-s04-provider-account-management-ui.md) | ready (lane account-ui) |
 | `PF-84` | Per-account usage and rate-limit attribution | [PF-84-S05](../../sprints/current/unified-provider-auth/pf-84-s05-per-account-usage-attribution.md) | draft; unallocated |
 
 ## Hard dependency graph
