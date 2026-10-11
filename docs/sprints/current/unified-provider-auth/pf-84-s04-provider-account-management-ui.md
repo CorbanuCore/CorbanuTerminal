@@ -1,20 +1,20 @@
 ---
 sprint_id: "PF-84-S04"
 title: "Account management in /providers and onboarding"
-status: draft
+status: in_progress
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-84"
 execution_order: 26
-owner: "UNALLOCATED"
-parallel_lane: "UNALLOCATED"
-write_scope: "UNALLOCATED"
-integration_gate: "UNALLOCATED"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+owner: "Codex PF-84 lane owner"
+parallel_lane: "account-ui"
+write_scope: "codex-rs/tui/, codex-rs/provider-auth/, codex-rs/app-server/, codex-rs/app-server-protocol/, codex-rs/core/, codex-rs/login/, codex-rs/vault/, codex-rs/cli/, codex-rs/model-provider/, codex-rs/model-provider-info/, qa/provider-auth/pf-84/s04-gate.md, qa/demos/specs/pf84-add-account.toml, qa/demos/specs/pf84-switch-account.toml, qa/demos/specs/pf84-no-duplicate-rows.toml, qa/demos/index/PF-84-S04.md, docs/sprints/current/unified-provider-auth/pf-84-s04-provider-account-management-ui.md, docs/sprints/current/unified-provider-auth/index.md"
+integration_gate: "Codex PF-84 lane owner merges to main after just test -p codex-tui -p codex-provider-auth (plus touched crates), Linux clippy -D warnings, the tmux/GLM run and one Opus 5.5 High review"
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s04-providers"
+branch: "feat/pf-84-s04-provider-accounts-ui"
+base_commit: "0558c52cc320422d1fc187f4a98afff7a1530286"
 depends_on: "PF-84-S03"
 created: 2026-10-08
-updated: 2026-10-08
+updated: 2026-10-10
 ---
 
 # PF-84-S04 — Account management in /providers and onboarding
@@ -54,10 +54,10 @@ Paths are under `codex-rs/`, at `63ea3d0cbd`.
 
 ## Preconditions
 
-- [ ] Plan is active.
-- [ ] Dependencies are completed.
-- [ ] Worktree, branch, and base commit are exact and match the plan.
-- [ ] If parallel, owner/lane/scopes are disjoint and the receiving integration gate is recorded.
+- [x] Plan is active.
+- [x] Dependencies are completed (PF-84-S03 merged behind `named_accounts`, `0558c52cc3`).
+- [x] Worktree, branch, and base commit are exact and match the plan.
+- [x] If parallel, owner/lane/scopes are disjoint and the receiving integration gate is recorded.
 
 ## Done
 
@@ -70,8 +70,8 @@ Paths are under `codex-rs/`, at `63ea3d0cbd`.
 - [ ] Add, rename, remove, session-select and set-default actions. Removing the
   current account needs a replacement first, as in PF-54.
 - [ ] Onboarding offers "Add another account" after a provider succeeds.
-- [ ] Moved from S02 (2026-10-10): named ChatGPT/OpenAI sign-ins kept in the vault (no extra
-  `Codex Auth` item or `auth.json`) and AWS profiles per account; both fail closed until then.
+- [ ] Pending Travis: named ChatGPT sign-ins and AWS profile accounts (fail closed today).
+  Recommended: split to a new PF-84-S06 after S05 (trade-off in the S03 report).
 - [ ] Code-blind functional design frozen before test-result disclosure, or non-user-facing N/A reason recorded.
 
 ## Verification
