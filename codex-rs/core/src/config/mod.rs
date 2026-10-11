@@ -531,6 +531,22 @@ impl Permissions {
         self.permission_profile_state.active_permission_profile()
     }
 
+    /// Whether these permissions come from the launch overrides of an
+    /// Aggressive level Corbanu Terminal enforces and shows (the stored
+    /// `/security` level, or a nested launch held to it), even while Core's
+    /// level stays lower (#428). Only those overrides select the Aggressive
+    /// profile and set the origin marker, and launch refuses Aggressive when
+    /// another layer defines the profile; either signal alone only makes a
+    /// check stricter.
+    pub fn launch_enforces_aggressive(&self) -> bool {
+        self.active_permission_profile()
+            .is_some_and(|profile| profile.id == codex_security_level::level::AGGRESSIVE_PROFILE_ID)
+            || self
+                .shell_environment_policy
+                .r#set
+                .contains_key(codex_security_level::nested::ORIGIN_ENV)
+    }
+
     /// Effective filesystem sandbox policy derived from the canonical profile.
     pub fn file_system_sandbox_policy(&self) -> FileSystemSandboxPolicy {
         self.effective_permission_profile()

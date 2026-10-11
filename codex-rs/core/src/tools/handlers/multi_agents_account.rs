@@ -3,6 +3,10 @@
 //! but only on an account that is already configured, and under the
 //! Aggressive security level only after the human approves the switch. The
 //! model sees account names, never credential values.
+//!
+//! "Aggressive" is Core's level in force or the level Corbanu Terminal
+//! enforces at launch and shows (#428, Travis 2026-10-11, option 1), which
+//! can be Aggressive while Core's level stays lower (no activation preflight).
 
 use crate::config::Config;
 use crate::config::configured_account_names;
@@ -72,7 +76,7 @@ pub(crate) async fn apply_spawn_agent_account(
         .map_or(SecurityLevel::Aggressive, |policy| {
             turn.config.security_level.max(policy.level)
         });
-    if level == SecurityLevel::Aggressive {
+    if level == SecurityLevel::Aggressive || turn.config.permissions.launch_enforces_aggressive() {
         let shown = provider
             .account
             .as_ref()

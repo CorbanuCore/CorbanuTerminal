@@ -29,7 +29,7 @@ use crate::legacy_core::format_exec_policy_error_with_source;
 use crate::legacy_core::load_exec_policy;
 
 /// The permission profile Aggressive defines and selects.
-pub(crate) const PROFILE_ID: &str = "corbanu-aggressive";
+pub(crate) const PROFILE_ID: &str = codex_security_level::level::AGGRESSIVE_PROFILE_ID;
 
 /// Removed from agent command environments in addition to the built-in
 /// `*KEY*`, `*SECRET*` and `*TOKEN*` excludes.
