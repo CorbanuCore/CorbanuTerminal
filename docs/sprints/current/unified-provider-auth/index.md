@@ -17,7 +17,7 @@ and cold resume pass in both live repositories. PF-58 is the current serial
 credential-health and reauthentication follow-up.
 PF-84 (named accounts per provider) was activated on 2026-10-10: S01 and S02 are
 `ready` and merged behind the `named_accounts` flag; S03 is `ready` and merged
-behind the flag; S04 and S05 follow. See the plan's PF-84 section.
+behind the flag; S04 is in progress; S05 follows. See the plan's PF-84 section.
 
 | Order | Sprint | Outcome | Status | Depends on |
 | ---: | --- | --- | --- | --- |
@@ -25,7 +25,7 @@ behind the flag; S04 and S05 follow. See the plan's PF-84 section.
 | 23 | [PF-84-S01](pf-84-s01-home-override-hygiene.md) | Home override hygiene (wrapper pitfall) | ready | none |
 | 24 | [PF-84-S02](pf-84-s02-account-registry-and-resolution.md) | Named account registry, storage and resolution | ready | none |
 | 25 | [PF-84-S03](pf-84-s03-account-selection-and-propagation.md) | Account selection per session, CLI and worker | ready | PF-84-S02 |
-| 26 | [PF-84-S04](pf-84-s04-provider-account-management-ui.md) | `/providers` account management; duplicate-row fix | draft | PF-84-S03 |
+| 26 | [PF-84-S04](pf-84-s04-provider-account-management-ui.md) | `/providers` account management; duplicate-row fix | in_progress | PF-84-S03 |
 | 27 | [PF-84-S05](pf-84-s05-per-account-usage-attribution.md) | Per-account usage and rate-limit attribution | draft | PF-84-S03, PF-60-S04 |
 | 7 | [PF-48-S01](../../archive/unified-provider-auth/pf-48-s01-provider-catalog-contract.md) | Typed provider catalog and capability contract | completed | PF-47-S01 |
 | 8 | [PF-49-S01](../../archive/unified-provider-auth/pf-49-s01-status-and-eligibility.md) | Shared metadata status and eligibility persistence | completed | PF-48-S01 |

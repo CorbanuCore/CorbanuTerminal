@@ -5,7 +5,7 @@ change_class: product-initiative
 priority: P1
 owner: "Codex primary agent"
 parallel_sprint_limit: 2
-parallel_lanes: "home-hygiene, account-registry, account-selection"
+parallel_lanes: "home-hygiene, account-registry, account-selection, account-ui"
 integration_owner: "Codex PF-84 lane owner"
 activation_authority: "Final product authority — user decision"
 activation_basis: "The user's 2026-09-01 P1 decision to supersede the remaining Claude-auth planning slot with one provider-auth initiative, preserve the merged Claude implementation evidence, unify onboarding and /providers, support multi-provider setup and deferred Corbanu Plan onboarding, and make every configured provider active by default. Reactivated 2026-10-10 for PF-84 by Travis: \"Yes, let's hit multi-account.\""
@@ -18,6 +18,9 @@ product_spec:
   heading: "Shipping MVP — LIVE"
   requirement_excerpt: "Encrypted `/vault`, masked entry, metadata-only inspection, and operational credential use without placing raw values in chat."
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s04-providers"
+    branch: "feat/pf-84-s04-provider-accounts-ui"
+    base_commit: "0558c52cc320422d1fc187f4a98afff7a1530286"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s03-select"
     branch: "feat/pf-84-s03-account-selection"
     base_commit: "0fa45b54f0ca65a6ce3485c27281624cb6f8b2cb"
@@ -427,6 +430,7 @@ credential scope. PF-84 does not change profile semantics.
 | Codex PF-84 home-hygiene worker | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s01-home` | `feat/pf-84-s01-home-override` | `051f9747225776a5d85ad00c2e5d0a8f5f4036bf` | PF-84-S01, lane `home-hygiene`. |
 | Codex PF-84 account-registry worker | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s02-accounts` | `feat/pf-84-s02-account-registry` | `051f9747225776a5d85ad00c2e5d0a8f5f4036bf` | PF-84-S02, lane `account-registry`. |
 | Codex PF-84 lane owner | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s03-select` | `feat/pf-84-s03-account-selection` | `0fa45b54f0ca65a6ce3485c27281624cb6f8b2cb` | PF-84-S03, lane `account-selection` (serial after S02, merged behind `named_accounts`). |
+| Codex PF-84 lane owner | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s04-providers` | `feat/pf-84-s04-provider-accounts-ui` | `0558c52cc320422d1fc187f4a98afff7a1530286` | PF-84-S04, lane `account-ui` (serial after S03, merged behind `named_accounts`). |
 | GPT-5.6 Sol high implementation agent (historical) | `/home/pfrpc/repos/worktrees/corbanu-main-f7356a94e0` | `feat/unified-provider-auth` | `f7356a94e032234022a462d65b576a7de2854859` | Serial implementation of PF-48 through PF-56 only. |
 | Codex primary agent | same receiving worktree | same branch | same base | Feature completeness, integration decisions, scope control, review budget, final-tree verification, and TMUX acceptance. |
 | Codex primary integration agent | `/Volumes/CorbanuDrive/Corbanu/worktrees/integrate-unified-provider-auth-final` | `integration/unified-provider-auth-final` | `06211dbfca61d3f36df3bf069a79ed53ad7a6fa2` | PF-57 latest-main merge, conflict resolution, verified regression repairs, combined-tree qualification, and handoff. |
@@ -519,8 +523,8 @@ OpenAI schema, provider authorization or credential format is rewritten.
 | `PF-57` | Reconcile Travis's provider UX/catalog changes with repaired release | [PF-57-S03](../../sprints/archive/unified-provider-auth/pf-57-s03-travis-release-reconciliation.md) | completed; [combined-tree evidence](../../../qa/release/0.1.38/travis-reconciliation.md) at `c37eb277d9` |
 | `PF-84` | Home override hygiene (wrapper pitfall) | [PF-84-S01](../../sprints/current/unified-provider-auth/pf-84-s01-home-override-hygiene.md) | ready (lane home-hygiene) |
 | `PF-84` | Named account registry, storage and resolution | [PF-84-S02](../../sprints/current/unified-provider-auth/pf-84-s02-account-registry-and-resolution.md) | ready (lane account-registry) |
-| `PF-84` | Account selection per session, CLI and worker | [PF-84-S03](../../sprints/current/unified-provider-auth/pf-84-s03-account-selection-and-propagation.md) | in progress (lane account-selection) |
-| `PF-84` | `/providers` account management; duplicate-row fix | [PF-84-S04](../../sprints/current/unified-provider-auth/pf-84-s04-provider-account-management-ui.md) | draft; unallocated |
+| `PF-84` | Account selection per session, CLI and worker | [PF-84-S03](../../sprints/current/unified-provider-auth/pf-84-s03-account-selection-and-propagation.md) | ready (lane account-selection) |
+| `PF-84` | `/providers` account management; duplicate-row fix | [PF-84-S04](../../sprints/current/unified-provider-auth/pf-84-s04-provider-account-management-ui.md) | in progress (lane account-ui) |
 | `PF-84` | Per-account usage and rate-limit attribution | [PF-84-S05](../../sprints/current/unified-provider-auth/pf-84-s05-per-account-usage-attribution.md) | draft; unallocated |
 
 ## Hard dependency graph
