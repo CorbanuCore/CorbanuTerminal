@@ -51,9 +51,43 @@ The fix closes #414 for the session/exec model path, but two TUI paths still bre
 4. **Fixed.** The account goes into argv only when the auth command's first arg is `internal-claude-oauth-token` (`is_claude_plan_token_helper`). The enrollment kinds follow the same rule.
 5. **Partly fixed.** Deferred config warnings are also shown before any error message, so a thread that fails to start no longer swallows them. Kept as is: a TUI-only config warning that the session never repeats stays in the set, so it only suppresses a later identical warning, which would be a duplicate anyway.
 6. **Fixed.** `corbanu-debug` reads the home variables with `var_os`; the warning text is converted lossily.
-7. **Not changed.** For API-key providers the `/models` auth comes from the provider key path, not `auth()`, so the guard would block a valid named API-key account. The acceptance run found 0 requests for an unenrolled API-key account (C4).
+7. **Not changed.** The guard stays limited to `auth.command` providers, which is the case found in acceptance (#419 item 2). The acceptance run found 0 requests for an unenrolled API-key account (C4). Widening the guard to API-key providers was not verified here.
 8. **Fixed.** The message now reads "cannot be verified: no Corbanu home is available".
 9. **Accepted.** The config is loaded only for a named account, and tokens are cached, so the cost is bounded.
 10. **Fixed.** The message shows the CLI value: "does not take `--kind claude-token` accounts".
 11. **Fixed.** The Claude hint also says to sign in again in the account's Claude Code config directory.
 12. **Done.** The S02-era helper (`origin/main` on PATH) serves the named account: `fake` gets 401 and `real` answers `pong` ([414](captures/414-claude-plan-path-skew.txt)).
+
+---
+
+## Round 2 (follow-up commit 1a351b82dc, same reviewer setup)
+
+**Verdict: APPROVE WITH NITS.** Findings 1 and 2, which blocked the last round, are now handled: finding 1 is fixed, and finding 2 is a reasonable deferral to #421 as long as the two PRs merge together. I didn't run builds or tests because the sandbox is read-only, so this comes from reading the diff and the code around it.
+
+**Regression checks pass:**
+- **`named_accounts` off:** the provider account is never set, so the Claude pane and model-path helper argv are unchanged. The only addition is removing `CORBANU_PROVIDER_ACCOUNT` from the helper's environment when no account is selected. That is intended and matches the model path.
+- **Secrets:** argv carries only the validated account name. Tokens still travel only over stdout and are zeroized.
+- **Claude pane default path:** unchanged. With no account it runs `internal-claude-oauth-token` with nothing added.
+
+**Dispositions:**
+- **#1 Fixed — correct.** The account flows through `prepare_turn_for_account`, then `DeferredClaudePlanAuth.account`, then argv and env. The regression test covers the named account, the default account and an outdated helper.
+- **#2 Left to #421 — reasonable**, provided it merges together with #421.
+- **#3, #4, #6, #8, #10, #11 Fixed — correct.**
+- **#5 Partly fixed** — the error-message path is fixed, but one path still loses warnings (item 3 below).
+- **#7 Not changed** — acceptable given the C4 evidence, though the stated reason is inaccurate (item 4 below).
+- **#9 Accepted** — fine.
+- **#12 Done.**
+
+**Remaining issues:**
+1. **Low** — `login/src/auth/external_bearer.rs:376`: `validate_provider_auth_command_for_account` no longer checks enrollment itself; callers now must. The one existing caller is still covered, because `provider.rs:503` stops on `account_error` before the call at `:511`. #421's new call must check enrollment the same way, for example with `selected_account_error`. The current helper also refuses unenrolled accounts on its own, so this is a backup check, not a leak.
+2. **Low** — `model-provider/src/auth.rs:238` together with `cli/src/account_cmd.rs:182`: if a user overrides the `claude-plan` auth command, the account is now treated as a `Command` account. Enrollment then requires `--kind command`, but `account add` refuses `--kind command` for `claude-plan`. The user is told to add an account that can never be added. It fails closed, so only the message needs fixing, such as saying named accounts need the built-in helper.
+3. **Low** — `tui/src/app/session_lifecycle.rs:671`: if the startup thread fails to start, it returns `Err` and the TUI exits without calling `add_error_message`. Deferred config warnings are still lost on that path.
+4. **Nit** — #7's reason is inaccurate. For named API-key accounts, `auth()` does go through `provider_env_auth`, which reads only the account's own key (`provider.rs:391`). So dropping the `auth.is_some()` condition would not block a valid account. Correct the wording in REVIEW.md, or add a unit test for an API-key account with no stored key.
+5. **Nit** — `tui/src/claude_panes/execution.rs:914`: the pane helper's stderr goes to `/dev/null`. An outdated helper or an unenrolled account in a pane therefore shows only the generic "open Providers to recover", not "predates named accounts" or "not configured".
+
+### Round 2 dispositions
+1. **Agreed.** #421 calls `selected_account_error` before its validate call, which matches what the reviewer asks for. This is noted on #421.
+2. **Accepted (low).** A user-overridden `claude-plan` auth command fails closed with a misleading `--kind command` hint. Left for S04's account UI.
+3. **Accepted (low).** A TUI that exits because its first thread failed to start prints the error and exits. The deferred config warnings are not shown on that path, as before when the startup redraw hid them.
+4. **Corrected** in item 7 above.
+5. **Accepted (nit).** The pane helper's stderr stays discarded, as before. The pane fails closed with the generic recovery message.
