@@ -3126,6 +3126,7 @@ fn merge_interactive_cli_flags(interactive: &mut TuiCli, subcommand_cli: TuiCli)
         approval_policy,
         web_search,
         prompt,
+        account,
         config_overrides,
         ..
     } = subcommand_cli;
@@ -3137,6 +3138,9 @@ fn merge_interactive_cli_flags(interactive: &mut TuiCli, subcommand_cli: TuiCli)
     }
     if web_search {
         interactive.web_search = true;
+    }
+    if account.is_some() {
+        interactive.account = account;
     }
     if strict_config {
         interactive.strict_config = true;

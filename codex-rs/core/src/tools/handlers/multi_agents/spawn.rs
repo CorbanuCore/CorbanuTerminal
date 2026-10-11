@@ -5,6 +5,8 @@ use crate::agent::control::render_input_preview;
 use crate::agent::exceeds_thread_spawn_depth_limit;
 use crate::agent::next_thread_spawn_depth;
 use crate::agent::role::DEFAULT_ROLE_NAME;
+use crate::tools::handlers::multi_agents_account::apply_spawn_agent_account;
+use crate::tools::handlers::multi_agents_account::spawned_account_name;
 use crate::tools::handlers::multi_agents_spec::SpawnAgentToolOptions;
 use crate::tools::handlers::multi_agents_spec::create_spawn_agent_tool_v1;
 use codex_tools::ToolSpec;
@@ -115,6 +117,15 @@ async fn handle_spawn_agent(
     apply_spawn_agent_runtime_overrides(&mut config, turn.as_ref())?;
     ensure_spawn_provider_authorized(&config, &config.model_provider_id)?;
     ensure_spawn_runtime_eligible(&session, &config).await?;
+    apply_spawn_agent_account(
+        &session,
+        turn.as_ref(),
+        &call_id,
+        &mut config,
+        args.account.as_deref(),
+    )
+    .await?;
+    let account = spawned_account_name(&config);
 
     let result = Box::pin(session.services.agent_control.spawn_agent_with_metadata(
         config,
@@ -218,6 +229,7 @@ async fn handle_spawn_agent(
     Ok(SpawnAgentResult {
         agent_id: new_thread_id.to_string(),
         nickname,
+        account,
     })
 }
 
@@ -235,6 +247,7 @@ struct SpawnAgentArgs {
     model: Option<String>,
     reasoning_effort: Option<ReasoningEffort>,
     service_tier: Option<String>,
+    account: Option<String>,
     #[serde(default)]
     fork_context: bool,
 }
@@ -243,6 +256,9 @@ struct SpawnAgentArgs {
 pub(crate) struct SpawnAgentResult {
     agent_id: String,
     nickname: Option<String>,
+    /// PF-84: the child's named account, when named accounts are on.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    account: Option<String>,
 }
 
 impl ToolOutput for SpawnAgentResult {

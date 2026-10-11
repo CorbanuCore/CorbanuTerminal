@@ -41,6 +41,7 @@ fn resume_history(
         file_system_sandbox_policy: None,
         model: previous_model.to_string(),
         model_provider: None,
+        provider_account: None,
         comp_hash: None,
         personality: None,
         collaboration_mode: None,

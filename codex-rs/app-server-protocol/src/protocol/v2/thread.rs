@@ -61,6 +61,11 @@ pub struct ThreadStartParams {
     pub model: Option<String>,
     #[ts(optional = nullable)]
     pub model_provider: Option<String>,
+    /// PF-84: a named account (`[<provider>:]<name>`) for this thread; it
+    /// beats `[provider_accounts]`.
+    #[experimental("thread/start.providerAccount")]
+    #[ts(optional = nullable)]
+    pub provider_account: Option<String>,
     /// Allow a provider with an authoritative static model catalog to replace an unavailable
     /// requested model with its default.
     #[experimental("thread/start.allowProviderModelFallback")]
@@ -474,6 +479,11 @@ pub struct ThreadResumeParams {
     pub model: Option<String>,
     #[ts(optional = nullable)]
     pub model_provider: Option<String>,
+    /// PF-84: a named account (`[<provider>:]<name>`) for this thread; it
+    /// beats `[provider_accounts]` and the account recorded in the rollout.
+    #[experimental("thread/resume.providerAccount")]
+    #[ts(optional = nullable)]
+    pub provider_account: Option<String>,
     #[serde(
         default,
         deserialize_with = "crate::protocol::serde_helpers::deserialize_double_option",

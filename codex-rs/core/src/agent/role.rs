@@ -199,6 +199,19 @@ async fn apply_role_to_config_inner(
     // root -> Troll -> Orc). Rebuilding from persisted layers must not collapse that effective
     // runtime limit back to the upstream default when a role file is applied.
     next_config.agent_max_depth = config.agent_max_depth;
+    // PF-84: the rebuilt layers only know `[provider_accounts]`; a child that
+    // stays on its parent's provider keeps the parent's live account (from
+    // `--account`, resume or a spawn `account`).
+    if next_config.model_provider_id == config.model_provider_id {
+        let account = config.model_provider.account.clone();
+        if let Some(provider) = next_config
+            .model_providers
+            .get_mut(&next_config.model_provider_id)
+        {
+            provider.account = account.clone();
+        }
+        next_config.model_provider.account = account;
+    }
     *config = next_config;
     Ok(())
 }

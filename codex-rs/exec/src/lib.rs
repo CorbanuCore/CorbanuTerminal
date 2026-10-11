@@ -300,6 +300,7 @@ pub async fn run_main_enforced(
         json: json_mode,
         prompt,
         output_schema: output_schema_path,
+        account,
         config_overrides,
     } = cli;
     let shared = shared.into_inner();
@@ -510,6 +511,7 @@ pub async fn run_main_enforced(
         ephemeral: ephemeral.then_some(true),
         bypass_hook_trust: bypass_hook_trust.then_some(true),
         additional_writable_roots: add_dir,
+        provider_account: account.clone(),
     };
     if let Some(enforced) = enforced {
         // `Never` above is the headless default, not a flag to report.
@@ -1207,6 +1209,7 @@ fn thread_start_params_from_config(config: &Config) -> ThreadStartParams {
     ThreadStartParams {
         model: config.model.clone(),
         model_provider: Some(config.model_provider_id.clone()),
+        provider_account: config.provider_account_override.clone(),
         cwd: Some(config.cwd.to_string_lossy().to_string()),
         runtime_workspace_roots: Some(config.workspace_roots.clone()),
         approval_policy: Some(config.permissions.approval_policy.value().into()),
@@ -1239,6 +1242,7 @@ fn thread_resume_params_from_config(
             .then(|| config.model.clone())
             .flatten(),
         model_provider: model_override_requested.then(|| config.model_provider_id.clone()),
+        provider_account: config.provider_account_override.clone(),
         cwd: Some(config.cwd.to_string_lossy().to_string()),
         runtime_workspace_roots: Some(config.workspace_roots.clone()),
         approval_policy: Some(config.permissions.approval_policy.value().into()),
