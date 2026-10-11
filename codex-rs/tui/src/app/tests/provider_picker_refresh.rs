@@ -21,6 +21,7 @@ async fn provider_manager_late_refresh_updates_picker_without_reopening_dismisse
         /*generation*/ 1,
         host.clone(),
         host.resolve().entries().to_vec(),
+        /*accounts*/ None,
         &app_server,
     );
     assert!(app.chat_widget.provider_manager_selected_index().is_some());
@@ -43,13 +44,20 @@ async fn provider_manager_late_refresh_updates_picker_without_reopening_dismisse
         /*generation*/ 2,
         host.clone(),
         recovered.clone(),
+        /*accounts*/ None,
         &app_server,
     );
     assert!(
         !app.model_catalog
             .provider_is_selectable("openai", "gpt-6-astra")
     );
-    app.provider_manager_statuses_resolved(/*generation*/ 1, host, recovered, &app_server);
+    app.provider_manager_statuses_resolved(
+        /*generation*/ 1,
+        host,
+        recovered,
+        /*accounts*/ None,
+        &app_server,
+    );
     assert!(
         app.model_catalog
             .provider_is_selectable("openai", "gpt-6-astra")

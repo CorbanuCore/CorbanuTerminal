@@ -16,6 +16,8 @@ pub(crate) struct ProviderManagementHost {
     account_auth_host: ProviderAccountAuthHost,
     session: ProviderManagementSession,
     focused_provider: Option<codex_provider_auth::ProviderCatalogId>,
+    /// PF-84-S04: named accounts; `None` while the feature is off.
+    named_accounts: Option<Vec<crate::provider_named_accounts::NamedAccountRow>>,
 }
 
 impl ProviderManagementHost {
@@ -38,7 +40,21 @@ impl ProviderManagementHost {
             account_auth_host,
             session,
             focused_provider: None,
+            named_accounts: None,
         }
+    }
+
+    pub(crate) fn named_accounts(
+        &self,
+    ) -> Option<&[crate::provider_named_accounts::NamedAccountRow]> {
+        self.named_accounts.as_deref()
+    }
+
+    pub(crate) fn set_named_accounts(
+        &mut self,
+        accounts: Option<Vec<crate::provider_named_accounts::NamedAccountRow>>,
+    ) {
+        self.named_accounts = accounts;
     }
 
     pub(crate) fn status_host(&self) -> &ProviderStatusHost {

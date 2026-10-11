@@ -2115,6 +2115,7 @@ dependencies = [
  "codex-utils-json-to-toml",
  "codex-utils-path-uri",
  "codex-utils-pty",
+ "codex-vault",
  "codex-web-search-extension",
  "codex-windows-sandbox",
  "core_test_support",

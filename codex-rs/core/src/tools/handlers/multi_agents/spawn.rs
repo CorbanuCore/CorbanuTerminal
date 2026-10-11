@@ -84,6 +84,7 @@ async fn handle_spawn_agent(
                 prompt: Some(prompt.clone()),
                 model: Some(args.model.clone().unwrap_or_default()),
                 reasoning_effort: Some(args.reasoning_effort.clone().unwrap_or_default()),
+                provider_account: None,
                 agents_states: Default::default(),
             }),
         )
@@ -214,6 +215,7 @@ async fn handle_spawn_agent(
                 prompt: Some(prompt),
                 model: Some(effective_model),
                 reasoning_effort: Some(effective_reasoning_effort),
+                provider_account: account.clone(),
                 agents_states,
             }),
         )

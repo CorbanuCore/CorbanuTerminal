@@ -171,6 +171,7 @@ mod provider_account_feedback;
 mod provider_auth_effect_executor;
 mod provider_auth_presentation;
 mod provider_management_host;
+mod provider_named_accounts;
 mod provider_status_host;
 pub(crate) mod public_widgets;
 mod render;

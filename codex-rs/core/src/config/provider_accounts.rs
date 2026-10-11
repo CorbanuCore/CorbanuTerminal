@@ -160,7 +160,7 @@ pub(crate) fn configured_account_names(codex_home: &Path, provider_id: &str) -> 
 /// API-key providers and `auth.command` providers (including Claude Plan).
 /// OpenAI sign-in and AWS providers are not supported yet, so selecting an
 /// account for them fails instead of silently using the default credential.
-fn supports_named_accounts(provider: &ModelProviderInfo) -> bool {
+pub fn supports_named_accounts(provider: &ModelProviderInfo) -> bool {
     provider.aws.is_none()
         && !provider.requires_openai_auth
         && (provider.env_key.is_some() || provider.auth.is_some())

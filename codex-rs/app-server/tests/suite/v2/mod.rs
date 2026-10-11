@@ -55,6 +55,7 @@ mod plugin_read;
 mod plugin_share;
 mod plugin_uninstall;
 mod process_exec;
+mod provider_account_inheritance;
 mod rate_limit_reset_credits;
 mod rate_limits;
 mod realtime_conversation;

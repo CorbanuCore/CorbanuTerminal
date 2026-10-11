@@ -274,6 +274,30 @@ impl OnboardingScreen {
                 } else {
                     SignInState::PickMode
                 };
+            let named_account_methods = if config
+                .features
+                .enabled(codex_features::Feature::NamedAccounts)
+            {
+                config
+                    .model_providers
+                    .iter()
+                    .map(|(id, provider)| {
+                        (
+                            id.clone(),
+                            crate::provider_named_accounts::add_methods(id, provider)
+                                .into_iter()
+                                // Onboarding takes pasted secrets; paths are in /providers.
+                                .filter(|method| {
+                                    *method != crate::provider_named_accounts::AddAccountMethod::ClaudeConfigDir
+                                })
+                                .collect::<Vec<_>>(),
+                        )
+                    })
+                    .filter(|(_, methods)| !methods.is_empty())
+                    .collect()
+            } else {
+                std::collections::BTreeMap::new()
+            };
             if let Some(app_server_request_handle) = app_server_request_handle {
                 steps.push(Step::Auth(AuthModeWidget {
                     request_frame: tui.frame_requester(),
@@ -299,6 +323,7 @@ impl OnboardingScreen {
                     provider_status_host,
                     provider_statuses: Arc::new(RwLock::new(provider_statuses)),
                     provider_auth_action_tx,
+                    named_account_methods,
                 }));
             } else {
                 tracing::warn!("skipping onboarding login step without app-server request handle");

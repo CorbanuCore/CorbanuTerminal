@@ -112,6 +112,11 @@ model: string | null,
  */
 reasoningEffort: ReasoningEffort | null,
 /**
+ * The named account the spawned agent uses (`default` included),
+ * only while named accounts are on.
+ */
+providerAccount: string | null,
+/**
  * Last known status of the target agents, when available.
  */
 agentsStates: { [key in string]?: CollabAgentState }, } | { "type": "subAgentActivity", id: string, kind: SubAgentActivityKind, agentThreadId: string, agentPath: string, agentNickname?: string, agentRole?: string, taskPreview?: string, } | { "type": "webSearch" } & WebSearchItem | { "type": "imageView", id: string, path: LegacyAppPathString, } | { "type": "sleep" } & SleepItem | { "type": "imageGeneration" } & ImageGenerationItem | { "type": "enteredReviewMode", id: string, review: string, } | { "type": "exitedReviewMode", id: string, review: string, } | { "type": "contextCompaction", id: string, };

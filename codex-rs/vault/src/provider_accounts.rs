@@ -11,6 +11,9 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use chrono::Utc;
+use codex_secrets::SecretName;
+use sha2::Digest;
+use sha2::Sha256;
 use zeroize::Zeroizing;
 
 use crate::CredentialType;
@@ -283,6 +286,23 @@ impl Vault {
         })
     }
 
+    /// Creates a new named account holding one kind. Fails, changing
+    /// nothing, when the account already holds anything: adding never
+    /// replaces another account's credential.
+    pub fn create_provider_account(
+        &self,
+        provider_id: &str,
+        name: &ProviderAccountName,
+        kind: ProviderAccountKind,
+        value: &str,
+    ) -> Result<(), VaultError> {
+        let existing = ProviderAccountKind::ALL
+            .into_iter()
+            .map(|kind| account_label(provider_id, name, kind))
+            .collect::<Result<Vec<_>, _>>()?;
+        self.store_provider_account(provider_id, name, kind, value, Some(&existing))
+    }
+
     /// Stores (or replaces) one kind of a named account.
     pub fn write_provider_account(
         &self,
@@ -291,12 +311,34 @@ impl Vault {
         kind: ProviderAccountKind,
         value: &str,
     ) -> Result<(), VaultError> {
+        self.store_provider_account(provider_id, name, kind, value, /*refuse_if_any*/ None)
+    }
+
+    /// Writes one kind under the storage lock. With `refuse_if_any`, fails
+    /// when any of those labels already exists, checked under the same lock.
+    fn store_provider_account(
+        &self,
+        provider_id: &str,
+        name: &ProviderAccountName,
+        kind: ProviderAccountKind,
+        value: &str,
+        refuse_if_any: Option<&[String]>,
+    ) -> Result<(), VaultError> {
         let label = account_label(provider_id, name, kind)?;
         if value.trim().is_empty() {
             return Err(VaultError::EmptySecret);
         }
         self.with_storage_lock(|| {
             let mut index = self.load_index()?;
+            if refuse_if_any.is_some_and(|labels| {
+                labels
+                    .iter()
+                    .any(|label| index.credentials.contains_key(label))
+            }) {
+                return Err(VaultError::InvalidLabel(format!(
+                    "{provider_id} already has an account `{name}`"
+                )));
+            }
             let now = Utc::now().timestamp();
             let created_at = index
                 .credentials
@@ -355,7 +397,140 @@ impl Vault {
             Ok(true)
         })
     }
+
+    /// Renames a named account in one transaction: every kind moves to the
+    /// new name and nothing else changes. Fails when `to` already exists or
+    /// `from` does not.
+    pub fn rename_provider_account(
+        &self,
+        provider_id: &str,
+        from: &ProviderAccountName,
+        to: &ProviderAccountName,
+    ) -> Result<(), VaultError> {
+        let moves = ProviderAccountKind::ALL
+            .into_iter()
+            .map(|kind| {
+                Ok((
+                    account_label(provider_id, from, kind)?,
+                    account_label(provider_id, to, kind)?,
+                ))
+            })
+            .collect::<Result<Vec<_>, VaultError>>()?;
+        self.with_storage_lock(|| {
+            let mut index = self.load_index()?;
+            if moves
+                .iter()
+                .any(|(_, target)| index.credentials.contains_key(target))
+            {
+                return Err(VaultError::InvalidLabel(format!(
+                    "{provider_id} already has an account `{to}`"
+                )));
+            }
+            let now = Utc::now().timestamp();
+            let mut updates = Vec::new();
+            let mut deletes = Vec::new();
+            for (source, target) in &moves {
+                let Some(mut meta) = index.credentials.remove(source) else {
+                    continue;
+                };
+                let value = self.read_secret(source)?.ok_or_else(|| {
+                    VaultError::Storage(anyhow::anyhow!(
+                        "{provider_id} account `{from}` is incomplete"
+                    ))
+                })?;
+                meta.label = target.clone();
+                meta.notes = Some(format!("{provider_id} account {to}"));
+                meta.updated_at = now;
+                index.credentials.insert(target.clone(), meta);
+                updates.push((VAULT_SCOPE.clone(), secret_name_for(target)?, value));
+                deletes.push((VAULT_SCOPE.clone(), secret_name_for(source)?));
+            }
+            if updates.is_empty() {
+                return Err(VaultError::InvalidLabel(format!(
+                    "{provider_id} has no account `{from}`"
+                )));
+            }
+            updates.push(index_secret_entry(&index)?);
+            self.secrets.apply_batch(&updates, &deletes)?;
+            Ok(())
+        })
+    }
+
+    /// A 12-hex fingerprint of a named account's material, salted per home so
+    /// it cannot be reversed or correlated across machines. Two accounts that
+    /// hold the same material share a fingerprint. `Ok(None)` when the account
+    /// holds nothing. The salt is created on first use and never leaves the
+    /// vault.
+    pub fn provider_account_fingerprint(
+        &self,
+        provider_id: &str,
+        name: &ProviderAccountName,
+    ) -> Result<Option<String>, VaultError> {
+        let labels = ProviderAccountKind::ALL
+            .into_iter()
+            .map(|kind| Ok((account_label(provider_id, name, kind)?, kind)))
+            .collect::<Result<Vec<_>, VaultError>>()?;
+        self.with_storage_lock(|| {
+            let index = self.load_index()?;
+            let mut material = Vec::new();
+            for (label, kind) in &labels {
+                if index
+                    .credentials
+                    .get(label)
+                    .is_some_and(|meta| meta.credential_type == kind.credential_type())
+                    && let Some(value) = self.read_secret(label)?
+                {
+                    material.push((*kind, Zeroizing::new(value)));
+                }
+            }
+            if material.is_empty() {
+                return Ok(None);
+            }
+            let salt = self.account_fingerprint_salt()?;
+            let mut hasher = Sha256::new();
+            hasher.update(b"corbanu-provider-account-fingerprint-v1\0");
+            hasher.update(salt.as_bytes());
+            hasher.update(b"\0");
+            hasher.update(provider_id.as_bytes());
+            for (kind, value) in &material {
+                hasher.update(b"\0");
+                hasher.update(kind.as_str().as_bytes());
+                hasher.update(b"\0");
+                hasher.update(value.trim().as_bytes());
+            }
+            let digest = hasher.finalize();
+            Ok(Some(
+                digest
+                    .iter()
+                    .take(6)
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect(),
+            ))
+        })
+    }
+
+    /// Reads or creates the per-home fingerprint salt. Callers hold the lock.
+    fn account_fingerprint_salt(&self) -> Result<Zeroizing<String>, VaultError> {
+        let name = SecretName::new(FINGERPRINT_SALT_SECRET_NAME).map_err(|error| {
+            VaultError::Storage(anyhow::anyhow!("invalid salt secret name: {error}"))
+        })?;
+        if let Some(salt) = self.secrets.get(&VAULT_SCOPE, &name)? {
+            return Ok(Zeroizing::new(salt));
+        }
+        let salt = Zeroizing::new(format!(
+            "{}{}",
+            uuid::Uuid::new_v4().simple(),
+            uuid::Uuid::new_v4().simple()
+        ));
+        self.secrets
+            .apply_batch(&[(VAULT_SCOPE.clone(), name, salt.to_string())], &[])?;
+        Ok(salt)
+    }
 }
+
+/// The per-home fingerprint salt. It is not a credential, so it stays out of
+/// the credential index and never shows in `/vault`.
+const FINGERPRINT_SALT_SECRET_NAME: &str = "VAULT_PROVIDER_ACCOUNT_FINGERPRINT_SALT";
 
 fn account_label(
     provider_id: &str,

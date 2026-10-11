@@ -1,0 +1,75 @@
+# PF-84-S04: "Use for this session" in /providers. The default Z.AI account
+# (real key) replies; after switching to account fake (a fake key) a new
+# session starts, /status names account fake, and the request gets a 401:
+# no fallback to the default key. Record with
+#   python3 scripts/demo_video.py record qa/demos/specs/pf84-switch-account.toml \
+#     --bin <candidate> --sprint PF-84-S04 --publish
+id = "pf84-switch-account"
+feature = "PF-84-S04: switch the session's account in /providers"
+expected = "Default account replies pong; after 'Use for this session' on fake, /status shows account fake and the next request gets a 401."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+approval_policy = "never"
+sandbox_mode = "read-only"
+[features]
+named_accounts = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+run = "printf pf84-s04-demo-fake-zai-key-0004 | {bin} account add zai fake >/dev/null && echo enrolled"
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Reply with the single word pong"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*pong\\W*$"
+timeout = 120
+compress = 3
+[[steps]]
+type = "/providers"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Z\\.AI · fake"
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Down"
+repeat = 7
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Use for this session"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "requests to zai use account `fake`"
+[[steps]]
+type = "/status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "account fake"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Escape"
+[[steps]]
+type = "Reply with the single word pong"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "401"
+timeout = 120
+compress = 3
+[[steps]]
+pause = 3.0

@@ -1183,6 +1183,13 @@
                 "null"
               ]
             },
+            "providerAccount": {
+              "description": "The named account the spawned agent uses (`default` included), only while named accounts are on.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "reasoningEffort": {
               "anyOf": [
                 {

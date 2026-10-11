@@ -1,20 +1,20 @@
 ---
 sprint_id: "PF-84-S04"
 title: "Account management in /providers and onboarding"
-status: in_progress
+status: ready
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-84"
 execution_order: 26
 owner: "Codex PF-84 lane owner"
 parallel_lane: "account-ui"
-write_scope: "codex-rs/tui/, codex-rs/provider-auth/, codex-rs/app-server/, codex-rs/app-server-protocol/, codex-rs/core/, codex-rs/login/, codex-rs/vault/, codex-rs/cli/, codex-rs/model-provider/, codex-rs/model-provider-info/, qa/provider-auth/pf-84/s04-gate.md, qa/demos/specs/pf84-add-account.toml, qa/demos/specs/pf84-switch-account.toml, qa/demos/specs/pf84-no-duplicate-rows.toml, qa/demos/index/PF-84-S04.md, docs/sprints/current/unified-provider-auth/pf-84-s04-provider-account-management-ui.md, docs/sprints/current/unified-provider-auth/index.md"
+write_scope: "codex-rs/tui/, codex-rs/protocol/, codex-rs/analytics/src/analytics_client_tests.rs, codex-rs/exec/tests/event_processor_with_json_output.rs, codex-rs/Cargo.lock, codex-rs/provider-auth/, codex-rs/app-server/, codex-rs/app-server-protocol/, codex-rs/core/, codex-rs/login/, codex-rs/vault/, codex-rs/cli/, codex-rs/model-provider/, codex-rs/model-provider-info/, qa/provider-auth/pf-84/s04-gate.md, qa/demos/specs/pf84-add-account.toml, qa/demos/specs/pf84-switch-account.toml, qa/demos/specs/pf84-no-duplicate-rows.toml, qa/demos/index/PF-84-S04.md, docs/sprints/current/unified-provider-auth/pf-84-s04-provider-account-management-ui.md, docs/sprints/current/unified-provider-auth/index.md"
 integration_gate: "Codex PF-84 lane owner merges to main after just test -p codex-tui -p codex-provider-auth (plus touched crates), Linux clippy -D warnings, the tmux/GLM run and one Opus 5.5 High review"
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s04-providers"
 branch: "feat/pf-84-s04-provider-accounts-ui"
 base_commit: "0558c52cc320422d1fc187f4a98afff7a1530286"
 depends_on: "PF-84-S03"
 created: 2026-10-08
-updated: 2026-10-10
+updated: 2026-10-11
 ---
 
 # PF-84-S04 — Account management in /providers and onboarding
@@ -62,28 +62,29 @@ Paths are under `codex-rs/`, at `63ea3d0cbd`.
 ## Done
 
 - [x] Sprint record created and linked to one plan feature.
+- [x] Regression test `configured_claude_plan_has_exactly_one_row` (both rows on the base),
+  then one onboarding row per configured provider with use / add account / replace behind it.
+- [x] `/providers` account rows (kind, salted fingerprint, session/default markers) and add,
+  rename, remove (replacement first when in use), use-for-session and make-default.
+- [x] Onboarding "Add another account"; account in `/status` and the spawn line; S03 follow-up
+  tests. Gate: [s04-gate.md](../../../../qa/provider-auth/pf-84/s04-gate.md).
+- [x] Named ChatGPT sign-ins and AWS profiles stay refused here; Travis's D4 (2026-10-11) moves them to PF-84-S06.
 
 ## Remaining
 
-- [ ] Regression first: a snapshot showing two rows for one configured Claude Plan; then fix.
-- [ ] Account rows: name, kind, 12-hex fingerprint or login email hint, active/current markers.
-- [ ] Add, rename, remove, session-select and set-default actions. Removing the
-  current account needs a replacement first, as in PF-54.
-- [ ] Onboarding offers "Add another account" after a provider succeeds.
-- [ ] Pending Travis: named ChatGPT sign-ins and AWS profile accounts (fail closed today).
-  Recommended: split to a new PF-84-S06 after S05 (trade-off in the S03 report).
-- [ ] Code-blind functional design frozen before test-result disclosure, or non-user-facing N/A reason recorded.
+- [ ] Code-blind functional design and execution (independent acceptance step, not the implementer).
 
 ## Verification
 
-- [ ] Focused: `just test -p codex-tui -p codex-provider-auth` (snapshots plus unit tests).
-- [ ] tmux SOP: in a disposable home, add a second Claude Plan account and a second
+- [x] Focused: `just test -p codex-tui -p codex-provider-auth` (snapshots plus unit tests).
+- [x] tmux SOP: in a disposable home, add a second Claude Plan account and a second
   ZAI key, switch the session account, restart, and check durability. Cancel is
   inert. Send text and Enter separately.
-- [ ] GLM run: `-m glm-5.3-flash -c model_provider="zai"` with the default ZAI account
+- [x] GLM run: `-m glm-5.3-flash -c model_provider="zai"` with the default ZAI account
   replying and the session switched to a fake second key giving a 401.
-- [ ] Videos: `pf84-add-account.toml`, `pf84-switch-account.toml`, `pf84-no-duplicate-rows.toml`.
-- [ ] One independent review (Opus 5.5 High).
+- [x] Videos: `pf84-add-account.toml`, `pf84-switch-account.toml`, `pf84-no-duplicate-rows.toml`.
+- [x] One independent review (Opus 5.5 High), plus one scoped follow-up check.
+- [ ] Independent code-blind functional execution (acceptance step, not the implementer).
 
 ## Security notes
 
@@ -92,8 +93,8 @@ Paths are under `codex-rs/`, at `63ea3d0cbd`.
 
 ## Exit evidence
 
-- [ ] Implementation commit and PR recorded.
-- [ ] Snapshots, tmux logs, canary scan and video paths linked.
+- [x] Implementation commit and PR recorded (branch `feat/pf-84-s04-provider-accounts-ui`, code at `7a1ab9bc9d`).
+- [x] Snapshots, tmux logs, canary scan and video paths linked (gate file).
 - [ ] Code-blind handoff checker passes, or limited-testing agreement recorded.
-- [ ] `Done` and `Remaining` ledgers reflect reality.
+- [x] `Done` and `Remaining` ledgers reflect reality.
 - [ ] Completed record moved to `docs/sprints/archive/unified-provider-auth/`.

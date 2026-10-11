@@ -684,7 +684,7 @@ impl App {
         session_start_source: Option<ThreadStartSource>,
         initial_user_message: Option<crate::chatwidget::UserMessage>,
         new_thread_name: Option<String>,
-    ) {
+    ) -> bool {
         // Start a fresh in-memory session while preserving resumability via persisted rollout
         // history. If an initial message is provided, `enqueue_primary_thread_session` suppresses it
         // until the new session is configured and any replayed turns have been rendered.
@@ -713,7 +713,7 @@ impl App {
             }
         }
         self.config = config.clone();
-        match app_server
+        let started_ok = match app_server
             .start_thread_with_session_start_source(&config, session_start_source)
             .await
         {
@@ -744,6 +744,7 @@ impl App {
                     self.chat_widget.add_error_message(format!(
                         "Failed to attach to fresh app-server thread: {err}"
                     ));
+                    false
                 } else {
                     if let Some(err) = name_error {
                         self.chat_widget.add_error_message(err);
@@ -760,6 +761,7 @@ impl App {
                         }
                         self.chat_widget.add_plain_history_lines(lines);
                     }
+                    true
                 }
             }
             Err(err) => {
@@ -767,9 +769,11 @@ impl App {
                     "Failed to start a fresh session through the app server: {err}"
                 ));
                 self.config.model = Some(model);
+                false
             }
-        }
+        };
         tui.frame_requester().schedule_frame();
+        started_ok
     }
 
     pub(super) async fn replace_chat_widget_with_app_server_thread(

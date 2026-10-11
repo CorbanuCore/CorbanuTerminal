@@ -2763,12 +2763,18 @@ impl App {
                 generation,
                 status_host,
                 statuses,
+                accounts,
             } => self.provider_manager_statuses_resolved(
                 generation,
                 status_host,
                 statuses,
+                accounts,
                 app_server,
             ),
+            AppEvent::ProviderAccount(event) => {
+                self.handle_provider_account_event(tui, app_server, event)
+                    .await;
+            }
             AppEvent::ProviderManagerMetadataResolved {
                 generation,
                 metadata,

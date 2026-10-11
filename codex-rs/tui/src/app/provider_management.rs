@@ -49,8 +49,25 @@ impl App {
         else {
             return;
         };
-        self.chat_widget
-            .open_provider_manager_actions(&entry, &status);
+        // PF-84-S04: account actions for a provider that can hold them.
+        let accounts = self.provider_manager_accounts_view();
+        let account_provider = accounts.as_ref().and_then(|accounts| {
+            crate::provider_named_accounts::account_provider_id(
+                &self.config,
+                entry
+                    .runtime_provider_ids
+                    .iter()
+                    .map(codex_provider_auth::ProviderRuntimeId::as_str),
+            )
+            .map(|provider_id| (provider_id, accounts))
+        });
+        self.chat_widget.open_provider_manager_actions(
+            &entry,
+            &status,
+            account_provider
+                .as_ref()
+                .map(|(provider_id, accounts)| (provider_id.as_str(), *accounts)),
+        );
     }
 
     pub(super) fn provider_manager_request_policy(
