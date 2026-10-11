@@ -335,7 +335,8 @@ impl KeyboardHandler for AuthModeWidget {
             let sign_in_state = { (*self.sign_in_state.read().unwrap()).clone() };
             match sign_in_state {
                 SignInState::PickMode => {
-                    self.handle_sign_in_option(self.highlighted_mode);
+                    let highlighted = self.effective_highlight(&self.displayed_sign_in_options());
+                    self.handle_sign_in_option(highlighted);
                 }
                 SignInState::ChatGptSuccessMessage | SignInState::ChatGptSuccess => {
                     self.finish_openai_account_setup();
@@ -647,7 +648,7 @@ impl AuthModeWidget {
 
         let current_index = options
             .iter()
-            .position(|option| *option == self.highlighted_mode)
+            .position(|option| *option == self.effective_highlight(&options))
             .unwrap_or(0);
         let next_index =
             (current_index as isize + delta).rem_euclid(options.len() as isize) as usize;
@@ -927,6 +928,27 @@ impl AuthModeWidget {
         }
     }
 
+    /// The highlighted row. A setup row that turned into its provider's single
+    /// configured row (PF-84-S04) keeps the focus on that row.
+    fn effective_highlight(&self, options: &[SignInOption]) -> SignInOption {
+        if options.contains(&self.highlighted_mode) {
+            return self.highlighted_mode;
+        }
+        self.provider_status_host
+            .catalog()
+            .entries()
+            .iter()
+            .enumerate()
+            .find(|(entry_index, entry)| {
+                options.contains(&SignInOption::ProviderRuntime(*entry_index))
+                    && entry_setup_options(entry, &self.api_key_provider_options)
+                        .contains(&self.highlighted_mode)
+            })
+            .map_or(self.highlighted_mode, |(entry_index, _)| {
+                SignInOption::ProviderRuntime(entry_index)
+            })
+    }
+
     fn select_provider_api_key_option(&mut self, index: usize) -> bool {
         let Some(option) = self.api_key_provider_options.get(index).cloned() else {
             return false;
@@ -985,12 +1007,13 @@ impl AuthModeWidget {
             ]
         };
 
+        let highlighted_row = self.effective_highlight(&self.displayed_sign_in_options());
         let create_mode_item = |idx: usize,
                                 selected_mode: SignInOption,
                                 text: &str,
                                 description: &str|
          -> Vec<Line<'static>> {
-            let is_selected = self.highlighted_mode == selected_mode;
+            let is_selected = highlighted_row == selected_mode;
             let caret = if is_selected { ">" } else { " " };
 
             let line1 = if is_selected {
@@ -1189,9 +1212,10 @@ impl AuthModeWidget {
             .wrap(Wrap { trim: false })
             .render(header_area, buf);
 
+        let highlighted = self.effective_highlight(&displayed_options);
         let selected_option_index = displayed_options
             .iter()
-            .position(|option| *option == self.highlighted_mode)
+            .position(|option| *option == highlighted)
             .unwrap_or(0);
         let selected_end_line = selected_option_index.saturating_mul(3).saturating_add(2);
         let option_scroll = selected_end_line
