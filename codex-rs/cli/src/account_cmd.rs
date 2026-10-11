@@ -182,10 +182,10 @@ fn ensure_kind_fits_provider(
         AccountKindArg::Command => provider.auth.is_some() && !provider.is_claude_plan(),
     };
     if !fits {
-        bail!(
-            "provider `{provider_id}` does not take a {} account",
-            kind.kind().as_str()
-        );
+        let kind = clap::ValueEnum::to_possible_value(&kind)
+            .map(|value| value.get_name().to_string())
+            .unwrap_or_else(|| kind.kind().as_str().to_string());
+        bail!("provider `{provider_id}` does not take `--kind {kind}` accounts");
     }
     Ok(())
 }
@@ -215,6 +215,17 @@ fn account_value(kind: AccountKindArg, value: Option<String>) -> anyhow::Result<
     match (kind, value) {
         (AccountKindArg::Command, None) => Ok(Zeroizing::new("1".to_string())),
         (AccountKindArg::Command, Some(_)) => bail!("a command account takes no --value"),
+        (AccountKindArg::ClaudeConfigDir, Some(value)) => {
+            let dir = std::path::Path::new(value.trim());
+            if !dir.is_absolute() || !dir.is_dir() {
+                bail!(
+                    "--value must be the absolute path of an existing Claude Code config \
+                     directory; {} is not",
+                    dir.display()
+                );
+            }
+            Ok(Zeroizing::new(value.trim().to_string()))
+        }
         (_, Some(value)) if !value.trim().is_empty() => {
             Ok(Zeroizing::new(value.trim().to_string()))
         }

@@ -1,0 +1,10 @@
+== before corbanu-debug [CORBANU_HOME=homeB]: home=fakehome/.corbanu-debug warnings=0
+== before corbanu-debug [CORBANU_HOME=homeB CODEX_HOME=homeD]: home=homeD warnings=0
+== before corbanu-debug [CORBANU_DEBUG_HOME=homeD CORBANU_HOME=homeB]: home=homeD warnings=0
+== before corbanu-debug [(none)]: home=fakehome/.corbanu-debug warnings=0
+== after corbanu-debug [CORBANU_HOME=homeB]: home=homeB warnings=0
+== after corbanu-debug [CORBANU_HOME=homeB CODEX_HOME=homeD]: home=homeB warnings=1
+   | warning: CORBANU_HOME (homeB) overrides CODEX_HOME (homeD); using homeB. To use another home, set CORBANU_HOME to it.
+== after corbanu-debug [CORBANU_DEBUG_HOME=homeD CORBANU_HOME=homeB]: home=homeD warnings=1
+   | warning: CORBANU_DEBUG_HOME (homeD) overrides CORBANU_HOME (homeB); using homeD. To use another home, set CORBANU_DEBUG_HOME to it.
+== after corbanu-debug [(none)]: home=fakehome/.corbanu-debug warnings=0

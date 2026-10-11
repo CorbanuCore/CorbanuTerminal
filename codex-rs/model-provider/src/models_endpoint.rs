@@ -84,6 +84,18 @@ impl OpenAiModelsEndpoint {
         let _timer =
             codex_otel::start_global_timer("codex.remote_models.fetch_update.duration_ms", &[]);
         let auth = self.auth().await;
+        if auth.is_none()
+            && self.provider_info.auth.is_some()
+            && let Some(account) = self.provider_info.account.as_ref()
+        {
+            // PF-84 (#419): a named account whose command produced no
+            // credential never sends an unauthenticated request.
+            return Err(std::io::Error::other(format!(
+                "account `{}` of provider `{}` has no usable credential; not listing models",
+                account.name, account.provider_id
+            ))
+            .into());
+        }
         let auth_mode = auth.as_ref().map(CodexAuth::auth_mode);
         let api_provider = self.provider_info.to_api_provider(auth_mode)?;
         let api_auth = resolve_provider_auth(auth.as_ref(), &self.provider_info)?;
@@ -398,5 +410,38 @@ mod tests {
                 format!("{}/models?client_version=0.0.0", server.uri()),
             ))
         );
+    }
+
+    /// PF-84 (#419): a named command account with no credential never sends
+    /// an unauthenticated `GET /models`.
+    #[tokio::test]
+    async fn named_command_account_without_credential_sends_no_models_request() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/models"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(ModelsResponse { models: Vec::new() }),
+            )
+            .expect(0)
+            .mount(&server)
+            .await;
+        let provider_info = ModelProviderInfo {
+            base_url: Some(server.uri()),
+            account: Some(codex_model_provider_info::NamedProviderAccount {
+                provider_id: "cmdp".to_string(),
+                name: "ghost".to_string(),
+            }),
+            ..provider_info_with_command_auth()
+        };
+        let endpoint = OpenAiModelsEndpoint::new(provider_info, /*auth_manager*/ None);
+
+        let error = endpoint
+            .list_models(
+                "0.0.0",
+                HttpClientFactory::new(OutboundProxyPolicy::RespectSystemProxy),
+            )
+            .await
+            .expect_err("no credential, no request");
+        assert!(error.to_string().contains("account `ghost`"), "{error}");
     }
 }

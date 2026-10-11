@@ -178,3 +178,32 @@ fn no_auth_local_provider_is_not_given_a_login_failure() {
     health.apply(&mut statuses);
     assert_eq!(statuses.entries(), &[original]);
 }
+
+/// PF-84 (#416): a named account's rejection names the account and leaves the
+/// default credential's health untouched.
+#[test]
+fn named_account_rejection_names_the_account_and_spares_the_default() {
+    let mut health = ProviderCredentialHealth::default();
+    let status = configured(
+        "zai",
+        ProviderCredentialSource::EncryptedVault,
+        CredentialControl::ManagedByCorbanu,
+    );
+    let account = NamedCredentialAccount {
+        provider_id: "zai".into(),
+        name: "fake".into(),
+    };
+    health.begin_for_account("named".into(), &status, Some(account.clone()));
+    assert_eq!(
+        health.reject_credential("named"),
+        Some(RejectedCredential {
+            provider: "zai".into(),
+            account: Some(account),
+        })
+    );
+    let mut statuses = ProviderStatusCatalog {
+        entries: vec![status.clone()],
+    };
+    health.apply(&mut statuses);
+    assert_eq!(statuses.entries, vec![status]);
+}

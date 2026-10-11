@@ -198,8 +198,16 @@ pub(crate) async fn resolve_claude_account_access_token(
         )
         .context("failed to read the Claude account")?
     {
-        let config_dir =
-            claude_config_dir_for_profile(Path::new(""), Some(PathBuf::from(config_dir.as_str())))?;
+        let requested = PathBuf::from(config_dir.as_str());
+        if !requested.is_absolute() || !requested.is_dir() {
+            return Err(anyhow!(
+                "Claude account `{name}` uses the Claude Code config directory {}, which is \
+                 not an existing absolute directory; add the account again with the right \
+                 `--value`",
+                requested.display()
+            ));
+        }
+        let config_dir = claude_config_dir_for_profile(Path::new(""), Some(requested))?;
         let store = preferred_platform_store(&config_dir, /*security*/ None).await?;
         return resolve_claude_code_login_access_token(&config_dir, store).await;
     }

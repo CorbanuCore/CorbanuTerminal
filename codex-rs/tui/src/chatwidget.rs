@@ -1566,6 +1566,8 @@ impl ChatWidget {
     }
 
     pub(crate) fn add_error_message(&mut self, message: String) {
+        // A session that fails to start must not swallow its config warnings.
+        self.show_deferred_config_warnings();
         self.add_to_history(history_cell::new_error_event(message));
         self.request_redraw();
     }

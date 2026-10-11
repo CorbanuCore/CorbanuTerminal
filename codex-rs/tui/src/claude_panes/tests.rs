@@ -5084,3 +5084,53 @@ fn contained_plan_routes_tool_approvals_to_corbanu() {
 #[cfg(unix)]
 #[path = "approval_turn_tests.rs"]
 mod approval_turn;
+
+/// PF-84 (#414): a Claude Plan pane on a named account passes the account in
+/// argv, so a helper that predates named accounts refuses instead of printing
+/// the default account's token; without one, no account variable leaks in.
+#[cfg(unix)]
+#[tokio::test]
+async fn claude_plan_pane_passes_its_named_account_to_the_helper() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let write_helper = |name: &str, body: &str| {
+        let path = dir.path().join(name);
+        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).expect("helper");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        path
+    };
+    let current = write_helper(
+        "corbanu",
+        "if [ \"$*\" = \"internal-claude-oauth-token --account work --enable named_accounts\" ] && [ \"$CORBANU_PROVIDER_ACCOUNT\" = work ]; then printf token-work; \
+         elif [ \"$*\" = internal-claude-oauth-token ] && [ -z \"${CORBANU_PROVIDER_ACCOUNT+x}\" ]; then printf token-default; else exit 3; fi",
+    );
+    let outdated = write_helper(
+        "old-corbanu",
+        "if [ $# -gt 1 ]; then echo \"error: unexpected argument '$2' found\" >&2; exit 2; fi; printf token-default",
+    );
+    let deferred = |helper: &std::path::Path, account: Option<&str>| {
+        super::turn_types::DeferredClaudePlanAuth {
+            codex_home: dir.path().to_path_buf(),
+            helper_executable: helper.to_path_buf(),
+            cwd: dir.path().to_path_buf(),
+            claude_config_dir_override: None,
+            account: account.map(str::to_string),
+        }
+    };
+    let token = |plan| async move {
+        super::execution::resolve_deferred_claude_plan_token(plan)
+            .await
+            .map(|token| token.to_string())
+    };
+
+    assert_eq!(
+        token(deferred(&current, Some("work")))
+            .await
+            .expect("named"),
+        "token-work"
+    );
+    assert_eq!(
+        token(deferred(&current, None)).await.expect("default"),
+        "token-default"
+    );
+    assert!(token(deferred(&outdated, Some("work"))).await.is_err());
+}

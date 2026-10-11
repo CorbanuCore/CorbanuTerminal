@@ -123,33 +123,73 @@ impl fmt::Debug for BearerTokenRefresher {
 pub struct ExternalBearerAccount {
     pub provider_id: String,
     pub name: String,
-    /// The home whose registry must hold a `command` entry for this account
-    /// before the command runs. `None` when the command checks the account
-    /// itself (Claude Plan's helper).
+    /// The home whose registry must hold this account before the command
+    /// runs. `None` skips the check (no home is known).
     pub registry_home: Option<PathBuf>,
+    pub server: ExternalBearerAccountServer,
+}
+
+/// Which command serves a named account, and so how the account reaches it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExternalBearerAccountServer {
+    /// A user `auth.command`: the account is passed in `CORBANU_PROVIDER_ACCOUNT`
+    /// only, and the registry must hold a `command` entry for it.
+    Command,
+    /// Corbanu's own Claude Plan helper (`corbanu internal-claude-oauth-token`):
+    /// the registry must hold a Claude token or config dir for the account.
+    /// The account also goes in argv (see [`is_claude_plan_token_helper`]).
+    ClaudePlanHelper,
+}
+
+impl ExternalBearerAccountServer {
+    fn enrolled_kinds(self) -> &'static [codex_vault::ProviderAccountKind] {
+        match self {
+            Self::Command => &[codex_vault::ProviderAccountKind::Command],
+            Self::ClaudePlanHelper => &[
+                codex_vault::ProviderAccountKind::ClaudeOauthToken,
+                codex_vault::ProviderAccountKind::ClaudeConfigDir,
+            ],
+        }
+    }
+
+    fn add_hint(self) -> &'static str {
+        match self {
+            Self::Command => "--kind command",
+            Self::ClaudePlanHelper => "--kind claude-token (or --kind claude-config-dir)",
+        }
+    }
 }
 
 impl ExternalBearerAccount {
-    fn ensure_enrolled(&self) -> io::Result<()> {
+    /// Refuses an account the registry does not hold, without running the command.
+    pub fn ensure_enrolled(&self) -> io::Result<()> {
         let Some(home) = self.registry_home.as_deref() else {
             return Ok(());
         };
-        let enrolled = super::provider_key_vault::provider_account_holds(
-            home,
-            &self.provider_id,
-            &self.name,
-            codex_vault::ProviderAccountKind::Command,
-        )?;
-        if enrolled {
-            Ok(())
-        } else {
-            Err(io::Error::other(format!(
-                "account `{name}` of provider `{id}` is not configured; add it with \
-                 `corbanu account add {id} {name} --kind command` or choose another account",
-                name = self.name,
-                id = self.provider_id,
-            )))
+        for kind in self.server.enrolled_kinds() {
+            let enrolled = super::provider_key_vault::provider_account_holds(
+                home,
+                &self.provider_id,
+                &self.name,
+                *kind,
+            )
+            .map_err(|error| {
+                io::Error::other(format!(
+                    "account `{}` of provider `{}` is unavailable: {error}",
+                    self.name, self.provider_id
+                ))
+            })?;
+            if enrolled {
+                return Ok(());
+            }
         }
+        Err(io::Error::other(format!(
+            "account `{name}` of provider `{id}` is not configured; add it with \
+             `corbanu account add {id} {name} {hint}` or choose another account",
+            name = self.name,
+            id = self.provider_id,
+            hint = self.server.add_hint(),
+        )))
     }
 }
 
@@ -225,6 +265,15 @@ struct CachedExternalBearerToken {
 /// PF-84: names the account a provider auth command must serve.
 pub const PROVIDER_ACCOUNT_ENV_VAR: &str = "CORBANU_PROVIDER_ACCOUNT";
 
+/// The hidden `corbanu` subcommand that prints a Claude Plan token.
+pub const CLAUDE_PLAN_TOKEN_HELPER_SUBCOMMAND: &str = "internal-claude-oauth-token";
+
+/// Whether `config` runs Corbanu's own Claude Plan token helper, which takes
+/// the account in argv as well (#414).
+pub fn is_claude_plan_token_helper(config: &ModelProviderAuthInfo) -> bool {
+    config.args.first().map(String::as_str) == Some(CLAUDE_PLAN_TOKEN_HELPER_SUBCOMMAND)
+}
+
 async fn run_provider_auth_command(
     config: &ModelProviderAuthInfo,
     force_refresh: bool,
@@ -232,8 +281,14 @@ async fn run_provider_auth_command(
 ) -> io::Result<String> {
     let program = resolve_provider_auth_program(&config.command, &config.cwd)?;
     let mut command = Command::new(&program);
+    command.args(&config.args);
+    // A helper that predates named accounts ignores the environment variable
+    // and would print the default account's token; in argv it is rejected.
+    let helper_account = account.filter(|_| is_claude_plan_token_helper(config));
+    if let Some(account) = helper_account {
+        command.args(["--account", account, "--enable", "named_accounts"]);
+    }
     command
-        .args(&config.args)
         .current_dir(config.cwd.as_path())
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -273,6 +328,20 @@ async fn run_provider_auth_command(
         } else {
             format!(": {stderr}")
         };
+        if let Some(account) = helper_account
+            && stderr.contains("unexpected argument '--account'")
+        {
+            // Retrying cannot help; `Unsupported` marks the failure permanent.
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                format!(
+                    "provider auth command `{}` predates named accounts, so account `{}` was \
+                     refused instead of using the default account; update it or put a current \
+                     `corbanu` first on PATH",
+                    config.command, account,
+                ),
+            ));
+        }
         return Err(io::Error::other(format!(
             "provider auth command `{}` exited with status {status}{stderr_suffix}",
             config.command
@@ -302,7 +371,8 @@ pub async fn validate_provider_auth_command(config: &ModelProviderAuthInfo) -> i
     validate_provider_auth_command_for_account(config, /*account*/ None).await
 }
 
-/// PF-84: [`validate_provider_auth_command`] for a named account.
+/// PF-84: [`validate_provider_auth_command`] for a named account. The caller
+/// checks enrollment first (see [`ExternalBearerAccount::ensure_enrolled`]).
 pub async fn validate_provider_auth_command_for_account(
     config: &ModelProviderAuthInfo,
     account: Option<&str>,

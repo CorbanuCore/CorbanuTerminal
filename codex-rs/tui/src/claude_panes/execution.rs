@@ -887,12 +887,20 @@ pub(super) fn parse_claude_version(text: &str) -> Option<(u64, u64, u64)> {
     parts.next().is_none().then_some(version)
 }
 
-async fn resolve_deferred_claude_plan_token(
+pub(super) async fn resolve_deferred_claude_plan_token(
     deferred: DeferredClaudePlanAuth,
 ) -> Result<Zeroizing<String>> {
     let mut command = Command::new(&deferred.helper_executable);
+    command.arg("internal-claude-oauth-token");
+    // PF-84 (#414): the account goes in argv too, so a helper that predates
+    // named accounts refuses instead of printing the default account's token.
+    match deferred.account.as_deref() {
+        Some(account) => command
+            .args(["--account", account, "--enable", "named_accounts"])
+            .env(codex_login::PROVIDER_ACCOUNT_ENV_VAR, account),
+        None => command.env_remove(codex_login::PROVIDER_ACCOUNT_ENV_VAR),
+    };
     command
-        .arg("internal-claude-oauth-token")
         .env("CORBANU_HOME", &deferred.codex_home)
         .env("PFTERMINAL_HOME", &deferred.codex_home)
         .env("CODEX_HOME", &deferred.codex_home)

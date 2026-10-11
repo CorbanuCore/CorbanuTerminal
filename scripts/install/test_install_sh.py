@@ -194,12 +194,13 @@ class InstallShTest(unittest.TestCase):
             self.assertEqual(homes("corbanu", CORBANU_HOME="/worker"), "/worker|")
             self.assertEqual(homes("corbanu", PFTERMINAL_HOME="/worker"), "|")
             self.assertEqual(homes("corbanu", CODEX_HOME="/worker"), "|/worker")
-            # The debug binary ignores CORBANU_HOME, so its wrapper still
-            # supplies the debug home unless a debug home was chosen.
+            # The debug wrapper supplies the debug home only when the caller
+            # chose no home; a caller-set CORBANU_HOME is kept, as for corbanu.
             debug_home = f"{default_home}-debug"
-            self.assertEqual(
-                homes("corbanu-debug", CORBANU_HOME="/worker"), f"/worker|{debug_home}"
-            )
+            self.assertEqual(homes("corbanu-debug"), f"|{debug_home}")
+            self.assertEqual(homes("corbanu-debug", CORBANU_HOME="/worker"), "/worker|")
+            self.assertEqual(homes("corbanu-debug", PFTERMINAL_HOME="/worker"), "|")
+            self.assertEqual(homes("corbanu-debug", CODEX_HOME="/worker"), "|/worker")
             self.assertEqual(homes("corbanu-debug", CORBANU_DEBUG_HOME="/dbg"), "|")
 
     def test_package_without_debug_binary_removes_managed_stale_launchers(self) -> None:

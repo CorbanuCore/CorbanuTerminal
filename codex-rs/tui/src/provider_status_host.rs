@@ -1,9 +1,12 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::RwLock;
 
 use codex_login::OpenAiAuthMetadata;
+use codex_login::ProviderAccountKind;
 use codex_model_provider_info::CORBANU_API_KEY_ENV_VARS;
+use codex_model_provider_info::NamedProviderAccount;
 use codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR;
 use codex_provider_auth::ApiKeyAuthTarget;
 use codex_provider_auth::ApiKeyCredentialMetadata;
@@ -123,12 +126,65 @@ pub(crate) struct ProviderStatusHost {
     account: Arc<RwLock<ProviderAccountMetadata>>,
     authorizations: ProviderRuntimeAuthorizations,
     health: Arc<RwLock<codex_provider_auth::ProviderCredentialHealth>>,
+    /// PF-84 (#417): catalog entries whose runtime provider runs on a named
+    /// account, and whether the vault holds that account. Such an entry's
+    /// status comes from the account, never from the default credential.
+    named_accounts: Arc<BTreeMap<String, bool>>,
+}
+
+/// PF-84: for each catalog entry whose runtime provider selects a named
+/// account, whether `holds` reports the account as enrolled (metadata only).
+fn named_account_enrollment(
+    catalog: &ProviderCatalog,
+    config: &Config,
+    holds: impl Fn(&NamedProviderAccount, ProviderAccountKind) -> bool,
+) -> BTreeMap<String, bool> {
+    let mut enrollment = BTreeMap::new();
+    for entry in catalog.entries() {
+        let selected = entry.runtime_provider_ids.iter().find_map(|id| {
+            config
+                .model_providers
+                .get(id.as_str())
+                .and_then(|provider| Some((provider, provider.account.as_ref()?)))
+        });
+        let Some((provider, account)) = selected else {
+            continue;
+        };
+        let kinds: &[ProviderAccountKind] = if provider.is_claude_plan() {
+            &[
+                ProviderAccountKind::ClaudeOauthToken,
+                ProviderAccountKind::ClaudeConfigDir,
+            ]
+        } else if provider.auth.is_some() {
+            &[ProviderAccountKind::Command]
+        } else {
+            &[ProviderAccountKind::ApiKey]
+        };
+        let enrolled = kinds.iter().any(|kind| holds(account, *kind));
+        enrollment.insert(entry.id.as_str().to_string(), enrolled);
+    }
+    enrollment
 }
 
 impl ProviderStatusHost {
     pub(crate) fn from_config(config: &Config, account: ProviderAccountMetadata) -> Self {
+        let codex_home = config.codex_home.to_path_buf();
+        Self::from_config_with_account_registry(config, account, |named, kind| {
+            codex_login::provider_account_holds(&codex_home, &named.provider_id, &named.name, kind)
+                .unwrap_or(false)
+        })
+    }
+
+    fn from_config_with_account_registry(
+        config: &Config,
+        account: ProviderAccountMetadata,
+        holds: impl Fn(&NamedProviderAccount, ProviderAccountKind) -> bool,
+    ) -> Self {
+        let catalog = ProviderCatalog::from_runtime_providers(&config.model_providers);
+        let named_accounts = Arc::new(named_account_enrollment(&catalog, config, holds));
         Self {
-            catalog: ProviderCatalog::from_runtime_providers(&config.model_providers),
+            named_accounts,
+            catalog,
             codex_home: config.codex_home.to_path_buf(),
             current: Arc::new(RwLock::new(CurrentProviderSelection::runtime_id(
                 config.model_provider_id.clone(),
@@ -243,6 +299,17 @@ impl ProviderStatusHost {
     }
 
     pub(crate) fn begin_credential_attempt(&self, scope: String, runtime_provider: &str) {
+        self.begin_account_credential_attempt(scope, runtime_provider, /*account*/ None);
+    }
+
+    /// PF-84: an attempt on `account` (a named account of `runtime_provider`),
+    /// or on the default credential when `None`.
+    pub(crate) fn begin_account_credential_attempt(
+        &self,
+        scope: String,
+        runtime_provider: &str,
+        account: Option<codex_provider_auth::NamedCredentialAccount>,
+    ) {
         let Some(entry) = self.catalog.entries().iter().find(|entry| {
             entry
                 .runtime_provider_ids
@@ -255,15 +322,18 @@ impl ProviderStatusHost {
             self.health
                 .write()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .begin(scope, &status);
+                .begin_for_account(scope, &status, account);
         }
     }
 
-    pub(crate) fn reject_credential_attempt(&self, scope: &str) -> Option<String> {
+    pub(crate) fn reject_credential_attempt(
+        &self,
+        scope: &str,
+    ) -> Option<codex_provider_auth::RejectedCredential> {
         self.health
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .reject_provider(scope)
+            .reject_credential(scope)
     }
 
     pub(crate) fn finish_credential_attempt(&self, scope: &str) {
@@ -322,14 +392,40 @@ impl ProviderStatusHost {
         managed: Option<&ManagedSnapshot>,
     ) -> ProviderMetadata {
         let first = entry.setup_capabilities.iter().next();
+        let named = self.named_accounts.get(entry.id.as_str()).copied();
         match first {
             Some(ProviderSetupCapability::OpenAiAccount)
             | Some(ProviderSetupCapability::ApiKey {
                 storage: ApiKeyStorage::OpenAiAuth,
             }) => ProviderMetadata::OpenAi(account.openai),
             Some(ProviderSetupCapability::ApiKey {
+                storage: ApiKeyStorage::EnvironmentVariable { .. },
+            }) if named.is_some() => {
+                let enrolled = named == Some(true);
+                // A named account ignores the environment and the default key.
+                ProviderMetadata::ApiKey(ApiKeyCredentialMetadata {
+                    environment: EnvironmentCredentialMetadata::Missing,
+                    managed: if enrolled {
+                        ManagedApiKeyMetadata::Stored {
+                            source: codex_login::ProviderApiKeyStorageSource::EncryptedVault,
+                        }
+                    } else {
+                        ManagedApiKeyMetadata::Missing
+                    },
+                })
+            }
+            Some(ProviderSetupCapability::ApiKey {
                 storage: ApiKeyStorage::EnvironmentVariable { env_key },
             }) => ProviderMetadata::ApiKey(self.environment_api_key_metadata(env_key, managed)),
+            Some(ProviderSetupCapability::ClaudeAccount) if named.is_some() => {
+                ProviderMetadata::Claude(if named == Some(true) {
+                    ClaudeCredentialMetadata::Configured {
+                        source: codex_provider_auth::ClaudeCredentialSource::Managed,
+                    }
+                } else {
+                    ClaudeCredentialMetadata::NotConfigured
+                })
+            }
             Some(ProviderSetupCapability::ClaudeAccount) => {
                 ProviderMetadata::Claude(account.claude)
             }
