@@ -744,8 +744,7 @@ mod thread_processor_behavior_tests {
         Ok(())
     }
 
-    #[test]
-    fn collect_resume_override_mismatches_includes_service_tier() {
+    fn resume_mismatch_fixture() -> (ThreadResumeParams, ThreadConfigSnapshot) {
         let cwd = test_path_buf("/tmp").abs();
         let request = ThreadResumeParams {
             thread_id: "thread-1".to_string(),
@@ -800,9 +799,47 @@ mod thread_processor_behavior_tests {
             provider_account: None,
         };
 
+        (request, config_snapshot)
+    }
+
+    #[test]
+    fn collect_resume_override_mismatches_includes_service_tier() {
+        let (request, config_snapshot) = resume_mismatch_fixture();
         assert_eq!(
             collect_resume_override_mismatches(&request, &config_snapshot),
             vec!["service_tier requested=Some(\"priority\") active=Some(\"flex\")".to_string()]
+        );
+    }
+
+    /// PF-84-S03 follow-up: a running thread never changes account. Resuming
+    /// it with another account is a reported mismatch; the same account,
+    /// qualified or not, is not.
+    #[test]
+    fn collect_resume_override_mismatches_includes_provider_account() {
+        let (mut request, mut config_snapshot) = resume_mismatch_fixture();
+        request.service_tier = None;
+        config_snapshot.model_provider_id = "zai".to_string();
+        config_snapshot.provider_account = Some("zai:main".to_string());
+
+        request.provider_account = Some("fake".to_string());
+        assert_eq!(
+            collect_resume_override_mismatches(&request, &config_snapshot),
+            vec!["provider_account requested=zai:fake active=Some(\"zai:main\")".to_string()]
+        );
+        for same in ["main", "zai:main"] {
+            request.provider_account = Some(same.to_string());
+            assert_eq!(
+                collect_resume_override_mismatches(&request, &config_snapshot),
+                Vec::<String>::new(),
+                "{same}"
+            );
+        }
+        // A thread on its default account is a mismatch for any named one.
+        config_snapshot.provider_account = Some("zai:default".to_string());
+        request.provider_account = Some("zai:main".to_string());
+        assert_eq!(
+            collect_resume_override_mismatches(&request, &config_snapshot),
+            vec!["provider_account requested=zai:main active=Some(\"zai:default\")".to_string()]
         );
     }
 

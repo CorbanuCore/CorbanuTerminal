@@ -185,6 +185,7 @@ mod provider_accounts;
 pub use codex_model_provider::selected_account_error;
 pub(crate) use provider_accounts::configured_account_names;
 pub use provider_accounts::split_account_selection;
+pub use provider_accounts::supports_named_accounts;
 pub(crate) use provider_accounts::stamp_provider_account;
 mod requirements;
 mod resolved_permission_profile;

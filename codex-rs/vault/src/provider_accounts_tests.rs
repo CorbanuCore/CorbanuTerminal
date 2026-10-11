@@ -272,3 +272,82 @@ fn scoped_broker_reads_refuse_named_subscription_material() {
         Err(crate::ScopedCredentialError::CredentialTypeDenied)
     ));
 }
+
+#[test]
+fn rename_moves_every_kind_and_leaves_other_labels_alone() {
+    let (_dir, vault) = test_vault();
+    let (work, home, other) = (name("work"), name("home"), name("other"));
+    vault
+        .write_provider_account("claude-plan", &work, ProviderAccountKind::ClaudeOauthToken, "tok")
+        .expect("write token");
+    vault
+        .write_provider_account("claude-plan", &work, ProviderAccountKind::ClaudeConfigDir, "/d")
+        .expect("write dir");
+    vault
+        .write_provider_account("claude-plan", &other, ProviderAccountKind::ClaudeOauthToken, "o")
+        .expect("write other");
+    let labels_before = vault.list().expect("list").len();
+
+    vault
+        .rename_provider_account("claude-plan", &work, &home)
+        .expect("rename");
+
+    assert_eq!(vault.list().expect("list").len(), labels_before);
+    assert_eq!(
+        vault.provider_account_kinds("claude-plan", &work).expect("kinds"),
+        Vec::new()
+    );
+    assert_eq!(
+        vault.provider_account_kinds("claude-plan", &home).expect("kinds"),
+        vec![
+            ProviderAccountKind::ClaudeOauthToken,
+            ProviderAccountKind::ClaudeConfigDir
+        ]
+    );
+    assert_eq!(
+        vault
+            .read_provider_account("claude-plan", &home, ProviderAccountKind::ClaudeOauthToken)
+            .expect("read")
+            .map(|value| value.to_string())
+            .as_deref(),
+        Some("tok")
+    );
+    // An existing target or a missing source is refused and changes nothing.
+    assert!(vault.rename_provider_account("claude-plan", &home, &other).is_err());
+    assert!(vault.rename_provider_account("claude-plan", &work, &name("x")).is_err());
+    assert_eq!(vault.list().expect("list").len(), labels_before);
+}
+
+#[test]
+fn fingerprints_identify_material_without_revealing_it() {
+    let (_dir, vault) = test_vault();
+    let (a, b, c) = (name("a"), name("b"), name("c"));
+    assert_eq!(vault.provider_account_fingerprint("zai", &a).expect("fp"), None);
+    for (account, value) in [(&a, "same-key"), (&b, "same-key"), (&c, "other-key")] {
+        vault
+            .write_provider_account("zai", account, ProviderAccountKind::ApiKey, value)
+            .expect("write");
+    }
+    let fp = |account| {
+        vault
+            .provider_account_fingerprint("zai", account)
+            .expect("fp")
+            .expect("present")
+    };
+    let (fa, fb, fc) = (fp(&a), fp(&b), fp(&c));
+    assert_eq!(fa.len(), 12);
+    assert!(fa.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    assert_eq!(fa, fb, "same material, same fingerprint");
+    assert_ne!(fa, fc);
+    assert_eq!(fp(&a), fa, "stable across calls");
+    // The salt is per home and is not a listed credential.
+    assert!(vault.list().expect("list").iter().all(|entry| !entry.label.contains("SALT")));
+    let (_other_dir, other_home) = test_vault();
+    other_home
+        .write_provider_account("zai", &a, ProviderAccountKind::ApiKey, "same-key")
+        .expect("write");
+    assert_ne!(
+        other_home.provider_account_fingerprint("zai", &a).expect("fp"),
+        Some(fa)
+    );
+}

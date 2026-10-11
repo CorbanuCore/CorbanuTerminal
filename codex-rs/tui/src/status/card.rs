@@ -971,15 +971,32 @@ fn format_model_provider(config: &Config, runtime_base_url: Option<&str>) -> Opt
         name
     };
     let base_url = runtime_base_url.and_then(sanitize_base_url);
+    // PF-84-S04: with named accounts on, name the account this session's
+    // requests use, `default` included.
+    let account = config
+        .features
+        .enabled(codex_features::Feature::NamedAccounts)
+        .then(|| {
+            provider
+                .account
+                .as_ref()
+                .map_or(codex_vault::DEFAULT_PROVIDER_ACCOUNT, |account| {
+                    account.name.as_str()
+                })
+        });
     let is_default_openai = provider.is_openai() && base_url.is_none();
-    if is_default_openai {
+    if is_default_openai && account.is_none() {
         return None;
     }
 
-    Some(match base_url {
+    let mut value = match base_url {
         Some(base_url) => format!("{provider_name} - {base_url}"),
         None => provider_name.to_string(),
-    })
+    };
+    if let Some(account) = account {
+        value.push_str(&format!(" · account {account}"));
+    }
+    Some(value)
 }
 
 fn sanitize_base_url(raw: &str) -> Option<String> {

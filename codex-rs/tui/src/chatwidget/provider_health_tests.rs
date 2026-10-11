@@ -150,7 +150,7 @@ async fn apps_rejection_marks_openai_not_current_claude_and_r_opens_recovery() {
         ProviderConfigurationState::Configured
     );
     let entry = host.catalog().get("openai").unwrap();
-    chat.open_provider_manager(host.catalog(), statuses.entries(), Some(&entry.id));
+    chat.open_provider_manager(host.catalog(), statuses.entries(), Some(&entry.id), /*accounts*/ None);
     while rx.try_recv().is_ok() {}
     chat.handle_key_event(crossterm::event::KeyEvent::new(
         crossterm::event::KeyCode::Char('r'),

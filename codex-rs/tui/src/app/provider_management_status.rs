@@ -8,6 +8,20 @@ pub(super) fn spawn_provider_status_job(job: impl FnOnce() + Send + 'static) {
     tokio::task::spawn_blocking(job);
 }
 
+/// PF-84-S04: named-account rows for `/providers` while the feature is on.
+/// A vault that cannot be read shows no rows rather than blocking the screen.
+fn load_named_accounts(
+    enabled: bool,
+    codex_home: &std::path::Path,
+) -> Option<Vec<crate::provider_named_accounts::NamedAccountRow>> {
+    enabled.then(|| {
+        crate::provider_named_accounts::load_rows(codex_home).unwrap_or_else(|error| {
+            tracing::warn!("{error}");
+            Vec::new()
+        })
+    })
+}
+
 pub(super) fn provider_manager_status_host(
     config: &crate::legacy_core::config::Config,
     shared: Option<crate::provider_status_host::ProviderStatusHost>,
@@ -56,10 +70,17 @@ impl App {
         spawn_provider_status_job(move || {
             let status_host = provider_manager_status_host(&config, shared_status_host);
             let statuses = status_host.resolve().entries().to_vec();
+            let accounts = load_named_accounts(
+                config
+                    .features
+                    .enabled(codex_features::Feature::NamedAccounts),
+                &config.codex_home,
+            );
             tx.send(AppEvent::ProviderManagerStatusesResolved {
                 generation,
                 status_host,
                 statuses,
+                accounts,
             });
         });
     }
@@ -69,6 +90,7 @@ impl App {
         generation: u64,
         status_host: crate::provider_status_host::ProviderStatusHost,
         statuses: Vec<codex_provider_auth::ProviderStatusSnapshot>,
+        accounts: Option<Vec<crate::provider_named_accounts::NamedAccountRow>>,
         app_server: &AppServerSession,
     ) {
         if generation != self.provider_management_generation {
@@ -85,16 +107,18 @@ impl App {
         // its eligibility snapshot. Publish the same status result to both UIs.
         self.model_catalog.update_provider_statuses(&statuses);
         let selected_index = self.chat_widget.provider_manager_selected_index();
+        let selected_provider = selected_index.and_then(|index| self.provider_manager_row_provider(index));
         if let Some(host) = self.provider_management_host.as_mut() {
-            if let Some(provider_id) = selected_index
-                .and_then(|index| host.statuses().get(index))
-                .map(|status| status.id.clone())
-            {
+            if let Some(provider_id) = selected_provider {
                 host.remember_focused_provider(provider_id);
             }
+            let accounts_changed = host.named_accounts() != accounts.as_deref();
+            host.set_named_accounts(accounts);
             // A late discovery result still refreshes policy, but must not
             // reopen a manager the user dismissed (for example to open /model).
-            if host.apply_statuses(statuses).applied && selected_index.is_some() {
+            if (host.apply_statuses(statuses).applied || accounts_changed)
+                && selected_index.is_some()
+            {
                 self.render_provider_manager();
             }
             return;
@@ -106,6 +130,8 @@ impl App {
             status_host,
             statuses,
         );
+        let mut host = host;
+        host.set_named_accounts(accounts);
         self.provider_management_host = Some(host);
         self.render_provider_manager();
         let config = self.config.clone();
@@ -139,12 +165,19 @@ impl App {
         let generation = self.next_provider_management_generation();
         let worker_host = status_host.clone();
         let tx = self.app_event_tx.clone();
+        let named_accounts_enabled = self
+            .config
+            .features
+            .enabled(codex_features::Feature::NamedAccounts);
+        let codex_home = self.config.codex_home.to_path_buf();
         spawn_provider_status_job(move || {
             let statuses = worker_host.resolve().entries().to_vec();
+            let accounts = load_named_accounts(named_accounts_enabled, &codex_home);
             tx.send(AppEvent::ProviderManagerStatusesResolved {
                 generation,
                 status_host,
                 statuses,
+                accounts,
             });
         });
     }
@@ -156,8 +189,41 @@ impl App {
         let catalog = host.status_host().catalog().clone();
         let statuses = host.statuses().to_vec();
         let focused_provider = host.focused_provider().cloned();
-        self.chat_widget
-            .open_provider_manager(&catalog, &statuses, focused_provider.as_ref());
+        let accounts = self.provider_manager_accounts_view();
+        self.chat_widget.open_provider_manager(
+            &catalog,
+            &statuses,
+            focused_provider.as_ref(),
+            accounts.as_ref(),
+        );
+    }
+
+    /// PF-84-S04: the accounts `/providers` shows; `None` while the feature is off.
+    pub(super) fn provider_manager_accounts_view(
+        &self,
+    ) -> Option<crate::provider_named_accounts::AccountsView> {
+        let rows = self.provider_management_host.as_ref()?.named_accounts()?;
+        Some(crate::provider_named_accounts::AccountsView::new(
+            rows.to_vec(),
+            self.chat_widget.config_ref(),
+            &self.config,
+        ))
+    }
+
+    /// The catalog provider of a `/providers` row, account rows included.
+    pub(super) fn provider_manager_row_provider(
+        &self,
+        index: usize,
+    ) -> Option<codex_provider_auth::ProviderCatalogId> {
+        let host = self.provider_management_host.as_ref()?;
+        let accounts = self.provider_manager_accounts_view();
+        crate::chatwidget::provider_manager_rows(
+            host.status_host().catalog(),
+            host.statuses(),
+            accounts.as_ref(),
+        )
+        .get(index)
+        .map(|row| row.provider_id().clone())
     }
 
     pub(super) fn provider_manager_metadata_resolved(

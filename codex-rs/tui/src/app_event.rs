@@ -1649,7 +1649,11 @@ pub(crate) enum AppEvent {
         generation: u64,
         status_host: crate::provider_status_host::ProviderStatusHost,
         statuses: Vec<codex_provider_auth::ProviderStatusSnapshot>,
+        /// PF-84-S04: named accounts, when the `named_accounts` feature is on.
+        accounts: Option<Vec<crate::provider_named_accounts::NamedAccountRow>>,
     },
+    /// PF-84-S04: a named-account action from `/providers`.
+    ProviderAccount(crate::provider_named_accounts::ProviderAccountEvent),
     ProviderManagerMetadataResolved {
         generation: u64,
         metadata: crate::provider_status_host::ProviderAccountMetadata,

@@ -100,6 +100,10 @@ pub(crate) fn mark_underlined_hyperlink(buf: &mut Buffer, area: Rect, url: &str)
 use super::onboarding_screen::StepState;
 
 mod headless_chatgpt_login;
+mod named_account;
+#[cfg(test)]
+#[path = "auth/named_account_tests.rs"]
+mod named_account_tests;
 
 #[derive(Clone)]
 pub(crate) enum SignInState {
@@ -133,6 +137,24 @@ pub(crate) enum SignInState {
     },
     ClaudeAccountConfigured {
         source: codex_provider_auth::ClaudeCredentialSource,
+    },
+    /// PF-84-S04: what to do with a configured provider's single row.
+    ConfiguredProviderChoice {
+        entry_index: usize,
+        highlighted: usize,
+    },
+    AccountNameEntry {
+        entry_index: usize,
+        value: String,
+    },
+    AccountValueEntry {
+        entry_index: usize,
+        name: codex_vault::ProviderAccountName,
+        value: String,
+    },
+    AccountSaving,
+    AccountSaved {
+        message: String,
     },
     Complete,
 }
@@ -278,6 +300,9 @@ impl ContinueWithDeviceCodeState {
 
 impl KeyboardHandler for AuthModeWidget {
     fn handle_key_event(&mut self, key_event: KeyEvent) {
+        if self.handle_named_account_key_event(&key_event) {
+            return;
+        }
         if self.handle_api_key_entry_key_event(&key_event) {
             return;
         }
@@ -337,6 +362,9 @@ impl KeyboardHandler for AuthModeWidget {
     }
 
     fn handle_paste(&mut self, pasted: String) {
+        if self.handle_named_account_paste(&pasted) {
+            return;
+        }
         if !self.handle_claude_auth_paste(&pasted) {
             let _ = self.handle_api_key_entry_paste(pasted);
         }
@@ -385,37 +413,46 @@ pub(crate) fn catalog_sign_in_options_from_statuses(
                     | ProviderSetupCapability::StatusOnly { .. }
             )
         });
-        for capability in entry.setup_capabilities.iter() {
-            let option = match capability {
-                ProviderSetupCapability::OpenAiAccount => Some(SignInOption::DeviceCode),
-                ProviderSetupCapability::ClaudeAccount => Some(SignInOption::AnthropicAccount),
-                ProviderSetupCapability::CorbanuPlan => Some(SignInOption::CorbanuPlan),
-                ProviderSetupCapability::ApiKey { .. } => api_key_options
-                    .iter()
-                    .position(|candidate| {
-                        candidate.target.provider_id == entry.id
-                            && candidate.capability == *capability
-                    })
-                    .map(SignInOption::ProviderApiKey),
-                ProviderSetupCapability::Local { .. }
-                | ProviderSetupCapability::CommandAuth { .. }
-                | ProviderSetupCapability::StatusOnly { .. } => None,
-            };
-            if let Some(option) = option {
-                options.push(option);
-            }
-        }
-        if status.is_some_and(|status| {
+        let offer_existing = status.is_some_and(|status| {
             super::provider_setup::provider_should_offer_existing_selection(
                 status,
                 has_noninteractive_capability,
             )
-        }) && !entry.runtime_provider_ids.is_empty()
-        {
+        }) && !entry.runtime_provider_ids.is_empty();
+        if offer_existing {
+            // PF-84-S04: a configured provider gets exactly one row; its setup
+            // methods ("Replace with ...") and "Add another account" sit behind it.
             options.push(SignInOption::ProviderRuntime(entry_index));
+        } else {
+            options.extend(entry_setup_options(entry, api_key_options));
         }
     }
     options
+}
+
+/// The setup rows one catalog entry offers while it is not configured.
+pub(crate) fn entry_setup_options(
+    entry: &codex_provider_auth::ProviderCatalogEntry,
+    api_key_options: &[ApiKeyProviderOption],
+) -> Vec<SignInOption> {
+    entry
+        .setup_capabilities
+        .iter()
+        .filter_map(|capability| match capability {
+            ProviderSetupCapability::OpenAiAccount => Some(SignInOption::DeviceCode),
+            ProviderSetupCapability::ClaudeAccount => Some(SignInOption::AnthropicAccount),
+            ProviderSetupCapability::CorbanuPlan => Some(SignInOption::CorbanuPlan),
+            ProviderSetupCapability::ApiKey { .. } => api_key_options
+                .iter()
+                .position(|candidate| {
+                    candidate.target.provider_id == entry.id && candidate.capability == *capability
+                })
+                .map(SignInOption::ProviderApiKey),
+            ProviderSetupCapability::Local { .. }
+            | ProviderSetupCapability::CommandAuth { .. }
+            | ProviderSetupCapability::StatusOnly { .. } => None,
+        })
+        .collect()
 }
 
 #[derive(Clone)]
@@ -442,6 +479,10 @@ pub(crate) struct AuthModeWidget {
     pub provider_status_host: ProviderStatusHost,
     pub provider_statuses: Arc<RwLock<ProviderStatusCatalog>>,
     pub provider_auth_action_tx: tokio::sync::mpsc::UnboundedSender<ProviderAuthAction>,
+    /// PF-84-S04: provider id -> how it takes a named account; empty while
+    /// the `named_accounts` feature is off.
+    pub named_account_methods:
+        std::collections::BTreeMap<String, Vec<crate::provider_named_accounts::AddAccountMethod>>,
 }
 
 impl AuthModeWidget {
@@ -658,7 +699,9 @@ impl AuthModeWidget {
                 }
             }
             SignInOption::ProviderRuntime(index) => {
-                self.select_provider_runtime_option(index);
+                if !self.open_configured_choice(index) {
+                    self.select_existing_provider(index);
+                }
             }
             SignInOption::CorbanuPlan => {
                 let queued = !self
@@ -703,7 +746,18 @@ impl AuthModeWidget {
             });
     }
 
-    fn select_provider_runtime_option(&mut self, index: usize) {
+    /// How a setup row reads behind a configured provider ("Replace with ...").
+    fn sign_in_option_method(&self, option: SignInOption) -> String {
+        match option {
+            SignInOption::ChatGpt | SignInOption::DeviceCode => "OpenAI account sign-in".to_string(),
+            SignInOption::AnthropicAccount => "Claude account sign-in".to_string(),
+            SignInOption::ApiKey | SignInOption::ProviderApiKey(_) => "a new API key".to_string(),
+            SignInOption::CorbanuPlan => "Corbanu API".to_string(),
+            SignInOption::ProviderRuntime(_) | SignInOption::Done => "setup".to_string(),
+        }
+    }
+
+    fn select_existing_provider(&mut self, index: usize) {
         let Some(entry) = self.provider_status_host.catalog().entries().get(index) else {
             self.set_error(Some(
                 "Selected provider is no longer available.".to_string(),
@@ -2193,7 +2247,12 @@ impl StepStateProvider for AuthModeWidget {
             | SignInState::ClaudeCodeLoginChecking
             | SignInState::ClaudeCodeLoginPending { .. }
             | SignInState::ClaudeCodeLoginReady { .. }
-            | SignInState::ClaudeCodeLoginCodeEntry { .. } => StepState::InProgress,
+            | SignInState::ClaudeCodeLoginCodeEntry { .. }
+            | SignInState::ConfiguredProviderChoice { .. }
+            | SignInState::AccountNameEntry { .. }
+            | SignInState::AccountValueEntry { .. }
+            | SignInState::AccountSaving
+            | SignInState::AccountSaved { .. } => StepState::InProgress,
             SignInState::ChatGptSuccess
             | SignInState::ApiKeyConfigured { .. }
             | SignInState::ClaudeAccountConfigured { .. } => StepState::InProgress,
@@ -2263,6 +2322,13 @@ impl WidgetRef for AuthModeWidget {
                 Paragraph::new("✓ Anthropic Claude account configured".fg(Color::Green))
                     .render(area, buf);
             }
+            SignInState::ConfiguredProviderChoice { .. }
+            | SignInState::AccountNameEntry { .. }
+            | SignInState::AccountValueEntry { .. }
+            | SignInState::AccountSaving
+            | SignInState::AccountSaved { .. } => {
+                self.render_named_account_state(area, buf, &sign_in_state);
+            }
             SignInState::Complete => {}
         }
     }
@@ -2310,7 +2376,7 @@ mod tests {
         "originator=codex_cli_rs"
     );
 
-    async fn widget_forced_chatgpt() -> (AuthModeWidget, TempDir) {
+    pub(super) async fn widget_forced_chatgpt() -> (AuthModeWidget, TempDir) {
         let codex_home = TempDir::new().unwrap();
         let codex_home_path = codex_home.path().to_path_buf();
         let config = ConfigBuilder::default()
@@ -2386,11 +2452,12 @@ mod tests {
             provider_status_host,
             provider_statuses: Arc::new(RwLock::new(provider_statuses)),
             provider_auth_action_tx,
+            named_account_methods: std::collections::BTreeMap::new(),
         };
         (widget, codex_home)
     }
 
-    fn buffer_text(buf: &Buffer, area: Rect) -> String {
+    pub(super) fn buffer_text(buf: &Buffer, area: Rect) -> String {
         let mut out = String::new();
         for y in area.top()..area.bottom() {
             for x in area.left()..area.right() {

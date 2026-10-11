@@ -1883,6 +1883,7 @@ async fn collab_receiver_notification_caches_thread_without_app_server_read() {
                 prompt: None,
                 model: None,
                 reasoning_effort: None,
+                provider_account: None,
                 agents_states: HashMap::new(),
             },
         }),
@@ -1923,6 +1924,7 @@ async fn collab_receiver_notification_does_not_cache_not_found_thread() {
                 prompt: Some("hello".to_string()),
                 model: None,
                 reasoning_effort: None,
+                provider_account: None,
                 agents_states: HashMap::from([(
                     receiver_thread_id.to_string(),
                     codex_app_server_protocol::CollabAgentState {
@@ -1963,6 +1965,7 @@ async fn collab_receiver_notification_caches_result_preview() {
                 prompt: None,
                 model: None,
                 reasoning_effort: None,
+                provider_account: None,
                 agents_states: HashMap::from([(
                     receiver_thread_id.to_string(),
                     codex_app_server_protocol::CollabAgentState {
@@ -4775,6 +4778,7 @@ async fn stale_receiver_running_status_does_not_hide_completed_orc_report() {
                 prompt: None,
                 model: None,
                 reasoning_effort: None,
+                provider_account: None,
                 agents_states: HashMap::from([(
                     orc_thread_id.to_string(),
                     codex_app_server_protocol::CollabAgentState {
@@ -14072,6 +14076,7 @@ async fn replace_chat_widget_reseeds_collab_agent_metadata_for_replay() {
                             prompt: None,
                             model: None,
                             reasoning_effort: None,
+                            provider_account: None,
                             agents_states: HashMap::new(),
                         },
                     },
@@ -14941,6 +14946,7 @@ async fn stale_provider_manager_claude_recovery_source_is_inert() -> Result<()> 
                 generation,
                 status_host,
                 statuses,
+                ..
             }) = app_event_rx.recv().await
             {
                 break (generation, status_host, statuses);
@@ -14949,7 +14955,7 @@ async fn stale_provider_manager_claude_recovery_source_is_inert() -> Result<()> 
     })
     .await
     .expect("timed out waiting for provider statuses");
-    app.provider_manager_statuses_resolved(generation, status_host, statuses, &app_server);
+    app.provider_manager_statuses_resolved(generation, status_host, statuses, /*accounts*/ None, &app_server);
     let (provider_id, target, mut status) = {
         let host = app.provider_management_host.as_ref().unwrap();
         let entry = host
@@ -15030,6 +15036,7 @@ async fn provider_manager_stale_api_key_completion_is_inert_and_current_settles(
                 generation,
                 status_host,
                 statuses,
+                ..
             }) = app_event_rx.recv().await
             {
                 break (generation, status_host, statuses);
@@ -15038,7 +15045,7 @@ async fn provider_manager_stale_api_key_completion_is_inert_and_current_settles(
     })
     .await
     .expect("timed out waiting for provider statuses");
-    app.provider_manager_statuses_resolved(generation, status_host.clone(), statuses, &app_server);
+    app.provider_manager_statuses_resolved(generation, status_host.clone(), statuses, /*accounts*/ None, &app_server);
     let initial_status_count = app
         .provider_management_host
         .as_ref()
@@ -15049,7 +15056,7 @@ async fn provider_manager_stale_api_key_completion_is_inert_and_current_settles(
         generation.wrapping_add(1),
         status_host.clone(),
         Vec::new(),
-        &app_server,
+        /*accounts*/ None, &app_server,
     );
     assert_eq!(
         app.provider_management_host
@@ -15096,7 +15103,7 @@ async fn provider_manager_stale_api_key_completion_is_inert_and_current_settles(
         generation,
         status_host.clone(),
         Vec::new(),
-        &app_server,
+        /*accounts*/ None, &app_server,
     );
     assert!(matches!(
         app.provider_management_host.as_ref().unwrap().phase(),
@@ -15158,7 +15165,7 @@ async fn provider_manager_stale_api_key_completion_is_inert_and_current_settles(
         app.provider_management_host.as_ref().unwrap().phase(),
         codex_provider_auth::ProviderManagementPhase::Persisting { .. }
     ));
-    app.provider_manager_statuses_resolved(generation, status_host, Vec::new(), &app_server);
+    app.provider_manager_statuses_resolved(generation, status_host, Vec::new(), /*accounts*/ None, &app_server);
     assert!(matches!(
         app.provider_management_host.as_ref().unwrap().phase(),
         codex_provider_auth::ProviderManagementPhase::Persisting { .. }

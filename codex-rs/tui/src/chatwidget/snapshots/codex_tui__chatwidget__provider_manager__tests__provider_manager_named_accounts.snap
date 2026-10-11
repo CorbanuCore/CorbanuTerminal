@@ -1,0 +1,17 @@
+---
+source: tui/src/chatwidget/provider_manager.rs
+assertion_line: 921
+expression: rendered
+---
+  Providers
+  Configure providers and control whether they are eligible for use.
+  Configured means credentials are present, not verified by the provider.
+
+› 1. Claude Account · default  Enabled · configured · this session
+  2. Claude Account · work     Named account · subscription token · fp a1b2c3d4e5f6 · default for
+                               new sessions
+  3. Z.AI · default            Enabled · configured · default for new sessions
+  4. Z.AI · fake               Named account · API key · fp 0f1e2d3c4b5a · this session
+
+  r recover credentials · Enter manage · Esc back
+  Press enter to confirm or esc to go back
