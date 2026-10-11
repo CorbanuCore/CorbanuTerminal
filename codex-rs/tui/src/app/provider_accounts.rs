@@ -350,9 +350,15 @@ impl App {
                     existing,
                     &self.config.model_provider_id,
                 );
-            if existing_provider != provider_id && existing_name != DEFAULT_PROVIDER_ACCOUNT {
+            // Dropping it is fine only when that changes nothing for its provider.
+            let configured_default =
+                crate::provider_named_accounts::persisted_defaults(&self.config)
+                    .get(existing_provider)
+                    .cloned()
+                    .unwrap_or_else(|| DEFAULT_PROVIDER_ACCOUNT.to_string());
+            if existing_provider != provider_id && existing_name != configured_default {
                 return Err(format!(
-                    "This session already selects {existing_provider} account `{existing_name}`, and one session selection covers one provider. Use {existing_provider}'s default account for this session first, or make {provider_id} account `{}` the default for new sessions.",
+                    "This session already selects {existing_provider} account `{existing_name}`, and one session selection covers one provider. Use {existing_provider} account `{configured_default}` (its default for new sessions) for this session first, or make {provider_id} account `{}` the default for new sessions.",
                     account_label(name)
                 ));
             }
@@ -372,7 +378,7 @@ impl App {
     /// Starts a new session whose requests to `provider_id` use `name`. The
     /// running thread keeps its account: a live thread never changes account.
     /// When the new session does not start, the previous selection and config
-    /// are restored and nothing else changes.
+    /// are restored; the old session has already ended, as with `/new`.
     async fn use_provider_account_for_session(
         &mut self,
         tui: &mut tui::Tui,
@@ -401,7 +407,7 @@ impl App {
             self.refresh_in_memory_config_from_disk_best_effort("restoring the session account")
                 .await;
             self.chat_widget.add_error_message(format!(
-                "No session runs on {provider_id} account `{}`; nothing else was changed.",
+                "The new session did not start, so no session runs on {provider_id} account `{}`; the account selection was not changed.",
                 account_label(name.as_ref())
             ));
             return false;
