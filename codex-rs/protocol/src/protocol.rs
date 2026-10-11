@@ -4439,6 +4439,10 @@ pub struct CollabAgentSpawnEndEvent {
     pub model: String,
     /// Effective reasoning effort used by the spawned agent after inheritance and role overrides.
     pub reasoning_effort: ReasoningEffortConfig,
+    /// The named account the spawned agent uses (`default` included), only
+    /// while named accounts are on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_account: Option<String>,
     /// Last known status of the new agent reported to the sender agent.
     pub status: AgentStatus,
 }

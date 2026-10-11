@@ -24,6 +24,15 @@ use crate::key_hint::KeyBindingListExt;
 use crate::provider_named_accounts::AccountValue;
 use crate::provider_named_accounts::AddAccountMethod;
 
+/// Which named-account state is showing, without copying its value.
+enum Peek {
+    Choice(usize, usize),
+    Name(usize),
+    Value(usize),
+    Saved,
+    Saving,
+}
+
 /// One choice behind a configured provider's row.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ConfiguredChoice {
@@ -87,25 +96,32 @@ impl AuthModeWidget {
     }
 
     pub(super) fn handle_named_account_key_event(&mut self, key_event: &KeyEvent) -> bool {
-        let state = self.sign_in_state.read().unwrap().clone();
-        match state {
+        // Peek at the state without copying an entered value.
+        let peek = match &*self.sign_in_state.read().unwrap() {
             SignInState::ConfiguredProviderChoice {
                 entry_index,
                 highlighted,
-            } => {
+            } => Peek::Choice(*entry_index, *highlighted),
+            SignInState::AccountNameEntry { entry_index, .. } => Peek::Name(*entry_index),
+            SignInState::AccountValueEntry { entry_index, .. } => Peek::Value(*entry_index),
+            SignInState::AccountSaved { .. } => Peek::Saved,
+            SignInState::AccountSaving => Peek::Saving,
+            _ => return false,
+        };
+        let cancel = keys::CANCEL.is_pressed(*key_event);
+        let confirm = keys::CONFIRM.is_pressed(*key_event);
+        match peek {
+            Peek::Choice(entry_index, highlighted) => {
                 let choices = self.configured_choices(entry_index);
                 let count = choices.len().max(1);
-                if keys::MOVE_UP.is_pressed(*key_event) || keys::MOVE_DOWN.is_pressed(*key_event) {
-                    let delta = if keys::MOVE_UP.is_pressed(*key_event) {
-                        count - 1
-                    } else {
-                        1
-                    };
+                let up = keys::MOVE_UP.is_pressed(*key_event);
+                if up || keys::MOVE_DOWN.is_pressed(*key_event) {
+                    let delta = if up { count - 1 } else { 1 };
                     *self.sign_in_state.write().unwrap() = SignInState::ConfiguredProviderChoice {
                         entry_index,
                         highlighted: (highlighted + delta) % count,
                     };
-                } else if keys::CONFIRM.is_pressed(*key_event) {
+                } else if confirm {
                     match choices.get(highlighted).copied() {
                         Some(ConfiguredChoice::UseExisting) => {
                             *self.sign_in_state.write().unwrap() = SignInState::PickMode;
@@ -123,75 +139,77 @@ impl AuthModeWidget {
                         }
                         None => {}
                     }
-                } else if keys::CANCEL.is_pressed(*key_event) {
+                } else if cancel {
                     *self.sign_in_state.write().unwrap() = SignInState::PickMode;
                 }
-                self.request_frame.schedule_frame();
-                true
             }
-            SignInState::AccountNameEntry {
-                entry_index,
-                mut value,
-            } => {
-                if keys::CANCEL.is_pressed(*key_event) {
+            Peek::Name(entry_index) => {
+                if cancel {
                     self.set_error(/*message*/ None);
                     *self.sign_in_state.write().unwrap() = SignInState::ConfiguredProviderChoice {
                         entry_index,
                         highlighted: 0,
                     };
-                } else if keys::CONFIRM.is_pressed(*key_event) {
-                    match ProviderAccountName::parse(&value) {
+                } else if confirm {
+                    let raw = match &*self.sign_in_state.read().unwrap() {
+                        SignInState::AccountNameEntry { value, .. } => value.clone(),
+                        _ => String::new(),
+                    };
+                    match ProviderAccountName::parse(&raw) {
                         Ok(name) => self.account_name_entered(entry_index, name),
                         Err(error) => self.set_error(Some(error.to_string())),
                     }
                 } else {
-                    if edit_text(&mut value, key_event) {
+                    let changed = match &mut *self.sign_in_state.write().unwrap() {
+                        SignInState::AccountNameEntry { value, .. } => edit_text(value, key_event),
+                        _ => false,
+                    };
+                    if changed {
                         self.set_error(/*message*/ None);
                     }
-                    *self.sign_in_state.write().unwrap() =
-                        SignInState::AccountNameEntry { entry_index, value };
                 }
-                self.request_frame.schedule_frame();
-                true
             }
-            SignInState::AccountValueEntry {
-                entry_index,
-                name,
-                mut value,
-            } => {
-                if keys::CANCEL.is_pressed(*key_event) {
+            Peek::Value(entry_index) => {
+                if cancel {
                     self.set_error(/*message*/ None);
+                    let name = match &*self.sign_in_state.read().unwrap() {
+                        SignInState::AccountValueEntry { name, .. } => name.to_string(),
+                        _ => String::new(),
+                    };
                     *self.sign_in_state.write().unwrap() = SignInState::AccountNameEntry {
                         entry_index,
-                        value: name.to_string(),
+                        value: name,
                     };
-                } else if keys::CONFIRM.is_pressed(*key_event) {
-                    if value.trim().is_empty() {
-                        self.set_error(Some("The value cannot be empty.".to_string()));
-                    } else {
-                        self.save_named_account(entry_index, name, AccountValue::new(value));
+                } else if confirm {
+                    let taken = match &mut *self.sign_in_state.write().unwrap() {
+                        SignInState::AccountValueEntry { name, value, .. }
+                            if !value.trim().is_empty() =>
+                        {
+                            Some((name.clone(), std::mem::take(&mut **value)))
+                        }
+                        _ => None,
+                    };
+                    match taken {
+                        Some((name, value)) => {
+                            self.save_named_account(entry_index, name, AccountValue::new(value));
+                        }
+                        None => self.set_error(Some("The value cannot be empty.".to_string())),
                     }
-                } else {
-                    edit_text(&mut value, key_event);
-                    *self.sign_in_state.write().unwrap() = SignInState::AccountValueEntry {
-                        entry_index,
-                        name,
-                        value,
-                    };
+                } else if let SignInState::AccountValueEntry { value, .. } =
+                    &mut *self.sign_in_state.write().unwrap()
+                {
+                    edit_text(value, key_event);
                 }
-                self.request_frame.schedule_frame();
-                true
             }
-            SignInState::AccountSaved { .. } => {
-                if keys::CONFIRM.is_pressed(*key_event) || keys::CANCEL.is_pressed(*key_event) {
+            Peek::Saved => {
+                if confirm || cancel {
                     *self.sign_in_state.write().unwrap() = SignInState::PickMode;
-                    self.request_frame.schedule_frame();
                 }
-                true
             }
-            SignInState::AccountSaving => true,
-            _ => false,
+            Peek::Saving => {}
         }
+        self.request_frame.schedule_frame();
+        true
     }
 
     pub(super) fn handle_named_account_paste(&mut self, pasted: &str) -> bool {
@@ -221,7 +239,7 @@ impl AuthModeWidget {
             *self.sign_in_state.write().unwrap() = SignInState::AccountValueEntry {
                 entry_index,
                 name,
-                value: String::new(),
+                value: zeroize::Zeroizing::new(String::new()),
             };
         } else {
             self.save_named_account(entry_index, name, AccountValue::new(String::new()));
@@ -298,7 +316,18 @@ impl AuthModeWidget {
                 highlighted,
             } => {
                 lines.push(format!("> {}", display_name(*entry_index)).bold().into());
-                lines.push("Configured · active · ready".dim().into());
+                let status = self
+                    .provider_status_host
+                    .catalog()
+                    .entries()
+                    .get(*entry_index)
+                    .map_or_else(String::new, |entry| {
+                        self.provider_status_description(
+                            entry.id.as_str(),
+                            "Use this provider without an enrollment step",
+                        )
+                    });
+                lines.push(status.dim().into());
                 lines.push("".into());
                 for (index, choice) in self.configured_choices(*entry_index).iter().enumerate() {
                     let label = match choice {
@@ -383,13 +412,15 @@ impl AuthModeWidget {
 
 /// Plain single-line editing; returns whether the text changed.
 fn edit_text(value: &mut String, key_event: &KeyEvent) -> bool {
+    if key_event.kind != KeyEventKind::Press {
+        return false;
+    }
     match key_event.code {
         KeyCode::Backspace => value.pop().is_some(),
         KeyCode::Char(character)
-            if key_event.kind == KeyEventKind::Press
-                && !key_event.modifiers.intersects(
-                    KeyModifiers::SUPER | KeyModifiers::CONTROL | KeyModifiers::ALT,
-                ) =>
+            if !key_event
+                .modifiers
+                .intersects(KeyModifiers::SUPER | KeyModifiers::CONTROL | KeyModifiers::ALT) =>
         {
             value.push(character);
             true

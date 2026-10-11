@@ -306,8 +306,8 @@ pub struct CollabAgentToolCallItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub reasoning_effort: Option<ReasoningEffortConfig>,
-    /// PF-84: the named account the spawned agent uses (`default` included),
-    /// only while named accounts are on.
+    /// The named account the spawned agent uses (`default` included), only
+    /// while named accounts are on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub provider_account: Option<String>,

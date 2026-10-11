@@ -4595,7 +4595,7 @@
               ]
             },
             "providerAccount": {
-              "description": "PF-84: the named account the spawned agent uses (`default` included), only while named accounts are on.",
+              "description": "The named account the spawned agent uses (`default` included), only while named accounts are on.",
               "type": [
                 "string",
                 "null"

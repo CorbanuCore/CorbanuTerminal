@@ -150,7 +150,8 @@ pub(crate) enum SignInState {
     AccountValueEntry {
         entry_index: usize,
         name: codex_vault::ProviderAccountName,
-        value: String,
+        /// Masked on screen; edited in place and wiped when dropped.
+        value: zeroize::Zeroizing<String>,
     },
     AccountSaving,
     AccountSaved {

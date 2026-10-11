@@ -112,8 +112,8 @@ model: string | null,
  */
 reasoningEffort: ReasoningEffort | null,
 /**
- * PF-84: the named account the spawned agent uses (`default`
- * included), only while named accounts are on.
+ * The named account the spawned agent uses (`default` included),
+ * only while named accounts are on.
  */
 providerAccount: string | null,
 /**

@@ -66,6 +66,8 @@ impl App {
                 name,
                 method,
             } => {
+                // An early hint only; the vault refuses an existing name again
+                // under its lock when the value is saved.
                 if self.provider_account_exists(&provider_id, &name) {
                     self.chat_widget.add_error_message(format!(
                         "{provider_id} already has an account `{name}`. Choose another name, or remove it first."
@@ -142,8 +144,7 @@ impl App {
                 self.schedule_provider_manager_refresh();
             }
             ProviderAccountEvent::RenameStart { provider_id, name } => {
-                let accounts = self.provider_manager_accounts_view().unwrap_or_default();
-                if accounts.session_account(&provider_id) == name.as_str() {
+                if self.provider_account_usage().session_account(&provider_id) == name.as_str() {
                     self.chat_widget.add_error_message(format!(
                         "This session uses {provider_id} account `{name}`. Use another account for this session first, then rename it."
                     ));
@@ -162,39 +163,17 @@ impl App {
                 from,
                 to,
             } => {
-                let accounts = self.provider_manager_accounts_view().unwrap_or_default();
-                if accounts.session_account(&provider_id) == from.as_str() {
-                    return;
-                }
-                let codex_home = self.config.codex_home.to_path_buf();
-                let result = tokio::task::spawn_blocking({
-                    let (provider_id, from, to) = (provider_id.clone(), from.clone(), to.clone());
-                    move || {
-                        crate::provider_named_accounts::rename_account(
-                            codex_home,
-                            &provider_id,
-                            &from,
-                            &to,
-                        )
-                    }
-                })
-                .await
-                .unwrap_or_else(|error| Err(error.to_string()));
-                // A default that named the old account follows the rename.
-                let result = match result {
-                    Ok(message) if accounts.default_account(&provider_id) == from.as_str() => self
-                        .persist_default_provider_account(&provider_id, Some(&to))
-                        .await
-                        .map(|()| format!("{message} It stays the default for new sessions.")),
-                    other => other,
-                };
+                let result = self.rename_provider_account(&provider_id, &from, &to).await;
                 self.provider_account_finished(result);
             }
             ProviderAccountEvent::RemoveStart { provider_id, name } => {
-                let accounts = self.provider_manager_accounts_view().unwrap_or_default();
                 let Some(entry) = self.provider_account_catalog_entry(&provider_id) else {
                     return;
                 };
+                let mut accounts = self.provider_account_usage();
+                if let Some(view) = self.provider_manager_accounts_view() {
+                    accounts.rows = view.rows;
+                }
                 self.chat_widget.open_provider_account_removal(
                     &entry,
                     provider_id,
@@ -233,6 +212,12 @@ impl App {
                 result,
             }));
         });
+    }
+
+    /// Which account this session and new sessions use, read from the live
+    /// configs so in-use checks never depend on `/providers` being open.
+    pub(super) fn provider_account_usage(&self) -> AccountsView {
+        AccountsView::new(Vec::new(), self.chat_widget.config_ref(), &self.config)
     }
 
     fn provider_account_methods(
@@ -274,9 +259,47 @@ impl App {
             .map_or_else(|| provider_id.to_string(), |entry| entry.display_name)
     }
 
+    /// Renames in the vault; a default that named the old account follows.
+    /// The session's own account is never renamed under it.
+    pub(super) async fn rename_provider_account(
+        &mut self,
+        provider_id: &str,
+        from: &ProviderAccountName,
+        to: &ProviderAccountName,
+    ) -> Result<String, String> {
+        let accounts = self.provider_account_usage();
+        if accounts.session_account(provider_id) == from.as_str() {
+            return Err(format!(
+                "This session uses {provider_id} account `{from}`; it was not renamed."
+            ));
+        }
+        let codex_home = self.config.codex_home.to_path_buf();
+        let message = tokio::task::spawn_blocking({
+            let (provider_id, from, to) = (provider_id.to_string(), from.clone(), to.clone());
+            move || {
+                crate::provider_named_accounts::rename_account(codex_home, &provider_id, &from, &to)
+            }
+        })
+        .await
+        .unwrap_or_else(|error| Err(error.to_string()))?;
+        if accounts.default_account(provider_id) != from.as_str() {
+            return Ok(message);
+        }
+        match self
+            .persist_default_provider_account(provider_id, Some(to))
+            .await
+        {
+            Ok(()) => Ok(format!("{message} It stays the default for new sessions.")),
+            Err(error) => Err(format!(
+                "{message} But the default for new sessions still names `{from}`, so they refuse to start until you choose another default. {error}"
+            )),
+        }
+    }
+
     /// Writes `[provider_accounts] <provider> = <name>` (or clears it for the
-    /// `default` account) and reloads the config new sessions start from.
-    async fn persist_default_provider_account(
+    /// `default` account), reloads the config new sessions start from, and
+    /// checks that the change is what new sessions now see.
+    pub(super) async fn persist_default_provider_account(
         &mut self,
         provider_id: &str,
         name: Option<&ProviderAccountName>,
@@ -296,14 +319,60 @@ impl App {
             .map_err(|error| {
                 format!("Could not save the default {provider_id} account: {error}")
             })?;
-        self.refresh_in_memory_config_from_disk_best_effort("changing the default account")
-            .await;
+        self.refresh_in_memory_config_from_disk()
+            .await
+            .map_err(|error| format!("Saved, but the config could not be reloaded: {error}"))?;
+        // A project config or `-c` entry outranks the user's config.toml.
+        let effective = crate::provider_named_accounts::persisted_defaults(&self.config)
+            .get(provider_id)
+            .cloned();
+        if effective.as_deref() != name.map(ProviderAccountName::as_str) {
+            return Err(format!(
+                "Saved to config.toml, but another config layer (a project config or `-c`) sets provider_accounts.{provider_id} = \"{}\", so new sessions still use that.",
+                effective.as_deref().unwrap_or(DEFAULT_PROVIDER_ACCOUNT)
+            ));
+        }
         Ok(())
+    }
+
+    /// Points the next session's `provider_id` requests at `name` and rebuilds
+    /// the config. Returns the previous selection to restore on failure. One
+    /// session selection covers one provider, so a selection held for another
+    /// provider is never silently dropped.
+    pub(super) async fn select_session_provider_account(
+        &mut self,
+        provider_id: &str,
+        name: Option<&ProviderAccountName>,
+    ) -> Result<Option<String>, String> {
+        if let Some(existing) = self.harness_overrides.provider_account.as_deref() {
+            let (existing_provider, existing_name) =
+                crate::legacy_core::config::split_account_selection(
+                    existing,
+                    &self.config.model_provider_id,
+                );
+            if existing_provider != provider_id && existing_name != DEFAULT_PROVIDER_ACCOUNT {
+                return Err(format!(
+                    "This session already selects {existing_provider} account `{existing_name}`, and one session selection covers one provider. Use {existing_provider}'s default account for this session first, or make {provider_id} account `{}` the default for new sessions.",
+                    account_label(name)
+                ));
+            }
+        }
+        let selection = format!("{provider_id}:{}", account_label(name));
+        let previous = self.harness_overrides.provider_account.replace(selection);
+        if let Err(error) = self.refresh_in_memory_config_from_disk().await {
+            self.harness_overrides.provider_account = previous;
+            return Err(format!(
+                "Could not use {provider_id} account `{}`: {error:#}",
+                account_label(name)
+            ));
+        }
+        Ok(previous)
     }
 
     /// Starts a new session whose requests to `provider_id` use `name`. The
     /// running thread keeps its account: a live thread never changes account.
-    /// Nothing changes when the new config cannot be built.
+    /// When the new session does not start, the previous selection and config
+    /// are restored and nothing else changes.
     async fn use_provider_account_for_session(
         &mut self,
         tui: &mut tui::Tui,
@@ -311,21 +380,32 @@ impl App {
         provider_id: String,
         name: Option<ProviderAccountName>,
     ) -> bool {
-        let selection = format!("{provider_id}:{}", account_label(name.as_ref()));
-        let previous = self.harness_overrides.provider_account.replace(selection);
-        if let Err(error) = self.refresh_in_memory_config_from_disk().await {
+        let previous = match self
+            .select_session_provider_account(&provider_id, name.as_ref())
+            .await
+        {
+            Ok(previous) => previous,
+            Err(error) => {
+                self.chat_widget.add_error_message(error);
+                return false;
+            }
+        };
+        let started = self
+            .start_fresh_session_with_summary_hint(
+                tui, app_server, /*session_start_source*/ None,
+                /*initial_user_message*/ None, /*new_thread_name*/ None,
+            )
+            .await;
+        if !started {
             self.harness_overrides.provider_account = previous;
+            self.refresh_in_memory_config_from_disk_best_effort("restoring the session account")
+                .await;
             self.chat_widget.add_error_message(format!(
-                "Could not use {provider_id} account `{}`: {error}",
+                "No session runs on {provider_id} account `{}`; nothing else was changed.",
                 account_label(name.as_ref())
             ));
             return false;
         }
-        self.start_fresh_session_with_summary_hint(
-            tui, app_server, /*session_start_source*/ None,
-            /*initial_user_message*/ None, /*new_thread_name*/ None,
-        )
-        .await;
         self.chat_widget.add_info_message(
             format!(
                 "New session: requests to {provider_id} use account `{}`.",
@@ -344,7 +424,7 @@ impl App {
         name: ProviderAccountName,
         replacement: Option<Option<ProviderAccountName>>,
     ) {
-        let accounts: AccountsView = self.provider_manager_accounts_view().unwrap_or_default();
+        let accounts = self.provider_account_usage();
         if accounts.in_use(&provider_id, name.as_str()) {
             // PF-54: an account in use is replaced before it is removed.
             let Some(replacement) = replacement else {
@@ -353,24 +433,29 @@ impl App {
                 ));
                 return;
             };
-            if accounts.default_account(&provider_id) == name.as_str()
-                && let Err(error) = self
-                    .persist_default_provider_account(&provider_id, replacement.as_ref())
-                    .await
-            {
-                self.chat_widget.add_error_message(error);
-                return;
-            }
+            // Switch the session first: if that fails nothing has changed.
             if accounts.session_account(&provider_id) == name.as_str()
                 && !self
                     .use_provider_account_for_session(
                         tui,
                         app_server,
                         provider_id.clone(),
-                        replacement,
+                        replacement.clone(),
                     )
                     .await
             {
+                self.chat_widget
+                    .add_error_message(format!("{provider_id} account `{name}` was not removed."));
+                return;
+            }
+            if accounts.default_account(&provider_id) == name.as_str()
+                && let Err(error) = self
+                    .persist_default_provider_account(&provider_id, replacement.as_ref())
+                    .await
+            {
+                self.chat_widget.add_error_message(format!(
+                    "{error} {provider_id} account `{name}` was not removed."
+                ));
                 return;
             }
         }
@@ -380,3 +465,7 @@ impl App {
         });
     }
 }
+
+#[cfg(test)]
+#[path = "provider_accounts_tests.rs"]
+mod tests;

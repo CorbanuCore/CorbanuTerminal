@@ -286,6 +286,23 @@ impl Vault {
         })
     }
 
+    /// Creates a new named account holding one kind. Fails, changing
+    /// nothing, when the account already holds anything: adding never
+    /// replaces another account's credential.
+    pub fn create_provider_account(
+        &self,
+        provider_id: &str,
+        name: &ProviderAccountName,
+        kind: ProviderAccountKind,
+        value: &str,
+    ) -> Result<(), VaultError> {
+        let existing = ProviderAccountKind::ALL
+            .into_iter()
+            .map(|kind| account_label(provider_id, name, kind))
+            .collect::<Result<Vec<_>, _>>()?;
+        self.store_provider_account(provider_id, name, kind, value, Some(&existing))
+    }
+
     /// Stores (or replaces) one kind of a named account.
     pub fn write_provider_account(
         &self,
@@ -294,12 +311,34 @@ impl Vault {
         kind: ProviderAccountKind,
         value: &str,
     ) -> Result<(), VaultError> {
+        self.store_provider_account(provider_id, name, kind, value, /*refuse_if_any*/ None)
+    }
+
+    /// Writes one kind under the storage lock. With `refuse_if_any`, fails
+    /// when any of those labels already exists, checked under the same lock.
+    fn store_provider_account(
+        &self,
+        provider_id: &str,
+        name: &ProviderAccountName,
+        kind: ProviderAccountKind,
+        value: &str,
+        refuse_if_any: Option<&[String]>,
+    ) -> Result<(), VaultError> {
         let label = account_label(provider_id, name, kind)?;
         if value.trim().is_empty() {
             return Err(VaultError::EmptySecret);
         }
         self.with_storage_lock(|| {
             let mut index = self.load_index()?;
+            if refuse_if_any.is_some_and(|labels| {
+                labels
+                    .iter()
+                    .any(|label| index.credentials.contains_key(label))
+            }) {
+                return Err(VaultError::InvalidLabel(format!(
+                    "{provider_id} already has an account `{name}`"
+                )));
+            }
             let now = Utc::now().timestamp();
             let created_at = index
                 .credentials

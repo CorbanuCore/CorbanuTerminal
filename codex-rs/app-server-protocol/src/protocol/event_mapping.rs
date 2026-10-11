@@ -125,7 +125,7 @@ pub fn item_event_to_server_notification(
                 prompt: Some(end_event.prompt),
                 model: Some(end_event.model),
                 reasoning_effort: Some(end_event.reasoning_effort),
-                provider_account: None,
+                provider_account: end_event.provider_account,
                 agents_states,
             };
             ServerNotification::ItemCompleted(ItemCompletedNotification {

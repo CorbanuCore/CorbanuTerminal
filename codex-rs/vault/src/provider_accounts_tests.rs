@@ -389,3 +389,28 @@ fn fingerprints_identify_material_without_revealing_it() {
         Some(fa)
     );
 }
+
+#[test]
+fn creating_an_existing_account_changes_nothing() {
+    let (_dir, vault) = test_vault();
+    let work = name("work");
+    vault
+        .create_provider_account("zai", &work, ProviderAccountKind::ApiKey, "first")
+        .expect("create");
+    assert!(matches!(
+        vault.create_provider_account("zai", &work, ProviderAccountKind::ApiKey, "second"),
+        Err(VaultError::InvalidLabel(message)) if message == "zai already has an account `work`"
+    ));
+    assert_eq!(
+        vault
+            .read_provider_account("zai", &work, ProviderAccountKind::ApiKey)
+            .expect("read")
+            .map(|value| value.to_string())
+            .as_deref(),
+        Some("first")
+    );
+    // Same name under another provider is another account.
+    vault
+        .create_provider_account("kimi", &work, ProviderAccountKind::ApiKey, "k")
+        .expect("create kimi");
+}

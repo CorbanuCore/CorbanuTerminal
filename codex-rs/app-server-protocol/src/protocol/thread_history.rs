@@ -928,7 +928,7 @@ impl ThreadHistoryBuilder {
             prompt: Some(payload.prompt.clone()),
             model: Some(payload.model.clone()),
             reasoning_effort: Some(payload.reasoning_effort.clone()),
-            provider_account: None,
+            provider_account: payload.provider_account.clone(),
             agents_states,
         });
     }
@@ -4002,6 +4002,7 @@ mod tests {
                 prompt: "inspect the repo".into(),
                 model: "gpt-5.4-mini".into(),
                 reasoning_effort: codex_protocol::openai_models::ReasoningEffort::Medium,
+                provider_account: Some("work".into()),
                 status: AgentStatus::Running,
             }),
         ];
@@ -4024,7 +4025,7 @@ mod tests {
                 prompt: Some("inspect the repo".into()),
                 model: Some("gpt-5.4-mini".into()),
                 reasoning_effort: Some(codex_protocol::openai_models::ReasoningEffort::Medium),
-                provider_account: None,
+                provider_account: Some("work".into()),
                 agents_states: [(
                     "00000000-0000-0000-0000-000000000002".into(),
                     CollabAgentState {

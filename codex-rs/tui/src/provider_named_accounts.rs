@@ -111,7 +111,7 @@ impl AccountsView {
 }
 
 /// `[provider_accounts]` as new sessions see it (config files and `-c`).
-fn persisted_defaults(config: &Config) -> BTreeMap<String, String> {
+pub(crate) fn persisted_defaults(config: &Config) -> BTreeMap<String, String> {
     let effective = config.config_layer_stack.effective_config();
     let Some(table) = effective
         .get("provider_accounts")
@@ -269,7 +269,7 @@ impl fmt::Debug for AccountValue {
     }
 }
 
-/// Saves (or replaces) one account. Blocking.
+/// Saves a new account; an existing name is refused. Blocking.
 pub(crate) fn save_account(
     codex_home: PathBuf,
     provider_id: &str,
@@ -286,8 +286,9 @@ pub(crate) fn save_account(
         _ if cleaned.is_empty() => return Err("The value cannot be empty.".to_string()),
         _ => cleaned,
     };
+    // Adding never replaces an existing account's credential.
     Vault::new(codex_home)
-        .write_provider_account(provider_id, name, method.kind(), &cleaned)
+        .create_provider_account(provider_id, name, method.kind(), &cleaned)
         .map_err(|error| format!("Could not save {provider_id} account `{name}`: {error}"))?;
     Ok(format!("Saved {provider_id} account `{name}`."))
 }

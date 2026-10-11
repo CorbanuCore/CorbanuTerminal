@@ -973,17 +973,18 @@ fn format_model_provider(config: &Config, runtime_base_url: Option<&str>) -> Opt
     let base_url = runtime_base_url.and_then(sanitize_base_url);
     // PF-84-S04: with named accounts on, name the account this session's
     // requests use, `default` included.
-    let account = config
+    let account = (config
         .features
         .enabled(codex_features::Feature::NamedAccounts)
-        .then(|| {
-            provider
-                .account
-                .as_ref()
-                .map_or(codex_vault::DEFAULT_PROVIDER_ACCOUNT, |account| {
-                    account.name.as_str()
-                })
-        });
+        && crate::legacy_core::config::supports_named_accounts(provider))
+    .then(|| {
+        provider
+            .account
+            .as_ref()
+            .map_or(codex_vault::DEFAULT_PROVIDER_ACCOUNT, |account| {
+                account.name.as_str()
+            })
+    });
     let is_default_openai = provider.is_openai() && base_url.is_none();
     if is_default_openai && account.is_none() {
         return None;
