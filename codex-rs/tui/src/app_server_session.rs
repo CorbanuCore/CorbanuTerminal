@@ -2370,7 +2370,7 @@ async fn thread_session_state_from_thread_resume_response(
             thread_params_mode,
         )
     };
-    thread_session_state_from_thread_response(
+    let mut session = thread_session_state_from_thread_response(
         &response.thread.id,
         response.thread.forked_from_id.clone(),
         response.thread.name.clone(),
@@ -2388,7 +2388,9 @@ async fn thread_session_state_from_thread_resume_response(
         response.reasoning_effort.clone(),
         config,
     )
-    .await
+    .await?;
+    session.provider_account = response.provider_account.clone();
+    Ok(session)
 }
 
 async fn thread_session_state_from_thread_fork_response(
@@ -2493,6 +2495,7 @@ async fn thread_session_state_from_thread_response(
         }),
         network_proxy: None,
         rollout_path,
+        provider_account: None,
     })
 }
 
@@ -3643,6 +3646,7 @@ requires_openai_auth = false
             initial_turns_page: None,
             turns_backwards_cursor: None,
             items_backwards_cursor: None,
+            provider_account: Some("openai:default".to_string()),
         };
 
         let started = started_thread_from_resume_response(
@@ -3653,6 +3657,10 @@ requires_openai_auth = false
         .await
         .expect("resume response should map");
         assert_eq!(started.session.forked_from_id, Some(forked_from_id));
+        assert_eq!(
+            started.session.provider_account.as_deref(),
+            Some("openai:default")
+        );
         assert_eq!(
             started.session.runtime_workspace_roots,
             response.runtime_workspace_roots

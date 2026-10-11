@@ -1043,6 +1043,7 @@ async fn bang_shell_enter_while_task_running_submits_run_user_shell_command() {
         message_history: None,
         network_proxy: None,
         rollout_path: Some(rollout_file.path().to_path_buf()),
+        provider_account: None,
     };
     chat.handle_thread_session(configured);
     drain_insert_history(&mut rx);

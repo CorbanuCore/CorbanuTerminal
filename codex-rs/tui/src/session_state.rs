@@ -55,6 +55,10 @@ pub(crate) struct ThreadSessionState {
     pub(crate) message_history: Option<MessageHistoryMetadata>,
     pub(crate) network_proxy: Option<SessionNetworkProxyRuntime>,
     pub(crate) rollout_path: Option<PathBuf>,
+    /// PF-84: the account the thread runs on (`<provider>:<name>`), when the
+    /// app server reported it; a resumed thread can run on its recorded
+    /// account rather than the one this TUI's config selects (#427).
+    pub(crate) provider_account: Option<String>,
 }
 
 impl ThreadSessionState {

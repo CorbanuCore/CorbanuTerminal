@@ -1,0 +1,11 @@
+default-recorded session: 01a1297d-1ee1-72c3-b50a-975f73d45003
+== T7 fresh: corbanu -c provider_accounts.zai="ghost"
+   | account `ghost` of provider `zai` is not configured; add it with `corbanu account add zai ghost` or pick another with `--account` (see `corbanu account list`)
+   | [process exited: 1]
+== T8 resume: corbanu -c provider_accounts.zai="ghost" resume <id> (refused up front; onboarding cannot use the recorded account)
+   | account `ghost` of provider `zai` is not configured; add it with `corbanu account add zai ghost` or pick another with `--account` (see `corbanu account list`)
+   | [process exited: 1]
+== T9 recovery: same with --account default, send pong prompt
+   | • pong
+   | › Reply with exactly the word pong and nothing else.
+   | • pong

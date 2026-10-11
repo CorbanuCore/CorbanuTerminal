@@ -1849,12 +1849,7 @@ impl ThreadManagerState {
         supports_openai_form_elicitation: bool,
         user_shell_override: Option<crate::shell::Shell>,
     ) -> CodexResult<NewThread> {
-        // PF-84: a session, resumed thread or spawned agent never starts on a
-        // named account that is missing; it is refused, never run on another.
-        if let Some(message) = crate::config::selected_account_error(
-            config.codex_home.as_path(),
-            &config.model_provider,
-        ) {
+        if let Some(message) = thread_start_account_error(&config, &session_source) {
             return Err(CodexErr::InvalidRequest(message));
         }
         let source_changed_during_startup = Arc::new(AtomicBool::new(false));
@@ -2303,6 +2298,18 @@ fn resolve_spawn_multi_agent_version(
     }
 
     resolve_multi_agent_version(initial_history, inherited_multi_agent_version)
+}
+
+/// PF-84: a session, resumed thread or spawned agent never starts on a named
+/// account that is missing; it is refused, never run on another. A session
+/// also checks an explicit account of another provider (#425); a spawned
+/// agent checks only the account it runs on.
+fn thread_start_account_error(config: &Config, session_source: &SessionSource) -> Option<String> {
+    if matches!(session_source, SessionSource::SubAgent(_)) {
+        crate::config::selected_account_error(config.codex_home.as_path(), &config.model_provider)
+    } else {
+        crate::config::session_account_error(config)
+    }
 }
 
 #[cfg(test)]

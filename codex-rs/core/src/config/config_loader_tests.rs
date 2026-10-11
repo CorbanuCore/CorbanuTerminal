@@ -4274,3 +4274,73 @@ async fn security_recovery_project_layer_only_raises_the_level() -> std::io::Res
     }
     Ok(())
 }
+
+/// PF-84 (#425): the account a resumed thread recorded (or a worker's parent
+/// runs on) beats `[provider_accounts]`; an explicit account replaces it only
+/// for the same provider, so another provider's `--account` never drops it.
+#[tokio::test]
+async fn inherited_account_is_replaced_only_by_an_explicit_account_of_its_provider()
+-> std::io::Result<()> {
+    let codex_home = tempdir().expect("tempdir");
+    std::fs::write(
+        codex_home.path().join(CONFIG_TOML_FILE),
+        "model = \"glm-5.3-flash\"\nmodel_provider = \"zai\"\n\n\
+         [features]\nnamed_accounts = true\n\n[provider_accounts]\nzai = \"cfg\"\n",
+    )?;
+    let accounts = |explicit: Option<&str>, inherited: Option<&str>, named: bool| {
+        let codex_home = codex_home.path().to_path_buf();
+        let cli_overrides = if named {
+            Vec::new()
+        } else {
+            vec![(
+                "features.named_accounts".to_string(),
+                TomlValue::Boolean(false),
+            )]
+        };
+        let overrides = ConfigOverrides {
+            provider_account: explicit.map(str::to_string),
+            inherited_provider_account: inherited.map(str::to_string),
+            ..Default::default()
+        };
+        async move {
+            let config = ConfigBuilder::default()
+                .codex_home(codex_home)
+                .cli_overrides(cli_overrides)
+                .harness_overrides(overrides)
+                .build()
+                .await?;
+            let account = |id: &str| {
+                config.model_providers[id]
+                    .account
+                    .as_ref()
+                    .map(|account| account.name.clone())
+            };
+            Ok::<_, std::io::Error>((account("zai"), account("kimi-code")))
+        }
+    };
+    let named = |name: &str| Some(name.to_string());
+    assert_eq!(
+        [
+            accounts(Some("kimi-code:alt"), Some("zai:work"), true).await?,
+            accounts(Some("zai:main"), Some("zai:work"), true).await?,
+            accounts(/*explicit*/ None, Some("zai:default"), true).await?,
+            accounts(Some("default"), Some("zai:main"), false).await?,
+        ],
+        [
+            (named("work"), named("alt")),
+            (named("main"), None),
+            (None, None),
+            (None, None),
+        ]
+    );
+    let error = accounts(/*explicit*/ None, Some("zai:main"), false)
+        .await
+        .expect_err("a recorded named account needs the feature");
+    assert!(
+        error
+            .to_string()
+            .starts_with("the thread's recorded account zai:main: named accounts need"),
+        "{error}"
+    );
+    Ok(())
+}

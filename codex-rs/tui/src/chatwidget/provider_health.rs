@@ -103,8 +103,22 @@ impl ChatWidget {
         }
     }
 
-    /// PF-84: the named account the current provider runs on, if any.
+    /// PF-84: the named account the current provider runs on, if any. The
+    /// account the app server reported for the thread wins: a resumed
+    /// thread runs on its recorded account, which this TUI's config may not
+    /// select (#427).
     fn selected_named_account(&self) -> Option<codex_provider_auth::NamedCredentialAccount> {
+        if let Some((provider_id, name)) = self
+            .thread_provider_account
+            .as_deref()
+            .and_then(|account| account.split_once(':'))
+            && provider_id == self.config.model_provider_id
+        {
+            return (name != "default").then(|| codex_provider_auth::NamedCredentialAccount {
+                provider_id: provider_id.to_string(),
+                name: name.to_string(),
+            });
+        }
         let account = self
             .config
             .model_providers

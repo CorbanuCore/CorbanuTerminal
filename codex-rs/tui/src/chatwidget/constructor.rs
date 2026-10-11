@@ -247,6 +247,7 @@ impl ChatWidget {
             last_rendered_width: std::cell::Cell::new(None),
             feedback,
             current_rollout_path: None,
+            thread_provider_account: None,
             current_cwd,
             workspace_command_runner,
             instruction_source_paths: Vec::new(),

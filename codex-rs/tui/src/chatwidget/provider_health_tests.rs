@@ -194,6 +194,48 @@ async fn named_account_rejection_names_the_account_not_the_default_recovery() {
         provider_id: "zai".into(),
         name: "fake".into(),
     });
+    assert_named_account_rejection(&mut chat, &mut rx);
+}
+
+/// PF-84 (#427): a resumed thread runs on the account it recorded, which this
+/// TUI's config does not select; its 401 still names that account.
+#[tokio::test]
+async fn resumed_named_account_rejection_names_the_recorded_account() {
+    let (mut chat, _tx, mut rx, _op_rx) =
+        super::super::tests::make_chatwidget_manual_with_sender().await;
+    chat.handle_thread_session(crate::session_state::ThreadSessionState {
+        thread_id: codex_protocol::ThreadId::new(),
+        forked_from_id: None,
+        fork_parent_title: None,
+        thread_name: None,
+        model: "glm-5.3-flash".to_string(),
+        model_provider_id: "zai".to_string(),
+        service_tier: None,
+        approval_policy: codex_app_server_protocol::AskForApproval::Never,
+        approvals_reviewer: codex_protocol::config_types::ApprovalsReviewer::User,
+        permission_profile: codex_protocol::models::PermissionProfile::read_only(),
+        active_permission_profile: None,
+        cwd: chat.config.cwd.clone(),
+        runtime_workspace_roots: Vec::new(),
+        instruction_source_paths: Vec::new(),
+        reasoning_effort: None,
+        collaboration_mode: None,
+        personality: None,
+        message_history: None,
+        network_proxy: None,
+        rollout_path: None,
+        provider_account: Some("zai:fake".to_string()),
+    });
+    assert_eq!(chat.config.model_provider_id, "zai");
+    assert_eq!(chat.config.model_providers["zai"].account, None);
+    while rx.try_recv().is_ok() {}
+    assert_named_account_rejection(&mut chat, &mut rx);
+}
+
+fn assert_named_account_rejection(
+    chat: &mut ChatWidget,
+    rx: &mut tokio::sync::mpsc::UnboundedReceiver<crate::app_event::AppEvent>,
+) {
     let host = crate::provider_status_host::ProviderStatusHost::from_config(
         chat.config_ref(),
         crate::provider_status_host::ProviderAccountMetadata::default(),

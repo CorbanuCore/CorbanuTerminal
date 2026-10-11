@@ -585,6 +585,12 @@ pub struct ThreadResumeResponse {
     #[experimental("thread/resume.itemsBackwardsCursor")]
     #[serde(default)]
     pub items_backwards_cursor: Option<String>,
+    /// PF-84: the account the resumed thread runs on, as
+    /// `<provider>:<name>` (`default` included). It can be the account the
+    /// thread recorded rather than the one the client asked for.
+    #[experimental("thread/resume.providerAccount")]
+    #[serde(default)]
+    pub provider_account: Option<String>,
 }
 
 impl ThreadResumeResponse {

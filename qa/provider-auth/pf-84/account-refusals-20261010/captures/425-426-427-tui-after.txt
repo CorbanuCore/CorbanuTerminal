@@ -1,0 +1,17 @@
+binary: after
+  zai	fake	api_key
+recorded: fake=01a1297c-29f0-7750-9e41-5f5ea02b700d default=01a1297c-2c69-7c73-924a-df021336a510
+== T1 #426: corbanu --account ghost
+   | account `ghost` of provider `zai` is not configured; add it with `corbanu account add zai ghost` or pick another with `--account` (see `corbanu account list`)
+   | [process exited: 1]
+== T2 #426: corbanu resume --account ghost <default session>
+   | account `ghost` of provider `zai` is not configured; add it with `corbanu account add zai ghost` or pick another with `--account` (see `corbanu account list`)
+   | [process exited: 1]
+== T3 #425: corbanu --account kimi-code:ghost
+   | account `ghost` of provider `kimi-code` is not configured; add it with `corbanu account add kimi-code ghost` or pick another with `--account` (see `corbanu acco
+   | unt list`)
+   | [process exited: 1]
+== T4 #427: corbanu resume <session recorded on fake>, send ping
+   | ■ unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id:
+   | ⚠ Z.AI (zai) account `fake` was rejected. Replace its key with `corbanu account add zai fake` (reads stdin), or choose another account. The default Z.AI
+   | ■ unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id:

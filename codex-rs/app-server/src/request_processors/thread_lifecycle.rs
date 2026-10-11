@@ -689,6 +689,7 @@ pub(super) async fn handle_pending_thread_resume_request(
         workspace_roots,
         reasoning_effort,
         originator,
+        provider_account,
         ..
     } = config_snapshot;
     let instruction_sources = pending.instruction_sources;
@@ -714,6 +715,7 @@ pub(super) async fn handle_pending_thread_resume_request(
         initial_turns_page,
         turns_backwards_cursor,
         items_backwards_cursor,
+        provider_account,
     };
     outgoing
         .send_response_with_thread_originator(request_id, response, originator)

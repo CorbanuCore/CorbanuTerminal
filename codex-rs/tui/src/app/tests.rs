@@ -11582,6 +11582,7 @@ async fn render_clear_ui_header_after_long_transcript_for_snapshot() -> String {
             message_history: None,
             network_proxy: None,
             rollout_path: Some(PathBuf::new()),
+            provider_account: None,
         };
         Arc::new(new_session_info(
             app.chat_widget.config_ref(),
@@ -12209,6 +12210,7 @@ pub(super) fn test_thread_session(thread_id: ThreadId, cwd: PathBuf) -> ThreadSe
         message_history: None,
         network_proxy: None,
         rollout_path: Some(PathBuf::new()),
+        provider_account: None,
     }
 }
 
@@ -13131,6 +13133,7 @@ async fn backtrack_selection_preserves_selected_prompt_and_requests_branch() {
             message_history: None,
             network_proxy: None,
             rollout_path: Some(PathBuf::new()),
+            provider_account: None,
         };
         Arc::new(new_session_info(
             app.chat_widget.config_ref(),
@@ -13202,6 +13205,7 @@ async fn backtrack_selection_preserves_selected_prompt_and_requests_branch() {
             message_history: None,
             network_proxy: None,
             rollout_path: Some(PathBuf::new()),
+            provider_account: None,
         });
 
     app.backtrack.base_id = Some(base_id);
@@ -14221,6 +14225,7 @@ async fn new_session_requests_shutdown_for_previous_conversation() {
             message_history: None,
             network_proxy: None,
             rollout_path: Some(PathBuf::new()),
+            provider_account: None,
         };
 
         app.chat_widget.handle_thread_session(event);
@@ -14651,6 +14656,7 @@ async fn clear_only_ui_reset_preserves_chat_session_state() {
             message_history: None,
             network_proxy: None,
             rollout_path: Some(PathBuf::new()),
+            provider_account: None,
         });
     app.chat_widget
         .apply_external_edit("draft prompt".to_string());

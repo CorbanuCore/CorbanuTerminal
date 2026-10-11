@@ -1,0 +1,57 @@
+binary: after
+hZ accounts:
+  zai	fake	api_key
+  zai	main	api_key
+-- #425: zai session, account of another provider
+== X12 --account kimi-code:main (kimi-code has no accounts) (exit 1)
+   args: exec --account kimi-code:main
+   | Error: thread/start: thread/start failed: account `main` of provider `kimi-code` is not configured; add it with `corbanu account add kimi-code main` or pick another with `--account` (see `corbanu account list`) (code -32600)
+== X12b --account kimi-code:ghost (exit 1)
+   args: exec --account kimi-code:ghost
+   | Error: thread/start: thread/start failed: account `ghost` of provider `kimi-code` is not configured; add it with `corbanu account add kimi-code ghost` or pick another with `--account` (see `corbanu account list`) (code -32600)
+== Z3 --account ghost (session provider, reference) (exit 1)
+   args: exec --account ghost
+   | Error: thread/start: thread/start failed: account `ghost` of provider `zai` is not configured; add it with `corbanu account add zai ghost` or pick another with `--account` (see `corbanu account list`) (code -32600)
+== Z1 --account main (exit 0)
+   args: exec --account main
+   | pong
+   | session id: 01a12979-6d2c-7371-9995-312d658b49e2
+-- #427-2: flag-off resume of a thread recorded on main
+== R7 resume --disable named_accounts <main session> (exit 1)
+   args: exec resume --disable named_accounts 01a12979-6d2c-7371-9995-312d658b49e2
+   | Error: thread/resume: thread/resume failed: failed to load configuration: the thread's recorded account zai:main: named accounts need the `named_accounts` feature (`--enable named_accounts`); resume with `--account default` to use the default credentials instead (code -32600)
+== R7b resume --disable named_accounts --account default <main session> (exit 0)
+   args: exec resume --disable named_accounts --account default 01a12979-6d2c-7371-9995-312d658b49e2
+   | pong
+   | session id: 01a12979-6d2c-7371-9995-312d658b49e2
+-- #425 positive / applies-to-nothing: kimi-code:kmain configured (real Kimi key)
+== P1 --account kimi-code:kmain (configured; session stays on zai default) (exit 0)
+   args: exec --account kimi-code:kmain
+   | pong
+   | session id: 01a12979-8c85-7f33-9d3e-633f5b2058b7
+== P2 --account kimi-code:kmain, agents.provider_allowlist=[zai] (exit 1)
+   args: exec -c agents.provider_allowlist=["zai"] --account kimi-code:kmain
+   | Error: --account kimi-code:kmain: this session runs on `zai` and nothing in it can run on `kimi-code` (`agents.provider_allowlist` does not allow it for spawned agents), so the account would be ignored; start the session on `kimi-code` (`-c model_provider="kimi-code"`) or drop the provider prefix
+== P3 --account kimi-code:kmain, agents.enabled=false (exit 1)
+   args: exec -c agents.enabled=false --account kimi-code:kmain
+   | Error: --account kimi-code:kmain: this session runs on `zai` and nothing in it can run on `kimi-code` (`agents.enabled` is false, so no agent can be spawned), so the account would be ignored; start the session on `kimi-code` (`-c model_provider="kimi-code"`) or drop the provider prefix
+== P4 --account kimi-code:default, agents.enabled=false (default is never refused) (exit 0)
+   args: exec -c agents.enabled=false --account kimi-code:default
+   | pong
+   | session id: 01a12979-9ee1-7c81-be9d-f61b0ea4247f
+== Z2 --account fake (401) (exit 1)
+   args: exec --account fake
+   | ERROR: unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: 83afc798-026d-4f97-ad48-fe06657127e8
+   | session id: 01a12979-b0e5-7bb0-a238-c6af4175be6b
+== R8 resume --account kimi-code:kmain <thread recorded on fake> (must stay on fake: 401, not default pong) (exit 1)
+   args: exec resume --account kimi-code:kmain 01a12979-b0e5-7bb0-a238-c6af4175be6b
+   | ERROR: unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: bd38898c-614d-4662-97ae-8de1894b7036
+   | session id: 01a12979-b0e5-7bb0-a238-c6af4175be6b
+-- #425: kimi-code session
+== K9 --account zai:ghost (missing account of another provider) (exit 1)
+   args: exec --account zai:ghost
+   | Error: thread/start: thread/start failed: account `ghost` of provider `zai` is not configured; add it with `corbanu account add zai ghost` or pick another with `--account` (see `corbanu account list`) (code -32600)
+== K0 no --account (reference: Kimi default key) (exit 0)
+   args: exec 
+   | pong
+   | session id: 01a12979-b881-7820-b7ee-b0f834ca18c3
