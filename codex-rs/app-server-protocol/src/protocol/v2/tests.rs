@@ -294,9 +294,11 @@ fn thread_resume_response_round_trips_initial_turns_page() {
         }),
         turns_backwards_cursor: Some("turns_head".to_string()),
         items_backwards_cursor: Some("items_head".to_string()),
+        provider_account: Some("zai:work".to_string()),
     };
 
     let value = serde_json::to_value(&response).expect("serialize thread resume response");
+    assert_eq!(value["providerAccount"], json!("zai:work"));
     assert_eq!(
         value["thread"]["section"],
         json!({

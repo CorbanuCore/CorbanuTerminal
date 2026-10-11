@@ -1,0 +1,7 @@
+== T5 positive: corbanu --account fake (configured) reaches the chat
+   | │ >_ Corbanu Terminal (v0.1.48)                            │
+   |   Z.AI GLM 5.3 Flash via zai default · /Volumes/CorbanuDrive/Corbanu/tmp/pf84fix2/work · Corbanu Terminal · TPS: -- tok/s
+== T6 positive: corbanu (default account) reaches the chat, ping answered
+   | › Reply with exactly the word pong and nothing else.
+   | • pong
+   |   Z.AI GLM 5.3 Flash via zai default · /Volumes/CorbanuDrive/Corbanu/tmp/pf84fix2/work · Corbanu Terminal · TPS: 0.7 tok/s

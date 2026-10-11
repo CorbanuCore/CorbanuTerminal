@@ -34,6 +34,7 @@ impl ChatWidget {
         self.update_collaboration_mode_indicator();
         self.forked_from = session.forked_from_id;
         self.current_rollout_path = session.rollout_path.clone();
+        self.thread_provider_account = session.provider_account.clone();
         self.current_cwd = Some(session.cwd.to_path_buf());
         self.config.cwd = session.cwd.clone();
         self.apply_thread_model_provider(session.model_provider_id.clone());

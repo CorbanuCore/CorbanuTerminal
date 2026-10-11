@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::path::Path;
 
+use codex_model_provider::selected_account_error;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::NamedProviderAccount;
 use codex_vault::Vault;
@@ -51,31 +52,44 @@ pub(crate) fn apply_provider_accounts(
 
 /// Applies an explicit `--account [<provider>:]<name>` selection; it beats
 /// `[provider_accounts]`. Without a prefix it selects an account of
-/// `session_provider_id`. Unlike the config table it is an error when the
+/// `session_provider_id`; with another provider's prefix it selects that
+/// provider's account for whatever in the session runs on it (spawned agents,
+/// workers, a switch to it), and [`other_provider_account_error`] checks it at
+/// thread start. Unlike the config table it is an error when the
 /// `named_accounts` feature is off, because ignoring it would run the session
-/// on the default account.
+/// on the default account. `recorded` marks the account a resumed thread
+/// recorded rather than a flag the user passed, so errors name its source.
 pub(crate) fn apply_explicit_provider_account(
     model_providers: &mut HashMap<String, ModelProviderInfo>,
     session_provider_id: &str,
     selection: &str,
     named_accounts_enabled: bool,
+    recorded: bool,
 ) -> std::io::Result<()> {
     let (provider_id, name) = split_account_selection(selection, session_provider_id);
+    let source = if recorded {
+        format!("the thread's recorded account {provider_id}:{name}")
+    } else {
+        format!("--account {provider_id}:{name}")
+    };
     let invalid = |message: String| {
         std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            format!("--account {provider_id}:{name}: {message}"),
+            format!("{source}: {message}"),
         )
     };
     if !named_accounts_enabled {
         if parse_provider_account_selection(name).is_ok_and(|name| name.is_none()) {
             return Ok(());
         }
-        return Err(invalid(
+        let message = if recorded {
+            "named accounts need the `named_accounts` feature (`--enable named_accounts`); \
+             resume with `--account default` to use the default credentials instead"
+        } else {
             "named accounts need the `named_accounts` feature (`--enable named_accounts`); \
              `--account default` uses the default credentials"
-                .to_string(),
-        ));
+        };
+        return Err(invalid(message.to_string()));
     }
     let provider = model_providers
         .get_mut(provider_id)
@@ -90,6 +104,76 @@ pub(crate) fn apply_explicit_provider_account(
                 .to_string(),
         )
     })
+}
+
+/// Why an explicit `--account <provider>:<name>` for a provider other than
+/// the session's cannot be used, with the same recovery text as the session
+/// provider's account (#425). The session's own account is checked
+/// separately, from `config.model_provider`.
+pub fn other_provider_account_error(config: &super::Config) -> Option<String> {
+    let (provider_id, _) = config
+        .provider_account_override
+        .as_deref()?
+        .split_once(':')?;
+    if provider_id == config.model_provider_id {
+        return None;
+    }
+    selected_account_error(
+        config.codex_home.as_path(),
+        config.model_providers.get(provider_id)?,
+    )
+}
+
+/// Why an explicit account of a provider other than the session's would be
+/// ignored by a session that cannot switch providers (exec): such an account
+/// applies only to spawned agents on that provider, so when no spawned agent
+/// may run there it is refused rather than silently unused (#425).
+pub fn unused_other_provider_account_error(config: &super::Config) -> Option<String> {
+    let spawns_enabled = config.features.enabled(codex_features::Feature::Collab)
+        || config
+            .features
+            .enabled(codex_features::Feature::MultiAgentV2);
+    unused_other_provider_account(
+        config.provider_account_override.as_deref()?,
+        &config.model_provider_id,
+        spawns_enabled,
+        config.agent_provider_allowlist.as_deref(),
+    )
+}
+
+fn unused_other_provider_account(
+    selection: &str,
+    session_provider_id: &str,
+    spawns_enabled: bool,
+    agent_provider_allowlist: Option<&[String]>,
+) -> Option<String> {
+    let (provider_id, _) = selection.split_once(':')?;
+    if provider_id == session_provider_id {
+        return None;
+    }
+    let reason = if !spawns_enabled {
+        "spawned agents are off"
+    } else if agent_provider_allowlist
+        .is_some_and(|allowed| !allowed.iter().any(|allowed| allowed == provider_id))
+    {
+        "`agents.provider_allowlist` does not allow it for spawned agents"
+    } else {
+        return None;
+    };
+    Some(format!(
+        "--account {selection}: this session runs on `{session_provider_id}` and nothing in it \
+         can run on `{provider_id}` ({reason}), so the account would be ignored; start the \
+         session on `{provider_id}` (`-c model_provider=\"{provider_id}\"`) or drop the \
+         provider prefix"
+    ))
+}
+
+/// Why the session cannot start on the accounts it selects: the session
+/// provider's account (from `--account` or `[provider_accounts]`), then an
+/// explicit account of another provider.
+pub fn session_account_error(config: &super::Config) -> Option<String> {
+    selected_account_error(config.codex_home.as_path(), &config.model_provider)
+        .or_else(|| other_provider_account_error(config))
 }
 
 /// Splits `[<provider>:]<name>`; the provider defaults to the session's.
@@ -294,6 +378,7 @@ mod tests {
             "zai",
             "work",
             /*named_accounts_enabled*/ true,
+            /*recorded*/ false,
         )
         .expect("session provider");
         apply_explicit_provider_account(
@@ -301,6 +386,7 @@ mod tests {
             "zai",
             "kimi:alt",
             /*named_accounts_enabled*/ true,
+            /*recorded*/ false,
         )
         .expect("prefixed provider");
         assert_eq!(
@@ -324,6 +410,7 @@ mod tests {
             "zai",
             "default",
             /*named_accounts_enabled*/ true,
+            /*recorded*/ false,
         )
         .expect("default clears");
         assert_eq!(model_providers["zai"].account, None);
@@ -333,9 +420,11 @@ mod tests {
     fn explicit_account_fails_closed_when_it_cannot_be_honoured() {
         let mut model_providers = providers();
         let error = |selection: &str, enabled: bool, providers: &mut HashMap<_, _>| {
-            apply_explicit_provider_account(providers, "zai", selection, enabled)
-                .expect_err(selection)
-                .to_string()
+            apply_explicit_provider_account(
+                providers, "zai", selection, enabled, /*recorded*/ false,
+            )
+            .expect_err(selection)
+            .to_string()
         };
         assert_eq!(
             [
@@ -358,8 +447,71 @@ mod tests {
             "zai",
             "default",
             /*named_accounts_enabled*/ false,
+            /*recorded*/ false,
         )
         .expect("default without the feature");
         assert_eq!(model_providers["zai"].account, None);
+    }
+
+    /// #425: exec cannot switch providers, so another provider's account
+    /// that no spawned agent can use is refused, not silently ignored.
+    #[test]
+    fn other_provider_account_is_refused_when_nothing_can_use_it() {
+        let allow_zai = ["zai".to_string()];
+        assert_eq!(
+            [
+                unused_other_provider_account("zai:work", "zai", false, None),
+                unused_other_provider_account("kimi-code:main", "zai", true, None),
+                unused_other_provider_account(
+                    "kimi-code:main",
+                    "zai",
+                    true,
+                    Some(&["kimi-code".to_string()]),
+                ),
+            ],
+            [None, None, None]
+        );
+        assert_eq!(
+            [
+                unused_other_provider_account("kimi-code:main", "zai", false, None),
+                unused_other_provider_account("kimi-code:main", "zai", true, Some(&allow_zai)),
+            ],
+            [
+                Some(
+                    "--account kimi-code:main: this session runs on `zai` and nothing in it can \
+                     run on `kimi-code` (spawned agents are off), so the account would be \
+                     ignored; start the session on `kimi-code` \
+                     (`-c model_provider=\"kimi-code\"`) or drop the provider prefix"
+                        .to_string()
+                ),
+                Some(
+                    "--account kimi-code:main: this session runs on `zai` and nothing in it can \
+                     run on `kimi-code` (`agents.provider_allowlist` does not allow it for \
+                     spawned agents), so the account would be ignored; start the session on \
+                     `kimi-code` (`-c model_provider=\"kimi-code\"`) or drop the provider prefix"
+                        .to_string()
+                ),
+            ]
+        );
+    }
+
+    /// #427: a flag-off resume names the thread's recorded account, not a
+    /// `--account` flag the user did not pass.
+    #[test]
+    fn recorded_account_errors_name_the_recorded_account() {
+        let error = apply_explicit_provider_account(
+            &mut providers(),
+            "zai",
+            "zai:main",
+            /*named_accounts_enabled*/ false,
+            /*recorded*/ true,
+        )
+        .expect_err("named account with the feature off");
+        assert_eq!(
+            error.to_string(),
+            "the thread's recorded account zai:main: named accounts need the `named_accounts` \
+             feature (`--enable named_accounts`); resume with `--account default` to use the \
+             default credentials instead"
+        );
     }
 }

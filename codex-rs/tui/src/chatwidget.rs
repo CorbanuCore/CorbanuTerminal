@@ -757,6 +757,8 @@ pub(crate) struct ChatWidget {
     feedback: codex_feedback::CodexFeedback,
     // Current session rollout path (if known)
     current_rollout_path: Option<PathBuf>,
+    // PF-84: the account the app server reported for this thread (if any).
+    thread_provider_account: Option<String>,
     // Current working directory (if known)
     current_cwd: Option<PathBuf>,
     // App-server-backed command runner for status-line workspace metadata lookups.

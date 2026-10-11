@@ -461,6 +461,46 @@ async fn start_thread_refuses_a_missing_named_account() {
     );
 }
 
+/// #425: `--account <other-provider>:<name>` whose account is missing is
+/// refused at thread start with the session-provider case's text, instead of
+/// running the session on its provider's default account.
+#[tokio::test]
+async fn start_thread_refuses_a_missing_account_of_another_provider() {
+    let temp_dir = tempdir().expect("tempdir");
+    let mut config = test_config().await;
+    config.codex_home = temp_dir.path().join("codex-home").abs();
+    config.cwd = config.codex_home.abs();
+    std::fs::create_dir_all(&config.codex_home).expect("create codex home");
+    config.model_provider_id = "zai".to_string();
+    config.model_provider = ModelProviderInfo::create_zai_provider();
+    let mut kimi = ModelProviderInfo::create_zai_provider();
+    kimi.account = Some(codex_model_provider_info::NamedProviderAccount {
+        provider_id: "kimi-code".to_string(),
+        name: "ghost".to_string(),
+    });
+    config.model_providers.insert("kimi-code".to_string(), kimi);
+    config.provider_account_override = Some("kimi-code:ghost".to_string());
+
+    let manager = ThreadManager::with_models_provider_and_home_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        config.codex_home.to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+    );
+    let Err(error) = manager.start_thread(StartThreadOptions::new(config)).await else {
+        panic!("a missing account of another provider must not start a thread");
+    };
+    let CodexErrorDetails::InvalidRequest(message) = error.details() else {
+        panic!("expected an invalid request, got {error}");
+    };
+    assert_eq!(
+        message,
+        &("account `ghost` of provider `kimi-code` is not configured; add it with \
+         `corbanu account add kimi-code ghost` or pick another with `--account` (see `corbanu account list`)"
+            .to_string())
+    );
+}
+
 #[tokio::test]
 async fn code_mode_session_provider_is_shared_across_threads() {
     let temp_dir = tempdir().expect("tempdir");

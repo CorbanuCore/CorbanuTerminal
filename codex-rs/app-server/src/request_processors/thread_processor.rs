@@ -3693,6 +3693,8 @@ impl ThreadRequestProcessor {
                 &resumed_history.history,
                 typesafe_overrides.model_provider.as_deref(),
             );
+            typesafe_overrides.provider_account_recorded =
+                typesafe_overrides.provider_account.is_some();
         }
 
         // Derive a Config using the same logic as new conversation, honoring overrides if provided.
@@ -3914,6 +3916,7 @@ impl ThreadRequestProcessor {
                     initial_turns_page,
                     turns_backwards_cursor,
                     items_backwards_cursor,
+                    provider_account: config_snapshot.provider_account.clone(),
                 };
 
                 let connection_id = request_id.connection_id;

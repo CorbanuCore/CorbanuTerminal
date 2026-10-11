@@ -1851,10 +1851,17 @@ impl ThreadManagerState {
     ) -> CodexResult<NewThread> {
         // PF-84: a session, resumed thread or spawned agent never starts on a
         // named account that is missing; it is refused, never run on another.
-        if let Some(message) = crate::config::selected_account_error(
-            config.codex_home.as_path(),
-            &config.model_provider,
-        ) {
+        // A session also checks an explicit account of another provider
+        // (#425); a spawned agent checks only the account it runs on.
+        let account_error = if matches!(session_source, SessionSource::SubAgent(_)) {
+            crate::config::selected_account_error(
+                config.codex_home.as_path(),
+                &config.model_provider,
+            )
+        } else {
+            crate::config::session_account_error(&config)
+        };
+        if let Some(message) = account_error {
             return Err(CodexErr::InvalidRequest(message));
         }
         let source_changed_during_startup = Arc::new(AtomicBool::new(false));

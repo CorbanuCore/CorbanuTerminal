@@ -194,6 +194,24 @@ async fn named_account_rejection_names_the_account_not_the_default_recovery() {
         provider_id: "zai".into(),
         name: "fake".into(),
     });
+    assert_named_account_rejection(&mut chat, &mut rx);
+}
+
+/// PF-84 (#427): a resumed thread runs on the account it recorded, which this
+/// TUI's config does not select; its 401 still names that account.
+#[tokio::test]
+async fn resumed_named_account_rejection_names_the_recorded_account() {
+    let (mut chat, _tx, mut rx, _op_rx) =
+        super::super::tests::make_chatwidget_manual_with_sender().await;
+    chat.config.model_provider_id = "zai".into();
+    chat.thread_provider_account = Some("zai:fake".into());
+    assert_named_account_rejection(&mut chat, &mut rx);
+}
+
+fn assert_named_account_rejection(
+    chat: &mut ChatWidget,
+    rx: &mut tokio::sync::mpsc::UnboundedReceiver<crate::app_event::AppEvent>,
+) {
     let host = crate::provider_status_host::ProviderStatusHost::from_config(
         chat.config_ref(),
         crate::provider_status_host::ProviderAccountMetadata::default(),

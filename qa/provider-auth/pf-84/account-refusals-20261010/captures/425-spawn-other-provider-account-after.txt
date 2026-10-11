@@ -1,0 +1,12 @@
+== S1 (multi_agent v1 cannot move a zai child to another provider: spawn_agent refuses the model switch; see first run)
+== S2 --account kimi-code:kmain, spawn_agent model_provider kimi-code fork_turns none (multi_agent_v2) (exit 0)
+   | child-ok
+   | session id: 01a12941-8993-7740-b43b-5c1adbacf91e
+== S3 control: same spawn without --account (no default Kimi key exists) (exit 0)
+   | session id: 01a12942-02a4-7670-92de-eb6f7ab234e7
+-- recorded accounts (rollouts in this home, newest first):
+   rollout-2026-10-10T21-39-14-01a12942-02a source="exec" model_provider=zai provider_account=default
+   rollout-2026-10-10T21-38-43-01a12941-899 source="exec" model_provider=zai provider_account=default
+   rollout-2026-10-10T21-38-50-01a12941-a3c source={"subagent": {"thread_spawn": {"parent_thread_id": "01a12941 model_provider=kimi-code provider_account=kmain
+   rollout-2026-10-10T21-38-06-01a12940-fb7 source="exec" model_provider=zai provider_account=default
+   rollout-2026-10-10T21-37-50-01a12940-bc6 source="exec" model_provider=zai provider_account=default

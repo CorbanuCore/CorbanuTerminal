@@ -512,6 +512,7 @@ pub async fn run_main_enforced(
         bypass_hook_trust: bypass_hook_trust.then_some(true),
         additional_writable_roots: add_dir,
         provider_account: account.clone(),
+        provider_account_recorded: false,
     };
     if let Some(enforced) = enforced {
         // `Never` above is the headless default, not a flag to report.
@@ -536,6 +537,11 @@ pub async fn run_main_enforced(
     )
     .await?;
     trace_exec_timing("after_build_exec_config", run_main_started_at);
+    // PF-84 (#425): exec cannot switch providers, so another provider's
+    // account that no spawned agent can use is refused, not ignored.
+    if let Some(message) = codex_core::config::unused_other_provider_account_error(&config) {
+        anyhow::bail!(message);
+    }
     if let Some(enforced) = enforced {
         #[allow(clippy::print_stderr)]
         if let Err(message) = enforced.verify(&config).await {

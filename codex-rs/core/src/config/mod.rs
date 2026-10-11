@@ -184,8 +184,11 @@ mod permissions;
 mod provider_accounts;
 pub use codex_model_provider::selected_account_error;
 pub(crate) use provider_accounts::configured_account_names;
+pub use provider_accounts::other_provider_account_error;
+pub use provider_accounts::session_account_error;
 pub use provider_accounts::split_account_selection;
 pub(crate) use provider_accounts::stamp_provider_account;
+pub use provider_accounts::unused_other_provider_account_error;
 mod requirements;
 mod resolved_permission_profile;
 #[cfg(test)]
@@ -2901,6 +2904,9 @@ pub struct ConfigOverrides {
     /// It beats `[provider_accounts]`; without a provider prefix it applies
     /// to the session's provider.
     pub provider_account: Option<String>,
+    /// PF-84: `provider_account` is the account a resumed thread recorded,
+    /// not a flag the user passed; errors then name the recorded account.
+    pub provider_account_recorded: bool,
 }
 
 fn dedupe_absolute_paths(paths: &mut Vec<AbsolutePathBuf>) {
@@ -3650,6 +3656,7 @@ impl Config {
             additional_writable_roots,
             workspace_roots: workspace_roots_override,
             provider_account: provider_account_override,
+            provider_account_recorded,
         } = overrides;
         let bypass_hook_trust = bypass_hook_trust.unwrap_or_default();
 
@@ -4235,6 +4242,7 @@ impl Config {
                     &model_provider_id,
                     selection,
                     features.enabled(Feature::NamedAccounts),
+                    provider_account_recorded,
                 )?;
                 let (provider_id, name) = split_account_selection(selection, &model_provider_id);
                 Some(format!("{provider_id}:{name}"))

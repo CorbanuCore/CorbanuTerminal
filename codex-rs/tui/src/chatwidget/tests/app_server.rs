@@ -61,6 +61,7 @@ fn configured_thread_session(thread_id: ThreadId) -> crate::session_state::Threa
         message_history: None,
         network_proxy: None,
         rollout_path: None,
+        provider_account: None,
     }
 }
 
@@ -890,6 +891,7 @@ async fn startup_config_warning_is_shown_once_after_the_session_header() {
         message_history: None,
         network_proxy: None,
         rollout_path: None,
+        provider_account: None,
     });
     chat.handle_server_notification(
         ServerNotification::Warning(codex_app_server_protocol::WarningNotification {

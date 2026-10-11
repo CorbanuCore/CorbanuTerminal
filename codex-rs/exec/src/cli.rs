@@ -44,8 +44,10 @@ pub struct Cli {
     pub output_schema: Option<PathBuf>,
 
     /// Named account for this session (`<name>` for the session's provider,
-    /// or `<provider>:<name>`). Needs the `named_accounts` feature; a missing
-    /// account is an error, never the default account.
+    /// or `<provider>:<name>`). Another provider's account is used by spawned
+    /// agents on that provider, and is refused when none can run there. Needs
+    /// the `named_accounts` feature; a missing account is an error, never the
+    /// default account.
     #[arg(long = "account", value_name = "[PROVIDER:]NAME", global = true)]
     pub account: Option<String>,
 
