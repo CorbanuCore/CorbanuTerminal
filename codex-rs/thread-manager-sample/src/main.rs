@@ -202,6 +202,7 @@ fn new_config(model: Option<String>, arg0_paths: Arg0DispatchPaths) -> anyhow::R
         personality: None,
         security_level: SecurityLevel::Permissive,
         broker_model_auth_origin: BrokerModelAuthOrigin::Config,
+        provider_account_override: None,
         permissions: Permissions::from_approval_and_profile(
             Constrained::allow_any(AskForApproval::Never),
             Constrained::allow_any(PermissionProfile::read_only()),

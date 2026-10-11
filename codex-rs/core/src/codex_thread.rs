@@ -85,6 +85,9 @@ pub struct ThreadConfigSnapshot {
     pub parent_thread_id: Option<ThreadId>,
     pub thread_source: Option<ThreadSource>,
     pub originator: String,
+    /// PF-84: the live account as `<provider>:<name>` (`default` included),
+    /// so workers the client starts for this thread inherit it.
+    pub provider_account: Option<String>,
 }
 
 /// Explains why `CodexThread::try_start_turn_if_idle` rejected an automatic

@@ -87,6 +87,7 @@ fn spawn_agent_tool_v2_requires_task_name_and_lists_visible_models() {
         hide_agent_type_model_reasoning: false,
         expose_spawn_agent_model_overrides: true,
         usage_hint_text: None,
+        expose_account: false,
     });
 
     let ToolSpec::Function(ResponsesApiTool {
@@ -263,6 +264,7 @@ fn spawn_agent_tool_v1_keeps_legacy_fork_context_field() {
         hide_agent_type_model_reasoning: false,
         expose_spawn_agent_model_overrides: true,
         usage_hint_text: None,
+        expose_account: false,
     });
 
     let ToolSpec::Namespace(namespace) = tool else {
@@ -328,6 +330,7 @@ fn spawn_agent_tool_caps_visible_model_summaries() {
         hide_agent_type_model_reasoning: false,
         expose_spawn_agent_model_overrides: true,
         usage_hint_text: None,
+        expose_account: false,
     });
 
     let ToolSpec::Function(ResponsesApiTool { description, .. }) = tool else {
@@ -372,6 +375,7 @@ fn spawn_agent_tool_keeps_model_controls_when_spawn_metadata_is_hidden() {
         hide_agent_type_model_reasoning: true,
         expose_spawn_agent_model_overrides: true,
         usage_hint_text: None,
+        expose_account: false,
     });
 
     let ToolSpec::Function(ResponsesApiTool {
@@ -405,6 +409,7 @@ fn spawn_agent_tool_hides_model_controls_without_override_exposure() {
         hide_agent_type_model_reasoning: true,
         expose_spawn_agent_model_overrides: false,
         usage_hint_text: None,
+        expose_account: false,
     });
 
     let ToolSpec::Function(ResponsesApiTool {
@@ -638,6 +643,7 @@ fn openai_reserved_collaboration_profile_restores_pinned_argument_contracts() {
             hide_agent_type_model_reasoning: false,
             expose_spawn_agent_model_overrides: true,
             usage_hint_text: None,
+            expose_account: false,
         },
     ));
     let ToolSpec::Function(spawn) = spawn else {
@@ -724,4 +730,23 @@ fn openai_reserved_collaboration_profile_restores_pinned_result_contracts() {
         list.output_schema.expect("list output schema")["properties"]["agents"]["items"]["required"],
         json!(["agent_name", "agent_status"])
     );
+}
+
+#[test]
+fn spawn_agent_account_argument_is_offered_only_with_named_accounts() {
+    let has_account = |expose_account: bool| {
+        let ToolSpec::Function(ResponsesApiTool { parameters, .. }) =
+            create_spawn_agent_tool_v2(SpawnAgentToolOptions {
+                expose_account,
+                ..SpawnAgentToolOptions::default()
+            })
+        else {
+            panic!("spawn_agent should be a function tool");
+        };
+        parameters
+            .properties
+            .expect("spawn_agent should use object params")
+            .contains_key("account")
+    };
+    assert_eq!((has_account(false), has_account(true)), (false, true));
 }

@@ -3490,6 +3490,7 @@ async fn record_initial_history_forked_hydrates_previous_turn_settings() {
         file_system_sandbox_policy: None,
         model: previous_model.to_string(),
         model_provider: None,
+        provider_account: None,
         comp_hash: None,
         personality: turn_context.personality,
         collaboration_mode: Some(turn_context.collaboration_mode()),
@@ -3914,6 +3915,7 @@ async fn thread_rollback_restores_cleared_reference_context_item_after_compactio
             turn_id: Some(rolled_back_turn_id.clone()),
             model: "rolled-back-model".to_string(),
             model_provider: None,
+            provider_account: None,
             comp_hash: None,
             ..first_context_item.clone()
         }),

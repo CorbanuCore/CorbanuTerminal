@@ -753,6 +753,7 @@ mod thread_processor_behavior_tests {
             path: None,
             model: None,
             model_provider: None,
+            provider_account: None,
             service_tier: Some(Some("priority".to_string())),
             cwd: None,
             runtime_workspace_roots: None,
@@ -796,6 +797,7 @@ mod thread_processor_behavior_tests {
             parent_thread_id: None,
             thread_source: None,
             originator: "test_originator".to_string(),
+            provider_account: None,
         };
 
         assert_eq!(
@@ -849,6 +851,48 @@ mod thread_processor_behavior_tests {
                 },
             },
         ))]
+    }
+
+    fn turn_context(model_provider: &str, provider_account: Option<&str>) -> RolloutItem {
+        let mut item = serde_json::json!({
+            "cwd": test_path_buf("/tmp/persisted-workspace"),
+            "approval_policy": "never",
+            "sandbox_policy": {"type": "danger-full-access"},
+            "model": "glm-5.3-flash",
+            "model_provider": model_provider,
+            "summary": "auto",
+        });
+        if let Some(account) = provider_account {
+            item["provider_account"] = serde_json::Value::String(account.to_string());
+        }
+        RolloutItem::TurnContext(serde_json::from_value(item).expect("turn context"))
+    }
+
+    #[test]
+    fn resume_restores_the_newest_recorded_provider_account() {
+        let history = [
+            turn_context("kimi", Some("work")),
+            turn_context("zai", Some("fake")),
+        ];
+        assert_eq!(
+            [
+                recorded_provider_account(&history, /*resumed_provider_id*/ None),
+                recorded_provider_account(&history, Some("zai")),
+                // The thread resumes on another provider: the account stays put.
+                recorded_provider_account(&history, Some("kimi")),
+                // The newest turn recorded no account (named accounts were off).
+                recorded_provider_account(
+                    &[turn_context("zai", Some("fake")), turn_context("zai", None)],
+                    Some("zai"),
+                ),
+            ],
+            [
+                Some("zai:fake".to_string()),
+                Some("zai:fake".to_string()),
+                None,
+                None,
+            ]
+        );
     }
 
     #[test]

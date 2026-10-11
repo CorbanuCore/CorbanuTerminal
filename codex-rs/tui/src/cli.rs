@@ -71,6 +71,12 @@ pub struct Cli {
     #[arg(long = "no-alt-screen", default_value_t = false)]
     pub no_alt_screen: bool,
 
+    /// Named account for this session (`<name>` for the session's provider,
+    /// or `<provider>:<name>`). Needs the `named_accounts` feature; a missing
+    /// account is an error, never the default account.
+    #[arg(long = "account", value_name = "[PROVIDER:]NAME")]
+    pub account: Option<String>,
+
     #[clap(skip)]
     pub config_overrides: CliConfigOverrides,
 }

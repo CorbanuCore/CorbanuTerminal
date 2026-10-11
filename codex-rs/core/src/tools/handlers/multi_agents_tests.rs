@@ -34,6 +34,7 @@ use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
 use codex_model_provider_info::KIMI_CODE_K3_MODEL;
 use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
+use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::ZAI_PROVIDER_ID;
@@ -6590,4 +6591,175 @@ async fn build_agent_resume_config_clears_base_instructions() {
         .set_permission_profile(turn.permission_profile())
         .expect("permission profile set");
     assert_eq!(config, expected);
+}
+
+/// PF-84-S03: a parent on Z.AI (on `parent_account` when set) spawns a child
+/// with `extra` spawn arguments. Returns the spawn result and the accounts of
+/// the spawned children (`<provider>:<name>`).
+async fn spawn_with_account(
+    named_accounts: bool,
+    configure: impl FnOnce(&mut crate::config::Config, &mut TurnContext),
+    parent_account: Option<&str>,
+    extra: serde_json::Value,
+) -> (Result<(), FunctionCallError>, Vec<Option<String>>) {
+    let (mut session, mut turn) = make_session_and_context().await;
+    let mut provider_info = ModelProviderInfo::create_zai_provider();
+    provider_info.account =
+        parent_account.map(|name| codex_model_provider_info::NamedProviderAccount {
+            provider_id: "zai".to_string(),
+            name: name.to_string(),
+        });
+    let mut config = (*turn.config).clone();
+    config.model_provider_id = "zai".to_string();
+    config.model_provider = provider_info.clone();
+    config
+        .model_providers
+        .insert("zai".to_string(), ModelProviderInfo::create_zai_provider());
+    config
+        .features
+        .enable(Feature::MultiAgentV2)
+        .expect("test config should allow feature update");
+    if named_accounts {
+        config
+            .features
+            .enable(Feature::NamedAccounts)
+            .expect("test config should allow feature update");
+    }
+    codex_vault::Vault::new(config.codex_home.to_path_buf())
+        .write_provider_account(
+            "zai",
+            &codex_vault::ProviderAccountName::parse("work").expect("name"),
+            codex_vault::ProviderAccountKind::ApiKey,
+            "canary-spawn-work",
+        )
+        .expect("write account");
+    configure(&mut config, &mut turn);
+    turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
+    set_turn_config(&mut turn, config);
+    let manager = thread_manager();
+    let root = manager
+        .start_thread((*turn.config).clone())
+        .await
+        .expect("root thread should start");
+    // The root's own control plane carries its security policy binding.
+    session.services.agent_control = root.thread.session.services.agent_control.clone();
+    session.thread_id = root.thread_id;
+    let mut arguments = json!({
+        "message": "say pong",
+        "task_name": "worker",
+        "fork_turns": "none",
+    });
+    for (key, value) in extra.as_object().expect("object").clone() {
+        arguments[key] = value;
+    }
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        SpawnAgentHandlerV2::default().handle(invocation(
+            Arc::new(session),
+            Arc::new(turn),
+            "spawn_agent",
+            function_payload(arguments),
+        )),
+    )
+    .await
+    .expect("spawn must not wait for an approval")
+    .map(drop);
+    let mut children = Vec::new();
+    for thread_id in manager.list_thread_ids().await {
+        if thread_id != root.thread_id {
+            let thread = manager.get_thread(thread_id).await.expect("child thread");
+            children.push(thread.config_snapshot().await.provider_account);
+        }
+    }
+    (result, children)
+}
+
+#[tokio::test]
+async fn spawn_account_needs_the_named_accounts_feature() {
+    let (result, _) = spawn_with_account(
+        /*named_accounts*/ false,
+        |_, _| {},
+        /*parent_account*/ None,
+        json!({"account": "work"}),
+    )
+    .await;
+    assert_eq!(
+        result,
+        Err(FunctionCallError::RespondToModel(
+            "spawn_agent `account` needs the `named_accounts` feature; omit it to use the parent's account.".to_string()
+        ))
+    );
+}
+
+#[tokio::test]
+async fn spawn_account_must_be_configured_for_the_child_provider() {
+    let (result, _) = spawn_with_account(
+        /*named_accounts*/ true,
+        |_, _| {},
+        /*parent_account*/ None,
+        json!({"account": "gone"}),
+    )
+    .await;
+    assert_eq!(
+        result,
+        Err(FunctionCallError::RespondToModel(
+            "account `gone` of provider `zai` is not configured; add it with `corbanu account add zai gone` or pick another with `--account` (see `corbanu account list`). Configured accounts of `zai`: `default`, work. Do not retry on another account without the user's consent.".to_string()
+        ))
+    );
+}
+
+#[tokio::test]
+async fn aggressive_spawn_account_switch_needs_an_approval() {
+    let (result, children) = spawn_with_account(
+        /*named_accounts*/ true,
+        |config, turn| {
+            config.security_level = codex_security_policy::SecurityLevel::Aggressive;
+            turn.approval_policy
+                .set(AskForApproval::Never)
+                .expect("approval policy should be set");
+        },
+        /*parent_account*/ None,
+        json!({"account": "work"}),
+    )
+    .await;
+    assert_eq!(children, Vec::<Option<String>>::new());
+    assert_eq!(
+        result,
+        Err(FunctionCallError::RespondToModel(
+            "Running a spawned agent on account `work` of `zai` needs the user's approval under the Aggressive security level, and approvals are off.".to_string()
+        ))
+    );
+}
+
+#[tokio::test]
+async fn spawn_account_switch_needs_no_prompt_below_aggressive() {
+    let (result, children) = spawn_with_account(
+        /*named_accounts*/ true,
+        |_, _| {},
+        /*parent_account*/ None,
+        json!({"account": "work"}),
+    )
+    .await;
+    assert_eq!(
+        (result, children),
+        (Ok(()), vec![Some("zai:work".to_string())])
+    );
+}
+
+#[tokio::test]
+async fn spawned_children_inherit_the_parent_account_even_with_a_role() {
+    for extra in [json!({}), json!({"agent_type": "explorer"})] {
+        let (result, children) = spawn_with_account(
+            /*named_accounts*/ true,
+            |_, _| {},
+            /*parent_account*/ Some("work"),
+            extra.clone(),
+        )
+        .await;
+        assert_eq!(
+            (result, children),
+            (Ok(()), vec![Some("zai:work".to_string())]),
+            "{extra}"
+        );
+    }
 }

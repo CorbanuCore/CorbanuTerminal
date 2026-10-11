@@ -241,6 +241,15 @@ impl SessionConfiguration {
             parent_thread_id: self.parent_thread_id,
             thread_source: self.thread_source.clone(),
             originator: self.originator.clone(),
+            provider_account: Some(self.provider.account.as_ref().map_or_else(
+                || {
+                    format!(
+                        "{}:default",
+                        self.original_config_do_not_use.model_provider_id
+                    )
+                },
+                ToString::to_string,
+            )),
         }
     }
 

@@ -865,6 +865,7 @@ async fn skills_changed_notification_is_emitted_after_skill_change() -> Result<(
         .send_thread_start_request_with_auto_env(ThreadStartParams {
             model: None,
             model_provider: None,
+            provider_account: None,
             allow_provider_model_fallback: false,
             service_tier: None,
             cwd: None,

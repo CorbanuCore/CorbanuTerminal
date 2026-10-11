@@ -5,6 +5,8 @@ use crate::agent::next_thread_spawn_depth;
 use crate::agent::role::DEFAULT_ROLE_NAME;
 use crate::agent_communication::AgentCommunicationContext;
 use crate::agent_communication::AgentCommunicationKind;
+use crate::tools::handlers::multi_agents_account::apply_spawn_agent_account;
+use crate::tools::handlers::multi_agents_account::spawned_account_name;
 use crate::tools::handlers::multi_agents_spec::SpawnAgentToolOptions;
 use crate::tools::handlers::multi_agents_spec::create_spawn_agent_tool_v2;
 use crate::tools::handlers::multi_agents_v2::message_tool::message_content;
@@ -174,6 +176,15 @@ async fn handle_spawn_agent(
     if child_runtime_was_selected {
         ensure_spawn_runtime_eligible(&session, &config).await?;
     }
+    apply_spawn_agent_account(
+        &session,
+        turn.as_ref(),
+        &call_id,
+        &mut config,
+        args.account.as_deref(),
+    )
+    .await?;
+    let resolved_account = spawned_account_name(&config);
     let resolved_model_provider = config.model_provider_id.clone();
     let resolved_model = config
         .model
@@ -271,6 +282,7 @@ async fn handle_spawn_agent(
             task_name,
             nickname,
             model_provider: resolved_model_provider,
+            account: resolved_account,
             model: resolved_model,
             reasoning_effort: resolved_reasoning_effort,
             service_tier: resolved_service_tier,
@@ -297,6 +309,7 @@ struct SpawnAgentArgs {
     task_name: String,
     agent_type: Option<String>,
     model_provider: Option<String>,
+    account: Option<String>,
     model: Option<String>,
     reasoning_effort: Option<ReasoningEffort>,
     service_tier: Option<String>,
@@ -348,6 +361,9 @@ pub(crate) enum SpawnAgentResult {
         task_name: String,
         nickname: Option<String>,
         model_provider: String,
+        /// PF-84: the child's named account, when named accounts are on.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        account: Option<String>,
         model: String,
         reasoning_effort: Option<ReasoningEffort>,
         service_tier: Option<String>,

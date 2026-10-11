@@ -82,6 +82,19 @@ fn collect_resume_override_mismatches(
             config_snapshot.model_provider_id
         ));
     }
+    if let Some(requested_account) = request.provider_account.as_deref().map(|selection| {
+        let (provider_id, name) = codex_core::config::split_account_selection(
+            selection,
+            &config_snapshot.model_provider_id,
+        );
+        format!("{provider_id}:{name}")
+    }) && config_snapshot.provider_account.as_deref() != Some(requested_account.as_str())
+    {
+        mismatch_details.push(format!(
+            "provider_account requested={requested_account} active={:?}",
+            config_snapshot.provider_account
+        ));
+    }
     if let Some(requested_service_tier) = request.service_tier.as_ref()
         && requested_service_tier != &config_snapshot.service_tier
     {
@@ -225,6 +238,24 @@ fn latest_persisted_thread_runtime(history: &[RolloutItem]) -> Option<PersistedT
         }),
         _ => None,
     })
+}
+
+/// PF-84: `<provider>:<account>` from the newest turn context, when it
+/// recorded an account (only while named accounts are on) for the provider
+/// the thread resumes on.
+fn recorded_provider_account(
+    history: &[RolloutItem],
+    resumed_provider_id: Option<&str>,
+) -> Option<String> {
+    let turn_context = history.iter().rev().find_map(|item| match item {
+        RolloutItem::TurnContext(turn_context) => Some(turn_context),
+        _ => None,
+    })?;
+    let provider_id = turn_context.model_provider.as_deref()?;
+    let account = turn_context.provider_account.as_deref()?;
+    resumed_provider_id
+        .is_none_or(|resumed| resumed == provider_id)
+        .then(|| format!("{provider_id}:{account}"))
 }
 
 fn apply_persisted_thread_runtime(
@@ -671,6 +702,14 @@ impl ThreadRequestProcessor {
             agent_class,
             mut thread,
         } = params;
+        // PF-84: a worker inherits its parent's live account unless the
+        // request names one.
+        if thread.provider_account.is_none()
+            && let Ok(parent_id) = ThreadId::from_string(&parent_thread_id)
+            && let Ok(parent) = self.thread_manager.get_thread(parent_id).await
+        {
+            thread.provider_account = parent.config_snapshot().await.provider_account;
+        }
         thread.spawn_agent_parent_thread_id = Some(parent_thread_id);
         thread.spawn_agent_role = Some(agent_role);
         thread.thread_source = Some(codex_app_server_protocol::ThreadSource::Subagent);
@@ -1311,6 +1350,7 @@ impl ThreadRequestProcessor {
         let ThreadStartParams {
             model,
             model_provider,
+            provider_account,
             allow_provider_model_fallback,
             service_tier,
             cwd,
@@ -1370,6 +1410,7 @@ impl ThreadRequestProcessor {
         );
         typesafe_overrides.ephemeral = ephemeral;
         typesafe_overrides.allow_provider_model_fallback = allow_provider_model_fallback;
+        typesafe_overrides.provider_account = provider_account;
         let listener_task_context = ListenerTaskContext {
             thread_manager: Arc::clone(&self.thread_manager),
             thread_state_manager: self.thread_state_manager.clone(),
@@ -3562,6 +3603,7 @@ impl ThreadRequestProcessor {
             path,
             model,
             model_provider,
+            provider_account,
             service_tier,
             cwd,
             runtime_workspace_roots,
@@ -3632,6 +3674,7 @@ impl ThreadRequestProcessor {
             developer_instructions,
             personality,
         );
+        typesafe_overrides.provider_account = provider_account;
         let has_explicit_model_resume_override =
             has_model_resume_override(request_overrides.as_ref(), &typesafe_overrides);
         let persisted_reasoning_effort = self
@@ -3641,6 +3684,16 @@ impl ThreadRequestProcessor {
                 &mut typesafe_overrides,
             )
             .await;
+        // PF-84: resume on the recorded account unless one was chosen
+        // explicitly; only when the thread resumes on the recorded provider.
+        if typesafe_overrides.provider_account.is_none()
+            && let InitialHistory::Resumed(resumed_history) = &thread_history
+        {
+            typesafe_overrides.provider_account = recorded_provider_account(
+                &resumed_history.history,
+                typesafe_overrides.model_provider.as_deref(),
+            );
+        }
 
         // Derive a Config using the same logic as new conversation, honoring overrides if provided.
         let mut config = match self

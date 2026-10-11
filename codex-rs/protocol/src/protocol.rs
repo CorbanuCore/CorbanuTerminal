@@ -3429,6 +3429,10 @@ pub struct TurnContextItem {
     pub model: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_provider: Option<String>,
+    /// PF-84: the named account of `model_provider` (`default` included),
+    /// recorded only while named accounts are on, so resume restores it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_account: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub comp_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -6350,6 +6354,7 @@ mod tests {
             ])),
             model: "gpt-5".to_string(),
             model_provider: None,
+            provider_account: None,
             comp_hash: None,
             personality: None,
             collaboration_mode: None,
