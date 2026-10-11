@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-84-S01"
 title: "Home override hygiene for per-account workers"
-status: ready
+status: completed
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-84"
 execution_order: 23
@@ -14,10 +14,23 @@ branch: "feat/pf-84-s01-home-override"
 base_commit: "051f9747225776a5d85ad00c2e5d0a8f5f4036bf"
 depends_on: "none"
 created: 2026-10-08
-updated: 2026-10-10
+updated: 2026-10-11
 ---
 
 # PF-84-S01 — Home override hygiene for per-account workers
+
+## Closure — 2026-10-11
+
+Completed. Travis **accepted** PF-84-S01 on 2026-10-11 (in chat with the coordinator). Both acceptance runs were source-blind, not the full isolated code-blind run; Travis accepted on that evidence, which is recorded here as the limited-testing agreement. Archived by the PF-84 integration worker.
+
+Evidence:
+
+- [Gate evidence](../../../../qa/provider-auth/pf-84/s01-gate.md) (tests, tmux/GLM 5.3 Flash runs, review dispositions, videos).
+- [S01/S02 independent acceptance](../../../../qa/provider-auth/pf-84/independent-acceptance-20261010/README.md) (PR #420, [review](../../../../qa/provider-auth/pf-84/independent-acceptance-20261010/REVIEW.md)): S01-1 to S01-7 pass except S01-4b (`corbanu-debug` ignored `CORBANU_HOME`), filed as #418 and fixed by
+  [acceptance fixes #414–#419](../../../../qa/provider-auth/pf-84/acceptance-fixes-20261010/README.md) (PR #422); #418 was not re-run by an independent tester.
+- PRs: #407 (activation), #408 (implementation), #420 (acceptance), #422 (#418 fix).
+
+Follow-ups: none owned by this record.
 
 ## Execution mandate
 
@@ -70,7 +83,7 @@ updated: 2026-10-10
 
 ## Remaining
 
-- [ ] Independent code-blind functional design and execution (acceptance step, not the implementer).
+- [x] Independent acceptance: a source-blind run instead of the isolated code-blind run (PR #420); Travis accepted it 2026-10-11 as limited testing.
 
 ## Verification
 
@@ -80,7 +93,7 @@ updated: 2026-10-10
 - [x] GLM run on `-m glm-5.3-flash -c model_provider="zai"` with the vault-helper ZAI key.
 - [x] Videos: `pf84-home-override`, `pf84-home-override-openai` (index `qa/demos/index/PF-84-S01.md`).
 - [x] One independent review (Opus 5.5 High); findings dispositioned.
-- [ ] Independent code-blind acceptance run linked (then Travis sign-off).
+- [x] Independent acceptance run linked (PR #420); Travis signed off 2026-10-11.
 
 ## Security notes
 
@@ -92,6 +105,6 @@ updated: 2026-10-10
 
 - [x] Implementation commit and PR recorded (code `84f2797b62`; PR in the gate evidence).
 - [x] Final-tree test output, tmux log and video path linked.
-- [ ] Code-blind handoff checker passes, or limited-testing agreement recorded.
+- [x] Limited-testing agreement recorded (Closure, 2026-10-11).
 - [x] `Done` and `Remaining` ledgers reflect reality.
-- [ ] Completed record moved to `docs/sprints/archive/unified-provider-auth/`.
+- [x] Completed record moved to `docs/sprints/archive/unified-provider-auth/`.

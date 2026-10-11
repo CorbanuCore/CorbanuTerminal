@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-84-S03"
 title: "Account selection per session, CLI and worker"
-status: ready
+status: completed
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-84"
 execution_order: 25
@@ -14,12 +14,34 @@ branch: "feat/pf-84-s03-account-selection"
 base_commit: "0fa45b54f0ca65a6ce3485c27281624cb6f8b2cb"
 depends_on: "PF-84-S02"
 created: 2026-10-08
-updated: 2026-10-10
+updated: 2026-10-11
 merged_behind_flag: "named_accounts"
 gate_evidence: "qa/provider-auth/pf-84/s03-gate.md"
 ---
 
 # PF-84-S03 — Account selection per session, CLI and worker
+
+## Closure — 2026-10-11
+
+Completed. Travis **accepted** PF-84-S03 on 2026-10-11 (in chat with the coordinator) behind the default-off `named_accounts` flag, with limits; the flag stays off. Both acceptance runs were source-blind, not the full isolated code-blind run; Travis accepted on that evidence, which is recorded here as the limited-testing agreement. Archived by the PF-84 integration worker.
+
+Evidence:
+
+- [Gate evidence](../../../../qa/provider-auth/pf-84/s03-gate.md) (tests, tmux/GLM 5.3 Flash runs, review dispositions, videos).
+- [S03 independent acceptance and S02 re-check](../../../../qa/provider-auth/pf-84/independent-acceptance-s03-20261010/README.md) (PR #429, [review](../../../../qa/provider-auth/pf-84/independent-acceptance-s03-20261010/REVIEW.md)): 15 pass, S03-3b fail (#425, #426), S03-1b not verifiable; S03-2c passes with the gap filed as #428.
+- PRs: #411 (allocation), #421 (implementation), #429 (acceptance), #422 (S02 acceptance fixes, before S03 acceptance), #431 (#425, #426, #427; open at archive time), #432 (#428).
+
+Limits (Travis, 2026-10-11): all must be resolved before the `named_accounts` flag is removed.
+
+- #425: `--account <other-provider>:<name>` naming a missing account is ignored instead of refused.
+- #426: TUI `--account <missing>` loops in default-key setup instead of refusing.
+- #428: D3 did not ask in the states the TUI shows as Aggressive while Core's level stays Permissive.
+  Travis chose option 1 on 2026-10-11 (D3 also follows the level the TUI shows; refused with approvals off). Resolved by
+  #432 ([evidence](../../../../qa/provider-auth/pf-84/d3-428-20261011/README.md)).
+
+Other follow-ups (tracked, not blockers): #427 (resume messages); the known limits in the gate evidence
+(resumed v1 child on its parent's account, fork does not carry the account, workers never see the coordinator's
+environment key); S03-1b (`thread/spawnAgent` workers) has no user-facing path for an independent tester.
 
 ## Execution mandate
 
@@ -75,7 +97,7 @@ Paths are under `codex-rs/`, at `63ea3d0cbd`.
 
 ## Remaining
 
-- [ ] Independent code-blind functional design and execution (acceptance step, not the implementer).
+- [x] Independent acceptance: a source-blind run instead of the isolated code-blind run (PR #429); Travis accepted it 2026-10-11 as limited testing.
 
 ## Verification
 
@@ -83,7 +105,8 @@ Paths are under `codex-rs/`, at `63ea3d0cbd`.
 - [x] tmux + GLM 5.3 Flash: spawn on `fake` (401, coordinator still replies); launcher workers
   `--account main|fake|gone` and resume; Kimi second provider; TUI `--account`.
 - [x] Videos ([index](../../../../qa/demos/index/PF-84-S03.md)); Opus 5.5 High review + one follow-up.
-- [ ] Linux clippy on the RTX box (offline 2026-10-10; the PR's Ubuntu clippy job stands in).
+- [x] Linux clippy `-D warnings` (with and without developer-accounting) on glitch, the temporary Linux box, at `147b6d9131`
+  (S03 code on main plus #432); the RTX box was offline on 2026-10-10 and the PR's Ubuntu clippy job stood in then.
 
 ## Security notes
 
@@ -95,6 +118,6 @@ Paths are under `codex-rs/`, at `63ea3d0cbd`.
 
 - [x] Implementation commit and PR recorded (gate evidence).
 - [x] Test output, tmux logs and video paths linked.
-- [ ] Code-blind handoff checker passes, or limited-testing agreement recorded.
+- [x] Limited-testing agreement recorded (Closure, 2026-10-11).
 - [x] `Done` and `Remaining` ledgers reflect reality.
-- [ ] Completed record moved to `docs/sprints/archive/unified-provider-auth/`.
+- [x] Completed record moved to `docs/sprints/archive/unified-provider-auth/`.
