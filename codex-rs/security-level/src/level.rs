@@ -20,6 +20,9 @@ pub const CONFIRMED_STATE_FILE: &str = "security_state.json";
 pub const ACTIVE_LOCK_FILE: &str = "security_level.lock";
 /// Exec-policy rules written only while Aggressive is stored.
 pub const RULES_FILE: &str = "corbanu-security-aggressive.rules";
+/// The permission profile an Aggressive launch defines and selects; core
+/// reads it to follow the level Corbanu Terminal shows (#428).
+pub const AGGRESSIVE_PROFILE_ID: &str = "corbanu-aggressive";
 /// The exec-policy rules folder inside a Corbanu home.
 pub const RULES_DIR: &str = "rules";
 /// Program names whose `vault` subcommand the Aggressive rule forbids.

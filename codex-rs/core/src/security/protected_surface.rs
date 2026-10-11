@@ -29,7 +29,10 @@ pub(crate) use gate::Admission;
 pub(crate) use gate::Route;
 pub(crate) use gate::admit;
 pub(crate) use gate::ask_human;
+pub(crate) use gate::ask_human_answer;
 pub(crate) use gate::check_dispatch;
+#[cfg(test)]
+pub(crate) use gate::question_id;
 pub(crate) use read_denials::ReadDenials;
 pub(crate) use read_denials::post_taint_read_policy;
 pub(crate) use read_denials::protect_file_tool_context;

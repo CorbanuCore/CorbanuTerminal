@@ -177,3 +177,60 @@ fn security_confirm_second_permissive_launch_keeps_the_running_aggressive_rules(
         (false, Some(false))
     );
 }
+
+/// #428 (Travis 2026-10-11, option 1): in every state the TUI shows as
+/// Aggressive while Core's level stays Permissive, the session config is the
+/// one Core gates a model-chosen spawn `account` switch on (D3).
+#[tokio::test]
+async fn shown_aggressive_states_gate_spawn_account_switches_in_core() {
+    for state in [
+        "level file missing, Aggressive rules present",
+        "Aggressive saved without a preflight, preflight feature on (boundary unverified)",
+        "Permissive saved for the next start",
+    ] {
+        let home = tempfile::tempdir().unwrap();
+        let cwd = tempfile::tempdir().unwrap();
+        level::save(home.path(), ChosenLevel::Aggressive, NestedAgents::Refuse).unwrap();
+        if state == "level file missing, Aggressive rules present" {
+            std::fs::remove_file(level::state_path(home.path())).unwrap();
+        }
+        let mut cli = Vec::new();
+        let mut plan = LaunchPlan::prepare(home.path(), &mut cli).unwrap();
+        assert!(plan.aggressive(), "{state}");
+        if state == "Permissive saved for the next start" {
+            level::save(home.path(), ChosenLevel::Permissive, NestedAgents::Refuse).unwrap();
+        }
+        plan.extend_env_overrides(&ShellEnvironmentPolicyToml::default(), &mut cli);
+        cli.push(broker_off());
+        if state.ends_with("(boundary unverified)") {
+            cli.push((
+                "features.protected_mode_preflight".to_string(),
+                toml::Value::Boolean(true),
+            ));
+        }
+        let mut overrides = ConfigOverrides {
+            cwd: Some(cwd.path().to_path_buf()),
+            ..Default::default()
+        };
+        plan.apply_launch_overrides(&mut overrides);
+        let config = crate::legacy_core::config::ConfigBuilder::default()
+            .codex_home(home.path().to_path_buf())
+            .cli_overrides(cli)
+            .harness_overrides(overrides)
+            .loader_overrides(codex_config::LoaderOverrides::without_managed_config_for_tests())
+            .build()
+            .await
+            .unwrap();
+        assert_eq!(
+            (
+                config.security_level,
+                config.permissions.launch_enforces_aggressive()
+            ),
+            (
+                crate::legacy_core::security_level_change::SecurityLevel::Permissive,
+                true
+            ),
+            "{state}"
+        );
+    }
+}

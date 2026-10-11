@@ -6602,6 +6602,27 @@ async fn spawn_with_account(
     parent_account: Option<&str>,
     extra: serde_json::Value,
 ) -> (Result<(), FunctionCallError>, Vec<Option<String>>) {
+    let (result, children, _asked) = spawn_with_account_answering(
+        named_accounts,
+        configure,
+        parent_account,
+        extra,
+        /*answer*/ None,
+    )
+    .await;
+    (result, children)
+}
+
+/// [`spawn_with_account`] with a turn that can ask the human: a security
+/// question is answered with `answer` (`Allow once`, `Cancel`, or empty for no
+/// answer). Also returns whether a question was asked.
+async fn spawn_with_account_answering(
+    named_accounts: bool,
+    configure: impl FnOnce(&mut crate::config::Config, &mut TurnContext),
+    parent_account: Option<&str>,
+    extra: serde_json::Value,
+    answer: Option<&str>,
+) -> (Result<(), FunctionCallError>, Vec<Option<String>>, bool) {
     let (mut session, mut turn) = make_session_and_context().await;
     let mut provider_info = ModelProviderInfo::create_zai_provider();
     provider_info.account =
@@ -6652,17 +6673,61 @@ async fn spawn_with_account(
     for (key, value) in extra.as_object().expect("object").clone() {
         arguments[key] = value;
     }
-    let result = tokio::time::timeout(
-        std::time::Duration::from_secs(30),
-        SpawnAgentHandlerV2::default().handle(invocation(
-            Arc::new(session),
-            Arc::new(turn),
-            "spawn_agent",
-            function_payload(arguments),
-        )),
-    )
+    if answer.is_some() {
+        *session.active_turn.lock().await = Some(crate::state::ActiveTurn::default());
+    }
+    let session = Arc::new(session);
+    let sub_id = turn.sub_id.clone();
+    let handler = SpawnAgentHandlerV2::default();
+    let call = handler.handle(invocation(
+        Arc::clone(&session),
+        Arc::new(turn),
+        "spawn_agent",
+        function_payload(arguments),
+    ));
+    tokio::pin!(call);
+    let mut asked = false;
+    let result = tokio::time::timeout(std::time::Duration::from_secs(30), async {
+        loop {
+            tokio::select! {
+                result = &mut call => break result,
+                () = tokio::time::sleep(std::time::Duration::from_millis(10)),
+                    if answer.is_some() && !asked =>
+                {
+                    let turn_state = session
+                        .active_turn
+                        .lock()
+                        .await
+                        .as_ref()
+                        .map(|active| Arc::clone(&active.turn_state));
+                    let pending = match turn_state {
+                        Some(turn_state) => turn_state.lock().await.remove_pending_user_input(&sub_id),
+                        None => None,
+                    };
+                    if let (Some(pending), Some(answer)) = (pending, answer) {
+                        asked = true;
+                        // An empty answer stands for a client that cannot ask
+                        // (`corbanu exec` rejects the request with no answers).
+                        let answers = if answer.is_empty() {
+                            std::collections::HashMap::new()
+                        } else {
+                            std::collections::HashMap::from([(
+                                crate::security::protected_surface::question_id("call-1"),
+                                codex_protocol::request_user_input::RequestUserInputAnswer {
+                                    answers: vec![answer.to_string()],
+                                },
+                            )])
+                        };
+                        let response =
+                            codex_protocol::request_user_input::RequestUserInputResponse { answers };
+                        let _ = pending.send(response);
+                    }
+                }
+            }
+        }
+    })
     .await
-    .expect("spawn must not wait for an approval")
+    .expect("spawn must not wait for an unanswered approval")
     .map(drop);
     let mut children = Vec::new();
     for thread_id in manager.list_thread_ids().await {
@@ -6671,7 +6736,7 @@ async fn spawn_with_account(
             children.push(thread.config_snapshot().await.provider_account);
         }
     }
-    (result, children)
+    (result, children, asked)
 }
 
 #[tokio::test]
@@ -6728,6 +6793,157 @@ async fn aggressive_spawn_account_switch_needs_an_approval() {
         Err(FunctionCallError::RespondToModel(
             "Running a spawned agent on account `work` of `zai` needs the user's approval under the Aggressive security level, and approvals are off.".to_string()
         ))
+    );
+}
+
+/// #428 (Travis 2026-10-11, option 1): the session's permissions as an
+/// Aggressive launch of Corbanu Terminal builds them while Core's level stays
+/// Permissive. `profile` selects the Aggressive permission profile; `marker`
+/// sets the origin marker. Both are set by every such launch: the states the
+/// TUI shows as "Aggressive is enforced; choose a level in /security" (level
+/// file missing, Aggressive rules present), "Aggressive is enforced, but the
+/// protected boundary is unverified" (saved without a preflight) and "Active
+/// in this session: Aggressive" (Permissive saved for the next start).
+async fn tui_aggressive_permissions(
+    codex_home: &std::path::Path,
+    profile: bool,
+    marker: bool,
+) -> crate::config::Permissions {
+    let profile_id = codex_security_level::level::AGGRESSIVE_PROFILE_ID;
+    let mut overrides = Vec::new();
+    if profile {
+        overrides.push((
+            format!("permissions.{profile_id}"),
+            toml::Value::Table(toml::toml! {
+                extends = ":workspace"
+                [network]
+                enabled = false
+            }),
+        ));
+        overrides.push((
+            "default_permissions".to_string(),
+            toml::Value::String(profile_id.to_string()),
+        ));
+    }
+    if marker {
+        overrides.push((
+            format!(
+                "shell_environment_policy.set.{}",
+                codex_security_level::nested::ORIGIN_ENV
+            ),
+            toml::Value::String(codex_home.to_string_lossy().into_owned()),
+        ));
+    }
+    let config = crate::config::ConfigBuilder::without_managed_config_for_tests()
+        .codex_home(codex_home.to_path_buf())
+        .cli_overrides(overrides)
+        .build()
+        .await
+        .expect("config with the Aggressive launch overrides");
+    assert_eq!(
+        (
+            config.security_level,
+            config.permissions.launch_enforces_aggressive()
+        ),
+        (
+            codex_security_policy::SecurityLevel::Permissive,
+            profile || marker
+        )
+    );
+    config.permissions
+}
+
+#[tokio::test]
+async fn tui_aggressive_spawn_account_switch_is_refused_with_approvals_off() {
+    for (profile, marker) in [(true, true), (true, false), (false, true)] {
+        let home = tempfile::tempdir().expect("home");
+        let permissions = tui_aggressive_permissions(home.path(), profile, marker).await;
+        let (result, children) = spawn_with_account(
+            /*named_accounts*/ true,
+            |config, turn| {
+                config.permissions = permissions;
+                turn.approval_policy
+                    .set(AskForApproval::Never)
+                    .expect("approval policy should be set");
+            },
+            /*parent_account*/ None,
+            json!({"account": "work"}),
+        )
+        .await;
+        assert_eq!(
+            (result, children),
+            (
+                Err(FunctionCallError::RespondToModel(
+                    "Running a spawned agent on account `work` of `zai` needs the user's approval under the Aggressive security level, and approvals are off.".to_string()
+                )),
+                Vec::new()
+            ),
+            "profile={profile} marker={marker}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn tui_aggressive_spawn_account_switch_asks_the_human() {
+    for (answer, expected) in [
+        (
+            "Cancel",
+            (
+                Err(FunctionCallError::RespondToModel(
+                    "The user declined running the spawned agent on account `work` of `zai`. Do not retry on another account without the user's consent.".to_string(),
+                )),
+                Vec::new(),
+                true,
+            ),
+        ),
+        (
+            "",
+            (
+                Err(FunctionCallError::RespondToModel(
+                    "Running a spawned agent on account `work` of `zai` needs the user's approval under the Aggressive security level, and no answer was given (this session cannot ask, or the question was dismissed). Do not retry on another account without the user's consent.".to_string(),
+                )),
+                Vec::new(),
+                true,
+            ),
+        ),
+        ("Allow once", (Ok(()), vec![Some("zai:work".to_string())], true)),
+    ] {
+        let home = tempfile::tempdir().expect("home");
+        let permissions = tui_aggressive_permissions(home.path(), true, true).await;
+        let outcome = spawn_with_account_answering(
+            /*named_accounts*/ true,
+            |config, turn| {
+                config.permissions = permissions;
+                turn.approval_policy
+                    .set(AskForApproval::UnlessTrusted)
+                    .expect("approval policy should be set");
+            },
+            /*parent_account*/ None,
+            json!({"account": "work"}),
+            Some(answer),
+        )
+        .await;
+        assert_eq!(outcome, expected, "{answer}");
+    }
+}
+
+#[tokio::test]
+async fn permissive_spawn_account_switch_asks_nothing_even_when_it_could() {
+    let (result, children, asked) = spawn_with_account_answering(
+        /*named_accounts*/ true,
+        |_, turn| {
+            turn.approval_policy
+                .set(AskForApproval::UnlessTrusted)
+                .expect("approval policy should be set");
+        },
+        /*parent_account*/ None,
+        json!({"account": "work"}),
+        Some("Cancel"),
+    )
+    .await;
+    assert_eq!(
+        (result, children, asked),
+        (Ok(()), vec![Some("zai:work".to_string())], false)
     );
 }
 
