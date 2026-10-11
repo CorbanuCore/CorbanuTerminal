@@ -1,0 +1,26 @@
+### Re-run of SP3/SP7 with a VALID default (env ZAI_API_KEY = real key) and the parent on the real 'main':
+### a 401 can only come from the 'fake' credential (review finding 1)
+== SP3 coordinator --account main; spawn account=fake (child must 401; no retry elsewhere) (exit 0)
+   exec args: --account main
+   spawn request: {message, account:"fake"}
+   final reply: unexpected status 401 Unauthorized: token expired or incorrect, url: http://api.z.ai:443/api/paas/v4/chat/completions, request id: 0c00250d-bf13-4fe0-8849-cd2b458d2cbe
+   thread 01a128fd-3725 provider=zai role=None
+     turn_context provider=zai provider_account=main
+     call spawn_agent_v1 {"message":"Reply with exactly the word child-ok","account":"fake"}
+     result {"agent_id":"01a128fd-589c-7141-bfb2-075f57112ba6","nickname":"Schrodinger","account":"fake"}
+     call wait_agent_v1 {"targets":["01a128fd-589c-7141-bfb2-075f57112ba6"]}
+     result {"status":{"01a128fd-589c-7141-bfb2-075f57112ba6":{"completed":null}},"timed_out":false}
+       thread 01a128fd-589c provider=zai role=None
+         turn_context provider=zai provider_account=fake
+== SP7 role child agent_type=explorer + account=fake (exit 0)
+   exec args: --account main
+   spawn request: {message, agent_type:"explorer", account:"fake"}
+   final reply: unexpected status 401 Unauthorized: token expired or incorrect, url: http://api.z.ai:443/api/paas/v4/chat/completions, request id: 18c68387-7742-48c0-9b87-bef6dd3ad7e1
+   thread 01a128fd-80e3 provider=zai role=None
+     turn_context provider=zai provider_account=main
+     call spawn_agent_v1 {"message":"Reply with exactly the word child-ok","agent_type":"explorer","account":"fake"}
+     result {"agent_id":"01a128fd-98bd-7652-93a7-15b04a582645","nickname":"Kant","account":"fake"}
+     call wait_agent_v1 {"targets":["01a128fd-98bd-7652-93a7-15b04a582645"]}
+     result {"status":{"01a128fd-98bd-7652-93a7-15b04a582645":{"completed":null}},"timed_out":false}
+       thread 01a128fd-98bd provider=zai role=explorer
+         turn_context provider=zai provider_account=fake

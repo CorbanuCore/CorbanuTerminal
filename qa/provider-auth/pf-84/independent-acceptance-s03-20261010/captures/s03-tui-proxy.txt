@@ -1,0 +1,71 @@
+Home hP (provider zpx -> canary proxy -> real Z.AI). default = env ZPX_API_KEY canary; main/work forwarded; fake -> 401.
+-- p1-work (--account work): wait rc=0
+   proxy saw 1 request(s): {('work', 200): 1} | canary/real values in bodies: none False
+-- p2-fake (--account fake): wait rc=0
+   proxy saw 1 request(s): {('fake', 401): 1} | canary/real values in bodies: none False
+p1 session 01a128d7-de2c-7ae0-acca-caf1d2cb4853; p2 session 01a128d8-11d6-7253-a8a5-c7a7721af24b
+-- p4-resume-fake (resume 01a128d8-11d6-7253-a8a5-c7a7721af24b): wait rc=0
+   proxy saw 1 request(s): {('fake', 401): 1} | canary/real values in bodies: none False
+-- p4b-resume-work (resume 01a128d7-de2c-7ae0-acca-caf1d2cb4853): wait rc=0
+   proxy saw 1 request(s): {('work', 200): 1} | canary/real values in bodies: none False
+-- p4c-resume-fake-as-main (resume --account main 01a128d8-11d6-7253-a8a5-c7a7721af24b): wait rc=0
+   proxy saw 1 request(s): {('main', 200): 1} | canary/real values in bodies: none False
+   proxy saw 0 request(s): {} | canary/real values in bodies: none False
+accounts after p3:
+  kimi-code	kimionly	api_key
+  zpx	aggr	api_key
+  zpx	fake	api_key
+  zpx	main	api_key
+  zpx	work	api_key
+
+=== p1-work
+│ model:     glm-5.3-flash   /model to change            │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s03acc/work │
+╰────────────────────────────────────────────────────────╯
+› Reply with exactly the word pong and nothing else.
+• pong
+Token usage: total=4,960 input=4,957 (+ 576 cached) output=3
+To continue this session, run corbanu resume 01a128d7-de2c-7ae0-acca-caf1d2cb4853
+TUI_EXITED rc=0
+
+=== p2-fake
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s03acc/work │
+╰────────────────────────────────────────────────────────╯
+› Reply with exactly the word pong and nothing else.
+⚠ Z.AI via canary proxy (zpx) account `fake` was rejected. Replace its key with `corbanu account add zpx fake` (reads stdin), or choose another account. The
+  default Z.AI via canary proxy credential is unchanged.
+■ unexpected status 401 Unauthorized: canary-proxy: invalid api key, url: http://127.0.0.1:18585/proxy/chat/completions
+To continue this session, run corbanu resume 01a128d8-11d6-7253-a8a5-c7a7721af24b
+TUI_EXITED rc=0
+
+=== p4-resume-fake
+╰────────────────────────────────────────────────────────╯
+› Reply with exactly the word pong and nothing else.
+■ unexpected status 401 Unauthorized: canary-proxy: invalid api key, url: http://127.0.0.1:18585/proxy/chat/completions
+› Reply with exactly the word pong and nothing else.
+⚠ Z.AI via canary proxy (zpx) credential was rejected. Open /providers, select Z.AI via canary proxy, and press r to recover. Other providers are unchanged.
+■ unexpected status 401 Unauthorized: canary-proxy: invalid api key, url: http://127.0.0.1:18585/proxy/chat/completions
+To continue this session, run corbanu resume 01a128d8-11d6-7253-a8a5-c7a7721af24b
+TUI_EXITED rc=0
+
+=== p4b-resume-work
+╰────────────────────────────────────────────────────────╯
+› Reply with exactly the word pong and nothing else.
+• pong
+› Reply with exactly the word pong and nothing else.
+• pong
+Token usage: total=5,018 input=5,001 (+ 6,080 cached) output=17 (reasoning 11)
+To continue this session, run corbanu resume 01a128d7-de2c-7ae0-acca-caf1d2cb4853
+TUI_EXITED rc=0
+
+=== p4c-resume-fake-as-main
+■ unexpected status 401 Unauthorized: canary-proxy: invalid api key, url: http://127.0.0.1:18585/proxy/chat/completions
+› Reply with exactly the word pong and nothing else.
+■ unexpected status 401 Unauthorized: canary-proxy: invalid api key, url: http://127.0.0.1:18585/proxy/chat/completions
+› Reply with exactly the word pong and nothing else.
+• pong
+Token usage: total=54 input=51 (+ 5,504 cached) output=3
+To continue this session, run corbanu resume 01a128d8-11d6-7253-a8a5-c7a7721af24b
+TUI_EXITED rc=0
+
+(p3-ghost on this custom provider showed the provider picker; the built-in-provider case is in s03-tui-missing-account-ghost.txt)

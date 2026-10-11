@@ -1,0 +1,45 @@
+session F started with --account fake: pong=0 401=3 id=01a128be-2e50-7b82-95eb-a271f9513e14
+session M started with --account main: pong=2 401=0 id=01a128be-317c-7483-9aaa-216f8c4da9be
+session G started with --account gone (real key): pong=2 401=0 id=01a128be-4ba2-76c3-b25b-4b9acef9fee0
+session C started with config provider_accounts.zai=fake: pong=0 401=3 id=01a128be-601b-79a0-bc51-34e749fbd48e
+session D started with --account default: pong=2 401=0 id=01a128be-62f6-7940-81e3-b47ae2f21c66
+session O started with the flag off: pong=2 401=0 id=01a128be-8225-7052-b95b-7133964559c2
+== R1 resume F (recorded fake), no --account (exit 1)
+   args: exec resume  <01a128be-2e50-7b82-95eb-a271f9513e14>
+   | ERROR: unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: 681779be-49fc-45d9-a946-361aeb4f5508
+   | session id: 01a128be-2e50-7b82-95eb-a271f9513e14
+== R2 resume F with --account main (exit 0)
+   args: exec resume --account main <01a128be-2e50-7b82-95eb-a271f9513e14>
+   | pong
+   | session id: 01a128be-2e50-7b82-95eb-a271f9513e14
+== R3 resume M (recorded main), no --account, config says fake (exit 0)
+   args: exec resume -c provider_accounts.zai="fake" <01a128be-317c-7483-9aaa-216f8c4da9be>
+   | pong
+   | session id: 01a128be-317c-7483-9aaa-216f8c4da9be
+== R4 resume C (config-selected fake), config now empty (exit 1)
+   args: exec resume  <01a128be-601b-79a0-bc51-34e749fbd48e>
+   | ERROR: unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: fef618ea-f797-452b-b184-91dde1d82e19
+   | session id: 01a128be-601b-79a0-bc51-34e749fbd48e
+== R5 resume D (explicit default), config says fake (exit 0)
+   args: exec resume -c provider_accounts.zai="fake" <01a128be-62f6-7940-81e3-b47ae2f21c66>
+   | pong
+   | session id: 01a128be-62f6-7940-81e3-b47ae2f21c66
+== R6 resume O (flag-off session) with flag on, config says fake (exit 1)
+   args: exec resume -c provider_accounts.zai="fake" <01a128be-8225-7052-b95b-7133964559c2>
+   | ERROR: unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: aad79fb9-9aa5-4cf2-b49e-8c36403af20c
+   | session id: 01a128be-8225-7052-b95b-7133964559c2
+== R7 resume F (recorded fake) with the flag OFF (exit 1)
+   args: exec resume --disable named_accounts <01a128be-2e50-7b82-95eb-a271f9513e14>
+   | Error: thread/resume: thread/resume failed: failed to load configuration: --account zai:main: named accounts need the `named_accounts` feature (`--enable named_accounts`); `--account default` uses the default credentials (code -32600)
+== R8 resume M with --account ghost (exit 1)
+   args: exec resume --account ghost <01a128be-317c-7483-9aaa-216f8c4da9be>
+   | Error: thread/resume: thread/resume failed: account `ghost` of provider `zai` is not configured; add it with `corbanu account add zai ghost` or pick another with `--account` (see `corbanu account list`) (code -32600)
+-- removing account gone
+   | Removed zai account `gone`.
+== R9 resume G (recorded gone, now removed), no --account (exit 1)
+   args: exec resume  <01a128be-4ba2-76c3-b25b-4b9acef9fee0>
+   | Error: thread/resume: thread/resume failed: account `gone` of provider `zai` is not configured; add it with `corbanu account add zai gone` or pick another with `--account` (see `corbanu account list`) (code -32600)
+== R10 resume G with --account main (explicit recovery) (exit 0)
+   args: exec resume --account main <01a128be-4ba2-76c3-b25b-4b9acef9fee0>
+   | pong
+   | session id: 01a128be-4ba2-76c3-b25b-4b9acef9fee0

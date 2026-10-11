@@ -1,0 +1,28 @@
+S02-14 re-check (#416): 401 on a named account in the TUI (home hS, real Z.AI; the same selector as the 2026-10-10 t2 run plus --account)
+
+=== t2b-config-fake
+› Reply with exactly the word pong and nothing else.
+⚠ Z.AI (zai) account `fake` was rejected. Replace its key with `corbanu account add zai fake` (reads stdin), or choose another account. The default Z.AI
+  credential is unchanged.
+■ unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id:
+3beaf044-e34c-400e-999b-105f12a9d5eb
+To continue this session, run corbanu resume 01a128cd-cfcd-7c42-bc31-dd8676c62956
+TUI_EXITED rc=0
+
+=== t2-fake
+› Reply with exactly the word pong and nothing else.
+⚠ Z.AI (zai) account `fake` was rejected. Replace its key with `corbanu account add zai fake` (reads stdin), or choose another account. The default Z.AI
+  credential is unchanged.
+■ unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id:
+e871648b-d4be-4287-b5e8-e8949537079c
+To continue this session, run corbanu resume 01a128cd-ac37-7e72-9e8e-d72eb3d2f1f5
+TUI_EXITED rc=0
+
+=== resume of a session recorded on the named account (canary proxy, home hP): p4-resume-fake
+› Reply with exactly the word pong and nothing else.
+■ unexpected status 401 Unauthorized: canary-proxy: invalid api key, url: http://127.0.0.1:18585/proxy/chat/completions
+› Reply with exactly the word pong and nothing else.
+⚠ Z.AI via canary proxy (zpx) credential was rejected. Open /providers, select Z.AI via canary proxy, and press r to recover. Other providers are unchanged.
+■ unexpected status 401 Unauthorized: canary-proxy: invalid api key, url: http://127.0.0.1:18585/proxy/chat/completions
+To continue this session, run corbanu resume 01a128d8-11d6-7253-a8a5-c7a7721af24b
+TUI_EXITED rc=0
