@@ -360,3 +360,57 @@ fn unselected_claude_environment_token_is_configured_not_ambiguous() {
         }
     );
 }
+
+/// PF-84 (#417): a provider that runs on an enrolled named account is
+/// configured even when it has no default key, so onboarding does not demand
+/// one; an unenrolled account still counts as not configured.
+#[tokio::test]
+async fn enrolled_named_account_configures_its_provider_without_a_default_key() {
+    let home = tempdir().unwrap();
+    let mut config = crate::legacy_core::config::ConfigBuilder::default()
+        .codex_home(home.path().to_path_buf())
+        .build()
+        .await
+        .unwrap();
+    config.model_provider_id = "zai".into();
+    config.model = Some("glm-5.3-flash".into());
+    config
+        .model_providers
+        .get_mut("zai")
+        .expect("built-in zai provider")
+        .account = Some(NamedProviderAccount {
+        provider_id: "zai".into(),
+        name: "main".into(),
+    });
+    for (enrolled, expected) in [
+        (true, ProviderConfigurationState::Configured),
+        (false, ProviderConfigurationState::NotConfigured),
+    ] {
+        let host = ProviderStatusHost::from_config_with_account_registry(
+            &config,
+            ProviderAccountMetadata::default(),
+            |account, kind| {
+                enrolled
+                    && account.provider_id == "zai"
+                    && account.name == "main"
+                    && kind == ProviderAccountKind::ApiKey
+            },
+        );
+        assert_eq!(
+            host.resolve_provider("zai").unwrap().configuration,
+            expected,
+            "enrolled = {enrolled}"
+        );
+        let policy = crate::chatwidget::provider_model_policy::ProviderModelPolicy::new(
+            host,
+            ProviderRuntimeAuthorizations::default(),
+        );
+        assert_eq!(
+            matches!(
+                policy.current("zai", "glm-5.3-flash"),
+                codex_provider_auth::CurrentSelectionDecision::Preserve(_)
+            ),
+            enrolled
+        );
+    }
+}

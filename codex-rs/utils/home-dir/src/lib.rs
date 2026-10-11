@@ -51,14 +51,23 @@ fn home_override_conflict(
     pfterminal_home_env: Option<&str>,
     codex_home_env: Option<&str>,
 ) -> Option<String> {
-    let set: Vec<(&str, &str)> = [
+    home_variables_conflict(&[
         ("CORBANU_HOME", corbanu_home_env),
         ("PFTERMINAL_HOME", pfterminal_home_env),
         ("CODEX_HOME", codex_home_env),
-    ]
-    .into_iter()
-    .filter_map(|(name, value)| value.map(|value| (name, value)))
-    .collect();
+    ])
+}
+
+/// The one-line warning when home variables, listed in precedence order, name
+/// different directories: the first set variable wins, and the first listed
+/// variable is the one to set to choose another home. Names variables and
+/// paths only.
+pub fn home_variables_conflict(variables: &[(&str, Option<&str>)]) -> Option<String> {
+    let (top, _) = *variables.first()?;
+    let set: Vec<(&str, &str)> = variables
+        .iter()
+        .filter_map(|(name, value)| value.map(|value| (*name, value)))
+        .collect();
     let (winner, winner_value) = *set.first()?;
     let same_dir = |value: &str| {
         let canonical =
@@ -75,7 +84,7 @@ fn home_override_conflict(
     }
     Some(format!(
         "warning: {winner} ({winner_value}) overrides {}; using {winner_value}. \
-         To use another home, set CORBANU_HOME to it.",
+         To use another home, set {top} to it.",
         ignored.join(" and ")
     ))
 }

@@ -264,6 +264,9 @@ pub(crate) struct DeferredClaudePlanAuth {
     pub(crate) helper_executable: PathBuf,
     pub(crate) cwd: PathBuf,
     pub(crate) claude_config_dir_override: Option<PathBuf>,
+    /// PF-84: the named Claude Plan account `[provider_accounts]` selects;
+    /// `None` is the home's default selection.
+    pub(crate) account: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

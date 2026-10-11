@@ -882,17 +882,19 @@ impl App {
         self.note_assignment_user_turn(&crate::spawn_orchestration::pane_node_id(&pane_id));
         let prompt_context = self.claude_pane_prompt_context(&pane_id);
         let prompt = compose_claude_pane_prompt(prompt, prompt_context.as_deref());
-        let prepared =
-            match self
-                .claude_panes
-                .prepare_turn(&pane_id, prompt, self.config.codex_home.as_ref())
-            {
-                Ok(prepared) => prepared,
-                Err(err) => {
-                    self.chat_widget.fail_external_pane_turn(err.to_string());
-                    return true;
-                }
-            };
+        let claude_plan_account = self.claude_plan_account();
+        let prepared = match self.claude_panes.prepare_turn_for_account(
+            &pane_id,
+            prompt,
+            self.config.codex_home.as_ref(),
+            claude_plan_account.as_deref(),
+        ) {
+            Ok(prepared) => prepared,
+            Err(err) => {
+                self.chat_widget.fail_external_pane_turn(err.to_string());
+                return true;
+            }
+        };
 
         self.chat_widget.begin_external_pane_turn();
         let tx = self.app_event_tx.clone();
@@ -902,6 +904,16 @@ impl App {
             tx.send(AppEvent::ClaudePaneTurnFinished { pane_id, result });
         });
         true
+    }
+
+    /// PF-84: the named Claude Plan account panes must use, if one is selected.
+    fn claude_plan_account(&self) -> Option<String> {
+        self.config
+            .model_providers
+            .get(codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID)?
+            .account
+            .as_ref()
+            .map(|account| account.name.clone())
     }
 
     pub(crate) fn submit_claude_pane_task(&mut self, pane_id: String, task: String) {
@@ -940,23 +952,21 @@ impl App {
         if !auto_processing_turn {
             self.spawn_operator_input_seen = true;
         }
-        let prepared =
-            match self
-                .claude_panes
-                .prepare_turn(&pane_id, prompt, self.config.codex_home.as_ref())
-            {
-                Ok(prepared) => prepared,
-                Err(err) => {
-                    self.abort_spawn_auto_processing_turn(&node_key);
-                    self.record_spawn_dispatch_failed_for_task(
-                        &target_node_id,
-                        &task,
-                        err.to_string(),
-                    );
-                    self.chat_widget.add_error_message(err.to_string());
-                    return;
-                }
-            };
+        let claude_plan_account = self.claude_plan_account();
+        let prepared = match self.claude_panes.prepare_turn_for_account(
+            &pane_id,
+            prompt,
+            self.config.codex_home.as_ref(),
+            claude_plan_account.as_deref(),
+        ) {
+            Ok(prepared) => prepared,
+            Err(err) => {
+                self.abort_spawn_auto_processing_turn(&node_key);
+                self.record_spawn_dispatch_failed_for_task(&target_node_id, &task, err.to_string());
+                self.chat_widget.add_error_message(err.to_string());
+                return;
+            }
+        };
         self.record_spawn_dispatch_delivered_for_task(&target_node_id, &task);
         self.record_claude_spawn_rollout_task_started(&pane_id, &task, prepared.plan.turn_index);
         // Loop breaker: a turn we auto-triggered (child-report processing) transitions

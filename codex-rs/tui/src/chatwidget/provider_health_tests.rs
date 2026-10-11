@@ -177,3 +177,85 @@ async fn apps_rejection_marks_openai_not_current_claude_and_r_opens_recovery() {
         ProviderConfigurationState::RecoveryRequired
     );
 }
+
+/// PF-84 (#416): a 401 on a named account names that account and its
+/// `corbanu account add` recovery, never `/providers` (which manages the
+/// default credential), and leaves the default credential's health alone.
+#[tokio::test]
+async fn named_account_rejection_names_the_account_not_the_default_recovery() {
+    let (mut chat, _tx, mut rx, _op_rx) =
+        super::super::tests::make_chatwidget_manual_with_sender().await;
+    chat.config.model_provider_id = "zai".into();
+    chat.config
+        .model_providers
+        .get_mut("zai")
+        .expect("built-in zai provider")
+        .account = Some(codex_model_provider_info::NamedProviderAccount {
+        provider_id: "zai".into(),
+        name: "fake".into(),
+    });
+    let host = crate::provider_status_host::ProviderStatusHost::from_config(
+        chat.config_ref(),
+        crate::provider_status_host::ProviderAccountMetadata::default(),
+    );
+    chat.model_catalog.set_provider_policy(
+        super::super::provider_model_policy::ProviderModelPolicy::new(
+            host.clone(),
+            ProviderRuntimeAuthorizations::default(),
+        ),
+    );
+    let before = host.resolve().get("zai").unwrap().configuration;
+    chat.observe_provider_health(&ServerNotification::TurnStarted(
+        codex_app_server_protocol::TurnStartedNotification {
+            thread_id: "thread".into(),
+            turn: codex_app_server_protocol::Turn {
+                id: "turn".into(),
+                items_view: codex_app_server_protocol::TurnItemsView::Full,
+                items: Vec::new(),
+                status: codex_app_server_protocol::TurnStatus::InProgress,
+                error: None,
+                started_at: Some(0),
+                completed_at: None,
+                duration_ms: None,
+            },
+        },
+    ));
+    while rx.try_recv().is_ok() {}
+    chat.observe_provider_health(&ServerNotification::Error(
+        codex_app_server_protocol::ErrorNotification {
+            thread_id: "thread".into(),
+            turn_id: "turn".into(),
+            will_retry: false,
+            error: codex_app_server_protocol::TurnError {
+                message: "synthetic rejection".into(),
+                codex_error_info: Some(CodexErrorInfo::Unauthorized),
+                additional_details: None,
+            },
+        },
+    ));
+    let warnings: Vec<_> = std::iter::from_fn(|| rx.try_recv().ok())
+        .filter_map(|event| match event {
+            crate::app_event::AppEvent::InsertHistoryCell(cell) => Some(
+                cell.display_lines(/*width*/ 400)
+                    .into_iter()
+                    .map(|line| line.to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            ),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(
+        warnings[0].contains("account `fake` was rejected"),
+        "{}",
+        warnings[0]
+    );
+    assert!(
+        warnings[0].contains("corbanu account add zai fake"),
+        "{}",
+        warnings[0]
+    );
+    assert!(!warnings[0].contains("/providers"), "{}", warnings[0]);
+    assert_eq!(host.resolve().get("zai").unwrap().configuration, before);
+}

@@ -39,6 +39,8 @@ pub(crate) struct EventProcessorWithHumanOutput {
     final_message_rendered: bool,
     emit_final_message_on_shutdown: bool,
     last_total_token_usage: Option<ThreadTokenUsage>,
+    /// Config warnings already printed; the session repeats them once (#419).
+    shown_config_warnings: Vec<String>,
 }
 
 impl EventProcessorWithHumanOutput {
@@ -64,6 +66,7 @@ impl EventProcessorWithHumanOutput {
             final_message_rendered: false,
             emit_final_message_on_shutdown: false,
             last_total_token_usage: None,
+            shown_config_warnings: Vec::new(),
         }
     }
 
@@ -239,6 +242,7 @@ impl EventProcessor for EventProcessorWithHumanOutput {
                     notification.summary,
                     details
                 );
+                self.shown_config_warnings.push(notification.summary);
                 CodexStatus::Running
             }
             ServerNotification::Warning(notification) => self.process_warning(notification.message),
@@ -369,6 +373,14 @@ impl EventProcessor for EventProcessorWithHumanOutput {
     }
 
     fn process_warning(&mut self, message: String) -> CodexStatus {
+        if let Some(index) = self
+            .shown_config_warnings
+            .iter()
+            .position(|shown| *shown == message)
+        {
+            self.shown_config_warnings.swap_remove(index);
+            return CodexStatus::Running;
+        }
         eprintln!(
             "{} {message}",
             "warning:".style(self.yellow).style(self.bold)

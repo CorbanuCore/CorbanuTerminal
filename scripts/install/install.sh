@@ -1170,7 +1170,7 @@ update_visible_command() {
         "$CURRENT_LINK/$debug_terminal_relative_path" \
         "$DEBUG_CODEX_HOME_DIR" \
         "$debug_tmp_script" \
-        '${CORBANU_DEBUG_HOME:-}${PFTERMINAL_DEBUG_HOME:-}'
+        '${CORBANU_DEBUG_HOME:-}${PFTERMINAL_DEBUG_HOME:-}${CORBANU_HOME:-}${PFTERMINAL_HOME:-}'
       debug_launchers_installed="true"
     else
       warn "release has no debug binary; skipping corbanu-debug launcher"

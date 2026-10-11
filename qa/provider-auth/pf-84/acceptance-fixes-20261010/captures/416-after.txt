@@ -1,0 +1,20 @@
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:     glm-5.3-flash   /model to change             │
+│ directory: /Volumes/CorbanuDrive/…/pf84fix-scratch/work │
+╰─────────────────────────────────────────────────────────╯
+
+⚠ Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true`
+  in <scratch>/hz/config.toml.
+
+› Reply with exactly the word pong and nothing else.
+
+⚠ Z.AI (zai) account `fake` was rejected. Replace its key with `corbanu account add zai fake` (reads stdin), or choose another account. The default Z.AI credential is unchanged.
+
+■ unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: 48a769fa-7222-4c46-a840-4be665786cf4
+
+› Use /skills to list available skills
+
+  Z.AI GLM 5.3 Flash via zai default · <scratch>/work · Corbanu Terminal · TPS: -- tok/s
+
