@@ -68,10 +68,10 @@ Paths are under `codex-rs/`, at `63ea3d0cbd`.
   rename, remove (replacement first when in use), use-for-session and make-default.
 - [x] Onboarding "Add another account"; account in `/status` and the spawn line; S03 follow-up
   tests. Gate: [s04-gate.md](../../../../qa/provider-auth/pf-84/s04-gate.md).
+- [x] Named ChatGPT sign-ins and AWS profiles stay refused here; Travis's D4 (2026-10-11) moves them to PF-84-S06.
 
 ## Remaining
 
-- [x] Named ChatGPT sign-ins and AWS profiles stay refused here; Travis's D4 (2026-10-11) moves them to PF-84-S06.
 - [ ] Code-blind functional design and execution (independent acceptance step, not the implementer).
 
 ## Verification
