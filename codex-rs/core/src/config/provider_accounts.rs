@@ -58,7 +58,8 @@ pub(crate) fn apply_provider_accounts(
 /// thread start. Unlike the config table it is an error when the
 /// `named_accounts` feature is off, because ignoring it would run the session
 /// on the default account. `recorded` marks the account a resumed thread
-/// recorded rather than a flag the user passed, so errors name its source.
+/// recorded (or a worker's parent runs on) rather than a flag the user
+/// passed, so errors name its source.
 pub(crate) fn apply_explicit_provider_account(
     model_providers: &mut HashMap<String, ModelProviderInfo>,
     session_provider_id: &str,
@@ -106,6 +107,21 @@ pub(crate) fn apply_explicit_provider_account(
     })
 }
 
+/// Why the account an explicit `--account` names cannot be used, whether it
+/// belongs to the session's provider or another one.
+pub fn explicit_account_error(config: &super::Config) -> Option<String> {
+    let (provider_id, _) = config
+        .provider_account_override
+        .as_deref()?
+        .split_once(':')?;
+    let provider = if provider_id == config.model_provider_id {
+        &config.model_provider
+    } else {
+        config.model_providers.get(provider_id)?
+    };
+    selected_account_error(config.codex_home.as_path(), provider)
+}
+
 /// Why an explicit `--account <provider>:<name>` for a provider other than
 /// the session's cannot be used, with the same recovery text as the session
 /// provider's account (#425). The session's own account is checked
@@ -118,10 +134,7 @@ pub fn other_provider_account_error(config: &super::Config) -> Option<String> {
     if provider_id == config.model_provider_id {
         return None;
     }
-    selected_account_error(
-        config.codex_home.as_path(),
-        config.model_providers.get(provider_id)?,
-    )
+    explicit_account_error(config)
 }
 
 /// Why an explicit account of a provider other than the session's would be
@@ -129,14 +142,12 @@ pub fn other_provider_account_error(config: &super::Config) -> Option<String> {
 /// applies only to spawned agents on that provider, so when no spawned agent
 /// may run there it is refused rather than silently unused (#425).
 pub fn unused_other_provider_account_error(config: &super::Config) -> Option<String> {
-    let spawns_enabled = config.features.enabled(codex_features::Feature::Collab)
-        || config
-            .features
-            .enabled(codex_features::Feature::MultiAgentV2);
+    let spawns_possible = config.multi_agent_version_override()
+        != Some(codex_protocol::protocol::MultiAgentVersion::Disabled);
     unused_other_provider_account(
         config.provider_account_override.as_deref()?,
         &config.model_provider_id,
-        spawns_enabled,
+        spawns_possible,
         config.agent_provider_allowlist.as_deref(),
     )
 }
@@ -144,15 +155,18 @@ pub fn unused_other_provider_account_error(config: &super::Config) -> Option<Str
 fn unused_other_provider_account(
     selection: &str,
     session_provider_id: &str,
-    spawns_enabled: bool,
+    spawns_possible: bool,
     agent_provider_allowlist: Option<&[String]>,
 ) -> Option<String> {
-    let (provider_id, _) = selection.split_once(':')?;
-    if provider_id == session_provider_id {
+    let (provider_id, name) = selection.split_once(':')?;
+    // `default` asks for today's credentials, so it is never refused.
+    if provider_id == session_provider_id
+        || parse_provider_account_selection(name).is_ok_and(|name| name.is_none())
+    {
         return None;
     }
-    let reason = if !spawns_enabled {
-        "spawned agents are off"
+    let reason = if !spawns_possible {
+        "`agents.enabled` is false, so no agent can be spawned"
     } else if agent_provider_allowlist
         .is_some_and(|allowed| !allowed.iter().any(|allowed| allowed == provider_id))
     {
@@ -468,8 +482,9 @@ mod tests {
                     true,
                     Some(&["kimi-code".to_string()]),
                 ),
+                unused_other_provider_account("kimi-code:default", "zai", false, None),
             ],
-            [None, None, None]
+            [None, None, None, None]
         );
         assert_eq!(
             [
@@ -479,8 +494,8 @@ mod tests {
             [
                 Some(
                     "--account kimi-code:main: this session runs on `zai` and nothing in it can \
-                     run on `kimi-code` (spawned agents are off), so the account would be \
-                     ignored; start the session on `kimi-code` \
+                     run on `kimi-code` (`agents.enabled` is false, so no agent can be spawned), so \
+                     the account would be ignored; start the session on `kimi-code` \
                      (`-c model_provider=\"kimi-code\"`) or drop the provider prefix"
                         .to_string()
                 ),

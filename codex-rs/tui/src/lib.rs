@@ -1254,8 +1254,11 @@ pub async fn run_main(
         exit_with_security_error(&message);
     }
     // PF-84 (#426): a missing named account is refused before onboarding,
-    // with exec's recovery text, instead of asking for a default key. A
-    // remote app server checks its own home at thread start.
+    // with exec's recovery text, instead of asking for a default key. This
+    // also applies to resume: onboarding cannot tell that the thread would
+    // run on its recorded account, so `--account <name>` is the recovery. A
+    // local daemon serves this same home; a remote app server checks its own
+    // home at thread start.
     if !app_server_target.uses_remote_workspace()
         && let Some(message) = crate::legacy_core::config::session_account_error(&config)
     {

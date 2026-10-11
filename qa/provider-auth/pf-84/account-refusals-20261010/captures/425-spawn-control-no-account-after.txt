@@ -1,3 +1,4 @@
+   |   Provider: Ambient API Key     Store AMBIENT_API_KEY in the vault
    |   Provider: Kimi Code API Key   Store KIMI_API_KEY in the vault
    |   Provider: Z.AI API Key        Store ZAI_API_KEY in the vault
    |   Provider: DeepSeek API Key    Store DEEPSEEK_API_KEY in the vault
@@ -5,4 +6,3 @@
    |   Provider: Meta API Key        Store MODEL_API_KEY in the vault
    |   Provider: Baseten API Key     Store BASETEN_API_KEY in the vault
    |   Provider: Vercel API Key      Store AI_GATEWAY_API_KEY in the vault
-   | This agent's turn failed. If you still need this agent, use the available collaboration tools to give it another task.

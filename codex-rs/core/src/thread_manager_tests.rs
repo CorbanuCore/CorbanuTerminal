@@ -501,6 +501,51 @@ async fn start_thread_refuses_a_missing_account_of_another_provider() {
     );
 }
 
+/// #425: another provider's account that is configured starts the session
+/// (it is used by agents on that provider); a spawned agent checks only the
+/// account it runs on, and `default` is never refused.
+#[tokio::test]
+async fn other_provider_account_check_accepts_configured_accounts_and_spawned_agents() {
+    let temp_dir = tempdir().expect("tempdir");
+    let mut config = test_config().await;
+    config.codex_home = temp_dir.path().join("codex-home").abs();
+    std::fs::create_dir_all(&config.codex_home).expect("create codex home");
+    config.model_provider_id = "zai".to_string();
+    config.model_provider = ModelProviderInfo::create_zai_provider();
+    codex_vault::Vault::new(config.codex_home.to_path_buf())
+        .write_provider_account(
+            "kimi-code",
+            &codex_vault::ProviderAccountName::parse("alt").expect("name"),
+            codex_vault::ProviderAccountKind::ApiKey,
+            "canary-kimi-alt",
+        )
+        .expect("write account");
+    let with_kimi = |name: Option<&str>| {
+        let mut config = config.clone();
+        let mut kimi = ModelProviderInfo::create_zai_provider();
+        kimi.account = name.map(|name| codex_model_provider_info::NamedProviderAccount {
+            provider_id: "kimi-code".to_string(),
+            name: name.to_string(),
+        });
+        config.model_providers.insert("kimi-code".to_string(), kimi);
+        config.provider_account_override = Some(format!("kimi-code:{}", name.unwrap_or("default")));
+        config
+    };
+    let spawned = SessionSource::SubAgent(SubAgentSource::Review);
+    assert_eq!(
+        [
+            thread_start_account_error(&with_kimi(Some("alt")), &SessionSource::Exec),
+            thread_start_account_error(&with_kimi(/*name*/ None), &SessionSource::Exec),
+            thread_start_account_error(&with_kimi(Some("ghost")), &spawned),
+        ],
+        [None, None, None]
+    );
+    assert!(
+        thread_start_account_error(&with_kimi(Some("ghost")), &SessionSource::Cli)
+            .is_some_and(|message| message.starts_with("account `ghost` of provider `kimi-code`"))
+    );
+}
+
 #[tokio::test]
 async fn code_mode_session_provider_is_shared_across_threads() {
     let temp_dir = tempdir().expect("tempdir");

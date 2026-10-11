@@ -41,7 +41,10 @@ echo "-- #425 positive / applies-to-nothing: kimi-code:kmain configured (real Ki
 addreal provider/kimi_api_key $H kimi-code kmain >/dev/null 2>&1
 run $H "P1 --account kimi-code:kmain (configured; session stays on zai default)" --account kimi-code:kmain
 run $H "P2 --account kimi-code:kmain, agents.provider_allowlist=[zai]" -c 'agents.provider_allowlist=["zai"]' --account kimi-code:kmain
-run $H "P3 --account kimi-code:kmain, --disable multi_agent" --disable multi_agent --account kimi-code:kmain
+run $H "P3 --account kimi-code:kmain, agents.enabled=false" -c 'agents.enabled=false' --account kimi-code:kmain
+run $H "P4 --account kimi-code:default, agents.enabled=false (default is never refused)" -c 'agents.enabled=false' --account kimi-code:default
+run $H "Z2 --account fake (401)" --account fake; Z2=$LAST
+run $H "R8 resume --account kimi-code:kmain <thread recorded on fake> (must stay on fake: 401, not default pong)" resume --account kimi-code:kmain $Z2
 echo "-- #425: kimi-code session"
 unset ZAI_API_KEY; export KIMI_API_KEY="$K"; KEEP=(KIMI_API_KEY)
 run $HK "K9 --account zai:ghost (missing account of another provider)" --account zai:ghost

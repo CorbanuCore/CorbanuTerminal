@@ -1,6 +1,6 @@
 binary: before
   zai	fake	api_key
-recorded: fake=01a12943-1f27-73e1-a8fe-0e9102125410 default=01a12943-25b2-7511-899e-f454ea5fef2f
+recorded: fake=01a1297b-6360-7862-8258-f4b60272fee7 default=01a1297b-6607-7530-ac0d-9dcf8dad4585
 == T1 #426: corbanu --account ghost
    | > Use your Z.AI API key
    | 
@@ -46,7 +46,7 @@ recorded: fake=01a12943-1f27-73e1-a8fe-0e9102125410 default=01a12943-25b2-7511-8
    | ╰──────────────────────────────────────────────────────────╯
    | 
    | 
-   | › Improve documentation in @filename
+   | › Write tests for @filename
    | 
    |   Z.AI GLM 5.3 Flash via zai default · /Volumes/CorbanuDrive/Corbanu/tmp/pf84fix2/work · Corbanu Terminal · TPS: -- tok/s
 == T4 #427: corbanu resume <session recorded on fake>, send ping

@@ -184,6 +184,7 @@ mod permissions;
 mod provider_accounts;
 pub use codex_model_provider::selected_account_error;
 pub(crate) use provider_accounts::configured_account_names;
+pub use provider_accounts::explicit_account_error;
 pub use provider_accounts::other_provider_account_error;
 pub use provider_accounts::session_account_error;
 pub use provider_accounts::split_account_selection;
@@ -2904,9 +2905,11 @@ pub struct ConfigOverrides {
     /// It beats `[provider_accounts]`; without a provider prefix it applies
     /// to the session's provider.
     pub provider_account: Option<String>,
-    /// PF-84: `provider_account` is the account a resumed thread recorded,
-    /// not a flag the user passed; errors then name the recorded account.
-    pub provider_account_recorded: bool,
+    /// PF-84: the account a resumed thread recorded, or a spawned worker's
+    /// parent runs on (`<provider>:<name>`). It beats `[provider_accounts]`;
+    /// `provider_account` beats it only when both name the same provider, so
+    /// another provider's explicit account never drops it (#425).
+    pub inherited_provider_account: Option<String>,
 }
 
 fn dedupe_absolute_paths(paths: &mut Vec<AbsolutePathBuf>) {
@@ -3656,7 +3659,7 @@ impl Config {
             additional_writable_roots,
             workspace_roots: workspace_roots_override,
             provider_account: provider_account_override,
-            provider_account_recorded,
+            inherited_provider_account,
         } = overrides;
         let bypass_hook_trust = bypass_hook_trust.unwrap_or_default();
 
@@ -4229,20 +4232,40 @@ impl Config {
         } else {
             requested_model_provider_id
         };
-        // Kept qualified by the provider it was validated against, so a thread
-        // later started or resumed on another provider cannot reinterpret it.
-        let provider_account_override = match provider_account_override
+        let named_accounts_enabled = features.enabled(Feature::NamedAccounts);
+        let explicit_account = provider_account_override
+            .as_deref()
+            .map(str::trim)
+            .filter(|selection| !selection.is_empty());
+        if let Some(inherited) = inherited_provider_account
             .as_deref()
             .map(str::trim)
             .filter(|selection| !selection.is_empty())
         {
+            let (inherited_provider, _) = split_account_selection(inherited, &model_provider_id);
+            let replaced = explicit_account.is_some_and(|selection| {
+                split_account_selection(selection, &model_provider_id).0 == inherited_provider
+            });
+            if !replaced {
+                provider_accounts::apply_explicit_provider_account(
+                    &mut model_providers,
+                    &model_provider_id,
+                    inherited,
+                    named_accounts_enabled,
+                    /*recorded*/ true,
+                )?;
+            }
+        }
+        // Kept qualified by the provider it was validated against, so a thread
+        // later started or resumed on another provider cannot reinterpret it.
+        let provider_account_override = match explicit_account {
             Some(selection) => {
                 provider_accounts::apply_explicit_provider_account(
                     &mut model_providers,
                     &model_provider_id,
                     selection,
-                    features.enabled(Feature::NamedAccounts),
-                    provider_account_recorded,
+                    named_accounts_enabled,
+                    /*recorded*/ false,
                 )?;
                 let (provider_id, name) = split_account_selection(selection, &model_provider_id);
                 Some(format!("{provider_id}:{name}"))

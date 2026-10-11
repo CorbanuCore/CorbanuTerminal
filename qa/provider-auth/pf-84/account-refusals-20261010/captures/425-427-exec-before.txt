@@ -6,45 +6,57 @@ hZ accounts:
 == X12 --account kimi-code:main (kimi-code has no accounts) (exit 0)
    args: exec --account kimi-code:main
    | pong
-   | session id: 01a12935-4796-7be1-aa8f-b793680db750
+   | session id: 01a12978-5d78-7720-b2fb-69ff59de31e5
 == X12b --account kimi-code:ghost (exit 0)
    args: exec --account kimi-code:ghost
    | pong
-   | session id: 01a12935-5e96-7a63-9236-b7a84ac4f03b
+   | session id: 01a12978-7001-7a62-806a-1dd6517009fc
 == Z3 --account ghost (session provider, reference) (exit 1)
    args: exec --account ghost
    | Error: thread/start: thread/start failed: account `ghost` of provider `zai` is not configured; add it with `corbanu account add zai ghost` or pick another with `--account` (see `corbanu account list`) (code -32600)
 == Z1 --account main (exit 0)
    args: exec --account main
    | pong
-   | session id: 01a12935-7edd-7712-a934-00eb7c6d3edc
+   | session id: 01a12978-831b-7520-81ec-90f5ce8ab302
 -- #427-2: flag-off resume of a thread recorded on main
 == R7 resume --disable named_accounts <main session> (exit 1)
-   args: exec resume --disable named_accounts 01a12935-7edd-7712-a934-00eb7c6d3edc
+   args: exec resume --disable named_accounts 01a12978-831b-7520-81ec-90f5ce8ab302
    | Error: thread/resume: thread/resume failed: failed to load configuration: --account zai:main: named accounts need the `named_accounts` feature (`--enable named_accounts`); `--account default` uses the default credentials (code -32600)
 == R7b resume --disable named_accounts --account default <main session> (exit 0)
-   args: exec resume --disable named_accounts --account default 01a12935-7edd-7712-a934-00eb7c6d3edc
+   args: exec resume --disable named_accounts --account default 01a12978-831b-7520-81ec-90f5ce8ab302
    | pong
-   | session id: 01a12935-7edd-7712-a934-00eb7c6d3edc
+   | session id: 01a12978-831b-7520-81ec-90f5ce8ab302
 -- #425 positive / applies-to-nothing: kimi-code:kmain configured (real Kimi key)
 == P1 --account kimi-code:kmain (configured; session stays on zai default) (exit 0)
    args: exec --account kimi-code:kmain
    | pong
-   | session id: 01a12935-a948-74a3-9073-e73d447f0a64
+   | session id: 01a12978-acaa-76b0-80cb-947654e7c176
 == P2 --account kimi-code:kmain, agents.provider_allowlist=[zai] (exit 0)
    args: exec -c agents.provider_allowlist=["zai"] --account kimi-code:kmain
    | pong
-   | session id: 01a12935-bb76-78e2-b437-df4611851fed
-== P3 --account kimi-code:kmain, --disable multi_agent (exit 0)
-   args: exec --disable multi_agent --account kimi-code:kmain
+   | session id: 01a12978-bfa6-74c2-b6da-4e53d3aba860
+== P3 --account kimi-code:kmain, agents.enabled=false (exit 0)
+   args: exec -c agents.enabled=false --account kimi-code:kmain
    | pong
-   | session id: 01a12935-d224-72b2-9ec6-6edd9292522e
+   | session id: 01a12978-d4b6-7460-8c0a-988b0505bbca
+== P4 --account kimi-code:default, agents.enabled=false (default is never refused) (exit 0)
+   args: exec -c agents.enabled=false --account kimi-code:default
+   | pong
+   | session id: 01a12978-e692-72a2-9acc-c1f02302e53a
+== Z2 --account fake (401) (exit 1)
+   args: exec --account fake
+   | ERROR: unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: 5f312af5-8ff0-4ca3-8409-5afd560af5f4
+   | session id: 01a12978-fcc1-74d1-b113-9934d0d33469
+== R8 resume --account kimi-code:kmain <thread recorded on fake> (must stay on fake: 401, not default pong) (exit 0)
+   args: exec resume --account kimi-code:kmain 01a12978-fcc1-74d1-b113-9934d0d33469
+   | pong
+   | session id: 01a12978-fcc1-74d1-b113-9934d0d33469
 -- #425: kimi-code session
 == K9 --account zai:ghost (missing account of another provider) (exit 0)
    args: exec --account zai:ghost
    | pong
-   | session id: 01a12935-f836-7ee1-b881-f0a66ed8fc3c
+   | session id: 01a12979-1218-7e52-94e2-025abca767b3
 == K0 no --account (reference: Kimi default key) (exit 0)
    args: exec 
    | pong
-   | session id: 01a12936-2ee4-73f1-bf29-856857bb3f5a
+   | session id: 01a12979-3b40-78a3-a5cf-9b22943bf534

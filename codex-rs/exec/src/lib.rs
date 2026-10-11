@@ -512,7 +512,7 @@ pub async fn run_main_enforced(
         bypass_hook_trust: bypass_hook_trust.then_some(true),
         additional_writable_roots: add_dir,
         provider_account: account.clone(),
-        provider_account_recorded: false,
+        inherited_provider_account: None,
     };
     if let Some(enforced) = enforced {
         // `Never` above is the headless default, not a flag to report.
