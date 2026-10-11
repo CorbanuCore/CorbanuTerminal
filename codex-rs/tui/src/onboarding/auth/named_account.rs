@@ -45,7 +45,11 @@ impl AuthModeWidget {
 
     /// The provider id and method a new named account of this entry uses.
     fn entry_account_target(&self, entry_index: usize) -> Option<(String, AddAccountMethod)> {
-        let entry = self.provider_status_host.catalog().entries().get(entry_index)?;
+        let entry = self
+            .provider_status_host
+            .catalog()
+            .entries()
+            .get(entry_index)?;
         entry.runtime_provider_ids.iter().find_map(|id| {
             self.named_account_methods
                 .get(id.as_str())
@@ -91,8 +95,7 @@ impl AuthModeWidget {
             } => {
                 let choices = self.configured_choices(entry_index);
                 let count = choices.len().max(1);
-                if keys::MOVE_UP.is_pressed(*key_event) || keys::MOVE_DOWN.is_pressed(*key_event)
-                {
+                if keys::MOVE_UP.is_pressed(*key_event) || keys::MOVE_DOWN.is_pressed(*key_event) {
                     let delta = if keys::MOVE_UP.is_pressed(*key_event) {
                         count - 1
                     } else {
@@ -209,7 +212,9 @@ impl AuthModeWidget {
 
     fn account_name_entered(&mut self, entry_index: usize, name: ProviderAccountName) {
         let Some((_, method)) = self.entry_account_target(entry_index) else {
-            self.set_error(Some("This provider cannot hold named accounts.".to_string()));
+            self.set_error(Some(
+                "This provider cannot hold named accounts.".to_string(),
+            ));
             return;
         };
         if method.is_secret() {
@@ -223,9 +228,16 @@ impl AuthModeWidget {
         }
     }
 
-    fn save_named_account(&mut self, entry_index: usize, name: ProviderAccountName, value: AccountValue) {
+    fn save_named_account(
+        &mut self,
+        entry_index: usize,
+        name: ProviderAccountName,
+        value: AccountValue,
+    ) {
         let Some((provider_id, method)) = self.entry_account_target(entry_index) else {
-            self.set_error(Some("This provider cannot hold named accounts.".to_string()));
+            self.set_error(Some(
+                "This provider cannot hold named accounts.".to_string(),
+            ));
             return;
         };
         *self.sign_in_state.write().unwrap() = SignInState::AccountSaving;
@@ -310,9 +322,7 @@ impl AuthModeWidget {
                         .into(),
                 );
                 lines.push("".into());
-                lines.push(
-                    "Name it: lowercase letters, digits or '-' (for example work).".into(),
-                );
+                lines.push("Name it: lowercase letters, digits or '-' (for example work).".into());
                 lines.push("".into());
                 lines.push(if value.is_empty() {
                     "  Account name".dim().into()
@@ -334,7 +344,9 @@ impl AuthModeWidget {
                         .into(),
                 );
                 lines.push("".into());
-                lines.push(format!("Paste the {method}. It is saved to the vault and never shown.").into());
+                lines.push(
+                    format!("Paste the {method}. It is saved to the vault and never shown.").into(),
+                );
                 lines.push("".into());
                 lines.push(if value.is_empty() {
                     "  Paste it here (masked)".dim().into()
@@ -375,9 +387,9 @@ fn edit_text(value: &mut String, key_event: &KeyEvent) -> bool {
         KeyCode::Backspace => value.pop().is_some(),
         KeyCode::Char(character)
             if key_event.kind == KeyEventKind::Press
-                && !key_event
-                    .modifiers
-                    .intersects(KeyModifiers::SUPER | KeyModifiers::CONTROL | KeyModifiers::ALT) =>
+                && !key_event.modifiers.intersects(
+                    KeyModifiers::SUPER | KeyModifiers::CONTROL | KeyModifiers::ALT,
+                ) =>
         {
             value.push(character);
             true

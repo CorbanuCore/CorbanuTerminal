@@ -749,7 +749,9 @@ impl AuthModeWidget {
     /// How a setup row reads behind a configured provider ("Replace with ...").
     fn sign_in_option_method(&self, option: SignInOption) -> String {
         match option {
-            SignInOption::ChatGpt | SignInOption::DeviceCode => "OpenAI account sign-in".to_string(),
+            SignInOption::ChatGpt | SignInOption::DeviceCode => {
+                "OpenAI account sign-in".to_string()
+            }
             SignInOption::AnthropicAccount => "Claude account sign-in".to_string(),
             SignInOption::ApiKey | SignInOption::ProviderApiKey(_) => "a new API key".to_string(),
             SignInOption::CorbanuPlan => "Corbanu API".to_string(),

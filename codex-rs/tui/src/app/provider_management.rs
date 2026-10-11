@@ -54,7 +54,10 @@ impl App {
         let account_provider = accounts.as_ref().and_then(|accounts| {
             crate::provider_named_accounts::account_provider_id(
                 &self.config,
-                entry.runtime_provider_ids.iter().map(|id| id.as_str()),
+                entry
+                    .runtime_provider_ids
+                    .iter()
+                    .map(codex_provider_auth::ProviderRuntimeId::as_str),
             )
             .map(|provider_id| (provider_id, accounts))
         });

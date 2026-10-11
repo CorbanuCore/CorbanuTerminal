@@ -287,7 +287,8 @@ impl ChatWidget {
             format!("account:{provider_id}:{name}"),
             title,
             format!("{} — masked", method.label()),
-            "Paste the value and press Enter. It is saved to the vault and never shown.".to_string(),
+            "Paste the value and press Enter. It is saved to the vault and never shown."
+                .to_string(),
             Box::new(move |_label, secret| {
                 tx.send(AppEvent::ProviderAccount(ProviderAccountEvent::Save {
                     provider_id,
@@ -348,8 +349,8 @@ impl ChatWidget {
                 "Remove",
                 "This cannot be undone.",
                 ProviderAccountEvent::Remove {
-                    provider_id: provider_id.clone(),
-                    name: name.clone(),
+                    provider_id,
+                    name,
                     replacement: None,
                 },
             ));
@@ -540,7 +541,7 @@ pub(crate) fn provider_manager_rows(
         let runtime_ids = entry
             .runtime_provider_ids
             .iter()
-            .map(|id| id.to_string())
+            .map(std::string::ToString::to_string)
             .collect::<Vec<_>>();
         for (account_index, account) in accounts.rows.iter().enumerate() {
             if runtime_ids.contains(&account.provider_id) {
@@ -568,7 +569,7 @@ fn provider_item(
         let runtime_ids = entry
             .runtime_provider_ids
             .iter()
-            .map(|id| id.to_string())
+            .map(std::string::ToString::to_string)
             .collect::<Vec<_>>();
         if let Some(account) = accounts.rows_for(&runtime_ids).next() {
             name.push_str(" · default");
@@ -614,10 +615,12 @@ fn account_item(
             accounts.markers(&account.provider_id, account.name.as_str())
         )),
         actions: vec![Box::new(move |tx| {
-            tx.send(AppEvent::ProviderAccount(ProviderAccountEvent::OpenActions {
-                provider_id: provider_id.clone(),
-                name: name.clone(),
-            }));
+            tx.send(AppEvent::ProviderAccount(
+                ProviderAccountEvent::OpenActions {
+                    provider_id: provider_id.clone(),
+                    name: name.clone(),
+                },
+            ));
         })],
         dismiss_on_select: false,
         ..Default::default()
@@ -852,7 +855,9 @@ mod tests {
                 availability: ProviderAvailabilityState::Ready,
             })
             .collect::<Vec<_>>();
-        chat.open_provider_manager(&catalog, &statuses, /*focused_provider*/ None, /*accounts*/ None);
+        chat.open_provider_manager(
+            &catalog, &statuses, /*focused_provider*/ None, /*accounts*/ None,
+        );
         let rendered =
             crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 80);
         insta::assert_snapshot!("provider_manager_shared_status", rendered);
@@ -900,10 +905,7 @@ mod tests {
                     "0f1e2d3c4b5a",
                 ),
             ],
-            session: std::collections::BTreeMap::from([(
-                "zai".to_string(),
-                "fake".to_string(),
-            )]),
+            session: std::collections::BTreeMap::from([("zai".to_string(), "fake".to_string())]),
             defaults: std::collections::BTreeMap::from([(
                 "claude-plan".to_string(),
                 "work".to_string(),
@@ -933,7 +935,11 @@ mod tests {
         );
         let rendered =
             crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 100);
-        assert!(rendered.contains("choose the account that replaces it first") || rendered.contains("Choose the account that replaces it first"), "{rendered}");
+        assert!(
+            rendered.contains("choose the account that replaces it first")
+                || rendered.contains("Choose the account that replaces it first"),
+            "{rendered}"
+        );
         assert!(rendered.contains("Replace with `default`"), "{rendered}");
     }
 
@@ -957,11 +963,23 @@ mod tests {
             .collect::<Vec<_>>();
         let focused_provider = statuses[2].id.clone();
 
-        chat.open_provider_manager(&catalog, &statuses, /*focused_provider*/ None, /*accounts*/ None);
-        chat.open_provider_manager(&catalog, &statuses, Some(&focused_provider), /*accounts*/ None);
+        chat.open_provider_manager(
+            &catalog, &statuses, /*focused_provider*/ None, /*accounts*/ None,
+        );
+        chat.open_provider_manager(
+            &catalog,
+            &statuses,
+            Some(&focused_provider),
+            /*accounts*/ None,
+        );
         assert_eq!(chat.provider_manager_selected_index(), Some(2));
 
-        chat.open_provider_manager(&catalog, &statuses[..2], Some(&focused_provider), /*accounts*/ None);
+        chat.open_provider_manager(
+            &catalog,
+            &statuses[..2],
+            Some(&focused_provider),
+            /*accounts*/ None,
+        );
         assert_eq!(chat.provider_manager_selected_index(), Some(0));
     }
 
@@ -979,7 +997,9 @@ mod tests {
             current: ProviderCurrentState::NotCurrent,
             availability: ProviderAvailabilityState::Ready,
         }];
-        chat.open_provider_manager(&catalog, &statuses, /*focused_provider*/ None, /*accounts*/ None);
+        chat.open_provider_manager(
+            &catalog, &statuses, /*focused_provider*/ None, /*accounts*/ None,
+        );
 
         chat.handle_key_event(crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::Enter,

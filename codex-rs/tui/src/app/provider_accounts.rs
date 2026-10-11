@@ -78,9 +78,7 @@ impl App {
                             provider_id,
                             name,
                             method,
-                            value: crate::provider_named_accounts::AccountValue::new(
-                                String::new(),
-                            ),
+                            value: crate::provider_named_accounts::AccountValue::new(String::new()),
                         }));
                     return;
                 }
@@ -98,7 +96,10 @@ impl App {
                 method,
                 value,
             } => {
-                if !self.provider_account_methods(&provider_id).contains(&method) {
+                if !self
+                    .provider_account_methods(&provider_id)
+                    .contains(&method)
+                {
                     self.chat_widget.add_error_message(format!(
                         "{provider_id} does not take that kind of account."
                     ));
@@ -194,8 +195,12 @@ impl App {
                 let Some(entry) = self.provider_account_catalog_entry(&provider_id) else {
                     return;
                 };
-                self.chat_widget
-                    .open_provider_account_removal(&entry, provider_id, name, &accounts);
+                self.chat_widget.open_provider_account_removal(
+                    &entry,
+                    provider_id,
+                    name,
+                    &accounts,
+                );
             }
             ProviderAccountEvent::Remove {
                 provider_id,
@@ -288,7 +293,9 @@ impl App {
             .with_edits([edit])
             .apply()
             .await
-            .map_err(|error| format!("Could not save the default {provider_id} account: {error}"))?;
+            .map_err(|error| {
+                format!("Could not save the default {provider_id} account: {error}")
+            })?;
         self.refresh_in_memory_config_from_disk_best_effort("changing the default account")
             .await;
         Ok(())
@@ -305,10 +312,7 @@ impl App {
         name: Option<ProviderAccountName>,
     ) -> bool {
         let selection = format!("{provider_id}:{}", account_label(name.as_ref()));
-        let previous = self
-            .harness_overrides
-            .provider_account
-            .replace(selection);
+        let previous = self.harness_overrides.provider_account.replace(selection);
         if let Err(error) = self.refresh_in_memory_config_from_disk().await {
             self.harness_overrides.provider_account = previous;
             self.chat_widget.add_error_message(format!(

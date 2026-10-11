@@ -192,14 +192,20 @@ impl AddAccountMethod {
 
 /// The ways a provider can take a named account; empty when it cannot hold
 /// one (OpenAI sign-in and AWS are a pending product decision).
-pub(crate) fn add_methods(provider_id: &str, provider: &ModelProviderInfo) -> Vec<AddAccountMethod> {
+pub(crate) fn add_methods(
+    provider_id: &str,
+    provider: &ModelProviderInfo,
+) -> Vec<AddAccountMethod> {
     if !crate::legacy_core::config::supports_named_accounts(provider)
         || codex_vault::validate_provider_account_provider_id(provider_id).is_err()
     {
         return Vec::new();
     }
     if provider_id == CLAUDE_PLAN_PROVIDER_ID {
-        vec![AddAccountMethod::ClaudeToken, AddAccountMethod::ClaudeConfigDir]
+        vec![
+            AddAccountMethod::ClaudeToken,
+            AddAccountMethod::ClaudeConfigDir,
+        ]
     } else if provider.is_claude_plan() {
         Vec::new()
     } else if provider.env_key.is_some() {

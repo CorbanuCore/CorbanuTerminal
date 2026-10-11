@@ -33,7 +33,10 @@ fn markers_name_the_session_and_default_accounts() {
     assert_eq!(view.session_account("kimi"), "default");
     assert_eq!(view.default_account("zai"), "default");
     assert_eq!(view.markers("zai", "work"), " · this session");
-    assert_eq!(view.markers("zai", "default"), " · default for new sessions");
+    assert_eq!(
+        view.markers("zai", "default"),
+        " · default for new sessions"
+    );
     assert_eq!(
         view.markers("kimi", "default"),
         " · this session".to_string()
@@ -110,10 +113,11 @@ fn save_rename_and_remove_touch_only_that_account() {
         rows.iter().map(|row| row.name.as_str()).collect::<Vec<_>>(),
         vec!["keep", "work"]
     );
-    assert!(rows.iter().all(|row| row
-        .fingerprint
-        .as_ref()
-        .is_some_and(|fp| fp.len() == 12 && !fp.contains(canary))));
+    assert!(rows.iter().all(|row| {
+        row.fingerprint
+            .as_ref()
+            .is_some_and(|fp| fp.len() == 12 && !fp.contains(canary))
+    }));
     let vault = Vault::new(home.path().to_path_buf());
     assert_eq!(
         vault
@@ -123,8 +127,13 @@ fn save_rename_and_remove_touch_only_that_account() {
         Some(format!("{canary}-work"))
     );
 
-    rename_account(home.path().to_path_buf(), "zai", &name("work"), &name("home"))
-        .expect("rename");
+    rename_account(
+        home.path().to_path_buf(),
+        "zai",
+        &name("work"),
+        &name("home"),
+    )
+    .expect("rename");
     let labels_after_rename = vault
         .list()
         .expect("list")

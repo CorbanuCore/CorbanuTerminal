@@ -44,7 +44,9 @@ impl ProviderManagementHost {
         }
     }
 
-    pub(crate) fn named_accounts(&self) -> Option<&[crate::provider_named_accounts::NamedAccountRow]> {
+    pub(crate) fn named_accounts(
+        &self,
+    ) -> Option<&[crate::provider_named_accounts::NamedAccountRow]> {
         self.named_accounts.as_deref()
     }
 

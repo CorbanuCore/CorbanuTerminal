@@ -107,7 +107,8 @@ impl App {
         // its eligibility snapshot. Publish the same status result to both UIs.
         self.model_catalog.update_provider_statuses(&statuses);
         let selected_index = self.chat_widget.provider_manager_selected_index();
-        let selected_provider = selected_index.and_then(|index| self.provider_manager_row_provider(index));
+        let selected_provider =
+            selected_index.and_then(|index| self.provider_manager_row_provider(index));
         if let Some(host) = self.provider_management_host.as_mut() {
             if let Some(provider_id) = selected_provider {
                 host.remember_focused_provider(provider_id);
