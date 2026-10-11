@@ -1,0 +1,11 @@
+How home hM was made by the PRE-PF-84 build 44b527f11f (before any candidate run):
+1. config.toml: model glm-5.3-flash, model_provider zai, project trusted. No [features], no accounts.
+2. Pre-PF-84 TUI onboarding ("Use your Z.AI API key"): the real key was loaded into a tmux paste buffer from the
+   operator vault helper and pasted with `tmux paste-buffer -p -d` (bracketed, buffer deleted; 0 buffers left).
+   The field showed 49 masked characters; the screen said "Z.AI API key configured".
+   Check: sha12 of the key the pre build stores (`vault auth-helper` on hM) = 4ac7ce2748dd = sha12 of the real key.
+   (A first attempt without bracketed paste lost 5 characters and was discarded; that home was deleted.)
+3. The pre-PF-84 onboarding then looped back to "Connect a Z.AI API key"; after a restart the pre TUI went straight
+   to the chat and answered "pong" (session 01a128ef-84cc-7ec0-b297-92dfbff398e3).
+4. One pre-PF-84 exec session (pong), recorded at the top of s03-migration-existing-homes.txt.
+Script: scripts/s03/migration-onboard.sh (the paste step was run by hand with -p as above).

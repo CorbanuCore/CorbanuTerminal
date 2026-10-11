@@ -71,7 +71,7 @@ Paths are under `codex-rs/`, at `63ea3d0cbd`.
 
 ## Remaining
 
-- [ ] Pending Travis: named ChatGPT sign-ins and AWS profiles (refused today); proposed PF-84-S06.
+- [x] Named ChatGPT sign-ins and AWS profiles stay refused here; Travis's D4 (2026-10-11) moves them to PF-84-S06.
 - [ ] Code-blind functional design and execution (independent acceptance step, not the implementer).
 
 ## Verification

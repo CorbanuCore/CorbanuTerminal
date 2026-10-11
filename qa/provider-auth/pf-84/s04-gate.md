@@ -101,6 +101,6 @@ another provider's selection is kept unless it equals that provider's configured
 - *Use for this session* starts a new session; the running thread keeps its account.
 - Onboarding adds API-key and Claude-token accounts; a Claude Code login directory is added in
   `/providers`. `corbanu account add` still replaces an existing account (S02 behaviour).
-- Named ChatGPT sign-ins and AWS profile accounts stay refused (pending Travis, proposed PF-84-S06).
+- Named ChatGPT sign-ins and AWS profile accounts stay refused; Travis's D4 moves them to PF-84-S06.
 - Multi-agent v2 spawns (`SubAgentActivity`) do not show the account.
 - Code-blind functional design/execution is the independent acceptance step, not this lane.

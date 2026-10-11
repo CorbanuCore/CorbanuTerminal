@@ -1,0 +1,45 @@
+TUI session (home hS; corbanu --account main --enable security_levels --enable source_envelopes -c security.version=1 -c security.level="aggressive"; default = invalid canary)
+## screen at the first spawn (account work):
+  then reply with the sub-agent result verbatim. If a tool returns an error, reply with that error text verbatim.
+  Question 1/1 (1 unanswered)
+  Allow the spawned agent to run on account `work` of `zai` instead of the parent's account?
+  › 1. Allow once  Run this one call; ask again next time.
+    2. Cancel      Do not run it.
+  tab to add notes | enter to submit answer | esc to interrupt
+## after Allow once (and the wait-tool security gate):
+  └ Reply with exactly the word child-ok
+• Questions 1/1 answered
+  • Allow `wait_agent_v1`? Security level: this is a tool the security level has not classified after untrusted content entered the session. Approve only if you
+    asked for it; a cached or automatic approval does not count.
+    answer: Allow once
+• Waiting for 01a128dd-9d67-7c21-9857-2173ac109340
+  └ Wakes on a child report/message, follow-up task, human steering, or timeout.
+• Wait ended — child status update
+  └ 01a128dd-9d67-7c21-9857-2173ac109340: Completed - child-ok
+• child-ok
+› Improve documentation in @filename
+  Z.AI GLM 5.3 Flash via zai default · /Volumes/CorbanuDrive/Corbanu/tmp/pf84s03acc/work · Corbanu Terminal · TPS: 4.0 tok/s · Main [default]
+## second spawn (account work) -> Cancel:
+  returns an error, reply with that error text verbatim.
+• Questions 1/1 answered
+  • Allow `spawn_agent_v1`? Security level: this is a tool the security level has not classified after untrusted content entered the session. Approve only if
+    you asked for it; a cached or automatic approval does not count.
+    answer: Allow once
+• Questions 1/1 answered
+  • Allow the spawned agent to run on account `work` of `zai` instead of the parent's account?
+    answer: Cancel
+• The user declined running the spawned agent on account work of zai. Do not retry on another account without the user's consent.
+› Improve documentation in @filename
+  Z.AI GLM 5.3 Flash via zai default · /Volumes/CorbanuDrive/Corbanu/tmp/pf84s03acc/work · Corbanu Terminal · TPS: 4.4 tok/s · Main [default]
+## rollout view (01a128dd-2107-7f80-ab6c-d632ef82262d):
+thread 01a128dd-2107 provider=zai role=None
+  turn_context provider=zai provider_account=main
+  call spawn_agent_v1 {"message":"Reply with exactly the word child-ok","account":"work"}
+  result {"agent_id":"01a128dd-9d67-7c21-9857-2173ac109340","nickname":"Mill","account":"work"}
+  call wait_agent_v1 {"targets":["01a128dd-9d67-7c21-9857-2173ac109340"],"timeout_ms":30000}
+  result {"status":{"01a128dd-9d67-7c21-9857-2173ac109340":{"completed":"child-ok"}},"timed_out":false}
+  call spawn_agent_v1 {"account":"work","message":"Reply with exactly the word child-two"}
+  result The user declined running the spawned agent on account `work` of `zai`. Do not retry on another account without the user's consent.
+    thread 01a128dd-9d67 provider=zai role=None
+      turn_context provider=zai provider_account=work
+coordinator turn_context {'approval_policy': 'on-request', 'security_level': 'aggressive', 'provider_account': 'main'}

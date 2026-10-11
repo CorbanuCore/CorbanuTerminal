@@ -217,7 +217,7 @@ requires the user to choose a usable replacement first.
 
 2026-10-08 amendment from Travis; activated 2026-10-10. S01 (home-hygiene lane)
 and S02 (account-registry lane) run in parallel with disjoint write scopes; S03,
-S04 and S05 are allocated when their dependencies are merged behind the flag.
+S04, S05 and S06 are allocated when their dependencies are merged behind the flag.
 
 **Requirement.** Support several accounts for any provider. That covers extra API
 keys (two Anthropic, OpenRouter or Z.AI keys) and extra subscription logins (two
@@ -297,8 +297,12 @@ though, for four reasons:
   needed to enroll and exercise accounts before the S04 UI; S03 adds the
   explicit selectors (`--account`, spawn, session, resume).
 - S02 amendment (2026-10-10): named OpenAI sign-ins (API-key login, ChatGPT) and AWS
-  profiles move to S04, where their sign-in flows live; selecting such an account
-  fails closed until then.
+  profiles left S02; selecting such an account fails closed until they ship.
+- Decision D4 (Travis, 2026-10-11, chat with the coordinator): option (a). A new
+  [PF-84-S06](../../sprints/current/unified-provider-auth/pf-84-s06-aws-and-chatgpt-accounts.md)
+  runs after S05: named AWS profile accounts first (slice A), then named
+  ChatGPT/OpenAI sign-in accounts (slice B). The other options, (b) AWS only and
+  (c) dropping both, were not chosen. This closes the question #423 recorded.
 
 **Decisions (recommended defaults adopted 2026-10-10; Travis may revisit).**
 Travis did not answer D1-D3 explicitly when approving the work, so the plan's
@@ -526,6 +530,7 @@ OpenAI schema, provider authorization or credential format is rewritten.
 | `PF-84` | Account selection per session, CLI and worker | [PF-84-S03](../../sprints/current/unified-provider-auth/pf-84-s03-account-selection-and-propagation.md) | ready (lane account-selection) |
 | `PF-84` | `/providers` account management; duplicate-row fix | [PF-84-S04](../../sprints/current/unified-provider-auth/pf-84-s04-provider-account-management-ui.md) | ready (lane account-ui) |
 | `PF-84` | Per-account usage and rate-limit attribution | [PF-84-S05](../../sprints/current/unified-provider-auth/pf-84-s05-per-account-usage-attribution.md) | draft; unallocated |
+| `PF-84` | Named AWS profile and ChatGPT/OpenAI sign-in accounts | [PF-84-S06](../../sprints/current/unified-provider-auth/pf-84-s06-aws-and-chatgpt-accounts.md) | draft; unallocated (D4) |
 
 ## Hard dependency graph
 
@@ -545,8 +550,8 @@ PF-42..PF-47 merged Claude foundation
 ```
 
 PF-84 (named accounts, active 2026-10-10): S01 has no dependency;
-S02 -> S03 -> S04, and S03 + PF-60-S04 (accounting schema) -> S05. S01 and S02
-run in parallel; the rest is serial.
+S02 -> S03 -> S04, S03 + PF-60-S04 (accounting schema) -> S05, and S05 -> S06.
+S01 and S02 run in parallel; the rest is serial.
 
 Outside PF-84 one sprint is executable at a time. A dependent sprint remains draft until its
 predecessor is completed and archived.
@@ -569,6 +574,7 @@ predecessor is completed and archived.
 | Worker on another account (PF-84) | Coordinator on `default` | Spawn subagent or tmux `corbanu exec --account work` | Spawn event shows `work` | Worker uses `work`, coordinator stays on `default`; failure never falls back |
 | Account isolation (PF-84) | Fake-key account `bad` | Select `bad`, send a prompt | Visible 401 with recovery | No retry on another account; no value in any artifact |
 | Per-account usage (PF-84) | Two accounts used | Open usage view | Rows grouped by provider and account | Counts match requests per account |
+| Named AWS and ChatGPT accounts (PF-84-S06) | Bedrock or OpenAI sign-in configured | Add `aws-profile` account or sign in a second ChatGPT account | One row per account; fake or missing account visibly refused | Requests use that account's profile or tokens; refresh saves to that account; never falls back |
 | Wrapper/home override (PF-84) | Inherited `CORBANU_HOME` | Launch through `~/.local/bin/corbanu` with another home | Warning or correct home | Never silently runs on the coordinator's home |
 
 ## Implementation sequence
@@ -720,6 +726,7 @@ see the [reconciliation evidence](../../../qa/release/0.1.38/travis-reconciliati
 | D1 PF-84 storage | product | Travis | PF-84-S02 | **Recommended default adopted 2026-10-10; Travis may revisit.** one vault per home with account-qualified labels (no new keychain items). Alternative: a home per account (proven, but splits vault, sessions and usage). |
 | D2 PF-84 import | product | Travis | PF-84-S04 | **Recommended default adopted 2026-10-10; Travis may revisit.** no automatic import from per-home workaround homes; re-enroll. |
 | D3 PF-84 model-chosen account | security | Travis | PF-84-S03 | **Recommended default adopted 2026-10-10; Travis may revisit.** spawn `account` limited to configured names, shown in the spawn event; requires approval under `/security` Aggressive. |
+| D4 PF-84 ChatGPT and AWS accounts | product | Travis | PF-84-S06 | **Decided 2026-10-11 by Travis (option (a))**: new S06 after S05, AWS profile accounts first, then ChatGPT/OpenAI sign-in accounts. Open points listed in the S06 record. |
 | PF-76-S01 overlap | integration | plan owner | PF-84-S02 | Reconciled 2026-10-10: PF-76 stores a profile's sign-in as a PF-84 named account selected by `[profiles.<name>.provider_accounts]`; see the PF-84 section. |
 
 ## Release linkage

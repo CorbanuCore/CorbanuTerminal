@@ -17,7 +17,9 @@ and cold resume pass in both live repositories. PF-58 is the current serial
 credential-health and reauthentication follow-up.
 PF-84 (named accounts per provider) was activated on 2026-10-10: S01 and S02 are
 `ready` and merged behind the `named_accounts` flag; S03 is `ready` and merged
-behind the flag; S04 is ready; S05 follows. See the plan's PF-84 section.
+behind the flag; S04 is ready; S05 follows. S06 (named AWS profile, then
+ChatGPT/OpenAI sign-in accounts) follows S05 per Travis's 2026-10-11 decision
+D4. See the plan's PF-84 section.
 
 | Order | Sprint | Outcome | Status | Depends on |
 | ---: | --- | --- | --- | --- |
@@ -27,6 +29,7 @@ behind the flag; S04 is ready; S05 follows. See the plan's PF-84 section.
 | 25 | [PF-84-S03](pf-84-s03-account-selection-and-propagation.md) | Account selection per session, CLI and worker | ready | PF-84-S02 |
 | 26 | [PF-84-S04](pf-84-s04-provider-account-management-ui.md) | `/providers` account management; duplicate-row fix | ready | PF-84-S03 |
 | 27 | [PF-84-S05](pf-84-s05-per-account-usage-attribution.md) | Per-account usage and rate-limit attribution | draft | PF-84-S03, PF-60-S04 |
+| 28 | [PF-84-S06](pf-84-s06-aws-and-chatgpt-accounts.md) | Named AWS profile, then ChatGPT/OpenAI sign-in accounts | draft | PF-84-S05 |
 | 7 | [PF-48-S01](../../archive/unified-provider-auth/pf-48-s01-provider-catalog-contract.md) | Typed provider catalog and capability contract | completed | PF-47-S01 |
 | 8 | [PF-49-S01](../../archive/unified-provider-auth/pf-49-s01-status-and-eligibility.md) | Shared metadata status and eligibility persistence | completed | PF-48-S01 |
 | 9 | [PF-50-S01](../../archive/unified-provider-auth/pf-50-s01-api-key-flow-controller.md) | Shared typed controller and API-key adapter | completed | PF-49-S01 |
