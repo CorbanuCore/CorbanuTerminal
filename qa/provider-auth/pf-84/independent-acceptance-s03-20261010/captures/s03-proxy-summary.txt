@@ -1,0 +1,33 @@
+canary proxy: 23 requests in the whole run
+  bearer=default   status=200  x7
+  bearer=fake      status=401  x4
+  bearer=main      status=200  x2
+  bearer=work      status=200  x10
+requests whose body contained ANY account canary value (what the model sees): 0
+requests whose body contained the real upstream key: 0
+spawn_agent offered with an `account` parameter in any request: False (custom chat providers get no spawn tool; see README)
+
+Every request in order (review finding 9):
+   1 bearer=default  200  proxy-setup smoke exec (hP, default) | first user: 'Reply with exactly the word pong and not'
+   2 bearer=default  200  second smoke exec after adding tool logging (hP, default) | first user: 'Reply with exactly the word pong and not'
+   3 bearer=default  200  TUI probe (hP, default) - showed no spawn tool | first user: 'Reply with exactly the word pong and not'
+   4 bearer=work     200  TUI p1 --account work | first user: 'Reply with exactly the word pong and not'
+   5 bearer=fake     401  TUI p2 --account fake | first user: 'Reply with exactly the word pong and not'
+   6 bearer=fake     401  TUI p4 resume <p2> (recorded fake) | first user: 'Reply with exactly the word pong and not'
+   7 bearer=work     200  TUI p4b resume <p1> (recorded work) | first user: 'Reply with exactly the word pong and not'
+   8 bearer=main     200  TUI p4c resume --account main <p2> | first user: 'Reply with exactly the word pong and not'
+   9 bearer=default  200  c1 coordinator turn (default) | first user: 'Run this exact shell command once and th'
+  10 bearer=work     200  worker W1 --account work | first user: 'Reply with exactly the word pong-W1 and '
+  11 bearer=fake     401  worker W2 --account fake | first user: 'Reply with exactly the word pong-W2 and '
+  12 bearer=fake     401  worker W4 resume <W2> | first user: 'Reply with exactly the word pong-W2 and '
+  13 bearer=main     200  worker W5 resume --account main <W2> | first user: 'Reply with exactly the word pong-W2 and '
+  14 bearer=default  200  c1 coordinator (tool follow-up) | first user: 'Run this exact shell command once and th'
+  15 bearer=default  200  c1 coordinator (tool follow-up) | first user: 'Run this exact shell command once and th'
+  16 bearer=default  200  c1 coordinator pong turn | first user: 'Run this exact shell command once and th'
+  17 bearer=work     200  home hW (zcmd, auth.command): every hW run used --account work (exec smoke, /spawn troll panes; rows 22-23 = the sp3 troll) | first user: ''
+  18 bearer=work     200  home hW (zcmd, auth.command): every hW run used --account work (exec smoke, /spawn troll panes; rows 22-23 = the sp3 troll) | first user: ''
+  19 bearer=work     200  home hW (zcmd, auth.command): every hW run used --account work (exec smoke, /spawn troll panes; rows 22-23 = the sp3 troll) | first user: 'Reply with exactly the word pong and not'
+  20 bearer=work     200  home hW (zcmd, auth.command): every hW run used --account work (exec smoke, /spawn troll panes; rows 22-23 = the sp3 troll) | first user: ''
+  21 bearer=work     200  home hW (zcmd, auth.command): every hW run used --account work (exec smoke, /spawn troll panes; rows 22-23 = the sp3 troll) | first user: ''
+  22 bearer=work     200  home hW (zcmd, auth.command): every hW run used --account work (exec smoke, /spawn troll panes; rows 22-23 = the sp3 troll) | first user: ''
+  23 bearer=work     200  home hW (zcmd, auth.command): every hW run used --account work (exec smoke, /spawn troll panes; rows 22-23 = the sp3 troll) | first user: 'Reply with exactly the word pong and not'

@@ -1,0 +1,52 @@
+home hK accounts (no default Kimi key anywhere):
+  kimi-code	fake	api_key
+  kimi-code	main	api_key
+  zai	zmain	api_key
+== K1 --account main (exit 0)
+   args: exec --account main
+   | pong
+   | session id: 01a128bf-8eb0-7cf3-ab70-f34a69d55ac7
+== K2 --account fake (exit 1)
+   args: exec --account fake
+   | ERROR: unexpected status 401 Unauthorized: The API Key appears to be invalid or may have expired. Please verify your credentials and try again., url: https://api.kimi.com/coding/v1/chat/completions, cf-ray: a48a5da7ba82ef7f-PHX
+   | session id: 01a128bf-c370-7242-828f-d421e74d3514
+== K3 --account ghost (exit 1)
+   args: exec --account ghost
+   | Error: thread/start: thread/start failed: account `ghost` of provider `kimi-code` is not configured; add it with `corbanu account add kimi-code ghost` or pick another with `--account` (see `corbanu account list`) (code -32600)
+== K4 default account (no Kimi default key configured) (exit 1)
+   args: exec 
+   | ERROR: Missing environment variable: `KIMI_API_KEY`. Run `/providers` and select the matching provider key:
+   | session id: 01a128bf-c7e2-78f2-b681-82c2edada0dd
+== K5 resume K2 (recorded fake), no --account (exit 1)
+   args: exec resume 01a128bf-c370-7242-828f-d421e74d3514
+   | ERROR: unexpected status 401 Unauthorized: The API Key appears to be invalid or may have expired. Please verify your credentials and try again., url: https://api.kimi.com/coding/v1/chat/completions, cf-ray: a48a5db179086cda-PHX
+   | session id: 01a128bf-c370-7242-828f-d421e74d3514
+== K6 resume K2 with --account main (exit 0)
+   args: exec resume --account main 01a128bf-c370-7242-828f-d421e74d3514
+   | pong
+   | session id: 01a128bf-c370-7242-828f-d421e74d3514
+== K7 resume K1 (recorded main), no --account (exit 0)
+   args: exec resume 01a128bf-8eb0-7cf3-ab70-f34a69d55ac7
+   | pong
+   | session id: 01a128bf-8eb0-7cf3-ab70-f34a69d55ac7
+-- cross-provider prefix: session provider is kimi-code
+== K8 --account zai:zmain (account of another provider; session stays kimi-code) (exit 1)
+   args: exec --account zai:zmain
+   | ERROR: Missing environment variable: `KIMI_API_KEY`. Run `/providers` and select the matching provider key:
+   | session id: 01a128c0-61b1-7c83-af12-c70432416a44
+== K9 --account zai:ghost (missing account of another provider) (exit 1)
+   args: exec --account zai:ghost
+   | ERROR: Missing environment variable: `KIMI_API_KEY`. Run `/providers` and select the matching provider key:
+   | session id: 01a128c0-62c5-7e00-9599-4887904169a3
+== K10 -c model_provider=zai -m glm-5.3-flash --account zai:zmain (exit 0)
+   args: exec -c model_provider="zai" -m glm-5.3-flash --account zai:zmain
+   | pong
+   | session id: 01a128c0-6461-7961-a90c-ae843d081f5f
+== K11 -c model_provider=zai -m glm-5.3-flash --account kimi-code:main (prefix names the other provider) (exit 0)
+   args: exec -c model_provider="zai" -m glm-5.3-flash --account kimi-code:main
+   | pong
+   | session id: 01a128c0-7882-7c93-93c0-5ae8f19b9c87
+== K12 -c model_provider=zai -m glm-5.3-flash --account kimi-code:ghost (missing, other provider) (exit 0)
+   args: exec -c model_provider="zai" -m glm-5.3-flash --account kimi-code:ghost
+   | pong
+   | session id: 01a128c0-8b36-79a2-99d8-f549d923a584
