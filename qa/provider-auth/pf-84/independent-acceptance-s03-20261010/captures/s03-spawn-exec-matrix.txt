@@ -1,0 +1,100 @@
+== SP1 coordinator --account main; spawn without account (inherit; default would 401) (exit 0)
+   exec args: --account main
+   spawn request: {message}
+   final reply: child-ok
+   thread 01a128c5-5e62 provider=zai role=None
+     turn_context provider=zai provider_account=main
+     call spawn_agent_v1 {"message":"Reply with exactly the word child-ok"}
+     result {"agent_id":"01a128c5-7987-7020-89f8-934b8a6bfd1d","nickname":"Euler","account":"main"}
+     call wait_agent_v1 {"targets":["01a128c5-7987-7020-89f8-934b8a6bfd1d"]}
+     result {"status":{"01a128c5-7987-7020-89f8-934b8a6bfd1d":{"completed":"child-ok"}},"timed_out":false}
+       thread 01a128c5-7987 provider=zai role=None
+         turn_context provider=zai provider_account=main
+== SP2 coordinator --account main; spawn account=work (exit 0)
+   exec args: --account main
+   spawn request: {message, account:"work"}
+   final reply: child-ok
+   thread 01a128c5-a51c provider=zai role=None
+     turn_context provider=zai provider_account=main
+     call spawn_agent_v1 {"message":"Reply with exactly the word child-ok","account":"work"}
+     result {"agent_id":"01a128c5-c3a4-7aa0-ac0c-00b04ff1e480","nickname":"Fermat","account":"work"}
+     call wait_agent_v1 {"targets":["01a128c5-c3a4-7aa0-ac0c-00b04ff1e480"],"timeout_ms":60000}
+     result {"status":{"01a128c5-c3a4-7aa0-ac0c-00b04ff1e480":{"completed":"child-ok"}},"timed_out":false}
+       thread 01a128c5-c3a4 provider=zai role=None
+         turn_context provider=zai provider_account=work
+== SP3 coordinator --account main; spawn account=fake (child must 401; no retry elsewhere) (exit 0)
+   exec args: --account main
+   spawn request: {message, account:"fake"}
+   final reply: unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: b254b856-d6a6-4b6b-ba5f-106ff5ae9018
+   thread 01a128c5-ee44 provider=zai role=None
+     turn_context provider=zai provider_account=main
+     call spawn_agent_v1 {"account":"fake","message":"Reply with exactly the word child-ok"}
+     result {"agent_id":"01a128c6-0b77-79f3-8225-f05e0e11f318","nickname":"Pascal","account":"fake"}
+     call wait_agent_v1 {"targets":["01a128c6-0b77-79f3-8225-f05e0e11f318"],"timeout_ms":30000}
+     result {"status":{"01a128c6-0b77-79f3-8225-f05e0e11f318":{"completed":null}},"timed_out":false}
+       thread 01a128c6-0b77 provider=zai role=None
+         turn_context provider=zai provider_account=fake
+== SP4 spawn account=ghost (not configured) (exit 0)
+   exec args: --account main
+   spawn request: {message, account:"ghost"}
+   final reply: account `ghost` of provider `zai` is not configured; add it with `corbanu account add zai ghost` or pick another with `--account` (see `corbanu account list`). Configured accounts of `zai`: `default`, fake, main, work. Do not retry on another account without the user's consent.
+   thread 01a128c6-3d63 provider=zai role=None
+     turn_context provider=zai provider_account=main
+     call spawn_agent_v1 {"message":"Reply with exactly the word child-ok","account":"ghost"}
+     result account `ghost` of provider `zai` is not configured; add it with `corbanu account add zai ghost` or pick another with `--account` (see `corbanu account list`). Configured accounts of `zai`: `default`, fake, main, work. Do not retry on another account without the user's consent.
+== SP5 spawn account=kimionly (configured for kimi-code only) (exit 0)
+   exec args: --account main
+   spawn request: {message, account:"kimionly"}
+   final reply: account `kimionly` of provider `zai` is not configured; add it with `corbanu account add zai kimionly` or pick another with `--account` (see `corbanu account list`). Configured accounts of `zai`: `default`, fake, main, work. Do not retry on another account without the user's consent.
+   thread 01a128c6-7220 provider=zai role=None
+     turn_context provider=zai provider_account=main
+     call spawn_agent_v1 {"message":"Reply with exactly the word child-ok","account":"kimionly"}
+     result account `kimionly` of provider `zai` is not configured; add it with `corbanu account add zai kimionly` or pick another with `--account` (see `corbanu account list`). Configured accounts of `zai`: `default`, fake, main, work. Do not retry on another account without the user's consent.
+== SP6 role child agent_type=explorer, no account (inherit) (exit 0)
+   exec args: --account main
+   spawn request: {message, agent_type:"explorer"}
+   final reply: child-ok
+   thread 01a128c6-acf2 provider=zai role=None
+     turn_context provider=zai provider_account=main
+     call spawn_agent_v1 {"agent_type":"explorer","message":"Reply with exactly the word child-ok"}
+     result {"agent_id":"01a128c6-c636-7792-8c27-a449842aa751","nickname":"Schrodinger","account":"main"}
+     call wait_agent_v1 {"targets":["01a128c6-c636-7792-8c27-a449842aa751"],"timeout_ms":30000}
+     result {"status":{"01a128c6-c636-7792-8c27-a449842aa751":{"completed":"child-ok"}},"timed_out":false}
+       thread 01a128c6-c636 provider=zai role=explorer
+         turn_context provider=zai provider_account=main
+== SP7 role child agent_type=explorer + account=fake (exit 0)
+   exec args: --account main
+   spawn request: {message, agent_type:"explorer", account:"fake"}
+   final reply: unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: 1c3e84e0-27b7-4a7b-b36e-6e9e31b3ab04
+   thread 01a128c6-eedb provider=zai role=None
+     turn_context provider=zai provider_account=main
+     call spawn_agent_v1 {"message":"Reply with exactly the word child-ok","agent_type":"explorer","account":"fake"}
+     result {"agent_id":"01a128c7-066f-7661-8f8e-eb2c7608507b","nickname":"Faraday","account":"fake"}
+     call wait_agent_v1 {"targets":["01a128c7-066f-7661-8f8e-eb2c7608507b"],"timeout_ms":30000}
+     result {"status":{"01a128c7-066f-7661-8f8e-eb2c7608507b":{"completed":null}},"timed_out":false}
+       thread 01a128c7-066f provider=zai role=explorer
+         turn_context provider=zai provider_account=fake
+== SP8 coordinator selected by config provider_accounts.zai=work; spawn without account (exit 0)
+   exec args: -c provider_accounts.zai="work"
+   spawn request: {message}
+   final reply: child-ok
+   thread 01a128c7-3d75 provider=zai role=None
+     turn_context provider=zai provider_account=work
+     call spawn_agent_v1 {"message":"Reply with exactly the word child-ok"}
+     result {"agent_id":"01a128c7-54e6-7d92-abf8-af70c65d2677","nickname":"Huygens","account":"work"}
+     call wait_agent_v1 {"targets":["01a128c7-54e6-7d92-abf8-af70c65d2677"]}
+     result {"status":{"01a128c7-54e6-7d92-abf8-af70c65d2677":{"completed":"child-ok"}},"timed_out":false}
+       thread 01a128c7-54e6 provider=zai role=None
+         turn_context provider=zai provider_account=work
+== SP9 flag OFF, real default key; ask for account=fake (exit 0)
+   exec args: --disable named_accounts
+   spawn request: {message, account:"fake"}
+   final reply: child-ok
+   thread 01a128c7-7c6d provider=zai role=None
+     turn_context provider=zai provider_account=<none>
+     call spawn_agent_v1 {"message":"Reply with exactly the word child-ok"}
+     result {"agent_id":"01a128c7-a73a-7850-be88-0a0ded2aa33d","nickname":"James"}
+     call wait_agent_v1 {"targets":["01a128c7-a73a-7850-be88-0a0ded2aa33d"],"timeout_ms":30000}
+     result {"status":{"01a128c7-a73a-7850-be88-0a0ded2aa33d":{"completed":"child-ok"}},"timed_out":false}
+       thread 01a128c7-a73a provider=zai role=None
+         turn_context provider=zai provider_account=<none>
