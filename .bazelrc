@@ -36,6 +36,11 @@ common:windows --test_env=WINDIR
 # 2 MiB stack can be too small for large async test futures on Windows CI; see
 # https://github.com/openai/codex/pull/19067 for the motivating failure.
 common --test_env=RUST_MIN_STACK=8388608 # 8 MiB
+# Match `just test` (scripts/isolated_rust_tests.py): ordinary debug tests never
+# call the native keyring and use the profile-local fallback instead. Without it,
+# vault-backed tests wait out the 15s native keyring timeout on CI runners.
+# See docs/development/test-isolation.md.
+common --test_env=CORBANU_TEST_NO_NATIVE_KEYRING=1
 
 common --test_output=errors
 common --nobuild_runfile_links
