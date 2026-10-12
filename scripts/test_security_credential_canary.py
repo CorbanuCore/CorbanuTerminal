@@ -164,6 +164,92 @@ class SecurityCredentialCanaryTests(unittest.TestCase):
         ):
             canary.validate_probe_output(probe, missing)
 
+    def test_failed_probe_names_the_assertion_with_redacted_values(self) -> None:
+        probe = canary.Probe(
+            probe_id="fixture",
+            package="fixture",
+            cargo_args=("--lib", "credential"),
+            expected_tests=("first_case", "second_case"),
+            source_paths=("fixture.rs",),
+            covers=("surface",),
+        )
+        failed = canary.CommandResult(
+            command=["cargo", "test"],
+            returncode=101,
+            stdout=(
+                "test module::first_case ... ok\n"
+                "test module::second_case ... FAILED\n"
+                "test module::third_case ... FAILED\n"
+                "failures:\n    module::second_case\n"
+                "test result: FAILED. 1 passed; 1 failed; 0 ignored\n"
+            ),
+            stderr=(
+                "thread 'module::second_case' (4242) panicked at "
+                "net/src/fixture_tests.rs:822:5:\n"
+                "assertion failed: `(left == right)`\n\n"
+                "\x1b[1mDiff\x1b[0m \x1b[31m< left\x1b[0m / \x1b[32mright >\x1b[0m :\n"
+                "\x1b[31m<None\x1b[0m\n"
+                '\x1b[32m>Some("ghp_pf27SyntheticCanary000000000000")\x1b[0m\n'
+                "observed key c2VjcmV0LWtleS1tYXRlcmlhbC0xMjM0NTY3OA==\n"
+                "test fixture state: api_key=plainlowercasevalue, token: abc\n"
+                "while running pf_27_s04_slowly_exiting_broker_is_detected\n"
+                "note: run with `RUST_BACKTRACE=1` to display a backtrace\n"
+                "thread 'module::third_case' (7) panicked at "
+                "C:\\a\\deps\\lib.rs:3:9:\r\n"
+                "\x1b]8;;https://example.invalid\x07explicit panic\r\n"
+            ),
+        )
+        with self.assertRaises(canary.QualificationError) as raised:
+            canary.validate_probe_output(probe, failed)
+        message = str(raised.exception)
+        self.assertIn(
+            "probe fixture failed: cargo exited 101; failed tests: 2", message
+        )
+        self.assertIn("FAILED module::second_case", message)
+        self.assertIn("panicked at net/src/fixture_tests.rs:822:5", message)
+        self.assertIn("| assertion failed: `(left == right)`", message)
+        self.assertIn("| <None", message)
+        self.assertIn('| >Some("[REDACTED]")', message)
+        self.assertIn("| observed key [REDACTED]", message)
+        self.assertIn(
+            "| test fixture state: api_key=[REDACTED], token: [REDACTED]", message
+        )
+        self.assertIn(
+            "| while running pf_27_s04_slowly_exiting_broker_is_detected", message
+        )
+        self.assertIn(
+            "FAILED module::third_case\n    panicked at C:\\a\\deps\\lib.rs:3:9",
+            message,
+        )
+        self.assertIn("| explicit panic", message)
+        self.assertNotIn("plainlowercasevalue", message)
+        self.assertNotIn("Synthetic", message)
+        self.assertNotIn("c2VjcmV0", message)
+        self.assertNotIn("\x1b", message)
+        self.assertNotIn("RUST_BACKTRACE", message)
+
+    def test_failed_probe_without_test_failures_reports_output_tail(self) -> None:
+        probe = canary.Probe(
+            probe_id="fixture",
+            package="fixture",
+            cargo_args=("--lib", "credential"),
+            expected_tests=("first_case",),
+            source_paths=("fixture.rs",),
+            covers=("surface",),
+        )
+        crashed = canary.CommandResult(
+            command=["cargo", "test"],
+            returncode=101,
+            stdout="",
+            stderr="error[E0425]: cannot find value `x` in this scope\n",
+        )
+        with self.assertRaisesRegex(
+            canary.QualificationError,
+            r"failed tests: 0\n  no failed test reported; output tail:\n"
+            r"    \| error\[E0425\]: cannot find value `x`",
+        ):
+            canary.validate_probe_output(probe, crashed)
+
     def test_parse_canary_result_requires_exact_surface_and_use_counts(self) -> None:
         payload = {
             "canary_sha256": "a" * 64,

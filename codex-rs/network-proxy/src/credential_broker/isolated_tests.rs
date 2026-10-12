@@ -46,11 +46,39 @@ const UPSTREAM_HOST: &str = "127.0.0.1";
 const SYNTHETIC_TOKEN: &str = "ghp_pf27SyntheticCanary0000000000000000000000";
 const STREAM_PATH: &str = "/stream";
 
+/// Milliseconds a test broker lingers in `exit` after its shutdown removed the
+/// socket, standing in for a slow process teardown on a loaded host (#222).
+#[cfg(unix)]
+const CHILD_EXIT_DELAY_ENV: &str = "CODEX_PF27_ISOLATED_BROKER_EXIT_DELAY_MS";
+
 #[test]
 fn pf_27_s04_pf_27_s01_isolated_broker_child_entry() {
     if std::env::var_os(CHILD_ENV).is_some() {
+        #[cfg(unix)]
+        linger_at_exit_if_requested();
         run_credential_broker_main_with(Some(test_stored_key));
     }
+}
+
+/// The broker leaves through `std::process::exit`, which runs `atexit`
+/// handlers after the shutdown already removed the socket directory.
+#[cfg(unix)]
+fn linger_at_exit_if_requested() {
+    use std::sync::atomic::AtomicU64;
+    use std::sync::atomic::Ordering;
+    static DELAY_MS: AtomicU64 = AtomicU64::new(0);
+    extern "C" fn linger() {
+        std::thread::sleep(Duration::from_millis(DELAY_MS.load(Ordering::Relaxed)));
+    }
+    let Some(delay_ms) = std::env::var(CHILD_EXIT_DELAY_ENV)
+        .ok()
+        .and_then(|value| value.parse().ok())
+    else {
+        return;
+    };
+    DELAY_MS.store(delay_ms, Ordering::Relaxed);
+    // SAFETY: registers a function without captured state; it only sleeps.
+    unsafe { libc::atexit(linger) };
 }
 
 /// PF-27-S05 stand-in for the vault resolver the binary supplies: reads
@@ -177,16 +205,26 @@ fn launcher_with_ca(
     ca_path: PathBuf,
     controller_pid_override: Option<u32>,
 ) -> IsolatedBrokerLauncher {
+    launcher_with_envs(ca_path, controller_pid_override, Vec::new())
+}
+
+fn launcher_with_envs(
+    ca_path: PathBuf,
+    controller_pid_override: Option<u32>,
+    extra_envs: Vec<(OsString, OsString)>,
+) -> IsolatedBrokerLauncher {
+    let mut envs = vec![
+        (OsString::from(CHILD_ENV), OsString::from("1")),
+        (OsString::from("SSL_CERT_FILE"), ca_path.into_os_string()),
+    ];
+    envs.extend(extra_envs);
     IsolatedBrokerLauncher::test_harness(
         /*program*/ None,
         [CHILD_TEST, "--exact", "--nocapture", "--test-threads=1"]
             .into_iter()
             .map(OsString::from)
             .collect(),
-        vec![
-            (OsString::from(CHILD_ENV), OsString::from("1")),
-            (OsString::from("SSL_CERT_FILE"), ca_path.into_os_string()),
-        ],
+        envs,
         controller_pid_override,
     )
 }
@@ -804,6 +842,66 @@ async fn pf_27_s04_pf_27_s01_externally_terminated_broker_is_detected_and_cleane
     let upstream = start_upstream().await;
     let broker = isolated_broker(launcher(&upstream, /*controller_pid_override*/ None));
     let dummy = virtualized_dummy(&broker);
+    let client = terminate_externally(&broker, /*lingers*/ false).await;
+    assert_exit_is_detected(&broker, &client, upstream.port, &dummy).await;
+}
+
+/// Regression for #222: the broker removes its socket before its process
+/// exits, and on a loaded host the exit can lag well behind. Detection must
+/// wait for the exit itself, not for a fixed time after the socket vanished.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn pf_27_s04_slowly_exiting_terminated_broker_is_detected_once_it_exits() {
+    let upstream = start_upstream().await;
+    let broker = isolated_broker(lingering_launcher(&upstream));
+    let dummy = virtualized_dummy(&broker);
+    let client = terminate_externally(&broker, /*lingers*/ true).await;
+    assert_exit_is_detected(&broker, &client, upstream.port, &dummy).await;
+}
+
+/// The window #222 exposed (socket gone, process still exiting) must fail
+/// closed: a request routed to the dying broker never reaches the upstream.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn pf_27_s04_requests_to_an_exiting_broker_fail_closed() {
+    let upstream = start_upstream().await;
+    let broker = isolated_broker(lingering_launcher(&upstream));
+    let dummy = virtualized_dummy(&broker);
+    let client = terminate_externally(&broker, /*lingers*/ true).await;
+
+    match route(&broker, upstream.port, "/echo", &dummy) {
+        Ok(CredentialRouting::Brokered(route)) => assert_eq!(
+            route.forward(request("/echo", &dummy)).await.err(),
+            Some(IsolatedBrokerError::Unavailable)
+        ),
+        other => assert_eq!(
+            other.err(),
+            Some(ScopedCredentialInjectionError::IsolatedBrokerUnavailable)
+        ),
+    }
+    assert_exit_is_detected(&broker, &client, upstream.port, &dummy).await;
+}
+
+/// A test broker that lingers in `exit` long after its socket is gone.
+#[cfg(unix)]
+fn lingering_launcher(upstream: &Upstream) -> IsolatedBrokerLauncher {
+    launcher_with_envs(
+        upstream.ca_path.clone(),
+        /*controller_pid_override*/ None,
+        vec![(
+            OsString::from(CHILD_EXIT_DELAY_ENV),
+            OsString::from("10000"),
+        )],
+    )
+}
+
+/// Sends SIGTERM to the broker and waits until it removed its socket. For a
+/// lingering broker, checks the race window is open: process still running.
+#[cfg(unix)]
+async fn terminate_externally(
+    broker: &CredentialBroker,
+    lingers: bool,
+) -> std::sync::Arc<super::IsolatedBrokerClient> {
     let client = broker.current_isolated_client().expect("broker client");
     let pid = client.pid_for_test().expect("broker pid");
     let status = std::process::Command::new("kill")
@@ -811,18 +909,45 @@ async fn pf_27_s04_pf_27_s01_externally_terminated_broker_is_detected_and_cleane
         .status()
         .expect("kill");
     assert!(status.success());
-    // The broker removes its own socket directory on SIGTERM.
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
     while client.socket_path().exists() && tokio::time::Instant::now() < deadline {
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    assert!(!client.socket_path().exists());
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(
+        !client.socket_path().exists(),
+        "broker kept its socket 10 s after SIGTERM"
+    );
+    if lingers {
+        assert!(
+            !client.has_exited_for_test(),
+            "broker exited before its exit delay; the race was not reproduced"
+        );
+    }
+    client
+}
 
+/// Waits (bounded) for the terminated broker to exit, then requires Core to
+/// see it as unavailable on the very next request.
+#[cfg(unix)]
+async fn assert_exit_is_detected(
+    broker: &CredentialBroker,
+    client: &super::IsolatedBrokerClient,
+    port: u16,
+    dummy: &str,
+) {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+    while !client.has_exited_for_test() && tokio::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(
+        client.has_exited_for_test(),
+        "broker process still running 30 s after it removed its socket"
+    );
     assert_eq!(
-        route(&broker, upstream.port, "/echo", &dummy).err(),
+        route(broker, port, "/echo", dummy).err(),
         Some(ScopedCredentialInjectionError::IsolatedBrokerUnavailable)
     );
+    assert!(!client.socket_path().exists());
 }
 
 #[cfg(unix)]

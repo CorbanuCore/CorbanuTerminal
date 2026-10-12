@@ -466,12 +466,7 @@ impl IsolatedBrokerClient {
         if !self.alive.load(Ordering::Acquire) {
             return false;
         }
-        let exited = match self.child.lock() {
-            Ok(mut child) => child
-                .as_mut()
-                .is_none_or(|child| !matches!(child.try_wait(), Ok(None))),
-            Err(_) => true,
-        };
+        let exited = self.child_exited();
         if exited && self.alive.swap(false, Ordering::AcqRel) {
             // A crashed broker cannot remove its own socket directory.
             remove_socket_dir(&self.socket_path);
@@ -607,6 +602,23 @@ impl IsolatedBrokerClient {
             .lock()
             .ok()
             .and_then(|child| child.as_ref().map(Child::id))
+    }
+
+    /// Whether the broker process is gone. The exit status stays observable
+    /// once reaped, so polling here never hides an exit from `is_alive`.
+    fn child_exited(&self) -> bool {
+        self.child.lock().map_or(true, |mut child| {
+            child
+                .as_mut()
+                .is_none_or(|child| !matches!(child.try_wait(), Ok(None)))
+        })
+    }
+
+    /// Whether the broker process has exited, without changing liveness
+    /// state. Lets tests wait for an external kill to take effect.
+    #[cfg(all(test, unix))]
+    pub(crate) fn has_exited_for_test(&self) -> bool {
+        self.child_exited()
     }
 
     /// Terminates the broker immediately. Used for crash qualification.

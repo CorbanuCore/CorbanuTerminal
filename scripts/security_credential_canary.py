@@ -25,6 +25,30 @@ SECRET_PATTERNS = (
     re.compile(r"(?i)\b(?:sk|ghp|gho|ghu|ghs|ghr)-[A-Za-z0-9_-]{8,}"),
     re.compile(r"(?i)\bBearer\s+[^\s\"']{8,}"),
 )
+REDACTION_PATTERNS = (
+    re.compile(
+        r"(?i)\b(?:sk|ghp|gho|ghu|ghs|ghr|github_pat|xox[a-z])[-_][A-Za-z0-9_-]{6,}"
+    ),
+    re.compile(r"(?i)\b(?:Bearer|Basic)\s+[^\s\"']+"),
+    re.compile(
+        r"(?i)\b((?:api[_-]?key|token|secret|password|passwd|credential)s?)"
+        r"(\s*[=:]\s*)[^\s,;]+"
+    ),
+)
+# Keys, digests and base64 material: long runs mixing letters and digits, or
+# very long runs of any kind. Plain snake_case identifiers stay readable.
+LONG_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9+/=_-]{24,}")
+IDENTIFIER_PATTERN = re.compile(r"[a-z][a-z0-9]{0,9}(?:_[a-z0-9]{1,10})+")
+ANSI_PATTERN = re.compile(r"\x1b(?:\[[0-9;?]*[A-Za-z]|\][^\x07\x1b]*(?:\x07|\x1b\\))")
+FAILED_TEST_PATTERN = re.compile(r"^test (\S+) \.\.\. FAILED$")
+TEST_STATUS_PATTERN = re.compile(r"^test \S+ \.\.\. (?:ok|FAILED|ignored)\b")
+PANIC_PATTERN = re.compile(
+    r"^thread '([^']+)'(?: \(\d+\))? panicked at ([^\s']+?:\d+:\d+):$"
+)
+PANIC_MESSAGE_TERMINATORS = ("note: ", "thread '", "failures:", "---- ")
+MAX_DIAGNOSED_TESTS = 5
+MAX_PANIC_MESSAGE_LINES = 12
+MAX_DIAGNOSTIC_LINE_CHARS = 200
 SENSITIVE_ENV_SUFFIXES = ("_API_KEY", "_TOKEN", "_SECRET", "_PASSWORD")
 REQUIRED_CANARY_SURFACES = {
     "exact_outgoing_request_capture",
@@ -411,11 +435,71 @@ def executed_test_count(result: CommandResult) -> int:
     return sum(int(value) for value in summaries)
 
 
+def redact(line: str) -> str:
+    """Defense in depth for diagnostics: drop credential- and key-shaped text."""
+    line = REDACTION_PATTERNS[0].sub("[REDACTED]", line)
+    line = REDACTION_PATTERNS[1].sub("[REDACTED]", line)
+    line = REDACTION_PATTERNS[2].sub(r"\1\2[REDACTED]", line)
+
+    def long_token(match: re.Match[str]) -> str:
+        token = match.group()
+        if IDENTIFIER_PATTERN.fullmatch(token):
+            return token
+        mixed = re.search(r"[A-Za-z]", token) and re.search(r"[0-9]", token)
+        return "[REDACTED]" if mixed or len(token) >= 48 else token
+
+    return LONG_TOKEN_PATTERN.sub(long_token, line)[:MAX_DIAGNOSTIC_LINE_CHARS]
+
+
+def probe_failure_diagnosis(result: CommandResult) -> str:
+    """Name each failed test with its panic location and assertion message
+    (expected vs observed), redacted and bounded, so CI logs say why."""
+    lines = [
+        ANSI_PATTERN.sub("", line).rstrip()
+        for line in f"{result.stdout}\n{result.stderr}".splitlines()
+    ]
+    failed = []
+    for line in lines:
+        match = FAILED_TEST_PATTERN.match(line)
+        if match is not None and match.group(1) not in failed:
+            failed.append(match.group(1))
+    panics: dict[str, list[str]] = {}
+    for index, line in enumerate(lines):
+        match = PANIC_PATTERN.match(line)
+        if match is None or match.group(1) in panics:
+            continue
+        detail = [f"panicked at {match.group(2)}"]
+        for message in lines[index + 1 :]:
+            if message.startswith(
+                PANIC_MESSAGE_TERMINATORS
+            ) or TEST_STATUS_PATTERN.match(message):
+                break
+            if message.strip() and len(detail) <= MAX_PANIC_MESSAGE_LINES:
+                detail.append(f"| {redact(message)}")
+        panics[match.group(1)] = detail
+    report = [f"cargo exited {result.returncode}; failed tests: {len(failed)}"]
+    for name in failed[:MAX_DIAGNOSED_TESTS]:
+        report.append(f"  FAILED {name}")
+        report.extend(
+            f"    {detail}"
+            for detail in panics.get(name, ["(no panic message captured)"])
+        )
+    if len(failed) > MAX_DIAGNOSED_TESTS:
+        report.append(f"  ... and {len(failed) - MAX_DIAGNOSED_TESTS} more")
+    if not failed:
+        tail = [line for line in lines if line.strip()][-MAX_PANIC_MESSAGE_LINES:]
+        report.append("  no failed test reported; output tail:")
+        report.extend(f"    | {redact(line)}" for line in tail)
+    return "\n".join(report)
+
+
 def validate_probe_output(probe: Probe, result: CommandResult) -> int:
     combined = f"{result.stdout}\n{result.stderr}"
     assert_secret_free(combined, f"probe {probe.probe_id} output")
     if result.returncode != 0:
-        raise QualificationError(f"probe {probe.probe_id} failed")
+        raise QualificationError(
+            f"probe {probe.probe_id} failed: {probe_failure_diagnosis(result)}"
+        )
     missing = [
         test_name
         for test_name in probe.expected_tests
