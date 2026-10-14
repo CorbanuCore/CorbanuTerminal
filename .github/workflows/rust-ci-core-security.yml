@@ -137,11 +137,9 @@ jobs:
         run: |
           cargo test --locked --target ${{ inputs.target }} -p codex-core --test all -- suite::pf_23_s01 suite::pf_25_s01
 
-      # Main keeps the cache warm; a PR saves only when nothing was restored.
+      # Only main saves caches; PRs and branch runs restore main's (#636).
       - name: Save sccache cache
-        if: >-
-          always() && !cancelled() &&
-          (github.event_name != 'pull_request' || steps.sccache_restore.outputs.cache-matched-key == '')
+        if: always() && !cancelled() && github.ref == 'refs/heads/main'
         continue-on-error: true
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:

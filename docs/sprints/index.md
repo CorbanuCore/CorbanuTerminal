@@ -131,13 +131,15 @@ integration must be explicit, never reported as delivered. Dashboard maintenance
 success does not mean product implementation is running. Process explicit answers
 into canonical records and the unlocked next action without another continue ask.
 
-Root AGENTS.md's September 12 delegation lets the named integrator extend review
-allowances to unblock work, preserving prior usage and recording each extension.
+Going over a review budget needs explicit authorization from Travis or the
+coordinator (root AGENTS.md "Review budget extensions", October 14, 2026, which
+supersedes the September 12 integrator delegation); integrators and workers
+never self-authorize. Preserve prior usage and record each extension.
 One fresh independent review of a material candidate plus scoped corrections is
 normal, not repeated reviews of unchanged clean code. Move on when reviews have
 no substantive unresolved issues. The security owner retains sole implementation
 ownership; applicable functional acceptance is independently executed under the
-root policy. Only review-budget/time holds may be lifted by this delegation.
+root policy. Such an authorization lifts only review-budget/time holds.
 Main merges/pushes, releases, deployments, live Task Node
 actions, new product contracts and paid-service commitments still need their
 separate authority. Current assignments/evidence are in the

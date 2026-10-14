@@ -123,5 +123,6 @@ checker blocks readiness. For `out_of_scope`, replace execution fields with
 `"approval": {"by": "product-authority name", "reason": "why excluded",
 "artifact": {"path": "scope-decision.md", "sha256": "..."}}`.
 When review use exceeds the recorded limit, `review_budget.extension` must have
-the same approval shape, recording the explicit budget amendment or authorized
-critical-finding exception. It does not turn failed cases into passes.
+the same approval shape, recording the explicit authorization; `by` names Travis
+or the coordinator, never the worker, implementer or integrator (root AGENTS.md
+"Review budget extensions"). It does not turn failed cases into passes.

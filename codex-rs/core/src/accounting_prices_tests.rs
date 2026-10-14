@@ -958,10 +958,10 @@ fn gpt_5_6_sol_promotion_ends_at_its_stated_boundary() -> anyhow::Result<()> {
     assert_eq!(billing.api_key_rates_at(after), None);
 
     let promotional = Rates {
-        noncached: Some(rate(4_000)?),
-        read: Some(rate(400)?),
-        write: Some(rate(5_000)?),
-        output: Some(rate(20_000)?),
+        noncached: Some(rate(/*milli*/ 4_000)?),
+        read: Some(rate(/*milli*/ 400)?),
+        write: Some(rate(/*milli*/ 5_000)?),
+        output: Some(rate(/*milli*/ 20_000)?),
     };
     for price in [
         responses_original("gpt-5.6-sol", "openai", scope, last, /*tier*/ None)?,

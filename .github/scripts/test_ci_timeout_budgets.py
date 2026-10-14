@@ -84,21 +84,23 @@ class PrLinuxClippyTest(unittest.TestCase):
             "[[ '${{ needs.lint_build_windows.result }}' == 'success' ]]", rust_ci
         )
 
-    def test_only_the_pr_windows_leg_skips_cache_saves(self) -> None:
+    def test_only_postmerge_lint_legs_save_caches(self) -> None:
         lint_build = self.workflow("rust-ci-lint-build.yml")
         for step in ("Save cargo home cache", "Save sccache cache (fallback)"):
             with self.subTest(step=step):
                 self.assertRegex(
                     lint_build,
-                    rf"(?m)^      - name: {re.escape(step)}\n        if: .* && inputs\.save_caches$",
+                    rf"(?m)^      - name: {re.escape(step)}\n"
+                    r"        if: .* && inputs\.save_caches && github\.ref == 'refs/heads/main'$",
                 )
         self.assertRegex(
             lint_build,
             r"(?m)^      save_caches:\n(?:        .*\n)*?        default: true$",
         )
-        # Postmerge (and so main's saved caches) keeps the default.
+        # Postmerge (and so main's saved caches) keeps the default; both
+        # blocking-ci legs restore them without saving duplicates (#636).
         self.assertNotIn("save_caches", self.workflow("rust-ci-full.yml"))
-        self.assertEqual(self.workflow("rust-ci.yml").count("save_caches: false"), 1)
+        self.assertEqual(self.workflow("rust-ci.yml").count("save_caches: false"), 2)
 
     def test_pr_ci_skips_linux_test_suite(self) -> None:
         self.assertNotIn("nextest", self.workflow("rust-ci.yml"))
@@ -124,6 +126,155 @@ class PrLinuxClippyTest(unittest.TestCase):
             r"            profile: dev\n"
             r"            timeout_minutes: 60$",
         )
+
+
+class PrArgumentCommentLintTest(unittest.TestCase):
+    """#636: PRs lint the crates they change, test code included."""
+
+    def rust_ci(self) -> str:
+        return (REPO_ROOT / ".github" / "workflows" / "rust-ci.yml").read_text()
+
+    def job(self, name: str) -> str:
+        match = re.search(rf"(?ms)^  {re.escape(name)}:\n.*?(?=^  \S|\Z)", self.rust_ci())
+        self.assertIsNotNone(match, name)
+        return match.group(0)
+
+    def test_changed_job_lists_changed_crates_on_prs(self) -> None:
+        changed = self.job("changed")
+        self.assertIn(
+            "argument_comment_lint_packages: ${{ steps.detect.outputs.argument_comment_lint_packages }}",
+            changed,
+        )
+        self.assertIn(
+            'python3 .github/scripts/argument_comment_lint_packages.py "$BASE_SHA" "$HEAD_SHA"',
+            changed,
+        )
+
+    def test_lint_runs_on_changed_crates_with_tests_within_budget(self) -> None:
+        job = self.job("argument_comment_lint_changed")
+        self.assertIn("runs-on: ubuntu-24.04", job)
+        self.assertIn("timeout-minutes: 30", job)
+        self.assertIn(
+            "if: ${{ needs.changed.outputs.argument_comment_lint_packages != '' }}", job
+        )
+        # run.py adds --all-targets (tests included) when no target is given.
+        self.assertRegex(
+            job,
+            r'python3 tools/argument-comment-lint/run\.py "\$\{args\[@\]\}" -- '
+            r"--ignore-rust-version --keep-going",
+        )
+        self.assertNotRegex(job, r"--(lib|bins|tests|all-targets)\b")
+
+    def test_lint_is_required(self) -> None:
+        rust_ci = self.rust_ci()
+        self.assertRegex(rust_ci, r"(?ms)^  results:\n.*?^        argument_comment_lint_changed,$")
+        self.assertIn(
+            "[[ '${{ needs.argument_comment_lint_changed.result }}' == 'success' ]]",
+            rust_ci,
+        )
+        # The package list is an output of `changed`, so it must have run.
+        self.assertIn("[[ '${{ needs.changed.result }}' == 'success' ]]", rust_ci)
+        self.assertIn(
+            "NEEDS_CHANGED_OUTPUTS_ARGUMENT_COMMENT_LINT_PACKAGES: "
+            "${{ needs.changed.outputs.argument_comment_lint_packages }}",
+            rust_ci,
+        )
+
+    def test_lint_restores_mains_cargo_home_cache(self) -> None:
+        # The path list is part of the cache version: it must match the save.
+        def cargo_home_restore(text: str) -> tuple[str, str]:
+            match = re.search(
+                r"(?ms)^      - name: Restore cargo home cache\n.*?path: \|\n(.*?)^          key: ([^\n]+)",
+                text,
+            )
+            self.assertIsNotNone(match)
+            return match.group(1), match.group(2)
+
+        lint_build = (REPO_ROOT / ".github" / "workflows" / "rust-ci-lint-build.yml").read_text()
+        paths, key = cargo_home_restore(self.job("argument_comment_lint_changed"))
+        main_paths, main_key = cargo_home_restore(lint_build)
+        self.assertEqual(paths, main_paths)
+        self.assertEqual(
+            key,
+            main_key.replace("${{ inputs.runner }}", "ubuntu-24.04")
+            .replace("${{ inputs.target }}", "x86_64-unknown-linux-gnu")
+            .replace("${{ inputs.profile }}", "dev"),
+        )
+
+    def test_lint_only_restores_caches(self) -> None:
+        job = self.job("argument_comment_lint_changed")
+        self.assertIn("actions/cache/restore@", job)
+        self.assertNotIn("actions/cache/save@", job)
+        self.assertNotRegex(job, r"uses: actions/cache@")
+
+
+class CacheSavePolicyTest(unittest.TestCase):
+    """#636: only main saves Actions caches; PRs restore main's."""
+
+    MAIN = "github.ref == 'refs/heads/main'"
+    # Release workflows run on tags or by hand, never on PRs.
+    EXEMPT = {"rusty-v8-release.yml"}
+
+    def ci_files(self) -> list[Path]:
+        files = sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml"))
+        files += sorted((REPO_ROOT / ".github" / "actions").glob("*/action.yml"))
+        return [path for path in files if path.name not in self.EXEMPT]
+
+    @staticmethod
+    def step_containing(lines: list[str], index: int) -> str:
+        start = index
+        while not re.match(r"^\s*- ", lines[start]):
+            start -= 1
+        indent = len(lines[start]) - len(lines[start].lstrip())
+        end = index + 1
+        while end < len(lines) and (
+            not lines[end].strip() or len(lines[end]) - len(lines[end].lstrip()) > indent
+        ):
+            end += 1
+        return "\n".join(lines[start:end])
+
+    def test_every_cache_save_is_main_only(self) -> None:
+        saves = 0
+        for path in self.ci_files():
+            lines = path.read_text().splitlines()
+            for index, line in enumerate(lines):
+                if "uses: actions/cache/save@" in line:
+                    saves += 1
+                    with self.subTest(file=path.name, line=index + 1):
+                        self.assertIn(self.MAIN, self.step_containing(lines, index))
+        self.assertGreater(saves, 10)
+
+    def test_no_combined_restore_and_save_cache_steps(self) -> None:
+        for path in self.ci_files():
+            with self.subTest(file=path.name):
+                self.assertNotRegex(path.read_text(), r"uses: actions/cache@")
+
+    def test_third_party_caches_save_only_on_main(self) -> None:
+        # Actions with their own cache: each use must be guarded (save-if,
+        # save-cache, cache-save, use-cache, setup-* `cache:`) or disable it.
+        caching_actions = re.compile(
+            r"uses: (Swatinem/rust-cache|astral-sh/setup-uv|bazel-contrib/setup-bazel|mlugg/setup-zig)@"
+        )
+        setup_with_cache = re.compile(r"uses: actions/setup-(node|python|go|java)@")
+        checked = 0
+        for path in self.ci_files():
+            lines = path.read_text().splitlines()
+            for index, line in enumerate(lines):
+                step = None
+                if caching_actions.search(line):
+                    step = self.step_containing(lines, index)
+                elif setup_with_cache.search(line):
+                    step = self.step_containing(lines, index)
+                    if not re.search(r"(?m)^\s+cache:", step):
+                        continue
+                if step is None:
+                    continue
+                checked += 1
+                with self.subTest(file=path.name, line=index + 1):
+                    self.assertTrue(
+                        self.MAIN in step or "use-cache: false" in step, step
+                    )
+        self.assertGreaterEqual(checked, 6)
 
 
 class NightlyHeavyJobsTest(unittest.TestCase):

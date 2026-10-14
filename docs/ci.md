@@ -22,11 +22,35 @@ red status noise without testing the code.
   (#717), so `cfg(unix)`-gated imports, helpers and `mut`s that are unused on
   Windows fail the PR instead of breaking postmerge. Same triggers, required
   status and shared job as the Linux leg. It restores the caches postmerge
-  `rust-ci-full` saves for this leg but saves none itself, so PR churn doesn't
-  evict main's (about 12 minutes warm, 15 cold; 60-minute timeout).
+  `rust-ci-full` saves for this leg (about 12 minutes warm, 15 cold; 60-minute
+  timeout).
+- Argument comment lint on changed crates
+  (`rust-ci / Argument comment lint - changed crates`, #636): runs the
+  `/*param*/` lint, test code included, on every `codex-rs` crate whose `.rs`
+  files the PR changes (`.github/scripts/argument_comment_lint_packages.py`;
+  a change to the lint job itself lints the small `codex-utils-string` crate).
+  It uses `tools/argument-comment-lint/run.py` (Cargo, `--all-targets`) on
+  Linux and is part of `CI results (required)`. Run it locally with
+  `tools/argument-comment-lint/run.py -p <crate> -- --ignore-rust-version`.
+  The Windows Bazel lint below skips test targets, and the full lints run
+  nightly.
 - Rust nextest on Linux x64.
 - SDK checks on hosted Linux x64.
 - V8 canary coverage on hosted Linux x64 only.
+
+## Actions Cache
+
+The repository's Actions cache is limited to 10 GB and GitHub evicts the least
+recently used entries beyond that. Only `main` saves caches (#636): every save
+step is guarded by `github.ref == 'refs/heads/main'`, as are Swatinem
+`save-if`, setup-uv `save-cache` and setup-bazel `cache-save`. Pull requests,
+and workflows dispatched on other branches, restore the caches `main` saved and
+save none, so PR churn can't evict them. setup-node and setup-zig can't restore
+without saving, so their caches are on only for `main` (both are used only by
+postmerge or nightly jobs). Where blocking-ci and postmerge run the same
+clippy leg on `main`, only postmerge `rust-ci-full` saves it.
+`.github/scripts/test_ci_timeout_budgets.py` enforces this. Check usage with
+`gh api repos/CorbanuCore/CorbanuTerminal/actions/cache/usage`.
 
 ## Nightly Coverage
 

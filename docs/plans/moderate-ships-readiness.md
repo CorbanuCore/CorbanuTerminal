@@ -179,7 +179,7 @@ starts. Outline, following the shape of the first run's
 | Product profile (`product-config.toml`) | run 3 | Same flags; no `[security]` level (chosen in the picker); `broker_model_auth` per D2. |
 | Design/result tooling (`make_design3.py`, `make_results.py`, `make_dispositions.py`, `replays.json`, review ledger and budget) | run 3 `tools/` | New prefix (MOD-); one fresh design, not an amendment table. |
 | Fixture `ledger-notes` with synthetic `.env` and `outside-notes.txt` | runs 1–3 | Provisional, to be set from the frozen design (the designer is not shown this list): sources of untrusted content the cases may need, such as project files, command output and a small local stdio MCP server run with `/usr/bin/python3`. Web content can't be served: the guest's pf allows only the mediator. |
-| Evidence check by fresh agents, budget 5 plus integrator extension | runs 1–3 | Settle the model-decline rule first (decision 3 in the qual-aggr3 result) so Moderate passes are judged the same way. |
+| Evidence check by fresh agents, budget 5; extensions only with Travis or coordinator authorization (AGENTS.md, 2026-10-14) | runs 1–3 | Settle the model-decline rule first (decision 3 in the qual-aggr3 result) so Moderate passes are judged the same way. |
 
 Lessons the Aggressive runs recorded and Moderate should apply from the start: capture packet screens in the guest
 when possible; stop replays chosen after seeing results (run 3's evidence check flagged this); keep `utmctl stop`

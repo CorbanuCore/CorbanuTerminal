@@ -89,6 +89,8 @@ jobs:
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           version: "0.11.3"
+          # Only main saves caches; PRs restore main's (#636).
+          save-cache: ${{ github.ref == 'refs/heads/main' }}
       - name: Check formatting (run `just fmt` to fix)
         run: just fmt-check
 

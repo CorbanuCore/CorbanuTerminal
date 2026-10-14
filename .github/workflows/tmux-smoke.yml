@@ -84,11 +84,9 @@ jobs:
           started=$SECONDS
           just test -p codex-tui --test all tmux --retries 0
           echo "tmux smoke runtime: $((SECONDS - started))s"
-      # Main keeps the cache warm; a PR saves only when nothing was restored.
+      # Only main saves caches; PRs and branch runs restore main's (#636).
       - name: Save sccache cache
-        if: >-
-          always() && !cancelled() &&
-          (github.event_name != 'pull_request' || steps.sccache_restore.outputs.cache-matched-key == '')
+        if: always() && !cancelled() && github.ref == 'refs/heads/main'
         continue-on-error: true
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:

@@ -41,6 +41,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: codex-rs
+          # Only main saves caches; PRs restore main's (#636).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install pinned just
         uses: taiki-e/install-action@v2
         with:

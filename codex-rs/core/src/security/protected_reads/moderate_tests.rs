@@ -99,7 +99,7 @@ fn issue_748_moderate_read_denial_names_the_level() {
     let script = format!("cat '{auth}'");
     let line = format!("cat: {auth}: Operation not permitted");
 
-    let explained = fixture.explain(Fixture::profile(), None, &script, &line);
+    let explained = fixture.explain(Fixture::profile(), /*contract*/ None, &script, &line);
     assert_eq!(
         explained,
         Some(read_explanation(&auth, WayForward::Permissive))
@@ -127,7 +127,7 @@ fn issue_748_moderate_read_denial_names_the_level() {
     assert_eq!(
         fixture.explain(
             Fixture::profile(),
-            None,
+            /*contract*/ None,
             &script,
             "cat: /etc/other.txt: Operation not permitted"
         ),
@@ -146,7 +146,12 @@ fn issue_748_moderate_write_denial_names_the_level() {
     let script = "printf x > .codex/p.toml";
     let line = "bash: .codex/p.toml: Operation not permitted";
     assert_eq!(
-        fixture.explain(PermissionProfile::Disabled, None, script, line),
+        fixture.explain(
+            PermissionProfile::Disabled,
+            /*contract*/ None,
+            script,
+            line
+        ),
         Some(write_explanation(".codex/p.toml", WayForward::Permissive))
     );
     let contract = fixture.contract();
@@ -167,7 +172,7 @@ fn issue_748_moderate_write_denial_names_the_level() {
     assert_eq!(
         fixture.explain(
             PermissionProfile::Disabled,
-            None,
+            /*contract*/ None,
             &skill_script,
             &skill_line
         ),
@@ -184,7 +189,7 @@ fn issue_748_moderate_write_denial_names_the_level() {
     );
     // Workspace-write keeps `.codex` read-only itself: not Moderate's.
     assert_eq!(
-        fixture.explain(Fixture::profile(), None, script, line),
+        fixture.explain(Fixture::profile(), /*contract*/ None, script, line),
         None
     );
 }
@@ -198,7 +203,7 @@ fn issue_748_denials_moderate_did_not_add_are_not_attributed() {
     assert_eq!(
         fixture.explain(
             Fixture::profile(),
-            None,
+            /*contract*/ None,
             "printf x > ../outside-notes.txt",
             "bash: ../outside-notes.txt: Operation not permitted"
         ),
@@ -218,7 +223,7 @@ fn issue_748_denials_moderate_did_not_add_are_not_attributed() {
     assert_eq!(
         fixture.explain(
             own_denial,
-            None,
+            /*contract*/ None,
             &format!("cat '{auth}'"),
             &format!("cat: {auth}: Operation not permitted")
         ),

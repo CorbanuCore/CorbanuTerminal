@@ -76,10 +76,12 @@ change invalidates old candidate-bound passes, not the original expectations.
 Use one design pass and one short evidence pass normally, counted alongside
 code/external reviews in the same per-track budget. Keep the complete review
 ledger, including prior passes. Respect the user's model choices; do not add a
-model-specific requirement here. Root AGENTS.md's September 12 delegation lets
-the named integrator authorize and record additional allowance without asking
-the human each time. Preserve prior usage, independence and actual evidence;
-never replace them with a fresh counter, endless reviews or fabricated acceptance.
+model-specific requirement here. Going over the budget needs explicit
+authorization from Travis or the coordinator, per root AGENTS.md "Review budget
+extensions" (October 14, 2026; it supersedes the September 12 integrator
+delegation). Workers, implementers and integrators never self-authorize.
+Preserve prior usage, independence and actual evidence; never replace them with
+a fresh counter, endless reviews or fabricated acceptance.
 
 Run from the repository root:
 

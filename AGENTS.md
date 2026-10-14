@@ -99,6 +99,14 @@ live-profile read stops successor/retry dispatch and invalidates that run; never
 ask the operator to authorize test binaries against their personal Keychain.
 Native/packaged credential qualification requires the separate isolated lane.
 
+A disposable `HOME` or profile does not stop third-party binaries (for example
+Claude Code) from querying the operator's login keychain through macOS
+services. Run them for tests or evidence only inside a sandbox that denies the
+keychain services (`com.apple.SecurityServer`, `com.apple.securityd.xpc`,
+`com.apple.securityd.systemkeychain`). Every `security` command names an
+explicit throwaway keychain path; never run it against the default or login
+keychain.
+
 ## Interactive product proof
 
 A user-facing interactive feature is not complete until the final built
@@ -162,28 +170,38 @@ For non-user-facing work, record a reasoned not-applicable decision.
   charged to the existing per-track review budget (default maximum five total,
   including code/external reviews). Do not reset the budget for this step.
   Record execution sessions/cost separately; execution is mandatory test work,
-  not an additional opinion review. Additional reviews may be authorized by the named integrator under the
-  September 12 delegation below; a spent budget never waives a required gate.
+  not an additional opinion review. Going over the budget needs the explicit
+  authorization described in review budget extensions below; a spent budget
+  never waives a required gate.
 
-### Integrator review discretion
+### Review budget extensions
 
-Travis's September 12, 2026 instruction delegates authority to the named
-integration owner to authorize additional scoped reviews without asking him each
-time. Favor extensions that remove real review/evidence blockers. Record scope,
-purpose, prior usage, additional allowance and result in the existing ledger;
-never erase earlier passes or disguise an extension as a reset. This applies to
-code, security, code-blind design and evidence reviews, including tracks held
-solely by review-count or replenishment-time limits. Security reviews remain
-coordinated through the existing security owner, without duplicate workers or
-resuming work paused for another reason.
+Owner decision, October 14, 2026 (Travis): going over a review or
+evidence-check budget needs explicit authorization from Travis or from the
+coordinator; Travis delegated that discretion to the coordinator. Workers and
+integrators may never self-authorize an extension. This applies to code,
+security, code-blind design and evidence reviews.
+
+- To ask for one, stop the review loop and send the coordinator (or Travis)
+  the reason, scope and what is at stake. Do not run the extra review while
+  waiting.
+- Record each authorization (who granted it, scope, purpose, prior usage,
+  additional allowance and result) in the existing review ledger and a tracking
+  issue. Never erase earlier passes or disguise an extension as a reset.
+- Without an authorization, record the last verdict honestly and stop that loop.
+- Security reviews remain coordinated through the existing security owner,
+  without duplicate workers or resuming work paused for another reason.
+
+History: Travis's September 12, 2026 delegation, which let the named
+integration owner authorize additional scoped reviews, is superseded as of
+October 14, 2026. Extensions recorded under it before that date stay as history.
 
 When earlier reviews have no substantive unresolved issue, move to the next
 required test, integration or assignment instead of seeking more opinions on
 unchanged code. Record cosmetic/nonblocking observations as follow-ups. Do not
 waive correctness/security findings, independence, actual test evidence,
 dependencies, product decisions, human acceptance or external-action permissions.
-Scope-break and convergence rules remain. Workers request routine extensions
-from the integrator rather than blocking on a new human review-spend decision.
+Scope-break and convergence rules remain.
 
 ### Model for adversarial functional cases
 
