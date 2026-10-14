@@ -163,3 +163,16 @@ mod tests {
         );
     }
 }
+
+// THROWAWAY (#717 proof, never merge): the import is used only by a
+// cfg(unix) test, so it is unused when linting for Windows.
+#[cfg(test)]
+mod windows_clippy_proof {
+    use std::path::PathBuf;
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_only_uses_the_import() {
+        assert!(PathBuf::from("/").is_absolute());
+    }
+}
