@@ -60,13 +60,15 @@ implementation_worktrees:
 
 ## Closing note (2026-10-14)
 
-**Closed 2026-10-14 to free active slot 2** for Travis's decision of 2026-10-14 to start the
-[PF-60 accounting follow-ups](../active/portfolio-agent-cost-accounting-followups.md) after the Moderate picker
-sprint (decision 29 of that day's list; coordinator brief `pf60-s06`). All three slots were full and this was the
-plan whose sprint programme was finished: PF-84-S01–S06 are accepted and archived (S06 on 2026-10-13, limited
-testing). Travis may reverse this; reopening it needs a free slot.
+**Closed 2026-10-14 by the Codex coordinator's worker `pf60-s06`** under the coordinator's brief, to free active
+slot 2 for Travis's decision of 2026-10-14 to start the
+[PF-60 accounting follow-ups](../active/portfolio-agent-cost-accounting-followups.md) after the Moderate picker sprint
+(decision 29 of that day's list). Travis decided to start the follow-ups; he did not himself choose which plan to
+close, and his confirmation of this closing is pending. All three slots were full and this was the plan whose sprint
+programme was finished: PF-84-S01–S06 are accepted and archived (S06 on 2026-10-13, limited testing). Reopening it
+needs a free slot.
 
-- **Exception, as for P0 security and PF-60:** closed without a release. Named accounts are on main behind the
+- **Exception, as for P0 security and PF-60 (both closed by Travis himself):** closed without a release. Named accounts are on main behind the
   default-off `named_accounts` flag. The `main-2026-10-14` prefix names the tree, not a release.
 - **Carried forward, not waived:** the six flag-removal prerequisites below (live ChatGPT and Bedrock checks with
   test accounts, the #425/#426/#428 re-check, the partial #555 legs and REG-02, #588/#609/#689, an isolated

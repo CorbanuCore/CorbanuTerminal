@@ -38,7 +38,7 @@ the remaining gaps on condition that each is carried into a future sprint.
   (debug builds with `developer-accounting`); shipping them to users is not authorised. The `main-2026-10-10` prefix
   names the tree, not a release.
 - **Carried forward:** every accepted gap, the open release linkage and S05's waiver (b) (enforced isolation gate)
-  are in the draft [accounting follow-ups plan](../active/portfolio-agent-cost-accounting-followups.md), sprints PF-60-S06 to PF-60-S10, each with acceptance criteria
+  are in the [accounting follow-ups plan](../active/portfolio-agent-cost-accounting-followups.md), sprints PF-60-S06 to PF-60-S10, each with acceptance criteria
   and an issue. It needs Travis's activation and a free slot; nothing there is authorised yet.
 - **Open accounting issues not assigned to a follow-up sprint** are listed in that plan's "Dependencies, decisions,
   and blockers" for Travis to place.
