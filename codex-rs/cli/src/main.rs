@@ -5004,3 +5004,5 @@ mod tests {
             .expect_err("feature should be rejected")
     }
 }
+
+// Throwaway (#828): a comment-only change to trigger CI.
