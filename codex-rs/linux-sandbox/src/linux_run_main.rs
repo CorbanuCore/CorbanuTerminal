@@ -1386,7 +1386,11 @@ fn remove_synthetic_mount_target(
             path.display()
         ),
     };
-    if !target.should_remove(found.is_empty_file(), found.is_dir(), found.identity()) {
+    if !target.should_remove(
+        found.is_placeholder_file(),
+        found.is_dir(),
+        found.identity(),
+    ) {
         return;
     }
     if !target.preserves_pre_existing_path()
@@ -1598,7 +1602,7 @@ fn remove_stale_synthetic_mount_targets() {
             Ok(None) => true,
             Ok(Some(found))
                 if !target.should_remove(
-                    found.is_empty_file(),
+                    found.is_placeholder_file(),
                     found.is_dir(),
                     found.identity(),
                 ) || recorded_at.is_some_and(|recorded_at| {

@@ -1986,10 +1986,19 @@ fn issue_540_runtime_entries_stay_read_only_when_the_rules_are_lifted() {
         assert!(all.read_only_paths().count() > all.runtime_read_only_paths().count());
         let denials = all.runtime_only();
         assert_eq!(denials.paths().count(), 0);
-        assert_eq!(
-            denials.read_only_paths().count(),
-            denials.runtime_read_only_paths().count()
-        );
+        // #837: besides the runtime entries, only git's hooks and config
+        // (of a repository above the test's folder, if any) stay read-only.
+        let runtime: Vec<&AbsolutePathBuf> = denials.runtime_read_only_paths().collect();
+        for path in denials.read_only_paths() {
+            assert!(
+                runtime.contains(&path)
+                    || path
+                        .as_path()
+                        .components()
+                        .any(|part| part.as_os_str() == ".git"),
+                "{path:?}"
+            );
+        }
         assert!(denials.matcher().is_none());
         let lifted = denials.apply(&profile).expect("not an external sandbox");
         let policy = lifted.file_system_sandbox_policy();
@@ -2046,9 +2055,15 @@ fn issue_837_an_approved_command_writes_git_but_not_its_hooks_or_config() {
     for folder in [".git/hooks", ".git/objects/ab", ".git/refs/heads"] {
         std::fs::create_dir_all(cwd.join(folder)).unwrap();
     }
-    for file in [".git/config", ".git/HEAD", ".git/index"] {
+    for file in [".git/HEAD", ".git/index"] {
         std::fs::write(cwd.join(file), "x").unwrap();
     }
+    // A hooks folder inside `.git` that does not exist yet.
+    std::fs::write(
+        cwd.join(".git/config"),
+        "[core]\n\thooksPath = .git/myhooks\n",
+    )
+    .unwrap();
     let written = [
         ".git/index",
         ".git/index.lock",
@@ -2065,6 +2080,9 @@ fn issue_837_an_approved_command_writes_git_but_not_its_hooks_or_config() {
         ".git/commondir",
         ".git/modules/sub/hooks/post-checkout",
         ".git/worktrees/w/commondir",
+        ".git/myhooks/pre-commit",
+        // Git would read the project root as a bare repository.
+        "HEAD",
     ];
     for profile in [workspace(&cwd), PermissionProfile::Disabled] {
         let all = ReadDenials::collect(
@@ -2099,14 +2117,27 @@ fn issue_837_an_approved_command_writes_git_but_not_its_hooks_or_config() {
                 !policy.can_write_path_with_cwd(&path, &cwd),
                 "{name}: {profile:?}"
             );
-            // In the workspace sandbox all of `.git` was read-only before.
+            // In the workspace sandbox all of `.git` was read-only before
+            // (so the project root could not become a bare repository).
             assert!(
-                full || !before.can_write_path_with_cwd(&path, &cwd),
+                full || name == "HEAD" || !before.can_write_path_with_cwd(&path, &cwd),
                 "{name}: {profile:?}"
             );
         }
-        // The rest of the project stays writable.
+        // The rest of the project stays writable, and `.git` stays in place.
         assert!(policy.can_write_path_with_cwd(&cwd.join("src/main.rs"), &cwd));
+        assert!(
+            policy
+                .get_unmovable_paths()
+                .contains(&abs(&cwd.join(".git"))),
+            "{profile:?}"
+        );
+        if cfg!(target_os = "macos") {
+            // In any case: the file system does not tell them apart.
+            for name in ["head", "Head"] {
+                assert!(!readable_under(&policy, &cwd.join(name), &cwd), "{name}");
+            }
+        }
     }
     // A `.git` that is a link is not opened.
     let linked = fx.user_home.join("linked");

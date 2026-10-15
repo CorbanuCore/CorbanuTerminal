@@ -1850,10 +1850,21 @@ fn append_empty_file_bind_data_args(bwrap_args: &mut BwrapArgs, path: &Path) -> 
     // closes it, so every mask needs its own. A shared one left the second
     // mask reading a closed descriptor ("Can't write data to file ...: Bad
     // file descriptor") unless bubblewrap happened to reuse its number (#636).
-    let null = match placeholder_contents(path) {
-        Some(contents) => file_with_contents(contents)?,
-        None => File::open("/dev/null")?,
-    };
+    // #837: a `.git/commondir` placeholder is written with its contents on
+    // the host as well (and then held read-only), so git runs outside the
+    // sandbox read the same while the command runs.
+    if let Some(contents) = placeholder_contents(path) {
+        let data = file_with_contents(contents)?;
+        bwrap_args.args.push("--file".to_string());
+        bwrap_args.args.push(data.as_raw_fd().to_string());
+        bwrap_args.args.push(path_to_string(path));
+        bwrap_args.args.push("--ro-bind".to_string());
+        bwrap_args.args.push(path_to_string(path));
+        bwrap_args.args.push(path_to_string(path));
+        bwrap_args.preserved_files.push(data);
+        return Ok(());
+    }
+    let null = File::open("/dev/null")?;
     bwrap_args.args.push("--ro-bind-data".to_string());
     bwrap_args.args.push(null.as_raw_fd().to_string());
     bwrap_args.args.push(path_to_string(path));
@@ -1861,34 +1872,41 @@ fn append_empty_file_bind_data_args(bwrap_args: &mut BwrapArgs, path: &Path) -> 
     Ok(())
 }
 
-/// #837: what the command sees in place of a missing read-only file, when
-/// an empty file would break it: a git folder's `commondir` (held read-only
-/// so no command can point later git runs at other hooks and config) names
-/// the git folder itself, which git reads as having no `commondir`. The file
-/// left on the host for the run stays empty, as for every placeholder.
-fn placeholder_contents(path: &Path) -> Option<&'static [u8]> {
+/// #837: what a placeholder for a missing read-only file holds, when an
+/// empty file would break what reads it: a git folder's `commondir` (held
+/// read-only so no command can point later git runs at other hooks and
+/// config) names the git folder itself, which git reads as having no
+/// `commondir`. It is removed after the run like an empty placeholder
+/// (`placeholder_registry::Found::is_placeholder_file`).
+pub(crate) fn placeholder_contents(path: &Path) -> Option<&'static [u8]> {
     let in_git_folder = path
         .parent()
         .and_then(Path::file_name)
         .is_some_and(|name| name == ".git");
-    (in_git_folder && path.file_name().is_some_and(|name| name == "commondir")).then_some(b".\n")
+    (in_git_folder && path.file_name().is_some_and(|name| name == "commondir"))
+        .then_some(GIT_COMMONDIR_PLACEHOLDER)
 }
 
-/// An unlinked file holding `contents`, read from its start.
+/// #837: the contents of a placeholder [`placeholder_contents`] names.
+pub(crate) const GIT_COMMONDIR_PLACEHOLDER: &[u8] = b".\n";
+
+/// The read end of a pipe holding `contents` (and then closed), for
+/// bubblewrap to read to its end. Both ends are close-on-exec; the read end
+/// is made inheritable with the other preserved files.
 fn file_with_contents(contents: &[u8]) -> Result<File> {
-    use std::io::Seek;
     use std::io::Write;
     use std::os::fd::FromRawFd;
-    // SAFETY: a valid NUL-terminated name and flags; the result is checked.
-    let fd = unsafe { libc::memfd_create(c"corbanu-placeholder".as_ptr(), libc::MFD_CLOEXEC) };
-    if fd < 0 {
+    let mut fds = [0; 2];
+    // SAFETY: `fds` has room for the two descriptors; the result is checked.
+    if unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC) } < 0 {
         return Err(std::io::Error::last_os_error().into());
     }
-    // SAFETY: `fd` was just created and is owned only here.
-    let mut file = unsafe { File::from_raw_fd(fd) };
-    file.write_all(contents)?;
-    file.rewind()?;
-    Ok(file)
+    // SAFETY: both descriptors were just created and are owned only here.
+    let (read, mut write) = unsafe { (File::from_raw_fd(fds[0]), File::from_raw_fd(fds[1])) };
+    // A few bytes: within the pipe's buffer, so this does not block.
+    write.write_all(contents)?;
+    drop(write);
+    Ok(read)
 }
 
 fn append_empty_directory_args(bwrap_args: &mut BwrapArgs, path: &Path) {
@@ -3020,8 +3038,9 @@ mod tests {
     }
 
     /// #837: a missing read-only `.git/commondir` in a writable `.git` is
-    /// held with a file naming the git folder itself (git reads that as no
-    /// `commondir`), not an empty one, which git fails on.
+    /// written (also on the host, for git runs there) with a file naming the
+    /// git folder itself (git reads that as no `commondir`), not an empty
+    /// one, which git fails on, and then held read-only.
     #[test]
     fn missing_git_commondir_is_held_with_a_file_naming_the_git_folder() {
         use std::io::Read;
@@ -3050,7 +3069,27 @@ mod tests {
             create_filesystem_args(&policy, temp_dir.path(), NO_UNREADABLE_GLOB_SCAN_MAX_DEPTH)
                 .expect("filesystem args");
 
-        assert_empty_file_bound_without_perms(&args.args, &commondir);
+        let path = path_to_string(&commondir);
+        let file = args
+            .args
+            .windows(3)
+            .position(|window| window[0] == "--file" && window[2] == path)
+            .expect("--file for the placeholder");
+        assert!(
+            args.args[file + 3..]
+                .windows(3)
+                .any(|window| window == ["--ro-bind", path.as_str(), path.as_str()]),
+            "held read-only after it is written: {:#?}",
+            args.args
+        );
+        assert!(
+            !args
+                .args
+                .windows(3)
+                .any(|window| window[0] == "--ro-bind-data" && window[2] == path),
+            "{:#?}",
+            args.args
+        );
         assert_eq!(args.preserved_files.len(), 1);
         let mut contents = String::new();
         args.preserved_files[0]

@@ -1679,12 +1679,27 @@ async fn issue_837_an_approved_command_commits_but_cannot_change_git_hooks_or_co
         (SecurityLevel::Moderate, false, false, false),
         (SecurityLevel::Permissive, true, true, true),
     ] {
+        // Where Moderate opens `.git`, also the other routes to hooks or
+        // config for later git runs: a `commondir`, `config.worktree` or
+        // submodule folder, a `HEAD` making the project root a bare
+        // repository, and `.git` moved aside and back.
+        let others = if level == SecurityLevel::Moderate && escalated {
+            "printf ../planted > .git/commondir; \
+             printf '[core]\\n\\thooksPath = planted\\n' > .git/config.worktree; \
+             mkdir -p .git/modules/m/hooks && printf x > .git/modules/m/hooks/post-checkout; \
+             printf 'ref: refs/heads/main\\n' > HEAD; printf x > head; \
+             mv .git .g837 && printf x > .g837/hooks/post-commit; mv .g837 .git; "
+        } else {
+            ""
+        };
         let mut arguments = json!({
-            "command": "printf x > notes-837.txt; \
-                git add -A && git -c user.name=t -c user.email=t@example.com commit -qm m837; \
-                printf 'echo planted\\n' > .git/hooks/pre-commit; \
-                printf '[core]\\n\\thooksPath = planted\\n' >> .git/config; \
-                echo ran-837",
+            "command": format!(
+                "printf x > notes-837.txt; \
+                 git add -A && git -c user.name=t -c user.email=t@example.com commit -qm m837; \
+                 printf 'echo planted\\n' > .git/hooks/pre-commit; \
+                 printf '[core]\\n\\thooksPath = planted\\n' >> .git/config; \
+                 {others}echo ran-837"
+            ),
         });
         if escalated {
             arguments["sandbox_permissions"] = json!("require_escalated");
@@ -1738,14 +1753,29 @@ async fn issue_837_an_approved_command_commits_but_cannot_change_git_hooks_or_co
         let committed = String::from_utf8_lossy(&subject.stdout).trim() == "m837";
         let hook = cwd.join(".git/hooks/pre-commit").exists();
         let config = std::fs::read_to_string(cwd.join(".git/config"))?.contains("planted");
+        let planted: Vec<&str> = [
+            ".git/commondir",
+            ".git/config.worktree",
+            ".git/modules",
+            "HEAD",
+            ".g837",
+            ".git/hooks/post-commit",
+        ]
+        .into_iter()
+        .filter(|path| {
+            // Case-insensitive file systems: `head` is `HEAD`.
+            std::fs::symlink_metadata(cwd.join(path)).is_ok()
+        })
+        .collect();
         if committed != commits
             || hook != changes_git_settings
             || config != changes_git_settings
             || asked != usize::from(escalated)
+            || !planted.is_empty()
         {
             wrong.push(format!(
                 "{level:?} escalated={escalated}: asked={asked} committed={committed} \
-                 hook={hook} config={config}: {output}"
+                 hook={hook} config={config} planted={planted:?}: {output}"
             ));
         }
     }

@@ -263,7 +263,7 @@ fn module_paths(git_dir: &AbsolutePathBuf) -> Vec<AbsolutePathBuf> {
 /// The `core.hooksPath` a git config file sets (the last one wins), resolved
 /// like git: `~/` against the user's home, a relative path against the work
 /// tree. Comments and quotes are handled; escapes and includes are not.
-fn hooks_path(
+pub(super) fn hooks_path(
     config: &AbsolutePathBuf,
     work_tree: &AbsolutePathBuf,
     home: Option<&AbsolutePathBuf>,

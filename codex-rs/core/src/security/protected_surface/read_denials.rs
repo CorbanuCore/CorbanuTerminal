@@ -237,12 +237,21 @@ pub(crate) struct ReadDenials {
     git_folders: Vec<AbsolutePathBuf>,
     /// #837: what stays read-only in those folders even then: git's hooks
     /// and config (as [`super::git_paths`] finds them), and `modules`,
-    /// `worktrees` and (Linux) a missing `commondir`, which would let a
-    /// command plant hooks or config for later git runs.
+    /// `worktrees`, a hooks folder inside `.git` that a config names, (Linux)
+    /// a missing `commondir`, and a `HEAD` at the project root, which would
+    /// let a command plant hooks or config for later git runs.
     git_read_only: Vec<AbsolutePathBuf>,
     /// #837: the `.git` folders made writable in [`Self::apply`] (set only
     /// by [`Self::runtime_only`]).
     git_writable: Vec<AbsolutePathBuf>,
+    /// #837: the opened `.git` folders, which may not be moved aside (to
+    /// change hooks or config under another name), and on macOS a pattern
+    /// denying a `HEAD` at each such project root in any case (the file
+    /// system ignores it): with one there (and `.git` made unusable) git
+    /// would read the root as a bare repository with a planted config. The
+    /// `HEAD` itself is in [`Self::git_read_only`].
+    git_unmovable: Vec<AbsolutePathBuf>,
+    git_globs: Vec<String>,
     /// Denials dropped because they hold the command's folder or a writable
     /// root (denying them would deny the workspace itself).
     pub(crate) skipped: Vec<AbsolutePathBuf>,
@@ -318,7 +327,7 @@ impl ReadDenials {
                 denials.read_only.push(path.clone());
             }
         }
-        denials.collect_git_folders(keep, git);
+        denials.collect_git_folders(keep, git, user_home);
         if let Ok(entries) = std::fs::read_dir(codex_home.as_path()) {
             for entry in entries.flatten() {
                 let name = entry.file_name();
@@ -798,7 +807,19 @@ impl ReadDenials {
     /// hooks or config (`modules`, `worktrees`, and on Linux a missing
     /// `commondir`, which [`super::git_paths`] leaves out there: the sandbox
     /// holds it for the run with a file naming the same folder).
-    fn collect_git_folders(&mut self, keep: &[AbsolutePathBuf], git: Vec<AbsolutePathBuf>) {
+    fn collect_git_folders(
+        &mut self,
+        keep: &[AbsolutePathBuf],
+        git: Vec<AbsolutePathBuf>,
+        user_home: Option<&Path>,
+    ) {
+        // Only where the sandboxes are checked to keep these paths (#766
+        // likewise): the Windows sandbox drops read-only entries for missing
+        // paths.
+        if !cfg!(any(target_os = "macos", target_os = "linux")) {
+            return;
+        }
+        let home = user_home.and_then(|home| AbsolutePathBuf::from_absolute_path(home).ok());
         let others = std::mem::take(&mut self.read_only);
         for root in keep {
             let dot_git = root.join(".git");
@@ -812,9 +833,32 @@ impl ReadDenials {
             for entry in ["modules", "worktrees"] {
                 self.push_read_only(dot_git.join(entry), keep);
             }
+            self.push_read_only(root.join("HEAD"), keep);
             if cfg!(target_os = "linux") {
                 self.push_read_only(dot_git.join("commondir"), keep);
+            } else {
+                self.git_globs.push(format!(
+                    "{}/[Hh][Ee][Aa][Dd]",
+                    crate::security::preflight::glob_escape_path(root.as_path())
+                        .trim_end_matches('/')
+                ));
             }
+            // A `core.hooksPath` inside `.git` that is missing (left out on
+            // Linux by `git_paths`): a placeholder there is harmless.
+            let configs = [
+                Some(dot_git.join("config")),
+                Some(dot_git.join("config.worktree")),
+                home.as_ref().map(|home| home.join(".gitconfig")),
+                home.as_ref().map(|home| home.join(".config/git/config")),
+            ];
+            for config in configs.into_iter().flatten() {
+                if let Some(hooks) = super::git_paths::hooks_path(&config, root, home.as_ref())
+                    && hooks.as_path().starts_with(dot_git.as_path())
+                {
+                    self.push_read_only(hooks, keep);
+                }
+            }
+            self.git_unmovable.push(dot_git.clone());
             self.git_folders.push(dot_git);
         }
         let extra = std::mem::replace(&mut self.read_only, others);
@@ -833,11 +877,18 @@ impl ReadDenials {
     /// writable (so `git commit` works), while git's hooks and config stay
     /// read-only, as before the approval.
     pub(crate) fn runtime_only(self) -> Self {
+        let mut unmovable = self.unmovable;
+        for path in self.git_unmovable {
+            if !unmovable.contains(&path) {
+                unmovable.push(path);
+            }
+        }
         Self {
             read_only: self.git_read_only,
             git_writable: self.git_folders,
+            globs: self.git_globs,
             runtime_read_only: self.runtime_read_only,
-            unmovable: self.unmovable,
+            unmovable,
             cwd: self.cwd,
             moderate_marker: self.moderate_marker,
             moderate_registry: self.moderate_registry,

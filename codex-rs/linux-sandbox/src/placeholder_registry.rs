@@ -113,6 +113,45 @@ impl Found {
         self.status.st_mode & libc::S_IFMT == libc::S_IFDIR
     }
 
+    /// #837: an empty file, or a `commondir` holding exactly what the
+    /// sandbox writes there ([`crate::bwrap::GIT_COMMONDIR_PLACEHOLDER`]):
+    /// what is left of a file placeholder after a run.
+    pub(crate) fn is_placeholder_file(&self) -> bool {
+        self.is_empty_file() || self.is_git_commondir_placeholder()
+    }
+
+    fn is_git_commondir_placeholder(&self) -> bool {
+        use std::io::Read;
+        let expected = crate::bwrap::GIT_COMMONDIR_PLACEHOLDER;
+        if self.status.st_mode & libc::S_IFMT != libc::S_IFREG
+            || usize::try_from(self.status.st_size).ok() != Some(expected.len())
+            || self.name.as_bytes() != b"commondir"
+        {
+            return false;
+        }
+        // SAFETY: the folder descriptor is open and the name a C string.
+        let fd = unsafe {
+            libc::openat(
+                self.folder.as_raw_fd(),
+                self.name.as_ptr(),
+                libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK,
+            )
+        };
+        if fd < 0 {
+            return false;
+        }
+        // SAFETY: `fd` was just opened and is owned only here.
+        let mut file = unsafe { fs::File::from_raw_fd(fd) };
+        let mut contents = Vec::new();
+        file.by_ref()
+            .take(expected.len() as u64 + 1)
+            .read_to_end(&mut contents)
+            .is_ok_and(|_| contents == expected)
+            && file
+                .metadata()
+                .is_ok_and(|metadata| (metadata.dev(), metadata.ino()) == self.identity())
+    }
+
     pub(crate) fn identity(&self) -> (u64, u64) {
         (self.status.st_dev, self.status.st_ino)
     }

@@ -92,3 +92,27 @@ fn a_placeholder_is_one_made_for_its_record() {
         recorded_at
     ));
 }
+
+/// #837: a `.git/commondir` placeholder (written with `.` for git) counts as
+/// a placeholder file; the person's own `commondir` does not.
+#[test]
+fn issue_837_a_git_commondir_placeholder_is_a_placeholder_file() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let git = dir.path().join(".git");
+    fs::create_dir(&git).expect(".git");
+    let commondir = git.join("commondir");
+    fs::write(&commondir, crate::bwrap::GIT_COMMONDIR_PLACEHOLDER).expect("placeholder");
+    let found = find_without_links(&commondir)
+        .expect("find")
+        .expect("found");
+    assert!(found.is_placeholder_file());
+    fs::write(&commondir, "../../other\n").expect("the person's own");
+    let found = find_without_links(&commondir)
+        .expect("find")
+        .expect("found");
+    assert!(!found.is_placeholder_file());
+    let other = git.join("other");
+    fs::write(&other, crate::bwrap::GIT_COMMONDIR_PLACEHOLDER).expect("other name");
+    let found = find_without_links(&other).expect("find").expect("found");
+    assert!(!found.is_placeholder_file());
+}
