@@ -107,3 +107,17 @@ pub use codex_vault::ProviderAccountSignIn;
 pub use codex_vault::claude_auth_selection_revision_path;
 pub use outbound_proxy::AuthRouteConfig;
 pub use token_data::TokenData;
+
+// Throwaway (#828): fails on its first attempt only, to show that Windows
+// gives the login unit tests one automatic re-run (#691).
+#[cfg(all(test, windows))]
+mod ci_691_rerun_probe {
+    #[test]
+    fn fails_on_the_first_attempt_only() {
+        let marker = std::path::Path::new(r"C:\corbanu-ci-691-rerun-probe");
+        if !marker.exists() {
+            let wrote = std::fs::write(marker, b"1").is_ok();
+            panic!("first attempt fails on purpose (marker written: {wrote})");
+        }
+    }
+}
