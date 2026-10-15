@@ -3925,3 +3925,5 @@ fn fatal_tui_error_preserves_full_cause_chain() {
     assert!(rendered.contains("turn/start failed in TUI"));
     assert!(rendered.contains("low-level injected cause"));
 }
+
+// Throwaway (#828): a comment-only change to trigger CI.
