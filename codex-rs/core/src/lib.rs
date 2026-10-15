@@ -227,3 +227,5 @@ pub use model_broker_auth::holds_environment_key as broker_holds_environment_key
 pub use model_broker_auth::install_for_config as install_broker_model_auth;
 pub use model_broker_auth::removed_environment_keys as broker_removed_environment_keys;
 pub mod otel_init;
+
+// Throwaway (#828): a comment-only change to trigger CI.
