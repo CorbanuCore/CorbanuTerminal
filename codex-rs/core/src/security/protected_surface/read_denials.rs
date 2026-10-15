@@ -823,10 +823,14 @@ impl ReadDenials {
         let others = std::mem::take(&mut self.read_only);
         for root in keep {
             let dot_git = root.join(".git");
+            // A repository's: a folder (not a link) with a `HEAD` file, not an
+            // empty `.git` a sandbox left behind.
             if self.git_folders.contains(&dot_git)
                 || has_nested_link(dot_git.as_path())
                 || !std::fs::symlink_metadata(dot_git.as_path())
                     .is_ok_and(|metadata| metadata.file_type().is_dir())
+                || !std::fs::symlink_metadata(dot_git.join("HEAD").as_path())
+                    .is_ok_and(|metadata| metadata.file_type().is_file())
             {
                 continue;
             }

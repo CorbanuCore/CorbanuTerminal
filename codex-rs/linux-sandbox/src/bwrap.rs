@@ -1850,21 +1850,21 @@ fn append_empty_file_bind_data_args(bwrap_args: &mut BwrapArgs, path: &Path) -> 
     // closes it, so every mask needs its own. A shared one left the second
     // mask reading a closed descriptor ("Can't write data to file ...: Bad
     // file descriptor") unless bubblewrap happened to reuse its number (#636).
-    // #837: a `.git/commondir` placeholder is written with its contents on
-    // the host as well (and then held read-only), so git runs outside the
-    // sandbox read the same while the command runs.
-    if let Some(contents) = placeholder_contents(path) {
-        let data = file_with_contents(contents)?;
-        bwrap_args.args.push("--file".to_string());
-        bwrap_args.args.push(data.as_raw_fd().to_string());
-        bwrap_args.args.push(path_to_string(path));
-        bwrap_args.args.push("--ro-bind".to_string());
-        bwrap_args.args.push(path_to_string(path));
-        bwrap_args.args.push(path_to_string(path));
-        bwrap_args.preserved_files.push(data);
-        return Ok(());
-    }
-    let null = File::open("/dev/null")?;
+    // #837: a `.git/commondir` placeholder holds its contents, and its mount
+    // target on the host is written with them first (bubblewrap mounts over
+    // the file it finds), so git runs outside the sandbox read the same
+    // while the command runs.
+    let null = match placeholder_contents(path) {
+        Some(contents) => {
+            let host = file_with_contents(contents)?;
+            bwrap_args.args.push("--file".to_string());
+            bwrap_args.args.push(host.as_raw_fd().to_string());
+            bwrap_args.args.push(path_to_string(path));
+            bwrap_args.preserved_files.push(host);
+            file_with_contents(contents)?
+        }
+        None => File::open("/dev/null")?,
+    };
     bwrap_args.args.push("--ro-bind-data".to_string());
     bwrap_args.args.push(null.as_raw_fd().to_string());
     bwrap_args.args.push(path_to_string(path));
@@ -3078,24 +3078,18 @@ mod tests {
         assert!(
             args.args[file + 3..]
                 .windows(3)
-                .any(|window| window == ["--ro-bind", path.as_str(), path.as_str()]),
+                .any(|window| window[0] == "--ro-bind-data" && window[2] == path),
             "held read-only after it is written: {:#?}",
             args.args
         );
-        assert!(
-            !args
-                .args
-                .windows(3)
-                .any(|window| window[0] == "--ro-bind-data" && window[2] == path),
-            "{:#?}",
-            args.args
-        );
-        assert_eq!(args.preserved_files.len(), 1);
-        let mut contents = String::new();
-        args.preserved_files[0]
-            .read_to_string(&mut contents)
-            .expect("placeholder contents");
-        assert_eq!(contents, ".\n");
+        // Written on the host, and mounted read-only over it.
+        assert_eq!(args.preserved_files.len(), 2);
+        for file in &mut args.preserved_files {
+            let mut contents = String::new();
+            file.read_to_string(&mut contents)
+                .expect("placeholder contents");
+            assert_eq!(contents, ".\n");
+        }
         assert_eq!(placeholder_contents(&dot_git.join("config")), None);
         assert_eq!(
             placeholder_contents(&temp_dir.path().join("other/commondir")),
