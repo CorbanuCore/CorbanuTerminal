@@ -1650,6 +1650,109 @@ async fn issue_540_runtime_entries_stay_read_only_when_a_person_lifts_the_rules(
     Ok(())
 }
 
+/// #837 (Travis, 2026-10-15): under Moderate a command a person approved
+/// writes the project's `.git` in its real sandbox (Seatbelt, bubblewrap),
+/// so `git commit` works, while git's hooks and config stay read-only; a
+/// command nobody approved keeps `.git` read-only, as before. Permissive is
+/// unchanged (an approved command runs outside the sandbox there).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn issue_837_an_approved_command_commits_but_cannot_change_git_hooks_or_config()
+-> anyhow::Result<()> {
+    use codex_protocol::models::PermissionProfile;
+    use codex_protocol::protocol::ReviewDecision;
+    skip_if_no_network!(Ok(()));
+    skip_if_sandbox!(Ok(()));
+    let git = |cwd: &std::path::Path, args: &[&str]| {
+        std::process::Command::new("git")
+            .args(["-c", "user.name=t", "-c", "user.email=t@example.com"])
+            .args(args)
+            .current_dir(cwd)
+            .output()
+            .expect("git")
+    };
+    let mut wrong = Vec::new();
+    // (level, asks to run outside the sandbox, commits, may change hooks
+    // and config)
+    for (level, escalated, commits, changes_git_settings) in [
+        (SecurityLevel::Moderate, true, true, false),
+        (SecurityLevel::Moderate, false, false, false),
+        (SecurityLevel::Permissive, true, true, true),
+    ] {
+        let mut arguments = json!({
+            "command": "printf x > notes-837.txt; \
+                git add -A && git -c user.name=t -c user.email=t@example.com commit -qm m837; \
+                printf 'echo planted\\n' > .git/hooks/pre-commit; \
+                printf '[core]\\n\\thooksPath = planted\\n' >> .git/config; \
+                echo ran-837",
+        });
+        if escalated {
+            arguments["sandbox_permissions"] = json!("require_escalated");
+            arguments["justification"] = json!("commit the notes");
+        }
+        let (test, captured) = start_turn_in(
+            /*home*/ None,
+            level,
+            AskForApproval::OnRequest,
+            vec![call("call-git", "shell_command", arguments), done_step()],
+            move |config| {
+                // Without the temporary folders, which hold the test's
+                // folder and would let any command write its `.git`.
+                config
+                    .permissions
+                    .set_permission_profile(PermissionProfile::workspace_write_with(
+                        std::slice::from_ref(&config.cwd),
+                        codex_protocol::permissions::NetworkSandboxPolicy::Restricted,
+                        /*exclude_tmpdir_env_var*/ true,
+                        /*exclude_slash_tmp*/ true,
+                    ))
+                    .expect("workspace write");
+                let cwd = config.cwd.as_path();
+                if !cwd.join(".git").exists() {
+                    for args in [
+                        &["init", "-q"][..],
+                        &["commit", "-q", "--allow-empty", "-m", "initial"],
+                    ] {
+                        let output = git(cwd, args);
+                        assert!(output.status.success(), "{output:?}");
+                    }
+                }
+            },
+        )
+        .await?;
+        let cwd = test.cwd_path().to_path_buf();
+        let mut asked = 0;
+        while let Some(approval) = next_exec_approval(&test).await {
+            asked += 1;
+            test.codex
+                .submit(Op::ExecApproval {
+                    id: approval.effective_approval_id(),
+                    turn_id: None,
+                    decision: ReviewDecision::Approved,
+                })
+                .await?;
+        }
+        let requests = captured.requests();
+        let output = output_text(&requests[requests.len() - 1], "call-git");
+        let subject = git(&cwd, &["log", "-1", "--format=%s"]);
+        let committed = String::from_utf8_lossy(&subject.stdout).trim() == "m837";
+        let hook = cwd.join(".git/hooks/pre-commit").exists();
+        let config = std::fs::read_to_string(cwd.join(".git/config"))?.contains("planted");
+        if committed != commits
+            || hook != changes_git_settings
+            || config != changes_git_settings
+            || asked != usize::from(escalated)
+        {
+            wrong.push(format!(
+                "{level:?} escalated={escalated}: asked={asked} committed={committed} \
+                 hook={hook} config={config}: {output}"
+            ));
+        }
+    }
+    assert_eq!(wrong, Vec::<String>::new());
+    Ok(())
+}
+
 /// Issue #562: a protected command cannot create a missing runtime entry of
 /// the Corbanu home either (`AGENTS.md`, `skills`, `plugins`, `packages`), nor the
 /// `AGENTS.override.md` read ahead of it, even with full access and with

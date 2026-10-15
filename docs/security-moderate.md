@@ -23,9 +23,12 @@ without them Corbanu refuses every model request under Moderate, so
   history and state. They can't write files that run code later: your shell
   and git start-up files, git hooks and config, the project's `.codex` and
   `.agents`, and Corbanu's own files. Your fresh approval of one command
-  lifts this for that command, except for Corbanu's runtime files and what
-  `secretless_agent_launch` keeps; a remembered or automatic approval never
-  does. A project's `.env` files aren't covered; Aggressive covers them.
+  lifts this for that command, except for git hooks and config, Corbanu's
+  runtime files and what `secretless_agent_launch` keeps; a remembered or
+  automatic approval never does. A command you approve can also write the
+  project's `.git`, so `git commit` works; its hooks and config, and the
+  `commondir`, `modules` and `worktrees` entries through which git would
+  read other ones, stay read-only even then. A project's `.env` files aren't covered; Aggressive covers them.
 - **Untrusted content.** Tool, MCP, web, agent and memory output reaches the
   model labelled untrusted. After it, protected actions need your fresh
   approval: the vault, credentials, security settings, disclosure, value
@@ -75,6 +78,12 @@ The kill switch (`/security` → `g`) works under every level.
   settings to keep every command in it.
 - MCP servers, apps, hooks and `!` shell commands run outside the sandbox, as
   under every level.
+- An approved command writes `.git` only where it is a folder in the
+  project: not in a linked worktree or submodule (whose `.git` is a file) or
+  through a link, so `git commit` doesn't work there under Moderate. On Linux,
+  while such a command runs, `.git/commondir` holds an empty file if it was
+  missing (removed when the command ends); other git runs on that repository
+  fail until then.
 - Nested agents are recognised on macOS and Linux only, and on Linux not when
   they run as root or in a user namespace of their own (#826). Corbanu marks
   Moderate by denying agent commands a file in the Corbanu home's `tmp`

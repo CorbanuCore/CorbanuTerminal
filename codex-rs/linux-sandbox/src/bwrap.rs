@@ -1850,12 +1850,45 @@ fn append_empty_file_bind_data_args(bwrap_args: &mut BwrapArgs, path: &Path) -> 
     // closes it, so every mask needs its own. A shared one left the second
     // mask reading a closed descriptor ("Can't write data to file ...: Bad
     // file descriptor") unless bubblewrap happened to reuse its number (#636).
-    let null = File::open("/dev/null")?;
+    let null = match placeholder_contents(path) {
+        Some(contents) => file_with_contents(contents)?,
+        None => File::open("/dev/null")?,
+    };
     bwrap_args.args.push("--ro-bind-data".to_string());
     bwrap_args.args.push(null.as_raw_fd().to_string());
     bwrap_args.args.push(path_to_string(path));
     bwrap_args.preserved_files.push(null);
     Ok(())
+}
+
+/// #837: what the command sees in place of a missing read-only file, when
+/// an empty file would break it: a git folder's `commondir` (held read-only
+/// so no command can point later git runs at other hooks and config) names
+/// the git folder itself, which git reads as having no `commondir`. The file
+/// left on the host for the run stays empty, as for every placeholder.
+fn placeholder_contents(path: &Path) -> Option<&'static [u8]> {
+    let in_git_folder = path
+        .parent()
+        .and_then(Path::file_name)
+        .is_some_and(|name| name == ".git");
+    (in_git_folder && path.file_name().is_some_and(|name| name == "commondir")).then_some(b".\n")
+}
+
+/// An unlinked file holding `contents`, read from its start.
+fn file_with_contents(contents: &[u8]) -> Result<File> {
+    use std::io::Seek;
+    use std::io::Write;
+    use std::os::fd::FromRawFd;
+    // SAFETY: a valid NUL-terminated name and flags; the result is checked.
+    let fd = unsafe { libc::memfd_create(c"corbanu-placeholder".as_ptr(), libc::MFD_CLOEXEC) };
+    if fd < 0 {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    // SAFETY: `fd` was just created and is owned only here.
+    let mut file = unsafe { File::from_raw_fd(fd) };
+    file.write_all(contents)?;
+    file.rewind()?;
+    Ok(file)
 }
 
 fn append_empty_directory_args(bwrap_args: &mut BwrapArgs, path: &Path) {
@@ -2983,6 +3016,51 @@ mod tests {
         assert!(
             registry_bind.expect("registry read-only bind") < temp_mask.expect("temp deny mask"),
             "registry protection must not reopen denied temp paths"
+        );
+    }
+
+    /// #837: a missing read-only `.git/commondir` in a writable `.git` is
+    /// held with a file naming the git folder itself (git reads that as no
+    /// `commondir`), not an empty one, which git fails on.
+    #[test]
+    fn missing_git_commondir_is_held_with_a_file_naming_the_git_folder() {
+        use std::io::Read;
+        let temp_dir = TempDir::new().expect("temp dir");
+        let dot_git = temp_dir.path().join("workspace/.git");
+        std::fs::create_dir_all(dot_git.join("hooks")).expect("create .git");
+        let commondir = dot_git.join("commondir");
+        let policy = FileSystemSandboxPolicy::restricted(vec![
+            FileSystemSandboxEntry {
+                path: FileSystemPath::Path {
+                    path: AbsolutePathBuf::from_absolute_path(&dot_git).expect("absolute"),
+                },
+                access: FileSystemAccessMode::Write,
+                missing_path_behavior: None,
+            },
+            FileSystemSandboxEntry {
+                path: FileSystemPath::Path {
+                    path: AbsolutePathBuf::from_absolute_path(&commondir).expect("absolute"),
+                },
+                access: FileSystemAccessMode::Read,
+                missing_path_behavior: None,
+            },
+        ]);
+
+        let mut args =
+            create_filesystem_args(&policy, temp_dir.path(), NO_UNREADABLE_GLOB_SCAN_MAX_DEPTH)
+                .expect("filesystem args");
+
+        assert_empty_file_bound_without_perms(&args.args, &commondir);
+        assert_eq!(args.preserved_files.len(), 1);
+        let mut contents = String::new();
+        args.preserved_files[0]
+            .read_to_string(&mut contents)
+            .expect("placeholder contents");
+        assert_eq!(contents, ".\n");
+        assert_eq!(placeholder_contents(&dot_git.join("config")), None);
+        assert_eq!(
+            placeholder_contents(&temp_dir.path().join("other/commondir")),
+            None
         );
     }
 

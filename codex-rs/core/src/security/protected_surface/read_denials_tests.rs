@@ -2033,6 +2033,98 @@ fn issue_540_runtime_entries_stay_read_only_when_the_rules_are_lifted() {
     );
 }
 
+/// #837 (Travis, 2026-10-15): where a person's approval lifts Moderate's
+/// rules for one command, the project's `.git` becomes writable in the
+/// workspace sandbox (so `git commit` works), while git's hooks and config
+/// and what would point later git runs elsewhere (`commondir`, `modules`,
+/// `worktrees`) stay read-only, also under full access. Before the approval
+/// `.git` stays read-only as before; a `.git` link is never opened.
+#[test]
+fn issue_837_an_approved_command_writes_git_but_not_its_hooks_or_config() {
+    let fx = fixture();
+    let cwd = fx.user_home.join("project");
+    for folder in [".git/hooks", ".git/objects/ab", ".git/refs/heads"] {
+        std::fs::create_dir_all(cwd.join(folder)).unwrap();
+    }
+    for file in [".git/config", ".git/HEAD", ".git/index"] {
+        std::fs::write(cwd.join(file), "x").unwrap();
+    }
+    let written = [
+        ".git/index",
+        ".git/index.lock",
+        ".git/COMMIT_EDITMSG",
+        ".git/objects/ab/cdef",
+        ".git/refs/heads/main.lock",
+        ".git/logs/HEAD",
+    ];
+    let kept = [
+        ".git/hooks/pre-commit",
+        ".git/hooks",
+        ".git/config",
+        ".git/config.worktree",
+        ".git/commondir",
+        ".git/modules/sub/hooks/post-checkout",
+        ".git/worktrees/w/commondir",
+    ];
+    for profile in [workspace(&cwd), PermissionProfile::Disabled] {
+        let all = ReadDenials::collect(
+            &fx.codex_home,
+            Some(&fx.user_home),
+            /*claude_config_dir*/ None,
+            &[abs(&cwd)],
+        );
+        let before = all.apply(&profile).unwrap().file_system_sandbox_policy();
+        let policy = all
+            .runtime_only()
+            .apply(&profile)
+            .unwrap()
+            .file_system_sandbox_policy();
+        let full = profile == PermissionProfile::Disabled;
+        for name in written {
+            let path = cwd.join(name);
+            // Full access already wrote `.git` (git's own files) before.
+            assert_eq!(
+                before.can_write_path_with_cwd(&path, &cwd),
+                full,
+                "{name}: {profile:?}"
+            );
+            assert!(
+                policy.can_write_path_with_cwd(&path, &cwd),
+                "{name}: {profile:?}"
+            );
+        }
+        for name in kept {
+            let path = cwd.join(name);
+            assert!(
+                !policy.can_write_path_with_cwd(&path, &cwd),
+                "{name}: {profile:?}"
+            );
+            // In the workspace sandbox all of `.git` was read-only before.
+            assert!(
+                full || !before.can_write_path_with_cwd(&path, &cwd),
+                "{name}: {profile:?}"
+            );
+        }
+        // The rest of the project stays writable.
+        assert!(policy.can_write_path_with_cwd(&cwd.join("src/main.rs"), &cwd));
+    }
+    // A `.git` that is a link is not opened.
+    let linked = fx.user_home.join("linked");
+    std::fs::create_dir_all(&linked).unwrap();
+    std::os::unix::fs::symlink(cwd.join(".git"), linked.join(".git")).unwrap();
+    let policy = ReadDenials::collect(
+        &fx.codex_home,
+        Some(&fx.user_home),
+        /*claude_config_dir*/ None,
+        &[abs(&linked)],
+    )
+    .runtime_only()
+    .apply(&workspace(&linked))
+    .unwrap()
+    .file_system_sandbox_policy();
+    assert!(!policy.can_write_path_with_cwd(&linked.join(".git/index"), &linked));
+}
+
 /// A user home reached through a link (`user -> real-user`) holding a
 /// dummy SSH key, with a workspace whose `.agents` links to that key.
 struct LinkedHome {

@@ -231,6 +231,18 @@ pub(crate) struct ReadDenials {
     /// #766: the registry of homes Moderate runs on, read-only to the command
     /// so it cannot drop this home from it.
     moderate_registry: Vec<AbsolutePathBuf>,
+    /// #837: each project root's `.git` folder (a real folder, not a link),
+    /// which [`Self::runtime_only`] makes writable for a command a person
+    /// approved under Moderate, so `git commit` works there.
+    git_folders: Vec<AbsolutePathBuf>,
+    /// #837: what stays read-only in those folders even then: git's hooks
+    /// and config (as [`super::git_paths`] finds them), and `modules`,
+    /// `worktrees` and (Linux) a missing `commondir`, which would let a
+    /// command plant hooks or config for later git runs.
+    git_read_only: Vec<AbsolutePathBuf>,
+    /// #837: the `.git` folders made writable in [`Self::apply`] (set only
+    /// by [`Self::runtime_only`]).
+    git_writable: Vec<AbsolutePathBuf>,
     /// Denials dropped because they hold the command's folder or a writable
     /// root (denying them would deny the workspace itself).
     pub(crate) skipped: Vec<AbsolutePathBuf>,
@@ -290,13 +302,23 @@ impl ReadDenials {
                     denials.push_read_only(root.join(entry), keep);
                 }
             }
-            // The repository the root is in, found the way git finds it; a
-            // worktree or submodule keeps hooks and config in the git folder
-            // its `.git` file points to (hooks in the common one).
+        }
+        // The repository each root is in, found the way git finds it; a
+        // worktree or submodule keeps hooks and config in the git folder its
+        // `.git` file points to (hooks in the common one).
+        let others = std::mem::take(&mut denials.read_only);
+        for root in keep {
             for path in super::git_paths::git_persistence_paths(root, user_home) {
                 denials.push_read_only(path, keep);
             }
         }
+        let git = std::mem::replace(&mut denials.read_only, others);
+        for path in &git {
+            if !denials.read_only.contains(path) {
+                denials.read_only.push(path.clone());
+            }
+        }
+        denials.collect_git_folders(keep, git);
         if let Ok(entries) = std::fs::read_dir(codex_home.as_path()) {
             for entry in entries.flatten() {
                 let name = entry.file_name();
@@ -769,12 +791,51 @@ impl ReadDenials {
         self.unmovable.iter()
     }
 
+    /// #837 (Travis, 2026-10-15): the `.git` folder of each project root,
+    /// when it is a real folder, and what stays read-only in it for a
+    /// command a person approved: `git` (its hooks and config) and the
+    /// folders and files through which a later git run would read other
+    /// hooks or config (`modules`, `worktrees`, and on Linux a missing
+    /// `commondir`, which [`super::git_paths`] leaves out there: the sandbox
+    /// holds it for the run with a file naming the same folder).
+    fn collect_git_folders(&mut self, keep: &[AbsolutePathBuf], git: Vec<AbsolutePathBuf>) {
+        let others = std::mem::take(&mut self.read_only);
+        for root in keep {
+            let dot_git = root.join(".git");
+            if self.git_folders.contains(&dot_git)
+                || has_nested_link(dot_git.as_path())
+                || !std::fs::symlink_metadata(dot_git.as_path())
+                    .is_ok_and(|metadata| metadata.file_type().is_dir())
+            {
+                continue;
+            }
+            for entry in ["modules", "worktrees"] {
+                self.push_read_only(dot_git.join(entry), keep);
+            }
+            if cfg!(target_os = "linux") {
+                self.push_read_only(dot_git.join("commondir"), keep);
+            }
+            self.git_folders.push(dot_git);
+        }
+        let extra = std::mem::replace(&mut self.read_only, others);
+        self.git_read_only = git;
+        for path in extra {
+            if !self.git_read_only.contains(&path) {
+                self.git_read_only.push(path);
+            }
+        }
+    }
+
     /// Issue #540: only the rule that keeps the Corbanu home's runtime
     /// entries read-only, for a command whose other rules a person's
     /// approval lifted (Moderate, #239). The home and the folders above it
-    /// stay in place too (#598).
+    /// stay in place too (#598). #837: the project's `.git` folders become
+    /// writable (so `git commit` works), while git's hooks and config stay
+    /// read-only, as before the approval.
     pub(crate) fn runtime_only(self) -> Self {
         Self {
+            read_only: self.git_read_only,
+            git_writable: self.git_folders,
             runtime_read_only: self.runtime_read_only,
             unmovable: self.unmovable,
             cwd: self.cwd,
@@ -1008,6 +1069,7 @@ impl ReadDenials {
             }))
             .collect();
         if entries.is_empty()
+            && self.git_writable.is_empty()
             && self.read_only.is_empty()
             && self.runtime_read_only.is_empty()
             && self.never_lifted.is_empty()
@@ -1031,12 +1093,49 @@ impl ReadDenials {
         if file_system.kind != FileSystemSandboxKind::Restricted {
             return None;
         }
-        // Only narrows: a path becomes read-only where the profile would let
-        // the command write it, never readable where it was not.
         let cwd = self
             .cwd
             .as_ref()
             .map_or_else(|| Path::new("/"), AbsolutePathBuf::as_path);
+        // #837: the `.git` folders a person's approval opens, where the
+        // profile writes their project root (under every reading of it, as
+        // for `worktrees` below). Their location is recorded for the
+        // sandboxes, which then refuse the command should a link take a
+        // folder's place before its sandbox is set up. Added before the
+        // read-only paths, which are kept read-only inside them.
+        let git_writable: Vec<FileSystemSandboxEntry> = {
+            let root_links = file_system.writable_root_links_with_cwd(cwd);
+            self.git_writable
+                .iter()
+                .filter(|dot_git| {
+                    dot_git.parent().is_some_and(|root| {
+                        can_write_with(&file_system, root.as_path(), cwd, &root_links)
+                            && file_system
+                                .can_grant_write_effective_path_with_cwd(root.as_path(), cwd)
+                    })
+                })
+                .filter_map(|dot_git| {
+                    // Still a real folder, not a link swapped in since.
+                    std::fs::symlink_metadata(dot_git.as_path())
+                        .is_ok_and(|metadata| metadata.file_type().is_dir())
+                        .then_some(())?;
+                    let real = std::fs::canonicalize(dot_git.as_path()).ok()?;
+                    codex_sandboxing::writable_root_ledger::record_checked_root(
+                        dot_git.as_path(),
+                        &real,
+                    );
+                    Some(FileSystemSandboxEntry::new(
+                        FileSystemPath::Path {
+                            path: dot_git.clone(),
+                        },
+                        FileSystemAccessMode::Write,
+                    ))
+                })
+                .collect()
+        };
+        file_system.entries.extend(git_writable);
+        // Only narrows: a path becomes read-only where the profile would let
+        // the command write it, never readable where it was not.
         let readable = Readability::new(&file_system, cwd);
         // #652: the profile's writable roots reached through a nested link,
         // computed once for every path below.

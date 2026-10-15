@@ -56,7 +56,7 @@ pub(crate) fn blocker(facts: Facts) -> Option<&'static str> {
 
 /// What Core's Moderate rules do in a running session, as the confirmation
 /// and the saved screen name them.
-pub(crate) const EFFECTS: &str = "agent commands always stay in the sandbox; unless you approve that one command, they cannot read credential files in your home folder or Corbanu's sign-in, vault, config, history and state, or write files that run code later; after untrusted content, protected actions need your fresh approval";
+pub(crate) const EFFECTS: &str = "agent commands always stay in the sandbox; unless you approve that one command, they cannot read credential files in your home folder or Corbanu's sign-in, vault, config, history and state, or write files that run code later (git hooks and config not even then); after untrusted content, protected actions need your fresh approval";
 
 /// The rows of the Moderate review, in order: control and Moderate's value.
 pub(crate) fn rows(facts: Facts) -> Vec<(&'static str, String)> {
@@ -64,7 +64,7 @@ pub(crate) fn rows(facts: Facts) -> Vec<(&'static str, String)> {
         ("Sandbox", SANDBOX.to_string()),
         (
             "Protected files",
-            "agent commands cannot read the credential files in your home folder (such as .ssh, .aws, .gnupg, .kube, .docker, .netrc, .npmrc and the macOS keychain folder) or Corbanu's sign-in, vault, config, history and state, and cannot write files that run code later (your shell and git start-up files, git hooks and config, the project's .codex and .agents) or Corbanu's own files. Your fresh approval of one command lifts this for that command, except Corbanu's runtime files and what secretless_agent_launch keeps; a remembered or automatic approval never does. A project's .env files are not covered (Aggressive covers them)".to_string(),
+            "agent commands cannot read the credential files in your home folder (such as .ssh, .aws, .gnupg, .kube, .docker, .netrc, .npmrc and the macOS keychain folder) or Corbanu's sign-in, vault, config, history and state, and cannot write files that run code later (your shell and git start-up files, git hooks and config, the project's .codex and .agents) or Corbanu's own files. Your fresh approval of one command lifts this for that command and lets it write the project's .git (so commits work), except git hooks and config, Corbanu's runtime files and what secretless_agent_launch keeps; a remembered or automatic approval never does. A project's .env files are not covered (Aggressive covers them)".to_string(),
         ),
         (
             "Untrusted content",
