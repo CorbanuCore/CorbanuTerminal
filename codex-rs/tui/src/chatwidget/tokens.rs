@@ -1914,12 +1914,18 @@ fn plain_billing(
 
 /// Total tokens, or input plus output where a provider reports no total.
 fn plain_tokens(t: &codex_state::accounting::DayTotals) -> String {
-    let [input, _, _, _, output, _, total] = &t.measured;
+    let [input, noncached, read, write, output, _, total] = &t.measured;
     let (known, unknown) = if total.unknown == 0 {
         (total.known, 0)
     } else {
+        // An unknown input total (a missing cache-write count, say) still has
+        // the parts the provider reported; both are lower bounds of the input.
+        let input_parts = noncached
+            .known
+            .saturating_add(read.known)
+            .saturating_add(write.known);
         (
-            input.known.saturating_add(output.known),
+            input.known.max(input_parts).saturating_add(output.known),
             input.unknown.max(output.unknown),
         )
     };
