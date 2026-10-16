@@ -109,6 +109,7 @@ mod issue_766;
 #[cfg(target_os = "linux")]
 mod issue_826;
 mod issue_840;
+mod issue_874;
 mod items;
 mod json_result;
 mod live_cli;
