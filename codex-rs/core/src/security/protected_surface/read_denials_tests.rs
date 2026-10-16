@@ -2061,7 +2061,7 @@ fn issue_837_an_approved_command_writes_git_but_not_its_hooks_or_config() {
     // A hooks folder inside `.git` that does not exist yet.
     std::fs::write(
         cwd.join(".git/config"),
-        "[core]\n\thooksPath = .git/myhooks\n",
+        "[core]\n\thooksPath = .git/myhooks\n[include]\n\tpath = extra.config\n",
     )
     .unwrap();
     let written = [
@@ -2081,6 +2081,11 @@ fn issue_837_an_approved_command_writes_git_but_not_its_hooks_or_config() {
         ".git/modules/sub/hooks/post-checkout",
         ".git/worktrees/w/commondir",
         ".git/myhooks/pre-commit",
+        // Included from `.git/config` (relative to it).
+        ".git/extra.config",
+        ".git/rebase-merge/git-rebase-todo",
+        ".git/sequencer/todo",
+        ".git/info/exclude",
         // Git would read the project root as a bare repository.
         "HEAD",
     ];
@@ -2134,11 +2139,43 @@ fn issue_837_an_approved_command_writes_git_but_not_its_hooks_or_config() {
         );
         if cfg!(target_os = "macos") {
             // In any case: the file system does not tell them apart.
-            for name in ["head", "Head"] {
+            for name in [
+                "head",
+                "Head",
+                ".git/COMMONDIR",
+                ".git/Modules",
+                ".git/Rebase-Merge",
+                ".git/MyHooks",
+                ".git/Extra.Config",
+            ] {
                 assert!(!readable_under(&policy, &cwd.join(name), &cwd), "{name}");
             }
+            // Git's own files in another case are the same files: allowed.
+            assert!(readable_under(&policy, &cwd.join(".git/INDEX"), &cwd));
         }
     }
+    // #513: a write a person approved for `.git/hooks` (an additional write
+    // permission in the command's profile) stays writable; config does not.
+    let (mut file_system, network) = workspace(&cwd).to_runtime_permissions();
+    file_system.entries.push(FileSystemSandboxEntry::new(
+        FileSystemPath::Path {
+            path: abs(&cwd.join(".git/hooks")),
+        },
+        FileSystemAccessMode::Write,
+    ));
+    let granted = PermissionProfile::from_runtime_permissions(&file_system, network);
+    let policy = ReadDenials::collect(
+        &fx.codex_home,
+        Some(&fx.user_home),
+        /*claude_config_dir*/ None,
+        &[abs(&cwd)],
+    )
+    .runtime_only()
+    .apply(&granted)
+    .unwrap()
+    .file_system_sandbox_policy();
+    assert!(policy.can_write_path_with_cwd(&cwd.join(".git/hooks/pre-commit"), &cwd));
+    assert!(!policy.can_write_path_with_cwd(&cwd.join(".git/config"), &cwd));
     // A `.git` that is a link is not opened.
     let linked = fx.user_home.join("linked");
     std::fs::create_dir_all(&linked).unwrap();

@@ -251,7 +251,12 @@ pub(crate) struct ReadDenials {
     /// would read the root as a bare repository with a planted config. The
     /// `HEAD` itself is in [`Self::git_read_only`].
     git_unmovable: Vec<AbsolutePathBuf>,
-    git_globs: Vec<String>,
+    /// Each with the path it protects (see [`Self::apply`]).
+    git_globs: Vec<(AbsolutePathBuf, String)>,
+    /// #837: the same, set only by [`Self::runtime_only`], where an explicit
+    /// write a person approved for one of these paths (#513: an additional
+    /// write permission for `.git/hooks`) is honoured.
+    git_any_case: Vec<(AbsolutePathBuf, String)>,
     /// Denials dropped because they hold the command's folder or a writable
     /// root (denying them would deny the workspace itself).
     pub(crate) skipped: Vec<AbsolutePathBuf>,
@@ -834,21 +839,19 @@ impl ReadDenials {
             {
                 continue;
             }
-            for entry in ["modules", "worktrees"] {
-                self.push_read_only(dot_git.join(entry), keep);
-            }
-            self.push_read_only(root.join("HEAD"), keep);
-            if cfg!(target_os = "linux") {
-                self.push_read_only(dot_git.join("commondir"), keep);
-            } else {
-                self.git_globs.push(format!(
-                    "{}/[Hh][Ee][Aa][Dd]",
-                    crate::security::preflight::glob_escape_path(root.as_path())
-                        .trim_end_matches('/')
-                ));
-            }
-            // A `core.hooksPath` inside `.git` that is missing (left out on
-            // Linux by `git_paths`): a placeholder there is harmless.
+            // What git reads hooks or config from, or runs later, that is
+            // not needed to commit: hooks and config (as `git_paths` finds
+            // them, also when missing), where other hooks and config would
+            // be read (`commondir`, `modules`, `worktrees`), what a later
+            // `git rebase --continue` or `cherry-pick --continue` runs,
+            // and `info` (excludes and attributes).
+            let mut inside: Vec<AbsolutePathBuf> = GIT_FOLDER_KEPT
+                .iter()
+                .map(|name| dot_git.join(name))
+                .collect();
+            // A `core.hooksPath` inside `.git` (left out on Linux by
+            // `git_paths` when missing: a placeholder there is harmless), and
+            // a config file included from inside `.git`.
             let configs = [
                 Some(dot_git.join("config")),
                 Some(dot_git.join("config.worktree")),
@@ -856,12 +859,27 @@ impl ReadDenials {
                 home.as_ref().map(|home| home.join(".config/git/config")),
             ];
             for config in configs.into_iter().flatten() {
-                if let Some(hooks) = super::git_paths::hooks_path(&config, root, home.as_ref())
-                    && hooks.as_path().starts_with(dot_git.as_path())
-                {
-                    self.push_read_only(hooks, keep);
-                }
+                inside.extend(super::git_paths::hooks_path(&config, root, home.as_ref()));
+                inside.extend(super::git_paths::include_paths(&config, home.as_ref()));
             }
+            inside.retain(|path| path.as_path().starts_with(dot_git.as_path()) && path != &dot_git);
+            for path in inside {
+                // macOS: the sandbox compares the name as given when it is
+                // created, and the file system then finds it under the name
+                // git opens, so a missing one is denied in any case too.
+                if cfg!(target_os = "macos") {
+                    self.git_globs
+                        .extend(any_case_glob_for_missing(&path).map(|glob| (path.clone(), glob)));
+                }
+                self.push_read_only(path, keep);
+            }
+            // The project root may not become a bare repository: `HEAD`.
+            let head = root.join("HEAD");
+            if cfg!(target_os = "macos") {
+                self.git_globs
+                    .extend(any_case_glob_for_missing(&head).map(|glob| (head.clone(), glob)));
+            }
+            self.push_read_only(head, keep);
             self.git_unmovable.push(dot_git.clone());
             self.git_folders.push(dot_git);
         }
@@ -890,7 +908,7 @@ impl ReadDenials {
         Self {
             read_only: self.git_read_only,
             git_writable: self.git_folders,
-            globs: self.git_globs,
+            git_any_case: self.git_globs,
             runtime_read_only: self.runtime_read_only,
             unmovable,
             cwd: self.cwd,
@@ -1158,6 +1176,29 @@ impl ReadDenials {
         // sandboxes, which then refuse the command should a link take a
         // folder's place before its sandbox is set up. Added before the
         // read-only paths, which are kept read-only inside them.
+        // #513: what the profile itself writes inside an opened `.git` (an
+        // additional write permission a person approved for `.git/hooks`,
+        // or the person's own rule for `.git`) stays writable: the rules
+        // below keep only git's default read-only `.git` from silent edits.
+        let granted: Vec<AbsolutePathBuf> = if self.git_writable.is_empty() {
+            Vec::new()
+        } else {
+            file_system
+                .get_writable_roots_with_cwd(cwd)
+                .into_iter()
+                .map(|root| root.root)
+                .filter(|root| {
+                    self.git_writable
+                        .iter()
+                        .any(|dot_git| root.as_path().starts_with(dot_git.as_path()))
+                })
+                .collect()
+        };
+        let is_granted = |path: &AbsolutePathBuf| {
+            granted
+                .iter()
+                .any(|root| path.as_path().starts_with(root.as_path()))
+        };
         let git_writable: Vec<FileSystemSandboxEntry> = {
             let root_links = file_system.writable_root_links_with_cwd(cwd);
             self.git_writable
@@ -1189,6 +1230,19 @@ impl ReadDenials {
                 .collect()
         };
         file_system.entries.extend(git_writable);
+        file_system.entries.extend(
+            self.git_any_case
+                .iter()
+                .filter(|(path, _)| !is_granted(path))
+                .map(|(_, pattern)| {
+                    FileSystemSandboxEntry::new(
+                        FileSystemPath::GlobPattern {
+                            pattern: pattern.clone(),
+                        },
+                        FileSystemAccessMode::Deny,
+                    )
+                }),
+        );
         // Only narrows: a path becomes read-only where the profile would let
         // the command write it, never readable where it was not.
         let readable = Readability::new(&file_system, cwd);
@@ -1214,7 +1268,8 @@ impl ReadDenials {
             })
             .collect();
         let read_only: Vec<FileSystemSandboxEntry> = self
-            .read_only_paths()
+            .never_lifted_paths()
+            .chain(self.read_only.iter().filter(|path| !is_granted(path)))
             .filter(|path| may_write(&file_system, path.as_path(), cwd, &links))
             .flat_map(|path| {
                 // #518: a `Read` entry more specific than a denial would
@@ -1415,6 +1470,50 @@ fn create_missing_read_later_folders(codex_home: &Path) {
     for lock in CORBANU_READ_LATER_LOCKS {
         let _ = options.open(codex_home.join(lock));
     }
+}
+
+/// #837: what stays read-only inside an opened `.git` (see
+/// [`ReadDenials::collect_git_folders`]).
+const GIT_FOLDER_KEPT: &[&str] = &[
+    "hooks",
+    "config",
+    "config.worktree",
+    "commondir",
+    "modules",
+    "worktrees",
+    "rebase-merge",
+    "rebase-apply",
+    "sequencer",
+    "info",
+];
+
+/// #837 (macOS): a pattern denying the first missing component of `path`
+/// in any letter case, or nothing when `path` exists. The folder above it is
+/// escaped as it is.
+fn any_case_glob_for_missing(path: &AbsolutePathBuf) -> Option<String> {
+    let mut missing = path.as_path();
+    while std::fs::symlink_metadata(missing).is_err() {
+        let parent = missing.parent()?;
+        if std::fs::symlink_metadata(parent).is_ok() {
+            let name = missing.file_name()?.to_str()?;
+            let name: String = name
+                .chars()
+                .map(|ch| match ch {
+                    ch if ch.is_ascii_alphabetic() => {
+                        format!("[{}{}]", ch.to_ascii_lowercase(), ch.to_ascii_uppercase())
+                    }
+                    '*' | '?' | '[' | '{' | '}' => format!("[{ch}]"),
+                    ch => ch.to_string(),
+                })
+                .collect();
+            return Some(format!(
+                "{}/{name}",
+                crate::security::preflight::glob_escape_path(parent).trim_end_matches('/')
+            ));
+        }
+        missing = parent;
+    }
+    None
 }
 
 /// Each spelling of `path` the sandboxes compare, as read-only paths are

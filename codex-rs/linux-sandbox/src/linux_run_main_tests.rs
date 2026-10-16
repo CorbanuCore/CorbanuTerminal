@@ -1223,3 +1223,29 @@ fn valid_inner_stage_modes_do_not_panic() {
         /*apply_seccomp_then_exec*/ true, /*use_legacy_landlock*/ false,
     );
 }
+
+/// #837 (review r2): a `.git/commondir` placeholder another live run made
+/// (written with `.` for git) is met as that run's placeholder, so a second
+/// run holds it too and the first run's cleanup leaves it while the second
+/// still mounts it; the last run out removes it.
+#[test]
+fn issue_837_a_live_commondir_placeholder_is_held_by_a_second_run() {
+    let temp_dir = tempfile::TempDir::new().expect("tempdir");
+    let git = temp_dir.path().join(".git");
+    std::fs::create_dir_all(&git).expect(".git");
+    let commondir = git.join("commondir");
+    let first = register_synthetic_mount_targets(&[crate::bwrap::SyntheticMountTarget::missing(
+        &commondir,
+    )]);
+    // bubblewrap's `--file`.
+    std::fs::write(&commondir, crate::bwrap::GIT_COMMONDIR_PLACEHOLDER).expect("written");
+    let metadata =
+        crate::bwrap::live_placeholder_file(&commondir).expect("another run's placeholder");
+    let second = register_synthetic_mount_targets(&[
+        crate::bwrap::SyntheticMountTarget::existing_empty_file(&commondir, &metadata),
+    ]);
+    cleanup_synthetic_mount_targets(&first);
+    assert!(commondir.exists(), "kept while the second run holds it");
+    cleanup_synthetic_mount_targets(&second);
+    assert!(!commondir.exists());
+}

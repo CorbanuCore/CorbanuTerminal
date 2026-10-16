@@ -2163,9 +2163,32 @@ fn has_read_only_bind(bwrap_args: &BwrapArgs, path: &Path) -> bool {
 
 /// #562: `path` when it is an empty file another live run registered as its
 /// placeholder.
-fn live_placeholder_file(path: &Path) -> Option<Metadata> {
-    let metadata = empty_file_metadata(path)?;
+pub(crate) fn live_placeholder_file(path: &Path) -> Option<Metadata> {
+    // #837: also a `.git/commondir` placeholder, which holds its contents.
+    let metadata = empty_file_metadata(path).or_else(|| placeholder_with_contents(path))?;
     crate::linux_run_main::is_live_placeholder(path).then_some(metadata)
+}
+
+/// #837: `path` when it is a file holding exactly what its placeholder holds
+/// ([`placeholder_contents`]), read without following a link.
+fn placeholder_with_contents(path: &Path) -> Option<Metadata> {
+    let contents = placeholder_contents(path)?;
+    let metadata = fs::symlink_metadata(path).ok()?;
+    if !metadata.file_type().is_file() || metadata.len() != contents.len() as u64 {
+        return None;
+    }
+    crate::placeholder_registry::find_without_links(path)
+        .ok()
+        .flatten()
+        .filter(|found| {
+            found.is_placeholder_file()
+                && found.identity()
+                    == (
+                        std::os::unix::fs::MetadataExt::dev(&metadata),
+                        std::os::unix::fs::MetadataExt::ino(&metadata),
+                    )
+        })
+        .map(|_| metadata)
 }
 
 /// #607: `path` when it is an empty folder another live run registered as

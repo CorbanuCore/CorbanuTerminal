@@ -18,10 +18,13 @@ const MAX_MODULE_DEPTH: usize = 8;
 /// `.git/modules` (submodule git folders, also nested ones); and those of
 /// every linked worktree's folder, also the other worktrees' (#650).
 ///
-/// On Linux a missing commondir, hooks folder or module entry is left out:
-/// the sandbox would put an empty placeholder there, which breaks git.
-/// Includes (`[include]`) are not
-/// followed, and a new nested `.git` stays with the command-text net.
+/// On Linux a missing commondir, a missing `core.hooksPath` folder and a
+/// missing module or linked-worktree entry are left out: the sandbox would
+/// put an empty placeholder there, which breaks git (an approved command's
+/// opened `.git` keeps them, #837: see `ReadDenials::collect_git_folders`).
+/// Includes (`[include]`) are not followed here (#837 follows those that
+/// lead into an opened `.git`), and a new nested `.git` stays with the
+/// command-text net.
 pub(super) fn git_persistence_paths(
     root: &AbsolutePathBuf,
     user_home: Option<&Path>,
@@ -310,6 +313,67 @@ pub(super) fn hooks_path(
             });
     remember(&HOOKS_PATHS, config, resolved.clone());
     resolved
+}
+
+/// #837: the files git includes from `config` (`[include]` and
+/// `[includeIf "…"]` `path` entries, also those the included files include,
+/// up to git's own depth of 10), resolved like git: `~/` against the user's
+/// home, a relative path against the folder of the file that names it.
+/// Conditions are not evaluated: every target counts. Unreadable files add
+/// nothing.
+pub(super) fn include_paths(
+    config: &AbsolutePathBuf,
+    home: Option<&AbsolutePathBuf>,
+) -> Vec<AbsolutePathBuf> {
+    let mut found: Vec<AbsolutePathBuf> = Vec::new();
+    let mut pending = vec![(config.clone(), 0)];
+    while let Some((file, depth)) = pending.pop() {
+        if depth >= 10 {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(file.as_path()) else {
+            continue;
+        };
+        let Some(folder) = file.parent() else {
+            continue;
+        };
+        let mut in_include = false;
+        for line in text.lines() {
+            let mut line = line.trim();
+            if let Some(rest) = line.strip_prefix('[') {
+                let Some((section, after)) = rest.split_once(']') else {
+                    in_include = false;
+                    continue;
+                };
+                let name = section.split_whitespace().next().unwrap_or_default();
+                in_include =
+                    name.eq_ignore_ascii_case("include") || name.eq_ignore_ascii_case("includeif");
+                line = after.trim();
+            }
+            let Some((key, value)) = line.split_once('=') else {
+                continue;
+            };
+            if !in_include || !key.trim().eq_ignore_ascii_case("path") {
+                continue;
+            }
+            let value = config_value(value);
+            let target = match value.strip_prefix("~/") {
+                Some(rest) => home.map(|home| home.join(rest)),
+                None if value.starts_with('~') || value.is_empty() => None,
+                None => Some(AbsolutePathBuf::resolve_path_against_base(
+                    &value,
+                    folder.as_path(),
+                )),
+            };
+            if let Some(target) = target
+                && !found.contains(&target)
+            {
+                found.push(target.clone());
+                pending.push((target, depth + 1));
+            }
+        }
+    }
+    found
 }
 
 type Remembered<T> =

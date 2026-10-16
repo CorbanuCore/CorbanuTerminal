@@ -1684,7 +1684,8 @@ async fn issue_837_an_approved_command_commits_but_cannot_change_git_hooks_or_co
         // submodule folder, a `HEAD` making the project root a bare
         // repository, and `.git` moved aside and back.
         let others = if level == SecurityLevel::Moderate && escalated {
-            "printf ../planted > .git/commondir; \
+            "printf ../planted > .git/commondir; printf ../planted > .git/COMMONDIR; \
+             mkdir -p .git/rebase-merge && printf 'exec touch pwned\\n' > .git/rebase-merge/git-rebase-todo; \
              printf '[core]\\n\\thooksPath = planted\\n' > .git/config.worktree; \
              mkdir -p .git/modules/m/hooks && printf x > .git/modules/m/hooks/post-checkout; \
              printf 'ref: refs/heads/main\\n' > HEAD; printf x > head; \
@@ -1757,6 +1758,7 @@ async fn issue_837_an_approved_command_commits_but_cannot_change_git_hooks_or_co
             ".git/commondir",
             ".git/config.worktree",
             ".git/modules",
+            ".git/rebase-merge",
             "HEAD",
             ".g837",
             ".git/hooks/post-commit",
