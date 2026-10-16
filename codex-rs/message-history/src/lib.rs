@@ -154,7 +154,7 @@ pub async fn append_entry(
         options.mode(0o600);
     }
 
-    let mut history_file = options.open(&path)?;
+    let history_file = options.open(&path)?;
 
     // Ensure permissions.
     ensure_owner_only_permissions(&history_file).await?;
@@ -162,35 +162,57 @@ pub async fn append_entry(
     let history_max_bytes = config.max_bytes;
 
     // Perform a blocking write under an advisory write lock using std::fs.
-    tokio::task::spawn_blocking(move || -> Result<()> {
-        // Retry a few times to avoid indefinite blocking when contended.
-        for _ in 0..MAX_RETRIES {
-            match history_file.try_lock() {
-                Ok(()) => {
-                    // While holding the exclusive lock, write the full line.
-                    // We do not open the file with `append(true)` on Windows, so ensure the
-                    // cursor is positioned at the end before writing.
-                    history_file.seek(SeekFrom::End(0))?;
-                    history_file.write_all(line.as_bytes())?;
-                    history_file.flush()?;
-                    enforce_history_limit(&mut history_file, history_max_bytes)?;
-                    return Ok(());
-                }
-                Err(std::fs::TryLockError::WouldBlock) => {
-                    std::thread::sleep(RETRY_SLEEP);
-                }
-                Err(e) => return Err(e.into()),
-            }
-        }
-
-        Err(std::io::Error::new(
-            std::io::ErrorKind::WouldBlock,
-            "could not acquire exclusive lock on history file after multiple attempts",
-        ))
+    tokio::task::spawn_blocking(move || {
+        append_history_line(history_file, &line, history_max_bytes)
     })
     .await??;
 
     Ok(())
+}
+
+// Own the file for the whole blocking append, including trimming.
+fn append_history_line(
+    history_file: File,
+    line: &str,
+    history_max_bytes: Option<usize>,
+) -> Result<()> {
+    // Retry a few times to avoid indefinite blocking when contended.
+    for _ in 0..MAX_RETRIES {
+        match history_file.try_lock() {
+            Ok(()) => {
+                let mut locked_file = HistoryFileLock(history_file);
+                let history_file = &mut locked_file.0;
+                // While holding the exclusive lock, write the full line.
+                // We do not open the file with `append(true)` on Windows, so ensure the
+                // cursor is positioned at the end before writing.
+                history_file.seek(SeekFrom::End(0))?;
+                history_file.write_all(line.as_bytes())?;
+                history_file.flush()?;
+                enforce_history_limit(history_file, history_max_bytes)?;
+                return Ok(());
+            }
+            Err(std::fs::TryLockError::WouldBlock) => {
+                std::thread::sleep(RETRY_SLEEP);
+            }
+            Err(e) => return Err(e.into()),
+        }
+    }
+
+    Err(std::io::Error::new(
+        std::io::ErrorKind::WouldBlock,
+        "could not acquire exclusive lock on history file after multiple attempts",
+    ))
+}
+
+// Closing a File alone need not release its lock while a forked child or a
+// duplicate descriptor still refers to the same open file description. Keep the
+// lock scoped to the operation, including every early return and I/O error.
+struct HistoryFileLock(File);
+
+impl Drop for HistoryFileLock {
+    fn drop(&mut self) {
+        let _ = self.0.unlock();
+    }
 }
 
 /// Trim the history file to honor `max_bytes`, dropping the oldest lines while holding
@@ -359,9 +381,6 @@ async fn history_metadata_for_file(path: &Path) -> (u64, usize) {
 }
 
 fn lookup_history_entry(path: &Path, log_id: u64, offset: usize) -> Option<HistoryEntry> {
-    use std::io::BufRead;
-    use std::io::BufReader;
-
     let file: File = match OpenOptions::new().read(true).open(path) {
         Ok(f) => f,
         Err(e) => {
@@ -370,6 +389,11 @@ fn lookup_history_entry(path: &Path, log_id: u64, offset: usize) -> Option<Histo
         }
     };
 
+    lookup_history_entry_from_file(file, log_id, offset)
+}
+
+// Own the file until every success and error return from the lookup.
+fn lookup_history_entry_from_file(file: File, log_id: u64, offset: usize) -> Option<HistoryEntry> {
     let metadata = match file.metadata() {
         Ok(m) => m,
         Err(e) => {
@@ -391,7 +415,8 @@ fn lookup_history_entry(path: &Path, log_id: u64, offset: usize) -> Option<Histo
 
         match lock_result {
             Ok(()) => {
-                let reader = BufReader::new(&file);
+                let locked_file = HistoryFileLock(file);
+                let reader = BufReader::new(&locked_file.0);
                 for (idx, line_res) in reader.lines().enumerate() {
                     let line = match line_res {
                         Ok(l) => l,
@@ -449,3 +474,7 @@ fn log_identity(_metadata: &std::fs::Metadata) -> Option<u64> {
 mod batch_tests;
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "lock_lifetime_tests.rs"]
+mod lock_lifetime_tests;
