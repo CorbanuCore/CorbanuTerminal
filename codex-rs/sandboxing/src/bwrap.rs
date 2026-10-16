@@ -262,12 +262,24 @@ fn bwrap_user_namespace_probe_args() -> [&'static str; 7] {
 }
 
 fn command_has_user_namespace_access(command: &mut Command, timeout: Duration) -> bool {
-    let mut child = match command.stdout(Stdio::null()).stderr(Stdio::piped()).spawn() {
-        Ok(child) => child,
-        Err(_) => return true,
-    };
-
     let deadline = Instant::now() + timeout;
+    command.stdout(Stdio::null()).stderr(Stdio::piped());
+    let mut child = loop {
+        match command.spawn() {
+            Ok(child) => break child,
+            // #635: Linux refuses to run a file that any process still holds
+            // open for writing (a child forked by another thread keeps a copy
+            // of the writer's descriptor until it starts its own program), and
+            // that ends quickly: retry until the deadline instead of reading
+            // the spawn error as "has access".
+            Err(err)
+                if err.kind() == ErrorKind::ExecutableFileBusy && Instant::now() < deadline =>
+            {
+                thread::sleep(Duration::from_millis(5));
+            }
+            Err(_) => return true,
+        }
+    };
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
