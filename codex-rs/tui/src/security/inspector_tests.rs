@@ -24,6 +24,7 @@ pub(crate) fn input(active: ChosenLevel) -> InspectorInput {
         network_broker: false,
         mcp_servers: vec!["docs".to_string()],
         hooks: false,
+        project_security_warnings: Vec::new(),
     }
 }
 
