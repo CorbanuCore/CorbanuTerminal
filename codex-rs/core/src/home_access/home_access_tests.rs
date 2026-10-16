@@ -229,7 +229,7 @@ fn stopping_threads_preserves_the_live_episode_then_allows_a_fresh_window() {
         attempts: 0,
     };
     assert_eq!(
-        wait.next_step(true, later, window)
+        wait.next_step(/*home_unreadable*/ true, later, window)
             .map(|step| step.remaining),
         Some(window)
     );
