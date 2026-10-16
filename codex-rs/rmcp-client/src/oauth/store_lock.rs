@@ -50,6 +50,14 @@ pub(super) struct OAuthStoreLock {
     _file: File,
 }
 
+impl Drop for OAuthStoreLock {
+    fn drop(&mut self) {
+        // On Unix a duplicate or inherited descriptor can outlive this guard. Release the
+        // lock at this operation's scope boundary, even while that descriptor stays open.
+        let _ = self._file.unlock();
+    }
+}
+
 impl OAuthStoreLock {
     pub(super) fn acquire(store: OAuthStore) -> Result<Self, OAuthStoreLockFailure> {
         // This lock intentionally follows the existing local File/Secrets credential-store

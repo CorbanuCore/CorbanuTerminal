@@ -29,6 +29,14 @@ pub(super) struct RefreshCredentialLock {
     _file: File,
 }
 
+impl Drop for RefreshCredentialLock {
+    fn drop(&mut self) {
+        // On Unix a duplicate or inherited descriptor can outlive this guard. Release the
+        // lock at this operation's scope boundary, even while that descriptor stays open.
+        let _ = self._file.unlock();
+    }
+}
+
 impl RefreshCredentialLock {
     pub(super) async fn acquire_for_server(server_name: &str, url: &str) -> Result<Self> {
         let store_key = super::compute_store_key(server_name, url)?;
