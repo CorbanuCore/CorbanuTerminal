@@ -50,6 +50,10 @@ mod send_message;
 mod spawn;
 pub(crate) mod wait;
 
+#[cfg(test)]
+#[path = "multi_agents_v2_source_identity_tests.rs"]
+mod source_identity_tests;
+
 pub(crate) const PLAINTEXT_SPAWN_AGENT_TOOL: &str = "spawn_agent_plaintext";
 pub(crate) const PLAINTEXT_SEND_MESSAGE_TOOL: &str = "send_message_plaintext";
 pub(crate) const PLAINTEXT_FOLLOWUP_TASK_TOOL: &str = "followup_task_plaintext";
@@ -80,6 +84,7 @@ pub(super) fn plaintext_adapter_spec(
 
 pub(super) fn ensure_message_encoding_matches_target(
     source_provider_id: &str,
+    source_codec_provider_id: &str,
     source: &crate::tools::context::ToolCallSource,
     target_provider_id: &str,
     encoding: CollaborationMessageEncoding,
@@ -93,9 +98,11 @@ pub(super) fn ensure_message_encoding_matches_target(
         return Ok(());
     }
 
-    let source_is_encrypted_openai_call = source_provider_id == OPENAI_PROVIDER_ID
+    // Wire compatibility selects the codec; it does not make a custom provider
+    // the same configured source as the built-in OpenAI provider.
+    let source_is_encrypted_openai_call = source_codec_provider_id == OPENAI_PROVIDER_ID
         && matches!(source, crate::tools::context::ToolCallSource::Direct);
-    if source_is_encrypted_openai_call && target_provider_id != OPENAI_PROVIDER_ID {
+    if source_is_encrypted_openai_call && target_provider_id != source_provider_id {
         return Err(FunctionCallError::RespondToModel(format!(
             "target provider `{target_provider_id}` cannot consume this OpenAI-encrypted collaboration payload. Call the function named `{plaintext_tool_name}` directly with exactly the same `target` and the plaintext `message`; do not call `{native_tool_name}` again and do not add an `adapter` field. No message was admitted and no target turn was started."
         )));
@@ -256,6 +263,7 @@ mod tests {
             assert_eq!(
                 ensure_message_encoding_matches_target(
                     OPENAI_PROVIDER_ID,
+                    OPENAI_PROVIDER_ID,
                     &crate::tools::context::ToolCallSource::Direct,
                     target,
                     CollaborationMessageEncoding::PlaintextAdapter,
@@ -270,6 +278,7 @@ mod tests {
     #[test]
     fn encrypted_openai_message_requires_plaintext_adapter_for_external_target() {
         let err = ensure_message_encoding_matches_target(
+            OPENAI_PROVIDER_ID,
             OPENAI_PROVIDER_ID,
             &crate::tools::context::ToolCallSource::Direct,
             "openrouter",
@@ -352,21 +361,24 @@ mod tests {
                 },
             ]
         );
-        for target in ["myopenai", "openrouter"] {
-            assert!(
+        for target in [OPENAI_PROVIDER_ID, "openrouter"] {
+            assert_eq!(
                 ensure_message_encoding_matches_target(
+                    &turn.config.model_provider_id,
                     codec_provider,
                     &source,
                     target,
                     CollaborationMessageEncoding::ProviderNative,
                     "followup_task",
                     PLAINTEXT_FOLLOWUP_TASK_TOOL,
-                )
-                .is_err(),
-                "opaque message must not reach {target}"
+                ),
+                Err(FunctionCallError::RespondToModel(format!(
+                    "target provider `{target}` cannot consume this OpenAI-encrypted collaboration payload. Call the function named `followup_task_plaintext` directly with exactly the same `target` and the plaintext `message`; do not call `followup_task` again and do not add an `adapter` field. No message was admitted and no target turn was started."
+                )))
             );
             assert_eq!(
                 ensure_message_encoding_matches_target(
+                    &turn.config.model_provider_id,
                     codec_provider,
                     &source,
                     target,

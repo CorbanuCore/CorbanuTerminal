@@ -194,6 +194,7 @@ async fn handle_spawn_agent(
     let resolved_service_tier = config.service_tier.clone();
 
     ensure_message_encoding_matches_target(
+        &turn.config.model_provider_id,
         crate::tools::collaboration_wire::message_source_provider_id(turn.as_ref()),
         &source,
         &resolved_model_provider,

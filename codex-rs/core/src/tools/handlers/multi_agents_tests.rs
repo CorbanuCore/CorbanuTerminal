@@ -1,4 +1,7 @@
 use super::*;
+
+#[path = "multi_agents_source_identity_route_tests.rs"]
+mod source_identity_route_tests;
 use crate::StartThreadOptions;
 use crate::ThreadManager;
 use crate::config::AgentRoleConfig;
