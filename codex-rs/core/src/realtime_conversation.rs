@@ -635,22 +635,25 @@ impl RealtimeConversationManager {
                         .unwrap_or(&Default::default()),
                 )
                 .await?;
-            let task = spawn_webrtc_sideband_input_task(RealtimeWebrtcSidebandInputTask {
-                model_client,
-                client,
-                session_config,
-                call_id: call.call_id,
-                sideband_headers: call.sideband_headers,
-                input_channels,
-                events_tx,
-                handoff_state: handoff.clone(),
-                session_kind,
-                event_parser,
-                realtime_active: Arc::clone(&realtime_active),
-                flush_transcript_tail_on_session_end,
-                transcript_tail_tx,
-                stop_token: stop_token.clone(),
-            });
+            let task = spawn_webrtc_sideband_input_task(
+                RealtimeWebrtcSidebandInputTask {
+                    model_client,
+                    client,
+                    session_config,
+                    call_id: call.call_id,
+                    sideband_headers: call.sideband_headers,
+                    input_channels,
+                    events_tx,
+                    handoff_state: handoff.clone(),
+                    session_kind,
+                    event_parser,
+                    realtime_active: Arc::clone(&realtime_active),
+                    flush_transcript_tail_on_session_end,
+                    transcript_tail_tx,
+                    stop_token: stop_token.clone(),
+                },
+                call.record,
+            );
             (task, Some(call.sdp))
         } else {
             let session_config_for_record = session_config.clone();
@@ -1846,7 +1849,21 @@ struct RealtimeWebrtcSidebandInputTask {
     stop_token: CancellationToken,
 }
 
-fn spawn_webrtc_sideband_input_task(input: RealtimeWebrtcSidebandInputTask) -> JoinHandle<()> {
+fn spawn_webrtc_sideband_input_task(
+    input: RealtimeWebrtcSidebandInputTask,
+    record: Option<crate::accounting::realtime::RealtimeSessionRecord>,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let ended_at_ms = run_webrtc_sideband_input_task(input).await;
+        if let Some(record) = record {
+            record.end(ended_at_ms).await;
+        }
+    })
+}
+
+/// The client sideband's lifetime, including cancellation or connection
+/// failure before it joins. This does not infer the remote media call's end.
+async fn run_webrtc_sideband_input_task(input: RealtimeWebrtcSidebandInputTask) -> i64 {
     let RealtimeWebrtcSidebandInputTask {
         model_client,
         client,
@@ -1864,61 +1881,59 @@ fn spawn_webrtc_sideband_input_task(input: RealtimeWebrtcSidebandInputTask) -> J
         stop_token,
     } = input;
 
-    tokio::spawn(async move {
-        if !realtime_active.load(Ordering::Relaxed) {
-            return;
-        }
+    if !realtime_active.load(Ordering::Relaxed) {
+        return chrono::Utc::now().timestamp_millis();
+    }
 
-        if admit_realtime_operation(&model_client, &events_tx)
-            .await
-            .is_err()
-        {
-            return;
-        }
+    if admit_realtime_operation(&model_client, &events_tx)
+        .await
+        .is_err()
+    {
+        return chrono::Utc::now().timestamp_millis();
+    }
 
-        let connection = match tokio::select! {
-            connection = client.connect_webrtc_sideband(
-                session_config,
-                &call_id,
-                sideband_headers,
-                default_headers(),
-            ) => connection,
-            _ = stop_token.cancelled() => return,
-        } {
-            Ok(connection) => connection,
-            Err(err) => {
-                if realtime_active.load(Ordering::Relaxed) {
-                    let mapped_error = map_api_error(err);
-                    warn!("failed to connect realtime sideband: {mapped_error}");
-                    let _ = events_tx
-                        .send(RealtimeEvent::Error(mapped_error.to_string()))
-                        .await;
-                }
-                return;
+    let connection = match tokio::select! {
+        connection = client.connect_webrtc_sideband(
+            session_config,
+            &call_id,
+            sideband_headers,
+            default_headers(),
+        ) => connection,
+        _ = stop_token.cancelled() => return chrono::Utc::now().timestamp_millis(),
+    } {
+        Ok(connection) => connection,
+        Err(err) => {
+            if realtime_active.load(Ordering::Relaxed) {
+                let mapped_error = map_api_error(err);
+                warn!("failed to connect realtime sideband: {mapped_error}");
+                let _ = events_tx
+                    .send(RealtimeEvent::Error(mapped_error.to_string()))
+                    .await;
             }
-        };
-
-        if !realtime_active.load(Ordering::Relaxed) {
-            return;
+            return chrono::Utc::now().timestamp_millis();
         }
+    };
 
-        run_realtime_input_task(RealtimeInputTask {
-            model_client,
-            writer: connection.writer(),
-            events: connection.events(),
-            text_rx: input_channels.text_rx,
-            handoff_output_rx: input_channels.handoff_output_rx,
-            audio_rx: input_channels.audio_rx,
-            events_tx,
-            handoff_state,
-            session_kind,
-            event_parser,
-            flush_transcript_tail_on_session_end,
-            transcript_tail_tx,
-            stop_token,
-        })
-        .await;
+    if !realtime_active.load(Ordering::Relaxed) {
+        return chrono::Utc::now().timestamp_millis();
+    }
+
+    run_realtime_input_task(RealtimeInputTask {
+        model_client,
+        writer: connection.writer(),
+        events: connection.events(),
+        text_rx: input_channels.text_rx,
+        handoff_output_rx: input_channels.handoff_output_rx,
+        audio_rx: input_channels.audio_rx,
+        events_tx,
+        handoff_state,
+        session_kind,
+        event_parser,
+        flush_transcript_tail_on_session_end,
+        transcript_tail_tx,
+        stop_token,
     })
+    .await
 }
 
 /// Runs a session until it ends, and returns when it ended (Unix ms): when

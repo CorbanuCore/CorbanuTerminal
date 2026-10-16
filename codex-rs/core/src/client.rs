@@ -768,6 +768,7 @@ pub(crate) struct RealtimeWebrtcCallStart {
     pub(crate) sdp: String,
     pub(crate) call_id: String,
     pub(crate) sideband_headers: ApiHeaderMap,
+    pub(crate) record: Option<crate::accounting::realtime::RealtimeSessionRecord>,
 }
 
 /// Reuses the API-auth material that created the WebRTC call for the sideband WebSocket join.
@@ -1710,6 +1711,9 @@ impl ModelClient {
             sdp: response.sdp,
             call_id: response.call_id,
             sideband_headers,
+            record: evidence
+                .as_deref()
+                .and_then(crate::accounting::transport::ResponseEvidence::realtime_session_record),
         })
     }
 

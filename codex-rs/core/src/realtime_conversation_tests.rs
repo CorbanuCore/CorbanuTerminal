@@ -21,6 +21,9 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::Mutex;
 
+#[path = "realtime_webrtc_accounting_tests.rs"]
+mod webrtc_accounting;
+
 fn pf_30_realtime_start(
     model_client: crate::client::ModelClient,
     base_url: String,
