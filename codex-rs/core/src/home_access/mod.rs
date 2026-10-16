@@ -144,6 +144,14 @@ impl HomeFailures {
             self.since = None;
         }
     }
+
+    /// An ended thread has no later append to resolve its stale entry. An
+    /// unrelated thread stopping proves nothing about an active turn wait.
+    fn stopped(&mut self, thread: ThreadId) {
+        if self.unsaved.remove(&thread).is_some() && self.unsaved.is_empty() {
+            self.since = None;
+        }
+    }
 }
 
 fn home_failures() -> Option<std::sync::MutexGuard<'static, HomeFailures>> {
@@ -154,6 +162,14 @@ fn home_failures() -> Option<std::sync::MutexGuard<'static, HomeFailures>> {
 pub(crate) fn note_rollout_written(thread: ThreadId) {
     if let Some(mut failures) = home_failures() {
         failures.written(thread);
+    }
+}
+
+/// Stop tracking an ended thread after its persistence shutdown attempt.
+/// This does not assert that its unwritten items became durable.
+pub(crate) fn note_thread_stopped(thread: ThreadId) {
+    if let Some(mut failures) = home_failures() {
+        failures.stopped(thread);
     }
 }
 
@@ -343,4 +359,4 @@ pub fn unreadable_home_message(home: &Path, error: &str, log: Option<&Path>) -> 
 
 #[cfg(test)]
 #[path = "home_access_tests.rs"]
-mod tests;
+pub(crate) mod tests;

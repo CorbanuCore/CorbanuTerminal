@@ -1,4 +1,11 @@
 use super::*;
+
+pub(crate) fn has_unsaved_rollout(thread: ThreadId) -> bool {
+    home_failures()
+        .expect("home failure state")
+        .unsaved
+        .contains_key(&thread)
+}
 use pretty_assertions::assert_eq;
 
 const WINDOW: Duration = Duration::from_secs(3600);
@@ -193,6 +200,48 @@ fn a_run_of_home_failures_ends_when_every_thread_is_saved() {
         (after_a, failures.since, failures.unsaved.len()),
         ((Some(start), 1), None, 0)
     );
+}
+
+#[test]
+fn stopping_threads_preserves_the_live_episode_then_allows_a_fresh_window() {
+    let start = Instant::now();
+    let later = start + Duration::from_secs(90);
+    let (a, b, c) = (ThreadId::new(), ThreadId::new(), ThreadId::new());
+    let dir = PathBuf::from("synthetic-sessions");
+    let mut failures = HomeFailures::default();
+    failures.unwritten(a, dir.clone(), start);
+    failures.unwritten(b, dir.clone(), start + Duration::from_secs(30));
+    failures.stopped(a);
+    assert_eq!(
+        (
+            failures.since,
+            failures.unsaved.len(),
+            failures.unsaved.contains_key(&b)
+        ),
+        (Some(start), 1, true)
+    );
+    failures.stopped(b);
+    assert_eq!((failures.since, failures.unsaved.len()), (None, 0));
+    failures.unwritten(c, dir, later);
+    let window = Duration::from_secs(60);
+    let mut wait = HomeWait {
+        started: failures.since,
+        attempts: 0,
+    };
+    assert_eq!(
+        wait.next_step(/*home_unreadable*/ true, later, window)
+            .map(|step| step.remaining),
+        Some(window)
+    );
+}
+
+#[test]
+fn stopping_an_unmarked_thread_does_not_reset_an_active_turn_wait() {
+    let start = Instant::now();
+    let mut failures = HomeFailures::default();
+    failures.failed(start);
+    failures.stopped(ThreadId::new());
+    assert_eq!((failures.since, failures.unsaved.len()), (Some(start), 0));
 }
 
 #[test]
