@@ -444,7 +444,19 @@ impl ExecCommandHandler {
             }
             None => None,
         };
-        if let Some(explanation) = protected_read {
+        // #826 follow-up: and a user namespace the Linux rule refused, named
+        // instead of a bare "Operation not permitted".
+        let user_namespace = crate::security::user_namespaces::denial_explanation(
+            session.as_ref(),
+            turn.as_ref(),
+            output.exit_code,
+            &output_text,
+        );
+        let explanation = match (protected_read, user_namespace) {
+            (Some(read), Some(namespace)) => Some(format!("{read}\n{namespace}")),
+            (read, namespace) => read.or(namespace),
+        };
+        if let Some(explanation) = explanation {
             crate::security::protected_reads::notify(
                 session.as_ref(),
                 turn.as_ref(),

@@ -7,6 +7,7 @@ pub mod policy_transforms;
 #[cfg(target_os = "macos")]
 pub mod seatbelt;
 mod spawn;
+pub mod user_namespaces;
 mod violation;
 mod windows;
 mod windows_legacy_warning;

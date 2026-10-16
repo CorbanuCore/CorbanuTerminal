@@ -134,16 +134,30 @@ own a command is root over its own files: it could open the placeholders the
 sandbox hides the vault store and other denied files with, and mount over
 paths, so a nested `corbanu exec` wouldn't be recognised as nested. The rule
 covers every process in Corbanu's Linux sandbox, bubblewrap's own included.
-No grant or approval lifts it; Permissive is unchanged. Commands that run
-without Corbanu's sandbox (an external sandbox), contained Claude panes and
-a remote Linux executor used from macOS or Windows aren't covered.
+No grant or approval lifts it; Permissive is unchanged. Contained Claude
+panes get the rule too (#891). Commands that run without Corbanu's sandbox
+(an external sandbox) and a remote Linux executor used from macOS or Windows
+aren't covered.
 
 What needs a user namespace fails: a sandbox of its own (the commands of a
 nested `corbanu exec`, which Corbanu explains), rootless containers (Podman,
 Buildah, rootless Docker), `bwrap`, Flatpak, Nix's build sandbox, `unshare`,
 and Chrome or Electron with their sandbox on (Puppeteer's default; pass
-`--no-sandbox`, as Playwright does). 32-bit programs stop too. Choose
+`--no-sandbox`, as Playwright does). 32-bit programs stop too. In a
+contained Claude pane, Claude Code's own Bash sandbox (bubblewrap) can't
+start (bubblewrap reports "No permissions to create new namespace");
+depending on its version and settings, Claude Code then fails the command
+or offers to run it outside its own sandbox, which, like every pane
+command, asks you first and still runs in Corbanu's sandbox. Choose
 Permissive to run them.
+
+Such a failure is named, not left as a bare "Operation not permitted": the
+command's output and a warning in your transcript name the rule and the
+level, the `/security` inspector lists "creating a user namespace" under
+recent denials, and the approval prompt for a command that runs `unshare`,
+`bwrap`, Podman, Buildah or Flatpak says it will fail. A contained Claude
+pane ends such a turn with a note naming the rule. The explanation only
+reads the command's output; it never changes what runs.
 
 ## A managed network proxy
 

@@ -418,3 +418,165 @@ fn issue_743_linux_pane_commands_can_make_temporary_files() {
     assert!(lines.contains(&"heredoc-ok"), "{stdout}\n{stderr}");
     assert!(!lines.contains(&"session-tmp-writable"), "{stdout}");
 }
+
+/// #891 (Travis, 2026-10-16, D12 option a): on Linux a contained pane's
+/// profile denies user namespaces under Moderate and Aggressive, active or
+/// saved, as agent commands' profiles do (#826). Permissive keeps the
+/// profile, and macOS and Windows keep it at every level (the keychain rule
+/// of #758 under Aggressive is unchanged).
+#[test]
+fn issue_891_contained_panes_deny_user_namespaces_under_protected_levels_on_linux() {
+    use crate::security::level::ChosenLevel;
+    use crate::security::level::test_levels;
+    use ChosenLevel::Aggressive;
+    use ChosenLevel::Moderate;
+    use ChosenLevel::Permissive;
+
+    let cwd = tempfile::tempdir().unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let containment = ClaudeContainment {
+        state_dir: state.path().join("pane-891"),
+        panes_dir: cwd.path().join("panes"),
+        linux_sandbox_exe: None,
+    };
+    let base = base_profile(&containment).unwrap();
+    assert!(!base.file_system_sandbox_policy().denies_user_namespaces());
+    for (active, stored, protected) in [
+        (Permissive, Permissive, None),
+        (Moderate, Moderate, Some("Moderate")),
+        (Aggressive, Aggressive, Some("Aggressive")),
+        // Saved but not yet active, and the stricter of the two.
+        (Permissive, Moderate, Some("Moderate")),
+        (Moderate, Aggressive, Some("Aggressive")),
+    ] {
+        let _levels = test_levels::set(active, stored);
+        let expected = protected.filter(|_| cfg!(target_os = "linux"));
+        let profile = level_rules(base.clone());
+        let mut without = profile.file_system_sandbox_policy();
+        without
+            .entries
+            .retain(|entry| !entry.denies_user_namespaces());
+        let mut keychain_only = base.file_system_sandbox_policy();
+        if active == Aggressive {
+            keychain_only
+                .entries
+                .push(FileSystemSandboxEntry::deny_keychain_services());
+        }
+        assert_eq!(
+            (
+                user_namespaces_denied(),
+                profile
+                    .file_system_sandbox_policy()
+                    .denies_user_namespaces(),
+                without == keychain_only,
+            ),
+            (expected, expected.is_some(), true),
+            "{active:?}/{stored:?}"
+        );
+    }
+}
+
+/// #891, real Linux sandbox: under Moderate and Aggressive a contained
+/// pane's commands cannot create a user namespace (`unshare` and
+/// bubblewrap, which Claude Code's own Bash sandbox uses, are refused) and
+/// the sandbox marks their environment; Permissive is unchanged. Skipped
+/// where `codex-linux-sandbox` is not built or cannot run.
+#[cfg(target_os = "linux")]
+#[test]
+#[allow(clippy::print_stderr, reason = "says why the test was skipped")]
+fn issue_891_linux_pane_commands_cannot_create_user_namespaces() {
+    use crate::security::level::ChosenLevel;
+    use crate::security::level::test_levels;
+
+    let Ok(exe) = codex_utils_cargo_bin::cargo_bin("codex-linux-sandbox") else {
+        eprintln!("skipped: codex-linux-sandbox is not built");
+        return;
+    };
+    let cwd = tempfile::tempdir().unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let state_dir = state
+        .path()
+        .canonicalize()
+        .unwrap()
+        .join("home-key/pane-891");
+    let containment = ClaudeContainment {
+        state_dir,
+        panes_dir: cwd.path().join("panes"),
+        linux_sandbox_exe: Some(exe),
+    };
+    std::fs::create_dir_all(containment.tmp_dir()).unwrap();
+    let env = HashMap::from([
+        ("PATH".to_string(), "/usr/bin:/bin".to_string()),
+        (
+            "HOME".to_string(),
+            cwd.path().to_string_lossy().into_owned(),
+        ),
+        ("TMPDIR".to_string(), "/tmp".to_string()),
+        // The bridge, as a pane's plan sets it (the sandbox routes the
+        // pane's network to it).
+        (
+            "HTTP_PROXY".to_string(),
+            "http://127.0.0.1:4242".to_string(),
+        ),
+    ]);
+    let run = |script: &str| {
+        let command = sandboxed(
+            &containment,
+            "/bin/sh",
+            &["-c".to_string(), script.to_string()],
+            env.clone(),
+            cwd.path(),
+            /*bridge_port*/ 4242,
+            &level_rules(base_profile(&containment).unwrap()),
+        )
+        .unwrap();
+        let mut process = std::process::Command::new(&command.argv[0]);
+        process
+            .args(&command.argv[1..])
+            .env_clear()
+            .envs(&command.env)
+            .current_dir(cwd.path());
+        if let Some(arg0) = &command.arg0 {
+            std::os::unix::process::CommandExt::arg0(&mut process, arg0);
+        }
+        let output = process.output().unwrap();
+        (
+            output.status,
+            String::from_utf8_lossy(&output.stdout).into_owned(),
+            String::from_utf8_lossy(&output.stderr).into_owned(),
+        )
+    };
+    {
+        let _levels = test_levels::set(ChosenLevel::Permissive, ChosenLevel::Permissive);
+        let (status, stdout, stderr) = run("echo ready");
+        if !status.success() || !stdout.contains("ready") {
+            eprintln!("skipped: the Linux sandbox cannot run here: {status}: {stderr}");
+            return;
+        }
+    }
+    let script = "echo marker=${CODEX_SANDBOX_USER_NAMESPACES_DENIED:-unset}; \
+         unshare -Ur true && echo NAMESPACE-MADE; \
+         if command -v bwrap >/dev/null; then bwrap --ro-bind / / true && echo BWRAP-RAN; fi; \
+         true";
+    for level in [ChosenLevel::Moderate, ChosenLevel::Aggressive] {
+        let _levels = test_levels::set(level, level);
+        let (_, stdout, stderr) = run(script);
+        eprintln!("{level:?}: stdout={stdout:?} stderr={stderr:?}");
+        assert!(stdout.contains("marker=1"), "{level:?}: {stdout}");
+        assert!(!stdout.contains("NAMESPACE-MADE"), "{level:?}: {stdout}");
+        assert!(!stdout.contains("BWRAP-RAN"), "{level:?}: {stdout}");
+        assert!(
+            stderr.contains("unshare failed: Operation not permitted"),
+            "{level:?}: {stderr}"
+        );
+        // What the pane then tells the person.
+        assert!(
+            codex_sandboxing::user_namespaces::reports_user_namespace_denial(&stderr),
+            "{level:?}: {stderr}"
+        );
+    }
+    let _levels = test_levels::set(ChosenLevel::Permissive, ChosenLevel::Permissive);
+    let (_, stdout, stderr) = run(script);
+    eprintln!("Permissive: stdout={stdout:?} stderr={stderr:?}");
+    assert!(stdout.contains("marker=unset"), "{stdout}");
+}

@@ -503,6 +503,7 @@ async fn issue_554_old_or_broken_claude_code_is_explained() {
                 "PATH".to_string(),
                 "/usr/bin:/bin".to_string(),
             )]),
+            user_namespaces_denied: None,
         };
         require_contained_claude_version(&path, version, root.path())
             .await

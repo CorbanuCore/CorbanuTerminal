@@ -139,6 +139,26 @@ pub(crate) fn aggressive_active() -> bool {
     context().is_some_and(|context| context.active == ChosenLevel::Aggressive)
 }
 
+/// #891: the stricter of the active and the saved level when that is a
+/// protected level (Moderate or Aggressive), for the rules contained Claude
+/// panes take under it. The saved level counts as soon as it is saved, as
+/// Core's own rules follow the stricter of the saved level and the live
+/// policy.
+pub(crate) fn protected_level_for_panes() -> Option<ChosenLevel> {
+    #[cfg(test)]
+    if let Some((active, stored)) = test_levels::LEVELS.get() {
+        return stricter_protected(active, stored);
+    }
+    let context = context()?;
+    stricter_protected(context.active, load(&context.codex_home).enforced())
+}
+
+fn stricter_protected(active: ChosenLevel, stored: ChosenLevel) -> Option<ChosenLevel> {
+    [ChosenLevel::Aggressive, ChosenLevel::Moderate]
+        .into_iter()
+        .find(|level| *level == active || *level == stored)
+}
+
 /// For entry points that may have no launch context (`corbanu
 /// claude-pane-smoke`): `codex_home`'s saved level, and the active level when
 /// there is one.

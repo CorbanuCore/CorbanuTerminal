@@ -199,6 +199,33 @@ fn issue_736_keychain_commands() {
     }
 }
 
+/// #826 follow-up: commands that run a program needing a user namespace,
+/// also inside a script, found as keychain commands are; not the words
+/// elsewhere.
+#[test]
+fn issue_826_user_namespace_commands() {
+    use super::writes::user_namespace_command;
+    for command in [
+        shell("unshare -Ur true"),
+        shell("/usr/bin/bwrap --ro-bind / / true"),
+        shell("cd app && podman run --rm alpine true"),
+        shell("FOO=1 buildah bud ."),
+        shell("bash -c 'flatpak run org.example.App'"),
+        vec!["unshare".to_string(), "-Urm".to_string(), "sh".to_string()],
+    ] {
+        assert!(user_namespace_command(&command), "{command:?}");
+    }
+    for command in [
+        shell("echo unshare"),
+        shell("cat bwrap.md"),
+        shell("docker run --rm alpine true"),
+        shell("git commit -m \"use podman\""),
+        shell("ls podman/"),
+    ] {
+        assert!(!user_namespace_command(&command), "{command:?}");
+    }
+}
+
 /// #740 (and #737): under Aggressive's sandbox (the current folder only),
 /// which commands a grant could never help, and why; a hook in a folder
 /// `core.hooksPath` names keeps the grant, and so does a start-up file when

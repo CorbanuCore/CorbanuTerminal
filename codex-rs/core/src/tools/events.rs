@@ -379,9 +379,10 @@ impl ToolEmitter {
     }
 
     /// #442: the explanation for a shell command that failed because the
-    /// Aggressive rules denied a protected read it names. The caller shows it
-    /// to the person after the command's end event and adds it to the
-    /// model's output.
+    /// Aggressive rules denied a protected read it names, and (#826) because
+    /// the Linux rule refused a user namespace. The caller shows it to the
+    /// person after the command's end event and adds it to the model's
+    /// output.
     async fn explain_protected_read(
         &self,
         ctx: ToolEventCtx<'_>,
@@ -399,7 +400,7 @@ impl ToolEmitter {
             },
             Err(ToolError::Rejected(_) | ToolError::Declined(_)) => return None,
         };
-        crate::security::protected_reads::denial_explanation(
+        let protected_read = crate::security::protected_reads::denial_explanation(
             ctx.session,
             ctx.turn,
             command,
@@ -407,7 +408,18 @@ impl ToolEmitter {
             Some(output.exit_code),
             &output.aggregated_output.text,
         )
-        .await
+        .await;
+        // #826 follow-up: a user namespace the Linux rule refused.
+        let user_namespace = crate::security::user_namespaces::denial_explanation(
+            ctx.session,
+            ctx.turn,
+            Some(output.exit_code),
+            &output.aggregated_output.text,
+        );
+        match (protected_read, user_namespace) {
+            (Some(read), Some(namespace)) => Some(format!("{read}\n{namespace}")),
+            (read, namespace) => read.or(namespace),
+        }
     }
 
     pub async fn finish(

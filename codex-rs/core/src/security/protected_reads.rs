@@ -55,6 +55,12 @@ use writes::write_targets;
 #[path = "protected_reads_writes.rs"]
 mod writes;
 
+/// #826 follow-up: whether `command` runs a program that always needs a
+/// user namespace (text-based; see `writes::user_namespace_command`).
+pub(crate) fn runs_user_namespace_program(command: &[String]) -> bool {
+    writes::user_namespace_command(command)
+}
+
 /// Output that says the operating system refused access (on Linux a write
 /// outside the writable folders reports a read-only file system; #620).
 const DENIAL_MARKERS: [&str; 3] = [

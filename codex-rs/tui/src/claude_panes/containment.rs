@@ -294,6 +294,9 @@ pub(crate) struct ContainedCommand {
     )]
     pub(crate) arg0: Option<String>,
     pub(crate) env: HashMap<String, String>,
+    /// #891: the security level ("Moderate" or "Aggressive") under which
+    /// the launch denies creating user namespaces (Linux), if it does.
+    pub(crate) user_namespaces_denied: Option<&'static str>,
 }
 
 /// Wrap `executable args` in the platform sandbox under the armed contract.
@@ -326,15 +329,39 @@ pub(crate) fn contain(
     )
     .map_err(|err| anyhow!(err))?;
     let (program, program_args) = pane_command(sandbox, &containment.tmp_dir(), executable, args);
-    sandboxed(
+    let user_namespaces = user_namespaces_denied();
+    let mut command = sandboxed(
         containment,
         &program,
         &program_args,
         env,
         cwd,
         bridge_port,
-        &level_rules(profile),
-    )
+        &rules_at(
+            profile,
+            crate::security::level::aggressive_active(),
+            user_namespaces.is_some(),
+        ),
+    )?;
+    command.user_namespaces_denied = user_namespaces;
+    Ok(command)
+}
+
+/// #891 (Travis, 2026-10-16, D12 option a): on Linux, under Moderate and
+/// Aggressive (the stricter of the active and the saved level), a contained
+/// pane may not create user namespaces either, as agent commands may not
+/// (#826): `unshare -Ur` could otherwise open what the sandbox hides and
+/// defeat nested-launch detection. Claude Code's own Bash sandbox
+/// (bubblewrap) needs one, so it cannot start in such a pane; the pane says
+/// so when a command reports the refusal ([`super::output_parse`]).
+/// Corbanu's sandbox still applies. Permissive, macOS and Windows keep the
+/// profile.
+pub(crate) fn user_namespaces_denied() -> Option<&'static str> {
+    if !cfg!(target_os = "linux") {
+        return None;
+    }
+    crate::security::level::protected_level_for_panes()
+        .map(crate::security::level::ChosenLevel::name)
 }
 
 /// The program and arguments run inside the sandbox for `executable args`.
@@ -369,19 +396,42 @@ pub(crate) fn pane_command(
 /// services either, although its bridge port selects Seatbelt's network
 /// rules, which allow `com.apple.SecurityServer` (Travis, 2026-10-14). Claude
 /// Code reaches the bridge over plain HTTP with the bridge's token, so it
-/// needs neither TLS nor the keychain. Other levels keep the profile.
-pub(crate) fn level_rules(profile: PermissionProfile) -> PermissionProfile {
-    if !crate::security::level::aggressive_active() {
+/// needs neither TLS nor the keychain. #891: on Linux, under Moderate and
+/// Aggressive, no user namespaces ([`user_namespaces_denied`]). Otherwise
+/// the profile is kept. [`contain`] applies them.
+fn rules_at(
+    profile: PermissionProfile,
+    deny_keychain: bool,
+    deny_user_namespaces: bool,
+) -> PermissionProfile {
+    if !deny_keychain && !deny_user_namespaces {
         return profile;
     }
     let (mut file_system, network) = profile.to_runtime_permissions();
     if !matches!(file_system.kind, FileSystemSandboxKind::Restricted) {
         return profile;
     }
-    file_system
-        .entries
-        .push(FileSystemSandboxEntry::deny_keychain_services());
+    if deny_keychain {
+        file_system
+            .entries
+            .push(FileSystemSandboxEntry::deny_keychain_services());
+    }
+    if deny_user_namespaces {
+        file_system
+            .entries
+            .push(FileSystemSandboxEntry::deny_user_namespaces());
+    }
     PermissionProfile::from_runtime_permissions(&file_system, network)
+}
+
+/// The level rules [`contain`] applies, at the current levels.
+#[cfg(test)]
+pub(crate) fn level_rules(profile: PermissionProfile) -> PermissionProfile {
+    rules_at(
+        profile,
+        crate::security::level::aggressive_active(),
+        user_namespaces_denied().is_some(),
+    )
 }
 
 /// `executable args` wrapped in the platform sandbox under `profile`, with
@@ -428,6 +478,7 @@ pub(crate) fn sandboxed(
         argv: request.command,
         arg0: request.arg0,
         env: request.env,
+        user_namespaces_denied: None,
     })
 }
 

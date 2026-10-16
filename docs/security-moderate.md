@@ -115,16 +115,29 @@ The kill switch (`/security` → `g`) works under every level.
   `clone` with a new user namespace fail with "Operation not permitted". In
   one of its own a command could open the files the sandbox hides and mount
   over paths, so a nested `corbanu exec` wouldn't be recognised. This covers
-  every process in Corbanu's Linux sandbox, but not commands that run
-  without it (your settings turn the sandbox off, or an external sandbox),
-  contained Claude panes, or a remote Linux executor used from macOS or
-  Windows. What needs a user namespace fails under Moderate and Aggressive:
-  a sandbox of its own (so the commands of a nested `corbanu exec` don't
-  run; Corbanu says why), rootless containers (Podman, Buildah, rootless
-  Docker), `bwrap`, Flatpak, Nix's build sandbox, and Chrome or Electron
-  with their sandbox on (Puppeteer's default; pass `--no-sandbox`, as
-  Playwright does). 32-bit programs stop too. No approval lifts it. Choose
+  every process in Corbanu's Linux sandbox and contained Claude panes
+  (#891), but not commands that run without it (your settings turn the
+  sandbox off, or an external sandbox) or a remote Linux executor used from
+  macOS or Windows. What needs a user namespace fails under Moderate and
+  Aggressive: a sandbox of its own (so the commands of a nested
+  `corbanu exec` don't run; Corbanu says why), rootless containers (Podman,
+  Buildah, rootless Docker), `bwrap`, Flatpak, Nix's build sandbox, and Chrome or
+  Electron with their sandbox on (Puppeteer's default; pass `--no-sandbox`,
+  as Playwright does). 32-bit programs stop too. In a contained Claude pane,
+  Claude Code's own Bash sandbox (bubblewrap) can't start (bubblewrap
+  reports "No permissions to create new namespace"); depending on its
+  version and settings, Claude Code then fails the command or offers to run
+  it outside its own sandbox, which, like every pane command, asks you
+  first and still runs in Corbanu's sandbox. No approval lifts it. Choose
   Permissive to run them.
+- A command that fails this way says why instead of a bare "Operation not
+  permitted": its output (what the agent sees) and a warning in your
+  transcript name the rule and the level, and the `/security` inspector
+  lists "creating a user namespace" under recent denials. Before you approve
+  a command that runs `unshare`, `bwrap`, Podman, Buildah or Flatpak, the
+  approval prompt says it will fail. A contained Claude pane ends such a
+  turn with a note naming the rule. The explanation only reads the
+  command's output; it never changes what runs.
 - A remote app server can't enforce a level chosen here; Corbanu refuses to
   start against one until you choose Permissive.
 

@@ -575,10 +575,42 @@ fn script_writes(script: &str, depth: usize) -> Writes {
 /// options), also inside a shell's `-c` script. Text-based: a match only
 /// adds the explanation (keychain commands are never granted anyway).
 pub(super) fn keychain_command(command: &[String]) -> bool {
-    simple_command_keychain(command, MAX_SCRIPT_DEPTH)
+    runs_program(command, MAX_SCRIPT_DEPTH, &keychain_invocation)
 }
 
-fn simple_command_keychain(words: &[String], depth: usize) -> bool {
+/// #826 follow-up: whether `command` runs a program that always needs a
+/// user namespace (`unshare`, `bwrap`, rootless Podman, …), found as
+/// [`keychain_command`] finds `security`. Text-based: a match only adds the
+/// approval prompt's note.
+pub(super) fn user_namespace_command(command: &[String]) -> bool {
+    runs_program(command, MAX_SCRIPT_DEPTH, &|program, _| {
+        codex_sandboxing::user_namespaces::needs_user_namespace(program)
+    })
+}
+
+/// `security [-hilqv] [-p prompt] command …` with a keychain verb.
+fn keychain_invocation(program: &str, arguments: &[&str]) -> bool {
+    if program != "security" {
+        return false;
+    }
+    let mut arguments = arguments.iter();
+    while let Some(word) = arguments.next() {
+        match *word {
+            "-p" => {
+                arguments.next();
+            }
+            _ if word.starts_with('-') => {}
+            verb => return KEYCHAIN_VERBS.contains(&verb.trim_end_matches(';')),
+        }
+    }
+    false
+}
+
+/// Whether `words` runs a program `matches` accepts (its file name and
+/// arguments), in command position (after `VAR=value`, `sudo`, `env`,
+/// `command`, `exec`, `nohup` and their options), also inside a shell's
+/// `-c` script, as deep as `depth` scripts.
+fn runs_program(words: &[String], depth: usize, matches: &dyn Fn(&str, &[&str]) -> bool) -> bool {
     let mut words = words.iter().map(String::as_str);
     let program = loop {
         match words.next() {
@@ -609,24 +641,10 @@ fn simple_command_keychain(words: &[String], depth: usize) -> bool {
             .is_some_and(|script| {
                 script_segments(script)
                     .iter()
-                    .any(|segment| simple_command_keychain(segment, depth))
+                    .any(|segment| runs_program(segment, depth, matches))
             });
     }
-    if program != "security" {
-        return false;
-    }
-    // `security [-hilqv] [-p prompt] command …`
-    let mut arguments = arguments.into_iter();
-    while let Some(word) = arguments.next() {
-        match word {
-            "-p" => {
-                arguments.next();
-            }
-            _ if word.starts_with('-') => {}
-            verb => return KEYCHAIN_VERBS.contains(&verb.trim_end_matches(';')),
-        }
-    }
-    false
+    matches(program, &arguments)
 }
 
 /// The simple commands of a shell script, split at `;`, `&&`, `||`, `|`,

@@ -34,6 +34,7 @@ use super::approval;
 use super::bridge::run_claude_bridge;
 use super::output_parse::ParsedClaudeOutput;
 use super::output_parse::parse_claude_output;
+use super::output_parse::tool_results_report_user_namespace_denial;
 use super::pane::ClaudePaneTurnStatus;
 use super::pane::ClaudePaneUsageStatus;
 use super::progress::dedupe_tool_names;
@@ -188,6 +189,10 @@ pub(crate) async fn run_claude_command_plan(
         )),
     );
     let redactor = ClaudeSecretRedactor::from_plan(&plan, /*additional_secret*/ None);
+    // #891: the level under which this launch denies user namespaces.
+    let user_namespaces_denied = contained
+        .as_ref()
+        .and_then(|contained| contained.user_namespaces_denied);
     let mut command = match contained {
         Some(contained) => {
             let (program, args) = contained
@@ -507,18 +512,26 @@ pub(crate) async fn run_claude_command_plan(
 
     if !stdout_text.trim().is_empty() {
         let output = match parse_claude_output(&stdout_text) {
-            Ok(parsed) => turn_output_from_parsed(&plan, parsed, duration_ms),
+            Ok(parsed) => {
+                let mut output = turn_output_from_parsed(&plan, parsed, duration_ms);
+                add_user_namespaces_note(&mut output, user_namespaces_denied, &stdout_text);
+                output
+            }
             // A transcript this client cannot parse is still a turn that
             // spent money, and the line stating what it spent may be sitting
             // in that same stdout. Salvage it rather than drop the turn.
-            Err(err) => partial_failed_turn_output(
-                &plan,
-                duration_ms,
-                ClaudePaneTurnStatus::ParseFailure,
-                Some("parse_failure".to_string()),
-                format!("{err:#}"),
-                &stdout_text,
-            ),
+            Err(err) => {
+                let mut output = partial_failed_turn_output(
+                    &plan,
+                    duration_ms,
+                    ClaudePaneTurnStatus::ParseFailure,
+                    Some("parse_failure".to_string()),
+                    format!("{err:#}"),
+                    &stdout_text,
+                );
+                add_user_namespaces_note(&mut output, user_namespaces_denied, &stdout_text);
+                output
+            }
         };
         report_direct_turn(progress_tx.as_ref(), &output);
         write_turn_audit(
@@ -1167,6 +1180,28 @@ fn linux_descendant_pids(root_pid: libc::pid_t) -> Vec<libc::pid_t> {
     }
 
     descendants
+}
+
+/// #891: when this turn's launch denied user namespaces (at `level`) and a
+/// tool result in `stdout` reports the refusal, the turn's text ends with a
+/// note naming the rule, instead of bubblewrap's misleading message alone.
+pub(super) fn add_user_namespaces_note(
+    output: &mut ClaudePaneTurnOutput,
+    level: Option<&str>,
+    stdout: &str,
+) {
+    let Some(level) = level else {
+        return;
+    };
+    if !tool_results_report_user_namespace_denial(stdout) {
+        return;
+    }
+    let note = codex_sandboxing::user_namespaces::claude_pane_note(level);
+    output.text = if output.text.trim().is_empty() {
+        note
+    } else {
+        format!("{}\n\n{note}", output.text.trim_end())
+    };
 }
 
 fn turn_output_from_parsed(
