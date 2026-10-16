@@ -111,7 +111,8 @@ async fn a_lock_held_past_the_wait_falls_back_to_this_process() -> anyhow::Resul
     // attempts), not SQLite's 5 s busy timeout.
     assert!(
         first_wait >= crate::QUICK_BUSY_TIMEOUT / 2 && first_wait < Duration::from_secs(2),
-        "{first_wait:?}"
+        "{first_wait:?}; quick_pool={}",
+        runtime.quick.is_some()
     );
 
     // While paused, later steps don't wait the lock out again.
@@ -524,10 +525,10 @@ async fn the_key_salt_is_per_home() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// #482: a row an older build kept under the unsalted key moves to the salted
-/// key with its cooldown, and the unsalted value is gone from the DB.
-#[tokio::test]
-async fn a_legacy_row_moves_to_its_salted_key() -> anyhow::Result<()> {
+/// A failed legacy write stays in this process: a fresh process cannot migrate
+/// a cooldown that never reached the historical database row.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_non_durable_legacy_seed_stays_in_this_process() -> anyhow::Result<()> {
     let home = unique_temp_dir();
     let runtime = StateRuntime::init_for_testing(home.clone(), "zai".into()).await?;
     let legacy = ProviderRequestKey {
@@ -549,9 +550,72 @@ async fn a_legacy_row_moves_to_its_salted_key() -> anyhow::Result<()> {
             )
             .await,
     );
-    runtime
+    assert!(lease.in_state_db);
+    let held = hold_write_lock(&runtime.sqlite().state_db_path()).await?;
+    let recorded = runtime
         .record_provider_request_throttle_result(&lease, rate_limited(), /*now_ms*/ 2_000)
         .await;
+    assert_eq!(
+        recorded,
+        ProviderRequestThrottled::new(/*decision*/ false, Some(StateDbFallback::Busy))
+    );
+    held.rollback().await?;
+
+    let process = StateRuntime::init_for_testing(home.clone(), "zai".into()).await?;
+    process
+        .adopt_legacy_provider_request_key(
+            &legacy.key_fingerprint,
+            &salted.key_fingerprint,
+            /*now_ms*/ 2_500,
+        )
+        .await;
+    assert_eq!(
+        check_reason(
+            &process
+                .check_provider_request_throttle(&salted, &preflight(), /*now_ms*/ 3_000)
+                .await
+        ),
+        None
+    );
+    assert_eq!(
+        check_reason(
+            &runtime
+                .check_provider_request_throttle(&legacy, &preflight(), /*now_ms*/ 3_000)
+                .await
+        ),
+        Some((ProviderRequestBlockReason::Cooldown, 62_000, Some(429)))
+    );
+    process.close().await;
+    runtime.close().await;
+    let _ = std::fs::remove_dir_all(home);
+    Ok(())
+}
+
+/// #482: a row an older build kept under the unsalted key moves to the salted
+/// key with its cooldown, and the unsalted value is gone from the DB.
+#[tokio::test]
+async fn a_legacy_row_moves_to_its_salted_key() -> anyhow::Result<()> {
+    let home = unique_temp_dir();
+    let runtime = StateRuntime::init_for_testing(home.clone(), "zai".into()).await?;
+    let legacy = ProviderRequestKey {
+        key_fingerprint: "env:ZAI_API_KEY:0123456789abcdef".to_string(),
+        ..key()
+    };
+    let salted = ProviderRequestKey {
+        key_fingerprint: "env-salted:ZAI_API_KEY:fedcba9876543210".to_string(),
+        ..key()
+    };
+    // Seed the historical database row directly: the best-effort throttle API
+    // may keep a failed write only in this process, and adjusts timestamps by
+    // elapsed time. Neither belongs to this migration fixture.
+    sqlx::query(
+        "INSERT INTO provider_request_state (provider_id, model, key_fingerprint, cooldown_until_ms, last_status, updated_at_ms) VALUES (?, ?, ?, 62000, 429, 2000)",
+    )
+    .bind(&legacy.provider_id)
+    .bind(&legacy.model)
+    .bind(&legacy.key_fingerprint)
+    .execute(runtime.pool.as_ref())
+    .await?;
 
     // A fresh process (no memory of the legacy cooldown) adopts the row.
     let process = StateRuntime::init_for_testing(home.clone(), "zai".into()).await?;
