@@ -1,0 +1,66 @@
+# #837 (MOD-06): under Moderate an approved command may write the project's
+# .git, so an agent's git commit works after a person approves it; hooks and
+# config stay read-only.
+id = "issue837-moderate-approved-commit"
+feature = "#837: under Moderate an approved git commit works"
+expected = "Under config Moderate with the milestone flags, the agent asks to run git add and git commit outside the sandbox; the person approves, the command stays in the sandbox, and the commit lands (git log shows it)."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "moderate"
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"notes.txt" = "moderate notes\n"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Call your shell tool exactly once to run: git add -A && git -c user.name=demo -c user.email=demo@example.com commit -qm 'moderate check' && git log -1 --format=%s -- with sandbox_permissions set to require_escalated and justification 'commit the notes'. Then report the result."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?i)Would you like to run"
+timeout = 240
+compress = 3
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)Then report the result\\.(?:(?!Working).)*\n• (?:(?!Working).)*\n› "
+timeout = 180
+compress = 3
+[[steps]]
+pause = 2.0
+[[steps]]
+type = "!git log -1 --format=%s"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "└ moderate check"
+[[steps]]
+pause = 3.0

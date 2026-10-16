@@ -29,7 +29,8 @@ without them Corbanu refuses every model request under Moderate, so
   project's `.git`, so `git commit` works. Its hooks and config (also config
   files included from inside `.git`), the `commondir`, `modules` and
   `worktrees` entries through which git would read other ones, the rebase
-  and cherry-pick state a later `--continue` runs, `info`, and a `HEAD` file
+  and cherry-pick state a later `--continue` runs, `info`, legacy remote
+  definitions (`remotes`, `branches`), and a `HEAD` file
   at the project root stay read-only even then, also with full access,
   unless the approved command's own permissions name them (an additional
   write permission for `.git/hooks`); `.git` can't be moved. A project's
@@ -99,8 +100,13 @@ The kill switch (`/security` → `g`) works under every level.
   progress), and while it runs, missing entries it may not create are held
   by files Corbanu removes when it ends: `.git/commondir` (naming `.git`
   itself, so git keeps working), empty files for other missing ones (such
-  as `config.worktree`, `sequencer` or `info`) and a `HEAD` at the project
-  root.
+  as `config.worktree`, `sequencer` or `info`; a `sequencer` file makes a
+  multi-commit `git cherry-pick` or `git revert` fail meanwhile) and a `HEAD`
+  at the project root.
+- An approved command that writes `.git` can also put links there (such as
+  `.git/COMMIT_EDITMSG` pointing at a file in your home folder) that git
+  later writes through when you run it outside the sandbox (#837; needs
+  security sign-off).
 - Nested agents are recognised on macOS and Linux only, and on Linux not when
   they run as root or in a user namespace of their own (#826). Corbanu marks
   Moderate by denying agent commands a file in the Corbanu home's `tmp`

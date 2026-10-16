@@ -345,7 +345,11 @@ pub(super) fn include_paths(
                     in_include = false;
                     continue;
                 };
-                let name = section.split_whitespace().next().unwrap_or_default();
+                // `[includeIf "…"]`, or the legacy dotted `[include.x]`.
+                let name = section
+                    .split(|ch: char| ch.is_whitespace() || ch == '.')
+                    .next()
+                    .unwrap_or_default();
                 in_include =
                     name.eq_ignore_ascii_case("include") || name.eq_ignore_ascii_case("includeif");
                 line = after.trim();

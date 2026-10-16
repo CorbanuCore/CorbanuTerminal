@@ -1478,6 +1478,10 @@ const GIT_FOLDER_KEPT: &[&str] = &[
     "rebase-apply",
     "sequencer",
     "info",
+    // Legacy remote definitions git still reads for a remote without a URL
+    // in config.
+    "remotes",
+    "branches",
 ];
 
 /// #837: the git config files that may name hooks or includes for the
