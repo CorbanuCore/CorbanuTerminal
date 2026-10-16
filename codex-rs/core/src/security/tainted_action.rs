@@ -202,8 +202,11 @@ impl PostTaintAction {
 
     pub(crate) fn approvals_off_rejection(&self) -> String {
         format!(
-            "Not run: this is {} after untrusted content entered the session, so it needs your \
-             approval, and approvals are off (approval_policy = never).",
+            "Not run: Security level {}: this is {} after untrusted content entered the session, \
+             so it needs your approval, and approvals are off (approval_policy = never). \
+             Review the action and turn approval prompts on before asking again. \
+             Other security protections still apply.",
+            self.state.level,
             self.kind.describe()
         )
     }
@@ -1290,3 +1293,7 @@ fn substitute(
 #[cfg(test)]
 #[path = "tainted_action_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tainted_action_refusal_tests.rs"]
+mod tainted_action_refusal_tests;

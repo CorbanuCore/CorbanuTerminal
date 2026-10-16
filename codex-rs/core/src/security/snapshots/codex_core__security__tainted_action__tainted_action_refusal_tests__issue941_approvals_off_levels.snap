@@ -1,0 +1,6 @@
+---
+source: core/src/security/tainted_action_refusal_tests.rs
+expression: "output.join(\"\\n\")"
+---
+Not run: Security level moderate: this is credential access after untrusted content entered the session, so it needs your approval, and approvals are off (approval_policy = never). Review the action and turn approval prompts on before asking again. Other security protections still apply.
+Not run: Security level aggressive: this is credential access after untrusted content entered the session, so it needs your approval, and approvals are off (approval_policy = never). Review the action and turn approval prompts on before asking again. Other security protections still apply.
