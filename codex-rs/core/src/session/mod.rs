@@ -1240,6 +1240,9 @@ impl Session {
     }
 
     /// Flush rollout writes and return the final durability-barrier result.
+    /// A successful flush/persist need not contain a written append, so it
+    /// does not clear the home-failure marker. The exit directory probe may
+    /// already finish at once; an actual persisted append or teardown clears it.
     #[instrument(name = "session.flush_rollout", level = "trace", skip_all)]
     pub(crate) async fn flush_rollout(&self) -> std::io::Result<()> {
         if let Some(live_thread) = self.live_thread() {

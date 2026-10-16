@@ -247,6 +247,8 @@ impl StepContext {
 }
 
 mod guardian_tests;
+#[path = "tests/home_access_lifecycle_tests.rs"]
+mod home_access_lifecycle_tests;
 mod panicking_task_tests;
 
 struct InstructionsTestCase {
