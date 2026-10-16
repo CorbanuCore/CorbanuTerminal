@@ -869,7 +869,8 @@ fn accounting_chat_cache_writes_are_read_on_the_moonshot_route() -> anyhow::Resu
                 Presence::Number(7168.try_into()?),
             ),
             (ChatTokenPresence::Null, Presence::Null),
-            (ChatTokenPresence::Missing, Presence::Missing),
+            // Moonshot leaves out a count that is zero (#368).
+            (ChatTokenPresence::Missing, Presence::Number(0.try_into()?)),
         ] {
             assert_eq!(
                 patch(
@@ -890,6 +891,90 @@ fn accounting_chat_cache_writes_are_read_on_the_moonshot_route() -> anyhow::Resu
             )?
             .write,
             Presence::Missing
+        );
+    }
+    Ok(())
+}
+
+/// #368: on the Moonshot route a cache count the API left out of a stated
+/// prompt is zero, a read missing from the prompt details is taken from
+/// `usage.cached_tokens`, and a null stays unknown. Nowhere else does a
+/// missing count become zero or `usage.cached_tokens` count.
+#[test]
+fn accounting_chat_moonshot_counts_left_out_are_zero() -> anyhow::Result<()> {
+    use crate::config::PricedRoute;
+    use codex_state::accounting::Presence;
+    let usage = |input, cached, usage_cached, write| ChatUsagePatch {
+        input_tokens: input,
+        cached_tokens: cached,
+        usage_cached_tokens: usage_cached,
+        cache_write_tokens: write,
+        output_tokens: ChatTokenPresence::Number(11),
+        ..Default::default()
+    };
+    let n = ChatTokenPresence::Number;
+    let missing = ChatTokenPresence::Missing;
+    let null = ChatTokenPresence::Null;
+    let moonshot = Some(PricedRoute::MoonshotOpenPlatform);
+    let zero = Presence::Number(0.try_into()?);
+    let cases = [
+        // (input, details read, usage read, write) -> (read, write)
+        ((n(100), missing, missing, missing), (zero, zero)),
+        (
+            (n(100), missing, n(40), missing),
+            (Presence::Number(40.try_into()?), zero),
+        ),
+        (
+            (n(100), n(30), n(40), n(5)),
+            (
+                Presence::Number(30.try_into()?),
+                Presence::Number(5.try_into()?),
+            ),
+        ),
+        (
+            (n(100), null, n(40), null),
+            (Presence::Null, Presence::Null),
+        ),
+        ((n(100), missing, null, missing), (Presence::Null, zero)),
+        (
+            (missing, missing, missing, missing),
+            (Presence::Missing, Presence::Missing),
+        ),
+    ];
+    // Whatever the provider is named, the route decides.
+    for provider in [
+        "kimi",
+        codex_model_provider_info::OPENAI_PROVIDER_ID,
+        codex_model_provider_info::OPENROUTER_PROVIDER_ID,
+    ] {
+        for ((input, cached, usage_cached, write), (read, written)) in cases {
+            let patch = patch(
+                usage(input, cached, usage_cached, write),
+                provider,
+                moonshot,
+            )?;
+            assert_eq!((patch.read, patch.write), (read, written), "{provider}");
+        }
+    }
+    // Off the route `usage.cached_tokens` never counts and a missing read stays
+    // unknown; only OpenRouter's own write rule makes a missing write zero.
+    for (provider, written) in [
+        ("kimi", Presence::Missing),
+        (
+            codex_model_provider_info::OPENAI_PROVIDER_ID,
+            Presence::Missing,
+        ),
+        (codex_model_provider_info::OPENROUTER_PROVIDER_ID, zero),
+    ] {
+        let patch = patch(
+            usage(n(100), missing, n(40), missing),
+            provider,
+            /*route*/ None,
+        )?;
+        assert_eq!(
+            (patch.read, patch.write),
+            (Presence::Missing, written),
+            "{provider}"
         );
     }
     Ok(())

@@ -395,12 +395,26 @@ pub(super) fn patch(
             ResponsesTokenPresence::Number(value) => Presence::Number(value.try_into()?),
         })
     };
+    // #814: apply #786's per-report Chat rule here too. An impossible
+    // reasoning subset must not make replay discard otherwise valid usage
+    // and the provider-reported charge. Split/cumulative reports are unchanged.
+    let output = presence(usage.output_tokens)?;
+    let mut reasoning = presence(usage.reasoning_tokens)?;
+    if let (Presence::Number(reasoning_count), Presence::Number(output_count)) = (reasoning, output)
+        && i64::from(reasoning_count) > i64::from(output_count)
+    {
+        tracing::debug!(
+            target: "codex_core::accounting",
+            "reasoning count above the output count; recorded as not reported"
+        );
+        reasoning = Presence::Missing;
+    }
     Ok(codex_state::accounting::Patch {
         input: presence(usage.input_tokens)?,
         read: presence(usage.cached_tokens)?,
         write: presence(usage.cache_write_tokens)?,
-        output: presence(usage.output_tokens)?,
-        reasoning: presence(usage.reasoning_tokens)?,
+        output,
+        reasoning,
         total: presence(usage.total_tokens)?,
         // The Vercel AI Gateway states what it charged with every response.
         // Other routes carry no such figure. A figure the exact decimal type

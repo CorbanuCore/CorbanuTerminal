@@ -24,8 +24,9 @@ without them Corbanu refuses every model request under Moderate, so
   and git start-up files, git hooks and config, the project's `.codex` and
   `.agents`, and Corbanu's own files. Your fresh approval of one command
   lifts this for that command, except for git hooks and config, Corbanu's
-  runtime files and what `secretless_agent_launch` keeps; a remembered or
-  automatic approval never does. A command you approve can also write the
+  runtime files, its security state and keys (such as `security_state.json`
+  and `source-origin.key`) and what `secretless_agent_launch` keeps; a
+  remembered or automatic approval never does. A command you approve can also write the
   project's `.git`, so `git commit` works. Its hooks and config (also config
   files included from inside `.git`), the `commondir`, `modules` and
   `worktrees` entries through which git would read other ones, the rebase
@@ -84,6 +85,12 @@ The kill switch (`/security` → `g`) works under every level.
   settings to keep every command in it.
 - MCP servers, apps, hooks and `!` shell commands run outside the sandbox, as
   under every level.
+- On Linux, where a command you approve can write a Corbanu home's folder
+  (another Corbanu home such as `~/.codex`, or this one without
+  `secretless_agent_launch`), it can create those of Corbanu's security files
+  there that don't exist yet (such as `security_state.json` before a level is
+  first confirmed); it can't read or change the ones that exist. On macOS it
+  can't create them either.
 - An approved command writes `.git` only where it is a repository's folder
   at the project's root, on macOS and Linux: not in a linked worktree or
   submodule (whose `.git` is a file), through a link, on Windows, or where

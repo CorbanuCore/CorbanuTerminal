@@ -1,0 +1,10 @@
+Source: https://platform.kimi.ai/docs/api/chat.md, fetched 2026-10-15 ~21:45Z with curl. Recorded facts (paraphrased):
+
+- "Usage fields" section: usage.prompt_tokens is all input tokens; prompt_tokens_details.cached_tokens (cache read),
+  prompt_tokens_details.cache_write_tokens (cache write) and the uncached remainder are mutually exclusive and sum to
+  prompt_tokens.
+- OpenAPI schema, both the ChatCompletion and ChatCompletionChunk `usage` objects: `prompt_tokens_details` lists
+  `cached_tokens` and `cache_write_tokens` under `required:`. `usage` also has a top-level `cached_tokens`
+  ("Number of tokens served from cache"), and the documented examples carry both, e.g. "cached_tokens":12 with
+  "prompt_tokens_details":{"cached_tokens":12,"cache_write_tokens":0}.
+- Real responses on 2026-10-15 (moonshot-real-20261015/) left both counts out when zero.

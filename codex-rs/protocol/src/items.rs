@@ -168,6 +168,7 @@ pub enum CommandExecutionStatus {
     Completed,
     Failed,
     Declined,
+    Refused,
 }
 
 impl From<ExecCommandStatus> for CommandExecutionStatus {
@@ -176,6 +177,7 @@ impl From<ExecCommandStatus> for CommandExecutionStatus {
             ExecCommandStatus::Completed => Self::Completed,
             ExecCommandStatus::Failed => Self::Failed,
             ExecCommandStatus::Declined => Self::Declined,
+            ExecCommandStatus::Refused => Self::Refused,
         }
     }
 }

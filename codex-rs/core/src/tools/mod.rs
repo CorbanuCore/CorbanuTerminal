@@ -1,5 +1,6 @@
 mod approvals;
 pub(crate) mod code_mode;
+mod collaboration_wire;
 pub(crate) mod context;
 pub(crate) mod events;
 mod executed_tool_calls;

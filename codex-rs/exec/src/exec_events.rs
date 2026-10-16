@@ -154,6 +154,7 @@ pub enum CommandExecutionStatus {
     Completed,
     Failed,
     Declined,
+    Refused,
 }
 
 /// A command executed by the agent.

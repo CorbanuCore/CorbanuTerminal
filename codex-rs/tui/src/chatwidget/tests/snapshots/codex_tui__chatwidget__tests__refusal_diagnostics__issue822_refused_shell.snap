@@ -1,0 +1,18 @@
+---
+source: tui/src/chatwidget/tests/refusal_diagnostics.rs
+assertion_line: 54
+expression: "format!(\"display:\\n{}transcript:\\n{}narrow:\\n{}\",\nlines_to_single_string(&display), lines_to_single_string(&transcript),\nlines_to_single_string(&cell.display_lines(32)),)"
+---
+display:
+✗ Did not run echo refused
+  └ Refused
+  └ Synthetic policy refused escalation before approval
+transcript:
+$ echo refused
+✗ Did not run (Refused)
+Synthetic policy refused escalation before approval
+narrow:
+✗ Did not run echo refused
+  └ Refused
+  └ Synthetic policy refused
+    escalation before approval

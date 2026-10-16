@@ -365,7 +365,15 @@ pub(super) fn legacy_eligible(
 /// Moonshot's Kimi Open Platform documents `cache_write_tokens` as the part of
 /// `prompt_tokens` written to the cache, apart from the cached part
 /// (platform.kimi.ai/docs/api/chat, usage fields), so it is kept on that route
-/// (`route`), whatever the user named the provider that reached it.
+/// (`route`), whatever the user named the provider that reached it. Its schema
+/// marks both counts required, but the API leaves out a count that is zero:
+/// real responses on 2026-10-15 (#368) had `kimi-k3` report 11,776 written and
+/// no `cached_tokens`, and `kimi-k2.7-code` send no `prompt_tokens_details` at
+/// all. So on that route, with `prompt_tokens` stated, a missing read or write
+/// count is zero; a read missing from the details is taken from
+/// `usage.cached_tokens` first, where Moonshot also states it. Without this
+/// the uncached input could not be derived and `/cost` showed only a lower
+/// bound (K2: the output alone).
 ///
 /// Every other route leaves the cache-write count unknown, reported or not: the
 /// field's meaning is only established for OpenRouter, OpenAI and Moonshot (a
@@ -402,18 +410,36 @@ pub(super) fn patch(
         );
         reasoning = Presence::Missing;
     }
+    let moonshot = route == Some(crate::config::PricedRoute::MoonshotOpenPlatform);
+    // On the Moonshot route a part of a stated prompt that is not reported is
+    // zero (see above).
+    let moonshot_part = |value| match value {
+        ChatTokenPresence::Missing
+            if moonshot && matches!(usage.input_tokens, ChatTokenPresence::Number(_)) =>
+        {
+            ChatTokenPresence::Number(0)
+        }
+        other => other,
+    };
+    let read = match usage.cached_tokens {
+        ChatTokenPresence::Missing if moonshot => moonshot_part(usage.usage_cached_tokens),
+        other => other,
+    };
     Ok(codex_state::accounting::Patch {
         input: presence(usage.input_tokens)?,
-        read: presence(usage.cached_tokens)?,
+        read: presence(read)?,
+        // The route decides before the provider's name does.
         write: match (provider_id, route) {
+            (_, Some(crate::config::PricedRoute::MoonshotOpenPlatform)) => {
+                presence(moonshot_part(usage.cache_write_tokens))?
+            }
             (codex_model_provider_info::OPENROUTER_PROVIDER_ID, _) => {
                 match usage.cache_write_tokens {
                     ChatTokenPresence::Missing => Presence::Number(0.try_into()?),
                     other => presence(other)?,
                 }
             }
-            (codex_model_provider_info::OPENAI_PROVIDER_ID, _)
-            | (_, Some(crate::config::PricedRoute::MoonshotOpenPlatform)) => {
+            (codex_model_provider_info::OPENAI_PROVIDER_ID, _) => {
                 presence(usage.cache_write_tokens)?
             }
             _ => Presence::Missing,

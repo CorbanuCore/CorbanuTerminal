@@ -303,4 +303,83 @@ mod tests {
             Some("opaque-ciphertext")
         );
     }
+
+    #[tokio::test]
+    async fn issue820_custom_reserved_messages_preserve_codec_and_fail_closed_targets() {
+        let (_session, mut turn) = crate::session::tests::make_session_and_context().await;
+        let mut config = (*turn.config).clone();
+        config.model_provider_id = "myopenai".to_string();
+        config.model_provider.name = "Custom official endpoint".to_string();
+        config.model_provider.base_url = Some("https://api.openai.com/v1".to_string());
+        turn.provider = codex_model_provider::create_model_provider(
+            config.model_provider.clone(),
+            turn.auth_manager.clone(),
+        );
+        turn.config = std::sync::Arc::new(config);
+        let codec_provider = crate::tools::collaboration_wire::message_source_provider_id(&turn);
+        assert_eq!(turn.config.model_provider_id, "myopenai");
+        assert!(!turn.provider.info().is_openai());
+        assert_eq!(codec_provider, OPENAI_PROVIDER_ID);
+        let source = crate::tools::context::ToolCallSource::Direct;
+        let communication = communication_from_tool_message(
+            AgentPath::root(),
+            AgentPath::try_from("/root/worker").expect("agent path"),
+            "synthetic-opaque-payload".to_string(),
+            &source,
+            codec_provider,
+            /*trigger_turn*/ true,
+        );
+        assert!(communication.content.is_empty());
+        assert_eq!(
+            communication.encrypted_content.as_deref(),
+            Some("synthetic-opaque-payload")
+        );
+        let codex_protocol::models::ResponseItem::AgentMessage { content, .. } =
+            communication.to_model_input_item()
+        else {
+            panic!("encrypted collaboration must serialize as AgentMessage");
+        };
+        pretty_assertions::assert_eq!(
+            content,
+            vec![
+                codex_protocol::models::AgentMessageInputContent::InputText {
+                    text:
+                        "Message Type: NEW_TASK\nTask name: /root/worker\nSender: /root\nPayload:\n"
+                            .to_string(),
+                },
+                codex_protocol::models::AgentMessageInputContent::EncryptedContent {
+                    encrypted_content: "synthetic-opaque-payload".to_string(),
+                },
+            ]
+        );
+        for target in ["myopenai", "openrouter"] {
+            assert!(
+                ensure_message_encoding_matches_target(
+                    codec_provider,
+                    &source,
+                    target,
+                    CollaborationMessageEncoding::ProviderNative,
+                    "followup_task",
+                    PLAINTEXT_FOLLOWUP_TASK_TOOL,
+                )
+                .is_err(),
+                "opaque message must not reach {target}"
+            );
+            assert_eq!(
+                ensure_message_encoding_matches_target(
+                    codec_provider,
+                    &source,
+                    target,
+                    CollaborationMessageEncoding::PlaintextAdapter,
+                    "followup_task",
+                    PLAINTEXT_FOLLOWUP_TASK_TOOL,
+                ),
+                Ok(())
+            );
+        }
+        assert_plaintext_new_task(
+            crate::tools::context::ToolCallSource::DirectPlaintextMessage,
+            codec_provider,
+        );
+    }
 }

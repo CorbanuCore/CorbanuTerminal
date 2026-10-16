@@ -110,7 +110,14 @@ pub(crate) fn exit_if_home_blocked_by_macos_privacy() {
     #[cfg(target_os = "macos")]
     {
         const EPERM: i32 = 1;
-        if !current_entrypoint_is_corbanu() {
+        // Private file helpers inherit a sandbox that deliberately denies the
+        // profile. Their file request must run without an interactive home probe.
+        if !current_entrypoint_is_corbanu()
+            || std::env::args_os().nth(1).as_deref()
+                == Some(std::ffi::OsStr::new(
+                    codex_exec_server::CODEX_FS_HELPER_ARG1,
+                ))
+        {
             return;
         }
         let Ok(home) = codex_core::config::find_codex_home() else {

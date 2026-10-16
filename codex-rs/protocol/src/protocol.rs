@@ -3744,6 +3744,7 @@ pub enum ExecCommandStatus {
     Completed,
     Failed,
     Declined,
+    Refused,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]

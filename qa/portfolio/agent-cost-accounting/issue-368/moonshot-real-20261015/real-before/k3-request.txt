@@ -1,0 +1,18 @@
+Request
+Requested UTC day: 2026-10-15
+Provider: kimi
+Model: kimi-k3
+Billing: Pay per use
+Estimated cost: at least $0.036003 (1 attempt had incomplete usage)
+Next step for requests with incomplete usage: check the bill from kimi. Their provider did not report every token count, so the estimate is missing or
+only a lower bound.
+Tokens: 12,029 tokens
+—— Details ——
+Billed cost: kimi doesn't report its charges, so any cost here is an estimate — check kimi's bill.
+Request: fc72560e-7ac3-4626-a6e5-686aef54dfd6
+Snapshot is not current; newer activity is unverified
+—— Open ——
+→ Technical details (attempt 1)
+Back
+Refresh
+Close

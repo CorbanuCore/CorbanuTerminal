@@ -15,11 +15,18 @@ pub enum ChatTokenPresence {
     Number(i64),
 }
 
-/// The six supported cumulative counters; absent fields never mean zero.
+/// The supported cumulative counters. An absent field is reported as missing
+/// here, never as zero; whether a route reads it as zero is core's rule.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ChatUsagePatch {
     pub input_tokens: ChatTokenPresence,
     pub cached_tokens: ChatTokenPresence,
+    /// `usage.cached_tokens`, outside the prompt details. Moonshot's Kimi Open
+    /// Platform documents its cache reads there as well as in
+    /// `prompt_tokens_details`; other routes give it no meaning. A value that
+    /// is not a count reads as null (stated but unknown) rather than failing
+    /// the report, as only the Moonshot route consults it.
+    pub usage_cached_tokens: ChatTokenPresence,
     pub cache_write_tokens: ChatTokenPresence,
     pub output_tokens: ChatTokenPresence,
     pub reasoning_tokens: ChatTokenPresence,
@@ -159,6 +166,7 @@ pub(super) fn decode(data: &str) -> Result<Option<ChatUsagePatch>, InvalidChatUs
     Ok(Some(ChatUsagePatch {
         input_tokens: field(fields.get("prompt_tokens"))?,
         cached_tokens: detail(fields.get("prompt_tokens_details"), "cached_tokens")?,
+        usage_cached_tokens: field(fields.get("cached_tokens")).unwrap_or(ChatTokenPresence::Null),
         cache_write_tokens: detail(fields.get("prompt_tokens_details"), "cache_write_tokens")?,
         output_tokens: field(fields.get("completion_tokens"))?,
         reasoning_tokens: detail(fields.get("completion_tokens_details"), "reasoning_tokens")?,

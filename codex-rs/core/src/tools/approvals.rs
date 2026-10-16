@@ -183,12 +183,12 @@ impl ApprovalResolution {
                         "rejected by user"
                     }
                 };
-                Err(ToolError::Rejected(rejection.to_string()))
+                Err(ToolError::Declined(rejection.to_string()))
             }
-            ReviewDecision::Denied { rejection } => Err(ToolError::Rejected(rejection)),
-            ReviewDecision::TimedOut => Err(ToolError::Rejected(guardian_timeout_message())),
+            ReviewDecision::Denied { rejection } => Err(ToolError::Declined(rejection)),
+            ReviewDecision::TimedOut => Err(ToolError::Declined(guardian_timeout_message())),
             ReviewDecision::Abort => {
-                Err(ToolError::Rejected("approval request aborted".to_string()))
+                Err(ToolError::Declined("approval request aborted".to_string()))
             }
             decision => Ok(decision),
         }
@@ -402,3 +402,7 @@ fn record_resolution(
 #[cfg(all(test, unix))]
 #[path = "approvals_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "refusal_diagnostics_tests.rs"]
+mod refusal_diagnostics_tests;

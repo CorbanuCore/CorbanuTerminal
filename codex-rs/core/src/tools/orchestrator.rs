@@ -1066,7 +1066,7 @@ fn sandbox_outcome_from_tool_error(err: &ToolError) -> Option<&'static str> {
             CodexErrorDetails::Sandbox(SandboxErr::Signal(_)) => Some("signal"),
             _ => None,
         },
-        ToolError::Rejected(_) => None,
+        ToolError::Rejected(_) | ToolError::Declined(_) => None,
     }
 }
 

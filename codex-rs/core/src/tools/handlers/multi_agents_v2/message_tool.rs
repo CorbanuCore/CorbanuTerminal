@@ -140,7 +140,7 @@ pub(super) async fn handle_message_string_tool(
         MessageDeliveryMode::TriggerTurn => ("followup_task", PLAINTEXT_FOLLOWUP_TASK_TOOL),
     };
     ensure_message_encoding_matches_target(
-        &turn.config.model_provider_id,
+        crate::tools::collaboration_wire::message_source_provider_id(turn.as_ref()),
         &source,
         &receiver_provider_id,
         encoding,
@@ -158,7 +158,7 @@ pub(super) async fn handle_message_string_tool(
         receiver_agent_path.clone(),
         message,
         &source,
-        &turn.config.model_provider_id,
+        crate::tools::collaboration_wire::message_source_provider_id(turn.as_ref()),
         mode.trigger_turn(),
     );
     communication.kind = Some(match mode {

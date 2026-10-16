@@ -1650,6 +1650,108 @@ async fn issue_540_runtime_entries_stay_read_only_when_a_person_lifts_the_rules(
     Ok(())
 }
 
+/// #838 (Travis, 2026-10-15): where a person's approval lifts Moderate's
+/// rules for one command after untrusted content, Corbanu's security state
+/// and keys (`source-origin.key`, `security_state.lock`, ...) stay denied in
+/// that command's real sandbox (Seatbelt, bubblewrap), read and write, also
+/// with full access, while the other stores are lifted (the sign-in file is
+/// readable, #540). The read is explained. Permissive is unchanged.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn issue_838_security_state_and_keys_stay_denied_after_a_fresh_approval() -> anyhow::Result<()>
+{
+    use codex_protocol::models::PermissionProfile;
+    use codex_protocol::protocol::ReviewDecision;
+    skip_if_no_network!(Ok(()));
+    skip_if_sandbox!(Ok(()));
+    // A valid origin key (32 bytes), so the session keeps it.
+    const KEY: &str = "PF838_ORIGIN_KEY_CANARY_32BYTES!";
+    const STATE: &str = "PF838_STATE_LOCK_CANARY";
+    let mut wrong = Vec::new();
+    for (level, profile, protected) in [
+        (SecurityLevel::Moderate, PermissionProfile::Disabled, true),
+        (
+            SecurityLevel::Moderate,
+            PermissionProfile::workspace_write(),
+            true,
+        ),
+        (
+            SecurityLevel::Permissive,
+            PermissionProfile::Disabled,
+            false,
+        ),
+    ] {
+        let shown = format!("{level:?} {profile:?}");
+        let home = Arc::new(TempDir::new()?);
+        let root = home.path().canonicalize()?;
+        std::fs::write(root.join("auth.json"), CANARY)?;
+        std::fs::write(root.join("source-origin.key"), KEY)?;
+        std::fs::write(root.join("security_state.lock"), STATE)?;
+        let key = root.join("source-origin.key");
+        let lock = root.join("security_state.lock");
+        let command = format!(
+            "cat '{auth}'; cat '{key}'; cat '{lock}'; printf x >> '{lock}'; cat '{key}'",
+            auth = root.join("auth.json").display(),
+            key = key.display(),
+            lock = lock.display(),
+        );
+        let (test, captured) = start_turn_in(
+            Some(home),
+            level,
+            AskForApproval::OnRequest,
+            vec![
+                injected_step(),
+                call("call-read", "shell_command", json!({ "command": command })),
+                done_step(),
+            ],
+            move |config| {
+                config
+                    .permissions
+                    .set_permission_profile(profile.clone())
+                    .expect("profile");
+            },
+        )
+        .await?;
+        let mut asked = 0;
+        while let Some(approval) = next_exec_approval(&test).await {
+            asked += 1;
+            test.codex
+                .submit(Op::ExecApproval {
+                    id: approval.effective_approval_id(),
+                    turn_id: None,
+                    decision: ReviewDecision::Approved,
+                })
+                .await?;
+        }
+        let requests = captured.requests();
+        let output = output_text(&requests[requests.len() - 1], "call-read");
+        let read_key = output.contains(KEY);
+        let read_lock = output.contains(STATE);
+        let wrote_lock = std::fs::read_to_string(&lock)? != STATE;
+        let explained = output.contains("Corbanu's security state and keys");
+        // Under Moderate a person was asked and the rules were lifted (the
+        // sign-in file was read), yet the security files stayed denied.
+        let ok = if protected {
+            asked == 1
+                && output.contains(CANARY)
+                && !read_key
+                && !read_lock
+                && !wrote_lock
+                && explained
+        } else {
+            read_key && read_lock && wrote_lock && !explained
+        };
+        if !ok {
+            wrong.push(format!(
+                "{shown}: asked={asked} key={read_key} lock={read_lock} \
+                 wrote={wrote_lock}: {output}"
+            ));
+        }
+    }
+    assert_eq!(wrong, Vec::<String>::new());
+    Ok(())
+}
+
 /// #837 (Travis, 2026-10-15): under Moderate a command a person approved
 /// writes the project's `.git` in its real sandbox (Seatbelt, bubblewrap),
 /// so `git commit` works, while git's hooks and config stay read-only; a

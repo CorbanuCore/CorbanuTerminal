@@ -3,7 +3,12 @@
 import type { ContentBlock as McpContentBlock } from "@modelcontextprotocol/sdk/types.js";
 
 /** The status of a command execution. */
-export type CommandExecutionStatus = "in_progress" | "completed" | "failed";
+export type CommandExecutionStatus =
+  | "in_progress"
+  | "completed"
+  | "failed"
+  | "declined"
+  | "refused";
 
 /** A command executed by the agent. */
 export type CommandExecutionItem = {

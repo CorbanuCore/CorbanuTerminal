@@ -29,6 +29,9 @@ for the PF-60 follow-up sprints with OpenRouter's per-endpoint pricing (item 1).
 **Update, later on 2026-10-14 (PF-60-S07, Travis's decision):** Moonshot is now priced by route, with K3 writes at
 the five-minute rate this client's requests get; BigModel stays deferred. See [the S07 gate](../pf-60-s07/gate.md).
 
+**Update, 2026-10-15 (real key):** the first real K3 and K2.7 Code requests showed Moonshot leaves out zero cache
+counts, so `/cost` showed only a lower bound; fixed in #859. See [moonshot-real-20261015](moonshot-real-20261015/README.md).
+
 ## Checks
 
 - `python3 scripts/check_openai_api_prices.py` against the 2026-10-14 page: every catalogue row matches, `gpt-6.1-sol` included.

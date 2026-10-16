@@ -8,6 +8,7 @@ use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
 use crate::tools::code_mode::default_exec_yield_time_override_ms;
 use crate::tools::code_mode::execute_spec::create_code_mode_tool;
+use crate::tools::collaboration_wire::uses_openai_reserved_collaboration_schema;
 use crate::tools::context::ToolInvocation;
 use crate::tools::effective_tool_mode;
 use crate::tools::flat_tool_names::FlatToolNames;
@@ -503,7 +504,7 @@ fn spec_for_model_request(
     };
 
     if multi_agent_v2_enabled(turn_context)
-        && turn_context.provider.info().is_openai()
+        && uses_openai_reserved_collaboration_schema(turn_context)
         && matches!(
             tool_name.name.as_str(),
             "spawn_agent"
@@ -1145,7 +1146,7 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                 multi_agent_v2_handler(ListAgentsHandlerV2, tool_namespace),
                 exposure,
             ));
-            if turn_context.provider.info().is_openai() {
+            if uses_openai_reserved_collaboration_schema(turn_context) {
                 // OpenAI's reserved collaboration schema encrypts assignment fields. That is
                 // correct for OpenAI recipients but opaque to external providers. These aliases
                 // retry the same Core operation with an ordinary plaintext function argument;

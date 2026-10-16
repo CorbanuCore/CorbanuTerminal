@@ -188,11 +188,20 @@ fn prepare_path_env_var_with_aliases(
     match prepare_aliases(path_for_aliases) {
         Ok((path_entry, updated_path_env_var)) => (Some(path_entry), Some(updated_path_env_var)),
         Err(err) => {
-            // It is possible that Codex will proceed successfully even if
-            // creating helper aliases fails, so warn the user and move on.
-            eprintln!("WARNING: proceeding, even though we could not create PATH aliases: {err}");
+            // Optional aliases can be denied in an otherwise usable protected
+            // home (#843). Keep the error visible without calling that a
+            // startup warning; unexpected failures still get the old warning.
+            eprintln!("{}", alias_setup_failure_message(&err));
             (None, package_path)
         }
+    }
+}
+
+fn alias_setup_failure_message(error: &std::io::Error) -> String {
+    if error.kind() == std::io::ErrorKind::PermissionDenied {
+        format!("note: temporary PATH aliases could not be created for this process: {error}")
+    } else {
+        format!("WARNING: proceeding, even though we could not create PATH aliases: {error}")
     }
 }
 
@@ -628,6 +637,33 @@ mod tests {
             .create(true)
             .truncate(false)
             .open(lock_path)
+    }
+
+    #[test]
+    fn issue843_denied_optional_alias_keeps_an_informational_diagnostic() {
+        let error = std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "synthetic read-only profile",
+        );
+        assert_eq!(
+            super::alias_setup_failure_message(&error),
+            "note: temporary PATH aliases could not be created for this process: synthetic read-only profile"
+        );
+    }
+
+    #[test]
+    fn issue843_unexpected_alias_failures_keep_the_existing_warning() {
+        for kind in [
+            std::io::ErrorKind::Other,
+            std::io::ErrorKind::NotFound,
+            std::io::ErrorKind::InvalidInput,
+        ] {
+            let error = std::io::Error::new(kind, "synthetic unexpected alias failure");
+            assert_eq!(
+                super::alias_setup_failure_message(&error),
+                "WARNING: proceeding, even though we could not create PATH aliases: synthetic unexpected alias failure"
+            );
+        }
     }
 
     #[test]

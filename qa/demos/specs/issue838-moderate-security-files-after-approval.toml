@@ -1,0 +1,72 @@
+# #838 (MOD-10): under Moderate, after untrusted content, a person's fresh
+# approval no longer lets an agent command read Corbanu's security state and
+# keys (here source-origin.key); the refusal says so.
+id = "issue838-moderate-security-files-after-approval"
+feature = "#838: Moderate keeps Corbanu's security state and keys closed even after you approve"
+expected = "Under config Moderate with the milestone flags, after a first command's output, the agent asks to read Corbanu's source-origin.key; the person approves, and the read is refused with a warning that Moderate keeps Corbanu's security state and keys from agent commands even when you approve them."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "moderate"
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+run = "echo \"$CODEX_HOME\""
+capture = "c"
+
+[[steps]]
+type = "Run exactly this shell command and show me its output: ls"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)show me its output: ls(?:(?!Working).)*\n› "
+timeout = 240
+compress = 3
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run exactly this shell command and show me its output: wc -c {c}/source-origin.key"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Press enter to confirm"
+timeout = 240
+compress = 2
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "y"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)security\\s+state\\s+and\\s+keys,\\s+even\\s+when\\s+you\\s+approve(?:(?!Working).)*\n› "
+timeout = 240
+compress = 3
+[[steps]]
+pause = 3.0

@@ -384,6 +384,8 @@ impl ChatWidget {
         // instead render the interaction-specific content elsewhere in the UI.
         let output = if status == CommandExecutionStatus::Declined {
             CommandOutput::declined()
+        } else if status == CommandExecutionStatus::Refused {
+            CommandOutput::refused(aggregated_output)
         } else {
             let aggregated_output = if is_unified_exec_interaction {
                 String::new()

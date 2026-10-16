@@ -2462,6 +2462,10 @@ fn command_execution_outcome(
             ToolItemTerminalStatus::Rejected,
             Some(ToolItemFailureKind::ApprovalDenied),
         )),
+        CommandExecutionStatus::Refused => Some((
+            ToolItemTerminalStatus::Rejected,
+            Some(ToolItemFailureKind::ToolError),
+        )),
     }
 }
 

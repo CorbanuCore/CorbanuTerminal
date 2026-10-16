@@ -194,7 +194,7 @@ fn network_approval_outcome_to_result(
 ) -> Result<(), ToolError> {
     match outcome {
         Some(NetworkApprovalOutcome::DeniedByApproval(rejection)) => {
-            Err(ToolError::Rejected(truncate_rejection_message(&rejection)))
+            Err(ToolError::Declined(truncate_rejection_message(&rejection)))
         }
         Some(NetworkApprovalOutcome::DeniedByPolicy(message)) => {
             Err(ToolError::Rejected(truncate_rejection_message(&message)))

@@ -1,0 +1,6 @@
+{"line": "POST /v1/chat/completions HTTP/1.1", "model": "kimi-k3", "stream": true, "stream_options": {"include_usage": true}, "has_prompt_cache_options": false}
+{"line": "POST /v1/chat/completions HTTP/1.1", "model": "kimi-k3", "stream": true, "stream_options": {"include_usage": true}, "has_prompt_cache_options": false}
+{"line": "POST /v1/chat/completions HTTP/1.1", "model": "kimi-k2.7-code", "stream": true, "stream_options": {"include_usage": true}, "has_prompt_cache_options": false}
+{"line": "POST /v1/chat/completions HTTP/1.1", "model": "kimi-k2.7-code", "stream": true, "stream_options": {"include_usage": true}, "has_prompt_cache_options": false}
+{"line": "POST /v1/chat/completions HTTP/1.1", "model": "kimi-k3", "stream": true, "stream_options": {"include_usage": true}, "has_prompt_cache_options": false}
+{"line": "POST /v1/chat/completions HTTP/1.1", "model": "kimi-k2.7-code", "stream": true, "stream_options": {"include_usage": true}, "has_prompt_cache_options": false}

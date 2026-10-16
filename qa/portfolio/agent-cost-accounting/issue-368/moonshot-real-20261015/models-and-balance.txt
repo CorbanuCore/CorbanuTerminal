@@ -1,0 +1,8 @@
+Readings with the kimi_api3 key, 2026-10-15 (curl; key passed via vault auth-helper, never printed).
+
+GET https://api.moonshot.ai/v1/models (~21:30Z): 200; ids kimi-k2.7-code, kimi-k3, kimi-k2.6, kimi-k2.7-code-highspeed.
+
+GET https://api.moonshot.ai/v1/users/me/balance:
+  21:31:23Z (before): {"available_balance":25,"voucher_balance":5,"cash_balance":20}
+  21:44:38Z (after):  {"available_balance":25,"voucher_balance":5,"cash_balance":20}
+  ~21:50Z (after):    same

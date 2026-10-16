@@ -385,3 +385,221 @@ fn accounting_responses_billed_charge_is_recorded_only_from_vercel() -> anyhow::
     }
     Ok(())
 }
+
+// Source-informed candidate baseline oracle for issue814 option(b).
+// Pure synthetic usage-to-ledger-Patch translation only; no DB, provider or money action.
+#[test]
+fn issue814_responses_excess_reasoning_retains_valid_usage_and_vercel_charge() -> anyhow::Result<()>
+{
+    use codex_state::accounting::Decimal;
+    use codex_state::accounting::Patch;
+    use codex_state::accounting::Presence;
+    let usage = ResponsesUsagePatch {
+        input_tokens: ResponsesTokenPresence::Number(100),
+        cached_tokens: ResponsesTokenPresence::Number(20),
+        output_tokens: ResponsesTokenPresence::Number(10),
+        reasoning_tokens: ResponsesTokenPresence::Number(11),
+        total_tokens: ResponsesTokenPresence::Number(110),
+        billed_usd: Some("0.012345".to_string()),
+        ..Default::default()
+    };
+    assert_eq!(
+        patch(usage, codex_model_provider_info::VERCEL_PROVIDER_ID)?,
+        Patch {
+            input: Presence::Number(100.try_into()?),
+            read: Presence::Number(20.try_into()?),
+            write: Presence::Missing,
+            output: Presence::Number(10.try_into()?),
+            reasoning: Presence::Missing,
+            total: Presence::Number(110.try_into()?),
+            billed_usd: Some(Decimal::try_from("0.012345".to_string())?),
+            refused_status: None,
+        }
+    );
+    Ok(())
+}
+
+#[test]
+fn issue814_responses_valid_absent_and_null_reasoning_are_preserved() -> anyhow::Result<()> {
+    use codex_state::accounting::Patch;
+    use codex_state::accounting::Presence;
+    for (reported, expected) in [
+        (
+            ResponsesTokenPresence::Number(9),
+            Presence::Number(9.try_into()?),
+        ),
+        (
+            ResponsesTokenPresence::Number(10),
+            Presence::Number(10.try_into()?),
+        ),
+        (ResponsesTokenPresence::Missing, Presence::Missing),
+        (ResponsesTokenPresence::Null, Presence::Null),
+    ] {
+        let usage = ResponsesUsagePatch {
+            output_tokens: ResponsesTokenPresence::Number(10),
+            reasoning_tokens: reported,
+            ..Default::default()
+        };
+        assert_eq!(
+            patch(usage, codex_model_provider_info::VERCEL_PROVIDER_ID)?,
+            Patch {
+                input: Presence::Missing,
+                read: Presence::Missing,
+                write: Presence::Missing,
+                output: Presence::Number(10.try_into()?),
+                reasoning: expected,
+                total: Presence::Missing,
+                billed_usd: None,
+                refused_status: None,
+            }
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn issue814_responses_does_not_guess_output_from_separate_reasoning_chunk() -> anyhow::Result<()> {
+    use codex_state::accounting::Patch;
+    use codex_state::accounting::Presence;
+    let usage = ResponsesUsagePatch {
+        reasoning_tokens: ResponsesTokenPresence::Number(11),
+        ..Default::default()
+    };
+    assert_eq!(
+        patch(usage, codex_model_provider_info::VERCEL_PROVIDER_ID)?,
+        Patch {
+            input: Presence::Missing,
+            read: Presence::Missing,
+            write: Presence::Missing,
+            output: Presence::Missing,
+            reasoning: Presence::Number(11.try_into()?),
+            total: Presence::Missing,
+            billed_usd: None,
+            refused_status: None,
+        }
+    );
+    Ok(())
+}
+
+#[test]
+fn issue814_responses_keeps_existing_billed_charge_source_boundary() -> anyhow::Result<()> {
+    let usage = ResponsesUsagePatch {
+        output_tokens: ResponsesTokenPresence::Number(10),
+        reasoning_tokens: ResponsesTokenPresence::Number(11),
+        billed_usd: Some("0.012345".to_string()),
+        ..Default::default()
+    };
+    let value = patch(usage, codex_model_provider_info::OPENAI_PROVIDER_ID)?;
+    assert_eq!(
+        (value.reasoning, value.billed_usd),
+        (codex_state::accounting::Presence::Missing, None)
+    );
+    Ok(())
+}
+
+#[test]
+fn issue814_chat_normalization_remains_unchanged() -> anyhow::Result<()> {
+    use codex_api::ChatTokenPresence;
+    use codex_api::ChatUsagePatch;
+    use codex_state::accounting::Presence;
+    for (reported, expected) in [
+        (ChatTokenPresence::Number(11), Presence::Missing),
+        (
+            ChatTokenPresence::Number(10),
+            Presence::Number(10.try_into()?),
+        ),
+        (ChatTokenPresence::Missing, Presence::Missing),
+        (ChatTokenPresence::Null, Presence::Null),
+    ] {
+        let value = crate::accounting::chat::patch(
+            ChatUsagePatch {
+                output_tokens: ChatTokenPresence::Number(10),
+                reasoning_tokens: reported,
+                ..Default::default()
+            },
+            codex_model_provider_info::OPENAI_PROVIDER_ID,
+            /*route*/ None,
+        )?;
+        assert_eq!(
+            (value.output, value.reasoning),
+            (Presence::Number(10.try_into()?), expected)
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn issue814_replay_rejection_is_atomic_and_normalized_report_retains_charge()
+-> anyhow::Result<()> {
+    use codex_state::accounting::AccountingStore;
+    use codex_state::accounting::Decimal;
+    use codex_state::accounting::Dialect;
+    use codex_state::accounting::Presence;
+    // This is a disposable synthetic ledger, with no transport, credential or charge action.
+    let fixture = Fixture::new().await?;
+    let owner = fixture.deferred.session.thread_id;
+    let store = AccountingStore::open(&fixture.db, /*as_of*/ 0).await?;
+    let attempt = Attempt {
+        attempt_id: Uuid::new_v4(),
+        request_id: Uuid::new_v4(),
+        thread_id: owner,
+        turn: "issue814-synthetic".into(),
+        retry_of: None,
+        provider: "vercel".into(),
+        model: "synthetic".into(),
+        scope: Uuid::new_v4(),
+        dialect: Dialect::Inclusive,
+        dispatched_at_ms: 0.try_into()?,
+        account: None,
+    };
+    store.admit(owner, &attempt, &[], /*as_of*/ 0).await?;
+    let normalized = patch(
+        ResponsesUsagePatch {
+            input_tokens: ResponsesTokenPresence::Number(100),
+            cached_tokens: ResponsesTokenPresence::Number(20),
+            cache_write_tokens: ResponsesTokenPresence::Number(0),
+            output_tokens: ResponsesTokenPresence::Number(10),
+            reasoning_tokens: ResponsesTokenPresence::Number(11),
+            total_tokens: ResponsesTokenPresence::Number(110),
+            billed_usd: Some("0.012345".to_string()),
+        },
+        codex_model_provider_info::VERCEL_PROVIDER_ID,
+    )?;
+    let mut raw = normalized.clone();
+    raw.reasoning = Presence::Number(11.try_into()?);
+    let mut observation = Observation {
+        revision: 1.try_into()?,
+        source: Uuid::new_v4(),
+        sequence: 1.try_into()?,
+        patch: raw,
+    };
+    let error = store
+        .observe(owner, &attempt, &[observation.clone()], /*as_of*/ 0)
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("reasoning exceeds output"));
+    assert_eq!(fixture.rows::<Observation>(OBSERVATIONS).await?, vec![]);
+    observation.patch = normalized;
+    let quote = store
+        .observe(owner, &attempt, &[observation.clone()], /*as_of*/ 0)
+        .await?;
+    assert_eq!(
+        quote.usage,
+        codex_state::accounting::Usage {
+            input: Some(100),
+            noncached: Some(80),
+            read: Some(20),
+            write: Some(0),
+            output: Some(10),
+            reasoning: None,
+            total: Some(110),
+            billed_usd: Some(Decimal::try_from("0.012345".to_string())?),
+            refused_status: None,
+        }
+    );
+    assert_eq!(
+        fixture.rows::<Observation>(OBSERVATIONS).await?,
+        vec![observation]
+    );
+    Ok(())
+}

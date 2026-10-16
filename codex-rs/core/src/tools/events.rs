@@ -71,6 +71,7 @@ pub(crate) enum ToolEventStage<'a> {
 pub(crate) enum ToolEventFailure<'a> {
     Output(ExecToolCallOutput),
     Message(String),
+    Refused(String),
     Rejected {
         message: String,
         applied_patch_delta: Option<&'a AppliedPatchDelta>,
@@ -297,7 +298,9 @@ impl ToolEmitter {
             }
             (
                 Self::ApplyPatch { changes, .. },
-                ToolEventStage::Failure(ToolEventFailure::Message(message)),
+                ToolEventStage::Failure(
+                    ToolEventFailure::Message(message) | ToolEventFailure::Refused(message),
+                ),
             ) => {
                 emit_patch_end(
                     ctx,
@@ -394,7 +397,7 @@ impl ToolEmitter {
                 CodexErrorDetails::Sandbox(SandboxErr::Denied { output, .. }) => output.as_ref(),
                 _ => return None,
             },
-            Err(ToolError::Rejected(_)) => return None,
+            Err(ToolError::Rejected(_) | ToolError::Declined(_)) => return None,
         };
         crate::security::protected_reads::denial_explanation(
             ctx.session,
@@ -414,6 +417,7 @@ impl ToolEmitter {
         applied_patch_delta: Option<&AppliedPatchDelta>,
     ) -> Result<String, FunctionCallError> {
         let explanation = self.explain_protected_read(ctx, &out).await;
+        let approval_declined = matches!(&out, Err(ToolError::Declined(_)));
         let (event, result) = match out {
             Ok(output) => {
                 let content = self.format_exec_output_for_model(&output, ctx);
@@ -460,16 +464,8 @@ impl ToolEmitter {
                     (event, result)
                 }
             },
-            Err(ToolError::Rejected(msg)) => {
-                // Normalize common rejection messages for exec tools so tests and
-                // users see a clear, consistent phrase.
-                //
-                // NOTE: ToolError::Rejected is currently used for both user-declined approvals
-                // and some operational/runtime rejection paths (for example setup failures).
-                // We intentionally map all of them through the "rejected" event path for now,
-                // which means a subset of non-user failures may be reported as Declined.
-                //
-                // TODO: We should add a new ToolError variant for user-declined approvals.
+            Err(ToolError::Rejected(msg) | ToolError::Declined(msg)) => {
+                // Preserve the approval result separately from policy/setup refusals.
                 let normalized = if msg == "rejected by user" {
                     match self {
                         Self::Shell { .. } | Self::UnifiedExec { .. } => {
@@ -481,10 +477,16 @@ impl ToolEmitter {
                     msg
                 };
                 let normalized = truncate_rejection_message(&normalized);
-                let event = ToolEventStage::Failure(ToolEventFailure::Rejected {
-                    message: normalized.clone(),
-                    applied_patch_delta,
-                });
+                // Patch rejection/diff semantics are unchanged by this command-label fix.
+                let failure = if approval_declined || matches!(self, Self::ApplyPatch { .. }) {
+                    ToolEventFailure::Rejected {
+                        message: normalized.clone(),
+                        applied_patch_delta,
+                    }
+                } else {
+                    ToolEventFailure::Refused(normalized.clone())
+                };
+                let event = ToolEventStage::Failure(failure);
                 let result = Err(FunctionCallError::RespondToModel(normalized));
                 (event, result)
             }
@@ -585,6 +587,18 @@ async fn emit_exec_stage(
                 duration: Duration::ZERO,
                 formatted_output: text,
                 status: ExecCommandStatus::Failed,
+            };
+            emit_exec_end(ctx, exec_input, exec_result).await;
+        }
+        ToolEventStage::Failure(ToolEventFailure::Refused(message)) => {
+            let exec_result = ExecCommandResult {
+                stdout: String::new(),
+                stderr: message.clone(),
+                aggregated_output: message.clone(),
+                exit_code: -1,
+                duration: Duration::ZERO,
+                formatted_output: message,
+                status: ExecCommandStatus::Refused,
             };
             emit_exec_end(ctx, exec_input, exec_result).await;
         }

@@ -533,7 +533,7 @@ impl<'a> ToolRuntime<UnifiedExecRequest, UnifiedExecProcess> for UnifiedExecRunt
                 req.additional_permissions.clone(),
             )
             .map_err(|error| match error {
-                ToolError::Rejected(_) => {
+                ToolError::Rejected(_) | ToolError::Declined(_) => {
                     ToolError::Rejected("missing command line for PTY".to_string())
                 }
                 error @ ToolError::Codex(_) => error,
@@ -601,7 +601,7 @@ impl<'a> ToolRuntime<UnifiedExecRequest, UnifiedExecProcess> for UnifiedExecRunt
             req.additional_permissions.clone(),
         )
         .map_err(|error| match error {
-            ToolError::Rejected(_) => {
+            ToolError::Rejected(_) | ToolError::Declined(_) => {
                 ToolError::Rejected("missing command line for PTY".to_string())
             }
             error @ ToolError::Codex(_) => error,

@@ -15,7 +15,7 @@ fn approval_resolution_rejects_denied_network_policy_amendment() {
     };
     assert!(matches!(
         resolution.into_tool_result(),
-        Err(ToolError::Rejected(rejection)) if rejection == "rejected by user"
+        Err(ToolError::Declined(rejection)) if rejection == "rejected by user"
     ));
 }
 

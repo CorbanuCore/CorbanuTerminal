@@ -173,6 +173,9 @@ impl EventProcessorWithHumanOutput {
                             format!(" declined{duration_suffix}:").style(self.yellow)
                         );
                     }
+                    CommandExecutionStatus::Refused => {
+                        eprintln!("{}", " refused before execution:".style(self.yellow));
+                    }
                     CommandExecutionStatus::InProgress => {
                         eprintln!(
                             "{}",

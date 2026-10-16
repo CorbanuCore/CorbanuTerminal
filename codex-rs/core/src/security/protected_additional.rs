@@ -535,7 +535,8 @@ pub(crate) fn refusal(level: SecurityLevel, path: &str) -> String {
             format!(
                 "Security level Moderate blocked access to `{path}`: an additional permission \
                  can never open protected files (credential files such as .env, SSH, cloud and \
-                 CLI tokens, and Corbanu's sign-in, vault, config and history). To allow it, a \
+                 CLI tokens, and Corbanu's sign-in, vault, config, history, security state and \
+                 keys). To allow it, a \
                  person can switch to Permissive in /security (it applies after a restart)."
             )
         }

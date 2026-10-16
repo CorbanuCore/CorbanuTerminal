@@ -582,7 +582,7 @@ async fn blocked_request_does_not_override_recorded_approval_outcome() {
     let error =
         network_approval_outcome_to_result(service.take_call_outcome("registration-1").await)
             .expect_err("approval denial should remain an error");
-    assert!(matches!(error, ToolError::Rejected(message) if message == rejection));
+    assert!(matches!(error, ToolError::Declined(message) if message == rejection));
 }
 
 #[tokio::test]
@@ -604,7 +604,7 @@ async fn specific_approval_outcome_replaces_earlier_blocked_request() {
     let error =
         network_approval_outcome_to_result(service.take_call_outcome("registration-1").await)
             .expect_err("specific approval denial should replace blocked policy denial");
-    assert!(matches!(error, ToolError::Rejected(message) if message == rejection));
+    assert!(matches!(error, ToolError::Declined(message) if message == rejection));
 }
 
 #[test]
@@ -615,7 +615,7 @@ fn approval_denial_messages_are_bounded_for_model_context() {
         rejection,
     )))
     .expect_err("approval denial should remain an error");
-    let ToolError::Rejected(message) = error else {
+    let ToolError::Declined(message) = error else {
         panic!("approval denial should produce a rejected tool error");
     };
 

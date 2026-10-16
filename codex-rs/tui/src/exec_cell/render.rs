@@ -196,7 +196,7 @@ impl HistoryCell for ExecCell {
             && !self
                 .calls
                 .iter()
-                .any(|call| call.is_declined() || call.is_unknown())
+                .any(|call| call.is_declined() || call.is_refused() || call.is_unknown())
         {
             self.exploring_display_lines(width)
         } else {
@@ -225,8 +225,11 @@ impl HistoryCell for ExecCell {
                 continue;
             }
 
+            if call.is_refused() {
+                lines.push(Line::from("✗ Did not run (Refused)".red()));
+            }
             if let Some(output) = call.output.as_ref() {
-                if !call.is_unified_exec_interaction() {
+                if !call.is_unified_exec_interaction() || call.is_refused() {
                     let wrap_width = width.max(1) as usize;
                     let wrap_opts = RtOptions::new(wrap_width);
                     for unwrapped in output
@@ -383,7 +386,7 @@ impl ExecCell {
                 .as_ref()
                 .map(|o| o.outcome == CommandOutcome::Exited(0))
         });
-        let bullet = if call.is_declined() || call.is_unknown() {
+        let bullet = if call.is_declined() || call.is_refused() || call.is_unknown() {
             "✗".red().bold()
         } else {
             match success {
@@ -392,9 +395,11 @@ impl ExecCell {
                 None => activity_marker(call.start_time, self.animations_enabled()),
             }
         };
-        let is_interaction =
-            call.is_unified_exec_interaction() && !call.is_declined() && !call.is_unknown();
-        let title = if call.is_declined() {
+        let is_interaction = call.is_unified_exec_interaction()
+            && !call.is_declined()
+            && !call.is_refused()
+            && !call.is_unknown();
+        let title = if call.is_declined() || call.is_refused() {
             "Did not run"
         } else if call.is_unknown() {
             "Execution unconfirmed"
@@ -467,6 +472,9 @@ impl ExecCell {
             lines.push(Line::from("  └ Approval declined".dim()));
             return lines;
         }
+        if call.is_refused() {
+            lines.push(Line::from("  └ Refused".dim()));
+        }
         if call.is_unknown() {
             lines.push(Line::from("  └ No exit status received".dim()));
         }
@@ -493,7 +501,7 @@ impl ExecCell {
             };
 
             if raw_output.lines.is_empty() {
-                if !call.is_unified_exec_interaction() && !call.is_unknown() {
+                if !call.is_unified_exec_interaction() && !call.is_refused() && !call.is_unknown() {
                     lines.extend(prefix_lines(
                         vec![Line::from("(no output)".dim())],
                         Span::from(layout.output_block.initial_prefix).dim(),

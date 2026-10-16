@@ -20,6 +20,7 @@ pub(super) enum CommandOutcome {
     Running,
     Exited(i32),
     Declined,
+    Refused,
     /// Finalized without evidence of an exit; the command may never have started.
     Unknown,
 }
@@ -46,6 +47,14 @@ impl CommandOutput {
         Self {
             outcome: CommandOutcome::Unknown,
             aggregated_output,
+            live_output: None,
+        }
+    }
+
+    pub(crate) fn refused(reason: String) -> Self {
+        Self {
+            outcome: CommandOutcome::Refused,
+            aggregated_output: reason,
             live_output: None,
         }
     }
@@ -153,7 +162,8 @@ impl ExecCell {
         };
         call.output = Some(output);
         // Refusal or a missing exit status cannot establish an execution duration.
-        call.duration = (!call.is_declined() && !call.is_unknown()).then_some(duration);
+        call.duration =
+            (!call.is_declined() && !call.is_refused() && !call.is_unknown()).then_some(duration);
         call.start_time = None;
         true
     }
@@ -163,7 +173,7 @@ impl ExecCell {
             || self
                 .calls
                 .iter()
-                .any(|call| call.is_declined() || call.is_unknown()))
+                .any(|call| call.is_declined() || call.is_refused() || call.is_unknown()))
             && self.calls.iter().all(ExecCall::is_complete)
     }
 
@@ -250,6 +260,12 @@ impl ExecCall {
             .is_some_and(|output| output.outcome == CommandOutcome::Declined)
     }
 
+    pub(super) fn is_refused(&self) -> bool {
+        self.output
+            .as_ref()
+            .is_some_and(|output| output.outcome == CommandOutcome::Refused)
+    }
+
     pub(super) fn is_unknown(&self) -> bool {
         self.output
             .as_ref()
@@ -257,7 +273,7 @@ impl ExecCall {
     }
 
     pub(super) fn is_complete(&self) -> bool {
-        self.duration.is_some() || self.is_declined() || self.is_unknown()
+        self.duration.is_some() || self.is_declined() || self.is_refused() || self.is_unknown()
     }
 
     pub(crate) fn is_user_shell_command(&self) -> bool {

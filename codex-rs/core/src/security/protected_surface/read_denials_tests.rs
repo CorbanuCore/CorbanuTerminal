@@ -1985,7 +1985,25 @@ fn issue_540_runtime_entries_stay_read_only_when_the_rules_are_lifted() {
         );
         assert!(all.read_only_paths().count() > all.runtime_read_only_paths().count());
         let denials = all.runtime_only();
-        assert_eq!(denials.paths().count(), 0);
+        // #838: only Corbanu's security state and keys stay denied.
+        let mut denied: Vec<&str> = denials
+            .paths()
+            .map(|path| path.as_path().file_name().unwrap().to_str().unwrap())
+            .collect();
+        denied.sort_unstable();
+        assert_eq!(
+            denied,
+            [
+                "security_confirm.lock",
+                "security_level.lock",
+                "security_level.toml",
+                "security_migration.toml",
+                "security_preflight.toml",
+                "security_state.json",
+                "security_state.lock",
+                "source-origin.key",
+            ]
+        );
         // #837: besides the runtime entries, only git's hooks and config
         // (of a repository above the test's folder, if any) stay read-only.
         let runtime: Vec<&AbsolutePathBuf> = denials.runtime_read_only_paths().collect();
@@ -1999,7 +2017,6 @@ fn issue_540_runtime_entries_stay_read_only_when_the_rules_are_lifted() {
                 "{path:?}"
             );
         }
-        assert!(denials.matcher().is_none());
         let lifted = denials.apply(&profile).expect("not an external sandbox");
         let policy = lifted.file_system_sandbox_policy();
         assert_eq!(
@@ -2039,6 +2056,235 @@ fn issue_540_runtime_entries_stay_read_only_when_the_rules_are_lifted() {
     assert_eq!(
         lifted.network_sandbox_policy(),
         NetworkSandboxPolicy::Enabled
+    );
+}
+
+/// #838 (Travis, 2026-10-15): where a person's approval lifts Moderate's
+/// rules for one command, Corbanu's security state and keys stay denied,
+/// read and write, existing or not, also under full access and for a command
+/// working in the home, while the other stores are lifted (#540). Before the
+/// approval they are denied as before.
+#[test]
+fn issue_838_security_state_and_keys_stay_denied_when_the_rules_are_lifted() {
+    let fx = fixture();
+    let cwd = fx.user_home.join("project");
+    let existing = [
+        "source-origin.key",
+        "security_state.json",
+        "security_preflight.toml",
+        "security_confirm.lock",
+    ];
+    for name in existing {
+        std::fs::write(fx.codex_home.join(name), "x").unwrap();
+    }
+    // Missing: denied before they exist, as before the approval.
+    let missing = [
+        "security_level.toml",
+        "security_state.lock",
+        "security_state.lock/x",
+    ];
+    for (cwd, profile) in [
+        (cwd.clone(), workspace(&cwd)),
+        (cwd.clone(), PermissionProfile::Disabled),
+        (fx.codex_home.clone(), PermissionProfile::Disabled),
+    ] {
+        let all = ReadDenials::collect(
+            &fx.codex_home,
+            Some(&fx.user_home),
+            /*claude_config_dir*/ None,
+            &[abs(&cwd)],
+        );
+        let before = all.apply(&profile).unwrap().file_system_sandbox_policy();
+        let policy = all
+            .runtime_only()
+            .apply(&profile)
+            .unwrap()
+            .file_system_sandbox_policy();
+        for name in existing.iter().chain(&missing) {
+            let path = fx.codex_home.join(name);
+            for policy in [&before, &policy] {
+                assert!(
+                    !policy.can_read_path_with_cwd(&path, &cwd),
+                    "{name}: {cwd:?} {profile:?}"
+                );
+                assert!(
+                    !policy.can_write_path_with_cwd(&path, &cwd),
+                    "{name}: {cwd:?} {profile:?}"
+                );
+            }
+        }
+        // The other stores are lifted for the approved command.
+        assert!(
+            policy.can_read_path_with_cwd(&fx.codex_home.join("auth.json"), &cwd),
+            "{cwd:?} {profile:?}"
+        );
+        assert!(
+            policy.can_read_path_with_cwd(&fx.codex_home.join("config.toml"), &cwd),
+            "{cwd:?} {profile:?}"
+        );
+    }
+    // The same files of another Corbanu home (denied whole before).
+    let other = fx.user_home.join(".pfterminal");
+    std::fs::create_dir_all(&other).unwrap();
+    std::fs::write(other.join("source-origin.key"), "x").unwrap();
+    std::fs::write(other.join("auth.json"), "x").unwrap();
+    let all = ReadDenials::collect(
+        &fx.codex_home,
+        Some(&fx.user_home),
+        /*claude_config_dir*/ None,
+        &[abs(&cwd)],
+    );
+    let before = all
+        .apply(&PermissionProfile::Disabled)
+        .unwrap()
+        .file_system_sandbox_policy();
+    let policy = all
+        .runtime_only()
+        .apply(&PermissionProfile::Disabled)
+        .unwrap()
+        .file_system_sandbox_policy();
+    for name in ["source-origin.key", "security_state.json"] {
+        for policy in [&before, &policy] {
+            assert!(
+                !policy.can_read_path_with_cwd(&other.join(name), &cwd),
+                "{name}"
+            );
+            assert!(
+                !policy.can_write_path_with_cwd(&other.join(name), &cwd),
+                "{name}"
+            );
+        }
+    }
+    assert!(policy.can_read_path_with_cwd(&other.join("auth.json"), &cwd));
+    // Explanations name them by any spelling of the home.
+    let link = fx.user_home.join("home-link");
+    std::os::unix::fs::symlink(&fx.codex_home, &link).unwrap();
+    // A home spelled through a link: denied by their real location (which
+    // bubblewrap can deny; it refuses a deny through a writable link).
+    let approved = ReadDenials::collect(
+        &link,
+        Some(&fx.user_home),
+        /*claude_config_dir*/ None,
+        &[abs(&cwd)],
+    )
+    .runtime_only();
+    let denied: Vec<&AbsolutePathBuf> = approved.paths().collect();
+    for name in [
+        "source-origin.key",
+        "security_state.json",
+        "security_level.toml",
+    ] {
+        assert!(
+            denied.contains(&&abs(&fx.codex_home.join(name))),
+            "{name}: {denied:?}"
+        );
+    }
+    assert_eq!(
+        denied.iter().any(|path| path.as_path().starts_with(&link)),
+        cfg!(target_os = "macos"),
+        "{denied:?}"
+    );
+    for path in [
+        fx.codex_home.join("security_state.json"),
+        link.join("source-origin.key"),
+        link.join("security_level.toml"),
+    ] {
+        assert!(
+            ReadDenials::is_security_file(&fx.codex_home, Some(&fx.user_home), &path),
+            "{path:?}"
+        );
+        assert!(
+            ReadDenials::is_security_file(&link, Some(&fx.user_home), &path),
+            "{path:?}"
+        );
+    }
+    for path in [
+        fx.codex_home.join("auth.json"),
+        fx.user_home.join("security_state.json"),
+    ] {
+        assert!(
+            !ReadDenials::is_security_file(&fx.codex_home, Some(&fx.user_home), &path),
+            "{path:?}"
+        );
+    }
+    assert!(ReadDenials::is_security_file(
+        &fx.codex_home,
+        Some(&fx.user_home),
+        &other.join("source-origin.key")
+    ));
+    // A project's own `.codex` is not a Corbanu home.
+    assert!(!ReadDenials::is_security_file(
+        &fx.codex_home,
+        Some(&fx.user_home),
+        &cwd.join(".codex/security_level.toml")
+    ));
+}
+
+/// #838 (review r2): where an approved command could write the folder of a
+/// missing security file, Linux leaves it out (bubblewrap would hold it with
+/// an empty placeholder Corbanu reads as a broken security state) and makes
+/// the missing security locks first, empty and private; macOS denies it
+/// before it exists. Existing ones stay denied everywhere.
+#[test]
+fn issue_838_missing_security_files_where_the_home_is_writable() {
+    let fx = fixture();
+    let cwd = abs(&fx.user_home.join("project"));
+    std::fs::write(fx.codex_home.join("source-origin.key"), "x").unwrap();
+    let denials = ReadDenials::for_turn(
+        &fx.codex_home,
+        &fx.codex_home,
+        &cwd,
+        std::slice::from_ref(&cwd),
+        &PermissionProfile::Disabled,
+    )
+    .runtime_only();
+    let denied: Vec<&AbsolutePathBuf> = denials.paths().collect();
+    let denied_here = |name: &str| denied.contains(&&abs(&fx.codex_home.join(name)));
+    assert!(denied_here("source-origin.key"), "{denied:?}");
+    assert_eq!(
+        denied_here("security_state.json"),
+        !cfg!(target_os = "linux"),
+        "{denied:?}"
+    );
+    for lock in [
+        "security_state.lock",
+        "security_confirm.lock",
+        "security_level.lock",
+    ] {
+        let path = fx.codex_home.join(lock);
+        if cfg!(target_os = "linux") {
+            let metadata = std::fs::metadata(&path).expect(lock);
+            assert_eq!(metadata.len(), 0, "{lock}");
+            assert_eq!(
+                std::os::unix::fs::PermissionsExt::mode(&metadata.permissions()) & 0o777,
+                0o600,
+                "{lock}"
+            );
+        }
+        assert!(denied_here(lock), "{lock}: {denied:?}");
+    }
+    // Where the home is not writable (the project only: no temporary
+    // folders, which hold the fixture), every one stays denied before it
+    // exists, also on Linux.
+    let project_only = PermissionProfile::workspace_write_with(
+        &[],
+        NetworkSandboxPolicy::Restricted,
+        /*exclude_tmpdir_env_var*/ true,
+        /*exclude_slash_tmp*/ true,
+    )
+    .materialize_project_roots_with_workspace_roots(std::slice::from_ref(&cwd));
+    let denials = ReadDenials::for_turn(
+        &fx.codex_home,
+        &fx.codex_home,
+        &cwd,
+        std::slice::from_ref(&cwd),
+        &project_only,
+    )
+    .runtime_only();
+    assert!(
+        denials
+            .paths()
+            .any(|path| *path == abs(&fx.codex_home.join("security_migration.toml")))
     );
 }
 

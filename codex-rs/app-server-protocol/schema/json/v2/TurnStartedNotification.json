@@ -341,7 +341,8 @@
         "inProgress",
         "completed",
         "failed",
-        "declined"
+        "declined",
+        "refused"
       ],
       "type": "string"
     },

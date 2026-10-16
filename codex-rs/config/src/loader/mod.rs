@@ -975,6 +975,25 @@ fn sanitize_project_config(config: &mut TomlValue) -> Vec<String> {
     ignored_keys
 }
 
+fn remove_unversioned_project_permissive_security(config: &mut TomlValue) -> bool {
+    let Some(table) = config.as_table_mut() else {
+        return false;
+    };
+    let Some(security) = table.get("security").and_then(TomlValue::as_table) else {
+        return false;
+    };
+    // Refuse only the incomplete, lowering-only table reported in #845.
+    // Valid versioned settings can still raise a project security floor;
+    // other malformed settings must retain their existing validation errors.
+    if security.len() != 1
+        || security.get("level").and_then(TomlValue::as_str) != Some("permissive")
+    {
+        return false;
+    }
+    table.remove("security");
+    true
+}
+
 fn project_ignored_config_keys_warning(
     dot_codex_folder: &AbsolutePathBuf,
     ignored_keys: &[String],
@@ -1332,6 +1351,15 @@ async fn load_project_layers(
                     }
                 };
                 let mut config = config;
+                if disabled_reason.is_none()
+                    && remove_unversioned_project_permissive_security(&mut config)
+                {
+                    startup_warnings.push(format!(
+                        "Ignored incomplete project [security] table in {}: \
+                         level = \"permissive\" without version cannot override trusted security settings.",
+                        config_file.display()
+                    ));
+                }
                 if disabled_reason.is_none() && strict_config {
                     validate_config_toml_strictly(
                         config_file.as_path(),

@@ -1,0 +1,37 @@
+Cost — this conversation
+Requested UTC day: 2026-10-15
+Today (UTC) in this conversation:
+• kimi · kimi-k2.7-code — Pay per use. 1 request, 11,572 tokens. Estimated cost: at least $0.000044 (1 attempt had incomplete usage).
+No other conversation recorded requests on this day.
+Next step for requests with incomplete usage: check the bill from kimi. Their provider did not report every token count, so the estimate is missing or
+only a lower bound.
+Costs are estimates from published prices; kimi doesn't report its charges — check kimi's bill.
+Select a provider below to see its requests.
+—— Details ——
+Known estimated token cost: $0.000044 + unknown costs
+Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
+Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+Snapshot is not current; newer activity is unverified
+Day covered (UTC): [2026-10-15T00:00:00.000Z, 2026-10-16T00:00:00.000Z)
+Read at: 2026-10-15T21:47:31.172Z; ledger current to: 2026-10-15T21:43:36.791Z (234381 ms behind)
+Retention: request detail kept since 2026-07-17T21:47:31.172Z; daily totals kept since 2025-10-16; oldest recorded day in this conversation 2026-10-15
+Known subtotal exact USD: 0.000044
+Input: 11,561
+Noncached input (derived for inclusive input): not reported (1 attempt)
+Cache read: not reported (1 attempt)
+Cache write: not reported (1 attempt)
+Output: 11
+Reasoning (subset, not separately billed): 8
+Total (not separately billed): 11,572
+Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+Unknown parent population: 0 attempts, excluded from root total
+—— Open ——
+→ kimi · kimi-k2.7-code — estimated at least $0.000044 (1 attempt had incomplete usage) (1 request)
+→ Request 1 · kimi · kimi-k2.7-code · estimated at least $0.000044 (1 attempt had incomplete usage)
+→ Root's own attempts (1 attempt)
+→ Descendant attempts (none)
+→ Unknown provider/model attribution (none)
+→ Unknown parent population (none)
+Refresh
+Close

@@ -1008,6 +1008,7 @@ pub enum CommandExecutionStatus {
     Completed,
     Failed,
     Declined,
+    Refused,
 }
 
 impl From<CoreExecCommandStatus> for CommandExecutionStatus {
@@ -1023,6 +1024,7 @@ impl From<CoreCommandExecutionStatus> for CommandExecutionStatus {
             CoreCommandExecutionStatus::Completed => Self::Completed,
             CoreCommandExecutionStatus::Failed => Self::Failed,
             CoreCommandExecutionStatus::Declined => Self::Declined,
+            CoreCommandExecutionStatus::Refused => Self::Refused,
         }
     }
 }
@@ -1033,6 +1035,7 @@ impl From<&CoreExecCommandStatus> for CommandExecutionStatus {
             CoreExecCommandStatus::Completed => CommandExecutionStatus::Completed,
             CoreExecCommandStatus::Failed => CommandExecutionStatus::Failed,
             CoreExecCommandStatus::Declined => CommandExecutionStatus::Declined,
+            CoreExecCommandStatus::Refused => CommandExecutionStatus::Refused,
         }
     }
 }
@@ -1674,3 +1677,7 @@ pub struct ToolRequestUserInputAnswer {
 pub struct ToolRequestUserInputResponse {
     pub answers: HashMap<String, ToolRequestUserInputAnswer>,
 }
+
+#[cfg(test)]
+#[path = "refusal_status_tests.rs"]
+mod refusal_status_tests;

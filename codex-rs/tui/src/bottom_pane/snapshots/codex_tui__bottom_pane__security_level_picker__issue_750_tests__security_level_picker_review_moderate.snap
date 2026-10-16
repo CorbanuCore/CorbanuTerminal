@@ -18,10 +18,12 @@ in Corbanu Terminal sessions and their child agents:
     keychain folder) or Corbanu's sign-in, vault, config, history and state, and
     cannot write files that run code later (your shell and git start-up files,
     git hooks and config, the project's .codex and .agents) or Corbanu's own
-    files. Your fresh approval of one command lifts this for that command,
-    except Corbanu's runtime files and what secretless_agent_launch keeps; a
-    remembered or automatic approval never does. A project's .env files are not
-    covered (Aggressive covers them)
+    files. Your fresh approval of one command lifts this for that command and
+    lets it write the project's .git (so commits work), except git hooks and
+    config, Corbanu's runtime files, its security state and keys (such as
+    security_state.json and source-origin.key), and what secretless_agent_launch
+    keeps; a remembered or automatic approval never does. A project's .env files
+    are not covered (Aggressive covers them)
 • Untrusted content
   Moderate: tool, MCP, web, agent and memory output reaches the model labelled
     untrusted; after it, protected actions (the vault, credentials, security
@@ -61,7 +63,8 @@ Core's level becomes Moderate from the next start (this session's policy does
 not run in this process yet): agent commands always stay in the sandbox; unless
 you approve that one command, they cannot read credential files in your home
 folder or Corbanu's sign-in, vault, config, history and state, or write files
-that run code later; after untrusted content, protected actions need your fresh
-approval.
+that run code later (Corbanu's security state and keys, and git hooks and
+config, stay closed to them even then); after untrusted content, protected
+actions need your fresh approval.
 Your config.toml is not modified.
 enter confirm and save · esc back, nothing changes

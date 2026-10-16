@@ -175,6 +175,7 @@ impl EventProcessorWithJsonOutput {
                         CommandExecutionStatus::Completed => ExecCommandExecutionStatus::Completed,
                         CommandExecutionStatus::Failed => ExecCommandExecutionStatus::Failed,
                         CommandExecutionStatus::Declined => ExecCommandExecutionStatus::Declined,
+                        CommandExecutionStatus::Refused => ExecCommandExecutionStatus::Refused,
                     },
                 }),
             }),

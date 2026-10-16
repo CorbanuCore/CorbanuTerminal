@@ -2947,3 +2947,159 @@ async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates(
     .await;
     unsupported_provider.assert_visible_lacks(&["web_search"]);
 }
+
+// Issue #820: real tool planning and serde, with disposable config and no provider call.
+fn issue820_use_custom_provider(turn: &mut TurnContext, base_url: &str, wire_api: &str) {
+    let provider_info: ModelProviderInfo = toml::from_str(&format!(
+        r#"
+name = "Custom official endpoint"
+base_url = "{base_url}"
+env_key = "ISSUE820_SYNTHETIC_UNSET_KEY"
+wire_api = "{wire_api}"
+billing = "pay_per_use"
+"#
+    ))
+    .expect("synthetic provider config");
+    // Wire-schema compatibility must not relabel this provider or enable built-in auth.
+    assert!(!provider_info.is_openai());
+    assert!(!provider_info.requires_openai_auth);
+    update_config(turn, |config| {
+        config.model_provider_id = "myopenai".to_string();
+        config.model_provider = provider_info.clone();
+    });
+    turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
+}
+
+#[tokio::test]
+async fn issue820_custom_official_responses_tools_match_builtin() {
+    let builtin = probe(|turn| {
+        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
+    })
+    .await;
+    let expected = serde_json::to_value(builtin.visible_spec(MULTI_AGENT_V2_NAMESPACE))
+        .expect("built-in collaboration serialization");
+    for base_url in [
+        "https://api.openai.com/v1",
+        "https://api.openai.com/v1/",
+        "https://api.openai.com:443/v1",
+        "https://API.OPENAI.COM/v1",
+    ] {
+        let custom = probe(|turn| {
+            issue820_use_custom_provider(turn, base_url, "responses");
+            set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
+        })
+        .await;
+        let captured = serde_json::to_value(custom.visible_spec(MULTI_AGENT_V2_NAMESPACE))
+            .expect("custom collaboration serialization");
+        assert_eq!(captured, expected, "reserved tools diverged for {base_url}");
+    }
+}
+
+#[tokio::test]
+async fn issue820_custom_official_responses_register_plaintext_adapters() {
+    let custom = probe(|turn| {
+        issue820_use_custom_provider(turn, "https://api.openai.com/v1", "responses");
+        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
+    })
+    .await;
+    for name in [
+        "spawn_agent_plaintext",
+        "send_message_plaintext",
+        "followup_task_plaintext",
+    ] {
+        custom.assert_registered_contains(&[name]);
+        let captured =
+            serde_json::to_value(custom.visible_spec(name)).expect("adapter serialization");
+        assert_eq!(
+            captured.pointer("/parameters/properties/message/encrypted"),
+            None
+        );
+    }
+}
+
+#[tokio::test]
+async fn issue820_other_responses_endpoints_keep_provider_neutral_tools() {
+    for base_url in [
+        "https://openrouter.ai/api/v1",
+        "https://example.openai.azure.com/openai/v1",
+        "https://api.openai.com.example.test/v1",
+        "https://api.openai.com@provider.example/v1",
+        "https://provider.example/api.openai.com/v1",
+        "http://api.openai.com/v1",
+        "https://api.openai.com:8443/v1",
+        "https://api.openai.com/proxy/v1",
+        "https://api.openai.com/v1?endpoint=other",
+        "https://api.openai.com/v1#other",
+        "not-a-url",
+    ] {
+        let plan = probe(|turn| {
+            issue820_use_custom_provider(turn, base_url, "responses");
+            set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
+        })
+        .await;
+        let ToolSpec::Namespace(namespace) = plan.visible_spec(MULTI_AGENT_V2_NAMESPACE) else {
+            panic!("expected collaboration namespace for {base_url}");
+        };
+        for name in ["spawn_agent", "send_message", "followup_task"] {
+            let function = namespace
+                .tools
+                .iter()
+                .find_map(|tool| match tool {
+                    ResponsesApiNamespaceTool::Function(tool) if tool.name == name => Some(tool),
+                    _ => None,
+                })
+                .expect("provider-neutral collaboration function");
+            assert_eq!(
+                function
+                    .parameters
+                    .properties
+                    .as_ref()
+                    .expect("object params")["message"]
+                    .encrypted,
+                None,
+                "{base_url} must retain plaintext {name}"
+            );
+        }
+        plan.assert_registered_lacks(&[
+            "spawn_agent_plaintext",
+            "send_message_plaintext",
+            "followup_task_plaintext",
+        ]);
+    }
+}
+
+#[tokio::test]
+async fn issue820_chat_wire_keeps_plaintext_and_no_reserved_adapters() {
+    let plan = probe(|turn| {
+        issue820_use_custom_provider(turn, "https://api.openai.com/v1", "chat");
+        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
+    })
+    .await;
+    plan.assert_registered_lacks(&[
+        "spawn_agent_plaintext",
+        "send_message_plaintext",
+        "followup_task_plaintext",
+    ]);
+    // Chat has no namespaces: the v2 handler is registered as a plain function.
+    let captured = serde_json::to_value(plan.visible_spec("followup_task"))
+        .expect("flat chat tool serialization");
+    assert_eq!(
+        captured.pointer("/parameters/properties/message/encrypted"),
+        None
+    );
+}
+
+#[tokio::test]
+async fn issue820_disabled_v2_does_not_add_reserved_adapters() {
+    let plan = probe(|turn| {
+        issue820_use_custom_provider(turn, "https://api.openai.com/v1", "responses");
+        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ false);
+    })
+    .await;
+    plan.assert_visible_lacks(&[MULTI_AGENT_V2_NAMESPACE]);
+    plan.assert_registered_lacks(&[
+        "spawn_agent_plaintext",
+        "send_message_plaintext",
+        "followup_task_plaintext",
+    ]);
+}

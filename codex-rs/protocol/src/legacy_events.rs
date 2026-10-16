@@ -182,6 +182,7 @@ impl CommandExecutionItem {
             CommandExecutionStatus::Completed => ExecCommandStatus::Completed,
             CommandExecutionStatus::Failed => ExecCommandStatus::Failed,
             CommandExecutionStatus::Declined => ExecCommandStatus::Declined,
+            CommandExecutionStatus::Refused => ExecCommandStatus::Refused,
         };
         Some(EventMsg::ExecCommandEnd(ExecCommandEndEvent {
             call_id: self.id.clone(),
