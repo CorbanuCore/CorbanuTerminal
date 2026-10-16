@@ -506,10 +506,15 @@ text(JSON.stringify(await tools.exec_command({ cmd: next })));
         assert!(next_question(&test).await.is_none());
         let output = output_text(&captured.requests()[1], "call-cell");
         // The cell ran (code mode was available) and its first command
-        // worked, so the second is the vault command.
+        // worked, so the second is the vault command. A first command that
+        // could not run at all throws out of the cell as a script error that
+        // names it.
+        let first_command_threw = output.contains("exec_command failed for")
+            && output.contains("printf 'run: corbanu vault list'");
         assert!(
             !output.contains("unsupported custom tool call")
-                && !output.contains("the notes command failed"),
+                && !output.contains("the notes command failed")
+                && !first_command_threw,
             "{level:?}: the cell did not reach the vault command: {output}"
         );
         assert_eq!(
