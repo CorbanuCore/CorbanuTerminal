@@ -272,6 +272,8 @@ pub(crate) struct RemoteControlWebsocket {
     desired_state_tx: Arc<watch::Sender<RemoteControlDesiredState>>,
     desired_state_rx: watch::Receiver<RemoteControlDesiredState>,
     desired_state_persistence_lock: Arc<Semaphore>,
+    #[cfg(test)]
+    disabled_status_barrier: Option<disabled_status_tests::DisabledPublishBarrier>,
 }
 
 pub(crate) struct RemoteControlWebsocketConfig {
@@ -473,6 +475,8 @@ impl RemoteControlWebsocket {
             desired_state_tx,
             desired_state_rx,
             desired_state_persistence_lock: channels.desired_state_persistence_lock,
+            #[cfg(test)]
+            disabled_status_barrier: None,
         }
     }
 
@@ -551,8 +555,24 @@ impl RemoteControlWebsocket {
             {
                 ConnectOutcome::Connected(websocket_connection) => *websocket_connection,
                 ConnectOutcome::Disabled => {
+                    #[cfg(test)]
+                    let disabled_status_barrier = match self.disabled_status_barrier.take() {
+                        Some(barrier) => {
+                            let _ = barrier.reached.send(());
+                            let _ = barrier.resume.await;
+                            Some((barrier.published, barrier.finish))
+                        }
+                        None => None,
+                    };
                     self.status_publisher
-                        .publish_status(RemoteControlConnectionStatus::Disabled);
+                        .publish_status_if(RemoteControlConnectionStatus::Disabled, || {
+                            !self.desired_state_rx.borrow().is_enabled()
+                        });
+                    #[cfg(test)]
+                    if let Some((published, finish)) = disabled_status_barrier {
+                        let _ = published.send(());
+                        let _ = finish.await;
+                    }
                     continue;
                 }
                 ConnectOutcome::Shutdown => break,
@@ -1848,6 +1868,10 @@ fn format_remote_control_websocket_connect_error(
 
     message
 }
+
+#[cfg(test)]
+#[path = "websocket_disabled_status_tests.rs"]
+mod disabled_status_tests;
 
 #[cfg(test)]
 #[path = "websocket_refresh_tests.rs"]
