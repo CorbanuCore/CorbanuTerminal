@@ -853,12 +853,14 @@ fn security_transition_kill_switch_from_another_process_reaches_running_trees() 
         .commit_with(other.kill(/*active*/ true), &store)
         .unwrap();
     assert!(!committed.reached_other_trees);
+    // #931: subscribers are told after the watcher pass has adopted the
+    // switch and run the sinks; the tree's state alone changes first.
     assert!(
-        within(latency, || here.now().4),
+        within(latency, || *watched.borrow()),
         "the kill switch did not arrive"
     );
+    assert!(here.now().4);
     assert!(here.revocations() >= 1, "the running work was not stopped");
-    assert!(within(latency, || *watched.borrow()));
     // A stricter level saved by the other process is not taken while running
     // (only the kill switch and the revocations saved with it are).
     assert_eq!(here.now().0, SecurityLevel::Moderate);
@@ -1009,10 +1011,13 @@ fn issue_842_moderate_from_another_process_raises_running_trees() {
         .commit_with(other.set_level(SecurityLevel::Moderate), &store)
         .unwrap();
     assert!(!committed.reached_other_trees);
+    // #931: subscribers are told after the watcher pass has raised the tree
+    // and run its sinks; the level alone becomes visible first.
     assert!(
-        within(latency, || here.now().0 == SecurityLevel::Moderate),
+        within(latency, || raised.has_changed().unwrap_or(false)),
         "Moderate did not arrive"
     );
+    assert_eq!(*raised.borrow_and_update(), Some(SecurityLevel::Moderate));
     let (level, next_start, after, _, kill_switch) = here.now();
     assert_eq!(
         (level, next_start, kill_switch),
@@ -1020,8 +1025,6 @@ fn issue_842_moderate_from_another_process_raises_running_trees() {
     );
     assert!(after > epoch, "grants and approvals did not end");
     assert_eq!(here.revocations(), 1);
-    assert!(within(latency, || raised.has_changed().unwrap_or(false)));
-    assert_eq!(*raised.borrow_and_update(), Some(SecurityLevel::Moderate));
     // Above it: unchanged.
     assert_eq!(already.now().0, SecurityLevel::Aggressive);
     assert_eq!(already.revocations(), 0);

@@ -19,8 +19,14 @@ use crate::protocol::NetworkAccess;
 use crate::protocol::SandboxPolicy;
 use crate::protocol::WritableRoot;
 
+mod effective_reads;
+pub use effective_reads::EffectiveReads;
 mod effective_writes;
 pub use effective_writes::EffectiveWrites;
+
+#[cfg(test)]
+#[path = "permissions/effective_reads_tests.rs"]
+mod effective_reads_tests;
 
 const PROTECTED_METADATA_GIT_PATH_NAME: &str = ".git";
 const PROTECTED_METADATA_AGENTS_PATH_NAME: &str = ".agents";
@@ -1202,25 +1208,15 @@ impl FileSystemSandboxPolicy {
     /// This does not model a sandbox's own clauses; on macOS use
     /// `codex_sandboxing::seatbelt::seatbelt_allows_file_read` (#488).
     pub fn can_read_effective_path_with_cwd(&self, path: &Path, cwd: &Path) -> bool {
-        match self.kind {
-            FileSystemSandboxKind::Unrestricted | FileSystemSandboxKind::ExternalSandbox => {
-                return true;
-            }
-            FileSystemSandboxKind::Restricted => {}
-        }
-        let Some(path) = resolve_candidate_path(path, cwd) else {
-            return false;
-        };
-        let path = normalize_effective_absolute_path(path);
-        self.resolved_entries_with_cwd(cwd)
-            .into_iter()
-            .map(|entry| ResolvedFileSystemEntry {
-                path: normalize_effective_absolute_path(entry.path),
-                access: entry.access,
-            })
-            .filter(|entry| path.as_path().starts_with(entry.path.as_path()))
-            .max_by_key(resolved_entry_precedence)
-            .is_some_and(|entry| entry.access.can_read())
+        self.effective_reads_with_cwd(cwd)
+            .can_read_effective_path(path)
+    }
+
+    /// Issue918: effective-read checks for one set of paths, with the resolved
+    /// entries normalized once on first use. Build a fresh view for each set;
+    /// it is not a persistent cache or an atomic filesystem snapshot.
+    pub fn effective_reads_with_cwd<'a>(&'a self, cwd: &'a Path) -> EffectiveReads<'a> {
+        EffectiveReads::new(self, cwd)
     }
 
     /// Like [`Self::can_write_path_with_cwd`], with the policy's paths and

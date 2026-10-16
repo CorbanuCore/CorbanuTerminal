@@ -326,7 +326,9 @@ pub(crate) fn verify_isolation(config: &Config, paths: &[PathBuf]) -> Vec<String
     // workspace opened through `/tmp` spells its paths unlike the launch
     // that denied them.
     #[cfg(not(target_os = "macos"))]
-    let readable = |path: &Path| policy.can_read_effective_path_with_cwd(path, cwd);
+    let reads = policy.effective_reads_with_cwd(cwd);
+    #[cfg(not(target_os = "macos"))]
+    let readable = |path: &Path| reads.can_read_effective_path(path);
     paths
         .iter()
         .filter(|path| {
