@@ -1856,11 +1856,15 @@ fn append_empty_file_bind_data_args(bwrap_args: &mut BwrapArgs, path: &Path) -> 
     // while the command runs.
     let null = match placeholder_contents(path) {
         Some(contents) => {
-            let host = file_with_contents(contents)?;
-            bwrap_args.args.push("--file".to_string());
-            bwrap_args.args.push(host.as_raw_fd().to_string());
-            bwrap_args.args.push(path_to_string(path));
-            bwrap_args.preserved_files.push(host);
+            // Not again where it holds them already (a later pass, or
+            // another run's): rewriting truncates it for a moment.
+            if fs::read(path).ok().as_deref() != Some(contents) {
+                let host = file_with_contents(contents)?;
+                bwrap_args.args.push("--file".to_string());
+                bwrap_args.args.push(host.as_raw_fd().to_string());
+                bwrap_args.args.push(path_to_string(path));
+                bwrap_args.preserved_files.push(host);
+            }
             file_with_contents(contents)?
         }
         None => File::open("/dev/null")?,

@@ -1685,6 +1685,8 @@ async fn issue_837_an_approved_command_commits_but_cannot_change_git_hooks_or_co
         // repository, and `.git` moved aside and back.
         let others = if level == SecurityLevel::Moderate && escalated {
             "printf ../planted > .git/commondir; printf ../planted > .git/COMMONDIR; \
+             printf x > .git/HOOKS/post-merge; printf x > .git/hoo\u{212a}s/post-rewrite; \
+             printf planted >> .git/CONFIG; git status > status-837.txt 2>&1; \
              mkdir -p .git/rebase-merge && printf 'exec touch pwned\\n' > .git/rebase-merge/git-rebase-todo; \
              printf '[core]\\n\\thooksPath = planted\\n' > .git/config.worktree; \
              mkdir -p .git/modules/m/hooks && printf x > .git/modules/m/hooks/post-checkout; \
@@ -1754,11 +1756,17 @@ async fn issue_837_an_approved_command_commits_but_cannot_change_git_hooks_or_co
         let committed = String::from_utf8_lossy(&subject.stdout).trim() == "m837";
         let hook = cwd.join(".git/hooks/pre-commit").exists();
         let config = std::fs::read_to_string(cwd.join(".git/config"))?.contains("planted");
+        // Git inside the approved command saw no rebase in progress.
+        let status = std::fs::read_to_string(cwd.join("status-837.txt")).unwrap_or_default();
+        let rebasing = status.to_ascii_lowercase().contains("rebas");
+        // macOS also holds a missing rebase state.
+        let rebase_planted = cfg!(target_os = "macos") && cwd.join(".git/rebase-merge").exists();
         let planted: Vec<&str> = [
             ".git/commondir",
             ".git/config.worktree",
-            ".git/modules",
-            ".git/rebase-merge",
+            ".git/modules/m",
+            ".git/hooks/post-merge",
+            ".git/hooks/post-rewrite",
             "HEAD",
             ".g837",
             ".git/hooks/post-commit",
@@ -1774,10 +1782,13 @@ async fn issue_837_an_approved_command_commits_but_cannot_change_git_hooks_or_co
             || config != changes_git_settings
             || asked != usize::from(escalated)
             || !planted.is_empty()
+            || rebasing
+            || rebase_planted
         {
             wrong.push(format!(
                 "{level:?} escalated={escalated}: asked={asked} committed={committed} \
-                 hook={hook} config={config} planted={planted:?}: {output}"
+                 hook={hook} config={config} planted={planted:?} rebasing={rebasing} \
+                 rebase_planted={rebase_planted}: {output}"
             ));
         }
     }

@@ -245,18 +245,8 @@ pub(crate) struct ReadDenials {
     /// by [`Self::runtime_only`]).
     git_writable: Vec<AbsolutePathBuf>,
     /// #837: the opened `.git` folders, which may not be moved aside (to
-    /// change hooks or config under another name), and on macOS a pattern
-    /// denying a `HEAD` at each such project root in any case (the file
-    /// system ignores it): with one there (and `.git` made unusable) git
-    /// would read the root as a bare repository with a planted config. The
-    /// `HEAD` itself is in [`Self::git_read_only`].
+    /// change hooks or config under another name).
     git_unmovable: Vec<AbsolutePathBuf>,
-    /// Each with the path it protects (see [`Self::apply`]).
-    git_globs: Vec<(AbsolutePathBuf, String)>,
-    /// #837: the same, set only by [`Self::runtime_only`], where an explicit
-    /// write a person approved for one of these paths (#513: an additional
-    /// write permission for `.git/hooks`) is honoured.
-    git_any_case: Vec<(AbsolutePathBuf, String)>,
     /// Denials dropped because they hold the command's folder or a writable
     /// root (denying them would deny the workspace itself).
     pub(crate) skipped: Vec<AbsolutePathBuf>,
@@ -841,45 +831,56 @@ impl ReadDenials {
             }
             // What git reads hooks or config from, or runs later, that is
             // not needed to commit: hooks and config (as `git_paths` finds
-            // them, also when missing), where other hooks and config would
-            // be read (`commondir`, `modules`, `worktrees`), what a later
-            // `git rebase --continue` or `cherry-pick --continue` runs,
-            // and `info` (excludes and attributes).
+            // them), where other hooks and config would be read
+            // (`commondir`, `modules`, `worktrees`), what a later
+            // `git rebase --continue` or `cherry-pick --continue` runs, and
+            // `info` (excludes and attributes).
             let mut inside: Vec<AbsolutePathBuf> = GIT_FOLDER_KEPT
                 .iter()
+                // Linux: a missing `rebase-merge` or `rebase-apply` held by
+                // a placeholder file would show a rebase in progress to
+                // every git run meanwhile; left out (a documented limit).
+                .filter(|name| {
+                    !(cfg!(target_os = "linux")
+                        && matches!(**name, "rebase-merge" | "rebase-apply")
+                        && std::fs::symlink_metadata(dot_git.join(name).as_path()).is_err())
+                })
                 .map(|name| dot_git.join(name))
                 .collect();
-            // A `core.hooksPath` inside `.git` (left out on Linux by
-            // `git_paths` when missing: a placeholder there is harmless), and
-            // a config file included from inside `.git`.
-            let configs = [
-                Some(dot_git.join("config")),
-                Some(dot_git.join("config.worktree")),
-                home.as_ref().map(|home| home.join(".gitconfig")),
-                home.as_ref().map(|home| home.join(".config/git/config")),
-            ];
-            for config in configs.into_iter().flatten() {
-                inside.extend(super::git_paths::hooks_path(&config, root, home.as_ref()));
-                inside.extend(super::git_paths::include_paths(&config, home.as_ref()));
-            }
-            inside.retain(|path| path.as_path().starts_with(dot_git.as_path()) && path != &dot_git);
-            for path in inside {
-                // macOS: the sandbox compares the name as given when it is
-                // created, and the file system then finds it under the name
-                // git opens, so a missing one is denied in any case too.
-                if cfg!(target_os = "macos") {
-                    self.git_globs
-                        .extend(any_case_glob_for_missing(&path).map(|glob| (path.clone(), glob)));
+            // What git must find as it is to stay safe; when one is missing
+            // or reached through a link below `.git` (the link itself could
+            // be replaced in a writable `.git`), `.git` is not opened.
+            let mut required: Vec<AbsolutePathBuf> = vec![dot_git.join("hooks")];
+            let configs = git_config_files(&dot_git, home.as_ref());
+            for config in &configs {
+                required.extend(super::git_paths::hooks_path(config, root, home.as_ref()));
+                for included in super::git_paths::include_paths(config, home.as_ref()) {
+                    // A `core.hooksPath` an included file sets.
+                    required.extend(super::git_paths::hooks_path(&included, root, home.as_ref()));
+                    required.push(included);
                 }
+            }
+            required.retain(|path| path.as_path().starts_with(dot_git.as_path()));
+            if required.contains(&dot_git)
+                || required
+                    .iter()
+                    .any(|path| std::fs::symlink_metadata(path.as_path()).is_err())
+                || required
+                    .iter()
+                    .chain(&inside)
+                    .any(|path| links_below(&dot_git, path))
+                || worktree_config_missing(&dot_git)
+            {
+                continue;
+            }
+            inside.extend(required);
+            for path in inside {
                 self.push_read_only(path, keep);
             }
             // The project root may not become a bare repository: `HEAD`.
-            let head = root.join("HEAD");
-            if cfg!(target_os = "macos") {
-                self.git_globs
-                    .extend(any_case_glob_for_missing(&head).map(|glob| (head.clone(), glob)));
-            }
-            self.push_read_only(head, keep);
+            // (macOS: a literal read-only path also refuses creating it in
+            // another case or Unicode spelling the file system folds to it.)
+            self.push_read_only(root.join("HEAD"), keep);
             self.git_unmovable.push(dot_git.clone());
             self.git_folders.push(dot_git);
         }
@@ -908,7 +909,6 @@ impl ReadDenials {
         Self {
             read_only: self.git_read_only,
             git_writable: self.git_folders,
-            git_any_case: self.git_globs,
             runtime_read_only: self.runtime_read_only,
             unmovable,
             cwd: self.cwd,
@@ -1215,6 +1215,12 @@ impl ReadDenials {
                     std::fs::symlink_metadata(dot_git.as_path())
                         .is_ok_and(|metadata| metadata.file_type().is_dir())
                         .then_some(())?;
+                    // Missing `modules` and `worktrees` are made, empty, as
+                    // git would: then they are held as they are (no
+                    // placeholder on Linux).
+                    for name in ["modules", "worktrees"] {
+                        let _ = std::fs::create_dir(dot_git.join(name).as_path());
+                    }
                     let real = std::fs::canonicalize(dot_git.as_path()).ok()?;
                     codex_sandboxing::writable_root_ledger::record_checked_root(
                         dot_git.as_path(),
@@ -1230,19 +1236,6 @@ impl ReadDenials {
                 .collect()
         };
         file_system.entries.extend(git_writable);
-        file_system.entries.extend(
-            self.git_any_case
-                .iter()
-                .filter(|(path, _)| !is_granted(path))
-                .map(|(_, pattern)| {
-                    FileSystemSandboxEntry::new(
-                        FileSystemPath::GlobPattern {
-                            pattern: pattern.clone(),
-                        },
-                        FileSystemAccessMode::Deny,
-                    )
-                }),
-        );
         // Only narrows: a path becomes read-only where the profile would let
         // the command write it, never readable where it was not.
         let readable = Readability::new(&file_system, cwd);
@@ -1487,33 +1480,90 @@ const GIT_FOLDER_KEPT: &[&str] = &[
     "info",
 ];
 
-/// #837 (macOS): a pattern denying the first missing component of `path`
-/// in any letter case, or nothing when `path` exists. The folder above it is
-/// escaped as it is.
-fn any_case_glob_for_missing(path: &AbsolutePathBuf) -> Option<String> {
-    let mut missing = path.as_path();
-    while std::fs::symlink_metadata(missing).is_err() {
-        let parent = missing.parent()?;
-        if std::fs::symlink_metadata(parent).is_ok() {
-            let name = missing.file_name()?.to_str()?;
-            let name: String = name
-                .chars()
-                .map(|ch| match ch {
-                    ch if ch.is_ascii_alphabetic() => {
-                        format!("[{}{}]", ch.to_ascii_lowercase(), ch.to_ascii_uppercase())
-                    }
-                    '*' | '?' | '[' | '{' | '}' => format!("[{ch}]"),
-                    ch => ch.to_string(),
-                })
-                .collect();
-            return Some(format!(
-                "{}/{name}",
-                crate::security::preflight::glob_escape_path(parent).trim_end_matches('/')
-            ));
-        }
-        missing = parent;
+/// #837: the git config files that may name hooks or includes for the
+/// repository in `dot_git`: its own, the user's global ones (also
+/// `GIT_CONFIG_GLOBAL` and `XDG_CONFIG_HOME`), and the system ones.
+fn git_config_files(
+    dot_git: &AbsolutePathBuf,
+    home: Option<&AbsolutePathBuf>,
+) -> Vec<AbsolutePathBuf> {
+    let mut configs = vec![dot_git.join("config"), dot_git.join("config.worktree")];
+    if let Some(home) = home {
+        configs.push(home.join(".gitconfig"));
+        configs.push(home.join(".config/git/config"));
     }
-    None
+    for (variable, child) in [
+        ("GIT_CONFIG_GLOBAL", None),
+        ("GIT_CONFIG_SYSTEM", None),
+        ("XDG_CONFIG_HOME", Some("git/config")),
+    ] {
+        if let Some(value) = std::env::var_os(variable)
+            && let Ok(path) = AbsolutePathBuf::from_absolute_path(std::path::PathBuf::from(value))
+        {
+            configs.push(child.map_or(path.clone(), |child| path.join(child)));
+        }
+    }
+    for system in [
+        "/etc/gitconfig",
+        "/opt/homebrew/etc/gitconfig",
+        "/usr/local/etc/gitconfig",
+    ] {
+        if let Ok(path) = AbsolutePathBuf::from_absolute_path(Path::new(system)) {
+            configs.push(path);
+        }
+    }
+    configs
+}
+
+/// #837: whether `path` (inside `dot_git`) is a link or below one, below
+/// `dot_git` itself.
+fn links_below(dot_git: &AbsolutePathBuf, path: &AbsolutePathBuf) -> bool {
+    let Ok(rest) = path.as_path().strip_prefix(dot_git.as_path()) else {
+        return false;
+    };
+    let mut current = dot_git.to_path_buf();
+    for component in rest.components() {
+        current.push(component);
+        match std::fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.file_type().is_symlink() => return true,
+            Ok(_) => {}
+            Err(_) => return false,
+        }
+    }
+    false
+}
+
+/// #837: whether the repository turns worktree config on
+/// (`extensions.worktreeConfig`) while `config.worktree` is missing: git
+/// would then read one an approved command creates.
+fn worktree_config_missing(dot_git: &AbsolutePathBuf) -> bool {
+    if std::fs::symlink_metadata(dot_git.join("config.worktree").as_path()).is_ok() {
+        return false;
+    }
+    let Ok(text) = std::fs::read_to_string(dot_git.join("config").as_path()) else {
+        // Unreadable: assume it may.
+        return std::fs::symlink_metadata(dot_git.join("config").as_path()).is_ok();
+    };
+    let mut in_extensions = false;
+    text.lines().any(|line| {
+        let mut line = line.trim();
+        if let Some(rest) = line.strip_prefix('[') {
+            let Some((section, after)) = rest.split_once(']') else {
+                in_extensions = false;
+                return false;
+            };
+            in_extensions = section.trim().eq_ignore_ascii_case("extensions");
+            line = after.trim();
+        }
+        // A bare key is true.
+        let (key, value) = line.split_once('=').unwrap_or((line, "true"));
+        in_extensions
+            && key.trim().eq_ignore_ascii_case("worktreeconfig")
+            && !matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "false" | "no" | "off" | "0"
+            )
+    })
 }
 
 /// Each spelling of `path` the sandboxes compare, as read-only paths are

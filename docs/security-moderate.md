@@ -26,14 +26,14 @@ without them Corbanu refuses every model request under Moderate, so
   lifts this for that command, except for git hooks and config, Corbanu's
   runtime files and what `secretless_agent_launch` keeps; a remembered or
   automatic approval never does. A command you approve can also write the
-  project's `.git`, so `git commit` works. Its hooks and config (also
-  config files it includes), the `commondir`, `modules` and `worktrees`
-  entries through which git would read other ones, the rebase and
-  cherry-pick state a later `--continue` runs, `info`, and a `HEAD` file at
-  the project root stay read-only even then, also with full access, unless
-  the approved command's own permissions name them (an additional write
-  permission for `.git/hooks`); `.git` can't be moved. A project's `.env`
-  files aren't covered; Aggressive covers them.
+  project's `.git`, so `git commit` works. Its hooks and config (also config
+  files included from inside `.git`), the `commondir`, `modules` and
+  `worktrees` entries through which git would read other ones, the rebase
+  and cherry-pick state a later `--continue` runs, `info`, and a `HEAD` file
+  at the project root stay read-only even then, also with full access,
+  unless the approved command's own permissions name them (an additional
+  write permission for `.git/hooks`); `.git` can't be moved. A project's
+  `.env` files aren't covered; Aggressive covers them.
 - **Untrusted content.** Tool, MCP, web, agent and memory output reaches the
   model labelled untrusted. After it, protected actions need your fresh
   approval: the vault, credentials, security settings, disclosure, value
@@ -85,15 +85,22 @@ The kill switch (`/security` → `g`) works under every level.
   under every level.
 - An approved command writes `.git` only where it is a repository's folder
   at the project's root, on macOS and Linux: not in a linked worktree or
-  submodule (whose `.git` is a file), through a link, or on Windows, so
-  `git commit` doesn't work there under Moderate. It can't create submodules
-  or linked worktrees, or rebase. It can mark files unchanged in git's index
-  (`git update-index --assume-unchanged`), which hides their changes from
-  `git status`. On Linux, while such a command runs, missing entries it may
-  not create are held by files Corbanu removes when it ends: `.git/commondir`
-  (naming `.git` itself, so git keeps working), empty files for the other
-  missing `.git` entries above (such as `config.worktree`, `modules`,
-  `worktrees` and `rebase-merge`) and a `HEAD` at the project root.
+  submodule (whose `.git` is a file), through a link, on Windows, or where
+  git would read hooks or config from something missing or linked inside
+  `.git` (a `core.hooksPath` or included file there, a linked hooks folder,
+  or worktree config turned on without its file), so `git commit` doesn't
+  work there under Moderate. Corbanu makes empty `.git/modules` and
+  `.git/worktrees` folders where they are missing. An approved command can't
+  create submodules or linked worktrees, or rebase. It can mark files
+  unchanged in git's index (`git update-index --assume-unchanged`), which
+  hides their changes from `git status`. On Linux, it can create a missing
+  `.git/rebase-merge` or `.git/rebase-apply` (a later `git rebase
+  --continue` would run what it lists; `git status` then shows a rebase in
+  progress), and while it runs, missing entries it may not create are held
+  by files Corbanu removes when it ends: `.git/commondir` (naming `.git`
+  itself, so git keeps working), empty files for other missing ones (such
+  as `config.worktree`, `sequencer` or `info`) and a `HEAD` at the project
+  root.
 - Nested agents are recognised on macOS and Linux only, and on Linux not when
   they run as root or in a user namespace of their own (#826). Corbanu marks
   Moderate by denying agent commands a file in the Corbanu home's `tmp`

@@ -2052,13 +2052,19 @@ fn issue_540_runtime_entries_stay_read_only_when_the_rules_are_lifted() {
 fn issue_837_an_approved_command_writes_git_but_not_its_hooks_or_config() {
     let fx = fixture();
     let cwd = fx.user_home.join("project");
-    for folder in [".git/hooks", ".git/objects/ab", ".git/refs/heads"] {
+    for folder in [
+        ".git/hooks",
+        ".git/objects/ab",
+        ".git/refs/heads",
+        ".git/myhooks",
+    ] {
         std::fs::create_dir_all(cwd.join(folder)).unwrap();
     }
+    std::fs::write(cwd.join(".git/extra.config"), "").unwrap();
     for file in [".git/HEAD", ".git/index"] {
         std::fs::write(cwd.join(file), "x").unwrap();
     }
-    // A hooks folder inside `.git` that does not exist yet.
+    // A hooks folder inside `.git`, and a config file included from it.
     std::fs::write(
         cwd.join(".git/config"),
         "[core]\n\thooksPath = .git/myhooks\n[include]\n\tpath = extra.config\n",
@@ -2083,7 +2089,6 @@ fn issue_837_an_approved_command_writes_git_but_not_its_hooks_or_config() {
         ".git/myhooks/pre-commit",
         // Included from `.git/config` (relative to it).
         ".git/extra.config",
-        ".git/rebase-merge/git-rebase-todo",
         ".git/sequencer/todo",
         ".git/info/exclude",
         // Git would read the project root as a bare repository.
@@ -2137,22 +2142,13 @@ fn issue_837_an_approved_command_writes_git_but_not_its_hooks_or_config() {
                 .contains(&abs(&cwd.join(".git"))),
             "{profile:?}"
         );
-        if cfg!(target_os = "macos") {
-            // In any case: the file system does not tell them apart.
-            for name in [
-                "head",
-                "Head",
-                ".git/COMMONDIR",
-                ".git/Modules",
-                ".git/Rebase-Merge",
-                ".git/MyHooks",
-                ".git/Extra.Config",
-            ] {
-                assert!(!readable_under(&policy, &cwd.join(name), &cwd), "{name}");
-            }
-            // Git's own files in another case are the same files: allowed.
-            assert!(readable_under(&policy, &cwd.join(".git/INDEX"), &cwd));
-        }
+        // A missing rebase state is held only on macOS (on Linux its
+        // placeholder would show a rebase in progress).
+        assert_eq!(
+            policy.can_write_path_with_cwd(&cwd.join(".git/rebase-merge/git-rebase-todo"), &cwd),
+            cfg!(target_os = "linux"),
+            "{profile:?}"
+        );
     }
     // #513: a write a person approved for `.git/hooks` (an additional write
     // permission in the command's profile) stays writable; config does not.
@@ -2176,6 +2172,58 @@ fn issue_837_an_approved_command_writes_git_but_not_its_hooks_or_config() {
     .file_system_sandbox_policy();
     assert!(policy.can_write_path_with_cwd(&cwd.join(".git/hooks/pre-commit"), &cwd));
     assert!(!policy.can_write_path_with_cwd(&cwd.join(".git/config"), &cwd));
+    // Not opened where what must stay as it is is missing or a link below
+    // `.git`: a missing hooks folder a config names, a missing included
+    // file, a linked hooks folder, worktree config turned on without its
+    // file.
+    let not_opened = |change: &dyn Fn(&Path)| {
+        let project = tempfile::tempdir().unwrap();
+        let project = project.path().canonicalize().unwrap();
+        for folder in [".git/hooks", ".git/objects", ".git/refs"] {
+            std::fs::create_dir_all(project.join(folder)).unwrap();
+        }
+        std::fs::write(project.join(".git/HEAD"), "ref: refs/heads/main\n").unwrap();
+        std::fs::write(project.join(".git/config"), "").unwrap();
+        change(&project);
+        let policy = ReadDenials::collect(
+            &fx.codex_home,
+            Some(&fx.user_home),
+            /*claude_config_dir*/ None,
+            &[abs(&project)],
+        )
+        .runtime_only()
+        .apply(&workspace(&project))
+        .unwrap()
+        .file_system_sandbox_policy();
+        !policy.can_write_path_with_cwd(&project.join(".git/index"), &project)
+    };
+    assert!(!not_opened(&|_| {}));
+    assert!(not_opened(&|project| {
+        std::fs::write(
+            project.join(".git/config"),
+            "[core]\n\thooksPath = .git/gone\n",
+        )
+        .unwrap();
+    }));
+    assert!(not_opened(&|project| {
+        std::fs::write(
+            project.join(".git/config"),
+            "[include]\n\tpath = gone.config\n",
+        )
+        .unwrap();
+    }));
+    assert!(not_opened(&|project| {
+        std::fs::remove_dir(project.join(".git/hooks")).unwrap();
+        std::fs::create_dir(project.join("githooks")).unwrap();
+        std::os::unix::fs::symlink("../githooks", project.join(".git/hooks")).unwrap();
+    }));
+    assert!(not_opened(&|project| {
+        std::fs::write(
+            project.join(".git/config"),
+            "[extensions]\n\tworktreeConfig = true\n",
+        )
+        .unwrap();
+    }));
     // A `.git` that is a link is not opened.
     let linked = fx.user_home.join("linked");
     std::fs::create_dir_all(&linked).unwrap();
