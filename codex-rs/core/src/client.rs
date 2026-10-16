@@ -4995,7 +4995,8 @@ fn chat_replay_function_arguments(arguments: String) -> String {
 /// call recorded on the Responses wire (before a provider switch or in forked
 /// history) replays under the flat name this request offers for that exact
 /// tool (`flat_tool_names`, the request's own mapping), such as an MCP tool's
-/// `mcp__server__tool`; otherwise under its bare name, as before. A tool whose
+/// `mcp__server__tool`, or the offered `*_v1` alias for a V1 agent tool;
+/// otherwise under its bare name, as before. A tool whose
 /// preferred flat name a plain tool already takes is offered under a hashed
 /// name, so its earlier calls never appear as calls of the plain tool (#688).
 fn flatten_namespaced_history(
@@ -5022,10 +5023,28 @@ fn flatten_namespaced_history(
             continue;
         };
         let tool_name = codex_tools::ToolName::namespaced(namespace, name.clone());
-        if let Some(flat) = flat_tool_names
+        let flat = flat_tool_names
             .flat_name_for(&tool_name)
             .filter(|flat| offered.contains(flat))
-        {
+            .or_else(|| {
+                // V1 tools use explicit plain aliases on these wires, so they
+                // are not present in the namespaced-tools flat-name mapping.
+                if tool_name.namespace.as_deref()
+                    != Some(crate::tools::handlers::multi_agents_spec::MULTI_AGENT_V1_NAMESPACE)
+                {
+                    return None;
+                }
+                let alias = match tool_name.name.as_str() {
+                    "spawn_agent" => "spawn_agent_v1",
+                    "send_input" => "send_input_v1",
+                    "wait_agent" => "wait_agent_v1",
+                    "close_agent" => "close_agent_v1",
+                    "resume_agent" => "resume_agent_v1",
+                    _ => return None,
+                };
+                offered.contains(alias).then_some(alias)
+            });
+        if let Some(flat) = flat {
             *name = flat.to_string();
         }
     }

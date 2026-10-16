@@ -3670,3 +3670,249 @@ fn anthropic_tool_use_ids_fit_its_alphabet() {
     assert_eq!(super::anthropic_tool_use_id("functions.shell:0"), mapped);
     assert_ne!(super::anthropic_tool_use_id("functions:shell.0"), mapped);
 }
+
+// Issue688 item4: history names must match the currently offered V1 aliases.
+// These build real wire requests but never dispatch them or access credentials.
+fn issue688_v1_history_wire_case(
+    anthropic: bool,
+    namespace: &str,
+    name: &str,
+    offered: &[&str],
+    expected: &str,
+) {
+    let function = |name: &str| {
+        codex_tools::ToolSpec::Function(codex_tools::ResponsesApiTool {
+            name: name.to_string(),
+            description: String::new(),
+            strict: false,
+            defer_loading: None,
+            parameters: codex_tools::JsonSchema::object(
+                Default::default(),
+                /*required*/ None,
+                /*additional_properties*/ None,
+            ),
+            output_schema: None,
+        })
+    };
+    let arguments = r#"{"task":"keep 日本語 and id"}"#;
+    let message = |text: &str| ResponseItem::Message {
+        id: None,
+        role: "user".to_string(),
+        content: vec![ContentItem::InputText {
+            text: text.to_string(),
+        }],
+        phase: None,
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let prompt = Prompt {
+        input: vec![
+            message("original request"),
+            ResponseItem::FunctionCall {
+                id: None,
+                name: name.to_string(),
+                namespace: Some(namespace.to_string()),
+                arguments: arguments.to_string(),
+                call_id: "issue688-call".to_string(),
+                encrypted_function_args: None,
+                internal_chat_message_metadata_passthrough: None,
+            },
+            ResponseItem::FunctionCallOutput {
+                id: None,
+                call_id: "issue688-call".to_string(),
+                output: FunctionCallOutputPayload::from_text("issue688-result".to_string()),
+                internal_chat_message_metadata_passthrough: None,
+            },
+            message("continue"),
+        ],
+        tools: offered.iter().map(|name| function(name)).collect(),
+        ..Default::default()
+    };
+    let client = test_model_client(SessionSource::Cli);
+    let mut model = test_model_info();
+    model.max_output_tokens = Some(4096);
+    let payload = if anthropic {
+        serde_json::to_value(
+            client
+                .build_anthropic_messages_request(&prompt, &model, /*effort*/ None)
+                .unwrap(),
+        )
+        .unwrap()
+    } else {
+        let metadata = test_responses_metadata_for_client(
+            &client,
+            /*turn_id*/ None,
+            "issue688-fixture".into(),
+            /*parent_thread_id*/ None,
+            TestCodexResponsesRequestKind::Turn,
+        );
+        serde_json::to_value(
+            client
+                .build_chat_completions_request(&prompt, &model, /*effort*/ None, &metadata)
+                .unwrap(),
+        )
+        .unwrap()
+    };
+    let messages = payload["messages"].as_array().unwrap();
+    if anthropic {
+        let blocks: Vec<_> = messages
+            .iter()
+            .flat_map(|message| message["content"].as_array().into_iter().flatten())
+            .collect();
+        let calls: Vec<_> = blocks
+            .iter()
+            .filter(|block| block["type"] == "tool_use")
+            .collect();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0]["name"], expected);
+        assert_eq!(calls[0]["id"], "issue688-call");
+        assert_eq!(
+            calls[0]["input"],
+            serde_json::from_str::<serde_json::Value>(arguments).unwrap()
+        );
+        let outputs: Vec<_> = blocks
+            .iter()
+            .filter(|block| block["type"] == "tool_result")
+            .collect();
+        assert_eq!(outputs.len(), 1);
+        assert_eq!(outputs[0]["tool_use_id"], "issue688-call");
+        assert!(outputs[0].to_string().contains("issue688-result"));
+    } else {
+        let calls: Vec<_> = messages
+            .iter()
+            .flat_map(|message| message["tool_calls"].as_array().into_iter().flatten())
+            .collect();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0]["function"]["name"], expected);
+        assert_eq!(calls[0]["id"], "issue688-call");
+        assert_eq!(calls[0]["function"]["arguments"], arguments);
+        let outputs: Vec<_> = messages
+            .iter()
+            .filter(|message| message["role"] == "tool")
+            .collect();
+        assert_eq!(outputs.len(), 1);
+        assert_eq!(outputs[0]["tool_call_id"], "issue688-call");
+        assert!(outputs[0].to_string().contains("issue688-result"));
+    }
+}
+
+macro_rules! issue688_v1_history_tests {
+    ($($test:ident, $anthropic:expr, $name:literal, $alias:literal;)*) => {$ (
+        #[test]
+        fn $test() {
+            // Offer both identities: V1 history must not be attributed to the
+            // current collaboration tool merely because its bare name exists.
+            issue688_v1_history_wire_case($anthropic, "multi_agent_v1", $name, &[$name, $alias], $alias);
+        }
+    )*};
+}
+issue688_v1_history_tests! {
+    issue688_v1_history_chat_spawn, false, "spawn_agent", "spawn_agent_v1";
+    issue688_v1_history_chat_send, false, "send_input", "send_input_v1";
+    issue688_v1_history_chat_wait, false, "wait_agent", "wait_agent_v1";
+    issue688_v1_history_chat_close, false, "close_agent", "close_agent_v1";
+    issue688_v1_history_chat_resume, false, "resume_agent", "resume_agent_v1";
+    issue688_v1_history_anthropic_spawn, true, "spawn_agent", "spawn_agent_v1";
+    issue688_v1_history_anthropic_send, true, "send_input", "send_input_v1";
+    issue688_v1_history_anthropic_wait, true, "wait_agent", "wait_agent_v1";
+    issue688_v1_history_anthropic_close, true, "close_agent", "close_agent_v1";
+    issue688_v1_history_anthropic_resume, true, "resume_agent", "resume_agent_v1";
+}
+
+#[test]
+fn issue688_v1_history_keeps_unavailable_alias_fallback() {
+    for anthropic in [false, true] {
+        issue688_v1_history_wire_case(
+            anthropic,
+            "multi_agent_v1",
+            "spawn_agent",
+            &["spawn_agent"],
+            "spawn_agent",
+        );
+    }
+}
+#[test]
+fn issue688_v1_history_does_not_invent_unknown_v1_alias() {
+    for anthropic in [false, true] {
+        issue688_v1_history_wire_case(
+            anthropic,
+            "multi_agent_v1",
+            "future_agent",
+            &["future_agent", "future_agent_v1"],
+            "future_agent",
+        );
+    }
+}
+#[test]
+fn issue688_v1_history_keeps_current_collaboration_identity() {
+    for anthropic in [false, true] {
+        issue688_v1_history_wire_case(
+            anthropic,
+            "collaboration",
+            "spawn_agent",
+            &["spawn_agent", "spawn_agent_v1"],
+            "spawn_agent",
+        );
+    }
+}
+#[test]
+fn issue688_v1_history_does_not_alias_unrelated_namespace() {
+    for anthropic in [false, true] {
+        issue688_v1_history_wire_case(
+            anthropic,
+            "mcp__synthetic",
+            "spawn_agent",
+            &["spawn_agent", "spawn_agent_v1"],
+            "spawn_agent",
+        );
+    }
+}
+
+/// The shared history helper also handles custom calls. Keep their payload/ID
+/// intact, and do not synthesize aliases for names outside the actual V1 set.
+#[test]
+fn issue688_v1_history_custom_calls_preserve_payload_and_known_identity() {
+    let api_tool = |name: &str| {
+        codex_tools::ToolSpec::Function(codex_tools::ResponsesApiTool {
+            name: name.to_string(),
+            description: String::new(),
+            strict: false,
+            defer_loading: None,
+            parameters: codex_tools::JsonSchema::object(
+                Default::default(),
+                /*required*/ None,
+                /*additional_properties*/ None,
+            ),
+            output_schema: None,
+        })
+    };
+    let tools = vec![api_tool("spawn_agent_v1"), api_tool("unknown_agent_v1")];
+    for (name, expected) in [
+        ("unknown_agent", "unknown_agent"),
+        ("spawn_agent", "spawn_agent_v1"),
+    ] {
+        let mut input = vec![ResponseItem::CustomToolCall {
+            id: None,
+            status: None,
+            call_id: "issue688-custom".to_string(),
+            name: name.to_string(),
+            namespace: Some("multi_agent_v1".to_string()),
+            input: "raw 日本語 payload".to_string(),
+            internal_chat_message_metadata_passthrough: None,
+        }];
+        super::flatten_namespaced_history(&mut input, &tools, &Default::default());
+        let ResponseItem::CustomToolCall {
+            name,
+            namespace,
+            input,
+            call_id,
+            ..
+        } = &input[0]
+        else {
+            panic!("custom call variant changed");
+        };
+        assert_eq!(name, expected);
+        assert_eq!(namespace, &None);
+        assert_eq!(input, "raw 日本語 payload");
+        assert_eq!(call_id, "issue688-custom");
+    }
+}
