@@ -267,6 +267,12 @@ The release owner named in `qa/release/<version>/` is accountable for collecting
 evidence and auditing change classifications. Classification disputes go to
 product authority.
 
+Release-preparation checklist:
+
+- Move entries from `qa/release/unreleased/RELEASE_NOTES.md` into
+  `qa/release/<version>/RELEASE_NOTES.md`, preserving existing version notes,
+  then clear only the transferred entries from the unreleased file.
+
 Absent an explicit release instruction from a human with release authority, a
 release candidate is qualified when its record shows:
 

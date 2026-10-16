@@ -80,6 +80,9 @@ Release artifacts are built by the manual `corbanu-terminal-release` GitHub Acti
 workflow. It does not run on every push. Run it only when you want
 installer-ready macOS and Linux artifacts for the current Cargo version.
 
+Before dispatching, follow the [release-preparation checklist](../AGENTS.md#release-gate)
+to carry pending notes into the versioned release notes.
+
 The workflow builds and smoke-tests these Corbanu Terminal artifacts:
 
 ```text
