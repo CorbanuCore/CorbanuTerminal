@@ -3551,3 +3551,6 @@ fn accounting_realtime_session_without_an_end_says_so() {
             .any(|line| line.starts_with("Realtime session")),
     );
 }
+
+#[path = "tokens/warmup_resume_tests.rs"]
+mod warmup_resume_tests;

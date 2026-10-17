@@ -84,7 +84,15 @@ pub(super) fn other_conversations_lines(
             counted(others.unavailable, "conversation")
         ));
     }
-    lines.push(RESUME_STEP.into());
+    if let Some(note) = super::warmup_resume::note(&quotes) {
+        lines.push(
+            "For conversations with saved turns, open them with /resume and run /cost there."
+                .into(),
+        );
+        lines.push(note);
+    } else {
+        lines.push(RESUME_STEP.into());
+    }
     // After the resume step: deleted conversations cannot be resumed.
     lines.extend(deleted);
     lines

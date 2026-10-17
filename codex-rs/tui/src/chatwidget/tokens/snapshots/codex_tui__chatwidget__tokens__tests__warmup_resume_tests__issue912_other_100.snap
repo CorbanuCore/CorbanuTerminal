@@ -1,0 +1,18 @@
+---
+source: tui/src/chatwidget/tokens/warmup_resume_tests.rs
+expression: "render_bottom_popup_with_height(&chat, width, 60)"
+---
+  Cost — this conversation
+  Requested UTC day: 1970-01-01
+
+› This conversation on 1970-01-01 (UTC):
+  • synthetic · synthetic-model — Pay per use. 1 request, 140 tokens. Estimated cost: at least
+  $0.000180 (1 attempt had no price).
+  Other conversations on this day, not included above: 1 request in 1 conversation.
+  • synthetic · synthetic-model — Pay per use. 1 request, 140 tokens. Estimated cost: at least
+  $0.000180 (1 attempt had no price).
+  Other conversations' estimated cost: at least $0.000180 (1 attempt had no price).
+  For conversations with saved turns, open them with /resume and run /cost there.
+
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
