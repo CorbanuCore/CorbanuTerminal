@@ -2052,6 +2052,22 @@ fn append_unreadable_root_args(
         bwrap_args.args.push("000".to_string());
         return append_existing_empty_file_bind_data_args(bwrap_args, unreadable_root, &metadata);
     }
+    // #348: the same placeholder after its run and its registry record are
+    // both gone. Mask it exactly as an existing empty file, but register it
+    // as this run's own target, so this run's cleanup removes it instead of
+    // every run preserving it as a real file forever.
+    if orphaned_placeholder_file(unreadable_root).is_some() {
+        if has_synthetic_mount_target(bwrap_args, unreadable_root) {
+            return Ok(());
+        }
+        bwrap_args.args.push("--perms".to_string());
+        bwrap_args.args.push("000".to_string());
+        append_empty_file_bind_data_args(bwrap_args, unreadable_root)?;
+        bwrap_args
+            .synthetic_mount_targets
+            .push(SyntheticMountTarget::missing(unreadable_root));
+        return Ok(());
+    }
     // #607: the same for another live run's placeholder folder (a protected
     // metadata name it holds read-only): masked as a denied folder and
     // registered, so its maker's cleanup (or a sweep after that run was
@@ -2115,6 +2131,24 @@ fn has_read_only_bind(bwrap_args: &BwrapArgs, path: &Path) -> bool {
 fn live_placeholder_file(path: &Path) -> Option<Metadata> {
     let metadata = empty_file_metadata(path)?;
     crate::linux_run_main::is_live_placeholder(path).then_some(metadata)
+}
+
+/// #348: `path` when it is an empty file bubblewrap made as a mount target
+/// for a run that never removed it, whose registry record is also gone (the
+/// registry lives in the temp directory, so a reboot or a temp sweep takes
+/// the record and leaves the file). No live run has it registered, and what
+/// bubblewrap makes is read-only and owned by the user; a file of the
+/// person's own at a denied path is, in the normal case, neither. Only that
+/// exact shape is taken for a leftover, because every later run otherwise
+/// sees a real pre-existing file and preserves it, so it stays forever.
+fn orphaned_placeholder_file(path: &Path) -> Option<Metadata> {
+    let metadata = empty_file_metadata(path)?;
+    // SAFETY: `geteuid` has no preconditions.
+    let euid = unsafe { libc::geteuid() };
+    (metadata.uid() == euid
+        && metadata.mode() & 0o222 == 0
+        && !crate::linux_run_main::is_live_placeholder(path))
+    .then_some(metadata)
 }
 
 /// #607: `path` when it is an empty folder another live run registered as
@@ -2411,6 +2445,121 @@ mod tests {
             "full-write policy with unreadable globs must still use bwrap"
         );
         assert_file_masked(&args.args, &root_env);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn orphaned_placeholder_file_matches_only_the_leftover_shape() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp_dir = TempDir::new().expect("temp dir");
+        let path = temp_dir.path().join("leftover");
+        std::fs::write(&path, "").expect("write empty file");
+
+        // A writable empty file is the person's own, not a leftover.
+        assert!(orphaned_placeholder_file(&path).is_none());
+
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o444))
+            .expect("make read-only");
+        let metadata = orphaned_placeholder_file(&path).expect("leftover placeholder");
+        assert_eq!(metadata.len(), 0);
+
+        // A read-only file with contents is not a placeholder either.
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644))
+            .expect("make writable");
+        std::fs::write(&path, "x").expect("write contents");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o444))
+            .expect("make read-only");
+        assert!(orphaned_placeholder_file(&path).is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_leftover_placeholder_is_registered_as_this_runs_target() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp_dir = TempDir::new().expect("temp dir");
+        let leftover = temp_dir.path().join(".pfterminal");
+        std::fs::write(&leftover, "").expect("write empty file");
+        std::fs::set_permissions(&leftover, std::fs::Permissions::from_mode(0o444))
+            .expect("make read-only");
+        let policy = FileSystemSandboxPolicy::restricted(vec![
+            FileSystemSandboxEntry {
+                path: FileSystemPath::Special {
+                    value: FileSystemSpecialPath::Root,
+                },
+                access: FileSystemAccessMode::Write,
+                missing_path_behavior: None,
+            },
+            FileSystemSandboxEntry {
+                path: FileSystemPath::Path {
+                    path: AbsolutePathBuf::from_absolute_path(&leftover)
+                        .expect("absolute leftover path"),
+                },
+                access: FileSystemAccessMode::Deny,
+                missing_path_behavior: None,
+            },
+        ]);
+
+        let args = create_bwrap_command_args(
+            vec!["/bin/true".to_string()],
+            &policy,
+            temp_dir.path(),
+            temp_dir.path(),
+            BwrapOptions::default(),
+        )
+        .expect("create bwrap args");
+
+        assert_file_masked(&args.args, &leftover);
+        assert_eq!(args.synthetic_mount_targets.len(), 1);
+        let target = &args.synthetic_mount_targets[0];
+        assert_eq!(target.path(), leftover.as_path());
+        assert!(
+            !target.preserves_pre_existing_path(),
+            "a leftover placeholder is removed by this run's cleanup, not preserved"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_writable_empty_file_is_not_registered_as_a_target() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let own_file = temp_dir.path().join(".pfterminal");
+        std::fs::write(&own_file, "").expect("write empty file");
+        let policy = FileSystemSandboxPolicy::restricted(vec![
+            FileSystemSandboxEntry {
+                path: FileSystemPath::Special {
+                    value: FileSystemSpecialPath::Root,
+                },
+                access: FileSystemAccessMode::Write,
+                missing_path_behavior: None,
+            },
+            FileSystemSandboxEntry {
+                path: FileSystemPath::Path {
+                    path: AbsolutePathBuf::from_absolute_path(&own_file)
+                        .expect("absolute file path"),
+                },
+                access: FileSystemAccessMode::Deny,
+                missing_path_behavior: None,
+            },
+        ]);
+
+        let args = create_bwrap_command_args(
+            vec!["/bin/true".to_string()],
+            &policy,
+            temp_dir.path(),
+            temp_dir.path(),
+            BwrapOptions::default(),
+        )
+        .expect("create bwrap args");
+
+        assert_file_masked(&args.args, &own_file);
+        assert!(
+            args.synthetic_mount_targets
+                .iter()
+                .all(|target| target.path() != own_file),
+            "a writable empty file is a real file: masked, never registered for removal"
+        );
     }
 
     #[cfg(unix)]
