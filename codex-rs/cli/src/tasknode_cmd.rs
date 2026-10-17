@@ -1477,7 +1477,7 @@ fn evidence_items_from_summary_and_artifacts(summary: &str, artifacts: &[String]
         .collect::<Vec<_>>();
     for url in summary
         .split_whitespace()
-        .filter(|part| part.starts_with("http://") || part.starts_with("https://"))
+        .filter(|part| is_http_url(part))
         .take(5)
     {
         if !items
@@ -1495,7 +1495,10 @@ fn evidence_item_from_artifact(artifact: &str) -> Option<Value> {
     if trimmed.is_empty() {
         return None;
     }
-    if let Some((kind, value)) = trimmed.split_once('=') {
+    // Query and path parameters are part of a bare URL, not a type delimiter.
+    if !is_http_url(trimmed)
+        && let Some((kind, value)) = trimmed.split_once('=')
+    {
         let value = value.trim();
         if value.is_empty() {
             return None;
@@ -1509,7 +1512,7 @@ fn evidence_item_from_artifact(artifact: &str) -> Option<Value> {
 }
 
 fn evidence_item_from_value(kind: &str, value: &str) -> Value {
-    if value.starts_with("http://") || value.starts_with("https://") {
+    if is_http_url(value) {
         json!({ "type": kind, "url": value })
     } else {
         json!({ "type": kind, "value": value })
@@ -1524,15 +1527,31 @@ fn evidence_item_value(item: &Value) -> Option<&str> {
 }
 
 fn infer_artifact_type(value: &str) -> &'static str {
-    if value.contains("github.com/") && value.contains("/pull/") {
-        "github_pr"
-    } else if value.contains("github.com/") && value.contains("/commit/") {
-        "git_commit"
-    } else if value.starts_with("http://") || value.starts_with("https://") {
-        "url"
-    } else {
-        "text"
+    if !is_http_url(value) {
+        return "text";
     }
+    if let Ok(url) = url::Url::parse(value)
+        && matches!(url.host_str(), Some("github.com" | "www.github.com"))
+        && let Some(mut segments) = url.path_segments()
+        && segments.next().is_some_and(|owner| !owner.is_empty())
+        && segments.next().is_some_and(|repo| !repo.is_empty())
+    {
+        let kind = segments.next();
+        if segments.next().is_some_and(|resource| !resource.is_empty()) {
+            match kind {
+                Some("pull") => return "github_pr",
+                Some("commit") => return "git_commit",
+                _ => {}
+            }
+        }
+    }
+    "url"
+}
+
+fn is_http_url(value: &str) -> bool {
+    value.split_once("://").is_some_and(|(scheme, _)| {
+        scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https")
+    })
 }
 
 #[cfg(test)]
@@ -1862,6 +1881,71 @@ mod tests {
         assert_eq!(
             items[2].get("type").and_then(Value::as_str),
             Some("git_commit")
+        );
+    }
+
+    #[test]
+    fn bare_artifact_urls_preserve_equals_signs() {
+        for (url, kind) in [
+            ("https://example.test/report?a=1&b=two", "url"),
+            ("HTTPS://example.test/report?a=1&b=two", "url"),
+            ("HtTp://example.test/report?a=1&b=two", "url"),
+            (
+                "http://example.test/a;v=1?q=a%3Db&next=%2Fpart#section-2",
+                "url",
+            ),
+            (
+                "https://github.com/owner/repo/pull/42?diff=split",
+                "github_pr",
+            ),
+            (
+                "HTTPS://github.com/owner/repo/pull/42?diff=split",
+                "github_pr",
+            ),
+        ] {
+            assert_eq!(
+                evidence_items_from_summary_and_artifacts("Reviewed", &[url.to_string()]),
+                vec![json!({"type": kind, "url": url})],
+            );
+        }
+        assert_eq!(
+            evidence_items_from_summary_and_artifacts(
+                "Reviewed",
+                &["url=https://example.test/report?a=1&b=two".to_string()],
+            ),
+            vec![json!({"type": "url", "url": "https://example.test/report?a=1&b=two"})],
+        );
+    }
+
+    #[test]
+    fn artifact_type_uses_the_actual_github_host_and_resource_path() {
+        for value in [
+            "https://notgithub.com/owner/repo/pull/42",
+            "https://example.test/?next=https://github.com/owner/repo/commit/abc",
+            "https://github.com/owner/repo/issues/1?next=/pull/42",
+            "https://github.com/owner/repo/wiki/pull/42",
+        ] {
+            let expected = vec![json!({"type": "url", "url": value})];
+            assert_eq!(
+                evidence_items_from_summary_and_artifacts("Reviewed", &[value.to_string()]),
+                expected,
+            );
+            assert_eq!(
+                evidence_items_from_summary_and_artifacts(value, &[]),
+                expected
+            );
+        }
+        assert_eq!(
+            infer_artifact_type("Note mentioning github.com/owner/repo/pull/42"),
+            "text",
+        );
+        assert_eq!(
+            infer_artifact_type("https://github.com/owner/repo/pull/42/files"),
+            "github_pr",
+        );
+        assert_eq!(
+            infer_artifact_type("https://github.com/owner/repo/commit/abc#diff-1"),
+            "git_commit",
         );
     }
 
