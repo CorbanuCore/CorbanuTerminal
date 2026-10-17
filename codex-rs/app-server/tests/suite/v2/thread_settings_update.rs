@@ -267,8 +267,12 @@ fn permission_barrier(fixture: &std::path::Path) -> Result<String> {
 }
 
 async fn wait_permission_barrier(fixture: &std::path::Path) -> Result<()> {
+    // #796: the barrier creates `started` (Python's `open('a')`) before its
+    // line lands (flushed when the file closes), so wait for the line itself;
+    // existence alone let the check below read an empty marker.
+    let started = fixture.join("started");
     timeout(DEFAULT_TIMEOUT, async {
-        while !fixture.join("started").exists() {
+        while !std::fs::read(&started).is_ok_and(|bytes| bytes.ends_with(b"\n")) {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
