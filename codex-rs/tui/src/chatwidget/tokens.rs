@@ -575,12 +575,12 @@ fn plan(totals: &codex_state::accounting::DayTotals) -> Vec<String> {
         )
     } else if totals.equivalent_usd == Decimal::default() {
         format!(
-            "Same tokens at API rates: unavailable — the catalogue states no API price for {} of {} plan attempts",
+            "Same tokens at API rates: unavailable — no API-equivalent figure for {} of {} plan attempts",
             totals.unknown_equivalents, totals.plan_attempts
         )
     } else {
         format!(
-            "Same tokens at API rates: {} known, plus {} of {} plan attempts the catalogue does not price",
+            "Same tokens at API rates: {} known, plus {} of {} plan attempts with no API-equivalent figure",
             money(totals.equivalent_usd),
             totals.unknown_equivalents,
             totals.plan_attempts

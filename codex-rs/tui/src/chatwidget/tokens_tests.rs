@@ -1206,8 +1206,8 @@ fn money_day(known: Decimal, unknown: i64, attempts: i64) -> DayTotals {
 }
 
 /// A day of subscription work: plan attempts, the consumption they imply, and
-/// the API equivalent, with `unknown_equivalents` for rows the catalogue does
-/// not price.
+/// the API equivalent, with `unknown_equivalents` for attempts with no complete
+/// API-equivalent figure.
 fn plan_day(equivalent: Decimal, burn_milli_tokens: i64, unknown_equivalents: i64) -> DayTotals {
     DayTotals {
         attempts: 2,
@@ -1233,13 +1233,13 @@ fn accounting_inspect_plan_work_is_never_reported_as_money_spent() {
     Plan consumption: 140 tokens at the plan rate that applied
     Same tokens at API rates: $0.001610
     ");
-    // A plan row the catalogue states no API price for says so, rather than
-    // reporting zero.
+    // An unavailable API equivalent does not imply a missing catalogue price
+    // and is not reported as zero.
     insta::assert_snapshot!(estimate(&plan_day(Decimal::default(), /*burn_milli_tokens*/ 280_000, /*unknown_equivalents*/ 2), EstimateGaps::default()).join("\n"), @"
     No recorded attempt here was billed per token.
     Subscription capacity: 2 of 2 attempts, not billed per token
     Plan consumption: 280 tokens at the plan rate that applied
-    Same tokens at API rates: unavailable — the catalogue states no API price for 2 of 2 plan attempts
+    Same tokens at API rates: unavailable — no API-equivalent figure for 2 of 2 plan attempts
     ");
     // A day with no plan work says nothing about plans at all.
     assert_eq!(
