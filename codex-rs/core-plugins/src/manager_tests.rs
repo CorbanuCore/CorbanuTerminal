@@ -43,6 +43,7 @@ use codex_config::types::McpServerTransportConfig;
 use codex_core_skills::PluginSkillSnapshots;
 use codex_core_skills::SkillsLoadInput;
 use codex_core_skills::SkillsService;
+use codex_core_skills::loader::ignore_user_home_skills_for_tests;
 use codex_login::CodexAuth;
 use codex_plugin::AppDeclaration;
 use codex_plugin::PluginId;
@@ -2872,6 +2873,8 @@ async fn plugin_cache_ignores_unrelated_session_overrides() {
 
 #[tokio::test]
 async fn skill_snapshots_resolve_remote_plugin_identity_from_authoritative_source() {
+    // This fixture exercises plugin snapshots, not the developer's personal skills.
+    ignore_user_home_skills_for_tests(/*ignore*/ true);
     let mut duplicate_plugin = remote_installed_plugin("sample");
     duplicate_plugin.id = "plugins~Plugin_duplicate".to_string();
 
