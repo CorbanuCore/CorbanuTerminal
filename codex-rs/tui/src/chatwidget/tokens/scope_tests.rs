@@ -853,7 +853,7 @@ fn unpriced_request_without_usage_names_its_own_provider() {
         let first = first_screen(&pages[0]);
         assert_eq!(
             first[1],
-            "• zainousage · Z.AI GLM 5.2 — Pay per use. 1 request, tokens not reported. Estimated cost: no price available."
+            "• zainousage · glm-5.2 — Pay per use. 1 request, tokens not reported. Estimated cost: no price available."
         );
         let step = "Next step for requests with no price: check the bill from zainousage. No published price covers them, so no cost is shown for them here.";
         assert!(first.contains(&step.to_string()), "{first:#?}");

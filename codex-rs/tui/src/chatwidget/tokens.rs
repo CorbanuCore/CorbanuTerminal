@@ -1458,8 +1458,13 @@ fn provider_name(id: &str) -> String {
     }
     // The built-in keeps its legacy brand name as an identity; the product,
     // and /providers, call it the Corbanu API.
-    if id == codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID {
-        return "Corbanu API".to_string();
+    match id {
+        codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID => {
+            return "Corbanu API".to_string();
+        }
+        codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID => return "Ollama".to_string(),
+        codex_model_provider_info::LMSTUDIO_OSS_PROVIDER_ID => return "LM Studio".to_string(),
+        _ => {}
     }
     NAMES
         .get_or_init(|| {
@@ -1473,9 +1478,10 @@ fn provider_name(id: &str) -> String {
         .unwrap_or_else(|| id.to_string())
 }
 
-/// The model's catalogue display name ("GPT-6 Sol"), else its slug.
-fn model_name(slug: &str) -> String {
-    static NAMES: std::sync::OnceLock<std::collections::HashMap<String, String>> =
+/// A display name belongs to its catalogue route, not every provider that
+/// accepts the same slug. Keep the recorded slug when that route has no row.
+fn model_name(provider: &str, slug: &str) -> String {
+    static NAMES: std::sync::OnceLock<std::collections::HashMap<(String, String), String>> =
         std::sync::OnceLock::new();
     if slug.trim().is_empty() {
         return "unknown model".to_string();
@@ -1487,12 +1493,15 @@ fn model_name(slug: &str) -> String {
                     catalog
                         .models
                         .into_iter()
-                        .map(|model| (model.slug, model.display_name))
+                        .filter_map(|model| {
+                            let provider = model.orchestration?.provider_id().to_string();
+                            Some(((provider, model.slug), model.display_name))
+                        })
                         .collect()
                 })
                 .unwrap_or_default()
         })
-        .get(slug)
+        .get(&(provider.to_string(), slug.to_string()))
         .cloned()
         .unwrap_or_else(|| slug.to_string())
 }
@@ -1505,13 +1514,13 @@ fn route_name_in(quote: &ObservationQuote, named: bool) -> String {
             "{} · account {} · {}",
             provider_name(&quote.attempt.provider),
             quote.attempt.account_name(),
-            model_name(&quote.attempt.model)
+            model_name(&quote.attempt.provider, &quote.attempt.model)
         )
     } else {
         format!(
             "{} · {}",
             provider_name(&quote.attempt.provider),
-            model_name(&quote.attempt.model)
+            model_name(&quote.attempt.provider, &quote.attempt.model)
         )
     }
 }
@@ -2237,7 +2246,7 @@ fn plain_header(quotes: &[&ObservationQuote], named: bool) -> Vec<String> {
         let route = (
             provider_name(&quote.attempt.provider),
             quote.attempt.account_name().to_string(),
-            model_name(&quote.attempt.model),
+            model_name(&quote.attempt.provider, &quote.attempt.model),
         );
         if !routes.contains(&route) {
             routes.push(route);

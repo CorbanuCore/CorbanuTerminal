@@ -15,6 +15,9 @@ use crossterm::event::KeyEvent;
 use crossterm::event::KeyModifiers;
 use pretty_assertions::assert_eq;
 
+#[path = "tokens/route_identity_tests.rs"]
+mod route_identity;
+
 async fn unavailable_inspector(width: u16, args: &str) -> ChatWidget {
     let (mut chat, mut rx, mut ops) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.on_terminal_resize(width);
@@ -2647,7 +2650,7 @@ fn accounting_inspect_plain_wording_counts_attempts_and_names_every_route() {
         Some("synthetic · synthetic-model")
     );
     // Real routes read by their display names.
-    assert_eq!(model_name("gpt-6-sol"), "GPT-6 Sol");
+    assert_eq!(model_name("openai", "gpt-6-sol"), "GPT-6 Sol");
     assert_eq!(provider_name("deepseek"), "DeepSeek");
 }
 
