@@ -1239,3 +1239,6 @@ fn default_account_day_does_not_name_accounts() {
                 .any(|line| line.contains("account default"))
     }));
 }
+
+#[path = "auto_review_price_reason_tests.rs"]
+mod auto_review_price_reason_tests;

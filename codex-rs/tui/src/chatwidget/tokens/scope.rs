@@ -123,6 +123,7 @@ pub(super) fn no_price_next_step<'a>(
     let mut in_part: Vec<String> = Vec::new();
     let mut incomplete: Vec<String> = Vec::new();
     let mut undeclared: Vec<String> = Vec::new();
+    let mut codex_auto_review_has_no_price = false;
     for quote in quotes {
         if quote.basis() == codex_state::accounting::Basis::Undeclared {
             if !undeclared.contains(&quote.attempt.provider) {
@@ -153,6 +154,8 @@ pub(super) fn no_price_next_step<'a>(
         } else if priced_any {
             &mut in_part
         } else if has_no_price(quote) || unreported {
+            codex_auto_review_has_no_price |=
+                quote.attempt.provider == "openai" && quote.attempt.model == "codex-auto-review";
             &mut no_price
         } else {
             // Only zero counts, which cost nothing whatever the rate.
@@ -182,6 +185,9 @@ pub(super) fn no_price_next_step<'a>(
         steps.push(format!(
             "Next step for requests with no price: check the bill from {providers}. No published price covers them, so no cost is shown for them here."
         ));
+    }
+    if codex_auto_review_has_no_price {
+        steps.push("OpenAI doesn't publish a price for Codex Auto Review.".into());
     }
     if let Some(providers) = joined(&in_part) {
         steps.push(format!(
