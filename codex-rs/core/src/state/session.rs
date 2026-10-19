@@ -6,6 +6,10 @@ use codex_sandboxing::policy_transforms::merge_permission_profiles;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::PoisonError;
+use tokio::sync::Semaphore;
 
 use super::AdditionalContextStore;
 use super::auto_compact_window::AutoCompactWindow;
@@ -51,7 +55,9 @@ pub(crate) struct SessionState {
     /// while named accounts are on. Names only, never credential material.
     account_token_usage: Vec<AccountTokenUsage>,
     /// #688: tools already reported as left out by the tool-count limit.
-    omitted_tools_reported: HashSet<codex_protocol::ToolName>,
+    omitted_tools_reported: Arc<Mutex<HashSet<codex_protocol::ToolName>>>,
+    /// Serialize notice delivery without holding the session state lock.
+    pub(crate) omitted_tools_notice_lock: Arc<Semaphore>,
 }
 
 impl SessionState {
@@ -86,7 +92,8 @@ impl SessionState {
             next_turn_is_first: true,
             openai_api_key_env_fallback_in_use: false,
             account_token_usage: Vec::new(),
-            omitted_tools_reported: HashSet::new(),
+            omitted_tools_reported: Arc::new(Mutex::new(HashSet::new())),
+            omitted_tools_notice_lock: Arc::new(Semaphore::new(/*permits*/ 1)),
         }
     }
 
@@ -103,20 +110,40 @@ impl SessionState {
         &self,
         omitted: &[codex_protocol::ToolName],
     ) -> Vec<codex_protocol::ToolName> {
+        let reported = self
+            .omitted_tools_reported
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         omitted
             .iter()
-            .filter(|tool| !self.omitted_tools_reported.contains(*tool))
+            .filter(|tool| !reported.contains(*tool))
             .cloned()
             .collect()
     }
 
     /// #688: records `tools` as reported to the person; each left-out tool
     /// is reported once per session.
+    #[cfg(test)]
     pub(crate) fn mark_omitted_tools_reported(
         &mut self,
         tools: impl IntoIterator<Item = codex_protocol::ToolName>,
     ) {
-        self.omitted_tools_reported.extend(tools);
+        self.omitted_tools_delivery_ack(tools.into_iter().collect())();
+    }
+
+    /// Owns only the reported set, so delivery can acknowledge synchronously
+    /// without reacquiring the asynchronous session state lock.
+    pub(crate) fn omitted_tools_delivery_ack(
+        &self,
+        tools: Vec<codex_protocol::ToolName>,
+    ) -> impl FnOnce() + Send + 'static + use<> {
+        let reported = Arc::clone(&self.omitted_tools_reported);
+        move || {
+            reported
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .extend(tools);
+        }
     }
 
     // History helpers
