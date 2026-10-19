@@ -2449,8 +2449,12 @@ impl Session {
 
     /// Persist the event to rollout and send it to clients.
     pub(crate) async fn send_event(&self, turn_context: &TurnContext, msg: EventMsg) {
-        self.send_event_with_warning_ack(turn_context, msg, None::<fn()>)
-            .await;
+        self.send_event_with_warning_ack(
+            turn_context,
+            msg,
+            /*on_warning_delivered*/ None::<fn()>,
+        )
+        .await;
     }
 
     /// Acknowledge a primary warning only after its gated form is enqueued,
