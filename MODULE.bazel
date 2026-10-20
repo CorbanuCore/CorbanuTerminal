@@ -142,6 +142,12 @@ nightly_rust.repository_set(
         "@llvm//constraints/windows/abi:msvc",
     ],
     exec_triple = "x86_64-pc-windows-msvc",
+    # Published Rust hashes; keep these aligned with the pinned tool versions.
+    # The gnullvm cross-target below shares this first repository-set declaration.
+    sha256s = {
+        "2025-09-18/rust-std-nightly-x86_64-pc-windows-gnullvm.tar.xz": "56e6216534786f1068d494c722024c016c795e89f7a0b80ac55b26cb0add8a68",
+        "2025-09-18/rustc-dev-nightly-x86_64-pc-windows-gnullvm.tar.xz": "62e4106098404bfc325627f75a9ea82868de7ee3d576afa4899295b85af6597c",
+    },
     target_compatible_with = [
         "@platforms//cpu:x86_64",
         "@platforms//os:windows",
@@ -177,6 +183,17 @@ nightly_rust.repository_set(
         "@llvm//constraints/windows/crt:msvcrt",
     ],
     exec_triple = "x86_64-pc-windows-gnullvm",
+    # Published Rust hashes; keep these aligned with the pinned tool versions.
+    # rustfmt retains rules_rust's default nightly/2026-07-16.
+    sha256s = {
+        "2025-09-18/cargo-nightly-x86_64-pc-windows-gnullvm.tar.xz": "0a99bc9e0bd82a727dbe5d52950afd99e7bad09c7daa85adbc7a321bf88e725c",
+        "2025-09-18/clippy-nightly-x86_64-pc-windows-gnullvm.tar.xz": "9366adbfe91441ef26c290359afd065b96e3dd656fb4579c5369b763c45cd781",
+        "2025-09-18/llvm-tools-nightly-x86_64-pc-windows-gnullvm.tar.xz": "1638ca4f5d77e3a0e45e55c5f353c089318de6aea9923baa81db08159df6828d",
+        "2025-09-18/rust-std-nightly-x86_64-pc-windows-gnullvm.tar.xz": "56e6216534786f1068d494c722024c016c795e89f7a0b80ac55b26cb0add8a68",
+        "2025-09-18/rustc-dev-nightly-x86_64-pc-windows-gnullvm.tar.xz": "62e4106098404bfc325627f75a9ea82868de7ee3d576afa4899295b85af6597c",
+        "2025-09-18/rustc-nightly-x86_64-pc-windows-gnullvm.tar.xz": "96acd9fa55760aa2d5dd7e79a68641eb807e6faeedbef04c77ac0809754ac3b9",
+        "2026-07-16/rustfmt-nightly-x86_64-pc-windows-gnullvm.tar.xz": "02cf6c4fb0ab2238276c9f7269f3a7430cbc8a8354a7ffc7ee9cac773f01fdb7",
+    },
     target_compatible_with = [
         "@platforms//cpu:x86_64",
         "@platforms//os:windows",
@@ -204,6 +221,16 @@ nightly_rust.repository_set(
         "@llvm//constraints/windows/crt:msvcrt",
     ],
     exec_triple = "x86_64-pc-windows-gnullvm",
+    # Published Rust hashes; keep these aligned with the pinned tool versions.
+    # rustfmt retains rules_rust's default nightly/2026-07-16.
+    sha256s = {
+        "2026-07-16/rustfmt-nightly-x86_64-pc-windows-gnullvm.tar.xz": "02cf6c4fb0ab2238276c9f7269f3a7430cbc8a8354a7ffc7ee9cac773f01fdb7",
+        "cargo-1.95.0-x86_64-pc-windows-gnullvm.tar.xz": "239c098b9878ad01ad5e0feeee377e6ee3311bc1534b1fb5eb630489d463bab2",
+        "clippy-1.95.0-x86_64-pc-windows-gnullvm.tar.xz": "9358dfc3b831a5f4b3a3a0016da734b4ef5e78c84ca8f148f56a9c126515ebfa",
+        "llvm-tools-1.95.0-x86_64-pc-windows-gnullvm.tar.xz": "5bbcdfe3116c44aae6ec42759908007d0e156d31b45a460f306ffecd28e39b6c",
+        "rust-std-1.95.0-x86_64-pc-windows-gnullvm.tar.xz": "3c52a0e34e0b4abe4439cabd77383408f5f9c80b6e249fbc0855df424b45008d",
+        "rustc-1.95.0-x86_64-pc-windows-gnullvm.tar.xz": "44ffbe057bb8f967087a1ad549a7139e9e5017d3aab396f42a6393f897e39531",
+    },
     target_compatible_with = [
         "@platforms//cpu:x86_64",
         "@platforms//os:windows",
