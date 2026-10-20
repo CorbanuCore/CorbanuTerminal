@@ -1493,7 +1493,16 @@ async fn assert_thread_fork_freezes_active_paginated_turn_as_interrupted(
                 item: RolloutItem::EventMsg(EventMsg::TurnAborted(aborted)),
                 ..
             },
-        ] if role == expected_marker_role && aborted.turn_id.as_deref() == Some("active-turn")
+            // PF-84: named accounts are on by default; the fork marks where its
+            // own usage per account (none yet) begins.
+            RolloutLine {
+                item: RolloutItem::EventMsg(EventMsg::TokenCount(usage_marker)),
+                ..
+            },
+        ] if role == expected_marker_role
+            && aborted.turn_id.as_deref() == Some("active-turn")
+            && usage_marker.info.is_none()
+            && usage_marker.account_usage.as_deref() == Some(&[][..])
     ));
 
     append_rollout_item_to_path(source_path.as_path(), &user_response_item("after-fork")).await?;

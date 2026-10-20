@@ -6650,6 +6650,11 @@ async fn spawn_with_account_answering(
             .features
             .enable(Feature::NamedAccounts)
             .expect("test config should allow feature update");
+    } else {
+        config
+            .features
+            .disable(Feature::NamedAccounts)
+            .expect("test config should allow feature update");
     }
     codex_vault::Vault::new(config.codex_home.to_path_buf())
         .write_provider_account(

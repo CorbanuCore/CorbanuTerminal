@@ -212,6 +212,11 @@ fn zai_session_with_account_usage(chat: &mut ChatWidget, named_accounts: bool) {
             .features
             .enable(codex_features::Feature::NamedAccounts)
             .expect("enable named accounts");
+    } else {
+        chat.config
+            .features
+            .disable(codex_features::Feature::NamedAccounts)
+            .expect("disable named accounts");
     }
     let report = |provider_id: &str, account: &str, input: i64, output: i64| {
         codex_app_server_protocol::ThreadAccountTokenUsage {

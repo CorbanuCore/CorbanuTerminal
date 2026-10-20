@@ -54,8 +54,20 @@ async fn accounting_chat_custom_provider_collects_with_real_identity() -> anyhow
     // bytes it had before named accounts, and the ledger its format.
     assert_eq!(records[0].account, None);
     assert!(!ledger_has_format_4(&db).await?);
-    // PF-84: with named accounts off, no usage is kept per account.
-    assert_eq!(test.codex.account_token_usage().await, None);
+    // PF-84: named accounts are on by default, so the session's usage is
+    // kept per account, under `default`.
+    let usage = test
+        .codex
+        .account_token_usage()
+        .await
+        .expect("usage per account");
+    assert_eq!(
+        usage
+            .iter()
+            .map(|row| (row.provider_id.as_str(), row.account.as_str()))
+            .collect::<Vec<_>>(),
+        vec![("custom-plan", "default")]
+    );
     posts(&server, /*expected*/ 1).await;
     stop(&test).await;
     Ok(())

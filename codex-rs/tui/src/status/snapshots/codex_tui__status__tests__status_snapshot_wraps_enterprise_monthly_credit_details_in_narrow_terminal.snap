@@ -13,6 +13,7 @@ expression: sanitized
 │ information on rate limits and credits     │
 │                                            │
 │  Model:                  gpt-5.1-codex-max │
+│  Model provider:         OpenAI · account  │
 │  Directory: [[workspace]]                  │
 │  Permissions:            Next turn: Custom │
 │                          (workspace with   │

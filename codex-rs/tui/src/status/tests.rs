@@ -2466,6 +2466,11 @@ async fn named_account_status(
             .features
             .enable(codex_features::Feature::NamedAccounts)
             .expect("enable named accounts");
+    } else {
+        config
+            .features
+            .disable(codex_features::Feature::NamedAccounts)
+            .expect("disable named accounts");
     }
     set_workspace_cwd(&mut config, test_path_buf("/workspace/tests").abs());
     // The session's own token usage: what the account rows add up to.
