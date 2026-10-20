@@ -29,6 +29,7 @@ use std::collections::HashSet;
 use std::path::Path;
 
 mod arithmetic;
+mod git_output;
 mod indirect;
 mod invocation;
 mod nested;
@@ -1083,6 +1084,35 @@ impl Classifier {
             .as_ref()
             .map(|(index, name)| (*index, WRITERS.contains(&name.as_str())));
         let cwd = folders.cwd.clone();
+        // #1141: Git output options write their operands, including paths
+        // relative to cumulative global -C options. Keep the existing word
+        // reading below unchanged; this pass can only add protection.
+        if let Some((index, name)) = &command
+            && name == "git"
+        {
+            let output = git_output::files(&words[index + 1..]);
+            let mut output_folder = cwd.clone();
+            for directory in output.directories {
+                work::step();
+                let resolved = self.homes.resolve(directory, &output_folder);
+                if resolved.len() > MAX_FOLDER_BYTES {
+                    self.note(ProtectedActionKind::UnseenCode);
+                    break;
+                }
+                output_folder = resolved;
+            }
+            for path in output.paths {
+                work::step();
+                if path.is_empty() {
+                    continue;
+                }
+                let resolved = self.homes.resolve(path, &output_folder);
+                self.word_path(&resolved, path, depth);
+                if self.homes.is_persistence(&resolved) {
+                    self.note(ProtectedActionKind::Persistence);
+                }
+            }
+        }
         // Words resolve against the folder of a `-C`/`--directory` flag
         // (`tar -C ~ ...`, `git -C ~/.codex ...`) once one has been given.
         let mut folder = cwd.clone();
