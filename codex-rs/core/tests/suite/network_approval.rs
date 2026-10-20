@@ -960,11 +960,18 @@ async fn ambiguous_unattributed_network_request_is_not_assigned_to_active_calls(
     let test = managed_network_unified_exec_test(&server).await?;
     let first_marker = test.cwd.path().join("ambiguous-network-first");
     let second_marker = test.cwd.path().join("ambiguous-network-second");
-    let wait_command = |marker: &std::path::Path| {
-        format!(
+    // Both calls must still be running when the test interrupts the turn.
+    // With the 1 s yield of `network_exec_args`, both calls returned at about
+    // the time the 1 s no-prompt window below ended; the turn then failed on
+    // the unmocked follow-up request and could finish before `Op::Interrupt`,
+    // so `TurnAborted` never came (#1134). Wait the 30 s maximum instead.
+    let wait_args = |marker: &std::path::Path| {
+        let mut args = network_exec_args(&format!(
             "touch '{}' && while true; do sleep 1; done",
             marker.display()
-        )
+        ));
+        args["yield_time_ms"] = json!(30_000);
+        args
     };
     mount_sse_once_match(
         &server,
@@ -974,12 +981,12 @@ async fn ambiguous_unattributed_network_request_is_not_assigned_to_active_calls(
             ev_function_call(
                 "ambiguous-network-first",
                 "exec_command",
-                &serde_json::to_string(&network_exec_args(&wait_command(&first_marker)))?,
+                &serde_json::to_string(&wait_args(&first_marker))?,
             ),
             ev_function_call(
                 "ambiguous-network-second",
                 "exec_command",
-                &serde_json::to_string(&network_exec_args(&wait_command(&second_marker)))?,
+                &serde_json::to_string(&wait_args(&second_marker))?,
             ),
             ev_completed("resp-ambiguous-network"),
         ]),
