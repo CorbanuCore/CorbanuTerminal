@@ -86,10 +86,12 @@ async fn stop_waits_for_live_reservation_to_resolve() {
     assert!(try_lock_file(&reservation).expect("lock reservation"));
     let cleanup = tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(50)).await;
-        drop(reservation);
+        // Keep the reservation live until its PID file is removed: otherwise
+        // stop() may remove the stale empty file before this cleanup does.
         tokio::fs::remove_file(pid_file)
             .await
             .expect("remove pid file");
+        drop(reservation);
     });
 
     backend.stop().await.expect("stop");
