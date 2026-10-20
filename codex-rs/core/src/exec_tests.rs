@@ -11,6 +11,52 @@ use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 use tokio::time::timeout;
 
+tokio::task_local! {
+    static CANCELLATION_GRACE_OVERRIDE: Duration;
+}
+
+pub(super) fn cancellation_grace_period() -> Duration {
+    CANCELLATION_GRACE_OVERRIDE
+        .try_with(|duration| *duration)
+        .unwrap_or(CANCELLATION_TERMINATION_GRACE_PERIOD)
+}
+
+#[tokio::test]
+async fn cancellation_grace_override_does_not_leak_between_tasks_or_scopes() -> anyhow::Result<()> {
+    let default = cancellation_grace_period();
+    let parent_grace = default + Duration::from_secs(3);
+    CANCELLATION_GRACE_OVERRIDE
+        .scope(parent_grace, async {
+            let barrier = std::sync::Arc::new(tokio::sync::Barrier::new(2));
+            let mut children = Vec::new();
+            for grace in [
+                default + Duration::from_secs(1),
+                default + Duration::from_secs(2),
+            ] {
+                let barrier = barrier.clone();
+                children.push(tokio::spawn(CANCELLATION_GRACE_OVERRIDE.scope(
+                    grace,
+                    async move {
+                        barrier.wait().await;
+                        tokio::task::yield_now().await;
+                        assert_eq!(cancellation_grace_period(), grace);
+                    },
+                )));
+            }
+            // A spawned task does not inherit its parent's test-only override.
+            let unscoped = tokio::spawn(async { cancellation_grace_period() });
+            assert_eq!(unscoped.await?, default);
+            for child in children {
+                child.await?;
+            }
+            assert_eq!(cancellation_grace_period(), parent_grace);
+            Ok::<(), anyhow::Error>(())
+        })
+        .await?;
+    assert_eq!(cancellation_grace_period(), default);
+    Ok(())
+}
+
 fn make_exec_output(
     exit_code: i32,
     stdout: &str,
@@ -1230,6 +1276,20 @@ async fn process_exec_tool_call_respects_cancellation_token() -> Result<()> {
 #[cfg(unix)]
 #[tokio::test]
 async fn process_exec_tool_call_cancellation_allows_sigterm_cleanup() -> Result<()> {
+    assert_sigterm_cleanup("printf cleaned > \"$CLEANUP_MARKER\"; exit 0").await
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn process_exec_tool_call_cancellation_allows_controlled_slow_sigterm_cleanup() -> Result<()>
+{
+    // Synthetic boundary coverage: this deliberately exceeds production's 50 ms
+    // grace. It is not a reproduction or a measured rate of the load-only flake.
+    assert_sigterm_cleanup("sleep 0.2; printf cleaned > \"$CLEANUP_MARKER\"; exit 0").await
+}
+
+#[cfg(unix)]
+async fn assert_sigterm_cleanup(cleanup: &str) -> Result<()> {
     let temp_dir = tempfile::TempDir::new()?;
     let ready_marker = temp_dir.path().join("ready");
     let cleanup_marker = temp_dir.path().join("cleanup");
@@ -1242,12 +1302,13 @@ async fn process_exec_tool_call_cancellation_allows_sigterm_cleanup() -> Result<
     let command = vec![
         "/bin/sh".to_string(),
         "-c".to_string(),
-        r#"(trap '' TERM; sleep 60) &
+        format!(
+            r#"(trap '' TERM; sleep 60) &
 printf '%s' "$!" > "$DESCENDANT_PID_MARKER"
-trap 'printf cleaned > "$CLEANUP_MARKER"; exit 0' TERM
+trap '{cleanup}' TERM
 printf ready > "$READY_MARKER"
 while :; do sleep 1 & wait $!; done"#
-            .to_string(),
+        ),
     ];
     let cwd = codex_utils_absolute_path::AbsolutePathBuf::current_dir()?;
     let mut env: HashMap<String, String> = std::env::vars().collect();
@@ -1292,14 +1353,17 @@ while :; do sleep 1 & wait $!; done"#
 
     let result = timeout(
         Duration::from_secs(5),
-        process_exec_tool_call(
-            params,
-            &PermissionProfile::Disabled,
-            &cwd,
-            std::slice::from_ref(&cwd),
-            &None,
-            /*use_legacy_landlock*/ false,
-            /*stdout_stream*/ None,
+        CANCELLATION_GRACE_OVERRIDE.scope(
+            Duration::from_secs(2),
+            process_exec_tool_call(
+                params,
+                &PermissionProfile::Disabled,
+                &cwd,
+                std::slice::from_ref(&cwd),
+                &None,
+                /*use_legacy_landlock*/ false,
+                /*stdout_stream*/ None,
+            ),
         ),
     )
     .await

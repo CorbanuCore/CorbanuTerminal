@@ -1076,12 +1076,11 @@ async fn consume_output(
                     } else {
                         false
                     };
-                    match tokio::time::timeout(
-                        CANCELLATION_TERMINATION_GRACE_PERIOD,
-                        child.wait(),
-                    )
-                    .await
-                    {
+                    #[cfg(not(test))]
+                    let cancellation_grace_period = CANCELLATION_TERMINATION_GRACE_PERIOD;
+                    #[cfg(test)]
+                    let cancellation_grace_period = tests::cancellation_grace_period();
+                    match tokio::time::timeout(cancellation_grace_period, child.wait()).await {
                         Ok(status) => {
                             status?;
                             if should_escalate
