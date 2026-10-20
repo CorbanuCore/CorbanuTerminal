@@ -15,7 +15,7 @@ const MAX_BRACE_EXPANSION: usize = 64;
 /// Holds a control character, so no variable or word can spell it.
 pub(super) const UNSEEN_OUTPUT: &str = "\u{1}unseen-output\u{1}";
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub(super) struct SimpleCommand {
     /// Words with quotes and backslashes removed, original case.
     pub(super) words: Vec<String>,
@@ -53,6 +53,14 @@ pub(super) fn basename(word: &str) -> &str {
 
 /// Simple commands of the argv and of any script inside it (`bash -lc "..."`).
 pub(super) fn simple_commands(command: &[String]) -> Lexed {
+    #[cfg(test)]
+    {
+        substitution_observer::record(substitution_observer::Work::ParserCalls, /*amount*/ 1);
+        substitution_observer::record(
+            substitution_observer::Work::ParserBytes,
+            command.iter().map(String::len).sum(),
+        );
+    }
     let mut lexer = Lexer::default();
     let mut incomplete = false;
     let mut previous: Option<&str> = None;
@@ -76,10 +84,13 @@ pub(super) fn simple_commands(command: &[String]) -> Lexed {
         lexer.arg(&expanded);
         lexer.flush();
     }
-    Lexed {
+    let lexed = Lexed {
         commands: lexer.finish(),
         incomplete,
-    }
+    };
+    #[cfg(test)]
+    substitution_observer::record_graph(&lexed);
+    lexed
 }
 
 /// `$IFS` and `${IFS}` separate words.
@@ -244,6 +255,10 @@ enum Group {
 struct Lexer {
     /// Finished commands, in order.
     done: Vec<SimpleCommand>,
+    /// Whether a finished command feeds another finished command. An open
+    /// substitution only contains commands finished since it opened, so an
+    /// earlier command cannot hide one of its top-level commands.
+    feeds_finished: Vec<bool>,
     current: SimpleCommand,
     word: String,
     open: Vec<Open>,
@@ -305,6 +320,15 @@ impl Lexer {
             Some("fi" | "done" | "esac") => self.close_group(Group::Keyword),
             _ => {}
         }
+        for &index in &finished.fed_by {
+            #[cfg(test)]
+            substitution_observer::record(
+                substitution_observer::Work::FedEdgeVisits,
+                /*amount*/ 1,
+            );
+            self.feeds_finished[index] = true;
+        }
+        self.feeds_finished.push(false);
         self.done.push(finished);
         Some(self.done.len() - 1)
     }
@@ -370,15 +394,23 @@ impl Lexer {
         let Some(open) = self.open.pop() else {
             return;
         };
+        #[cfg(test)]
+        substitution_observer::record(
+            substitution_observer::Work::RangeVisits,
+            self.done.len() - open.first,
+        );
         let inner: Vec<usize> = (open.first..self.done.len()).collect();
         // The commands at this level (not inside a nested substitution).
         let top: Vec<usize> = inner
             .iter()
             .copied()
-            .filter(|index| {
-                !inner
-                    .iter()
-                    .any(|other| self.done[*other].fed_by.contains(index))
+            .filter(|&index| {
+                #[cfg(test)]
+                substitution_observer::record(
+                    substitution_observer::Work::MembershipProbes,
+                    /*amount*/ 1,
+                );
+                !self.feeds_finished[index]
             })
             .collect();
         let spliced = match top.as_slice() {
@@ -398,6 +430,11 @@ impl Lexer {
         };
         self.current = open.outer;
         if !open.output {
+            #[cfg(test)]
+            substitution_observer::record(
+                substitution_observer::Work::FedAppendVisits,
+                inner.len(),
+            );
             self.current.fed_by.extend(inner);
         }
         self.word = open.outer_word;
@@ -419,6 +456,11 @@ impl Lexer {
         let chars: Vec<char> = arg.chars().collect();
         let mut index = 0;
         while index < chars.len() {
+            #[cfg(test)]
+            substitution_observer::record(
+                substitution_observer::Work::LexerChars,
+                /*amount*/ 1,
+            );
             let ch = chars[index];
             let next = chars.get(index + 1).copied();
             match ch {
@@ -600,3 +642,11 @@ pub(super) fn literal_output(words: &[String]) -> Option<String> {
         .collect();
     Some(printed.join(" "))
 }
+
+#[cfg(test)]
+#[path = "shell_substitution_tests.rs"]
+mod substitution_tests;
+
+#[cfg(test)]
+#[path = "shell_substitution_observer.rs"]
+mod substitution_observer;
