@@ -23,6 +23,10 @@ use codex_security_policy::RevocationState;
 use codex_security_policy::SecurityLevel;
 use codex_security_policy::SecuritySettings;
 use pretty_assertions::assert_eq;
+use std::future::Future;
+use std::future::poll_fn;
+use std::pin::Pin;
+use std::task::Poll;
 use std::time::Duration;
 use tokio::task::JoinHandle;
 
@@ -104,6 +108,10 @@ impl Fixture {
     }
 
     fn request(&self) -> JoinHandle<NetworkDecision> {
+        tokio::spawn(self.request_future())
+    }
+
+    fn request_future(&self) -> Pin<Box<dyn Future<Output = NetworkDecision> + Send>> {
         let service = Arc::clone(&self.session.services.network_approval);
         let session = Arc::clone(&self.session);
         let request = NetworkPolicyRequest::new(NetworkPolicyRequestArgs {
@@ -116,7 +124,48 @@ impl Fixture {
             command: None,
             exec_policy_hint: None,
         });
-        tokio::spawn(async move { service.handle_inline_policy_request(session, request).await })
+        Box::pin(async move { service.handle_inline_policy_request(session, request).await })
+    }
+
+    /// Poll an unspawned request until it is waiting on the current generation.
+    async fn join_open_prompt(
+        &self,
+        mut request: Pin<&mut (dyn Future<Output = NetworkDecision> + Send)>,
+    ) {
+        let pending = {
+            let approvals = self
+                .session
+                .services
+                .network_approval
+                .pending_host_approvals
+                .lock()
+                .unwrap();
+            assert_eq!(approvals.len(), 1, "one prompt is open");
+            Arc::clone(approvals.values().next().unwrap())
+        };
+        let references_without_request = Arc::strong_count(&pending);
+
+        // The prompt owner cannot finish before this test answers it. Only the
+        // locally polled request can add a reference to this generation. The
+        // follower path has no suspension between cloning it and waiting on
+        // its decision, so Pending plus that reference proves it has joined.
+        tokio::time::timeout(
+            WAIT,
+            poll_fn(|cx| {
+                assert!(
+                    request.as_mut().poll(cx).is_pending(),
+                    "the request must wait for the open prompt"
+                );
+                if Arc::strong_count(&pending) == references_without_request + 1 {
+                    Poll::Ready(())
+                } else {
+                    Poll::Pending
+                }
+            }),
+        )
+        .await
+        .expect("the request joined the open prompt");
+        assert!(pending.decision.get().is_none());
     }
 
     /// The next network prompt, or `None` when `decision` finished first.
@@ -244,14 +293,9 @@ async fn issue_945_waiters_on_a_stale_prompt_are_decided_again() {
     let fixture = Fixture::new().await;
     let mut first = fixture.request();
     let shown = fixture.prompt(&mut first).await;
-    let mut second = fixture.request();
-    // The second request joins the open prompt: no prompt of its own.
-    assert!(
-        tokio::time::timeout(Duration::from_millis(300), fixture.events.recv())
-            .await
-            .is_err()
-    );
-    assert!(!second.is_finished());
+    let mut second = fixture.request_future();
+    fixture.join_open_prompt(second.as_mut()).await;
+    assert!(fixture.events.try_recv().is_err());
 
     fixture.raise_level();
     fixture
@@ -259,6 +303,10 @@ async fn issue_945_waiters_on_a_stale_prompt_are_decided_again() {
         .await;
     let again = fixture.prompt(&mut first).await;
     assert_ne!(again.call_id, shown.call_id);
+    // Waking an old waiter does not mean it has joined this new generation.
+    // Keep the new prompt open until the second request has actually joined.
+    fixture.join_open_prompt(second.as_mut()).await;
+    let mut second = tokio::spawn(second);
     fixture.answer(&again, ReviewDecision::denied("no")).await;
     assert_eq!(decided(first).await, denied());
     assert_eq!(
