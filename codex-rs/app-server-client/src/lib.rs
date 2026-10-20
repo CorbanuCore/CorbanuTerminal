@@ -1108,6 +1108,7 @@ mod tests {
     use codex_app_server_protocol::ToolRequestUserInputParams;
     use codex_app_server_protocol::ToolRequestUserInputQuestion;
     use codex_core::config::ConfigBuilder;
+    use codex_core::config::ConfigOverrides;
     use codex_core::init_state_db;
     use codex_uds::UnixListener;
     use codex_utils_absolute_path::AbsolutePathBuf;
@@ -1127,29 +1128,85 @@ mod tests {
     use tokio_tungstenite::tungstenite::handshake::server::Response as WebSocketResponse;
     use tokio_tungstenite::tungstenite::http::header::AUTHORIZATION;
 
-    async fn build_test_config() -> Config {
-        match ConfigBuilder::default().build().await {
-            Ok(config) => config,
-            Err(_) => Config::load_default_with_cli_overrides(Vec::new())
-                .await
-                .expect("default config should load"),
-        }
+    async fn build_test_config() -> (TempDir, Config) {
+        let codex_home = TempDir::new().expect("temporary config home");
+        let config = build_test_config_for_codex_home(codex_home.path()).await;
+        (codex_home, config)
     }
 
     async fn build_test_config_for_codex_home(codex_home: &Path) -> Config {
-        match ConfigBuilder::default()
+        let cwd = codex_home.join("workspace");
+        std::fs::create_dir_all(&cwd).expect("temporary test workspace");
+        ConfigBuilder::default()
             .codex_home(codex_home.to_path_buf())
+            .harness_overrides(ConfigOverrides {
+                cwd: Some(cwd),
+                ..Default::default()
+            })
             .build()
             .await
-        {
-            Ok(config) => config,
-            Err(_) => Config::load_default_with_cli_overrides_for_codex_home(
-                codex_home.to_path_buf(),
-                Vec::new(),
-            )
-            .await
-            .expect("default config should load"),
-        }
+            .expect("test config should load for its temporary workspace")
+    }
+
+    #[tokio::test]
+    async fn test_config_owns_temporary_roots() {
+        let (codex_home, config) = build_test_config().await;
+        assert_eq!(config.codex_home.as_path(), codex_home.path());
+        assert!(
+            config.cwd.as_path().starts_with(codex_home.path()),
+            "the test workspace must be owned by the temporary home guard"
+        );
+        assert_ne!(config.cwd.as_path(), codex_home.path());
+        assert_eq!(config.workspace_roots, vec![config.cwd.clone()]);
+        // Match callers that hand the returned config to a shared fixture.
+        let config_for_caller = Arc::new(config);
+        let surviving_config = Arc::clone(&config_for_caller);
+        drop(config_for_caller);
+        let workspace = surviving_config.cwd.to_path_buf();
+        let marker = workspace.join("owned-workspace-marker");
+        std::fs::write(&marker, b"owned workspace")
+            .expect("workspace survives config construction");
+        assert_eq!(
+            std::fs::read(&marker).expect("workspace marker"),
+            b"owned workspace"
+        );
+        drop(surviving_config);
+        assert!(
+            workspace.exists(),
+            "the returned owner outlives config consumers"
+        );
+        drop(codex_home);
+        assert!(
+            !workspace.exists(),
+            "the temporary owner cleans up the workspace"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_config_for_codex_home_uses_owned_temporary_roots() {
+        let codex_home = tempfile::tempdir().expect("temporary config home");
+        let config = build_test_config_for_codex_home(codex_home.path()).await;
+        assert_eq!(config.codex_home.as_path(), codex_home.path());
+        assert!(
+            config.cwd.as_path().starts_with(codex_home.path()),
+            "the test workspace must be owned by the temporary home guard"
+        );
+        assert_ne!(config.cwd.as_path(), codex_home.path());
+        assert_eq!(config.workspace_roots, vec![config.cwd.clone()]);
+        let workspace = config.cwd.to_path_buf();
+        let marker = workspace.join("owned-workspace-marker");
+        std::fs::write(&marker, b"owned workspace")
+            .expect("workspace survives config construction");
+        assert_eq!(
+            std::fs::read(&marker).expect("workspace marker"),
+            b"owned workspace"
+        );
+        drop(config);
+        drop(codex_home);
+        assert!(
+            !workspace.exists(),
+            "the temporary owner cleans up the workspace"
+        );
     }
 
     struct TestClient {
@@ -2379,7 +2436,8 @@ mod tests {
 
     #[tokio::test]
     async fn runtime_start_args_forward_environment_manager_and_openai_form_capability() {
-        let config = Arc::new(build_test_config().await);
+        let (_codex_home, config) = build_test_config().await;
+        let config = Arc::new(config);
         let environment_manager = Arc::new(
             EnvironmentManager::create_for_tests(
                 Some("ws://127.0.0.1:8765".to_string()),
@@ -2440,7 +2498,7 @@ mod tests {
 
     #[tokio::test]
     async fn runtime_start_args_use_remote_thread_config_loader_when_configured() {
-        let mut config = build_test_config().await;
+        let (_codex_home, mut config) = build_test_config().await;
         config.experimental_thread_config_endpoint = Some("not-a-valid-endpoint".to_string());
 
         let runtime_args = InProcessClientStartArgs {

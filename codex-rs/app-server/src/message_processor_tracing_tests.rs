@@ -27,6 +27,7 @@ use codex_config::CloudConfigBundleLoader;
 use codex_config::LoaderOverrides;
 use codex_core::config::Config;
 use codex_core::config::ConfigBuilder;
+use codex_core::config::ConfigOverrides;
 use codex_exec_server::EnvironmentManager;
 use codex_feedback::CodexFeedback;
 use codex_login::AuthManager;
@@ -211,6 +212,8 @@ impl TracingHarness {
 }
 
 async fn build_test_config(codex_home: &Path, server_uri: &str) -> Result<Config> {
+    let cwd = codex_home.join("workspace");
+    std::fs::create_dir_all(&cwd)?;
     write_mock_responses_config_toml(
         codex_home,
         server_uri,
@@ -223,8 +226,40 @@ async fn build_test_config(codex_home: &Path, server_uri: &str) -> Result<Config
 
     Ok(ConfigBuilder::default()
         .codex_home(codex_home.to_path_buf())
+        .harness_overrides(ConfigOverrides {
+            cwd: Some(cwd),
+            ..Default::default()
+        })
         .build()
         .await?)
+}
+
+#[tokio::test]
+async fn test_config_uses_owned_temporary_roots() {
+    let codex_home = tempfile::tempdir().expect("temporary config home");
+    let config = build_test_config(codex_home.path(), "http://127.0.0.1:1")
+        .await
+        .expect("test config");
+    assert_eq!(config.codex_home.as_path(), codex_home.path());
+    assert!(
+        config.cwd.as_path().starts_with(codex_home.path()),
+        "the test workspace must be owned by the temporary home guard"
+    );
+    assert_ne!(config.cwd.as_path(), codex_home.path());
+    assert_eq!(config.workspace_roots, vec![config.cwd.clone()]);
+    let workspace = config.cwd.to_path_buf();
+    let marker = workspace.join("owned-workspace-marker");
+    std::fs::write(&marker, b"owned workspace").expect("workspace survives config construction");
+    assert_eq!(
+        std::fs::read(&marker).expect("workspace marker"),
+        b"owned workspace"
+    );
+    drop(config);
+    drop(codex_home);
+    assert!(
+        !workspace.exists(),
+        "the temporary owner cleans up the workspace"
+    );
 }
 
 async fn build_test_processor(

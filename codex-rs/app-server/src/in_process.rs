@@ -767,24 +767,50 @@ mod tests {
     use codex_app_server_protocol::ThreadStartParams;
     use codex_app_server_protocol::ThreadStartResponse;
     use codex_core::config::ConfigBuilder;
+    use codex_core::config::ConfigOverrides;
     use pretty_assertions::assert_eq;
     use std::path::Path;
     use tempfile::TempDir;
 
     async fn build_test_config(codex_home: &Path) -> Config {
-        match ConfigBuilder::default()
+        let cwd = codex_home.join("workspace");
+        std::fs::create_dir_all(&cwd).expect("temporary test workspace");
+        ConfigBuilder::default()
             .codex_home(codex_home.to_path_buf())
+            .harness_overrides(ConfigOverrides {
+                cwd: Some(cwd),
+                ..Default::default()
+            })
             .build()
             .await
-        {
-            Ok(config) => config,
-            Err(_) => Config::load_default_with_cli_overrides_for_codex_home(
-                codex_home.to_path_buf(),
-                Vec::new(),
-            )
-            .await
-            .expect("default config should load"),
-        }
+            .expect("test config should load for its temporary workspace")
+    }
+
+    #[tokio::test]
+    async fn test_config_uses_owned_temporary_roots() {
+        let codex_home = tempfile::tempdir().expect("temporary config home");
+        let config = build_test_config(codex_home.path()).await;
+        assert_eq!(config.codex_home.as_path(), codex_home.path());
+        assert!(
+            config.cwd.as_path().starts_with(codex_home.path()),
+            "the test workspace must be owned by the temporary home guard"
+        );
+        assert_ne!(config.cwd.as_path(), codex_home.path());
+        assert_eq!(config.workspace_roots, vec![config.cwd.clone()]);
+        let workspace = config.cwd.to_path_buf();
+        let marker = workspace.join("owned-workspace-marker");
+        std::fs::write(&marker, b"owned workspace")
+            .expect("workspace survives config construction");
+        assert_eq!(
+            std::fs::read(&marker).expect("workspace marker"),
+            b"owned workspace"
+        );
+        drop(config);
+        drop(codex_home);
+        assert!(
+            !workspace.exists(),
+            "the temporary owner cleans up the workspace"
+        );
     }
 
     async fn start_test_client_with_capacity(
