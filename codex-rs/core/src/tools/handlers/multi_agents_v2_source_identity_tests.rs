@@ -1,23 +1,38 @@
 //! Source-informed issue863 regression. Provider data is synthetic; no inference.
 use super::*;
 use crate::tools::collaboration_wire::message_source_provider_id;
+use codex_model_provider_info::WireApi;
 use pretty_assertions::assert_eq;
 
-#[tokio::test]
-async fn issue863_native_custom_same_source_is_admitted() {
-    let (_session, mut turn) = crate::session::tests::make_session_and_context().await;
+fn install_custom_provider(
+    turn: &mut TurnContext,
+    base_url: &str,
+    wire_api: WireApi,
+    env_key: Option<String>,
+) {
     let mut config = (*turn.config).clone();
     config.model_provider_id = "myopenai".to_string();
     config.model_provider.name = "My OpenAI".to_string();
-    config.model_provider.base_url = Some("https://api.openai.com/v1".to_string());
-    config.model_provider.wire_api = codex_model_provider_info::WireApi::Responses;
+    config.model_provider.base_url = Some(base_url.to_string());
+    config.model_provider.wire_api = wire_api;
     config.model_provider.requires_openai_auth = false;
-    config.model_provider.env_key = Some("SYNTHETIC_ISSUE863_API_KEY".to_string());
+    config.model_provider.env_key = env_key;
     turn.provider = codex_model_provider::create_model_provider(
         config.model_provider.clone(),
         turn.auth_manager.clone(),
     );
     turn.config = std::sync::Arc::new(config);
+}
+
+#[tokio::test]
+async fn issue863_native_custom_same_source_is_admitted() {
+    let (_session, mut turn) = crate::session::tests::make_session_and_context().await;
+    install_custom_provider(
+        &mut turn,
+        "https://api.openai.com/v1",
+        WireApi::Responses,
+        Some("SYNTHETIC_ISSUE863_API_KEY".to_string()),
+    );
     assert_eq!(turn.config.model_provider_id, "myopenai");
     assert_eq!(message_source_provider_id(&turn), OPENAI_PROVIDER_ID);
     assert_eq!(
@@ -37,18 +52,12 @@ async fn issue863_native_custom_same_source_is_admitted() {
 #[tokio::test]
 async fn issue863_native_custom_to_builtin_source_is_rejected_before_admission() {
     let (_session, mut turn) = crate::session::tests::make_session_and_context().await;
-    let mut config = (*turn.config).clone();
-    config.model_provider_id = "myopenai".to_string();
-    config.model_provider.name = "My OpenAI".to_string();
-    config.model_provider.base_url = Some("https://api.openai.com/v1".to_string());
-    config.model_provider.wire_api = codex_model_provider_info::WireApi::Responses;
-    config.model_provider.requires_openai_auth = false;
-    config.model_provider.env_key = Some("SYNTHETIC_ISSUE863_API_KEY".to_string());
-    turn.provider = codex_model_provider::create_model_provider(
-        config.model_provider.clone(),
-        turn.auth_manager.clone(),
+    install_custom_provider(
+        &mut turn,
+        "https://api.openai.com/v1",
+        WireApi::Responses,
+        Some("SYNTHETIC_ISSUE863_API_KEY".to_string()),
     );
-    turn.config = std::sync::Arc::new(config);
     assert_eq!(
         ensure_message_encoding_matches_target(
             &turn.config.model_provider_id,
@@ -93,7 +102,6 @@ fn issue863_existing_builtin_and_plaintext_controls() {
 #[tokio::test]
 async fn issue863_reserved_schema_endpoint_matrix_stays_conservative() {
     use crate::tools::collaboration_wire::uses_openai_reserved_collaboration_schema;
-    use codex_model_provider_info::WireApi;
 
     let (_session, mut turn) = crate::session::tests::make_session_and_context().await;
     let cases = [
@@ -113,17 +121,8 @@ async fn issue863_reserved_schema_endpoint_matrix_stays_conservative() {
     ];
     for wire in [WireApi::Responses, WireApi::Chat, WireApi::Anthropic] {
         for (url, responses_supported) in cases {
-            let mut config = (*turn.config).clone();
-            config.model_provider_id = "myopenai".to_string();
-            config.model_provider.name = "My OpenAI".to_string();
-            config.model_provider.base_url = Some(url.to_string());
-            config.model_provider.wire_api = wire;
-            config.model_provider.requires_openai_auth = false;
-            turn.provider = codex_model_provider::create_model_provider(
-                config.model_provider.clone(),
-                turn.auth_manager.clone(),
-            );
-            turn.config = std::sync::Arc::new(config);
+            let env_key = turn.config.model_provider.env_key.clone();
+            install_custom_provider(&mut turn, url, wire, env_key);
             let expected = wire == WireApi::Responses && responses_supported;
             assert_eq!(
                 uses_openai_reserved_collaboration_schema(&turn),

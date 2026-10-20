@@ -82,9 +82,12 @@ pub(super) fn plaintext_adapter_spec(
     }
 }
 
+/// Keep the configured provider identity separate from the payload codec.
+/// A custom provider may use the OpenAI codec without becoming the built-in
+/// OpenAI provider for encrypted-message admission.
 pub(super) fn ensure_message_encoding_matches_target(
-    source_provider_id: &str,
-    source_codec_provider_id: &str,
+    configured_source_provider_id: &str,
+    source_codec_id: &str,
     source: &crate::tools::context::ToolCallSource,
     target_provider_id: &str,
     encoding: CollaborationMessageEncoding,
@@ -100,9 +103,9 @@ pub(super) fn ensure_message_encoding_matches_target(
 
     // Wire compatibility selects the codec; it does not make a custom provider
     // the same configured source as the built-in OpenAI provider.
-    let source_is_encrypted_openai_call = source_codec_provider_id == OPENAI_PROVIDER_ID
+    let source_is_encrypted_openai_call = source_codec_id == OPENAI_PROVIDER_ID
         && matches!(source, crate::tools::context::ToolCallSource::Direct);
-    if source_is_encrypted_openai_call && target_provider_id != source_provider_id {
+    if source_is_encrypted_openai_call && target_provider_id != configured_source_provider_id {
         return Err(FunctionCallError::RespondToModel(format!(
             "target provider `{target_provider_id}` cannot consume this OpenAI-encrypted collaboration payload. Call the function named `{plaintext_tool_name}` directly with exactly the same `target` and the plaintext `message`; do not call `{native_tool_name}` again and do not add an `adapter` field. No message was admitted and no target turn was started."
         )));
