@@ -1342,7 +1342,7 @@ impl UnifiedExecProcessManager {
             ),
             local_policy_env,
         };
-        let mut orchestrator = ToolOrchestrator::new();
+        let mut orchestrator = ToolOrchestrator::new().with_handler_basis(request.handler_basis);
         let mut runtime = UnifiedExecRuntime::new(self, request.shell_mode.clone());
         let live_aggressive = context
             .session

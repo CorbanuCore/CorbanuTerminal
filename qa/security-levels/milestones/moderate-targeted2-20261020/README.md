@@ -117,3 +117,9 @@ evidence checks supported every disposition and the totals but failed the record
 are applied. The budget is spent, so the r3 corrections (the leftover-process wording, overlapping mediator windows and
 the third relay stall in [common/effective-policy-addendum.txt](common/effective-policy-addendum.txt), where carried
 cases' evidence paths resolve in [results.json](results.json), and MOD-09's summary) are applied but not re-checked.
+
+## Follow-up (2026-10-20)
+
+MOD-09 and MOD-21 were re-run with the owner's local model as the product's model (#1052):
+[../moderate-localmodel-20261020/](../moderate-localmodel-20261020/). MOD-21 passed; MOD-09 failed on its item 7
+approval (#1077). This record's dispositions are unchanged; the owner decides how the follow-up counts.

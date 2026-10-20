@@ -1595,6 +1595,11 @@ fn cleanup_synthetic_mount_targets(targets: &[SyntheticMountTargetRegistration])
                     };
                     remove_synthetic_mount_target(&made, recorded_at);
                 }
+                // #607: a path this run only held, which is no longer the
+                // one it found (the person replaced it while the command
+                // ran): theirs, left in place. (Before, it was removed when
+                // empty, as if bubblewrap had made it for this run.)
+                _ if target.target.preserves_pre_existing_path() => {}
                 _ => remove_synthetic_mount_target(&target.target, /*recorded_at*/ None),
             }
             remove_synthetic_mount_target_record(&target.marker_dir);
@@ -1756,6 +1761,12 @@ fn remove_synthetic_mount_target(
         ),
     };
     if !target.should_remove(found.is_empty_file(), found.is_dir(), found.identity()) {
+        return;
+    }
+    // #607: not when the record kept in the Corbanu home says a placeholder
+    // was made there and this is none of those (the person replaced it); one
+    // another run made must still be exactly as made.
+    if crate::placeholder_journal::recorded_otherwise(target.path(), path, &found.status) {
         return;
     }
     if !target.preserves_pre_existing_path()
@@ -1977,8 +1988,15 @@ fn remove_stale_synthetic_mount_targets() {
                     found.identity(),
                 ) || recorded_at.is_some_and(|recorded_at| {
                     !crate::placeholder_registry::made_for_record(found.changed_at(), recorded_at)
-                }) =>
+                }) || crate::placeholder_journal::recorded_otherwise(
+                    target.path(),
+                    target.removal_path(),
+                    &found.status,
+                ) =>
             {
+                // #607: nor one the record kept in the Corbanu home says is
+                // not exactly the placeholder made there (the person's own
+                // empty file or folder, made within the window above).
                 true
             }
             Ok(Some(found)) => match found.remove() {

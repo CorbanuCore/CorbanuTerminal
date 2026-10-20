@@ -1,0 +1,8 @@
+{"type":"thread.started","thread_id":"01a1584d-b9c4-74a0-9bb6-76d0e3ae15b1"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Model metadata for `Qwen3.8-Flash-Next-Uncensored-MLX-Serve-mixed-4-8bit` not found. Defaulting to fallback metadata; this can degrade performance and cause issues."}}
+{"type":"item.completed","item":{"id":"item_1","type":"error","message":"Skill descriptions were shortened to fit the 2% skills context budget. Codex can still see every skill, but some descriptions are shorter. Disable unused skills or plugins to leave more room for the rest."}}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_2","type":"command_execution","command":"/bin/bash -lc 'echo TOOLCALL-OK-$((6*7))'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_2","type":"command_execution","command":"/bin/bash -lc 'echo TOOLCALL-OK-$((6*7))'","aggregated_output":"TOOLCALL-OK-42\n","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_3","type":"agent_message","text":"TOOLCALL-OK-42"}}
+{"type":"turn.completed","usage":{"input_tokens":30570,"cached_input_tokens":15272,"cache_write_input_tokens":0,"output_tokens":44,"reasoning_output_tokens":0}}

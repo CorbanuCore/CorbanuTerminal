@@ -80,8 +80,37 @@ impl Setup {
     /// The helper running `script` in `base` (writable), with `.pfterminal`
     /// denied, recording its placeholders in the Corbanu home.
     fn command(&self, script: &str, tmp: &PathBuf) -> Command {
-        let profile = PermissionProfile::from_runtime_permissions(
-            &FileSystemSandboxPolicy::restricted(vec![
+        self.command_with(script, tmp, Vec::new())
+    }
+
+    /// [`Self::command`] with `extra` entries in its policy.
+    fn command_with(
+        &self,
+        script: &str,
+        tmp: &PathBuf,
+        extra: Vec<FileSystemSandboxEntry>,
+    ) -> Command {
+        let deny = FileSystemSandboxEntry::skip_missing_path(
+            FileSystemPath::Path {
+                path: AbsolutePathBuf::try_from(self.placeholder()).unwrap(),
+            },
+            FileSystemAccessMode::Deny,
+        );
+        // `extra` with a write entry for the root: full access with its
+        // denials (Moderate's), in place of `base` alone.
+        let full_write = extra.iter().any(|entry| {
+            entry.access == FileSystemAccessMode::Write
+                && matches!(
+                    entry.path,
+                    FileSystemPath::Special {
+                        value: FileSystemSpecialPath::Root
+                    }
+                )
+        });
+        let mut entries = if full_write {
+            Vec::new()
+        } else {
+            vec![
                 FileSystemSandboxEntry::new(
                     FileSystemPath::Special {
                         value: FileSystemSpecialPath::Root,
@@ -94,13 +123,12 @@ impl Setup {
                     },
                     FileSystemAccessMode::Write,
                 ),
-                FileSystemSandboxEntry::skip_missing_path(
-                    FileSystemPath::Path {
-                        path: AbsolutePathBuf::try_from(self.placeholder()).unwrap(),
-                    },
-                    FileSystemAccessMode::Deny,
-                ),
-            ]),
+            ]
+        };
+        entries.push(deny);
+        entries.extend(extra);
+        let profile = PermissionProfile::from_runtime_permissions(
+            &FileSystemSandboxPolicy::restricted(entries),
             NetworkSandboxPolicy::Restricted,
         );
         let mut args = create_linux_sandbox_command_args_for_permission_profile(
@@ -130,8 +158,13 @@ impl Setup {
     /// Starts a run that holds its sandbox (and placeholder) until its
     /// standard input closes, once it is set up.
     fn start(&self, tmp: &PathBuf) -> Child {
+        self.start_with(tmp, Vec::new())
+    }
+
+    /// [`Self::start`] with `extra` entries in its policy.
+    fn start_with(&self, tmp: &PathBuf, extra: Vec<FileSystemSandboxEntry>) -> Child {
         let mut child = self
-            .command("echo ready; read line; echo done", tmp)
+            .command_with("echo ready; read line; echo done", tmp, extra)
             .stdin(Stdio::piped())
             .spawn()
             .unwrap();
@@ -404,5 +437,249 @@ fn runs_starting_at_once_after_a_crash_all_work_and_leave_nothing() {
     assert!(std::fs::symlink_metadata(setup.placeholder()).is_err());
     assert_ran(&setup.run("echo ran", &tmp));
     assert!(std::fs::symlink_metadata(setup.placeholder()).is_err());
+    assert_eq!(setup.records(), Vec::<String>::new());
+}
+
+/// A read-only entry for `path` (as core protects a repository's git files).
+fn read_only(path: PathBuf) -> FileSystemSandboxEntry {
+    FileSystemSandboxEntry::new(
+        FileSystemPath::Path {
+            path: AbsolutePathBuf::try_from(path).unwrap(),
+        },
+        FileSystemAccessMode::Read,
+    )
+}
+
+/// #745: a run whose policy protects paths in another live run's empty
+/// placeholder folder (the `.git` it made, which core takes for a
+/// repository's once it exists, protecting its hooks and config) holds that
+/// folder read-only instead of making placeholders in it. Before, those
+/// changed the folder, so its maker could not remove it, its record dropped
+/// it, and it was left behind for good. Each run has a temporary folder of
+/// its own; the last starts after both have ended, as after a reboot.
+#[test]
+fn a_placeholder_folder_another_run_protects_paths_in_is_not_left_behind() {
+    let setup = Setup::new();
+    if !setup.sandbox_runs() {
+        return;
+    }
+    let git = setup.base.join(".git");
+    // Full access with denials (Moderate's): the root is writable, `.git`
+    // too; its hooks and config are read-only, as core protects them once
+    // `.git` exists (or, in one case, a path in it is denied instead).
+    let protects = |deny: bool| {
+        let mut entries = vec![FileSystemSandboxEntry::new(
+            FileSystemPath::Special {
+                value: FileSystemSpecialPath::Root,
+            },
+            FileSystemAccessMode::Write,
+        )];
+        if deny {
+            entries.push(FileSystemSandboxEntry::new(
+                FileSystemPath::Path {
+                    path: AbsolutePathBuf::try_from(git.join("info/secret")).unwrap(),
+                },
+                FileSystemAccessMode::Deny,
+            ));
+        } else {
+            entries.push(read_only(git.join("hooks")));
+            entries.push(read_only(git.join("config")));
+        }
+        entries
+    };
+    // The other run in a temporary folder of its own (found from the
+    // record kept in the Corbanu home) or in the maker's (found from its
+    // registry); the next run in a third, as after a reboot.
+    for (case, shared, deny) in [
+        ("own temporary folder", false, false),
+        ("shared temporary folder", true, false),
+        ("a denied path in it", false, true),
+    ] {
+        let maker_tmp = setup.tmp(&format!("maker-{case}"));
+        let maker = setup.start(&maker_tmp);
+        assert!(git.is_dir(), "{case}: the maker's placeholder folder");
+        let user_tmp = if shared {
+            maker_tmp.clone()
+        } else {
+            setup.tmp(&format!("user-{case}"))
+        };
+        let user = setup.start_with(&user_tmp, protects(deny));
+        assert_ran(&finish(maker));
+        assert_ran(&finish(user));
+        let output = setup.run("echo ran", &setup.tmp(&format!("next-{case}")));
+        assert_ran(&output);
+        assert!(
+            std::fs::symlink_metadata(&git).is_err(),
+            "{case}: not left behind: {:?}",
+            std::fs::read_dir(&git).map(Iterator::collect::<Vec<_>>)
+        );
+        assert_eq!(setup.records(), Vec::<String>::new(), "{case}");
+        assert_eq!(String::from_utf8_lossy(&output.stderr), "", "{case}");
+    }
+
+    // The command can create nothing in it, as without the other run.
+    let maker = setup.start(&setup.tmp("maker-2"));
+    let output = setup
+        .command_with(
+            "touch .git/hooks 2>/dev/null; echo hooks=$?; \
+             mkdir .git/objects 2>/dev/null; echo objects=$?",
+            &setup.tmp("writer"),
+            protects(/*deny*/ false),
+        )
+        .output()
+        .unwrap();
+    assert_ran(&output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("hooks=") && !stdout.contains("hooks=0") && !stdout.contains("objects=0"),
+        "{stdout}"
+    );
+    assert_eq!(std::fs::read_dir(&git).unwrap().count(), 0, "unchanged");
+    assert_ran(&finish(maker));
+    assert!(
+        std::fs::symlink_metadata(&git).is_err(),
+        "its maker removed it"
+    );
+}
+
+/// #745: a placeholder folder that was not empty when its run's cleanup came
+/// to it (the person put a file in it) stays in that run's record, so the
+/// next start reports it once and leaves it. Before, the record dropped it
+/// unreported.
+#[test]
+fn a_placeholder_folder_its_run_could_not_remove_is_reported() {
+    let setup = Setup::new();
+    if !setup.sandbox_runs() {
+        return;
+    }
+    let git = setup.base.join(".git");
+    let maker = setup.start(&setup.tmp("maker"));
+    std::fs::write(git.join("notes"), "mine").unwrap();
+    assert_ran(&finish(maker));
+    assert_eq!(setup.records().len(), 1, "kept in the record");
+
+    let output = setup.run("echo ran", &setup.tmp("next"));
+    assert_ran(&output);
+    assert_eq!(std::fs::read(git.join("notes")).unwrap(), b"mine");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("left ") && stderr.contains(".git"),
+        "{stderr}"
+    );
+    assert_eq!(setup.records(), Vec::<String>::new());
+}
+
+/// Makes the person's own empty, read-only file at `path` (another file, so
+/// another inode, than the placeholder there), as an editor saving it would.
+fn replace_with_own_empty_file(path: &PathBuf) -> u64 {
+    let own = path.with_extension("own");
+    std::fs::write(&own, "").unwrap();
+    std::fs::set_permissions(&own, std::fs::Permissions::from_mode(0o444)).unwrap();
+    let ino = std::fs::symlink_metadata(&own).unwrap().ino();
+    std::fs::rename(&own, path).unwrap();
+    ino
+}
+
+fn ino(path: &PathBuf) -> Option<u64> {
+    std::fs::symlink_metadata(path)
+        .ok()
+        .map(|metadata| metadata.ino())
+}
+
+/// #607 (item 5): a killed run's placeholder that the person replaced with
+/// their own empty file soon after (within the temporary folder's registry's
+/// window) is not removed by the next start in that temporary folder: the
+/// record kept in the Corbanu home says it is not the placeholder made
+/// there. It is reported once.
+#[test]
+fn a_persons_own_file_in_place_of_a_killed_runs_placeholder_is_kept() {
+    let setup = Setup::new();
+    if !setup.sandbox_runs() {
+        return;
+    }
+    let tmp = setup.tmp("shared");
+    let mut crashed = setup.start(&tmp);
+    crashed.kill().unwrap();
+    crashed.wait().unwrap();
+    let own = replace_with_own_empty_file(&setup.placeholder());
+
+    let output = setup.run("echo ran", &tmp);
+    assert_ran(&output);
+    assert_eq!(ino(&setup.placeholder()), Some(own), "kept");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains(".pfterminal"), "{stderr}");
+    assert_eq!(setup.records(), Vec::<String>::new());
+}
+
+/// #607 (item 4): the last run out that shares another run's placeholder
+/// does not remove it once the person has replaced it with their own empty
+/// file while the command ran.
+#[test]
+fn the_last_run_out_keeps_a_shared_placeholder_the_person_replaced() {
+    let setup = Setup::new();
+    if !setup.sandbox_runs() {
+        return;
+    }
+    let tmp = setup.tmp("shared");
+    let mut maker = setup.start(&tmp);
+    let holder = setup.start(&tmp);
+    maker.kill().unwrap();
+    maker.wait().unwrap();
+    let own = replace_with_own_empty_file(&setup.placeholder());
+
+    assert_ran(&finish(holder));
+    assert_eq!(ino(&setup.placeholder()), Some(own), "kept");
+    let output = setup.run("echo ran", &setup.tmp("next"));
+    assert_ran(&output);
+    assert_eq!(ino(&setup.placeholder()), Some(own));
+    assert_eq!(setup.records(), Vec::<String>::new());
+}
+
+/// #607 (item 4): a run that holds a killed run's placeholder (left in
+/// place while a live run of another temporary folder mounts over it) does
+/// not remove the path once the person has replaced it while its command
+/// ran.
+#[test]
+fn a_held_placeholder_the_person_replaced_is_kept() {
+    let setup = Setup::new();
+    if !setup.sandbox_runs() {
+        return;
+    }
+    let tmp = setup.tmp("shared");
+    let mut maker = setup.start(&tmp);
+    let user = setup.start(&setup.tmp("user"));
+    maker.kill().unwrap();
+    maker.wait().unwrap();
+    let holder = setup.start(&tmp);
+    let own = replace_with_own_empty_file(&setup.placeholder());
+
+    assert_ran(&finish(user));
+    assert_ran(&finish(holder));
+    assert_eq!(ino(&setup.placeholder()), Some(own), "kept");
+    let output = setup.run("echo ran", &setup.tmp("next"));
+    assert_ran(&output);
+    assert_eq!(ino(&setup.placeholder()), Some(own));
+    assert_eq!(setup.records(), Vec::<String>::new());
+}
+
+/// #607: a run's own placeholder that the person replaced with their own
+/// empty file while the command ran is left to them, and reported at the
+/// next start. Before, the run's cleanup removed any empty file there.
+#[test]
+fn a_runs_own_placeholder_the_person_replaced_is_kept() {
+    let setup = Setup::new();
+    if !setup.sandbox_runs() {
+        return;
+    }
+    let maker = setup.start(&setup.tmp("maker"));
+    let own = replace_with_own_empty_file(&setup.placeholder());
+    assert_ran(&finish(maker));
+    assert_eq!(ino(&setup.placeholder()), Some(own), "kept");
+
+    let output = setup.run("echo ran", &setup.tmp("next"));
+    assert_ran(&output);
+    assert_eq!(ino(&setup.placeholder()), Some(own));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains(".pfterminal"), "{stderr}");
     assert_eq!(setup.records(), Vec::<String>::new());
 }

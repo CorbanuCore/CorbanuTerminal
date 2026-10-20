@@ -88,6 +88,7 @@ ignore = [
     { id = "RUSTSEC-2026-0370", reason = "zvariant v4.2.0 is unmaintained (merged into zbus 6; no known vulnerability); pulled in via zbus v4.4.0 under keyring v3.6.3/secret-service v4.0.0 used by codex-keyring-store for the Linux Secret Service; remove when keyring moves to zbus >= 6" },
     { id = "RUSTSEC-2026-0371", reason = "zbus_names v3.0.0 is unmaintained (merged into zbus 6; no known vulnerability); pulled in via zbus v4.4.0 under keyring v3.6.3/secret-service v4.0.0 used by codex-keyring-store for the Linux Secret Service; remove when keyring moves to zbus >= 6" },
     { id = "RUSTSEC-2026-0372", reason = "zvariant_derive v4.2.0 is unmaintained (merged into zbus 6; no known vulnerability); pulled in via zvariant v4.2.0 under zbus v4.4.0, keyring v3.6.3/secret-service v4.0.0 used by codex-keyring-store; remove when keyring moves to zbus >= 6" },
+    { id = "RUSTSEC-2026-0374", reason = "basic-toml v0.1.10 is unmaintained (no known vulnerability); used only at compile time by the i18n-embed-fl/i18n-embed-impl proc macros (via i18n-config) to read age's bundled i18n.toml, for codex-secrets local storage; remove when age drops i18n-embed-fl or i18n-config moves to toml" },
 ]
 # If this is true, then cargo deny will use the git executable to fetch advisory database.
 # If this is false, then it uses a built-in git library.

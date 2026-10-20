@@ -42,6 +42,26 @@ use std::time::Instant;
 
 pub(crate) struct ToolOrchestrator {
     sandbox: SandboxManager,
+    handler_basis: Option<HandlerBasis>,
+}
+
+/// #1057: the policy a tool's handler read its `request_permissions` grants
+/// (and made its exec-policy decision) under, taken just before the grants
+/// were read, so a transition committed before the run reached the
+/// orchestrator is noticed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct HandlerBasis {
+    marker: crate::state::AuthorityMarker,
+    aggressive: bool,
+}
+
+impl HandlerBasis {
+    pub(crate) fn now(session: &crate::session::session::Session) -> Self {
+        Self {
+            marker: session.services.authority_marker(),
+            aggressive: session.services.model_client().live_level_is_aggressive(),
+        }
+    }
 }
 
 pub(crate) struct OrchestratorRunResult<Out> {
@@ -53,7 +73,14 @@ impl ToolOrchestrator {
     pub fn new() -> Self {
         Self {
             sandbox: SandboxManager::new(),
+            handler_basis: None,
         }
+    }
+
+    /// #1057: the run was prepared by a handler under `basis`.
+    pub(crate) fn with_handler_basis(mut self, basis: Option<HandlerBasis>) -> Self {
+        self.handler_basis = basis;
+        self
     }
 
     async fn run_attempt<Rq, Out, T>(
@@ -144,7 +171,9 @@ impl ToolOrchestrator {
     /// Aggressive on, the run's exec-policy decision (made by the tool's
     /// handler) is stale too, so it is refused instead: a new call is decided
     /// under Aggressive. A retry outside the sandbox approved (or due) before
-    /// a transition is not run.
+    /// a transition is not run. #1057: a run whose handler read its grants
+    /// before a transition is handled the same way before anyone is asked,
+    /// as if its first round had gone stale.
     pub async fn run<Rq, Out, T>(
         &mut self,
         tool: &mut T,
@@ -156,13 +185,41 @@ impl ToolOrchestrator {
     where
         T: ToolRuntime<Rq, Out>,
     {
-        let aggressive_at_start = tool_ctx
-            .session
-            .services
-            .model_client()
-            .live_level_is_aggressive();
+        let aggressive_at_start = match self.handler_basis {
+            Some(basis) => basis.aggressive,
+            None => tool_ctx
+                .session
+                .services
+                .model_client()
+                .live_level_is_aggressive(),
+        };
+        // The first round is decided under the handler's policy, so a
+        // transition committed from here on is noticed by it too. A basis
+        // without a marker (the policy not initialized then; not in real
+        // sessions) notices nothing, as before.
+        let mut first_under = self.handler_basis.and_then(|basis| basis.marker);
+        if tool_ctx.session.services.transition_since(first_under) {
+            tracing::info!(
+                target: "codex_core::security::transition",
+                call_id = %tool_ctx.call_id,
+                "security transition after the handler read its grants"
+            );
+            stale_refusal(
+                tool,
+                req,
+                tool_ctx,
+                aggressive_at_start,
+                /*before_decided*/ true,
+            )
+            .await?;
+            first_under = None;
+        }
         let mut asked_again = false;
         for _ in 0..MAX_STALE_APPROVAL_ROUNDS {
+            // D50: the policy this round is decided under.
+            let decided_under = first_under
+                .take()
+                .or_else(|| tool_ctx.session.services.authority_marker());
             match Box::pin(self.run_round(
                 tool,
                 req,
@@ -170,6 +227,7 @@ impl ToolOrchestrator {
                 turn_ctx,
                 approval_policy,
                 asked_again,
+                decided_under,
             ))
             .await?
             {
@@ -180,24 +238,14 @@ impl ToolOrchestrator {
                         call_id = %tool_ctx.call_id,
                         "approval answered after a security transition; not used"
                     );
-                    if tool_ctx
-                        .session
-                        .services
-                        .model_client()
-                        .live_level_is_aggressive()
-                        != aggressive_at_start
-                    {
-                        warn(tool_ctx, STALE_AGGRESSIVE_REFUSAL).await;
-                        return Err(ToolError::Rejected(STALE_AGGRESSIVE_REFUSAL.to_string()));
-                    }
-                    // D51 (#1001): the permissions this request carries were
-                    // read (from grants, by the tool's handler) before the
-                    // transition, which ended those grants: refused, so a
-                    // new call reads them again.
-                    if tool.additional_permissions(req).is_some() {
-                        warn(tool_ctx, STALE_PERMISSIONS_REFUSAL).await;
-                        return Err(ToolError::Rejected(STALE_PERMISSIONS_REFUSAL.to_string()));
-                    }
+                    stale_refusal(
+                        tool,
+                        req,
+                        tool_ctx,
+                        aggressive_at_start,
+                        /*before_decided*/ false,
+                    )
+                    .await?;
                     // The note is for a person who saw the earlier prompt.
                     asked_again = person_asked;
                 }
@@ -208,7 +256,9 @@ impl ToolOrchestrator {
     }
 
     /// One decision and run; [`Round::Stale`] when a security transition was
-    /// committed before its first attempt started.
+    /// committed before its first attempt started. `decided_under`: the
+    /// policy marker this round is decided under (D50, #1057).
+    #[expect(clippy::too_many_arguments)]
     async fn run_round<Rq, Out, T>(
         &mut self,
         tool: &mut T,
@@ -217,12 +267,11 @@ impl ToolOrchestrator {
         turn_ctx: &crate::session::turn_context::TurnContext,
         approval_policy: AskForApproval,
         asked_again: bool,
+        decided_under: crate::state::AuthorityMarker,
     ) -> Result<Round<Out>, ToolError>
     where
         T: ToolRuntime<Rq, Out>,
     {
-        // D50: the policy this run is decided under.
-        let decided_under = tool_ctx.session.services.authority_marker();
         let otel = turn_ctx.session_telemetry.clone();
         let otel_tn = flat_tool_name(&tool_ctx.tool_name).into_owned();
         let otel_ci = &tool_ctx.call_id;
@@ -802,12 +851,12 @@ impl ToolOrchestrator {
         // #874 (D6): the git folders this session watches, looked at again
         // before deciding whether an approval lifts the rules (text typed
         // into a running shell or a process left running may have changed
-        // them).
-        let git_held = git_refresh(
-            tool_ctx,
-            resolution_folders(tool, req, &turn_cwd, &materialized_workspace_roots),
-        )
-        .await;
+        // them). #943 item 11: the folder the command runs in (its
+        // `workdir`) counts too.
+        let mut git_folders =
+            resolution_folders(tool, req, &turn_cwd, &materialized_workspace_roots);
+        git_folders.extend(tool.command_cwd(req));
+        let git_held = git_refresh(tool_ctx, git_folders).await;
         let mut git_held_back = false;
         let denied = post_taint_read_denials(
             tool_ctx,
@@ -1088,7 +1137,18 @@ impl ToolOrchestrator {
                         );
                     let unsandboxed =
                         initial_sandbox == SandboxType::None || policy_allows_no_sandbox;
-                    GitCheck::begin(tool_ctx, level, folders, effective, unsandboxed).await
+                    // #943 item 11: and the folder the command runs in (its
+                    // `workdir`), which may be another repository.
+                    let command_cwd = tool.command_cwd(req).map(|cwd| cwd.to_path_buf());
+                    GitCheck::begin(
+                        tool_ctx,
+                        level,
+                        folders,
+                        command_cwd,
+                        effective,
+                        unsandboxed,
+                    )
+                    .await
                 }
                 _ => None,
             };
@@ -1439,13 +1499,15 @@ struct GitCheck {
 }
 
 impl GitCheck {
-    /// The repositories of `folders` whose git folder the run may write
+    /// The repositories of `folders` and of `command_cwd` (the folder the
+    /// command runs in, #943 item 11) whose git folder the run may write
     /// (through `policy`, or anywhere where it may run unsandboxed), with
     /// this session's first look at each taken.
     async fn begin(
         tool_ctx: &ToolCtx,
         level: codex_security_policy::SecurityLevel,
         folders: Vec<std::path::PathBuf>,
+        command_cwd: Option<std::path::PathBuf>,
         policy: codex_protocol::permissions::FileSystemSandboxPolicy,
         unsandboxed: bool,
     ) -> Option<Self> {
@@ -1456,7 +1518,7 @@ impl GitCheck {
         // Issue #524: reading folders stays off the async thread.
         let looked = tokio::task::spawn_blocking(move || {
             let folders: Vec<&std::path::Path> = folders.iter().map(AsRef::as_ref).collect();
-            let repos: Vec<_> = git_postcheck::repos(&folders)
+            let repos: Vec<_> = git_postcheck::repos_and(&folders, command_cwd.as_deref())
                 .into_iter()
                 .filter(|repo| {
                     unsandboxed
@@ -1569,6 +1631,46 @@ enum Round<Out> {
     },
 }
 
+/// D50 (#1001): `Err` when a run whose approval (or, #1057, whose handler's
+/// grant read) went stale must not be decided again: the transition switched
+/// Aggressive on, so its exec-policy decision is stale, or (D51) it carries
+/// permissions read from grants the transition ended. A new call reads them
+/// again. `before_decided`: the transition came before anyone was asked.
+async fn stale_refusal<Rq, Out, T>(
+    tool: &T,
+    req: &Rq,
+    tool_ctx: &ToolCtx,
+    aggressive_at_start: bool,
+    before_decided: bool,
+) -> Result<(), ToolError>
+where
+    T: ToolRuntime<Rq, Out>,
+{
+    let refusal = if tool_ctx
+        .session
+        .services
+        .model_client()
+        .live_level_is_aggressive()
+        != aggressive_at_start
+    {
+        if before_decided {
+            PREPARED_BEFORE_AGGRESSIVE_REFUSAL
+        } else {
+            STALE_AGGRESSIVE_REFUSAL
+        }
+    } else if tool.additional_permissions(req).is_some() {
+        if before_decided {
+            PREPARED_PERMISSIONS_REFUSAL
+        } else {
+            STALE_PERMISSIONS_REFUSAL
+        }
+    } else {
+        return Ok(());
+    };
+    warn(tool_ctx, refusal).await;
+    Err(ToolError::Rejected(refusal.to_string()))
+}
+
 /// D50 (#1001): how often a run whose approval went stale is decided again.
 const MAX_STALE_APPROVAL_ROUNDS: usize = 3;
 
@@ -1583,6 +1685,17 @@ pub(crate) const STALE_AGGRESSIVE_REFUSAL: &str = "Not run: the security policy 
 pub(crate) const STALE_PERMISSIONS_REFUSAL: &str = "Not run: the security policy changed while \
      this was being approved, and the permissions it asked for or was granted were for the \
      earlier policy, so the approval was not used. Ask again if it is still needed.";
+
+/// #1057: why a run prepared before Aggressive was switched on did not run.
+pub(crate) const PREPARED_BEFORE_AGGRESSIVE_REFUSAL: &str = "Not run: security level \
+     Aggressive was switched on while this was being prepared, before it was decided. Ask \
+     again if it is still needed; it will be decided under Aggressive.";
+
+/// #1057: why a run carrying permissions read before a transition did not
+/// run.
+pub(crate) const PREPARED_PERMISSIONS_REFUSAL: &str = "Not run: the security policy changed \
+     while this was being prepared, and the permissions it asked for or was granted were for \
+     the earlier policy. Ask again if it is still needed.";
 
 /// D50: why a retry outside the sandbox did not happen.
 const STALE_RETRY_NOTE: &str = "The security level changed while this command ran or its \

@@ -1,0 +1,1 @@
+  353 _securityagent Tue Oct 20 08:59:12 2026     /System/Library/Frameworks/Security.framework/Versions/A/MachServices/SecurityAgent.bundle/Contents/MacOS/SecurityAgent

@@ -86,8 +86,8 @@ pub(crate) fn apply_explicit_provider_account(
         let message = if recorded {
             format!(
                 "named accounts need the `named_accounts` feature (`--enable named_accounts`); \
-                 resume with `--account {provider_id}:default` to use the default credentials \
-                 instead"
+                 `--account {provider_id}:default` (on a resume or fork) uses the default \
+                 credentials instead"
             )
         } else {
             "named accounts need the `named_accounts` feature (`--enable named_accounts`); \
@@ -280,6 +280,94 @@ pub fn default_login_restriction_error(
         .hidden_default_login_reason()
 }
 
+/// #689: why a spawned agent on `child` (runtime provider `child_id`) cannot
+/// sign in, checked before it starts, as the TUI checks its own spawns (#665).
+/// Named accounts are per connection: `zai` and `zai-anthropic` share
+/// `ZAI_API_KEY`, but only the connection a named account is selected for runs
+/// on it. When `child` runs on the default key of such a key variable while
+/// another connection (or the parent, `parent`) runs on a named account, and
+/// the default key is in neither the environment (nor held by the credential
+/// broker) nor storage, the child would fail at its first request with a
+/// sign-in error; it is refused instead. Without named accounts in play, or
+/// when storage cannot be read, nothing is refused.
+pub(crate) fn spawn_default_key_error(
+    config: &super::Config,
+    child_id: &str,
+    child: &ModelProviderInfo,
+    parent_id: &str,
+    parent: &ModelProviderInfo,
+) -> Option<String> {
+    spawn_default_key_error_with(config, child_id, child, (parent_id, parent), |name| {
+        std::env::var(name).is_ok_and(|value| !value.trim().is_empty())
+            || crate::model_broker_auth::holds_environment_key(name)
+    })
+}
+
+fn spawn_default_key_error_with(
+    config: &super::Config,
+    child_id: &str,
+    child: &ModelProviderInfo,
+    parent: (&str, &ModelProviderInfo),
+    environment_holds: impl Fn(&str) -> bool,
+) -> Option<String> {
+    if child.account.is_some()
+        || child.auth.is_some()
+        || child.aws.is_some()
+        || child.requires_openai_auth
+        || child.is_claude_plan()
+        || child.experimental_bearer_token.is_some()
+    {
+        return None;
+    }
+    let env_key = child.env_key.as_deref()?;
+    let mut configured = config
+        .model_providers
+        .iter()
+        .map(|(id, provider)| (id.as_str(), provider))
+        .collect::<Vec<_>>();
+    configured.sort_by_key(|(id, _)| *id);
+    // The parent first, so the message names it when it is the one on a
+    // named account.
+    let (index, named_id, account) = std::iter::once(parent)
+        .chain(configured)
+        .enumerate()
+        .find_map(|(index, (id, provider))| {
+            let account = provider.account.as_ref()?;
+            (provider.env_key.as_deref() == Some(env_key)).then_some((index, id, account))
+        })?;
+    let on_parent = index == 0;
+    if child
+        .api_key_env_vars()
+        .iter()
+        .any(|name| environment_holds(name))
+    {
+        return None;
+    }
+    match codex_login::provider_api_key_metadata_from_auth_storage(&config.codex_home, env_key) {
+        Ok(
+            codex_login::ProviderApiKeyStorageMetadata::Missing
+            | codex_login::ProviderApiKeyStorageMetadata::Suppressed,
+        ) => {}
+        Ok(codex_login::ProviderApiKeyStorageMetadata::Stored { .. }) | Err(_) => return None,
+    }
+    let named = if on_parent {
+        format!("the parent runs on `{named_id}` account `{}`", account.name)
+    } else {
+        format!(
+            "account `{}` is selected for `{named_id}` only",
+            account.name
+        )
+    };
+    Some(format!(
+        "spawn_agent: `{child_id}` would run on its default account, which has no credential \
+         (`{env_key}` is not set and no default key is stored); accounts are selected per \
+         connection, and {named}. Spawn without the `model_provider`, `account` or \
+         `agent_type` that chose this connection and account to run on the parent's, or ask \
+         the user to add a default `{env_key}` (`/providers`). Do not retry on another \
+         account without the user's consent."
+    ))
+}
+
 /// Splits `[<provider>:]<name>`; the provider defaults to the session's.
 pub fn split_account_selection<'a>(
     selection: &'a str,
@@ -385,6 +473,127 @@ mod tests {
             .iter()
             .map(|(provider, name)| (provider.to_string(), name.to_string()))
             .collect()
+    }
+
+    /// #689: a spawned agent on the default key of a connection whose
+    /// sibling (or parent) runs on a named account is refused only when the
+    /// default key is nowhere: not in the environment, not held by the
+    /// broker and not stored.
+    #[tokio::test]
+    async fn spawn_on_a_default_key_that_is_nowhere_is_refused() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        use core_test_support::PathBufExt;
+        let mut config = crate::config::test_config().await;
+        config.codex_home = temp_dir.path().join("codex-home").abs();
+        std::fs::create_dir_all(&config.codex_home).expect("create codex home");
+        let zai = ModelProviderInfo::create_zai_provider();
+        let anthropic = ModelProviderInfo::create_zai_anthropic_provider();
+        let mut work = zai.clone();
+        stamp_provider_account("zai", &mut work, "work").expect("stamp");
+        config.model_providers = HashMap::from([
+            ("zai".to_string(), zai.clone()),
+            ("zai-anthropic".to_string(), anthropic.clone()),
+        ]);
+        let nothing_held = |_: &str| false;
+        let check = |config: &crate::config::Config,
+                     child_id: &str,
+                     child: &ModelProviderInfo,
+                     parent: (&str, &ModelProviderInfo),
+                     held: &dyn Fn(&str) -> bool| {
+            spawn_default_key_error_with(config, child_id, child, parent, held)
+        };
+        let refusal = |named: &str| {
+            format!(
+                "spawn_agent: `zai-anthropic` would run on its default account, which has no \
+                 credential (`ZAI_API_KEY` is not set and no default key is stored); accounts \
+                 are selected per connection, and {named}. Spawn without the `model_provider`, \
+                 `account` or `agent_type` that chose this connection and account to run on the \
+                 parent's, or ask the user to add a default `ZAI_API_KEY` (`/providers`). Do not \
+                 retry on another account without the user's consent."
+            )
+        };
+        // The parent runs `zai` on `work`; no default key anywhere.
+        assert_eq!(
+            check(
+                &config,
+                "zai-anthropic",
+                &anthropic,
+                ("zai", &work),
+                &nothing_held
+            ),
+            Some(refusal("the parent runs on `zai` account `work`"))
+        );
+        // The same, with `[provider_accounts] zai = "work"` and a parent on
+        // another provider.
+        let mut stamped = config.clone();
+        stamped
+            .model_providers
+            .insert("zai".to_string(), work.clone());
+        let kimi = ModelProviderInfo::create_kimi_code_provider();
+        assert_eq!(
+            check(
+                &stamped,
+                "zai-anthropic",
+                &anthropic,
+                ("kimi-code", &kimi),
+                &nothing_held
+            ),
+            Some(refusal("account `work` is selected for `zai` only"))
+        );
+        // No named account in play: nothing changes.
+        assert_eq!(
+            check(
+                &config,
+                "zai-anthropic",
+                &anthropic,
+                ("zai", &zai),
+                &nothing_held
+            ),
+            None
+        );
+        // The child on a named account is checked by its enrollment instead.
+        let mut anthropic_work = anthropic.clone();
+        stamp_provider_account("zai-anthropic", &mut anthropic_work, "work").expect("stamp");
+        assert_eq!(
+            check(
+                &config,
+                "zai-anthropic",
+                &anthropic_work,
+                ("zai", &work),
+                &nothing_held
+            ),
+            None
+        );
+        // A default key in the environment, or held by the broker.
+        assert_eq!(
+            check(
+                &config,
+                "zai-anthropic",
+                &anthropic,
+                ("zai", &work),
+                &|name: &str| name == "ZAI_API_KEY"
+            ),
+            None
+        );
+        // A stored default key.
+        codex_login::login_with_provider_api_key(
+            &config.codex_home,
+            "ZAI_API_KEY",
+            "canary-689-default",
+            codex_login::AuthCredentialsStoreMode::File,
+            codex_login::AuthKeyringBackendKind::default(),
+        )
+        .expect("store default key");
+        assert_eq!(
+            check(
+                &config,
+                "zai-anthropic",
+                &anthropic,
+                ("zai", &work),
+                &nothing_held
+            ),
+            None
+        );
     }
 
     #[test]
@@ -690,8 +899,8 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "the thread's recorded account zai:main: named accounts need the `named_accounts` \
-             feature (`--enable named_accounts`); resume with `--account zai:default` to use the \
-             default credentials instead"
+             feature (`--enable named_accounts`); `--account zai:default` (on a resume or fork) \
+             uses the default credentials instead"
         );
     }
 }

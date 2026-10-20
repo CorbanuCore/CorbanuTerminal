@@ -798,6 +798,7 @@ impl Classifier {
             .filter_map(|command| command.pipe_from)
             .collect();
         if (lexed.incomplete && self.not_shell == 0 && self.rebuilt == 0)
+            || lexed.too_deep
             || indirect::opaque_execution(&lexed.commands)
         {
             self.note(ProtectedActionKind::UnseenCode);

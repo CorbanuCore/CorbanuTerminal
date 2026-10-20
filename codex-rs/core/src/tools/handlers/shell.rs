@@ -20,6 +20,7 @@ use crate::tools::handlers::apply_patch::intercept_apply_patch;
 use crate::tools::handlers::implicit_granted_permissions;
 use crate::tools::handlers::normalize_and_validate_additional_permissions;
 use crate::tools::handlers::parse_arguments;
+use crate::tools::orchestrator::HandlerBasis;
 use crate::tools::orchestrator::ToolOrchestrator;
 use crate::tools::runtimes::shell::ShellRequest;
 use crate::tools::runtimes::shell::ShellRuntime;
@@ -103,6 +104,8 @@ async fn run_exec_like(args: RunExecLikeArgs) -> Result<FunctionToolOutput, Func
     let exec_permission_approvals_enabled =
         session.features().enabled(Feature::ExecPermissionApprovals);
     let requested_additional_permissions = additional_permissions.clone();
+    // #1057: taken before the grants are read.
+    let handler_basis = HandlerBasis::now(session.as_ref());
     let effective_additional_permissions = apply_granted_turn_permissions(
         session.as_ref(),
         &turn_environment.environment_id,
@@ -228,7 +231,7 @@ async fn run_exec_like(args: RunExecLikeArgs) -> Result<FunctionToolOutput, Func
         justification: exec_params.justification.clone(),
         exec_approval_requirement,
     };
-    let mut orchestrator = ToolOrchestrator::new();
+    let mut orchestrator = ToolOrchestrator::new().with_handler_basis(Some(handler_basis));
     let mut runtime = ShellRuntime::for_shell_command(shell_runtime_backend);
     let tool_ctx = ToolCtx {
         session: session.clone(),

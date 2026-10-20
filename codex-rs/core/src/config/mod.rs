@@ -191,6 +191,7 @@ pub(crate) use provider_accounts::configured_account_names;
 pub use provider_accounts::default_login_restriction_error;
 pub use provider_accounts::other_provider_account_error;
 pub use provider_accounts::session_account_error;
+pub(crate) use provider_accounts::spawn_default_key_error;
 pub use provider_accounts::split_account_selection;
 pub(crate) use provider_accounts::stamp_provider_account;
 pub use provider_accounts::subagent_account_error;

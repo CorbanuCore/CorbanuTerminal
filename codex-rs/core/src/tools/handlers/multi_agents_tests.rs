@@ -6637,7 +6637,7 @@ async fn spawn_with_account_answering(
         });
     let mut config = (*turn.config).clone();
     config.model_provider_id = "zai".to_string();
-    config.model_provider = provider_info.clone();
+    config.model_provider = provider_info;
     config
         .model_providers
         .insert("zai".to_string(), ModelProviderInfo::create_zai_provider());
@@ -6665,7 +6665,7 @@ async fn spawn_with_account_answering(
         )
         .expect("write account");
     configure(&mut config, &mut turn);
-    turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
+    turn.provider = create_model_provider(config.model_provider.clone(), turn.auth_manager.clone());
     set_turn_config(&mut turn, config);
     let manager = thread_manager();
     let root = manager
@@ -7012,6 +7012,96 @@ async fn spawn_account_switch_needs_no_prompt_below_aggressive() {
     assert_eq!(
         (result, children),
         (Ok(()), vec![Some("zai:work".to_string())])
+    );
+}
+
+/// #689: a parent on Z.AI account `work` spawns on the Claude-style
+/// connection, which runs on the default account; with no default key that
+/// child would fail at its first request, so it is refused before it starts.
+/// Explicit `account: default` on the parent's own connection is refused the
+/// same way. With a default key the spawn goes ahead. The key variable is
+/// unique to this test so the ambient environment cannot supply it.
+#[tokio::test]
+async fn spawn_on_a_connection_without_its_own_credential_is_refused() {
+    const KEY: &str = "CORBANU_TEST_689_ZAI_KEY";
+    let use_test_key = |config: &mut crate::config::Config, _: &mut TurnContext| {
+        for id in [ZAI_PROVIDER_ID, "zai-anthropic"] {
+            let mut provider = if id == ZAI_PROVIDER_ID {
+                ModelProviderInfo::create_zai_provider()
+            } else {
+                ModelProviderInfo::create_zai_anthropic_provider()
+            };
+            provider.env_key = Some(KEY.to_string());
+            config.model_providers.insert(id.to_string(), provider);
+        }
+        config.model_provider.env_key = Some(KEY.to_string());
+    };
+    let refusal = |child: &str| {
+        format!(
+            "spawn_agent: `{child}` would run on its default account, which has no credential \
+             (`{KEY}` is not set and no default key is stored); accounts are selected per \
+             connection, and the parent runs on `zai` account `work`. Spawn without the \
+             `model_provider`, `account` or `agent_type` that chose this connection and account \
+             to run on the parent's, or ask the user to add a default `{KEY}` (`/providers`). \
+             Do not retry on another account without the user's consent."
+        )
+    };
+    for (extra, child) in [
+        (
+            json!({"model_provider": "zai-anthropic", "model": "glm-5.2"}),
+            "zai-anthropic",
+        ),
+        (json!({"account": "default"}), ZAI_PROVIDER_ID),
+    ] {
+        let (result, children) = spawn_with_account(
+            /*named_accounts*/ true,
+            use_test_key,
+            /*parent_account*/ Some("work"),
+            extra.clone(),
+        )
+        .await;
+        assert_eq!(
+            (result, children),
+            (
+                Err(FunctionCallError::RespondToModel(refusal(child))),
+                Vec::new()
+            ),
+            "{extra}"
+        );
+    }
+    // The parent's own connection and account still spawn.
+    let (result, children) = spawn_with_account(
+        /*named_accounts*/ true,
+        use_test_key,
+        /*parent_account*/ Some("work"),
+        json!({}),
+    )
+    .await;
+    assert_eq!(
+        (result, children),
+        (Ok(()), vec![Some("zai:work".to_string())])
+    );
+    // With a stored default key the Claude-style connection spawns.
+    let (result, children) = spawn_with_account(
+        /*named_accounts*/ true,
+        |config, turn| {
+            use_test_key(config, turn);
+            codex_login::login_with_provider_api_key(
+                &config.codex_home,
+                KEY,
+                "canary-689-default",
+                codex_login::AuthCredentialsStoreMode::File,
+                codex_login::AuthKeyringBackendKind::default(),
+            )
+            .expect("store default key");
+        },
+        /*parent_account*/ Some("work"),
+        json!({"model_provider": "zai-anthropic", "model": "glm-5.2"}),
+    )
+    .await;
+    assert_eq!(
+        (result, children),
+        (Ok(()), vec![Some("zai-anthropic:default".to_string())])
     );
 }
 

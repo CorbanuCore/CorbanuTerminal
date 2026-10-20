@@ -44,7 +44,7 @@ mod other {
     #[derive(Clone, Debug)]
     pub(crate) enum Repo {}
 
-    pub(crate) fn repos(_folders: &[&Path]) -> Vec<Repo> {
+    pub(crate) fn repos_and(_folders: &[&Path], _also: Option<&Path>) -> Vec<Repo> {
         Vec::new()
     }
 

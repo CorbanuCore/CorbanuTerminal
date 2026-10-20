@@ -401,8 +401,8 @@ pub(crate) fn leave() {
 }
 
 /// After this run's cleanup: keeps the placeholders it made that are still
-/// in place as made (a live run holds them), for a later sweep, and removes
-/// the rest of its record.
+/// there (a live run holds them, or they changed since: #745), for a later
+/// sweep, and removes the rest of its record.
 pub(crate) fn finish() {
     with_journal(Journal::finish);
 }
@@ -424,6 +424,38 @@ pub(crate) fn used_by_live_run(path: &Path, real: &Path) -> bool {
     let mut used = false;
     with_journal(|journal| used = journal.used_by_live_run(path, real));
     used
+}
+
+/// #745: whether another run's record names `path` (as spelled, or where it
+/// is) as a placeholder it made or was about to make. A run holds such a
+/// folder read-only instead of making placeholders of its own in it, which
+/// would change it, so that its maker could no longer remove it.
+pub(crate) fn recorded_by_another_run(path: &Path) -> bool {
+    let real = crate::placeholder_registry::real_placeholder_path(path);
+    let mut recorded = false;
+    with_journal(|journal| recorded = journal.recorded_by_another_run(path, real.as_deref()));
+    recorded
+}
+
+/// #607: whether a record (this run's or another's) names a placeholder made
+/// at `real` (or `path`) and what is there now (`status`) is none of those:
+/// the person replaced it, or (another run's, which must still be exactly
+/// what was made) changed it. It is then not removed. `false` when no record
+/// names one made there (or there is no record).
+pub(crate) fn recorded_otherwise(path: &Path, real: &Path, status: &libc::stat) -> bool {
+    let mut otherwise = false;
+    with_journal(|journal| otherwise = journal.recorded_otherwise(path, real, status));
+    otherwise
+}
+
+/// Whether `identity` is `found`: exactly (`exact`), or the same file or
+/// folder (device, inode and type).
+fn same_made(identity: &Identity, found: &libc::stat, exact: bool) -> bool {
+    if exact {
+        return *identity == Identity::of(found);
+    }
+    (identity.dev, identity.ino, identity.mode & libc::S_IFMT)
+        == (found.st_dev, found.st_ino, found.st_mode & libc::S_IFMT)
 }
 
 /// The identity `record` gives the folder placeholder it made at `real`.
@@ -599,13 +631,6 @@ fn unescape_mount_point(point: &[u8]) -> Vec<u8> {
         }
     }
     out
-}
-
-fn is_still_made(real: &Path, kind: Kind, identity: &Identity) -> bool {
-    matches!(
-        crate::placeholder_registry::find_without_links(real),
-        Ok(Some(found)) if matches_made(&found, kind, identity)
-    )
 }
 
 fn matches_made(
@@ -870,6 +895,79 @@ impl Journal {
                 .any(|(_, record)| uses(record, path, real))
     }
 
+    fn recorded_by_another_run(&mut self, path: &Path, real: Option<&Path>) -> bool {
+        let Ok(_lock) = self.lock() else {
+            return false;
+        };
+        let (records, _) = self.other_records();
+        records
+            .iter()
+            .flat_map(|(_, record)| record.entries.iter())
+            .filter(|entry| matches!(entry, Entry::Made { .. } | Entry::Pending { .. }))
+            .any(|entry| {
+                let (made, made_real) = entry.paths();
+                [made, made_real]
+                    .iter()
+                    .any(|made| *made == path || Some(*made) == real)
+            })
+    }
+
+    fn recorded_otherwise(&mut self, path: &Path, real: &Path, status: &libc::stat) -> bool {
+        let Ok(_lock) = self.lock() else {
+            return false;
+        };
+        let (records, _) = self.other_records();
+        // This run's own placeholder: the same file or folder; another
+        // run's: exactly as made.
+        let own = self.record.entries.iter().map(|entry| (entry, false));
+        let others = records
+            .iter()
+            .flat_map(|(_, record)| record.entries.iter())
+            .map(|entry| (entry, true));
+        let mut named = false;
+        for (entry, exact) in own.chain(others) {
+            let Entry::Made {
+                path: made,
+                real: made_real,
+                identity,
+                ..
+            } = entry
+            else {
+                continue;
+            };
+            if made_real != real && made != path {
+                continue;
+            }
+            if same_made(identity, status, exact) {
+                return false;
+            }
+            named = true;
+        }
+        named
+    }
+
+    /// Whether a record other than the one named `stem` made exactly what is
+    /// at `real` now (a placeholder another run made there since).
+    fn made_by_another_record(&self, stem: &str, real: &Path) -> bool {
+        let Ok(Some(found)) = crate::placeholder_registry::find_without_links(real) else {
+            return false;
+        };
+        let (records, _) = self.other_records();
+        self.record
+            .entries
+            .iter()
+            .chain(
+                records
+                    .iter()
+                    .filter(|(name, _)| name != stem)
+                    .flat_map(|(_, record)| record.entries.iter()),
+            )
+            .any(|entry| {
+                matches!(entry, Entry::Made { real: made, identity, .. }
+                    if made == real && same_made(identity, &found.status, /*exact*/ true))
+            })
+    }
+
     fn leave(&mut self) {
         if !self.written {
             self.record.entries.clear();
@@ -899,13 +997,16 @@ impl Journal {
         let Ok(_lock) = self.lock() else {
             return;
         };
+        // #745: also one changed or replaced since (a folder that was not
+        // empty when this run's cleanup came to it): a sweep reports it once
+        // and leaves it, instead of it being forgotten here.
         self.record.entries.retain(|entry| match entry {
-            Entry::Made {
-                kind,
-                real,
-                identity,
-                ..
-            } => is_still_made(real, *kind, identity),
+            // One that cannot be looked at now is kept too: dropping it
+            // would leave only the temporary folder's looser rules for it.
+            Entry::Made { real, .. } => !matches!(
+                crate::placeholder_registry::find_without_links(real),
+                Ok(None)
+            ),
             Entry::Uses { .. } | Entry::Pending { .. } => false,
         });
         if self.record.entries.is_empty() {
@@ -992,6 +1093,10 @@ impl Journal {
                                 }
                             }
                             Removal::Missing => {}
+                            // #745: not when another run made what is there
+                            // now (its own record has it).
+                            Removal::Kept(Kept::Changed)
+                                if self.made_by_another_record(&stem, real) => {}
                             Removal::Kept(why) => self.report(real, why),
                             Removal::Failed => kept.push(entry.clone()),
                         }

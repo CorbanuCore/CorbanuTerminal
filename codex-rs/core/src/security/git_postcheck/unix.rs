@@ -21,7 +21,7 @@ use std::time::UNIX_EPOCH;
 /// incomplete (and holds, see `held_for`).
 const MAX_ENTRIES: usize = 50_000;
 const MAX_DEPTH: usize = 16;
-const MAX_REPOS: usize = 8;
+pub(super) const MAX_REPOS: usize = 8;
 const MAX_REPOS_PER_THREAD: usize = 16;
 const MAX_THREADS: usize = 64;
 /// New, empty config files and hooks folders remembered (`Global::empty_new`).
@@ -88,6 +88,18 @@ impl Repo {
         }
         probes
     }
+}
+
+/// [`repos`] of `folders`, and beyond the cap the repository of `also`
+/// (#943 item 11: the folder a command runs in, its `workdir`).
+pub(crate) fn repos_and(folders: &[&Path], also: Option<&Path>) -> Vec<Repo> {
+    let mut found = repos(folders);
+    for repo in also.map_or_else(Vec::new, |also| repos(&[also])) {
+        if !found.iter().any(|known| known.dot_git == repo.dot_git) {
+            found.push(repo);
+        }
+    }
+    found
 }
 
 /// The repositories `folders` are in (the nearest `.git` at or above each,
@@ -1036,9 +1048,11 @@ pub(crate) fn recheck(
         ),
         level,
     );
-    // Held for a command in the project it runs in.
-    let watched: Vec<PathBuf> = self::repos(folders)
-        .into_iter()
+    // Held for a command in the project it runs in. Each folder on its own,
+    // so no cap leaves one out (#943 item 11: the command's `workdir` added).
+    let watched: Vec<PathBuf> = folders
+        .iter()
+        .flat_map(|folder| self::repos(&[folder]))
         .flat_map(|repo| repo.git_dirs)
         .collect();
     (message, held_for(&watched))

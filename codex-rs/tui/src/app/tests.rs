@@ -13778,7 +13778,7 @@ fn session_start_failure_turns_a_server_refusal_into_a_plain_message() {
         )),
         thread_id,
     };
-    let refusal = "failed to load configuration: the thread's recorded account zai:work: named accounts need the `named_accounts` feature (`--enable named_accounts`); resume with `--account zai:default` to use the default credentials instead";
+    let refusal = "failed to load configuration: the thread's recorded account zai:work: named accounts need the `named_accounts` feature (`--enable named_accounts`); `--account zai:default` (on a resume or fork) uses the default credentials instead";
 
     for action in ["resume", "fork"] {
         for suffix in ["", r#", data: {"reason":"cloudRequirements"}"#] {

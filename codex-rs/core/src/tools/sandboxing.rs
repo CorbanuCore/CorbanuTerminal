@@ -492,6 +492,12 @@ pub(crate) trait ToolRuntime<Req, Out>: Approvable<Req> + Sandboxable {
         None
     }
 
+    /// #943 item 11: the folder the command itself runs in (the model's
+    /// `workdir`), for the post-command `.git` check only.
+    fn command_cwd(&self, _req: &Req) -> Option<codex_utils_absolute_path::AbsolutePathBuf> {
+        None
+    }
+
     /// D48 (c): the `PATH` the command runs with, where it runs on this host
     /// (a program named without a folder is looked up there); `None` where
     /// unknown or remote.

@@ -336,13 +336,46 @@ pub(super) async fn apply_granted_turn_permissions(
             permissions_preapproved: false,
         };
     }
+    let granted_permissions = read_granted_permissions(session, environment_id).await;
+    with_granted_permissions(
+        granted_permissions,
+        cwd,
+        sandbox_permissions,
+        additional_permissions,
+    )
+}
 
+/// The session's and the turn's `request_permissions` grants for
+/// `environment_id`, merged.
+pub(super) async fn read_granted_permissions(
+    session: &Session,
+    environment_id: &str,
+) -> Option<AdditionalPermissionProfile> {
     let granted_session_permissions = session.granted_session_permissions(environment_id).await;
     let granted_turn_permissions = session.granted_turn_permissions(environment_id).await;
-    let granted_permissions = merge_permission_profiles(
+    merge_permission_profiles(
         granted_session_permissions.as_ref(),
         granted_turn_permissions.as_ref(),
-    );
+    )
+}
+
+/// [`apply_granted_turn_permissions`] over grants already read. #1057: a
+/// caller that also derives something else from the grants reads them once,
+/// so whatever they shaped is carried: when there are grants, the result's
+/// `additional_permissions` is `Some`.
+pub(super) fn with_granted_permissions(
+    granted_permissions: Option<AdditionalPermissionProfile>,
+    cwd: &Path,
+    sandbox_permissions: SandboxPermissions,
+    additional_permissions: Option<AdditionalPermissionProfile>,
+) -> EffectiveAdditionalPermissions {
+    if matches!(sandbox_permissions, SandboxPermissions::RequireEscalated) {
+        return EffectiveAdditionalPermissions {
+            sandbox_permissions,
+            additional_permissions,
+            permissions_preapproved: false,
+        };
+    }
     let effective_permissions = merge_permission_profiles(
         additional_permissions.as_ref(),
         granted_permissions.as_ref(),
@@ -388,6 +421,7 @@ mod tests {
     use super::implicit_granted_permissions;
     use super::normalize_and_validate_additional_permissions;
     use super::permissions_are_preapproved;
+    use super::with_granted_permissions;
     use crate::sandboxing::SandboxPermissions;
     use codex_protocol::models::AdditionalPermissionProfile;
     use codex_protocol::models::FileSystemPermissions;
@@ -542,5 +576,31 @@ mod tests {
             stored_grant,
             cwd.path(),
         ));
+    }
+
+    /// #1057: grants read once are always carried, so whatever they shaped
+    /// is noticed when a transition ends them before the run is decided.
+    #[test]
+    fn issue_1057_grants_are_carried() {
+        let cwd = std::env::temp_dir();
+        let grant = AdditionalPermissionProfile {
+            network: Some(NetworkPermissions {
+                enabled: Some(true),
+            }),
+            ..Default::default()
+        };
+        for sandbox_permissions in [
+            SandboxPermissions::UseDefault,
+            SandboxPermissions::WithAdditionalPermissions,
+        ] {
+            let effective = with_granted_permissions(
+                Some(grant.clone()),
+                &cwd,
+                sandbox_permissions,
+                /*additional_permissions*/ None,
+            );
+            assert_eq!(effective.additional_permissions, Some(grant.clone()));
+            assert!(effective.permissions_preapproved);
+        }
     }
 }

@@ -833,3 +833,33 @@ fn issue_874_an_empty_config_forgotten_by_another_session() {
         vec![format!("config {}", git.join("config.worktree").display())]
     );
 }
+
+/// #943 item 11 (review r1): the folder a command runs in is never left out
+/// by the cap on repositories looked at, nor when what holds it is worked
+/// out.
+#[test]
+fn issue_943_the_command_folder_is_not_left_out_by_the_cap() {
+    let projects: Vec<Project> = (0..=unix::MAX_REPOS).map(|_| Project::new()).collect();
+    let (last, others) = projects.split_last().expect("projects");
+    let folders: Vec<&Path> = others
+        .iter()
+        .map(|project| project.root.as_path())
+        .collect();
+    assert_eq!(repos(&folders).len(), unix::MAX_REPOS);
+    let found = repos_and(&folders, Some(last.root.as_path()));
+    assert_eq!(found.len(), unix::MAX_REPOS + 1);
+    // Its finding holds a command there, past the cap too.
+    let (thread, _) = baseline(last);
+    symlink(
+        last.outside.join("zshrc"),
+        last.git().join("COMMIT_EDITMSG"),
+    )
+    .expect("link");
+    let mut all = folders.clone();
+    all.push(last.root.as_path());
+    let (_, held) = recheck(thread, "Moderate", &all);
+    assert_eq!(
+        held,
+        vec![last.git().join("COMMIT_EDITMSG").display().to_string()]
+    );
+}

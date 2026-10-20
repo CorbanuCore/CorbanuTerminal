@@ -188,6 +188,66 @@ async fn tmux_resume_ignores_a_missing_provider_accounts_entry() -> Result<()> {
     Ok(())
 }
 
+/// #426 (re-verified for the flag removal): a new session whose account is
+/// missing, named by `--account` or by `[provider_accounts]`, exits with the
+/// recovery text before any onboarding instead of asking for a default key.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn tmux_a_missing_launch_account_exits_before_onboarding() -> Result<()> {
+    if !TmuxServer::should_run("PF-84 #426 missing launch account")? {
+        return Ok(());
+    }
+    let repo_root = codex_utils_cargo_bin::repo_root()?;
+    let binary = corbanu_binary(&repo_root)?;
+    let tmux = TmuxServer::start("pf84_426_missing_launch_account")?;
+    for (name, extra, args) in [
+        (
+            "pf84-426-flag",
+            "",
+            vec!["--account".to_string(), "ghost".to_string()],
+        ),
+        (
+            "pf84-426-config",
+            "\n[provider_accounts]\nzai = \"ghost\"\n",
+            Vec::new(),
+        ),
+    ] {
+        let home = tempdir()?;
+        write_config_with(home.path(), &repo_root, extra)?;
+        add_account(&binary, home.path(), "work")?;
+        let session = tmux.new_session(launch_spec(
+            name,
+            &binary,
+            &repo_root,
+            home.path(),
+            /*subcommand*/ None,
+            &args,
+        ))?;
+        let pane = session.primary_pane();
+        let screen =
+            pane.wait_stable_until("an exit, or onboarding", READY_TIMEOUT, |capture| {
+                capture.contains(ONBOARDING)
+                    || capture.contains(WELCOME)
+                    || capture.contains("EXITED")
+            })?;
+        let screen = squash(&screen);
+        ensure!(
+            !screen.contains(ONBOARDING) && !screen.contains(WELCOME),
+            "{name}: opened onboarding:\n{screen}"
+        );
+        for needle in [
+            "account `ghost` of provider `zai` is not configured",
+            "corbanu account add zai ghost",
+            "EXITED 1",
+        ] {
+            ensure!(
+                contains(&screen, needle),
+                "{name}: missing {needle:?} in:\n{screen}"
+            );
+        }
+    }
+    Ok(())
+}
+
 /// Esc in the `corbanu resume` picker shown before onboarding leaves; it does
 /// not start a new session that would open onboarding.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

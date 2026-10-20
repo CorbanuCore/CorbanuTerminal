@@ -232,6 +232,10 @@ impl ToolRuntime<ShellRequest, ExecToolCallOutput> for ShellRuntime {
         req.turn_environment.workspace_roots()
     }
 
+    fn command_cwd(&self, req: &ShellRequest) -> Option<AbsolutePathBuf> {
+        Some(req.cwd.clone())
+    }
+
     fn local_search_path<'a>(&self, req: &'a ShellRequest) -> Option<&'a str> {
         (!req.turn_environment.environment.is_remote())
             .then(|| req.env.get("PATH").map(String::as_str))

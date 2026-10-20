@@ -1,0 +1,20 @@
+--- amendments-v5-designer.md	2026-10-20 01:17:03
++++ amendments-v5-draft.md	2026-10-20 01:17:10
+@@ -9,7 +9,7 @@
+ more than the literal step. "screens-v5 NN" is a screen of this candidate (folder `screens-v5/`); older screen labels
+ keep their meaning.
+ 
+-Decision labels (see `decisions.md`):
++Decision labels:
+ - **OR**: the owner request with D61 (#1052).
+ - **D67**: this sprint re-tests the cases that were blocked by refusals.
+ - **CB**: the coordinator's brief of 2026-10-20. The local model is the product model and follows the test script,
+@@ -72,7 +72,7 @@
+     - press Esc once;
+     - resubmit the request once, labelled "resubmitted (stall)".
+   - A second stall makes the case blocked.
+-  - If the group's time (about 80 minutes) runs out before the case is complete, record it as blocked, with the last
++  - If the group's time (about 110 minutes) runs out before the case is complete, record it as blocked, with the last
+     screen.
+ - **V5-2 Further attempts** (OR, CB). This model is expected to attempt the steps. After a prompt was answered with
+   Esc, or a command was refused, it may try a different command or tool on its own to reach the same file or do the

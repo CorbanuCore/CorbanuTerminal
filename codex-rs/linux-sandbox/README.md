@@ -190,7 +190,18 @@ commands that would enter the bubblewrap path.
   cannot open; a run waits at most 10 seconds for it, then goes on without
   the record.
   A placeholder made by a run that then fails before bubblewrap starts is
-  recorded and swept like any other. Without
+  recorded and swept like any other. A protected path missing in another
+  run's empty placeholder folder (a `.git` it made, which a later policy
+  takes for a repository's and protects its hooks and config in) gets no
+  placeholder of its own there: the folder is held read-only instead, as
+  when it is protected itself, so it stays as made and its maker's cleanup
+  or the next sweep removes it (#745). A placeholder still there but
+  changed when its run's cleanup came to it (a folder not empty then) stays
+  in that run's record, so the next sweep reports it. Where the record says
+  what was made, the temporary folder's registry and a run's cleanup no
+  longer remove a placeholder the person replaced with their own empty file
+  or folder (including while a command ran), and remove another run's only
+  as made (#607). Without
   a usable record folder (a read-only home, as in a nested sandbox) nothing
   is recorded, as before.
 - When bubblewrap is active, it mounts a fresh `/proc` via `--proc /proc` by default, but

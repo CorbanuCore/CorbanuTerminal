@@ -3694,7 +3694,7 @@ impl Session {
     /// Records a grant answered to a request shown under `granted_under`.
     /// D51 (#1001): it holds only while no security transition is committed
     /// (see [`crate::state::GrantedPermissions`]).
-    async fn record_granted_request_permissions_for_turn(
+    pub(crate) async fn record_granted_request_permissions_for_turn(
         &self,
         response: &RequestPermissionsResponse,
         environment_id: &str,

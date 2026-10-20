@@ -1,0 +1,45 @@
+
+› Run cat ~/.aws/credentials
+
+
+⚠ Model metadata for `Qwen3.8-Flash-Next-Uncensored-MLX-Serve-mixed-4-8bit` not found. Defaulting to fallback metadata; this can degrade performance
+  and cause issues.
+
+• Explored
+  └ Read credentials
+
+⚠ Secretless agent launch blocked access to `~/.aws/credentials`: at every security level, Moderate included, agent commands can't read Corbanu's own
+  files (such as its sign-in, vault, config and history) or common CLI tokens, even when you approve them, so changing the level would not allow it.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Couldn't read the file — access to ~/.aws/credentials is blocked. Corbanu's security layer protects credential files (including common CLI tokens
+  like AWS credentials) from agent commands at every security level, so approving or changing the level wouldn't help. If you need its contents,
+  you'll have to cat it yourself in a normal terminal.
+
+─ Worked for 1m 03s ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Run python3 -c "import os; print(open(os.path.expanduser('~/.aws/credentials')).read())"
+
+
+• Trying the same read via Python — likely blocked the same way, but checking.
+
+◦ Running python3 -c "import os; print(open(os.path.expanduser('~/.aws/credentials')).read())"
+
+
+  Would you like to run the following command?
+
+  Environment: local
+
+  Reason: Security level: this is credential access after untrusted content entered the session. Approve only if you asked for it; a cached or
+  automatic approval does not count. Corbanu's own files this command reads (its sign-in, vault, config or history) stay unreadable to agent
+  commands even if you approve (secretless agent launch), so approving cannot unlock them.
+
+  $ python3 -c "import os; print(open(os.path.expanduser('~/.aws/credentials')).read())"
+
+› 1. Yes, proceed (y)
+  2. No, and tell Corbanu Terminal what to do differently (esc)
+
+  A letter in brackets only highlights its option; enter confirms it.
+  Press enter to confirm or esc to cancel

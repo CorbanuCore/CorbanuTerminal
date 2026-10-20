@@ -22,13 +22,15 @@ use crate::tools::context::ToolPayload;
 use crate::tools::context::boxed_tool_output;
 use crate::tools::events::ToolEmitter;
 use crate::tools::events::ToolEventCtx;
-use crate::tools::handlers::apply_granted_turn_permissions;
 use crate::tools::handlers::apply_patch_spec::create_apply_patch_freeform_tool;
 use crate::tools::handlers::emit_model_edit_compat_metric;
 use crate::tools::handlers::emit_model_edit_fallback_activated_metric;
+use crate::tools::handlers::read_granted_permissions;
 use crate::tools::handlers::resolve_tool_environment;
 use crate::tools::handlers::updated_hook_command;
+use crate::tools::handlers::with_granted_permissions;
 use crate::tools::hook_names::HookToolName;
+use crate::tools::orchestrator::HandlerBasis;
 use crate::tools::orchestrator::ToolOrchestrator;
 use crate::tools::registry::CoreToolRuntime;
 use crate::tools::registry::PostToolUsePayload;
@@ -50,7 +52,6 @@ use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::FileChange;
 use codex_protocol::protocol::PatchApplyUpdatedEvent;
 use codex_sandboxing::policy_transforms::effective_file_system_sandbox_policy;
-use codex_sandboxing::policy_transforms::merge_permission_profiles;
 use codex_sandboxing::policy_transforms::normalize_additional_permissions;
 use codex_tools::ToolName;
 use codex_tools::ToolSpec;
@@ -305,16 +306,9 @@ async fn effective_patch_permissions(
 )> {
     let file_paths = file_paths_for_action(action);
     let native_cwd = cwd.to_abs_path()?;
-    let granted_permissions = merge_permission_profiles(
-        session
-            .granted_session_permissions(environment_id)
-            .await
-            .as_ref(),
-        session
-            .granted_turn_permissions(environment_id)
-            .await
-            .as_ref(),
-    );
+    // #1057: read once, so every grant that widens the policy (and so may
+    // let the patch through unasked) is also carried by the request.
+    let granted_permissions = read_granted_permissions(session, environment_id).await;
     let base_file_system_sandbox_policy = turn.file_system_sandbox_policy();
     let file_system_sandbox_policy = effective_file_system_sandbox_policy(
         &base_file_system_sandbox_policy,
@@ -324,14 +318,12 @@ async fn effective_patch_permissions(
         .iter()
         .map(PathUri::to_abs_path)
         .collect::<Result<Vec<_>, _>>()?;
-    let effective_additional_permissions = apply_granted_turn_permissions(
-        session,
-        environment_id,
+    let effective_additional_permissions = with_granted_permissions(
+        granted_permissions,
         native_cwd.as_path(),
         crate::sandboxing::SandboxPermissions::UseDefault,
         write_permissions_for_paths(&native_file_paths, &file_system_sandbox_policy, &native_cwd),
-    )
-    .await;
+    );
 
     Ok((
         file_paths,
@@ -458,6 +450,8 @@ impl ApplyPatchHandler {
         .await
         {
             codex_apply_patch::MaybeApplyPatchVerified::Body(changes) => {
+                // #1057: taken before the grants are read.
+                let handler_basis = HandlerBasis::now(session.as_ref());
                 let (file_paths, effective_additional_permissions, file_system_sandbox_policy) =
                     effective_patch_permissions(
                         session.as_ref(),
@@ -504,7 +498,8 @@ impl ApplyPatchHandler {
                                 .permissions_preapproved,
                         };
 
-                        let mut orchestrator = ToolOrchestrator::new();
+                        let mut orchestrator =
+                            ToolOrchestrator::new().with_handler_basis(Some(handler_basis));
                         let mut runtime = ApplyPatchRuntime::new();
                         let tool_ctx = ToolCtx {
                             session: session.clone(),
@@ -666,6 +661,8 @@ pub(crate) async fn intercept_apply_patch(
                 turn.record_strict_apply_patch_parse_success();
                 reject_apply_patch_if_fallback_active(&turn, "strict_apply_patch_shell")?;
             }
+            // #1057: taken before the grants are read.
+            let handler_basis = HandlerBasis::now(session.as_ref());
             let (approval_keys, effective_additional_permissions, file_system_sandbox_policy) =
                 effective_patch_permissions(
                     session.as_ref(),
@@ -712,7 +709,8 @@ pub(crate) async fn intercept_apply_patch(
                             .permissions_preapproved,
                     };
 
-                    let mut orchestrator = ToolOrchestrator::new();
+                    let mut orchestrator =
+                        ToolOrchestrator::new().with_handler_basis(Some(handler_basis));
                     let mut runtime = ApplyPatchRuntime::new();
                     let tool_ctx = ToolCtx {
                         session: session.clone(),

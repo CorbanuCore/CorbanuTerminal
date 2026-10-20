@@ -64,7 +64,17 @@ pub(super) struct Lexed {
     pub(super) commands: Vec<SimpleCommand>,
     /// A brace expression had too many alternatives to expand.
     pub(super) incomplete: bool,
+    /// Substitutions nested past `MAX_SUBSTITUTION_DEPTH`; the deeper ones
+    /// were read without linking their output (#1020).
+    pub(super) too_deep: bool,
 }
+
+/// How deeply substitutions (`$(`, `<(`, `>(`, backticks) are read inside
+/// each other. A deeper one's commands are still read and judged by name,
+/// and the command it interrupts keeps its words around an unseen value,
+/// but its output is not spliced in or linked, and the line fails closed. The reader stays linear in the text times this
+/// depth squared (#1020).
+pub(super) const MAX_SUBSTITUTION_DEPTH: usize = 32;
 
 pub(super) fn basename(word: &str) -> &str {
     word.trim_end_matches('/')
@@ -98,9 +108,11 @@ pub(super) fn simple_commands(command: &[String]) -> Lexed {
         lexer.arg(&expanded);
         lexer.flush();
     }
+    let too_deep = lexer.too_deep;
     Lexed {
         commands: lexer.finish(),
         incomplete,
+        too_deep,
     }
 }
 
@@ -247,6 +259,9 @@ struct Open {
     process: bool,
     /// Opened by `$((`: arithmetic when it also closes with `))`.
     arithmetic: bool,
+    /// Past `MAX_SUBSTITUTION_DEPTH`: its commands are read, but not
+    /// linked to the command it interrupts or spliced into its words.
+    skip: bool,
 }
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
@@ -278,6 +293,10 @@ struct Lexer {
     /// Open groups and the pipe that feeds every command inside them.
     groups: Vec<(Group, Option<usize>)>,
     redirect: Redirect,
+    /// A substitution opened past `MAX_SUBSTITUTION_DEPTH`.
+    too_deep: bool,
+    /// Open substitutions that are not past `MAX_SUBSTITUTION_DEPTH`.
+    real_open: usize,
 }
 
 impl Lexer {
@@ -374,6 +393,12 @@ impl Lexer {
     }
 
     fn open_substitution(&mut self, backtick: bool, output: bool, process: bool, arithmetic: bool) {
+        let skip = self.real_open >= MAX_SUBSTITUTION_DEPTH;
+        if skip {
+            self.too_deep = true;
+        } else {
+            self.real_open += 1;
+        }
         let outer = std::mem::replace(
             &mut self.current,
             SimpleCommand {
@@ -393,6 +418,7 @@ impl Lexer {
             output,
             process,
             arithmetic,
+            skip,
         });
     }
 
@@ -405,16 +431,29 @@ impl Lexer {
         let Some(open) = self.open.pop() else {
             return;
         };
+        if open.skip {
+            // The command it interrupted continues; what it printed is
+            // unseen.
+            self.current = open.outer;
+            self.word = open.outer_word;
+            self.looked_up = open.outer_looked_up;
+            if !open.output {
+                self.word.push_str(UNSEEN_OUTPUT);
+            }
+            return;
+        }
+        self.real_open -= 1;
         let inner: Vec<usize> = (open.first..self.done.len()).collect();
-        // The commands at this level (not inside a nested substitution).
+        // The commands at this level (not inside a nested substitution),
+        // found in one pass over what the inner commands are fed by.
+        let nested: std::collections::HashSet<usize> = inner
+            .iter()
+            .flat_map(|other| self.done[*other].fed_by.iter().copied())
+            .collect();
         let top: Vec<usize> = inner
             .iter()
             .copied()
-            .filter(|index| {
-                !inner
-                    .iter()
-                    .any(|other| self.done[*other].fed_by.contains(index))
-            })
+            .filter(|index| !nested.contains(index))
             .collect();
         let spliced = match top.as_slice() {
             _ if open.output || open.process => None,
