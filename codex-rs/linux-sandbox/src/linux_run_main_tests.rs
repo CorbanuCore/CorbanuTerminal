@@ -324,14 +324,31 @@ fn cleanup_synthetic_mount_targets_removes_only_empty_mount_targets() {
 fn synthetic_mount_registry_root_is_unique_to_effective_user() {
     let effective_uid = unsafe { libc::geteuid() };
     assert_eq!(
-        synthetic_mount_registry_root(),
-        std::env::temp_dir()
-            .canonicalize()
-            .expect("resolve temp directory")
-            .join(format!(
-                "codex-bwrap-synthetic-mount-targets-{effective_uid}"
-            ))
+        synthetic_mount_registry_root().file_name(),
+        Some(std::ffi::OsStr::new(&format!(
+            "codex-bwrap-synthetic-mount-targets-{effective_uid}"
+        )))
     );
+}
+
+/// #348: the state directory the registry lives under: `$XDG_STATE_HOME`
+/// when it is set and absolute, else the home directory's `.local/state`.
+#[test]
+fn state_dir_comes_from_xdg_state_home_or_the_home_directory() {
+    let home = Path::new("/home/person");
+    assert_eq!(
+        state_dir_from(Some(std::ffi::OsStr::new("/state")), Some(home)),
+        Some(PathBuf::from("/state"))
+    );
+    assert_eq!(
+        state_dir_from(Some(std::ffi::OsStr::new("relative/state")), Some(home)),
+        Some(PathBuf::from("/home/person/.local/state"))
+    );
+    assert_eq!(
+        state_dir_from(None, Some(home)),
+        Some(PathBuf::from("/home/person/.local/state"))
+    );
+    assert_eq!(state_dir_from(None, None), None);
 }
 
 #[test]
@@ -496,7 +513,15 @@ fn ended_pid() -> u32 {
 /// does not mean.
 fn plant_stale_placeholder(placeholder: &Path, others: &[(u32, &[u8])]) -> PathBuf {
     let marker_dir = synthetic_mount_marker_dir(placeholder);
-    std::fs::create_dir_all(&marker_dir).expect("marker dir");
+    plant_stale_placeholder_in(&marker_dir, placeholder, others)
+}
+
+fn plant_stale_placeholder_in(
+    marker_dir: &Path,
+    placeholder: &Path,
+    others: &[(u32, &[u8])],
+) -> PathBuf {
+    std::fs::create_dir_all(marker_dir).expect("marker dir");
     for (pid, contents) in others {
         std::fs::write(marker_dir.join(pid.to_string()), contents).expect("marker");
     }
@@ -506,10 +531,10 @@ fn plant_stale_placeholder(placeholder: &Path, others: &[(u32, &[u8])]) -> PathB
     )
     .expect("the maker's marker");
     write_synthetic_mount_target_record(
-        &marker_dir,
+        marker_dir,
         &crate::bwrap::SyntheticMountTarget::missing(placeholder),
     );
-    marker_dir
+    marker_dir.to_path_buf()
 }
 
 /// #582: the next run removes a placeholder whose runs all ended without
@@ -546,6 +571,62 @@ fn stale_placeholders_of_ended_runs_are_removed() {
     assert!(!marker_dir.exists());
     assert_eq!(std::fs::read(&changed).expect("changed"), b"real contents");
     assert!(!changed_marker_dir.exists());
+}
+
+/// #348: a record an older version wrote under the temporary directory's
+/// registry is swept from there, so a placeholder recorded before the
+/// registry moved to the state directory is still removed (for as long as
+/// the temporary directory lasts).
+#[test]
+fn stale_placeholders_recorded_under_the_temp_registry_are_removed() {
+    let Some(temp_root) = temp_synthetic_mount_registry_root() else {
+        return;
+    };
+    if temp_root == synthetic_mount_registry_root() {
+        // No state directory on this host: the two registries are one.
+        return;
+    }
+    let temp_dir = tempfile::TempDir::new().expect("tempdir");
+    let placeholder = temp_dir.path().join(".pfterminal");
+    std::fs::write(&placeholder, "").expect("placeholder");
+    // An older version's runs made that registry and its lock file.
+    std::fs::create_dir_all(&temp_root).expect("temp registry");
+    if !temp_root.join("lock").exists() {
+        std::fs::write(temp_root.join("lock"), "").expect("temp registry lock");
+    }
+    let marker_dir = temp_root.join(format!("{:016x}", hash_path(&placeholder)));
+    let marker_dir = plant_stale_placeholder_in(&marker_dir, &placeholder, &[]);
+
+    remove_stale_synthetic_mount_targets();
+
+    assert!(!placeholder.exists());
+    assert!(!marker_dir.exists());
+}
+
+/// #348 (owner decision D45): only a placeholder a run recorded is ever
+/// removed. A person's own empty read-only file at a denied path, with no
+/// record anywhere, has a leftover placeholder's shape but is not one: the
+/// sweep keeps it, and it is not held as a live placeholder either.
+#[test]
+fn a_persons_own_unrecorded_empty_read_only_file_is_kept() {
+    let temp_dir = tempfile::TempDir::new().expect("tempdir");
+    let own_file = temp_dir.path().join(".pfterminal");
+    std::fs::write(&own_file, "").expect("the person's own file");
+    std::fs::set_permissions(&own_file, std::fs::Permissions::from_mode(0o444))
+        .expect("make it read-only");
+
+    remove_stale_synthetic_mount_targets();
+
+    assert!(own_file.exists());
+    assert_eq!(
+        std::fs::metadata(&own_file)
+            .expect("stat")
+            .permissions()
+            .mode()
+            & 0o777,
+        0o444
+    );
+    assert!(!is_live_placeholder(&own_file));
 }
 
 /// #607: a sweep leaves a placeholder whose run is in another PID namespace

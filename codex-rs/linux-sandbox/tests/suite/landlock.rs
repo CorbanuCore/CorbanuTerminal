@@ -683,6 +683,12 @@ async fn sandbox_rejects_symlinked_synthetic_mount_registry() {
     );
     let mut env = create_env_from_core_vars();
     env.insert("TMPDIR".to_string(), temp.path().display().to_string());
+    // #348: the registry lives under the state directory, so the symlink
+    // is planted there (the temp directory holds it no longer).
+    env.insert(
+        "XDG_STATE_HOME".to_string(),
+        temp.path().display().to_string(),
+    );
     let output = expect_denied(
         run_cmd_result_with_permission_profile_for_cwd(
             &["sh", "-c", "touch registry/forged-marker"],

@@ -1674,7 +1674,12 @@ fn read_synthetic_mount_target_record(
         None => (rest, None),
     };
     let path = Path::new(std::ffi::OsStr::from_bytes(path));
-    if !path.is_absolute() || synthetic_mount_marker_dir(path) != marker_dir {
+    // #348: a record written before the registry moved out of the
+    // temporary directory names its folder under that root instead.
+    if !path.is_absolute()
+        || (synthetic_mount_marker_dir(path) != marker_dir
+            && temp_synthetic_mount_marker_dir(path).as_deref() != Some(marker_dir))
+    {
         return None;
     }
     let real_path = match real_path {
@@ -1731,14 +1736,33 @@ fn owned_by_this_user(path: &Path, file: bool) -> bool {
 /// registry it does nothing, and what cannot be removed keeps its record for
 /// a later run.
 fn remove_stale_synthetic_mount_targets() {
-    // A run without placeholders must not fail here.
-    let Some(registry_root) = unchecked_synthetic_mount_registry_root() else {
-        return;
-    };
-    if !owned_by_this_user(&registry_root, /*file*/ false) {
+    // A registry this run cannot lock (read-only in a nested sandbox) is
+    // left as it is. (#673: never while this thread holds the lock, which a
+    // second descriptor would wait for forever.)
+    if REGISTRY_LOCK_HELD.get() {
         return;
     }
-    let Ok(entries) = fs::read_dir(&registry_root) else {
+    let registry_root = unchecked_synthetic_mount_registry_root();
+    if let Some(registry_root) = &registry_root {
+        sweep_synthetic_mount_registry_root(registry_root);
+    }
+    // #348: records an older version left under the temporary directory
+    // are swept from there too, for as long as that directory lasts.
+    if let Some(temp_root) = temp_synthetic_mount_registry_root()
+        && registry_root.as_deref() != Some(temp_root.as_path())
+    {
+        sweep_synthetic_mount_registry_root(&temp_root);
+    }
+}
+
+/// One registry folder's part of [`remove_stale_synthetic_mount_targets`]:
+/// the placeholders recorded in it whose runs all ended.
+fn sweep_synthetic_mount_registry_root(registry_root: &Path) {
+    // A run without placeholders must not fail here.
+    if !owned_by_this_user(registry_root, /*file*/ false) {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(registry_root) else {
         return;
     };
     // Without the lock first: most runs find nothing recorded.
@@ -1748,12 +1772,6 @@ fn remove_stale_synthetic_mount_targets() {
         .filter(|marker_dir| marker_dir.join(SYNTHETIC_MOUNT_TARGET_RECORD).is_file())
         .collect();
     if recorded.is_empty() {
-        return;
-    }
-    // A registry this run cannot lock (read-only in a nested sandbox) is
-    // left as it is. (#673: never while this thread holds the lock, which a
-    // second descriptor would wait for forever.)
-    if REGISTRY_LOCK_HELD.get() {
         return;
     }
     let Ok(lock_file) = File::open(registry_root.join("lock")) else {
@@ -1929,10 +1947,65 @@ impl Drop for RegistryLock {
 /// The registry folder, without the panicking checks of
 /// [`synthetic_mount_registry_root`].
 fn unchecked_synthetic_mount_registry_root() -> Option<PathBuf> {
+    compute_synthetic_mount_registry_root()
+}
+
+/// #348: the registry folder: under the per-user state directory
+/// ([`user_state_dir`]) when there is one, else under the temporary
+/// directory, as before. A placeholder's record must outlive the run that
+/// wrote it by as long as the placeholder can: the temporary directory is
+/// swept and lost on reboot, and a record lost with it orphaned the
+/// placeholder, which later runs then took for a file of the person's own
+/// and kept forever.
+fn compute_synthetic_mount_registry_root() -> Option<PathBuf> {
+    if let Some(state_dir) = user_state_dir() {
+        // The state directory may not exist yet on a fresh account, and
+        // the root is looked up before anything else would make it.
+        if state_dir.canonicalize().is_err() {
+            let _ = fs::create_dir_all(&state_dir);
+        }
+        if let Ok(state_dir) = state_dir.canonicalize() {
+            return Some(state_dir.join(synthetic_mount_registry_dir_name()));
+        }
+    }
+    temp_synthetic_mount_registry_root()
+}
+
+/// The registry folder under the temporary directory: where it lived
+/// before #348 (the sweep still reads records an older version left
+/// there), and the fallback where there is no state directory.
+fn temp_synthetic_mount_registry_root() -> Option<PathBuf> {
     let temp_dir = std::env::temp_dir().canonicalize().ok()?;
+    Some(temp_dir.join(synthetic_mount_registry_dir_name()))
+}
+
+fn synthetic_mount_registry_dir_name() -> String {
     // SAFETY: `geteuid` has no preconditions.
-    let euid = unsafe { libc::geteuid() };
-    Some(temp_dir.join(format!("codex-bwrap-synthetic-mount-targets-{euid}")))
+    let effective_uid = unsafe { libc::geteuid() };
+    format!("codex-bwrap-synthetic-mount-targets-{effective_uid}")
+}
+
+/// The per-user state directory (XDG base directories):
+/// `$XDG_STATE_HOME` when it is set and absolute, else `~/.local/state`.
+/// `None` where no home directory is known.
+fn user_state_dir() -> Option<PathBuf> {
+    state_dir_from(
+        std::env::var_os("XDG_STATE_HOME").as_deref(),
+        std::env::home_dir().as_deref(),
+    )
+}
+
+fn state_dir_from(
+    xdg_state_home: Option<&std::ffi::OsStr>,
+    home: Option<&Path>,
+) -> Option<PathBuf> {
+    if let Some(state_home) = xdg_state_home {
+        let state_home = PathBuf::from(state_home);
+        if state_home.is_absolute() {
+            return Some(state_home);
+        }
+    }
+    home.map(|home| home.join(".local").join("state"))
 }
 
 /// The registry's lock file, opened (and the registry made) for locking.
@@ -2004,24 +2077,26 @@ fn synthetic_mount_marker_dir(path: &Path) -> PathBuf {
     synthetic_mount_registry_root().join(format!("{:016x}", hash_path(path)))
 }
 
+/// A path's marker folder in the temporary directory's registry, where an
+/// older version recorded it (before #348).
+fn temp_synthetic_mount_marker_dir(path: &Path) -> Option<PathBuf> {
+    temp_synthetic_mount_registry_root().map(|root| root.join(format!("{:016x}", hash_path(path))))
+}
+
 pub(crate) fn synthetic_mount_registry_root() -> PathBuf {
     static REGISTRY_ROOT: OnceLock<PathBuf> = OnceLock::new();
 
     REGISTRY_ROOT
         .get_or_init(|| {
-            let effective_uid = unsafe { libc::geteuid() };
-            let temp_dir = std::env::temp_dir();
-            let temp_dir = temp_dir.canonicalize().unwrap_or_else(|err| {
+            let registry_root = compute_synthetic_mount_registry_root().unwrap_or_else(|| {
+                let temp_dir = std::env::temp_dir();
                 panic!(
-                    "failed to resolve synthetic mount registry temp directory {}: {err}",
+                    "failed to resolve synthetic mount registry directory (state directory or {})",
                     temp_dir.display()
                 )
             });
-            let registry_root = temp_dir.join(format!(
-                "codex-bwrap-synthetic-mount-targets-{effective_uid}"
-            ));
             // A registry symlink can redirect bookkeeping into a writable root
-            // that does not overlap TMPDIR, bypassing its read-only mount.
+            // that does not overlap the registry's parent, bypassing its read-only mount.
             assert!(
                 !registry_root.is_symlink(),
                 "synthetic mount registry must not be a symlink: {}",
