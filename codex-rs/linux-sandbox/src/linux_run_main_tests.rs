@@ -345,10 +345,10 @@ fn state_dir_comes_from_xdg_state_home_or_the_home_directory() {
         Some(PathBuf::from("/home/person/.local/state"))
     );
     assert_eq!(
-        state_dir_from(None, Some(home)),
+        state_dir_from(/*xdg_state_home*/ None, Some(home)),
         Some(PathBuf::from("/home/person/.local/state"))
     );
-    assert_eq!(state_dir_from(None, None), None);
+    assert_eq!(state_dir_from(/*xdg_state_home*/ None, /*home*/ None), None);
 }
 
 #[test]
