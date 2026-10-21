@@ -42,7 +42,7 @@ pub use batch::HistoryBatch;
 pub use batch::HistoryBatchCursor;
 pub use batch::HistoryBatchEntry;
 pub use batch::lookup_batch;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(crate) use batch::lookup_batch_from_file;
 
 #[cfg(unix)]
