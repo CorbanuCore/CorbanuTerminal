@@ -11,7 +11,6 @@ expression: sanitized
 │ information on rate limits and credits                                     │
 │                                                                            │
 │  Model:            gpt-5.1-codex-max (reasoning none, summaries auto)      │
-│  Model provider:   OpenAI · account default                                │
 │  Directory: [[workspace]]                                                  │
 │  Permissions:      Next turn: Profile locked (read-only, Ask for approval) │
 │  Security:         Requested Permissive; effective protection unverified   │

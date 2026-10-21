@@ -8,7 +8,7 @@ expression: sanitized
 │  >_ Corbanu Terminal (v<V>)                                                                │
 │                                                                                            │
 │  Model:                claude-opus-5-plan                                                  │
-│  Model provider:       Claude Plan · account default                                       │
+│  Model provider:       Claude Plan                                                         │
 │  Directory: [[workspace]]                                                                  │
 │  Permissions:          Next turn: Custom (workspace with network access, Ask for approval) │
 │  Security:             Requested Permissive; effective protection unverified (/security)   │

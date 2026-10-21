@@ -14,7 +14,6 @@ expression: sanitized
 │                    control.sock (v0.133.0)                               │
 │                                                                          │
 │  Model:            gpt-5.1-codex-max (reasoning medium, summaries auto)  │
-│  Model provider:   OpenAI · account default                              │
 │  Directory: [[workspace]]                                                │
 │  Permissions:      Next turn: Custom (workspace with network access, Ask │
 │                    for approval)                                         │
