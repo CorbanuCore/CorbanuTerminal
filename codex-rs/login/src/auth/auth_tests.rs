@@ -3623,151 +3623,112 @@ fn legacy_provider_auth_replacements_are_atomic_and_leave_no_temporary_file() {
     );
 }
 
-// DIAGNOSTIC ONLY (#1201), never to be merged: times each phase of the
-// cmd.exe provider-auth helper under the Windows Bazel lane's load.
+// DIAGNOSTIC ONLY (#1201), never to be merged, round 2: the real test body,
+// sequentially, with per-step timestamps; and an inline (no batch file) helper.
 #[cfg(windows)]
 mod diag_1201 {
-    use super::ProviderAuthScript;
-    use std::time::Duration;
+    use super::*;
     use std::time::Instant;
-    use tokio::io::AsyncReadExt;
 
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    const TRACED: &str = "@echo off\r\n>>trace.txt echo b %time%\r\nsetlocal EnableExtensions DisableDelayedExpansion\r\nset \"first_line=\"\r\n<tokens.txt set /p \"first_line=\"\r\n>>trace.txt echo r %time%\r\nif not defined first_line exit /b 1\r\nsetlocal EnableDelayedExpansion\r\necho(!first_line!\r\nendlocal\r\n>>trace.txt echo p %time%\r\ntype nul > tokens.next\r\nfor /f \"usebackq skip=1 delims=\" %%L in (\"tokens.txt\") do >>tokens.next echo(%%L\r\n>>trace.txt echo f %time%\r\nmove /y tokens.next tokens.txt >nul\r\n>>trace.txt echo e %time%\r\n";
 
-    #[derive(Debug)]
-    struct Run {
-        variant: &'static str,
-        spawn_ms: u128,
-        exit_ms: Option<u128>,
-        stdout_eof_ms: Option<u128>,
-        stderr_eof_ms: Option<u128>,
-        status: Option<i32>,
-        stdout: String,
-        trace: String,
+    fn ms(t: Instant) -> u128 {
+        t.elapsed().as_millis()
     }
 
-    async fn run(
-        script: &ProviderAuthScript,
-        variant: &'static str,
-        flags: Option<u32>,
-        args: &[String],
-    ) -> Run {
-        let dir = script.tempdir.path();
-        let mut command = tokio::process::Command::new("cmd.exe");
-        command
-            .args(args)
-            .current_dir(dir)
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .kill_on_drop(true);
-        if let Some(flags) = flags {
-            command.creation_flags(flags);
-        }
-        let t0 = Instant::now();
-        let mut child = command.spawn().expect("spawn cmd.exe");
-        let spawn_ms = t0.elapsed().as_millis();
-        let mut stdout = child.stdout.take().expect("stdout");
-        let mut stderr = child.stderr.take().expect("stderr");
-        let limit = Duration::from_secs(30);
-        let out_fut = async {
-            let mut buf = Vec::new();
-            let ok = tokio::time::timeout(limit, stdout.read_to_end(&mut buf)).await;
-            (ok.is_ok().then(|| t0.elapsed().as_millis()), buf)
-        };
-        let err_fut = async {
-            let mut buf = Vec::new();
-            let ok = tokio::time::timeout(limit, stderr.read_to_end(&mut buf)).await;
-            ok.is_ok().then(|| t0.elapsed().as_millis())
-        };
-        let wait_fut = async {
-            match tokio::time::timeout(limit, child.wait()).await {
-                Ok(Ok(status)) => (Some(t0.elapsed().as_millis()), status.code()),
-                _ => (None, None),
-            }
-        };
-        let ((stdout_eof_ms, out), stderr_eof_ms, (exit_ms, status)) =
-            tokio::join!(out_fut, err_fut, wait_fut);
-        let trace = std::fs::read_to_string(dir.join("trace.txt")).unwrap_or_default();
-        Run {
-            variant,
-            spawn_ms,
-            exit_ms,
-            stdout_eof_ms,
-            stderr_eof_ms,
-            status,
-            stdout: String::from_utf8_lossy(&out).trim().to_string(),
-            trace: trace.replace("\r\n", "|"),
-        }
-    }
-
-    async fn scenario(i: usize) -> Vec<Run> {
-        let mut runs = Vec::new();
-        let script = ProviderAuthScript::new(&["provider-token", "refreshed-provider-token"])
-            .expect("script");
-        let (variant, flags) = match i % 3 {
-            0 => ("plain", None),
-            1 => ("no_window", Some(CREATE_NO_WINDOW)),
-            _ => ("traced", None),
-        };
-        let args = if variant == "traced" {
-            let traced = std::fs::read_to_string(script.tempdir.path().join("print-token.cmd"))
-                .expect("script")
-                .replace(
-                    "@echo off\n",
-                    "@echo off\n>>trace.txt echo begin %time%\n",
-                )
-                .replace("echo(!first_line!\n", "echo(!first_line!\n>>trace.txt echo printed %time%\n")
-                .replace(
-                    "type nul > tokens.next\n",
-                    ">>trace.txt echo rewrite %time%\ntype nul > tokens.next\n",
-                )
-                .replace(
-                    "move /y tokens.next tokens.txt >nul\n",
-                    ">>trace.txt echo move %time%\nmove /y tokens.next tokens.txt >nul\n>>trace.txt echo end %time% %errorlevel%\n",
-                );
-            std::fs::write(script.tempdir.path().join("print-token.cmd"), traced).expect("write");
-            script.args.clone()
-        } else {
-            script.args.clone()
-        };
-        runs.push(run(&script, variant, flags, &args).await);
-        runs.push(run(&script, variant, flags, &args).await);
-        let bare: Vec<String> = ["/d", "/s", "/c", "exit 0"].map(String::from).to_vec();
-        runs.push(run(&script, "bare", flags, &bare).await);
-        runs
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn diag_1201_cmd_helper_phases() {
-        let mut all = Vec::new();
-        let tasks: Vec<_> = (0..60).map(|i| tokio::spawn(scenario(i))).collect();
-        for task in tasks {
-            all.extend(task.await.expect("scenario"));
-        }
-        let mut report = String::new();
-        let mut by_variant = std::collections::BTreeMap::<&str, Vec<u128>>::new();
-        for run in &all {
-            let total = [run.exit_ms, run.stdout_eof_ms, run.stderr_eof_ms]
-                .into_iter()
-                .map(|t| t.unwrap_or(99_999))
-                .max()
-                .unwrap_or(0);
-            by_variant.entry(run.variant).or_default().push(total);
-            if total > 3_000 || run.status != Some(0) {
-                report.push_str(&format!("SLOW/BAD {run:?}\n"));
+    #[tokio::test]
+    async fn diag_1201_real_body_sequential() {
+        let status = std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-Command",
+                "$s=Get-MpComputerStatus; \"rtp=$($s.RealTimeProtectionEnabled) ioav=$($s.IoavProtectionEnabled) bm=$($s.BehaviorMonitorEnabled)\"",
+            ])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_else(|e| format!("{e}"));
+        let mut report = format!("defender: {status}\n");
+        let mut totals = Vec::new();
+        for i in 0..30 {
+            let script =
+                ProviderAuthScript::new(&["provider-token", "refreshed-provider-token"]).unwrap();
+            std::fs::write(script.tempdir.path().join("print-token.cmd"), TRACED).unwrap();
+            let mut auth_config = script.auth_config();
+            auth_config.refresh_interval_ms = 0;
+            auth_config.timeout_ms = std::num::NonZeroU64::new(60_000).unwrap();
+            let manager = AuthManager::external_bearer_only(auth_config);
+            let mut recovery = manager.unauthorized_recovery();
+            let t0 = Instant::now();
+            let first = manager
+                .auth()
+                .await
+                .and_then(|a| a.api_key().map(str::to_string));
+            let t_first = ms(t0);
+            let t1 = Instant::now();
+            let next = recovery.next().await.map(|_| ()).map_err(|e| e.to_string());
+            let t_second = ms(t1);
+            let trace = std::fs::read_to_string(script.tempdir.path().join("trace.txt"))
+                .unwrap_or_default()
+                .replace("\r\n", "|");
+            totals.push(t_first.max(t_second));
+            if t_first > 2_000 || t_second > 2_000 || first.is_none() || next.is_err() {
+                report.push_str(&format!(
+                    "SLOW i={i} first={t_first}ms ok={} refresh={t_second}ms {next:?} trace={trace}\n",
+                    first.is_some()
+                ));
             }
         }
-        for (variant, mut totals) in by_variant {
-            totals.sort_unstable();
-            let n = totals.len();
-            report.push_str(&format!(
-                "{variant}: n={n} p50={} p90={} max={}\n",
-                totals[n / 2],
-                totals[n * 9 / 10],
-                totals[n - 1]
-            ));
+        totals.sort_unstable();
+        report.push_str(&format!(
+            "real-body: n=30 p50={} p90={} max={}\n",
+            totals[15], totals[27], totals[29]
+        ));
+        // Inline helper: one command line, no batch file.
+        let mut inline = Vec::new();
+        for i in 0..30 {
+            let script =
+                ProviderAuthScript::new(&["provider-token", "refreshed-provider-token"]).unwrap();
+            for run in 0..2 {
+                let mut std_command = std::process::Command::new("cmd.exe");
+                {
+                    use std::os::windows::process::CommandExt;
+                    std_command.raw_arg(r#"/d /s /v:on /c "set "t=" & (set /p t=<tokens.txt) & (echo(!t!) & (for /f "usebackq skip=1 delims=" %L in ("tokens.txt") do @echo(%L)>tokens.next & move /y tokens.next tokens.txt >nul""#);
+                }
+                std_command
+                    .current_dir(script.tempdir.path())
+                    .stdin(std::process::Stdio::null());
+                let mut command = tokio::process::Command::from(std_command);
+                command.kill_on_drop(true);
+                let t = Instant::now();
+                let out =
+                    tokio::time::timeout(std::time::Duration::from_secs(60), command.output())
+                        .await;
+                let elapsed = ms(t);
+                inline.push(elapsed);
+                let text = match &out {
+                    Ok(Ok(o)) => format!(
+                        "status={:?} out={:?} err={:?}",
+                        o.status.code(),
+                        String::from_utf8_lossy(&o.stdout).trim(),
+                        String::from_utf8_lossy(&o.stderr).trim()
+                    ),
+                    other => format!("{other:?}"),
+                };
+                let expected = if run == 0 {
+                    "provider-token"
+                } else {
+                    "refreshed-provider-token"
+                };
+                if elapsed > 2_000 || !text.contains(&format!("out={expected:?}")) || i == 0 {
+                    report.push_str(&format!("INLINE i={i} run={run} {elapsed}ms {text}\n"));
+                }
+            }
         }
-        panic!("DIAG-1201 report (intentional failure)\n{report}");
+        inline.sort_unstable();
+        report.push_str(&format!(
+            "inline: n=60 p50={} p90={} max={}\n",
+            inline[30], inline[54], inline[59]
+        ));
+        panic!("DIAG-1201 round 2 (intentional failure)\n{report}");
     }
 }
