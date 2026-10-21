@@ -7,7 +7,7 @@ binary, provider credentials, the encrypted vault, and model selection.
 
 | Requirement      | Details                                                        |
 | ---------------- | -------------------------------------------------------------- |
-| Operating system | macOS 12+, Ubuntu 20.04+/Debian 10+, or Windows 11 via WSL2    |
+| Operating system | macOS 12+, Ubuntu 20.04+/Debian 10+, or Windows 11             |
 | Git              | 2.23+ recommended                                              |
 | RAM              | 4 GB minimum, 8 GB recommended                                 |
 | Rust             | Required only for source builds                                |
@@ -61,6 +61,26 @@ curl -fsSL https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/downlo
 
 The installer requires a published GitHub release. If a fresh clone has no
 release yet, use the source build fallback below.
+
+### Windows Installer
+
+Windows installs natively; WSL2 is not required. Run the installer from
+PowerShell:
+
+```powershell
+irm https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.ps1 | iex
+```
+
+The installer downloads the Windows package from the same GitHub release and
+creates the `corbanu` command in `%LOCALAPPDATA%\Programs\Corbanu Terminal\bin`,
+or reuses a legacy `%LOCALAPPDATA%\Programs\PFTerminal\bin` when only that one
+exists. Set `CORBANU_INSTALL_DIR` to choose another directory. It leaves any
+existing stock `codex` command alone. State resolution follows the order above,
+with `%USERPROFILE%\.corbanu` and `%USERPROFILE%\.pfterminal` in place of
+`$HOME/.corbanu` and `$HOME/.pfterminal`.
+
+If an upgrade refuses to retarget a junction or still runs an old version, see
+[Windows upgrade diagnostics](windows-upgrade-diagnostics.md).
 
 ### macOS DMG
 
