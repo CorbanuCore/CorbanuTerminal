@@ -273,10 +273,16 @@ pub enum ExecPolicyUpdateError {
     JoinBlockingTask { source: tokio::task::JoinError },
 
     #[error("failed to update in-memory rules: {source}")]
-    AddRule {
-        #[from]
-        source: ExecPolicyRuleError,
-    },
+    AddRule { source: ExecPolicyRuleError },
+}
+
+// Written by hand: thiserror's `#[from]` on this named field expands to
+// `AddRule { source: source }`, which clippy 1.99 reports as
+// `redundant_field_names` at the field's span.
+impl From<ExecPolicyRuleError> for ExecPolicyUpdateError {
+    fn from(source: ExecPolicyRuleError) -> Self {
+        Self::AddRule { source }
+    }
 }
 
 /// #626: the level a person approved a remembered approval under.

@@ -163,6 +163,11 @@ skip_reopen_warmup = true
 The first reply after reopening may then be slower, and when approvals go to the auto-reviewer, its session starts at
 the first review instead of on reopen. A new conversation still warms up, and so do sub-agents.
 
+App-server clients that start a thread only for realtime voice (`thread/start`, then `thread/realtime/start`) get
+the new-conversation warm-up too, on the thread's text model, which realtime uses only for handoffs (and the
+optional end-of-session transcript turn). Pass a cheap
+`model` on `thread/start` to make it cheaper; see "Realtime-only threads" in `codex-rs/app-server/README.md` (#1045).
+
 ## Vault And Secrets
 
 Provider API keys saved by Corbanu Terminal are stored in the encrypted vault, not in
@@ -236,9 +241,45 @@ the levels protect and their limits are on
 ### Protected launch (`secretless_agent_launch`)
 
 With `secretless_agent_launch` on, every agent command runs inside the OS
-sandbox, with only allowlisted environment variables, and can't read
-Corbanu's vault, sign-in files or config. Nothing runs outside the sandbox at
-any level. At Permissive, Corbanu therefore doesn't offer it (#739):
+sandbox, with only allowlisted environment variables, and can't read these
+files:
+
+- Corbanu's own: its vault (`secrets`), sign-in files (`auth.json`,
+  `.credentials.json`, `provider_auth.json`, `.env`), config (`config.toml`,
+  `managed_config.toml`), `wallet`, history (`history.jsonl`), session
+  transcripts (`sessions`, `archived_sessions`), logs (`log`), shell
+  snapshots (`shell_snapshots`), its runtime folder (`run`), its databases
+  (`*.sqlite*` at the top of its home), the database init lock
+  (`pfterminal_db_init.lock`), the GPU controller lock
+  (`gpu-controller.lock`), pending accounting records
+  (`accounting-pending`), databases recovery set aside (`db-backups` in its
+  home, `<home>.db-backups` beside it), and the credential broker's runtime
+  folder. If you keep the databases in a separate folder (`sqlite_home` or
+  `CODEX_SQLITE_HOME`), commands can't read that folder's databases, init
+  lock, GPU controller lock, pending accounting records and backups
+  (`db-backups` in it, `<folder>.db-backups` beside it) either. On Linux a
+  backup folder beside a folder is covered only when it exists at the
+  command's start.
+- CLI tokens: the files `~/.netrc`, `~/.git-credentials`,
+  `~/.config/gh/hosts.yml`, `~/.aws/credentials`, `~/.docker/config.json`,
+  `~/.npmrc` and Claude's sign-in (`~/.claude/.credentials.json`, and
+  `.credentials.json` in `CLAUDE_CONFIG_DIR` when set); on Windows also
+  `_netrc` in your profile folder, the GitHub CLI's `hosts.yml` in
+  `%APPDATA%`, the whole Google Cloud CLI folder `%APPDATA%\gcloud` (its
+  credentials and config), and Cargo's `credentials.toml` and `credentials`
+  (in `CARGO_HOME`, by default `%USERPROFILE%\.cargo`).
+- On macOS, your keychains (`~/Library/Keychains`).
+
+On Windows, one of these that doesn't exist when a command starts isn't
+covered for that command (such as a backup recovery creates while it runs),
+except Corbanu's own folders inside its home (`secrets`, `wallet`, `run`,
+`shell_snapshots`, `log`, `sessions`, `archived_sessions`,
+`accounting-pending`, `db-backups`) and files created directly in its home.
+
+Approving a command never unlocks these, at any level; under Moderate the
+approval prompt names such a file and says so. Nothing runs outside the
+sandbox at any level. At Permissive, Corbanu therefore doesn't offer it
+(#739):
 
 - A command that asks to run outside the sandbox isn't run, and you aren't
   asked. Corbanu says it isn't possible here. (If your own permission profile

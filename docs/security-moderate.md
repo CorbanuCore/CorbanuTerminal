@@ -6,10 +6,12 @@ while normal work continues. It keeps your own approval, sandbox, network and
 web search settings and adds the protections below. The review in
 `/security` lists the same rows before you confirm, and the inspector (`i`)
 shows what is in force: its recent denials include what Moderate's sandbox
-refused, and a model request of the session (or one of its agents) that the
-credential broker refused, for any reason, shows the broker as degraded until
-a later request of the same session goes through. A refused request outside
-any session (the model list, the wallet) shows in every session's inspector.
+refused (and a protected file the image tool was refused, which a warning
+on screen also explains, as for a command, #1087), and a model request of
+the session (or one of its agents) that the credential broker refused, for
+any reason, shows the broker as degraded until a later request of the same
+session goes through. A refused request outside any session (the model
+list, the wallet) shows in every session's inspector.
 
 Moderate needs the untrusted-content labels (the `source_envelopes` feature):
 without them Corbanu refuses every model request under Moderate, so
@@ -32,7 +34,8 @@ without them Corbanu refuses every model request under Moderate, so
   `.agents`, and Corbanu's own files. Your fresh approval of one command
   lifts this for that command, except for Corbanu's runtime files, its
   security state and keys (such as `security_state.json` and
-  `source-origin.key`) and what `secretless_agent_launch` keeps; a remembered
+  `source-origin.key`) and what `secretless_agent_launch` keeps (such as
+  `~/.aws/credentials` and `~/.netrc`; see below); a remembered
   or automatic approval never does. A project's `.env` files aren't covered;
   Aggressive covers them.
 - **Untrusted content.** Tool, MCP, web, agent and memory output reaches the
@@ -40,11 +43,15 @@ without them Corbanu refuses every model request under Moderate, so
   approval: the vault, credentials (a project's `.env` files included),
   Corbanu's own files and security settings, disclosure, value transfer, code
   you haven't seen, MCP calls that change or send data, and tools Corbanu
-  hasn't classified. Where approving can't unlock a file (Corbanu's sign-in,
-  vault, config and history stay closed to agent commands under
-  `secretless_agent_launch`), the prompt says so. Cached, remembered or
-  automatic approvals don't count, and with approvals off these actions are
-  refused.
+  hasn't classified. Where approving can't unlock a file, the prompt names
+  it and says what it is: under `secretless_agent_launch`, Corbanu's own
+  files (such as its sign-in, vault, config and history), CLI tokens (`~/.aws/credentials`, `~/.netrc`,
+  `~/.npmrc`, `~/.git-credentials`, `~/.config/gh/hosts.yml`,
+  `~/.docker/config.json`, Claude's sign-in) and, on macOS,
+  `~/Library/Keychains` stay closed to agent commands (see
+  [Protected launch](config.md#protected-launch-secretless_agent_launch)).
+  Cached, remembered or automatic approvals don't count, and with approvals
+  off these actions are refused.
 - **Model keys.** From the next start, provider API keys are held by the
   credential broker, as under Aggressive. `broker_model_auth = false` in your
   own config keeps it off.
@@ -99,18 +106,42 @@ Counters and plain uses still run without asking:
 in two (the output on one, the arithmetic or pattern on the next) avoids
 the prompt.
 
+## Other code hidden in a command line
+
+After untrusted content these also count as code you haven't seen and ask
+first, with or without command output on the line:
+
+- zsh glob qualifiers that run code: `e` and `oe` with code
+  (`ls *(e:'rm x':)`) and `+name` (`ls *(+f)`) (#1028). Quoted text that zsh
+  would read that way asks too, such as `git commit -m "fix(tests): x"`.
+- bash's prompt expansion `${v@P}`, which runs any `$(...)` in the value, as
+  `eval` would (#1012). Other ways a shell runs a variable's value
+  (`PS4` with `set -x`, zsh's `${(e)v}` and `print -P`, `trap "$v"`) aren't
+  covered yet (#1064).
+- substitutions (`$(...)`, `<(...)`, `>(...)`) nested more than 32 deep
+  (#1020).
+
 ## Choosing, restarting and going back
 
 When you confirm Moderate, Core's rules (the sandbox, protected files and
 untrusted content) apply at once in every session of this Corbanu Terminal,
-and grants and "for session" approvals end. A command or file edit whose
-approval prompt was still open is asked about again under the new level; an
-answer to the old prompt isn't used, and a retry outside the sandbox that was
-being approved (or was due) isn't run (#1001). Other Corbanu Terminals running
-on the same Corbanu home take them within about a second and say so, as they
-do with the kill switch. The credential broker starts at the next start
-(in each of them); press `r` to restart right away. Your `config.toml` isn't
-changed.
+and grants and "for session" approvals end. A command, file edit or MCP tool
+call whose approval prompt was still open is decided again under the new
+level, so you're asked again where it needs approval; an answer to the old
+prompt isn't used, and a retry outside the sandbox that was being approved (or
+was due) isn't run (#1001). A command or file edit that carried extra
+permissions (ones it asked for, or grants made before the change) isn't
+decided again: it doesn't run, and the agent can ask again (#1001, #1057).
+Other Corbanu Terminals running on the same Corbanu home take them within
+about a second and say so, as they do with the kill switch. The credential
+broker starts at the next start (in each of them); press `r` to restart right
+away. Your `config.toml` isn't changed. If you confirm before the window's own
+session has started, that session starts under Core's Moderate rules too
+(#1047). In a window whose sessions run on an app server outside Corbanu
+Terminal (a remote server or the local daemon), Moderate reaches that server
+only if it runs on this Corbanu home, as it reaches another Corbanu Terminal;
+Corbanu Terminal starts against such a server only under Permissive, so the
+level picker doesn't offer "restart now" there.
 
 Choosing Permissive or Aggressive from Moderate shows what changes first.
 Back to Permissive takes effect when you restart; until then Moderate stays
@@ -124,47 +155,58 @@ The kill switch (`/security` → `g`) works under every level.
 - If your own settings turn the sandbox off (full access), commands that the
   protected-file rules don't cover run without one. Choose a sandbox in your
   settings to keep every command in it.
-- With full access in your own settings, commands can also write the
-  project's `.git`, except its hooks and config (with a sandbox setting `.git`
-  stays read-only). A command could leave something there that your own git
-  later follows outside the sandbox (#874): a link such as
-  `.git/COMMIT_EDITMSG` to a file elsewhere (or to `.git/config`), which your
-  next `git commit` writes; a hard link; rebase or cherry-pick steps whose
-  `exec` lines, or a merge strategy that isn't git's own, run when you
-  continue; a remote in `.git/remotes`; config or a hooks folder where there
-  was none; or a replaced `.git`. On macOS and Linux, Corbanu looks at `.git`
-  before a session's first such command (and reports links, steps and hard
-  links already there), after each one, before each later command and at
-  the end of each turn, and warns you about anything new, with the command
-  that removes it. It removes nothing itself. Below `objects`, `lfs` and
-  `annex` it looks only at their own entries: git reads the files below and
-  puts new ones in place, it doesn't write through them. Links inside a
-  hooks folder are left alone (git runs hooks, it doesn't write through
-  them). Until you remove what it found, and while it can't look at all of
-  `.git` (a folder it can't read, or too many entries), approving a command
-  in that project doesn't lift the protected-file rules (nor run it outside
-  the sandbox, nor let it create user namespaces), in any session of this
-  Corbanu Terminal. Some setups of your own hold them too until you remove
-  them: a layout made of links (`git new-workdir`, Android's `repo`), a
-  `config.worktree` that `git sparse-checkout` adds, or a hooks folder a
-  hook installer creates where there was none. On Linux the sandbox leaves
-  empty files and folders in place while a command runs: a new config file or
-  hooks folder that is empty is reported (in any session) once something is
-  put in it, and an empty `.git` folder replaced by another empty one isn't
-  reported. It doesn't watch in between: a process a command left running can
-  change `.git` after the last look, even while an approved command runs, and
-  what it changes after a turn ends is found at the next command, not before
-  you run git yourself. It watches the repositories of the folders agent
-  commands run in (a command's own working folder, `workdir`, too): not a
-  repository a command reaches elsewhere (`git -C`, a `cd` in the command or
-  in a shell it left running, a program the zsh-fork shell starts in another
-  folder), not one a command creates and fills in one go (nothing was there to
-  compare with), and not a `.git` removed in one command and made again in a
-  later one (it gets a first look, which reports only links, steps and hard
-  links). New config and hooks are checked only in a repository's own git
-  folder, not in its worktrees' or submodules'. A session that works in more
-  than 16 repositories forgets the oldest; its next look there reports only
-  links, steps and hard links.
+- With full access in your own settings, commands can also write the project's
+  `.git`, except its hooks and config (with a sandbox setting `.git` stays
+  read-only). A command could leave something there that your own git later
+  follows outside the sandbox (#874): a link such as `.git/COMMIT_EDITMSG` to
+  a file elsewhere (or to `.git/config`), which your next `git commit` writes;
+  a hard link; rebase or cherry-pick steps whose `exec` lines, or a merge
+  strategy that isn't git's own, run when you continue; a remote in
+  `.git/remotes`; config or a hooks folder where there was none; or a replaced
+  `.git`. On macOS and Linux, Corbanu looks at `.git` before a session's first
+  such command is decided (and reports links, steps and hard links already
+  there, which then hold that command too), after each one, before each later
+  command and at the end of each turn, and warns you about anything new, with
+  the command that removes it. It removes nothing itself. Below `objects`,
+  `lfs` and `annex` it looks only at their own entries: git reads the files
+  below and puts new ones in place, it doesn't write through them. Links
+  inside a hooks folder are left alone (git runs hooks, it doesn't write
+  through them). Until you remove what it found, and while it can't look at
+  all of `.git` (a folder it can't read, or too many entries), approving a
+  command in that project doesn't lift the protected-file rules (nor run it
+  outside the sandbox, nor let it create user namespaces), in any session of
+  this Corbanu Terminal. Some setups of your own hold them too until you
+  remove them: a layout made of links (`git new-workdir`, Android's `repo`), a
+  `config.worktree` that `git sparse-checkout` adds, or a hooks folder a hook
+  installer creates where there was none. On Linux the sandbox leaves empty
+  files and folders in place while a command runs: a new config file or hooks
+  folder that is empty is reported (in any session) once something is put in
+  it, and an empty `.git` folder replaced by another empty one isn't reported.
+  It doesn't watch in between: a process a command left running can change
+  `.git` after the last look, even while an approved command runs, and what it
+  changes after a turn ends is found at the next command, not before you run
+  git yourself. It watches the repositories of the folders agent commands run
+  in (a command's own working folder, `workdir`, too): not a repository a
+  command reaches elsewhere (`git -C`, a `cd` in the command or in a shell it
+  left running, a program the zsh-fork shell starts in another folder), not
+  one a command creates and fills in one go (nothing was there to compare
+  with). A `.git` that was missing at a look and is back as a different one is
+  looked at in full: its config, hooks and remotes are reported as new, also
+  after `git init` or a fresh clone there (not a worktree git adds again for
+  the same repository), and approving a command in that project doesn't lift
+  the rules until you remove them or restart Corbanu Terminal; the same one
+  moved back (the same inode and, on Linux where the file system records it,
+  the same creation time) is compared with the last look (looked at in full
+  where it now names other git folders). On Linux a new `.git` file that gets
+  a removed one's inode number with the same text counts as moved back where
+  the file system doesn't record creation times, or where it was made within a
+  few milliseconds of the old one (one tick of the clock that stamps them).
+  Where a worktree's or submodule's `.git` is replaced by another kind, or
+  pointed at other git folders, check its config and hooks yourself before you
+  run git there. New config and hooks are checked only in a repository's own
+  git folder, not in its worktrees' or submodules'. A session that works in
+  more than 16 repositories forgets the oldest; its next look there reports
+  only links, steps and hard links.
 - MCP servers, apps, hooks and `!` shell commands run outside the sandbox, as
   under every level.
 - On Linux, where a command you approve can write a Corbanu home's folder

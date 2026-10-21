@@ -45,3 +45,54 @@ them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
   from the automatic approval reviewer still show `no price available` (no
   estimate, never $0), and the next step now adds "OpenAI doesn't publish a
   price for Codex Auto Review." (#913).
+
+## `/security` wording
+
+- **Revoke all names its real scope.** After "Revoke all active authority",
+  the confirmation now says it was revoked "in every session of this Corbanu
+  Terminal on this Corbanu home", as its review says, instead of "in this
+  session". A saved kill switch, on or off, also says that other Corbanu
+  Terminals on the home take it within about a second (#1035).
+- **A stale inspector view is not called degraded.** When the inspector's facts
+  are more than 30 seconds old and nothing else is wrong, its top line reads
+  "◌ Moderate set; this view is stale (status observed 33s ago)" instead of
+  "▲ Moderate degraded"; press `r` to refresh. A stale view still never shows
+  the green "Protected" badge (#1036).
+
+## `/security`: windows without a session yet, and remote app servers
+
+- **Moderate before the window's session starts.** Confirmed in a window whose
+  session hasn't started, Moderate's Saved screen no longer says the session
+  stays Permissive until a restart: that session starts under Core's Moderate
+  rules; the credential broker still waits for the restart (#1047).
+- **Remote app server windows.** In a window whose sessions run on an app
+  server outside Corbanu Terminal (a remote server or the local daemon),
+  `/security` no longer says the session starts here, says the level reaches
+  that server only if it runs on this Corbanu home, and the level picker
+  doesn't offer "restart now", since Corbanu Terminal starts against such a
+  server only under Permissive (#1047).
+
+## Named accounts (behind `named_accounts`)
+
+- **App servers in homes with only the default login no longer wait for a
+  conversation.** With named accounts on, a standalone app server or daemon
+  held back its own ChatGPT requests (apps, plugins, rate limits, the model
+  catalog) until a conversation started, even in homes without named
+  accounts. It now does that only when the home has a named OpenAI sign-in
+  account or `[provider_accounts]` selects one. A server started without one
+  starts holding them from the first conversation on an account added while it
+  runs, and never goes back to the default login (#1085).
+- **`/status` names the account only where named accounts exist.** With named
+  accounts on, the provider line read "OpenAI · account default" (or
+  "Z.AI · account default") in every home. It now names the account only when
+  that provider has a named account in the home, or the session is on or used
+  one; otherwise the line is what it was without the feature (D86).
+
+## `corbanu login status`
+
+- **No part of an API key is shown.** With an API-key login it used to print
+  the key's first 8 and last 5 characters. It now prints
+  `Logged in using an API key - API key configured`, plus
+  `(fingerprint <12 hex>)` when the home's vault has its fingerprint salt. That
+  is the same per-home fingerprint a named OpenAI account holding the key
+  shows (REG-02).

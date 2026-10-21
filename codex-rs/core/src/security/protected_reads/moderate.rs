@@ -13,8 +13,10 @@
 //! own full access runs commands outside a sandbox, which the contract
 //! refuses at every level. Nothing is said about approvals lifting the rules
 //! (#747), except that Corbanu's security state and keys stay denied even
-//! then (#838). Explanation only: it never changes what runs or what is
-//! denied.
+//! then (#838). #1139 (D94): one denial the person's own sandbox makes is
+//! Moderate's too: a write into a writable folder's `.git`, which only a run
+//! outside the sandbox could make and Moderate never allows one (#747).
+//! Explanation only: it never changes what runs or what is denied.
 
 use std::cell::RefCell;
 use std::path::Path;
@@ -131,6 +133,11 @@ pub(super) enum Denied {
     SecurityFile,
     /// A write the secretless launch contract keeps at every level.
     KeptWrite,
+    /// A write into the project's `.git` folder (#1139).
+    GitWrite,
+    /// The same, where secretless agent launch keeps every command in the
+    /// sandbox at every level.
+    KeptGitWrite,
 }
 
 impl Denied {
@@ -151,6 +158,14 @@ impl Denied {
             ),
             Self::KeptWrite => (
                 "writing Corbanu's home or a protected credential file",
+                KEPT,
+            ),
+            Self::GitWrite => (
+                "writing the project's .git folder (git hooks and config)",
+                "denied by the sandbox under Moderate, even when you approve",
+            ),
+            Self::KeptGitWrite => (
+                "writing the project's .git folder (git hooks and config)",
                 KEPT,
             ),
         }
@@ -278,28 +293,139 @@ fn explain_denied(
         }
         blocked
     };
-    let word = super::written_word(
+    if let Some(word) = super::written_word(
         command,
         cwd,
         user_home,
         codex_home,
         &write,
         Some(denial_lines),
-    )?;
-    let kept = found
-        .take()
-        .zip(contract)
-        .is_some_and(|(path, contract)| contract.keeps_read_only(&launched, &path, cwd));
-    Some(if kept {
-        (Denied::KeptWrite, kept_write_explanation(&word))
+    ) {
+        let kept = found
+            .take()
+            .zip(contract)
+            .is_some_and(|(path, contract)| contract.keeps_read_only(&launched, &path, cwd));
+        return Some(if kept {
+            (Denied::KeptWrite, kept_write_explanation(&word))
+        } else {
+            (Denied::Write, write_explanation(&word, way))
+        });
+    }
+
+    // #1139 (D94): a write into a project's `.git` folder. The person's own
+    // sandbox keeps it read-only inside a writable folder; under Moderate no
+    // approval runs a command outside the sandbox (#747, D3), so Moderate is
+    // why it stays read-only. Explanation only: nothing else changes.
+    // A relative path is resolved against the command's folder, which is
+    // not where it wrote if it changed folder (`cd`, `git -C`, ...): then
+    // only an absolute path is attributed.
+    let relative_ok = !changes_folder(command);
+    let git_write = |path: &Path| git_folder_write(&base, path, cwd);
+    let word = super::written_word(
+        command,
+        cwd,
+        user_home,
+        codex_home,
+        &git_write,
+        Some(denial_lines),
+    )
+    .filter(|word| relative_ok || Path::new(word).is_absolute())
+    .or_else(|| git_path_in_lines(cwd, lines, relative_ok, &git_write))?;
+    Some(if contract.is_some() {
+        (Denied::KeptGitWrite, kept_git_write_explanation(&word))
     } else {
-        (Denied::Write, write_explanation(&word, way))
+        (Denied::GitWrite, git_write_explanation(&word))
     })
+}
+
+/// Whether `path` lies in a `.git` folder that `base` keeps read-only while
+/// it can write the folder holding it (a writable folder's protected `.git`).
+fn git_folder_write(base: &FileSystemSandboxPolicy, path: &Path, cwd: &Path) -> bool {
+    let mut git_folder = None;
+    for ancestor in path.ancestors() {
+        if ancestor.file_name() == Some(std::ffi::OsStr::new(".git")) {
+            git_folder = Some(ancestor);
+        }
+    }
+    let Some(parent) = git_folder.and_then(Path::parent) else {
+        return false;
+    };
+    !base.can_write_path_with_cwd(path, cwd) && base.can_write_path_with_cwd(parent, cwd)
+}
+
+/// #1139: a path inside a `.git` folder that a denial line reports and
+/// `accept` takes (`error: could not lock config file .git/config: Operation
+/// not permitted`, `bash: .git/hooks/pre-commit: Operation not permitted`),
+/// as the line spells it.
+fn git_path_in_lines(
+    cwd: &Path,
+    lines: &[String],
+    relative_ok: bool,
+    accept: &dyn Fn(&Path) -> bool,
+) -> Option<String> {
+    lines
+        .iter()
+        .flat_map(|line| line.split_whitespace())
+        .map(|token| {
+            token
+                .trim_matches(|c: char| matches!(c, '\'' | '"' | '`' | '‘' | '’' | ':' | ',' | ';'))
+        })
+        .filter(|token| {
+            let path = Path::new(token);
+            (relative_ok || path.is_absolute())
+                && path.components().any(|c| c.as_os_str() == ".git")
+        })
+        .find(|token| accept(&cwd.join(token)))
+        .map(str::to_string)
+}
+
+/// #1139 review: whether `command` may run in, or point git at, another
+/// folder than its own (`cd`, `pushd`, `git -C`, `--git-dir`, `--work-tree`,
+/// `GIT_DIR=`, `GIT_WORK_TREE=`), so a relative path it reports may not be
+/// relative to its folder.
+fn changes_folder(command: &[String]) -> bool {
+    command.iter().any(|argument| {
+        argument
+            .split(|c: char| c.is_whitespace() || matches!(c, ';' | '&' | '|' | '(' | ')' | '`'))
+            .any(|word| {
+                matches!(word, "cd" | "pushd" | "popd" | "-C")
+                    || word.starts_with("--git-dir")
+                    || word.starts_with("--work-tree")
+                    || word.starts_with("GIT_DIR=")
+                    || word.starts_with("GIT_WORK_TREE=")
+            })
+    })
+}
+
+/// #1139 (D94): the explanation for a write into the project's `.git`
+/// folder, which Moderate keeps read-only.
+pub(crate) fn git_write_explanation(path: &str) -> String {
+    format!(
+        "Security level Moderate blocked writing `{}`: under Moderate, agent commands always run \
+         inside the sandbox, even when you approve them, and the sandbox keeps the project's .git \
+         folder (git hooks and config) read-only. To make this change, a person can run the \
+         command in their own terminal, or switch to Permissive in /security (it applies after a \
+         restart), where an approved command can run outside the sandbox.",
+        super::shown_path(path)
+    )
+}
+
+/// #1139: as [`git_write_explanation`], where secretless agent launch keeps
+/// every agent command inside the sandbox at every level.
+pub(crate) fn kept_git_write_explanation(path: &str) -> String {
+    format!(
+        "Security level Moderate blocked writing `{}`: agent commands always run inside the \
+         sandbox, even when you approve them, and the sandbox keeps the project's .git folder \
+         (git hooks and config) read-only. Secretless agent launch keeps agent commands inside \
+         the sandbox at every security level, so changing the level would not allow it; a person \
+         can run the command in their own terminal.",
+        super::shown_path(path)
+    )
 }
 
 /// The person's own permissions for the command: the profile without
 /// Moderate's rules, with the project roots as the sandbox resolves them.
-fn own_profile(inputs: &ReadPolicyInputs) -> PermissionProfile {
+pub(super) fn own_profile(inputs: &ReadPolicyInputs) -> PermissionProfile {
     inputs
         .profile
         .clone()

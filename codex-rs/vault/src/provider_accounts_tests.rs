@@ -390,6 +390,45 @@ fn fingerprints_identify_material_without_revealing_it() {
     );
 }
 
+/// REG-02: a sign-in outside the vault (the default login) gets the
+/// fingerprint a named account holding it has, without writing the vault.
+#[test]
+fn a_sign_in_outside_the_vault_matches_the_account_holding_it() {
+    let (dir, vault) = test_vault();
+    let sign_in = r#"{"OPENAI_API_KEY":"sk-reg02-fixture-key"}"#;
+    let other = r#"{"OPENAI_API_KEY":"sk-reg02-other-key"}"#;
+    assert_eq!(
+        vault.sign_in_fingerprint("openai", sign_in).expect("fp"),
+        None,
+        "no salt yet"
+    );
+    let work = name("work");
+    vault
+        .write_provider_account("openai", &work, ProviderAccountKind::ChatgptAuth, sign_in)
+        .expect("write");
+    let before = snapshot(dir.path());
+    let fp = vault
+        .sign_in_fingerprint("openai", sign_in)
+        .expect("fp")
+        .expect("present");
+    assert_eq!(
+        snapshot(dir.path()),
+        before,
+        "a read never writes the vault"
+    );
+    assert_eq!(
+        Some(fp.clone()),
+        vault
+            .provider_account_fingerprint("openai", &work)
+            .expect("account fp")
+    );
+    assert!(!fp.contains("reg02"));
+    assert_ne!(
+        vault.sign_in_fingerprint("openai", other).expect("fp"),
+        Some(fp)
+    );
+}
+
 #[test]
 fn creating_an_existing_account_changes_nothing() {
     let (_dir, vault) = test_vault();

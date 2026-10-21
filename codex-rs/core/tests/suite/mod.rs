@@ -91,6 +91,8 @@ mod hooks;
 #[cfg(not(target_os = "windows"))]
 mod hooks_mcp;
 mod image_rollout;
+mod issue_1087;
+mod issue_1139;
 mod issue_443;
 mod issue_445;
 mod issue_505;
@@ -191,6 +193,7 @@ mod state_db_throttle_fallback;
 mod stream_error_allows_next_turn;
 mod stream_no_completed;
 mod subagent_notifications;
+mod test_codex_cwd;
 mod token_budget;
 mod tool_harness;
 mod tool_parallelism;

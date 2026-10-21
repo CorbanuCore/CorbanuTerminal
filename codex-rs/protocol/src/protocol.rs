@@ -3516,7 +3516,9 @@ pub struct TurnContextItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_provider: Option<String>,
     /// PF-84: the named account of `model_provider` (`default` included),
-    /// recorded only while named accounts are on, so resume restores it.
+    /// recorded only while named accounts are on, so resume restores it. An
+    /// account of another provider that `model_provider` runs on (they share
+    /// an API key) is recorded as `<owner>:<name>` (#1129).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_account: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

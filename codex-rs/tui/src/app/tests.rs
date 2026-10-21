@@ -2317,6 +2317,51 @@ async fn pane_spawn_tree_hides_task_actions() {
     }
 }
 
+/// D95 (#1146): only the person's Spawn status prompt sends a task as the
+/// person's own input; the route agents' tasks take (assignment fires,
+/// model dispatch) still sends them as inter-agent messages.
+#[tokio::test]
+async fn spawn_status_prompt_alone_sends_person_tasks() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let main_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000001146").expect("valid thread id");
+    let orc_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000001147").expect("valid thread id");
+    app.primary_thread_id = Some(main_thread_id);
+    app.active_thread_id = Some(main_thread_id);
+    app.upsert_agent_picker_thread(
+        orc_thread_id,
+        Some("Snaga".to_string()),
+        Some("orc".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_thread
+        .insert(orc_thread_id, main_thread_id);
+
+    (crate::spawn_orchestration::spawn_agent_task_prompt_submit(
+        app.app_event_tx.clone(),
+        orc_thread_id,
+    ))("typed by the person".to_string());
+    match rx.try_recv().expect("the prompt sends an event") {
+        AppEvent::SubmitSpawnAgentTaskFromPerson { thread_id, task } => {
+            assert_eq!(thread_id, orc_thread_id);
+            assert_eq!(task, "typed by the person");
+        }
+        event => panic!("expected the person's task, got {event:?}"),
+    }
+
+    app.send_native_task_event(orc_thread_id, "sent by an agent".to_string());
+    match rx.try_recv().expect("an agent's task sends an event") {
+        AppEvent::SubmitSpawnAgentTask {
+            thread_id, task, ..
+        } => {
+            assert_eq!(thread_id, orc_thread_id);
+            assert_eq!(task, "sent by an agent");
+        }
+        event => panic!("expected an agent's task, got {event:?}"),
+    }
+}
+
 #[tokio::test]
 async fn pane_spawn_tree_disables_restored_unloaded_native_rows() {
     let mut app = make_test_app().await;

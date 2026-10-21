@@ -31,7 +31,7 @@ use codex_protocol::models::FunctionCallOutputBody;
 use codex_protocol::models::FunctionCallOutputContentItem;
 use codex_protocol::models::FunctionCallOutputPayload;
 use codex_protocol::openai_models::InputModality;
-use core_test_support::load_default_config_for_test;
+use core_test_support::load_default_config_for_test_in;
 use core_test_support::responses;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
@@ -597,7 +597,8 @@ async fn start_function_dynamic_tool_call(call_id: &str) -> Result<PendingDynami
 
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&server.uri()).write(codex_home.path())?;
-    let config = load_default_config_for_test(&codex_home).await;
+    let cwd = TempDir::new()?;
+    let config = load_default_config_for_test_in(&codex_home, Default::default(), cwd.path()).await;
     let mut model_info =
         codex_core::test_support::construct_model_info_offline("mock-model", &config);
     model_info.input_modalities.push(InputModality::Audio);

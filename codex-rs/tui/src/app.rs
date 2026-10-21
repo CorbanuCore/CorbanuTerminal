@@ -308,7 +308,7 @@ impl TuiInputDrainWatchdog {
 
     fn note_drainer_send_failed(&self) {
         self.pending_events
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |pending| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |pending| {
                 pending.checked_sub(1)
             })
             .ok();
@@ -318,7 +318,7 @@ impl TuiInputDrainWatchdog {
         self.last_handled_ms
             .store(self.elapsed_ms(), Ordering::Relaxed);
         self.pending_events
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |pending| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |pending| {
                 pending.checked_sub(1)
             })
             .ok();

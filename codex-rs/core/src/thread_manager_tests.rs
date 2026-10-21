@@ -2992,6 +2992,7 @@ async fn named_chatgpt_account_loads_in_a_session_on_a_third_party_provider() {
             ("features.named_accounts".to_string(), true.into()),
         ])
         .harness_overrides(crate::config::ConfigOverrides {
+            cwd: Some(crate::session::tests::kept_test_cwd()),
             provider_account: Some("openai:work".to_string()),
             ..Default::default()
         })

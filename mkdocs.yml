@@ -272,6 +272,7 @@ nav:
       - Contributing: contributing.md
       - Tmux TUI Harness: tmuxHarness.md
       - CI Coverage: ci.md
+      - Rust Toolchain Bump: rust-toolchain-bump.md
       - License: license.md
 
 plugins:

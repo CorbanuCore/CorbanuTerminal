@@ -13,6 +13,7 @@ use pretty_assertions::assert_eq;
 
 use super::Session;
 use super::SessionSettingsUpdate;
+use super::tests::TestFolders;
 use super::tests::build_test_config;
 use super::tests::make_session_and_context_for_config;
 
@@ -31,14 +32,15 @@ fn account(name: &str) -> NamedChatgptAccount {
 /// A session on the default OpenAI login whose catalog also has
 /// `openai-work` and `openai-play`: OpenAI on named accounts `work` and
 /// `play`, each signed in with its own API key in the home's vault.
-async fn session_with_accounts() -> (Arc<Session>, tempfile::TempDir) {
+async fn session_with_accounts() -> (Arc<Session>, TestFolders) {
     let (session, home) = unshared_session_with_accounts().await;
     (Arc::new(session), home)
 }
 
-async fn unshared_session_with_accounts() -> (Session, tempfile::TempDir) {
+async fn unshared_session_with_accounts() -> (Session, TestFolders) {
     let home = tempfile::tempdir().expect("home");
-    let mut config = build_test_config(home.path()).await;
+    let test_cwd = tempfile::tempdir().expect("create test cwd");
+    let mut config = build_test_config(home.path(), test_cwd.path()).await;
     for (name, key) in [("work", WORK_KEY), ("play", PLAY_KEY)] {
         login_named_account_with_api_key(home.path(), &account(name), key).expect("sign-in");
         let mut provider = config.model_provider.clone();
@@ -51,7 +53,11 @@ async fn unshared_session_with_accounts() -> (Session, tempfile::TempDir) {
             .insert(format!("openai-{name}"), provider);
     }
     let (session, _turn_context) = make_session_and_context_for_config(config).await;
-    (session, home)
+    let folders = TestFolders {
+        home,
+        cwd: test_cwd,
+    };
+    (session, folders)
 }
 
 async fn switch_to(session: &Session, provider_id: &str) {
@@ -241,7 +247,8 @@ async fn a_switch_that_keeps_the_account_does_not_reconnect() {
 /// fetched and filtered with the account the session switched to.
 #[tokio::test]
 async fn the_model_list_follows_a_mid_session_account_switch() {
-    let (mut session, home) = unshared_session_with_accounts().await;
+    let (mut session, folders) = unshared_session_with_accounts().await;
+    let home = &folders.home;
     let default_auth = codex_login::AuthManager::from_auth_for_testing_with_home(
         codex_login::CodexAuth::create_dummy_chatgpt_auth_for_testing(),
         home.path().to_path_buf(),
@@ -250,7 +257,7 @@ async fn the_model_list_follows_a_mid_session_account_switch() {
         .services
         .active_auth
         .replace_for_testing(Arc::clone(&default_auth));
-    let mut config = build_test_config(home.path()).await;
+    let mut config = build_test_config(home.path(), folders.cwd.path()).await;
     let only_chatgpt =
         |slug: &str, supported_in_api: bool| codex_protocol::openai_models::ModelInfo {
             supported_in_api,

@@ -123,3 +123,32 @@ cases' evidence paths resolve in [results.json](results.json), and MOD-09's summ
 MOD-09 and MOD-21 were re-run with the owner's local model as the product's model (#1052):
 [../moderate-localmodel-20261020/](../moderate-localmodel-20261020/). MOD-21 passed; MOD-09 failed on its item 7
 approval (#1077). This record's dispositions are unchanged; the owner decides how the follow-up counts.
+
+## Sign-off (2026-10-20)
+
+Dated addendum; the record above is unchanged.
+
+- **Signed off:** Travis Good signed off the milestone "Moderate ships" on 2026-10-20 (decision D61; recorded on
+  [#447](https://github.com/CorbanuCore/CorbanuTerminal/pull/447#issuecomment-6285047513) as "D61 MODERATE MILESTONE SIGNED OFF" and in the
+  [P1 security plan](../../../../docs/plans/active/p1-security-hardening.md#human-acceptance)).
+- **Basis:** this record (PR #1037): all 34 cases 30 passed, 4 accepted by owner decision (MOD-09 and MOD-21 under D39,
+  MOD-11 under D43, MOD-28 under D40), 0 failed, 0 blocked, resting on the earlier records for the cases not re-run:
+  [targeted re-run](../moderate-targeted-20261016/README.md) (#971; dispositions D38-D43 of 2026-10-19) and
+  [first run](../moderate-20261014/README.md) (#844).
+- **Known limits accepted with it:**
+  - MOD-09 and MOD-21: the product's credential handling was not reached in these runs, because the hosted test models
+    declined before any tool ran (D39); the same protections passed in MOD-03, MOD-12 and MOD-14.
+  - MOD-28: revoke is not testable as written, since Moderate offers no session approval to revoke (D40).
+  - `.git` stays read-only under Moderate, so agents can't commit (D5 (c)); MOD-11 and MOD-06's git-commit part are
+    accepted limits (D43). The post-command `.git` check (#926, D6) is the follow-up.
+  - #838's Linux limit (D7): where an approved command can write another Corbanu home's folder, it can create security
+    files that don't exist yet.
+  - The Linux user-namespace block of #876 and its breakage list (D13). Since 2026-10-20 a person can allow user
+    namespaces for one approved command under Moderate, with a warning (D27 (a), #975; after untrusted content only for
+    known tools, D48 (c), #1024).
+  - Unchanged from the runs: macOS only, stand-in project, no Claude panes (D7 (a)); MOD-17 and MOD-29 pass under the
+    model-decline rule; the review budget's last corrections not independently re-checked.
+- **Follow-up after the sign-off:** the local-model re-run of MOD-09 and MOD-21 (#1052, record
+  [../moderate-localmodel-20261020/](../moderate-localmodel-20261020/), PR #1078). MOD-21 passed; MOD-09 failed on item
+  7 (protected launch keeps CLI-token files closed even after approval; the prompt wording is #1077), and every
+  protection held. It doesn't change this sign-off; how MOD-09 counts is pending owner decision D72.

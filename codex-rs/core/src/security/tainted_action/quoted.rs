@@ -7,6 +7,7 @@
 
 use super::shell::UNSEEN_OUTPUT;
 use super::shell::ansi_c;
+use super::work;
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct Word {
@@ -106,6 +107,7 @@ fn read(text: &str, nesting: usize, body: bool, arithmetic: bool) -> Reading {
     } else {
         let mut index = 0;
         while index < chars.len() {
+            work::step();
             index = reader.list(index, /*nested*/ false);
         }
     }
@@ -113,6 +115,7 @@ fn read(text: &str, nesting: usize, body: bool, arithmetic: bool) -> Reading {
     let mut kept = Vec::with_capacity(reader.out.len());
     let mut next = 0;
     for command in &reader.out {
+        work::step();
         kept.push((!command.is_empty()).then(|| {
             next += 1;
             next - 1
@@ -120,6 +123,7 @@ fn read(text: &str, nesting: usize, body: bool, arithmetic: bool) -> Reading {
     }
     let mut out: Vec<Command> = Vec::with_capacity(next);
     for mut command in reader.out {
+        work::step();
         if command.is_empty() {
             continue;
         }
@@ -308,6 +312,7 @@ impl Reader<'_> {
         // The `case` counts of the brackets around the text being read.
         let mut opened: Vec<usize> = Vec::new();
         while index < chars.len() {
+            work::step();
             let ch = chars[index];
             let next = chars.get(index + 1).copied();
             let previous = index.checked_sub(1).map(|at| chars[at]);
@@ -378,6 +383,7 @@ impl Reader<'_> {
                     };
                     index += 1;
                     while index < chars.len() && chars[index] != '\n' {
+                        work::step();
                         comment.text.push(chars[index]);
                         index += 1;
                     }
@@ -390,6 +396,7 @@ impl Reader<'_> {
                     index += 1;
                     let from = index;
                     while index < chars.len() && chars[index] != '\'' {
+                        work::step();
                         list.word.text.push(chars[index]);
                         index += 1;
                     }
@@ -476,6 +483,7 @@ impl Reader<'_> {
     fn double_quoted(&mut self, mut index: usize, word: &mut Word) -> usize {
         let chars = self.chars;
         while index < chars.len() {
+            work::step();
             match chars[index] {
                 '"' => return index + 1,
                 '\\' => match chars.get(index + 1) {
@@ -528,6 +536,7 @@ impl Reader<'_> {
             let mut inner = String::new();
             let mut at = index + 1;
             while at < chars.len() && chars[at] != '`' {
+                work::step();
                 if chars[at] == '\\'
                     && let Some(escaped @ ('`' | '\\' | '$')) = chars.get(at + 1)
                 {
@@ -560,6 +569,7 @@ impl Reader<'_> {
                 let mut at = index + 2;
                 let mut open = 1usize;
                 while at < chars.len() {
+                    work::step();
                     match chars[at] {
                         '$' if !in_double && chars.get(at + 1) == Some(&'\'') => {
                             at = ansi_c(chars, at + 2, &mut scratch.text);
@@ -582,6 +592,7 @@ impl Reader<'_> {
                         '\'' => {
                             at += 1;
                             while at < chars.len() && chars[at] != '\'' {
+                                work::step();
                                 if chars[at] == '`'
                                     || (chars[at] == '$'
                                         && matches!(chars.get(at + 1), Some('(' | '{')))
@@ -616,6 +627,7 @@ impl Reader<'_> {
                     .get(at)
                     .is_some_and(|ch| ch.is_ascii_alphanumeric() || *ch == '_')
                 {
+                    work::step();
                     at += 1;
                 }
                 word.text.extend(&chars[index..at]);
@@ -662,6 +674,7 @@ impl Reader<'_> {
         let mut scratch = Word::default();
         let mut index = 0;
         while index < chars.len() {
+            work::step();
             match chars[index] {
                 '\\' => index += 2,
                 '$' | '`' => index = self.expansion(index, &mut scratch, /*in_double*/ true),
@@ -681,8 +694,10 @@ impl Reader<'_> {
             command,
         } in std::mem::take(pending)
         {
+            work::step();
             let mut body = String::new();
             while index < chars.len() {
+                work::step();
                 let end = chars[index..]
                     .iter()
                     .position(|ch| *ch == '\n')
@@ -913,14 +928,11 @@ mod tests {
             assert!(!commands(sure).unsure, "{sure:?}");
         }
         // Reserved words before a `case` are tracked as they come: a line
-        // of them takes linear time.
-        let started = std::time::Instant::now();
-        let keywords = format!("echo \"$({}case x in a) :;; esac)\"", "! ".repeat(200_000));
-        assert!(!commands(&keywords).unsure);
-        assert!(
-            started.elapsed() < std::time::Duration::from_secs(5),
-            "{:?}",
-            started.elapsed()
-        );
+        // of them takes linear work (#1102).
+        work::assert_linear("reserved words", |scale| {
+            let words = "! ".repeat(50_000 * scale);
+            let keywords = format!("echo \"$({words}case x in a) :;; esac)\"");
+            assert!(!commands(&keywords).unsure);
+        });
     }
 }

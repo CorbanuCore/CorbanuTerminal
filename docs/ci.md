@@ -102,6 +102,10 @@ Check the latest nightly run before cutting a release. To run these jobs on
 every PR again, pass `cold_bazel: true` to the `bazel`, `rust-ci` and `sdk` calls in
 `blocking-ci.yml` (and add a `BUILDBUDDY_API_KEY` secret so they finish in time).
 
+## Rust toolchain bumps
+
+See [Rust toolchain bump](rust-toolchain-bump.md) for what to update and when.
+
 ## Disabled Until Runners Exist
 
 - macOS Rust and Bazel checks outside the manual release builder.

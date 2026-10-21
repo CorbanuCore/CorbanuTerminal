@@ -80,6 +80,13 @@ jobs:
         shell: bash
         run: ./scripts/check-module-bazel-lock.sh
 
+      # Every rules_rust toolchain archive is pinned (#1032). Runs after the
+      # lockfile check, so its Bazel calls can't touch the lockfile first.
+      - name: Check Rust toolchain MODULE.bazel checksums
+        if: matrix.os == 'ubuntu-24.04' && matrix.target == 'x86_64-unknown-linux-gnu'
+        shell: bash
+        run: python3 .github/scripts/rust_toolchain_bazel_sha256s.py --check
+
       # The Linux sandbox tests (landlock/bwrap) create user and network
       # namespaces; Ubuntu 24.04 runners restrict them by default. Same step as
       # rust-ci-full-nextest-platform.yml.
@@ -295,7 +302,7 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
 
       - name: Build and smoke-test product binaries
         shell: pwsh
@@ -456,6 +463,18 @@ jobs:
           target: ${{ matrix.target }}
           cache-scope: bazel-${{ github.job }}
 
+      # Same as the test job (#636): a toolchain bump misses the exact
+      # repository cache and these cold builds then filled the disk (#1027).
+      - name: Free runner disk space (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          df -h /
+          for dir in /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost; do
+            if [[ -d "$dir" ]]; then sudo rm -r -- "$dir"; fi
+          done
+          df -h /
+
       - name: bazel build --config=clippy lint targets
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
@@ -550,6 +569,18 @@ jobs:
         with:
           target: ${{ matrix.target }}
           cache-scope: bazel-${{ github.job }}
+
+      # Same as the test job (#636): a toolchain bump misses the exact
+      # repository cache and these cold builds then filled the disk (#1027).
+      - name: Free runner disk space (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          df -h /
+          for dir in /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost; do
+            if [[ -d "$dir" ]]; then sudo rm -r -- "$dir"; fi
+          done
+          df -h /
 
       - name: bazel build verify-release-build targets
         env:

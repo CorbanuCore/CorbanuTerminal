@@ -143,6 +143,9 @@ fn day(own: Vec<ObservationQuote>, others: Option<OtherConversations>) -> Inspec
         unknown_parent_totals: DayTotals::default(),
         unknown_parent_unavailable_threads: 0,
         unknown_parent_requests: Default::default(),
+        empty_day: requests
+            .is_empty()
+            .then_some(codex_state::accounting::EmptyDay::NotRecorded),
         requests,
         other_conversations: others,
     })
@@ -240,8 +243,10 @@ const NOT_STATED: &str = "Costs are estimates from published prices; local-mock 
 #[test]
 fn empty_conversation_states_its_scope_and_the_days_other_conversations() {
     let pages = inspection_pages(Ok(day(Vec::new(), Some(two_other_conversations()))));
-    let mut expected =
-        vec!["This conversation on 2026-09-16 (UTC): no recorded requests.".to_string()];
+    let mut expected = vec![
+        "This conversation on 2026-09-16 (UTC): nothing recorded.".to_string(),
+        super::super::empty_day::NOT_PROOF.to_string(),
+    ];
     expected.extend(OTHERS_BLOCK.map(String::from));
     expected.extend([NEXT_STEP.to_string(), NOT_STATED.to_string()]);
     assert_eq!(first_screen(&pages[0]), expected);
@@ -263,7 +268,13 @@ fn empty_conversation_states_its_scope_and_the_days_other_conversations() {
 
 #[test]
 fn every_day_view_says_whether_other_conversations_were_read() {
-    let first = |others| first_screen(&inspection_pages(Ok(day(Vec::new(), others)))[0]);
+    // FUP-02: every empty day here says its emptiness is not proof; the
+    // lines after that one are about other conversations.
+    let first = |others| {
+        let mut lines = first_screen(&inspection_pages(Ok(day(Vec::new(), others)))[0]);
+        assert_eq!(lines.remove(1), super::super::empty_day::NOT_PROOF);
+        lines
+    };
     let empty = |deleted_attempts| OtherConversations {
         deleted_attempts,
         ..Default::default()
@@ -271,7 +282,7 @@ fn every_day_view_says_whether_other_conversations_were_read() {
     assert_eq!(
         first(Some(empty(DeletedAttempts::Counted(0)))),
         vec![
-            "This conversation on 2026-09-16 (UTC): no recorded requests.",
+            "This conversation on 2026-09-16 (UTC): nothing recorded.",
             "No other conversation recorded requests on this day.",
             "Costs are estimates from published prices; your provider's bill is the final amount.",
         ]
@@ -280,7 +291,7 @@ fn every_day_view_says_whether_other_conversations_were_read() {
     assert_eq!(
         first(Some(empty(DeletedAttempts::Counted(7)))),
         vec![
-            "This conversation on 2026-09-16 (UTC): no recorded requests.",
+            "This conversation on 2026-09-16 (UTC): nothing recorded.",
             "No other saved conversation has recorded requests on this day.",
             "Deleted conversations or subagents sent 7 request attempts on this day. Their recorded cost was deleted with them, so it is not included here; any cost they incurred is on your provider's bill.",
             "Costs are estimates from published prices; your provider's bill is the final amount.",
@@ -961,7 +972,7 @@ fn unpriced_request_without_usage_names_its_own_provider() {
         let first = first_screen(&pages[0]);
         assert_eq!(
             first[1],
-            "• zainousage · Z.AI GLM 5.2 — Pay per use. 1 request, tokens not reported. Estimated cost: no price available."
+            "• zainousage · glm-5.2 — Pay per use. 1 request, tokens not reported. Estimated cost: no price available."
         );
         let step = "Next step for requests with no price: check the bill from zainousage. No published price covers them, so no cost is shown for them here.";
         assert!(first.contains(&step.to_string()), "{first:#?}");
@@ -1208,12 +1219,18 @@ fn only_pay_per_use_work_can_lack_a_price() {
             .find(|line| line.starts_with("Billing basis:"))
             .unwrap()
     };
-    assert_eq!(basis_line("kimi-code"), "Billing basis: subscription");
+    assert_eq!(
+        basis_line("kimi-code"),
+        "Billing basis: subscription (built-in default)"
+    );
     assert_eq!(
         basis_line("my-gateway"),
         "Billing basis: pay per use (set in your config)"
     );
-    assert_eq!(basis_line("ollama"), "Billing basis: local, no charge");
+    assert_eq!(
+        basis_line("ollama"),
+        "Billing basis: local, no charge (built-in default)"
+    );
     assert_eq!(basis_line("my-llm"), "Billing basis: not declared");
     let undeclared = attempt_text("my-llm");
     assert!(

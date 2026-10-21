@@ -487,6 +487,14 @@ pub(crate) enum AppEvent {
         /// is handled after the switch was turned off.
         sent_while_kill_switch_on: bool,
     },
+    /// D95 (#1146): a task the person typed into Spawn status's "Send task
+    /// to" prompt. It starts a turn in that pane as the person's own input,
+    /// as if typed there, not as a message from another agent. Only that
+    /// prompt sends it; tasks from agents use [`AppEvent::SubmitSpawnAgentTask`].
+    SubmitSpawnAgentTaskFromPerson {
+        thread_id: codex_protocol::ThreadId,
+        task: String,
+    },
     /// Start a normal turn in an operator-owned native user pane.
     SubmitCodexUserPaneTask {
         thread_id: codex_protocol::ThreadId,

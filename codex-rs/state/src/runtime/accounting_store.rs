@@ -45,6 +45,9 @@ pub use writer::WriteOutcome;
 #[path = "accounting_scope.rs"]
 mod scope;
 
+#[path = "accounting_empty_day.rs"]
+mod empty_day;
+
 #[path = "accounting_indexes.rs"]
 mod indexes;
 
@@ -70,6 +73,28 @@ pub struct Inspection {
     /// Same-day attempts of other root conversations, outside every total above.
     /// `None` when this view did not read them (range buckets).
     pub other_conversations: Option<OtherConversations>,
+    /// What the day's emptiness means, for a single-day view in which neither
+    /// this conversation nor a resolved subagent has a recorded attempt.
+    /// `None` when they have one, and in range buckets.
+    pub empty_day: Option<EmptyDay>,
+}
+
+/// A day on which neither the conversation nor a resolved subagent has a
+/// recorded attempt. Only `BeforeConversation` says there were no requests:
+/// the ledger keeps no record of when a writer ran or which writes failed
+/// (#314), so an empty day inside the ledger's life proves nothing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EmptyDay {
+    /// Proven: the whole UTC day ends before the conversation started, and no
+    /// thread of unresolved ancestry has anything on it. `started_day` is the
+    /// UTC day of the earliest of every spawn-tree thread's UUIDv7 id time, its
+    /// stored creation times and every request recorded for it. As good as the
+    /// clock that stamped them, the same clock that dates every request.
+    BeforeConversation { started_day: i64 },
+    /// Not proven: the day ends before this home's ledger was created.
+    BeforeLedger { ledger_started_day: i64 },
+    /// Not proven: nothing is recorded; collection coverage is unknown.
+    NotRecorded,
 }
 
 /// UTC half-open requested interval and calendar-aligned grouping.
@@ -810,6 +835,21 @@ async fn inspect_tree_window(
     let InspectionDay::Ready(mut view) = first else {
         return Ok(first);
     };
+    // FUP-02: a single day with nothing recorded for the owner. Before the
+    // aggregate floor it stays unavailable, as before, unless the conversation
+    // had not started yet; that is decided here, ahead of the tree.
+    let mut started = None;
+    if window.is_none() && view.totals.attempts == 0 && day < view.coverage.aggregate_day_floor {
+        let early = started_ms(conn, owner, work).await?;
+        if !empty_day::proven_before(day, early) {
+            return Ok(InspectionDay::DetailUnavailable {
+                coverage: view.coverage,
+                read_at_ms,
+                compact: false,
+            });
+        }
+        started = Some(early);
+    }
     if !work.scans(/*count*/ 1) {
         return Ok(InspectionDay::TooLarge);
     }
@@ -976,7 +1016,46 @@ async fn inspect_tree_window(
         view.other_conversations =
             Some(scope::other_conversations(conn, unrelated, day, read_at_ms, work).await);
     }
+    // Last, so the start's scan never takes budget the rest of the view needs.
+    if window.is_none() && view.totals.attempts == 0 {
+        let started = match started {
+            Some(started) => started,
+            None => started_ms(conn, owner, work).await?,
+        };
+        let unknown_clear = view.unknown_parent_totals.attempts == 0
+            && view.unknown_parent_unavailable_threads == 0;
+        let empty = empty_day::classify(
+            day,
+            started,
+            empty_day::ledger_started_day(conn).await?,
+            unknown_clear,
+        );
+        if day < view.coverage.aggregate_day_floor
+            && !matches!(empty, EmptyDay::BeforeConversation { .. })
+        {
+            return Ok(InspectionDay::DetailUnavailable {
+                coverage: view.coverage,
+                read_at_ms,
+                compact: false,
+            });
+        }
+        view.empty_day = Some(empty);
+    }
     Ok(InspectionDay::Ready(view))
+}
+
+/// `empty_day::started_ms`, charged to the work budget: one scan of the
+/// accounting rows for the tree's earliest recorded request. Without budget
+/// left for it there is no proof, and the view stays as it would have been.
+async fn started_ms(
+    conn: &mut SqliteConnection,
+    owner: ThreadId,
+    work: &mut InspectionWork,
+) -> anyhow::Result<Option<i64>> {
+    if work.scan_rows > work.rows || !work.scans(/*count*/ 1) {
+        return Ok(None);
+    }
+    empty_day::started_ms(conn, owner).await
 }
 
 // All buckets reuse the already-open deferred snapshot, including ancestry.

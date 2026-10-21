@@ -115,6 +115,11 @@ impl SecurityInspector {
                     .bold()
                     .into()
             }
+            Badge::Stale(level, age) => {
+                format!("◌ {level} set; this view is stale (status observed {age})")
+                    .cyan()
+                    .into()
+            }
             Badge::Blocked(reason) => format!("■ Blocked: {reason}").red().bold().into(),
         };
         lines.extend(word_wrap_lines([badge_line], width));
@@ -129,7 +134,7 @@ impl SecurityInspector {
             PolicyFacts::Stored { .. } | PolicyFacts::Unreadable => String::new(),
         };
         let observed = if age > STALE_AFTER_SECONDS {
-            Line::from(format!("Observed {age}s ago{generation}: stale, press r").red())
+            Line::from(format!("Observed {age}s ago{generation}: stale, press r to refresh").cyan())
         } else {
             Line::from(format!("Observed {age}s ago{generation}").dim())
         };

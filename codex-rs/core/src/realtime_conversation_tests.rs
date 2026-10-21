@@ -501,7 +501,8 @@ async fn pf_60_s03_realtime_call_is_recorded() -> anyhow::Result<()> {
         .await;
 
     let home = tempfile::tempdir()?;
-    let mut config = crate::session::tests::build_test_config(home.path()).await;
+    let test_cwd = tempfile::tempdir()?;
+    let mut config = crate::session::tests::build_test_config(home.path(), test_cwd.path()).await;
     config.model_provider = codex_model_provider_info::ModelProviderInfo {
         request_max_retries: Some(0),
         stream_max_retries: Some(0),
@@ -722,17 +723,19 @@ async fn realtime_stand_in(end: StandInEnd) -> anyhow::Result<String> {
 /// stand-in at `endpoint`, recording under `accounting`.
 async fn realtime_ledger_session(
     home: &std::path::Path,
+    cwd: &std::path::Path,
     endpoint: &str,
     accounting: crate::config::AccountingMode,
 ) -> anyhow::Result<(
     Arc<crate::session::session::Session>,
     Arc<codex_state::StateRuntime>,
 )> {
-    realtime_ledger_session_with(home, endpoint, accounting, |_| {}).await
+    realtime_ledger_session_with(home, cwd, endpoint, accounting, |_| {}).await
 }
 
 async fn realtime_ledger_session_with(
     home: &std::path::Path,
+    cwd: &std::path::Path,
     endpoint: &str,
     accounting: crate::config::AccountingMode,
     configure: impl FnOnce(&mut crate::config::Config),
@@ -745,7 +748,7 @@ async fn realtime_ledger_session_with(
     use codex_state::ThreadMetadataBuilder;
     use codex_utils_absolute_path::AbsolutePathBuf;
 
-    let mut config = crate::session::tests::build_test_config(home).await;
+    let mut config = crate::session::tests::build_test_config(home, cwd).await;
     config.model_provider = codex_model_provider_info::ModelProviderInfo {
         request_max_retries: Some(0),
         stream_max_retries: Some(0),
@@ -907,8 +910,10 @@ async fn pf_824_websocket_realtime_session_is_one_request_with_tokens_unknown() 
 {
     let endpoint = realtime_stand_in(StandInEnd::ClientCloses).await?;
     let home = tempfile::tempdir()?;
+    let test_cwd = tempfile::tempdir()?;
     let (owner, db) = realtime_ledger_session(
         home.path(),
+        test_cwd.path(),
         &endpoint,
         crate::config::AccountingMode::DirectOpenAiResponses {
             scope: uuid::Uuid::new_v4(),
@@ -936,9 +941,11 @@ async fn pf_824_websocket_realtime_session_dropped_by_the_server_is_recorded() -
 {
     let endpoint = realtime_stand_in(StandInEnd::ServerDrops).await?;
     let home = tempfile::tempdir()?;
+    let test_cwd = tempfile::tempdir()?;
     // The provider-bound mode a developer-accounting build uses.
     let (owner, db) = realtime_ledger_session(
         home.path(),
+        test_cwd.path(),
         &endpoint,
         crate::config::AccountingMode::Provider {
             scope: uuid::Uuid::new_v4(),
@@ -968,8 +975,10 @@ async fn pf_824_websocket_realtime_session_is_not_recorded_when_collection_is_of
 -> anyhow::Result<()> {
     let endpoint = realtime_stand_in(StandInEnd::ClientCloses).await?;
     let home = tempfile::tempdir()?;
+    let test_cwd = tempfile::tempdir()?;
     let (owner, db) = realtime_ledger_session(
         home.path(),
+        test_cwd.path(),
         &endpoint,
         crate::config::AccountingMode::Disabled,
     )
@@ -1007,8 +1016,10 @@ async fn pf_824_websocket_session_on_a_ws_base_url_is_recorded() -> anyhow::Resu
     let endpoint = realtime_stand_in(StandInEnd::ClientCloses).await?;
     let ws_base = endpoint.replacen("http://", "ws://", 1);
     let home = tempfile::tempdir()?;
+    let test_cwd = tempfile::tempdir()?;
     let (owner, db) = realtime_ledger_session_with(
         home.path(),
+        test_cwd.path(),
         "http://127.0.0.1:1/v1",
         provider_bound("http://127.0.0.1:1/v1"),
         |config| config.experimental_realtime_ws_base_url = Some(ws_base),
@@ -1034,8 +1045,14 @@ async fn pf_824_websocket_session_on_a_ws_base_url_is_recorded() -> anyhow::Resu
 async fn pf_824_replaced_and_shut_down_sessions_record_their_ends() -> anyhow::Result<()> {
     let endpoint = realtime_stand_in(StandInEnd::ClientCloses).await?;
     let home = tempfile::tempdir()?;
-    let (owner, db) =
-        realtime_ledger_session(home.path(), &endpoint, provider_bound(&endpoint)).await?;
+    let test_cwd = tempfile::tempdir()?;
+    let (owner, db) = realtime_ledger_session(
+        home.path(),
+        test_cwd.path(),
+        &endpoint,
+        provider_bound(&endpoint),
+    )
+    .await?;
     super::handle_start(&owner, "first".into(), realtime_websocket_params()).await?;
     super::handle_start(&owner, "second".into(), realtime_websocket_params()).await?;
     assert!(
@@ -1133,8 +1150,14 @@ fn pf_824_websocket_session_is_recorded_as_api_key_work() {
 async fn pf_824_websocket_session_under_chatgpt_sign_in_is_api_key_work() -> anyhow::Result<()> {
     const OPENAI_API: &str = "https://api.openai.com/v1";
     let home = tempfile::tempdir()?;
-    let (owner, _db) =
-        realtime_ledger_session(home.path(), OPENAI_API, provider_bound(OPENAI_API)).await?;
+    let test_cwd = tempfile::tempdir()?;
+    let (owner, _db) = realtime_ledger_session(
+        home.path(),
+        test_cwd.path(),
+        OPENAI_API,
+        provider_bound(OPENAI_API),
+    )
+    .await?;
     owner
         .services
         .active_auth
@@ -1178,8 +1201,10 @@ async fn pf_824_websocket_session_under_chatgpt_sign_in_is_recorded_with_its_key
 -> anyhow::Result<()> {
     let endpoint = realtime_stand_in(StandInEnd::ClientCloses).await?;
     let home = tempfile::tempdir()?;
+    let test_cwd = tempfile::tempdir()?;
     let (owner, db) = realtime_ledger_session(
         home.path(),
+        test_cwd.path(),
         &endpoint,
         crate::config::AccountingMode::DirectOpenAiResponses {
             scope: uuid::Uuid::new_v4(),
@@ -1215,8 +1240,14 @@ async fn pf_889_ambient_key_session_under_a_named_account_is_left_unrecorded() -
     for ambient_under_named_account in [false, true] {
         let endpoint = realtime_stand_in(StandInEnd::ClientCloses).await?;
         let home = tempfile::tempdir()?;
-        let (owner, db) =
-            realtime_ledger_session(home.path(), &endpoint, provider_bound(&endpoint)).await?;
+        let test_cwd = tempfile::tempdir()?;
+        let (owner, db) = realtime_ledger_session(
+            home.path(),
+            test_cwd.path(),
+            &endpoint,
+            provider_bound(&endpoint),
+        )
+        .await?;
         let mut prepared =
             super::prepare_realtime_start(&owner, realtime_websocket_params()).await?;
         assert!(matches!(

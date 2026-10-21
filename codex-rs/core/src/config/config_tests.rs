@@ -2023,6 +2023,7 @@ respect_system_proxy = false
 
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cli_overrides(vec![(
             "features.respect_system_proxy".to_string(),
             toml::Value::Boolean(true),
@@ -5368,6 +5369,7 @@ enabled = true
 
     let config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .build()
         .await?;
     let plugins_manager = PluginsManager::new(codex_home.path().to_path_buf());
@@ -5428,6 +5430,7 @@ enabled = true
 
     let config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
                 r#"
@@ -5531,6 +5534,7 @@ enabled = true
 
     let config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
                 r#"
@@ -7676,6 +7680,7 @@ async fn for_config_writes_selected_user_config_file() -> anyhow::Result<()> {
 
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .loader_overrides(LoaderOverrides {
             user_config_path: Some(selected_config.abs()),
             user_config_profile: Some("work".parse().expect("profile-v2 name")),
@@ -10356,6 +10361,7 @@ async fn requirements_disallowing_default_sandbox_falls_back_to_required_default
 
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
                 r#"allowed_sandbox_modes = ["read-only"]"#,
@@ -10737,6 +10743,7 @@ async fn feature_requirements_normalize_effective_feature_values() -> std::io::R
 
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
                 r#"
@@ -10769,6 +10776,7 @@ async fn feature_requirements_auto_review_disables_guardian_approval() -> std::i
 
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
                 r#"
@@ -10791,6 +10799,7 @@ async fn browser_feature_requirements_are_valid() -> std::io::Result<()> {
 
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
                 r#"
@@ -11015,6 +11024,7 @@ async fn requirements_disallowing_default_approvals_reviewer_falls_back_to_requi
 
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
                 r#"allowed_approvals_reviewers = ["guardian_subagent"]"#,
@@ -11771,6 +11781,7 @@ async fn feature_requirements_normalize_runtime_feature_mutations() -> std::io::
 
     let mut config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
                 r#"
@@ -11805,6 +11816,7 @@ async fn feature_requirements_warn_on_collab_legacy_alias() -> std::io::Result<(
 
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
                 r#"
@@ -11835,6 +11847,7 @@ async fn feature_requirements_warn_and_ignore_unknown_feature() -> std::io::Resu
 
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
                 r#"

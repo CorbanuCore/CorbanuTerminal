@@ -809,6 +809,29 @@ async fn openai_api_key_env_fallback_notice_renders_as_warning() {
     );
 }
 
+/// #1139 (D94, MOD-11): the warning core sends when Moderate's sandbox
+/// stops a write into the project's `.git` names the level and the way
+/// forward in the transcript (text from core's `git_write_explanation`).
+#[tokio::test]
+async fn moderate_git_folder_write_warning_renders_the_level() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+
+    chat.handle_server_notification(
+        ServerNotification::Warning(WarningNotification {
+            thread_id: Some("thread-1".to_string()),
+            message: "Security level Moderate blocked writing `.git/hooks/pre-commit`: under Moderate, agent commands always run inside the sandbox, even when you approve them, and the sandbox keeps the project's .git folder (git hooks and config) read-only. To make this change, a person can run the command in their own terminal, or switch to Permissive in /security (it applies after a restart), where an approved command can run outside the sandbox.".to_string(),
+        }),
+        /*replay_kind*/ None,
+    );
+
+    let cells = drain_insert_history(&mut rx);
+    assert_eq!(cells.len(), 1, "expected one warning history cell");
+    assert_chatwidget_snapshot!(
+        "moderate_git_folder_write_warning",
+        lines_to_single_string(&cells[0]),
+    );
+}
+
 #[tokio::test]
 async fn live_app_server_guardian_warning_notification_renders_message() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;

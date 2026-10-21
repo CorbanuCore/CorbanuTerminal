@@ -6,6 +6,9 @@ use std::path::Path;
 use std::sync::Arc;
 use uuid::Uuid;
 
+#[path = "accounting_empty_day_tests.rs"]
+mod empty_day;
+
 fn inspection(value: InspectionDay) -> Inspection {
     let InspectionDay::Ready(value) = value else {
         panic!("{value:?}")

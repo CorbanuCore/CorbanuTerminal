@@ -217,6 +217,7 @@ enabled = true
     .expect("write config");
     let config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .build()
         .await
         .expect("config should build");

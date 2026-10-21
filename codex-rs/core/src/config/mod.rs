@@ -190,6 +190,8 @@ pub use provider_accounts::apply_recorded_provider_account;
 pub(crate) use provider_accounts::configured_account_names;
 pub use provider_accounts::default_login_restriction_error;
 pub use provider_accounts::other_provider_account_error;
+pub(crate) use provider_accounts::restore_recorded_agent_account;
+pub(crate) use provider_accounts::resume_default_key_error;
 pub use provider_accounts::session_account_error;
 pub(crate) use provider_accounts::spawn_default_key_error;
 pub use provider_accounts::split_account_selection;
@@ -2001,6 +2003,13 @@ impl Config {
     /// Whether the `named_accounts` feature is on.
     pub fn named_accounts_enabled(&self) -> bool {
         self.features.enabled(Feature::NamedAccounts)
+    }
+
+    /// PF-84 (#1085): whether this home uses named OpenAI sign-in accounts
+    /// (one is enrolled, or `[provider_accounts]` selects one). Blocking: an
+    /// initialised vault is decrypted to read its account metadata.
+    pub fn uses_named_sign_in_accounts(&self) -> bool {
+        provider_accounts::uses_named_sign_in_accounts(&self.codex_home, &self.model_providers)
     }
 
     /// Creates the HTTP client factory resolved from the effective feature configuration.

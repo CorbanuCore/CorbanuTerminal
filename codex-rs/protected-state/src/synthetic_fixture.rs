@@ -68,8 +68,12 @@ impl SyntheticRootFixture {
         Ok(PolicyCheckpoint {
             schema_version: 1,
             revision: 1,
-            owner: AuthoritativeStateOwner::new("1".repeat(64), "controller", 1)
-                .map_err(|_| RootError::Invalid)?,
+            owner: AuthoritativeStateOwner::new(
+                "1".repeat(64),
+                "controller",
+                /*owner_generation*/ 1,
+            )
+            .map_err(|_| RootError::Invalid)?,
             state_sha256: "a".repeat(64),
             commit_sha256: "b".repeat(64),
         })

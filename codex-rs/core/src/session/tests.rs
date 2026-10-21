@@ -1715,8 +1715,13 @@ async fn reload_user_config_layer_updates_base_and_selected_profile_layers() {
     .expect("write base user config");
     std::fs::write(&profile_config_path, "model = \"profile-old\"\n")
         .expect("write profile user config");
+    let session_cwd = session.get_config().await.cwd.to_path_buf();
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.to_path_buf())
+        .harness_overrides(ConfigOverrides {
+            cwd: Some(session_cwd),
+            ..Default::default()
+        })
         .loader_overrides(LoaderOverrides {
             user_config_path: Some(profile_config_path.abs()),
             user_config_profile: Some("work".parse().expect("profile-v2 name")),
@@ -4233,7 +4238,8 @@ async fn thread_rollback_fails_when_num_turns_is_zero() {
 #[tokio::test]
 async fn set_rate_limits_retains_previous_credits() {
     let codex_home = tempfile::tempdir().expect("create temp dir");
-    let config = build_test_config(codex_home.path()).await;
+    let test_cwd = tempfile::tempdir().expect("create test cwd");
+    let config = build_test_config(codex_home.path(), test_cwd.path()).await;
     let config = Arc::new(config);
     let model = get_model_offline_for_tests(config.model.as_deref());
     let model_info =
@@ -4344,7 +4350,8 @@ async fn set_rate_limits_retains_previous_credits() {
 #[tokio::test]
 async fn set_rate_limits_updates_plan_type_when_present() {
     let codex_home = tempfile::tempdir().expect("create temp dir");
-    let config = build_test_config(codex_home.path()).await;
+    let test_cwd = tempfile::tempdir().expect("create test cwd");
+    let config = build_test_config(codex_home.path(), test_cwd.path()).await;
     let config = Arc::new(config);
     let model = get_model_offline_for_tests(config.model.as_deref());
     let model_info =
@@ -4706,16 +4713,85 @@ fn write_test_provider_auth(codex_home: &Path) {
     .expect("write test provider API key");
 }
 
-pub(crate) async fn build_test_config(codex_home: &Path) -> Config {
+/// A temporary working folder for helpers whose callers keep no folder, as
+/// `make_session_and_context`: commands the session runs need it to exist
+/// after the helper returns, so it isn't removed. It stays in the test run's
+/// temporary folder: `just test` gives each run its own and removes it, while
+/// a plain `cargo test` or `cargo nextest` run leaves several hundred empty
+/// ones in the system's.
+pub(crate) fn kept_test_cwd() -> PathBuf {
+    tempfile::Builder::new()
+        .prefix("codex-test-cwd-")
+        .tempdir()
+        .expect("create test cwd")
+        .keep()
+}
+
+/// #1157: harness overrides that build a unit test's config for a kept
+/// temporary working folder ([`kept_test_cwd`]) instead of the test
+/// process's own folder, the crate's source tree.
+pub(crate) fn kept_test_cwd_overrides() -> ConfigOverrides {
+    ConfigOverrides {
+        cwd: Some(kept_test_cwd()),
+        ..Default::default()
+    }
+}
+
+/// A test config for `codex_home`, built for the working folder `cwd`. Pass
+/// a temporary folder: without one the config would be built for the test
+/// process's own folder, the crate's source tree, and sandboxed commands
+/// could write into it (#1138, as #1120 for `core_test_support`).
+pub(crate) async fn build_test_config(codex_home: &Path, cwd: &Path) -> Config {
     ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.to_path_buf())
         .harness_overrides(ConfigOverrides {
             model: Some("gpt-5.5".to_string()),
+            cwd: Some(cwd.to_path_buf()),
             ..Default::default()
         })
         .build()
         .await
         .expect("load default test config")
+}
+
+/// #1138: the config is built for the folder the test passes, not for the
+/// test process's own (the crate's source tree).
+#[tokio::test]
+async fn build_test_config_is_built_for_the_given_folder() {
+    let codex_home = tempfile::tempdir().expect("create temp dir");
+    let test_cwd = tempfile::tempdir().expect("create test cwd");
+    let config = build_test_config(codex_home.path(), test_cwd.path()).await;
+    let cwd = config.cwd.as_path();
+    assert!(
+        cwd == test_cwd.path() || cwd == test_cwd.path().canonicalize().expect("canonical"),
+        "{}",
+        cwd.display()
+    );
+    assert!(!cwd.starts_with(env!("CARGO_MANIFEST_DIR")));
+}
+
+/// #1157: unit tests that build a config with [`kept_test_cwd_overrides`]
+/// get a temporary working folder that exists, not the crate's source tree.
+#[tokio::test]
+async fn kept_test_cwd_overrides_build_for_a_temporary_folder() {
+    let codex_home = tempfile::tempdir().expect("create temp dir");
+    let config = ConfigBuilder::without_managed_config_for_tests()
+        .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(kept_test_cwd_overrides())
+        .build()
+        .await
+        .expect("load default test config");
+    let cwd = config.cwd.as_path();
+    assert!(cwd.is_dir(), "{}", cwd.display());
+    assert!(
+        cwd.file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with("codex-test-cwd-")),
+        "{}",
+        cwd.display()
+    );
+    assert!(!cwd.starts_with(env!("CARGO_MANIFEST_DIR")));
+    assert!(!cwd.starts_with(codex_home.path()));
 }
 
 fn session_telemetry(
@@ -5208,7 +5284,8 @@ async fn per_turn_fable_limits_are_scoped_to_the_plan_route() {
 
 pub(crate) async fn make_session_configuration_for_tests() -> SessionConfiguration {
     let codex_home = tempfile::tempdir().expect("create temp dir");
-    let config = build_test_config(codex_home.path()).await;
+    let test_cwd = kept_test_cwd();
+    let config = build_test_config(codex_home.path(), &test_cwd).await;
     let config = Arc::new(config);
     let model = get_model_offline_for_tests(config.model.as_deref());
     let model_info =
@@ -6035,7 +6112,8 @@ async fn absolute_cwd_update_with_turn_environment_is_allowed() {
 #[tokio::test]
 async fn session_new_fails_when_zsh_fork_enabled_without_packaged_zsh() {
     let codex_home = tempfile::tempdir().expect("create temp dir");
-    let mut config = build_test_config(codex_home.path()).await;
+    let test_cwd = tempfile::tempdir().expect("create test cwd");
+    let mut config = build_test_config(codex_home.path(), test_cwd.path()).await;
     config
         .features
         .enable(Feature::ShellZshFork)
@@ -6441,27 +6519,40 @@ pub(crate) async fn make_session_and_context_for_config(config: Config) -> (Sess
 
 pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
     let codex_home = tempfile::tempdir().expect("create temp dir");
-    let config = build_test_config(codex_home.path()).await;
+    let test_cwd = kept_test_cwd();
+    let config = build_test_config(codex_home.path(), &test_cwd).await;
     make_session_and_context_for_config(config).await
 }
 
-pub(crate) type ProviderAuthSessionContext = (Session, TurnContext, tempfile::TempDir);
+/// A test session's temporary home and working folder, removed when dropped.
+pub(crate) struct TestFolders {
+    pub(crate) home: tempfile::TempDir,
+    pub(crate) cwd: tempfile::TempDir,
+}
+
+pub(crate) type ProviderAuthSessionContext = (Session, TurnContext, TestFolders);
 
 pub(crate) async fn make_session_and_context_with_provider_auth() -> ProviderAuthSessionContext {
     let codex_home = tempfile::tempdir().expect("create temp dir");
+    let test_cwd = tempfile::tempdir().expect("create test cwd");
     write_test_provider_auth(codex_home.path());
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.path().to_path_buf())
         .harness_overrides(ConfigOverrides {
             model: Some(AMBIENT_DEFAULT_MODEL.to_string()),
             model_provider: Some(AMBIENT_PROVIDER_ID.to_string()),
+            cwd: Some(test_cwd.path().to_path_buf()),
             ..Default::default()
         })
         .build()
         .await
         .expect("load Ambient provider test config");
     let (session, turn_context) = make_session_and_context_for_config(config).await;
-    (session, turn_context, codex_home)
+    let folders = TestFolders {
+        home: codex_home,
+        cwd: test_cwd,
+    };
+    (session, turn_context, folders)
 }
 
 pub(crate) async fn make_session_with_config(
@@ -6485,7 +6576,8 @@ async fn make_session_with_config_and_rx(
     mutator: impl FnOnce(&mut Config),
 ) -> anyhow::Result<(Arc<Session>, async_channel::Receiver<Event>)> {
     let codex_home = tempfile::tempdir().expect("create temp dir");
-    let mut config = build_test_config(codex_home.path()).await;
+    let test_cwd = kept_test_cwd();
+    let mut config = build_test_config(codex_home.path(), &test_cwd).await;
     mutator(&mut config);
     let config = Arc::new(config);
     let auth_manager = AuthManager::from_auth_for_testing_with_home(
@@ -6602,7 +6694,8 @@ async fn make_session_with_history_source_and_agent_control_and_rx(
     agent_control: AgentControl,
 ) -> anyhow::Result<(Arc<Session>, async_channel::Receiver<Event>)> {
     let codex_home = tempfile::tempdir().expect("create temp dir");
-    let mut config = build_test_config(codex_home.path()).await;
+    let test_cwd = kept_test_cwd();
+    let mut config = build_test_config(codex_home.path(), &test_cwd).await;
     config.ephemeral = true;
     let config = Arc::new(config);
     let auth_manager = AuthManager::from_auth_for_testing_with_home(
@@ -8410,10 +8503,12 @@ where
     F: FnOnce(&mut Config),
 {
     let codex_home = tempfile::tempdir().expect("create temp dir");
+    let test_cwd = kept_test_cwd();
     make_session_and_context_with_auth_config_home_and_rx(
         auth,
         dynamic_tools,
         codex_home.path(),
+        &test_cwd,
         configure_config,
         /*start_submission_loop*/ false,
     )
@@ -8424,6 +8519,7 @@ async fn make_session_and_context_with_auth_config_home_and_rx<F>(
     auth: CodexAuth,
     dynamic_tools: Vec<DynamicToolSpec>,
     codex_home: &Path,
+    cwd: &Path,
     configure_config: F,
     start_submission_loop: bool,
 ) -> (
@@ -8436,7 +8532,7 @@ where
 {
     let (tx_sub, rx_sub) = async_channel::bounded(16);
     let (tx_event, rx_event) = async_channel::unbounded();
-    let mut config = build_test_config(codex_home).await;
+    let mut config = build_test_config(codex_home, cwd).await;
     configure_config(&mut config);
     let state_db = None;
     let config = Arc::new(config);
@@ -8712,10 +8808,12 @@ async fn make_session_and_context_with_submission_loop_and_rx() -> (
     async_channel::Receiver<Event>,
 ) {
     let codex_home = tempfile::tempdir().expect("create temp dir");
+    let test_cwd = kept_test_cwd();
     make_session_and_context_with_auth_config_home_and_rx(
         CodexAuth::from_api_key("Test API Key"),
         Vec::new(),
         codex_home.path(),
+        &test_cwd,
         |_config| {},
         /*start_submission_loop*/ true,
     )

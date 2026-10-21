@@ -176,6 +176,7 @@ fn day(quotes: Vec<ObservationQuote>) -> InspectionDay {
         unknown_parent_requests: Default::default(),
         requests,
         other_conversations: Some(OtherConversations::default()),
+        empty_day: None,
     })
 }
 

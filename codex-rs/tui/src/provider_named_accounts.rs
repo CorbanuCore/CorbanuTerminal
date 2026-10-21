@@ -174,6 +174,21 @@ pub(crate) fn holds_named_account(
     provider_id: &str,
     kind: ProviderAccountKind,
 ) -> Option<bool> {
+    holds_named_account_where(codex_home, provider_id, |kinds| kinds.contains(&kind))
+}
+
+/// D86: whether the vault holds any named account of `provider_id`;
+/// `None` when the vault cannot be read. Blocking (it reads the vault
+/// index); no credential value is read.
+pub(crate) fn holds_any_named_account(codex_home: &Path, provider_id: &str) -> Option<bool> {
+    holds_named_account_where(codex_home, provider_id, |_| true)
+}
+
+fn holds_named_account_where(
+    codex_home: &Path,
+    provider_id: &str,
+    kinds_match: impl Fn(&[ProviderAccountKind]) -> bool,
+) -> Option<bool> {
     let vault = Vault::new(codex_home.to_path_buf());
     if vault.key_storage() == VaultKeyStorage::NotInitialized {
         return Some(false);
@@ -185,7 +200,7 @@ pub(crate) fn holds_named_account(
         .map(|accounts| {
             accounts
                 .iter()
-                .any(|account| account.provider_id == provider_id && account.kinds.contains(&kind))
+                .any(|account| account.provider_id == provider_id && kinds_match(&account.kinds))
         })
 }
 

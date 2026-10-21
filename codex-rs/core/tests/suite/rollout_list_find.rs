@@ -178,8 +178,14 @@ async fn find_ignores_granular_gitignore_rules() {
 async fn find_locates_rollout_file_written_by_recorder() -> std::io::Result<()> {
     // Ensures the name-based finder locates a rollout produced by the real recorder.
     let home = TempDir::new().unwrap();
+    // #1157: built for a temporary folder, not the test process's own.
+    let cwd = TempDir::new().unwrap();
     let config = ConfigBuilder::default()
         .codex_home(home.path().to_path_buf())
+        .harness_overrides(codex_core::config::ConfigOverrides {
+            cwd: Some(cwd.path().to_path_buf()),
+            ..Default::default()
+        })
         .build()
         .await?;
     let thread_id = ThreadId::new();

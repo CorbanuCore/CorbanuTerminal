@@ -56,7 +56,7 @@ pub(crate) fn blocker(facts: Facts) -> Option<&'static str> {
 
 /// What Core's Moderate rules do in a running session, as the confirmation
 /// and the saved screen name them.
-pub(crate) const EFFECTS: &str = "agent commands always stay in the sandbox; unless you approve that one command, they cannot read credential files in your home folder or Corbanu's sign-in, vault, config, history and state, or write files that run code later (Corbanu's security state and keys stay closed to them even then); after untrusted content, protected actions need your fresh approval";
+pub(crate) const EFFECTS: &str = "agent commands always stay in the sandbox; unless you approve that one command, they cannot read credential files in your home folder or Corbanu's sign-in, vault, config, history and state, or write files that run code later (Corbanu's security state and keys stay closed to them even then, and, with secretless_agent_launch on, so do the CLI tokens and Corbanu files it keeps); after untrusted content, protected actions need your fresh approval";
 
 /// The rows of the Moderate review, in order: control and Moderate's value.
 pub(crate) fn rows(facts: Facts) -> Vec<(&'static str, String)> {
@@ -75,7 +75,7 @@ pub(crate) fn rows(facts: Facts) -> Vec<(&'static str, String)> {
             format!(
                 "{}; {}",
                 if facts.secretless_launch {
-                    "only allowlisted environment variables reach agent commands, and the vault store, sign-in files and config stay unreadable to them even when you approve (secretless_agent_launch)"
+                    "only allowlisted environment variables reach agent commands, and the vault store, sign-in files, config and CLI tokens (such as ~/.aws/credentials and ~/.netrc) stay unreadable to them even when you approve (secretless_agent_launch)"
                 } else {
                     "agent commands get your environment as configured (secretless_agent_launch off)"
                 },

@@ -7,6 +7,7 @@
 use super::indirect;
 use super::outbound;
 use super::quoted::Word;
+use super::work;
 
 /// Names GNU sed runs under.
 pub(super) const NAMES: &[&str] = &["sed", "gsed"];
@@ -127,6 +128,7 @@ fn call(args: &[Word], bsd: bool, posix: bool) -> Call {
     let mut options_done = false;
     let mut index = 0;
     while let Some(arg) = args.get(index) {
+        work::step();
         index += 1;
         // An unquoted expansion may become any words, options included.
         call.unknown |= arg.splits;
@@ -194,6 +196,7 @@ fn call(args: &[Word], bsd: bool, posix: bool) -> Call {
         }
         let cluster = &text[1..];
         for (at, letter) in cluster.char_indices() {
+            work::step();
             let rest = &cluster[at + letter.len_utf8()..];
             match letter {
                 'n' | 'r' | 'E' | 's' | 'u' | 'z' | 'b' => continue,
@@ -254,6 +257,7 @@ pub(super) fn program(text: &str) -> Program {
         ..Program::default()
     };
     for reading in readings {
+        work::step();
         match reading {
             Some(reading) => {
                 program.runs |= reading.runs;
@@ -284,6 +288,7 @@ fn read(text: &str, brackets: bool) -> Option<Program> {
         ..Program::default()
     };
     loop {
+        work::step();
         parser.skip(" \t\n;");
         let Some(ch) = parser.peek() else {
             return Some(program);
@@ -309,6 +314,7 @@ fn read(text: &str, brackets: bool) -> Option<Program> {
         }
         parser.skip(" \t");
         while parser.peek() == Some('!') {
+            work::step();
             parser.index += 1;
             parser.skip(" \t");
         }
@@ -358,6 +364,7 @@ fn read(text: &str, brackets: bool) -> Option<Program> {
                 parser.part(delimiter, /*brackets*/ false)?;
                 let mut wrote = false;
                 while let Some(flag) = parser.peek() {
+                    work::step();
                     match flag {
                         'g' | 'p' | 'i' | 'I' | 'm' | 'M' | '0'..='9' => parser.index += 1,
                         'e' => {
@@ -409,6 +416,7 @@ impl Parser<'_> {
 
     fn skip(&mut self, set: &str) {
         while self.peek().is_some_and(|ch| set.contains(ch)) {
+            work::step();
             self.index += 1;
         }
     }
@@ -416,6 +424,7 @@ impl Parser<'_> {
     fn digits(&mut self) -> bool {
         let start = self.index;
         while self.peek().is_some_and(|ch| ch.is_ascii_digit()) {
+            work::step();
             self.index += 1;
         }
         self.index > start
@@ -425,6 +434,7 @@ impl Parser<'_> {
     fn rest_of_line(&mut self) -> String {
         let mut text = String::new();
         while let Some(ch) = self.next() {
+            work::step();
             if ch == '\n' {
                 break;
             }
@@ -438,6 +448,7 @@ impl Parser<'_> {
     fn label(&mut self) -> String {
         let mut label = String::new();
         while let Some(ch) = self.peek() {
+            work::step();
             if ch.is_whitespace() || ";}".contains(ch) {
                 break;
             }
@@ -460,6 +471,7 @@ impl Parser<'_> {
         let mut text = String::new();
         let mut escaped = false;
         while let Some(ch) = self.next() {
+            work::step();
             match ch {
                 _ if escaped => {
                     escaped = false;
@@ -529,6 +541,7 @@ impl Parser<'_> {
     /// `brackets`, a bracket expression may hold the delimiter.
     fn part(&mut self, delimiter: char, brackets: bool) -> Option<()> {
         loop {
+            work::step();
             let ch = self.next()?;
             if ch == '\\' {
                 self.next()?;
@@ -549,11 +562,13 @@ impl Parser<'_> {
             self.index += 1;
         }
         loop {
+            work::step();
             match self.next()? {
                 ']' => return Some(()),
                 '[' if matches!(self.peek(), Some(':' | '.' | '=')) => {
                     let close = self.next()?;
                     loop {
+                        work::step();
                         if self.next()? == close && self.peek() == Some(']') {
                             self.index += 1;
                             break;

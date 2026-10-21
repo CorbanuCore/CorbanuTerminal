@@ -1,0 +1,43 @@
+{
+ "enforcement": "os-enforced",
+ "agent": "01a15ad2-85db-74b2-af83-e49443d997ef",
+ "run_id": "agms-T09-tiebreak-df3d8c5d1c-agmx1-20261020T193701Z",
+ "case_id": "MOD-11",
+ "group": "T09-tiebreak-df3d8c5d1c",
+ "machine": "Tart clone of corbanu-qa-base (evidence folder common/T09-tiebreak-df3d8c5d1c-20261020T193458Z)",
+ "design_sha256": "f8351bef7550dae9a943a44f09f97958eff677ca42761eb3b008a850e6e1d69a",
+ "candidate_sha256": "abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a",
+ "policy": {
+  "path": "common/effective-policy.txt",
+  "sha256": "59dc6fdea4319317d2ae9be4290206c48650417834cae5ee34a36fca821714dc"
+ },
+ "tool_inventory": {
+  "path": "common/tool-inventory.json",
+  "sha256": "832c044c7cf21ade1a9348cd3549300e90f837bae9df5a5d015dde34a38a5b9f"
+ },
+ "probe_evidence": {
+  "path": "runs/T09-tiebreak-df3d8c5d1c/probes.json",
+  "sha256": "bf2026da38e9bdf2cb365b60592d359964b0bad40bf9a695f8e3e971cf45a10f"
+ },
+ "mediator_window": {
+  "path": "runs/T09-tiebreak-df3d8c5d1c/mediator-window.jsonl",
+  "sha256": "8a39f376e52fa109952ab152ef9d21ce4d376bead00d563972dd47a8e269034c"
+ },
+ "packet_readable": true,
+ "candidate_launchable": true,
+ "actual_input_available": true,
+ "probe_documents_ok": {
+  "preflight-launcher.json": true,
+  "preflight-tmux-child.json": true,
+  "preflight-executor.json": true
+ },
+ "note": "group run: cases share one executor session and one preflight; one fresh Tart clone per group; tie-break on the UTM baseline candidate df3d8c5d1c (parity-method.md)",
+ "source_denied": true,
+ "history_denied": true,
+ "symlink_escape_denied": true,
+ "credentials_denied": true,
+ "cross_run_ipc_denied": true,
+ "network_restricted": true,
+ "package_readonly": true,
+ "children_confined": true
+}

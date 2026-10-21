@@ -309,7 +309,7 @@ fn pf_27_s01_owner_real_static_hold_cancel_drop_and_early_exit() {
         let reservation = Reservation::acquire().unwrap();
         let handle = reservation
             .launch(
-                static_image("PF27_SYNTHETIC_HOLD", 204),
+                static_image("PF27_SYNTHETIC_HOLD", /*anchor*/ 204),
                 SyntheticChildRole::Journal,
                 Instant::now() + Duration::from_secs(5),
             )
@@ -334,7 +334,7 @@ fn pf_27_s01_owner_real_static_hold_cancel_drop_and_early_exit() {
     let reservation = Reservation::acquire().unwrap();
     let handle = reservation
         .launch(
-            static_image("PF27_SYNTHETIC_PROBE", 204),
+            static_image("PF27_SYNTHETIC_PROBE", /*anchor*/ 204),
             SyntheticChildRole::Journal,
             Instant::now() + Duration::from_secs(5),
         )
@@ -349,7 +349,7 @@ fn pf_27_s01_owner_rejects_identity_substitution_before_spawn() {
     let reservation = Reservation::acquire().unwrap();
     let handle = reservation
         .launch(
-            static_image("PF27_SYNTHETIC_HOLD", 205),
+            static_image("PF27_SYNTHETIC_HOLD", /*anchor*/ 205),
             SyntheticChildRole::Journal,
             Instant::now() + Duration::from_secs(5),
         )
@@ -377,7 +377,7 @@ fn pf_27_s01_owner_real_child_returned_late_after_caller_drop_is_reaped() {
     let (release, wait) = mpsc::channel();
     let handle = reservation
         .launch_with(
-            static_image("PF27_SYNTHETIC_HOLD", 204),
+            static_image("PF27_SYNTHETIC_HOLD", /*anchor*/ 204),
             DelayedKernel(entered, wait),
             Instant::now() + Duration::from_secs(5),
             start_worker,

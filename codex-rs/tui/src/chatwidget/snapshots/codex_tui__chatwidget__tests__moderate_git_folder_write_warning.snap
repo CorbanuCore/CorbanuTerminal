@@ -1,0 +1,10 @@
+---
+source: tui/src/chatwidget/tests/app_server.rs
+expression: "lines_to_single_string(&cells[0])"
+---
+⚠ Security level Moderate blocked writing `.git/hooks/pre-commit`: under
+  Moderate, agent commands always run inside the sandbox, even when you approve
+  them, and the sandbox keeps the project's .git folder (git hooks and config)
+  read-only. To make this change, a person can run the command in their own
+  terminal, or switch to Permissive in /security (it applies after a restart),
+  where an approved command can run outside the sandbox.

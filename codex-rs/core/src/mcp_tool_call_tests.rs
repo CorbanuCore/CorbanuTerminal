@@ -1948,6 +1948,7 @@ async fn persist_codex_app_tool_approval_writes_tool_override() {
     let tmp = tempdir().expect("tempdir");
     let config = ConfigBuilder::default()
         .codex_home(tmp.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .build()
         .await
         .expect("load config");
@@ -1998,6 +1999,7 @@ async fn persist_custom_mcp_tool_approval_writes_tool_override() {
     .expect("seed config");
     let config = ConfigBuilder::default()
         .codex_home(tmp.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .build()
         .await
         .expect("load config");
@@ -2040,6 +2042,7 @@ approval_mode = "prompt"
     .expect("seed config");
     let config = ConfigBuilder::default()
         .codex_home(tmp.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .build()
         .await
         .expect("load config");
@@ -2084,6 +2087,7 @@ approval_mode = "approve"
     .expect("seed config");
     let config = ConfigBuilder::default()
         .codex_home(codex_home.to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .build()
         .await
         .expect("load config");
@@ -2118,6 +2122,7 @@ enabled = true
     .expect("seed config");
     let initial_config = ConfigBuilder::default()
         .codex_home(codex_home.to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .build()
         .await
         .expect("load initial config");
@@ -2142,6 +2147,7 @@ approval_mode = "approve"
     .expect("update config");
     let updated_config = ConfigBuilder::default()
         .codex_home(codex_home.to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .build()
         .await
         .expect("load updated config");
@@ -2210,6 +2216,7 @@ async fn maybe_persist_mcp_tool_approval_reloads_session_config_for_custom_serve
     .expect("seed config");
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.clone().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .build()
         .await
         .expect("load config");
@@ -2270,6 +2277,7 @@ enabled = true
     .expect("seed config");
     let config = ConfigBuilder::default()
         .codex_home(codex_home.to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .build()
         .await
         .expect("load config");

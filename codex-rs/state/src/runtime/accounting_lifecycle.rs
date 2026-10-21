@@ -555,9 +555,13 @@ impl Journal<'_> {
             "SELECT EXISTS(SELECT 1 FROM draft_accounting_compact_days WHERE thread_id = ? AND utc_day = ?)",
         ).bind(owner.to_string()).bind(day).fetch_one(&mut *conn).await?;
         // A compact prefix cannot supply detail, but retained raw suffixes can.
-        if day < coverage.aggregate_day_floor
-            || (compact && window.is_none())
-            || (read_at_ms >= 90 * DAY_MS && lower <= read_at_ms - 90 * DAY_MS)
+        // A whole day with nothing recorded for this owner loses no detail to
+        // retention; the tree inspection decides what that emptiness shows.
+        let recorded = !records.is_empty() || compact;
+        if (recorded || window.is_some())
+            && (day < coverage.aggregate_day_floor
+                || (compact && window.is_none())
+                || (read_at_ms >= 90 * DAY_MS && lower <= read_at_ms - 90 * DAY_MS))
         {
             return Ok(InspectionDay::DetailUnavailable {
                 coverage,
@@ -622,6 +626,7 @@ impl Journal<'_> {
             unknown_parent_unavailable_threads: 0,
             unknown_parent_requests: BTreeMap::new(),
             other_conversations: None,
+            empty_day: None,
             totals,
             requests,
         }))

@@ -5586,6 +5586,134 @@ impl App {
                     }
                 }
             }
+            AppEvent::SubmitSpawnAgentTaskFromPerson { thread_id, task } => {
+                // D95 (#1146): the person's own task from Spawn status reaches
+                // the pane as user input, as if typed there. No agent's
+                // dispatch acknowledgement is consumed or attributed to it.
+                if self.spawn_legacy_read_only
+                    || self.spawn_crew.as_ref().is_some_and(|crew| {
+                        !matches!(crew.status, crate::crew_state::CrewCreationStatus::Ready)
+                    })
+                {
+                    self.chat_widget.add_error_message(
+                        "This /spawn hierarchy is read-only until its crew identity and creation \
+                         state are reconciled."
+                            .to_string(),
+                    );
+                    return Ok(AppRunControl::Continue);
+                }
+                let task = task.trim().to_string();
+                if task.is_empty() {
+                    self.chat_widget
+                        .add_error_message("Spawn task cannot be empty.".to_string());
+                    return Ok(AppRunControl::Continue);
+                }
+                if task.len() > crate::dispatch_queue::MAX_DISPATCH_TASK_BYTES {
+                    self.chat_widget.add_error_message(format!(
+                        "task is {} bytes; maximum is {} bytes",
+                        task.len(),
+                        crate::dispatch_queue::MAX_DISPATCH_TASK_BYTES
+                    ));
+                    return Ok(AppRunControl::Continue);
+                }
+                let label = self.thread_label(thread_id);
+                // A pane its parent controls takes no typed input; the task
+                // goes to it as before, as a message, and the person is told.
+                if self.agent_navigation.is_parent_owned(thread_id) {
+                    self.chat_widget.add_info_message(
+                        person_task_to_parent_owned_pane_message(&label),
+                        /*hint*/ None,
+                    );
+                    self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
+                        thread_id,
+                        task,
+                        sent_while_kill_switch_on: false,
+                    });
+                    return Ok(AppRunControl::Continue);
+                }
+                // #507: a typed message is not kept while the kill switch is
+                // on; neither is this one (checked again before it is sent).
+                if self.kill_switch_on_now() {
+                    self.chat_widget
+                        .add_error_message(person_task_kill_switch_message(&label));
+                    return Ok(AppRunControl::Continue);
+                }
+                let thread_id = match self
+                    .materialize_saved_native_spawn_thread_for_task(app_server, thread_id)
+                    .await
+                {
+                    Ok(thread_id) => thread_id,
+                    Err(error) => {
+                        self.chat_widget
+                            .add_error_message(format!("Not sent to {label}: {error:#}"));
+                        return Ok(AppRunControl::Continue);
+                    }
+                };
+                if self.agent_navigation.is_parent_owned(thread_id) {
+                    self.chat_widget.add_info_message(
+                        person_task_to_parent_owned_pane_message(&label),
+                        /*hint*/ None,
+                    );
+                    self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
+                        thread_id,
+                        task,
+                        sent_while_kill_switch_on: false,
+                    });
+                    return Ok(AppRunControl::Continue);
+                }
+                if self.kill_switch_on_now() {
+                    self.chat_widget
+                        .add_error_message(person_task_kill_switch_message(&label));
+                    return Ok(AppRunControl::Continue);
+                }
+                // User input, as typing sends it: added to a running turn, or
+                // a new turn. It sends no settings, so the pane keeps the
+                // approval, sandbox, model and mode Core holds for it.
+                let items = vec![codex_app_server_protocol::UserInput::Text {
+                    text: task.clone(),
+                    text_elements: Vec::new(),
+                }];
+                let sent = match self.active_turn_id_for_submission(thread_id).await {
+                    Some(turn_id) => app_server
+                        .turn_steer(thread_id, turn_id, items, /*client_user_message_id*/ None)
+                        .await
+                        .map(|_| ())
+                        .map_err(|error| {
+                            format!(
+                                "Not sent to {label}: its running turn did not take it ({error}). \
+                                 Send it again when that turn ends."
+                            )
+                        }),
+                    None => match app_server
+                        .turn_start_keeping_thread_settings(
+                            thread_id,
+                            items,
+                            self.spawn_additional_context_for_thread(thread_id),
+                        )
+                        .await
+                    {
+                        Ok(crate::app_server_session::TurnStartOutcome::Started { .. }) => Ok(()),
+                        Ok(crate::app_server_session::TurnStartOutcome::CapacityUnavailable {
+                            max_threads,
+                        }) => Err(format!(
+                            "Not sent to {label}: all {max_threads} execution slots are in use."
+                        )),
+                        Err(error) => {
+                            Err(format!("Not sent to {label}: the turn could not start: {error:#}"))
+                        }
+                    },
+                };
+                match sent {
+                    Ok(()) => {
+                        self.agent_navigation.set_last_task_message(
+                            thread_id,
+                            Some(task.chars().take(240).collect()),
+                        );
+                        self.persist_pane_state();
+                    }
+                    Err(detail) => self.chat_widget.add_error_message(detail),
+                }
+            }
             AppEvent::SubmitCodexUserPaneTask {
                 thread_id,
                 task,
@@ -6796,6 +6924,24 @@ pub(super) fn account_switch_message_for(
     } else {
         format!("Connectors, usage and the model list now use {label}; model list refreshed.")
     }
+}
+
+/// D95: why a task the person sent from Spawn status to a pane its parent
+/// controls arrives as a message, not as their own input.
+fn person_task_to_parent_owned_pane_message(label: &str) -> String {
+    format!(
+        "{label} is controlled by its parent and takes no direct input, so the task was sent to \
+         it as a message (it arrives as a message from another agent, not as your own input)."
+    )
+}
+
+/// D95: a task the person sends from Spawn status while the kill switch is on.
+fn person_task_kill_switch_message(label: &str) -> String {
+    format!(
+        "Not sent to {label}: the security kill switch is on. A task you send from Spawn status \
+         is your own input, as if you typed it in that pane, and typed input is not kept while \
+         the switch is on. Send it again after turning the switch off."
+    )
 }
 
 #[cfg(test)]

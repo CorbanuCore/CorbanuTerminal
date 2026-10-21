@@ -2449,7 +2449,34 @@ async fn named_account_status(
     width: u16,
 ) -> String {
     let temp_home = TempDir::new().expect("temp home");
-    let mut config = test_config(&temp_home).await;
+    named_account_status_in(&temp_home, named_accounts, account, account_usage, width).await
+}
+
+/// D86: adds named API-key accounts (provider id, name) to `home`'s vault.
+fn enroll_named_accounts(home: &TempDir, accounts: &[(&str, &str)]) {
+    let vault = codex_vault::Vault::new(home.path().to_path_buf());
+    for (provider_id, name) in accounts {
+        let name = codex_vault::ProviderAccountName::parse(name).expect("account name");
+        vault
+            .create_provider_account(
+                provider_id,
+                &name,
+                codex_vault::ProviderAccountKind::ApiKey,
+                "test-key-not-a-secret",
+            )
+            .expect("add named account");
+    }
+}
+
+/// [`named_account_status`] in `temp_home`, whose vault the test prepared.
+async fn named_account_status_in(
+    temp_home: &TempDir,
+    named_accounts: bool,
+    account: Option<&str>,
+    account_usage: Option<super::StatusAccountUsage>,
+    width: u16,
+) -> String {
+    let mut config = test_config(temp_home).await;
     config.model_provider_id = "zai".to_string();
     config.model_provider = ModelProviderInfo {
         name: "Z.AI".to_string(),
@@ -2613,4 +2640,181 @@ async fn status_snapshot_account_usage_several_accounts() {
     )
     .await;
     assert_snapshot!(rendered);
+}
+
+fn model_provider_line(rendered: &str) -> &str {
+    rendered
+        .lines()
+        .find(|line| line.contains("Model provider:"))
+        .expect("model provider line")
+}
+
+fn default_account_usage() -> Option<super::StatusAccountUsage> {
+    Some(super::StatusAccountUsage {
+        rows: vec![(
+            codex_vault::DEFAULT_PROVIDER_ACCOUNT.to_string(),
+            account_tokens(
+                /*input*/ 47_100, /*cached*/ 12_000, /*output*/ 6_247,
+                /*reasoning*/ 300,
+            ),
+        )],
+    })
+}
+
+/// D86: with named accounts on, a provider with no named account in the
+/// home shows no account, as with them off.
+#[tokio::test]
+async fn status_snapshot_account_line_hidden_without_named_accounts() {
+    let rendered = named_account_status(
+        /*named_accounts*/ true,
+        /*account*/ None,
+        default_account_usage(),
+        /*width*/ 100,
+    )
+    .await;
+    let line = model_provider_line(&rendered);
+    assert!(
+        line.contains("Z.AI") && !line.contains("account"),
+        "{rendered}"
+    );
+    assert_snapshot!(rendered);
+}
+
+/// D86: once the provider has a named account, the line names the account
+/// the session uses, `default` included.
+#[tokio::test]
+async fn status_snapshot_account_line_names_default_when_provider_has_named_account() {
+    let home = TempDir::new().expect("temp home");
+    enroll_named_accounts(&home, &[("zai", "work")]);
+    let rendered = named_account_status_in(
+        &home,
+        /*named_accounts*/ true,
+        /*account*/ None,
+        default_account_usage(),
+        /*width*/ 100,
+    )
+    .await;
+    assert!(
+        model_provider_line(&rendered).contains("Z.AI · account default"),
+        "{rendered}"
+    );
+    assert_snapshot!(rendered);
+}
+
+/// D86: another provider's named account does not count; a vault that
+/// cannot be read does (the account is named rather than hidden).
+#[tokio::test]
+async fn account_line_counts_only_this_providers_named_accounts() {
+    let home = TempDir::new().expect("temp home");
+    enroll_named_accounts(&home, &[("kimi", "work")]);
+    let rendered = named_account_status_in(
+        &home,
+        /*named_accounts*/ true,
+        /*account*/ None,
+        default_account_usage(),
+        /*width*/ 100,
+    )
+    .await;
+    assert!(
+        !model_provider_line(&rendered).contains("account"),
+        "{rendered}"
+    );
+
+    std::fs::write(
+        home.path().join("secrets").join("local.age"),
+        b"not an age file",
+    )
+    .expect("corrupt the vault");
+    let rendered = named_account_status_in(
+        &home,
+        /*named_accounts*/ true,
+        /*account*/ None,
+        default_account_usage(),
+        /*width*/ 100,
+    )
+    .await;
+    assert!(
+        model_provider_line(&rendered).contains("Z.AI · account default"),
+        "{rendered}"
+    );
+}
+
+/// D86: with named accounts off, an enrolled named account changes nothing.
+#[tokio::test]
+async fn account_line_stays_off_with_named_accounts_off() {
+    let home = TempDir::new().expect("temp home");
+    enroll_named_accounts(&home, &[("zai", "work")]);
+    let rendered = named_account_status_in(
+        &home, /*named_accounts*/ false, /*account*/ None, /*account_usage*/ None,
+        /*width*/ 100,
+    )
+    .await;
+    let line = model_provider_line(&rendered);
+    assert!(
+        line.contains("Z.AI") && !line.contains("account"),
+        "{rendered}"
+    );
+}
+
+/// D86: the default OpenAI provider in a home without named accounts has no
+/// "Model provider" line: it renders exactly as with named accounts off.
+#[tokio::test]
+async fn default_openai_status_is_unchanged_without_named_accounts() {
+    async fn render(named_accounts: bool) -> String {
+        let temp_home = TempDir::new().expect("temp home");
+        let mut config = test_config(&temp_home).await;
+        if named_accounts {
+            config
+                .features
+                .enable(codex_features::Feature::NamedAccounts)
+                .expect("enable named accounts");
+        } else {
+            config
+                .features
+                .disable(codex_features::Feature::NamedAccounts)
+                .expect("disable named accounts");
+        }
+        set_workspace_cwd(&mut config, test_path_buf("/workspace/tests").abs());
+        let usage = account_tokens(
+            /*input*/ 1_000, /*cached*/ 0, /*output*/ 200, /*reasoning*/ 0,
+        );
+        let now = chrono::Local
+            .with_ymd_and_hms(2026, 10, 11, 4, 5, 6)
+            .single()
+            .expect("timestamp");
+        let account_display = StatusAccountDisplay::ChatGpt {
+            email: Some("user@example.com".to_string()),
+            plan: Some("Plus".to_string()),
+        };
+        let (composite, _) = new_status_output_with_rate_limits_handle(
+            &config,
+            /*runtime_model_provider_base_url*/ None,
+            /*remote_connection*/ None,
+            Some(&account_display),
+            /*token_info*/ None,
+            &usage,
+            &None,
+            /*thread_name*/ None,
+            /*forked_from*/ None,
+            &[],
+            /*plan_type*/ None,
+            now,
+            "gpt-5.1-codex-max",
+            /*collaboration_mode*/ None,
+            /*reasoning_effort_override*/ None,
+            "<none>".to_string(),
+            /*refreshing_rate_limits*/ false,
+            // What `status_account_usage` passes: rows only with the flag on.
+            named_accounts.then(|| super::StatusAccountUsage {
+                rows: vec![(
+                    codex_vault::DEFAULT_PROVIDER_ACCOUNT.to_string(),
+                    usage.clone(),
+                )],
+            }),
+        );
+        sanitize_directory(render_lines(&composite.display_lines(/*width*/ 100))).join("\n")
+    }
+    let on = render(/*named_accounts*/ true).await;
+    assert!(!on.contains("Model provider"), "{on}");
+    assert_eq!(on, render(/*named_accounts*/ false).await);
 }

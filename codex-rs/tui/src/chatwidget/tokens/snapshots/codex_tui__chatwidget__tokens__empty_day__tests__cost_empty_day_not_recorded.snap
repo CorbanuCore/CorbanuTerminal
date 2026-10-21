@@ -1,0 +1,18 @@
+---
+source: tui/src/chatwidget/tokens/empty_day_tests.rs
+expression: "render_bottom_popup_with_height(&chat, 100, 24)"
+---
+  Cost — this conversation
+  Requested UTC day: 2026-01-01
+
+› This conversation on 2026-01-01 (UTC): nothing recorded.
+  That does not show there were no requests: one that failed to record, or one sent from a build
+  without developer accounting, leaves no record.
+  No other conversation recorded requests on this day.
+  Costs are estimates from published prices; your provider's bill is the final amount.
+  —— Details ——
+  No recorded attempts in this conversation or its subagents; collection coverage unknown.
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent
+
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close

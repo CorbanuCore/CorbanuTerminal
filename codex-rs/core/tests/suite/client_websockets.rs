@@ -46,7 +46,7 @@ use codex_rollout_trace::RawTraceEventPayload;
 use codex_rollout_trace::TraceWriter;
 use codex_rollout_trace::replay_bundle;
 use core_test_support::TestCodexResponsesRequestKind;
-use core_test_support::load_default_config_for_test;
+use core_test_support::load_default_config_for_test_in;
 use core_test_support::responses::WebSocketConnectionConfig;
 use core_test_support::responses::WebSocketTestServer;
 use core_test_support::responses::ev_assistant_message;
@@ -110,6 +110,7 @@ fn assert_request_trace_matches(body: &serde_json::Value, expected_trace: &W3cTr
 
 struct WebsocketTestHarness {
     _codex_home: TempDir,
+    _cwd: TempDir,
     client: ModelClient,
     outbound_proxy_policy: OutboundProxyPolicy,
     session_id: SessionId,
@@ -2522,7 +2523,9 @@ async fn websocket_harness_with_provider_options(
     enabled_features: &[Feature],
 ) -> WebsocketTestHarness {
     let codex_home = TempDir::new().unwrap();
-    let mut config = load_default_config_for_test(&codex_home).await;
+    let cwd = TempDir::new().unwrap();
+    let mut config =
+        load_default_config_for_test_in(&codex_home, Default::default(), cwd.path()).await;
     config.model = Some(MODEL.to_string());
     if runtime_metrics_enabled {
         config
@@ -2593,6 +2596,7 @@ async fn websocket_harness_with_provider_options(
 
     WebsocketTestHarness {
         _codex_home: codex_home,
+        _cwd: cwd,
         client,
         outbound_proxy_policy,
         session_id,

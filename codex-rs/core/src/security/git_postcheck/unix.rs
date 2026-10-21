@@ -2,6 +2,7 @@ use codex_protocol::ThreadId;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
+use std::collections::hash_map;
 use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::io::Read;
@@ -19,7 +20,7 @@ use std::time::UNIX_EPOCH;
 
 /// Entries looked at per repository at most; past it the look is
 /// incomplete (and holds, see `held_for`).
-const MAX_ENTRIES: usize = 50_000;
+pub(super) const MAX_ENTRIES: usize = 50_000;
 const MAX_DEPTH: usize = 16;
 pub(super) const MAX_REPOS: usize = 8;
 const MAX_REPOS_PER_THREAD: usize = 16;
@@ -203,6 +204,83 @@ fn times(meta: &std::fs::Metadata) -> (i128, i128) {
     )
 }
 
+/// When it was made, where the file system records it (#943 item 12: a
+/// freed inode number can come back for the next file or folder, on Linux
+/// at once; the creation time tells them apart). Not on macOS, which doesn't
+/// hand out a freed one at once and moves a file's creation time back with
+/// its modification time (`touch -t`, `rsync -t`). Not on an overlay file
+/// system either (#943 follow-up 19): git's first write in a container
+/// copies the folder up from the image's layer, with a new creation time
+/// and the same inode number.
+pub(super) fn born(path: &Path, meta: &std::fs::Metadata) -> Option<i128> {
+    if cfg!(target_os = "macos") || on_overlay(path, meta) {
+        return None;
+    }
+    meta.created()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|since| since.as_nanos() as i128)
+}
+
+/// Devices seen not to be overlay file systems, checked once each. Only
+/// that answer is remembered: a device number freed by an unmount can come
+/// back for another file system, and a stale "not overlay" only compares
+/// creation times where they would have been ignored.
+#[cfg(target_os = "linux")]
+static NOT_OVERLAY: LazyLock<Mutex<HashSet<u64>>> = LazyLock::new(Mutex::default);
+#[cfg(target_os = "linux")]
+const MAX_DEVICES: usize = 256;
+
+/// Whether `path`, still the file or folder `meta` describes, is on an
+/// overlay file system. Anything that can't be told counts as not.
+#[cfg(target_os = "linux")]
+fn on_overlay(path: &Path, meta: &std::fs::Metadata) -> bool {
+    use std::os::fd::AsRawFd;
+
+    let lock = || NOT_OVERLAY.lock().unwrap_or_else(PoisonError::into_inner);
+    if lock().contains(&meta.dev()) {
+        return false;
+    }
+    // Opened without following a link or reading it, and checked to be the
+    // same one, so a swap since `meta` can't borrow another's file system.
+    let Ok(file) = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_PATH | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(path)
+    else {
+        return false;
+    };
+    let same = file
+        .metadata()
+        .is_ok_and(|now| now.dev() == meta.dev() && now.ino() == meta.ino());
+    if !same {
+        return false;
+    }
+    let mut stat = std::mem::MaybeUninit::<libc::statfs>::uninit();
+    // SAFETY: `file` is an open descriptor and `stat` is written by the call.
+    if unsafe { libc::fstatfs(file.as_raw_fd(), stat.as_mut_ptr()) } != 0 {
+        return false;
+    }
+    // SAFETY: `fstatfs` succeeded, so it filled `stat`.
+    let stat = unsafe { stat.assume_init() };
+    // `f_type`'s and the constant's types differ between C libraries; the
+    // value fits either.
+    #[allow(clippy::unnecessary_cast)]
+    let overlay = stat.f_type as i64 == libc::OVERLAYFS_SUPER_MAGIC as i64;
+    if !overlay {
+        let mut not_overlay = lock();
+        if not_overlay.len() < MAX_DEVICES {
+            not_overlay.insert(meta.dev());
+        }
+    }
+    overlay
+}
+
+#[cfg(not(target_os = "linux"))]
+fn on_overlay(_path: &Path, _meta: &std::fs::Metadata) -> bool {
+    false
+}
+
 fn now_nanos() -> i128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -328,6 +406,7 @@ enum Role {
 struct Folder {
     dev: u64,
     ino: u64,
+    born: Option<i128>,
     ctime: i128,
     /// Listed long enough after its last change to trust its change time.
     settled: bool,
@@ -351,10 +430,12 @@ enum DotGit {
     Folder {
         dev: u64,
         ino: u64,
+        born: Option<i128>,
     },
     File {
         dev: u64,
         ino: u64,
+        born: Option<i128>,
         text: Option<String>,
     },
     Link {
@@ -372,10 +453,12 @@ impl DotGit {
             Kind::Dir => DotGit::Folder {
                 dev: meta.dev(),
                 ino: meta.ino(),
+                born: born(path, &meta),
             },
             Kind::File => DotGit::File {
                 dev: meta.dev(),
                 ino: meta.ino(),
+                born: born(path, &meta),
                 text: read_small(path),
             },
             Kind::Link => DotGit::Link {
@@ -400,6 +483,14 @@ struct Snapshot {
     /// (`is_empty_stub`), still there and empty: reported once something
     /// is in them, whatever `Global::empty_new` holds meanwhile.
     empty_new: HashSet<PathBuf>,
+    /// The git folders this look walked (#943 review r6); empty in a
+    /// baseline.
+    git_dirs: Vec<PathBuf>,
+    /// A folder it reached again in another role than the one it listed it
+    /// in (one git folder inside another's tree, #943 item 13 review r1):
+    /// what it saw of that tree may be less than a look of that folder alone
+    /// sees.
+    overlapping: bool,
 }
 
 impl Snapshot {
@@ -413,12 +504,15 @@ impl Snapshot {
             incomplete: None,
             went_missing: false,
             empty_new: HashSet::new(),
+            git_dirs: Vec::new(),
+            overlapping: false,
         }
     }
 }
 
 fn walk(repo: &Repo, prev: Option<&Snapshot>) -> Snapshot {
     let mut snapshot = Snapshot::empty(&DotGit::read(&repo.dot_git));
+    snapshot.git_dirs = repo.git_dirs.clone();
     let home = dirs::home_dir().and_then(|home| std::fs::canonicalize(home).ok());
     if repo
         .git_dirs
@@ -439,7 +533,17 @@ fn walk(repo: &Repo, prev: Option<&Snapshot>) -> Snapshot {
         .map(|dir| (dir.clone(), 0, Role::GitDir))
         .collect();
     while let Some((dir, depth, role)) = queue.pop_front() {
-        if snapshot.folders.contains_key(&dir) {
+        if let Some(seen) = snapshot.folders.get(&dir) {
+            let has = |name: &str| seen.entries.contains_key(OsStr::new(name));
+            let role = match role {
+                Role::Modules if has("HEAD") && (has("objects") || has("commondir")) => {
+                    Role::GitDir
+                }
+                role => role,
+            };
+            if role != seen.role {
+                snapshot.overlapping = true;
+            }
             continue;
         }
         let Ok(meta) = std::fs::symlink_metadata(&dir) else {
@@ -451,7 +555,11 @@ fn walk(repo: &Repo, prev: Option<&Snapshot>) -> Snapshot {
         let old = prev.and_then(|prev| prev.folders.get(&dir));
         let (_, ctime) = times(&meta);
         let mut folder = match old.filter(|old| {
-            old.settled && old.dev == meta.dev() && old.ino == meta.ino() && old.ctime == ctime
+            old.settled
+                && old.dev == meta.dev()
+                && old.ino == meta.ino()
+                && old.born == born(&dir, &meta)
+                && old.ctime == ctime
         }) {
             Some(old) => old.clone(),
             None => match list(&dir, &meta, old) {
@@ -597,6 +705,7 @@ fn list(dir: &Path, meta: &std::fs::Metadata, old: Option<&Folder>) -> Option<Fo
     Some(Folder {
         dev: meta.dev(),
         ino: meta.ino(),
+        born: born(dir, meta),
         ctime,
         settled: times(&after).1 == ctime && settled(ctime),
         role: Role::Plain,
@@ -955,10 +1064,14 @@ struct Global {
     /// looked (`is_empty_stub`): any session's later look reports one once
     /// something is in it. Kept when a session forgets the repository.
     empty_new: HashSet<PathBuf>,
-    /// Repositories (by their git folders) whose latest look was
-    /// incomplete, and why.
-    incomplete: HashMap<Vec<PathBuf>, String>,
+    /// Git folders (by repository) a look couldn't see all of; those a
+    /// later look saw in full are taken out (#943 item 13: also where that
+    /// look walked other folders with them).
+    incomplete: HashMap<Vec<PathBuf>, Unchecked>,
     uses: u64,
+    /// Looks started, for `incomplete`: a look that started earlier doesn't
+    /// clear what a later one recorded.
+    looks: u64,
 }
 
 static GLOBAL: LazyLock<Mutex<Global>> = LazyLock::new(Default::default);
@@ -1000,12 +1113,17 @@ fn slot_of(thread: ThreadId, repo: &Repo, used: bool) -> Slot {
         if used || !state.used.contains_key(&repo.dot_git) {
             state.used.insert(repo.dot_git.clone(), uses);
         }
-        state
+        let (stored, slot) = state
             .repos
             .entry(repo.dot_git.clone())
-            .or_insert_with(|| (repo.clone(), Slot::default()))
-            .1
-            .clone()
+            .or_insert_with(|| (repo.clone(), Slot::default()));
+        // #943 review r5: where a command runs there, its git folders as
+        // found now (a `.git` made again may be another kind) are what later
+        // looks (`recheck`) walk.
+        if used && stored.git_dirs != repo.git_dirs {
+            *stored = repo.clone();
+        }
+        slot.clone()
     })
 }
 
@@ -1067,7 +1185,7 @@ pub(super) fn check(thread: ThreadId, repos: &[Repo]) -> Vec<Finding> {
 fn look(thread: ThreadId, repos: &[Repo], first_only: bool, used: bool) -> Vec<Finding> {
     let mut findings = Vec::new();
     let mut held = Vec::new();
-    let mut incomplete = Vec::new();
+    let mut walked = Vec::new();
     for repo in repos {
         let slot = slot_of(thread, repo, used);
         let mut snapshot = slot.lock().unwrap_or_else(PoisonError::into_inner);
@@ -1077,17 +1195,94 @@ fn look(thread: ThreadId, repos: &[Repo], first_only: bool, used: bool) -> Vec<F
         // Gone (a worktree removed, a scratch clone deleted): nothing to
         // follow. Should the same one come back, it is compared with the
         // last look; a new one there gets a first look.
-        if DotGit::read(&repo.dot_git) == DotGit::Missing {
+        let now = DotGit::read(&repo.dot_git);
+        if now == DotGit::Missing {
             if let Some(prev) = snapshot.as_mut() {
                 prev.went_missing = true;
             }
-            incomplete.push((repo.git_dirs.clone(), None));
+            let started = with_global(|global| {
+                global.looks += 1;
+                global.looks
+            });
+            walked.push((Walked::Exact(repo.git_dirs.clone()), started));
             continue;
         }
+        // Made again or replaced (#943 reviews r4, r6): it may be another
+        // kind (a worktree's or submodule's `.git` file replaced by a folder,
+        // or the reverse) or name other git folders, so they are worked out
+        // again, also for later looks. #943 item 12: also where it is back
+        // as the same one after a look saw it missing (a `commondir` that
+        // names another folder now, or a file system that doesn't record
+        // when a reused inode was made).
+        let remade_repo = snapshot
+            .as_ref()
+            .filter(|prev| prev.dot_git != now || prev.went_missing)
+            .and_then(|_| repo_at(repo.dot_git.clone()))
+            .filter(|fresh| fresh.git_dirs != repo.git_dirs);
+        if let Some(fresh) = &remade_repo {
+            with_global(|global| {
+                if let Some((stored, _)) = global
+                    .threads
+                    .get_mut(&thread)
+                    .and_then(|state| state.repos.get_mut(&fresh.dot_git))
+                {
+                    *stored = fresh.clone();
+                }
+            });
+        }
+        // Replaced in place (no look saw it missing), or back as the same
+        // one naming other git folders (#943 item 12 review r1): this look
+        // also walks the git folders it named before, where something may
+        // have been left meanwhile.
+        let replaced_repo = remade_repo
+            .as_ref()
+            .filter(|_| {
+                snapshot
+                    .as_ref()
+                    .is_some_and(|prev| !prev.went_missing || prev.dot_git == now)
+            })
+            .map(|fresh| {
+                let mut both = fresh.clone();
+                for dir in &repo.git_dirs {
+                    if !both.git_dirs.contains(dir) {
+                        both.git_dirs.push(dir.clone());
+                    }
+                }
+                both
+            });
+        let repo = replaced_repo
+            .as_ref()
+            .or(remade_repo.as_ref())
+            .unwrap_or(repo);
         // The last look stays until this one is done (a panic keeps it).
         let prev = snapshot.as_ref();
-        let mut cur = walk(repo, prev);
-        let prev = prev.filter(|prev| !(prev.went_missing && prev.dot_git != cur.dot_git));
+        let started = with_global(|global| {
+            global.looks += 1;
+            global.looks
+        });
+        // Made again: what the old one had isn't carried into this look.
+        let mut cur = walk(
+            repo,
+            prev.filter(|prev| !(prev.went_missing && prev.dot_git != now)),
+        );
+        // Missing at the last look and back as a different one: a full
+        // look, not a first look (#943). Likewise where the git folders
+        // differ from those the last look walked (review r6: replaced as
+        // another kind, or a `gitdir:` file pointed elsewhere), still
+        // reported as replaced where it was.
+        let remade = prev
+            .filter(|prev| {
+                (prev.went_missing && prev.dot_git != cur.dot_git)
+                    || (!prev.git_dirs.is_empty() && prev.git_dirs != repo.git_dirs)
+            })
+            .map(|prev| {
+                let mut baseline = remade_baseline(repo, prev, &cur);
+                if !prev.went_missing {
+                    baseline.dot_git = prev.dot_git.clone();
+                }
+                baseline
+            });
+        let prev = remade.as_ref().or(prev);
         let remembered: HashSet<PathBuf> = with_global(|global| {
             global
                 .empty_new
@@ -1160,24 +1355,224 @@ fn look(thread: ThreadId, repos: &[Repo], first_only: bool, used: bool) -> Vec<F
                 why: why.clone(),
             });
         }
-        incomplete.push((repo.git_dirs.clone(), cur.incomplete.clone()));
+        walked.push((
+            match &cur.incomplete {
+                Some(why) => {
+                    Walked::Incomplete(repo.git_dirs.clone(), why.clone(), repo.dot_git.clone())
+                }
+                // Where git folders overlap in other roles, only its own
+                // entry (as before #943 item 13).
+                None if cur.overlapping => Walked::Exact(repo.git_dirs.clone()),
+                None => Walked::Complete(repo.git_dirs.clone(), seen_in_full(&cur)),
+            },
+            started,
+        ));
         findings.extend(found);
         *snapshot = Some(cur);
     }
     with_global(|global| {
-        for (git_dirs, why) in incomplete {
-            match why {
-                Some(why) => {
-                    global.incomplete.insert(git_dirs, why);
+        for (look, started) in walked {
+            match look {
+                Walked::Incomplete(git_dirs, why, dot_git) => {
+                    let entry = global.incomplete.entry(git_dirs).or_insert(Unchecked {
+                        why: why.clone(),
+                        at: started,
+                        by: HashSet::new(),
+                    });
+                    if entry.at <= started {
+                        entry.why = why;
+                        entry.at = started;
+                    }
+                    entry.by.insert((thread, dot_git));
                 }
-                None => {
-                    global.incomplete.remove(&git_dirs);
+                // Its own entry goes, if recorded before it started. #943
+                // item 13: so do the folders it saw in full from an entry
+                // left behind, whose every recorder's repository names other
+                // git folders now (its `.git` replaced or made again, or the
+                // look that walked the old and new ones). Any other entry goes
+                // only by a complete look of its own: looks of its git folders
+                // one by one may each stay below `MAX_ENTRIES`.
+                Walked::Complete(own, seen) => {
+                    let threads = &global.threads;
+                    let left_behind = |dirs: &Vec<PathBuf>, by: &HashSet<(ThreadId, PathBuf)>| {
+                        by.iter().all(|(thread, dot_git)| {
+                            threads
+                                .get(thread)
+                                .and_then(|state| state.repos.get(dot_git))
+                                .is_some_and(|(repo, _)| repo.git_dirs != *dirs)
+                        })
+                    };
+                    let mut kept: HashMap<Vec<PathBuf>, Unchecked> = HashMap::new();
+                    for (mut dirs, entry) in std::mem::take(&mut global.incomplete) {
+                        if entry.at < started {
+                            if dirs == own {
+                                continue;
+                            }
+                            if left_behind(&dirs, &entry.by) {
+                                dirs.retain(|dir| !seen.contains(dir));
+                            }
+                        }
+                        if dirs.is_empty() {
+                            continue;
+                        }
+                        // Two entries left the same: the later one's reason
+                        // and start, both recorders.
+                        match kept.entry(dirs) {
+                            hash_map::Entry::Occupied(mut kept) => {
+                                let kept = kept.get_mut();
+                                kept.by.extend(entry.by);
+                                if kept.at < entry.at {
+                                    kept.why = entry.why;
+                                    kept.at = entry.at;
+                                }
+                            }
+                            hash_map::Entry::Vacant(kept) => {
+                                kept.insert(entry);
+                            }
+                        }
+                    }
+                    global.incomplete = kept;
+                }
+                Walked::Exact(git_dirs) => {
+                    if global
+                        .incomplete
+                        .get(&git_dirs)
+                        .is_some_and(|entry| entry.at < started)
+                    {
+                        global.incomplete.remove(&git_dirs);
+                    }
                 }
             }
         }
         global.held.extend(held);
     });
     findings
+}
+
+/// The git folders a complete look saw as a look of each alone would (#943
+/// item 13 review r2): every folder it listed in the git folder role, but
+/// one with a folder below it as deep as a look of it alone stops at (a
+/// git folder nested in another's tree is walked from its own depth), and
+/// a home folder or file system root (never looked at in full). Where it
+/// reached a folder again in another role, none (`Snapshot::overlapping`).
+fn seen_in_full(cur: &Snapshot) -> Vec<PathBuf> {
+    let home = dirs::home_dir().and_then(|home| std::fs::canonicalize(home).ok());
+    let git_dirs: HashSet<&Path> = cur
+        .folders
+        .iter()
+        .filter(|(dir, folder)| {
+            folder.role == Role::GitDir && dir.parent().is_some() && Some(*dir) != home.as_ref()
+        })
+        .map(|(dir, _)| dir.as_path())
+        .collect();
+    let too_deep: HashSet<&Path> = cur
+        .folders
+        .keys()
+        .flat_map(|below| below.ancestors().skip(MAX_DEPTH))
+        .filter(|dir| git_dirs.contains(dir))
+        .collect();
+    git_dirs
+        .difference(&too_deep)
+        .map(|dir| dir.to_path_buf())
+        .collect()
+}
+
+/// An entry of `Global::incomplete`.
+struct Unchecked {
+    why: String,
+    /// When the look that recorded it last started.
+    at: u64,
+    /// The sessions' repositories (by `.git`) whose looks recorded it.
+    by: HashSet<(ThreadId, PathBuf)>,
+}
+
+/// How a look at a repository went, for `Global::incomplete`.
+enum Walked {
+    /// Its git folders, and those it saw in full (`seen_in_full`).
+    Complete(Vec<PathBuf>, Vec<PathBuf>),
+    /// Its git folders weren't, why, and its `.git`.
+    Incomplete(Vec<PathBuf>, String, PathBuf),
+    /// Only its own entry goes: its `.git` is gone (nothing to follow
+    /// there), or it saw them in full but overlapping in other roles.
+    Exact(Vec<PathBuf>),
+}
+
+/// What a `.git` made again (missing at the last look, now a different one)
+/// is compared with: the last look's folders that are still the same ones,
+/// and empty ones for its own git folders that aren't, so that config,
+/// hooks, remotes and steps there are reported as new (empty ones once
+/// filled). A worktree's `commondir` naming its common folder, still the
+/// same one, isn't new (`git worktree add` again).
+fn remade_baseline(repo: &Repo, prev: &Snapshot, cur: &Snapshot) -> Snapshot {
+    let mut baseline = Snapshot::empty(&cur.dot_git);
+    baseline.empty_new = prev.empty_new.clone();
+    for (dir, folder) in &cur.folders {
+        if let Some(old) = prev
+            .folders
+            .get(dir)
+            .filter(|old| old.dev == folder.dev && old.ino == folder.ino && old.born == folder.born)
+        {
+            baseline.folders.insert(dir.clone(), old.clone());
+        }
+    }
+    baseline.states = prev
+        .states
+        .iter()
+        .filter(|(path, _)| {
+            path.parent()
+                .is_some_and(|dir| baseline.folders.contains_key(dir))
+        })
+        .map(|(path, read)| (path.clone(), read.clone()))
+        .collect();
+    let kept: Vec<&PathBuf> = repo
+        .git_dirs
+        .iter()
+        .filter(|dir| baseline.folders.contains_key(*dir))
+        .collect();
+    for dir in &repo.git_dirs {
+        if baseline.folders.contains_key(dir) {
+            continue;
+        }
+        let commondir = cur
+            .folders
+            .get(dir)
+            .and_then(|folder| folder.entries.get(OsStr::new("commondir")))
+            .filter(|entry| entry.kind == Kind::File && entry.nlink == 1)
+            .filter(|_| {
+                read_small(&dir.join("commondir"))
+                    .and_then(|common| plain_commondir(dir, &common))
+                    .is_some_and(|common| kept.contains(&&common))
+            });
+        let entries = commondir
+            .map(|entry| (OsString::from("commondir"), entry.clone()))
+            .into_iter()
+            .collect();
+        baseline.folders.insert(
+            dir.clone(),
+            Folder {
+                dev: 0,
+                ino: 0,
+                born: None,
+                ctime: 0,
+                settled: false,
+                role: Role::GitDir,
+                entries,
+            },
+        );
+    }
+    baseline
+}
+
+/// The folder a `commondir` names, as `git worktree add` writes it (`../..`
+/// or a real path), without following links: git follows its text each
+/// time it runs, where a link could lead elsewhere later.
+fn plain_commondir(dir: &Path, text: &str) -> Option<PathBuf> {
+    let text = text.trim_end_matches(['\n', '\r']);
+    if text == "../.." {
+        return dir.parent()?.parent().map(Path::to_path_buf);
+    }
+    let path = Path::new(text);
+    (path.is_absolute() && std::fs::canonicalize(path).ok()? == path).then(|| path.to_path_buf())
 }
 
 /// What any session (a sub-agent's too) found in the git folders `watched`

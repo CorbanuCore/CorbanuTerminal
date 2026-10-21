@@ -219,6 +219,7 @@ async fn refresh_accessible_connectors_cache_from_mcp_tools_writes_latest_instal
     let codex_home = tempdir().expect("tempdir should succeed");
     let mut config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .build()
         .await
         .expect("config should load");
@@ -365,6 +366,7 @@ approvals_reviewer = "{app}"
         .expect("write config");
         let config = ConfigBuilder::default()
             .codex_home(codex_home.path().to_path_buf())
+            .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
             .build()
             .await
             .expect("config should build");
@@ -407,6 +409,7 @@ approvals_reviewer = "user"
     .expect("write config");
     let config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
                 r#"allowed_approvals_reviewers = ["auto_review"]"#,
@@ -437,6 +440,7 @@ approvals_reviewer = "user"
     .expect("write config");
     let config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cloud_config_bundle(
             CloudConfigBundleFixture::loader_with_enterprise_requirement(
                 r#"allowed_approvals_reviewers = ["auto_review"]"#,
@@ -507,6 +511,7 @@ discoverables = [
     .expect("write config");
     let config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .build()
         .await
         .expect("config should load");
@@ -536,6 +541,7 @@ disabled_tools = [
     .expect("write config");
     let config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .build()
         .await
         .expect("config should load");
@@ -564,6 +570,7 @@ discoverables = [
     .expect("write config");
     let config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .build()
         .await
         .expect("config should load");
@@ -601,6 +608,7 @@ apps = true
     .expect("write config");
     let config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .build()
         .await
         .expect("config should load");

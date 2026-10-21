@@ -1352,6 +1352,59 @@ impl AppServerSession {
             .wrap_err("thread/inject_items failed during TUI side conversation setup")
     }
 
+    /// D95 (#1146): starts a turn with the person's `items` that sends no
+    /// settings at all (no cwd, model, approval, sandbox, permissions,
+    /// effort, mode or personality), so the thread keeps the settings Core
+    /// holds for it, as a turn its mailbox starts does.
+    pub(crate) async fn turn_start_keeping_thread_settings(
+        &mut self,
+        thread_id: ThreadId,
+        items: Vec<UserInput>,
+        additional_context: Option<
+            HashMap<String, codex_app_server_protocol::AdditionalContextEntry>,
+        >,
+    ) -> Result<TurnStartOutcome> {
+        let client_user_message_id = Uuid::now_v7().to_string();
+        let request_handle = self.request_handle();
+        let mut requests = Vec::with_capacity(PER_THREAD_REQUEST_ATTEMPTS);
+        for _ in 0..PER_THREAD_REQUEST_ATTEMPTS {
+            let request_id = self.next_request_id();
+            requests.push(ClientRequest::TurnStart {
+                request_id,
+                params: TurnStartParams {
+                    thread_id: thread_id.to_string(),
+                    client_user_message_id: Some(client_user_message_id.clone()),
+                    input: items.clone(),
+                    responsesapi_client_metadata: None,
+                    additional_context: additional_context.clone(),
+                    environments: None,
+                    cwd: None,
+                    runtime_workspace_roots: None,
+                    approval_policy: None,
+                    approvals_reviewer: None,
+                    sandbox_policy: None,
+                    permissions: None,
+                    model: None,
+                    service_tier: None,
+                    effort: None,
+                    summary: None,
+                    personality: None,
+                    output_schema: None,
+                    collaboration_mode: None,
+                    multi_agent_mode: None,
+                },
+            });
+        }
+        tokio::spawn(run_turn_start_requests(
+            request_handle,
+            thread_id,
+            requests,
+            /*injected_failures*/ 0,
+        ))
+        .await
+        .map_err(|error| color_eyre::eyre::eyre!("turn/start worker panicked: {error}"))?
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn spawn_turn_start(
         &mut self,

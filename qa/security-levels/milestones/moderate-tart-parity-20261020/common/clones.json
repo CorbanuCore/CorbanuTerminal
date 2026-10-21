@@ -1,0 +1,274 @@
+[
+ {
+  "clone": "T01-20261020T114605Z",
+  "forwarded": 29,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T02-20261020T115925Z",
+  "forwarded": 55,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T03-20261020T121710Z",
+  "forwarded": 58,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T04-20261020T123417Z",
+  "forwarded": 68,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T05-20261020T125205Z",
+  "forwarded": 59,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T05-replay-20261020T182732Z",
+  "forwarded": 47,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T06-20261020T130916Z",
+  "forwarded": 48,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T07-20261020T132454Z",
+  "forwarded": 49,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T08-20261020T133950Z",
+  "forwarded": 72,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T08-replay-20261020T184034Z",
+  "forwarded": 73,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T09-20261020T141012Z",
+  "forwarded": 64,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T09-replay-20261020T185436Z",
+  "forwarded": 74,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T09-tiebreak-df3d8c5d1c-20261020T193458Z",
+  "forwarded": 74,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T10-20261020T142857Z",
+  "forwarded": 43,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T10-replay-20261020T191247Z",
+  "forwarded": 47,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T11-20261020T144532Z",
+  "forwarded": 29,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T12-20261020T145703Z",
+  "forwarded": 49,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T13-20261020T151220Z",
+  "forwarded": 47,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T14-20261020T152958Z",
+  "forwarded": 58,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T15-20261020T154716Z",
+  "forwarded": 37,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T16-20261020T155943Z",
+  "forwarded": 50,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T17-20261020T161617Z",
+  "forwarded": 70,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T17-replay-postcap-20261020T200421Z",
+  "forwarded": 61,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T18-20261020T163152Z",
+  "forwarded": 53,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T19-20261020T164738Z",
+  "forwarded": 30,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T19-replay-20261020T192622Z",
+  "forwarded": 34,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T20-20261020T165754Z",
+  "forwarded": 33,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T21-20261020T170934Z",
+  "forwarded": 90,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T21-replay-postcap-20261020T202303Z",
+  "forwarded": 58,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T22-20261020T173517Z",
+  "forwarded": 34,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T23-20261020T174646Z",
+  "forwarded": 45,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T24-20261020T175832Z",
+  "forwarded": 28,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T25-20261020T180733Z",
+  "forwarded": 44,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ },
+ {
+  "clone": "T26-20261020T181839Z",
+  "forwarded": 31,
+  "non_200": 0,
+  "session_error": 0,
+  "tunnel_connects": 1,
+  "tunnel_ssh_exits": 0
+ }
+]

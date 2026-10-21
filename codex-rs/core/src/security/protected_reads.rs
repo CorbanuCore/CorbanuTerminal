@@ -42,6 +42,7 @@ use codex_protocol::protocol::WarningEvent;
 use codex_security_policy::SecurityLevel;
 use codex_utils_absolute_path::AbsolutePathBuf;
 
+use super::launch_contract::KeptFile;
 use super::protected_surface::ReadDenials;
 use super::tainted_action::PolicyBinding;
 use super::tainted_action::USER_PERSISTENCE;
@@ -89,7 +90,15 @@ pub(crate) fn unhurried_lookups_for_tests(enabled: bool) {
 }
 
 pub(crate) fn lookup_timeout() -> Duration {
-    if UNHURRIED_LOOKUPS.load(Ordering::Relaxed) {
+    // #997: this crate's own unit tests get the test bound too; under load
+    // they took over 2 seconds as the integration suites did (#902).
+    // `cfg!(test)` is never set in a build that ships.
+    lookup_timeout_in(/*unit_test*/ cfg!(test))
+}
+
+/// The bound in a unit-test build (`unit_test`) or any other process.
+fn lookup_timeout_in(unit_test: bool) -> Duration {
+    if unit_test || UNHURRIED_LOOKUPS.load(Ordering::Relaxed) {
         TEST_LOOKUP_TIMEOUT
     } else {
         LOOKUP_TIMEOUT
@@ -982,48 +991,73 @@ pub(crate) async fn protected_note_in_command(
     .await
 }
 
-/// #841: under Moderate with the secretless launch contract, what a person
-/// is told before approving a protected action that reads files the
-/// contract keeps unreadable at every level (Corbanu's sign-in, vault,
-/// config, history): approving runs the command but cannot unlock them.
-pub(crate) const MODERATE_KEPT_READ_NOTE: &str = "Corbanu's own files this command reads (its sign-in, vault, config or history) stay unreadable to agent commands even if you approve (secretless agent launch), so approving cannot unlock them.";
+/// #841, #1077: under Moderate with the secretless launch contract, what a
+/// person is told before approving a protected action that reads a file the
+/// contract keeps unreadable at every level (a CLI token file, the keychains,
+/// the Google Cloud CLI's folder on Windows, or Corbanu's own files such as
+/// its sign-in, vault, config or history): the file, what it is, and that
+/// approving runs the command but cannot unlock it.
+pub(crate) fn moderate_kept_read_note(path: &str, kept: KeptFile) -> String {
+    let what = match kept {
+        KeptFile::CliToken => "is a CLI token file",
+        KeptFile::GoogleCloudCliFolder => {
+            "is the Google Cloud CLI's folder (credentials and config)"
+        }
+        KeptFile::InGoogleCloudCliFolder => {
+            "is in the Google Cloud CLI's folder (credentials and config)"
+        }
+        KeptFile::Keychain => "is part of your keychains",
+        KeptFile::CorbanuOwn => {
+            "is one of Corbanu's own files (such as its sign-in, vault, config or history)"
+        }
+    };
+    format!(
+        "`{}` {what}: secretless agent launch keeps it unreadable to agent commands at every \
+         security level, even if you approve, so approving cannot unlock it. If you approve, \
+         the command runs, but that read fails.",
+        shown_path(path)
+    )
+}
 
-/// #841: whether, under Moderate with the secretless launch contract,
-/// `command` names a path the contract keeps unreadable at every level.
-pub(crate) async fn moderate_kept_read_in_command(
+/// #841: under Moderate with the secretless launch contract, the note for
+/// `command` when it names a path the contract keeps unreadable at every
+/// level ([`moderate_kept_read_note`]).
+pub(crate) async fn moderate_kept_read_note_for_command(
     session: &Session,
     turn: &TurnContext,
     command: &[String],
     cwd: &Path,
-) -> bool {
-    let Some(contract) = super::launch_contract::active() else {
-        return false;
-    };
-    let Some(inputs) = ReadPolicyInputs::capture_at(session, turn, SecurityLevel::Moderate) else {
-        return false;
-    };
+) -> Option<String> {
+    let contract = super::launch_contract::active()?;
+    let inputs = ReadPolicyInputs::capture_at(session, turn, SecurityLevel::Moderate)?;
     let (command, cwd) = (command.to_vec(), cwd.to_path_buf());
-    off_thread(move || Some(kept_read_named(&inputs, contract, &command, &cwd)))
-        .await
-        .is_some_and(|named| named)
+    off_thread(move || kept_read_note(&inputs, contract, &command, &cwd)).await
 }
 
-/// See [`moderate_kept_read_in_command`].
-fn kept_read_named(
+/// See [`moderate_kept_read_note_for_command`]: the first word naming a kept
+/// path, as the command spelled it.
+fn kept_read_note(
     inputs: &ReadPolicyInputs,
     contract: &super::launch_contract::LaunchContract,
     command: &[String],
     cwd: &Path,
-) -> bool {
-    denied_word(
+) -> Option<String> {
+    let found = std::cell::Cell::new(None);
+    let word = denied_word(
         command,
         cwd,
         inputs.user_home.as_deref(),
         &inputs.codex_home,
-        |path| contract.keeps_unreadable(path, cwd),
+        |path| {
+            let kept = contract.kept_file(path, cwd);
+            if kept.is_some() {
+                found.set(kept);
+            }
+            kept.is_some()
+        },
         /*denial_lines*/ None,
-    )
-    .is_some()
+    )?;
+    Some(moderate_kept_read_note(&word, found.get()?))
 }
 
 /// Issue #245: under Aggressive, the explanation for a request whose own
@@ -1085,6 +1119,108 @@ pub(crate) fn record_permission_refusal(session: &Session) {
         "additional permissions naming a protected path",
         "refused before it ran; never granted under Aggressive",
     );
+}
+
+/// #1087: the explanation for an in-process file tool's read of `path` (the
+/// image tool's) that the protected-path rules refused where the tool's own
+/// permissions allow it, or that the secretless launch contract keeps
+/// unreadable where the person's own permissions allow it: under Moderate
+/// or Aggressive, it names the level as a refused command does (#442, #748;
+/// a path the contract keeps is attributed to it under Moderate, as there),
+/// and is listed under the inspector's recent denials (#622, #839). `own` is
+/// the tool's sandbox context before the rules (the contract's denials
+/// included), `protected` after them. Explanation only.
+pub(crate) async fn file_tool_denial_explanation(
+    session: &Session,
+    turn: &TurnContext,
+    own: &codex_file_system::FileSystemSandboxContext,
+    protected: &codex_file_system::FileSystemSandboxContext,
+    path: &Path,
+) -> Option<String> {
+    let (level, inputs) = ReadPolicyInputs::capture_at(session, turn, SecurityLevel::Moderate)
+        .map(|inputs| (SecurityLevel::Moderate, inputs))
+        .or_else(|| {
+            ReadPolicyInputs::capture(session, turn)
+                .map(|inputs| (SecurityLevel::Aggressive, inputs))
+        })?;
+    let policy = |context: &codex_file_system::FileSystemSandboxContext| {
+        PermissionProfile::try_from(context.permissions.clone())
+            .ok()
+            .map(|profile| profile.file_system_sandbox_policy())
+    };
+    let (own_policy, protected_policy) = (policy(own)?, policy(protected)?);
+    let cwd = own
+        .cwd
+        .as_ref()
+        .and_then(|cwd| cwd.to_abs_path().ok())
+        .unwrap_or_else(|| inputs.turn_cwd.clone());
+    let contract = super::launch_contract::active();
+    let path = path.to_path_buf();
+    let found = off_thread(move || {
+        explain_file_tool_denial(
+            level,
+            &inputs,
+            contract,
+            &own_policy,
+            &protected_policy,
+            cwd.as_path(),
+            &path,
+        )
+    })
+    .await;
+    let (what, outcome, explanation) = found?;
+    match outcome {
+        Some(outcome) => super::inspection::record_refusal(session.thread_id(), what, outcome),
+        None => super::inspection::record_sandbox_denial(session.thread_id(), what),
+    }
+    Some(explanation)
+}
+
+/// See [`file_tool_denial_explanation`]: what was denied (for the
+/// inspector, with `None` for Aggressive's sandbox-denial outcome) and the
+/// explanation.
+fn explain_file_tool_denial(
+    level: SecurityLevel,
+    inputs: &ReadPolicyInputs,
+    contract: Option<&super::launch_contract::LaunchContract>,
+    own_policy: &FileSystemSandboxPolicy,
+    protected_policy: &FileSystemSandboxPolicy,
+    cwd: &Path,
+    path: &Path,
+) -> Option<(&'static str, Option<&'static str>, String)> {
+    let readable = |policy: &FileSystemSandboxPolicy| {
+        super::protected_surface::readable_under(policy, path, cwd)
+    };
+    // The person's own permissions, without the contract or the rules.
+    let person = moderate::own_profile(inputs).file_system_sandbox_policy();
+    let kept =
+        contract.is_some_and(|contract| contract.keeps_unreadable(path, cwd)) && readable(&person);
+    let refused = !readable(protected_policy) && readable(own_policy);
+    if !kept && !refused {
+        return None;
+    }
+    let shown = path.display().to_string();
+    Some(if level == SecurityLevel::Aggressive {
+        let note = ProtectedNote::Read(shown);
+        (note.inspected(), None, note.explanation())
+    } else if kept {
+        let (what, outcome) = moderate::Denied::KeptRead.inspected();
+        (what, Some(outcome), moderate::kept_read_explanation(&shown))
+    } else if ReadDenials::is_security_file(&inputs.codex_home, inputs.user_home.as_deref(), path) {
+        let (what, outcome) = moderate::Denied::SecurityFile.inspected();
+        (
+            what,
+            Some(outcome),
+            moderate::security_file_explanation(&shown, moderate::WayForward::Permissive),
+        )
+    } else {
+        let (what, outcome) = moderate::Denied::Read.inspected();
+        (
+            what,
+            Some(outcome),
+            moderate::read_explanation(&shown, moderate::WayForward::Permissive),
+        )
+    })
 }
 
 /// Shows `explanation` to the person as a warning beside the failed command.

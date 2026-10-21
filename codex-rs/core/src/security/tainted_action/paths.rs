@@ -4,6 +4,7 @@
 //! locations that could reach the network or raise an OS privacy prompt.
 
 use super::ProtectedActionKind;
+use super::work;
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -188,6 +189,7 @@ impl Homes {
             ("PFTERMINAL_HOME", Some(&self.codex_home_raw)),
             ("HOME", self.user_home_raw.as_ref()),
         ] {
+            work::step();
             if let Some(value) = value {
                 word = replace_variable(&word, name, value);
             }
@@ -320,6 +322,7 @@ impl Homes {
         let mut existing = PathBuf::from(&path);
         let mut tail: Vec<String> = Vec::new();
         loop {
+            work::step();
             let key = existing.to_string_lossy().into_owned();
             let cached = self.cache.borrow().get(&key).cloned();
             let found = match cached {
@@ -339,6 +342,7 @@ impl Homes {
             };
             if let Some(mut canonical) = found {
                 for segment in tail.iter().rev() {
+                    work::step();
                     canonical = format!("{}/{segment}", canonical.trim_end_matches('/'));
                 }
                 return Some(normalize_path(&canonical.to_lowercase()));
@@ -401,6 +405,7 @@ impl Homes {
     /// the path count), or a default home folder name as a segment.
     fn below_home<'a>(&self, segments: &[&'a str]) -> Option<Vec<&'a str>> {
         for home in &self.codex_homes {
+            work::step();
             let home = self::segments(home);
             if home.is_empty() || home.len() > segments.len() {
                 continue;
@@ -445,6 +450,7 @@ pub(super) fn replace_variable(word: &str, name: &str, value: &str) -> String {
     let mut out = String::new();
     let mut rest = word;
     while let Some(at) = rest.find(&marker) {
+        work::step();
         let after = &rest[at + marker.len()..];
         out.push_str(&rest[..at]);
         if after
@@ -466,6 +472,7 @@ pub(super) fn replace_variable(word: &str, name: &str, value: &str) -> String {
 pub(super) fn normalize_path(path: &str) -> String {
     let mut parts: Vec<&str> = Vec::new();
     for segment in path.split('/') {
+        work::step();
         match segment {
             "" | "." => {}
             ".." => {
@@ -514,6 +521,7 @@ pub(super) fn glob_any(pattern: &str, name: &str) -> bool {
     let (mut p, mut n) = (0, 0);
     let mut star: Option<(usize, usize)> = None;
     while n < name.len() {
+        work::step();
         if p < pattern.len() && pattern[p] == '*' {
             star = Some((p, n));
             p += 1;
@@ -529,6 +537,7 @@ pub(super) fn glob_any(pattern: &str, name: &str) -> bool {
         }
     }
     while p < pattern.len() && pattern[p] == '*' {
+        work::step();
         p += 1;
     }
     p == pattern.len()

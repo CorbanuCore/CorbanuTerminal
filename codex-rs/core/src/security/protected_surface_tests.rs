@@ -32,7 +32,8 @@ fn mcp(tool: &str, acts_outside: bool, arguments: Value) -> Option<ProtectedActi
 #[tokio::test]
 async fn pf_23_s01_every_builtin_tool_route_is_classified() {
     let home = tempfile::tempdir().expect("home");
-    let mut config = build_test_config(home.path()).await;
+    let test_cwd = tempfile::tempdir().expect("create test cwd");
+    let mut config = build_test_config(home.path(), test_cwd.path()).await;
     for spec in codex_features::FEATURES {
         let _ = config.features.enable(spec.id);
     }

@@ -9,8 +9,6 @@ use anyhow::Context;
 use anyhow::Result;
 use anyhow::ensure;
 use core_test_support::responses;
-use sha2::Digest;
-use sha2::Sha256;
 use tempfile::tempdir;
 use uuid::Uuid;
 use wiremock::Mock;
@@ -19,6 +17,7 @@ use wiremock::ResponseTemplate;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
 
+use crate::support::file_hash::sha256_file;
 use crate::support::secret_scan;
 use crate::support::tmux::CommandSpec;
 use crate::support::tmux::SessionSpec;
@@ -1086,7 +1085,7 @@ fn register_evidence(tmux: &TmuxServer, home: &Path, binary: &Path) -> Result<()
         .modified()?
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default();
-    let hash = format!("{:x}", Sha256::digest(fs::read(binary)?));
+    let hash = sha256_file(binary)?;
     fs::write(
         home.join("binary.sha256"),
         format!("{hash}  {}\n", binary.display()),

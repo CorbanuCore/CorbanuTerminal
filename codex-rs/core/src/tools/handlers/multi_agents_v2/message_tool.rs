@@ -124,12 +124,11 @@ pub(super) async fn handle_message_string_tool(
         .ensure_v2_agent_loaded(resume_config, receiver_thread_id)
         .await
         .map_err(|err| collab_agent_error(receiver_thread_id, err))?;
-    let receiver_provider_id = session
+    let receiver = session
         .services
         .agent_control
         .get_agent_config_snapshot(receiver_thread_id)
         .await
-        .map(|snapshot| snapshot.model_provider_id)
         .ok_or_else(|| {
             FunctionCallError::RespondToModel(format!(
                 "target agent `{receiver_agent_path}` has no loaded provider configuration"
@@ -140,10 +139,13 @@ pub(super) async fn handle_message_string_tool(
         MessageDeliveryMode::TriggerTurn => ("followup_task", PLAINTEXT_FOLLOWUP_TASK_TOOL),
     };
     ensure_message_encoding_matches_target(
-        &turn.config.model_provider_id,
+        ConfiguredRuntime::from_provider(&turn.config.model_provider_id, turn.provider.info()),
         crate::tools::collaboration_wire::message_source_provider_id(turn.as_ref()),
         &source,
-        &receiver_provider_id,
+        ConfiguredRuntime::from_snapshot(
+            &receiver.model_provider_id,
+            receiver.provider_account.as_deref(),
+        ),
         encoding,
         native_tool_name,
         plaintext_tool_name,

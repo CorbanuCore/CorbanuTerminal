@@ -11,6 +11,7 @@
 
 use super::indirect;
 use super::shell;
+use super::work;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::ops::Range;
@@ -64,6 +65,9 @@ const KSH: &[&str] = &["ksh", "ksh93", "mksh", "pdksh", "oksh", "lksh"];
 const GROUP: &str = "__corbanu_arithmetic_group_";
 /// Compound lists nested deeper than this are not followed (fails closed).
 const MAX_LIST_DEPTH: usize = 4;
+
+/// Bytes read for where a quoted qualifier group ends (#1028).
+const MAX_QUOTED_GROUP: usize = 4096;
 
 /// Words walked back from an array assignment to where its command starts.
 const MAX_ASSIGNMENT_WALK: usize = 64;
@@ -323,6 +327,9 @@ pub(super) struct Arithmetic {
     /// whose subscripts and `e`/`+` qualifiers the shell evaluates (#937,
     /// D57), decoded (`zsh -c $'print /*\\x28.[w])'`).
     qualifier_words: Vec<String>,
+    /// The line may use zsh glob substitution (#1084): a lexed word spells
+    /// it, or a command may turn on options the reader cannot name.
+    glob_subst: bool,
 }
 
 impl Arithmetic {
@@ -343,6 +350,7 @@ impl Arithmetic {
             ..Self::default()
         };
         for arg in &text {
+            work::step();
             let (builders, unknown) = building(arg);
             arithmetic.builders.extend(builders);
             arithmetic.unknown_builder |= unknown;
@@ -359,9 +367,11 @@ impl Arithmetic {
         // Lists in parentheses, which the lexer splits at `(`:
         // `a=(x $(cat f))`, zsh `for x (0 $(cat f))`.
         for arg in &text {
+            work::step();
             let (lists, deep) = lists(arg);
             arithmetic.unfollowed |= deep;
             for list in lists {
+                work::step();
                 let body = &arg[list.body];
                 // Raw text: any substitution in it counts as command output.
                 let value = if body.contains("$(") || body.contains("<(") || body.contains('`') {
@@ -371,6 +381,7 @@ impl Arithmetic {
                 };
                 let node = arithmetic.group(std::iter::once(value));
                 for name in list.names {
+                    work::step();
                     arithmetic.assigned.push((name, node.clone()));
                 }
             }
@@ -383,6 +394,7 @@ impl Arithmetic {
         let node = format!("{GROUP}{}", self.groups);
         self.groups += 1;
         for value in values {
+            work::step();
             self.assigned.push((node.clone(), value));
         }
         node
@@ -408,10 +420,20 @@ impl Arithmetic {
             })
             .collect();
         self.output_seen |= raw.iter().any(|word| command_output(word));
+        self.glob_subst |= words
+            .iter()
+            .chain(&raw)
+            .any(|word| shell::glob_substitution(word))
+            || renames_shell(&raw)
+            // A name built by expansion (`n=options; read -A $n`).
+            || simple.words.iter().zip(words).any(|(raw, word)| {
+                work::step();
+                raw != word && word.to_ascii_lowercase().contains("options")
+            });
         self.qualifier_words.extend(
             words
                 .iter()
-                .filter(|word| !qualifier_lists(word).is_empty())
+                .filter(|word| !all_qualifier_lists(word).is_empty())
                 .cloned(),
         );
         // Redirect targets (`read x < "$f"`) are files, not operands.
@@ -422,14 +444,17 @@ impl Arithmetic {
             .chain(&simple.here_string)
             .chain(&simple.writes_to)
         {
+            work::step();
             if let Some(slot) = redirect.get_mut(*index) {
                 *slot = true;
             }
         }
         let mut start = 0;
+        let mut eval_scanned = false;
         // `eval let v`, zsh `noglob let v`: the rest is a command too. Each
         // level notes only what precedes its command, so this is linear.
         while start < raw.len().min(words.len()) {
+            work::step();
             let raw = &raw[start..];
             let command = indirect::command_word(&words[start..]);
             match command {
@@ -445,6 +470,16 @@ impl Arithmetic {
                     }
                     if name == "eval" {
                         self.evaluates_text = true;
+                        // `eval 'print ${'$t'x}'`: an expansion in the text
+                        // may spell `${~x}` (#1084). Scanned at the first
+                        // `eval` only: later levels see a suffix (linear).
+                        if !eval_scanned {
+                            eval_scanned = true;
+                            self.glob_subst |= words[start + index + 1..].iter().any(|word| {
+                                work::step();
+                                word.contains(['$', '`']) || word.contains(shell::UNSEEN_OUTPUT)
+                            });
+                        }
                     }
                     self.note_one(&raw[..index], &redirect[start..], /*command*/ None);
                     start += index + 1;
@@ -462,6 +497,7 @@ impl Arithmetic {
         // Assignments before the command (`IFS= read`, `X=1 cmd`), and all
         // words when there is no command.
         for word in &words[..end] {
+            work::step();
             if let Some((name, value)) = assignment(word) {
                 self.assigned.push((name.to_string(), value.to_string()));
                 if appends(word) {
@@ -475,6 +511,7 @@ impl Arithmetic {
         if !defaulted.is_empty() {
             let node = self.group(words.iter().cloned());
             for name in defaulted {
+                work::step();
                 self.assigned.push((name, node.clone()));
             }
         }
@@ -525,6 +562,7 @@ impl Arithmetic {
         if name == "alias" {
             self.evaluates_text = true;
             for (at, word) in args.iter().enumerate() {
+                work::step();
                 let Some((alias, value)) = word.split_once('=') else {
                     continue;
                 };
@@ -556,6 +594,21 @@ impl Arithmetic {
         if matches!(name, "source" | ".") {
             self.sources = true;
         }
+        if sets_unnamed_options(name, args) {
+            self.glob_subst = true;
+        }
+        // `export ARG${:-V0}=sh`: a declared name the reader cannot
+        // complete may be `ARGV0` or `options`.
+        if DECLARING_BUILTINS.contains(&name)
+            && args.iter().any(|word| {
+                work::step();
+                let declared = word.split('=').next().unwrap_or(word);
+                !word.starts_with(['-', '+'])
+                    && (declared.contains(['$', '`']) || declared.contains(shell::UNSEEN_OUTPUT))
+            })
+        {
+            self.glob_subst = true;
+        }
         if matches!(
             name,
             "read" | "select" | "mapfile" | "readarray" | "vared" | "sysread"
@@ -570,6 +623,7 @@ impl Arithmetic {
         if matches!(name, "[[" | "test" | "[") && args.iter().any(|word| word == "=~") {
             let node = self.group(args.iter().cloned());
             for name in MATCH_DEFAULTS {
+                work::step();
                 self.assigned.push(((*name).to_string(), node.clone()));
             }
         }
@@ -594,6 +648,7 @@ impl Arithmetic {
         if matches!(name, "test" | "[" | "[[") && args.iter().any(operator) {
             self.evaluated.extend(args.iter().cloned());
             for (at, word) in args.iter().enumerate() {
+                work::step();
                 if word == "-v" {
                     // `-v a[sub]` evaluates the subscript.
                     if let Some(next) = args.get(at + 1)
@@ -632,6 +687,7 @@ impl Arithmetic {
             // zsh/ksh `read 'v?prompt'`, zparseopts `a:=arr`, and an
             // array name attached to its option (`read -raarr`, `-Aarr`).
             for (_, word) in args.iter().enumerate().filter(|(at, _)| operand(*at)) {
+                work::step();
                 if let Some(cluster) = word.strip_prefix('-')
                     && let Some(at) = cluster.find(['a', 'A'])
                     && is_identifier(&cluster[at + 1..])
@@ -641,6 +697,7 @@ impl Arithmetic {
                 let prompted = word.split_once('?').map_or(word.as_str(), |(name, _)| name);
                 let spec = word.rsplit_once('=').map(|(_, name)| name);
                 for candidate in std::iter::once(prompted).chain(spec) {
+                    work::step();
                     if is_identifier(candidate) {
                         self.filled.insert(candidate.to_string());
                     }
@@ -664,6 +721,7 @@ impl Arithmetic {
             // `-Z`) and zsh `-T` (joined with a separator) rebuild values.
             let rebuilt = flagged(&['l', 'u', 'L', 'R', 'Z', 'T']);
             for word in args {
+                work::step();
                 let declared = assignment(word)
                     .map(|(name, _)| name)
                     .or_else(|| is_identifier(word).then_some(word.as_str()));
@@ -720,6 +778,7 @@ impl Arithmetic {
                 self.group(values.iter().cloned())
             };
             for variable in variables {
+                work::step();
                 self.assigned.push((variable, node.clone()));
             }
         }
@@ -728,6 +787,7 @@ impl Arithmetic {
             // group of all the words, so repeated `-A` stays linear.
             let mut node = None;
             for pair in args.windows(2) {
+                work::step();
                 // `-A`, `+A`, or in a cluster (`-sA`).
                 let array = pair[0].len() > 1
                     && pair[0].starts_with(['-', '+'])
@@ -742,7 +802,9 @@ impl Arithmetic {
         }
         if name == "set" || self.functions.contains(name) {
             for value in args {
+                work::step();
                 for positional in POSITIONAL {
+                    work::step();
                     self.assigned
                         .push(((*positional).to_string(), value.clone()));
                 }
@@ -765,6 +827,7 @@ impl Arithmetic {
         let mut format: Option<usize> = None;
         let mut at = 0;
         while at < args.len() {
+            work::step();
             let word = &args[at];
             let cluster = word
                 .strip_prefix('-')
@@ -818,6 +881,7 @@ impl Arithmetic {
                 .extend(args[first + 1..].iter().map(|word| format_text(word)));
         }
         for target in &targets {
+            work::step();
             self.named.push(target.clone());
             if let Some((name, _)) = assignment(&format!("{target}=")) {
                 let node = node
@@ -834,6 +898,7 @@ impl Arithmetic {
     fn read_options(&mut self, args: &[String]) {
         let mut take_next = false;
         for word in args {
+            work::step();
             if take_next {
                 self.evaluated.push(word.clone());
                 self.strict_words.push(word.clone());
@@ -853,6 +918,64 @@ impl Arithmetic {
                 }
             }
         }
+    }
+
+    /// Whether the line may run code from a zsh glob qualifier (#1028): a
+    /// parenthesised group attached to a word that zsh would parse as
+    /// qualifiers reaching an `e` one (`*(e:code:)`, `*(eXcodeX)`), a `+`
+    /// one (`*(+func)`), a sort by either (`*(oe:code:)`) or an expansion
+    /// (`*($x)`, whose value zsh parses as qualifiers). Read without
+    /// quotes, and again without backslashes (`x=/\\(e:c:\\)` used by
+    /// `$~x`), so nested shells' scripts, `trap` and `functions[...]` text,
+    /// and values later expanded count; lexed (decoded) words count too.
+    /// With or without command output on the line. `text` is the line's
+    /// argv.
+    pub(super) fn runs_qualifier_code(&self, text: &[String]) -> bool {
+        let runs = |text: &str| {
+            all_qualifier_lists(text).into_iter().any(|range| {
+                // A group left open may hold either. The group may also end
+                // later than read without quotes, at the first `)` outside
+                // quotes (`e:'a)':`, `e:a\\):`): both are read.
+                if range.is_empty() && range.start == text.len() {
+                    return true;
+                }
+                let list = &text[range.clone()];
+                qualifier_runs_code(list)
+                    || (list.contains(['\'', '"', '\\'])
+                        && quoted_group_end(text, range.start)
+                            .is_none_or(|end| qualifier_runs_code(&text[range.start..end])))
+            })
+        };
+        text.iter()
+            .map(|arg| joined(arg))
+            .chain(self.qualifier_words.iter().cloned())
+            .any(|text| runs(&text) || (text.contains('\\') && runs(&text.replace('\\', ""))))
+    }
+
+    /// Whether the line may use zsh glob substitution (#1084), under which
+    /// a value from anywhere (command output, input, the environment, a
+    /// file) is read as a pattern whose qualifiers may run code: a spelling
+    /// in the argv or a lexed word ([`shell::glob_substitution`]), a write
+    /// to zsh's `options` array, or a command that may turn on options the
+    /// reader cannot name. With or without command output on the line.
+    /// `text` is the line's argv.
+    pub(super) fn uses_glob_substitution(&self, text: &[String]) -> bool {
+        let options = |name: &str| name == "options";
+        self.glob_subst
+            || text
+                .iter()
+                .any(|arg| shell::glob_substitution(&joined(arg)))
+            || self.assigned.iter().any(|(name, _)| options(name))
+            || self
+                .filled
+                .iter()
+                .chain(&self.appended)
+                .chain(&self.namerefs)
+                .any(|name| options(name))
+            || self
+                .named
+                .iter()
+                .any(|word| options(word.split(['[', '=']).next().unwrap_or(word)))
     }
 
     /// Whether the line evaluates, as arithmetic, a variable filled from
@@ -922,6 +1045,7 @@ impl Arithmetic {
         let mut texts: Vec<String> = text.iter().map(|arg| joined(arg)).collect();
         let originals = texts.len();
         for at in 0..originals {
+            work::step();
             let bare = unquoted(&texts[at]);
             if bare != texts[at] {
                 texts.push(bare);
@@ -941,18 +1065,21 @@ impl Arithmetic {
         let mut first_read: HashMap<&str, (usize, usize)> = HashMap::new();
         let mut self_reads: HashSet<&str> = HashSet::new();
         for (at, text) in texts[..originals].iter().enumerate() {
+            work::step();
             let bytes = text.as_bytes();
             // How many regions cover each byte, and where each one ends.
             let mut depth = vec![0_i32; bytes.len() + 1];
             let mut ends: HashMap<usize, usize> = HashMap::new();
             let mut plain: HashSet<usize> = HashSet::new();
             for (_, range) in found.iter().filter(|(text_at, _)| *text_at == at) {
+                work::step();
                 depth[range.start] += 1;
                 depth[range.end] -= 1;
                 ends.entry(range.start).or_insert(range.end);
                 let region = &text[range.clone()];
                 if pure_arithmetic(region) {
                     for (offset, name) in arithmetic_assignments(region) {
+                        work::step();
                         plain.insert(range.start + offset);
                         results.insert(name.to_string());
                     }
@@ -961,10 +1088,12 @@ impl Arithmetic {
             let mut inside = Vec::with_capacity(bytes.len());
             let mut open = 0;
             for delta in &depth[..bytes.len()] {
+                work::step();
                 open += delta;
                 inside.push(open > 0);
             }
             for name in names(text) {
+                work::step();
                 let start = name.as_ptr() as usize - text.as_ptr() as usize;
                 let end = start + name.len();
                 let before = &text[..start];
@@ -1111,9 +1240,11 @@ impl Arithmetic {
         let mut failed: HashSet<String> = HashSet::new();
         let mut receivers: HashMap<&str, Vec<&str>> = HashMap::new();
         for (name, value) in &self.assigned {
+            work::step();
             match numeric_references(value) {
                 Some(sources) => {
                     for source in sources {
+                        work::step();
                         if candidate(source) {
                             receivers.entry(source).or_default().push(name);
                         } else {
@@ -1128,7 +1259,9 @@ impl Arithmetic {
         }
         let mut queue: Vec<String> = failed.iter().cloned().collect();
         while let Some(source) = queue.pop() {
+            work::step();
             for receiver in receivers.get(source.as_str()).into_iter().flatten() {
+                work::step();
                 if failed.insert((*receiver).to_string()) {
                     queue.push((*receiver).to_string());
                 }
@@ -1156,12 +1289,14 @@ impl Arithmetic {
         // Who receives each name's value: a graph walk keeps this linear.
         let mut receivers: HashMap<String, Vec<&str>> = HashMap::new();
         for (name, value) in &self.assigned {
+            work::step();
             // A lexed value still holding `$(` or a backtick was quoted or
             // decoded (`$'\x24\x28'`): arithmetic would run it.
             if command_output(value) || value.contains("$(") || value.contains('`') {
                 tainted.insert(name.clone());
             }
             for source in names(&visible(value)) {
+                work::step();
                 receivers.entry(source.to_string()).or_default().push(name);
             }
         }
@@ -1192,6 +1327,7 @@ impl Arithmetic {
                 .chain(self.filled.iter().map(String::as_str))
                 .collect();
             for (name, value) in &self.assigned {
+                work::step();
                 if self.builds(value) || !clean_form(value, &known) {
                     tainted.insert(name.clone());
                 }
@@ -1199,7 +1335,9 @@ impl Arithmetic {
         }
         let mut queue: Vec<String> = tainted.iter().cloned().collect();
         while let Some(source) = queue.pop() {
+            work::step();
             for receiver in receivers.get(&source).into_iter().flatten() {
+                work::step();
                 if tainted.insert((*receiver).to_string()) {
                     queue.push((*receiver).to_string());
                 }
@@ -1250,6 +1388,7 @@ fn without_substitutions(text: &str) -> String {
     let mut at = 0;
     let mut from = 0;
     while at < bytes.len() {
+        work::step();
         let substitution = bytes[at] == b'`'
             || (bytes[at] == b'$'
                 && bytes.get(at + 1) == Some(&b'(')
@@ -1268,6 +1407,7 @@ fn without_substitutions(text: &str) -> String {
             let mut depth = 0_usize;
             let mut end = bytes.len();
             for (offset, &byte) in bytes[at + 1..].iter().enumerate() {
+                work::step();
                 match byte {
                     b'(' => depth += 1,
                     b')' => {
@@ -1295,6 +1435,7 @@ fn only_facts(text: &str) -> bool {
     let bytes = text.as_bytes();
     let mut at = 0;
     while at < bytes.len() {
+        work::step();
         let (body, end) = if bytes[at] == b'`' {
             let end = text[at + 1..]
                 .find('`')
@@ -1307,6 +1448,7 @@ fn only_facts(text: &str) -> bool {
             let mut depth = 0_usize;
             let mut end = bytes.len();
             for (offset, &byte) in bytes[at + 1..].iter().enumerate() {
+                work::step();
                 match byte {
                     b'(' => depth += 1,
                     b')' => {
@@ -1377,6 +1519,7 @@ fn numeric_references(value: &str) -> Option<Vec<&str>> {
             .get(end)
             .is_some_and(|&byte| is_name_char(byte as char))
         {
+            work::step();
             end += 1;
         }
         end
@@ -1384,6 +1527,7 @@ fn numeric_references(value: &str) -> Option<Vec<&str>> {
     let mut sources = Vec::new();
     let mut at = 0;
     while at < bytes.len() {
+        work::step();
         if value[at..].starts_with(shell::ARITHMETIC_OUTPUT) {
             at += shell::ARITHMETIC_OUTPUT.len();
             continue;
@@ -1398,6 +1542,7 @@ fn numeric_references(value: &str) -> Option<Vec<&str>> {
                     .get(at)
                     .is_some_and(|&byte| is_name_char(byte as char) || matches!(byte, b'#' | b'.'))
                 {
+                    work::step();
                     at += 1;
                 }
             }
@@ -1429,6 +1574,7 @@ fn numeric_references(value: &str) -> Option<Vec<&str>> {
                     // a count.
                     at = name_end(at + 2);
                     for listed in ["[@]", "[*]"] {
+                        work::step();
                         if value[at..].starts_with(listed) {
                             at += listed.len();
                         }
@@ -1488,6 +1634,7 @@ fn numeric_references(value: &str) -> Option<Vec<&str>> {
 fn condition_unsafe(region: &str, unsafe_in: &impl Fn(&str) -> bool) -> bool {
     let words: Vec<&str> = region.split_whitespace().collect();
     words.iter().enumerate().any(|(at, word)| {
+        work::step();
         if *word == "-v" {
             words
                 .get(at + 1)
@@ -1517,6 +1664,7 @@ fn subscript_context(text: &str, range: &Range<usize>) -> bool {
     // `${#a[i]}`, zsh `${=a[i]}`, `$^a[i]`.
     let mut sigils = stem;
     for _ in 0..2 {
+        work::step();
         sigils = sigils
             .strip_suffix(['#', '=', '^', '~', '!', '+'])
             .unwrap_or(sigils);
@@ -1561,6 +1709,7 @@ fn flags_unsafe(region: &str, unsafe_in: &impl Fn(&str) -> bool) -> bool {
         return true;
     }
     flags.char_indices().any(|(at, flag)| {
+        work::step();
         if !matches!(flag, 'l' | 'r' | 'I') {
             return false;
         }
@@ -1586,6 +1735,7 @@ fn format_text(word: &str) -> String {
     let mut chars = word.chars().peekable();
     let mut previous = ' ';
     while let Some(ch) = chars.next() {
+        work::step();
         match ch {
             '\\' => {
                 chars.next();
@@ -1595,12 +1745,16 @@ fn format_text(word: &str) -> String {
                 while chars
                     .next_if(|ch| "-+ #0123456789.'*hlLqjzt".contains(*ch))
                     .is_some()
-                {}
+                {
+                    work::step();
+                }
                 if chars
                     .next_if(|ch| "diouxXeEfFgGaAcsbqQ%".contains(*ch))
                     .is_some()
                 {
-                    while chars.next_if(|ch| is_name_char(*ch)).is_some() {}
+                    while chars.next_if(|ch| is_name_char(*ch)).is_some() {
+                        work::step();
+                    }
                 }
                 kept.push(' ');
             }
@@ -1656,6 +1810,7 @@ fn clean_form(value: &str, known: &HashSet<&str>) -> bool {
     };
     let mut at = 0;
     while at < bytes.len() {
+        work::step();
         if value[at..].starts_with(shell::ARITHMETIC_OUTPUT) {
             let end = at + shell::ARITHMETIC_OUTPUT.len();
             if (at > 0 && name_at(at - 1)) || name_at(end) {
@@ -1694,6 +1849,7 @@ fn clean_form(value: &str, known: &HashSet<&str>) -> bool {
             | b'#' => at += 1,
             b'a'..=b'z' | b'A'..=b'Z' | b'_' => {
                 while name_at(at) {
+                    work::step();
                     at += 1;
                 }
             }
@@ -1704,9 +1860,11 @@ fn clean_form(value: &str, known: &HashSet<&str>) -> bool {
                         at += 2;
                         // `$#NAME` (`${#NAME}`, `${#a[@]}`): a length.
                         while name_at(at) {
+                            work::step();
                             at += 1;
                         }
                         for subscript in ["[@]", "[*]"] {
+                            work::step();
                             if value[at..].starts_with(subscript) {
                                 at += subscript.len();
                             }
@@ -1719,6 +1877,7 @@ fn clean_form(value: &str, known: &HashSet<&str>) -> bool {
                             end += 1;
                         } else {
                             while name_at(end) {
+                                work::step();
                                 end += 1;
                             }
                         }
@@ -1766,6 +1925,7 @@ fn building(text: &str) -> (Vec<String>, bool) {
     let mut unknown = false;
     let mut at = 0;
     while at < bytes.len() {
+        work::step();
         if bytes[at] != b'$' {
             at += 1;
             continue;
@@ -1894,6 +2054,127 @@ fn braced(content: &str) -> (Option<&str>, bool) {
     (Some(name), !plain)
 }
 
+/// Whether a command may turn on zsh options the reader cannot name
+/// (#1084): `setopt`/`unsetopt` with an expanded name, one built by a
+/// brace range or glob (`glob{s..s}ubst`, `glob?subst`) or by pattern
+/// (`-m`), `set`, `emulate` or a zsh with such an option or `-o` value, or
+/// `emulate` (also `zsh --emulate`) in a mode other than zsh: `csh`, `ksh`
+/// and `sh` turn on `GLOB_SUBST`. Also `zmv`, `zcp` and `zln` with an
+/// expanded pattern, which they glob as `${~pat}`.
+fn sets_unnamed_options(name: &str, args: &[String]) -> bool {
+    let expanded = |word: &str| word.contains(['$', '`']) || word.contains(shell::UNSEEN_OUTPUT);
+    // The lexer drops braces but keeps a range's `..`.
+    let unnamed = |word: &str| {
+        expanded(word) || word.contains(['{', '}', '*', '?', '[', '<', '(']) || word.contains("..")
+    };
+    let name = shell::basename(name);
+    // keeper's `keep` globs all its arguments as `$~*`.
+    if name == "keep" {
+        return args.iter().any(|word| expanded(word));
+    }
+    if matches!(name, "zmv" | "zcp" | "zln") {
+        let mut words = args.iter();
+        while let Some(word) = words.next() {
+            work::step();
+            if expanded(word) {
+                return true;
+            }
+            if word == "--" {
+                return words.next().is_some_and(|pattern| expanded(pattern));
+            }
+            let Some(cluster) = word.strip_prefix('-') else {
+                // The pattern.
+                return false;
+            };
+            // `-p prog`, `-np prog`: a value-taking letter at the end of
+            // its cluster takes the next word (`-pprog` holds its own).
+            if let Some(at) = cluster.find(['o', 'p', 'P'])
+                && at + 1 == cluster.len()
+            {
+                words.next();
+            }
+        }
+        return false;
+    }
+    if matches!(name, "setopt" | "unsetopt") {
+        return args
+            .iter()
+            .any(|word| unnamed(word) || (word.starts_with(['-', '+']) && word.contains('m')));
+    }
+    if !matches!(name, "set" | "emulate" | "zsh" | "-zsh") {
+        return false;
+    }
+    let emulate = name == "emulate";
+    let mut mode_seen = false;
+    let mut script_next = false;
+    let mut words = args.iter();
+    while let Some(word) = words.next() {
+        work::step();
+        if word == "--" {
+            break;
+        }
+        if !(word.len() > 1 && word.starts_with(['-', '+'])) {
+            // `emulate zsh -c 'code'`, `zsh -c 'code'`: the rest is code,
+            // read as commands.
+            if (emulate && mode_seen) || script_next {
+                break;
+            }
+            // An expanded word where an option or mode may stand
+            // (`set $(cat f)`, `emulate $m`).
+            if expanded(word) {
+                return true;
+            }
+            if emulate && !mode_seen {
+                if word != "zsh" {
+                    return true;
+                }
+                mode_seen = true;
+                continue;
+            }
+            break;
+        }
+        if unnamed(word) {
+            return true;
+        }
+        if let Some(long) = word.strip_prefix("--") {
+            let mode = match long.strip_prefix("emulate") {
+                Some("") => words.next().map(String::as_str),
+                Some(value) => value.strip_prefix('='),
+                None => continue,
+            };
+            if mode.is_none_or(|mode| mode != "zsh") {
+                return true;
+            }
+            continue;
+        }
+        script_next |= name != "set" && !emulate && word.starts_with('-') && word.contains('c');
+        // `-o NAME` and clusters holding `o` (`-xo NAME`) take the next word.
+        if word[1..].contains('o') && words.next().is_some_and(|value| unnamed(value)) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Whether lexed words may start a zsh under another name (`exec -a csh
+/// zsh`, `exec -acsh zsh`, GNU `env -a csh zsh`), which it reads as an
+/// emulation mode (#1084): `exec` or `env`, a later option word with `a`
+/// and a later word that names a zsh or is expanded. One pass.
+fn renames_shell(words: &[String]) -> bool {
+    let (mut launcher, mut renamed, mut shell) = (false, false, false);
+    for word in words {
+        work::step();
+        if launcher {
+            renamed |= word.starts_with('-') && !word.starts_with("--") && word.contains('a');
+            shell |= shell::basename(word).contains("zsh")
+                || word.contains(['$', '`'])
+                || word.contains(shell::UNSEEN_OUTPUT);
+        }
+        launcher |= matches!(shell::basename(word), "exec" | "env");
+    }
+    renamed && shell
+}
+
 /// Text as the shell parses it: a backslash-newline joins the lines.
 fn joined(text: &str) -> String {
     text.replace("\\\n", "")
@@ -1956,6 +2237,7 @@ fn lists(text: &str) -> (Vec<List>, bool) {
     let mut stack: Vec<Option<(Vec<String>, usize)>> = Vec::new();
     let mut depth = 0;
     for (at, &byte) in bytes.iter().enumerate() {
+        work::step();
         match byte {
             b'(' => {
                 let names = list_names(&text[..at]);
@@ -1981,6 +2263,7 @@ fn lists(text: &str) -> (Vec<List>, bool) {
     }
     // Unclosed lists run to the end of the text.
     for (names, start) in stack.into_iter().flatten() {
+        work::step();
         found.push(List {
             names,
             body: start..bytes.len(),
@@ -2008,6 +2291,7 @@ fn list_names(before: &str) -> Option<Vec<String>> {
     let mut names = Vec::new();
     let mut rest = before.trim_end_matches([' ', '\t']);
     loop {
+        work::step();
         let start = name_tail_start(rest);
         let word = &rest[start..];
         if matches!(word, "for" | "foreach") {
@@ -2084,6 +2368,7 @@ fn names(text: &str) -> impl Iterator<Item = &str> {
     let mut index = 0;
     std::iter::from_fn(move || {
         while index < bytes.len() {
+            work::step();
             let start = index;
             let ch = bytes[index] as char;
             let previous = start.checked_sub(1).map(|at| bytes[at] as char);
@@ -2095,6 +2380,7 @@ fn names(text: &str) -> impl Iterator<Item = &str> {
             }
             if ch.is_ascii_alphabetic() || ch == '_' {
                 while index < bytes.len() && is_name_char(bytes[index] as char) {
+                    work::step();
                     index += 1;
                 }
                 let number_part = previous.is_some_and(|ch| ch.is_ascii_digit() || ch == '#');
@@ -2141,6 +2427,7 @@ fn functions(text: &str) -> Vec<String> {
     let mut found = Vec::new();
     let bytes = text.as_bytes();
     for (at, _) in text.match_indices('(') {
+        work::step();
         let after = text[at + 1..].trim_start_matches([' ', '\t']);
         if !after.starts_with(')') {
             continue;
@@ -2157,6 +2444,7 @@ fn functions(text: &str) -> Vec<String> {
     }
     let words: Vec<&str> = text.split_whitespace().collect();
     for pair in words.windows(2) {
+        work::step();
         if pair[0] == "function" {
             let name = pair[1].trim_end_matches(['(', ')', '{']);
             if !name.is_empty() {
@@ -2231,6 +2519,7 @@ fn regions(text: &str) -> Vec<Range<usize>> {
     // subscript.
     let mut in_list = vec![0_i32; bytes.len() + 1];
     for list in lists(text).0 {
+        work::step();
         in_list[list.body.start] += 1;
         in_list[list.body.end] -= 1;
     }
@@ -2244,6 +2533,7 @@ fn regions(text: &str) -> Vec<Range<usize>> {
     // The next `]` at or after each byte, for subscripts in `${a[i]:v}`.
     let mut next_close = vec![bytes.len(); bytes.len() + 1];
     for at in (0..bytes.len()).rev() {
+        work::step();
         next_close[at] = if bytes[at] == b']' {
             at
         } else {
@@ -2252,7 +2542,9 @@ fn regions(text: &str) -> Vec<Range<usize>> {
     }
     let mut counted = 0;
     while index < bytes.len() {
+        work::step();
         while counted <= index {
+            work::step();
             lists_open += in_list[counted];
             counted += 1;
         }
@@ -2355,12 +2647,29 @@ fn regions(text: &str) -> Vec<Range<usize>> {
 /// Linear: parentheses are matched in one pass, and each backslash or `$`
 /// run is counted at most twice.
 fn qualifier_lists(text: &str) -> Vec<Range<usize>> {
+    lists_attached(text, /*skip_arithmetic*/ true)
+}
+
+/// `qualifier_lists` including groups inside arithmetic regions, for
+/// checks that do not read those regions themselves (#1028): a region read
+/// without quotes may span a real qualifier (`echo '$((' ; print *(e:x:)`).
+fn all_qualifier_lists(text: &str) -> Vec<Range<usize>> {
+    lists_attached(text, /*skip_arithmetic*/ false)
+}
+
+fn lists_attached(text: &str, skip_arithmetic: bool) -> Vec<Range<usize>> {
     if !text.contains('(') {
         return Vec::new();
     }
     let bytes = text.as_bytes();
     let mut depth = vec![0_i32; bytes.len() + 1];
-    for range in regions(text) {
+    let skipped = if skip_arithmetic {
+        regions(text)
+    } else {
+        Vec::new()
+    };
+    for range in skipped {
+        work::step();
         let region = &text[range.clone()];
         if ["$((", "((", "$[", ":"]
             .iter()
@@ -2374,6 +2683,7 @@ fn qualifier_lists(text: &str) -> Vec<Range<usize>> {
     let mut close = vec![bytes.len(); bytes.len()];
     let mut open = Vec::new();
     for (at, byte) in bytes.iter().enumerate() {
+        work::step();
         match byte {
             b'(' => open.push(at),
             b')' => {
@@ -2430,6 +2740,7 @@ fn qualifier_lists(text: &str) -> Vec<Range<usize>> {
     let mut masked = 0;
     let mut after = 0;
     for at in 0..bytes.len() {
+        work::step();
         masked += depth[at];
         if at < after
             || bytes[at] != b'('
@@ -2450,6 +2761,318 @@ fn qualifier_lists(text: &str) -> Vec<Range<usize>> {
     lists
 }
 
+/// Bare qualifier text with arithmetic expansions (`$((...))`) and
+/// neutral facts (`$(date +%s)`) read as `0`. `None` when another
+/// substitution's output (chosen by whatever it reads) would be read.
+/// Linear: each substitution is skipped once.
+fn neutral_expansions(list: &[u8]) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(list.len());
+    let mut at = 0;
+    while at < list.len() {
+        work::step();
+        let arithmetic = list[at..].starts_with(b"$((");
+        let substitution =
+            list[at] == b'`' || (list[at] == b'$' && list.get(at + 1) == Some(&b'('));
+        if !substitution {
+            out.push(list[at]);
+            at += 1;
+            continue;
+        }
+        // Where the inner group of `$((` closes, to tell arithmetic
+        // (`$((1))`) from a subshell in a substitution (`$((cmd) )`).
+        let mut inner_close = None;
+        let end = if list[at] == b'`' {
+            at + 1 + list[at + 1..].iter().position(|byte| *byte == b'`')? + 1
+        } else {
+            let mut depth = 0_usize;
+            let mut end = None;
+            for (offset, byte) in list[at + 1..].iter().enumerate() {
+                work::step();
+                match byte {
+                    b'(' => depth += 1,
+                    b')' => {
+                        depth -= 1;
+                        if depth == 1 && inner_close.is_none() {
+                            inner_close = Some(at + 1 + offset);
+                        }
+                        if depth == 0 {
+                            end = Some(at + 1 + offset + 1);
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            end?
+        };
+        let arithmetic = arithmetic && inner_close == Some(end - 2);
+        let span = &list[at..end];
+        let neutral = if arithmetic {
+            // Its own expansions are read like any other.
+            !span[3..].contains(&b'$') && !span.contains(&b'`')
+        } else if span.starts_with(b"$((") {
+            // A subshell in a substitution (`$((cmd) )`).
+            false
+        } else {
+            only_facts(&String::from_utf8_lossy(span))
+        };
+        if !neutral {
+            return None;
+        }
+        out.push(b'0');
+        at = end;
+    }
+    Some(out)
+}
+
+/// Where the group whose `(` is just before `start` ends when quotes and
+/// backslashes are read: at the first `)` outside them and outside nested
+/// groups. `None` when it does not end within `MAX_QUOTED_GROUP` bytes,
+/// which the caller treats as code (bounded, so many groups stay linear).
+fn quoted_group_end(text: &str, start: usize) -> Option<usize> {
+    let bytes = &text.as_bytes()[..text.len().min(start + MAX_QUOTED_GROUP)];
+    let mut depth = 0_usize;
+    let mut at = start;
+    while at < bytes.len() {
+        work::step();
+        match bytes[at] {
+            b'\\' => at += 1,
+            b'\'' => {
+                at = bytes[at + 1..]
+                    .iter()
+                    .position(|byte| *byte == b'\'')
+                    .map_or(bytes.len(), |end| at + 1 + end);
+            }
+            b'"' => {
+                at += 1;
+                while at < bytes.len() && bytes[at] != b'"' {
+                    work::step();
+                    at += if bytes[at] == b'\\' { 2 } else { 1 };
+                }
+            }
+            b'(' => depth += 1,
+            b')' if depth == 0 => return Some(at),
+            b')' => depth -= 1,
+            _ => {}
+        }
+        at += 1;
+    }
+    None
+}
+
+/// Whether zsh, parsing a group's text as glob qualifiers, may reach one
+/// that runs code before a character it rejects: `e` with any delimiter
+/// and non-empty code that closes,
+/// `+name`, `oe`/`o+` sorts, or an expansion (`$x`, a substitution that is
+/// not a neutral fact) whose value it would parse as qualifiers. Quotes
+/// and backslashes are removed first, as zsh does (`'e':x:`). Text zsh
+/// rejects (`print('hello')`: `h` is no qualifier) or reads as modifiers
+/// after `:` runs nothing. Linear.
+fn qualifier_runs_code(list: &str) -> bool {
+    let list: Vec<u8> = {
+        let mut bare = Vec::with_capacity(list.len());
+        let mut bytes = list.bytes();
+        while let Some(byte) = bytes.next() {
+            work::step();
+            match byte {
+                b'\'' | b'"' => {}
+                b'\\' => bare.extend(bytes.next()),
+                byte => bare.push(byte),
+            }
+        }
+        bare
+    };
+    // zsh expands the word before reading qualifiers, so an expansion
+    // anywhere (`P:$x:`, `u$x`, `[$x]`) may become code: only arithmetic
+    // (a number) and neutral facts are read on, as `0`. Brace expansion
+    // (`{e,u}:code:`) may also form one.
+    let Some(list) = neutral_expansions(&list) else {
+        return true;
+    };
+    if list.contains(&b'$') || list.contains(&b'`') {
+        return true;
+    }
+    if let Some(open) = list.iter().position(|byte| *byte == b'{')
+        && (list[open..].contains(&b',') || list[open..].windows(2).any(|pair| pair == b".."))
+    {
+        return true;
+    }
+    let list = list.as_slice();
+    // Past a delimited argument starting at `at` (the delimiter); `None`
+    // when it never closes.
+    // The delimiter is a whole character, as zsh reads it (`Pé-xé`).
+    let delimited = |at: usize| -> Option<usize> {
+        let open = *list.get(at)?;
+        let width = match open {
+            0xf0.. => 4,
+            0xe0.. => 3,
+            0xc0.. => 2,
+            _ => 1,
+        };
+        let close: &[u8] = match open {
+            b'(' => b")",
+            b'[' => b"]",
+            b'{' => b"}",
+            b'<' => b">",
+            _ => list.get(at..at + width)?,
+        };
+        list[at + width..]
+            .windows(close.len())
+            .position(|window| window == close)
+            .map(|end| at + width + end + close.len())
+    };
+    let digits = |mut at: usize| {
+        let start = at;
+        while list.get(at).is_some_and(u8::is_ascii_digit) {
+            work::step();
+            at += 1;
+        }
+        (at > start).then_some(at)
+    };
+    let sign = |at: usize| at + usize::from(matches!(list.get(at), Some(b'+' | b'-')));
+    let mut at = 0;
+    if list.starts_with(b"#q") {
+        at = 2;
+    }
+    while at < list.len() {
+        work::step();
+        let byte = list[at];
+        at = match byte {
+            // Code between delimiters: zsh rejects it left open, and empty
+            // code runs nothing.
+            b'e' => match delimited(at + 1) {
+                Some(next) if next > at + 3 => return true,
+                Some(next) => next,
+                None => return false,
+            },
+            b'+' => {
+                return list.get(at + 1).is_some_and(|next| {
+                    next.is_ascii_alphanumeric() || !next.is_ascii() || b"_{$`".contains(next)
+                });
+            }
+            b'o' | b'O' => match list.get(at + 1) {
+                Some(b'e') => match delimited(at + 2) {
+                    Some(next) if next > at + 4 => return true,
+                    Some(next) => next,
+                    None => return false,
+                },
+                Some(b'+') => {
+                    return list.get(at + 2).is_some_and(|next| {
+                        next.is_ascii_alphanumeric() || !next.is_ascii() || b"_{$`".contains(next)
+                    });
+                }
+                Some(b'n' | b'L' | b'l' | b'a' | b'm' | b'c' | b'd' | b'N') => at + 2,
+                _ => return false,
+            },
+            b'a' | b'm' | b'c' => {
+                let unit = at
+                    + 1
+                    + usize::from(matches!(
+                        list.get(at + 1),
+                        Some(b'M' | b'w' | b'd' | b'h' | b'm' | b's')
+                    ));
+                match digits(sign(unit)) {
+                    Some(next) => next,
+                    None => return false,
+                }
+            }
+            b'L' => {
+                let unit = at
+                    + 1
+                    + usize::from(matches!(
+                        list.get(at + 1),
+                        Some(b'k' | b'K' | b'm' | b'M' | b'g' | b'G' | b't' | b'T' | b'p' | b'P')
+                    ));
+                match digits(sign(unit)) {
+                    Some(next) => next,
+                    None => return false,
+                }
+            }
+            b'l' => match digits(sign(at + 1)) {
+                Some(next) => next,
+                None => return false,
+            },
+            b'd' | b'Y' => match digits(at + 1) {
+                Some(next) => next,
+                None => return false,
+            },
+            b'u' | b'g' => match digits(at + 1) {
+                Some(next) => next,
+                None => match delimited(at + 1) {
+                    Some(next) => next,
+                    None => return false,
+                },
+            },
+            b'P' => match delimited(at + 1) {
+                Some(next) => next,
+                None => return false,
+            },
+            // A mode, as zsh reads it: octal digits (`f644`), one of
+            // `=+-?` and digits or permission letters (`f+rw`, `f?644`), or
+            // a spec delimited by any other character (`fu+xu`, `feu+xe`).
+            b'f' => match list.get(at + 1) {
+                Some(b'0'..=b'7') => {
+                    let mut next = at + 1;
+                    while list
+                        .get(next)
+                        .is_some_and(|byte| (b'0'..=b'7').contains(byte))
+                    {
+                        work::step();
+                        next += 1;
+                    }
+                    next
+                }
+                Some(b'=' | b'+' | b'-' | b'?') => match digits(at + 2) {
+                    Some(next) => next,
+                    None => {
+                        let mut next = at + 2;
+                        while list.get(next).is_some_and(|byte| b"rwxXst".contains(byte)) {
+                            work::step();
+                            next += 1;
+                        }
+                        next
+                    }
+                },
+                _ => match delimited(at + 1) {
+                    Some(next) => next,
+                    None => return false,
+                },
+            },
+            // A subscript, which may nest (`[a[1]+1]`).
+            b'[' => {
+                let mut depth = 0_usize;
+                let mut end = None;
+                for (offset, byte) in list[at..].iter().enumerate() {
+                    work::step();
+                    match byte {
+                        b'[' => depth += 1,
+                        b']' => {
+                            depth -= 1;
+                            if depth == 0 {
+                                end = Some(at + offset + 1);
+                                break;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                match end {
+                    Some(end) => end,
+                    None => return false,
+                }
+            }
+            b'%' => at + 1 + usize::from(matches!(list.get(at + 1), Some(b'b' | b'c'))),
+            // Modifiers follow; none of them runs code.
+            b':' => return false,
+            b'/' | b'.' | b'@' | b'=' | b'p' | b'*' | b'r' | b'w' | b'x' | b'A' | b'I' | b'E'
+            | b'R' | b'W' | b'X' | b's' | b'S' | b't' | b'F' | b'N' | b'D' | b'n' | b'M' | b'T'
+            | b'U' | b'G' | b'^' | b'-' | b',' | b'q' => at + 1,
+            _ => return false,
+        };
+    }
+    false
+}
+
 /// Whether the `=` at `at` ends a word that assigns an array (`a=(`,
 /// `a+=(`, `a[k]=(`): the word starts the command, or follows other
 /// assignments or the options of a declaring builtin.
@@ -2468,6 +3091,7 @@ fn assignment_position(text: &str, at: usize) -> bool {
     let mut rest = before[..start].trim_end();
     // A bounded walk: past that the group counts as a qualifier list.
     for _ in 0..MAX_ASSIGNMENT_WALK {
+        work::step();
         if rest.is_empty() || rest.ends_with([';', '&', '|', '(', '{', '!']) {
             return true;
         }
@@ -2557,6 +3181,7 @@ fn condition_end(text: &str, start: usize) -> usize {
     let mut stack: Vec<Context> = Vec::new();
     let mut index = start;
     while index < bytes.len() {
+        work::step();
         let byte = bytes[index];
         let next = bytes.get(index + 1).copied();
         let mut step = 1;
@@ -2608,6 +3233,7 @@ fn conditions(text: &str) -> Vec<Range<usize>> {
     let mut found = Vec::new();
     let mut from = 0;
     while let Some(open) = text[from..].find("[[").map(|at| from + at) {
+        work::step();
         let close = condition_end(text, open + 2);
         let span = &text[open..close];
         if span

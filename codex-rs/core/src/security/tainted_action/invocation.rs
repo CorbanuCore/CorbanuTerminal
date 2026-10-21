@@ -4,6 +4,7 @@
 //! `p.js`, `perl -pe '...' f` runs inline code.
 
 use super::shell::SHELLS;
+use super::work;
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Code<'a> {
@@ -44,6 +45,7 @@ pub(super) fn parse<'a>(name: &str, args: &'a [String]) -> Option<Invocation<'a>
     let mut index = 0;
     let mut subcommand_seen = false;
     while let Some(arg) = args.get(index) {
+        work::step();
         let next = args.get(index + 1).map(String::as_str);
         index += 1;
         if arg == "--" {
@@ -248,6 +250,7 @@ impl Family {
         }
         let group = arg.trim_start_matches(['-', '+']);
         for (at, letter) in group.char_indices() {
+            work::step();
             let rest = &group[at + letter.len_utf8()..];
             let attached = (!rest.is_empty()).then_some(rest);
             let inline = attached.map_or(Opt::Inline, Opt::InlineAttached);

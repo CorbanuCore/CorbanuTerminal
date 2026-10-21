@@ -1227,6 +1227,14 @@ async fn process_exec_tool_call_respects_cancellation_token() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn cancellation_termination_grace_period_stays_50_ms_outside_test_overrides() {
+    assert_eq!(
+        cancellation_termination_grace_period(),
+        Duration::from_millis(50)
+    );
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn process_exec_tool_call_cancellation_allows_sigterm_cleanup() -> Result<()> {
@@ -1290,16 +1298,24 @@ while :; do sleep 1 & wait $!; done"#
         arg0: None,
     };
 
+    // The trap only has to run before the grace period ends. Production's 50 ms
+    // (pinned by `cancellation_termination_grace_period_stays_50_ms_outside_test_overrides`)
+    // can expire first on a loaded runner, leaving the cleanup marker empty
+    // (#349), so this exec gets 2 s; the 5 s bound still covers readiness, the
+    // grace period and the escalation.
     let result = timeout(
         Duration::from_secs(5),
-        process_exec_tool_call(
-            params,
-            &PermissionProfile::Disabled,
-            &cwd,
-            std::slice::from_ref(&cwd),
-            &None,
-            /*use_legacy_landlock*/ false,
-            /*stdout_stream*/ None,
+        CANCELLATION_TERMINATION_GRACE_PERIOD_OVERRIDE.scope(
+            Duration::from_secs(2),
+            process_exec_tool_call(
+                params,
+                &PermissionProfile::Disabled,
+                &cwd,
+                std::slice::from_ref(&cwd),
+                &None,
+                /*use_legacy_landlock*/ false,
+                /*stdout_stream*/ None,
+            ),
         ),
     )
     .await

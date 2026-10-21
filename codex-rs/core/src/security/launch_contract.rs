@@ -61,6 +61,13 @@ const PROTECTED_CODEX_HOME_ENTRIES: &[&str] = &[
     // #651: the database init lock (#586); a command holding it would stall
     // every new launch on this home.
     super::preflight::DB_INIT_LOCK,
+    // #1107: the rest of what Corbanu keeps beside the databases
+    // (`preflight::DATABASE_FOLDER_ENTRIES`), as in a separate database
+    // folder: the GPU controller's lock, pending accounting records and the
+    // databases recovery set aside.
+    "gpu-controller.lock",
+    "accounting-pending",
+    "db-backups",
 ];
 
 /// The entries of [`PROTECTED_CODEX_HOME_ENTRIES`] that are directories. On
@@ -74,6 +81,8 @@ const PROTECTED_CODEX_HOME_DIRS: &[&str] = &[
     "log",
     "sessions",
     "archived_sessions",
+    "accounting-pending",
+    "db-backups",
 ];
 
 /// Credential files under `$HOME` that tools read for the user: CLI tokens
@@ -93,6 +102,23 @@ const PROTECTED_HOME_ENTRIES: &[&str] = &[
 pub(crate) const PROTECTED_ZDOTDIR: &str = "/var/empty";
 
 static ACTIVE: OnceLock<LaunchContract> = OnceLock::new();
+
+/// #1077: what a file the contract keeps unreadable at every level is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum KeptFile {
+    /// A CLI token ([`PROTECTED_HOME_ENTRIES`] and their Windows places).
+    CliToken,
+    /// The Google Cloud CLI's folder on Windows (`%APPDATA%\gcloud`), which
+    /// holds its credentials and config.
+    GoogleCloudCliFolder,
+    /// A file or folder inside it.
+    InGoogleCloudCliFolder,
+    /// The macOS keychains folder.
+    Keychain,
+    /// Corbanu's own files: its sign-in, vault, config, history, databases
+    /// and credential broker.
+    CorbanuOwn,
+}
 
 /// Why a protected launch was refused. The text is shown to the user and model.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -190,6 +216,13 @@ impl std::error::Error for LaunchDenied {}
 pub(crate) struct LaunchContract {
     codex_home: AbsolutePathBuf,
     protected_read_paths: Vec<AbsolutePathBuf>,
+    /// #1077: the CLI tokens among [`Self::protected_read_paths`].
+    cli_token_paths: Vec<AbsolutePathBuf>,
+    /// #1077: the keychain folders among [`Self::protected_read_paths`].
+    keychain_paths: Vec<AbsolutePathBuf>,
+    /// The Google Cloud CLI's folder among [`Self::protected_read_paths`]
+    /// (Windows only).
+    google_cloud_cli_folders: Vec<AbsolutePathBuf>,
     managed_values: Vec<Zeroizing<String>>,
     hardened: bool,
     /// #651: database folders set apart from `CODEX_HOME` (`sqlite_home`)
@@ -330,6 +363,11 @@ impl LaunchContract {
             .iter()
             .map(|entry| codex_home.join(entry))
             .collect::<Vec<_>>();
+        // #1077: kept apart too, so the approval prompt can say what a kept
+        // file is.
+        let mut cli_token_paths = Vec::new();
+        let mut keychain_paths = Vec::new();
+        let mut google_cloud_cli_folders = Vec::new();
         // Windows has no HOME by default; its profile directory is USERPROFILE.
         let home = std::env::var_os("HOME").or_else(|| {
             cfg!(windows)
@@ -339,21 +377,20 @@ impl LaunchContract {
         if let Some(home) = home
             && let Ok(home) = AbsolutePathBuf::from_absolute_path(home)
         {
-            protected_read_paths
-                .extend(PROTECTED_HOME_ENTRIES.iter().map(|entry| home.join(entry)));
+            cli_token_paths.extend(PROTECTED_HOME_ENTRIES.iter().map(|entry| home.join(entry)));
             if cfg!(target_os = "macos") {
-                protected_read_paths.push(home.join("Library/Keychains"));
+                keychain_paths.push(home.join("Library/Keychains"));
             }
             if cfg!(windows) {
-                protected_read_paths.push(home.join("_netrc"));
+                cli_token_paths.push(home.join("_netrc"));
             }
         }
         if cfg!(windows)
             && let Some(app_data) = std::env::var_os("APPDATA")
             && let Ok(app_data) = AbsolutePathBuf::from_absolute_path(app_data)
         {
-            protected_read_paths.push(app_data.join("GitHub CLI").join("hosts.yml"));
-            protected_read_paths.push(app_data.join("gcloud"));
+            cli_token_paths.push(app_data.join("GitHub CLI").join("hosts.yml"));
+            google_cloud_cli_folders.push(app_data.join("gcloud"));
         }
         if cfg!(windows)
             && let Some(cargo_home) = std::env::var_os("CARGO_HOME").or_else(|| {
@@ -365,14 +402,17 @@ impl LaunchContract {
             })
             && let Ok(cargo_home) = AbsolutePathBuf::from_absolute_path(cargo_home)
         {
-            protected_read_paths.push(cargo_home.join("credentials.toml"));
-            protected_read_paths.push(cargo_home.join("credentials"));
+            cli_token_paths.push(cargo_home.join("credentials.toml"));
+            cli_token_paths.push(cargo_home.join("credentials"));
         }
         if let Some(dir) = std::env::var_os("CLAUDE_CONFIG_DIR")
             && let Ok(dir) = AbsolutePathBuf::from_absolute_path(dir)
         {
-            protected_read_paths.push(dir.join(".credentials.json"));
+            cli_token_paths.push(dir.join(".credentials.json"));
         }
+        protected_read_paths.extend(cli_token_paths.iter().cloned());
+        protected_read_paths.extend(keychain_paths.iter().cloned());
+        protected_read_paths.extend(google_cloud_cli_folders.iter().cloned());
         if let Some(dir) = codex_network_proxy::credential_broker_user_runtime_dir()
             && let Ok(dir) = AbsolutePathBuf::from_absolute_path(dir)
         {
@@ -381,6 +421,9 @@ impl LaunchContract {
         Self {
             codex_home: codex_home.clone(),
             protected_read_paths,
+            cli_token_paths,
+            keychain_paths,
+            google_cloud_cli_folders,
             managed_values,
             hardened,
             database_folders: std::sync::Mutex::new(Vec::new()),
@@ -591,6 +634,46 @@ impl LaunchContract {
             .ok()
             .flatten()
             .is_some_and(|matcher| matcher.is_read_denied(path))
+    }
+
+    /// #1077: what `path` is when this contract keeps it unreadable at every
+    /// level, so the approval prompt can name it. Explanation only.
+    pub(crate) fn kept_file(&self, path: &Path, cwd: &Path) -> Option<KeptFile> {
+        if !self.keeps_unreadable(path, cwd) {
+            return None;
+        }
+        let among = |paths: &[AbsolutePathBuf]| {
+            let entries = paths
+                .iter()
+                .map(|path| {
+                    FileSystemSandboxEntry::skip_missing_path(
+                        FileSystemPath::Path { path: path.clone() },
+                        FileSystemAccessMode::Deny,
+                    )
+                })
+                .collect();
+            ReadDenyMatcher::try_new(&FileSystemSandboxPolicy::restricted(entries), cwd)
+                .ok()
+                .flatten()
+                .is_some_and(|matcher| matcher.is_read_denied(path))
+        };
+        Some(if among(&self.cli_token_paths) {
+            KeptFile::CliToken
+        } else if among(&self.keychain_paths) {
+            KeptFile::Keychain
+        } else if among(&self.google_cloud_cli_folders) {
+            if self
+                .google_cloud_cli_folders
+                .iter()
+                .any(|folder| folder.as_path() == path)
+            {
+                KeptFile::GoogleCloudCliFolder
+            } else {
+                KeptFile::InGoogleCloudCliFolder
+            }
+        } else {
+            KeptFile::CorbanuOwn
+        })
     }
 
     /// #748: whether this contract alone, at every security level, keeps

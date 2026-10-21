@@ -1230,20 +1230,12 @@ impl App {
 
     pub(crate) fn open_spawn_agent_task_prompt(&mut self, thread_id: ThreadId) {
         let title = self.thread_label(thread_id);
-        let tx = self.app_event_tx.clone();
         let view = CustomPromptView::new(
             format!("Send Task to {title}"),
             "Describe the work to run in this pane".to_string(),
             String::new(),
             Some("Task".to_string()),
-            Box::new(move |task| {
-                // A person's own task: held only while the switch is on.
-                tx.send(AppEvent::SubmitSpawnAgentTask {
-                    thread_id,
-                    task,
-                    sent_while_kill_switch_on: false,
-                });
-            }),
+            spawn_agent_task_prompt_submit(self.app_event_tx.clone(), thread_id),
         );
         self.chat_widget.show_custom_prompt_view(view);
     }
@@ -6042,6 +6034,18 @@ fn exact_crew_runtime_for_node(
             )),
             RuntimeRequest::Selector { .. } => None,
         })
+}
+
+/// D95 (#1146): what Spawn status's "Send task to" prompt does with the text
+/// the person typed: it reaches the pane as the person's own input, as if
+/// typed there. Tasks from agents keep [`AppEvent::SubmitSpawnAgentTask`].
+pub(crate) fn spawn_agent_task_prompt_submit(
+    tx: crate::app_event_sender::AppEventSender,
+    thread_id: ThreadId,
+) -> crate::bottom_pane::custom_prompt_view::PromptSubmitted {
+    Box::new(move |task| {
+        tx.send(AppEvent::SubmitSpawnAgentTaskFromPerson { thread_id, task });
+    })
 }
 
 #[cfg(test)]

@@ -681,7 +681,7 @@ async fn guardian_subagent_does_not_inherit_parent_exec_policy_rules() {
     )
     .expect("write policy file");
 
-    let mut config = build_test_config(codex_home.path()).await;
+    let mut config = build_test_config(codex_home.path(), project_dir.path()).await;
     config.cwd = project_dir.abs();
     config.config_layer_stack = ConfigLayerStack::new(
         vec![ConfigLayerEntry::new(

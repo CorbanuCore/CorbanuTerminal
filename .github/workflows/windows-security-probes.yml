@@ -104,7 +104,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-ci
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
       - name: Process access probes
         shell: bash
         run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-process-hardening -- pf_27_s06 pf_27_s07 --nocapture --test-threads=1

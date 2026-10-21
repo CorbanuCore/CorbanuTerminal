@@ -10,8 +10,12 @@ fn runs_unseen_in(shell: &str, line: &str) -> bool {
     let argv = vec![shell.to_string(), "-c".to_string(), line.to_string()];
     let mut arithmetic = Arithmetic::new(&argv);
     let variables = HashMap::new();
+    let mut budget = super::super::Budget {
+        left: usize::MAX,
+        small_left: usize::MAX,
+    };
     for simple in &shell::simple_commands(&argv).commands {
-        let (words, _) = super::super::substitute(simple, &variables);
+        let (words, _, _) = super::super::substitute(simple, &variables, &mut budget);
         arithmetic.note(simple, &words);
     }
     arithmetic.runs_unseen(&argv)
@@ -231,28 +235,38 @@ fn review_1_regions_and_lists() {
 }
 
 /// Attacker text cannot make the check super-linear (scripts of up to
-/// 256 KiB are classified this way).
+/// 256 KiB are classified this way): the work counted at 256 KiB is about
+/// four times that at 64 KiB (#1102).
 #[test]
 fn review_1_stays_linear() {
-    let big = |unit: &str| unit.repeat(256 * 1024 / unit.len());
-    let lines = [
-        format!("for {} in {}; do :; done", big("a ").trim(), big("1 ")),
-        format!("printf {} x", big("-v x ")),
-        format!("eval(){{ :;}}; {} v", big("eval ")),
-        format!("alias eval=let; {} v", big("eval ")),
-        format!("echo {}", big("${")),
-        format!("echo {}", big("${a[")),
-        big("[[ "),
-        big("a=("),
-        big("x x ("),
-        format!("set {}", big("-A x ")),
-        format!("alias s='set {}'; s", big("-A a ")),
+    type Line = fn(&dyn Fn(&str) -> String) -> String;
+    let lines: [(&str, Line); 11] = [
+        ("for", |big| {
+            format!("for {} in {}; do :; done", big("a ").trim(), big("1 "))
+        }),
+        ("printf -v", |big| format!("printf {} x", big("-v x "))),
+        ("eval function", |big| {
+            format!("eval(){{ :;}}; {} v", big("eval "))
+        }),
+        ("eval alias", |big| {
+            format!("alias eval=let; {} v", big("eval "))
+        }),
+        ("${", |big| format!("echo {}", big("${"))),
+        ("${a[", |big| format!("echo {}", big("${a["))),
+        ("[[", |big| big("[[ ")),
+        ("a=(", |big| big("a=(")),
+        ("x x (", |big| big("x x (")),
+        ("set -A", |big| format!("set {}", big("-A x "))),
+        ("alias set -A", |big| {
+            format!("alias s='set {}'; s", big("-A a "))
+        }),
     ];
-    let started = std::time::Instant::now();
-    for line in &lines {
-        runs_unseen(line);
+    for (label, line) in lines {
+        work::assert_linear(label, |scale| {
+            let big = |unit: &str| unit.repeat(64 * 1024 * scale / unit.len());
+            runs_unseen(&line(&big));
+        });
     }
-    assert!(started.elapsed() < std::time::Duration::from_secs(20));
 }
 
 /// Review 2 N1: non-ASCII text before `(` must not split a character.
@@ -716,52 +730,110 @@ fn glob_qualifier_lists_ask_on_output_lines() {
     assert_eq!(qualifier_lists("echo x(y"), vec![8..8]);
 }
 
-/// The fallback stays linear on long chains of copies and long regions.
+/// The fallback stays linear on long chains of copies and long regions:
+/// the work counted at the sizes given is about four times that at a
+/// quarter of them (#1102).
 #[test]
 fn review_6_fallback_stays_linear() {
-    let mut line = String::from("out=$(cmd); v0=1;");
-    for at in 1..20_000 {
-        line.push_str(&format!(" v{at}=$v{};", at - 1));
-    }
-    line.push_str(" echo $((v19999))");
-    let start = std::time::Instant::now();
-    assert!(!runs_unseen(&line));
-    // The helpers on long attacker text (the lexer's own cost on deep
-    // nesting is main's, tracked separately).
-    let deep = "$(".repeat(200_000);
-    assert_eq!(without_substitutions(&deep).trim(), "");
-    let ticks = "`".repeat(200_001);
-    let _ = without_substitutions(&ticks);
-    assert_eq!(
-        arithmetic_assignments(&"i=1, ".repeat(100_000)).count(),
-        100_000
-    );
+    work::assert_linear("copies", |scale| {
+        let last = 5_000 * scale;
+        let mut line = String::from("out=$(cmd); v0=1;");
+        for at in 1..last {
+            line.push_str(&format!(" v{at}=$v{};", at - 1));
+        }
+        line.push_str(&format!(" echo $((v{}))", last - 1));
+        assert!(!runs_unseen(&line));
+    });
+    // The helpers on long attacker text.
+    work::assert_linear("$(", |scale| {
+        let deep = "$(".repeat(50_000 * scale);
+        assert_eq!(without_substitutions(&deep).trim(), "");
+    });
+    work::assert_linear("`", |scale| {
+        let _ = without_substitutions(&"`".repeat(50_000 * scale + 1));
+    });
+    work::assert_linear("assignments", |scale| {
+        let count = 25_000 * scale;
+        let found = arithmetic_assignments(&"i=1, ".repeat(count)).count();
+        assert_eq!(found, count);
+    });
     // Without separators each value runs on: only the last one is read.
-    assert_eq!(arithmetic_assignments(&"i=1 ".repeat(100_000)).count(), 1);
-    assert!(numeric_references(&"$x + ".repeat(100_000)).is_some());
-    let condition = format!("[[ {} ]]", "m -eq 1 && ".repeat(50_000));
-    assert!(condition_unsafe(&condition, &|text: &str| names(text)
-        .any(|name| name == "m")));
-    let _ = format_text(&"%5d\\n".repeat(100_000));
-    let flags = format!("${{({})x}}", "l:1:".repeat(50_000));
-    let _ = flags_unsafe(&flags, &|_: &str| false);
+    work::assert_linear("unseparated assignments", |scale| {
+        let found = arithmetic_assignments(&"i=1 ".repeat(25_000 * scale)).count();
+        assert_eq!(found, 1);
+    });
+    work::assert_linear("references", |scale| {
+        assert!(numeric_references(&"$x + ".repeat(25_000 * scale)).is_some());
+    });
+    work::assert_linear("condition", |scale| {
+        // The unsafe operand comes last, so every word is read.
+        let condition = format!("[[ {}m -eq 1 ]]", "n -eq 1 && ".repeat(12_500 * scale));
+        assert!(condition_unsafe(&condition, &|text: &str| names(text)
+            .any(|name| name == "m")));
+    });
+    work::assert_linear("format", |scale| {
+        let _ = format_text(&"%5d\\n".repeat(25_000 * scale));
+    });
+    work::assert_linear("flags", |scale| {
+        let flags = format!("${{({})x}}", "l:1:".repeat(12_500 * scale));
+        let _ = flags_unsafe(&flags, &|_: &str| false);
+    });
     // D57 qualifier lists: assignments, attached groups, escapes and `$`
     // runs, nested groups, and substitutions in a list.
-    assert_eq!(qualifier_lists(&"a=(1); ".repeat(50_000)).len(), 0);
+    work::assert_linear("assignment lists", |scale| {
+        assert_eq!(qualifier_lists(&"a=(1); ".repeat(12_500 * scale)).len(), 0);
+    });
     // Past the bounded walk a chain of assignments counts as lists.
-    assert!(!qualifier_lists(&"a=(1) ".repeat(50_000)).is_empty());
-    assert_eq!(qualifier_lists(&"x) a=(".repeat(50_000)).len(), 50_000);
-    assert_eq!(qualifier_lists(&"f(x) ".repeat(50_000)).len(), 50_000);
-    assert_eq!(
-        qualifier_lists(&format!("{}(x)", "\\".repeat(200_000))).len(),
-        1
-    );
-    assert_eq!(
-        qualifier_lists(&format!("{}(x)", "$".repeat(200_000))).len(),
-        1
-    );
-    let nested = format!("f{}{}", "(g".repeat(100_000), ")".repeat(100_000));
-    assert_eq!(qualifier_lists(&nested).len(), 1);
-    assert!(only_facts(&"$(date +%s)".repeat(20_000)));
-    assert!(start.elapsed() < std::time::Duration::from_secs(20));
+    work::assert_linear("chained assignment lists", |scale| {
+        assert!(!qualifier_lists(&"a=(1) ".repeat(12_500 * scale)).is_empty());
+    });
+    work::assert_linear("attached groups", |scale| {
+        let count = 12_500 * scale;
+        assert_eq!(qualifier_lists(&"x) a=(".repeat(count)).len(), count);
+    });
+    work::assert_linear("groups", |scale| {
+        let count = 12_500 * scale;
+        assert_eq!(qualifier_lists(&"f(x) ".repeat(count)).len(), count);
+    });
+    work::assert_linear("escapes", |scale| {
+        let escapes = "\\".repeat(50_000 * scale);
+        assert_eq!(qualifier_lists(&format!("{escapes}(x)")).len(), 1);
+    });
+    work::assert_linear("dollars", |scale| {
+        let dollars = "$".repeat(50_000 * scale);
+        assert_eq!(qualifier_lists(&format!("{dollars}(x)")).len(), 1);
+    });
+    work::assert_linear("nested qualifier list", |scale| {
+        let depth = 25_000 * scale;
+        let nested = format!("f{}{}", "(g".repeat(depth), ")".repeat(depth));
+        assert_eq!(qualifier_lists(&nested).len(), 1);
+    });
+    work::assert_linear("facts", |scale| {
+        assert!(only_facts(&"$(date +%s)".repeat(5_000 * scale)));
+    });
+}
+
+/// #1028: the qualifier reading stays linear on many quoted groups, long
+/// subscripts and long delimited arguments: the work counted at the sizes
+/// given is about four times that at a quarter of them (#1102).
+#[test]
+fn qualifier_code_reading_stays_linear() {
+    let arithmetic = Arithmetic::new(&[]);
+    type Text = fn(usize) -> String;
+    let texts: [(&str, Text); 5] = [
+        ("quote", |count| "a(x') ".repeat(count)),
+        ("double quote", |count| "a(\"x) ".repeat(count)),
+        ("subscripts", |count| {
+            format!("a([{}", "[".repeat(2 * count))
+        }),
+        ("delimited", |count| {
+            format!("a(P:{}", "x".repeat(2 * count))
+        }),
+        ("names", |count| format!("a({})", "N".repeat(2 * count))),
+    ];
+    for (label, text) in texts {
+        work::assert_linear(label, |scale| {
+            let _ = arithmetic.runs_qualifier_code(&[text(25_000 * scale)]);
+        });
+    }
 }

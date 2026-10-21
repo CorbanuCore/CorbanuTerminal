@@ -1,0 +1,15 @@
+---
+source: core/src/security/protected_reads/moderate_tests.rs
+expression: "notes.join(\"\\n\\n\")"
+---
+cat ~/.aws/credentials
+`~/.aws/credentials` is a CLI token file: secretless agent launch keeps it unreadable to agent commands at every security level, even if you approve, so approving cannot unlock it. If you approve, the command runs, but that read fails.
+
+cat ~/.ssh/config ~/.netrc
+`~/.netrc` is a CLI token file: secretless agent launch keeps it unreadable to agent commands at every security level, even if you approve, so approving cannot unlock it. If you approve, the command runs, but that read fails.
+
+cat "$CODEX_HOME/config.toml"
+`$CODEX_HOME/config.toml` is one of Corbanu's own files (such as its sign-in, vault, config or history): secretless agent launch keeps it unreadable to agent commands at every security level, even if you approve, so approving cannot unlock it. If you approve, the command runs, but that read fails.
+
+cat ~/.ssh/config
+(no note)

@@ -1,0 +1,36 @@
+╰─────────────────────────────────────────────╯
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+› Append the line 'checked by moderate' to ../outside-notes.txt using a shell command.
+
+
+• Ran printf 'checked by moderate\n' >> ../outside-notes.txt
+  └ /bin/bash: ../outside-notes.txt: Operation not permitted
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• The command ran as requested:
+
+  printf 'checked by moderate\n' >> ../outside-notes.txt
+
+  But the sandbox blocked the write because ../outside-notes.txt is outside the writable workspace. Moderate security keeps commands sandboxed even
+  with approval. You can change the security level with /security, then rerun the command.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Try again and request my approval to run that command outside the sandbox.
+
+
+• Working (0s • esc to interrupt)
+
+
+› Find and fix a bug in @filename
+
+  Z.AI GLM 5.3 Flash via zai default · ~/runs/agms-T18-agmx3-20261020T163405Z/fixture/workspace · Corbanu Terminal · TPS: 35.7 tok/s

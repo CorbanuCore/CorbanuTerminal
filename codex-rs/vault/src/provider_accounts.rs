@@ -694,25 +694,31 @@ impl Vault {
             let Some(salt) = self.account_fingerprint_salt()? else {
                 return Ok(None);
             };
-            let mut hasher = Sha256::new();
-            hasher.update(b"corbanu-provider-account-fingerprint-v1\0");
-            hasher.update(salt.as_bytes());
-            hasher.update(b"\0");
-            hasher.update(provider_id.as_bytes());
-            for (kind, value) in &material {
-                hasher.update(b"\0");
-                hasher.update(kind.as_str().as_bytes());
-                hasher.update(b"\0");
-                hasher.update(value.trim().as_bytes());
-            }
-            let digest = hasher.finalize();
-            Ok(Some(
-                digest
-                    .iter()
-                    .take(6)
-                    .map(|byte| format!("{byte:02x}"))
-                    .collect(),
-            ))
+            Ok(Some(fingerprint_digest(&salt, provider_id, &material)))
+        })
+    }
+
+    /// REG-02: the fingerprint a named account of `provider_id` holding this
+    /// sign-in (`auth.json` contents) has, so the default login can be told
+    /// apart from, or matched with, a named account without showing any part
+    /// of it. Same reads as [`Self::provider_account_fingerprint`]: it never
+    /// writes the vault, and is `Ok(None)` when the vault has no salt yet.
+    pub fn sign_in_fingerprint(
+        &self,
+        provider_id: &str,
+        sign_in: &str,
+    ) -> Result<Option<String>, VaultError> {
+        let identity =
+            Zeroizing::new(sign_in_identity(sign_in).unwrap_or_else(|| sign_in.to_string()));
+        self.with_storage_lock(|| {
+            let Some(salt) = self.account_fingerprint_salt()? else {
+                return Ok(None);
+            };
+            Ok(Some(fingerprint_digest(
+                &salt,
+                provider_id,
+                &[(ProviderAccountKind::ChatgptAuth, identity.clone())],
+            )))
         })
     }
 
@@ -739,6 +745,31 @@ impl Vault {
         );
         Ok(Some((VAULT_SCOPE.clone(), fingerprint_salt_name()?, salt)))
     }
+}
+
+/// The 12-hex salted digest of an account's material.
+fn fingerprint_digest(
+    salt: &str,
+    provider_id: &str,
+    material: &[(ProviderAccountKind, Zeroizing<String>)],
+) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"corbanu-provider-account-fingerprint-v1\0");
+    hasher.update(salt.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(provider_id.as_bytes());
+    for (kind, value) in material {
+        hasher.update(b"\0");
+        hasher.update(kind.as_str().as_bytes());
+        hasher.update(b"\0");
+        hasher.update(value.trim().as_bytes());
+    }
+    hasher
+        .finalize()
+        .iter()
+        .take(6)
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 fn fingerprint_salt_name() -> Result<SecretName, VaultError> {

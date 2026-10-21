@@ -3,7 +3,9 @@
 `/security` → Aggressive runs every agent command in a sandbox that writes only
 in the current folder. This page explains the file protections that people ask
 about most, and their limits. `/security` shows the same rules before you
-confirm the level, and the inspector shows what is in force.
+confirm the level, and the inspector shows what is in force. When the image
+tool is refused a protected file, Corbanu explains it on screen, as for a
+refused command, and lists it in the inspector (#1087).
 
 ## Credential files
 
@@ -271,8 +273,10 @@ me again" or in a config file, an administrator's included (#1001): such a
 tool is decided as if it had no "always allow" setting (by you, or by your
 approvals reviewer or hooks, as usual). One you choose while Aggressive is on applies
 under it too; Corbanu records MCP ones in `mcp-approvals-aggressive.json` in
-its home, for connectors and for servers your own config defines (not one a
-project or plugin defines).
+its home, for connectors and for servers defined only in your own config.
+For any other server (one a project or plugin defines or changes), "always
+allow" chosen under Aggressive lasts only for that session while Aggressive
+is on, and the prompt says so (#1057).
 
 ## Other Corbanu Terminals on the same home
 
@@ -285,9 +289,10 @@ then on, these apply there:
 - Core's protections;
 - approval for every command, from each pane's next turn;
 - the end of its grants and "for session" approvals;
-- for a command or file edit whose approval prompt is still open: the answer
-  isn't used and nothing runs; the agent can ask again under Aggressive
-  (#1001).
+- for a command or file edit whose approval prompt is still open, or that is
+  still being prepared: the answer isn't used and nothing runs; the agent can
+  ask again under Aggressive (#1001, #1057). An MCP tool call whose prompt is
+  still open is decided again under Aggressive instead (#1001).
 
 A running `corbanu exec` can't ask you for approval, so from then on it
 refuses every command that isn't known read-only.
@@ -303,4 +308,7 @@ before you restart, also when you confirm before the window's own session
 has started (#978); that session then starts with them too (#1015). A window
 on a remote app server is not covered: its sessions run in the server's
 process, which, if it runs on this Corbanu home, takes the saved level as
-another Corbanu Terminal would.
+another Corbanu Terminal would. The level picker in `/security` says so in
+such a window and doesn't offer "restart now": Corbanu Terminal starts against
+such a server only under Permissive, so start it locally to use the level
+(#1047).

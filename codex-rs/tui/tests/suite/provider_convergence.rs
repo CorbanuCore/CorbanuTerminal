@@ -7,13 +7,12 @@ use std::time::UNIX_EPOCH;
 use anyhow::Result;
 use anyhow::ensure;
 use core_test_support::responses;
-use sha2::Digest;
-use sha2::Sha256;
 use tempfile::tempdir;
 use uuid::Uuid;
 use wiremock::MockServer;
 
 use crate::support::chat_ready;
+use crate::support::file_hash::sha256_file;
 use crate::support::secret_scan;
 use crate::support::tmux::CommandSpec;
 use crate::support::tmux::SessionSpec;
@@ -611,7 +610,7 @@ async fn response_request_count(server: &MockServer) -> usize {
 fn register_evidence(tmux: &TmuxServer, home: &Path, binary: &Path) -> Result<()> {
     let metadata = fs::metadata(binary)?;
     let modified = metadata.modified()?.duration_since(UNIX_EPOCH)?;
-    let hash = format!("{:x}", Sha256::digest(fs::read(binary)?));
+    let hash = sha256_file(binary)?;
     fs::write(
         home.join("binary.sha256"),
         format!("{hash}  {}\n", binary.display()),

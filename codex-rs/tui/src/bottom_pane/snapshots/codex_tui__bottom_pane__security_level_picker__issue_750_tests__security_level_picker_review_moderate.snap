@@ -32,9 +32,10 @@ in Corbanu Terminal sessions and their child agents:
     approvals off they are refused
 • Secrets
   Moderate: only allowlisted environment variables reach agent commands, and the
-    vault store, sign-in files and config stay unreadable to them even when you
-    approve (secretless_agent_launch); managed secrets and stored vault
-    credentials are removed from command output (secret_output_gate)
+    vault store, sign-in files, config and CLI tokens (such as ~/.aws/
+    credentials and ~/.netrc) stay unreadable to them even when you approve
+    (secretless_agent_launch); managed secrets and stored vault credentials are
+    removed from command output (secret_output_gate)
 • Model keys
   Moderate: from the next start, provider API keys from the environment or the
     vault are held by the isolated credential broker, which sends model requests
@@ -58,11 +59,15 @@ Screened search routing (PF-32), Brokered browser login (PF-37), Quarantine (PF-
 Unchanged: model and provider, your approval, sandbox, network and web search
 settings, MCP servers, apps and hooks (they run outside the sandbox), and wallet
 scopes.
-Core's level becomes Moderate from the next start (this session's policy does
-not run in this process yet): agent commands always stay in the sandbox; unless
-you approve that one command, they cannot read credential files in your home
-folder or Corbanu's sign-in, vault, config, history and state, or write files
-that run code later (Corbanu's security state and keys stay closed to them even
-then); after untrusted content, protected actions need your fresh approval.
+Core's level is saved as Moderate as soon as you confirm: agent commands
+always stay in the sandbox; unless you approve that one command, they cannot
+read credential files in your home folder or Corbanu's sign-in, vault, config,
+history and state, or write files that run code later (Corbanu's security state
+and keys stay closed to them even then, and, with secretless_agent_launch on,
+so do the CLI tokens and Corbanu files it keeps); after untrusted content,
+protected actions need your fresh approval. This window's session has not
+started yet: when it starts here, it takes Core's Moderate rules, and so do the
+other sessions you start here. Model keys through the credential broker start
+when you restart Corbanu Terminal (you can restart right after saving).
 Your config.toml is not modified.
 enter confirm and save · esc back, nothing changes

@@ -59,8 +59,8 @@ create_openai_url(None, 3);
 Install the required tooling once:
 
 ```bash
-cargo install --locked cargo-dylint dylint-link
-rustup toolchain install nightly-2025-09-18 \
+cargo install --locked cargo-dylint@6.1.1 dylint-link@6.1.1
+rustup toolchain install nightly-2026-08-08 \
   --component llvm-tools-preview \
   --component rustc-dev \
   --component rust-src
@@ -82,15 +82,19 @@ The package is not a full Rust toolchain. Running the prebuilt path still
 requires the pinned nightly toolchain to be installed via `rustup`:
 
 ```bash
-rustup toolchain install nightly-2025-09-18 \
+rustup toolchain install nightly-2026-08-08 \
   --component llvm-tools-preview \
   --component rustc-dev \
   --component rust-src
 ```
 
-The checked-in DotSlash file lives at `tools/argument-comment-lint/argument-comment-lint`.
-`run-prebuilt-linter.py` resolves that file via `dotslash` and is the path used by
-targeted package runs such as `just argument-comment-lint -p codex-core`.
+The checked-in DotSlash file lives at `tools/argument-comment-lint/argument-comment-lint`
+and `run-prebuilt-linter.py` resolves it via `dotslash`. It still points at
+upstream's `rust-v0.117.0-alpha.2` package, built for `nightly-2025-09-18`,
+which can't lint code that uses newer std APIs such as `Atomic*::try_update`.
+Until a Corbanu package for the current nightly is published (#1130), targeted
+package runs such as `just argument-comment-lint -p codex-core` build the lint
+from source with `run.py` (install `cargo-dylint` and `dylint-link` as above).
 Repo-wide runs now go through a native Bazel aspect that invokes a custom
 `rustc_driver` and reuses Bazel-managed Rust dependency metadata instead of
 spawning `cargo dylint` once per crate. The source-build path remains available
@@ -104,7 +108,7 @@ argument-comment-lint/
     argument-comment-lint
     cargo-dylint
   lib/
-    libargument_comment_lint@nightly-2025-09-18-<target>.dylib|so
+    libargument_comment_lint@nightly-2026-08-08-<target>.dylib|so
 ```
 
 On Windows the same layout is published as a `.zip`, with `.exe` and `.dll`
@@ -113,7 +117,7 @@ filenames instead.
 DotSlash resolves the package entrypoint to `argument-comment-lint/bin/argument-comment-lint`
 (or `.exe` on Windows). That runner finds the sibling bundled `cargo-dylint`
 binary and the single packaged Dylint library under `lib/`, normalizes the
-host-qualified nightly filename to the plain `nightly-2025-09-18` channel when
+host-qualified nightly filename to the plain `nightly-2026-08-08` channel when
 needed, and then invokes `cargo-dylint dylint --lib-path <that-library>` with
 the repo's default `DYLINT_RUSTFLAGS` and `CARGO_INCREMENTAL=0` settings.
 

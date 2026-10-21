@@ -121,6 +121,7 @@ fn params() -> codex_protocol::protocol::ConversationStartParams {
 
 async fn session(
     home: &std::path::Path,
+    cwd: &std::path::Path,
     endpoint: &str,
     sideband: &Sideband,
     accounting: crate::config::AccountingMode,
@@ -128,7 +129,7 @@ async fn session(
     Arc<crate::session::session::Session>,
     Arc<codex_state::StateRuntime>,
 )> {
-    realtime_ledger_session_with(home, endpoint, accounting, |config| {
+    realtime_ledger_session_with(home, cwd, endpoint, accounting, |config| {
         config.experimental_realtime_ws_base_url = Some(sideband.endpoint.clone());
         config.experimental_realtime_webrtc_call_base_url = Some(endpoint.to_string());
     })
@@ -186,7 +187,15 @@ async fn pf_889_webrtc_sideband_normal_end_observes_existing_attempt() -> anyhow
     let endpoint = format!("{}/v1", http.uri());
     let sideband = sideband().await?;
     let home = tempfile::tempdir()?;
-    let (owner, db) = session(home.path(), &endpoint, &sideband, provider_bound(&endpoint)).await?;
+    let test_cwd = tempfile::tempdir()?;
+    let (owner, db) = session(
+        home.path(),
+        test_cwd.path(),
+        &endpoint,
+        &sideband,
+        provider_bound(&endpoint),
+    )
+    .await?;
     start(&owner, "webrtc-fixture").await?;
     connected(&sideband).await?;
     let ended_after = chrono::Utc::now().timestamp_millis();
@@ -207,8 +216,10 @@ async fn pf_889_webrtc_collection_off_keeps_session_unrecorded() -> anyhow::Resu
     let endpoint = format!("{}/v1", http.uri());
     let sideband = sideband().await?;
     let home = tempfile::tempdir()?;
+    let test_cwd = tempfile::tempdir()?;
     let (owner, db) = session(
         home.path(),
+        test_cwd.path(),
         &endpoint,
         &sideband,
         crate::config::AccountingMode::Disabled,
@@ -227,7 +238,15 @@ async fn pf_889_webrtc_requested_close_observes_end_before_return() -> anyhow::R
     let endpoint = format!("{}/v1", http.uri());
     let sideband = sideband().await?;
     let home = tempfile::tempdir()?;
-    let (owner, db) = session(home.path(), &endpoint, &sideband, provider_bound(&endpoint)).await?;
+    let test_cwd = tempfile::tempdir()?;
+    let (owner, db) = session(
+        home.path(),
+        test_cwd.path(),
+        &endpoint,
+        &sideband,
+        provider_bound(&endpoint),
+    )
+    .await?;
     start(&owner, "webrtc-fixture").await?;
     connected(&sideband).await?;
     let ended_after = chrono::Utc::now().timestamp_millis();
@@ -243,7 +262,15 @@ async fn pf_889_webrtc_transport_drop_observes_existing_attempt() -> anyhow::Res
     let endpoint = format!("{}/v1", http.uri());
     let sideband = sideband().await?;
     let home = tempfile::tempdir()?;
-    let (owner, db) = session(home.path(), &endpoint, &sideband, provider_bound(&endpoint)).await?;
+    let test_cwd = tempfile::tempdir()?;
+    let (owner, db) = session(
+        home.path(),
+        test_cwd.path(),
+        &endpoint,
+        &sideband,
+        provider_bound(&endpoint),
+    )
+    .await?;
     start(&owner, "webrtc-fixture").await?;
     connected(&sideband).await?;
     let ended_after = chrono::Utc::now().timestamp_millis();
@@ -260,7 +287,15 @@ async fn pf_889_webrtc_cancel_pending_sideband_preserves_creation_attempt() -> a
     let endpoint = format!("{}/v1", http.uri());
     let sideband = sideband_handshake(Handshake::Pending).await?;
     let home = tempfile::tempdir()?;
-    let (owner, db) = session(home.path(), &endpoint, &sideband, provider_bound(&endpoint)).await?;
+    let test_cwd = tempfile::tempdir()?;
+    let (owner, db) = session(
+        home.path(),
+        test_cwd.path(),
+        &endpoint,
+        &sideband,
+        provider_bound(&endpoint),
+    )
+    .await?;
     start(&owner, "webrtc-fixture").await?;
     tokio::time::timeout(Duration::from_secs(5), sideband.accepted.recv()).await??;
     let ended_after = chrono::Utc::now().timestamp_millis();
@@ -297,7 +332,15 @@ async fn pf_889_webrtc_replacement_shutdown_and_stale_stop_keep_attempt_identity
     let endpoint = format!("{}/v1", http.uri());
     let sideband = sideband().await?;
     let home = tempfile::tempdir()?;
-    let (owner, db) = session(home.path(), &endpoint, &sideband, provider_bound(&endpoint)).await?;
+    let test_cwd = tempfile::tempdir()?;
+    let (owner, db) = session(
+        home.path(),
+        test_cwd.path(),
+        &endpoint,
+        &sideband,
+        provider_bound(&endpoint),
+    )
+    .await?;
     start(&owner, "first").await?;
     connected(&sideband).await?;
     let first_stop = owner
@@ -368,7 +411,15 @@ async fn pf_889_webrtc_http_failure_does_not_invent_sideband_end() -> anyhow::Re
     let endpoint = format!("{}/v1", http.uri());
     let sideband = sideband().await?;
     let home = tempfile::tempdir()?;
-    let (owner, db) = session(home.path(), &endpoint, &sideband, provider_bound(&endpoint)).await?;
+    let test_cwd = tempfile::tempdir()?;
+    let (owner, db) = session(
+        home.path(),
+        test_cwd.path(),
+        &endpoint,
+        &sideband,
+        provider_bound(&endpoint),
+    )
+    .await?;
     assert!(start(&owner, "webrtc-fixture").await.is_err());
     assert!(owner.conversation.running_state().await.is_none());
     let (attempts, observations) = realtime_ledger_settled(&db, /*count*/ 0).await?;

@@ -8,6 +8,7 @@ use super::invocation::Code;
 use super::invocation::Invocation;
 use super::shell::SimpleCommand;
 use super::shell::basename;
+use super::work;
 use base64::Engine;
 
 /// Bytes of one script file the classifier reads.
@@ -28,6 +29,7 @@ pub(super) fn joined_literals(text: &str) -> Vec<String> {
     let mut index = 0;
     let mut gap = String::new();
     while index < chars.len() {
+        work::step();
         let quote = chars[index];
         if !matches!(quote, '\'' | '"' | '`') {
             gap.push(quote);
@@ -38,6 +40,7 @@ pub(super) fn joined_literals(text: &str) -> Vec<String> {
         let mut escaped = false;
         index += 1;
         while index < chars.len() && chars[index] != quote {
+            work::step();
             if chars[index] == '\\' && index + 1 < chars.len() {
                 let (decoded, used) = decode_escape(&chars[index + 1..]);
                 // #841: only an escape that changes the text hides
@@ -226,6 +229,7 @@ pub(super) fn command_word(words: &[String]) -> Option<(usize, String)> {
     ];
     let mut index = 0;
     while let Some(word) = words.get(index) {
+        work::step();
         let name = basename(word).to_lowercase();
         let assignment = word.contains('=') && !word.starts_with('-');
         if assignment || KEYWORDS.contains(&name.as_str()) {
@@ -245,6 +249,7 @@ pub(super) fn command_word(words: &[String]) -> Option<(usize, String)> {
         index += 1;
         let mut operands = *operands;
         while let Some(option) = words.get(index) {
+            work::step();
             if option.starts_with('-') {
                 // `taskset -c 0 cmd` names the CPUs in the option instead.
                 if name == "taskset" && matches!(option.as_str(), "-c" | "--cpu-list") {
@@ -320,6 +325,7 @@ pub(super) fn opaque_execution(commands: &[SimpleCommand]) -> bool {
         feeders.extend(command.pipe_from);
         let mut seen = std::collections::HashSet::new();
         while let Some(index) = feeders.pop() {
+            work::step();
             if !seen.insert(index) {
                 continue;
             }
@@ -340,6 +346,7 @@ pub(super) fn opaque_execution(commands: &[SimpleCommand]) -> bool {
 pub(super) fn patch_additions(patch: &str) -> Vec<(String, String)> {
     let mut files: Vec<(String, String)> = Vec::new();
     for line in patch.lines() {
+        work::step();
         let header = ["*** Add File: ", "*** Update File: ", "*** Move to: "]
             .iter()
             .find_map(|prefix| line.strip_prefix(prefix));

@@ -161,9 +161,11 @@ class PrArgumentCommentLintTest(unittest.TestCase):
         # run.py adds --all-targets (tests included) when no target is given.
         self.assertRegex(
             job,
-            r'python3 tools/argument-comment-lint/run\.py "\$\{args\[@\]\}" -- '
-            r"--ignore-rust-version --keep-going",
+            r'(?m)python3 tools/argument-comment-lint/run\.py "\$\{args\[@\]\}" -- --keep-going$',
         )
+        # #1030: the lint nightly is newer than the stable toolchain, so any
+        # crate that builds on stable meets its rust-version on the nightly too.
+        self.assertNotIn("--ignore-rust-version", job)
         self.assertNotRegex(job, r"--(lib|bins|tests|all-targets)\b")
 
     def test_lint_is_required(self) -> None:
