@@ -3623,112 +3623,79 @@ fn legacy_provider_auth_replacements_are_atomic_and_leave_no_temporary_file() {
     );
 }
 
-// DIAGNOSTIC ONLY (#1201), never to be merged, round 2: the real test body,
-// sequentially, with per-step timestamps; and an inline (no batch file) helper.
+// DIAGNOSTIC ONLY (#1201), never to be merged, round 3: the real helper run
+// while another thread spawns this test binary, as the pf_28 test does.
 #[cfg(windows)]
 mod diag_1201 {
     use super::*;
+    use std::sync::atomic::AtomicBool;
     use std::time::Instant;
 
-    const TRACED: &str = "@echo off\r\n>>trace.txt echo b %time%\r\nsetlocal EnableExtensions DisableDelayedExpansion\r\nset \"first_line=\"\r\n<tokens.txt set /p \"first_line=\"\r\n>>trace.txt echo r %time%\r\nif not defined first_line exit /b 1\r\nsetlocal EnableDelayedExpansion\r\necho(!first_line!\r\nendlocal\r\n>>trace.txt echo p %time%\r\ntype nul > tokens.next\r\nfor /f \"usebackq skip=1 delims=\" %%L in (\"tokens.txt\") do >>tokens.next echo(%%L\r\n>>trace.txt echo f %time%\r\nmove /y tokens.next tokens.txt >nul\r\n>>trace.txt echo e %time%\r\n";
+    #[test]
+    fn diag_1201_child_noop() {}
 
-    fn ms(t: Instant) -> u128 {
-        t.elapsed().as_millis()
+    async fn one_run(script: &ProviderAuthScript) -> (u128, u128, u128, String) {
+        let mut command = tokio::process::Command::new("cmd.exe");
+        command
+            .args(&script.args)
+            .current_dir(script.tempdir.path())
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true);
+        let t0 = Instant::now();
+        let child = command.spawn().expect("spawn");
+        let spawn = t0.elapsed().as_millis();
+        let pid = child.id();
+        let out = tokio::time::timeout(std::time::Duration::from_secs(60), child.wait_with_output())
+            .await;
+        let total = t0.elapsed().as_millis();
+        let text = match out {
+            Ok(Ok(o)) => format!("{:?} {:?}", o.status.code(), String::from_utf8_lossy(&o.stdout).trim()),
+            other => format!("{other:?}"),
+        };
+        (spawn, total, u128::from(pid.unwrap_or(0)), text)
     }
 
-    #[tokio::test]
-    async fn diag_1201_real_body_sequential() {
-        let status = std::process::Command::new("powershell")
-            .args([
-                "-NoProfile",
-                "-Command",
-                "$s=Get-MpComputerStatus; \"rtp=$($s.RealTimeProtectionEnabled) ioav=$($s.IoavProtectionEnabled) bm=$($s.BehaviorMonitorEnabled)\"",
-            ])
-            .output()
-            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-            .unwrap_or_else(|e| format!("{e}"));
-        let mut report = format!("defender: {status}\n");
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn diag_1201_with_concurrent_self_spawns() {
+        let stop = Arc::new(AtomicBool::new(false));
+        let spawner = {
+            let stop = Arc::clone(&stop);
+            std::thread::spawn(move || {
+                let mut times = Vec::new();
+                while !stop.load(Ordering::Relaxed) {
+                    let t = Instant::now();
+                    let _ = std::process::Command::new(std::env::current_exe().unwrap())
+                        .args(["--exact", "auth::manager::tests::diag_1201::diag_1201_child_noop", "--test-threads=1"])
+                        .output();
+                    times.push(t.elapsed().as_millis());
+                }
+                times
+            })
+        };
+        let mut report = String::new();
         let mut totals = Vec::new();
-        for i in 0..30 {
-            let script =
-                ProviderAuthScript::new(&["provider-token", "refreshed-provider-token"]).unwrap();
-            std::fs::write(script.tempdir.path().join("print-token.cmd"), TRACED).unwrap();
-            let mut auth_config = script.auth_config();
-            auth_config.refresh_interval_ms = 0;
-            auth_config.timeout_ms = std::num::NonZeroU64::new(60_000).unwrap();
-            let manager = AuthManager::external_bearer_only(auth_config);
-            let mut recovery = manager.unauthorized_recovery();
-            let t0 = Instant::now();
-            let first = manager
-                .auth()
-                .await
-                .and_then(|a| a.api_key().map(str::to_string));
-            let t_first = ms(t0);
-            let t1 = Instant::now();
-            let next = recovery.next().await.map(|_| ()).map_err(|e| e.to_string());
-            let t_second = ms(t1);
-            let trace = std::fs::read_to_string(script.tempdir.path().join("trace.txt"))
-                .unwrap_or_default()
-                .replace("\r\n", "|");
-            totals.push(t_first.max(t_second));
-            if t_first > 2_000 || t_second > 2_000 || first.is_none() || next.is_err() {
-                report.push_str(&format!(
-                    "SLOW i={i} first={t_first}ms ok={} refresh={t_second}ms {next:?} trace={trace}\n",
-                    first.is_some()
-                ));
-            }
-        }
-        totals.sort_unstable();
-        report.push_str(&format!(
-            "real-body: n=30 p50={} p90={} max={}\n",
-            totals[15], totals[27], totals[29]
-        ));
-        // Inline helper: one command line, no batch file.
-        let mut inline = Vec::new();
-        for i in 0..30 {
+        let mut spawns = Vec::new();
+        for i in 0..60 {
             let script =
                 ProviderAuthScript::new(&["provider-token", "refreshed-provider-token"]).unwrap();
             for run in 0..2 {
-                let mut std_command = std::process::Command::new("cmd.exe");
-                {
-                    use std::os::windows::process::CommandExt;
-                    std_command.raw_arg(r#"/d /s /v:on /c "set "t=" & (set /p t=<tokens.txt) & (echo(!t!) & (for /f "usebackq skip=1 delims=" %L in ("tokens.txt") do @echo(%L)>tokens.next & move /y tokens.next tokens.txt >nul""#);
-                }
-                std_command
-                    .current_dir(script.tempdir.path())
-                    .stdin(std::process::Stdio::null());
-                let mut command = tokio::process::Command::from(std_command);
-                command.kill_on_drop(true);
-                let t = Instant::now();
-                let out =
-                    tokio::time::timeout(std::time::Duration::from_secs(60), command.output())
-                        .await;
-                let elapsed = ms(t);
-                inline.push(elapsed);
-                let text = match &out {
-                    Ok(Ok(o)) => format!(
-                        "status={:?} out={:?} err={:?}",
-                        o.status.code(),
-                        String::from_utf8_lossy(&o.stdout).trim(),
-                        String::from_utf8_lossy(&o.stderr).trim()
-                    ),
-                    other => format!("{other:?}"),
-                };
-                let expected = if run == 0 {
-                    "provider-token"
-                } else {
-                    "refreshed-provider-token"
-                };
-                if elapsed > 2_000 || !text.contains(&format!("out={expected:?}")) || i == 0 {
-                    report.push_str(&format!("INLINE i={i} run={run} {elapsed}ms {text}\n"));
+                let (spawn, total, pid, text) = one_run(&script).await;
+                spawns.push(spawn);
+                totals.push(total);
+                if total > 1_000 || spawn > 200 {
+                    report.push_str(&format!("SLOW i={i} run={run} spawn={spawn}ms total={total}ms pid={pid} {text}\n"));
                 }
             }
         }
-        inline.sort_unstable();
-        report.push_str(&format!(
-            "inline: n=60 p50={} p90={} max={}\n",
-            inline[30], inline[54], inline[59]
-        ));
-        panic!("DIAG-1201 round 2 (intentional failure)\n{report}");
+        stop.store(true, Ordering::Relaxed);
+        let mut child_times = spawner.join().unwrap();
+        for v in [&mut totals, &mut spawns, &mut child_times] {
+            v.sort_unstable();
+        }
+        let q = |v: &Vec<u128>| format!("n={} p50={} p90={} max={}", v.len(), v[v.len() / 2], v[v.len() * 9 / 10], v[v.len() - 1]);
+        report.push_str(&format!("helper total: {}\nhelper spawn: {}\nself child: {}\n", q(&totals), q(&spawns), q(&child_times)));
+        panic!("DIAG-1201 round 3 (intentional failure)\n{report}");
     }
 }
