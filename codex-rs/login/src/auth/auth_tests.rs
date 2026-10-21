@@ -3622,3 +3622,152 @@ fn legacy_provider_auth_replacements_are_atomic_and_leave_no_temporary_file() {
         vec![std::ffi::OsString::from("provider_auth.json")]
     );
 }
+
+// DIAGNOSTIC ONLY (#1201), never to be merged: times each phase of the
+// cmd.exe provider-auth helper under the Windows Bazel lane's load.
+#[cfg(windows)]
+mod diag_1201 {
+    use super::ProviderAuthScript;
+    use std::time::Duration;
+    use std::time::Instant;
+    use tokio::io::AsyncReadExt;
+
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+    #[derive(Debug)]
+    struct Run {
+        variant: &'static str,
+        spawn_ms: u128,
+        exit_ms: Option<u128>,
+        stdout_eof_ms: Option<u128>,
+        stderr_eof_ms: Option<u128>,
+        status: Option<i32>,
+        stdout: String,
+        trace: String,
+    }
+
+    async fn run(
+        script: &ProviderAuthScript,
+        variant: &'static str,
+        flags: Option<u32>,
+        args: &[String],
+    ) -> Run {
+        let dir = script.tempdir.path();
+        let mut command = tokio::process::Command::new("cmd.exe");
+        command
+            .args(args)
+            .current_dir(dir)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true);
+        if let Some(flags) = flags {
+            command.creation_flags(flags);
+        }
+        let t0 = Instant::now();
+        let mut child = command.spawn().expect("spawn cmd.exe");
+        let spawn_ms = t0.elapsed().as_millis();
+        let mut stdout = child.stdout.take().expect("stdout");
+        let mut stderr = child.stderr.take().expect("stderr");
+        let limit = Duration::from_secs(30);
+        let out_fut = async {
+            let mut buf = Vec::new();
+            let ok = tokio::time::timeout(limit, stdout.read_to_end(&mut buf)).await;
+            (ok.is_ok().then(|| t0.elapsed().as_millis()), buf)
+        };
+        let err_fut = async {
+            let mut buf = Vec::new();
+            let ok = tokio::time::timeout(limit, stderr.read_to_end(&mut buf)).await;
+            ok.is_ok().then(|| t0.elapsed().as_millis())
+        };
+        let wait_fut = async {
+            match tokio::time::timeout(limit, child.wait()).await {
+                Ok(Ok(status)) => (Some(t0.elapsed().as_millis()), status.code()),
+                _ => (None, None),
+            }
+        };
+        let ((stdout_eof_ms, out), stderr_eof_ms, (exit_ms, status)) =
+            tokio::join!(out_fut, err_fut, wait_fut);
+        let trace = std::fs::read_to_string(dir.join("trace.txt")).unwrap_or_default();
+        Run {
+            variant,
+            spawn_ms,
+            exit_ms,
+            stdout_eof_ms,
+            stderr_eof_ms,
+            status,
+            stdout: String::from_utf8_lossy(&out).trim().to_string(),
+            trace: trace.replace("\r\n", "|"),
+        }
+    }
+
+    async fn scenario(i: usize) -> Vec<Run> {
+        let mut runs = Vec::new();
+        let script = ProviderAuthScript::new(&["provider-token", "refreshed-provider-token"])
+            .expect("script");
+        let (variant, flags) = match i % 3 {
+            0 => ("plain", None),
+            1 => ("no_window", Some(CREATE_NO_WINDOW)),
+            _ => ("traced", None),
+        };
+        let args = if variant == "traced" {
+            let traced = std::fs::read_to_string(script.tempdir.path().join("print-token.cmd"))
+                .expect("script")
+                .replace(
+                    "@echo off\n",
+                    "@echo off\n>>trace.txt echo begin %time%\n",
+                )
+                .replace("echo(!first_line!\n", "echo(!first_line!\n>>trace.txt echo printed %time%\n")
+                .replace(
+                    "type nul > tokens.next\n",
+                    ">>trace.txt echo rewrite %time%\ntype nul > tokens.next\n",
+                )
+                .replace(
+                    "move /y tokens.next tokens.txt >nul\n",
+                    ">>trace.txt echo move %time%\nmove /y tokens.next tokens.txt >nul\n>>trace.txt echo end %time% %errorlevel%\n",
+                );
+            std::fs::write(script.tempdir.path().join("print-token.cmd"), traced).expect("write");
+            script.args.clone()
+        } else {
+            script.args.clone()
+        };
+        runs.push(run(&script, variant, flags, &args).await);
+        runs.push(run(&script, variant, flags, &args).await);
+        let bare: Vec<String> = ["/d", "/s", "/c", "exit 0"].map(String::from).to_vec();
+        runs.push(run(&script, "bare", flags, &bare).await);
+        runs
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn diag_1201_cmd_helper_phases() {
+        let mut all = Vec::new();
+        let tasks: Vec<_> = (0..60).map(|i| tokio::spawn(scenario(i))).collect();
+        for task in tasks {
+            all.extend(task.await.expect("scenario"));
+        }
+        let mut report = String::new();
+        let mut by_variant = std::collections::BTreeMap::<&str, Vec<u128>>::new();
+        for run in &all {
+            let total = [run.exit_ms, run.stdout_eof_ms, run.stderr_eof_ms]
+                .into_iter()
+                .map(|t| t.unwrap_or(99_999))
+                .max()
+                .unwrap_or(0);
+            by_variant.entry(run.variant).or_default().push(total);
+            if total > 3_000 || run.status != Some(0) {
+                report.push_str(&format!("SLOW/BAD {run:?}\n"));
+            }
+        }
+        for (variant, mut totals) in by_variant {
+            totals.sort_unstable();
+            let n = totals.len();
+            report.push_str(&format!(
+                "{variant}: n={n} p50={} p90={} max={}\n",
+                totals[n / 2],
+                totals[n * 9 / 10],
+                totals[n - 1]
+            ));
+        }
+        panic!("DIAG-1201 report (intentional failure)\n{report}");
+    }
+}
