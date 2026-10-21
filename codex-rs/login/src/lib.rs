@@ -5,6 +5,14 @@ pub mod token_data;
 
 mod device_code_auth;
 mod outbound_proxy;
+
+/// #1201: unit tests that run a provider-auth helper hold this for reading;
+/// the one test that spawns a copy of this test binary holds it for writing.
+/// On the Windows test lane a helper run took seconds instead of
+/// milliseconds while the process was spawning copies of itself, enough to
+/// exceed the helper's 10 s timeout.
+#[cfg(test)]
+pub(crate) static TEST_CHILD_PROCESSES: std::sync::RwLock<()> = std::sync::RwLock::new(());
 mod pkce;
 mod server;
 mod success_page;

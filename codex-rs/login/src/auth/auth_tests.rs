@@ -1619,6 +1619,13 @@ struct ProviderAuthScript {
     tempdir: TempDir,
     command: String,
     args: Vec<String>,
+    _helper_runs: std::sync::RwLockReadGuard<'static, ()>,
+}
+
+fn helper_runs() -> std::sync::RwLockReadGuard<'static, ()> {
+    crate::TEST_CHILD_PROCESSES
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 impl ProviderAuthScript {
@@ -1690,6 +1697,7 @@ move /y tokens.next tokens.txt >nul
             tempdir,
             command,
             args,
+            _helper_runs: helper_runs(),
         })
     }
 
@@ -1729,6 +1737,7 @@ exit 1
             tempdir,
             command,
             args,
+            _helper_runs: helper_runs(),
         })
     }
 
@@ -3665,6 +3674,9 @@ mod diag_1201 {
             std::thread::spawn(move || {
                 let mut times = Vec::new();
                 while !stop.load(Ordering::Relaxed) {
+                    let _no_helpers = crate::TEST_CHILD_PROCESSES
+                        .write()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
                     let t = Instant::now();
                     let _ = std::process::Command::new(std::env::current_exe().unwrap())
                         .args(["--exact", "auth::manager::tests::diag_1201::diag_1201_child_noop", "--test-threads=1"])
@@ -3696,6 +3708,6 @@ mod diag_1201 {
         }
         let q = |v: &Vec<u128>| format!("n={} p50={} p90={} max={}", v.len(), v[v.len() / 2], v[v.len() * 9 / 10], v[v.len() - 1]);
         report.push_str(&format!("helper total: {}\nhelper spawn: {}\nself child: {}\n", q(&totals), q(&spawns), q(&child_times)));
-        panic!("DIAG-1201 round 3 (intentional failure)\n{report}");
+        panic!("DIAG-1201 round 4, with the #1201 lock (intentional failure)\n{report}");
     }
 }
