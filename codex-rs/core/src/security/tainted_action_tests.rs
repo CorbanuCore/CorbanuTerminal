@@ -3780,3 +3780,147 @@ fn issue_1141_1142_checks_are_linear() {
         });
     }
 }
+
+/// #691 probe (throwaway): what the classifier finds with this platform's
+/// own paths. Always fails, printing the table.
+#[test]
+fn issue_691_probe_native_paths() {
+    let (home, user, cwd, sep) = if cfg!(windows) {
+        (
+            r"C:\Users\fixture\.corbanu",
+            r"C:\Users\fixture",
+            r"C:\work",
+            "\\",
+        )
+    } else {
+        ("/home/fixture/.corbanu", "/home/fixture", "/work", "/")
+    };
+    let classify = |cwd: &str, command: &[&str]| {
+        classify_with(
+            &shell_in(cwd, command),
+            Path::new(home),
+            Some(Path::new(user)),
+        )
+    };
+    let patch = |file: &str| {
+        classify_with(
+            &ApprovalAction::ApplyPatch {
+                id: "call".into(),
+                environment_id: "local".into(),
+                cwd: abs(cwd),
+                files: vec![abs(file)],
+                patch: String::new(),
+            },
+            Path::new(home),
+            Some(Path::new(user)),
+        )
+    };
+    let auth = format!("{home}{sep}auth.json");
+    let config = format!("{home}{sep}config.toml");
+    let keys = format!("{user}{sep}.ssh{sep}authorized_keys");
+    let fwd = auth.replace('\\', "/");
+    let mut rows: Vec<String> = Vec::new();
+    let mut row = |label: &str, got: Option<ProtectedActionKind>| {
+        rows.push(format!("{label} => {got:?}"));
+    };
+    row(&format!("apply_patch {config}"), patch(&config));
+    row(&format!("apply_patch {keys}"), patch(&keys));
+    row(
+        &format!("apply_patch {cwd}{sep}src{sep}main.rs"),
+        patch(&format!("{cwd}{sep}src{sep}main.rs")),
+    );
+    for (label, command) in [
+        (
+            "cmd type <auth>",
+            vec!["cmd.exe".to_string(), "/c".into(), format!("type {auth}")],
+        ),
+        (
+            "powershell Get-Content <auth>",
+            vec![
+                "powershell.exe".into(),
+                "-NoProfile".into(),
+                "-Command".into(),
+                format!("Get-Content {auth}"),
+            ],
+        ),
+        (
+            "powershell Get-Content $env:USERPROFILE\\.ssh\\id_ed25519",
+            vec![
+                "powershell.exe".into(),
+                "-Command".into(),
+                "Get-Content $env:USERPROFILE\\.ssh\\id_ed25519".into(),
+            ],
+        ),
+        (
+            "powershell Get-Content ~\\.ssh\\id_ed25519",
+            vec![
+                "powershell.exe".into(),
+                "-Command".into(),
+                "Get-Content ~\\.ssh\\id_ed25519".into(),
+            ],
+        ),
+        (
+            "powershell corbanu vault list",
+            vec![
+                "powershell.exe".into(),
+                "-Command".into(),
+                "corbanu vault list".into(),
+            ],
+        ),
+        (
+            "bash cat <auth>",
+            vec!["bash".into(), "-lc".into(), format!("cat {auth}")],
+        ),
+        (
+            "bash cat <auth with />",
+            vec!["bash".into(), "-lc".into(), format!("cat {fwd}")],
+        ),
+        (
+            "bash cat ~/.corbanu/auth.json",
+            vec![
+                "bash".into(),
+                "-lc".into(),
+                "cat ~/.corbanu/auth.json".into(),
+            ],
+        ),
+        (
+            "bash cat ~/.ssh/id_ed25519",
+            vec!["bash".into(), "-lc".into(), "cat ~/.ssh/id_ed25519".into()],
+        ),
+        (
+            "bash cat $CODEX_HOME/auth.json",
+            vec![
+                "bash".into(),
+                "-lc".into(),
+                "cat $CODEX_HOME/auth.json".into(),
+            ],
+        ),
+        (
+            "bash corbanu vault list",
+            vec!["bash".into(), "-lc".into(), "corbanu vault list".into()],
+        ),
+        (
+            "bash echo x >> ~/.bashrc",
+            vec!["bash".into(), "-lc".into(), "echo x >> ~/.bashrc".into()],
+        ),
+        (
+            "bash cat notes.txt",
+            vec!["bash".into(), "-lc".into(), "cat notes.txt".into()],
+        ),
+    ] {
+        let command: Vec<&str> = command.iter().map(String::as_str).collect();
+        row(&format!("cwd {cwd}: {label}"), classify(cwd, &command));
+    }
+    row(
+        &format!("cwd {home}: bash cat auth.json"),
+        classify(home, &["bash", "-lc", "cat auth.json"]),
+    );
+    row(
+        &format!("cwd {home}: powershell Get-Content auth.json"),
+        classify(
+            home,
+            &["powershell.exe", "-Command", "Get-Content auth.json"],
+        ),
+    );
+    panic!("#691 probe\n{}", rows.join("\n"));
+}
