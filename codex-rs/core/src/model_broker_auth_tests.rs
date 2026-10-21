@@ -545,6 +545,10 @@ async fn sec_391_config_load_applies_the_aggressive_default() {
         }
         let config = ConfigBuilder::default()
             .codex_home(home.path().to_path_buf())
+            .harness_overrides(crate::config::ConfigOverrides {
+                cwd: Some(home.path().to_path_buf()),
+                ..Default::default()
+            })
             .cli_overrides(cli)
             .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
             .build()

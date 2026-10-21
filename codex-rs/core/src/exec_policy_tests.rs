@@ -110,6 +110,10 @@ async fn test_config() -> (TempDir, Config) {
     let home = TempDir::new().expect("create temp dir");
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(home.path().to_path_buf())
+        .harness_overrides(crate::config::ConfigOverrides {
+            cwd: Some(home.path().to_path_buf()),
+            ..Default::default()
+        })
         .build()
         .await
         .expect("load default test config");
@@ -2989,4 +2993,31 @@ prefix_rule(pattern=["python3", "src/notes.py", "list"], decision="allow")
         },
     )
     .await;
+}
+
+/// The returned guard owns the cwd for every consumer after helper return (#1157).
+#[tokio::test]
+async fn issue_1157_exec_policy_config_keeps_the_owned_working_folder() {
+    let (home, config) = test_config().await;
+    assert_eq!(
+        config.cwd.as_path(),
+        home.path(),
+        "returned config must use the owned working folder"
+    );
+    let cwd = config.cwd.to_path_buf();
+    std::fs::write(cwd.join("after-return"), "owned").expect("cwd survives helper return");
+    assert_eq!(
+        std::fs::read_to_string(cwd.join("after-return")).unwrap(),
+        "owned"
+    );
+    drop(config);
+    assert!(
+        cwd.exists(),
+        "the returned owner still holds the working folder"
+    );
+    drop(home);
+    assert!(
+        !cwd.exists(),
+        "the returned owner cleans up the working folder"
+    );
 }

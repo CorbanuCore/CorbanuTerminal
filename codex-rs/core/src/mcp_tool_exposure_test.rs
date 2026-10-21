@@ -217,6 +217,10 @@ enabled = true
     .expect("write config");
     let config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::config::ConfigOverrides {
+            cwd: Some(codex_home.path().to_path_buf()),
+            ..Default::default()
+        })
         .build()
         .await
         .expect("config should build");

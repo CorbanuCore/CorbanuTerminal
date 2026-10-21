@@ -17,6 +17,10 @@ async fn config(marker: bool) -> (tempfile::TempDir, Config) {
     }
     let config = crate::config::ConfigBuilder::without_managed_config_for_tests()
         .codex_home(home.path().to_path_buf())
+        .harness_overrides(crate::config::ConfigOverrides {
+            cwd: Some(home.path().to_path_buf()),
+            ..Default::default()
+        })
         .cli_overrides(overrides)
         .build()
         .await
@@ -166,4 +170,31 @@ fn sec_439_aggressive_instructions_name_web_search_and_the_way_forward() {
     ] {
         assert!(AGGRESSIVE_INSTRUCTIONS.contains(expected), "{expected}");
     }
+}
+
+/// The returned guard owns the cwd for every consumer after helper return (#1157).
+#[tokio::test]
+async fn issue_1157_refusal_config_keeps_the_owned_working_folder() {
+    let (home, config) = config(/*marker*/ false).await;
+    assert_eq!(
+        config.cwd.as_path(),
+        home.path(),
+        "returned config must use the owned working folder"
+    );
+    let cwd = config.cwd.to_path_buf();
+    std::fs::write(cwd.join("after-return"), "owned").expect("cwd survives helper return");
+    assert_eq!(
+        std::fs::read_to_string(cwd.join("after-return")).unwrap(),
+        "owned"
+    );
+    drop(config);
+    assert!(
+        cwd.exists(),
+        "the returned owner still holds the working folder"
+    );
+    drop(home);
+    assert!(
+        !cwd.exists(),
+        "the returned owner cleans up the working folder"
+    );
 }

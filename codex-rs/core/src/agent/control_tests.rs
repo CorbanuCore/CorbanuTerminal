@@ -79,6 +79,10 @@ async fn test_config_with_cli_overrides(
     }
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(home.path().to_path_buf())
+        .harness_overrides(crate::config::ConfigOverrides {
+            cwd: Some(home.path().to_path_buf()),
+            ..Default::default()
+        })
         .cli_overrides(cli_overrides)
         .build()
         .await
@@ -210,11 +214,11 @@ fn spawn_agent_call(call_id: &str) -> ResponseItem {
 }
 
 struct AgentControlHarness {
-    _home: TempDir,
     config: Config,
     state_db: Option<StateDbHandle>,
     manager: ThreadManager,
     control: AgentControl,
+    _home: TempDir,
 }
 
 impl AgentControlHarness {
@@ -5837,5 +5841,32 @@ async fn pf_30_s02_child_result_reaches_the_parent_as_agent_data() {
         Some(MessageOrigin::External(
             codex_protocol::provenance::SourceKind::ChildAgent
         ))
+    );
+}
+
+/// The returned guard owns the cwd for every consumer after helper return (#1157).
+#[tokio::test]
+async fn issue_1157_agent_config_keeps_the_owned_working_folder() {
+    let (home, config) = test_config().await;
+    assert_eq!(
+        config.cwd.as_path(),
+        home.path(),
+        "returned config must use the owned working folder"
+    );
+    let cwd = config.cwd.to_path_buf();
+    std::fs::write(cwd.join("after-return"), "owned").expect("cwd survives helper return");
+    assert_eq!(
+        std::fs::read_to_string(cwd.join("after-return")).unwrap(),
+        "owned"
+    );
+    drop(config);
+    assert!(
+        cwd.exists(),
+        "the returned owner still holds the working folder"
+    );
+    drop(home);
+    assert!(
+        !cwd.exists(),
+        "the returned owner cleans up the working folder"
     );
 }

@@ -281,6 +281,7 @@ impl ExecutorFileSystem for FailingFileSystem {
 struct TestConfig {
     config: Config,
     user_instructions: Option<UserInstructions>,
+    _codex_home: TempDir,
 }
 
 impl Deref for TestConfig {
@@ -449,11 +450,14 @@ async fn make_config(root: &TempDir, limit: usize, instructions: Option<&str>) -
     let codex_home = TempDir::new().unwrap();
     let mut config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::config::ConfigOverrides {
+            cwd: Some(root.path().to_path_buf()),
+            ..Default::default()
+        })
         .build()
         .await
         .expect("defaults for test should always succeed");
 
-    config.cwd = root.abs();
     config.project_doc_max_bytes = limit;
 
     let user_instructions = instructions.map(|text| UserInstructions {
@@ -463,6 +467,7 @@ async fn make_config(root: &TempDir, limit: usize, instructions: Option<&str>) -
     TestConfig {
         config,
         user_instructions,
+        _codex_home: codex_home,
     }
 }
 
@@ -498,12 +503,15 @@ async fn make_config_with_project_root_markers(
     )];
     let mut config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(crate::config::ConfigOverrides {
+            cwd: Some(root.path().to_path_buf()),
+            ..Default::default()
+        })
         .cli_overrides(cli_overrides)
         .build()
         .await
         .expect("defaults for test should always succeed");
 
-    config.cwd = root.abs();
     config.project_doc_max_bytes = limit;
     let user_instructions = instructions.map(|text| UserInstructions {
         text: text.to_owned(),
@@ -512,6 +520,7 @@ async fn make_config_with_project_root_markers(
     TestConfig {
         config,
         user_instructions,
+        _codex_home: codex_home,
     }
 }
 
@@ -1635,4 +1644,158 @@ fn create_skill(codex_home: PathBuf, name: &str, description: &str) {
     fs::create_dir_all(&skill_dir).unwrap();
     let content = format!("---\nname: {name}\ndescription: {description}\n---\n\n# Body\n");
     fs::write(skill_dir.join("SKILL.md"), content).unwrap();
+}
+
+/// The loader must see the fixture cwd, not only a Config.cwd reassignment
+/// after it has already inspected the process working folder (#1157).
+#[tokio::test]
+async fn issue_1157_default_helper_loads_the_owned_working_folder() {
+    let root = TempDir::new().expect("working folder");
+    let project = root.path().join(".codex");
+    fs::create_dir(&project).expect("project folder");
+    fs::write(project.join("config.toml"), "model = \"fixture-model\"\n").expect("project config");
+    let config = make_config(&root, /*limit*/ 1024, /*instructions*/ None).await;
+    let project = AbsolutePathBuf::from_absolute_path(project).expect("absolute project folder");
+    let layer = config
+        .config_layer_stack
+        .get_layers(
+            codex_config::ConfigLayerStackOrdering::HighestPrecedenceFirst,
+            /*include_disabled*/ true,
+        )
+        .into_iter()
+        .find(|layer| {
+            matches!(&layer.name, ConfigLayerSource::Project { dot_codex_folder } if dot_codex_folder == &project)
+        });
+    assert!(
+        layer.is_some(),
+        "the loader must inspect the owned working folder"
+    );
+    let layer = layer.expect("checked inspected project layer");
+    assert!(
+        layer.is_disabled(),
+        "the inspected project remains untrusted"
+    );
+    assert!(
+        layer
+            .disabled_reason
+            .as_deref()
+            .is_some_and(|reason| !reason.is_empty()),
+        "the inspected project has a reason for remaining disabled"
+    );
+    assert_eq!(
+        layer.config.get("model").and_then(TomlValue::as_str),
+        Some("fixture-model")
+    );
+    assert_ne!(
+        config
+            .config_layer_stack
+            .effective_config()
+            .get("model")
+            .and_then(TomlValue::as_str),
+        Some("fixture-model"),
+        "inspecting an untrusted project must not apply its model"
+    );
+    assert_eq!(config.cwd, root.abs());
+    let cwd = root.path().to_path_buf();
+    fs::write(cwd.join("after-return"), "owned").expect("cwd survives helper return");
+    assert_eq!(
+        fs::read_to_string(cwd.join("after-return")).unwrap(),
+        "owned"
+    );
+    let home = config.codex_home.to_path_buf();
+    fs::write(home.join("after-return"), "owned").expect("config home survives helper return");
+    assert_eq!(
+        fs::read_to_string(home.join("after-return")).unwrap(),
+        "owned"
+    );
+    drop(config);
+    assert!(
+        !home.exists(),
+        "the fixture-owned config home is cleaned up"
+    );
+    drop(root);
+    assert!(
+        !cwd.exists(),
+        "the caller-owned working folder is cleaned up"
+    );
+}
+
+/// The loader must see the fixture cwd, not only a Config.cwd reassignment
+/// after it has already inspected the process working folder (#1157).
+#[tokio::test]
+async fn issue_1157_project_markers_helper_loads_the_owned_working_folder() {
+    let root = TempDir::new().expect("working folder");
+    let project = root.path().join(".codex");
+    fs::create_dir(&project).expect("project folder");
+    fs::write(project.join("config.toml"), "model = \"fixture-model\"\n").expect("project config");
+    let config = make_config_with_project_root_markers(
+        &root,
+        /*limit*/ 1024,
+        /*instructions*/ None,
+        &[".fixture-root"],
+    )
+    .await;
+    let project = AbsolutePathBuf::from_absolute_path(project).expect("absolute project folder");
+    let layer = config
+        .config_layer_stack
+        .get_layers(
+            codex_config::ConfigLayerStackOrdering::HighestPrecedenceFirst,
+            /*include_disabled*/ true,
+        )
+        .into_iter()
+        .find(|layer| {
+            matches!(&layer.name, ConfigLayerSource::Project { dot_codex_folder } if dot_codex_folder == &project)
+        });
+    assert!(
+        layer.is_some(),
+        "the loader must inspect the owned working folder"
+    );
+    let layer = layer.expect("checked inspected project layer");
+    assert!(
+        layer.is_disabled(),
+        "the inspected project remains untrusted"
+    );
+    assert!(
+        layer
+            .disabled_reason
+            .as_deref()
+            .is_some_and(|reason| !reason.is_empty()),
+        "the inspected project has a reason for remaining disabled"
+    );
+    assert_eq!(
+        layer.config.get("model").and_then(TomlValue::as_str),
+        Some("fixture-model")
+    );
+    assert_ne!(
+        config
+            .config_layer_stack
+            .effective_config()
+            .get("model")
+            .and_then(TomlValue::as_str),
+        Some("fixture-model"),
+        "inspecting an untrusted project must not apply its model"
+    );
+    assert_eq!(config.cwd, root.abs());
+    let cwd = root.path().to_path_buf();
+    fs::write(cwd.join("after-return"), "owned").expect("cwd survives helper return");
+    assert_eq!(
+        fs::read_to_string(cwd.join("after-return")).unwrap(),
+        "owned"
+    );
+    let home = config.codex_home.to_path_buf();
+    fs::write(home.join("after-return"), "owned").expect("config home survives helper return");
+    assert_eq!(
+        fs::read_to_string(home.join("after-return")).unwrap(),
+        "owned"
+    );
+    drop(config);
+    assert!(
+        !home.exists(),
+        "the fixture-owned config home is cleaned up"
+    );
+    drop(root);
+    assert!(
+        !cwd.exists(),
+        "the caller-owned working folder is cleaned up"
+    );
 }

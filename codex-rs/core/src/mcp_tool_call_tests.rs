@@ -1948,6 +1948,10 @@ async fn persist_codex_app_tool_approval_writes_tool_override() {
     let tmp = tempdir().expect("tempdir");
     let config = ConfigBuilder::default()
         .codex_home(tmp.path().to_path_buf())
+        .harness_overrides(crate::config::ConfigOverrides {
+            cwd: Some(tmp.path().to_path_buf()),
+            ..Default::default()
+        })
         .build()
         .await
         .expect("load config");
@@ -1998,6 +2002,10 @@ async fn persist_custom_mcp_tool_approval_writes_tool_override() {
     .expect("seed config");
     let config = ConfigBuilder::default()
         .codex_home(tmp.path().to_path_buf())
+        .harness_overrides(crate::config::ConfigOverrides {
+            cwd: Some(tmp.path().to_path_buf()),
+            ..Default::default()
+        })
         .build()
         .await
         .expect("load config");
@@ -2040,6 +2048,10 @@ approval_mode = "prompt"
     .expect("seed config");
     let config = ConfigBuilder::default()
         .codex_home(tmp.path().to_path_buf())
+        .harness_overrides(crate::config::ConfigOverrides {
+            cwd: Some(tmp.path().to_path_buf()),
+            ..Default::default()
+        })
         .build()
         .await
         .expect("load config");
@@ -2062,6 +2074,7 @@ approval_mode = "prompt"
 
 #[tokio::test]
 async fn custom_mcp_tool_approval_mode_uses_plugin_mcp_policy() {
+    let cwd = tempdir().expect("working folder");
     let (session, mut turn_context) = make_session_and_context().await;
     let codex_home = session.codex_home().await;
     write_sample_plugin_mcp(codex_home.as_path());
@@ -2084,6 +2097,10 @@ approval_mode = "approve"
     .expect("seed config");
     let config = ConfigBuilder::default()
         .codex_home(codex_home.to_path_buf())
+        .harness_overrides(crate::config::ConfigOverrides {
+            cwd: Some(cwd.path().to_path_buf()),
+            ..Default::default()
+        })
         .build()
         .await
         .expect("load config");
@@ -2102,6 +2119,7 @@ approval_mode = "approve"
 
 #[tokio::test]
 async fn custom_mcp_tool_approval_mode_uses_updated_plugin_mcp_policy_after_cache_warm() {
+    let cwd = tempdir().expect("working folder");
     let (session, mut turn_context) = make_session_and_context().await;
     let codex_home = session.codex_home().await;
     write_sample_plugin_mcp(codex_home.as_path());
@@ -2118,6 +2136,10 @@ enabled = true
     .expect("seed config");
     let initial_config = ConfigBuilder::default()
         .codex_home(codex_home.to_path_buf())
+        .harness_overrides(crate::config::ConfigOverrides {
+            cwd: Some(cwd.path().to_path_buf()),
+            ..Default::default()
+        })
         .build()
         .await
         .expect("load initial config");
@@ -2142,6 +2164,10 @@ approval_mode = "approve"
     .expect("update config");
     let updated_config = ConfigBuilder::default()
         .codex_home(codex_home.to_path_buf())
+        .harness_overrides(crate::config::ConfigOverrides {
+            cwd: Some(cwd.path().to_path_buf()),
+            ..Default::default()
+        })
         .build()
         .await
         .expect("load updated config");
@@ -2200,6 +2226,7 @@ async fn maybe_persist_mcp_tool_approval_reloads_session_config() {
 
 #[tokio::test]
 async fn maybe_persist_mcp_tool_approval_reloads_session_config_for_custom_server() {
+    let cwd = tempdir().expect("working folder");
     let (session, mut turn_context) = make_session_and_context().await;
     let codex_home = session.codex_home().await;
     std::fs::create_dir_all(&codex_home).expect("create codex home");
@@ -2210,6 +2237,10 @@ async fn maybe_persist_mcp_tool_approval_reloads_session_config_for_custom_serve
     .expect("seed config");
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.clone().to_path_buf())
+        .harness_overrides(crate::config::ConfigOverrides {
+            cwd: Some(cwd.path().to_path_buf()),
+            ..Default::default()
+        })
         .build()
         .await
         .expect("load config");
@@ -2254,6 +2285,7 @@ async fn maybe_persist_mcp_tool_approval_reloads_session_config_for_custom_serve
 
 #[tokio::test]
 async fn maybe_persist_mcp_tool_approval_writes_plugin_mcp_policy() {
+    let cwd = tempdir().expect("working folder");
     let (session, mut turn_context) = make_session_and_context().await;
     let codex_home = session.codex_home().await;
     write_sample_plugin_mcp(codex_home.as_path());
@@ -2270,6 +2302,10 @@ enabled = true
     .expect("seed config");
     let config = ConfigBuilder::default()
         .codex_home(codex_home.to_path_buf())
+        .harness_overrides(crate::config::ConfigOverrides {
+            cwd: Some(cwd.path().to_path_buf()),
+            ..Default::default()
+        })
         .build()
         .await
         .expect("load config");

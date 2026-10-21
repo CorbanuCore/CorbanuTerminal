@@ -6958,6 +6958,10 @@ async fn tui_aggressive_permissions(
     }
     let config = crate::config::ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.to_path_buf())
+        .harness_overrides(crate::config::ConfigOverrides {
+            cwd: Some(codex_home.to_path_buf()),
+            ..Default::default()
+        })
         .cli_overrides(overrides)
         .build()
         .await
