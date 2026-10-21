@@ -1,0 +1,55 @@
+# Moderate reel: ordinary work inside the project feels as under Permissive (no prompts).
+id = "modreel-normal-work"
+feature = "Under Moderate, ordinary work in the project runs without prompts"
+expected = "Under Moderate (approvals on request), the agent edits a project file with its edit tool and runs ordinary commands (the project's own script, git status) with no approval prompt."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "moderate"
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"notes.txt" = """buy milk
+"""
+"notes.py" = """import sys
+from pathlib import Path
+
+NOTES = Path(__file__).with_name("notes.txt")
+if sys.argv[1:] == ["list"]:
+    for n, line in enumerate(NOTES.read_text().splitlines(), 1):
+        print(f"{n}. {line}")
+"""
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+wait = "model:\\s+glm-5\\.3-flash"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Use your file edit tool to add a line 'ship v2 on Friday' to the end of notes.txt. Then run python3 notes.py list and git status --short, and show me both outputs."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "2\\. ship v2 on Friday(?:(?!Working).)*\\n› "
+timeout = 240
+compress = 4
+[[steps]]
+pause = 4.0

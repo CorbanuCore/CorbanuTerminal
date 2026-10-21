@@ -1,0 +1,5 @@
+commit 2f9d05c51e
+version 0.1.48
+corbanu sha256 a4f9804b3d689650f5176b70c55d5388a55f424a17f3eb0c35be9262dd11c494
+packet /Volumes/CorbanuDrive/Corbanu/.codex-work/utm-par2-20261021/packet-v4c
+staged 2026-10-21T08:20:58Z

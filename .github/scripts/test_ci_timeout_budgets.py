@@ -361,14 +361,12 @@ class RunScopedCachePruneTest(unittest.TestCase):
         self.assertEqual(re.findall(r"uses: ([\w/-]+)@", prune), ["actions/checkout"])
 
     def test_no_other_workflow_holds_actions_write(self) -> None:
-        # cla.yml is upstream's and runs only in openai's repositories.
         holders = {
             path.name
             for path in self.WORKFLOWS.glob("*.yml")
             if re.search(r"(?m)^\s+actions: write$", path.read_text())
         }
-        self.assertEqual(holders, {"cache-prune.yml", "cla.yml"})
-        self.assertIn("github.repository_owner == 'openai'", (self.WORKFLOWS / "cla.yml").read_text())
+        self.assertEqual(holders, {"cache-prune.yml"})
 
 
 class PrWindowsNativeTestsTest(unittest.TestCase):

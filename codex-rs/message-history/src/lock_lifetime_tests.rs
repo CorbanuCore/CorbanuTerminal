@@ -1,4 +1,4 @@
-#![cfg(unix)]
+#![cfg(any(unix, windows))]
 
 use super::*;
 use pretty_assertions::assert_eq;
@@ -32,6 +32,8 @@ fn assert_released(competitor: &File) {
     competitor.unlock().expect("release competing control lock");
 }
 
+// This control relies on Unix open-file-description lock ownership.
+#[cfg(unix)]
 #[test]
 fn issue928_native_control_duplicate_retains_lock_until_explicit_unlock() {
     let (_directory, original, retained, competitor) = history_fixture("");
@@ -171,6 +173,7 @@ async fn issue928_concurrent_public_appends_preserve_all_entries() {
     actual.sort();
     expected.sort();
     assert_eq!(actual, expected);
+    #[cfg(unix)]
     assert_eq!(
         std::fs::metadata(directory.path().join(HISTORY_FILENAME))
             .unwrap()

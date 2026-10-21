@@ -24,7 +24,6 @@ use pretty_assertions::assert_eq;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
 use tempfile::TempDir;
 use tokio::process::Command;
 
@@ -113,23 +112,30 @@ async fn create_clean_git_repo(repo_name: &str) -> (TempDir, AbsolutePathBuf) {
     (temp_dir, repo_path)
 }
 
+/// Awaits the spawned enrichment task itself instead of polling against a wall-clock budget:
+/// each git command it runs is already bounded by the git helpers' own timeout, and loaded
+/// Windows runners took longer than the old 2 s poll (#1241).
+async fn finish_git_enrichment(state: &TurnMetadataState) {
+    let task = state
+        .enrichment_task
+        .lock()
+        .expect("enrichment task lock")
+        .take()
+        .expect("git enrichment should have been spawned");
+    task.await.expect("git enrichment task should finish");
+}
+
 async fn wait_for_git_enrichment(state: &TurnMetadataState) -> Value {
-    tokio::time::timeout(Duration::from_secs(2), async {
-        loop {
-            let header = test_turn_metadata_header(state);
-            let json: Value = serde_json::from_str(&header).expect("json");
-            if json
-                .get("workspaces")
-                .and_then(Value::as_object)
-                .is_some_and(|workspaces| !workspaces.is_empty())
-            {
-                return json;
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .expect("git enrichment should complete")
+    finish_git_enrichment(state).await;
+    let header = test_turn_metadata_header(state);
+    let json: Value = serde_json::from_str(&header).expect("json");
+    assert!(
+        json.get("workspaces")
+            .and_then(Value::as_object)
+            .is_some_and(|workspaces| !workspaces.is_empty()),
+        "git enrichment should complete with workspace metadata: {json}"
+    );
+    json
 }
 
 #[tokio::test]
@@ -957,21 +963,6 @@ async fn turn_metadata_state_git_enrichment_cancellation_is_retryable_and_errors
         /*enforce_managed_network*/ false,
     );
     invalid_state.spawn_git_enrichment_task();
-    tokio::time::timeout(Duration::from_secs(2), async {
-        loop {
-            if invalid_state
-                .enrichment_task
-                .lock()
-                .expect("enrichment task lock")
-                .as_ref()
-                .is_some_and(tokio::task::JoinHandle::is_finished)
-            {
-                return;
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .expect("failed git enrichment should complete");
+    finish_git_enrichment(&invalid_state).await;
     assert!(invalid_state.current_workspaces().is_empty());
 }

@@ -75,6 +75,20 @@ bumps (#1030). The date appears in:
 - any `#[allow(..., reason = "...")]` in `codex-rs` that names the nightly
   (`rg -F nightly-<date> codex-rs`): remove it once the nightly moves.
 
+After the nightly (or the lint itself) changes, republish the prebuilt package
+that `just argument-comment-lint <args>` uses (#1130). Once the PR is merged:
+
+```bash
+gh workflow run rust-release-argument-comment-lint.yml --ref main -f publish=true
+```
+
+That creates a prerelease tagged `argument-comment-lint-<nightly>-<sha>`. In a
+follow-up PR, copy its `argument-comment-lint` asset over
+`tools/argument-comment-lint/argument-comment-lint` and check
+`tools/argument-comment-lint/run-prebuilt-linter.py -p codex-core`. CI builds
+the lint from source, so it doesn't wait for this; until then, use `run.py`
+for targeted runs.
+
 Picking the nightly:
 
 - Pin `clippy_utils` to a rust-clippy "rustup" sync commit and use the

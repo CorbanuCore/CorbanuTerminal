@@ -573,6 +573,102 @@ fn an_unreadable_record_of_a_live_run_keeps_every_placeholder() {
     assert!(std::fs::symlink_metadata(&path).is_err());
 }
 
+// A proc entry supplied to the real scanner, with an owned root inode and
+// a mountinfo file. These fixtures do not chroot, mount, or create processes.
+fn write_mount_view(process: &Path, namespace: &str, root: &Path, point: &str) {
+    std::fs::create_dir_all(process.join("ns")).expect("process namespace folder");
+    std::os::unix::fs::symlink(namespace, process.join("ns/mnt")).expect("namespace link");
+    std::os::unix::fs::symlink(root, process.join("root")).expect("process root link");
+    std::fs::write(
+        process.join("mountinfo"),
+        format!("1 0 0:1 / {point} rw - tmpfs tmpfs rw\n"),
+    )
+    .expect("mountinfo");
+}
+
+#[test]
+fn different_roots_in_one_mount_namespace_are_all_scanned() {
+    let temp = tempfile::TempDir::new().expect("tempdir");
+    let root_a = temp.path().join("root-a");
+    let root_b = temp.path().join("root-b");
+    std::fs::create_dir(&root_a).expect("first root");
+    std::fs::create_dir(&root_b).expect("second root");
+    let first = temp.path().join("101");
+    let second = temp.path().join("102");
+    write_mount_view(&first, "mnt:[1]", &root_a, "/first-root-mount");
+    write_mount_view(&second, "mnt:[1]", &root_b, "/second-root-mount");
+
+    assert_eq!(
+        mount_points_for_processes([first, second].into_iter()),
+        Some(HashSet::from([
+            b"/first-root-mount".to_vec(),
+            b"/second-root-mount".to_vec(),
+        ])),
+    );
+}
+
+#[test]
+fn identical_mount_views_are_deduplicated_without_hiding_other_namespaces() {
+    let temp = tempfile::TempDir::new().expect("tempdir");
+    let root = temp.path().join("root");
+    std::fs::create_dir(&root).expect("root");
+    let first = temp.path().join("101");
+    let duplicate = temp.path().join("102");
+    let other_namespace = temp.path().join("103");
+    write_mount_view(&first, "mnt:[1]", &root, "/first-namespace-mount");
+    write_mount_view(&duplicate, "mnt:[1]", &root, "/unused");
+    write_mount_view(&other_namespace, "mnt:[2]", &root, "/other-namespace-mount");
+    // Reading a directory as mountinfo fails. The duplicate must not be read.
+    std::fs::remove_file(duplicate.join("mountinfo")).expect("remove duplicate file");
+    std::fs::create_dir(duplicate.join("mountinfo")).expect("unreadable duplicate");
+
+    assert_eq!(
+        mount_points_for_processes([first, duplicate, other_namespace].into_iter()),
+        Some(HashSet::from([
+            b"/first-namespace-mount".to_vec(),
+            b"/other-namespace-mount".to_vec(),
+        ])),
+    );
+}
+
+#[test]
+fn unidentified_roots_do_not_hide_another_process_mount_view() {
+    let temp = tempfile::TempDir::new().expect("tempdir");
+    let unavailable_root = temp.path().join("absent-root");
+    let first = temp.path().join("101");
+    let second = temp.path().join("102");
+    write_mount_view(&first, "mnt:[1]", &unavailable_root, "/first-view");
+    write_mount_view(&second, "mnt:[1]", &unavailable_root, "/second-view");
+
+    assert_eq!(
+        mount_points_for_processes([first, second].into_iter()),
+        Some(HashSet::from([
+            b"/first-view".to_vec(),
+            b"/second-view".to_vec(),
+        ])),
+    );
+}
+
+#[test]
+fn an_unreadable_mount_view_still_fails_closed() {
+    let temp = tempfile::TempDir::new().expect("tempdir");
+    let root_a = temp.path().join("root-a");
+    let root_b = temp.path().join("root-b");
+    std::fs::create_dir(&root_a).expect("first root");
+    std::fs::create_dir(&root_b).expect("second root");
+    let first = temp.path().join("101");
+    let second = temp.path().join("102");
+    write_mount_view(&first, "mnt:[1]", &root_a, "/first-view");
+    write_mount_view(&second, "mnt:[1]", &root_b, "/unreadable-view");
+    std::fs::remove_file(second.join("mountinfo")).expect("remove mountinfo file");
+    std::fs::create_dir(second.join("mountinfo")).expect("unreadable view");
+
+    assert_eq!(
+        mount_points_for_processes([first, second].into_iter()),
+        None
+    );
+}
+
 #[test]
 fn a_mount_point_in_any_of_this_users_namespaces_is_found() {
     assert_eq!(unescape_mount_point(br"/a\040b\134c"), b"/a b\\c".to_vec());
@@ -581,6 +677,68 @@ fn a_mount_point_in_any_of_this_users_namespaces_is_found() {
     assert!(mounted_anywhere(&[Path::new("/proc")]));
     let dir = tempfile::TempDir::new().expect("tempdir");
     assert!(!mounted_anywhere(&[dir.path()]));
+}
+
+// A fake `/proc/<pid>` in mount namespace `namespace`, with a `mountinfo`
+// listing `point`, or none (the process has ended) when `point` is `None`.
+fn fake_process(proc_dir: &Path, pid: &str, namespace: &str, point: Option<&str>) -> PathBuf {
+    let process = proc_dir.join(pid);
+    std::fs::create_dir_all(process.join("ns")).expect("ns folder");
+    std::os::unix::fs::symlink(namespace, process.join("ns/mnt")).expect("ns link");
+    // All fake processes share one root, so their views dedupe by namespace.
+    std::os::unix::fs::symlink(proc_dir, process.join("root")).expect("root link");
+    if let Some(point) = point {
+        std::fs::write(
+            process.join("mountinfo"),
+            format!("1 0 0:1 / {point} rw - tmpfs tmpfs rw\n"),
+        )
+        .expect("mountinfo");
+    }
+    process
+}
+
+#[test]
+fn a_process_that_ends_mid_scan_does_not_hide_its_namespace() {
+    let temp = tempfile::TempDir::new().expect("tempdir");
+    let ended = fake_process(temp.path(), "101", "mnt:[1]", /*point*/ None);
+    let live = fake_process(temp.path(), "102", "mnt:[1]", Some("/live-view"));
+    let other = fake_process(temp.path(), "103", "mnt:[2]", Some("/other-view"));
+
+    assert_eq!(
+        mount_points_for_processes([ended, live, other].into_iter()),
+        Some(HashSet::from([
+            b"/live-view".to_vec(),
+            b"/other-view".to_vec(),
+        ])),
+    );
+}
+
+#[test]
+fn a_namespace_whose_view_was_read_is_read_once() {
+    let temp = tempfile::TempDir::new().expect("tempdir");
+    let first = fake_process(temp.path(), "101", "mnt:[1]", Some("/first-view"));
+    // Reading a folder as `mountinfo` fails the whole scan, so this view
+    // must not be read: its namespace was already read through `first`.
+    let duplicate = fake_process(temp.path(), "102", "mnt:[1]", /*point*/ None);
+    std::fs::create_dir(duplicate.join("mountinfo")).expect("unreadable view");
+
+    assert_eq!(
+        mount_points_for_processes([first, duplicate].into_iter()),
+        Some(HashSet::from([b"/first-view".to_vec()])),
+    );
+}
+
+#[test]
+fn an_unreadable_view_still_fails_the_scan() {
+    let temp = tempfile::TempDir::new().expect("tempdir");
+    let unreadable = fake_process(temp.path(), "101", "mnt:[1]", /*point*/ None);
+    std::fs::create_dir(unreadable.join("mountinfo")).expect("unreadable view");
+    let live = fake_process(temp.path(), "102", "mnt:[1]", Some("/live-view"));
+
+    assert_eq!(
+        mount_points_for_processes([unreadable, live].into_iter()),
+        None
+    );
 }
 
 #[test]
@@ -734,12 +892,56 @@ fn a_path_another_run_made_is_recorded_as_used_and_nothing_else() {
 }
 
 #[test]
+fn a_child_of_a_pending_placeholder_folder_is_recorded_as_used() {
+    let mut setup = Setup::new();
+    let pending = setup.base.join("home/pending");
+    let prefix_sibling = setup.base.join("home/pending2");
+    let child = pending.join("child");
+    let sibling_child = prefix_sibling.join("child");
+    std::fs::create_dir(&pending).expect("pending folder");
+    std::fs::create_dir(&prefix_sibling).expect("prefix sibling folder");
+    std::fs::write(&child, "").expect("child");
+    std::fs::write(&sibling_child, "").expect("sibling child");
+    setup.write(
+        this_run_with_start(Some(7)),
+        vec![Entry::Pending {
+            kind: Kind::Directory,
+            path: pending.clone(),
+            real: pending.clone(),
+        }],
+    );
+    let pending_name = setup.records().pop().expect("pending record name");
+    let pending_record = setup.journal.read(&pending_name).expect("pending record");
+    setup.journal.register(
+        &[],
+        &[
+            (child.clone(), child.clone()),
+            (sibling_child.clone(), sibling_child),
+        ],
+    );
+    let own = format!("{}.rec", setup.journal.name);
+    let record = setup.journal.read(&own).expect("record");
+    assert_eq!(
+        record.entries,
+        vec![Entry::Uses {
+            path: child.clone(),
+            real: child,
+        }]
+    );
+    assert!(uses(&record, &pending, &pending));
+    assert!(!uses(&record, &prefix_sibling, &prefix_sibling));
+    assert_eq!(setup.journal.read(&pending_name), Some(pending_record));
+}
+
+#[test]
 fn a_path_another_run_was_about_to_make_is_recorded_as_used() {
     let mut setup = Setup::new();
     let pending = setup.base.join("home/pending");
     let sibling = setup.base.join("home/sibling");
+    let prefix_sibling = setup.base.join("home/pending2");
     std::fs::write(&pending, "").expect("bubblewrap made it");
     std::fs::write(&sibling, "").expect("sibling");
+    std::fs::write(&prefix_sibling, "").expect("prefix sibling");
     // Another run's record (another start time than this process's): it
     // was about to make the placeholder when it was recorded.
     setup.write(
@@ -755,12 +957,21 @@ fn a_path_another_run_was_about_to_make_is_recorded_as_used() {
         &[
             (pending.clone(), pending.clone()),
             (sibling.clone(), sibling.clone()),
+            (prefix_sibling.clone(), prefix_sibling.clone()),
         ],
     );
     let own = format!("{}.rec", setup.journal.name);
     let record = setup.journal.read(&own).expect("record");
     assert!(uses(&record, &pending, &pending));
     assert!(!uses(&record, &sibling, &sibling));
+    assert!(!uses(&record, &prefix_sibling, &prefix_sibling));
+    assert_eq!(
+        record.entries,
+        vec![Entry::Uses {
+            path: pending.clone(),
+            real: pending,
+        }]
+    );
 }
 
 /// #745: a placeholder this run made that is still there but changed (a

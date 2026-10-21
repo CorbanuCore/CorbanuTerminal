@@ -62,7 +62,10 @@ impl SessionAccountUsage {
                 .into_iter()
                 .map(|(account, usage)| (account.to_string(), usage)),
         );
-        StatusAccountUsage { rows }
+        StatusAccountUsage {
+            rows,
+            named_account_in_home: None,
+        }
     }
 }
 
@@ -71,9 +74,23 @@ impl SessionAccountUsage {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct StatusAccountUsage {
     pub(crate) rows: Vec<(String, TokenUsage)>,
+    /// D86/#1193: whether the provider has a named account in this home, as
+    /// the background check last found; `None` while unknown.
+    pub(crate) named_account_in_home: Option<bool>,
 }
 
 impl StatusAccountUsage {
+    /// D86/D125: whether `/status` names the account and shows these rows:
+    /// the session is on (or used) a named account of the provider, or the
+    /// home holds one. Unknown counts as holding one, so the account is
+    /// shown rather than hidden. Never reads the vault.
+    pub(crate) fn provider_has_named_account(&self) -> bool {
+        self.rows
+            .iter()
+            .any(|(account, _)| account != codex_vault::DEFAULT_PROVIDER_ACCOUNT)
+            || self.named_account_in_home.unwrap_or(true)
+    }
+
     /// One line (wrapped by the caller) for a single account; a header and
     /// one aligned row per account, the active one marked, for several.
     pub(crate) fn lines(&self) -> Vec<Vec<Span<'static>>> {

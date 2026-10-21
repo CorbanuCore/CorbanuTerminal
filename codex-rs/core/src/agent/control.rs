@@ -532,6 +532,18 @@ impl AgentControl {
         self.state.agent_id_for_path(&AgentPath::root()) == Some(agent_id)
     }
 
+    /// Whether `thread_id` is loaded and is the root of its own tree: a thread a client
+    /// started (such as a pane the person opened), not a spawned or internal agent.
+    pub(crate) async fn is_loaded_root_thread(&self, thread_id: ThreadId) -> bool {
+        let Ok(state) = self.upgrade() else {
+            return false;
+        };
+        state
+            .get_thread(thread_id)
+            .await
+            .is_ok_and(|thread| !thread.session_source.is_non_root_agent())
+    }
+
     pub(crate) fn ensure_agent_known(&self, agent_id: ThreadId) -> CodexResult<AgentMetadata> {
         self.state
             .agent_metadata_for_thread(agent_id)

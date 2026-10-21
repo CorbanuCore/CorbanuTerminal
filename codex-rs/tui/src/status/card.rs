@@ -335,20 +335,20 @@ impl StatusHistoryCell {
             .as_ref()
             .and_then(|usage| usage.rows.first())
             .map(|(account, _)| account.as_str());
-        // D86: other accounts this session used count as the provider
-        // having named accounts.
-        let used_named_account = account_usage.as_ref().is_some_and(|usage| {
-            usage
-                .rows
-                .iter()
-                .any(|(account, _)| account != codex_vault::DEFAULT_PROVIDER_ACCOUNT)
-        });
+        // D86/D125: the account and its usage rows appear only when this
+        // provider has a named account in the home (a stamped account
+        // always is one), so homes without any show what they did.
+        let provider_has_named_account = config.model_provider.account.is_some()
+            || account_usage
+                .as_ref()
+                .is_some_and(StatusAccountUsage::provider_has_named_account);
         let model_provider = format_model_provider(
             config,
             runtime_model_provider_base_url,
             active_account,
-            used_named_account,
+            provider_has_named_account,
         );
+        let account_usage = account_usage.filter(|_| provider_has_named_account);
         let show_chatgpt_usage_link = config.model_provider.requires_openai_auth;
         let account = compose_account_display(account_display);
         let account_value = status_account_value(config, account_display);
@@ -1039,7 +1039,7 @@ fn format_model_provider(
     config: &Config,
     runtime_base_url: Option<&str>,
     active_account: Option<&str>,
-    used_named_account: bool,
+    provider_has_named_account: bool,
 ) -> Option<String> {
     let provider = &config.model_provider;
     let name = provider.name.trim();
@@ -1052,21 +1052,22 @@ fn format_model_provider(
     // PF-84-S04: with named accounts on, name the account this session's
     // requests use, `default` included. D86: only when this provider has a
     // named account in the home, so homes without any show what they did.
+    // #1193: that answer comes from a cache filled off the UI thread.
     let account = (config
         .features
         .enabled(codex_features::Feature::NamedAccounts)
         && crate::legacy_core::config::supports_named_accounts(provider)
-        && provider_has_named_account(config, active_account, used_named_account))
-    .then(|| {
-        active_account.unwrap_or_else(|| {
-            provider
-                .account
-                .as_ref()
-                .map_or(codex_vault::DEFAULT_PROVIDER_ACCOUNT, |account| {
-                    account.name.as_str()
-                })
-        })
-    });
+        && provider_has_named_account)
+        .then(|| {
+            active_account.unwrap_or_else(|| {
+                provider
+                    .account
+                    .as_ref()
+                    .map_or(codex_vault::DEFAULT_PROVIDER_ACCOUNT, |account| {
+                        account.name.as_str()
+                    })
+            })
+        });
     let is_default_openai = provider.is_openai() && base_url.is_none();
     if is_default_openai && account.is_none() {
         return None;
@@ -1080,30 +1081,6 @@ fn format_model_provider(
         value.push_str(&format!(" · account {account}"));
     }
     Some(value)
-}
-
-/// D86: whether the session's provider has a named account in this home:
-/// the session is on (or used) one, or the vault holds one. Cheap checks
-/// first; the vault index is read only when they say nothing. A vault that
-/// cannot be read counts as holding one (the line then names the account).
-fn provider_has_named_account(
-    config: &Config,
-    active_account: Option<&str>,
-    used_named_account: bool,
-) -> bool {
-    // A stamped account (`[provider_accounts]`, `--account`, borrowed ones
-    // included) always has a named, non-`default` name.
-    if used_named_account
-        || config.model_provider.account.is_some()
-        || active_account.is_some_and(|name| name != codex_vault::DEFAULT_PROVIDER_ACCOUNT)
-    {
-        return true;
-    }
-    crate::provider_named_accounts::holds_any_named_account(
-        &config.codex_home,
-        &config.model_provider_id,
-    )
-    .unwrap_or(true)
 }
 
 fn sanitize_base_url(raw: &str) -> Option<String> {

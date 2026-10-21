@@ -1,0 +1,26 @@
+• PF84-SWITCHBACK-OK
+/status
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date                            │
+│ information on rate limits and credits                                                   │
+│                                                                                          │
+│  Model:                GPT-5.6-Luna (reasoning low, summaries auto)                      │
+│  Model provider:       OpenAI · account t1                                               │
+│  Directory:            <L>/work         │
+│  Permissions:          Next turn: Read Only (never)                                      │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              ChatGPT sign-in · <email-hint> · Free (account t1)                │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a15d9f-346e-7373-933b-2e71fdd9d1d0                              │
+│                                                                                          │
+│  Token usage:          53.7K total  (53.6K input + 41 output)                            │
+│  Context window:       97% left (18.2K used / 258K)                                      │
+│  Account usage:        t1 · 42,426 input · 33 output                                     │
+│  Monthly limit:        [████████████████████] 100% left (resets 01:41 on 20 Nov)         │
+│  Credits:              44565 credits                                                     │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+› Explain this codebase
+  GPT-5.6-Luna low · <L>/work · Corbanu Terminal · TPS: 2.8 tok/s

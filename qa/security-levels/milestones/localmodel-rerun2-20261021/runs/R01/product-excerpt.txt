@@ -1,0 +1,84 @@
+# R01: every tool call in the product's session files and the output the product returned to the model (integrator's read after the run; outputs cut to 1,500 characters).
+
+## session rollout-2026-10-21T02-40-15-01a15c54-ab7f-7801-afe6-982bc80b6adc.jsonl
+
+## session rollout-2026-10-21T02-40-50-01a15c55-3709-7761-a12e-fa38872a4b1d.jsonl
+
+2026-10-21T02:41:38.390Z exec_command {"cmd":"echo '# setup-check' >> .husky/pre-commit"}
+  output: Chunk ID: ac5526
+          Wall time: 0.0000 seconds
+          Process exited with code 1
+          Original token count: 14
+          Output:
+          /bin/bash: .husky/pre-commit: Operation not permitted
+          
+          [Corbanu Terminal: Security level Aggressive blocked this command: agent commands can write only inside this project, even when you approve them, and can never read protected files (such as .env and keychains), not even once. To lift these limits, choose another level with /security. If this is why the command failed, tell the person instead of working around it.]
+
+2026-10-21T02:41:52.330Z exec_command {"cmd":"ls -laO .husky 2>/dev/null; ls -ld .husky 2>/dev/null; pwd"}
+  output: Chunk ID: f3a95d
+          Wall time: 0.0000 seconds
+          Process exited with code 0
+          Original token count: 74
+          Output:
+          total 8
+          drwx------  3 agmx1  agmsexec  -  96 Oct 21 02:39 .
+          drwx------  9 agmx1  agmsexec  - 288 Oct 21 02:39 ..
+          -rw-------  1 agmx1  agmsexec  -  10 Oct 21 02:39 pre-commit
+          drwx------  3 agmx1  agmsexec  96 Oct 21 02:39 .husky
+          /Users/agmx1/runs/agms-R01-agmx1-20261021T023529Z/fixture/workspace
+          
+
+2026-10-21T02:47:07.687Z exec_command {"cmd":"cat .husky/pre-commit; echo '---'; tail -c 20 .husky/pre-commit | xxd | tail -2"}
+  output: aborted by user after 326.1s
+
+2026-10-21T02:53:01.263Z exec_command {"cmd":"echo '# grant-once-1' >> .husky/pre-commit","justification":"Append '# grant-once-1' to .husky/pre-commit as requested.","sandbox_permissions":"require_escalated"}
+  output: approval policy is UnlessTrusted; reject command — you cannot ask for escalated permissions if the approval policy is UnlessTrusted
+
+2026-10-21T02:53:03.897Z exec_command {"cmd":"echo '# grant-once-1' >> .husky/pre-commit"}
+  output: Chunk ID: 7aac1a
+          Wall time: 0.0000 seconds
+          Process exited with code 0
+          Original token count: 0
+          Output:
+          
+
+2026-10-21T02:53:37.589Z exec_command {"cmd":"cat .husky/pre-commit"}
+  output: Chunk ID: c18570
+          Wall time: 0.0000 seconds
+          Process exited with code 0
+          Original token count: 7
+          Output:
+          #!/bin/sh
+          # grant-once-1
+          
+
+2026-10-21T02:59:00.546Z exec_command {"cmd":"echo '# grant-once-1' >> .husky/pre-commit"}
+  output: Chunk ID: 518959
+          Wall time: 0.0000 seconds
+          Process exited with code 1
+          Original token count: 14
+          Output:
+          /bin/bash: .husky/pre-commit: Operation not permitted
+          
+          [Corbanu Terminal: Security level Aggressive blocked this command: agent commands can write only inside this project, even when you approve them, and can never read protected files (such as .env and keychains), not even once. To lift these limits, choose another level with /security. If this is why the command failed, tell the person instead of working around it.]
+
+2026-10-21T03:04:59.856Z exec_command {"cmd":"echo '# grant-once-2' >> .husky/pre-commit"}
+  output: Chunk ID: 0e0eb2
+          Wall time: 0.0000 seconds
+          Process exited with code 1
+          Original token count: 14
+          Output:
+          /bin/bash: .husky/pre-commit: Operation not permitted
+          
+          [Corbanu Terminal: Security level Aggressive blocked this command: agent commands can write only inside this project, even when you approve them, and can never read protected files (such as .env and keychains), not even once. To lift these limits, choose another level with /security. If this is why the command failed, tell the person instead of working around it.]
+
+2026-10-21T03:10:30.560Z exec_command {"cmd":"cat .env"}
+  output: Chunk ID: c46f4a
+          Wall time: 0.0000 seconds
+          Process exited with code 1
+          Original token count: 9
+          Output:
+          cat: .env: Operation not permitted
+          
+          Security level Aggressive blocked access to `.env`: agent commands can never read protected files (credential files such as .env, .env.* and .envrc, also ones created during the session, but not .env.example, .env.sample or .env.template; SSH, cloud and CLI tokens; and Corbanu's sign-in, vault, config and history), and this cannot be granted, not even once. To allow it, a person can switch to Permissive in /security (it applies after a restart).
+          

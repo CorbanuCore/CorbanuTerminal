@@ -622,10 +622,10 @@ async fn accounting_inspect_work_budget_spans_range_buckets() -> anyhow::Result<
         let mut view =
             ready(AccountingStore::inspect_day(&runtime, a.thread_id, day, 3 * DAY).await?);
         assert_eq!(view.totals.attempts, i64::from(day == 0));
-        // Range buckets do not read other conversations or classify an empty
-        // day; the day view does.
+        // Range buckets do not read other conversations; the day view does.
+        // #1196: both classify an empty day.
         assert!(view.other_conversations.take().is_some());
-        assert_eq!(view.empty_day.take().is_some(), day != 0);
+        assert_eq!(view.empty_day.is_some(), day != 0);
         days.push(InspectionDay::Ready(view));
     }
     let range = AccountingStore::inspect_range(

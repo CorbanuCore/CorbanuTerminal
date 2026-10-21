@@ -1619,6 +1619,16 @@ struct ProviderAuthScript {
     tempdir: TempDir,
     command: String,
     args: Vec<String>,
+    /// #1201: held while the helper may run; see `TEST_CHILD_PROCESSES`.
+    /// One per test: a second read lock on the same thread can deadlock
+    /// while the writer waits.
+    _helper_runs: std::sync::RwLockReadGuard<'static, ()>,
+}
+
+fn helper_runs() -> std::sync::RwLockReadGuard<'static, ()> {
+    crate::TEST_CHILD_PROCESSES
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 impl ProviderAuthScript {
@@ -1690,6 +1700,7 @@ move /y tokens.next tokens.txt >nul
             tempdir,
             command,
             args,
+            _helper_runs: helper_runs(),
         })
     }
 
@@ -1729,6 +1740,7 @@ exit 1
             tempdir,
             command,
             args,
+            _helper_runs: helper_runs(),
         })
     }
 

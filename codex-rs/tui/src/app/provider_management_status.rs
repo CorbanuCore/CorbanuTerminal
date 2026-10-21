@@ -151,6 +151,10 @@ impl App {
     pub(super) fn open_provider_manager(&mut self, _app_server: &AppServerSession) {
         sync_provider_manager_model_policy(&self.model_catalog, &self.config);
         check_named_bedrock_account(&self.model_catalog, &self.config, &self.app_event_tx);
+        crate::provider_named_accounts::check_named_account_providers(
+            &self.model_catalog,
+            &self.config,
+        );
         let generation = self.next_provider_management_generation();
         self.provider_management_host = None;
         let config = self.config.clone();
@@ -370,5 +374,47 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].model, "shared-model");
+    }
+
+    /// #1193: the background check caches which providers have named
+    /// accounts (this one off the UI thread); with named accounts off it
+    /// does not run.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn named_account_check_caches_the_answer_off_the_ui_thread() {
+        let home = tempfile::TempDir::new().unwrap();
+        let mut config = crate::legacy_core::config::ConfigBuilder::default()
+            .codex_home(home.path().to_path_buf())
+            .build()
+            .await
+            .unwrap();
+        codex_vault::Vault::new(home.path().to_path_buf())
+            .create_provider_account(
+                "zai",
+                &codex_vault::ProviderAccountName::parse("work").unwrap(),
+                codex_vault::ProviderAccountKind::ApiKey,
+                "test-key-not-a-secret",
+            )
+            .unwrap();
+        let catalog = std::sync::Arc::new(crate::model_catalog::ModelCatalog::new(Vec::new()));
+
+        config
+            .features
+            .disable(codex_features::Feature::NamedAccounts)
+            .unwrap();
+        crate::provider_named_accounts::check_named_account_providers(&catalog, &config);
+        assert_eq!(catalog.begin_named_account_check(), 1, "no check ran");
+
+        config
+            .features
+            .enable(codex_features::Feature::NamedAccounts)
+            .unwrap();
+        crate::provider_named_accounts::check_named_account_providers(&catalog, &config);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while catalog.provider_has_named_account("zai").is_none() {
+            assert!(std::time::Instant::now() < deadline, "check never answered");
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert_eq!(catalog.provider_has_named_account("zai"), Some(true));
+        assert_eq!(catalog.provider_has_named_account("kimi"), Some(false));
     }
 }

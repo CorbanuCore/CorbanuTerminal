@@ -19,6 +19,54 @@ pub fn try_parse_shell(shell_lc_arg: &str) -> Option<Tree> {
     parser.parse(shell_lc_arg, old_tree)
 }
 
+/// The grammar's node type, so callers can walk a [`Tree`] without a
+/// tree-sitter dependency of their own.
+pub use tree_sitter::Node as SyntaxNode;
+
+/// Why [`try_parse_shell_bounded`] stopped without a tree.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ParseStop {
+    /// Every parse in progress had met a syntax error. Error recovery can
+    /// take time quadratic in the text, so it is not attempted.
+    SyntaxError,
+    /// The parse used more than its progress checks.
+    Budget,
+}
+
+/// [`try_parse_shell`] for text that must be parsed in bounded time: it
+/// stops at the first syntax error every parse in progress has met, or once
+/// tree-sitter has checked its progress more than `max_checks` times (it
+/// checks about once every 100 parse operations). Also returns the number
+/// of checks made. The bounds count work rather than time, so the same text
+/// always gets the same answer. A tree it returns may still hold an error
+/// (one met between two checks).
+pub fn try_parse_shell_bounded(
+    script: &str,
+    max_checks: usize,
+) -> (Result<Tree, ParseStop>, usize) {
+    let lang = BASH.into();
+    let mut parser = Parser::new();
+    #[expect(clippy::expect_used)]
+    parser.set_language(&lang).expect("load bash grammar");
+    let mut checks = 0usize;
+    let mut stop = ParseStop::Budget;
+    let mut progress = |state: &tree_sitter::ParseState| {
+        checks += 1;
+        if state.has_error() {
+            stop = ParseStop::SyntaxError;
+            return true;
+        }
+        checks > max_checks
+    };
+    let bytes = script.as_bytes();
+    let tree = parser.parse_with_options(
+        &mut |offset, _| bytes.get(offset..).unwrap_or_default(),
+        /*old_tree*/ None,
+        Some(tree_sitter::ParseOptions::new().progress_callback(&mut progress)),
+    );
+    (tree.ok_or(stop), checks)
+}
+
 /// Parse a script which may contain multiple simple commands joined only by
 /// the safe logical/pipe/sequencing operators: `&&`, `||`, `;`, `|`.
 ///

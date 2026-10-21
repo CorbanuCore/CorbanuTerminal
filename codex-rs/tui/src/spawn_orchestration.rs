@@ -1251,30 +1251,20 @@ impl App {
         task.trim().to_string()
     }
 
-    /// Route native work according to thread ownership. Managed `/spawn` agents consume the Core
-    /// mailbox, while operator-created `/panes` threads accept ordinary user turns.
+    /// Send an agent's task (assignment fires, model dispatch) to a native pane. Every native
+    /// pane takes it from its Core mailbox as inter-agent data, also a pane the person opened
+    /// (D106, #1176): an agent's task never arrives as the person's own input. The person's own
+    /// task from Spawn status takes [`AppEvent::SubmitSpawnAgentTaskFromPerson`] instead.
     pub(crate) fn send_native_task_event(&self, thread_id: ThreadId, task: String) {
-        let is_operator_pane = self
-            .agent_navigation
-            .get(&thread_id)
-            .is_some_and(|entry| self.is_operator_owned_codex_user_pane(thread_id, entry));
         // #660: only agents (assignment fires, model dispatch) send through
         // here; a task sent while the switch is on never starts a turn, even
         // when it is handled just after switch-off.
         let sent_while_kill_switch_on = self.kill_switch_on_now();
-        if is_operator_pane {
-            self.app_event_tx.send(AppEvent::SubmitCodexUserPaneTask {
-                thread_id,
-                task,
-                sent_while_kill_switch_on,
-            });
-        } else {
-            self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
-                thread_id,
-                task,
-                sent_while_kill_switch_on,
-            });
-        }
+        self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
+            thread_id,
+            task,
+            sent_while_kill_switch_on,
+        });
     }
 
     /// #660 follow-up: a task for the managed Codex pane `thread_id` waits in
@@ -5583,6 +5573,24 @@ fn saved_spawn_child_identity(
         role,
         identity,
     })
+}
+
+/// Whether a restored pane layout holds a pre-CrewSpec `/spawn` hierarchy, which stays read-only.
+///
+/// A `/spawn` hierarchy always has a pane root (`pane:codex-main` or a Claude pane), a bound
+/// Nazgul, Claude panes, or pending dispatches. Sub-agents started by the model's spawn-agent
+/// tool are recorded only as `thread:` -> `thread:` edges; they are not `/spawn` panes and keep
+/// working after resume, so they alone do not make the layout legacy (#1208).
+pub(crate) fn pane_layout_has_legacy_spawn_hierarchy(
+    layout: &crate::claude_panes::PaneLayoutState,
+) -> bool {
+    !layout.spawn_pending_dispatches.is_empty()
+        || layout.spawn_crew.is_none()
+            && (layout.spawn_nazgul_pane_id.is_some()
+                || layout.spawn_parent_by_node.iter().any(|(child, parent)| {
+                    node_id_thread(child).is_none() || node_id_thread(parent).is_none()
+                })
+                || !layout.claude_pane_ids.is_empty())
 }
 
 pub(crate) fn thread_node_id(thread_id: ThreadId) -> String {

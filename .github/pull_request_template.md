@@ -16,3 +16,6 @@ Include a link to a bug report or enhancement request.
       turns nightly red after merge.
 - [ ] Literal arguments (`None`, `true`, numbers) in new code, tests included,
       carry a `/*param*/` comment. PR CI lints the crates you changed.
+- [ ] After changing a type (or a doc comment) in `codex-protocol` or
+      `codex-app-server-protocol`, run `just write-app-server-schema` and
+      `just write-app-server-schema --experimental`, and commit the fixtures.

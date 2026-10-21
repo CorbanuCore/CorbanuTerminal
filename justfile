@@ -193,7 +193,7 @@ argument-comment-lint *args:
     if [ "$#" -eq 0 ]; then \
       bazel build --config=argument-comment-lint -- $({{ justfile_directory() }}/tools/argument-comment-lint/list-bazel-targets.sh); \
     else \
-      {{ python }} {{ justfile_directory() }}/tools/argument-comment-lint/run.py "$@"; \
+      {{ python }} {{ justfile_directory() }}/tools/argument-comment-lint/run-prebuilt-linter.py "$@"; \
     fi
 
 [no-cd]

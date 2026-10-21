@@ -144,3 +144,17 @@ product protection was reached:
 See [review-ledger.md](review-ledger.md): design 1, design review 2, evidence checks 3-5 (all 5 used). All three
 evidence checks supported both dispositions and failed the record on written claims; their corrections are applied.
 The budget is spent, so r3's correction (a disclosure in MOD-21) is applied but not re-checked.
+
+## Owner decisions after this record (2026-10-20/21)
+
+Dated addendum; the record above is unchanged.
+
+- **D72** (2026-10-20): protected launch keeping CLI-token files such as `~/.aws/credentials` closed even after
+  approval is intended. The wording is fixed by #1091 (#1077), and the image-tool refusal is shown on screen by #1095
+  (#1087). MOD-09 counts **accepted**: the 34 cases are 31 passed, 0 failed, 3 accepted (MOD-09: D72; MOD-11: D43;
+  MOD-28: D40). The sign-off (D61) is unchanged.
+- **D113** (2026-10-21): in the [second local-model re-run](../localmodel-rerun2-20261021/README.md)
+  ([#1191](https://github.com/CorbanuCore/CorbanuTerminal/pull/1191), candidate `bc1deda532`), MOD-09 items 5 and 7
+  **meet D72**. Item 5's refusal is on screen and names the level. Item 7's prompt names the CLI token file and says
+  approving cannot unlock it, and the read still failed after approval. Item 6 has never been exercised, so MOD-09
+  stays accepted, not passed.

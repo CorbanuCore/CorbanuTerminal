@@ -300,6 +300,12 @@ struct Spool {
     _lock: std::fs::File,
 }
 
+impl Drop for Spool {
+    fn drop(&mut self) {
+        let _ = self._lock.unlock();
+    }
+}
+
 impl Spool {
     fn open(home: &Path) -> std::io::Result<Self> {
         let dir = home.join(PENDING_DIR);

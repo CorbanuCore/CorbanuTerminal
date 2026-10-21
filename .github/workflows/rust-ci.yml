@@ -25,6 +25,7 @@ jobs:
       argument_comment_lint: ${{ steps.detect.outputs.argument_comment_lint }}
       argument_comment_lint_package: ${{ steps.detect.outputs.argument_comment_lint_package }}
       argument_comment_lint_packages: ${{ steps.detect.outputs.argument_comment_lint_packages }}
+      app_server_schema: ${{ steps.detect.outputs.app_server_schema }}
       codex: ${{ steps.detect.outputs.codex }}
       windows_native_tests: ${{ steps.detect.outputs.windows_native_tests }}
       workflows: ${{ steps.detect.outputs.workflows }}
@@ -60,6 +61,9 @@ jobs:
           # forced file list above, which matches none of them; nightly runs
           # every crate's native Windows tests in bazel.yml instead.
           windows_native_tests=false
+          # Schema fixture tests run on PRs that change the protocol crates
+          # (or this workflow); postmerge rust-ci-full runs them on main.
+          app_server_schema=false
           for f in "${files[@]}"; do
             [[ $f == codex-rs/* ]] && codex=true
             [[ $f == codex-rs/* || $f == tools/argument-comment-lint/* || $f == justfile ]] && argument_comment_lint=true
@@ -68,6 +72,7 @@ jobs:
             [[ $f == .github/* ]] && workflows=true
             [[ $f == codex-rs/tui/* || $f == codex-rs/core/* || $f == codex-rs/state/* || $f == codex-rs/login/* ]] && windows_native_tests=true
             [[ $f == .github/workflows/rust-ci-windows-native-tests.yml ]] && windows_native_tests=true
+            [[ $f == codex-rs/protocol/* || $f == codex-rs/app-server-protocol/* || $f == .github/workflows/rust-ci.yml ]] && app_server_schema=true
           done
 
           echo "argument_comment_lint=$argument_comment_lint" >> "$GITHUB_OUTPUT"
@@ -80,6 +85,7 @@ jobs:
           fi
           echo "Argument comment lint packages: ${packages:-none}"
           echo "argument_comment_lint_packages=${packages% }" >> "$GITHUB_OUTPUT"
+          echo "app_server_schema=$app_server_schema" >> "$GITHUB_OUTPUT"
           echo "codex=$codex" >> "$GITHUB_OUTPUT"
           echo "windows_native_tests=$windows_native_tests" >> "$GITHUB_OUTPUT"
           echo "workflows=$workflows" >> "$GITHUB_OUTPUT"
@@ -207,6 +213,33 @@ jobs:
     if: ${{ needs.changed.outputs.windows_native_tests == 'true' }}
     uses: ./.github/workflows/rust-ci-windows-native-tests.yml
     secrets: inherit
+
+  # codex-app-server-protocol schema fixture tests on PRs that change
+  # codex-protocol or codex-app-server-protocol (#1165). Only postmerge
+  # rust-ci-full ran them, so a changed protocol type or doc comment without
+  # `just write-app-server-schema` turned main red (#1140, fixed by #1164).
+  app_server_schema_fixtures:
+    name: App-server schema fixtures
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: changed
+    if: ${{ needs.changed.outputs.app_server_schema == 'true' }}
+    defaults:
+      run:
+        working-directory: codex-rs
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci
+      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
+      - name: cargo test codex-app-server-protocol schema_fixtures
+        run: cargo test --locked -p codex-app-server-protocol --lib schema_fixtures
+
+      - name: Check for a clean worktree
+        if: always() && !cancelled()
+        uses: ./.github/actions/check-clean-worktree
 
   argument_comment_lint_package:
     name: Argument comment lint package
@@ -454,6 +487,7 @@ jobs:
         lint_build_windows,
         core_security_tests,
         windows_native_tests,
+        app_server_schema_fixtures,
         argument_comment_lint_package,
         argument_comment_lint_changed,
         argument_comment_lint_prebuilt,
@@ -473,6 +507,7 @@ jobs:
           echo "winlint: ${{ needs.lint_build_windows.result }}"
           echo "coresec: ${{ needs.core_security_tests.result }}"
           echo "winnat : ${{ needs.windows_native_tests.result }}"
+          echo "schema : ${{ needs.app_server_schema_fixtures.result }}"
 
           # Every decision below reads its outputs.
           [[ '${{ needs.changed.result }}' == 'success' ]] || { echo 'changed failed'; exit 1; }
@@ -487,6 +522,11 @@ jobs:
           # Required whenever it runs (PRs touching tui, core, state, login).
           if [[ "${NEEDS_CHANGED_OUTPUTS_WINDOWS_NATIVE_TESTS}" == 'true' ]]; then
             [[ '${{ needs.windows_native_tests.result }}' == 'success' ]] || { echo 'windows_native_tests failed'; exit 1; }
+          fi
+
+          # Required whenever it runs (PRs touching protocol or app-server-protocol).
+          if [[ "${NEEDS_CHANGED_OUTPUTS_APP_SERVER_SCHEMA}" == 'true' ]]; then
+            [[ '${{ needs.app_server_schema_fixtures.result }}' == 'success' ]] || { echo 'app_server_schema_fixtures failed'; exit 1; }
           fi
 
           if [[ "${NEEDS_CHANGED_OUTPUTS_ARGUMENT_COMMENT_LINT_PACKAGE}" == 'true' ]]; then
@@ -513,5 +553,6 @@ jobs:
           NEEDS_CHANGED_OUTPUTS_CODEX: ${{ needs.changed.outputs.codex }}
           NEEDS_CHANGED_OUTPUTS_WORKFLOWS: ${{ needs.changed.outputs.workflows }}
           NEEDS_CHANGED_OUTPUTS_WINDOWS_NATIVE_TESTS: ${{ needs.changed.outputs.windows_native_tests }}
+          NEEDS_CHANGED_OUTPUTS_APP_SERVER_SCHEMA: ${{ needs.changed.outputs.app_server_schema }}
           NEEDS_CHANGED_OUTPUTS_ARGUMENT_COMMENT_LINT_PACKAGE: ${{ needs.changed.outputs.argument_comment_lint_package }}
           NEEDS_CHANGED_OUTPUTS_ARGUMENT_COMMENT_LINT_PACKAGES: ${{ needs.changed.outputs.argument_comment_lint_packages }}

@@ -2150,7 +2150,10 @@ impl App {
                     let message = match outcome {
                         SettingsUpdateOutcome::Confirmed => {
                             if self.refresh_model_list(app_server).await {
-                                Some(account_switch_message(account.as_ref()))
+                                Some(account_switch_message(
+                                    account.as_ref(),
+                                    &self.config,
+                                ))
                             } else {
                                 Some(SWITCH_LIST_NOT_REFRESHED.to_string())
                             }
@@ -3809,6 +3812,11 @@ impl App {
             }
             AppEvent::VaultCredentialDeleted { label, result } => {
                 self.chat_widget.on_vault_credential_deleted(label, result);
+                // #1193: the deleted entry may have been a named account.
+                crate::provider_named_accounts::check_named_account_providers(
+                    &self.model_catalog,
+                    &self.config,
+                );
             }
             AppEvent::VaultMenuCredentialsReady { result } => {
                 self.chat_widget.on_vault_menu_credentials_ready(result);
@@ -5350,10 +5358,18 @@ impl App {
                 task,
                 sent_while_kill_switch_on,
             } => {
-                if self.spawn_legacy_read_only
-                    || self.spawn_crew.as_ref().is_some_and(|crew| {
-                        !matches!(crew.status, crate::crew_state::CrewCreationStatus::Ready)
-                    })
+                // D106 (#1176): a pane the person opened takes agents' tasks
+                // from its mailbox too; the /spawn crew's state does not stop
+                // them, as it did not when they arrived as its input.
+                let is_operator_pane = self
+                    .agent_navigation
+                    .get(&thread_id)
+                    .is_some_and(|entry| self.is_operator_owned_codex_user_pane(thread_id, entry));
+                if !is_operator_pane
+                    && (self.spawn_legacy_read_only
+                        || self.spawn_crew.as_ref().is_some_and(|crew| {
+                            !matches!(crew.status, crate::crew_state::CrewCreationStatus::Ready)
+                        }))
                 {
                     let target_node_id = self.logical_native_node_for_thread(thread_id);
                     let acks = self.take_spawn_dispatch_acks_for_task(&target_node_id, task.trim());
@@ -5376,6 +5392,14 @@ impl App {
                 }
                 let task = task.trim().to_string();
                 if task.is_empty() {
+                    // The sender is told, as before for a pane the person opened.
+                    let target_node_id = self.logical_native_node_for_thread(thread_id);
+                    self.record_spawn_dispatch_failed_for_task_with_turns(
+                        &target_node_id,
+                        &task,
+                        "spawn task cannot be empty",
+                        /*start_turns*/ !sent_while_kill_switch_on,
+                    );
                     self.chat_widget
                         .add_error_message("Spawn task cannot be empty.".to_string());
                     return Ok(AppRunControl::Continue);
@@ -5468,8 +5492,14 @@ impl App {
                         );
                         self.persist_pane_state();
                     }
+                    // D106: a pane the person opened is never re-created as a
+                    // saved agent; if Core has not loaded it, the task fails
+                    // (below) as it did when it had no live session.
                     Err(error)
-                        if AppServerSession::agent_message_target_not_found(&error, thread_id) =>
+                        if !is_operator_pane
+                            && AppServerSession::agent_message_target_not_found(
+                                &error, thread_id,
+                            ) =>
                     {
                         match self
                             .materialize_saved_native_spawn_thread_for_task(app_server, thread_id)
@@ -5712,154 +5742,6 @@ impl App {
                         self.persist_pane_state();
                     }
                     Err(detail) => self.chat_widget.add_error_message(detail),
-                }
-            }
-            AppEvent::SubmitCodexUserPaneTask {
-                thread_id,
-                task,
-                sent_while_kill_switch_on,
-            } => {
-                let task = task.trim().to_string();
-                // #660: a task sent while the switch was on starts no turn in
-                // its sender, also when it fails after switch-off.
-                let report_turns = !sent_while_kill_switch_on;
-                let target_node_id = self.logical_native_node_for_thread(thread_id);
-                let is_operator_pane = self
-                    .agent_navigation
-                    .get(&thread_id)
-                    .is_some_and(|entry| self.is_operator_owned_codex_user_pane(thread_id, entry));
-                if !is_operator_pane {
-                    let detail =
-                        format!("native thread {thread_id} is not an operator-owned user pane");
-                    self.record_spawn_dispatch_failed_for_task_with_turns(
-                        &target_node_id,
-                        &task,
-                        &detail,
-                        report_turns,
-                    );
-                    self.chat_widget.add_error_message(detail);
-                    return Ok(AppRunControl::Continue);
-                }
-                if task.is_empty() {
-                    self.record_spawn_dispatch_failed_for_task_with_turns(
-                        &target_node_id,
-                        &task,
-                        "operator pane task cannot be empty",
-                        report_turns,
-                    );
-                    self.chat_widget
-                        .add_error_message("Operator pane task cannot be empty.".to_string());
-                    return Ok(AppRunControl::Continue);
-                }
-                if task.len() > crate::dispatch_queue::MAX_DISPATCH_TASK_BYTES {
-                    let detail = format!(
-                        "task is {} bytes; maximum is {} bytes",
-                        task.len(),
-                        crate::dispatch_queue::MAX_DISPATCH_TASK_BYTES
-                    );
-                    self.record_spawn_dispatch_failed_for_task_with_turns(
-                        &target_node_id,
-                        &task,
-                        &detail,
-                        report_turns,
-                    );
-                    self.chat_widget.add_error_message(detail);
-                    return Ok(AppRunControl::Continue);
-                }
-                // #507: with the kill switch on, a task for a pane the person
-                // opened is a user turn, which is refused and not kept; say so
-                // to the sender and the person instead of reporting it sent.
-                // Checked before the store-lock retry below, so a retry never
-                // starts it once the switch is off. #660: also when another
-                // agent sent it while the switch was on and it is handled only
-                // after switch-off.
-                let kill_switch_on = self.kill_switch_on_now();
-                if sent_while_kill_switch_on || kill_switch_on {
-                    let label = self.thread_label(thread_id);
-                    let detail = if kill_switch_on {
-                        format!(
-                            "Not sent to {label}: the security kill switch is on, and a task for a pane you opened is not kept (as a typed message is not). Send it again after turning the switch off."
-                        )
-                    } else {
-                        format!(
-                            "Not sent to {label}: it was sent while the security kill switch was on, and a task for a pane you opened is not kept (as a typed message is not). It was not started when the switch was turned off; send it again."
-                        )
-                    };
-                    // #660: the sender is told; no turn starts for it there.
-                    self.record_kill_switch_dispatch_failed_for_task(&target_node_id, &task, &detail);
-                    self.chat_widget.add_error_message(detail);
-                    return Ok(AppRunControl::Continue);
-                }
-                let session = match self.thread_event_channels.get(&thread_id) {
-                    Some(channel) => match channel.store.try_lock() {
-                        Ok(store) => store.session.clone(),
-                        Err(_) => {
-                            // Never wait on a thread store from the main dispatcher. A thread-event
-                            // handler may hold this lock while doing asynchronous work, which would
-                            // otherwise freeze all terminal input. Wait off-loop, then replay the
-                            // submission so it observes the latest pane ownership and session.
-                            let store = Arc::clone(&channel.store);
-                            let app_event_tx = self.app_event_tx.clone();
-                            tokio::spawn(async move {
-                                let store_guard = store.lock().await;
-                                drop(store_guard);
-                                app_event_tx.send(AppEvent::SubmitCodexUserPaneTask {
-                                    thread_id,
-                                    task,
-                                    sent_while_kill_switch_on,
-                                });
-                            });
-                            return Ok(AppRunControl::Continue);
-                        }
-                    },
-                    None => None,
-                };
-                let Some(session) = session else {
-                    let detail = format!(
-                        "operator-owned pane {thread_id} has no live session available for turn submission"
-                    );
-                    self.record_spawn_dispatch_failed_for_task(&target_node_id, &task, &detail);
-                    self.chat_widget.add_error_message(detail);
-                    return Ok(AppRunControl::Continue);
-                };
-                let mut op = AppCommand::user_turn(
-                    vec![codex_app_server_protocol::UserInput::Text {
-                        text: task.clone(),
-                        text_elements: Vec::new(),
-                    }],
-                    session.cwd.to_path_buf(),
-                    AskForApproval::from(self.config.permissions.approval_policy.value()),
-                    self.config.permissions.active_permission_profile(),
-                    session.model,
-                    session.reasoning_effort,
-                    /*summary*/ None,
-                    /*service_tier*/ None,
-                    /*final_output_json_schema*/ None,
-                    session.collaboration_mode.map(|mode| *mode),
-                    session.personality,
-                );
-                if let AppCommand::UserTurn {
-                    approvals_reviewer, ..
-                } = &mut op
-                {
-                    *approvals_reviewer = Some(self.config.approvals_reviewer);
-                }
-                match self.submit_thread_op(app_server, thread_id, op).await {
-                    Ok(()) => {
-                        self.record_spawn_dispatch_delivered_for_task(&target_node_id, &task);
-                        self.agent_navigation
-                            .set_running(thread_id, /*is_running*/ true);
-                        self.agent_navigation.set_last_task_message(
-                            thread_id,
-                            Some(task.chars().take(240).collect()),
-                        );
-                        self.persist_pane_state();
-                    }
-                    Err(error) => {
-                        let detail = format!("operator pane turn submission failed: {error:#}");
-                        self.record_spawn_dispatch_failed_for_task(&target_node_id, &task, &detail);
-                        self.chat_widget.add_error_message(detail);
-                    }
                 }
             }
             AppEvent::SendSpawnAgentMailboxMessage { params } => {
@@ -6904,25 +6786,45 @@ pub(super) fn sign_in_account_switch(
     (codex_model_provider::named_sign_in_account(current) != account).then_some(account)
 }
 
-pub(super) fn account_switch_message(account: Option<&codex_login::NamedChatgptAccount>) -> String {
-    account_switch_message_for(account, codex_login::default_login_left_unenforced())
+pub(super) fn account_switch_message(
+    account: Option<&codex_login::NamedChatgptAccount>,
+    config: &Config,
+) -> String {
+    account_switch_message_for(
+        account,
+        codex_login::default_login_left_unenforced(),
+        login_restrictions_configured(config),
+    )
+}
+
+/// #1205: whether `forced_login_method` or `forced_chatgpt_workspace_id` is
+/// configured; only these can rule out the default login (the login method
+/// implied by an API-key provider such as Z.AI does not count).
+pub(super) fn login_restrictions_configured(config: &Config) -> bool {
+    config.configured_forced_login_method.is_some() || config.forced_chatgpt_workspace_id.is_some()
 }
 
 /// `default_login_left_in_place`: this process skipped the startup
 /// enforcement of the login restrictions on the default login (#570), so a
-/// default login they rule out is hidden rather than used (#609).
+/// default login they rule out is hidden rather than used (#609). The caveat
+/// is shown only when `login_restrictions_configured` too (#1205).
 pub(super) fn account_switch_message_for(
     account: Option<&codex_login::NamedChatgptAccount>,
     default_login_left_in_place: bool,
+    login_restrictions_configured: bool,
 ) -> String {
     let label = match account {
         Some(account) => format!("{} account `{}`", account.provider_id, account.name),
-        None => "the default account".to_string(),
+        None => "the default OpenAI login".to_string(),
     };
-    if account.is_none() && default_login_left_in_place {
-        "Switched to the default account; model list refreshed. If your login restrictions (`forced_login_method`, `forced_chatgpt_workspace_id`) rule out the default login, this session cannot use it and its next request is refused with the reason; sign in with `corbanu login`, or pick a named account in /providers.".to_string()
+    let message =
+        format!("Connectors, usage and the model list now use {label}; model list refreshed.");
+    if account.is_none() && default_login_left_in_place && login_restrictions_configured {
+        format!(
+            "{message} If your login restrictions (`forced_login_method`, `forced_chatgpt_workspace_id`) rule out the default login, this session cannot use it and its next request is refused with the reason; sign in with `corbanu login`, or pick a named account in /providers."
+        )
     } else {
-        format!("Connectors, usage and the model list now use {label}; model list refreshed.")
+        message
     }
 }
 

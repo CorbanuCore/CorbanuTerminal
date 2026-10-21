@@ -62,6 +62,7 @@ fn threads_add_up_per_account_of_the_active_provider() {
     assert_eq!(
         session.for_provider("zai", "default"),
         StatusAccountUsage {
+            named_account_in_home: None,
             rows: vec![
                 ("default".to_string(), tokens([100, 20, 10, 5])),
                 ("work".to_string(), tokens([51, 1, 6, 1])),
@@ -82,6 +83,7 @@ fn threads_add_up_per_account_of_the_active_provider() {
     assert_eq!(
         session.for_provider("zai", "work"),
         StatusAccountUsage {
+            named_account_in_home: None,
             rows: vec![("work".to_string(), TokenUsage::default())],
         }
     );
@@ -90,6 +92,7 @@ fn threads_add_up_per_account_of_the_active_provider() {
 #[test]
 fn one_account_is_one_line() {
     let summary = StatusAccountUsage {
+        named_account_in_home: None,
         rows: vec![("work".to_string(), tokens([40_100, 12_000, 6_015, 300]))],
     };
     assert_eq!(
@@ -98,10 +101,12 @@ fn one_account_is_one_line() {
     );
     // Cached input and reasoning appear only when reported.
     let summary = StatusAccountUsage {
+        named_account_in_home: None,
         rows: vec![("work".to_string(), tokens([700, 0, 32, 0]))],
     };
     assert_eq!(text(summary.lines()), vec!["work · 700 input · 32 output"]);
     let summary = StatusAccountUsage {
+        named_account_in_home: None,
         rows: vec![("default".to_string(), TokenUsage::default())],
     };
     assert_eq!(text(summary.lines()), vec!["default · no usage yet"]);
@@ -110,6 +115,7 @@ fn one_account_is_one_line() {
 #[test]
 fn several_accounts_are_an_aligned_table_with_the_active_one_marked() {
     let summary = StatusAccountUsage {
+        named_account_in_home: None,
         rows: vec![
             ("default".to_string(), tokens([40_100, 12_000, 6_015, 0])),
             ("work".to_string(), tokens([7_000, 0, 232, 0])),

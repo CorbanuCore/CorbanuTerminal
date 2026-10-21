@@ -10,7 +10,7 @@ use super::utc_date;
 pub(super) const NOT_PROOF: &str = "That does not show there were no requests: one that failed to record, or one sent from a build without developer accounting, leaves no record.";
 
 /// The first screen's opening lines. `None` is a view that did not classify
-/// its emptiness (a range bucket), which proves nothing either.
+/// its emptiness, which proves nothing either.
 pub(super) fn overview(heading: &str, empty: Option<EmptyDay>) -> Vec<String> {
     match empty {
         Some(EmptyDay::BeforeConversation { started_day }) => vec![format!(

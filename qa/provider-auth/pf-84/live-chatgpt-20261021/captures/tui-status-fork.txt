@@ -1,0 +1,24 @@
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date                            │
+│ information on rate limits and credits                                                   │
+│                                                                                          │
+│  Model:                GPT-5.6-Luna (reasoning low, summaries auto)                      │
+│  Model provider:       OpenAI · account t1                                               │
+│  Directory:            <L>/work         │
+│  Permissions:          Next turn: Workspace (Ask for approval)                           │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              ChatGPT sign-in · <email-hint> · Free (account t1)                │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a15da2-8755-77a0-88cc-5fbb0e8859a3                              │
+│  Forked from:          01a15d9f-346e-7373-933b-2e71fdd9d1d0                              │
+│                                                                                          │
+│  Token usage:          53.7K total  (53.6K input + 41 output)                            │
+│  Context window:       97% left (18.2K used / 258K)                                      │
+│  Account usage:        t1 · no usage yet                                                 │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+› Write tests for @filename
+  GPT-5.6-Luna low · <L>/work · Corbanu Terminal · TPS: -- tok/s

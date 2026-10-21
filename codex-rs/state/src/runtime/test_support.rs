@@ -77,3 +77,51 @@ pub(super) fn test_thread_metadata(
         git_origin_url: None,
     }
 }
+
+/// Lets the child of `fork_child_holding_descriptors` start its program when
+/// dropped, on every path, so a failing check cannot leave it waiting.
+#[cfg(all(test, unix))]
+pub(crate) struct ReleaseChild(std::io::PipeWriter);
+
+#[cfg(all(test, unix))]
+impl Drop for ReleaseChild {
+    fn drop(&mut self) {
+        use std::io::Write;
+        let _ = self.0.write_all(b"r");
+    }
+}
+
+/// Fork a child, from another thread as any spawn does, that keeps a copy of
+/// every descriptor of this process open until the returned `ReleaseChild` is
+/// dropped, and return once it has forked. #928: a lock released only by
+/// closing its file stays held through that copy.
+#[cfg(all(test, unix))]
+pub(crate) fn fork_child_holding_descriptors() -> std::io::Result<(
+    ReleaseChild,
+    std::thread::JoinHandle<std::io::Result<std::process::ExitStatus>>,
+)> {
+    use std::io::Read;
+    use std::io::Write;
+    use std::os::unix::process::CommandExt;
+    // The child reports the fork, then waits for the release byte, so its
+    // copies stay open until the caller's checks have run.
+    let (mut forked, mut forked_tx) = std::io::pipe()?;
+    let (mut release_rx, release_tx) = std::io::pipe()?;
+    let release = ReleaseChild(release_tx);
+    let spawner = std::thread::spawn(move || {
+        let mut command = std::process::Command::new("/bin/sh");
+        command.args(["-c", "exit 0"]);
+        // SAFETY: the hook only writes to and reads from pipes, both safe after fork.
+        unsafe {
+            command.pre_exec(move || {
+                forked_tx.write_all(b"f")?;
+                release_rx.read_exact(&mut [0; 1])?;
+                Ok(())
+            });
+        }
+        command.status()
+    });
+    let mut byte = [0; 1];
+    forked.read_exact(&mut byte)?;
+    Ok((release, spawner))
+}

@@ -659,6 +659,33 @@ async fn cost_scope_snapshots_wide_and_narrow() {
     );
 }
 
+// #1196: a catalogue name without a route brand names the model on any route;
+// a branded one is shown only on its own operator's routes.
+#[tokio::test]
+async fn cost_unbranded_model_names_on_other_routes_snapshot() {
+    let own = vec![
+        unpriced(
+            /*id*/ 1,
+            thread(/*n*/ 1),
+            "my-claude-proxy",
+            "claude-opus-5-5",
+        ),
+        unpriced(/*id*/ 2, thread(/*n*/ 1), "my-zai", "glm-5.2"),
+        unpriced(/*id*/ 3, thread(/*n*/ 1), "openrouter", "z-ai/glm-5.2"),
+        unpriced(
+            /*id*/ 4,
+            thread(/*n*/ 1),
+            "anthropic",
+            "claude-opus-5-5-plan",
+        ),
+    ];
+    let chat = opened(day(own, /*others*/ None), /*width*/ 100).await;
+    insta::assert_snapshot!(
+        "cost_unbranded_model_names_on_other_routes",
+        render_bottom_popup_with_height(&chat, /*width*/ 100, /*height*/ 24)
+    );
+}
+
 /// The OpenAI price bound at dispatch: $5/M noncached, $0.50/M cache read,
 /// $30/M output, no stated cache-write rate.
 fn openai_price() -> codex_state::accounting::Snapshot {

@@ -2564,6 +2564,7 @@ fn sorted_writable_roots(mut roots: Vec<WritableRoot>) -> Vec<WritableRoot> {
     roots
 }
 
+#[cfg(any(test, debug_assertions))]
 thread_local! {
     static EFFECTIVE_PATH_NORMALIZATIONS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
@@ -2571,12 +2572,15 @@ thread_local! {
 /// #907: how many paths this thread has normalized with filesystem calls
 /// (each walks the path's ancestors, then resolves the first that exists),
 /// so tests can bound what a policy check costs. Instrumentation only.
+/// Available in debug builds and this crate's unit tests, not release libraries.
+#[cfg(any(test, debug_assertions))]
 #[doc(hidden)]
 pub fn effective_path_normalizations_on_this_thread() -> u64 {
     EFFECTIVE_PATH_NORMALIZATIONS.with(std::cell::Cell::get)
 }
 
 fn normalize_effective_absolute_path(path: AbsolutePathBuf) -> AbsolutePathBuf {
+    #[cfg(any(test, debug_assertions))]
     EFFECTIVE_PATH_NORMALIZATIONS.with(|count| count.set(count.get() + 1));
     let raw_path = path.to_path_buf();
     for ancestor in raw_path.ancestors() {

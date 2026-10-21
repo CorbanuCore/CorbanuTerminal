@@ -73,10 +73,11 @@ cd tools/argument-comment-lint
 cargo test
 ```
 
-GitHub releases also publish a DotSlash file named
-`argument-comment-lint` for macOS arm64, Linux arm64, Linux x64, and Windows
-x64. The published package contains a small runner executable, a bundled
-`cargo-dylint`, and the prebuilt lint library.
+Prebuilt packages for macOS arm64, Linux arm64, Linux x64, and Windows x64
+are published as GitHub prereleases tagged
+`argument-comment-lint-<nightly>-<short sha>`, together with a generated
+DotSlash file named `argument-comment-lint`. Each package contains a small
+runner executable, a bundled `cargo-dylint`, and the prebuilt lint library.
 
 The package is not a full Rust toolchain. Running the prebuilt path still
 requires the pinned nightly toolchain to be installed via `rustup`:
@@ -88,14 +89,22 @@ rustup toolchain install nightly-2026-08-08 \
   --component rust-src
 ```
 
-The checked-in DotSlash file lives at `tools/argument-comment-lint/argument-comment-lint`
-and `run-prebuilt-linter.py` resolves it via `dotslash`. It still points at
-upstream's `rust-v0.117.0-alpha.2` package, built for `nightly-2025-09-18`,
-which can't lint code that uses newer std APIs such as `Atomic*::try_update`.
-Until a Corbanu package for the current nightly is published (#1130), targeted
-package runs such as `just argument-comment-lint -p codex-core` build the lint
-from source with `run.py` (install `cargo-dylint` and `dylint-link` as above).
-Repo-wide runs now go through a native Bazel aspect that invokes a custom
+The checked-in DotSlash file lives at `tools/argument-comment-lint/argument-comment-lint`.
+`run-prebuilt-linter.py` resolves that file via `dotslash` (install it with
+`cargo install --locked dotslash`) and is the path used by targeted package
+runs such as `just argument-comment-lint -p codex-core`.
+
+To publish a new package (after the lint nightly or the lint itself changes),
+run the `rust-release-argument-comment-lint` workflow from `main` with
+`publish` checked:
+
+```bash
+gh workflow run rust-release-argument-comment-lint.yml --ref main -f publish=true
+```
+
+Then copy the new release's `argument-comment-lint` asset over the checked-in
+DotSlash file. CI doesn't use the prebuilt package; it builds the lint from
+source. Repo-wide runs now go through a native Bazel aspect that invokes a custom
 `rustc_driver` and reuses Bazel-managed Rust dependency metadata instead of
 spawning `cargo dylint` once per crate. The source-build path remains available
 in `run.py` for people iterating on the lint crate itself.
@@ -122,7 +131,7 @@ needed, and then invokes `cargo-dylint dylint --lib-path <that-library>` with
 the repo's default `DYLINT_RUSTFLAGS` and `CARGO_INCREMENTAL=0` settings.
 
 The checked-in `run-prebuilt-linter.py` wrapper uses the fetched package
-contents directly so the current checked-in alpha artifact works the same way.
+contents directly.
 It also makes sure the `rustup` shims stay ahead of any direct toolchain
 `cargo` binary on `PATH`, and sets `RUSTUP_HOME` from `rustup show home` when
 the environment does not already provide it. That extra `RUSTUP_HOME` export is

@@ -428,6 +428,12 @@ impl CodexThread {
                 codex_protocol::AgentPath::try_from(parent_path)
                     .map_err(CodexErr::InvalidRequest)?
             }
+            // D106 (#1176): a pane the person opened is the root of its own tree, so this
+            // thread's tree does not know it. A task for it still goes to its mailbox, as
+            // inter-agent data like any other agent message, never as the person's input.
+            Err(_) if control.is_loaded_root_thread(target_thread_id).await => {
+                codex_protocol::AgentPath::root()
+            }
             Err(err) => return Err(err),
         };
         let effective_trigger_turn = if trigger_turn && kind == AgentMessageKind::TerminalResult {

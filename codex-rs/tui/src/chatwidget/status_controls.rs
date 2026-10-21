@@ -245,6 +245,7 @@ impl ChatWidget {
             crate::status::compose_agents_summary(&self.config, &self.instruction_source_paths);
         let model_display_name = self.model_display_name();
         let account_usage = self.status_account_usage();
+        let refresh_named_accounts = account_usage.is_some();
         let (cell, handle) = crate::status::new_status_output_with_rate_limits_handle(
             &self.config,
             self.runtime_model_provider_base_url.as_deref(),
@@ -269,6 +270,14 @@ impl ChatWidget {
             self.refreshing_status_outputs.push((request_id, handle));
         }
         self.add_to_history(cell);
+        // #1193: refresh the cached answer in the background so a change made
+        // by another process shows on the next `/status`.
+        if refresh_named_accounts {
+            crate::provider_named_accounts::check_named_account_providers(
+                &self.model_catalog,
+                &self.config,
+            );
+        }
     }
 
     /// PF-84: the active provider's per-account token summary, only while
@@ -295,7 +304,11 @@ impl ChatWidget {
                     .map(|account| account.name.as_str())
             })
             .unwrap_or(codex_vault::DEFAULT_PROVIDER_ACCOUNT);
-        Some(self.session_account_usage.for_provider(provider_id, active))
+        let mut usage = self.session_account_usage.for_provider(provider_id, active);
+        // D86/#1193: the cached background answer; the vault is never read
+        // here, on the UI thread.
+        usage.named_account_in_home = self.model_catalog.provider_has_named_account(provider_id);
+        Some(usage)
     }
 
     /// PF-84: records a thread's latest per-account usage report.

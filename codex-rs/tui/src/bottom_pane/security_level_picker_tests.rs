@@ -1039,8 +1039,11 @@ mod pf_24_s02 {
         );
         let (picker, _rx) = machine.picker(ChosenLevel::Aggressive);
         let list = machine.text(&picker);
+        // The message embeds the temp path, so where it wraps (at a space or
+        // after a '/') depends on TMPDIR length; match with whitespace removed.
+        let unwrapped: String = list.split_whitespace().collect();
         assert!(
-            list.contains("may have been changed outside /security"),
+            unwrapped.contains("mayhavebeenchangedoutside/security"),
             "{list}"
         );
     }

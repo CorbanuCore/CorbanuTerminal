@@ -1,0 +1,59 @@
+# Terminal extracts for steps whose screens were not saved to separate capture files.
+# Lines starting with `$`, `›`, `•` or a path, and the quoted product output, are verbatim (sanitized: <email-hint>,
+# <L> = throwaway run dir). `#` comments, `->` notes and the timing and hash-table lines summarise the run's output.
+
+## Sign-in timing (UTC)
+08:38:47Z  device-code URL + code written to the coordinator handoff file
+08:40:34Z  login finished: "Signed in OpenAI account `t1` (ChatGPT sign-in · <email-hint> · Free)." EXIT:0
+
+## Right after sign-in (before any model turn)
+$ shasum -a 256 -c default-before.sha
+<L>/home/auth.json: OK
+<L>/home/config.toml: OK
+$ corbanu login status
+Logged in using an API key - API key configured (fingerprint 14a1326dad39)
+$ corbanu login --account t1 status
+OpenAI account `t1`: ChatGPT sign-in · <email-hint> · Free
+$ corbanu account list
+openai	t1	chatgpt_auth	ChatGPT sign-in · <email-hint> · Free
+$ find home -type f   (credential-related entries)
+<L>/home/auth.json
+<L>/home/secrets/.vault.lock
+<L>/home/secrets/keyring-fallback/ed9625c29e6125a411fbeb40b953a04f8eafa1496940fe75a2778e44c5a193ed.key
+<L>/home/secrets/local.age
+
+## After the first `exec --account t1` (files new since sign-in, excerpt)
+<L>/home/models-cache/openai/t1/models_cache.json
+# its models (slug, visibility): gpt-reserve hide, gpt-6-luna list, gpt-5.6-terra list, gpt-5.6-luna list, codex-auto-review hide
+
+## Default-login hash checks (auth.json, all equal to the pre-sign-in hash 14d04837…0b5b)
+after exec --account t1 -m gpt-5.6-luna      : auth.json: OK
+after the TUI resume turn                     : auth.json: OK   (config.toml FAILED: the trust prompt added [projects.…])
+after /quit of the resumed TUI                : 14d0483703725bc9eb55ae96cc0c0f180facef7315d4d0302e8dbb3684000b5b
+after fork, spawn and child reload            : 14d0483703725bc9eb55ae96cc0c0f180facef7315d4d0302e8dbb3684000b5b
+after logout --account t1                     : 14d0483703725bc9eb55ae96cc0c0f180facef7315d4d0302e8dbb3684000b5b
+
+## Control run (row 3) was `--ephemeral`, so it wrote no rollout; its evidence is the 401 in capture 03.
+
+## TUI resume turn (row 6)
+› Reply with exactly: PF84-RESUME-OK
+• PF84-RESUME-OK
+
+## Switch to Z.AI and back (row 7); the first message is the #1205 wording defect
+• Switched to the default account; model list refreshed. If your login restrictions (`forced_login_method`, `forced_chatgpt_workspace_id`) rule out the default
+login, this session cannot use it and its next request is refused with the reason; sign in with `corbanu login`, or pick a named account in /providers.
+• Model changed to GLM 5.3 Flash · Z.AI (OpenAI-style) low
+› Reply with exactly: PF84-ZAI-OK
+• PF84-ZAI-OK
+  Z.AI GLM 5.3 Flash via zai low · <L>/work · Corbanu Terminal
+• Connectors, usage and the model list now use openai account `t1`; model list refreshed.
+• Model changed to GPT-5.6-Luna via OpenAI low
+› Reply with exactly: PF84-SWITCHBACK-OK
+• PF84-SWITCHBACK-OK
+
+## Operator's real Corbanu home (.codex-work/corbanu-terminal/home, not ~), checked after cleanup (run started 01:30 MST = 08:30Z)
+$ ls -l .codex-work/corbanu-terminal/home/auth.json     -> modified 2026-10-15T13:44 (before the run)
+$ find .codex-work/corbanu-terminal/home/auth.json .codex-work/corbanu-terminal/home/secrets -maxdepth 1 -newermt '2026-10-21 01:30'   -> (no output)
+
+## First, stricter sandbox profile (also denied com.apple.SecurityServer), dropped because TLS failed
+Error signing in account `t1`: error sending request for url (https://auth.openai.com/api/accounts/deviceauth/usercode)

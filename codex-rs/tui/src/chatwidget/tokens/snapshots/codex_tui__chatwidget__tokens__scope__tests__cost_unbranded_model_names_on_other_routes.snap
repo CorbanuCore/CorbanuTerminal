@@ -1,0 +1,18 @@
+---
+source: tui/src/chatwidget/tokens/scope_tests.rs
+expression: "render_bottom_popup_with_height(&chat, 100, 24)"
+---
+  Cost — this conversation
+  Requested UTC day: 2026-09-16
+
+› This conversation on 2026-09-16 (UTC):
+  • Anthropic · claude-opus-5-5-plan — Pay per use. 1 request, 55 tokens. Estimated cost: no
+  price available.
+  • my-claude-proxy · Claude Opus 5.5 — Pay per use. 1 request, 55 tokens. Estimated cost: no
+  price available.
+  • my-zai · glm-5.2 — Pay per use. 1 request, 55 tokens. Estimated cost: no price available.
+  • OpenRouter · z-ai/glm-5.2 — Pay per use. 1 request, 55 tokens. Estimated cost: no price
+  available.
+
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close

@@ -983,6 +983,7 @@ async fn accounting_deleted_attempts_count_only_what_retention_cannot_explain() 
             rows: 0,
             visits: 0,
             scan_rows: 1,
+            started: None,
         };
         assert_eq!(
             scope::deleted_attempts(&mut conn, /*day*/ 150, ahead, &mut work).await,
@@ -1624,12 +1625,26 @@ async fn accounting_inspect_range_week_day_slices_and_expired_prefix() -> anyhow
         ),
         (7, Some((6 * DAY, 11 * DAY)), true)
     );
-    assert!(
-        buckets[0]
-            .days
-            .iter()
-            .all(|d| matches!(d, InspectionDay::DetailUnavailable { .. }))
-    );
+    // The two recorded days are past the daily totals. #1196: the five empty
+    // days inside them read as the day view reads them, never as zero.
+    for (index, day) in buckets[0].days.iter().enumerate() {
+        if index < 2 {
+            assert!(
+                matches!(day, InspectionDay::DetailUnavailable { .. }),
+                "{day:?}"
+            );
+            continue;
+        }
+        let InspectionDay::Ready(view) = day else {
+            panic!("{day:?}")
+        };
+        assert_eq!((view.utc_day, view.totals.attempts), (4 + index as i64, 0));
+        assert!(view.requests.is_empty());
+        assert!(
+            matches!(view.empty_day, Some(EmptyDay::BeforeLedger { .. })),
+            "{view:?}"
+        );
+    }
     runtime.close().await;
     Ok(())
 }

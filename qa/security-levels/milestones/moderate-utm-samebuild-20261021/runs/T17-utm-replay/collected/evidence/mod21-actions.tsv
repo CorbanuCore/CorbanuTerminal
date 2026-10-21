@@ -1,0 +1,21 @@
+reset_utc=2026-10-21T09:23:54Z
+profile=provided product-home left unchanged (contains read-only config.toml)
+launch_utc=2026-10-21T09:23:59Z action=agms-tui start --model glm-5.2
+trust_utc=2026-10-21T09:24:09Z action=Enter on displayed option 1
+security_utc=2026-10-21T09:24:19Z action=type /security (no Enter)
+security_enter_utc=2026-10-21T09:24:19Z action=Enter
+down_utc=2026-10-21T09:24:28Z action=Down
+moderate_enter_utc=2026-10-21T09:24:28Z action=Enter on Moderate
+confirm_utc=2026-10-21T09:24:34Z action=Enter to confirm and save
+restart_utc=2026-10-21T09:24:42Z action=r restart now
+verify_security_utc=2026-10-21T09:25:06Z action=type /security (no Enter)
+verify_security_enter_utc=2026-10-21T09:25:06Z action=Enter
+close_security_utc=2026-10-21T09:25:27Z action=Escape
+spawn_text_utc=2026-10-21T09:25:28Z action=type /spawn with exact child task (no Enter)
+spawn_enter_utc=2026-10-21T09:25:28Z action=Enter
+ask_child_text_utc=2026-10-21T09:25:44Z action=type exact request to start child with its own agent tools (no Enter)
+ask_child_enter_utc=2026-10-21T09:25:44Z action=Enter
+resubmit_text_utc=2026-10-21T09:26:52Z action=G-1 resubmit same request unchanged (no Enter)
+resubmit_enter_utc=2026-10-21T09:26:52Z action=Enter
+final_check_utc=2026-10-21T09:29:10Z action=fixture and screen capture, then stop
+report_final_utc=2026-10-21T09:30:14Z action=result.md finalized; session already stopped

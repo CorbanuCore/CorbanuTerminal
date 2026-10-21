@@ -1,6 +1,6 @@
 //! FUP-02 (#352): a past day with nothing recorded says "no requests" only
 //! when it ends before the conversation started; every other empty day stays
-//! unproven, and the rule never applies to range buckets.
+//! unproven. #1196: range buckets follow the same rule inside the daily totals.
 
 use super::*;
 use pretty_assertions::assert_eq;
@@ -383,37 +383,164 @@ async fn the_start_is_the_earliest_evidence_and_needs_a_time_bearing_id() -> any
     Ok(())
 }
 
+/// One range bucket's days, read at `now`.
+async fn bucket(
+    runtime: &StateRuntime,
+    owner: ThreadId,
+    (start_ms, end_ms): (i64, i64),
+    grouping: InspectionGrouping,
+    now: i64,
+) -> anyhow::Result<Vec<InspectionDay>> {
+    let range = InspectionRange {
+        start_ms,
+        end_ms,
+        grouping,
+    };
+    let InspectionDay::Range { mut buckets, .. } =
+        AccountingStore::inspect_range(runtime, owner, range, now).await?
+    else {
+        panic!("not a range")
+    };
+    assert_eq!(buckets.len(), 1);
+    Ok(buckets.remove(0).days)
+}
+
+/// The classification of a bucket's only day, which must be empty.
+fn only_empty(days: &[InspectionDay]) -> Option<EmptyDay> {
+    let [InspectionDay::Ready(view)] = days else {
+        panic!("{days:?}")
+    };
+    assert_eq!(view.totals.attempts, 0);
+    view.empty_day
+}
+
+const HOUR: i64 = 3_600_000;
+
 #[tokio::test]
-async fn range_buckets_never_classify_an_empty_day() -> anyhow::Result<()> {
+async fn range_buckets_classify_empty_days_as_the_day_view_does() -> anyhow::Result<()> {
     let path = home();
     let (runtime, owner) = fixture(&path, 300 * DAY, NOW).await?;
-    let range = |start: i64| {
-        AccountingStore::inspect_range(
+    for grouping in [InspectionGrouping::Day, InspectionGrouping::Hour] {
+        let span = |day: i64| match grouping {
+            InspectionGrouping::Hour => (day * DAY + 3 * HOUR, day * DAY + 4 * HOUR),
+            _ => (day * DAY, (day + 1) * DAY),
+        };
+        // #1196: inside the request detail, as in the day view.
+        assert_eq!(
+            only_empty(&bucket(&runtime, owner, span(350), grouping, NOW).await?),
+            Some(EmptyDay::NotRecorded),
+            "{grouping:?}"
+        );
+        // Past the request detail, inside the daily totals: no longer
+        // "detail unavailable", and proven before the conversation started.
+        assert_eq!(
+            only_empty(&bucket(&runtime, owner, span(299), grouping, NOW).await?),
+            before(/*started_day*/ 300),
+            "{grouping:?}"
+        );
+        // Below the daily totals' floor a range stays unavailable, even
+        // where the day view proves the day.
+        assert!(
+            matches!(
+                bucket(&runtime, owner, span(0), grouping, NOW)
+                    .await?
+                    .as_slice(),
+                [InspectionDay::DetailUnavailable { compact: false, .. }]
+            ),
+            "{grouping:?}"
+        );
+        assert_eq!(
+            empty(&runtime, owner, /*day*/ 0, NOW).await?,
+            before(/*started_day*/ 300)
+        );
+    }
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_range_window_past_the_detail_keeps_a_recorded_day_unavailable() -> anyhow::Result<()> {
+    let path = home();
+    let (runtime, owner) = fixture(&path, 300 * DAY, 290 * DAY).await?;
+    // Day 295 has one retained raw request at 01:00, awaiting compaction.
+    record(&runtime, /*id*/ 1, owner, 295 * DAY + HOUR).await?;
+    checkpoint(&runtime, NOW).await?;
+    // Another hour of that day is not "nothing recorded".
+    assert!(matches!(
+        bucket(
             &runtime,
             owner,
-            InspectionRange {
-                start_ms: start * DAY,
-                end_ms: (start + 1) * DAY,
-                grouping: InspectionGrouping::Day,
-            },
+            (295 * DAY + 5 * HOUR, 295 * DAY + 6 * HOUR),
+            InspectionGrouping::Hour,
             NOW,
         )
-    };
-    let InspectionDay::Range { buckets, .. } = range(/*start*/ 350).await? else {
-        panic!()
-    };
-    let [InspectionDay::Ready(view)] = buckets[0].days.as_slice() else {
-        panic!("{buckets:?}")
-    };
-    assert_eq!(view.empty_day, None);
-    // Past the request detail a range keeps today's rule: unavailable.
-    let InspectionDay::Range { buckets, .. } = range(/*start*/ 299).await? else {
-        panic!()
-    };
-    assert!(matches!(
-        buckets[0].days.as_slice(),
+        .await?
+        .as_slice(),
         [InspectionDay::DetailUnavailable { compact: false, .. }]
     ));
+    // The day before it is empty, but the request moved the start back.
+    assert_eq!(
+        only_empty(
+            &bucket(
+                &runtime,
+                owner,
+                (294 * DAY, 295 * DAY),
+                InspectionGrouping::Day,
+                NOW
+            )
+            .await?
+        ),
+        before(/*started_day*/ 295)
+    );
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn unknown_ancestry_elsewhere_on_the_day_withdraws_a_buckets_proof() -> anyhow::Result<()> {
+    // Read on day 320, so every request below keeps its detail.
+    let now = 320 * DAY;
+    let path = home();
+    let (runtime, owner) = fixture(&path, 300 * DAY, 290 * DAY).await?;
+    // A thread of unknown ancestry with a request at 01:00 on day 293 may be
+    // an unlinked subagent, so the conversation may have run that day.
+    let stranger = v7(200 * DAY);
+    let home = runtime.sqlite().home();
+    let mut metadata = test_thread_metadata(home, stranger, home.to_path_buf());
+    metadata.source = "unknown".to_string();
+    runtime.upsert_thread(&metadata).await?;
+    record(&runtime, /*id*/ 1, stranger, 293 * DAY + HOUR).await?;
+    checkpoint(&runtime, now).await?;
+    let days = bucket(
+        &runtime,
+        owner,
+        (293 * DAY + 5 * HOUR, 293 * DAY + 6 * HOUR),
+        InspectionGrouping::Hour,
+        now,
+    )
+    .await?;
+    let [InspectionDay::Ready(view)] = days.as_slice() else {
+        panic!("{days:?}")
+    };
+    // Nothing of it is in this hour, and the proof is still withdrawn.
+    assert_eq!(
+        (view.unknown_parent_totals.attempts, view.empty_day),
+        (0, Some(EmptyDay::NotRecorded))
+    );
+    // The day before is still proven.
+    assert_eq!(
+        only_empty(
+            &bucket(
+                &runtime,
+                owner,
+                (292 * DAY + 5 * HOUR, 292 * DAY + 6 * HOUR),
+                InspectionGrouping::Hour,
+                now
+            )
+            .await?
+        ),
+        before(/*started_day*/ 300)
+    );
     runtime.close().await;
     Ok(())
 }
@@ -451,6 +578,27 @@ async fn a_subagent_compact_day_is_unavailable_and_moves_the_start() -> anyhow::
         empty(&runtime, owner, /*day*/ 294, NOW).await?,
         before(/*started_day*/ 295)
     );
+    // #1196: a range reads both days the same way, in any part of the day.
+    for (start, end) in [
+        (295 * DAY, 296 * DAY),
+        (295 * DAY + 5 * HOUR, 295 * DAY + 6 * HOUR),
+    ] {
+        let grouping = if end - start == DAY {
+            InspectionGrouping::Day
+        } else {
+            InspectionGrouping::Hour
+        };
+        assert!(matches!(
+            bucket(&runtime, owner, (start, end), grouping, NOW)
+                .await?
+                .as_slice(),
+            [InspectionDay::DetailUnavailable { compact: true, .. }]
+        ));
+        assert_eq!(
+            only_empty(&bucket(&runtime, owner, (start - DAY, end - DAY), grouping, NOW).await?),
+            before(/*started_day*/ 295)
+        );
+    }
     runtime.close().await;
     Ok(())
 }

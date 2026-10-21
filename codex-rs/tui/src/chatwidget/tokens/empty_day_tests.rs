@@ -222,3 +222,203 @@ async fn empty_day_snapshots() {
         );
     }
 }
+
+/// #1196: a bucket day as the store returns it, classified as `empty`.
+fn empty_view(utc_day: i64, empty: Option<EmptyDay>) -> InspectionDay {
+    let InspectionDay::Ready(mut view) = empty_day(empty) else {
+        unreachable!()
+    };
+    view.utc_day = utc_day;
+    view.other_conversations = None;
+    InspectionDay::Ready(view)
+}
+
+/// A range of `(start, end, days)` buckets, with the ledger current to
+/// `completed_as_of_ms`.
+fn range_of(
+    grouping: codex_state::accounting::InspectionGrouping,
+    completed_as_of_ms: i64,
+    buckets: Vec<(i64, i64, Vec<InspectionDay>)>,
+) -> InspectionDay {
+    let InspectionDay::Ready(template) = empty_day(/*empty_day*/ None) else {
+        unreachable!()
+    };
+    InspectionDay::Range {
+        requested: codex_state::accounting::InspectionRange {
+            start_ms: buckets[0].0,
+            end_ms: buckets[buckets.len() - 1].1,
+            grouping,
+        },
+        aggregate_day_floor: Some(template.coverage.aggregate_day_floor),
+        completed_as_of_ms: Some(completed_as_of_ms),
+        read_at_ms: READ_AT,
+        buckets: buckets
+            .into_iter()
+            .map(|(start_ms, end_ms, mut days)| {
+                // Every day was read from the same ledger snapshot.
+                for day in &mut days {
+                    if let InspectionDay::Ready(view) = day {
+                        view.coverage.completed_as_of_ms = completed_as_of_ms;
+                    }
+                }
+                codex_state::accounting::InspectionBucket {
+                    start_ms,
+                    end_ms,
+                    effective: Some((start_ms, end_ms.min(completed_as_of_ms + 1))),
+                    partial: end_ms > completed_as_of_ms + 1,
+                    days,
+                }
+            })
+            .collect(),
+    }
+}
+
+/// Whole-day buckets of empty days, the first starting on `first_day`.
+fn empty_days(
+    first_day: i64,
+    buckets: &[&[Option<EmptyDay>]],
+) -> Vec<(i64, i64, Vec<InspectionDay>)> {
+    let mut day = first_day;
+    buckets
+        .iter()
+        .map(|days| {
+            let start = day;
+            let views = days
+                .iter()
+                .map(|&empty| {
+                    day += 1;
+                    empty_view(day - 1, empty)
+                })
+                .collect();
+            (start * DAY_MS, day * DAY_MS, views)
+        })
+        .collect()
+}
+
+/// The bucket pages' text, in order.
+fn bucket_pages(range: InspectionDay) -> Vec<String> {
+    inspection_pages(Ok(range))
+        .into_iter()
+        .skip(1)
+        .filter(|page| page.parent == Some(0))
+        .map(|page| page.text.join("\n"))
+        .collect()
+}
+
+#[test]
+fn range_buckets_read_empty_days_as_the_day_view_does() {
+    use codex_state::accounting::InspectionGrouping;
+    let before = Some(EmptyDay::BeforeConversation {
+        started_day: STARTED,
+    });
+    let hour = DAY * DAY_MS + 3 * 3_600_000;
+    let pages = bucket_pages(range_of(
+        InspectionGrouping::Hour,
+        READ_AT,
+        vec![(hour, hour + 3_600_000, vec![empty_view(DAY, before)])],
+    ));
+    insta::assert_snapshot!("cost_range_empty_hour_before_conversation", pages[0]);
+    assert!(
+        pages[0].contains("after this UTC hour.")
+            && pages[0].contains("this UTC hour ends before the conversation started")
+            && pages[0].contains("anything on this hour's UTC day."),
+        "{}",
+        pages[0]
+    );
+    // A bucket of days classified alike keeps the claim; days classified
+    // differently prove only that nothing is recorded.
+    let pages = bucket_pages(range_of(
+        InspectionGrouping::Week,
+        READ_AT,
+        empty_days(
+            DAY,
+            &[
+                &[before, before],
+                &[before, Some(EmptyDay::NotRecorded)],
+                &[
+                    before,
+                    Some(EmptyDay::BeforeLedger {
+                        ledger_started_day: 20_697,
+                    }),
+                ],
+            ],
+        ),
+    ));
+    assert!(pages[0].contains("no requests recorded — this conversation started on 2026-10-20 (UTC), after this bucket."), "{}", pages[0]);
+    assert!(
+        pages[0].contains("anything on this bucket's UTC days."),
+        "{}",
+        pages[0]
+    );
+    for page in &pages[1..] {
+        assert!(
+            page.contains("nothing recorded.") && page.contains(NOT_PROOF),
+            "{page}"
+        );
+        assert!(
+            !page.to_lowercase().contains("no requests recorded"),
+            "{page}"
+        );
+    }
+}
+
+/// #1218 review: a bucket only partly reached, its later days lagging the
+/// checkpoint, never dates its emptiness before a day it contains.
+#[test]
+fn a_bucket_containing_the_start_is_never_before_it() {
+    use codex_state::accounting::InspectionGrouping;
+    let before = Some(EmptyDay::BeforeConversation {
+        started_day: STARTED,
+    });
+    let ledger = Some(EmptyDay::BeforeLedger {
+        ledger_started_day: STARTED,
+    });
+    // The ledger is current only to the end of the day before the start.
+    let checkpoint = STARTED * DAY_MS - 1;
+    for empty in [before, ledger] {
+        let mut days = vec![
+            empty_view(STARTED - 2, empty),
+            empty_view(STARTED - 1, empty),
+        ];
+        days.extend((0..5).map(|_| InspectionDay::CheckpointLag));
+        let pages = bucket_pages(range_of(
+            InspectionGrouping::Week,
+            checkpoint,
+            vec![((STARTED - 2) * DAY_MS, (STARTED + 5) * DAY_MS, days)],
+        ));
+        let text = pages.join("\n");
+        assert!(
+            !text.to_lowercase().contains("no requests recorded"),
+            "{text}"
+        );
+        assert!(!text.contains("after this bucket"), "{text}");
+        assert!(text.contains(NOT_PROOF), "{text}");
+    }
+    // A bucket recorded through a checkpoint inside it, ending before the
+    // start: its lagging days were never checked for unknown ancestry.
+    let checkpoint_inside = (STARTED - 6) * DAY_MS - 1;
+    let mut days: Vec<InspectionDay> = (0..4)
+        .map(|offset| empty_view(STARTED - 10 + offset, before))
+        .collect();
+    days.extend((0..3).map(|_| InspectionDay::CheckpointLag));
+    let text = bucket_pages(range_of(
+        InspectionGrouping::Week,
+        checkpoint_inside,
+        vec![((STARTED - 10) * DAY_MS, (STARTED - 3) * DAY_MS, days)],
+    ))
+    .join("\n");
+    assert!(
+        !text.to_lowercase().contains("no requests recorded"),
+        "{text}"
+    );
+    assert!(text.contains(NOT_PROOF), "{text}");
+    // The whole-day buckets before it keep the claim.
+    let pages = bucket_pages(range_of(
+        InspectionGrouping::Day,
+        checkpoint,
+        empty_days(STARTED - 2, &[&[before], &[before]]),
+    ));
+    for page in &pages {
+        assert!(page.contains("after this bucket."), "{page}");
+    }
+}

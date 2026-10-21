@@ -3082,6 +3082,48 @@ fn issue_1084_glob_substitution_is_unseen_code() {
     assert_eq!(wrong, Vec::<String>::new());
 }
 
+/// #932 phase 3: under zsh too, the zsh-only checks do not ask for plain
+/// commands of programs that never run their words when the bash grammar
+/// proves every word is data (quoted or plain characters, no expansion).
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_932_zsh_lines_of_proven_data_skip_the_zsh_only_checks() {
+    let named = |command: &[&str]| {
+        classify_as_named_with(
+            &shell_in("/work", command),
+            Path::new(HOME),
+            Some(Path::new(USER_HOME)),
+        )
+    };
+    let mut wrong = Vec::new();
+    for shell in ["/bin/zsh", "/usr/bin/zsh", "/bin/bash"] {
+        for line in [
+            "git commit -m \"fix(tests)\"",
+            "git commit -m 'fix(tests): keep *(N) and /*(e:true:)'",
+            "echo '${~x} ${(e)y} setopt globsubst' && git status",
+            "grep -n 'x$~y' notes.txt | head -n 3",
+            "git add 'src/*(N)'; git status",
+        ] {
+            let found = named(&[shell, "-lc", line]);
+            if found.is_some() {
+                wrong.push(format!("{shell} {line:?}: {found:?}, expected None"));
+            }
+        }
+    }
+    // Run as the argv names only: otherwise the checks ask as before.
+    let found = classify_fixture(&shell_in(
+        "/work",
+        &["/bin/zsh", "-lc", "git commit -m 'fix(tests)'"],
+    ));
+    if found != Some(ProtectedActionKind::UnseenCode) {
+        wrong.push(format!("not as named: {found:?}"));
+    }
+    assert_eq!(wrong, Vec::<String>::new());
+}
+
 /// D85: the zsh-only checks (#1028 glob qualifiers, #1084 glob substitution)
 /// ask only where zsh may run: not on a line a system bash, dash or sh runs
 /// as plain commands of programs that never hand their words to a shell,
@@ -3155,8 +3197,16 @@ fn d85_zsh_only_checks_ask_only_where_zsh_may_run() {
     // argv shape.
     let qualifier = "git commit -m '/*(e:true:)'";
     for command in [
-        vec!["/bin/zsh", "-lc", qualifier],
-        vec!["/usr/bin/zsh", "-c", "git commit -m \"fix(tests)\""],
+        // #932 phase 3: under zsh, only words the grammar does not prove
+        // data keep the checks.
+        vec!["/bin/zsh", "-lc", "git commit -m \"$m\" -m '/*(e:true:)'"],
+        vec!["/usr/bin/zsh", "-c", "git commit -m fix(tests)"],
+        vec!["/bin/zsh", "-lc", "cd '/*(e:true:)'"],
+        vec!["/bin/zsh", "-lc", "echo 'it''s /*(e:true:)'"],
+        vec!["/bin/zsh", "-lc", "git commit -m \\'/*(e:true:)\\'"],
+        vec!["/bin/zsh", "-lc", "set -o globsubst; echo '/*(e:true:)'"],
+        vec!["/bin/fish", "-c", qualifier],
+        vec!["zsh", "-lc", qualifier],
         vec!["/bin/bash", "-lc", "zsh -c 'print -l /*(e:true:)'"],
         vec![
             "/bin/bash",
@@ -3581,4 +3631,328 @@ fn issue_1065_review_2_large_values_are_judged_once() {
     assert_eq!((few.0, many.0), (Some(UnseenCode), Some(UnseenCode)));
     assert_eq!(many.1, few.1);
     assert!(many.2 - few.2 <= 8 * 997 * 2, "{few:?} {many:?}");
+}
+
+/// #1141: a file an output option names is written like a redirection
+/// target. #1142 (below): setting a variable or git config key whose value
+/// git (or a pager or editor it starts) runs is code the classifier does not
+/// read.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1141_output_files_are_written() {
+    use ProtectedActionKind::*;
+    for command in [
+        "git log -1 --format=x --output=~/.zshrc",
+        "git log -1 --format=x --output=/home/fixture/.zshrc",
+        "git log -1 --format=x --output /home/fixture/.zshrc",
+        "git log -1 --format=x --out=$HOME/.bashrc",
+        "git -C ~ log -1 --output=.zshrc",
+        "git -C ~ archive -o.zshrc HEAD",
+        "git archive -o~/.zshrc HEAD",
+        "git diff --output=.git/hooks/pre-commit",
+        "git format-patch -o ~/.config/autostart HEAD~1",
+        "env git log --output=~/.profile",
+        "sort -o ~/.zshrc list",
+        "git config --file ~/.zshrc a.b '$(touch pwned)'",
+        "git bundle create ~/.zshrc HEAD",
+        "printf 'protocol=x\\n' | git credential-store --file ~/.zshrc store",
+        // Review round 1: a reading word as the value, chained `-C`.
+        "git config --file ~/.zshenv 'x.$(touch pwned).y' get",
+        "git config --comment --get -f ~/.zshenv 'x.$(touch pwned).y' z",
+        "git config -f ~/.zshenv 'x.$(touch pwned).y' -- --get",
+        "git -C ~ -C . config -f .zshenv 'x.$(touch pwned).y' z",
+        "git -C ~ -C . log --output=.zshrc",
+        "git -C ~ -C '' log --output=.zshrc",
+        "git --global config --file ~/.zshrc a.b x list",
+        // Review round 2: a reading option after the key is a value.
+        "git config --file ~/.zshenv 'x.$(touch pwned).y' z --get",
+        "git config -f ~/.zshenv k --list",
+        "git config -f ~/.zshenv --add 'x.$(touch pwned).y' -l",
+        "git config --global core.fsmonitor 'touch pwned' --get",
+        // Review round 3.
+        "git fast-export --export-marks=~/.zshrc HEAD",
+    ] {
+        assert_eq!(script(command), Some(Persistence), "{command}");
+    }
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1142_git_code_settings_are_unseen_code() {
+    let unseen = Some(ProtectedActionKind::UnseenCode);
+    for command in [
+        "GIT_PAGER='touch pwned' git log",
+        "PAGER='touch pwned' git log",
+        "env GIT_PAGER='touch pwned' git log",
+        "export GIT_PAGER='touch pwned'; git log",
+        "printf -v GIT_PAGER %s 'touch pwned'; git log",
+        "printf -v PAGER %s 'touch pwned'; git log",
+        "n=PAGER; printf -v \"$n\" %s 'touch pwned'; git log",
+        "printf -v \"$(cat name)\" %s 'touch pwned'; git log",
+        "read -r GIT_EDITOR <<< 'touch pwned'; git commit",
+        "GIT_SSH_COMMAND='touch pwned' git fetch",
+        "GIT_EXTERNAL_DIFF='touch pwned' git diff",
+        "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=x git log",
+        "git -c core.pager='touch pwned' log",
+        "git -c alias.x='!touch pwned' x",
+        "git --config-env=core.editor=X commit",
+        "git --exec-path=/tmp/x log",
+        "bash -c \"GIT_PAGER='touch pwned' git log\"",
+        "declare -u n=pager; printf -v \"$n\" %s 'touch pwned'; git log",
+        "HOME=/tmp/h git log",
+        "GIT_TRACE=/tmp/t git status",
+        "GIT_TEST_FSMONITOR='touch pwned;:' git status",
+        "n=$(cat name); env \"$n=touch pwned;:\" git diff --no-index a b",
+        "n=$(printf GIT_EXTERNAL_;printf DIFF); env \"$n=touch pwned;:\" git diff",
+        // Review round 2: an empty `-C`/`--namespace` value (the lexer drops
+        // empty words) and names built at run time and set by arithmetic or
+        // zsh `(P)`.
+        "git -C '' -c core.fsmonitor='touch pwned' status",
+        "git -C \"\" -c alias.x='!touch pwned' x",
+        "git --namespace '' -c alias.x='!touch pwned' x",
+        "n=${LOGNAME/*/HO}ME; let \"$n=1\"; git status",
+        "n=${LOGNAME/*/HO}ME; (( $n = 1 )); git status",
+        "n=${LOGNAME/*/HO}ME; : $(( $n = 1 )); git status",
+        "n=${LOGNAME/*/HO}ME; [[ \"$n=1\" -eq 1 ]]; git status",
+        "n=${LOGNAME/*/HO}ME; a[$n=1]=1; git status",
+        "n=${LOGNAME/*/HO}ME; declare -i x; x=$n=1; git status",
+        "n=${LOGNAME/*/HO}ME=1; (( n )); git status",
+        "n=${LOGNAME/*/HO}ME; m=\"$n=1\"; k=$m; (( k )); git status",
+        "n=${LOGNAME/*/HO}ME; : ${(P)n::=/tmp/h}; git status",
+        "n=${LOGNAME/*/HO}ME; : ${(P)n=/tmp/h}; git status",
+        // ... and names from outside the line.
+        "let \"$x=1\"; git status",
+        "m=$x$y; (( m )); git status",
+        "m=\"$x=1\"; (( m )); git status",
+        ": ${(P)x::=/tmp/h}; git status",
+        ": ${(P)x=/tmp/h}; git status",
+        ": ${!x:=1}; git status",
+        // Review round 3: quoted values the lexer splits, a missing value
+        // option, unseen words before the subcommand, attached prefix names.
+        "git --namespace 'a b' -c alias.x='!touch pwned' x",
+        "git --namespace 'a,b' -c alias.x='!touch pwned' x",
+        "git -c 'user.name=a b' $o x",
+        "git --shallow-file x -c alias.y='!touch pwned' y",
+        "git $(cat notes.txt) x",
+        "o=\"-p -c alias.x=!id\"; git $o x",
+        "set -a; printf -vGIT_TEST_FSMONITOR %s 'touch pwned'; git status",
+        "read -rGIT_CONFIG_KEY_0 <<< core.pager",
+        // Review round 4: values the substitution cuts short, attached
+        // names with more after them, globs.
+        "o=(--bare -c 'alias.x=!id'); git \"${o[@]}\" x",
+        "export o='--bare -c alias.x=!id'; git $o x",
+        "a=(PAG); env \"${a[@]}ER=id\" git log",
+        "a=(HO); export \"${a[@]}ME=/tmp/e\"; git status",
+        "env -SPAGER=id git log",
+        "printf -vHOME[0] %s /tmp/e; git status",
+        "touch ./-c; git -[c] 'alias.x=!id' x",
+        "git [-]c 'alias.x=!id' x",
+        "git --exec-pat[h]=d x",
+        "touch PAGER=id; env PAG?R=* git log",
+        "touch PAGER; read PAGE[R] <<< id; git log",
+        // D105: shell `alias` bodies (`alias git='git -c core.pager=x'`)
+        // are not read here, as on main; tracked under #932.
+    ] {
+        assert_eq!(script(command), unseen, "{command}");
+    }
+    for command in [
+        "git log --oneline -20",
+        "git log --output-indicator-new=+ -p",
+        "git log --output=out.txt",
+        "git -c user.name=x -c color.ui=always commit -m 'fix editor crash'",
+        "git -C sub status",
+        "git commit -c HEAD",
+        "echo \"$PAGER\" ${EDITOR}",
+        "sort -o sorted.txt list",
+        "git config --global --get user.name",
+        "git config get user.email",
+        "git config --type bool --get core.bare",
+        "i=0; (( i = i + 1 )); a[i]=2; let j=i+1; git status",
+        "for ((i = 0; i < 3; i++)); do git log -1; done",
+        "n=3; m=$n; (( m > 2 )) && git status",
+        ": ${PORT:=8080} ${HOST:=x}; (( PORT > 1 )) && git status",
+        "x=$((i + 1)); a[x]=1; (( x > 2 )) && git status",
+        "echo ${(U)name} ${(L)x}; git status",
+        "git commit -m \"$msg\" && git log -c HEAD",
+        "git -C sub commit -c HEAD",
+        "cmake -DCMAKE_INSTALL_PREFIX=$HOME/.local -DPAGER_DOCS=OFF .",
+        "a[1]=x b+=y git status; declare -a c; c[0]=1; declare d[1]=2",
+        "alias gs='git status' gl='git log --oneline'",
+    ] {
+        assert_eq!(script(command), None, "{command}");
+    }
+}
+
+/// #1142 review round 3: a flag group cut inside a character.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1142_flag_groups_cut_inside_a_character() {
+    let line = format!("echo ${{({}\u{e9})}} a=1", "h".repeat(63));
+    let _ = script(&line);
+}
+
+/// #1102: the #1141/#1142 checks stay linear in the line's length: each
+/// unit repeated in a `git ... status` line and in a `read` line, each line
+/// checked on its own. #1244: one test per unit and line, so that no single
+/// test runs long in a debug build (the work counted is unchanged).
+macro_rules! issue_1141_1142_checks_are_linear {
+    ($($name:ident: $unit:literal,)*) => {
+        mod issue_1141_1142_checks_are_linear {
+            use super::*;
+            $(
+                mod $name {
+                    use super::*;
+
+                    #[test]
+                    #[cfg_attr(
+                        windows,
+                        ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+                    )]
+                    fn in_git_lines() {
+                        work::assert_linear(concat!(stringify!($name), " in git lines"), |scale| {
+                            let _ = script(&format!("git {} status", $unit.repeat(400 * scale)));
+                        });
+                    }
+
+                    #[test]
+                    #[cfg_attr(
+                        windows,
+                        ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+                    )]
+                    fn in_read_lines() {
+                        work::assert_linear(concat!(stringify!($name), " in read lines"), |scale| {
+                            let _ = script(&format!("read {}", $unit.repeat(400 * scale)));
+                        });
+                    }
+                }
+            )*
+        }
+    };
+}
+
+issue_1141_1142_checks_are_linear! {
+    git_words: "-/git -c x ",
+    git_config_words: "git config ",
+    chained_folders: "-C a ",
+    output_options: "--output=x -o y ",
+    code_variables: "PAGER=x ${EDITOR:=y} ",
+    naming_operands: "$a ",
+    git_option_values: "-C git ",
+    git_dir_values: "--git-dir git ",
+    git_upper_case_values: "-C GIT ",
+    git_after_the_subcommand: "-C d log x ",
+    arithmetic_assignments: "$((a[b[$x]]=$y=1)) ",
+    named_assignments: "${(P)a=1} ${!b:=1} ",
+    built_values: "m=$x=1 ${c:=1}$d=1 ",
+}
+
+/// #1159: git under another name is judged as git (a dashed helper in git's
+/// exec path runs `git <subcommand>`, `git.exe` is git), and more git
+/// options and variables that name a file or folder git writes are writes.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1159_git_helpers_and_path_writes() {
+    use ProtectedActionKind::*;
+    for command in [
+        "/usr/lib/git-core/git-config --global core.pager 'touch pwned'",
+        "git-config --global core.pager 'touch pwned'",
+        "git-config core.fsmonitor 'touch pwned'",
+        "git-config alias.x '!touch pwned'",
+        "GIT-CONFIG --global core.pager x",
+        "sudo /usr/lib/git-core/git-config --system core.pager x",
+        "find . -maxdepth 0 -exec /usr/libexec/git-core/git-config --global core.pager x \\;",
+        "git.exe config --global core.pager x",
+        "git-config.exe --global core.pager x",
+        "git-log -1 --format=x --output=~/.zshrc",
+        "/usr/lib/git-core/git-archive -o ~/.zshrc HEAD",
+        "git-config --file ~/.zshrc a.b x",
+        "git-bundle create ~/.zshrc HEAD",
+        "git-credential-store --file ~/.zshrc store",
+        "git.exe log -1 --output=~/.zshrc",
+        "git checkout-index -a --prefix=$HOME/",
+        "git checkout-index -a --prefix=~/.z",
+        "git checkout-index -af --prefix=/home/fixture/.config/autostart/",
+        "git -C ~ checkout-index -a --prefix=",
+        "/usr/lib/git-core/git-checkout-index -a --prefix=~/",
+        "git read-tree --index-output=~/.zshrc HEAD",
+        "git --work-tree=~ checkout HEAD -- .zshrc",
+        "git --work-tree ~ checkout HEAD -- .zshrc",
+        // Review round 1: a prefix that makes new names (`.` + `git/hooks/x`).
+        "git checkout-index -f --prefix=. git/hooks/pre-commit",
+        "git checkout-index -fa --prefix=.",
+        "git checkout-index -a --prefix=.gi",
+        "git-checkout-index -a --prefix=.",
+    ] {
+        assert_eq!(script(command), Some(Persistence), "{command}");
+    }
+    for command in [
+        "git.exe -c core.pager='touch pwned' log",
+        "env git.exe -c alias.x='!touch pwned' x",
+        "git -C git.exe -c core.pager='touch pwned' log",
+        "find . -exec /usr/lib/git-core/git-conf* --global core.pager x \\;",
+        "find . -exec git-$sub --global core.pager x \\;",
+        "GIT_INDEX_FILE=~/.zshrc git add x",
+        "export GIT_WORK_TREE=~; git checkout HEAD -- .zshrc",
+        // Review round 1: a setting whose value ends in a git name is judged
+        // before the scan stops there.
+        "git -c core.pager=./git.exe log",
+        "git -ccore.pager=./git.exe log",
+        "git --exec-path=./git.exe fetch",
+        "git.exe -c core.pager=./git.exe log",
+        "git.exe --exec-path=./git.exe fetch",
+        "git -c core.pager=/tmp/x/git log",
+        "git --exec-path=/tmp/x/git fetch",
+    ] {
+        assert_eq!(script(command), Some(UnseenCode), "{command}");
+    }
+    for command in [
+        "git-lfs pull",
+        "git-log --oneline -5",
+        "git-config get user.name",
+        "git-config user.email a@example.com",
+        "git.exe status",
+        "git checkout-index -a --prefix=build/",
+        "git read-tree --index-output=/tmp/idx HEAD",
+        "git --work-tree=../wt checkout main -- .",
+        "cat docs/git-config.txt",
+        "echo \"$GIT_INDEX_FILE\"",
+    ] {
+        assert_eq!(script(command), None, "{command}");
+    }
+}
+
+/// #1159: the git helper checks stay linear in the line's length.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1159_checks_are_linear() {
+    for (label, unit) in [
+        ("git helpers", "git-config "),
+        ("git helper options", "-/git-config "),
+        ("git.exe words", "git.exe -c x "),
+        ("prefixes", "checkout-index --prefix=a/ "),
+        ("config values", "-f config -f git "),
+        ("git option names", "-ccolor.x=./git.exe "),
+    ] {
+        work::assert_linear(label, |scale| {
+            let line = format!("git {} status", unit.repeat(400 * scale));
+            let _ = script(&line);
+            let line = format!("git-config {}", unit.repeat(400 * scale));
+            let _ = script(&line);
+        });
+    }
 }

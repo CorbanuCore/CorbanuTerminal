@@ -9,6 +9,15 @@ mod pkce;
 mod server;
 mod success_page;
 
+/// #1201: unit tests that run a provider-auth helper hold this for reading;
+/// the one test that spawns a copy of this test binary holds it for writing.
+/// On the Windows test lane, helper runs that normally take milliseconds
+/// stalled for seconds while the process spawned copies of itself. The test
+/// whose helper hit its 10 s timeout runs, in its shard, just before the one
+/// that spawns.
+#[cfg(test)]
+pub(crate) static TEST_CHILD_PROCESSES: std::sync::RwLock<()> = std::sync::RwLock::new(());
+
 pub use codex_config::types::AuthCredentialsStoreMode;
 pub use codex_http_client::BuildCustomCaTransportError as BuildLoginHttpClientError;
 pub use device_code_auth::DeviceCode;

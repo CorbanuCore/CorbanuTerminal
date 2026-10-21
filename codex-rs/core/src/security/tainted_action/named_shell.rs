@@ -1,6 +1,9 @@
 //! D85: whether a command line provably never reaches zsh, so the zsh-only
 //! checks (glob qualifiers #1028, glob substitution #1084) need not ask for
-//! it (`git commit -m "fix(tests)"` under bash).
+//! it (`git commit -m "fix(tests)"` under bash). #932 phase 3
+//! ([`grammar_proves_data`]) also lifts them under any system shell, zsh
+//! and any `sh` included, for lines whose every word the grammar proves is
+//! data.
 //!
 //! Fail closed: only a line the host runs under the bash, dash or sh its
 //! argv names by system path (an sh that is not zsh), whose script is plain
@@ -12,6 +15,10 @@
 //! must stay out of words whose meaning matters. Anything else keeps the
 //! checks, a shell named without a system path included.
 
+use super::grammar;
+use super::quoted;
+use super::shadow;
+use super::shadow::Comparison;
 use codex_shell_command::bash::PlainWord;
 
 /// Longer scripts are not parsed (they keep the checks).
@@ -51,6 +58,63 @@ pub(super) fn avoids_zsh(command: &[String]) -> bool {
     codex_shell_command::bash::parse_shell_script_into_plain_words(script).is_some_and(|commands| {
         !commands.is_empty() && commands.iter().all(|words| data_only(words))
     })
+}
+
+/// #932 phase 3: the zsh-only checks need not ask for a line, under a
+/// system bash, zsh, dash or sh, when the bash grammar proves every word of it is
+/// data no shell expands (`grammar.rs`) and the line is D85's plain
+/// commands of programs that never run their words. No unquoted glob
+/// character, parenthesis or expansion is left for a zsh glob qualifier or
+/// glob substitution to act on.
+///
+/// Fail closed: the grammar must read the line (no refusal), find nothing
+/// zsh may read differently, and find the same commands as the quote-aware
+/// reader; the line must hold no substitution, no `''` (zsh's `RC_QUOTES`
+/// reads `'a''b'` as `a'b`) and no `cd` (zsh runs `chpwd` hooks).
+pub(super) fn grammar_proves_data(command: &[String]) -> bool {
+    /// Shells by system path (as D85, a shell named otherwise may be
+    /// anything).
+    const SYSTEM_SHELLS: &[&str] = &[
+        "/bin/bash",
+        "/usr/bin/bash",
+        "/bin/zsh",
+        "/usr/bin/zsh",
+        "/bin/sh",
+        "/usr/bin/sh",
+        "/bin/dash",
+        "/usr/bin/dash",
+    ];
+    let [shell, flag, script] = command else {
+        return false;
+    };
+    if !matches!(flag.as_str(), "-c" | "-lc")
+        || !SYSTEM_SHELLS.contains(&shell.as_str())
+        || script.len() > grammar::MAX_BYTES
+        || splits_differently(script)
+        || script.contains("''")
+    {
+        return false;
+    }
+    let Ok(reading) = grammar::read(script) else {
+        return false;
+    };
+    let mut budget = usize::MAX;
+    let (comparison, _) = shadow::compare(script, &quoted::commands(script), &mut budget);
+    !reading.zsh_unsure
+        && !reading.bash_only
+        && comparison == Comparison::Agree
+        && !reading.commands.is_empty()
+        && reading.commands.iter().all(|command| {
+            !command.substituted
+                && command.words.first().is_some_and(|name| name.text != "cd")
+                && command.words.iter().all(|word| word.data)
+        })
+        && codex_shell_command::bash::parse_shell_script_into_plain_words(script).is_some_and(
+            |commands| {
+                commands.len() == reading.commands.len()
+                    && commands.iter().all(|words| data_only(words))
+            },
+        )
 }
 
 /// Text the parse may split into words other than bash's: a backslash

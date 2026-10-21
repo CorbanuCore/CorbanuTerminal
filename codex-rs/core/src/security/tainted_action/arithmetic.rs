@@ -1348,6 +1348,96 @@ impl Arithmetic {
 }
 
 impl Arithmetic {
+    /// #1142: whether arithmetic may set a variable the classifier cannot
+    /// name (`PAGER`, `HOME` built from fragments): an assignment whose name
+    /// is built at run time (`(( $n = 1 ))`, `let "$n=1"`, `a[$n=1]`, `x=$n=1`
+    /// for an integer `x`), or a variable whose value the line builds at run
+    /// time and arithmetic evaluates (`m="$n=1"; (( m ))` assigns the
+    /// variable `$n` names). `text` is the line's argv. Values from earlier
+    /// lines are not seen.
+    pub(super) fn assigns_unseen_name(&self, text: &[String]) -> bool {
+        let text: Vec<String> = text.iter().map(|arg| unquoted(&joined(arg))).collect();
+        // zsh `${(P)n=x}`/`${(P)n::=x}` and bash `${!n:=x}` assign the
+        // variable `n` names (the lexer splits these words, so the text is
+        // read).
+        if text.iter().any(|arg| assigns_named_variable(arg)) {
+            return true;
+        }
+        let evaluated: Vec<String> = self
+            .evaluated
+            .iter()
+            .chain(
+                self.assigned
+                    .iter()
+                    .filter(|(name, _)| self.integers.contains(name))
+                    .map(|(_, value)| value),
+            )
+            .map(|word| unquoted(word))
+            .collect();
+        let regions: Vec<&str> = text
+            .iter()
+            .flat_map(|arg| regions(arg).into_iter().map(move |range| &arg[range]))
+            .chain(evaluated.iter().map(String::as_str))
+            .collect();
+        if regions.iter().any(|region| built_assignment(region)) {
+            return true;
+        }
+        let built = self.built_values();
+        !built.is_empty()
+            && regions
+                .iter()
+                .any(|region| names(&visible(region)).any(|name| built.contains(name)))
+    }
+
+    /// Variables whose value the line builds at run time from expansions
+    /// arithmetic does not read as numbers (`n=${x/*/HO}ME=1`), and those
+    /// whose value uses one (`m="$n=1"`, `k=$m`).
+    fn built_values(&self) -> HashSet<String> {
+        let known: HashSet<&str> = self
+            .assigned
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .chain(self.filled.iter().map(String::as_str))
+            .collect();
+        let mut built: HashSet<String> = HashSet::new();
+        let mut receivers: HashMap<String, Vec<&str>> = HashMap::new();
+        for (name, value) in &self.assigned {
+            work::step();
+            let expands = value.contains('$') || value.contains('`') || command_output(value);
+            // An `=` the value joins to an expansion (`m="$n=1"`) may form
+            // an assignment. A group's words may be the defaults that fill
+            // it (`${PORT:=8080}` arrives as `$PORT:=8080`), which do not.
+            let joins_equals = || {
+                if name.starts_with(GROUP) {
+                    without_defaults(value).contains('=')
+                } else {
+                    value.contains('=')
+                }
+            };
+            if expands && (!clean_form(value, &known) || joins_equals()) {
+                built.insert(name.clone());
+            }
+            for source in names(&visible(value)) {
+                work::step();
+                receivers
+                    .entry(source.to_string())
+                    .or_default()
+                    .push(name.as_str());
+            }
+        }
+        let mut queue: Vec<String> = built.iter().cloned().collect();
+        while let Some(source) = queue.pop() {
+            work::step();
+            for receiver in receivers.get(&source).into_iter().flatten() {
+                work::step();
+                if built.insert((*receiver).to_string()) {
+                    queue.push((*receiver).to_string());
+                }
+            }
+        }
+        built
+    }
+
     /// Whether lexed text (where `${x}r` reads `$xr`) expands a variable
     /// that the line builds names from, or joins an expansion to name text.
     fn builds(&self, lexed: &str) -> bool {
@@ -1478,6 +1568,132 @@ fn only_facts(text: &str) -> bool {
         at = end;
     }
     true
+}
+
+/// Longest zsh flag group read (`${(P)n=x}`); a longer one counts.
+const MAX_FLAGS: usize = 64;
+
+/// Whether text assigns the variable another variable names: zsh
+/// `${(P)n=x}`, `${(P)n::=x}`, bash `${!n=x}`, `${!n:=x}`. Over-matches
+/// (`${(P)n:-x=y}`). Linear: each expansion looks at most `MAX_FLAGS`
+/// bytes ahead for its flags, and its `=` is any later one.
+fn assigns_named_variable(text: &str) -> bool {
+    let Some(last_equals) = text.rfind('=') else {
+        return false;
+    };
+    text.match_indices("${").any(|(at, _)| {
+        work::step();
+        let rest = &text[at + 2..];
+        if let Some(flags) = rest.strip_prefix('(') {
+            // Bytes, so a window end inside a character cannot panic.
+            let window = &flags.as_bytes()[..flags.len().min(MAX_FLAGS)];
+            // Flags are ASCII letters and delimiters; an unclosed or long
+            // group counts.
+            return window
+                .iter()
+                .position(|&byte| byte == b')')
+                .is_none_or(|close| {
+                    window[..close].contains(&b'P') && last_equals > at + 3 + close
+                });
+        }
+        rest.strip_prefix('!').is_some_and(|name| {
+            let len = name
+                .find(|ch: char| !is_name_char(ch))
+                .unwrap_or(name.len());
+            let after = &name[len..];
+            len > 0 && (after.starts_with('=') || after.starts_with(":="))
+        })
+    })
+}
+
+/// Lexed text without the default assignments that fill a group
+/// (`$a:=1`, `$a=1`, `$a::=1` lose their `$a:=`).
+fn without_defaults(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find('$') {
+        work::step();
+        out.push_str(&rest[..at]);
+        let body = &rest[at + 1..];
+        let len = body
+            .find(|ch: char| !is_name_char(ch))
+            .unwrap_or(body.len());
+        let tail = &body[len..];
+        let marker = ["::=", ":=", "="]
+            .into_iter()
+            .find(|marker| len > 0 && tail.starts_with(marker));
+        match marker {
+            Some(marker) => rest = &tail[marker.len()..],
+            None => {
+                out.push('$');
+                rest = body;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Whether arithmetic text assigns (`=`, `+=`, `<<=`...) to a name built
+/// at run time (`$n = 1`, `${n}=1`, `$(cat f)=1`); a subscript of a plain
+/// name (`a[$i]=1`) is not. Linear: each assignment looks back over its own
+/// operand, and over at most `MAX_SUBSCRIPT` bytes of a subscript.
+fn built_assignment(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    for (at, _) in text.match_indices('=') {
+        work::step();
+        let before = |back: usize| at.checked_sub(back).map(|index| bytes[index]);
+        if bytes.get(at + 1) == Some(&b'=') {
+            continue;
+        }
+        let mut end = at;
+        match before(1) {
+            Some(b'=' | b'!') => continue,
+            Some(op @ (b'<' | b'>')) => {
+                if before(2) != Some(op) {
+                    continue;
+                }
+                end -= 2;
+            }
+            Some(b'+' | b'-' | b'*' | b'/' | b'%' | b'&' | b'|' | b'^') => end -= 1,
+            _ => {}
+        }
+        while end > 0 && bytes[end - 1].is_ascii_whitespace() {
+            work::step();
+            end -= 1;
+        }
+        // `name[subscript]`: the name is before the subscript.
+        if end > 0 && bytes[end - 1] == b']' {
+            let window = end.saturating_sub(MAX_SUBSCRIPT);
+            let mut depth = 0_usize;
+            let open = (window..end).rev().find(|&index| {
+                work::step();
+                match bytes[index] {
+                    b']' => depth += 1,
+                    b'[' => depth -= 1,
+                    _ => {}
+                }
+                depth == 0
+            });
+            match open {
+                Some(open) => end = open,
+                None => return true,
+            }
+        }
+        let mut start = end;
+        while start > 0
+            && !bytes[start - 1].is_ascii_whitespace()
+            && !b"=+-*/%&|^<>!~?:,;()[".contains(&bytes[start - 1])
+        {
+            work::step();
+            start -= 1;
+        }
+        let operand = &text[start..end];
+        if operand.contains('$') || operand.contains('`') || command_output(operand) {
+            return true;
+        }
+    }
+    false
 }
 
 /// Plain assignments in arithmetic text (`i=0`, `i = 2`, not `i == 2`,

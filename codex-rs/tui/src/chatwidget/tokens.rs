@@ -1525,11 +1525,12 @@ fn operator(id: &str) -> &str {
     }
 }
 
-/// The model's catalogue display name ("GPT-6 Sol"), else its slug. #352: the
-/// names carry their route's brand, so a row owned by another operator
-/// ("Ambient GLM 5.2" for `z-ai/glm-5.2` sent to OpenRouter) is not this
-/// route's name, and neither is it for a provider you configured: its id says
-/// nothing about whose model it serves.
+/// The model's catalogue display name ("GPT-6 Sol"), else its slug. #352: a
+/// name that carries its route's brand ("Ambient GLM 5.2") is not the name of
+/// a row another operator served (`z-ai/glm-5.2` sent to OpenRouter), nor of
+/// one a provider you configured served: its id says nothing about whose model
+/// it serves. #1196: a name without a route brand ("Claude Opus 5.5") names
+/// the model on any route.
 fn model_name(provider: &str, slug: &str) -> String {
     /// Display name and owning provider, by slug.
     type Names = std::collections::HashMap<String, (String, Option<String>)>;
@@ -1558,14 +1559,35 @@ fn model_name(provider: &str, slug: &str) -> String {
         .get(slug)
     {
         Some((name, owner))
-            if owner
-                .as_deref()
-                .is_none_or(|owner| operator(owner) == operator(provider)) =>
+            if owner.as_deref().is_none_or(|owner| {
+                operator(owner) == operator(provider) || !carries_route_brand(name, owner)
+            }) =>
         {
             name.clone()
         }
         _ => slug.to_string(),
     }
+}
+
+/// Whether a catalogue name carries the brand of the route that owns its row:
+/// every word of the owning operator's built-in name is a word of it ("Z.AI
+/// GLM 5.2" for Z.AI, "Claude Opus 5.5 Plan" for Claude Plan), ignoring case.
+/// A word that names how a route sells the model ("Plan", "(Direct)",
+/// "Free") is a brand too, as are an empty name and an owner with no
+/// built-in name, so such names are never borrowed.
+fn carries_route_brand(name: &str, owner: &str) -> bool {
+    let Some(brand) = built_in_providers().get(operator(owner)) else {
+        return true;
+    };
+    let words: std::collections::HashSet<String> =
+        name.split_whitespace().map(str::to_lowercase).collect();
+    words.is_empty()
+        || ["plan", "(direct)", "free"]
+            .iter()
+            .any(|word| words.contains(*word))
+        || brand
+            .split_whitespace()
+            .all(|word| words.contains(&word.to_lowercase()))
 }
 
 /// "Provider · Model", or "Provider · account NAME · Model" where the view

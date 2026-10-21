@@ -1,0 +1,6 @@
+2026-10-21T08:13:50Z guest network did not come up (ARP incomplete, SSH 'Host is down'); power cycle as in earlier UTM records
+2026-10-21T08:16:00Z request not answered in 2 min; utmctl stop
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 stopped  macOS 3
+2026-10-21T08:16:05Z

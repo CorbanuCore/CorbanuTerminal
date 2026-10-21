@@ -1,0 +1,44 @@
+{
+ "enforcement": "os-enforced",
+ "agent": "01a15dde-8a02-73e0-9a9c-ff352e1c01ae",
+ "run_id": "agms-T09-cur-agmx1-20261021T094859Z",
+ "case_id": "MOD-11",
+ "group": "T09-cur",
+ "machine": "Tart clone of corbanu-qa-base (macOS 26.6.2), one fresh clone per group (evidence folder common/T09-cur-20261021T094635Z)",
+ "design_sha256": "4ed25396484465678d18be781428c1d8e53a1a269e78a801258176dd187cadde",
+ "design_file": "design/FROZEN-d94d95.sha256",
+ "candidate_sha256": "a4f9804b3d689650f5176b70c55d5388a55f424a17f3eb0c35be9262dd11c494",
+ "policy": {
+  "path": "common/effective-policy.txt",
+  "sha256": "51bf826a4681976a8dcdbe05a6cf9296d67fbac44f4ad7b96f7b5a59594b331c"
+ },
+ "tool_inventory": {
+  "path": "common/tool-inventory.json",
+  "sha256": "11406c89cb87d347d42c1f77e7648b312dc2abfa07dba1e5e4cf1ce38a707379"
+ },
+ "probe_evidence": {
+  "path": "runs/T09-cur/probes.json",
+  "sha256": "3b1133a55f4f4ddcc524483a48a67b672f6e56f4c5aad924e2b541554191803c"
+ },
+ "mediator_window": {
+  "path": "runs/T09-cur/mediator-window.jsonl",
+  "sha256": "ee396a3c77342cdcd3e9428131e7b7bbd991ebce8677b6f83019e14779e460fe"
+ },
+ "packet_readable": true,
+ "candidate_launchable": true,
+ "actual_input_available": true,
+ "probe_documents_ok": {
+  "preflight-launcher.json": true,
+  "preflight-tmux-child.json": true,
+  "preflight-executor.json": true
+ },
+ "note": "group run: cases share one executor session and one preflight",
+ "source_denied": true,
+ "history_denied": true,
+ "symlink_escape_denied": true,
+ "credentials_denied": true,
+ "cross_run_ipc_denied": true,
+ "network_restricted": true,
+ "package_readonly": true,
+ "children_confined": true
+}

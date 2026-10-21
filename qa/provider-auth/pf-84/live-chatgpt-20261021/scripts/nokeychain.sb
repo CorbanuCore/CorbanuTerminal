@@ -1,0 +1,11 @@
+;; Run as nokc2.sb. Blocks /usr/bin/security and the data-protection keychain / security-agent XPC services only.
+;; It ALLOWS com.apple.SecurityServer (needed for TLS), so it is NOT keychain protection by itself; the
+;; CORBANU_TEST_NO_NATIVE_KEYRING guard (debug-assertion builds only) kept the keychain out. See README.
+(version 1)
+(allow default)
+(deny mach-lookup
+  (global-name "com.apple.securityd.xpc")
+  (global-name "com.apple.securityd.systemkeychain")
+  (global-name "com.apple.security.agent")
+  (global-name "com.apple.security.agent.login"))
+(deny process-exec (literal "/usr/bin/security"))

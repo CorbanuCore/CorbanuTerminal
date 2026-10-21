@@ -73,9 +73,9 @@ pub struct Inspection {
     /// Same-day attempts of other root conversations, outside every total above.
     /// `None` when this view did not read them (range buckets).
     pub other_conversations: Option<OtherConversations>,
-    /// What the day's emptiness means, for a single-day view in which neither
-    /// this conversation nor a resolved subagent has a recorded attempt.
-    /// `None` when they have one, and in range buckets.
+    /// What the emptiness of the day, or of a range bucket's part of it,
+    /// means when neither this conversation nor a resolved subagent has a
+    /// recorded attempt there. `None` when they have one.
     pub empty_day: Option<EmptyDay>,
 }
 
@@ -765,6 +765,9 @@ pub(super) struct InspectionWork {
     rows: usize,
     visits: usize,
     scan_rows: usize,
+    /// FUP-02: a conversation's start, read once per inspection (a range reads
+    /// it for every empty bucket day).
+    started: Option<(ThreadId, Option<i64>)>,
 }
 
 impl InspectionWork {
@@ -780,6 +783,7 @@ impl InspectionWork {
             rows: 4_000_000usize.saturating_sub(scanned as usize),
             visits: 20_000,
             scan_rows: scanned as usize,
+            started: None,
         })
     }
 
@@ -791,6 +795,14 @@ impl InspectionWork {
         }
         self.rows -= cost;
         true
+    }
+
+    /// One scan when the budget has room for it and `reserve` more. Unlike
+    /// [`Self::scans`], a refusal leaves the budget for the rest of the
+    /// inspection.
+    pub(super) fn spare_scan(&mut self, reserve: usize) -> bool {
+        self.scan_rows.saturating_mul(reserve.saturating_add(1)) <= self.rows
+            && self.scans(/*count*/ 1)
     }
 
     pub(super) fn visit(&mut self) -> bool {
@@ -874,6 +886,9 @@ async fn inspect_tree_window(
         }
     }
     let mut unrelated = Vec::new();
+    // A thread of unknown ancestry with anything on this UTC day, inside a
+    // range bucket's window or not, may be an unlinked subagent.
+    let mut unknown_on_day = false;
     for candidate in candidates {
         if !work.visit() {
             return Ok(InspectionDay::TooLarge);
@@ -960,6 +975,7 @@ async fn inspect_tree_window(
             return Ok(InspectionDay::TooLarge);
         }
         ancestry.extend(discovered);
+        unknown_on_day |= relation.is_none();
         let other = Journal::inspect_window_on_connection(
             conn,
             ThreadId::from_string(&candidate)?,
@@ -1017,12 +1033,14 @@ async fn inspect_tree_window(
             Some(scope::other_conversations(conn, unrelated, day, read_at_ms, work).await);
     }
     // Last, so the start's scan never takes budget the rest of the view needs.
-    if window.is_none() && view.totals.attempts == 0 {
+    // #1196: a range bucket's part of the day is classified the same way.
+    if view.totals.attempts == 0 {
         let started = match started {
             Some(started) => started,
             None => started_ms(conn, owner, work).await?,
         };
-        let unknown_clear = view.unknown_parent_totals.attempts == 0
+        let unknown_clear = !unknown_on_day
+            && view.unknown_parent_totals.attempts == 0
             && view.unknown_parent_unavailable_threads == 0;
         let empty = empty_day::classify(
             day,
@@ -1045,17 +1063,25 @@ async fn inspect_tree_window(
 }
 
 /// `empty_day::started_ms`, charged to the work budget: one scan of the
-/// accounting rows for the tree's earliest recorded request. Without budget
-/// left for it there is no proof, and the view stays as it would have been.
+/// accounting rows for the tree's earliest recorded request, once per
+/// inspection. Without budget left for it there is no proof, and the view stays
+/// as it would have been.
 async fn started_ms(
     conn: &mut SqliteConnection,
     owner: ThreadId,
     work: &mut InspectionWork,
 ) -> anyhow::Result<Option<i64>> {
-    if work.scan_rows > work.rows || !work.scans(/*count*/ 1) {
+    if let Some((read_for, started)) = work.started
+        && read_for == owner
+    {
+        return Ok(started);
+    }
+    if !work.spare_scan(/*reserve*/ 0) {
         return Ok(None);
     }
-    empty_day::started_ms(conn, owner).await
+    let started = empty_day::started_ms(conn, owner).await?;
+    work.started = Some((owner, started));
+    Ok(started)
 }
 
 // All buckets reuse the already-open deferred snapshot, including ancestry.

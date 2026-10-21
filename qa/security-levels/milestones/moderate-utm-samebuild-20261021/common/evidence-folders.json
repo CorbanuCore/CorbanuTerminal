@@ -1,0 +1,35 @@
+{
+ "folders": [
+  {
+   "evidence_folder": "T09-cur-20261021T094635Z",
+   "forwarded": 74,
+   "non_200": 5,
+   "session_error": 0,
+   "tunnel_connects": 1,
+   "tunnel_ssh_exits": 0
+  },
+  {
+   "evidence_folder": "T17-cur-20261021T100740Z",
+   "forwarded": 47,
+   "non_200": 0,
+   "session_error": 0,
+   "tunnel_connects": 1,
+   "tunnel_ssh_exits": 0
+  },
+  {
+   "evidence_folder": "utm",
+   "forwarded": 300,
+   "non_200": 0,
+   "session_error": 0,
+   "tunnel_connects": 1,
+   "tunnel_ssh_exits": 0
+  }
+ ],
+ "host_relay": {
+  "requests": 423,
+  "non_200": 5,
+  "other_events": {
+   "started": 1
+  }
+ }
+}

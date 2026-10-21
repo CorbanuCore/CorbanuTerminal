@@ -52,10 +52,6 @@ fn pf_29_s01_receipt_round_trip_and_corrupt_receipts_fail_closed() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "PF-27-S06: protected launch is not available on Windows yet, so readiness is never clean (#691)"
-)]
 fn pf_29_s01_isolation_only_after_a_preflight_and_lands_in_the_profile() {
     let root = tempfile::tempdir().unwrap();
     let corbanu = root.path().join("corbanu");
@@ -157,7 +153,9 @@ fn pf_29_s01_isolation_only_after_a_preflight_and_lands_in_the_profile() {
         .find(|(key, _)| key == &format!("permissions.{}", aggressive::PROFILE_ID))
         .map(|(_, value)| value.clone())
         .unwrap();
-    for path in [home.join(".ssh/id_rsa"), corbanu.join("*.sqlite*")] {
+    // The keys are the paths as the inventory spells them, with this
+    // platform's separators.
+    for path in [home.join(".ssh").join("id_rsa"), corbanu.join("*.sqlite*")] {
         assert_eq!(
             profile["filesystem"][path.to_string_lossy().as_ref()],
             toml::Value::String("deny".to_string())

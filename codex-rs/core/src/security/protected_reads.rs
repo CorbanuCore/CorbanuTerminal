@@ -410,7 +410,12 @@ impl ReadPolicyInputs {
     /// in `.husky`), or may be (a program or path the text does not show:
     /// `npx husky install | tee ../log` keeps the offer).
     fn unliftable_note(&self, command: &[String], cwd: &Path) -> Option<ProtectedNote> {
-        let writes = writes::writes(command);
+        let mut writes = writes::writes(command);
+        if !writes.understood {
+            // #1182: `cd DIR && echo x >> ../notes.txt`. Only ever adds a
+            // note: without it this command is not explained (and offered).
+            writes = writes::writes_following_cd(command);
+        }
         let denials = self.denials();
         let policy = self.base_policy();
         let effective = policy.effective_writes_with_cwd(self.turn_cwd.as_path());
@@ -813,8 +818,9 @@ fn path_in_lines(
 }
 
 /// The paths a denial line may name: quoted (`find: ‘/x’: Permission
-/// denied`, `ls: cannot open directory '/x': …`) or between the program and
-/// the reason (`ls: /x: Operation not permitted`).
+/// denied`, `ls: cannot open directory '/x': …`), between the program and
+/// the reason (`ls: /x: Operation not permitted`), or before the reason
+/// when the program's name was split off (#1194).
 fn paths_in_denial_line(line: &str) -> Vec<String> {
     let mut paths = Vec::new();
     for (open, close) in [('‘', '’'), ('\'', '\''), ('"', '"'), ('`', '\'')] {
@@ -831,6 +837,12 @@ fn paths_in_denial_line(line: &str) -> Vec<String> {
     let fields: Vec<&str> = line.split(": ").collect();
     if fields.len() >= 3 {
         paths.push(fields[1..fields.len() - 1].join(": "));
+    } else if fields.len() == 2 {
+        // #1194: BSD `ls` and `find` write `ls: ` and `/x: Operation not
+        // permitted` separately, and unified exec merges stdout and stderr
+        // as they arrive, so output flushed in between can leave the line
+        // without the program's name.
+        paths.push(fields[0].to_string());
     }
     paths.retain(|path| !path.trim().is_empty());
     paths

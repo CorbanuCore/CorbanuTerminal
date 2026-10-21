@@ -5,6 +5,7 @@
 //! #907: what [`ReadDenials::apply`] costs in filesystem walks.
 
 use super::*;
+#[cfg(debug_assertions)]
 use codex_protocol::permissions::effective_path_normalizations_on_this_thread;
 use std::time::Duration;
 use std::time::Instant;
@@ -16,6 +17,7 @@ fn abs(path: &Path) -> AbsolutePathBuf {
 /// A Corbanu home and a git project in a temporary folder, and the
 /// session's denials for a workspace-write profile there (the user's real
 /// home is read as `for_turn` reads it).
+#[cfg(debug_assertions)]
 fn session() -> (tempfile::TempDir, ReadDenials, PermissionProfile) {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().canonicalize().unwrap();
@@ -43,6 +45,7 @@ fn session() -> (tempfile::TempDir, ReadDenials, PermissionProfile) {
 
 /// Filesystem normalizations one `apply` makes, with the counts it is
 /// bounded by: the applied policy's entries and the read-only paths.
+#[cfg(debug_assertions)]
 fn normalizations(denials: &ReadDenials, profile: &PermissionProfile) -> (u64, usize, usize) {
     let before = effective_path_normalizations_on_this_thread();
     let applied = denials.apply(profile).unwrap();
@@ -53,12 +56,15 @@ fn normalizations(denials: &ReadDenials, profile: &PermissionProfile) -> (u64, u
 }
 
 #[test]
+#[cfg(debug_assertions)]
 fn issue_907_apply_normalizes_the_policy_entries_once_not_per_path() {
     let (_dir, denials, profile) = session();
     let (count, entries, paths) = normalizations(&denials, &profile);
     eprintln!("#907 apply: {count} normalizations, {entries} entries, {paths} read-only paths");
     assert!(paths > 5, "{paths}");
-    let bound = 4 * (entries + paths) as u64;
+    // #918: tighten the existing linear ceiling without pinning a platform's
+    // exact count or treating normalization calls as syscall/latency evidence.
+    let bound = 3 * (entries + paths) as u64;
     assert!(
         count <= bound,
         "apply normalized {count} paths (bound {bound}): {entries} entries x {paths} paths"
@@ -68,6 +74,7 @@ fn issue_907_apply_normalizes_the_policy_entries_once_not_per_path() {
 /// Run by hand for the #907 measurements:
 /// `cargo test -p codex-core --lib issue_907_measure -- --ignored --nocapture`.
 #[test]
+#[cfg(debug_assertions)]
 #[ignore = "measurement, run by hand"]
 fn issue_907_measure_apply_latency() {
     let (_dir, denials, profile) = session();

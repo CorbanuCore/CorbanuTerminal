@@ -182,18 +182,26 @@ fn has_plugins_clone_dirs(codex_home: &Path) -> bool {
     })
 }
 
+/// Writes an executable script from a child process. Written here, a
+/// sibling test forking (to spawn its own `git`) while the file is open for
+/// writing keeps a copy of that descriptor until it execs, and running the
+/// script then fails with ETXTBSY on Linux (#635).
 #[cfg(unix)]
 fn write_executable_script(path: &Path, contents: &str) {
-    #[cfg(unix)]
-    use std::os::unix::fs::PermissionsExt;
-
-    std::fs::write(path, contents).expect("write script");
-    #[cfg(unix)]
-    {
-        let mut permissions = std::fs::metadata(path).expect("metadata").permissions();
-        permissions.set_mode(0o755);
-        std::fs::set_permissions(path, permissions).expect("chmod");
-    }
+    let mut writer = Command::new("/bin/sh")
+        .args(["-c", "cat > \"$1\" && chmod 755 \"$1\"", "sh"])
+        .arg(path)
+        .stdin(Stdio::piped())
+        .spawn()
+        .expect("spawn script writer");
+    writer
+        .stdin
+        .take()
+        .expect("script writer stdin")
+        .write_all(contents.as_bytes())
+        .expect("write script");
+    let status = writer.wait().expect("wait for script writer");
+    assert!(status.success(), "script writer failed: {status}");
 }
 
 #[cfg(unix)]
@@ -873,9 +881,53 @@ fn cancelled_sync_kills_git_and_its_helpers_and_skips_fallback() {
         .prefix("fake-git-slow-fetch-")
         .tempdir()
         .expect("tempdir");
-    let git_path = bin_dir.path().join("git");
-    let git_pid = bin_dir.path().join("git.pid");
-    let helper_pid = bin_dir.path().join("helper.pid");
+    let SlowFetchGit {
+        git_path,
+        git_pid,
+        helper_pid,
+    } = write_slow_fetch_git(bin_dir.path());
+    let cancel = AtomicBool::new(false);
+
+    let err = std::thread::scope(|scope| {
+        let sync = scope.spawn(|| {
+            sync_openai_plugins_repo_with_transport_overrides(
+                tmp.path(),
+                Some(git_path.as_path()),
+                "http://127.0.0.1:9",
+                "http://127.0.0.1:9/backend-api/plugins/export/curated",
+                &crate::test_support::test_http_client_factory(),
+                &cancel,
+            )
+        });
+        wait_until("the fetch starts", || {
+            git_pid.exists() && helper_pid.exists()
+        });
+        let cancelled_at = std::time::Instant::now();
+        cancel.store(true, Ordering::SeqCst);
+        let result = sync.join().expect("sync thread");
+        assert!(cancelled_at.elapsed() < Duration::from_secs(5));
+        result.expect_err("cancelled sync fails")
+    });
+
+    assert!(err.starts_with(SYNC_CANCELLED), "{err}");
+    wait_until_gone(&[read_pid(&git_pid), read_pid(&helper_pid)]);
+    assert!(!has_plugins_clone_dirs(tmp.path()));
+}
+
+/// A fake `git` whose fetch starts a helper and never finishes, writing
+/// into the clone until it is killed. Pid files appear once the fetch runs.
+#[cfg(unix)]
+struct SlowFetchGit {
+    git_path: PathBuf,
+    git_pid: PathBuf,
+    helper_pid: PathBuf,
+}
+
+#[cfg(unix)]
+fn write_slow_fetch_git(bin_dir: &Path) -> SlowFetchGit {
+    let git_path = bin_dir.join("git");
+    let git_pid = bin_dir.join("git.pid");
+    let helper_pid = bin_dir.join("helper.pid");
     let sha = TEST_CURATED_PLUGIN_SHA;
     write_executable_script(
         &git_path,
@@ -902,42 +954,112 @@ exit 1
             git_pid = git_pid.display(),
         ),
     );
-    let cancel = AtomicBool::new(false);
+    SlowFetchGit {
+        git_path,
+        git_pid,
+        helper_pid,
+    }
+}
 
-    let err = std::thread::scope(|scope| {
-        let sync = scope.spawn(|| {
-            sync_openai_plugins_repo_with_transport_overrides(
-                tmp.path(),
-                Some(git_path.as_path()),
-                "http://127.0.0.1:9",
-                "http://127.0.0.1:9/backend-api/plugins/export/curated",
-                &crate::test_support::test_http_client_factory(),
-                &cancel,
-            )
-        });
-        wait_until("the fetch starts", || {
-            git_pid.exists() && helper_pid.exists()
-        });
-        let cancelled_at = std::time::Instant::now();
-        cancel.store(true, Ordering::SeqCst);
-        let result = sync.join().expect("sync thread");
-        assert!(cancelled_at.elapsed() < Duration::from_secs(5));
-        result.expect_err("cancelled sync fails")
-    });
+#[cfg(unix)]
+fn read_pid(pid_file: &Path) -> libc::pid_t {
+    std::fs::read_to_string(pid_file)
+        .expect("pid")
+        .trim()
+        .parse()
+        .expect("pid number")
+}
 
-    assert!(err.starts_with(SYNC_CANCELLED), "{err}");
-    for pid_file in [&git_pid, &helper_pid] {
-        let pid: libc::pid_t = std::fs::read_to_string(pid_file)
-            .expect("pid")
-            .trim()
-            .parse()
-            .expect("pid number");
+/// Waits until every pid has exited. If they don't, kills them so a failed
+/// run leaves nothing behind.
+#[cfg(unix)]
+fn wait_until_gone(pids: &[libc::pid_t]) {
+    struct KillOnPanic<'a>(&'a [libc::pid_t]);
+    impl Drop for KillOnPanic<'_> {
+        fn drop(&mut self) {
+            if std::thread::panicking() {
+                for pid in self.0 {
+                    // SAFETY: `kill` takes no pointers.
+                    unsafe {
+                        libc::kill(*pid, libc::SIGKILL);
+                    }
+                }
+            }
+        }
+    }
+    let _guard = KillOnPanic(pids);
+    for pid in pids {
         // SAFETY: signal 0 only checks that the process exists.
         wait_until("git and its helper exit", || unsafe {
-            libc::kill(pid, 0) != 0
+            libc::kill(*pid, 0) != 0
         });
     }
-    assert!(!has_plugins_clone_dirs(tmp.path()));
+}
+
+#[cfg(unix)]
+const KILLED_SYNC_CHILD_DIR: &str = "CORBANU_TEST_KILLED_PLUGIN_SYNC_DIR";
+
+/// #1202: when the process running the sync is killed outright (SIGKILL,
+/// so no cancel flag is ever set), `git` and the helper it started die
+/// with it instead of writing into the home until their timeout.
+#[cfg(unix)]
+#[test]
+fn killed_process_takes_git_and_its_helpers_with_it() {
+    let dir = tempdir().expect("tempdir");
+    std::fs::create_dir(dir.path().join("home")).expect("home");
+    let SlowFetchGit {
+        git_pid,
+        helper_pid,
+        ..
+    } = write_slow_fetch_git(dir.path());
+    let child = Command::new(std::env::current_exe().expect("test binary"))
+        .args([
+            "--exact",
+            "startup_sync::tests::killed_sync_child",
+            "--ignored",
+            "--test-threads=1",
+        ])
+        .env(KILLED_SYNC_CHILD_DIR, dir.path())
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn the sync process");
+    // Killed and reaped however the test ends.
+    struct Reaped(Child);
+    impl Drop for Reaped {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let child = Reaped(child);
+    wait_until("the fetch starts", || {
+        git_pid.exists() && helper_pid.exists()
+    });
+
+    drop(child);
+
+    wait_until_gone(&[read_pid(&git_pid), read_pid(&helper_pid)]);
+}
+
+/// The sync process `killed_process_takes_git_and_its_helpers_with_it` kills.
+#[cfg(unix)]
+#[test]
+#[ignore = "run by killed_process_takes_git_and_its_helpers_with_it"]
+fn killed_sync_child() {
+    let Some(dir) = std::env::var_os(KILLED_SYNC_CHILD_DIR).map(PathBuf::from) else {
+        return;
+    };
+    let git_path = dir.join("git");
+    let _ = sync_openai_plugins_repo_with_transport_overrides(
+        &dir.join("home"),
+        Some(git_path.as_path()),
+        "http://127.0.0.1:9",
+        "http://127.0.0.1:9/backend-api/plugins/export/curated",
+        &crate::test_support::test_http_client_factory(),
+        &NOT_CANCELLED,
+    );
 }
 
 /// #477: once cancelled, the sync starts no further `git`.

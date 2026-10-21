@@ -1192,6 +1192,10 @@ jobs:
     name: argument-comment-lint release assets
     needs: tag-check
     uses: ./.github/workflows/rust-release-argument-comment-lint.yml
+    # Its publish-release job (workflow_dispatch only) asks for contents: write,
+    # and a caller must grant what a called job asks for, even a skipped one.
+    permissions:
+      contents: write
     with:
       publish: true
 
