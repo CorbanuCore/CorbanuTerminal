@@ -52,10 +52,6 @@ fn pf_29_s01_receipt_round_trip_and_corrupt_receipts_fail_closed() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "PF-27-S06: protected launch is not available on Windows yet, so readiness is never clean (#691)"
-)]
 fn pf_29_s01_isolation_only_after_a_preflight_and_lands_in_the_profile() {
     let root = tempfile::tempdir().unwrap();
     let corbanu = root.path().join("corbanu");

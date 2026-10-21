@@ -314,10 +314,6 @@ fn escaped(text: &str) -> String {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "the corpus is POSIX shell text; the grammar is the same on Windows"
-)]
 fn grammar_and_reader_differential() {
     let cases = all_cases();
     assert!(cases.len() > 2000, "corpus too small: {}", cases.len());
