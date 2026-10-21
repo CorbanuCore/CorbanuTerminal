@@ -357,3 +357,42 @@ async fn search_batch_defers_oversized_row_during_backward_scan() {
         0
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn issue1003_lookup_batch_releases_shared_lock_with_retained_descriptor() {
+    let directory = TempDir::new().expect("synthetic history directory");
+    let path = directory.path().join(HISTORY_FILENAME);
+    std::fs::write(
+        &path,
+        "{\"session_id\":\"synthetic\",\"ts\":1,\"text\":\"hello\"}\n",
+    )
+    .expect("write synthetic history");
+    let config = HistoryConfig::new(directory.path(), &History::default());
+    let original = OpenOptions::new()
+        .read(true)
+        .open(&path)
+        .expect("open operation descriptor");
+    let retained = original
+        .try_clone()
+        .expect("duplicate open file description");
+    let batch = lookup_batch_from_file(
+        original,
+        /*log_id*/ 0,
+        HistoryBatchCursor::new(/*end_offset*/ 0),
+        &config,
+    )
+    .expect("read history batch");
+    assert_eq!(batch.entries.len(), 1);
+    let competitor = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&path)
+        .expect("independent open file description");
+    assert!(
+        competitor.try_lock().is_ok(),
+        "lookup_batch returned but a retained duplicate still holds its shared lock"
+    );
+    competitor.unlock().expect("release competing control lock");
+    assert!(retained.metadata().is_ok(), "duplicate remains open");
+}
