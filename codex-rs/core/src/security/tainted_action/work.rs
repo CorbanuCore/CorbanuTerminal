@@ -147,6 +147,7 @@ mod tests {
         ("indirect.rs", include_str!("indirect.rs")),
         ("invocation.rs", include_str!("invocation.rs")),
         ("launched_git.rs", include_str!("launched_git.rs")),
+        ("loader_variables.rs", include_str!("loader_variables.rs")),
         ("named_shell.rs", include_str!("named_shell.rs")),
         ("nested.rs", include_str!("nested.rs")),
         ("code_variables.rs", include_str!("code_variables.rs")),

@@ -68,6 +68,9 @@ pub(super) struct SimpleCommand {
     /// made by a brace expansion or `$IFS`, or holding a substitution's
     /// spliced output (`{git,config}`, `git${IFS}config`, `$(echo git)`).
     pub(super) hidden: Vec<usize>,
+    /// #1064: it is the text of an arithmetic expansion (`$((i + 1))`),
+    /// which runs no command.
+    pub(super) arithmetic: bool,
     /// #989: indexes of the words holding a parameter expansion the lexer
     /// misreads (`${c:-eval}`, `${!c}`, `${c}al`, `"$c"al`, zsh `$c:t`): it
     /// drops braces and quotes, so the substituted word is not its value.
@@ -144,7 +147,11 @@ pub(super) fn simple_commands(command: &[String]) -> Lexed {
 /// #1064: also a transformation whose operator is not one of the letters
 /// that only quote or describe the value (`${v@$p}`, `${!r@${p^}}`): it may
 /// be `P` when it runs.
-pub(super) fn prompt_expansion(text: &str) -> bool {
+///
+/// #1064: `foreign`: the line may run code of another language, which can
+/// build shell text at run time (`chr(64)`); there an uncertain subscript
+/// counts on any line holding an `@`, as before.
+pub(super) fn prompt_expansion(text: &str, foreign: bool) -> bool {
     if !text.contains('@') {
         return false;
     }
@@ -153,10 +160,29 @@ pub(super) fn prompt_expansion(text: &str) -> bool {
         .chars()
         .filter(|ch| !matches!(ch, '\'' | '"' | '\\'))
         .collect();
+    // #1064: a subscript whose end is uncertain counts only where some
+    // subscript's end is followed by an operator (in either reading), or
+    // where other code may build one.
+    let after_subscript = foreign
+        || [joined.as_str(), bare.as_str()]
+            .iter()
+            .any(|text| operator_after_subscript(text));
     [joined.as_str(), bare.as_str()].iter().any(|text| {
         text.match_indices("@P").any(|(at, _)| {
             !text[at + 2..].starts_with(|ch: char| ch.is_ascii_alphanumeric() || ch == '_')
-        }) || computed_transformation(text)
+        }) || computed_transformation(text, after_subscript)
+    })
+}
+
+/// #1064: whether text holds `]@` followed by anything but one of the
+/// letters that only quote or describe a value (`${a[$(f)]@$p}`, but not
+/// `${a[@]}`, `"$@"` or `${a[i]@Q}`). The `]` that ends a subscript is
+/// written right before a transformation's `@` (backslash-newlines joined,
+/// or with quotes and backslashes removed). Linear.
+fn operator_after_subscript(text: &str) -> bool {
+    text.match_indices("]@").any(|(at, _)| {
+        work::step();
+        !text[at + 2..].starts_with(|ch: char| "QEAKakUuL".contains(ch))
     })
 }
 
@@ -164,7 +190,10 @@ pub(super) fn prompt_expansion(text: &str) -> bool {
 /// before it and a subscript after it) whose `op` is not one of `QEAKakUuL`
 /// (`${!prefix@}` lists names). A subscript is read at most 64 bytes; one
 /// not closed by then counts. Linear.
-fn computed_transformation(text: &str) -> bool {
+///
+/// #1064: such a subscript counts only when `after_subscript` (see
+/// [`operator_after_subscript`]), so `"${a[${#a[@]}-1]}"` does not.
+fn computed_transformation(text: &str, after_subscript: bool) -> bool {
     text.match_indices("${").any(|(at, _)| {
         work::step();
         let mut rest = &text[at + "${".len()..];
@@ -198,12 +227,12 @@ fn computed_transformation(text: &str) -> bool {
                             break;
                         }
                     }
-                    b'\'' | b'"' | b'\\' | b'`' | b'(' | b'{' => return true,
+                    b'\'' | b'"' | b'\\' | b'`' | b'(' | b'{' => return after_subscript,
                     _ => {}
                 }
             }
             let Some(close) = close else {
-                return true;
+                return after_subscript;
             };
             rest = &rest[close + 1..];
         }
@@ -723,6 +752,10 @@ impl Lexer {
             self.looked_up |= spliced.is_some()
                 && !matches!(top.as_slice(), [only] if fact_output(&self.done[*only]));
             let unseen = if open.arithmetic && arithmetic_close {
+                for index in open.first..self.done.len() {
+                    work::step();
+                    self.done[index].arithmetic = true;
+                }
                 ARITHMETIC_OUTPUT
             } else {
                 UNSEEN_OUTPUT

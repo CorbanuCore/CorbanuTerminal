@@ -6537,7 +6537,6 @@ fn issue_1159_code_variables_and_git_programs_are_unseen_code() {
         "echo $PATH ${PATH} $ENV ${ENV:-x}",
         "grep -n ENV Dockerfile",
         "docker run -e PROMPT=x img",
-        "PATH=./bin:$PATH ls",
         "ENV=production npm start",
         "export ENV=dev",
         "NODE_OPTIONS=--max-old-space-size=8192 npm run build",
@@ -6660,6 +6659,283 @@ fn issue_1064_1159_checks_are_linear() {
         ("compilers", "cc -o "),
         ("equals", "=git "),
         ("tee", "tee $(cat f) "),
+    ] {
+        work::assert_linear(label, |scale| {
+            let _ = script(&format!("{} echo hi", unit.repeat(400 * scale)));
+            let _ = script(&format!("echo {} x", unit.repeat(400 * scale)));
+        });
+    }
+}
+
+/// #1064 (option (c)): a variable that makes a later program load code,
+/// set to a risky value: a relative, empty, unknown or writable folder in a
+/// search path, interpreter options that load code, any `PYTHONSTARTUP` or
+/// `PERL5OPT`, and `ENV` for a shell that may be interactive. Ordinary
+/// values stay quiet.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1064_loading_variables_with_risky_values_are_unseen_code() {
+    use ProtectedActionKind::UnseenCode;
+    let mut wrong = Vec::new();
+    for command in [
+        // Search paths: relative, empty, in the workspace or a temp folder.
+        "PATH=./bin:$PATH ls",
+        "PATH=./bin:$PATH git log",
+        "PATH=bin:$PATH git log",
+        "PATH=:$PATH git log",
+        "PATH=$PATH: git log",
+        "PATH= git log",
+        "export PATH=/work/bin:$PATH",
+        "PATH=$PWD/bin:$PATH make",
+        "cd /opt && PATH=/opt/x:$PATH make",
+        "cd sub && PATH=.:$PATH make",
+        "PATH=/tmp/x:$PATH git log",
+        "PATH=/work/../work/bin:$PATH git log",
+        // Unknown: unseen output, an unknown variable, a glob.
+        "d=$(cat notes); PATH=$d:$PATH git log",
+        "PATH=$D/bin:$PATH ls",
+        "PATH=/opt/*/bin:$PATH ls",
+        // A value the word lexer splits at a quoted blank, or a variable
+        // whose value it may cut short.
+        "PATH=\"/usr/bin :.\" git log",
+        "PATH='/usr/bin :./bin' git log",
+        "PATH=/usr/bin\\ :. git log",
+        "export o='/opt/bin :.'; PATH=$o:$PATH git log",
+        "export o='/opt/bin :.'; q=$o; PATH=$q:$PATH git log",
+        "export o='/opt/bin;.:x'; PATH=$o:$PATH git log",
+        "PATH='~/bin':$PATH git log",
+        "PATH=\"~/bin:$PATH\" git log",
+        "PATH='$HOME/bin':$PATH git log",
+        "p='~/bin'; PATH=$p:$PATH git log",
+        "PATH=\\~/bin:$PATH git log",
+        "PATH=${HOME#/}:$PATH git log",
+        "PATH=\"${HOME/\\//}:$PATH\" git log",
+        "PATH=$HOME:t:$PATH git log",
+        "PATH=/proc/self/cwd/bin:$PATH git log",
+        // Review 1.
+        "cd /opt && PATH=\"/usr/my bin:/opt/x\" make",
+        "PATH=/var/tmp/x:$PATH ls",
+        "read PATH[0] < f",
+        "select PATH in ./bin; do git log; done",
+        "JAVA_TOOL_OPTIONS=-Djava.class.path=. java -version",
+        // Review 2.
+        "cd /opt/x; cd /; cd /usr; PATH=/opt/x:$PATH make",
+        "ENV=./x.sh sh -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -e -i -c : </dev/null",
+        "env \"PATH=/usr/bin :.\" git log",
+        // Other ways to set it.
+        "PATH+=:./bin; git log",
+        "env PATH=./bin:/usr/bin git log",
+        "env -S'PATH=./bin git' log",
+        "env -i PATH=bin git log",
+        "sudo PATH=./bin:$PATH make",
+        "declare -x PATH=./bin:$PATH",
+        "export A=1 PATH=./bin:$PATH",
+        "PATH[0]=./bin; git log",
+        "read PATH < f",
+        "read -r PATH < f",
+        "printf -v PATH %s ./bin",
+        "mapfile -t PATH < f",
+        "declare -n r=PATH; r=./bin",
+        "v=./bin; declare -n PATH=v",
+        ": ${PATH:=./bin}",
+        "for PATH in ./bin; do git log; done",
+        "export PATH=${PATH#*:}",
+        "$env:Path = '.\\bin;' + $env:Path",
+        "setx PATH bin",
+        // Library and module search paths.
+        "LD_LIBRARY_PATH=. ls",
+        "LD_LIBRARY_PATH=./lib ls",
+        "DYLD_LIBRARY_PATH=./lib ls",
+        "DYLD_FRAMEWORK_PATH=build ls",
+        "PYTHONPATH=. python3 -c 1",
+        "PYTHONPATH=src:$PYTHONPATH python3 -c 1",
+        "PYTHONPATH+=:/opt/lib python3 -c 1",
+        "PYTHONHOME=./py python3 -c 1",
+        "NODE_PATH=./node_modules node -e 1",
+        "PERL5LIB=lib perl -e 1",
+        "RUBYLIB=lib ruby -e 1",
+        "CLASSPATH=. java -version",
+        "GEM_PATH=./gems gem list",
+        "GEM_HOME=vendor gem list",
+        // Interpreter options that load code.
+        "NODE_OPTIONS=--require=./x.js node -e 1",
+        "NODE_OPTIONS='--require ./x.js' node -e 1",
+        "NODE_OPTIONS=\"--max-old-space-size=4096 --require ./x.js\" npm test",
+        "NODE_OPTIONS=-r./x.js node -e 1",
+        "NODE_OPTIONS=--import=./x.mjs node -e 1",
+        "NODE_OPTIONS=--loader=./x.mjs node -e 1",
+        "NODE_OPTIONS=--experimental-loader=./x.mjs node -e 1",
+        "o=$(cat notes); export NODE_OPTIONS=$o",
+        "export o='--max-old-space-size=1 --require=./x.js'; NODE_OPTIONS=$o node -e 1",
+        "JAVA_TOOL_OPTIONS=-javaagent:./a.jar java -version",
+        "_JAVA_OPTIONS=-agentpath:./a.so java -version",
+        "JDK_JAVA_OPTIONS=@opts java -version",
+        "JAVA_TOOL_OPTIONS='-XX:OnError=sh' java -version",
+        "JAVA_TOOL_OPTIONS=-Xbootclasspath/a:./x.jar java -version",
+        "RUBYOPT=-r./x ruby -e 1",
+        "RUBYOPT=-Ilib ruby -e 1",
+        "RUBYOPT=-wrx ruby -e 1",
+        "PYTHONSTARTUP=./s.py python3",
+        "export PYTHONSTARTUP=/opt/s.py",
+        "PERL5OPT=-Mstrict perl -e 1",
+        // `ENV`, for a shell that may be interactive.
+        "ENV=./x.sh sh -i",
+        "export ENV=./x.sh; sh",
+        "ENV=/opt/x.sh sh -s",
+        "env ENV=./e dash -i",
+        "export ENV=x; bash -c 'sh -i'",
+        "ENV='./a b' sh --",
+    ] {
+        if script(command) != Some(UnseenCode) {
+            wrong.push(command);
+        }
+    }
+    for command in [
+        "p=$HOME/bin; PATH=$p:$PATH; echo $p",
+        "PATH=/usr/local/bin:$PATH make",
+        "PATH=$PATH:/usr/sbin ls",
+        "PATH+=:/opt/bin; ls",
+        "export PATH=\"$HOME/.local/bin:$PATH\"",
+        "export PATH=\"${HOME}/.local/bin:${PATH}\"",
+        "export PATH=~/bin:$PATH",
+        "export PATH=\"/opt/My Tools/bin:/usr/bin\"",
+        "export PATH=\"$HOME/My Tools:/usr/bin\"",
+        "p=/opt/x; PATH=$p:~/bin:$PATH make",
+        "p=\"$HOME/bin\"; PATH=\"$p:$PATH\" make",
+        "PATH=${HOME}/bin:$PATH make",
+        "d='/opt/x'; PATH=$d:$PATH make",
+        "export LD_LIBRARY_PATH=/opt/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}",
+        "PYTHONPATH=/opt/lib python3 -c 1",
+        "export PATH",
+        "echo $PATH ${PYTHONPATH:-none}",
+        "grep -n PATH Makefile",
+        "unset PYTHONPATH",
+        "export GOPATH=$HOME/go",
+        "ENV=production npm start",
+        "export ENV=dev",
+        "ENV=dev sh -c 'echo hi'",
+        "export ENV=dev; echo x | sh",
+        "export ENV=dev; sh -c 'echo hi'",
+        "NODE_OPTIONS=--max-old-space-size=4096 npm run build",
+        "NODE_OPTIONS=\"$NODE_OPTIONS --max-old-space-size=4096\" npm test",
+        "NODE_OPTIONS='--enable-source-maps --no-warnings' node -e 1",
+        "JAVA_TOOL_OPTIONS=-Xmx2g java -version",
+        "export JAVA_TOOL_OPTIONS='-Dfile.encoding=UTF-8 -Xmx2g'",
+        "RUBYOPT=-W0 ruby -e 1",
+        "RUBYOPT=--yjit ruby -e 1",
+        "echo 'PATH=./bin' > notes.txt",
+        "x='a b'; echo \"$x\"",
+        "git commit -m 'set PATH correctly'",
+    ] {
+        if script(command).is_some() {
+            wrong.push(command);
+        }
+    }
+    assert_eq!(wrong, Vec::<&str>::new());
+}
+
+/// #1064: under Windows path rules (on every platform) a drive is part of
+/// one search-path entry (`C:\x/bin`), so the user's folders stay quiet.
+#[test]
+fn issue_1064_search_paths_under_windows_rules() {
+    use ProtectedActionKind::UnseenCode;
+    let bash = |line: &str| windows_kind(&["bash", "-lc", line]);
+    for line in [
+        "PATH=./bin:$PATH git log",
+        "PATH=C:/work/bin:$PATH git log",
+        "PATH=$PWD/bin:$PATH git log",
+        "PATH=C:\\:$PATH git log",
+    ] {
+        assert_eq!(bash(line), Some(UnseenCode), "{line}");
+    }
+    for line in [
+        "p=$HOME/bin; PATH=$p:$PATH; echo $p",
+        "PATH=/c/tools:$PATH git log",
+        "PATH=D:/tools:$PATH git log",
+    ] {
+        assert_eq!(bash(line), None, "{line}");
+    }
+}
+
+/// #1064 item 3: a subscript holding `(`, `{`, a quote or a backtick asks
+/// only when a subscript's end is followed by a transformation operator,
+/// not on every line that also holds an `@`.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1064_uncertain_subscripts_ask_only_before_an_operator() {
+    use ProtectedActionKind::UnseenCode;
+    let mut wrong = Vec::new();
+    for command in [
+        "p=$(cat f); echo \"${a[$(f)]@$p}\"",
+        "p=$(cat f); echo \"${a[`f`]@\"$p\"}\"",
+        "p=$(cat f); echo \"${a[${#a[@]}-1]@$p}\" \"$@\"",
+        "p=$(cat f); echo \"${a[\"]\"]@\"$p\"}\"",
+        "p=$(cat f); echo \"${a[$((i+1))]@`echo P`}\"",
+        "p=$(cat f); echo \"${a[$(f)]\\\n@$p}\"",
+        "echo \"${a[$(f)]@P}\"",
+        // Review 1: other code may build the `@` at run time.
+        "python3 -c 'import subprocess as s; s.run([\"bash\",\"-c\",\"mapfile a <notes; p=P; echo ${a[$((0))]\"+chr(64)+\"$p}\"]) # x@y'",
+        "python3 -c 'import os; t=\"[@]\"; os.system(\"echo ${a[$((0))]\" + t[1] + \"P}\")'",
+        "awk 'BEGIN { system(\"echo ${a[$((0))]\" sprintf(\"%c\", 64) \"P}\") }' # @",
+        "py=python3; $py -c 'import os; t=\"[@]\"; os.system(\"echo ${a[$((0))]\" + t[1] + \"P}\")'",
+        "alias p=python3; p -c 'import os; t=\"[@]\"; os.system(\"echo ${a[$((0))]\" + t[1] + \"P}\")'",
+        // Review 2: shell escapes, programs not known as interpreters, and
+        // aliases of more than one word.
+        "git log -1 --author=me@example.com; printf 'p=P; mapfile a <notes; echo ${a[$((0))]\\x40$p}\\n' | bash",
+        "echo -e 'p=P; echo ${a[$((0))]\\x40$p}' | bash # @",
+        "vim -es -c 'set shell=bash' -c 'call system(\"mapfile a <notes; p=P; echo ${a[$((0))]\" . nr2char(64) . \"$p}\")' -c 'qa!' # x@y",
+        "shopt -s expand_aliases; alias p='env python3'; p -c 'import os; t=\"[@]\"; os.system(\"echo ${a[$((0))]\" + t[1] + \"P}\")'",
+        "printf 'echo ${a[$((0))]\\x40P}' | echo $(perl -e 'exec bash') # x@y",
+        "printf 'echo ${a[$((0))]\\x40P}' | echo $(sh + 1) # x@y",
+    ] {
+        if script(command) != Some(UnseenCode) {
+            wrong.push(command);
+        }
+    }
+    for command in [
+        "echo \"${arr[${#arr[@]}-1]}\"",
+        "echo \"${a[$((i+1))]}\" $@",
+        "declare -A m; echo \"${m[\"key\"]}\" \"${a[@]}\"",
+        "echo \"${a[$(date +%s)]}\" \"$@\"",
+        "echo \"${a[`date +%s`]}\" ${#a[@]}",
+        "echo \"${a[${#a[@]}-1]@Q}\"",
+        "echo \"${a[$(date +%s)]}\" user@host",
+        "for i in 0 1; do echo \"${a[$((i+1))]}\" ${#a[@]}; done",
+        "x=\"${a[$(date +%s)]}\"; printf '%s\\n' \"$x\" \"$@\"",
+    ] {
+        if script(command).is_some() {
+            wrong.push(command);
+        }
+    }
+    assert_eq!(wrong, Vec::<&str>::new());
+}
+
+/// #1064: the new checks stay linear.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1064_loader_checks_are_linear() {
+    for (label, unit) in [
+        ("entries", "PATH=./a:/b:"),
+        ("split", "PATH=\"/a :"),
+        ("cut", "x='a b' "),
+        ("names", "a=a=a="),
+        ("quotes", "'\"$'"),
+        ("options", "NODE_OPTIONS=--a "),
+        ("shells", "sh -x "),
+        ("shell options", "sh -o "),
+        ("shell files", "bash --rcfile "),
+        ("readers", "read PATH "),
+        ("subscripts", "${a[$(f)]}"),
+        ("operators", "]@"),
     ] {
         work::assert_linear(label, |scale| {
             let _ = script(&format!("{} echo hi", unit.repeat(400 * scale)));
