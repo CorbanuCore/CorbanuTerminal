@@ -110,3 +110,35 @@ fn unclear_operands_are_not_patterns() {
     assert!(patterns("grep <(cat .env) logs").is_empty());
     assert_eq!(patterns("rg --pre cat token .env"), ["token"]);
 }
+
+#[test]
+fn control_flow_conditions_recognize_search_patterns() {
+    for script in [
+        "if grep -q .env x.log; then :; fi",
+        "if false; then :; elif grep -q .env x.log; then :; fi",
+        "while grep -q .env x.log; do :; done",
+        "until rg -q .env x.log; do :; done",
+    ] {
+        assert_eq!(patterns(script), [".env"], "{script}");
+    }
+}
+
+#[test]
+fn control_flow_words_in_arguments_do_not_start_searches() {
+    for keyword in ["if", "elif", "while", "until"] {
+        let script = format!("cat {keyword} grep .env");
+        assert_eq!(patterns(&script), Vec::<String>::new(), "{script}");
+    }
+}
+
+#[test]
+fn control_flow_search_paths_remain_paths() {
+    for script in [
+        "if grep -q token .env; then :; fi",
+        "if false; then :; elif grep -q token .env; then :; fi",
+        "while grep -q token .env; do :; done",
+        "until rg -q token .env; do :; done",
+    ] {
+        assert_eq!(patterns(script), ["token"], "{script}");
+    }
+}
