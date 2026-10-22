@@ -71,8 +71,14 @@ const SEARCHES: &[&str] = &["cdpath", "cdablevars", "oldpwd", "autocd"];
 /// folder other than the line's: a wrapper's folder option in any
 /// spelling, `find -execdir`, `chroot` or a systemd `WorkingDirectory=`.
 pub(super) fn runs_elsewhere(texts: &[String]) -> bool {
+    elsewhere_at(texts).is_some()
+}
+
+/// The position of the first of `texts` that makes `runs_elsewhere` true:
+/// it holds for the texts before a position after it, and only those.
+pub(super) fn elsewhere_at(texts: &[String]) -> Option<usize> {
     let mut letters: Vec<char> = Vec::new();
-    for text in texts {
+    for (at, text) in texts.iter().enumerate() {
         work::step();
         let flag = text.split_once('=').map_or(text.as_str(), |(flag, _)| flag);
         if FOLDER_FLAGS.contains(&flag)
@@ -91,7 +97,7 @@ pub(super) fn runs_elsewhere(texts: &[String]) -> bool {
                 window.eq_ignore_ascii_case(b"workingdirectory")
             })
         {
-            return true;
+            return Some(at);
         }
         if text.len() > 1
             && text.starts_with('-')
@@ -101,7 +107,7 @@ pub(super) fn runs_elsewhere(texts: &[String]) -> bool {
                 letters.contains(&letter)
             })
         {
-            return true;
+            return Some(at);
         }
         for (wrapper, letter) in SHORT_FOLDER_FLAGS {
             work::step();
@@ -110,7 +116,7 @@ pub(super) fn runs_elsewhere(texts: &[String]) -> bool {
             }
         }
     }
-    false
+    None
 }
 
 /// Whether `text` defines code that runs later than it is read: a
@@ -220,6 +226,21 @@ pub(super) fn odd_change(name: &str, args: &[String]) -> bool {
         "pushd" => operands == 0,
         _ => operands > 1,
     }
+}
+
+/// Whether `pushd`/`popd` changes the folder stack rather than (only) the
+/// folder: `-n` keeps the folder, `+N`/`-N` pick an entry of a stack that
+/// is not followed, and `pushd -` goes back (zsh).
+pub(super) fn stack_change(name: &str, args: &[String]) -> bool {
+    matches!(name, "pushd" | "popd")
+        && args.iter().any(|arg| {
+            work::step();
+            arg == "-"
+                || arg.starts_with('+')
+                || (arg.starts_with('-')
+                    && !arg.starts_with("--")
+                    && (arg.contains('n') || arg[1..].starts_with(|ch: char| ch.is_ascii_digit())))
+        })
 }
 
 /// The names in `text`: runs of letters, digits and underscores.

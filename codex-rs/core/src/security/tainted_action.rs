@@ -352,6 +352,13 @@ const FOLDER_FLAGS: &[&str] = &["-C", "--directory", "--cwd", "--cd", "--chdir"]
 /// Nesting limit for scripts, payloads and literals classified inside an
 /// action. Deeper nesting fails closed.
 const MAX_DEPTH: usize = 4;
+/// Shell builtins that change what the rest of a line does (its folder,
+/// variables or code): named by a path they run a file instead.
+const PATH_BUILTINS: &[&str] = &[
+    "cd", "pushd", "popd", "chdir", "source", ".", "eval", "exec", "export", "local", "declare",
+    "readonly", "typeset", "trap", "alias", "builtin", "command", "let", "read", "set", "shopt",
+    "unset",
+];
 /// Bytes of command text one classification lexes; more fail closed.
 const MAX_COMMAND_BYTES: usize = 1024 * 1024;
 /// Script files one classification reads; more fail closed.
@@ -537,6 +544,7 @@ impl Classifier {
             sed_scope: None,
             ran: Vec::new(),
             ran_unknown: false,
+            argv0: String::new(),
             written: Vec::new(),
             nested_scripts: 0,
             unknown_folder: 0,
@@ -558,6 +566,7 @@ impl Classifier {
 
     /// Judge a command line run in `cwd`.
     fn judge_command(&mut self, command: &[String], cwd: &str) {
+        self.argv0 = command.first().cloned().unwrap_or_default();
         self.homes.allow_lookups_under(cwd);
         self.path(cwd);
         self.command(command, cwd, /*depth*/ 0);
@@ -912,6 +921,8 @@ struct Classifier {
     /// one whose name the classifier cannot see.
     ran: Vec<String>,
     ran_unknown: bool,
+    /// The action's own program (`argv[0]`): if it is missing, nothing runs.
+    argv0: String,
     /// #885: files the action's command lines write (`None`: one the
     /// classifier cannot name).
     written: Vec<Option<String>>,
@@ -1429,7 +1440,13 @@ impl Classifier {
             }
             folders.unchecked |= matches!(name.as_str(), "cd" | "pushd")
                 && unchecked[index + 1..].iter().any(|word| *word);
-            self.change_folder(name, args, folders, variables);
+            // `pushd -n x`, `popd +1`: the folder stack changes, the folder
+            // may not (or goes to an entry of a stack not followed).
+            if unknown_folder::stack_change(name, args) {
+                folders.unfollowed = true;
+            } else {
+                self.change_folder(name, args, folders, variables);
+            }
         }
         let mut git_config = GitConfigWrites::new(&lower, &hidden, &unchecked);
         let mut launched_git = launched_git::LaunchedGit::new(
@@ -1638,6 +1655,85 @@ impl Classifier {
             }
         }
         self.scripts_of(simple, words, unseen, command.as_ref(), &cwd, depth);
+        self.path_programs(words, command.as_ref(), &cwd, depth);
+    }
+
+    /// A program named by a path (`./python3`, `./env`, `/usr/bin/env`) is
+    /// the file that runs, whatever its name: it is read as any program run
+    /// by its path, besides what its name would run. A shell builtin named
+    /// by a path (`./cd`, `./source`) runs that file, not the builtin, so
+    /// the rest of the line is not known: it asks.
+    fn path_programs(
+        &mut self,
+        words: &[String],
+        command: Option<&(usize, String)>,
+        cwd: &str,
+        depth: usize,
+    ) {
+        // #1261: Windows path rules follow their own reads.
+        if self.homes.windows_paths() {
+            return;
+        }
+        // `scripts_of` read a command that names no shell or interpreter.
+        let read = command
+            .filter(|_| indirect::invocation(words).is_none())
+            .map(|(index, _)| *index);
+        let elsewhere = unknown_folder::elsewhere_at(words);
+        for at in indirect::programs(words) {
+            work::step();
+            let word = &words[at];
+            if !word.contains('/') || Some(at) == read {
+                continue;
+            }
+            if PATH_BUILTINS.contains(&basename(&word.to_lowercase())) {
+                self.note(ProtectedActionKind::UnseenCode);
+            } else if !self.runs_elsewhere(elsewhere, at, word) {
+                self.named_program_file(word, cwd, depth);
+            }
+        }
+    }
+
+    /// A program named by a path whose name is a known tool's: judged as a
+    /// script when it is text. An executable is not one the action ran as
+    /// a script (`/bin/bash`). Missing, it asks as any program run by its
+    /// path, unless it is the action's own program: then nothing runs.
+    fn named_program_file(&mut self, word: &str, cwd: &str, depth: usize) {
+        if word.contains('$') {
+            return;
+        }
+        let file = self.homes.resolve(word, cwd);
+        let data = self
+            .sed_scope
+            .as_ref()
+            .is_some_and(|scope| scope.is_data(word));
+        match self.read_file(&file, word, cwd) {
+            FileText::Binary => {}
+            FileText::Missing if data || (depth == 0 && self.argv0 == word) => {}
+            FileText::Missing | FileText::Unreadable => {
+                self.ran.push(file);
+                self.note(ProtectedActionKind::UnseenCode);
+            }
+            FileText::Text(text) => {
+                self.ran.push(file);
+                self.script(&text, cwd, depth + 1);
+            }
+        }
+    }
+
+    /// Whether `file`, a word of the program at `at` or after it, names a
+    /// file relative to a folder a wrapper before that program moved to
+    /// (`env -C sub bash run.sh`, `sudo -D sub ./run.sh`): which file runs
+    /// is not known, so it asks.
+    /// `from`: `unknown_folder::elsewhere_at` of the command's words.
+    fn runs_elsewhere(&mut self, from: Option<usize>, at: usize, file: &str) -> bool {
+        let elsewhere = !self.homes.windows_paths()
+            && from.is_some_and(|from| from < at)
+            && (file.contains("..")
+                || self.homes.resolve(file, "/a") != self.homes.resolve(file, "/b"));
+        if elsewhere {
+            self.note(ProtectedActionKind::UnseenCode);
+        }
+        elsewhere
     }
 
     /// #1283: for each of a simple command's words, whether the quote-aware
@@ -1723,9 +1819,15 @@ impl Classifier {
             return;
         };
         let local = |word: &str| word.starts_with(['.', '/', '~']);
+        let elsewhere = if self.homes.windows_paths() {
+            None
+        } else {
+            unknown_folder::elsewhere_at(words)
+        };
         let Some(invocation) = indirect::invocation(words) else {
             let word = &words[*index];
-            if word.contains('/') {
+            // `env -C sub ./run.sh` runs `sub/run.sh`.
+            if word.contains('/') && !self.runs_elsewhere(elsewhere, *index, word) {
                 // A binary through an environment path (`$JAVA_HOME/bin/java`)
                 // is not a script; an unseen one was already judged.
                 if !word.contains('$') {
@@ -1751,7 +1853,11 @@ impl Classifier {
         let shell =
             shell::SHELLS.contains(&name.as_str()) || matches!(name.as_str(), "source" | ".");
         match invocation.code {
-            Code::File(file) => self.required_script(file, cwd, depth, shell),
+            Code::File(file) => {
+                if !self.runs_elsewhere(elsewhere, *index, file) {
+                    self.required_script(file, cwd, depth, shell);
+                }
+            }
             Code::Module(module) if module.contains('$') => {
                 self.note(ProtectedActionKind::UnseenCode);
             }
@@ -1759,6 +1865,9 @@ impl Classifier {
                 let module = module.replace('.', "/");
                 for candidate in [format!("{module}.py"), format!("{module}/__main__.py")] {
                     work::step();
+                    if self.runs_elsewhere(elsewhere, *index, &candidate) {
+                        continue;
+                    }
                     let file = self.homes.resolve(&candidate, cwd);
                     self.not_shell += 1;
                     self.script_file(&file, &candidate, cwd, depth, Script::IfPresent);
@@ -1777,6 +1886,9 @@ impl Classifier {
         }
         for preload in invocation.preloads {
             work::step();
+            if self.runs_elsewhere(elsewhere, *index, preload) {
+                continue;
+            }
             if local(preload) {
                 self.required_script(preload, cwd, depth, /*shell*/ false);
             } else {

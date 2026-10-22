@@ -168,6 +168,21 @@ fn hex_bytes(word: &str) -> Option<Vec<u8>> {
 /// assignments, shell keywords and wrappers (with their options and
 /// arguments), with the index of that word.
 pub(super) fn command_word(words: &[String]) -> Option<(usize, String)> {
+    command_chain(words, &mut |_| {})
+}
+
+/// The positions of the programs a simple command runs: its wrappers
+/// (`env`, `sudo`, `timeout`, ...) and then its command.
+pub(super) fn programs(words: &[String]) -> Vec<usize> {
+    let mut found = Vec::new();
+    if let Some((index, _)) = command_chain(words, &mut |at| found.push(at)) {
+        found.push(index);
+    }
+    found
+}
+
+/// `command_word`, telling `wrapper` the position of each wrapper skipped.
+fn command_chain(words: &[String], wrapper: &mut dyn FnMut(usize)) -> Option<(usize, String)> {
     const KEYWORDS: &[&str] = &["!", "if", "then", "elif", "else", "do", "while", "until"];
     /// Wrappers: options that take a value, and operands before the command.
     const WRAPPERS: &[(&str, &[&str], usize)] = &[
@@ -246,6 +261,7 @@ pub(super) fn command_word(words: &[String]) -> Option<(usize, String)> {
         else {
             return Some((index, name));
         };
+        wrapper(index);
         index += 1;
         let mut operands = *operands;
         while let Some(option) = words.get(index) {

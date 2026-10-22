@@ -6378,3 +6378,147 @@ fn issue_1309_possible_folders_are_linear() {
         });
     }
 }
+
+/// #1302 follow-up: lines run in a workspace whose files are `files`, with
+/// that workspace as the user's home.
+#[cfg(unix)]
+fn in_workspace(files: &[(&str, &str)], line: &str) -> Option<ProtectedActionKind> {
+    let root = tempfile::tempdir().expect("tempdir");
+    let work = root.path();
+    std::fs::create_dir_all(work.join("sub")).expect("sub");
+    for (name, text) in files {
+        std::fs::write(work.join(name), text).expect("file");
+    }
+    let cwd = work.to_string_lossy().into_owned();
+    classify_with(
+        &shell_in(&cwd, &["bash", "-lc", line]),
+        &fixture(HOME),
+        Some(work),
+    )
+}
+
+/// #1302 follow-up: a program named by a path (`./python3`, `./env`) is the
+/// workspace file that runs, not the tool or builtin of that name: it is
+/// read, and a builtin named by a path (`./cd`) asks. Ordinary lines,
+/// system programs by path included, stay quiet.
+#[cfg(unix)]
+#[test]
+fn programs_named_by_a_path_are_the_files_that_run() {
+    use ProtectedActionKind::*;
+    let evil = "echo x >> ~/.zshenv\n";
+    let ok = ("ok.py", "print(1)\n");
+    let mut wrong = Vec::new();
+    for (files, line, expected) in [
+        (vec![("python3", evil), ok], "./python3 ok.py", Persistence),
+        (
+            vec![("python3", evil), ok],
+            "\"$PWD/python3\" ok.py",
+            Persistence,
+        ),
+        (
+            vec![("sub/python3", evil), ok],
+            "sub/python3 ok.py",
+            Persistence,
+        ),
+        (vec![("env", evil), ok], "./env python3 ok.py", Persistence),
+        (
+            vec![("timeout", evil), ok],
+            "./timeout 5 python3 ok.py",
+            Persistence,
+        ),
+        (vec![("bash", evil)], "./bash -c true", Persistence),
+        (vec![("sh", evil)], "sh -c './sh -c true'", Persistence),
+        // A builtin's name: the file runs, not the builtin.
+        (
+            vec![("source", "true\n"), ("ok.sh", "true\n")],
+            "./source ok.sh",
+            UnseenCode,
+        ),
+        // Already asked on main; kept as regressions.
+        (
+            vec![("cd", "true\n")],
+            "./cd /tmp; echo x >> .zshenv",
+            UnseenCode,
+        ),
+        (
+            vec![("pushd", "true\n")],
+            "./pushd /tmp; echo x >> .zshenv",
+            UnseenCode,
+        ),
+    ] {
+        let found = in_workspace(&files, line);
+        if found != Some(expected) {
+            wrong.push(format!("{line}: {found:?}"));
+        }
+    }
+    assert_eq!(wrong, Vec::<String>::new());
+    let run = ("run.sh", "echo x > out.txt\n");
+    for (files, line) in [
+        (vec![ok], "python3 ok.py"),
+        (vec![ok], "/usr/bin/env python3 ok.py"),
+        (vec![run], "/bin/sh -c 'bash run.sh'"),
+        (vec![run], "./run.sh && \"$PWD/run.sh\""),
+        (vec![("sub/run.sh", "true\n")], "cd sub && bash run.sh"),
+        (
+            vec![("sub/run.sh", "true\n")],
+            "pushd sub; bash run.sh; popd",
+        ),
+        (vec![run], "env -C sub make; env -i bash run.sh"),
+    ] {
+        assert_eq!(in_workspace(&files, line), None, "{line}");
+    }
+}
+
+/// #1302 follow-up: `pushd -n` and `popd -n` keep the folder, `pushd +1`
+/// goes to an entry of the stack, and a wrapper's folder option (`env -C`,
+/// `sudo -D`) runs a relative script from that folder: the classifier
+/// followed none of these and read a script other than the one that runs.
+#[cfg(unix)]
+#[test]
+fn folder_stack_and_wrapper_folders_ask() {
+    let evil = "echo x >> ~/.zshenv\n";
+    let here = [("run.sh", evil), ("sub/run.sh", "true\n")];
+    let there = [("run.sh", "true\n"), ("sub/run.sh", evil)];
+    let mut wrong = Vec::new();
+    for (files, line) in [
+        (&here, "pushd -n sub; bash run.sh"),
+        (&here, "pushd -n sub >/dev/null; ./run.sh"),
+        (&here, "pushd /tmp; pushd +1; echo x >> .zshenv"),
+        (&here, "pushd -n /tmp; echo x >> .zshenv"),
+        (&there, "pushd sub; popd -n; bash run.sh"),
+        (&there, "env -C sub bash run.sh"),
+        (&there, "env --chdir=sub ./run.sh"),
+        (&there, "sudo -D sub bash run.sh"),
+        (&there, "env -C sub python3 -m run"),
+    ] {
+        if in_workspace(files, line).is_none() {
+            wrong.push(line);
+        }
+    }
+    assert_eq!(wrong, Vec::<&str>::new());
+    let quiet = [("run.sh", "true\n"), ("sub/run.sh", "true\n")];
+    for line in [
+        "pushd sub; bash run.sh; popd",
+        "pushd sub && popd && bash run.sh -n",
+        "env -C sub make",
+        "env -C sub bash \"$PWD/run.sh\"",
+    ] {
+        assert_eq!(in_workspace(&quiet, line), None, "{line}");
+    }
+}
+
+/// #1302 follow-up: programs named by a path, behind a wrapper's folder,
+/// are judged in linear work.
+#[cfg(unix)]
+#[test]
+fn programs_named_by_a_path_are_linear() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let cwd = root.path().to_string_lossy().into_owned();
+    work::assert_linear("path-named wrappers", |scale| {
+        let line = format!(
+            "env -C sub {}./run.sh",
+            "./env /usr/bin/env ".repeat(40 * scale)
+        );
+        assert!(classify_fixture(&shell_in(&cwd, &["bash", "-lc", &line])).is_some());
+    });
+}
