@@ -17,6 +17,7 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::AbortOnDropHandle;
 use tracing::Instrument;
 use tracing::Span;
+use tracing::debug;
 use tracing::field;
 use tracing::info_span;
 use tracing::trace;
@@ -580,10 +581,25 @@ impl Session {
 
         let turn_context = self.new_default_turn_with_sub_id(sub_id.clone()).await;
         // #1331 (D171): nor while its named account is removed or signed out.
-        if crate::session::turn::turn_refusal(self, &turn_context)
-            .await
-            .is_some()
-        {
+        if let Some(err) = crate::session::turn::turn_refusal(self, &turn_context).await {
+            let message = format!(
+                "Agent messages remain queued: {err}. After recovery, send another message or start a turn to retry."
+            );
+            self.send_event(
+                &turn_context,
+                EventMsg::Warning(WarningEvent {
+                    message: message.clone(),
+                }),
+            )
+            .await;
+            if let Err(err) = self
+                .services
+                .agent_control
+                .warn_parent_of_held_mailbox(self.thread_id, &turn_context.session_source, message)
+                .await
+            {
+                debug!("failed to notify parent of held mailbox: {err}");
+            }
             return;
         }
         let agent_execution_guard = match self.services.agent_control.try_execution_guard(
