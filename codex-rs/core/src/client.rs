@@ -1551,7 +1551,7 @@ impl ModelClient {
                 deferred
                     .resolve_path(
                         self.state.provider.info(),
-                        client_setup.auth.as_ref(),
+                        client_setup.auth.as_ref().map(CodexAuth::auth_mode),
                         &client_setup
                             .api_provider
                             .url_for_path(RESPONSES_COMPACT_ENDPOINT),
@@ -1722,7 +1722,7 @@ impl ModelClient {
                 deferred
                     .resolve_path(
                         self.state.provider.info(),
-                        client_setup.auth.as_ref(),
+                        client_setup.auth.as_ref().map(CodexAuth::auth_mode),
                         &call_url,
                         &call_route,
                     )
@@ -1810,7 +1810,12 @@ impl ModelClient {
         };
         let model = session_config.model.as_deref().unwrap_or_default();
         crate::accounting::realtime::RealtimeSessionRecord::begin(
-            &deferred, provider, credential, &url, &path, model,
+            &deferred,
+            provider,
+            credential.map(CodexAuth::auth_mode),
+            &url,
+            &path,
+            model,
         )
         .await
     }
@@ -1873,7 +1878,7 @@ impl ModelClient {
                 deferred
                     .resolve_path(
                         self.state.provider.info(),
-                        client_setup.auth.as_ref(),
+                        client_setup.auth.as_ref().map(CodexAuth::auth_mode),
                         &client_setup
                             .api_provider
                             .url_for_path(MEMORIES_SUMMARIZE_ENDPOINT),

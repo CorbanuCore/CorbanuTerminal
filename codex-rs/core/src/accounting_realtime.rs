@@ -6,8 +6,8 @@
 //! carry none - so they stay unknown, never zero.
 use super::Sampling;
 use super::responses::DeferredResponsesSampling;
-use codex_login::CodexAuth;
 use codex_model_provider_info::ModelProviderInfo;
+use codex_protocol::auth::AuthMode;
 use codex_state::accounting::Attempt;
 use codex_state::accounting::Patch;
 use std::sync::Arc;
@@ -21,19 +21,19 @@ pub(crate) struct RealtimeSessionRecord {
 
 impl RealtimeSessionRecord {
     /// Admit the session that opened at `url` (`route` under the approved
-    /// endpoint) on `deferred`, signed in with `auth`. `None` when it goes
+    /// endpoint) on `deferred`, with resolved `auth_mode`. `None` when it goes
     /// unrecorded: a route or credential the accounting does not approve, or
     /// a ledger failure, each logged as a gap. Never refuses the session.
     pub(crate) async fn begin(
         deferred: &DeferredResponsesSampling,
         provider: &ModelProviderInfo,
-        auth: Option<&CodexAuth>,
+        auth_mode: Option<AuthMode>,
         url: &str,
         route: &str,
         model: &str,
     ) -> Option<Self> {
         let sampling = deferred
-            .resolve_path(provider, auth, url, route)
+            .resolve_path(provider, auth_mode, url, route)
             .await
             .ok()
             .flatten()?;
