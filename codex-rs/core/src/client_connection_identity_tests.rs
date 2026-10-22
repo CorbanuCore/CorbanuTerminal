@@ -38,11 +38,20 @@ fn api_only_identity_follows_resolved_credentials_without_exposing_them() {
     let same = BearerAuthProvider::new("synthetic-old-token".to_string());
     let new = BearerAuthProvider::new("synthetic-new-token".to_string());
     let anonymous = BearerAuthProvider::default();
-    let identity = ConnectionIdentity::of(/*auth*/ None, &old);
+    let identity = ConnectionIdentity::of(/*auth*/ None, &HeaderMap::new(), &old);
 
-    assert_eq!(identity, ConnectionIdentity::of(/*auth*/ None, &same));
-    assert_ne!(identity, ConnectionIdentity::of(/*auth*/ None, &new));
-    assert_ne!(identity, ConnectionIdentity::of(/*auth*/ None, &anonymous));
+    assert_eq!(
+        identity,
+        ConnectionIdentity::of(/*auth*/ None, &HeaderMap::new(), &same)
+    );
+    assert_ne!(
+        identity,
+        ConnectionIdentity::of(/*auth*/ None, &HeaderMap::new(), &new)
+    );
+    assert_ne!(
+        identity,
+        ConnectionIdentity::of(/*auth*/ None, &HeaderMap::new(), &anonymous)
+    );
     assert_eq!(format!("{identity:?}"), "ConnectionIdentity(..)");
 }
 
@@ -52,7 +61,11 @@ fn api_only_identity_canonicalizes_header_names_but_preserves_value_bytes_and_or
     headers.append("x-api-key", HeaderValue::from_static("synthetic-first"));
     headers.append("x-api-key", HeaderValue::from_static("synthetic-second"));
     headers.insert("x-account", HeaderValue::from_static("test-account"));
-    let identity = ConnectionIdentity::of(/*auth*/ None, &HeaderAuth(headers.clone()));
+    let identity = ConnectionIdentity::of(
+        /*auth*/ None,
+        &HeaderMap::new(),
+        &HeaderAuth(headers.clone()),
+    );
 
     let mut reordered = HeaderMap::new();
     reordered.insert("x-account", HeaderValue::from_static("test-account"));
@@ -60,7 +73,11 @@ fn api_only_identity_canonicalizes_header_names_but_preserves_value_bytes_and_or
     reordered.append("x-api-key", HeaderValue::from_static("synthetic-second"));
     assert_eq!(
         identity,
-        ConnectionIdentity::of(/*auth*/ None, &HeaderAuth(reordered))
+        ConnectionIdentity::of(
+            /*auth*/ None,
+            &HeaderMap::new(),
+            &HeaderAuth(reordered)
+        )
     );
 
     headers.remove("x-api-key");
@@ -68,16 +85,24 @@ fn api_only_identity_canonicalizes_header_names_but_preserves_value_bytes_and_or
     headers.append("x-api-key", HeaderValue::from_static("synthetic-first"));
     assert_ne!(
         identity,
-        ConnectionIdentity::of(/*auth*/ None, &HeaderAuth(headers.clone()))
+        ConnectionIdentity::of(
+            /*auth*/ None,
+            &HeaderMap::new(),
+            &HeaderAuth(headers.clone())
+        )
     );
-    let reversed = ConnectionIdentity::of(/*auth*/ None, &HeaderAuth(headers.clone()));
+    let reversed = ConnectionIdentity::of(
+        /*auth*/ None,
+        &HeaderMap::new(),
+        &HeaderAuth(headers.clone()),
+    );
     headers.append(
         "x-api-key",
         HeaderValue::from_bytes(b"synthetic-\xff").expect("header"),
     );
     assert_ne!(
         reversed,
-        ConnectionIdentity::of(/*auth*/ None, &HeaderAuth(headers))
+        ConnectionIdentity::of(/*auth*/ None, &HeaderMap::new(), &HeaderAuth(headers))
     );
 }
 
@@ -88,8 +113,101 @@ fn known_chatgpt_identity_keeps_the_connection_across_bearer_refreshes() {
     let refreshed = BearerAuthProvider::new("synthetic-refreshed-token".to_string());
 
     assert_eq!(
-        ConnectionIdentity::of(Some(&auth), &old),
-        ConnectionIdentity::of(Some(&auth), &refreshed)
+        ConnectionIdentity::of(Some(&auth), &HeaderMap::new(), &old),
+        ConnectionIdentity::of(Some(&auth), &HeaderMap::new(), &refreshed)
+    );
+}
+
+#[test]
+fn configured_header_identity_follows_values_and_removal_without_exposing_them() {
+    let anonymous = BearerAuthProvider::default();
+    for name in ["authorization", "x-api-key", "x-tenant"] {
+        let mut headers = HeaderMap::new();
+        headers.insert(name, HeaderValue::from_static("synthetic-old-value"));
+        let identity = ConnectionIdentity::of(/*auth*/ None, &headers, &anonymous);
+        assert_eq!(
+            identity,
+            ConnectionIdentity::of(/*auth*/ None, &headers.clone(), &anonymous)
+        );
+        assert_eq!(format!("{identity:?}"), "ConnectionIdentity(..)");
+
+        headers.insert(name, HeaderValue::from_static("synthetic-new-value"));
+        assert_ne!(
+            identity,
+            ConnectionIdentity::of(/*auth*/ None, &headers, &anonymous)
+        );
+        headers.remove(name);
+        assert_ne!(
+            identity,
+            ConnectionIdentity::of(/*auth*/ None, &headers, &anonymous)
+        );
+    }
+}
+
+#[test]
+fn configured_header_identity_uses_resolved_auth_precedence() {
+    let old = BearerAuthProvider::new("synthetic-old-token".to_string());
+    let new = BearerAuthProvider::new("synthetic-new-token".to_string());
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        "authorization",
+        HeaderValue::from_static("synthetic-overridden-one"),
+    );
+    headers.insert("x-tenant", HeaderValue::from_static("synthetic-tenant-one"));
+    let identity = ConnectionIdentity::of(/*auth*/ None, &headers, &old);
+
+    headers.insert(
+        "authorization",
+        HeaderValue::from_static("synthetic-overridden-two"),
+    );
+    assert_eq!(
+        identity,
+        ConnectionIdentity::of(/*auth*/ None, &headers, &old)
+    );
+    assert_ne!(
+        identity,
+        ConnectionIdentity::of(/*auth*/ None, &headers, &new)
+    );
+
+    headers.insert("x-tenant", HeaderValue::from_static("synthetic-tenant-two"));
+    assert_ne!(
+        identity,
+        ConnectionIdentity::of(/*auth*/ None, &headers, &old)
+    );
+}
+
+#[test]
+fn configured_header_identity_preserves_duplicate_order_and_raw_bytes() {
+    let anonymous = BearerAuthProvider::default();
+    let mut headers = HeaderMap::new();
+    headers.append("x-api-key", HeaderValue::from_static("synthetic-first"));
+    headers.append("x-api-key", HeaderValue::from_static("synthetic-second"));
+    headers.insert("x-tenant", HeaderValue::from_static("synthetic-tenant"));
+    let identity = ConnectionIdentity::of(/*auth*/ None, &headers, &anonymous);
+    let mut reordered = HeaderMap::new();
+    reordered.insert("x-tenant", HeaderValue::from_static("synthetic-tenant"));
+    reordered.append("x-api-key", HeaderValue::from_static("synthetic-first"));
+    reordered.append("x-api-key", HeaderValue::from_static("synthetic-second"));
+    assert_eq!(
+        identity,
+        ConnectionIdentity::of(/*auth*/ None, &reordered, &anonymous)
+    );
+
+    headers.remove("x-api-key");
+    headers.append("x-api-key", HeaderValue::from_static("synthetic-second"));
+    headers.append("x-api-key", HeaderValue::from_static("synthetic-first"));
+    assert_ne!(
+        identity,
+        ConnectionIdentity::of(/*auth*/ None, &headers, &anonymous)
+    );
+    let reversed = ConnectionIdentity::of(/*auth*/ None, &headers, &anonymous);
+    headers.append(
+        "x-api-key",
+        HeaderValue::from_bytes(b"synthetic-\xff").expect("header"),
+    );
+    assert_ne!(
+        reversed,
+        ConnectionIdentity::of(/*auth*/ None, &headers, &anonymous)
     );
 }
 
@@ -197,4 +315,108 @@ async fn api_only_rotation_reconnects_a_prewarmed_socket_and_keeps_same_key_reus
         vec![2, 1]
     );
     server.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn configured_header_rotation_reconnects_prewarmed_socket_and_keeps_same_value_reuse() {
+    skip_if_no_network!();
+    for header_name in ["authorization", "x-api-key"] {
+        let server = start_websocket_server(vec![
+            vec![
+                vec![ev_response_created("old-1"), ev_completed("old-1")],
+                vec![ev_response_created("old-2"), ev_completed("old-2")],
+                // A stale connection completes so the assertions fail without a timeout.
+                vec![ev_response_created("stale-3"), ev_completed("stale-3")],
+            ],
+            vec![vec![ev_response_created("new-3"), ev_completed("new-3")]],
+        ])
+        .await;
+        let thread_id = ThreadId::new();
+        let client_with_header = |value: &str| {
+            let mut provider = create_oss_provider_with_base_url(
+                &format!("{}/v1", server.uri()),
+                WireApi::Responses,
+            );
+            provider.supports_websockets = true;
+            provider.http_headers = Some([(header_name.to_string(), value.to_string())].into());
+            test_model_client_with_provider(thread_id, SessionSource::Cli, provider)
+        };
+        let mut session = client_with_header("synthetic-old-value").new_session();
+        let telemetry = test_session_telemetry();
+        let model = test_model_info();
+        let metadata = test_responses_metadata_for_client(
+            &session.client,
+            /*turn_id*/ None,
+            "configured-identity-test".to_string(),
+            /*parent_thread_id*/ None,
+            TestCodexResponsesRequestKind::WebsocketConnection,
+        );
+        let setup = session.client.current_client_setup().await.expect("setup");
+        assert!(setup.auth.is_none());
+        assert!(setup.api_auth.to_auth_headers().is_empty());
+        assert_eq!(
+            setup.api_provider.headers.get(header_name),
+            Some(&HeaderValue::from_static("synthetic-old-value"))
+        );
+        session
+            .preconnect_websocket(&telemetry, &metadata)
+            .await
+            .expect("preconnect");
+
+        let mut completions = Vec::new();
+        for (turn, value) in [
+            ("one", "synthetic-old-value"),
+            ("two", "synthetic-old-value"),
+            ("three", "synthetic-new-value"),
+        ] {
+            session.client = client_with_header(value);
+            let metadata = test_responses_metadata_for_client(
+                &session.client,
+                Some(turn),
+                "configured-identity-test".to_string(),
+                /*parent_thread_id*/ None,
+                TestCodexResponsesRequestKind::Turn,
+            );
+            let mut stream = session
+                .stream(
+                    &Prompt::default(),
+                    &model,
+                    &telemetry,
+                    /*effort*/ None,
+                    ReasoningSummary::None,
+                    /*service_tier*/ None,
+                    &metadata,
+                    &InferenceTraceContext::disabled(),
+                )
+                .await
+                .expect("stream");
+            while let Some(event) = stream.next().await {
+                if let ResponseEvent::Completed { response_id, .. } = event.expect("event") {
+                    completions.push(response_id);
+                    break;
+                }
+            }
+        }
+        assert_eq!(completions, vec!["old-1", "old-2", "new-3"]);
+        assert_eq!(
+            server
+                .handshakes()
+                .iter()
+                .map(|handshake| handshake.header(header_name))
+                .collect::<Vec<_>>(),
+            vec![
+                Some("synthetic-old-value".to_string()),
+                Some("synthetic-new-value".to_string()),
+            ]
+        );
+        assert_eq!(
+            server
+                .connections()
+                .iter()
+                .map(Vec::len)
+                .collect::<Vec<_>>(),
+            vec![2, 1]
+        );
+        server.shutdown().await;
+    }
 }
