@@ -364,6 +364,65 @@ fn issue_554_recursive_listing_of_a_parent_is_attributed_to_the_home() {
     }
 }
 
+/// #1334: the prefixless BSD denial form from #1194 can contain ": " in
+/// its path. Keep that whole path, and still accept only the resolved home.
+/// Such path components are supported on Unix, not Windows.
+#[cfg(unix)]
+#[test]
+fn issue_1334_split_denial_with_colon_space_is_attributed_to_the_home() {
+    let cwd = Path::new("/tmp");
+    let user_home = Path::new("/tmp/home: fixture");
+    let codex_home = user_home.join(".corbanu");
+    let command = shell("find /tmp");
+    let unlistable = |path: &Path| {
+        AbsolutePathBuf::from_absolute_path(path).is_ok_and(|path| path.as_path() == codex_home)
+    };
+    for (line, expected) in [
+        (
+            "/tmp/home: fixture/.corbanu: Operation not permitted",
+            Some("/tmp/home: fixture/.corbanu"),
+        ),
+        (
+            "find: /tmp/home: fixture/.corbanu: Operation not permitted",
+            Some("/tmp/home: fixture/.corbanu"),
+        ),
+        (
+            "home: fixture/.corbanu: Operation not permitted",
+            Some("home: fixture/.corbanu"),
+        ),
+        (
+            "find: home: fixture/.corbanu: Operation not permitted",
+            Some("home: fixture/.corbanu"),
+        ),
+        (
+            "/tmp/home: fixture/.corbanu-old: Operation not permitted",
+            None,
+        ),
+        (
+            "/tmp/home: fixture/.corbanu/vault: Operation not permitted",
+            None,
+        ),
+        (
+            "/tmp/other: fixture/.corbanu: Operation not permitted",
+            None,
+        ),
+        ("other: fixture/.corbanu: Operation not permitted", None),
+    ] {
+        assert_eq!(
+            unlistable_path_in_lines(
+                &command,
+                cwd,
+                Some(user_home),
+                &codex_home,
+                &[line.to_string()],
+                &unlistable,
+            ),
+            expected.map(str::to_string),
+            "{line}"
+        );
+    }
+}
+
 /// #442 (milestone AGG-09): under Aggressive a denied read of a protected
 /// file is explained where it failed, naming the level and /security; it is
 /// not explained under Permissive or for a failure that is not a denial.
