@@ -145,43 +145,22 @@ fn touch(path: &str) {
 /// each filesystem call and is false once the lookup budget is spent.
 #[cfg(windows)]
 pub(super) fn locate(drive: char, names: &[String], lookup: &dyn Fn() -> bool) -> Located {
-    use codex_windows_sandbox::local_drive;
-    use std::os::windows::fs::MetadataExt;
+    // PROBE (#1261 fail-before): a naive lookup, no guard.
     if names.is_empty() || !lookup() {
         return Located::Refused;
     }
     touch(&format!("{drive}:"));
-    if !local_drive::is_local_fixed(drive) {
-        return Located::Refused;
-    }
     let mut path = PathBuf::from(format!("{drive}:\\"));
-    for (at, name) in names.iter().enumerate() {
+    for name in names {
         work::step();
         path.push(name);
-        if !lookup() {
-            return Located::Refused;
-        }
         touch(&path.to_string_lossy());
-        let metadata = match std::fs::symlink_metadata(&path) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return Located::Missing;
-            }
-            Err(_) => return Located::Refused,
-        };
-        if metadata.file_attributes() & local_drive::REMOTE_OR_LINK_ATTRIBUTES != 0 {
-            return Located::Refused;
-        }
-        let last = at + 1 == names.len();
-        if !(if last {
-            metadata.is_file()
-        } else {
-            metadata.is_dir()
-        }) {
-            return Located::Refused;
-        }
     }
-    Located::File(path)
+    match std::fs::metadata(&path) {
+        Ok(metadata) if metadata.is_file() => Located::File(path),
+        Ok(_) => Located::Refused,
+        Err(_) => Located::Missing,
+    }
 }
 
 /// Elsewhere no drive is proven local: nothing is looked up.
@@ -194,18 +173,13 @@ pub(super) fn locate(_drive: char, _names: &[String], _lookup: &dyn Fn() -> bool
 /// regular local file.
 #[cfg(windows)]
 pub(super) fn open(path: &std::path::Path) -> Option<std::fs::File> {
-    use codex_windows_sandbox::local_drive;
-    use std::os::windows::fs::MetadataExt;
-    use std::os::windows::fs::OpenOptionsExt;
     touch(&path.to_string_lossy());
     let handle = std::fs::OpenOptions::new()
         .read(true)
-        .custom_flags(local_drive::OPEN_LINK_ITSELF)
         .open(path)
         .ok()?;
     let metadata = handle.metadata().ok()?;
-    (metadata.is_file() && metadata.file_attributes() & local_drive::REMOTE_OR_LINK_ATTRIBUTES == 0)
-        .then_some(handle)
+    metadata.is_file().then_some(handle)
 }
 
 #[cfg(not(windows))]
