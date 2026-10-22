@@ -20,6 +20,7 @@ use ratatui::text::Line;
 
 use crate::app_event::AppEvent;
 use crate::app_event_sender::AppEventSender;
+use crate::bottom_pane::security_level_picker::REMOTE_RESTART_REFUSED;
 use crate::key_hint;
 use crate::key_hint::KeyBindingListExt;
 use crate::keymap::ListKeymap;
@@ -82,6 +83,8 @@ pub(crate) struct RevocationTarget {
     pub(crate) codex_home: PathBuf,
     pub(crate) configured: SecurityLevel,
     pub(crate) thread: Option<codex_protocol::ThreadId>,
+    /// False when the session runs on a remote app server or the local daemon.
+    pub(crate) sessions_in_this_process: bool,
 }
 
 pub(crate) struct RevocationView {
@@ -320,9 +323,16 @@ impl RevocationView {
                                     _ => {}
                                 }
                             }
-                            let message = outcome_line(revocation, &report);
+                            let message = outcome_line(revocation, &report).map(|message| {
+                                if !target.sessions_in_this_process && report.not_saved.is_none() {
+                                    format!("{message} {REMOTE_RESTART_REFUSED}")
+                                } else {
+                                    message
+                                }
+                            });
                             Outcome {
-                                restartable: message.is_ok()
+                                restartable: target.sessions_in_this_process
+                                    && message.is_ok()
                                     && report.not_saved.is_none()
                                     && super::restart::restart_blocker().is_none(),
                                 message,
