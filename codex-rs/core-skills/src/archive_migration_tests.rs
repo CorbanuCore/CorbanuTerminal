@@ -294,3 +294,25 @@ fn archive_migration_bzip2_regular_file() {
     );
     println!("ZIP_CASE=bzip2_regular_file; method12; exact owned synthetic payload");
 }
+
+#[test]
+fn archive_migration_disabled_lzma_is_rejected_without_output() {
+    let temp = tempfile::tempdir().unwrap();
+    let dest = temp.path().join("destination");
+    let outside = temp.path().join("outside");
+    std::fs::create_dir(&dest).unwrap();
+    std::fs::create_dir(&outside).unwrap();
+    std::fs::write(outside.join("sentinel"), b"unchanged").unwrap();
+    // Valid method-14 ZIP generated and independently decoded with Python zipfile.
+    let bytes = include_bytes!("fixtures/archive-lzma.zip");
+    let result = extract(bytes, &dest);
+    assert!(result.is_err(), "LZMA must remain disabled: {result:?}");
+    assert_eq!(std::fs::read_dir(&dest).unwrap().count(), 0);
+    assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 2);
+    assert_eq!(std::fs::read_dir(&outside).unwrap().count(), 1);
+    assert_eq!(
+        std::fs::read(outside.join("sentinel")).unwrap(),
+        b"unchanged"
+    );
+    println!("ZIP_CASE=disabled_lzma; method14; rejected; no destination or outside writes");
+}
