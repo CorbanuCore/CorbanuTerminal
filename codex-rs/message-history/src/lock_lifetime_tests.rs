@@ -251,3 +251,65 @@ async fn issue928_disabled_persistence_creates_no_history_file() {
     append_entry("synthetic", "session", &config).await.unwrap();
     assert!(!directory.path().join(HISTORY_FILENAME).exists());
 }
+
+#[test]
+fn issue1003_lookup_batch_releases_shared_lock_with_retained_descriptor() {
+    let contents = "{\"session_id\":\"synthetic\",\"ts\":1,\"text\":\"oldest\"}\n\
+        {\"session_id\":\"synthetic\",\"ts\":2,\"text\":\"newest\"}\n";
+    let (directory, original, retained, competitor) = history_fixture(contents);
+    let config = HistoryConfig::new(directory.path(), &History::default());
+    let log_id = log_identity(&original.metadata().unwrap()).unwrap();
+    let batch = batch::lookup_batch_from_file(
+        original,
+        log_id,
+        HistoryBatchCursor::new(/*end_offset*/ 1),
+        &config,
+    )
+    .expect("read history batch");
+    assert_eq!(
+        batch
+            .entries
+            .iter()
+            .map(|entry| entry.offset)
+            .collect::<Vec<_>>(),
+        vec![1, 0]
+    );
+    assert_released(&competitor);
+    assert!(retained.metadata().is_ok(), "duplicate remains open");
+}
+
+#[test]
+fn issue1003_lookup_batch_failure_exits_release_shared_lock() {
+    let directory = TempDir::new().expect("synthetic history directory");
+    let path = directory.path().join(HISTORY_FILENAME);
+    std::fs::write(
+        &path,
+        "{\"session_id\":\"synthetic\",\"ts\":1,\"text\":\"hello\"}\n",
+    )
+    .expect("write synthetic history");
+    let config = HistoryConfig::new(directory.path(), &History::default());
+    let write_only = OpenOptions::new()
+        .write(true)
+        .open(&path)
+        .expect("open write-only descriptor");
+    let retained = write_only
+        .try_clone()
+        .expect("duplicate open file description");
+    let competitor = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&path)
+        .expect("independent open file description");
+    let result = batch::lookup_batch_from_file(
+        write_only,
+        /*log_id*/ 0,
+        HistoryBatchCursor::new(/*end_offset*/ 0),
+        &config,
+    );
+    assert!(
+        result.is_err(),
+        "a write-only descriptor must fail its read"
+    );
+    assert_released(&competitor);
+    assert!(retained.metadata().is_ok(), "duplicate remains open");
+}
