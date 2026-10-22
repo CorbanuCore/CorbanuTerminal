@@ -870,3 +870,186 @@ async fn issue_997_unit_test_lookups_outlast_the_production_bound() {
     });
     assert_eq!(slow.await, Some("found"));
 }
+
+/// #691 probe (win-691b, throwaway): what Windows-native commands and denial
+/// lines are attributed to. Panics with the table so the native job prints it.
+#[cfg(windows)]
+#[tokio::test]
+async fn probe_691b_windows_native_denials() {
+    let mut report = Vec::new();
+    let cwd = Path::new(r"C:\work\project");
+    let user_home = Path::new(r"C:\Users\someone");
+    let codex_home = Path::new(r"C:\Users\someone\.corbanu");
+    let denied = |path: &Path| {
+        AbsolutePathBuf::from_absolute_path(path).is_ok_and(|path| {
+            path.as_path().starts_with(codex_home)
+                || path.as_path() == Path::new(r"C:\work\project\.env")
+        })
+    };
+    let ps = |s: &str| {
+        vec![
+            "powershell.exe".to_string(),
+            "-Command".to_string(),
+            s.to_string(),
+        ]
+    };
+    let cmd = |s: &str| vec!["cmd.exe".to_string(), "/c".to_string(), s.to_string()];
+    for (label, command) in [
+        (
+            "ps unquoted",
+            ps(r"Get-Content C:\Users\someone\.corbanu\auth.json"),
+        ),
+        (
+            "ps quoted",
+            ps(r"Get-Content 'C:\Users\someone\.corbanu\auth.json'"),
+        ),
+        (
+            "ps env",
+            ps(r"Get-Content $env:USERPROFILE\.corbanu\auth.json"),
+        ),
+        ("ps tilde", ps(r"Get-Content ~\.corbanu\auth.json")),
+        (
+            "ps fwd",
+            ps("Get-Content C:/Users/someone/.corbanu/auth.json"),
+        ),
+        ("ps rel", ps("Get-Content .env")),
+        ("ps rel bs", ps(r"Get-Content .\.env")),
+        (
+            "cmd unquoted",
+            cmd(r"type C:\Users\someone\.corbanu\auth.json"),
+        ),
+        (
+            "cmd quoted",
+            cmd(r#"type "C:\Users\someone\.corbanu\auth.json""#),
+        ),
+        ("cmd env", cmd(r"type %USERPROFILE%\.corbanu\auth.json")),
+        ("sh home var", shell("cat \"$CORBANU_HOME/auth.json\"")),
+    ] {
+        let found = denied_word(&command, cwd, Some(user_home), codex_home, denied, None);
+        report.push(format!("denied_word {label}: {found:?}"));
+    }
+    let ps_line =
+        r"Get-Content : Access to the path 'C:\Users\someone\.corbanu\auth.json' is denied."
+            .to_string();
+    for (label, command) in [
+        (
+            "ps quoted+line",
+            ps(r"Get-Content 'C:\Users\someone\.corbanu\auth.json'"),
+        ),
+        (
+            "ps unquoted+line",
+            ps(r"Get-Content C:\Users\someone\.corbanu\auth.json"),
+        ),
+    ] {
+        let found = denied_word(
+            &command,
+            cwd,
+            Some(user_home),
+            codex_home,
+            denied,
+            Some(std::slice::from_ref(&ps_line)),
+        );
+        report.push(format!("denied_word {label}: {found:?}"));
+    }
+    let unlistable = |path: &Path| {
+        AbsolutePathBuf::from_absolute_path(path).is_ok_and(|path| path.as_path() == codex_home)
+    };
+    for (label, command, line) in [
+        (
+            "gci -Recurse",
+            ps(r"Get-ChildItem -Recurse C:\Users\someone"),
+            r"Get-ChildItem : Access to the path 'C:\Users\someone\.corbanu' is denied.",
+        ),
+        (
+            "gci -Recurse quoted",
+            ps(r"Get-ChildItem -Recurse 'C:\Users\someone'"),
+            r"Get-ChildItem : Access to the path 'C:\Users\someone\.corbanu' is denied.",
+        ),
+        (
+            "dir /s",
+            cmd(r"dir /s C:\Users\someone"),
+            "Access is denied.",
+        ),
+    ] {
+        let found = unlistable_path_in_lines(
+            &command,
+            cwd,
+            Some(user_home),
+            codex_home,
+            &[line.to_string()],
+            &unlistable,
+        );
+        report.push(format!("unlistable {label}: {found:?}"));
+    }
+
+    // End to end, under Aggressive.
+    let (session, turn) = crate::session::tests::make_session_and_context().await;
+    #[allow(deprecated)]
+    let cwd = turn.cwd.clone();
+    let home = turn.config.codex_home.to_path_buf();
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::write(home.join("auth.json"), "x").unwrap();
+    let client = (*session.services.model_client())
+        .clone()
+        .with_ingress_level(SecurityLevel::Aggressive)
+        .with_source_envelopes(/*enabled*/ true);
+    session.services.replace_model_client(client);
+    let auth = home.join("auth.json").display().to_string();
+    let parent = home.parent().unwrap().display().to_string();
+    let home_s = home.display().to_string();
+    for (label, command, output) in [
+        (
+            "ps51 quoted",
+            ps(&format!("Get-Content '{auth}'")),
+            format!("Get-Content : Access to the path '{auth}' is denied.\n"),
+        ),
+        (
+            "pwsh7 quoted",
+            ps(&format!("Get-Content '{auth}'")),
+            format!("Get-Content: Access to the path '{auth}' is denied.\n"),
+        ),
+        (
+            "ps unquoted",
+            ps(&format!("Get-Content {auth}")),
+            format!("Get-Content : Access to the path '{auth}' is denied.\n"),
+        ),
+        (
+            "cmd type",
+            cmd(&format!("type \"{auth}\"")),
+            "Access is denied.\n".to_string(),
+        ),
+        (
+            "python",
+            ps(&format!("python -c \"open(r'{auth}').read()\"")),
+            format!(
+                "PermissionError: [Errno 13] Permission denied: '{}'\n",
+                auth.replace('\\', "\\\\")
+            ),
+        ),
+        (
+            "git-bash cat",
+            ps(&format!("cat '{auth}'")),
+            format!("cat: '{auth}': Permission denied\n"),
+        ),
+        (
+            "gci recurse parent",
+            ps(&format!("Get-ChildItem -Recurse '{parent}'")),
+            format!("Get-ChildItem : Access to the path '{home_s}' is denied.\n"),
+        ),
+        (
+            "gci home",
+            ps(&format!("Get-ChildItem '{home_s}'")),
+            format!("Get-ChildItem : Access to the path '{home_s}' is denied.\n"),
+        ),
+    ] {
+        let explanation =
+            denial_explanation(&session, &turn, &command, cwd.as_path(), Some(1), &output).await;
+        report.push(format!(
+            "e2e {label}: {:?}",
+            explanation.map(|text| text.chars().take(70).collect::<String>())
+        ));
+        let named = protected_path_in_command(&session, &turn, &command, cwd.as_path()).await;
+        report.push(format!("e2e named {label}: {named:?}"));
+    }
+    panic!("PROBE-691B\n{}", report.join("\n"));
+}
