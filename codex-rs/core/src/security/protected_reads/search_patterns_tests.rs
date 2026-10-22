@@ -21,6 +21,70 @@ fn patterns(script: &str) -> Vec<String> {
 }
 
 #[test]
+fn leading_assignments_before_searches_are_program_prefixes() {
+    for script in [
+        "LC_ALL=C grep .env logs",
+        "LC_ALL=C LANG=en_US rg .env logs",
+        "EMPTY= _MODE2=dev egrep .env logs",
+        "MODE=a=b fgrep .env logs",
+        "LC_ALL=C /usr/bin/grep .env logs",
+        "LC_ALL=C git grep .env -- logs",
+        "env LC_ALL=C grep .env logs",
+        "LC_ALL=C command grep .env logs",
+    ] {
+        assert_eq!(patterns(script), [".env"], "{script}");
+    }
+}
+
+#[test]
+fn assignment_like_arguments_do_not_start_searches() {
+    for script in [
+        "cat LC_ALL=C grep .env",
+        "echo LC_ALL=C LANG=C rg .env",
+        "cat env LC_ALL=C grep .env",
+        "=C grep .env logs",
+        "1MODE=C grep .env logs",
+        "MODE-NAME=C grep .env logs",
+        "./MODE=C grep .env logs",
+        "MODE[0]=C grep .env logs",
+        "MODE+=C grep .env logs",
+    ] {
+        assert_eq!(patterns(script), Vec::<String>::new(), "{script}");
+    }
+}
+
+#[test]
+fn assigned_searches_keep_actual_paths_out_of_patterns() {
+    for script in [
+        "LC_ALL=C grep token .env",
+        "LC_ALL=C rg -e token .env",
+        "MODE=.npmrc grep token .env",
+    ] {
+        assert_eq!(patterns(script), ["token"], "{script}");
+    }
+    assert_eq!(
+        patterns("LC_ALL=C grep -f patterns.txt .env"),
+        Vec::<String>::new()
+    );
+    assert_eq!(patterns("LC_ALL=C rg --files .env"), Vec::<String>::new());
+}
+
+#[test]
+fn assignment_prefixes_respect_command_boundaries() {
+    for script in [
+        "cat logs; LC_ALL=C grep .env logs",
+        "cat logs | LC_ALL=C rg .env",
+        "echo done && LC_ALL=C grep .env logs",
+        "cat MODE=C; grep .env logs",
+        "echo done\nLC_ALL=C grep .env logs",
+    ] {
+        assert_eq!(patterns(script), [".env"], "{script}");
+    }
+    assert_eq!(patterns("LC_ALL=C\ncat grep .env"), Vec::<String>::new());
+    assert_eq!(patterns("LC_ALL=C grep -e token; cat .env"), ["token;"]);
+}
+
+#[test]
 fn the_first_operand_of_a_search_is_its_pattern() {
     assert_eq!(patterns(r#"rg ".env" logs/"#), [".env"]);
     assert_eq!(patterns("rg -n -i .env logs/"), [".env"]);

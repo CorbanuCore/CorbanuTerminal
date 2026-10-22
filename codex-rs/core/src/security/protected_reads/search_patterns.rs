@@ -244,9 +244,14 @@ fn unquoted_lines(script: &str) -> Vec<&str> {
 /// Whether `words[index]` is where a program is named.
 fn program_position(lines: &Words<'_>, mut index: usize) -> bool {
     let words = lines.words;
-    // `sudo grep`, `then grep`: where the word before is itself a program
-    // or a keyword (not `cat do grep .env`).
-    while index > 0 && !lines.starts[index] && PROGRAM_BEFORE.contains(&words[index - 1].as_str()) {
+    // Prefixes must themselves start a command: `LC_ALL=C grep` and
+    // `sudo grep`, but not `cat LC_ALL=C grep` or `cat do grep`.
+    while index > 0
+        && !lines.starts[index]
+        && !lines.ends(index - 1)
+        && (PROGRAM_BEFORE.contains(&words[index - 1].as_str())
+            || assignment_word(&words[index - 1]))
+    {
         index -= 1;
     }
     if lines.starts[index] {
@@ -265,6 +270,18 @@ fn program_position(lines: &Words<'_>, mut index: usize) -> bool {
         && index
             .checked_sub(2)
             .is_some_and(|index| super::posix_shell(&words[index]))
+}
+
+/// A shell assignment has a variable name before its first `=`. Paths,
+/// options, array subscripts and other expressions do not count as names.
+fn assignment_word(word: &str) -> bool {
+    let Some((name, _value)) = word.split_once('=') else {
+        return false;
+    };
+    let mut name = name.bytes();
+    name.next()
+        .is_some_and(|first| first.is_ascii_alphabetic() || first == b'_')
+        && name.all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
 }
 
 /// The search `words[index]` starts, and the index of its first argument.
