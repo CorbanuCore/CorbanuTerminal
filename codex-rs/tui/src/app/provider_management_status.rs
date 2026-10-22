@@ -52,7 +52,7 @@ fn sync_provider_manager_model_policy(
 /// PF-84-S06 (#572): Bedrock's models are listed for a session on Bedrock
 /// only, because its default account has no setup in the TUI. A named
 /// Bedrock account (an AWS profile) can be chosen from a session on another
-/// provider (`/providers` → *Use for this session*, `--account
+/// provider (`/providers` → *Start a new session on this account*, `--account
 /// amazon-bedrock:<name>` or `[provider_accounts]`), so while the vault holds
 /// one, `/model` offers Bedrock's models too; they go again once none is
 /// left. The vault read blocks, so it runs off the runtime and reports back

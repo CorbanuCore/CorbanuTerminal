@@ -214,3 +214,149 @@ fn sec_444_undenied_config_layer_is_not_called_missing_at_start() {
     let file = super::not_denied_at_launch(line, /*config_layer*/ false);
     assert!(file.contains("it was not there when Corbanu Terminal started"));
 }
+
+// Only owned fixture roots enter this launch-audit phase. Calling the whole
+// audit would also inventory the process home and environment.
+async fn launch_isolation_config(home: &Path, cwd: &Path, denied: &[PathBuf]) -> Config {
+    use crate::legacy_core::config::ConfigBuilder;
+    use crate::legacy_core::config::ConfigOverrides;
+
+    let mut filesystem = toml::map::Map::new();
+    for path in [home, cwd] {
+        filesystem.insert(
+            path.to_str().unwrap().to_string(),
+            toml::Value::String("read".to_string()),
+        );
+    }
+    for path in denied {
+        filesystem.insert(
+            path.to_str().unwrap().to_string(),
+            toml::Value::String("deny".to_string()),
+        );
+    }
+    let mut network = toml::map::Map::new();
+    network.insert("enabled".to_string(), toml::Value::Boolean(false));
+    let mut profile = toml::map::Map::new();
+    profile.insert("filesystem".to_string(), toml::Value::Table(filesystem));
+    profile.insert("network".to_string(), toml::Value::Table(network));
+    ConfigBuilder::default()
+        .codex_home(home.to_path_buf())
+        .harness_overrides(ConfigOverrides {
+            cwd: Some(cwd.to_path_buf()),
+            default_permissions: Some("launch-audit-fixture".to_string()),
+            ..Default::default()
+        })
+        .cli_overrides(vec![(
+            "permissions.launch-audit-fixture".to_string(),
+            toml::Value::Table(profile),
+        )])
+        .loader_overrides(codex_config::LoaderOverrides::without_managed_config_for_tests())
+        .build()
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn issue_951_launch_isolation_batch_preserves_messages_and_order() {
+    let home = tempfile::tempdir().unwrap();
+    let cwd = tempfile::tempdir().unwrap();
+    let denied = cwd.path().join("denied");
+    std::fs::create_dir(&denied).unwrap();
+    let database_pattern = database_glob(home.path());
+    let config = launch_isolation_config(
+        home.path(),
+        cwd.path(),
+        &[denied.clone(), database_pattern.clone()],
+    )
+    .await;
+    let ordinary = cwd.path().join("ordinary.key");
+    let layer = cwd.path().join("config.toml");
+    let unmatched_pattern = cwd.path().join("other-db").join("*.sqlite*");
+    let literal_glob_syntax = cwd.path().join("literal[1]");
+    let covered_database = home.path().join("state_5.sqlite-wal");
+    let paths = vec![
+        ordinary.clone(),
+        denied.join("secret.key"),
+        layer.clone(),
+        database_pattern,
+        covered_database,
+        unmatched_pattern.clone(),
+        ordinary.clone(),
+        literal_glob_syntax.clone(),
+    ];
+    let layers = vec![layer.clone()];
+    let missing = |path: &Path| {
+        format!(
+            "Isolation: agent commands can still read {}; it was not there when Corbanu Terminal started (another folder, or a new file). Remove it, or restart from the folder that holds it",
+            path.display()
+        )
+    };
+    let expected = vec![
+        missing(&ordinary),
+        format!(
+            "Isolation: agent commands can still read {}; this config file holds a secret, and config files are read only after the sandbox is set up, so it was not denied. Move the secret into the vault (or remove it) and restart",
+            layer.display()
+        ),
+        missing(&unmatched_pattern),
+        missing(&ordinary),
+        missing(&literal_glob_syntax),
+    ];
+    assert_eq!(
+        launch_isolation_blockers(&config, &paths, &layers),
+        expected
+    );
+    // This reference retains the old caller's per-path verdicts and wording.
+    let singleton_messages = paths
+        .iter()
+        .flat_map(|path| {
+            verify_isolation(&config, std::slice::from_ref(path))
+                .into_iter()
+                .map(|line| not_denied_at_launch(&line, layers.contains(path)))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        launch_isolation_blockers(&config, &paths, &layers),
+        singleton_messages
+    );
+    assert_eq!(
+        launch_isolation_blockers(&config, &[], &layers),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        launch_isolation_blockers(&config, &[denied.join("another.key")], &layers),
+        Vec::<String>::new()
+    );
+}
+
+// macOS deliberately keeps the Seatbelt verdict path. The normalization
+// counter is available to dependent debug tests, including after PR1004.
+#[cfg(all(debug_assertions, not(target_os = "macos")))]
+#[tokio::test]
+async fn issue_951_launch_isolation_prepares_one_effective_read_set() {
+    use codex_protocol::permissions::effective_path_normalizations_on_this_thread;
+
+    let home = tempfile::tempdir().unwrap();
+    let cwd = tempfile::tempdir().unwrap();
+    let denied = (0..20)
+        .map(|index| cwd.path().join(format!("denied-{index}")))
+        .collect::<Vec<_>>();
+    for path in &denied {
+        std::fs::create_dir(path).unwrap();
+    }
+    let config = launch_isolation_config(home.path(), cwd.path(), &denied).await;
+    let paths = (0..32)
+        .map(|index| cwd.path().join(format!("readable-{index}.key")))
+        .collect::<Vec<_>>();
+
+    // Measure the actual policy cost instead of assuming how profile entries
+    // expand. All counter reads and calls stay on this thread, with no await.
+    let before = effective_path_normalizations_on_this_thread();
+    assert_eq!(verify_isolation(&config, &paths[..1]).len(), 1);
+    let singleton_cost = effective_path_normalizations_on_this_thread() - before;
+    assert!(singleton_cost > 1, "fixture must normalize policy entries");
+    let before = effective_path_normalizations_on_this_thread();
+    let blockers = launch_isolation_blockers(&config, &paths, &[]);
+    let batch_cost = effective_path_normalizations_on_this_thread() - before;
+    assert_eq!(blockers.len(), paths.len());
+    assert_eq!(batch_cost, singleton_cost - 1 + paths.len() as u64);
+}

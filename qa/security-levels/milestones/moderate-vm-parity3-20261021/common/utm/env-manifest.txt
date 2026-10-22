@@ -1,0 +1,8 @@
+run by hand 2026-10-21T17:51:39Z (utm-run.sh up sends it with ssh -n, so its copy is empty)
+python3: Python 3.9.6
+git: git version 2.50.1 (Apple Git-155)
+bash: GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
+who: 
+loginwindow: 1 process(es)
+SecurityAgent: 1 process(es)
+hw: 8 CPUs, 17179869184 bytes, hv_vmm_present=1

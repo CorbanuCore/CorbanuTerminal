@@ -1510,17 +1510,14 @@ fn provider_name(id: &str) -> String {
 /// alias, is its operator's.
 fn operator(id: &str) -> &str {
     use codex_model_provider_info as ids;
-    match id {
+    match ids::canonical_provider_id(id) {
         ids::ZAI_ANTHROPIC_PROVIDER_ID => ids::ZAI_PROVIDER_ID,
         ids::OPENROUTER_ANTHROPIC_PROVIDER_ID => ids::OPENROUTER_PROVIDER_ID,
         ids::BASETEN_ANTHROPIC_PROVIDER_ID => ids::BASETEN_PROVIDER_ID,
         ids::VERCEL_ANTHROPIC_PROVIDER_ID | ids::VERCEL_ANTHROPIC_FAST_PROVIDER_ID => {
             ids::VERCEL_PROVIDER_ID
         }
-        ids::PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID
-        | ids::CORBANU_PLAN_PROVIDER_ID
-        | ids::CORBANU_PLAN_ANTHROPIC_PROVIDER_ID
-        | ids::CORBANU_TERMINAL_PLAN_PROVIDER_ID => ids::PFTERMINAL_PLAN_PROVIDER_ID,
+        ids::PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID => ids::PFTERMINAL_PLAN_PROVIDER_ID,
         other => other,
     }
 }

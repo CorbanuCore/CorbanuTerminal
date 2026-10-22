@@ -746,9 +746,12 @@ fn agent_task_to_person_opened_pane_arrives_as_mailbox_data() -> Result<()> {
                 .any(|text| text == agent_task),
             "{serialized}"
         );
+        // #1248: the sender's `/root` is Main's tree, not the pane's own; the
+        // recipient is told which tree sent it.
+        let root = fixture.root;
         assert!(
             serialized.contains(&format!(
-                "<inter_agent_message sender=\\\"/root\\\" recipient=\\\"/root\\\">\\n{agent_task}\\n</inter_agent_message>"
+                "<inter_agent_message sender=\\\"/root\\\" recipient=\\\"/root\\\">\\nSender: agent /root in another pane's agent tree (thread {root}), not this pane's /root\\n{agent_task}\\n</inter_agent_message>"
             )),
             "{serialized}"
         );
@@ -1692,9 +1695,10 @@ fn agent_task_to_person_opened_pane_waits_in_mailbox_while_kill_switch_on() -> R
         );
         assert!(
             pending_agent_message_text(&request).contains("pf1176 agent queued")
-                || serialized.contains(
-                    "<inter_agent_message sender=\\\"/root\\\" recipient=\\\"/root\\\">\\npf1176 agent queued\\n</inter_agent_message>"
-                ),
+                || serialized.contains(&format!(
+                    "<inter_agent_message sender=\\\"/root\\\" recipient=\\\"/root\\\">\\nSender: agent /root in another pane's agent tree (thread {}), not this pane's /root\\npf1176 agent queued\\n</inter_agent_message>",
+                    fixture.root
+                )),
             "{serialized}"
         );
         assert!(

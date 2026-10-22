@@ -6775,6 +6775,9 @@ impl App {
 
 const SWITCH_LIST_NOT_REFRESHED: &str = "The account switch applied, but the model list could not be refreshed; switch accounts again or restart to refresh it.";
 const SWITCH_NOT_CONFIRMED: &str = "The account switch was not confirmed, so the model list was not refreshed; switch accounts again or restart to refresh it.";
+/// #1205: appended to the switch message for the default login when this
+/// process left it in place and a login restriction is configured.
+pub(super) const DEFAULT_LOGIN_RESTRICTION_CAVEAT: &str = "If your login restrictions (`forced_login_method`, `forced_chatgpt_workspace_id`) rule out the default login, this session cannot use it and its next request is refused with the reason; sign in with `corbanu login`, or pick a named account in /providers.";
 
 /// PF-84: `Some(account)` when moving from `current` to `next` changes the
 /// sign-in account the session uses (`Some(None)`: to the default login).
@@ -6820,9 +6823,7 @@ pub(super) fn account_switch_message_for(
     let message =
         format!("Connectors, usage and the model list now use {label}; model list refreshed.");
     if account.is_none() && default_login_left_in_place && login_restrictions_configured {
-        format!(
-            "{message} If your login restrictions (`forced_login_method`, `forced_chatgpt_workspace_id`) rule out the default login, this session cannot use it and its next request is refused with the reason; sign in with `corbanu login`, or pick a named account in /providers."
-        )
+        format!("{message} {DEFAULT_LOGIN_RESTRICTION_CAVEAT}")
     } else {
         message
     }

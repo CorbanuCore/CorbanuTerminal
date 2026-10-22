@@ -1,0 +1,14 @@
+╰───────────────────────────────────────╯
+╭───────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)         │
+│                                       │
+│ model:     glm-5.2   /model to change │
+│ directory: ~/runs/…/fixture/workspace │
+╰───────────────────────────────────────╯
+■ Spawn a Troll before creating Orc panes, then choose that Troll as supervisor.
+• Spawned Corbanu Terminal Troll pane Burzum. glm-5.2; no task was started.
+  Assign Orc Supervisor
+  Choose the Troll that will supervise this Orc.
+  Search Trolls
+› Troll: Burzum [troll]  Native Corbanu Terminal pane; 01a15a21-1030-7ca1-bff4-89874937fe44
+  Press enter to confirm or esc to go back

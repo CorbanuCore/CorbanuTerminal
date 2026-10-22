@@ -146,6 +146,7 @@ mod tests {
         ("grammar.rs", include_str!("grammar.rs")),
         ("indirect.rs", include_str!("indirect.rs")),
         ("invocation.rs", include_str!("invocation.rs")),
+        ("launched_git.rs", include_str!("launched_git.rs")),
         ("named_shell.rs", include_str!("named_shell.rs")),
         ("nested.rs", include_str!("nested.rs")),
         ("code_variables.rs", include_str!("code_variables.rs")),
@@ -157,6 +158,8 @@ mod tests {
         ("sed.rs", include_str!("sed.rs")),
         ("shadow.rs", include_str!("shadow.rs")),
         ("shell.rs", include_str!("shell.rs")),
+        ("windows_paths.rs", include_str!("windows_paths.rs")),
+        ("windows_shell.rs", include_str!("windows_shell.rs")),
     ];
 
     /// Where loops start in `line`, as their keyword (`for`, `while` or

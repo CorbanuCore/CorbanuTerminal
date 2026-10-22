@@ -2559,6 +2559,10 @@ pub struct AuthManager {
     /// refreshes and logs out only that account's vault store, never the
     /// default login, the environment or the ephemeral store.
     named_account: Option<NamedChatgptAccount>,
+    /// D171 (#1286): for a named-account manager, its vault handle (kept so
+    /// the decrypted store stays cached) and the store marker last seen
+    /// holding the account.
+    named_store: Option<named_account::NamedAccountStore>,
     /// The login method the configuration requires (`forced_login_method` as
     /// configured, not the API-key-only onboarding default a third-party
     /// session provider implies); a named account's sign-in of the other
@@ -2749,6 +2753,7 @@ impl AuthManager {
             external_auth: RwLock::new(None),
             provider_api_key_cache: RwLock::new(ProviderApiKeyCache::new()),
             named_account: None,
+            named_store: None,
             forced_login_method: None,
             base_manager: None,
             hide_restricted_default_login: false,
@@ -2782,6 +2787,7 @@ impl AuthManager {
             external_auth: RwLock::new(None),
             provider_api_key_cache: RwLock::new(ProviderApiKeyCache::new()),
             named_account: None,
+            named_store: None,
             forced_login_method: None,
             base_manager: None,
             hide_restricted_default_login: false,
@@ -2814,6 +2820,7 @@ impl AuthManager {
             external_auth: RwLock::new(None),
             provider_api_key_cache: RwLock::new(ProviderApiKeyCache::new()),
             named_account: None,
+            named_store: None,
             forced_login_method: None,
             base_manager: None,
             hide_restricted_default_login: false,
@@ -2854,6 +2861,7 @@ impl AuthManager {
             external_auth: RwLock::new(None),
             provider_api_key_cache: RwLock::new(ProviderApiKeyCache::new()),
             named_account: None,
+            named_store: None,
             forced_login_method: None,
             base_manager: None,
             hide_restricted_default_login: false,
@@ -2905,6 +2913,7 @@ impl AuthManager {
             )) as Arc<dyn ExternalAuth>)),
             provider_api_key_cache: RwLock::new(ProviderApiKeyCache::new()),
             named_account: None,
+            named_store: None,
             forced_login_method: None,
             base_manager: None,
             hide_restricted_default_login: false,
@@ -2918,7 +2927,25 @@ impl AuthManager {
     }
 
     /// Current cached auth (clone) without attempting a refresh.
+    ///
+    /// D171 (#1286): a named account's sign-in is dropped once the account
+    /// was removed or signed out (by any process); [`AuthManager::auth`]
+    /// picks up a later sign-in.
     pub fn auth_cached(&self) -> Option<CodexAuth> {
+        match self.held_named_sign_in() {
+            named_account::HeldSignIn::Current => {}
+            named_account::HeldSignIn::Changed => self.reload_named_sign_in_sync(),
+            named_account::HeldSignIn::Gone => {
+                self.set_cached_auth(/*new_auth*/ None);
+                return None;
+            }
+        }
+        self.auth_cached_unchecked()
+    }
+
+    /// The cached auth as it is, for the guarded reloads that compare it with
+    /// the stored one.
+    fn auth_cached_unchecked(&self) -> Option<CodexAuth> {
         self.inner
             .read()
             .ok()
@@ -2946,6 +2973,9 @@ impl AuthManager {
     #[instrument(level = "trace", skip_all)]
     pub async fn auth(&self) -> Option<CodexAuth> {
         // A named account loads lazily, and picks up a sign-in added later.
+        // D171 (#1286): `auth_cached` drops a sign-in held in memory once the
+        // account was removed or replaced (by any process), so the next
+        // request is refused with its recovery or runs on the new sign-in.
         if self.named_account.is_some() && self.auth_cached().is_none() {
             self.reload().await;
         }
@@ -2959,6 +2989,10 @@ impl AuthManager {
             && let Err(err) = self.refresh_token().await
         {
             tracing::error!("Failed to refresh token: {}", err);
+            // D171: a named account removed meanwhile is not used.
+            if self.named_account.is_some() {
+                return self.auth_cached();
+            }
             return Some(auth);
         }
         self.auth_cached()
@@ -3058,7 +3092,7 @@ impl AuthManager {
         }
 
         tracing::info!("Reloading auth for account {expected_account_id}");
-        let cached_before_reload = self.auth_cached();
+        let cached_before_reload = self.auth_cached_unchecked();
         let auth_changed =
             !Self::auths_equal_for_refresh(cached_before_reload.as_ref(), new_auth.as_ref());
         self.set_cached_auth(new_auth);
@@ -3203,6 +3237,11 @@ impl AuthManager {
             }
             tracing::info!("Reloaded auth, changed: {changed}");
             guard.auth = new_auth;
+            // D171: what the store was last seen holding was about the
+            // sign-in held before.
+            if changed && let Some(store) = self.named_store.as_ref() {
+                store.forget();
+            }
             if auth_changed_for_refresh {
                 self.auth_change_tx.send_modify(|revision| *revision += 1);
             }
@@ -3360,7 +3399,8 @@ impl AuthManager {
                 REFRESH_TOKEN_UNKNOWN_MESSAGE.to_string(),
             ))
         })?;
-        let auth_before_reload = self.auth_cached();
+        // D171: as held, so another process's refresh is picked up below.
+        let auth_before_reload = self.auth_cached_unchecked();
         if auth_before_reload
             .as_ref()
             .is_some_and(|auth| auth.is_api_key_auth() || auth.is_personal_access_token_auth())

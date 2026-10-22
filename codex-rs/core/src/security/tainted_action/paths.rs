@@ -4,6 +4,7 @@
 //! locations that could reach the network or raise an OS privacy prompt.
 
 use super::ProtectedActionKind;
+use super::windows_paths;
 use super::work;
 use std::cell::Cell;
 use std::cell::RefCell;
@@ -83,6 +84,8 @@ const PRIVACY_FOLDERS: &[&str] = &[
 ];
 
 pub(super) struct Homes {
+    /// #1240: Windows path rules (see `windows_paths`) instead of POSIX ones.
+    windows: bool,
     /// Original spellings, used to expand `$CODEX_HOME`, `$HOME` and `~`.
     codex_home_raw: String,
     user_home_raw: Option<String>,
@@ -99,9 +102,25 @@ pub(super) struct Homes {
 
 impl Homes {
     pub(super) fn new(codex_home: &Path, user_home: Option<&Path>) -> Self {
-        let raw = |path: &Path| path.to_string_lossy().trim_end_matches('/').to_string();
+        Self::with_rules(codex_home, user_home, /*windows*/ false)
+    }
+
+    /// #1240: the homes under Windows path rules, for the classifier's
+    /// Windows view.
+    pub(super) fn windows(codex_home: &Path, user_home: Option<&Path>) -> Self {
+        Self::with_rules(codex_home, user_home, /*windows*/ true)
+    }
+
+    fn with_rules(codex_home: &Path, user_home: Option<&Path>, windows: bool) -> Self {
+        let separators: &[char] = if windows { &['/', '\\'] } else { &['/'] };
+        let raw = |path: &Path| {
+            path.to_string_lossy()
+                .trim_end_matches(separators)
+                .to_string()
+        };
         let codex_home_raw = raw(codex_home);
         let user_home_raw = user_home.map(raw);
+        let normalize = |path: &str| normalize_with(windows, path);
         let mut lookup_roots = vec![
             "/tmp".to_string(),
             "/private/tmp".to_string(),
@@ -111,12 +130,13 @@ impl Homes {
         lookup_roots.extend(
             std::env::temp_dir()
                 .to_str()
-                .map(|temp| normalize_path(&temp.to_lowercase())),
+                .map(|temp| normalize(&temp.to_lowercase())),
         );
         if !codex_home_raw.is_empty() {
-            lookup_roots.push(normalize_path(&codex_home_raw.to_lowercase()));
+            lookup_roots.push(normalize(&codex_home_raw.to_lowercase()));
         }
         let homes = Self {
+            windows,
             codex_home_raw,
             user_home_raw,
             codex_homes: Vec::new(),
@@ -127,7 +147,7 @@ impl Homes {
             exhausted: Cell::new(false),
         };
         let spellings = |raw: &str| {
-            let mut spellings = vec![normalize_path(&raw.to_lowercase())];
+            let mut spellings = vec![normalize(&raw.to_lowercase())];
             if let Some(canonical) = homes.canonical(raw)
                 && !spellings.contains(&canonical)
             {
@@ -158,7 +178,7 @@ impl Homes {
 
     /// Lookups are allowed under `folder` (the action's working folder).
     pub(super) fn allow_lookups_under(&self, folder: &str) {
-        let folder = normalize_path(&folder.to_lowercase());
+        let folder = self.normalize(&folder.to_lowercase());
         let mut roots = self.lookup_roots.borrow_mut();
         if !roots.contains(&folder) {
             roots.push(folder);
@@ -178,10 +198,23 @@ impl Homes {
         self.user_home_raw.as_deref()
     }
 
+    /// Whether these are the Windows path rules.
+    pub(super) fn is_windows(&self) -> bool {
+        self.windows
+    }
+
+    /// `normalize_path`, or its Windows counterpart.
+    fn normalize(&self, path: &str) -> String {
+        normalize_with(self.windows, path)
+    }
+
     /// Expand `~`, `~user`, `$HOME` and `$CODEX_HOME` (or `$CORBANU_HOME`,
     /// `$PFTERMINAL_HOME`) spellings and make a
     /// relative word absolute against `cwd`. Keeps the word's case.
     pub(super) fn resolve(&self, word: &str, cwd: &str) -> String {
+        if self.windows {
+            return self.resolve_windows(word, cwd);
+        }
         let mut word = word.to_string();
         for (name, value) in [
             ("CODEX_HOME", Some(&self.codex_home_raw)),
@@ -212,6 +245,43 @@ impl Homes {
         }
     }
 
+    /// [`Self::resolve`] under Windows rules: the same spellings, the Windows
+    /// ones too (`%USERPROFILE%`, `$env:CODEX_HOME`, `~\`), and Windows roots.
+    fn resolve_windows(&self, word: &str, cwd: &str) -> String {
+        let mut word = word.to_string();
+        for (name, value) in [
+            ("CODEX_HOME", Some(&self.codex_home_raw)),
+            ("CORBANU_HOME", Some(&self.codex_home_raw)),
+            ("PFTERMINAL_HOME", Some(&self.codex_home_raw)),
+            ("HOME", self.user_home_raw.as_ref()),
+        ] {
+            work::step();
+            if let Some(value) = value {
+                word = replace_variable(&word, name, value);
+            }
+        }
+        word = windows_paths::expand(
+            &word,
+            &windows_paths::Values {
+                codex_home: &self.codex_home_raw,
+                user_home: self.user_home_raw.as_deref(),
+                cwd,
+            },
+        );
+        if let Some(home) = &self.user_home_raw
+            && let Some(rest) = word.strip_prefix('~')
+        {
+            let (user, tail) = rest.split_at(rest.find(['/', '\\']).unwrap_or(rest.len()));
+            if user.is_empty() {
+                word = format!("{home}{tail}");
+            } else {
+                // `~name` is a sibling of the user's home.
+                word = format!("{}/{user}{tail}", windows_paths::parent(home));
+            }
+        }
+        windows_paths::join(cwd, &word)
+    }
+
     /// Classify a resolved path, also through its canonical form (symlinks,
     /// `/var` vs `/private/var`, letter case on case-insensitive volumes).
     pub(super) fn classify_resolved(&self, path: &str) -> Option<ProtectedActionKind> {
@@ -227,7 +297,7 @@ impl Homes {
     /// under their rule), or a workspace's `.git` (hooks, config), `.codex` or
     /// `.agents`, also through its canonical form.
     pub(super) fn is_persistence(&self, path: &str) -> bool {
-        let lexical = normalize_path(&path.to_lowercase());
+        let lexical = self.normalize(&path.to_lowercase());
         let canonical = self.canonical(path);
         let entry_segments =
             |entry: &str| -> Vec<String> { entry.split('/').map(str::to_lowercase).collect() };
@@ -272,7 +342,7 @@ impl Homes {
     /// Whether `path` (globs allowed) is the user's home, or a folder holding
     /// it or the Corbanu home: copying or archiving it takes credentials.
     pub(super) fn holds_a_home(&self, path: &str) -> bool {
-        let lexical = normalize_path(&path.to_lowercase());
+        let lexical = self.normalize(&path.to_lowercase());
         let canonical = self.canonical(path);
         [Some(lexical), canonical]
             .into_iter()
@@ -293,7 +363,12 @@ impl Homes {
 
     /// Whether filesystem lookups may touch `path`.
     pub(super) fn lookups_allowed(&self, path: &str) -> bool {
-        let lower = normalize_path(&path.to_lowercase());
+        // #1240: Windows rules never look up (a lookup can follow a link or
+        // a mapped drive to a network share).
+        if self.windows {
+            return false;
+        }
+        let lower = self.normalize(&path.to_lowercase());
         let under = |root: &str| lower == root || lower.starts_with(&format!("{root}/"));
         if self.lookup_roots.borrow().iter().any(|root| under(root)) {
             return true;
@@ -358,7 +433,7 @@ impl Homes {
     /// The protected kind of one absolute path. Glob segments count as any
     /// protected folder they could match.
     pub(super) fn classify_path(&self, path: &str) -> Option<ProtectedActionKind> {
-        let path = normalize_path(&path.to_lowercase());
+        let path = self.normalize(&path.to_lowercase());
         let segments = segments(&path);
         let name = segments.last().copied().unwrap_or_default();
         if segments
@@ -468,6 +543,15 @@ pub(super) fn replace_variable(word: &str, name: &str, value: &str) -> String {
     out
 }
 
+/// [`normalize_path`] under POSIX or Windows rules.
+fn normalize_with(windows: bool, path: &str) -> String {
+    if windows {
+        windows_paths::normalize(path)
+    } else {
+        normalize_path(path)
+    }
+}
+
 /// Resolve `.`, `..` and repeated slashes without touching the filesystem.
 pub(super) fn normalize_path(path: &str) -> String {
     let mut parts: Vec<&str> = Vec::new();
@@ -503,6 +587,23 @@ fn glob_matches(pattern: &str, name: &str) -> bool {
 /// The glob match itself, leading wildcards included. Iterative with one
 /// backtrack point, so it is linear-times-linear whatever the pattern.
 pub(super) fn glob_any(pattern: &str, name: &str) -> bool {
+    // The pattern's text before its first glob character must start the
+    // name, and without glob characters the match below is equality. Checked
+    // first, byte by byte, this skips the match's two allocations and stops
+    // at the first difference: every word's path checks compare it with many
+    // short names, and a long word otherwise is read in full for each
+    // (#1275).
+    let (pattern_bytes, name_bytes) = (pattern.as_bytes(), name.as_bytes());
+    let mut at = 0;
+    loop {
+        work::step();
+        match pattern_bytes.get(at) {
+            None => return at == name_bytes.len(),
+            Some(b'*' | b'?' | b'[') => break,
+            Some(byte) if name_bytes.get(at) != Some(byte) => return false,
+            Some(_) => at += 1,
+        }
+    }
     let pattern: Vec<char> = pattern.chars().collect();
     let name: Vec<char> = name.chars().collect();
     // Length of the single-character token at `at` (`?`, `[...]` or literal).

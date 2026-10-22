@@ -5,15 +5,15 @@ binary, provider credentials, the encrypted vault, and model selection.
 
 ## System Requirements
 
-| Requirement      | Details                                                        |
-| ---------------- | -------------------------------------------------------------- |
-| Operating system | macOS 12+, Ubuntu 20.04+/Debian 10+, or Windows 11 via WSL2    |
-| Git              | 2.23+ recommended                                              |
-| RAM              | 4 GB minimum, 8 GB recommended                                 |
-| Rust             | Required only for source builds                                |
-| Node.js          | Required only for npm/package development                      |
-| Linux sandbox    | `bubblewrap` recommended on Linux                              |
-| Linux keyring    | A Secret Service provider such as GNOME Keyring is recommended |
+| Requirement      | Details                                                          |
+| ---------------- | ---------------------------------------------------------------- |
+| Operating system | macOS 12+, Ubuntu 20.04+/Debian 10+, or Windows 11 (x64, native) |
+| Git              | 2.23+ recommended                                                |
+| RAM              | 4 GB minimum, 8 GB recommended                                   |
+| Rust             | Required only for source builds                                  |
+| Node.js          | Required only for npm/package development                        |
+| Linux sandbox    | `bubblewrap` recommended on Linux                                |
+| Linux keyring    | A Secret Service provider such as GNOME Keyring is recommended   |
 
 On Ubuntu/Debian hosts, install the common runtime helpers:
 
@@ -62,6 +62,28 @@ curl -fsSL https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/downlo
 The installer requires a published GitHub release. If a fresh clone has no
 release yet, use the source build fallback below.
 
+### Windows Release Installer
+
+Corbanu Terminal runs natively on Windows; WSL2 is not required. In PowerShell:
+
+```powershell
+irm https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.ps1 | iex
+```
+
+On x64 Windows the installer downloads the `x86_64-pc-windows-msvc` package,
+verifies its SHA-256 digest, installs the `corbanu` command in
+`%LOCALAPPDATA%\Programs\Corbanu Terminal\bin`, and adds that folder to your
+user `PATH` (restart PowerShell windows that were already open). State
+resolves as on Linux and macOS, with `%USERPROFILE%\.corbanu` as the default
+home. `CORBANU_INSTALL_DIR` and `CORBANU_HOME` override the defaults. Releases
+publish an x64 Windows package only: on Arm64 Windows the installer looks for an
+`aarch64-pc-windows-msvc` package, finds none, and stops with an error.
+
+For the Windows sandbox modes, see [Sandbox](sandbox.md). If an upgrade refuses
+to retarget a junction or still runs an old version, see the
+[Windows upgrade diagnostics](windows-upgrade-diagnostics.md). To run Corbanu
+Terminal inside WSL2 instead, use the Linux installer above in the WSL2 shell.
+
 ### macOS DMG
 
 Download the latest DMG from
@@ -78,7 +100,7 @@ uses the bundled archive and verifies it before installation.
 
 Release artifacts are built by the manual `corbanu-terminal-release` GitHub Actions
 workflow. It does not run on every push. Run it only when you want
-installer-ready macOS and Linux artifacts for the current Cargo version.
+installer-ready macOS, Linux and Windows artifacts for the current Cargo version.
 
 Before dispatching, follow the [release-preparation checklist](../AGENTS.md#release-gate)
 to carry pending notes into the versioned release notes.
@@ -90,6 +112,7 @@ corbanu-terminal-package-aarch64-apple-darwin.tar.gz
 corbanu-terminal-package-x86_64-apple-darwin.tar.gz
 corbanu-terminal-package-aarch64-unknown-linux-musl.tar.gz
 corbanu-terminal-package-x86_64-unknown-linux-gnu.tar.gz
+corbanu-terminal-package-x86_64-pc-windows-msvc.zip
 CorbanuTerminal-aarch64-apple-darwin.dmg
 CorbanuTerminal-x86_64-apple-darwin.dmg
 corbanu-terminal-package_SHA256SUMS

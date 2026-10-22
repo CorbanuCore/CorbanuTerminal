@@ -7,11 +7,19 @@ use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_path_uri::PathUri;
 use pretty_assertions::assert_eq;
 use std::cell::RefCell;
-use std::path::Path;
 
 thread_local! {
     /// Comparisons made on this thread, for these tests.
     pub(super) static RECORDED: RefCell<Vec<Comparison>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A fixture path; on Windows (#1240) on drive `C:` (`/work` is `C:\work`).
+fn fixture(path: &str) -> std::path::PathBuf {
+    if cfg!(windows) {
+        format!("C:{}", path.replace('/', "\\")).into()
+    } else {
+        path.into()
+    }
 }
 
 /// The classification of `bash -lc script`, and the comparisons it made.
@@ -22,7 +30,7 @@ fn classified(script: &str) -> (Option<ProtectedActionKind>, Vec<Comparison>) {
         environment_id: "local".into(),
         command: vec!["bash".into(), "-lc".into(), script.into()],
         cwd: PathUri::from_abs_path(
-            &AbsolutePathBuf::from_absolute_path_checked("/work").expect("absolute"),
+            &AbsolutePathBuf::from_absolute_path_checked(fixture("/work")).expect("absolute"),
         ),
         sandbox_permissions: SandboxPermissions::UseDefault,
         additional_permissions: None,
@@ -30,17 +38,13 @@ fn classified(script: &str) -> (Option<ProtectedActionKind>, Vec<Comparison>) {
     };
     let kind = classify_with(
         &action,
-        Path::new("/home/fixture/.corbanu"),
-        Some(Path::new("/home/fixture")),
+        &fixture("/home/fixture/.corbanu"),
+        Some(&fixture("/home/fixture")),
     );
     (kind, RECORDED.with(RefCell::take))
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn every_command_line_is_compared_and_nothing_changes() {
     assert_eq!(
         classified("git status && echo 'a; b'"),
@@ -56,10 +60,6 @@ fn every_command_line_is_compared_and_nothing_changes() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn differences_are_recorded_by_kind() {
     // The reader reads arithmetic as commands on purpose (#937).
     assert_eq!(
@@ -94,10 +94,6 @@ fn the_budget_bounds_the_lines_compared() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn empty_scripts_cannot_multiply_the_comparisons() {
     let mut command = vec!["bash".to_string()];
     for _ in 0..2000 {
@@ -110,7 +106,7 @@ fn empty_scripts_cannot_multiply_the_comparisons() {
         environment_id: "local".into(),
         command,
         cwd: PathUri::from_abs_path(
-            &AbsolutePathBuf::from_absolute_path_checked("/work").expect("absolute"),
+            &AbsolutePathBuf::from_absolute_path_checked(fixture("/work")).expect("absolute"),
         ),
         sandbox_permissions: SandboxPermissions::UseDefault,
         additional_permissions: None,
@@ -118,8 +114,8 @@ fn empty_scripts_cannot_multiply_the_comparisons() {
     };
     let _ = classify_with(
         &action,
-        Path::new("/home/fixture/.corbanu"),
-        Some(Path::new("/home/fixture")),
+        &fixture("/home/fixture/.corbanu"),
+        Some(&fixture("/home/fixture")),
     );
     let recorded = RECORDED.with(RefCell::take);
     let compared = recorded

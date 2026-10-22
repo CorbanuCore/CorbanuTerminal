@@ -150,7 +150,7 @@ impl App {
             ProviderAccountEvent::RenameStart { provider_id, name } => {
                 if self.provider_account_usage().session_account(&provider_id) == name.as_str() {
                     self.chat_widget.add_error_message(format!(
-                        "This session uses {provider_id} account `{name}`. Use another account for this session first, then rename it."
+                        "This session uses {provider_id} account `{name}`. Start a new session on another account first, then rename it."
                     ));
                     return;
                 }
@@ -463,7 +463,7 @@ impl App {
                     .unwrap_or_else(|| DEFAULT_PROVIDER_ACCOUNT.to_string());
             if existing_provider != provider_id && existing_name != configured_default {
                 return Err(format!(
-                    "This session already selects {existing_provider} account `{existing_name}`, and one session selection covers one provider. Use {existing_provider} account `{configured_default}` (its default for new sessions) for this session first, or make {provider_id} account `{}` the default for new sessions.",
+                    "This session already selects {existing_provider} account `{existing_name}`, and one session selection covers one provider. Start a new session on {existing_provider} account `{configured_default}` (its default for new sessions) first, or make {provider_id} account `{}` the default for new sessions.",
                     account_label(name)
                 ));
             }

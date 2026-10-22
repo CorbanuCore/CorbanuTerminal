@@ -10,8 +10,19 @@ use std::sync::Arc;
 
 const HOME: &str = "/home/fixture/.corbanu";
 
+/// A fixture path; on Windows (#1240) on drive `C:` (`/work` is `C:\work`).
+fn fixture(path: &str) -> std::path::PathBuf {
+    if cfg!(windows) {
+        format!("C:{}", path.replace('/', "\\")).into()
+    } else {
+        path.into()
+    }
+}
+
 fn cwd() -> PathUri {
-    PathUri::from_abs_path(&AbsolutePathBuf::from_absolute_path_checked("/work").expect("abs"))
+    PathUri::from_abs_path(
+        &AbsolutePathBuf::from_absolute_path_checked(fixture("/work")).expect("abs"),
+    )
 }
 
 fn mcp(tool: &str, acts_outside: bool, arguments: Value) -> Option<ProtectedActionKind> {
@@ -24,7 +35,7 @@ fn mcp(tool: &str, acts_outside: bool, arguments: Value) -> Option<ProtectedActi
         arguments: Some(&arguments),
         cwd: &cwd,
     };
-    classify_mcp(&call, Path::new(HOME))
+    classify_mcp(&call, &fixture(HOME))
 }
 
 /// Every built-in tool a session can register is on the matrix: a new tool
@@ -115,10 +126,6 @@ fn pf_23_s01_route_matrix() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn pf_23_s01_mcp_calls_are_classified_by_effect_and_arguments() {
     use ProtectedActionKind::*;
     for (tool, acts_outside, arguments, expected) in [
@@ -200,15 +207,11 @@ fn pf_23_s01_mcp_calls_are_classified_by_effect_and_arguments() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn pf_23_s01_typed_input_is_judged_as_the_command_it_amounts_to() {
     use ProtectedActionKind::*;
     let cwd = cwd();
     let typed =
-        |process: &str, chars: &str| classify_typed_input(process, chars, &cwd, Path::new(HOME));
+        |process: &str, chars: &str| classify_typed_input(process, chars, &cwd, &fixture(HOME));
     assert_eq!(typed("bash -i", "ls -la\n"), None);
     assert_eq!(typed("bash -i", "y\n"), None);
     assert_eq!(typed("bash -i", "corbanu vault list\n"), Some(Vault));

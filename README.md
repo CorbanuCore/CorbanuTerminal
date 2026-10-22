@@ -24,6 +24,9 @@ curl -fsSL https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/downlo
 irm https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.ps1 | iex
 ```
 
+If an upgrade refuses to retarget a junction or still runs an old version, see
+the [Windows upgrade diagnostics](docs/windows-upgrade-diagnostics.md).
+
 The standalone installer creates the `corbanu` command. It does not replace a
 stock `codex` command. macOS users can alternatively
 download the latest Corbanu Terminal DMG from

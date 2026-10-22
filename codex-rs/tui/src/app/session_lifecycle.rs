@@ -1111,6 +1111,16 @@ impl App {
             Ok(resumed) => {
                 let resumed_thread_id = resumed.session.thread_id;
                 let resumed_session = resumed.session.clone();
+                // D172 (#1287): an account selected for this session wins
+                // over the recorded one; say so, from the account the app
+                // server resumed the thread on.
+                let account_notice = recorded_account.as_ref().and_then(|recorded| {
+                    crate::resume_launch::resume_account_notice(
+                        &resume_config,
+                        recorded,
+                        resumed_session.provider_account.as_deref(),
+                    )
+                });
                 let remember_model = !resumed.blocks_direct_input;
                 self.shutdown_current_thread(app_server).await;
                 apply_persisted_resume_runtime(
@@ -1151,6 +1161,9 @@ impl App {
                             ));
                         }
                         self.backfill_loaded_subagent_threads(app_server).await;
+                        if let Some(notice) = account_notice {
+                            self.chat_widget.add_info_message(notice, /*hint*/ None);
+                        }
                         if let Some(summary) = summary {
                             let mut lines: Vec<Line<'static>> = Vec::new();
                             if let Some(usage_line) = summary.usage_line {

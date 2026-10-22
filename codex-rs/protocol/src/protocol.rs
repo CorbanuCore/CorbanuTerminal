@@ -775,6 +775,14 @@ pub struct InterAgentCommunication {
     #[ts(optional)]
     pub created_at_ms: Option<i64>,
     pub author: AgentPath,
+    /// Core's description of an `author` outside the recipient's agent tree, such as an agent
+    /// in another pane sending a task to a pane the person opened (issue 1248). Agent paths
+    /// are relative to their own tree, so such an author's `/root` would read as the
+    /// recipient's own root. Shown to the recipient's model as a `Sender:` line; it names the
+    /// sender only and grants no trust: the message stays inter-agent data.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub author_label: Option<String>,
     pub recipient: AgentPath,
     #[serde(default)]
     pub other_recipients: Vec<AgentPath>,
@@ -810,6 +818,7 @@ impl InterAgentCommunication {
             }),
             created_at_ms: Some(chrono::Utc::now().timestamp_millis()),
             author,
+            author_label: None,
             recipient,
             other_recipients,
             content,
@@ -838,6 +847,7 @@ impl InterAgentCommunication {
             }),
             created_at_ms: Some(chrono::Utc::now().timestamp_millis()),
             author,
+            author_label: None,
             recipient,
             other_recipients,
             content: String::new(),
@@ -917,7 +927,8 @@ impl InterAgentCommunication {
                     AgentMessageInputContent::InputText {
                         text: format!(
                             "Message Type: {message_type}\nTask name: {}\nSender: {}\nPayload:\n",
-                            self.recipient, self.author
+                            self.recipient,
+                            self.author_label.as_deref().unwrap_or(self.author.as_str())
                         ),
                     },
                     AgentMessageInputContent::EncryptedContent {
@@ -925,9 +936,16 @@ impl InterAgentCommunication {
                     },
                 ]
             }
-            None => vec![AgentMessageInputContent::InputText {
-                text: self.content.clone(),
-            }],
+            None => self
+                .author_label
+                .iter()
+                .map(|label| AgentMessageInputContent::InputText {
+                    text: format!("Sender: {label}"),
+                })
+                .chain([AgentMessageInputContent::InputText {
+                    text: self.content.clone(),
+                }])
+                .collect(),
         };
         ResponseItem::AgentMessage {
             id: self.id.clone(),
@@ -4888,6 +4906,7 @@ mod tests {
             kind: Some(AgentMessageKind::Assignment),
             created_at_ms: Some(1_000),
             author: AgentPath::root(),
+            author_label: None,
             recipient: AgentPath::root().join("reviewer").expect("recipient path"),
             other_recipients: vec![AgentPath::root().join("worker").expect("recipient path")],
             content: "review the diff".to_string(),
@@ -4970,6 +4989,62 @@ mod tests {
                 internal_chat_message_metadata_passthrough: None,
             }
         );
+    }
+
+    #[test]
+    fn cross_tree_author_label_renders_as_the_sender_line() {
+        let label = "agent /root in another pane's agent tree (thread t1), not this pane's /root";
+        let mut plaintext = InterAgentCommunication::new(
+            AgentPath::root(),
+            AgentPath::root(),
+            Vec::new(),
+            "agent task".to_string(),
+            /*trigger_turn*/ true,
+        );
+        plaintext.author_label = Some(label.to_string());
+        assert_eq!(
+            plaintext.to_model_input_item(),
+            ResponseItem::AgentMessage {
+                id: None,
+                author: "/root".to_string(),
+                recipient: "/root".to_string(),
+                content: vec![
+                    AgentMessageInputContent::InputText {
+                        text: format!("Sender: {label}"),
+                    },
+                    AgentMessageInputContent::InputText {
+                        text: "agent task".to_string(),
+                    },
+                ],
+                internal_chat_message_metadata_passthrough: None,
+            }
+        );
+
+        let mut encrypted = InterAgentCommunication::new_encrypted(
+            AgentPath::root(),
+            AgentPath::root(),
+            Vec::new(),
+            "encrypted payload".to_string(),
+            /*trigger_turn*/ true,
+        );
+        encrypted.author_label = Some(label.to_string());
+        let ResponseItem::AgentMessage { content, .. } = encrypted.to_model_input_item() else {
+            panic!("expected an agent message");
+        };
+        assert_eq!(
+            content[0],
+            AgentMessageInputContent::InputText {
+                text: format!(
+                    "Message Type: NEW_TASK\nTask name: /root\nSender: {label}\nPayload:\n"
+                ),
+            }
+        );
+
+        // Messages without a label (every same-tree message) keep their old shape and JSON.
+        let mut unlabelled = plaintext;
+        unlabelled.author_label = None;
+        let json = serde_json::to_string(&unlabelled).expect("serialize");
+        assert!(!json.contains("author_label"), "{json}");
     }
 
     #[test]

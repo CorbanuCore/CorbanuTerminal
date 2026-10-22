@@ -1,0 +1,11 @@
+╭───────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)         │
+│                                       │
+│ model:     glm-5.2   /model to change │
+│ directory: ~/runs/…/fixture/workspace │
+╰───────────────────────────────────────╯
+
+
+› Find and fix a bug in @filename
+
+  Z.AI GLM 5.2 via zai standard · ~/runs/agms-T17-utm3-agmx2-20261021T185354Z/fixture/workspace · Corbanu Terminal · TPS: -- tok/s · Main [default]

@@ -3747,7 +3747,11 @@ async fn resume_with_only_model_spawned_sub_agents_shows_no_legacy_spawn_notice(
     let legacy = issue_1208_layout(&[(ISSUE_1208_CHILD, "pane:codex-main")]);
     for (layout, expect_notice) in [(native_only, false), (legacy, true)] {
         let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
-        // The flag App construction sets from the restored layout.
+        // Set by hand as App construction does it in app.rs
+        // (`restored_spawn_legacy_read_only`, the value given to
+        // `spawn_legacy_read_only` when the App is built from the restored
+        // layout). If that site stops calling
+        // `pane_layout_has_legacy_spawn_hierarchy`, change this line too.
         app.spawn_legacy_read_only =
             crate::spawn_orchestration::pane_layout_has_legacy_spawn_hierarchy(&layout);
         let mut app_server = start_config_write_test_app_server(&app).await?;

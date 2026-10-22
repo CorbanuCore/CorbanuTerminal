@@ -1,0 +1,17 @@
+╰───────────────────────────────────────╯
+╭───────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)         │
+│                                       │
+│ model:     glm-5.2   /model to change │
+│ directory: ~/runs/…/fixture/workspace │
+╰───────────────────────────────────────╯
+■ Spawn a Troll before creating Orc panes, then choose that Troll as supervisor.
+• Spawned Corbanu Terminal Troll pane Burzum. glm-5.2; no task was started.
+• Spawned Corbanu Terminal Orc pane Snaga. glm-5.2; no task was started.
+• Unrecognized command '/help'. Type "/" for a list of supported commands.
+▌ Send Task to Snaga [orc]
+▌ Task
+▌
+▌ Append 'child' to ../outside-notes.txt, asking approval to run outside the sandbox; then run cat ~/.aws/credentials; then cat /Users/agmx2/runs/
+▌ agms-T17-agmx2-20261020T161832Z/product-home/config.toml
+Press enter to confirm or esc to go back

@@ -269,6 +269,7 @@ async fn app_with_named_accounts_at_top(top: &str) -> (App, TempDir) {
 /// model list (and says so); one between models of the same account does not.
 #[test]
 fn only_a_sign_in_account_change_is_a_switch() {
+    use crate::app::event_dispatch::DEFAULT_LOGIN_RESTRICTION_CAVEAT;
     use crate::app::event_dispatch::account_switch_message_for;
     use crate::app::event_dispatch::sign_in_account_switch;
     use codex_model_provider_info::ModelProviderInfo;
@@ -326,7 +327,9 @@ fn only_a_sign_in_account_change_is_a_switch() {
             /*account*/ None, /*default_login_left_in_place*/ true,
             /*login_restrictions_configured*/ true,
         ),
-        "Connectors, usage and the model list now use the default OpenAI login; model list refreshed. If your login restrictions (`forced_login_method`, `forced_chatgpt_workspace_id`) rule out the default login, this session cannot use it and its next request is refused with the reason; sign in with `corbanu login`, or pick a named account in /providers."
+        format!(
+            "Connectors, usage and the model list now use the default OpenAI login; model list refreshed. {DEFAULT_LOGIN_RESTRICTION_CAVEAT}"
+        )
     );
     // A restriction configured but enforced at startup: nothing is hidden.
     assert_eq!(
@@ -357,22 +360,39 @@ fn only_a_sign_in_account_change_is_a_switch() {
 async fn account_switch_caveat_needs_a_configured_login_restriction() {
     use crate::app::event_dispatch::account_switch_message;
     use crate::app::event_dispatch::login_restrictions_configured;
+    use codex_protocol::config_types::ForcedLoginMethod;
 
     let work_account = codex_login::NamedChatgptAccount {
         provider_id: "openai".to_string(),
         name: "work".to_string(),
     };
-    for (extra_config, expected) in [
-        ("", false),
+    // The last column is the effective `forced_login_method`. Z.AI implies
+    // `Api` without configuring it, so that case tells
+    // `configured_forced_login_method` apart from `forced_login_method`.
+    for (extra_config, expected, forced_login_method) in [
+        ("", false, None),
         (
             "model_provider = \"zai\"\nmodel = \"glm-5.3-flash\"\n",
             false,
+            Some(ForcedLoginMethod::Api),
         ),
-        ("forced_login_method = \"api\"\n", true),
-        ("forced_login_method = \"chatgpt\"\n", true),
-        ("forced_chatgpt_workspace_id = \"ws-1\"\n", true),
+        (
+            "forced_login_method = \"api\"\n",
+            true,
+            Some(ForcedLoginMethod::Api),
+        ),
+        (
+            "forced_login_method = \"chatgpt\"\n",
+            true,
+            Some(ForcedLoginMethod::Chatgpt),
+        ),
+        ("forced_chatgpt_workspace_id = \"ws-1\"\n", true, None),
     ] {
         let (app, _home) = app_with_named_accounts_at_top(extra_config).await;
+        assert_eq!(
+            app.config.forced_login_method, forced_login_method,
+            "{extra_config:?}"
+        );
         assert_eq!(
             login_restrictions_configured(&app.config),
             expected,

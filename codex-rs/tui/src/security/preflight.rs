@@ -308,6 +308,15 @@ pub(crate) fn verify_database_folder(config: &Config) -> Vec<String> {
 
 /// Every isolated path must be unreadable to agent commands.
 pub(crate) fn verify_isolation(config: &Config, paths: &[PathBuf]) -> Vec<String> {
+    isolation_failures(config, paths)
+        .into_iter()
+        .map(|(_, line)| line)
+        .collect()
+}
+
+/// Keep uncovered paths paired with their diagnostics, in input order, so
+/// launch can identify config layers without rebuilding the read view per path.
+fn isolation_failures<'a>(config: &Config, paths: &'a [PathBuf]) -> Vec<(&'a PathBuf, String)> {
     let policy = config.permissions.file_system_sandbox_policy();
     let cwd = config.cwd.as_path();
     let codex_home = config.codex_home.as_path();
@@ -326,7 +335,9 @@ pub(crate) fn verify_isolation(config: &Config, paths: &[PathBuf]) -> Vec<String
     // workspace opened through `/tmp` spells its paths unlike the launch
     // that denied them.
     #[cfg(not(target_os = "macos"))]
-    let readable = |path: &Path| policy.can_read_effective_path_with_cwd(path, cwd);
+    let reads = policy.effective_reads_with_cwd(cwd);
+    #[cfg(not(target_os = "macos"))]
+    let readable = |path: &Path| reads.can_read_effective_path(path);
     paths
         .iter()
         .filter(|path| {
@@ -342,11 +353,27 @@ pub(crate) fn verify_isolation(config: &Config, paths: &[PathBuf]) -> Vec<String
             !covered
         })
         .map(|path| {
-            format!(
-                "Isolation: agent commands can still read {}",
-                path.display()
+            (
+                path,
+                format!(
+                    "Isolation: agent commands can still read {}",
+                    path.display()
+                ),
             )
         })
+        .collect()
+}
+
+/// The isolation phase of launch's audit checks the complete inventory as one
+/// set, then preserves each path's existing config-layer diagnostic.
+fn launch_isolation_blockers(
+    config: &Config,
+    paths: &[PathBuf],
+    layers: &[PathBuf],
+) -> Vec<String> {
+    isolation_failures(config, paths)
+        .into_iter()
+        .map(|(path, line)| not_denied_at_launch(&line, layers.contains(path)))
         .collect()
 }
 
@@ -371,17 +398,11 @@ pub(crate) fn audit_at_launch(codex_home: &Path, config: &Config) -> Boundary {
         .iter()
         .filter_map(|layer| layer.path.clone())
         .collect::<Vec<_>>();
-    blockers.extend(
-        preflight
-            .inventory
-            .isolation_paths()
-            .iter()
-            .flat_map(|path| {
-                verify_isolation(config, std::slice::from_ref(path))
-                    .into_iter()
-                    .map(|line| not_denied_at_launch(&line, layers.contains(path)))
-            }),
-    );
+    blockers.extend(launch_isolation_blockers(
+        config,
+        &preflight.inventory.isolation_paths(),
+        &layers,
+    ));
     if !blockers.is_empty() {
         return Boundary::NotClean { blockers };
     }

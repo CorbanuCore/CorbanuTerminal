@@ -182,10 +182,6 @@ fn return_to_permissive_while_aggressive_is_active() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Aggressive cannot be fully applied on a Windows test machine without the Windows sandbox (#691)"
-)]
 fn unreadable_state_is_reported_and_aggressive_selected() {
     let home = tempfile::tempdir().unwrap();
     std::fs::write(
@@ -199,8 +195,11 @@ fn unreadable_state_is_reported_and_aggressive_selected() {
         /*preflight_input*/ None,
         RuntimeKeymap::defaults().list,
     );
-    let rendered =
-        render(&picker, /*width*/ 400).replace(&home.path().display().to_string(), "<home>");
+    // The state file's full path, so the snapshot holds on Windows too (#691).
+    let rendered = render(&picker, /*width*/ 400).replace(
+        &level::state_path(home.path()).display().to_string(),
+        "<home>/security_level.toml",
+    );
     insta::assert_snapshot!("security_level_picker_unreadable", rendered);
 }
 
@@ -798,7 +797,7 @@ mod pf_24_s02 {
     #[test]
     #[cfg_attr(
         windows,
-        ignore = "Aggressive cannot be fully applied on a Windows test machine without the Windows sandbox (#691)"
+        ignore = "PF-27-S06: protected launch is not available on Windows yet, so the preflight never passes and Aggressive is never confirmed with Core (#691)"
     )]
     fn security_confirm_aggressive_raises_core_and_offers_restart() {
         let machine = Machine::new();
@@ -838,7 +837,7 @@ mod pf_24_s02 {
     #[test]
     #[cfg_attr(
         windows,
-        ignore = "Aggressive cannot be fully applied on a Windows test machine without the Windows sandbox (#691)"
+        ignore = "PF-27-S06: protected launch is not available on Windows yet, so the preflight never passes and Aggressive is never confirmed with Core (#691)"
     )]
     fn issue_739_downgrade_under_protected_launch_keeps_corbanu_files_denied() {
         let machine = Machine::new();
@@ -869,7 +868,7 @@ mod pf_24_s02 {
     #[test]
     #[cfg_attr(
         windows,
-        ignore = "Aggressive cannot be fully applied on a Windows test machine without the Windows sandbox (#691)"
+        ignore = "PF-27-S06: protected launch is not available on Windows yet, so the preflight never passes and Aggressive is never confirmed with Core (#691)"
     )]
     fn security_confirm_downgrade_shows_removed_protections_first() {
         let machine = Machine::new();
@@ -928,7 +927,7 @@ mod pf_24_s02 {
     #[test]
     #[cfg_attr(
         windows,
-        ignore = "Aggressive cannot be fully applied on a Windows test machine without the Windows sandbox (#691)"
+        ignore = "PF-27-S06: protected launch is not available on Windows yet, so the preflight never passes and Aggressive is never confirmed with Core (#691)"
     )]
     fn security_confirm_downgrade_never_restarts_without_the_environment_key() {
         let machine = Machine::new();
@@ -959,7 +958,7 @@ mod pf_24_s02 {
     #[test]
     #[cfg_attr(
         windows,
-        ignore = "Aggressive cannot be fully applied on a Windows test machine without the Windows sandbox (#691)"
+        ignore = "PF-27-S06: protected launch is not available on Windows yet, so the preflight never passes and Aggressive is never confirmed with Core (#691)"
     )]
     fn security_confirm_write_failure_keeps_the_view_open() {
         let machine = Machine::new();
@@ -992,7 +991,7 @@ mod pf_24_s02 {
     #[test]
     #[cfg_attr(
         windows,
-        ignore = "Aggressive cannot be fully applied on a Windows test machine without the Windows sandbox (#691)"
+        ignore = "PF-27-S06: protected launch is not available on Windows yet, so the preflight never passes and Aggressive is never confirmed with Core (#691)"
     )]
     fn security_confirm_state_changed_elsewhere_reviews_again() {
         let machine = Machine::new();
@@ -1023,7 +1022,7 @@ mod pf_24_s02 {
     #[test]
     #[cfg_attr(
         windows,
-        ignore = "Aggressive cannot be fully applied on a Windows test machine without the Windows sandbox (#691)"
+        ignore = "PF-27-S06: protected launch is not available on Windows yet, so the preflight never passes and Aggressive is never confirmed with Core (#691)"
     )]
     fn security_confirm_level_file_edited_by_an_agent_is_caught() {
         let machine = Machine::new();
@@ -1077,7 +1076,7 @@ mod pf_24_s02 {
     #[test]
     #[cfg_attr(
         windows,
-        ignore = "Aggressive cannot be fully applied on a Windows test machine without the Windows sandbox (#691)"
+        ignore = "PF-27-S06: protected launch is not available on Windows yet, so the preflight never passes and Aggressive is never confirmed with Core (#691)"
     )]
     fn security_confirm_saving_screen_until_the_commit_finishes() {
         let machine = Machine::new();

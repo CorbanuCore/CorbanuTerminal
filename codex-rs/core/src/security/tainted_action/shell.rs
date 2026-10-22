@@ -10,6 +10,8 @@ use super::work;
 /// Shells whose `-c` argument is its own command line.
 pub(super) const SHELLS: &[&str] = &[
     "sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh", "ash", "mksh", "yash",
+    // #1276: more spellings of POSIX-style shells.
+    "rbash", "posh", "lksh", "oksh", "hush", "osh",
 ];
 /// Words one brace expression may expand to before it is left as written.
 const MAX_BRACE_EXPANSION: usize = 64;
@@ -22,6 +24,10 @@ pub(super) const UNSEEN_OUTPUT: &str = "\u{1}unseen-output\u{1}";
 /// own control character brackets it, so no neighbouring text can complete
 /// or absorb it.
 pub(super) const ARITHMETIC_OUTPUT: &str = "\u{2}\u{1}unseen-output\u{1}\u{2}";
+/// #1283: marks the words a brace expansion or `$IFS` made, which the
+/// quote-aware reading (`quoted.rs`) keeps as one word as written. The
+/// lexer drops it; text holding it only marks more words.
+const HIDDEN: char = '\u{5}';
 
 /// A character of the command text as a word holds it: the placeholders'
 /// control characters are replaced, so text can never spell a placeholder.
@@ -58,6 +64,10 @@ pub(super) struct SimpleCommand {
     /// Its text held a backslash, which the words no longer show
     /// (`printf 'a\x24'` decodes it).
     pub(super) escaped: bool,
+    /// #1283: indexes of the words the quote-aware reading cannot spell:
+    /// made by a brace expansion or `$IFS`, or holding a substitution's
+    /// spliced output (`{git,config}`, `git${IFS}config`, `$(echo git)`).
+    pub(super) hidden: Vec<usize>,
 }
 
 /// Lexed simple commands, in the order they finish (a substitution comes
@@ -244,10 +254,11 @@ fn writes_options(text: &str) -> bool {
     })
 }
 
-/// `$IFS` and `${IFS}` separate words.
+/// `$IFS` and `${IFS}` separate words (#1283: marked on both sides).
 fn replace_ifs(arg: &str) -> String {
-    let arg = arg.replace("${IFS}", " ");
-    super::paths::replace_variable(&arg, "IFS", " ")
+    let split = format!("{HIDDEN} {HIDDEN}");
+    let arg = arg.replace("${IFS}", &split);
+    super::paths::replace_variable(&arg, "IFS", &split)
 }
 
 /// Bounded brace expansion inside each whitespace-separated word:
@@ -316,6 +327,7 @@ fn expand_braces(text: &str) -> (String, bool) {
             return;
         }
         let mut words = vec![std::mem::take(word)];
+        let mut expanded = false;
         while let Some(position) = words
             .iter()
             .position(|word| brace_alternatives(word).is_some())
@@ -323,12 +335,20 @@ fn expand_braces(text: &str) -> (String, bool) {
             work::step();
             let alternatives = brace_alternatives(&words[position]).unwrap_or_default();
             words.splice(position..=position, alternatives);
+            expanded = true;
             if words.len() > MAX_BRACE_EXPANSION {
                 complete = false;
                 break;
             }
         }
-        out.push_str(&unmask(&words.join(" ")));
+        let separator = if expanded {
+            // #1283: each word it made is marked.
+            out.push(HIDDEN);
+            format!(" {HIDDEN}")
+        } else {
+            " ".to_string()
+        };
+        out.push_str(&unmask(&words.join(&separator)));
     };
     let mut has_quote = false;
     for (original, ch) in chars.iter().zip(masked.chars()) {
@@ -382,6 +402,8 @@ struct Open {
     outer_word: String,
     /// The outer word already holds a lookup's output.
     outer_looked_up: bool,
+    /// The outer word is already hidden from the quote-aware reading.
+    outer_hidden: bool,
     first: usize,
     backtick: bool,
     /// `>(...)`: the substitution reads the outer command's output.
@@ -420,6 +442,8 @@ struct Lexer {
     word: String,
     /// The word being built holds a lookup's output.
     looked_up: bool,
+    /// #1283: the word being built is hidden from the quote-aware reading.
+    hidden: bool,
     open: Vec<Open>,
     /// Open groups and the pipe that feeds every command inside them.
     groups: Vec<(Group, Option<usize>)>,
@@ -442,6 +466,9 @@ impl Lexer {
             }
             if std::mem::take(&mut self.looked_up) {
                 self.current.looked_up.push(self.current.words.len());
+            }
+            if std::mem::take(&mut self.hidden) {
+                self.current.hidden.push(self.current.words.len());
             }
             let word = std::mem::take(&mut self.word);
             self.current.words.push(word);
@@ -540,10 +567,12 @@ impl Lexer {
         );
         let outer_word = std::mem::take(&mut self.word);
         let outer_looked_up = std::mem::take(&mut self.looked_up);
+        let outer_hidden = std::mem::take(&mut self.hidden);
         self.open.push(Open {
             outer,
             outer_word,
             outer_looked_up,
+            outer_hidden,
             first: self.done.len(),
             backtick,
             output,
@@ -568,6 +597,7 @@ impl Lexer {
             self.current = open.outer;
             self.word = open.outer_word;
             self.looked_up = open.outer_looked_up;
+            self.hidden = open.outer_hidden;
             if !open.output {
                 self.word.push_str(UNSEEN_OUTPUT);
             }
@@ -607,6 +637,7 @@ impl Lexer {
         }
         self.word = open.outer_word;
         self.looked_up = open.outer_looked_up;
+        self.hidden = open.outer_hidden || spliced.is_some();
         if !open.output {
             // Not literal text: the output of a lookup or of `cd X && pwd`.
             self.looked_up |= spliced.is_some()
@@ -674,6 +705,7 @@ impl Lexer {
                 }
                 '}' if self.word.is_empty() => self.close_bracket(),
                 '\\' => self.current.escaped = true,
+                HIDDEN => self.hidden = true,
                 '\'' | '"' | '{' | '}' => {}
                 '<' if next == Some('<') && chars.get(index + 2) == Some(&'<') => {
                     self.flush();

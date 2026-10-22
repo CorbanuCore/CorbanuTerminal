@@ -70,6 +70,95 @@ const DENIAL_MARKERS: [&str; 3] = [
     "read-only file system",
 ];
 
+/// #1296: whether commands run on Windows, where PowerShell and cmd spell
+/// paths (`C:\Users\me`, `$env:USERPROFILE`, `%USERPROFILE%`) and report
+/// denials (`Access is denied.`) their own way.
+const WINDOWS: bool = cfg!(windows);
+
+/// Whether `line` reports a denial (see [`DENIAL_MARKERS`]); `windows`
+/// (#1296) adds Windows' texts: cmd's (Win32's) `Access is denied.` and
+/// PowerShell's (.NET's) `Access to the path '…' is denied.`.
+fn is_denial_line(line: &str, windows: bool) -> bool {
+    let line = line.to_ascii_lowercase();
+    DENIAL_MARKERS.iter().any(|marker| line.contains(marker))
+        || (windows
+            && (line.contains("access is denied")
+                || (line.contains("access to the path") && line.contains("is denied"))))
+}
+
+/// #1296: cmd's bare `Access is denied.` names no path, so the denial is
+/// attributed to the protected path the command names.
+fn names_no_path(line: &str, windows: bool) -> bool {
+    windows
+        && line
+            .trim()
+            .trim_end_matches('.')
+            .eq_ignore_ascii_case("access is denied")
+}
+
+/// The words of `command`, shell scripts split into words. #1296: with
+/// `windows`, a command no POSIX shell runs (PowerShell, cmd) is split as
+/// they split it: `\` is a path separator there, not an escape.
+fn command_words(command: &[String], windows: bool) -> Vec<String> {
+    let posix = !windows || command.first().is_some_and(|program| posix_shell(program));
+    command
+        .iter()
+        .flat_map(|argument| {
+            if posix {
+                shlex::split(argument)
+                    .unwrap_or_else(|| argument.split_whitespace().map(str::to_string).collect())
+            } else {
+                windows_words(argument)
+            }
+        })
+        .collect()
+}
+
+/// #1296: whether `program` is a POSIX shell (Git for Windows' `bash.exe`).
+fn posix_shell(program: &str) -> bool {
+    let name = program
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(program)
+        .to_ascii_lowercase();
+    let name = name.strip_suffix(".exe").unwrap_or(&name);
+    matches!(name, "bash" | "sh" | "zsh" | "dash" | "ksh")
+}
+
+/// #1296: `text` split into words as PowerShell and cmd split it, as far as
+/// paths go: at whitespace outside quotes; `'…'` and `"…"` quote (the quotes
+/// are dropped); `\` is kept.
+fn windows_words(text: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut word = String::new();
+    let mut started = false;
+    let mut quote = None;
+    for ch in text.chars() {
+        match quote {
+            Some(open) if ch == open => quote = None,
+            Some(_) => word.push(ch),
+            None if ch == '\'' || ch == '"' => {
+                quote = Some(ch);
+                started = true;
+            }
+            None if ch.is_whitespace() => {
+                if started {
+                    words.push(std::mem::take(&mut word));
+                    started = false;
+                }
+            }
+            None => {
+                word.push(ch);
+                started = true;
+            }
+        }
+    }
+    if started {
+        words.push(word);
+    }
+    words
+}
+
 /// How long the path lookups may take before no explanation is given.
 const LOOKUP_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -605,10 +694,7 @@ pub(crate) async fn denial_explanation(
     }
     let denial_lines: Vec<String> = output
         .lines()
-        .filter(|line| {
-            let line = line.to_ascii_lowercase();
-            DENIAL_MARKERS.iter().any(|marker| line.contains(marker))
-        })
+        .filter(|line| is_denial_line(line, WINDOWS))
         .map(str::to_string)
         .collect();
     if denial_lines.is_empty() {
@@ -793,12 +879,8 @@ fn path_in_lines(
     }
     let mut bases = vec![cwd.to_path_buf()];
     bases.extend(
-        command
-            .iter()
-            .flat_map(|argument| {
-                shlex::split(argument)
-                    .unwrap_or_else(|| argument.split_whitespace().map(str::to_string).collect())
-            })
+        command_words(command, WINDOWS)
+            .into_iter()
             .map(|word| {
                 word.trim_matches(|c: char| matches!(c, ';' | '|' | '&' | '(' | ')'))
                     .to_string()
@@ -1258,12 +1340,8 @@ pub(super) fn denied_word(
     denied: impl Fn(&Path) -> bool,
     denial_lines: Option<&[String]>,
 ) -> Option<String> {
-    command
-        .iter()
-        .flat_map(|argument| {
-            shlex::split(argument)
-                .unwrap_or_else(|| argument.split_whitespace().map(str::to_string).collect())
-        })
+    command_words(command, WINDOWS)
+        .into_iter()
         .flat_map(|whole| {
             // `--file=.env`, `<.env`, `.env;`: the path part of the word.
             let word = whole.trim_matches(|c: char| matches!(c, ';' | '|' | '&' | '(' | ')'));
@@ -1301,7 +1379,11 @@ pub(super) fn denied_word(
                     .iter()
                     .flatten()
                     .filter_map(|name| name.to_str())
-                    .any(|name| lines.iter().any(|line| line.contains(name)))
+                    .any(|name| {
+                        lines
+                            .iter()
+                            .any(|line| line.contains(name) || names_no_path(line, WINDOWS))
+                    })
             }) && denied(path.as_path())
         })
 }
@@ -1374,8 +1456,33 @@ fn embedded_paths(word: &str) -> Vec<String> {
 }
 
 fn resolve(word: &str, cwd: &Path, user_home: Option<&Path>, codex_home: &Path) -> Option<PathBuf> {
+    expand(word, cwd, user_home, codex_home, WINDOWS).map(|expanded| cwd.join(expanded))
+}
+
+/// `word` with the home variables and `~` expanded; `None` when another
+/// variable is left. #1296: `windows` adds PowerShell's and cmd's spellings
+/// (`$env:USERPROFILE`, `${env:CODEX_HOME}`, `%USERPROFILE%`, in any letter
+/// case) and `~\`.
+fn expand(
+    word: &str,
+    cwd: &Path,
+    user_home: Option<&Path>,
+    codex_home: &Path,
+    windows: bool,
+) -> Option<String> {
     let codex_home = codex_home.to_string_lossy();
     let mut expanded = word.to_string();
+    if windows {
+        let user_home = user_home.map(Path::to_string_lossy);
+        expanded = super::tainted_action::windows_paths::expand(
+            &expanded,
+            &super::tainted_action::windows_paths::Values {
+                codex_home: &codex_home,
+                user_home: user_home.as_deref(),
+                cwd: &cwd.to_string_lossy(),
+            },
+        );
+    }
     for name in ["CODEX_HOME", "CORBANU_HOME", "PFTERMINAL_HOME"] {
         for spelling in [format!("${{{name}}}"), format!("${name}")] {
             expanded = expanded.replace(&spelling, &codex_home);
@@ -1389,12 +1496,14 @@ fn resolve(word: &str, cwd: &Path, user_home: Option<&Path>, codex_home: &Path) 
             expanded = home.into_owned();
         } else if let Some(rest) = expanded.strip_prefix("~/") {
             expanded = format!("{home}/{rest}");
+        } else if let Some(rest) = expanded.strip_prefix("~\\").filter(|_| windows) {
+            expanded = format!("{home}\\{rest}");
         }
     }
     if expanded.contains('$') || expanded.starts_with('~') {
         return None;
     }
-    Some(cwd.join(expanded))
+    Some(expanded)
 }
 
 mod moderate;

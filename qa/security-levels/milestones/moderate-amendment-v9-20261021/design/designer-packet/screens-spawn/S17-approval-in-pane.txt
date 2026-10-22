@@ -1,0 +1,20 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.2 xhigh   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+› Append 'child' to ../outside-notes.txt, asking approval to run outside the sandbox; then run cat ~/.aws/credentials (create a synthetic ~/.aws/
+  credentials first from the tester's own shell); then cat the product home's config.toml
+• [the agent's reply text before the command, omitted]
+◦ Running printf 'child' >> ../outside-notes.txt
+  Would you like to run the following command?
+  Environment: local
+  Reason: Under security level Moderate it still runs inside the sandbox, even if you approve: writes outside your writable folders and network your
+  sandbox blocks still fail.
+  $ printf 'child' >> ../outside-notes.txt
+› 1. Yes, proceed (y)
+  2. Yes, and don't ask again for commands that start with `printf 'child' >> ../outside-notes.txt`
+  3. No, and tell Corbanu Terminal what to do differently (esc)
+  A letter in brackets only highlights its option; enter confirms it. Options that last beyond this request: choose with ↑/↓, then enter.
+  Press enter to confirm or esc to cancel

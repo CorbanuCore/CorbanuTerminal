@@ -357,6 +357,19 @@ async fn thread_agent_message_reaches_another_root_thread_as_agent_mail() -> Res
         );
     }
     assert!(input.contains("<inter_agent_message "), "{input}");
+    // #1248: both roots are `/root` in their own trees, so the recipient is told which
+    // tree sent it; the message is still the agent's, not the person's.
+    let expected = format!(
+        "<inter_agent_message sender=\"/root\" recipient=\"/root\">\n\
+         Sender: agent /root in another pane's agent tree (thread {}), not this pane's /root\n\
+         agent task for another root 1176\n\
+         </inter_agent_message>",
+        source.id
+    );
+    assert!(
+        user_texts.iter().any(|text| text == &expected),
+        "expected {expected:?} in {user_texts:?}"
+    );
     Ok(())
 }
 

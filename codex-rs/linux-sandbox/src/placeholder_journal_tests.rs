@@ -64,6 +64,34 @@ impl Setup {
     fn sweep(&mut self) {
         self.journal.sweep(&|_, _| false);
     }
+
+    fn left_folder_with_children(&self, children: usize) -> PathBuf {
+        let folder = self.base.join("home/.git");
+        let paths = (0..children)
+            .map(|index| folder.join(format!("child-{index}")))
+            .collect::<Vec<_>>();
+        let mut planned = vec![Planned {
+            kind: Kind::Directory,
+            path: &folder,
+            real: &folder,
+            makes: true,
+        }];
+        planned.extend(paths.iter().map(|path| Planned {
+            kind: Kind::File,
+            path,
+            real: path,
+            makes: true,
+        }));
+        let mut maker =
+            open_journal(&self.base.join("corbanu/sandbox-placeholders")).expect("maker");
+        maker.register(&planned, &[]);
+        let records = self.records();
+        assert_eq!(records.len(), 1);
+        let record = maker.read(&records[0]).expect("record");
+        maker.remove_record().expect("unlink");
+        self.write(ended(), record.entries);
+        folder
+    }
 }
 
 /// A run that has ended: its pid is gone (or names another process, which
@@ -252,6 +280,113 @@ fn a_placeholder_a_run_made_and_left_is_removed() {
     assert!(std::fs::symlink_metadata(&folder).is_err());
     assert_eq!(setup.records(), Vec::<String>::new());
     assert_eq!(setup.report(), "");
+}
+
+#[test]
+fn a_sweep_limits_successful_removals_across_records_and_resumes() {
+    let mut setup = Setup::new();
+    for group in 0..2 {
+        let entries = (0..40)
+            .map(|index| {
+                let path = setup.base.join(format!("home/group-{group}-{index}"));
+                let identity = make_placeholder(&path, Kind::File).expect("placeholder");
+                Entry::Made {
+                    kind: Kind::File,
+                    path: path.clone(),
+                    real: path,
+                    identity,
+                }
+            })
+            .collect();
+        setup.write(ended(), entries);
+    }
+    assert_eq!(setup.records().len(), 2);
+
+    setup.sweep();
+
+    assert_eq!(
+        std::fs::read_dir(setup.base.join("home"))
+            .expect("home")
+            .count(),
+        16
+    );
+    let remaining = setup
+        .records()
+        .iter()
+        .map(|name| setup.journal.read(name).expect("deferred record"))
+        .flat_map(|record| record.entries)
+        .collect::<Vec<_>>();
+    assert_eq!(remaining.len(), 16);
+    assert!(remaining.iter().all(|entry| entry.paths().1.is_file()));
+    assert_eq!(setup.report(), "");
+
+    setup.sweep();
+
+    assert_eq!(
+        std::fs::read_dir(setup.base.join("home"))
+            .expect("home")
+            .count(),
+        0
+    );
+    assert_eq!(setup.records(), Vec::<String>::new());
+    assert_eq!(setup.report(), "");
+}
+
+#[test]
+fn a_deferred_parent_keeps_the_identity_its_removed_children_left() {
+    let mut setup = Setup::new();
+    let folder = setup.left_folder_with_children(/*children*/ 64);
+
+    setup.sweep();
+
+    assert!(folder.is_dir(), "the parent is deferred after 64 removals");
+    assert_eq!(std::fs::read_dir(&folder).expect("folder").count(), 0);
+    let names = setup.records();
+    assert_eq!(names.len(), 1);
+    let record = setup.journal.read(&names[0]).expect("deferred record");
+    let found = crate::placeholder_registry::find_without_links(&folder)
+        .expect("lookup")
+        .expect("parent");
+    assert_eq!(
+        record.entries,
+        vec![Entry::Made {
+            kind: Kind::Directory,
+            path: folder.clone(),
+            real: folder.clone(),
+            identity: Identity::of(&found.status),
+        }]
+    );
+
+    setup.sweep();
+
+    assert!(!folder.exists(), "{}", setup.report());
+    assert_eq!(setup.records(), Vec::<String>::new());
+    assert_eq!(setup.report(), "");
+}
+
+#[test]
+fn a_deferred_parent_changed_between_sweeps_is_still_kept() {
+    let mut setup = Setup::new();
+    let folder = setup.left_folder_with_children(/*children*/ 64);
+
+    setup.sweep();
+
+    assert!(folder.is_dir());
+    tick();
+    std::fs::set_permissions(&folder, std::fs::Permissions::from_mode(0o700))
+        .expect("the person changes the parent");
+    setup.sweep();
+
+    assert_eq!(
+        std::fs::symlink_metadata(&folder)
+            .expect("kept parent")
+            .permissions()
+            .mode()
+            & 0o777,
+        0o700
+    );
+    assert_eq!(setup.records(), Vec::<String>::new(), "reported once");
+    assert!(setup.report().contains(".git"), "{}", setup.report());
 }
 
 #[test]

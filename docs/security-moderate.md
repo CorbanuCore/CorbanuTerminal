@@ -113,8 +113,8 @@ first, with or without command output on the line:
 
 - zsh glob qualifiers that run code: `e` and `oe` with code
   (`ls *(e:'rm x':)`) and `+name` (`ls *(+f)`) (#1028). Quoted text that zsh
-  would read that way asks too, such as `git commit -m "fix(tests): x"`, but
-  only where zsh may run the line (#1172, D85). A line that runs as
+  would read that way asks too, such as `git commit -m "fix(tests): x"`,
+  except on the plain lines described next (#1172, D85). A line that runs as
   `-c` or `-lc` under a system `bash` or `dash` (`/bin/bash`,
   `/usr/bin/bash`, `/bin/dash`, `/usr/bin/dash`, or a `/bin/sh` or
   `/usr/bin/sh` that is one of them, as on macOS) doesn't ask for this when
@@ -126,13 +126,17 @@ first, with or without command output on the line:
   or `[`). Plain means literal words joined by `;`, `&&`, `||`, `|` or a
   newline: no `$(...)`, variables, redirections, groups, assignments, `if`
   or loops, comments, backslashes or control characters (and no non-ASCII
-  character right before `|`, a brace, a bracket or `~`). So
-  `git commit -m "fix(tests): x"` under `/bin/bash` doesn't ask for this.
-  The same line still asks under zsh (for example when your shell is zsh),
-  under a shell named without one of those system paths (such as `bash` or
+  character right before `|`, a brace, a bracket or `~`). A system `zsh`
+  (`/bin/zsh`, `/usr/bin/zsh`, the macOS default) doesn't ask for this
+  either when such a line also has no `cd`, no `''` and no unquoted
+  parenthesis, glob character, brace, `~` or expansion in any word (#932,
+  #1197). So `git commit -m "fix(tests): x"` runs without this question
+  under `/bin/bash` and under `/bin/zsh`. It still asks unquoted
+  (`git commit -m fix(tests)`), beside a variable or other expansion, under
+  a shell named without one of those system paths (such as `zsh`, `bash` or
   Homebrew's `/opt/homebrew/bin/bash`), with any other program on it, when
   typed into a running shell, and for every command when the zsh-fork shell
-  is on. zsh lines still ask (#932 tracks this).
+  is on.
 - bash's prompt expansion `${v@P}`, which runs any `$(...)` in the value, as
   `eval` would (#1012). Other ways a shell runs a variable's value
   (`PS4` with `set -x`, zsh's `${(e)v}` and `print -P`, `trap "$v"`) aren't

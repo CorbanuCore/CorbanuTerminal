@@ -34,6 +34,7 @@ mod git_helpers;
 mod grammar;
 mod indirect;
 mod invocation;
+mod launched_git;
 mod named_shell;
 mod nested;
 mod outbound;
@@ -43,6 +44,10 @@ mod quoted;
 mod sed;
 mod shadow;
 mod shell;
+/// #1296: also expands the Windows home spellings for protected-read
+/// explanations (`protected_reads`).
+pub(crate) mod windows_paths;
+mod windows_shell;
 mod work;
 
 pub(crate) use paths::USER_PERSISTENCE;
@@ -415,12 +420,52 @@ pub(super) fn classify_as_named_with(
 
 /// The classifier after judging the action, with its counters. `as_named`:
 /// the host runs the action as its argv names (see [`classify_as_named`]).
+/// #1240: on Windows the action is also judged under Windows path rules
+/// (`windows_paths`, `windows_shell`), and the stronger finding is kept:
+/// the first judgment is the same as on every other platform, so the
+/// Windows view only adds findings.
 fn classified(
     action: &ApprovalAction,
     codex_home: &Path,
     user_home: Option<&Path>,
     as_named: bool,
 ) -> Classifier {
+    let mut classifier = judged(action, Homes::new(codex_home, user_home), as_named);
+    if cfg!(windows) {
+        let windows = judged(action, Homes::windows(codex_home, user_home), as_named);
+        if let Some(kind) = windows.found {
+            classifier.note(kind);
+        }
+    }
+    classifier
+}
+
+/// #1240: [`classify_with`] of a command run in `cwd` as on Windows, on any
+/// platform (an action cannot hold a Windows folder elsewhere). Filesystem
+/// lookups under Windows rules happen only on Windows.
+#[cfg(test)]
+pub(super) fn classify_as_windows(
+    command: &[String],
+    cwd: &str,
+    codex_home: &Path,
+    user_home: Option<&Path>,
+) -> Option<ProtectedActionKind> {
+    let mut classifier =
+        Classifier::new(Homes::new(codex_home, user_home), /*avoids_zsh*/ false);
+    classifier.judge_command(command, cwd);
+    let mut windows = Classifier::new(
+        Homes::windows(codex_home, user_home),
+        /*avoids_zsh*/ false,
+    );
+    windows.judge_command(command, cwd);
+    if let Some(kind) = windows.found {
+        classifier.note(kind);
+    }
+    classifier.found
+}
+
+/// One judgment of the action, under the path rules of `homes`.
+fn judged(action: &ApprovalAction, homes: Homes, as_named: bool) -> Classifier {
     let avoids_zsh = as_named
         && match action {
             ApprovalAction::Shell { command, .. } | ApprovalAction::ExecCommand { command, .. } => {
@@ -428,33 +473,11 @@ fn classified(
             }
             ApprovalAction::ApplyPatch { .. } => false,
         };
-    let mut classifier = Classifier {
-        avoids_zsh,
-        homes: Homes::new(codex_home, user_home),
-        found: None,
-        scripts_read: 0,
-        rebuilt: 0,
-        not_shell: 0,
-        sed_scope: None,
-        ran: Vec::new(),
-        ran_unknown: false,
-        written: Vec::new(),
-        nested_scripts: 0,
-        substitution_budget: Budget {
-            left: MAX_SUBSTITUTED_BYTES,
-            small_left: MAX_SUBSTITUTED_BYTES,
-        },
-        classified_bytes: 0,
-        classified_lines: 0,
-        compared: shadow::Budget::new(),
-    };
+    let mut classifier = Classifier::new(homes, avoids_zsh);
     match action {
         ApprovalAction::Shell { command, cwd, .. }
         | ApprovalAction::ExecCommand { command, cwd, .. } => {
-            let cwd = path_text(cwd);
-            classifier.homes.allow_lookups_under(&cwd);
-            classifier.path(&cwd);
-            classifier.command(command, &cwd, /*depth*/ 0);
+            classifier.judge_command(command, &path_text(cwd));
         }
         ApprovalAction::ApplyPatch {
             files, patch, cwd, ..
@@ -492,6 +515,42 @@ fn classified(
     classifier
 }
 
+impl Classifier {
+    fn new(homes: Homes, avoids_zsh: bool) -> Self {
+        Self {
+            avoids_zsh,
+            homes,
+            found: None,
+            scripts_read: 0,
+            rebuilt: 0,
+            not_shell: 0,
+            sed_scope: None,
+            ran: Vec::new(),
+            ran_unknown: false,
+            written: Vec::new(),
+            nested_scripts: 0,
+            unknown_folder: 0,
+            launched: launched_git::Launch::default(),
+            substitution_budget: Budget {
+                left: MAX_SUBSTITUTED_BYTES,
+                small_left: MAX_SUBSTITUTED_BYTES,
+            },
+            classified_bytes: 0,
+            classified_lines: 0,
+            compared: shadow::Budget::new(),
+            windows_decoded: HashSet::new(),
+            windows_budget: windows_shell::RESOLVE_BUDGET,
+        }
+    }
+
+    /// Judge a command line run in `cwd`.
+    fn judge_command(&mut self, command: &[String], cwd: &str) {
+        self.homes.allow_lookups_under(cwd);
+        self.path(cwd);
+        self.command(command, cwd, /*depth*/ 0);
+    }
+}
+
 fn path_text(path: &PathUri) -> String {
     path.to_abs_path()
         .map(|path| path.as_path().to_string_lossy().into_owned())
@@ -514,28 +573,132 @@ fn rank(kind: ProtectedActionKind) -> u8 {
 
 /// Commands that install something to run later outside the sandbox:
 /// cron, launchd and systemd user units (PF-23-S02; git config is judged by
-/// [`GitConfigWrites`]). `args` are lowercase.
-fn persistence_command(name: &str, args: &[String]) -> bool {
-    let has = |word: &str| args.iter().any(|arg| arg == word);
+/// [`GitConfigWrites`]), given the words after `name` (`later` from `from`).
+fn persistence_command(name: &str, later: &mut LaterWords, from: usize) -> bool {
     match name {
-        "crontab" => !has("-l"),
-        "launchctl" => ["load", "bootstrap", "submit", "enable"]
-            .iter()
-            .any(|verb| has(verb)),
-        "systemctl" => has("--user") && ["enable", "link", "edit"].iter().any(|verb| has(verb)),
+        "crontab" => !later.holds(from, &["-l"]),
+        "launchctl" => later.holds(from, &["load", "bootstrap", "submit", "enable"]),
+        "systemctl" => {
+            later.holds(from, &["--user"]) && later.holds(from, &["enable", "link", "edit"])
+        }
         _ => false,
     }
 }
 
+/// #1275: what the words after each word of a simple command hold, for the
+/// checks made on each command word (credential, persistence and Corbanu
+/// CLI commands). Each is worked out once, on its first use, so judging
+/// every copy of a command word (`gh gh gh …`) stays linear.
+struct LaterWords<'a> {
+    /// The command's words, lowercase.
+    words: &'a [String],
+    /// For a set of words, whether each word or one after it is in it.
+    holding: Vec<(&'static [&'static str], Vec<bool>)>,
+    /// Whether each word or one after it widens a Corbanu CLI run's policy.
+    policy_flags: Option<Vec<bool>>,
+    /// The CLI subcommand of the words from each word on.
+    subcommands: Option<Vec<Option<usize>>>,
+}
+
+impl<'a> LaterWords<'a> {
+    fn new(words: &'a [String]) -> Self {
+        Self {
+            words,
+            holding: Vec::new(),
+            policy_flags: None,
+            subcommands: None,
+        }
+    }
+
+    /// Whether `words[from..]` holds one of `set`.
+    fn holds(&mut self, from: usize, set: &'static [&'static str]) -> bool {
+        let words = self.words;
+        // Sets are constants: there are a few of them.
+        let at = match self.holding.iter().position(|(known, _)| {
+            work::step();
+            *known == set
+        }) {
+            Some(at) => at,
+            None => {
+                let held = suffix_any(words.len(), |at| set.contains(&words[at].as_str()));
+                self.holding.push((set, held));
+                self.holding.len() - 1
+            }
+        };
+        self.holding[at].1.get(from).copied().unwrap_or(false)
+    }
+
+    /// Whether a Corbanu CLI run given `words[from..]` has its policy
+    /// widened by a flag or a `-c` override.
+    fn policy_flag(&mut self, from: usize) -> bool {
+        let words = self.words;
+        let flags = self.policy_flags.get_or_insert_with(|| {
+            let policy_key =
+                |value: &str| POLICY_CONFIG_KEYS.iter().any(|key| value.starts_with(key));
+            suffix_any(words.len(), |at| {
+                let word = &words[at];
+                CLI_POLICY_FLAGS.iter().any(|flag| word.contains(flag))
+                    || word.starts_with("--dangerously")
+                    || word.strip_prefix("--config=").is_some_and(policy_key)
+                    || (word.len() > 2 && word.strip_prefix("-c").is_some_and(policy_key))
+                    || (matches!(word.as_str(), "-c" | "--config")
+                        && words.get(at + 1).is_some_and(|value| policy_key(value)))
+            })
+        });
+        flags.get(from).copied().unwrap_or(false)
+    }
+
+    /// The CLI subcommand of `words[from..]`: the first word that is neither
+    /// a flag nor a flag's value.
+    fn subcommand(&mut self, from: usize) -> Option<&'a str> {
+        let words = self.words;
+        let subcommands = self.subcommands.get_or_insert_with(|| {
+            let mut subcommands = vec![None; words.len() + 2];
+            for (at, word) in words.iter().enumerate().rev() {
+                work::step();
+                subcommands[at] = if !word.starts_with('-') {
+                    Some(at)
+                } else if !word.contains('=') && CLI_VALUE_FLAGS.contains(&word.as_str()) {
+                    subcommands[at + 2]
+                } else {
+                    subcommands[at + 1]
+                };
+            }
+            subcommands
+        });
+        subcommands
+            .get(from)
+            .copied()
+            .flatten()
+            .map(|at| words[at].as_str())
+    }
+}
+
+/// For each of `len` words and the end, whether `check` holds for it or a
+/// word after it.
+fn suffix_any(len: usize, check: impl Fn(usize) -> bool) -> Vec<bool> {
+    let mut held = vec![false; len + 1];
+    for at in (0..len).rev() {
+        work::step();
+        held[at] = held[at + 1] || check(at);
+    }
+    held
+}
+
 /// #1159: whether `git config` writes global config or a git key that runs
 /// a program, for each git word of a simple command (`git`, `git.exe`, a
-/// dashed helper such as `git-config` that gives its subcommand apart).
-/// What follows each word is worked out once, on the first git word, so
-/// judging every git word of a line (`git config git config …`) stays
-/// linear.
+/// dashed helper such as `git-config` that gives its subcommand apart),
+/// or opens it in an editor (#1255: `git config -e`). What follows each
+/// word is worked out once, on the first git word, so judging every git
+/// word of a line (`git config git config …`) stays linear.
 struct GitConfigWrites<'a> {
     /// The command's words, lowercase.
     words: &'a [String],
+    /// #1283: which of them the quote-aware reading cannot spell as a name,
+    /// and which it cannot know (see `Classifier::word_marks`); empty when
+    /// unknown.
+    hidden: &'a [bool],
+    unchecked: &'a [bool],
     seen: Option<FollowingWords>,
 }
 
@@ -548,20 +711,37 @@ struct FollowingWords {
     persisting: Vec<bool>,
     /// Whether, as the words after `config`, they only read.
     reads: Vec<bool>,
+    /// #1255: whether, as the words after `config`, they open an editor.
+    edits: Vec<bool>,
+    /// #1255: whether a `config` among them is followed by words that open
+    /// an editor (any of them: the first may be an option's value, as in
+    /// `git -C config config -e`).
+    config_edits: Vec<bool>,
+    /// #1283: whether one of them is unchecked, or may open an editor.
+    unchecked: Vec<bool>,
+    editor_words: Vec<bool>,
 }
 
 impl<'a> GitConfigWrites<'a> {
-    fn new(words: &'a [String]) -> Self {
-        Self { words, seen: None }
+    fn new(words: &'a [String], hidden: &'a [bool], unchecked: &'a [bool]) -> Self {
+        Self {
+            words,
+            hidden,
+            unchecked,
+            seen: None,
+        }
     }
 
     /// Whether `git <subcommand> words[from..]` (or `git words[from..]`)
     /// writes such config.
     fn persists(&mut self, from: usize, subcommand: Option<&str>) -> bool {
         let words = self.words;
+        let unchecked = self.unchecked;
         let seen = self.seen.get_or_insert_with(|| {
             let mut next_config = vec![None; words.len() + 1];
             let mut persisting = vec![false; words.len() + 1];
+            let edits = outputs::git_config_edits_each(words);
+            let mut config_edits = vec![false; words.len() + 1];
             for (at, word) in words.iter().enumerate().rev() {
                 work::step();
                 next_config[at] = if word == "config" {
@@ -569,28 +749,51 @@ impl<'a> GitConfigWrites<'a> {
                 } else {
                     next_config[at + 1]
                 };
+                config_edits[at] = config_edits[at + 1] || (word == "config" && edits[at + 1]);
                 persisting[at] = persisting[at + 1]
                     || matches!(word.as_str(), "--global" | "--system")
                     || GIT_RUN_KEYS.contains(&word.as_str())
                     || word.starts_with("alias.");
             }
             FollowingWords {
+                unchecked: suffix_any(words.len(), |at| {
+                    unchecked.get(at).copied().unwrap_or(false)
+                }),
+                editor_words: suffix_any(words.len(), |at| outputs::may_open_editor(&words[at])),
                 next_config,
                 persisting,
                 // #1141: a reading word given as a value (`git config -f f k
                 // get`) does not make it a read.
                 reads: outputs::git_config_reads_each(words),
+                edits,
+                config_edits,
             }
         });
+        let flag = |flags: &[bool], at: usize| flags.get(at).copied().unwrap_or(false);
+        let edits = flag(&seen.config_edits, from)
+            || (subcommand == Some("config") && flag(&seen.edits, from));
         let start = if subcommand == Some("config") {
             from
         } else {
             match seen.next_config.get(from).copied().flatten() {
                 Some(at) => at + 1,
-                None => return false,
+                None => return edits,
             }
         };
-        start < seen.reads.len() && !seen.reads[start] && seen.persisting[start]
+        // #1283: git or its `config` spelled by text the quote-aware reading
+        // cannot see (`{git,config}`, `$g config`): that reading, which keeps
+        // quoted values whole, cannot check what this one makes of them.
+        let hidden = |at: usize| self.hidden.get(at).copied().unwrap_or(false);
+        if hidden(from - 1) || hidden(start - 1) {
+            return true;
+        }
+        // A word it cannot know (`"$k"` with `k=core.pager`): judged here
+        // only, where quoted text is split, so a read is not trusted and any
+        // editor option counts.
+        if flag(&seen.unchecked, from) {
+            return edits || flag(&seen.editor_words, start) || flag(&seen.persisting, start);
+        }
+        edits || (start < seen.reads.len() && !seen.reads[start] && seen.persisting[start])
     }
 }
 
@@ -609,37 +812,22 @@ fn folder_bases(folder: &str, chained: &[String], cwd: &str) -> Vec<String> {
     bases
 }
 
-/// The CLI subcommand: the first word that is neither a flag nor a flag's value.
-fn subcommand(args: &[String]) -> Option<&str> {
-    const VALUE_FLAGS: &[&str] = &[
-        "-c",
-        "--config",
-        "-p",
-        "--profile",
-        "-m",
-        "--model",
-        "--cd",
-        "-s",
-        "--sandbox",
-        "-a",
-        "--ask-for-approval",
-        "-i",
-        "--image",
-    ];
-    let mut skip = false;
-    for word in args {
-        work::step();
-        if std::mem::take(&mut skip) {
-            continue;
-        }
-        if word.starts_with('-') {
-            skip = !word.contains('=') && VALUE_FLAGS.contains(&word.as_str());
-            continue;
-        }
-        return Some(word.as_str());
-    }
-    None
-}
+/// Corbanu CLI flags that take the next word as their value.
+const CLI_VALUE_FLAGS: &[&str] = &[
+    "-c",
+    "--config",
+    "-p",
+    "--profile",
+    "-m",
+    "--model",
+    "--cd",
+    "-s",
+    "--sandbox",
+    "-a",
+    "--ask-for-approval",
+    "-i",
+    "--image",
+];
 
 /// Whether `word` sets `flag`: exactly for long flags, and inside a group of
 /// short flags (`-rn` sets `-r`).
@@ -670,6 +858,9 @@ struct Folders {
     stack: std::rc::Rc<Vec<String>>,
     /// A `cd`/`pushd` past the folder limits was not followed (#1065).
     unfollowed: bool,
+    /// #1283: a `cd`/`pushd` took a word the quote-aware reading cannot
+    /// know (`D=~; cd "$D"`), so that reading's folder may be wrong.
+    unchecked: bool,
 }
 
 struct Classifier {
@@ -694,6 +885,13 @@ struct Classifier {
     written: Vec<Option<String>>,
     /// #885: nested shell scripts judged so far.
     nested_scripts: usize,
+    /// #1283: inside a nested script whose folder the quote-aware reading
+    /// cannot know (run after `cd "$d"`, or by `env -C`).
+    unknown_folder: usize,
+    /// #1268: inside a script a launcher runs with its input added after
+    /// it (`xargs env -S'git config'`) or put into its text (`xargs -I% sh
+    /// -c 'git config %'`, where any word may be input).
+    launched: launched_git::Launch,
     /// #1065: bytes of variable values left to substitute.
     substitution_budget: Budget,
     /// #1065: bytes of command text, and command lines, lexed so far.
@@ -704,6 +902,12 @@ struct Classifier {
     avoids_zsh: bool,
     /// #932: comparisons left with the grammar.
     compared: shadow::Budget,
+    /// #1240: PowerShell encoded commands the Windows view judged, with
+    /// the folder each was judged in: once each.
+    windows_decoded: HashSet<(String, String)>,
+    /// #1240: bytes of words and folders the Windows view may still
+    /// resolve; past it the action fails closed.
+    windows_budget: usize,
 }
 
 /// #841 (MOD-06): the word classifier splits quoted text into commands on
@@ -958,6 +1162,10 @@ impl Classifier {
             self.note(ProtectedActionKind::UnseenCode);
             return;
         }
+        // #1240: the same text as cmd and PowerShell read it.
+        if self.homes.is_windows() {
+            self.windows_text(command, cwd, depth);
+        }
         // #841: this line's own sed programs (nested lines have theirs).
         let outer_scope = std::mem::replace(&mut self.sed_scope, SedScope::of(command));
         let lexed = shell::simple_commands(command);
@@ -982,6 +1190,7 @@ impl Classifier {
             previous: cwd.to_string(),
             stack: std::rc::Rc::default(),
             unfollowed: false,
+            unchecked: self.unknown_folder > 0,
         };
         let mut variables: HashMap<String, String> = HashMap::new();
         for (name, value) in [
@@ -1003,6 +1212,10 @@ impl Classifier {
         // Values too large to substitute, judged once each (by name and
         // length) while the lexing limits allow.
         let mut judged: HashSet<(String, usize)> = HashSet::new();
+        // #1268: the word lexer drops braces, so a launcher's placeholders
+        // (`{}`, `{.}`) are only seen in the text as written.
+        let braces = command.iter().any(|arg| arg.contains('{'));
+        let mut loops = launched_git::PositionalLoops::default();
         for (index, simple) in lexed.commands.iter().enumerate() {
             work::step();
             let (words, unseen, skipped) =
@@ -1040,8 +1253,10 @@ impl Classifier {
                 &words,
                 &unseen,
                 feeds_pipe,
+                braces,
                 &mut folders,
                 &mut variables,
+                &mut loops,
                 depth,
             );
         }
@@ -1089,11 +1304,22 @@ impl Classifier {
         words: &[String],
         unseen: &[bool],
         feeds_pipe: bool,
+        braces: bool,
         folders: &mut Folders,
         variables: &mut HashMap<String, String>,
+        loops: &mut launched_git::PositionalLoops,
         depth: usize,
     ) {
         let lower: Vec<String> = words.iter().map(|word| word.to_lowercase()).collect();
+        let (hidden, mut unchecked) = self.word_marks(simple, words, variables);
+        loops.read(&simple.words);
+        let looped = loops.marks(&simple.words);
+        // #1283: a loop variable over the positional parameters is a value
+        // neither reading knows, wherever its quoting takes effect.
+        for (unchecked, looped) in unchecked.iter_mut().zip(&looped) {
+            work::step();
+            *unchecked |= *looped;
+        }
         let command = indirect::command_word(words);
         // Assignments (`A=x`, `export A=x`) feed later `$A` words.
         let comment = words.first().is_some_and(|word| word.starts_with('#'));
@@ -1149,29 +1375,50 @@ impl Classifier {
             if self.rebuilt == 0 && (unseen[*index] || inline_unseen || eval_unseen) {
                 self.note(ProtectedActionKind::UnseenCode);
             }
+            folders.unchecked |= matches!(name.as_str(), "cd" | "pushd")
+                && unchecked[index + 1..].iter().any(|word| *word);
             self.change_folder(name, args, folders, variables);
         }
-        let mut git_config = GitConfigWrites::new(&lower);
+        let mut git_config = GitConfigWrites::new(&lower, &hidden, &unchecked);
+        let mut launched_git = launched_git::LaunchedGit::new(
+            words,
+            &lower,
+            braces,
+            self.launched,
+            launched_git::Marks {
+                hidden: &hidden,
+                unchecked: &unchecked,
+                looped: &looped,
+            },
+        );
+        let mut later = LaterWords::new(&lower);
         // Not only at command position: wrappers (`nice -n 5`, `sudo -u x`,
         // `timeout 9`, `eval`, `npx`, nested `sh -c`) put the real command later.
         for (index, word) in lower.iter().enumerate() {
             work::step();
             let name = basename(word);
-            let args = &lower[index + 1..];
             let imported = index > 0 && matches!(lower[index - 1].as_str(), "from" | "import");
             if CLI_NAMES.contains(&name) && !imported {
-                self.cli(args);
+                self.cli(&mut later, index + 1);
             }
             // #1159: git under another name (`git.exe`), or a dashed helper
             // (`/usr/lib/git-core/git-config`) that runs `git <subcommand>`.
-            let helper = git_helpers::git_name(word);
+            // #1276: or a finder's exec option with git attached
+            // (`fd --exec=git`).
+            let git_word = launched_git.attached(index).unwrap_or(word);
+            let is_git = basename(git_word) == "git";
+            let helper = git_helpers::git_name(git_word);
             let subcommand = helper.as_ref().and_then(Option::as_deref);
-            if persistence_command(name, args)
-                || ((name == "git" || helper.is_some())
-                    && git_config.persists(index + 1, subcommand))
+            if persistence_command(name, &mut later, index + 1)
+                || ((is_git || helper.is_some()) && git_config.persists(index + 1, subcommand))
             {
                 self.note(ProtectedActionKind::Persistence);
             }
+            // #1268: git given words from a launcher's input (`xargs git`).
+            if let Some(kind) = launched_git.judge(index, helper.as_ref()) {
+                self.note(kind);
+            }
+            launched_git.step(index);
             // A helper named by text the classifier cannot see may be any
             // subcommand (`git-$x`, `git-conf*`), like `git $x`.
             if subcommand.is_some_and(|subcommand| {
@@ -1186,19 +1433,18 @@ impl Classifier {
             }
             // #1142: `git -c core.pager=…` runs the value (args as written).
             // A dashed helper takes no git options.
-            if (name == "git" || helper == Some(None))
-                && code_variables::git_runs_code(
-                    &words[index + 1..],
-                    simple.words.get(index + 1..).unwrap_or_default(),
-                )
+            let git_args = (
+                &words[index + 1..],
+                simple.words.get(index + 1..).unwrap_or_default(),
+            );
+            if (is_git && code_variables::git_runs_code_after_git(git_args.0, git_args.1))
+                || (helper == Some(None) && code_variables::git_runs_code(git_args.0, git_args.1))
             {
                 self.note(ProtectedActionKind::UnseenCode);
             }
             for (credential_command, verbs) in CREDENTIAL_COMMANDS {
                 work::step();
-                if name == *credential_command
-                    && args.iter().any(|word| verbs.contains(&word.as_str()))
-                {
+                if name == *credential_command && later.holds(index + 1, verbs) {
                     self.note(ProtectedActionKind::Credentials);
                 }
             }
@@ -1233,9 +1479,14 @@ impl Classifier {
         }
         // #1141: an output option makes a writer of its command, and its
         // value is a file written (`git log --output=~/.zshrc`, `-o.zshrc`).
-        let outputs = command
-            .as_ref()
-            .and_then(|(index, name)| outputs::output_files(name, &words[index + 1..]));
+        let outputs = command.as_ref().and_then(|(index, name)| {
+            // #1283: a `config` the quote-aware reading cannot spell.
+            // A wrapper's words count too (`env -C "$d" git`), and so does a
+            // folder changed through one (`cd "$d"`).
+            let unchecked =
+                hidden[*index] || folders.unchecked || unchecked.iter().any(|word| *word);
+            outputs::output_files(name, &words[index + 1..], unchecked)
+        });
         if command
             .as_ref()
             .is_some_and(|(index, name)| outputs::joins_names(name, &words[index + 1..]))
@@ -1304,7 +1555,9 @@ impl Classifier {
                     work::step();
                     let resolved = self.homes.resolve(candidate, base);
                     self.word_path(&resolved, candidate, depth);
-                    if written && self.homes.is_persistence(&resolved) {
+                    if written
+                        && (self.homes.is_persistence(&resolved) || self.unknown_place(candidate))
+                    {
                         self.note(ProtectedActionKind::Persistence);
                     }
                     if recursive && !folder_value && self.homes.holds_a_home(&resolved) {
@@ -1326,12 +1579,64 @@ impl Classifier {
                 // ~`, `--output-directory ~/`) may be the home's.
                 if self.homes.is_persistence(&resolved)
                     || (file.ends_with('/') && self.homes.holds_a_home(&resolved))
+                    || self.unknown_place(file)
                 {
                     self.note(ProtectedActionKind::Persistence);
                 }
             }
         }
         self.scripts_of(simple, words, unseen, command.as_ref(), &cwd, depth);
+    }
+
+    /// #1283: for each of a simple command's words, whether the quote-aware
+    /// reading (`nested.rs`), which checks git on the words as the shell
+    /// passes them on, cannot spell it as a name (`hidden`: `$g` for `git`,
+    /// a brace expansion, `$IFS`, a substitution's output; not
+    /// `"$HOME/bin/git"`), or cannot know its text (`unchecked`: also any
+    /// variable it does not resolve, as in `k=core.pager; git config "$k"`).
+    /// `variables`: as the words were substituted.
+    fn word_marks(
+        &self,
+        simple: &SimpleCommand,
+        words: &[String],
+        variables: &HashMap<String, String>,
+    ) -> (Vec<bool>, Vec<bool>) {
+        let user_home = self.homes.user_home();
+        let codex_home = self.homes.codex_home();
+        // The homes the quote-aware reading resolves itself.
+        let resolved = |name: &str, value: &str| match name {
+            "HOME" => user_home == Some(value),
+            "CODEX_HOME" | "CORBANU_HOME" | "PFTERMINAL_HOME" => codex_home == value,
+            _ => false,
+        };
+        let mut hidden = Vec::with_capacity(words.len());
+        let mut unchecked = Vec::with_capacity(words.len());
+        for (word, raw) in words.iter().zip(&simple.words) {
+            work::step();
+            hidden.push(basename(&word.to_lowercase()) != basename(&raw.to_lowercase()));
+            unchecked.push(
+                word != raw
+                    && raw.match_indices('$').any(|(at, _)| {
+                        work::step();
+                        let after = &raw[at + 1..];
+                        let end = after
+                            .find(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
+                            .unwrap_or(after.len());
+                        let name = &after[..end];
+                        variables
+                            .get(name)
+                            .is_some_and(|value| !resolved(name, value))
+                    }),
+            );
+        }
+        for at in &simple.hidden {
+            work::step();
+            if let (Some(hidden), Some(unchecked)) = (hidden.get_mut(*at), unchecked.get_mut(*at)) {
+                *hidden = true;
+                *unchecked = true;
+            }
+        }
+        (hidden, unchecked)
     }
 
     /// Follow a relative `-C` from the folder before it. Past
@@ -1448,6 +1753,14 @@ impl Classifier {
         }
     }
 
+    /// #1283: in a folder the classifier cannot know, a file named relative
+    /// to it (`.zshenv`, `../x`, `$d/x`) may be any file.
+    fn unknown_place(&self, word: &str) -> bool {
+        self.unknown_folder > 0
+            && (word.contains("..")
+                || self.homes.resolve(word, "/a") != self.homes.resolve(word, "/b"))
+    }
+
     /// Follow `cd`, `pushd` and `popd` (also behind `builtin`/`command`).
     fn change_folder(
         &self,
@@ -1482,23 +1795,19 @@ impl Classifier {
         }
     }
 
-    fn cli(&mut self, args: &[String]) {
-        let policy_key = |value: &str| POLICY_CONFIG_KEYS.iter().any(|key| value.starts_with(key));
-        if args.iter().any(|word| word == "vault") {
+    /// The checks on a Corbanu CLI word, given the words after it (`later`
+    /// from `from`).
+    fn cli(&mut self, later: &mut LaterWords, from: usize) {
+        if later.holds(from, &["vault"]) {
             self.note(ProtectedActionKind::Vault);
         }
-        if subcommand(args).is_some_and(|sub| CLI_POLICY_WORDS.contains(&sub)) {
+        if later
+            .subcommand(from)
+            .is_some_and(|sub| CLI_POLICY_WORDS.contains(&sub))
+        {
             self.note(ProtectedActionKind::SecurityPolicy);
         }
-        let policy_flag = args.iter().enumerate().any(|(index, word)| {
-            CLI_POLICY_FLAGS.iter().any(|flag| word.contains(flag))
-                || word.starts_with("--dangerously")
-                || word.strip_prefix("--config=").is_some_and(policy_key)
-                || (word.len() > 2 && word.strip_prefix("-c").is_some_and(policy_key))
-                || (matches!(word.as_str(), "-c" | "--config")
-                    && args.get(index + 1).is_some_and(|value| policy_key(value)))
-        });
-        if policy_flag {
+        if later.policy_flag(from) {
             self.note(ProtectedActionKind::SecurityPolicy);
         }
     }
@@ -1510,6 +1819,12 @@ impl Classifier {
     /// large, past the file limit, or where lookups are not allowed) fails
     /// closed; an optional one is skipped when it is not there.
     fn script_file(&mut self, file: &str, cwd: &str, depth: usize, need: Script) {
+        // #1240: the first judgment reads script files; the Windows view's
+        // paths are not ones to open (and where it may not look a missing
+        // optional script would read as unreadable).
+        if self.homes.is_windows() {
+            return;
+        }
         self.ran.push(file.to_string());
         let unreadable = |classifier: &mut Self, missing: bool| {
             if need == Script::Required || !missing {

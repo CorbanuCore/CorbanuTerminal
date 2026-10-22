@@ -54,6 +54,9 @@ const REPORT_LIMIT: u64 = 1 << 20;
 const TEMPORARY_STALE_AFTER: Duration = Duration::from_secs(10 * 60);
 /// The largest record file read.
 const RECORD_LIMIT: u64 = 16 << 20;
+/// Leave large cleanup backlogs for later sweeps rather than removing them
+/// all while holding the record folder's lock.
+const SWEEP_REMOVAL_LIMIT: usize = 64;
 /// How long a run waits for the record folder's lock (a backstop: the lock
 /// is a write lock, which a command that sees the folder read-only cannot
 /// take). Then the run goes on without the record, as before (nothing
@@ -1065,7 +1068,11 @@ impl Journal {
         let in_use = |path: &Path, real: &Path| {
             live.iter().any(|(_, record)| uses(record, path, real)) || used_by_registry(path, real)
         };
+        let mut removals_left = SWEEP_REMOVAL_LIMIT;
         for (stem, record) in ended {
+            if removals_left == 0 {
+                break;
+            }
             let mut kept = Vec::new();
             // Deepest first, so a placeholder in a placeholder folder of the
             // same run goes before the folder; the folder is then expected
@@ -1073,8 +1080,20 @@ impl Journal {
             let mut entries = record.entries.clone();
             entries.sort_by_key(|entry| std::cmp::Reverse(entry.paths().1.components().count()));
             let mut expected: HashMap<PathBuf, Identity> = HashMap::new();
-            for entry in entries {
+            for mut entry in entries {
                 if matches!(entry, Entry::Uses { .. }) {
+                    continue;
+                }
+                if removals_left == 0 {
+                    // A child removed in this sweep can change a deferred
+                    // parent. Keep only the identity change already checked
+                    // below, so the next sweep can still check it exactly.
+                    if let Entry::Made { real, identity, .. } = &mut entry
+                        && let Some(after) = expected.get(real)
+                    {
+                        *identity = *after;
+                    }
+                    kept.push(entry);
                     continue;
                 }
                 let (path, real) = entry.paths();
@@ -1105,6 +1124,7 @@ impl Journal {
                                 folder_before,
                                 folder_after,
                             } => {
+                                removals_left -= 1;
                                 // Only the change an unlink makes: times and
                                 // size, never its mode or owner (a chmod or
                                 // chown in between). Both readings come from

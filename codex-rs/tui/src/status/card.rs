@@ -342,16 +342,32 @@ impl StatusHistoryCell {
             || account_usage
                 .as_ref()
                 .is_some_and(StatusAccountUsage::provider_has_named_account);
+        // PF-84-S06: a named sign-in account describes itself; D171 (#1286):
+        // one removed or signed out while the session ran is not presented
+        // as the session's account.
+        let named_sign_in = codex_model_provider::named_sign_in_account(&config.model_provider)
+            .map(|account| {
+                let summary = codex_login::named_account_summary(&config.codex_home, &account);
+                (account, summary)
+            });
+        // With a remote app server the account lives on the remote host, so
+        // this home's vault does not tell.
+        let session_account_gone = remote_connection.is_none()
+            && named_sign_in
+                .as_ref()
+                .is_some_and(|(_, summary)| matches!(summary, Ok(None)));
         let model_provider = format_model_provider(
             config,
             runtime_model_provider_base_url,
             active_account,
             provider_has_named_account,
+            session_account_gone,
         );
         let account_usage = account_usage.filter(|_| provider_has_named_account);
         let show_chatgpt_usage_link = config.model_provider.requires_openai_auth;
         let account = compose_account_display(account_display);
-        let account_value = status_account_value(config, account_display);
+        let account_value =
+            status_account_value(config, account_display, named_sign_in, remote_connection);
         let security = crate::security::view::status_summary(
             config.security_level,
             crate::legacy_core::security_level_change::configured_level(config),
@@ -745,21 +761,30 @@ fn status_approval_label(
 fn status_account_value(
     config: &Config,
     account_display: Option<&StatusAccountDisplay>,
+    named_sign_in: Option<(
+        codex_login::NamedChatgptAccount,
+        std::io::Result<Option<codex_login::NamedSignInSummary>>,
+    )>,
+    remote_connection: Option<&RemoteConnectionStatus>,
 ) -> Option<String> {
     let provider = &config.model_provider;
     // PF-84-S06: a named sign-in account describes itself, never the default
     // login (kind, email hint and plan only).
-    if let Some(account) = codex_model_provider::named_sign_in_account(provider) {
-        let summary = codex_login::named_account_summary(&config.codex_home, &account)
-            .ok()
-            .flatten();
+    if let Some((account, summary)) = named_sign_in {
         return Some(match summary {
-            Some(summary) => format!(
+            Ok(Some(summary)) => format!(
                 "{} (account {})",
                 crate::provider_named_accounts::describe_sign_in(&summary),
                 account.name
             ),
-            None => format!("account {} is not signed in", account.name),
+            // D171 (#1286): removed or signed out, also while the session ran.
+            // Short, as the line is cut at the card's width.
+            Ok(None) if remote_connection.is_none() => format!(
+                "account {name} has no sign-in: `corbanu login --account {name}` or `/providers`",
+                name = account.name
+            ),
+            Ok(None) => format!("account {} is not signed in", account.name),
+            Err(_) => format!("account {} is not signed in", account.name),
         });
     }
     if provider.auth.is_some() {
@@ -1040,6 +1065,7 @@ fn format_model_provider(
     runtime_base_url: Option<&str>,
     active_account: Option<&str>,
     provider_has_named_account: bool,
+    session_account_gone: bool,
 ) -> Option<String> {
     let provider = &config.model_provider;
     let name = provider.name.trim();
@@ -1077,8 +1103,20 @@ fn format_model_provider(
         Some(base_url) => format!("{provider_name} - {base_url}"),
         None => provider_name.to_string(),
     };
-    if let Some(account) = account {
-        value.push_str(&format!(" · account {account}"));
+    match account {
+        // D171 (#1286): the session's account was removed or signed out; the
+        // Account line names it and its recovery.
+        Some(account)
+            if session_account_gone
+                && provider
+                    .account
+                    .as_ref()
+                    .is_some_and(|session| session.name == account) =>
+        {
+            value.push_str(" · account unavailable");
+        }
+        Some(account) => value.push_str(&format!(" · account {account}")),
+        None => {}
     }
     Some(value)
 }

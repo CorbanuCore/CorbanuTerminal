@@ -380,8 +380,32 @@ fn names_in_any_case(operand: &str) -> bool {
 /// `-c 'user.name=a b'`), so after any option a later word may still be
 /// one of git's. Those lines are read to the end: a setting with a value
 /// (`-c k=v`; not `commit -c HEAD`) or a word holding an unseen value
-/// counts. Stops at the next `git` (#1102: each word is scanned once).
+/// counts. Stops at the next `git` that an option follows (#1102: its own
+/// scan reads on from there).
+///
+/// D153: a git name the lexer may have split out of quoted text (`git -c
+/// 'user.name=a git.exe b' -c core.pager=sh log`) is followed by more of
+/// that text, not an option, and a scan from it would take that text for
+/// the subcommand. So the scan reads on past a git name that a word other
+/// than an option follows. The scan from such a name ends at its first
+/// word, and the others end at the next git name an option follows, so
+/// each word is still read by at most two scans.
+///
+/// This is the scan for a word that names git another way (`git.exe`): it
+/// also stops at such names. The scan for a `git` word is
+/// [`git_runs_code_after_git`].
 pub(super) fn git_runs_code(args: &[String], raw: &[String]) -> bool {
+    git_runs_code_until(args, raw, /*other_git_names_stop*/ true)
+}
+
+/// [`git_runs_code`] for a `git` word: like the scan before #1159, it reads
+/// on past `git.exe` and other names for git (D153), and stops only at a
+/// `git`.
+pub(super) fn git_runs_code_after_git(args: &[String], raw: &[String]) -> bool {
+    git_runs_code_until(args, raw, /*other_git_names_stop*/ false)
+}
+
+fn git_runs_code_until(args: &[String], raw: &[String], other_git_names_stop: bool) -> bool {
     let unsafe_key = |setting: &str| {
         let key = setting
             .split_once('=')
@@ -404,7 +428,7 @@ pub(super) fn git_runs_code(args: &[String], raw: &[String]) -> bool {
     // does not end them).
     let is_git = |word: &str| {
         shell::basename(word).eq_ignore_ascii_case("git")
-            || super::git_helpers::git_name(word) == Some(None)
+            || (other_git_names_stop && super::git_helpers::git_name(word) == Some(None))
     };
     // Past the first word that is not an option: only settings with a
     // value, and unseen words, count.
@@ -415,7 +439,12 @@ pub(super) fn git_runs_code(args: &[String], raw: &[String]) -> bool {
         // #1159: an option word ending in a git name (`-ccore.pager=./git`,
         // `--exec-path=./git.exe`) is judged before the scan stops there.
         let option = word.starts_with('-');
-        if !option && is_git(word) {
+        // D153: a git name ends the scan only when an option follows it.
+        let ends_scan = |at: usize| {
+            args.get(at).is_some_and(|word| is_git(word))
+                && args.get(at + 1).is_none_or(|after| after.starts_with('-'))
+        };
+        if !option && ends_scan(index) {
             return false;
         }
         let next = args.get(index + 1).map(String::as_str);
@@ -427,7 +456,7 @@ pub(super) fn git_runs_code(args: &[String], raw: &[String]) -> bool {
                 None => return !past_subcommand,
                 // #1159: the setting first (`-c core.pager=./git`).
                 Some(value) if setting(value, index + 1) => return true,
-                Some(value) if is_git(value) => return false,
+                Some(_) if ends_scan(index + 1) => return false,
                 Some(_) => {}
             }
             index += 2;
@@ -449,7 +478,7 @@ pub(super) fn git_runs_code(args: &[String], raw: &[String]) -> bool {
             }
             past_subcommand = true;
         }
-        if option && is_git(word) {
+        if option && ends_scan(index) {
             return false;
         }
         if !past_subcommand
@@ -459,7 +488,7 @@ pub(super) fn git_runs_code(args: &[String], raw: &[String]) -> bool {
             // A value that is a `git` is checked on its own (#1102); one
             // that looks like an option is read as one (the lexer drops
             // empty words: `-C '' -c k=v`); an unseen one may be options.
-            if is_git(value) {
+            if ends_scan(index + 1) {
                 return false;
             }
             if unseen(index + 1) {
