@@ -286,9 +286,18 @@ impl Classifier {
             self.unknown_folder -= usize::from(unknown);
             self.launched = outer;
         }
+        // Shared targets are the same for every sed in this reading. If
+        // present, they make `elsewhere` true, so judging a sed cannot reach
+        // `self.script` and add a new executed file. If absent, this is false
+        // regardless of later scripts. Judge them once, without copying their
+        // potentially large names for every sed (#1132).
+        let shared_may_run = found
+            .shared_targets
+            .iter()
+            .any(|target| self.may_run(target.as_deref()));
         for sed in std::mem::take(&mut found.seds) {
             work::step();
-            self.judge_sed(sed, &found, depth);
+            self.judge_sed(sed, &found, depth, shared_may_run);
         }
         // A command the word lexer finds that this reading does not
         // (spelled through a variable, braces or `$IFS`) fails closed.
@@ -783,7 +792,7 @@ impl Classifier {
     /// classifier cannot read, or that saves what it outputs to a file the
     /// line runs is code the host cannot read; an in-place edit that only
     /// keeps, drops or adds lines has the text it adds judged instead.
-    fn judge_sed(&mut self, sed: Sed, line: &Found, depth: usize) {
+    fn judge_sed(&mut self, sed: Sed, line: &Found, depth: usize, shared_may_run: bool) {
         // #1240: judged once, by the first judgment (it reads program
         // files; the Windows view does not open files).
         if self.homes.is_windows_view() {
@@ -838,7 +847,6 @@ impl Classifier {
             return;
         }
         let mut targets = sed.saved_to.clone();
-        targets.extend(line.shared_targets.iter().cloned());
         targets.extend(readings.iter().flat_map(|reading| {
             reading
                 .writes
@@ -850,7 +858,7 @@ impl Classifier {
         if sed.substituted && line.other_writes {
             targets.push(None);
         }
-        let elsewhere = !targets.is_empty();
+        let elsewhere = !targets.is_empty() || !line.shared_targets.is_empty();
         if !elsewhere && !call.in_place {
             return;
         }
@@ -861,7 +869,7 @@ impl Classifier {
         if call.in_place {
             targets.extend(call.operands.iter().map(|word| target(known(word))));
         }
-        if !targets.iter().any(|target| self.may_run(target.as_deref())) {
+        if !shared_may_run && !targets.iter().any(|target| self.may_run(target.as_deref())) {
             return;
         }
         if elsewhere || !readings.iter().all(|reading| reading.keeps_lines) {

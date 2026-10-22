@@ -6793,3 +6793,46 @@ fn issue_1309_own_writes_in_possible_folders_are_linear() {
         });
     }
 }
+
+/// #1132: enlarging shared redirection names and the number of sed calls
+/// together must not copy those names for every call. The pipeline has a
+/// fixed eight stages at both sizes, below the existing stage/collection
+/// limits. Count the existing allocator and loop counters, not elapsed time.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1132_shared_targets_are_not_copied_per_sed() {
+    work::assert_linear("shared sed targets", |scale| {
+        let target = "y".repeat(1024 * scale);
+        let pipeline = format!("exec >{target}|").repeat(8);
+        let calls = " sed p;".repeat(64 * scale);
+        let line = format!("{pipeline} cat;{calls}");
+        assert_eq!(script(&line), None);
+    });
+}
+
+/// Sharing target judgement must keep both known and unknown destinations
+/// conservative, while ordinary sed output without an executed script stays
+/// unprotected. These are classified strings; no shell command is executed.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1132_shared_target_judgement_preserves_classification() {
+    use ProtectedActionKind::*;
+    let (_dir, cwd) = issue_885_fixture();
+    let cases = [
+        ("exec >out; sed p; sed p", None),
+        ("exec 3>&1; sed p; sed p", None),
+        ("sed p; sed p", None),
+        ("exec >r.sh; sed p; bash r.sh", Some(UnseenCode)),
+        ("exec >&3; sed p; bash r.sh", Some(UnseenCode)),
+        ("exec >out; sed 'e echo hi'", Some(UnseenCode)),
+        // With no shared target, in-place text may discover another script.
+        ("sed -i '1a bash present.sh' r.sh; bash r.sh; sed p", None),
+    ];
+    assert_eq!(issue_885_wrong(&cwd, &cases), Vec::<String>::new());
+}
