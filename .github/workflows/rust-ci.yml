@@ -47,6 +47,8 @@ jobs:
             echo "Base SHA: $BASE_SHA"
             echo "Head SHA: $HEAD_SHA"
             mapfile -d '' -t files < <(git diff --name-only -z --no-renames "$BASE_SHA" "$HEAD_SHA")
+            diff_pid=$!
+            wait "$diff_pid"
           else
             # On manual runs, default to the full fast-PR bundle.
             files=("codex-rs/force" "tools/argument-comment-lint/force" ".github/force")

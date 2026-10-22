@@ -143,6 +143,10 @@ class PrChangedPathsTest(unittest.TestCase):
             self.detect(["docs/note\ncodex-rs/core/src/lib.rs"]), self.expected()
         )
 
+    def test_git_diff_failure_does_not_report_a_clean_diff(self) -> None:
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.detect([], base="0" * 40)
+
     def test_empty_diff_has_no_area_flags(self) -> None:
         self.assertEqual(self.detect([]), self.expected())
 
