@@ -5586,6 +5586,10 @@ mod elicitation_holders_tests;
 pub(crate) mod tests;
 
 #[cfg(test)]
+#[path = "pending_mailbox_wake_tests.rs"]
+mod pending_mailbox_wake_tests;
+
+#[cfg(test)]
 #[path = "account_switch_tests.rs"]
 mod account_switch_tests;
 
