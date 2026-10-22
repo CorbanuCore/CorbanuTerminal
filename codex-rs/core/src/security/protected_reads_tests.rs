@@ -79,10 +79,6 @@ fn issue_442_finds_the_denied_path_the_command_names() {
 /// `ls "$CODEX_HOME"` and `ls home/tmp/..` are attributed to the home; the
 /// listing explanation names the path as the command spelled it.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_506_listing_denial_is_attributed_through_variables_and_dot_dot() {
     let cwd = Path::new("/work/project");
     let user_home = Path::new("/users/me");
@@ -133,10 +129,6 @@ fn issue_506_listing_denial_is_attributed_through_variables_and_dot_dot() {
 /// folder the command names; the line is attributed to the home as it
 /// spells it, in BSD and GNU forms and relative to the folder a `cd` names.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_554_recursive_listing_of_a_parent_is_attributed_to_the_home() {
     let cwd = Path::new("/work/project");
     let user_home = Path::new("/users/me");
@@ -372,10 +364,6 @@ async fn issue_1194_a_split_denial_line_is_still_explained() {
 /// like a path argument, so no grant is offered for it; code that names no
 /// protected path is left alone.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_621_finds_the_denied_path_inside_interpreter_code() {
     let cwd = Path::new("/work/project");
     let user_home = Path::new("/Users/someone");

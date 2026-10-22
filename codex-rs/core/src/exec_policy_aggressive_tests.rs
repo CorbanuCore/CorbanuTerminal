@@ -342,10 +342,6 @@ async fn issue_626_note_names_only_suspended_rules() {
 /// #626 (review r1): where prompts are rejected (approval policy never),
 /// the rejection says a remembered approval was suspended.
 #[tokio::test]
-#[cfg_attr(
-    windows,
-    ignore = "without a Windows sandbox the read-only command is refused for that first, before the suspended rule is named (#691)"
-)]
 async fn issue_626_rejection_names_the_suspended_rule() {
     let home = TempDir::new().expect("home");
     let project = TempDir::new().expect("project");
