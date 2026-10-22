@@ -35,6 +35,62 @@ fn the_first_operand_of_a_search_is_its_pattern() {
 }
 
 #[test]
+fn quoted_or_escaped_suffixes_do_not_start_searches() {
+    for (script, pattern) in [
+        ("grep 'a|' rg .env", "a|"),
+        ("grep \"a|\" grep .env", "a|"),
+        ("grep a\\| egrep .env", "a|"),
+        ("grep 'a;' fgrep .env", "a;"),
+        ("grep \"a&\" rg .env", "a&"),
+        ("grep a\\& rg .env", "a&"),
+    ] {
+        assert_eq!(patterns(script), [pattern], "{script}");
+    }
+}
+
+#[test]
+fn literal_separator_words_are_patterns_and_option_values() {
+    for (script, pattern) in [
+        ("grep '|' rg .env", "|"),
+        ("grep ';' rg .env", ";"),
+        ("grep '(' rg .env", "("),
+        ("grep ')' rg .env", ")"),
+        ("grep '!' rg .env", "!"),
+        ("grep -e '|' rg .env", "|"),
+        ("grep --regexp='a|' rg .env", "--regexp=a|"),
+        ("rg --glob 'a|' token .env", "token"),
+    ] {
+        assert_eq!(patterns(script), [pattern], "{script}");
+    }
+    assert_eq!(patterns("grep -f 'a|' rg .env"), Vec::<String>::new());
+}
+
+#[test]
+fn real_separators_after_quoted_patterns_still_end_searches() {
+    for script in [
+        "grep 'a|' logs; rg .env logs",
+        "grep 'a'| rg .env logs",
+        "grep 'a|' logs && rg .env logs",
+        "grep 'a|' logs\ngrep .env logs",
+    ] {
+        assert_eq!(patterns(script), ["a|", ".env"], "{script}");
+    }
+    for script in ["grep 'a|'; rg .env logs", "grep a\\|; rg .env logs"] {
+        assert_eq!(patterns(script), ["a|;", ".env"], "{script}");
+    }
+}
+
+#[test]
+fn separator_provenance_survives_empty_quotes_continuations_and_comments() {
+    for script in ["grep 'a|'\"\" rg .env", "grep a\\\n\\| rg .env"] {
+        assert_eq!(patterns(script), ["a|"], "{script}");
+    }
+    assert_eq!(patterns("grep 'a|b' .env"), ["a|b"]);
+    assert_eq!(patterns("grep 'a\nb|' rg .env"), ["a\nb|"]);
+    assert_eq!(patterns("# don't split '|\ngrep .env logs"), [".env"]);
+}
+
+#[test]
 fn a_pattern_option_gives_the_patterns() {
     assert_eq!(
         patterns("grep -e .env -e .npmrc logs/x.log"),

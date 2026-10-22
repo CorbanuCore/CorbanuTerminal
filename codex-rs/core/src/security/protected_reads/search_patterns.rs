@@ -135,9 +135,13 @@ pub(super) fn search_pattern_indices(
     let Some(starts) = line_starts(command, words, windows) else {
         return patterns;
     };
+    let Some(literal_ends) = literal_word_ends(command, words, windows) else {
+        return patterns;
+    };
     let words = Words {
         words,
         starts: &starts,
+        literal_ends: &literal_ends,
     };
     let mut index = 0;
     while index < words.words.len() {
@@ -158,15 +162,87 @@ pub(super) fn search_pattern_indices(
 struct Words<'a> {
     words: &'a [String],
     starts: &'a [bool],
+    literal_ends: &'a [bool],
 }
 
 impl Words<'_> {
     /// Whether the command `words[index]` is in ends with it (`x;`, the
     /// last word of a line).
     fn ends(&self, index: usize) -> bool {
-        self.words[index].ends_with([';', '|', '&'])
+        (!self.literal_ends[index] && self.words[index].ends_with([';', '|', '&']))
             || self.starts.get(index + 1).copied().unwrap_or(true)
     }
+
+    fn separator(&self, index: usize) -> bool {
+        !self.literal_ends[index] && SEPARATORS.contains(&self.words[index].as_str())
+    }
+}
+
+/// Whether each word's last character was quoted or escaped. Shlex removes
+/// this distinction: `grep 'a|' rg .env` must not start another search at `rg`.
+/// Keep its tokenization authoritative; unclear or mismatching words bail out.
+fn literal_word_ends(command: &[String], words: &[String], windows: bool) -> Option<Vec<bool>> {
+    let posix = !windows
+        || command
+            .first()
+            .is_some_and(|program| super::posix_shell(program));
+    if !posix {
+        return Some(vec![false; words.len()]);
+    }
+    let mut joined = Vec::with_capacity(words.len());
+    let mut literal_ends = Vec::with_capacity(words.len());
+    for argument in command {
+        let mut raw_words = Vec::new();
+        let (mut start, mut quote, mut escaped, mut comment) = (None, None, false, false);
+        let mut literal_end = false;
+        for (offset, c) in argument.char_indices() {
+            if comment {
+                comment = c != '\n';
+            } else if escaped {
+                if c != '\n' {
+                    literal_end = true;
+                }
+                escaped = false;
+            } else if let Some(open) = quote {
+                if c == open {
+                    quote = None;
+                } else if c == '\\' && open == '"' {
+                    escaped = true;
+                } else {
+                    literal_end = true;
+                }
+            } else if matches!(c, ' ' | '\t' | '\r' | '\n') {
+                if let Some(begin) = start.take() {
+                    raw_words.push((&argument[begin..offset], literal_end));
+                }
+            } else if c == '#' && start.is_none() {
+                comment = true;
+            } else {
+                start.get_or_insert(offset);
+                match c {
+                    '\'' | '"' => quote = Some(c),
+                    '\\' => escaped = true,
+                    _ => literal_end = false,
+                }
+            }
+        }
+        if quote.is_some() || escaped {
+            return None;
+        }
+        if let Some(begin) = start {
+            raw_words.push((&argument[begin..], literal_end));
+        }
+        for (raw, literal_end) in raw_words {
+            let parsed = super::argument_words(raw, /*posix*/ true);
+            if parsed.len() > 1 {
+                return None;
+            }
+            // A standalone backslash-newline produces no word.
+            literal_ends.extend(std::iter::repeat_n(literal_end, parsed.len()));
+            joined.extend(parsed);
+        }
+    }
+    (joined == words).then_some(literal_ends)
 }
 
 /// For each of `words`, whether it starts a new line of the script it is
@@ -255,7 +331,7 @@ fn program_position(lines: &Words<'_>, mut index: usize) -> bool {
     let Some(previous) = index.checked_sub(1).map(|index| words[index].as_str()) else {
         return true;
     };
-    if SEPARATORS.contains(&previous) || previous.ends_with([';', '|', '&']) {
+    if lines.separator(index - 1) || lines.ends(index - 1) {
         return true;
     }
     // `bash -c 'grep …'`, `sh -lc …`: the script's first word.
@@ -302,7 +378,7 @@ fn mark_patterns(
         |index: usize, value: Value| !lines.ends(index) && takes_next(value, words.get(index + 1));
     while index < words.len() {
         let word = words[index].as_str();
-        if SEPARATORS.contains(&word) {
+        if lines.separator(index) {
             break;
         }
         if word.contains("<(") || word.contains(">(") {
