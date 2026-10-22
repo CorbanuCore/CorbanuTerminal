@@ -1,4 +1,5 @@
 import pathlib
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -30,7 +31,7 @@ class FacilityControlTests(unittest.TestCase):
         with patch.object(facility_control, "_run_remote", side_effect=fake_run) as remote:
             records = facility_control.get_statuses(key)
 
-        self.assertEqual(remote.call_count, 2)
+        self.assertEqual(remote.call_count, 3)
         self.assertEqual(records["comfyui"]["status"], "running")
         self.assertEqual(records["breeze-tts"]["status"], "running")
         self.assertEqual(records["yue2-realaudio"]["status"], "running")
@@ -73,6 +74,8 @@ class FacilityControlTests(unittest.TestCase):
 
     def test_breeze_controls_only_breeze(self):
         item = facility_control.facility_map()["breeze-tts"]
+        self.assertEqual(item["host"], "100.116.44.7")
+        self.assertEqual(item["url"], "http://100.116.44.7:7868/")
         self.assertEqual(item["service_units"], ("breeze-tts.service",))
         for verb, state, code in (("start", "active", 0), ("stop", "inactive", 3)):
             with patch.object(facility_control, "_run_remote", side_effect=[([], None, 0), ([state], None, code)]) as remote:
@@ -104,6 +107,25 @@ class FacilityControlTests(unittest.TestCase):
         self.assertIn("IdentitiesOnly=yes", rendered)
         self.assertIn("systemctl --user is-active comfyui-ui.service", rendered)
         self.assertNotIn("password", rendered.lower())
+
+    def test_bossa_uses_its_account_and_owner_only_key(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = pathlib.Path(directory)
+            key = home / ".ssh" / "id_ed25519"
+            key.parent.mkdir()
+            key.touch(mode=0o600)
+            with patch.object(facility_control.Path, "home", return_value=home):
+                command = facility_control._ssh_command("100.116.44.7", pathlib.Path("/tmp/rtx-key"), ["true"])
+            self.assertIn("ambient@100.116.44.7", command)
+            self.assertEqual(command[command.index("-i") + 1], str(key))
+
+    def test_missing_bossa_key_fails_closed_without_dispatch(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            facility_control.Path, "home", return_value=pathlib.Path(directory)
+        ), patch.object(facility_control.subprocess, "run") as run:
+            self.assertEqual(facility_control._run_remote("100.116.44.7", pathlib.Path("/tmp/rtx-key"), ["true"]),
+                             (None, "unreachable", None))
+            run.assert_not_called()
 
     def test_incomplete_or_failed_probe_cannot_verify_action(self):
         item = next(item for item in FACILITIES if item["id"] == "minimax-music3")

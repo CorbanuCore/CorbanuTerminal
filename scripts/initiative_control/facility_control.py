@@ -28,11 +28,18 @@ def facility_map():
 
 
 def _ssh_command(host, key, remote_args):
+    # Breeze moved to Bossa Nova; preserve every other facility's identity.
+    user = SSH_USER
+    if host == "100.116.44.7":
+        user = "ambient"
+        key = Path.home() / ".ssh" / "id_ed25519"
+        if not key.is_file() or key.stat().st_mode & 0o077:
+            raise ValueError("Bossa Nova SSH key must be owner-only")
     return [
         "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5",
         "-o", "ConnectionAttempts=1", "-o", "StrictHostKeyChecking=yes",
         "-o", "IdentitiesOnly=yes", "-o", "LogLevel=ERROR", "-i", str(key),
-        f"{SSH_USER}@{host}", shlex.join(remote_args),
+        f"{user}@{host}", shlex.join(remote_args),
     ]
 
 
@@ -40,7 +47,7 @@ def _run_remote(host, key, remote_args):
     try:
         result = subprocess.run(_ssh_command(host, key, remote_args), capture_output=True,
                                 text=True, timeout=SSH_TIMEOUT, check=False)
-    except (OSError, subprocess.TimeoutExpired):
+    except (OSError, ValueError, subprocess.TimeoutExpired):
         return None, "unreachable", None
     if result.returncode == 255:
         return None, "unreachable", result.returncode
