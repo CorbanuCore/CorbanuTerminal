@@ -18,6 +18,10 @@ use crate::provider_named_accounts::ProviderAccountEvent;
 
 const MANAGER_VIEW_ID: &str = "provider-manager";
 
+#[cfg(test)]
+#[path = "provider_manager_status_account_tests.rs"]
+mod status_account_tests;
+
 impl ChatWidget {
     pub(crate) fn open_provider_manager_api_key(
         &mut self,
