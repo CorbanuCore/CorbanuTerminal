@@ -4765,7 +4765,14 @@ impl Config {
                 })
             })
         });
+        // The legacy GLM 5.2 routes advertise Medium as Standard; retain that explicit choice.
+        let legacy_glm_standard_selected = cfg.model_reasoning_effort == Some(ReasoningEffort::Medium)
+            && matches!(
+                (model_provider_id.as_str(), model.as_deref()),
+                (ZAI_PROVIDER_ID, Some("glm-5.2")) | (AMBIENT_PROVIDER_ID, Some("z-ai/glm-5.2"))
+            );
         let model_reasoning_effort = if !exact_catalogue_effort
+            && !legacy_glm_standard_selected
             && ((ambient_provider_selected && !model_without_explicit_provider)
                 || zai_chat_provider_selected)
         {
