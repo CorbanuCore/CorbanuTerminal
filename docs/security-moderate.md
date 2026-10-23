@@ -198,7 +198,10 @@ The kill switch (`/security` → `g`) works under every level.
   all of `.git` (a folder it can't read, or too many entries), approving a
   command in that project doesn't lift the protected-file rules (nor run it
   outside the sandbox, nor let it create user namespaces), in any session of
-  this Corbanu Terminal. Some setups of your own hold them too until you
+  this Corbanu Terminal. If the repository's own git folder was unreadable at
+  its first look, config files or hooks added before the first complete look
+  may not be reported as new. Check that config and those hooks yourself
+  before you run git there. Some setups of your own hold them too until you
   remove them: a layout made of links (`git new-workdir`, Android's `repo`), a
   `config.worktree` that `git sparse-checkout` adds, or a hooks folder a hook
   installer creates where there was none. On Linux the sandbox leaves empty
