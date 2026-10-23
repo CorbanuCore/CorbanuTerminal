@@ -287,6 +287,28 @@ impl AgentControl {
             {
                 return Ok(message_id);
             }
+            // #1058: mark the message Submitted before handing it over. A turn already running
+            // on the recipient can apply it as soon as it is handed over, and moves it from
+            // Submitted to ProviderRunning; marked after the hand-off, it stayed Submitted while
+            // that turn ran it.
+            if !state_db
+                .transition_agent_message(
+                    &message_id,
+                    AgentMailboxPhase::Submitting,
+                    AgentMailboxPhase::Submitted,
+                    crate::turn_timing::now_unix_timestamp_ms(),
+                )
+                .await
+                .map_err(|err| {
+                    CodexErr::Fatal(format!(
+                        "failed to confirm agent message {message_id} submission: {err}"
+                    ))
+                })?
+            {
+                return Err(CodexErr::Fatal(format!(
+                    "agent message {message_id} lost its submitting state"
+                )));
+            }
         }
 
         let op = Op::InterAgentCommunication {
@@ -306,39 +328,18 @@ impl AgentControl {
             )
             .await;
         match &result {
-            Ok(_) => {
-                if let Some(state_db) = state_db.as_ref()
-                    && !state_db
-                        .transition_agent_message(
-                            &message_id,
-                            AgentMailboxPhase::Submitting,
-                            AgentMailboxPhase::Submitted,
-                            crate::turn_timing::now_unix_timestamp_ms(),
-                        )
-                        .await
-                        .map_err(|err| {
-                            CodexErr::Fatal(format!(
-                                "failed to confirm agent message {message_id} submission: {err}"
-                            ))
-                        })?
-                {
-                    return Err(CodexErr::Fatal(format!(
-                        "agent message {message_id} lost its submitting state"
-                    )));
-                }
-                match last_task_message {
-                    Some(last_task_message) => self
-                        .state
-                        .update_last_task_message(agent_id, last_task_message),
-                    None => self.state.clear_last_task_message(agent_id),
-                }
-            }
+            Ok(_) => match last_task_message {
+                Some(last_task_message) => self
+                    .state
+                    .update_last_task_message(agent_id, last_task_message),
+                None => self.state.clear_last_task_message(agent_id),
+            },
             Err(_) => {
                 if let Some(state_db) = state_db.as_ref() {
                     let _ = state_db
                         .transition_agent_message(
                             &message_id,
-                            AgentMailboxPhase::Submitting,
+                            AgentMailboxPhase::Submitted,
                             AgentMailboxPhase::Ready,
                             crate::turn_timing::now_unix_timestamp_ms(),
                         )

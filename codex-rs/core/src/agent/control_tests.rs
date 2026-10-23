@@ -1486,6 +1486,133 @@ async fn durable_agent_mailbox_deduplicates_and_completes_after_rollout_flush() 
     );
 }
 
+/// A turn that runs until it is cancelled, so mail handed to its thread meanwhile is applied
+/// inside it.
+#[derive(Clone, Copy)]
+struct Issue1058RunningTurn;
+
+impl crate::tasks::SessionTask for Issue1058RunningTurn {
+    fn kind(&self) -> crate::state::TaskKind {
+        crate::state::TaskKind::Regular
+    }
+
+    fn span_name(&self) -> &'static str {
+        "session_task.issue_1058_running_turn"
+    }
+
+    async fn run(
+        self: Arc<Self>,
+        _session: Arc<crate::tasks::SessionTaskContext>,
+        _ctx: Arc<crate::session::turn_context::TurnContext>,
+        _input: Vec<crate::session::TurnInput>,
+        cancellation_token: tokio_util::sync::CancellationToken,
+    ) -> crate::tasks::SessionTaskResult {
+        cancellation_token.cancelled().await;
+        Ok(None)
+    }
+}
+
+/// #1058: a running turn can apply agent mail as soon as the mail is handed to its thread. The
+/// sender is held at its hand-off (`send_op` locks the captured-ops log right before it submits
+/// the op) while the running turn applies the message, then released. The message must not be
+/// left `Submitted` while the turn runs it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn issue1058_mail_applied_by_a_running_turn_is_not_left_submitted() {
+    let (home, mut config) = test_config().await;
+    let _ = config.features.enable(Feature::Sqlite);
+    let harness = AgentControlHarness::new_with_config(home, config).await;
+    let (thread_id, thread) = harness.start_thread().await;
+    let session = Arc::clone(&thread.codex.session);
+    let turn_context = session.new_default_turn().await;
+    session
+        .spawn_task(Arc::clone(&turn_context), Vec::new(), Issue1058RunningTurn)
+        .await;
+    let communication = InterAgentCommunication::new(
+        AgentPath::root(),
+        AgentPath::try_from("/root/worker").expect("agent path"),
+        Vec::new(),
+        "applied by the running turn".to_string(),
+        /*trigger_turn*/ false,
+    );
+    let message_id = communication.message_id.clone().expect("stable message id");
+    let state_db = harness.state_db.clone().expect("state db");
+    let phase = async |state_db: &StateDbHandle| {
+        state_db
+            .get_agent_message(&message_id)
+            .await
+            .expect("mailbox lookup")
+            .map(|row| row.phase)
+    };
+
+    let ops_log = harness
+        .manager
+        .ops_log_for_tests()
+        .expect("the test thread manager captures ops");
+    let (held_tx, held_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+    let holder = std::thread::spawn(move || {
+        let _hand_off = ops_log
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        held_tx.send(()).expect("report the hand-off held");
+        let _ = release_rx.recv();
+    });
+    held_rx.recv().expect("hand-off held");
+
+    let control = harness.control.clone();
+    let sent = communication.clone();
+    let send = tokio::spawn(async move {
+        control
+            .send_inter_agent_communication(
+                thread_id,
+                sent,
+                AgentCommunicationContext::new(AgentCommunicationKind::Message, thread_id),
+                /*parent_turn_id*/ None,
+            )
+            .await
+    });
+
+    // The sender cannot pass the hand-off, so its delivery attempt stays reserved here.
+    timeout(Duration::from_secs(10), async {
+        while !matches!(
+            phase(&state_db).await,
+            Some(
+                codex_state::AgentMailboxPhase::Submitting
+                    | codex_state::AgentMailboxPhase::Submitted
+            )
+        ) {
+            sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the sender reserves its delivery attempt");
+    // Let a sender that marks the message before its hand-off finish that write.
+    let _ = timeout(Duration::from_secs(5), async {
+        while phase(&state_db).await != Some(codex_state::AgentMailboxPhase::Submitted) {
+            sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+
+    // The running turn applies the message inside the send, then the sender goes on.
+    session
+        .record_inter_agent_communication(turn_context.as_ref(), communication.clone())
+        .await;
+    assert!(session.has_applied_agent_message_id(&message_id).await);
+    release_tx.send(()).expect("release the hand-off");
+    holder.join().expect("hand-off holder");
+    send.await
+        .expect("send task")
+        .expect("send_inter_agent_communication should succeed");
+
+    assert_eq!(
+        phase(&state_db).await,
+        Some(codex_state::AgentMailboxPhase::ProviderRunning),
+        "mail the running turn applied must not be left Submitted"
+    );
+    session.abort_all_tasks(TurnAbortReason::Interrupted).await;
+}
+
 #[tokio::test]
 async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
     let (home, mut config) = test_config().await;
