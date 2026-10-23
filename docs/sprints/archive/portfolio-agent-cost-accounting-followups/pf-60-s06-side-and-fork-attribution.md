@@ -2,7 +2,7 @@
 sprint_id: "PF-60-S06"
 title: "Side-conversation and temporary-fork attribution"
 status: completed
-plan_file: "docs/plans/active/portfolio-agent-cost-accounting-followups.md"
+plan_file: "docs/plans/completed/main-2026-10-20-portfolio-agent-cost-accounting-followups.md"
 plan_feature: "PF-60"
 execution_order: 1
 owner: "Codex worker pf60-s06; Travis Good accepts"
@@ -50,7 +50,7 @@ S10 results for this sprint ([dispositions](../../../../qa/portfolio/agent-cost-
 
 ## Plan linkage
 
-- Plan: [Accounting follow-ups after PF-60](../../../plans/active/portfolio-agent-cost-accounting-followups.md); feature `PF-60`.
+- Plan: [Accounting follow-ups after PF-60](../../../plans/completed/main-2026-10-20-portfolio-agent-cost-accounting-followups.md); feature `PF-60`.
 - Acceptance advanced: every request appears once under the parent conversation, labelled with what it was.
 
 ## Code boundaries

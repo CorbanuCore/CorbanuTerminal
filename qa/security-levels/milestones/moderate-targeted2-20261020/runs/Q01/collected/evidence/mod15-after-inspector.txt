@@ -1,0 +1,33 @@
+
+  You can manage the vault yourself via /vault in the Corbanu UI, or enable approval prompts in /permissions if you want me to be able to access it.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Run python3 src/notes.py list
+
+
+• Ran python3 src/notes.py list
+  └ buy coffee
+    review budget
+
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• buy coffee
+  review budget
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+Security level
+Active in this session: Moderate
+Core's level: Moderate
+
+  Permissive
+> Moderate  (active)
+  Aggressive
+
+Protection around untrusted content and secrets while normal work continues: agent commands stay in your sandbox, credential and Corbanu files are
+protected, and protected actions after untrusted content need your fresh approval. Your own approval, sandbox and network settings stay.
+
+↑/↓ move · enter choose · g grants and kill switch · esc close · i inspect

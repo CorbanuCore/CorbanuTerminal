@@ -300,6 +300,12 @@ struct Spool {
     _lock: std::fs::File,
 }
 
+impl Drop for Spool {
+    fn drop(&mut self) {
+        let _ = self._lock.unlock();
+    }
+}
+
 impl Spool {
     fn open(home: &Path) -> std::io::Result<Self> {
         let dir = home.join(PENDING_DIR);
@@ -477,11 +483,23 @@ fn recently_created(path: &Path) -> bool {
         .is_none_or(|age| age < LOCK_FILE_GRACE)
 }
 
+/// A file lock this process holds, unlocked when dropped (#928). Closing the
+/// file releases the lock only once every copy of its descriptor is closed,
+/// and a child forked meanwhile (any spawn in this process) keeps a copy until
+/// it starts its program, so another writer would find it still held.
+struct HeldLock(std::fs::File);
+
+impl Drop for HeldLock {
+    fn drop(&mut self) {
+        let _ = self.0.unlock();
+    }
+}
+
 /// A gone process's records, claimed by holding its lock.
 struct Claim {
     /// Its lock file, held; `None` when it had none left.
     path: Option<PathBuf>,
-    _lock: Option<std::fs::File>,
+    _lock: Option<HeldLock>,
 }
 
 /// Claim the records of `process` if it has exited: its lock file is gone,
@@ -497,7 +515,7 @@ fn claim(dir: &Path, process: &str) -> Option<Claim> {
         Ok(file) => match file.try_lock() {
             Ok(()) => Some(Claim {
                 path: Some(path),
-                _lock: Some(file),
+                _lock: Some(HeldLock(file)),
             }),
             Err(_) => None,
         },
@@ -1093,14 +1111,14 @@ async fn ensure_validated(
 }
 
 /// The validation lease, if no other process holds it.
-fn take_lease(path: &Path) -> std::io::Result<Option<std::fs::File>> {
+fn take_lease(path: &Path) -> std::io::Result<Option<HeldLock>> {
     let file = std::fs::OpenOptions::new()
         .create(true)
         .truncate(false)
         .write(true)
         .open(path)?;
     match file.try_lock() {
-        Ok(()) => Ok(Some(file)),
+        Ok(()) => Ok(Some(HeldLock(file))),
         Err(std::fs::TryLockError::WouldBlock) => Ok(None),
         Err(std::fs::TryLockError::Error(error)) => Err(error),
     }

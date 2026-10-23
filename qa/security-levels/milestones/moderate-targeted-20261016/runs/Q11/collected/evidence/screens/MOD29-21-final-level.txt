@@ -1,0 +1,27 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+› Run cat .env
+
+
+• I can't run that — the current security policy denies reading .env files (and their variants) under the Aggressive security level, and this
+  restriction can't be overridden by approval.
+
+  If you want to allow .env access, change your security level in Corbanu Terminal via /security, then ask me again.
+
+Security level
+Active in this session: Aggressive
+Core's level: Aggressive
+
+  Permissive
+  Moderate
+> Aggressive  (active)
+
+Sensitive access denied by default, built from existing sandbox, approval, network and exec-policy controls.
+
+↑/↓ move · enter choose · g grants and kill switch · esc close · i inspect

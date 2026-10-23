@@ -353,7 +353,7 @@ crossterm = "0.29.0"
 # ctor 0.6 split its macros into host-only crates that rules_rs could not load
 # while cross-compiling the native-Windows gnullvm graph. The 1.x line uses the
 # linktime macro implementation already exercised elsewhere in this workspace.
-ctor = "1.0.6"
+ctor = "1.0.13"
 deno_core_icudata = "0.77.0"
 derive_more = "2"
 diffy = "0.4.2"
@@ -543,7 +543,15 @@ which = "8"
 whoami = "1.6.1"
 wildmatch = "2.6.1"
 winapi-util = "0.1.11"
-zip = "2.4.2"
+# Only the methods GitHub zipballs and skill exports use (stored, deflate,
+# deflate64, bzip2). Fewer decoders for untrusted archives, and fewer crates on
+# the Windows Bazel lint command line (#968).
+zip = { version = "9.0.5", default-features = false, features = [
+    "bzip2-rs",
+    "deflate64",
+    "deflate",
+    "time",
+] }
 zstd = "0.13"
 
 wiremock = "0.6"

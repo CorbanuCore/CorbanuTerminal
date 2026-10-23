@@ -65,6 +65,18 @@ impl ResponseEvidence {
         !self.is_excluded() && !self.sampling.is_closed()
     }
 
+    /// Retain the admitted WebRTC creation attempt for its sideband's end.
+    /// Excluded or unbound calls stay unrecorded, as they were at creation.
+    pub(crate) fn realtime_session_record(&self) -> Option<super::realtime::RealtimeSessionRecord> {
+        if !self.is_recorded() {
+            return None;
+        }
+        Some(super::realtime::RealtimeSessionRecord::for_attempt(
+            Arc::clone(&self.sampling),
+            self.attempt.get()?.clone(),
+        ))
+    }
+
     /// Accounting failed for this request: record nothing more for it or the
     /// rest of its turn, and let it proceed. The request was, or will be, sent
     /// and billed; failing it would lose the provider's answer as well.

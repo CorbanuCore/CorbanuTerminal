@@ -417,6 +417,13 @@ impl SandboxManager {
                     allow_proxy_network,
                 );
                 crate::landlock::insert_pinned_writable_roots_arg(&mut args, &pinned);
+                // #348: where the helper records the placeholders it makes.
+                if let Ok(codex_home) = codex_utils_home_dir::find_codex_home() {
+                    crate::landlock::insert_placeholder_record_dir_arg(
+                        &mut args,
+                        codex_home.as_path(),
+                    );
+                }
                 let mut full_command = Vec::with_capacity(1 + args.len());
                 full_command.push(os_string_to_command_component(exe.as_os_str().to_owned()));
                 full_command.append(&mut args);

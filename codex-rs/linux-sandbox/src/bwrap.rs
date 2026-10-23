@@ -244,8 +244,10 @@ impl SyntheticMountTarget {
 
     /// #562: whether the file or folder found when the arguments were built
     /// is still the one at the path. Another run's cleanup may have removed
-    /// it since; bubblewrap then makes a new mount target, which is this
-    /// run's own placeholder.
+    /// it before this run registered it; the mount target made then is this
+    /// run's own placeholder. #607: once registered, a change is the
+    /// person's (or a mount target bubblewrap made again after the path
+    /// vanished in between, which is not told apart): left in place.
     pub(crate) fn pre_existing_path_is_unchanged(&self) -> bool {
         let Some(identity) = self.pre_existing_path else {
             return true;
@@ -1070,6 +1072,13 @@ fn create_filesystem_args_with_pins(
             bwrap_args.args.push("--ro-bind".to_string());
             bwrap_args.args.push(path_to_string(registry_mount));
             bwrap_args.args.push(path_to_string(registry_mount));
+        }
+        // #348: the same for the placeholder record kept in the Corbanu
+        // home, so the command cannot forge a record a later run acts on.
+        if let Some(record_mount) = crate::placeholder_journal::record_dir_mount(mount_root) {
+            bwrap_args.args.push("--ro-bind".to_string());
+            bwrap_args.args.push(path_to_string(&record_mount));
+            bwrap_args.args.push(path_to_string(&record_mount));
         }
         for unreadable_root in nested_unreadable_roots {
             if snapshot_covered.contains(&unreadable_root) {
@@ -2077,7 +2086,9 @@ fn append_unreadable_root_args(
 /// `~/Library/Keychains`) is held as one (masked and registered, so that
 /// run's cleanup cannot remove it from under this one); any other file in a
 /// writable root is bound read-only where it is (a mount point cannot be
-/// removed or renamed). Returns whether `missing` needs nothing more.
+/// removed or renamed). #745: a folder there that is another run's empty
+/// placeholder is held too ([`hold_placeholder_folder_above_missing_path`]).
+/// Returns whether `missing` needs nothing more.
 fn hold_file_above_missing_path(
     bwrap_args: &mut BwrapArgs,
     missing: &Path,
@@ -2086,7 +2097,18 @@ fn hold_file_above_missing_path(
     let Some(parent) = missing.parent() else {
         return Ok(false);
     };
-    if !fs::symlink_metadata(parent).is_ok_and(|metadata| metadata.file_type().is_file()) {
+    let Ok(metadata) = fs::symlink_metadata(parent) else {
+        return Ok(false);
+    };
+    if metadata.file_type().is_dir() {
+        return Ok(hold_placeholder_folder_above_missing_path(
+            bwrap_args,
+            parent,
+            &metadata,
+            allowed_write_paths,
+        ));
+    }
+    if !metadata.file_type().is_file() {
         return Ok(false);
     }
     if has_synthetic_mount_target(bwrap_args, parent) || has_read_only_bind(bwrap_args, parent) {
@@ -2100,6 +2122,36 @@ fn hold_file_above_missing_path(
         bwrap_args.args.push(path_to_string(parent));
     }
     Ok(true)
+}
+
+/// #745: the folder `missing` would go in (`folder`) is another run's empty
+/// placeholder folder (a protected `.git` it made, which this run's policy
+/// took for a repository's). A placeholder made in it would change it, so
+/// that its maker could not remove it, and it was left behind for good. It
+/// is held read-only instead, as when it is a protected path itself: the
+/// command cannot create `missing` (or anything) in it, as it could not
+/// create the folder without the other run. Whether `missing` needs nothing
+/// more.
+fn hold_placeholder_folder_above_missing_path(
+    bwrap_args: &mut BwrapArgs,
+    folder: &Path,
+    metadata: &Metadata,
+    allowed_write_paths: &[PathBuf],
+) -> bool {
+    // Held already in this pass: its read-only mount covers `missing`.
+    if has_synthetic_mount_target(bwrap_args, folder) {
+        return true;
+    }
+    if !is_within_allowed_write_paths(folder, allowed_write_paths)
+        || allowed_write_paths.iter().any(|root| root == folder)
+        || !directory_is_empty(folder)
+        || !(crate::linux_run_main::is_live_placeholder(folder)
+            || crate::placeholder_journal::recorded_by_another_run(folder))
+    {
+        return false;
+    }
+    append_existing_empty_directory_args(bwrap_args, folder, metadata);
+    true
 }
 
 fn has_read_only_bind(bwrap_args: &BwrapArgs, path: &Path) -> bool {

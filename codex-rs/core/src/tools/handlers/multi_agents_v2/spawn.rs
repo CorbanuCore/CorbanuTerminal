@@ -176,12 +176,27 @@ async fn handle_spawn_agent(
     if child_runtime_was_selected {
         ensure_spawn_runtime_eligible(&session, &config).await?;
     }
+    let target_provider_id = config.model_provider_id.clone();
+    let ensure_encoding = |target: &codex_model_provider_info::ModelProviderInfo| {
+        ensure_message_encoding_matches_target(
+            ConfiguredRuntime::from_provider(&turn.config.model_provider_id, turn.provider.info()),
+            crate::tools::collaboration_wire::message_source_provider_id(turn.as_ref()),
+            &source,
+            ConfiguredRuntime::from_provider(&target_provider_id, target),
+            encoding,
+            "spawn_agent",
+            PLAINTEXT_SPAWN_AGENT_TOOL,
+        )
+    };
+    // #1144: an account the encrypted payload cannot follow is refused
+    // before the Aggressive approval is asked.
     apply_spawn_agent_account(
         &session,
         turn.as_ref(),
         &call_id,
         &mut config,
         args.account.as_deref(),
+        &ensure_encoding,
     )
     .await?;
     let resolved_account = spawned_account_name(&config);
@@ -193,14 +208,7 @@ async fn handle_spawn_agent(
     let resolved_reasoning_effort = config.model_reasoning_effort.clone();
     let resolved_service_tier = config.service_tier.clone();
 
-    ensure_message_encoding_matches_target(
-        crate::tools::collaboration_wire::message_source_provider_id(turn.as_ref()),
-        &source,
-        &resolved_model_provider,
-        encoding,
-        "spawn_agent",
-        PLAINTEXT_SPAWN_AGENT_TOOL,
-    )?;
+    ensure_encoding(&config.model_provider)?;
     let source = match encoding {
         CollaborationMessageEncoding::ProviderNative => source,
         CollaborationMessageEncoding::PlaintextAdapter => {

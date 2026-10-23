@@ -128,6 +128,9 @@ pub(crate) struct SecurityLevelPicker {
     pending: Option<Pending>,
     /// Run the commit on the calling thread (tests).
     pub(super) commit_inline: bool,
+    /// #978/#1015: whether other sessions of this process run on the home
+    /// (tests replace it: building a Core policy tree needs Core internals).
+    pub(super) sessions_run_here: fn(&std::path::Path, Option<codex_protocol::ThreadId>) -> bool,
     /// Sends the "restart now" request.
     app_event_tx: Option<AppEventSender>,
     /// #436: why "restart now" would lose provider keys, if it would.
@@ -147,15 +150,31 @@ pub(crate) struct SecurityLevelPicker {
 
 /// Core's `[security]` levels from the session's config layers, and the
 /// session the picker was opened in.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct CoreLevels {
     /// The session's thread, once it has started: its policy tree is the one
     /// a confirmation commits through.
     pub(crate) thread: Option<codex_protocol::ThreadId>,
+    /// #1047: whether this window's sessions run in this process (an
+    /// embedded app server), so a session that has not started yet starts
+    /// here, under what a confirmation saved. False with a remote app server
+    /// (or the local daemon): its sessions run in the server's process.
+    pub(crate) sessions_in_this_process: bool,
     /// The strictest level any layer sets (without the stored state).
     pub(crate) configured: SecurityLevel,
     /// The strictest level a layer other than the user's `config.toml` sets.
     pub(crate) outside_user_config: SecurityLevel,
+}
+
+impl Default for CoreLevels {
+    fn default() -> Self {
+        Self {
+            thread: None,
+            sessions_in_this_process: true,
+            configured: SecurityLevel::default(),
+            outside_user_config: SecurityLevel::default(),
+        }
+    }
 }
 
 impl SecurityLevelPicker {
@@ -197,6 +216,7 @@ impl SecurityLevelPicker {
             ),
             pending: None,
             commit_inline: cfg!(test),
+            sessions_run_here: crate::legacy_core::security_level_change::sessions_run_here,
             app_event_tx: None,
             restart_blocked: crate::security::restart::restart_blocker(),
             open_revocations: false,
@@ -268,6 +288,11 @@ impl SecurityLevelPicker {
     }
 
     pub(crate) fn set_core_levels(&mut self, core: CoreLevels) {
+        // #1047: a restart against a remote app server is refused while a
+        // level above Permissive is saved.
+        if !core.sessions_in_this_process && self.restart_blocked.is_none() {
+            self.restart_blocked = Some(REMOTE_RESTART_REFUSED.to_string());
+        }
         self.core = core;
         self.basis = LevelBasis::read(&self.codex_home, core.configured, core.thread);
         // #750: Moderate that Core keeps is the level selected first.
@@ -1021,6 +1046,12 @@ impl SecurityLevelPicker {
                     "This session is already Aggressive; saving keeps it after restart. Your config.toml is not modified.".to_string()
                 } else if self.core_aggressive_on_confirm() {
                     self.review_at_confirmation()
+                } else if !self.core.sessions_in_this_process {
+                    // #1047: a remote app server's sessions (below).
+                    "The rows above apply in a Corbanu Terminal started locally (below); this window keeps its current settings. Your config.toml is not modified.".to_string()
+                } else if self.core_saved_for_window_start() {
+                    // #1015: this window's session starts here under it.
+                    "The rows above take effect when you restart Corbanu Terminal (you can restart right after saving); until then this window's session keeps its current settings, apart from Core's level and approval for every command (below). Your config.toml is not modified.".to_string()
                 } else {
                     "The rows above take effect when you restart Corbanu Terminal (you can restart right after saving); this session keeps its current settings until then. Your config.toml is not modified.".to_string()
                 }));
@@ -1240,20 +1271,123 @@ impl SecurityLevelPicker {
                     if saved {
                         lines.extend(wrap(MODERATE_REACHES_OTHER_TERMINALS));
                     }
+                } else if level == ChosenLevel::Moderate
+                    && self.active == ChosenLevel::Permissive
+                    && self.window_session_starts_here()
+                    && outcome.core.as_ref().is_none_or(|report| {
+                        report.kind != LevelChangeKind::Downgrade
+                            && report.not_saved.is_none()
+                            && report.next_start == SecurityLevel::Moderate
+                    })
+                {
+                    // #1047: as #1015 for Aggressive: this window's session
+                    // has not started; it starts here under Core's saved
+                    // Moderate. The credential broker waits for the restart.
+                    lines.extend(wrap(&format!(
+                        "{WINDOW_SESSION_TAKES_MODERATE} Starts when you restart: model keys held by the credential broker (unless your own config turns broker_model_auth off), and Moderate shown as the active level."
+                    )));
+                    if outcome.core.is_some() {
+                        lines.extend(wrap(MODERATE_REACHES_OTHER_TERMINALS));
+                    }
+                } else if level == ChosenLevel::Aggressive
+                    && self.window_session_starts_here()
+                    && let Some(report) = outcome
+                        .core
+                        .as_ref()
+                        .filter(|report| report.approvals.is_some())
+                {
+                    // #1015: this window's session has not started; it
+                    // starts here with approval for every command, and
+                    // under Core's level when that was saved.
+                    lines.extend(wrap(&format!(
+                        "Restart Corbanu Terminal to activate the rest of Aggressive. This window's session has not started yet: when it starts here before you restart, it takes {}approval for every command, and its other settings stay {} until the restart.",
+                        if report.not_saved.is_none()
+                            && report.next_start == SecurityLevel::Aggressive
+                        {
+                            "Core's Aggressive protections and "
+                        } else {
+                            ""
+                        },
+                        self.active.name()
+                    )));
+                    if let Some(approvals) = &report.approvals {
+                        for line in approvals_lines(approvals) {
+                            lines.extend(wrap(&line));
+                        }
+                    }
+                } else if !self.core.sessions_in_this_process
+                    && self.active == ChosenLevel::Permissive
+                    && level != ChosenLevel::Permissive
+                {
+                    // #1047: a remote app server's sessions do not run in
+                    // this process, and a restart against it is refused.
+                    // Only a saved raise reaches running processes.
+                    let reaches = outcome.core.as_ref().is_some_and(|report| {
+                        report.kind == LevelChangeKind::Stricter && report.not_saved.is_none()
+                    });
+                    lines.extend(wrap(&remote_window_sessions(level, reaches)));
+                    // #842: other processes on the home take Moderate from
+                    // the saved state (Aggressive's line is below).
+                    if level == ChosenLevel::Moderate && reaches {
+                        lines.extend(wrap(MODERATE_REACHES_OTHER_TERMINALS));
+                    }
                 } else {
                     lines.extend(wrap(&format!(
                         "Restart Corbanu Terminal to activate {}. Until then this session stays {}.",
                         level.name(),
                         self.active.name()
                     )));
+                    // #978: confirmed where this session's policy does not
+                    // run here; the other sessions of this process took it.
+                    if level == ChosenLevel::Aggressive
+                        && let Some(approvals) = outcome
+                            .core
+                            .as_ref()
+                            .and_then(|report| report.approvals.as_ref())
+                    {
+                        for line in approvals_lines(approvals) {
+                            lines.extend(wrap(&line));
+                        }
+                    }
                 }
                 if let Some(report) = &outcome.core {
-                    lines.extend(wrap(&core_outcome_line(report)));
+                    // #1015: beside "when it starts here", "from the next
+                    // start" would read as the restart only.
+                    lines.extend(wrap(&if (level == ChosenLevel::Moderate
+                        || report.approvals.is_some())
+                        && self.window_session_starts_here()
+                        && report.kind == LevelChangeKind::Stricter
+                        && !report.live
+                        && !report.other_sessions
+                        && report.not_saved.is_none()
+                    {
+                        format!(
+                            "Core's level is {} for every session that starts from now on.",
+                            name(report.next_start)
+                        )
+                    } else {
+                        core_outcome_line(report)
+                    }));
+                    // #919: other processes on the home take it from the
+                    // saved state (not when it could not be saved).
+                    if level == ChosenLevel::Aggressive
+                        && report.next_start == SecurityLevel::Aggressive
+                        && report.not_saved.is_none()
+                    {
+                        lines.extend(wrap(AGGRESSIVE_REACHES_OTHER_TERMINALS));
+                    }
                     if let Some(reason) = &report.not_saved {
                         lines.extend(
-                            wrap(&format!(
-                                "Core's level applies now but could not be saved ({reason}); it holds until this process ends, and the next start reports it."
-                            ))
+                            wrap(&if report.live || report.other_sessions {
+                                format!(
+                                    "Core's level applies now but could not be saved ({reason}); it holds until this process ends, and the next start reports it."
+                                )
+                            } else {
+                                // #1015: no session of this process holds it.
+                                format!(
+                                    "Core's level could not be saved ({reason}), and no running session of this Corbanu Terminal holds it. Choose the level again to retry."
+                                )
+                            })
                             .into_iter()
                             .map(Stylize::red),
                         );
@@ -1458,7 +1592,7 @@ fn approvals_lines(
 /// What Core's Aggressive level does in a running session (PF-23, #443).
 /// #846: the project's credential files (`.env` and the like) are denied by
 /// Aggressive's sandbox profile, which starts at the restart, not by these.
-const CORE_EFFECTS: &str = "agent commands cannot run `corbanu vault …` and cannot open protected paths (the vault store, sign-in files, credential files in your home folder such as .ssh, .aws and .netrc, and Corbanu's config, history and state), sensitive surfaces need a grant, external content reaches the model labelled untrusted, and memory summaries stop";
+pub(crate) const CORE_EFFECTS: &str = "agent commands cannot run `corbanu vault …` and cannot open protected paths (the vault store, sign-in files, credential files in your home folder such as .ssh, .aws and .netrc, and Corbanu's config, history and state), sensitive surfaces need a grant, external content reaches the model labelled untrusted, and memory summaries stop";
 
 /// Issue #443: what only the restart applies after Aggressive is saved;
 /// `approvals_now` when the confirmation already required approval for
@@ -1583,7 +1717,7 @@ fn and_list_oxford(items: &[String]) -> String {
 
 /// Core's Aggressive effects without the untrusted-content labels
 /// (`source_envelopes` off): only the vault rule is sure to hold now.
-const CORE_EFFECTS_VAULT_ONLY: &str = "agent commands cannot run `corbanu vault …`";
+pub(crate) const CORE_EFFECTS_VAULT_ONLY: &str = "agent commands cannot run `corbanu vault …`";
 
 impl SecurityLevelPicker {
     /// Issue #443: Core's level is Aggressive in this session's live policy
@@ -1669,14 +1803,36 @@ impl SecurityLevelPicker {
             || self.basis.in_force == SecurityLevel::Aggressive
         {
             format!(
-                "This session stays {} until you restart Corbanu Terminal; Moderate applies from the next start (you can restart right after saving). Grants and \"for session\" approvals in this session end as soon as you confirm.",
-                name(self.basis.in_force.max(confirm::core_level(self.active)))
+                "This session stays {} until you restart Corbanu Terminal; Moderate applies from the next start{}. Grants and \"for session\" approvals in this session end as soon as you confirm.",
+                name(self.basis.in_force.max(confirm::core_level(self.active))),
+                // #1047: a restart against a remote app server is refused.
+                if self.core.sessions_in_this_process {
+                    " (you can restart right after saving)"
+                } else {
+                    ""
+                }
             )
         } else if self.basis.live && self.basis.in_force == SecurityLevel::Moderate {
             "Core's level is already Moderate in this session; confirming saves Moderate for every start. Model keys through the credential broker start when you restart Corbanu Terminal.".to_string()
         } else if self.basis.live {
             format!(
                 "Core's level becomes Moderate as soon as you confirm, in this session and the others of this Corbanu Terminal, and within about a second in other Corbanu Terminals running on this Corbanu home (each says so): {effects}; grants and \"for session\" approvals end. Model keys through the credential broker start when you restart Corbanu Terminal (you can restart right after saving); commands already running keep the permissions they started with."
+            )
+        } else if self.window_session_starts_here() {
+            // #1047: as #1015 for Aggressive.
+            format!(
+                "Core's level is saved as Moderate as soon as you confirm: {effects}. {WINDOW_SESSION_TAKES_MODERATE}{} Model keys through the credential broker start when you restart Corbanu Terminal (you can restart right after saving).",
+                if (self.sessions_run_here)(&self.codex_home, self.core.thread) {
+                    format!(" {OTHER_SESSIONS_HERE_TAKE_MODERATE_NOW}")
+                } else {
+                    String::new()
+                }
+            )
+        } else if !self.core.sessions_in_this_process {
+            // #1047: a remote app server's sessions.
+            format!(
+                "Core's level is saved as Moderate as soon as you confirm: {effects}. {}",
+                remote_window_sessions(ChosenLevel::Moderate, /*reaches*/ true)
             )
         } else {
             format!(
@@ -1747,6 +1903,25 @@ impl SecurityLevelPicker {
         )
     }
 
+    /// #1015: confirming Aggressive saves Core's level before this window's
+    /// session has started, so that session starts under it.
+    fn core_saved_for_window_start(&self) -> bool {
+        self.preflight_input.is_some()
+            && !self.basis.live
+            && self.window_session_starts_here()
+            && confirm::core_commit_needed(
+                &self.basis,
+                ChosenLevel::Aggressive,
+                /*raise*/ true,
+            )
+    }
+
+    /// #1015/#1047: this window's session has not started yet and starts in
+    /// this process, so it takes what a confirmation saves.
+    fn window_session_starts_here(&self) -> bool {
+        self.core.thread.is_none() && self.core.sessions_in_this_process
+    }
+
     /// Confirming Aggressive raises Core's level in this session at once.
     fn core_aggressive_on_confirm(&self) -> bool {
         self.preflight_input.is_some() && self.basis.live
@@ -1788,11 +1963,35 @@ impl SecurityLevelPicker {
                 format!(
                     "Core's level becomes Aggressive as soon as you confirm, in this session and the others of this Corbanu Terminal: {effects}; grants and \"for session\" approvals end. Approval for every command: {APPROVALS_NOW}."
                 )
+            } else if self.window_session_starts_here() {
+                // #1015: sessions that start here from now on take the saved
+                // level and approval for every command, this window's too.
+                format!(
+                    "Core's level is saved as Aggressive as soon as you confirm: {effects}. {WINDOW_SESSION_TAKES_AGGRESSIVE}{}",
+                    if (self.sessions_run_here)(&self.codex_home, self.core.thread) {
+                        format!(" {OTHER_SESSIONS_HERE_TAKE_AGGRESSIVE_NOW}")
+                    } else {
+                        String::new()
+                    }
+                )
+            } else if !self.core.sessions_in_this_process {
+                // #1047: a remote app server's sessions.
+                format!(
+                    "Core's level is saved as Aggressive as soon as you confirm: {effects}. {}",
+                    remote_window_sessions(ChosenLevel::Aggressive, /*reaches*/ true)
+                )
+            } else if (self.sessions_run_here)(&self.codex_home, self.core.thread) {
+                // #978: the other sessions of this process take it now.
+                format!(
+                    "Core's level becomes Aggressive from the next start (this session's policy does not run in this process yet): {effects}. {OTHER_SESSIONS_HERE_TAKE_AGGRESSIVE}"
+                )
             } else {
                 format!(
                     "Core's level becomes Aggressive from the next start (this session's policy does not run in this process yet): {effects}."
                 )
             },
+            // #919: other processes on the home take it from the saved state.
+            AGGRESSIVE_REACHES_OTHER_TERMINALS_REVIEW.to_string(),
         ]
     }
 
@@ -1861,6 +2060,56 @@ const PROTECTED_LAUNCH_KEEPS_SANDBOX: &str = "Protected launch (secretless_agent
 /// #842 (Travis, 2026-10-15): on the Saved screen after Moderate applied now.
 const MODERATE_REACHES_OTHER_TERMINALS: &str = "Other Corbanu Terminals running on this Corbanu home take Core's Moderate rules within about a second and say so; their model keys move to the credential broker when they restart.";
 
+/// #978: on the Aggressive review when this session's policy does not run in
+/// this process but other sessions of it do.
+const OTHER_SESSIONS_HERE_TAKE_AGGRESSIVE: &str = "The other sessions of this Corbanu Terminal running on this Corbanu home take it as soon as you confirm, with approval for every command from their next turn, and so do sessions you start here before you restart.";
+
+/// #1015: on the Aggressive review when this window's session has not
+/// started yet: it starts under the saved level (`recovery::recover`) and
+/// with approval for every command (`confirmed_approvals`).
+const WINDOW_SESSION_TAKES_AGGRESSIVE: &str = "This window's session has not started yet: when it starts here, it takes Core's level and approval for every command, and so do the other sessions you start here before you restart.";
+
+/// #1015: the rest of [`OTHER_SESSIONS_HERE_TAKE_AGGRESSIVE`] after
+/// [`WINDOW_SESSION_TAKES_AGGRESSIVE`].
+const OTHER_SESSIONS_HERE_TAKE_AGGRESSIVE_NOW: &str = "The other sessions of this Corbanu Terminal running on this Corbanu home take it as soon as you confirm, with approval for every command from their next turn.";
+
+/// #1047: as [`WINDOW_SESSION_TAKES_AGGRESSIVE`], for Moderate: the session
+/// starts under the saved level (`recovery::recover`).
+const WINDOW_SESSION_TAKES_MODERATE: &str = "This window's session has not started yet: when it starts here, it takes Core's Moderate rules, and so do the other sessions you start here.";
+
+/// #1047: the rest of the Moderate review line when other sessions of this
+/// process run on the home.
+const OTHER_SESSIONS_HERE_TAKE_MODERATE_NOW: &str = "The other sessions of this Corbanu Terminal running on this Corbanu home take Core's Moderate rules as soon as you confirm; their grants and \"for session\" approvals end.";
+
+/// #1047: this window's sessions run on a remote app server (or the local
+/// daemon), in another process: they take the saved level only as another
+/// Corbanu Terminal on the home would, and a start against such a server is
+/// refused while a level above Permissive is saved
+/// (`SecurityLaunch::check_target`).
+/// `reaches`: Core's level was raised and saved, so a server on this home
+/// takes it.
+fn remote_window_sessions(level: ChosenLevel, reaches: bool) -> String {
+    format!(
+        "This window's sessions run on an app server outside this Corbanu Terminal{} Corbanu Terminal starts against such a server only under Permissive: to use {}, start Corbanu Terminal locally.",
+        if reaches {
+            ": if that server runs on this Corbanu home, they take Core's saved level as other Corbanu Terminals running on this home do; otherwise this level does not reach them."
+        } else {
+            "."
+        },
+        level.name()
+    )
+}
+
+/// #1047: why "restart now" is not offered in a remote window.
+const REMOTE_RESTART_REFUSED: &str = "Restart now is not offered: this window uses an app server outside this Corbanu Terminal, and Corbanu Terminal starts against one only under Permissive.";
+
+/// #919 (Travis, 2026-10-16, D20): on the Aggressive review, where Core's
+/// record is committed.
+const AGGRESSIVE_REACHES_OTHER_TERMINALS_REVIEW: &str = "Other Corbanu Terminals running on this Corbanu home take Core's Aggressive protections and approval for every command within about a second of confirming, and each says so; the rest of Aggressive starts there when they restart.";
+
+/// #919: on the Saved screen after Core's Aggressive record was saved.
+const AGGRESSIVE_REACHES_OTHER_TERMINALS: &str = "Other Corbanu Terminals running on this Corbanu home take Core's Aggressive protections and approval for every command within about a second and say so; the rest of Aggressive starts there when they restart.";
+
 fn name(level: SecurityLevel) -> &'static str {
     crate::security::view::profile_name(level)
 }
@@ -1897,6 +2146,20 @@ fn core_outcome_line(
             "Core's level is {} now in this session, and from every start.",
             name(report.in_force)
         ),
+        // #978: the other sessions of this process took it now.
+        LevelChangeKind::Stricter if report.other_sessions => format!(
+            "Core's level is {} now in the other sessions of this Corbanu Terminal{}.",
+            name(report.in_force),
+            if report.not_saved.is_none() {
+                ", and from every start"
+            } else {
+                ""
+            }
+        ),
+        // #1015: nothing holds it here and nothing was saved.
+        LevelChangeKind::Stricter if report.not_saved.is_some() => {
+            "Core's level is unchanged.".to_string()
+        }
         LevelChangeKind::Stricter => {
             format!(
                 "Core's level is {} from the next start.",
@@ -1913,6 +2176,11 @@ fn core_outcome_line(
             "Core's level stays {} in this session and is {} from the next start; grants and \"for session\" approvals ended now.",
             name(report.in_force),
             name(report.next_start)
+        ),
+        // #978: the other sessions of this process below it rose to it now.
+        LevelChangeKind::Unchanged if report.other_sessions => format!(
+            "Core's level: {}, now also in the other sessions of this Corbanu Terminal that were below it.",
+            name(report.in_force)
         ),
         LevelChangeKind::Unchanged => format!("Core's level: {}.", name(report.in_force)),
     }
@@ -1933,3 +2201,7 @@ mod issue_750_tests;
 #[cfg(test)]
 #[path = "security_level_picker_issue_816_tests.rs"]
 mod issue_816_tests;
+
+#[cfg(test)]
+#[path = "security_level_picker_issue_1047_tests.rs"]
+mod issue_1047_tests;

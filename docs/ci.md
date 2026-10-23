@@ -72,9 +72,8 @@ fresh copy (up to 2.1 GB each). The `cache-prune` workflow keeps only the newest
 copy of each such cache: it runs after blocking-ci, postmerge-ci, nightly-ci,
 tmux smoke and CodeQL finish on `main`, and hourly, and deletes older `main`
 copies with `.github/scripts/prune_actions_caches.py` (`--dry-run` lists them).
-It is the only job here that holds `actions: write` (`cla.yml` asks for it but
-runs only upstream). Caches without a run ID in the key (cargo-home, apt) are
-saved only on a key miss and aren't pruned.
+It is the only job here that holds `actions: write`. Caches without a run ID in
+the key (cargo-home, apt) are saved only on a key miss and aren't pruned.
 `.github/scripts/test_ci_timeout_budgets.py` enforces this; a new workflow that
 saves a run-ID-keyed cache on `main` must be added to `cache-prune`'s trigger
 list. Check usage with
@@ -101,6 +100,10 @@ disabled, because it conflicts with this workflow.
 Check the latest nightly run before cutting a release. To run these jobs on
 every PR again, pass `cold_bazel: true` to the `bazel`, `rust-ci` and `sdk` calls in
 `blocking-ci.yml` (and add a `BUILDBUDDY_API_KEY` secret so they finish in time).
+
+## Rust toolchain bumps
+
+See [Rust toolchain bump](rust-toolchain-bump.md) for what to update and when.
 
 ## Disabled Until Runners Exist
 

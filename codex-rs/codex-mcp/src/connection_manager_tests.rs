@@ -2747,6 +2747,16 @@ fn server_metadata_preserves_tool_approval_policy() {
         metadata.tool_approval_mode("search"),
         AppToolApproval::Approve
     );
+    // #1001 D52: without `approve`, the tool falls back to the server
+    // default, not to Auto.
+    assert_eq!(
+        metadata.tool_approval_mode_without_approve("search"),
+        AppToolApproval::Prompt
+    );
+    assert_eq!(
+        metadata.tool_approval_mode_without_approve("read"),
+        AppToolApproval::Prompt
+    );
 }
 
 #[tokio::test]

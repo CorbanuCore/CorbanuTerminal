@@ -7,7 +7,7 @@ or up to three when it declares `parallel_lanes` (the security plan since 2026-1
 Current active initiatives:
 
 - [1. P1 security hardening](p1-security-hardening.md) (from 2026-10-08; replaced the [closed P0 security plan](../completed/main-2026-10-08-p0-security-levels.md))
-- [2. Accounting follow-ups after PF-60](portfolio-agent-cost-accounting-followups.md) (from 2026-10-14, Travis's decision; took the slot of the [closed provider-onboarding plan](../completed/main-2026-10-14-unified-provider-auth.md), whose PF-84 flag-removal work is a [draft](../proposed/named-accounts-flag-removal.md))
+- 2. Free since 2026-10-20: the [accounting follow-ups plan](../completed/main-2026-10-20-portfolio-agent-cost-accounting-followups.md) completed; Travis assigns the slot
 - [3. Task Node integration and beta planning](initiative-delivery-control.md)
 
 Run `python3 docs/plans/check.py` before adding, moving, or closing a plan.

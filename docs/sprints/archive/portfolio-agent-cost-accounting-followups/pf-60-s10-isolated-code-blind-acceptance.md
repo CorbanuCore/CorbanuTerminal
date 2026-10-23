@@ -2,7 +2,7 @@
 sprint_id: "PF-60-S10"
 title: "Isolated code-blind acceptance of the follow-ups"
 status: completed
-plan_file: "docs/plans/active/portfolio-agent-cost-accounting-followups.md"
+plan_file: "docs/plans/completed/main-2026-10-20-portfolio-agent-cost-accounting-followups.md"
 plan_feature: "PF-60"
 execution_order: 5
 owner: "Codex worker pf60-s10 (integrator); fresh designer, reviewer, executors and evidence checkers; Travis Good accepts"
@@ -53,7 +53,7 @@ Completed. PF-60-S10's isolated code-blind run ([record](../../../../qa/portfoli
 
 ## Plan linkage
 
-- Plan: [Accounting follow-ups after PF-60](../../../plans/active/portfolio-agent-cost-accounting-followups.md); feature `PF-60`.
+- Plan: [Accounting follow-ups after PF-60](../../../plans/completed/main-2026-10-20-portfolio-agent-cost-accounting-followups.md); feature `PF-60`.
 - Acceptance advanced: all follow-up flows pass on one recorded binary under enforced isolation.
 
 ## Code boundaries

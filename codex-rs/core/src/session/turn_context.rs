@@ -703,11 +703,18 @@ impl TurnContext {
                 .features
                 .enabled(Feature::NamedAccounts)
                 .then(|| {
-                    self.provider
-                        .info()
-                        .account
-                        .as_ref()
-                        .map_or_else(|| "default".to_string(), |account| account.name.clone())
+                    // #1129: an account borrowed from another provider (same
+                    // API key, see `with_account_from`) keeps its owner.
+                    self.provider.info().account.as_ref().map_or_else(
+                        || "default".to_string(),
+                        |account| {
+                            if account.provider_id == self.config.model_provider_id {
+                                account.name.clone()
+                            } else {
+                                account.to_string()
+                            }
+                        },
+                    )
                 }),
             comp_hash: self.model_info.comp_hash.clone(),
             personality: self.personality,

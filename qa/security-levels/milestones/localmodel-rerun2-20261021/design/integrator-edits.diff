@@ -1,0 +1,11 @@
+--- amendments-L2-designer.md	2026-10-20 19:15:38
++++ amendments-L2-draft.md	2026-10-20 19:15:38
+@@ -41,7 +41,7 @@
+ - **#1095**: a refused image-tool read names the level on screen.
+ - **CB**: the coordinator's brief of 2026-10-20. MOD-09 runs items 5 and 7 only, and `~/.ssh/config` is not used for
+   item 7.
+-- **F**: integrator choices and test-machine facts (`tools.md`, screens-v6).
++- **F**: integrator choices and test-machine facts (the tester prompt's Environment section, screens-v6).
+ 
+ ## Rules for this re-run
+ 

@@ -1197,7 +1197,15 @@ impl Session {
                     });
             let (network_proxy, session_network_proxy) =
                 if let Some(spec) = config.permissions.network.as_ref() {
-                    let current_exec_policy = exec_policy.current();
+                    // D52 (#1001): under Aggressive (as the model client reads
+                    // the level), network allow rules saved outside it are
+                    // suspended.
+                    let live_aggressive = crate::client::live_level_of(
+                        config.security_level,
+                        Some(&ingress_policy),
+                        thread_id,
+                    ) == codex_security_policy::SecurityLevel::Aggressive;
+                    let current_exec_policy = exec_policy.current_for(live_aggressive);
                     let (network_proxy, session_network_proxy) = Self::start_managed_network_proxy(
                         spec,
                         current_exec_policy.as_ref(),
@@ -1499,12 +1507,14 @@ impl Session {
             .await?;
             sess.start_mcp_prewarm_worker(mcp_prewarm_rx, mcp_auth_changes);
             // #403: a conversation the user resumes or forks (restart, `/resume`,
-            // `/side`, editing a message) is a reopen: its warm-up is shown as
-            // such, and can be skipped. A sub-agent or reviewer started with
-            // copied history is not one; its warm-up stays an ordinary one.
+            // `/side`, editing a message, the first one too: #1038) is a reopen:
+            // its warm-up is shown as such, and can be skipped. A sub-agent or
+            // reviewer started with copied history is not one; its warm-up
+            // stays an ordinary one.
             let reopened = crate::session_startup_prewarm::is_reopen(
                 &initial_history,
                 &session_configuration.session_source,
+                config.reopened_by_prompt_edit,
             );
             sess.schedule_startup_prewarm(
                 session_configuration.base_instructions.clone(),

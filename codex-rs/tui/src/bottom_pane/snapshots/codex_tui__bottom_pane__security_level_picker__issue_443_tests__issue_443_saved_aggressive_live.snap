@@ -19,6 +19,9 @@ unused, model keys held by the credential broker, and the child-agent rules.
 Until then this session keeps your own settings for these, and commands already
 running keep the permissions they started with until they end.
 Core's level is Aggressive now in this session, and from every start.
+Other Corbanu Terminals running on this Corbanu home take Core's Aggressive
+protections and approval for every command within about a second and say so; the
+rest of Aggressive starts there when they restart.
 Press r to restart now: Corbanu Terminal closes this session and starts again in
 this folder with the same options. Conversations from before cannot be resumed
 under Aggressive.

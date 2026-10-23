@@ -1,0 +1,25 @@
+2026-10-20T04:43:57Z live check after restore (before shutdown)
+ls: /Users/Shared/agms-canary-ipc.pid: No such file or directory
+ls: /Users/agent/agms: No such file or directory
+ls: /Users/agent/agms-canary: No such file or directory
+ls: /etc/sudoers.d/agms-codeblind: No such file or directory
+ls: /opt/agms: No such file or directory
+ls: /private/tmp/agms-canary-ipc: No such file or directory
+agmx accounts: 0
+group-absent
+-rw-r--r--  1 root  wheel  82 Sep 17 22:00 /etc/codex/config.toml
+AGMS pf lines: 0
+10:set skip on lo0
+virtiofs: 1
+agadmin-1792471421-85808.sh
+agadmin-1792471425-85841.sh
+agadmin-1792471428-85880.sh
+su.exp
+0
+0
+Deleted Users
+Shared
+agent
+neo
+neo_1
+2026-10-20T04:43:55Z

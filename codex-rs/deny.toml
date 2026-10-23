@@ -70,7 +70,7 @@ feature-depth = 1
 # A list of advisory IDs to ignore. Note that ignored advisories will still
 # output a note when they are encountered.
 ignore = [
-    # Reviewed 2026-10-12. Keep this list in sync with .cargo/audit.toml.
+    # Reviewed 2026-10-19. Keep this list in sync with .cargo/audit.toml.
     # Each exception must identify the dependency path and removal condition.
     { id = "RUSTSEC-2024-0388", reason = "derivative is unmaintained; pulled in via starlark/starlark_syntax v0.14.2 used by execpolicy/cli/core; no fixed starlark release yet" },
     { id = "RUSTSEC-2025-0057", reason = "fxhash is unmaintained; pulled in via starlark_map under starlark v0.14.2 used by execpolicy/cli/core and bm25 used by core; remove when upstream dependencies drop fxhash" },
@@ -85,6 +85,10 @@ ignore = [
     { id = "RUSTSEC-2026-0194", reason = "quick-xml v0.39.4 remains via plist/syntect and wayland-scanner; plist does not exercise the affected APIs and wayland-scanner parses trusted build-time XML; remove when rust-plist#191 and wayland-rs#938 are released" },
     { id = "RUSTSEC-2026-0195", reason = "quick-xml v0.39.4 remains via plist/syntect and wayland-scanner; plist does not exercise the affected APIs and wayland-scanner parses trusted build-time XML; remove when rust-plist#191 and wayland-rs#938 are released" },
     { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml is unmaintained (no known vulnerability); pulled in via serde_yaml v0.9 (deprecated) used by core-plugins, core-skills and external-agent-migration to read YAML front matter and skill metadata files, which can come from third-party skills and plugins; remove when they move to a maintained YAML parser" },
+    { id = "RUSTSEC-2026-0370", reason = "zvariant v4.2.0 is unmaintained (merged into zbus 6; no known vulnerability); pulled in via zbus v4.4.0 under keyring v3.6.3/secret-service v4.0.0 used by codex-keyring-store for the Linux Secret Service; remove when keyring moves to zbus >= 6" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names v3.0.0 is unmaintained (merged into zbus 6; no known vulnerability); pulled in via zbus v4.4.0 under keyring v3.6.3/secret-service v4.0.0 used by codex-keyring-store for the Linux Secret Service; remove when keyring moves to zbus >= 6" },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive v4.2.0 is unmaintained (merged into zbus 6; no known vulnerability); pulled in via zvariant v4.2.0 under zbus v4.4.0, keyring v3.6.3/secret-service v4.0.0 used by codex-keyring-store; remove when keyring moves to zbus >= 6" },
+    { id = "RUSTSEC-2026-0374", reason = "basic-toml v0.1.10 is unmaintained (no known vulnerability); used only at compile time by the i18n-embed-fl/i18n-embed-impl proc macros (via i18n-config) to read age's bundled i18n.toml, for codex-secrets local storage; remove when age drops i18n-embed-fl or i18n-config moves to toml" },
 ]
 # If this is true, then cargo deny will use the git executable to fetch advisory database.
 # If this is false, then it uses a built-in git library.

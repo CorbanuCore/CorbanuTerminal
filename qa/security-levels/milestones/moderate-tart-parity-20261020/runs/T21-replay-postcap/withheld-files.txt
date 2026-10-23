@@ -1,0 +1,5 @@
+# Not exported (product homes, product logs, tester copies of product homes): size sha256 path
+0 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 product-logs/.codex-login.log.scrub-v1
+0 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 product-logs/.codex-tui.log.scrub-v1
+190311 4c1e6da332c45f2f8251b49e6763fa0e5e16149c743d19af06de5b0625eeeee7 product-logs/codex-tui.log
+408 9676b6852bcbad1cfb26fd14ae2e52f17ff7c50e645d7c3fd41483c2088dc1d9 product-home/config.toml

@@ -19,6 +19,54 @@ pub fn try_parse_shell(shell_lc_arg: &str) -> Option<Tree> {
     parser.parse(shell_lc_arg, old_tree)
 }
 
+/// The grammar's node type, so callers can walk a [`Tree`] without a
+/// tree-sitter dependency of their own.
+pub use tree_sitter::Node as SyntaxNode;
+
+/// Why [`try_parse_shell_bounded`] stopped without a tree.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ParseStop {
+    /// Every parse in progress had met a syntax error. Error recovery can
+    /// take time quadratic in the text, so it is not attempted.
+    SyntaxError,
+    /// The parse used more than its progress checks.
+    Budget,
+}
+
+/// [`try_parse_shell`] for text that must be parsed in bounded time: it
+/// stops at the first syntax error every parse in progress has met, or once
+/// tree-sitter has checked its progress more than `max_checks` times (it
+/// checks about once every 100 parse operations). Also returns the number
+/// of checks made. The bounds count work rather than time, so the same text
+/// always gets the same answer. A tree it returns may still hold an error
+/// (one met between two checks).
+pub fn try_parse_shell_bounded(
+    script: &str,
+    max_checks: usize,
+) -> (Result<Tree, ParseStop>, usize) {
+    let lang = BASH.into();
+    let mut parser = Parser::new();
+    #[expect(clippy::expect_used)]
+    parser.set_language(&lang).expect("load bash grammar");
+    let mut checks = 0usize;
+    let mut stop = ParseStop::Budget;
+    let mut progress = |state: &tree_sitter::ParseState| {
+        checks += 1;
+        if state.has_error() {
+            stop = ParseStop::SyntaxError;
+            return true;
+        }
+        checks > max_checks
+    };
+    let bytes = script.as_bytes();
+    let tree = parser.parse_with_options(
+        &mut |offset, _| bytes.get(offset..).unwrap_or_default(),
+        /*old_tree*/ None,
+        Some(tree_sitter::ParseOptions::new().progress_callback(&mut progress)),
+    );
+    (tree.ok_or(stop), checks)
+}
+
 /// Parse a script which may contain multiple simple commands joined only by
 /// the safe logical/pipe/sequencing operators: `&&`, `||`, `;`, `|`.
 ///
@@ -85,11 +133,7 @@ pub fn try_parse_word_only_commands_sequence(tree: &Tree, src: &str) -> Option<V
 
     let mut commands = Vec::new();
     for node in command_nodes {
-        if let Some(words) = parse_plain_command_from_node(node, src) {
-            commands.push(words);
-        } else {
-            return None;
-        }
+        commands.push(parse_plain_command_from_node(node, src)?);
     }
     Some(commands)
 }
@@ -98,6 +142,65 @@ pub fn try_parse_word_only_commands_sequence(tree: &Tree, src: &str) -> Option<V
 pub fn parse_shell_script_into_commands(script: &str) -> Option<Vec<Vec<String>>> {
     let tree = try_parse_shell(script)?;
     try_parse_word_only_commands_sequence(&tree, script)
+}
+
+/// A word of a plain command (see [`parse_shell_script_into_plain_words`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlainWord {
+    /// The word as [`parse_shell_script_into_commands`] returns it.
+    pub text: String,
+    /// Some of it is outside quotes, where bash still applies brace
+    /// expansion, pathname expansion and backslash removal.
+    pub unquoted: bool,
+}
+
+/// [`parse_shell_script_into_commands`], telling which words have parts
+/// outside quotes.
+pub fn parse_shell_script_into_plain_words(script: &str) -> Option<Vec<Vec<PlainWord>>> {
+    let tree = try_parse_shell(script)?;
+    let commands = try_parse_word_only_commands_sequence(&tree, script)?;
+    // The same command nodes, in the same order, as that parse.
+    let mut command_nodes = Vec::new();
+    let mut stack = vec![tree.root_node()];
+    while let Some(node) = stack.pop() {
+        if node.kind() == "command" {
+            command_nodes.push(node);
+        }
+        let mut cursor = node.walk();
+        stack.extend(node.children(&mut cursor));
+    }
+    command_nodes.sort_by_key(Node::start_byte);
+    if command_nodes.len() != commands.len() {
+        return None;
+    }
+    let mut plain = Vec::with_capacity(commands.len());
+    for (node, words) in command_nodes.into_iter().zip(commands) {
+        let mut cursor = node.walk();
+        let unquoted: Vec<bool> = node
+            .named_children(&mut cursor)
+            .map(|child| match child.kind() {
+                "string" | "raw_string" => false,
+                "concatenation" => {
+                    let mut parts = child.walk();
+                    child
+                        .named_children(&mut parts)
+                        .any(|part| matches!(part.kind(), "word" | "number"))
+                }
+                _ => true,
+            })
+            .collect();
+        if unquoted.len() != words.len() {
+            return None;
+        }
+        plain.push(
+            words
+                .into_iter()
+                .zip(unquoted)
+                .map(|(text, unquoted)| PlainWord { text, unquoted })
+                .collect(),
+        );
+    }
+    Some(plain)
 }
 
 pub fn extract_bash_command(command: &[String]) -> Option<(&str, &str)> {
@@ -479,6 +582,38 @@ mod tests {
                 "456".to_string()
             ]]
         );
+    }
+
+    #[test]
+    fn plain_words_tell_unquoted_parts() {
+        let words =
+            parse_shell_script_into_plain_words("git log 'a*' \"b?\" c* x\"y\" 'p'q && echo 1")
+                .expect("plain");
+        let flags: Vec<Vec<(&str, bool)>> = words
+            .iter()
+            .map(|command| {
+                command
+                    .iter()
+                    .map(|word| (word.text.as_str(), word.unquoted))
+                    .collect()
+            })
+            .collect();
+        assert_eq!(
+            flags,
+            vec![
+                vec![
+                    ("git", true),
+                    ("log", true),
+                    ("a*", false),
+                    ("b?", false),
+                    ("c*", true),
+                    ("xy", true),
+                    ("pq", true),
+                ],
+                vec![("echo", true), ("1", true)],
+            ]
+        );
+        assert_eq!(parse_shell_script_into_plain_words("echo $x"), None);
     }
 
     #[test]

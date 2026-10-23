@@ -126,8 +126,8 @@ impl ChatWidget {
         let mut items = Vec::new();
         if accounts.session_account(&provider_id) != name.as_str() {
             items.push(account_event_item(
-                "Use for this session",
-                "Start a new session whose requests to this provider use this account.",
+                "Start a new session on this account",
+                "Leaves this conversation as it is; the new session's requests to this provider use this account.",
                 ProviderAccountEvent::UseForSession {
                     provider_id: provider_id.clone(),
                     name: Some(name.clone()),
@@ -399,7 +399,11 @@ impl ChatWidget {
         let mut header = ColumnRenderable::new();
         header.push(Line::from(entry.display_name.clone().bold()));
         header.push(Line::from(status_description(status)));
-        if status.configuration == ProviderConfigurationState::Configured {
+        if is_unchecked_local_runtime(status) {
+            header.push(Line::from(
+                "Local server: not checked; the first request shows whether it is running.",
+            ));
+        } else if status.configuration == ProviderConfigurationState::Configured {
             header.push(Line::from(
                 "Credentials are present; a successful request is needed to verify access.",
             ));
@@ -694,8 +698,8 @@ fn push_default_account_items(
     ));
     if accounts.session_account(provider_id) != codex_vault::DEFAULT_PROVIDER_ACCOUNT {
         items.push(account_event_item(
-            "Use default account for this session",
-            "Start a new session whose requests use this provider's default account.",
+            "Start a new session on the default account",
+            "Leaves this conversation as it is; the new session's requests use this provider's default account.",
             ProviderAccountEvent::UseForSession {
                 provider_id: provider_id.to_string(),
                 name: None,
@@ -737,6 +741,11 @@ fn policy_item(
 fn status_description(status: &ProviderStatusSnapshot) -> String {
     let state = match status.configuration {
         ProviderConfigurationState::Configured => match status.eligibility {
+            // Ollama and LM Studio are never probed (no credential, no startup
+            // request), so their row must not claim more than that.
+            ProviderEligibilityState::Active if is_unchecked_local_runtime(status) => {
+                "Enabled · local (not checked)"
+            }
             ProviderEligibilityState::Active => "Enabled · configured",
             ProviderEligibilityState::Inactive => "Inactive",
             _ => "Configured",
@@ -754,6 +763,21 @@ fn status_description(status: &ProviderStatusSnapshot) -> String {
         current.unwrap_or(""),
         unavailable.unwrap_or("")
     )
+}
+
+/// A local runtime (Ollama, LM Studio) is reported configured without any
+/// probe: nothing is checked until a request is sent to it.
+pub(super) fn is_unchecked_local_runtime(status: &ProviderStatusSnapshot) -> bool {
+    status.methods.iter().any(|method| {
+        matches!(method.capability, ProviderSetupCapability::Local { .. })
+            && matches!(
+                method.state,
+                ProviderMethodState::Configured {
+                    source: codex_provider_auth::ProviderCredentialSource::Local,
+                    ..
+                }
+            )
+    })
 }
 
 fn credential_control_note(status: &ProviderStatusSnapshot) -> Option<&'static str> {
@@ -1016,6 +1040,23 @@ mod tests {
         let rendered =
             crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 100);
         insta::assert_snapshot!("provider_manager_account_actions", rendered);
+        // D174: choosing another account starts a new session, and says so.
+        chat.open_provider_account_actions(&claude, &accounts.rows[0], &accounts);
+        let rendered =
+            crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 120);
+        insta::assert_snapshot!("provider_manager_account_actions_new_session", rendered);
+        let mut items = Vec::new();
+        push_default_account_items(&mut items, "zai", &accounts);
+        assert!(
+            items
+                .iter()
+                .any(|item| item.name == "Start a new session on the default account"),
+            "{:?}",
+            items
+                .iter()
+                .map(|item| item.name.as_str())
+                .collect::<Vec<_>>()
+        );
 
         chat.open_provider_account_removal(
             &zai,
@@ -1101,6 +1142,122 @@ mod tests {
             Ok(AppEvent::OpenProviderManagerActions { provider_id }) if provider_id == entry.id
         ));
         assert_eq!(chat.provider_manager_selected_index(), Some(0));
+    }
+
+    /// #1288: /providers shows eight rows at a time; when there are more, the
+    /// popup says which row is selected out of how many.
+    #[tokio::test]
+    async fn provider_manager_shows_position_when_rows_exceed_the_window() {
+        let (mut chat, _tx, _rx, _op_rx) =
+            crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
+        let catalog = ProviderCatalog::from_runtime_providers(&chat.config_ref().model_providers);
+        let statuses = catalog
+            .entries()
+            .iter()
+            .map(|entry| ProviderStatusSnapshot {
+                id: entry.id.clone(),
+                methods: Vec::new(),
+                configuration: ProviderConfigurationState::Configured,
+                eligibility: ProviderEligibilityState::Active,
+                current: ProviderCurrentState::NotCurrent,
+                availability: ProviderAvailabilityState::Ready,
+            })
+            .collect::<Vec<_>>();
+        let total = provider_manager_rows(&catalog, &statuses, /*accounts*/ None).len();
+        assert!(
+            total > crate::bottom_pane::popup_consts::MAX_POPUP_ROWS,
+            "{total} rows"
+        );
+
+        chat.open_provider_manager(
+            &catalog, &statuses, /*focused_provider*/ None, /*accounts*/ None,
+        );
+        let rendered =
+            crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 80);
+        assert!(rendered.contains(&format!("1 / {total}")), "{rendered}");
+
+        chat.handle_key_event(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Down,
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        let rendered =
+            crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 80);
+        assert!(rendered.contains(&format!("2 / {total}")), "{rendered}");
+
+        chat.open_provider_manager(
+            &catalog,
+            &statuses[..3],
+            /*focused_provider*/ None,
+            /*accounts*/ None,
+        );
+        let rendered =
+            crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 80);
+        assert!(!rendered.contains(" / 3"), "{rendered}");
+    }
+
+    /// Ollama and LM Studio are listed without any probe, so their rows and
+    /// action header say "local (not checked)" rather than "configured".
+    #[tokio::test]
+    async fn provider_manager_marks_local_runtimes_not_checked() {
+        let (mut chat, _tx, _rx, _op_rx) =
+            crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
+        let catalog = ProviderCatalog::from_runtime_providers(&chat.config_ref().model_providers);
+        let mut metadata = codex_provider_auth::ProviderMetadataSnapshot::default();
+        for id in [
+            codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID,
+            codex_model_provider_info::LMSTUDIO_OSS_PROVIDER_ID,
+        ] {
+            metadata.insert(
+                catalog.get(id).expect("local runtime entry"),
+                codex_provider_auth::ProviderMetadata::Local(
+                    codex_provider_auth::LocalProviderMetadata::Available,
+                ),
+            );
+        }
+        let resolved = codex_provider_auth::ProviderStatusResolver::resolve(
+            &catalog,
+            &metadata,
+            &codex_provider_auth::ProviderEligibilitySnapshot::Loaded(Default::default()),
+            &codex_provider_auth::CurrentProviderSelection::None,
+        );
+        let openai = catalog
+            .get(codex_model_provider_info::OPENAI_PROVIDER_ID)
+            .expect("OpenAI entry");
+        let statuses = vec![
+            ProviderStatusSnapshot {
+                id: openai.id.clone(),
+                methods: Vec::new(),
+                configuration: ProviderConfigurationState::Configured,
+                eligibility: ProviderEligibilityState::Active,
+                current: ProviderCurrentState::NotCurrent,
+                availability: ProviderAvailabilityState::Ready,
+            },
+            resolved
+                .get(codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID)
+                .expect("Ollama status")
+                .clone(),
+            resolved
+                .get(codex_model_provider_info::LMSTUDIO_OSS_PROVIDER_ID)
+                .expect("LM Studio status")
+                .clone(),
+        ];
+
+        chat.open_provider_manager(
+            &catalog, &statuses, /*focused_provider*/ None, /*accounts*/ None,
+        );
+        insta::assert_snapshot!(
+            "provider_manager_local_runtimes",
+            crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 80)
+        );
+
+        let ollama = catalog
+            .get(codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID)
+            .expect("Ollama entry");
+        chat.open_provider_manager_actions(ollama, &statuses[1], /*account_provider*/ None);
+        insta::assert_snapshot!(
+            "provider_actions_local_runtime",
+            crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 80)
+        );
     }
 
     #[test]

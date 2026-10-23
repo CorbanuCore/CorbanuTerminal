@@ -388,15 +388,21 @@ async fn schedule_startup_prewarm_inner(
 /// reopens or forks (#403): resumed or forked history, started by the user's
 /// client. A sub-agent, reviewer or internal worker given copied history is
 /// not: the user opened nothing.
+///
+/// `reopened_by_prompt_edit` (#1038): editing the first message continues in
+/// a conversation with no history, which is a reopen all the same.
 pub(crate) fn is_reopen(
     history: &codex_protocol::protocol::InitialHistory,
     source: &codex_protocol::protocol::SessionSource,
+    reopened_by_prompt_edit: bool,
 ) -> bool {
     use codex_protocol::protocol::InitialHistory;
-    matches!(
-        history,
-        InitialHistory::Resumed(_) | InitialHistory::Forked(_)
-    ) && !source.is_non_root_agent()
+    let reopened = match history {
+        InitialHistory::Resumed(_) | InitialHistory::Forked(_) => true,
+        InitialHistory::New => reopened_by_prompt_edit,
+        InitialHistory::Cleared => false,
+    };
+    reopened && !source.is_non_root_agent()
 }
 
 /// What a reopened conversation says after its warm-up request is sent (#403).

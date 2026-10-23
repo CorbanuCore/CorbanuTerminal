@@ -1,7 +1,7 @@
-//! A realtime WebSocket session recorded as one request (#824).
+//! Realtime session ends on standalone WebSocket or existing WebRTC attempts.
 //!
-//! The session is admitted as one attempt when it opens, so it is in the
-//! ledger however it ends, and its end time is recorded when it closes. Its
+//! A WebSocket session is admitted when it opens; WebRTC retains the attempt
+//! already admitted for HTTP creation. The end states only its timestamp. Its
 //! tokens are never reported to this client - the realtime events it parses
 //! carry none - so they stay unknown, never zero.
 use super::Sampling;
@@ -38,16 +38,23 @@ impl RealtimeSessionRecord {
             .ok()
             .flatten()?;
         match sampling.admit_with_tier(model, url, /*tier*/ None).await {
-            Ok(attempt) => Some(Self {
-                sampling,
-                attempt,
-                source: Uuid::new_v4(),
-            }),
+            Ok(attempt) => Some(Self::for_attempt(sampling, attempt)),
             Err(error) => {
                 sampling.reject();
                 super::gap("admit realtime session", format_args!("{error:#}"));
                 None
             }
+        }
+    }
+
+    /// Observe a session on an already admitted HTTP call, without counting
+    /// another request. A separate source keeps its end distinct from any
+    /// observation made while creating that call.
+    pub(super) fn for_attempt(sampling: Arc<Sampling>, attempt: Attempt) -> Self {
+        Self {
+            sampling,
+            attempt,
+            source: Uuid::new_v4(),
         }
     }
 

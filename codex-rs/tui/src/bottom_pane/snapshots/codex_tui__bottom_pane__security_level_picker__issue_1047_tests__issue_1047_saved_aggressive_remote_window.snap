@@ -1,0 +1,17 @@
+---
+source: tui/src/bottom_pane/security_level_picker_issue_1047_tests.rs
+expression: "render(&picker, 80)"
+---
+Saved: Aggressive (nested agents: refuse)
+This window's sessions run on an app server outside this Corbanu Terminal: if
+that server runs on this Corbanu home, they take Core's saved level as other
+Corbanu Terminals running on this home do; otherwise this level does not reach
+them. Corbanu Terminal starts against such a server only under Permissive: to
+use Aggressive, start Corbanu Terminal locally.
+Core's level is Aggressive from the next start.
+Other Corbanu Terminals running on this Corbanu home take Core's Aggressive
+protections and approval for every command within about a second and say so; the
+rest of Aggressive starts there when they restart.
+Restart now is not offered: this window uses an app server outside this Corbanu
+Terminal, and Corbanu Terminal starts against one only under Permissive.
+enter or esc close

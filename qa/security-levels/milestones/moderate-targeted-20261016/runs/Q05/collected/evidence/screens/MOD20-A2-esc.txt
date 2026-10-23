@@ -1,0 +1,33 @@
+
+✔ You approved Corbanu to run cat /Users/agmx2/runs/agms-Q05-agmx2-20261016T110934Z/product-home/secrets/.v... this time
+
+• Explored
+  └ Read .vault.lock
+
+⚠ Secretless agent launch blocked access to `/Users/agmx2/runs/agms-Q05-agmx2-20261016T110934Z/product-home/secrets/.vault.lock`: at every security
+  level, Moderate included, agent commands can't read Corbanu's own files (such as its sign-in, vault, config and history) or common CLI tokens, even
+  when you approve them, so changing the level would not allow it.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Blocked:
+
+  cat: /Users/agmx2/runs/agms-Q05-agmx2-20261016T110934Z/product-home/secrets/.vault.lock: Operation not permitted
+
+  This is a vault file — blocked at every security level (like the config and history files), so switching to Permissive wouldn't help. You'd need to
+  read it yourself outside the agent sandbox.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+Security level
+Active in this session: Moderate
+Core's level: Moderate
+
+  Permissive
+> Moderate  (active)
+  Aggressive
+
+Protection around untrusted content and secrets while normal work continues: agent commands stay in your sandbox, credential and Corbanu files are
+protected, and protected actions after untrusted content need your fresh approval. Your own approval, sandbox and network settings stay.
+
+↑/↓ move · enter choose · g grants and kill switch · esc close · i inspect

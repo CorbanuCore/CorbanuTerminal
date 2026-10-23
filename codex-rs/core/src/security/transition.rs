@@ -27,8 +27,8 @@
 //! a start), while its revocation applies now. A downgrade or kill-switch
 //! release that cannot be saved changes nothing. The kill switch, on or off,
 //! also reaches the other processes running on the home, through their watch
-//! of the saved state ([`kill_switch_watch`], #507), and so does Moderate
-//! (#842).
+//! of the saved state ([`kill_switch_watch`], #507), and so do Moderate
+//! (#842) and Aggressive (#919), which only ever raise them.
 
 use std::path::Path;
 use std::path::PathBuf;
@@ -586,6 +586,34 @@ pub(crate) fn live_controller(home: &Path, thread: ThreadId) -> Option<TrustedSe
         .map(|shared| TrustedSecurityController { shared })
 }
 
+/// #978: whether a policy tree of this process runs on `home` (a session of
+/// this process uses it; not one of a remote app server). #1015: only an
+/// initialized tree counts, as only those take a commit (`propagate`), and
+/// not the one holding `except` (the confirming session's own).
+pub(crate) fn trees_run_on(home: &Path, except: Option<ThreadId>) -> bool {
+    let home = canonical(home);
+    let trees: Vec<Arc<SharedEffectivePolicy>> = {
+        let mut trees = TREES.lock().unwrap_or_else(PoisonError::into_inner);
+        trees.retain(|(_, tree)| tree.strong_count() > 0);
+        trees
+            .iter()
+            .filter(|(tree_home, _)| *tree_home == home)
+            .filter_map(|(_, tree)| tree.upgrade())
+            .collect()
+    };
+    trees.iter().any(|tree| {
+        tree.state
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_ref()
+            .is_some_and(|state| {
+                except.is_none_or(|thread| {
+                    state.root_agent_id != thread && !state.agents.contains_key(&thread)
+                })
+            })
+    })
+}
+
 /// #507: whether a person's kill switch is on in a policy tree of this
 /// process on `home`; `None` when no tree of this process is on it.
 pub(crate) fn live_kill_switch(home: &Path) -> Option<bool> {
@@ -734,7 +762,7 @@ impl super::EffectivePolicyView {
         }
         drop(trees);
         // #507: a kill switch saved by another process reaches this tree
-        // (#842: and Moderate).
+        // (#842, #919: and Moderate or Aggressive, only ever raising it).
         kill_switch_watch::ensure(&home);
     }
 }

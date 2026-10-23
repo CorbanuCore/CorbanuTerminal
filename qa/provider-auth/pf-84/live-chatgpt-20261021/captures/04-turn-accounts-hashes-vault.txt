@@ -1,0 +1,21 @@
+# provider:model:provider_account per turn_context, from each rollout in the throwaway home
+01a15d9e-d6dc-7af3-9798-0845cee8645f: openai:gpt-6-sol:t1
+01a15d9f-346e-7373-933b-2e71fdd9d1d0: openai:gpt-5.6-luna:t1 | openai:gpt-5.6-luna:t1 | zai:glm-5.3-flash:default | openai:gpt-5.6-luna:t1
+01a15da2-8755-77a0-88cc-5fbb0e8859a3: openai:gpt-5.6-luna:t1 | openai:gpt-5.6-luna:t1 | zai:glm-5.3-flash:default | openai:gpt-5.6-luna:t1 | openai:gpt-5.6-luna:t1 | openai:gpt-5.6-luna:t1
+01a15da2-e95a-76d2-8798-6d290edcec33: openai:gpt-5.6-luna:t1 | openai:gpt-5.6-luna:t1
+
+# default login file (auth.json) SHA-256: before sign-in / after all steps incl. sign-out
+14d0483703725bc9eb55ae96cc0c0f180facef7315d4d0302e8dbb3684000b5b  <L>/home/auth.json
+14d0483703725bc9eb55ae96cc0c0f180facef7315d4d0302e8dbb3684000b5b  <L>/home/auth.json
+
+# vault key storage in the throwaway home (no keychain item; file fallback)
+secrets/.vault.lock
+secrets/keyring-fallback/ed9625c29e6125a411fbeb40b953a04f8eafa1496940fe75a2778e44c5a193ed.key
+secrets/local.age
+
+$ corbanu login status
+Logged in using an API key - API key configured (fingerprint 14a1326dad39)
+$ corbanu account list
+No named accounts. Every provider uses its default account.
+$ corbanu logout --account t1   (run earlier)
+Signed out OpenAI account `t1`

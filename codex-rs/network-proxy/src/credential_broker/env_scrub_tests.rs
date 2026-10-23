@@ -241,7 +241,13 @@ fn pf_27_s09_entries_outside_the_heaps_are_overwritten() {
         .encode_utf16()
         .flat_map(u16::to_le_bytes)
         .collect();
-    super::windows_env::wipe_entries_in_allocation(page as usize, &name, &[&wide]);
+    super::windows_env::wipe_copies_in_allocation(
+        page as usize,
+        &name,
+        &[&wide],
+        &[],
+        /*heap*/ None,
+    );
     drop((taken, wide));
     assert!(super::windows_env::process_parameters_allocation().is_some());
 
@@ -251,4 +257,139 @@ fn pf_27_s09_entries_outside_the_heaps_are_overwritten() {
     // SAFETY: allocated above.
     unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) };
     assert_eq!(left, vec![u16::from(b'0'); key.len()]);
+}
+
+/// #974: in a swept allocation, a stale copy whose `NAME=` was partly
+/// overwritten (as one was outside every block the heap walk reported) is
+/// overwritten too, narrow or UTF-16, as in a block in use. A short value is
+/// overwritten only after its `NAME=`; the caller's own buffers are left.
+#[cfg(windows)]
+#[test]
+fn sec_974_stale_copies_without_their_name_are_overwritten_in_an_allocation() {
+    use windows_sys::Win32::System::Memory::MEM_COMMIT;
+    use windows_sys::Win32::System::Memory::MEM_RELEASE;
+    use windows_sys::Win32::System::Memory::MEM_RESERVE;
+    use windows_sys::Win32::System::Memory::PAGE_READWRITE;
+    use windows_sys::Win32::System::Memory::VirtualAlloc;
+    use windows_sys::Win32::System::Memory::VirtualFree;
+    let unmask =
+        |masked: &[u8]| Zeroizing::new(masked.iter().map(|byte| byte ^ 0x5a).collect::<Vec<u8>>());
+    let mask = |plain: &str| plain.bytes().map(|byte| byte ^ 0x5a).collect::<Vec<u8>>();
+    let key = mask(&Zeroizing::new(format!(
+        "sk-sec974-stale-{:016x}",
+        rand::random::<u64>()
+    )));
+    let placeholder = mask("dummy-key-974");
+    let name = format!("SEC_974_STALE_{}", std::process::id());
+    // SAFETY: two fresh private pages, released below.
+    let page = unsafe {
+        VirtualAlloc(
+            std::ptr::null(),
+            8192,
+            MEM_COMMIT | MEM_RESERVE,
+            PAGE_READWRITE,
+        )
+    }
+    .cast::<u8>();
+    assert!(!page.is_null(), "page");
+    let write = |offset: usize, bytes: &[u8]| {
+        // SAFETY: within the committed pages.
+        unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), page.add(offset), bytes.len()) };
+    };
+    let wide = |plain: &[u8]| -> Zeroizing<Vec<u8>> {
+        // Sized up front, so no reallocation leaves a partial copy behind.
+        let mut wide = Zeroizing::new(Vec::with_capacity(plain.len() * 2));
+        wide.extend(plain.iter().flat_map(|byte| [*byte, 0]));
+        wide
+    };
+    // Read back masked, so the test keeps no plain copy.
+    let read = |offset: usize, len: usize| -> Vec<u8> {
+        // SAFETY: within the committed pages.
+        unsafe { std::slice::from_raw_parts(page.add(offset), len) }
+            .iter()
+            .map(|byte| byte ^ 0x5a)
+            .collect()
+    };
+    // The name's start overwritten, as found in the failing run.
+    let narrow_at = 100 + "~~~~~~Y_KEY=".len();
+    write(100, b"~~~~~~Y_KEY=");
+    write(narrow_at, &unmask(&key));
+    // A UTF-16 copy with no name at all.
+    let wide_at = 1000;
+    write(wide_at, &wide(&unmask(&key)));
+    // A placeholder, too short to be hunted without its name...
+    let placeholder_at = 2000;
+    write(placeholder_at, &unmask(&placeholder));
+    // ...but overwritten after it.
+    let named = format!("{name}=");
+    let named_at = 3000 + named.len();
+    write(3000, named.as_bytes());
+    write(named_at, &unmask(&placeholder));
+    // A copy in the caller's own buffer.
+    let kept_at = 5000;
+    write(kept_at, &unmask(&key));
+
+    let plain = unmask(&key);
+    let plain_wide = wide(&plain);
+    let placeholder_plain = unmask(&placeholder);
+    let kept = (page as usize + kept_at, page as usize + kept_at + key.len());
+    super::windows_env::wipe_copies_in_allocation(
+        page as usize + 4096,
+        &name,
+        &[&plain_wide, &plain, &placeholder_plain],
+        &[kept],
+        /*heap*/ None,
+    );
+    drop((plain, plain_wide, placeholder_plain));
+    let left = [
+        read(narrow_at, key.len()),
+        read(wide_at, key.len() * 2),
+        read(placeholder_at, placeholder.len()),
+        read(named_at, placeholder.len()),
+        read(kept_at, key.len()),
+    ];
+    // SAFETY: allocated above.
+    unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) };
+    let zeros = |len: usize| vec![b'0' ^ 0x5a; len];
+    let wide_zeros: Vec<u8> = std::iter::repeat_n([b'0' ^ 0x5a, 0x5a], key.len())
+        .flatten()
+        .collect();
+    assert_eq!(left[0], zeros(key.len()), "narrow copy");
+    assert_eq!(left[1], wide_zeros, "UTF-16 copy");
+    assert_eq!(left[2], placeholder, "bare placeholder");
+    assert_eq!(left[3], zeros(placeholder.len()), "named placeholder");
+    assert_eq!(left[4], key, "the caller's own buffer");
+}
+
+/// #974: the sweep reaches every heap's memory: the allocations it covers
+/// include the process heap's and a private heap's.
+#[cfg(windows)]
+#[test]
+fn sec_974_heap_allocations_include_every_heap() {
+    use windows_sys::Win32::System::Memory::GetProcessHeap;
+    use windows_sys::Win32::System::Memory::HeapAlloc;
+    use windows_sys::Win32::System::Memory::HeapCreate;
+    // SAFETY: a private growable heap, never destroyed (see below).
+    let private = unsafe { HeapCreate(0, 0, 0) };
+    assert!(private != 0, "private heap");
+    // SAFETY: allocates from the private heap.
+    let block = unsafe { HeapAlloc(private, 0, 64) };
+    assert!(!block.is_null());
+    let allocations = super::windows_env::heap_allocations();
+    let base = |address: usize| super::windows_env::allocation_base(address).expect("allocation");
+    // SAFETY: this process's default heap.
+    let process_heap = unsafe { GetProcessHeap() } as usize;
+    let has = |address: usize| {
+        allocations
+            .iter()
+            .any(|(_, allocation)| *allocation == base(address))
+    };
+    let found = (
+        has(process_heap),
+        has(private as usize),
+        has(block as usize),
+    );
+    // The private heap is left alive: a concurrent sweep in this process
+    // could otherwise lock a destroyed heap handle.
+    assert_eq!(found, (true, true, true), "{allocations:#x?}");
 }

@@ -11,6 +11,7 @@ use std::time::SystemTime;
 use super::HISTORY_READ_BUFFER_SIZE;
 use super::HistoryConfig;
 use super::HistoryEntry;
+use super::HistoryFileLock;
 use super::MAX_RETRIES;
 use super::RETRY_SLEEP;
 use super::history_filepath;
@@ -114,7 +115,17 @@ pub fn lookup_batch(
     config: &HistoryConfig,
 ) -> std::io::Result<HistoryBatch> {
     let path = history_filepath(config);
-    let mut file = OpenOptions::new().read(true).open(path)?;
+    let file = OpenOptions::new().read(true).open(path)?;
+    lookup_batch_from_file(file, log_id, cursor, config)
+}
+
+// Own the file until every success and error return from the lookup.
+pub(crate) fn lookup_batch_from_file(
+    file: File,
+    log_id: u64,
+    cursor: HistoryBatchCursor,
+    config: &HistoryConfig,
+) -> std::io::Result<HistoryBatch> {
     let current_log_id = log_identity(&file.metadata()?).unwrap_or(0);
     if log_id != 0 && current_log_id != log_id {
         return Ok(HistoryBatch::default());
@@ -122,7 +133,10 @@ pub fn lookup_batch(
 
     for _ in 0..MAX_RETRIES {
         match file.try_lock_shared() {
-            Ok(()) => return scan_batch(&mut file, cursor, config),
+            Ok(()) => {
+                let mut locked_file = HistoryFileLock(file);
+                return scan_batch(&mut locked_file.0, cursor, config);
+            }
             Err(std::fs::TryLockError::WouldBlock) => std::thread::sleep(RETRY_SLEEP),
             Err(error) => return Err(error.into()),
         }

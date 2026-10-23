@@ -23,9 +23,13 @@
 //! to Moderate (Core's rules apply now, its grants and "for session"
 //! approvals end), as the other sessions of the confirming process do; the
 //! launch-time controls (the credential broker) wait for the next start, as
-//! there. Other levels are not taken from the file while running: a lower
-//! one never applies before a restart, and Aggressive saved elsewhere applies
-//! at the next session start. An unreadable file changes nothing while
+//! there. #919 (Travis, 2026-10-16, D20): so does Aggressive: a tree below it
+//! rises to Aggressive, and the sessions of this process take approval for
+//! every command (#505), as the other sessions of the confirming process do;
+//! Aggressive's launch-time controls (its sandbox profile, network, the
+//! environment rules, the broker) wait for the next start, as there. A level
+//! is only ever raised while running: a lower one saved elsewhere never
+//! applies before a restart. An unreadable file changes nothing while
 //! running (a transient read error must not flip the switch); the next start
 //! enforces it as before.
 //!
@@ -75,8 +79,8 @@ struct HomeWatch {
     /// stops and resumes Claude panes with it). They are told only of a
     /// change another process made.
     on: tokio::sync::watch::Sender<bool>,
-    /// #842: the level another process confirmed that this process's trees
-    /// rose to, for subscribers (the TUI says so); signalled per rise.
+    /// #842/#919: the level another process confirmed that this process's
+    /// trees rose to, for subscribers (the TUI says so); signalled per rise.
     raised: tokio::sync::watch::Sender<Option<SecurityLevel>>,
 }
 
@@ -102,8 +106,9 @@ pub(crate) fn subscribe(home: &Path) -> tokio::sync::watch::Receiver<bool> {
     watch(home, |watch| watch.on.subscribe())
 }
 
-/// #842: signalled when Moderate confirmed in another process on `home` was
-/// taken by this process's sessions (Core's level rose to it here).
+/// #842/#919: signalled when Moderate or Aggressive confirmed in another
+/// process on `home` was taken by this process's sessions (Core's level rose
+/// to it here).
 pub(crate) fn subscribe_level_raised(
     home: &Path,
 ) -> tokio::sync::watch::Receiver<Option<SecurityLevel>> {
@@ -149,7 +154,7 @@ fn watch<T>(home: &Path, with: impl FnOnce(&HomeWatch) -> T) -> T {
     result
 }
 
-fn run(home: &Path, watch: &HomeWatch) {
+fn run(home: &Path, watch: &Arc<HomeWatch>) {
     let (tx, rx) = mpsc::channel::<()>();
     // The file is replaced by a rename, so its folder is watched.
     let watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
@@ -197,13 +202,18 @@ fn run(home: &Path, watch: &HomeWatch) {
         let contents = std::fs::read(home.join(STATE_FILE)).ok();
         if last.as_ref() != Some(&contents) {
             last = Some(contents);
-            if let Some(level) = apply_saved(home).raised {
-                watch.raised.send_replace(Some(level));
-            }
+            let raised = apply_saved(home).raised;
             watch.on.send_if_modified(|on| {
                 let now = crate::security::revocation_change::kill_switch_on(home);
                 std::mem::replace(on, now) != now && !changed_here(home)
             });
+            match raised {
+                Some(SecurityLevel::Aggressive) => approve_every_command(home, watch),
+                Some(level) => {
+                    watch.raised.send_replace(Some(level));
+                }
+                None => {}
+            }
         }
         match rx.recv_timeout(POLL) {
             Ok(()) | Err(mpsc::RecvTimeoutError::Timeout) => {}
@@ -242,7 +252,7 @@ fn trees_on(home: &Path) -> Vec<Arc<SharedEffectivePolicy>> {
 pub(super) struct Applied {
     /// Trees that took a kill-switch change.
     pub(super) reached: usize,
-    /// #842: the level trees rose to, if any did.
+    /// #842/#919: the level trees rose to, if any did.
     pub(super) raised: Option<SecurityLevel>,
 }
 
@@ -252,8 +262,41 @@ pub(super) fn apply(home: &Path) -> usize {
     apply_saved(home).reached
 }
 
-/// The saved kill switch and a Moderate confirmed elsewhere (#842) reach
-/// this process's trees on `home`.
+/// #919: after this process's trees rose to Aggressive saved by another
+/// process, its sessions on `home` take approval for every command from
+/// their next turn (#505), and sessions it starts later start with it; then
+/// subscribers are told of the rise. Off the watch thread, which keeps
+/// reading the saved state (a kill switch saved meanwhile is not held up by
+/// `confirmed_approvals`' wait); on it only if no thread can start.
+fn approve_every_command(home: &Path, watch: &Arc<HomeWatch>) {
+    fn approve(home: &Path, watch: &HomeWatch) {
+        let approvals = crate::security::confirmed_approvals::confirm(home);
+        tracing::info!(
+            target: "codex_core::security::transition",
+            held = approvals.held,
+            kept = approvals.kept.len(),
+            pending = approvals.pending,
+            "Aggressive confirmed by another process: approval for every command"
+        );
+        watch.raised.send_replace(Some(SecurityLevel::Aggressive));
+    }
+    let thread_home = home.to_path_buf();
+    let thread_watch = Arc::clone(watch);
+    let spawned = std::thread::Builder::new()
+        .name("corbanu-aggressive-approvals".to_string())
+        .spawn(move || approve(&thread_home, &thread_watch));
+    if let Err(error) = spawned {
+        tracing::warn!(
+            target: "codex_core::security::transition",
+            %error,
+            "approval for every command on the watch thread"
+        );
+        approve(home, watch);
+    }
+}
+
+/// The saved kill switch and a Moderate (#842) or Aggressive (#919)
+/// confirmed elsewhere reach this process's trees on `home`.
 pub(super) fn apply_saved(home: &Path) -> Applied {
     let home = canonical(home);
     // Never between a commit of this process saving the file and applying
@@ -326,21 +369,24 @@ pub(super) fn apply_saved(home: &Path) -> Applied {
     }
     Applied {
         reached,
-        raised: raise_to_moderate(&home, &stored),
+        raised: raise_to_saved(&home, &stored),
     }
 }
 
-/// #842: Moderate saved by another process raises this process's trees on
-/// `home` that are below it, as a confirmation raises the other sessions of
-/// its own process: Core's level, so its rules apply now; the epoch moves,
-/// so grants and "for session" approvals end; and the sinks revoke. Only
-/// the level is taken here (the revocations stay with the kill-switch rules
-/// above). Returns the level when a tree rose.
-fn raise_to_moderate(
+/// #842/#919: Moderate or Aggressive saved by another process raises this
+/// process's trees on `home` that are below it, as a confirmation raises the
+/// other sessions of its own process: Core's level, so its rules apply now;
+/// the epoch moves, so grants and "for session" approvals end; and the sinks
+/// revoke. Never lowers a tree: Permissive saved elsewhere, or a level below
+/// a tree's own, changes nothing here. Only the level is taken here (the
+/// revocations stay with the kill-switch rules above). Returns the level
+/// when a tree rose.
+fn raise_to_saved(
     home: &Path,
     stored: &crate::security::recovery::DurableSecurityState,
 ) -> Option<SecurityLevel> {
-    if stored.level != SecurityLevel::Moderate {
+    let saved = stored.level;
+    if saved == SecurityLevel::Permissive {
         return None;
     }
     let mut raised = None;
@@ -350,31 +396,33 @@ fn raise_to_moderate(
             let Some(state) = guard.as_mut() else {
                 continue;
             };
-            if state.persisted.settings.level >= SecurityLevel::Moderate {
-                // Its next start reads Moderate at least (a restart of a
-                // window waiting for a downgrade starts at the saved level).
-                state.next_start_level = state.next_start_level.max(SecurityLevel::Moderate);
+            if state.persisted.settings.level >= saved {
+                // Its next start reads the saved level at least (a restart of
+                // a window waiting for a downgrade starts at the saved level).
+                state.next_start_level = state.next_start_level.max(saved);
                 continue;
             }
             let revocations = state.persisted.revocations.clone();
-            if let Err(error) = adopt(state, SecurityLevel::Moderate, revocations) {
+            if let Err(error) = adopt(state, saved, revocations) {
                 tracing::warn!(
                     target: "codex_core::security::transition",
                     %error,
-                    "cannot take Moderate confirmed by another process"
+                    level = %saved,
+                    "cannot take a level confirmed by another process"
                 );
                 continue;
             }
-            state.next_start_level = state.next_start_level.max(SecurityLevel::Moderate);
+            state.next_start_level = state.next_start_level.max(saved);
             true
         };
         if rose {
             tracing::info!(
                 target: "codex_core::security::transition",
-                "Moderate confirmed by another process on this home applies here now"
+                level = %saved,
+                "a level confirmed by another process on this home applies here now"
             );
             notify_sinks(&tree);
-            raised = Some(SecurityLevel::Moderate);
+            raised = Some(saved);
         }
     }
     raised

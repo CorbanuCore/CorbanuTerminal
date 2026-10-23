@@ -4,6 +4,9 @@
 // user-visible output must go through the appropriate abstraction (e.g.,
 // the TUI or the tracing stack).
 #![deny(clippy::print_stdout, clippy::print_stderr)]
+// The `Send` check of the file tools' futures nests through the tool
+// orchestrator's rounds (D50, #1001) deeper than the default limit of 128.
+#![recursion_limit = "256"]
 
 mod account_models_manager;
 mod anthropic_payload;

@@ -53,12 +53,14 @@ fn issue_826_namespace_programs_by_file_name() {
 }
 
 /// The rule is named in plain language, with the level, the tools that need
-/// it and the way forward; nothing offers a way to allow it.
+/// it and the way forward.
 #[test]
 fn issue_826_explanations_name_the_rule() {
     for text in [
-        denial_explanation("Moderate"),
-        approval_note("Moderate"),
+        denial_explanation(Rule::ModerateOneCommand),
+        denial_explanation(Rule::ModerateAfterUntrusted),
+        approval_note(Rule::ModerateOneCommand),
+        approval_note(Rule::ModerateAfterUntrusted),
         claude_pane_note("Moderate"),
     ] {
         for expected in [
@@ -73,8 +75,123 @@ fn issue_826_explanations_name_the_rule() {
         }
     }
     assert!(
-        denial_explanation("Aggressive")
+        denial_explanation(Rule::Aggressive)
             .starts_with("Security level Aggressive blocks creating user namespaces")
     );
     assert!(claude_pane_note("Aggressive").contains("Claude Code's own Bash sandbox"));
+}
+
+/// D27 (a): under Moderate the explanations say how a person allows it for
+/// one command (after a failure, whose output is untrusted content, only in
+/// a new session); under Aggressive that nothing does. The prompt's warning
+/// says what approving allows, that it can get past the file protections,
+/// and what "one run" covers.
+#[test]
+fn d27_moderate_names_the_one_command_way_and_aggressive_does_not() {
+    for text in [
+        denial_explanation(Rule::ModerateOneCommand),
+        denial_explanation(Rule::ModerateAfterUntrusted),
+        approval_note(Rule::ModerateOneCommand),
+        approval_note(Rule::ModerateAfterUntrusted),
+    ] {
+        for expected in ["outside the sandbox", "untrusted content", "Moderate"] {
+            assert!(text.contains(expected), "{expected:?} missing: {text}");
+        }
+    }
+    // After a failure the session already has untrusted content: a new one.
+    for rule in [Rule::ModerateOneCommand, Rule::ModerateAfterUntrusted] {
+        let text = denial_explanation(rule);
+        for expected in [
+            "a person can allow it for one command",
+            "this one's too",
+            "in a new session",
+        ] {
+            assert!(text.contains(expected), "{expected:?} missing: {text}");
+        }
+    }
+    let note = approval_note(Rule::ModerateOneCommand);
+    assert!(
+        note.contains("approving this prompt doesn't lift it"),
+        "{note}"
+    );
+    let note = approval_note(Rule::ModerateAfterUntrusted);
+    assert!(
+        note.contains("approving this prompt doesn't lift it"),
+        "{note}"
+    );
+    // Kill switch on, or Moderate not fully in force: no new-session advice.
+    for text in [
+        denial_explanation(Rule::ModerateNotInForce),
+        approval_note(Rule::ModerateNotInForce),
+    ] {
+        for expected in [
+            "Security level Moderate",
+            "kill switch",
+            "Permissive in /security",
+        ] {
+            assert!(
+                text.to_lowercase().contains(&expected.to_lowercase()),
+                "{expected:?} missing: {text}"
+            );
+        }
+        assert!(!text.to_lowercase().contains("new session"), "{text}");
+    }
+    for text in [
+        denial_explanation(Rule::Aggressive),
+        approval_note(Rule::Aggressive),
+    ] {
+        assert!(
+            text.to_lowercase()
+                .contains("no approval or grant lifts this"),
+            "{text}"
+        );
+        assert!(!text.contains("outside the sandbox"), "{text}");
+    }
+    let warning = moderate_one_run_warning();
+    for expected in [
+        "Warning (Linux): approving also lets this one run create user namespaces",
+        "rootless Podman, bwrap, unshare, Flatpak, Nix's build sandbox and Chrome's sandbox",
+        "this command can get past the file protections",
+        "may not run at Moderate",
+        "kernel",
+        "what it starts or is given while it runs",
+        "never remembered",
+    ] {
+        assert!(
+            warning.contains(expected),
+            "{expected:?} missing: {warning}"
+        );
+    }
+}
+
+/// D48 (c): after untrusted content under Moderate, the explanations name
+/// the known tools as the only commands it may still be allowed for (and a
+/// new session's first command); the list is the owner's.
+#[test]
+fn d48_moderate_names_the_known_tools() {
+    assert_eq!(
+        KNOWN_TOOLS,
+        ["unshare", "bwrap", "podman", "buildah", "flatpak", "nix"]
+    );
+    for text in [
+        denial_explanation(Rule::ModerateOneCommand),
+        denial_explanation(Rule::ModerateAfterUntrusted),
+        approval_note(Rule::ModerateOneCommand),
+        approval_note(Rule::ModerateAfterUntrusted),
+    ] {
+        assert!(
+            text.contains(
+                "one plain command that runs unshare, bwrap, podman, buildah, flatpak or nix"
+            ),
+            "{text}"
+        );
+    }
+    for text in [
+        denial_explanation(Rule::ModerateNotInForce),
+        approval_note(Rule::ModerateNotInForce),
+        denial_explanation(Rule::Aggressive),
+        approval_note(Rule::Aggressive),
+    ] {
+        assert!(!text.contains("plain command"), "{text}");
+    }
 }

@@ -405,6 +405,7 @@ async fn strict_auto_review_turn_grant_forces_guardian_for_shell_command_policy_
             },
             codex_exec_server::LOCAL_ENVIRONMENT_ID,
             Some(&originating_turn_state),
+            session.services.authority_marker(),
         )
         .await;
 
@@ -617,6 +618,8 @@ async fn shell_command_allows_sticky_turn_permissions_without_inline_request_per
                 }),
                 ..Default::default()
             },
+            /*granted_under*/ None,
+            session.services.authority_marker(),
         );
     }
 
@@ -678,7 +681,7 @@ async fn guardian_subagent_does_not_inherit_parent_exec_policy_rules() {
     )
     .expect("write policy file");
 
-    let mut config = build_test_config(codex_home.path()).await;
+    let mut config = build_test_config(codex_home.path(), project_dir.path()).await;
     config.cwd = project_dir.abs();
     config.config_layer_stack = ConfigLayerStack::new(
         vec![ConfigLayerEntry::new(

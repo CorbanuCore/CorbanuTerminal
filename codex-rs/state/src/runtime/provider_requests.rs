@@ -9,6 +9,17 @@ const DEFAULT_COOLDOWN_CAP_MS: i64 = 5 * 60 * 1000;
 /// before the turn goes on with this process's in-memory throttle. These steps
 /// run on the short-wait pool (`StateRuntime::quick`): an attempt waits at most
 /// `QUICK_BUSY_TIMEOUT`, so this allows a second one and no more.
+///
+/// This is a budget for starting tries, not a hard limit on the wait: a second
+/// try that starts inside it runs its full `QUICK_BUSY_TIMEOUT`. With the lock
+/// held throughout, the step is two 500 ms tries and a 50 ms pause, about
+/// 1.05 s on paper. Measured (#905, #916): about 1.2 s on macOS and about
+/// 1.3 s on Windows, where SQLite's busy sleeps round up to the 15.6 ms system
+/// timer (each 500 ms try takes about 625 ms). A loaded machine takes longer:
+/// 1.4-1.8 s on a loaded Mac, and one short wait took 2 s on a Windows CI
+/// runner (#914). Kept as is (owner decision D30, recorded on #905): a strict
+/// 1 s would allow one try only and send brief lock holds to the 60 s
+/// in-memory fallback (`STATE_DB_RETRY_AFTER`) sooner.
 pub(super) const PROVIDER_REQUEST_BUSY_WAIT: Duration = Duration::from_secs(1);
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]

@@ -106,6 +106,33 @@ async fn confirm_aggressive(test: &TestCodex) -> anyhow::Result<LevelChangeRepor
     Ok(report)
 }
 
+/// #978: a person confirms Aggressive where the confirming session's policy
+/// does not run in this process (no thread yet): Core's
+/// stored record is committed, and the commit raises this process's sessions.
+async fn confirm_aggressive_without_a_live_tree(
+    test: &TestCodex,
+) -> anyhow::Result<LevelChangeReport> {
+    let home = test.codex_home_path().to_path_buf();
+    let report = tokio::task::spawn_blocking(move || {
+        let basis = LevelBasis::read(&home, SecurityLevel::Permissive, /*thread*/ None);
+        assert!(!basis.live, "no live tree without a thread");
+        commit_human_level_change(
+            &home,
+            SecurityLevel::Permissive,
+            /*thread*/ None,
+            &basis,
+            SecurityLevel::Aggressive,
+            Probes::Passed,
+            /*now_unix_seconds*/ 1_000,
+        )
+    })
+    .await??;
+    assert_eq!(report.kind, LevelChangeKind::Stricter);
+    assert!(!report.live);
+    assert!(report.other_sessions, "the running session rose");
+    Ok(report)
+}
+
 async fn submit_text(codex: &CodexThread, text: &str) -> anyhow::Result<()> {
     codex
         .submit(Op::UserInput {
@@ -140,7 +167,16 @@ struct Run {
     wrote: bool,
 }
 
-async fn run(confirm: bool) -> anyhow::Result<Run> {
+/// Where Aggressive is confirmed before the turn, if at all.
+enum Confirm {
+    No,
+    /// In this session's `/security`.
+    InThisSession,
+    /// #978: where no live tree runs (no thread yet).
+    WithoutALiveTree,
+}
+
+async fn run(confirm: Confirm) -> anyhow::Result<Run> {
     let server = start_mock_server().await;
     let command = "printf x > issue505.txt";
     mount_sse_sequence(
@@ -172,8 +208,12 @@ async fn run(confirm: bool) -> anyhow::Result<Run> {
         .with_config(permissive_without_approvals)
         .build(&server)
         .await?;
-    if confirm {
-        let report = confirm_aggressive(&test).await?;
+    let report = match confirm {
+        Confirm::No => None,
+        Confirm::InThisSession => Some(confirm_aggressive(&test).await?),
+        Confirm::WithoutALiveTree => Some(confirm_aggressive_without_a_live_tree(&test).await?),
+    };
+    if let Some(report) = report {
         assert_eq!(
             report
                 .approvals
@@ -211,7 +251,20 @@ async fn run(confirm: bool) -> anyhow::Result<Run> {
 async fn issue_505_confirming_aggressive_requires_a_persons_approval_at_once() -> anyhow::Result<()>
 {
     skip_if_no_network!(Ok(()));
-    let confirmed = run(/*confirm*/ true).await?;
+    let confirmed = run(Confirm::InThisSession).await?;
+    assert!(confirmed.asked, "a person is asked before the command runs");
+    assert!(!confirmed.wrote, "declined: the command did not run");
+    Ok(())
+}
+
+/// #978: the same when the person confirmed where no live tree runs (no
+/// thread yet): the commit raises this process's running session, which then
+/// takes approval for every command.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn issue_978_aggressive_confirmed_without_a_live_tree_requires_approval_here()
+-> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    let confirmed = run(Confirm::WithoutALiveTree).await?;
     assert!(confirmed.asked, "a person is asked before the command runs");
     assert!(!confirmed.wrote, "declined: the command did not run");
     Ok(())
@@ -221,7 +274,7 @@ async fn issue_505_confirming_aggressive_requires_a_persons_approval_at_once() -
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn issue_505_permissive_sessions_keep_their_approval_policy() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
-    let permissive = run(/*confirm*/ false).await?;
+    let permissive = run(Confirm::No).await?;
     assert!(!permissive.asked);
     assert!(permissive.wrote);
     Ok(())

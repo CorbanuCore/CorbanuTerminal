@@ -1,0 +1,48 @@
+# D27 (a) (#891, Travis 2026-10-19, security sign-off): under Moderate on Linux,
+# a person may let one command create user namespaces by approving its request
+# to run outside the sandbox; the prompt warns that it can get past the file
+# protections. Record on Linux (the rule is Linux-only).
+id = "issue891-d27-moderate-one-run-userns"
+feature = "D27: under Moderate on Linux, allow user namespaces for one approved command"
+expected = "Under Moderate on Linux, the agent asks to run unshare outside the sandbox. The approval prompt warns that approving lets this one run create user namespaces and that it can get past the file protections; approved with y, the command runs as root in its own user namespace (uid-in-namespace=0)."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "moderate"
+
+[features]
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run exactly this shell command with sandbox_permissions set to require_escalated (justification: rootless tools need a user namespace): unshare --user --map-root-user sh -c 'echo uid-in-namespace=$(id -u)'"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Warning \\(Linux\\):[\\s\\S]*?file\\s+protections"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 6.0
+[[steps]]
+key = "y"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)uid-in-namespace=0(?:(?!Working).)*\\n› "
+timeout = 180
+compress = 3
+[[steps]]
+pause = 3.0

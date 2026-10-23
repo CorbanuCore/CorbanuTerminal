@@ -1,0 +1,4 @@
+  404 _securityagent Mon Oct 19 20:44:00 2026     /System/Library/Frameworks/Security.framework/Versions/A/MachServices/SecurityAgent.bundle/Contents/MacOS/SecurityAgent
+2026-10-20T03:46:54Z clear (baseline login-window SecurityAgent only)
+0
+     129

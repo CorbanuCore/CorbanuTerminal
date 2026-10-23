@@ -8,6 +8,7 @@ use super::invocation::Code;
 use super::invocation::Invocation;
 use super::shell::SimpleCommand;
 use super::shell::basename;
+use super::work;
 use base64::Engine;
 
 /// Bytes of one script file the classifier reads.
@@ -28,6 +29,7 @@ pub(super) fn joined_literals(text: &str) -> Vec<String> {
     let mut index = 0;
     let mut gap = String::new();
     while index < chars.len() {
+        work::step();
         let quote = chars[index];
         if !matches!(quote, '\'' | '"' | '`') {
             gap.push(quote);
@@ -38,6 +40,7 @@ pub(super) fn joined_literals(text: &str) -> Vec<String> {
         let mut escaped = false;
         index += 1;
         while index < chars.len() && chars[index] != quote {
+            work::step();
             if chars[index] == '\\' && index + 1 < chars.len() {
                 let (decoded, used) = decode_escape(&chars[index + 1..]);
                 // #841: only an escape that changes the text hides
@@ -226,8 +229,16 @@ pub(super) fn command_word(words: &[String]) -> Option<(usize, String)> {
     ];
     let mut index = 0;
     while let Some(word) = words.get(index) {
-        let name = basename(word).to_lowercase();
-        let assignment = word.contains('=') && !word.starts_with('-');
+        work::step();
+        // #1159: zsh `=git` runs git (`$(which git)`); any other `=word`
+        // is read as before.
+        let equals_git = equals_git(word);
+        let name = if equals_git {
+            "git".to_string()
+        } else {
+            basename(word).to_lowercase()
+        };
+        let assignment = word.contains('=') && !word.starts_with('-') && !equals_git;
         if assignment || KEYWORDS.contains(&name.as_str()) {
             index += 1;
             continue;
@@ -245,6 +256,7 @@ pub(super) fn command_word(words: &[String]) -> Option<(usize, String)> {
         index += 1;
         let mut operands = *operands;
         while let Some(option) = words.get(index) {
+            work::step();
             if option.starts_with('-') {
                 // `taskset -c 0 cmd` names the CPUs in the option instead.
                 if name == "taskset" && matches!(option.as_str(), "-c" | "--cpu-list") {
@@ -262,6 +274,37 @@ pub(super) fn command_word(words: &[String]) -> Option<(usize, String)> {
     None
 }
 
+/// #1159: whether `word` is zsh's `=git` (EQUALS expansion: the `git` on the
+/// path).
+pub(super) fn equals_git(word: &str) -> bool {
+    word.strip_prefix('=')
+        .is_some_and(|rest| basename(rest).eq_ignore_ascii_case("git"))
+}
+
+/// #989: whether the command word holds a parameter expansion the lexer
+/// misreads (`${c:-eval}`, `${!c}`, `${c}al`): its name is not the one the
+/// words spell, so it is code the classifier cannot name. Such a word
+/// counts as unseen wherever it could be a command or a wrapper; one that
+/// assigns a variable (`A=${x:-y} cmd`) stays an assignment.
+pub(super) fn misread_command(command: &SimpleCommand, words: &[String]) -> bool {
+    if command.operated.is_empty() {
+        return false;
+    }
+    let mut masked = words.to_vec();
+    for at in &command.operated {
+        work::step();
+        if let Some(word) = masked.get_mut(*at)
+            && command
+                .words
+                .get(*at)
+                .is_none_or(|raw| super::arithmetic::assignment(raw).is_none())
+        {
+            *word = super::shell::UNSEEN_OUTPUT.to_string();
+        }
+    }
+    command_word(&masked).is_some_and(|(at, _)| command.operated.contains(&at))
+}
+
 /// The invocation a simple command makes, if it runs a shell or interpreter.
 pub(super) fn invocation(words: &[String]) -> Option<Invocation<'_>> {
     let (index, name) = command_word(words)?;
@@ -276,7 +319,10 @@ fn executes_input(command: &SimpleCommand) -> bool {
     let Some((index, name)) = command_word(&command.words) else {
         return command.words.is_empty() && !command.fed_by.is_empty();
     };
-    if name.starts_with('$') || name.contains(super::shell::UNSEEN_OUTPUT) || name == "eval" {
+    if name.starts_with('$')
+        || name.contains(super::shell::UNSEEN_OUTPUT)
+        || matches!(name.as_str(), "eval" | "trap")
+    {
         return true;
     }
     if name == "parallel" {
@@ -320,6 +366,7 @@ pub(super) fn opaque_execution(commands: &[SimpleCommand]) -> bool {
         feeders.extend(command.pipe_from);
         let mut seen = std::collections::HashSet::new();
         while let Some(index) = feeders.pop() {
+            work::step();
             if !seen.insert(index) {
                 continue;
             }
@@ -340,6 +387,7 @@ pub(super) fn opaque_execution(commands: &[SimpleCommand]) -> bool {
 pub(super) fn patch_additions(patch: &str) -> Vec<(String, String)> {
     let mut files: Vec<(String, String)> = Vec::new();
     for line in patch.lines() {
+        work::step();
         let header = ["*** Add File: ", "*** Update File: ", "*** Move to: "]
             .iter()
             .find_map(|prefix| line.strip_prefix(prefix));

@@ -1683,6 +1683,87 @@ async fn issue_582_a_placeholder_left_by_a_killed_run_is_removed_by_the_next() {
     );
 }
 
+/// #348: as #582, but the killed run's temporary folder (with the registry
+/// that recorded its placeholder) is lost before the next run, as on a
+/// reboot. The record kept in the Corbanu home removes it at the next start;
+/// before, it stayed for good. Needs an existing Corbanu home (where the
+/// sandbox keeps the record); skipped without one.
+#[tokio::test]
+async fn issue_348_a_placeholder_left_by_a_killed_run_is_removed_after_its_registry_is_lost() {
+    if should_skip_bwrap_tests().await {
+        eprintln!("skipping bwrap test: bwrap sandbox prerequisites are unavailable");
+        return;
+    }
+    if !codex_core::config::find_codex_home().is_ok_and(|home| home.as_path().is_dir()) {
+        eprintln!("skipping: no Corbanu home to keep the placeholder record in");
+        return;
+    }
+    let dir = tempfile::tempdir().expect("tempdir");
+    let base = dir.path().canonicalize().expect("canonical");
+    let home = base.join("home");
+    std::fs::create_dir_all(&home).expect("home");
+    let policy = FileSystemSandboxPolicy::restricted(vec![
+        FileSystemSandboxEntry {
+            path: FileSystemPath::Special {
+                value: FileSystemSpecialPath::Root,
+            },
+            access: FileSystemAccessMode::Write,
+            missing_path_behavior: None,
+        },
+        FileSystemSandboxEntry::skip_missing_path(
+            FileSystemPath::Path {
+                path: AbsolutePathBuf::from_absolute_path(home.join("Library/Keychains"))
+                    .expect("absolute"),
+            },
+            FileSystemAccessMode::Deny,
+        ),
+    ]);
+    let run = |script: &'static str, timeout_ms: u64, tmp: PathBuf| {
+        let cwd = AbsolutePathBuf::from_absolute_path(&base).expect("absolute base");
+        let profile =
+            PermissionProfile::from_runtime_permissions(&policy, NetworkSandboxPolicy::Restricted);
+        let mut env = create_env_from_core_vars();
+        std::fs::create_dir_all(&tmp).expect("tmp");
+        env.insert("TMPDIR".to_string(), tmp.to_string_lossy().into_owned());
+        async move {
+            run_cmd_result_with_permission_profile_for_cwd(
+                &["bash", "-c", script],
+                cwd,
+                profile,
+                env,
+                timeout_ms,
+                /*use_legacy_landlock*/ false,
+            )
+            .await
+        }
+    };
+    let killed_tmp = base.join("tmp-killed");
+    let killed = run("sleep 30", 2_000, killed_tmp.clone()).await;
+    assert!(
+        matches!(
+            killed
+                .as_ref()
+                .err()
+                .map(codex_protocol::error::CodexErr::details),
+            Some(CodexErrorDetails::Sandbox(SandboxErr::Timeout { .. }))
+        ),
+        "{killed:?}"
+    );
+    let library = home.join("Library");
+    let stale = std::fs::symlink_metadata(&library).expect("the placeholder stays");
+    assert!(stale.is_file() && stale.len() == 0, "{stale:?}");
+    // The reboot.
+    std::fs::remove_dir_all(&killed_tmp).expect("lose the registry");
+    let output = run("echo ran-348", NETWORK_TIMEOUT_MS, base.join("tmp-next"))
+        .await
+        .expect("the next run starts");
+    assert!(output.stdout.text.contains("ran-348"), "{output:?}");
+    assert!(
+        std::fs::symlink_metadata(&library).is_err(),
+        "the stale placeholder is removed, and the next run cleans up its own"
+    );
+}
+
 /// #493: under a full-write profile with a denial, the writable `/` bind
 /// must not cover the minimal `/dev` (bubblewrap binds `nodev`), so
 /// `/dev/null` stays usable while the denied file stays unreadable.

@@ -346,3 +346,32 @@ fn write_named_fake_bwrap_in(dir: &Path) -> PathBuf {
     fs::set_permissions(&path, permissions).expect("chmod fake bwrap");
     fs::canonicalize(path).expect("canonicalize fake bwrap")
 }
+
+/// #635: the probe runs a file that another process still holds open for
+/// writing once the writer closes it (here this test holds it; in a test
+/// binary, a child forked by another thread does), instead of reading the
+/// `ETXTBSY` spawn error as "has access".
+#[test]
+fn system_bwrap_probe_waits_while_the_file_is_open_for_writing() {
+    let fake_bwrap = write_fake_bwrap(
+        r#"#!/bin/sh
+echo 'No permissions to create a new namespace' >&2
+exit 1
+"#,
+    );
+    let fake_bwrap_path: &Path = fake_bwrap.as_ref();
+    let writer = std::fs::OpenOptions::new()
+        .append(true)
+        .open(fake_bwrap_path)
+        .expect("open fake bwrap for writing");
+    let release = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(100));
+        drop(writer);
+    });
+
+    assert!(!system_bwrap_has_user_namespace_access(
+        fake_bwrap_path,
+        SYSTEM_BWRAP_PROBE_TIMEOUT,
+    ));
+    release.join().expect("writer thread");
+}

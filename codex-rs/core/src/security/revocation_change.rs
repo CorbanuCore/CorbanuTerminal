@@ -173,9 +173,10 @@ pub fn watch_kill_switch(codex_home: &Path) -> tokio::sync::watch::Receiver<bool
     super::effective_policy::transition::kill_switch_watch::subscribe(codex_home)
 }
 
-/// #842: signalled when Moderate, confirmed in another Corbanu Terminal
-/// process on `codex_home`, was taken by this process's sessions (seen
-/// within about a second): Core's Moderate rules apply here now.
+/// #842/#919: signalled when Moderate or Aggressive, confirmed in another
+/// Corbanu Terminal process on `codex_home`, was taken by this process's
+/// sessions (seen within about a second): Core's rules for that level apply
+/// here now (under Aggressive with approval for every command, #505).
 pub fn watch_level_raised_elsewhere(
     codex_home: &Path,
 ) -> tokio::sync::watch::Receiver<Option<SecurityLevel>> {

@@ -1,0 +1,23 @@
+---agms
+ls: /Users/agent/agms: No such file or directory
+ls: /Users/agent/agms/restore-state: No such file or directory
+---
+config.toml
+agmx accounts: 0
+homebrew
+keyfile-present
+AGMS pf lines: 0
+10:set skip on lo0
+/dev/disk0 on /Volumes/My Shared Files (AppleVirtIOFS, local, nodev, nosuid, automounted)
+ls: /Users/agent/ag-admin: No such file or directory
+ls: /Users/Shared/agms-canary-ipc.pid: No such file or directory
+ls: /Users/agent/agms-canary: No such file or directory
+ls: /etc/sudoers.d/agms-codeblind: No such file or directory
+ls: /private/tmp/agms-canary-ipc: No such file or directory
+who: 
+Deleted Users
+Shared
+agent
+neo
+neo_1
+2026-10-21T17:51:29Z

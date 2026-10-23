@@ -757,7 +757,11 @@ async fn run_review_on_session(
                 .parent_session
                 .services
                 .network_approval
-                .sync_session_approved_hosts_to(&review_session.session.services.network_approval)
+                .sync_session_approved_hosts_to(
+                    &review_session.session.services.network_approval,
+                    params.parent_session.services.authority_marker(),
+                    review_session.session.services.authority_marker(),
+                )
                 .await;
 
             build_guardian_prompt_items_with_parent_turn(
@@ -1572,9 +1576,10 @@ mod tests {
         let outcome = run_before_review_deadline(
             tokio::time::Instant::now() + Duration::from_millis(10),
             /*external_cancel*/ None,
-            async {
-                tokio::time::sleep(Duration::from_millis(50)).await;
-            },
+            // A future that cannot finish first. A 50 ms sleep raced the 10 ms
+            // deadline: after a long Windows scheduler stall both were ready
+            // and `select!` could pick the future.
+            std::future::pending::<()>(),
         )
         .await;
 
@@ -1614,9 +1619,10 @@ mod tests {
             tokio::time::Instant::now() + Duration::from_millis(10),
             /*external_cancel*/ None,
             &cancel_token,
-            async {
-                tokio::time::sleep(Duration::from_millis(50)).await;
-            },
+            // A future that cannot finish first. A 50 ms sleep raced the 10 ms
+            // deadline: after a long Windows scheduler stall both were ready
+            // and `select!` could pick the future.
+            std::future::pending::<()>(),
         )
         .await;
 

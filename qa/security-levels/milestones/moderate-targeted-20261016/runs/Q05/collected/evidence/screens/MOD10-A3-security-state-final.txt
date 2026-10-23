@@ -1,0 +1,45 @@
+
+⚠ Secretless agent launch blocked access to `/Users/agmx2/runs/agms-Q05-agmx2-20261016T110934Z/product-home/history.jsonl`: at every security level,
+  Moderate included, agent commands can't read Corbanu's own files (such as its sign-in, vault, config and history) or common CLI tokens, even when
+  you approve them, so changing the level would not allow it.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Blocked again:
+
+  cat: /Users/agmx2/runs/agms-Q05-agmx2-20261016T110934Z/product-home/history.jsonl: Operation not permitted
+
+  Same reason as before — history.jsonl is one of Corbanu's own files (sign-in, vault, config, history), which agent commands can't read at any
+  security level. You'd need to view it yourself directly.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Run: cat /Users/agmx2/runs/agms-Q05-agmx2-20261016T110934Z/product-home/security_state.json
+
+
+✔ You approved Corbanu to run cat /Users/agmx2/runs/agms-Q05-agmx2-20261016T110934Z/product-home/security_s... this time
+
+• Explored
+  └ Read security_state.json
+
+⚠ Security level Moderate blocked access to `/Users/agmx2/runs/agms-Q05-agmx2-20261016T110934Z/product-home/security_state.json`: agent commands can't
+  read or change Corbanu's security state and keys, even when you approve them. To allow it, a person can switch to Permissive in /security (it
+  applies after a restart).
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Blocked:
+
+  cat: /Users/agmx2/runs/agms-Q05-agmx2-20261016T110934Z/product-home/security_state.json: Operation not permitted
+
+  This one is a bit different from the previous two: security_state.json holds Corbanu's security state and keys, which agent commands can't read at
+  Moderate level. Unlike the config/history files (blocked at every level), this one could be allowed if you switch to Permissive in /security — the
+  change takes effect after a restart.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Write tests for @filename
+
+  Z.AI GLM 5.3 Flash via zai default · ~/runs/agms-Q05-agmx2-20261016T110934Z/fixture/workspace · Corbanu Terminal · TPS: 19.1 tok/s

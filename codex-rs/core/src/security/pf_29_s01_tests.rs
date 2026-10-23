@@ -81,6 +81,30 @@ fn find(preflight: &Preflight, kind: FindingKind) -> Vec<&Finding> {
         .collect()
 }
 
+/// The blocker every Windows machine has until PF-27-S06 brings protected
+/// launch there (#691).
+const WINDOWS_SANDBOX_BLOCKER: &str =
+    "OS sandbox: protected launch is not available on this platform yet (PF-27-S06)";
+
+/// [`Preflight::is_clean`] on macOS and Linux. Elsewhere (today, Windows)
+/// the OS sandbox row is never ready yet, so it must be exactly
+/// [`WINDOWS_SANDBOX_BLOCKER`] and the fixture is clean when nothing else
+/// blocks.
+pub(super) fn clean(preflight: &Preflight) -> bool {
+    if cfg!(any(target_os = "macos", target_os = "linux")) {
+        return preflight.is_clean();
+    }
+    let mut blockers = preflight.blockers();
+    let Some(at) = blockers
+        .iter()
+        .position(|line| line == WINDOWS_SANDBOX_BLOCKER)
+    else {
+        panic!("no Windows OS sandbox blocker in {blockers:?}");
+    };
+    blockers.remove(at);
+    blockers.is_empty()
+}
+
 fn layer(label: &str, path: Option<PathBuf>, toml: &str) -> ConfigLayerInput {
     ConfigLayerInput {
         label: label.to_string(),
@@ -90,17 +114,13 @@ fn layer(label: &str, path: Option<PathBuf>, toml: &str) -> ConfigLayerInput {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "PF-27-S06: protected launch is not available on Windows yet, so readiness is never clean (#691)"
-)]
 fn pf_29_s01_empty_machine_is_clean_only_when_controls_are_ready() {
     let fixture = Fixture::new();
     let sources = fixture.sources();
-    assert!(fixture.run(&sources).is_clean());
+    assert!(clean(&fixture.run(&sources)));
 
     let off = Preflight::run_with_key(&sources, ReadinessFlags::default(), KEY);
-    assert!(!off.is_clean());
+    assert!(!clean(&off));
     let blockers = off.blockers();
     for key in [
         "secretless_agent_launch",
@@ -115,10 +135,6 @@ fn pf_29_s01_empty_machine_is_clean_only_when_controls_are_ready() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "PF-27-S06: protected launch is not available on Windows yet, so readiness is never clean (#691)"
-)]
 fn pf_29_s01_credential_files_and_ssh_keys_are_isolated_not_blocking() {
     let fixture = Fixture::new();
     let home = fixture.home();
@@ -148,7 +164,7 @@ fn pf_29_s01_credential_files_and_ssh_keys_are_isolated_not_blocking() {
         );
     }
     assert_eq!(find(&preflight, FindingKind::SshPrivateKey).len(), 2);
-    assert!(preflight.is_clean(), "{:?}", preflight.blockers());
+    assert!(clean(&preflight), "{:?}", preflight.blockers());
 }
 
 #[test]
@@ -185,7 +201,7 @@ fn pf_29_s01_shell_profile_exports_block_and_never_expose_values() {
     let references = find(&preflight, FindingKind::Reference);
     assert_eq!(references.len(), 1);
     assert_eq!(references[0].class, SecretClass::PermittedDerived);
-    assert!(!preflight.is_clean());
+    assert!(!clean(&preflight));
 
     let rendered = format!("{preflight:?}{:?}", preflight.blockers());
     assert!(!rendered.contains(FAKE_KEY), "value leaked");
@@ -338,10 +354,6 @@ command = "docs-mcp"
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "PF-27-S06: protected launch is not available on Windows yet, so readiness is never clean (#691)"
-)]
 fn pf_29_s01_old_memory_content_blocks_until_removed() {
     let fixture = Fixture::new();
     let memories = fixture.corbanu().join("memories");
@@ -360,12 +372,13 @@ fn pf_29_s01_old_memory_content_blocks_until_removed() {
     assert_eq!(
         memory[0].location,
         memories
-            .join("rollout_summaries/old.md")
+            .join("rollout_summaries")
+            .join("old.md")
             .display()
             .to_string()
     );
     assert_eq!(memory[0].disposition, Disposition::RemoveFromContext);
-    assert!(!preflight.is_clean());
+    assert!(!clean(&preflight));
 }
 
 #[cfg(unix)]
@@ -453,15 +466,11 @@ fn nix_is_root() -> bool {
 /// so a locked vault shows up as a store that cannot be read; a damaged
 /// store is the same. An empty `secrets/` (lock file only) is no vault.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "PF-27-S06: protected launch is not available on Windows yet, so readiness is never clean (#691)"
-)]
 fn pf_29_s01_locked_or_damaged_vault_is_incomplete_readiness() {
     let fixture = Fixture::new();
     let store = fixture.corbanu().join("secrets/local.age");
     fixture.write(&fixture.corbanu().join("secrets/.vault.lock"), b"");
-    assert!(fixture.run(&fixture.sources()).is_clean());
+    assert!(clean(&fixture.run(&fixture.sources())));
 
     let vault_incomplete = |preflight: &Preflight| {
         preflight
@@ -472,11 +481,11 @@ fn pf_29_s01_locked_or_damaged_vault_is_incomplete_readiness() {
     fixture.write(&store, b"not an age file");
     let damaged = fixture.run(&fixture.sources());
     assert!(vault_incomplete(&damaged));
-    assert!(!damaged.is_clean());
+    assert!(!clean(&damaged));
 
     fixture.write(&store, b"age-encryption.org/v1\n-> scrypt salt 16\n---");
     let present = fixture.run(&fixture.sources());
-    assert!(present.is_clean(), "{:?}", present.blockers());
+    assert!(clean(&present), "{:?}", present.blockers());
     assert_eq!(
         find(&present, FindingKind::VaultStore)[0].disposition,
         Disposition::Denied
@@ -497,10 +506,6 @@ fn pf_29_s01_locked_or_damaged_vault_is_incomplete_readiness() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "PF-27-S06: protected launch is not available on Windows yet, so readiness is never clean (#691)"
-)]
 fn pf_29_s01_corrupt_snapshots_and_histories_are_isolated() {
     let fixture = Fixture::new();
     let home = fixture.corbanu();
@@ -536,7 +541,7 @@ fn pf_29_s01_corrupt_snapshots_and_histories_are_isolated() {
         find(&preflight, FindingKind::Wallet)[0].class,
         SecretClass::CustodyKey
     );
-    assert!(preflight.is_clean(), "{:?}", preflight.blockers());
+    assert!(clean(&preflight), "{:?}", preflight.blockers());
 }
 
 /// #294: the secretless launch contract creates its protected directories
@@ -574,7 +579,7 @@ fn pf_29_s01_drift_between_preflight_and_activation() {
     let netrc_id = find(&first, FindingKind::CredentialFile)[0].id.clone();
     assert_eq!(drift.changed, vec![netrc_id]);
     assert_eq!(drift.added.len(), 1);
-    assert!(!second.is_clean());
+    assert!(!clean(&second));
 
     let (_, flags) = first.recheck(&sources, ReadinessFlags::default());
     assert!(flags.readiness_changed);
@@ -658,10 +663,6 @@ fn pf_29_s01_devices_and_pipes_neither_hang_nor_exhaust_memory() {
 /// is stored; it is not a secret, so it neither blocks Aggressive nor makes
 /// its config file a "credential file".
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "PF-27-S06: protected launch is not available on Windows yet, so readiness is never clean (#691)"
-)]
 fn pf_29_s01_credential_store_modes_are_not_secrets() {
     let fixture = Fixture::new();
     let system_path = fixture.root.path().join("etc/codex/config.toml");
@@ -687,7 +688,7 @@ model_auto_compact_token_limit_scope = "body_after_prefix"
         Vec::<&Finding>::new()
     );
     assert_eq!(preflight.inventory.isolation_paths(), Vec::<PathBuf>::new());
-    assert!(preflight.is_clean(), "{:?}", preflight.blockers());
+    assert!(clean(&preflight), "{:?}", preflight.blockers());
 
     // Only the top-level settings, and only their choices: the same name
     // under another table, or a value that is not a choice, still blocks.
@@ -699,6 +700,6 @@ model_auto_compact_token_limit_scope = "body_after_prefix"
     ] {
         let mut sources = fixture.sources();
         sources.config_layers = vec![layer("launch flags", /*path*/ None, flag)];
-        assert!(!fixture.run(&sources).is_clean(), "{flag}");
+        assert!(!clean(&fixture.run(&sources)), "{flag}");
     }
 }

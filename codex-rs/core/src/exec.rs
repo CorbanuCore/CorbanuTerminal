@@ -65,6 +65,22 @@ const EXIT_CODE_SIGNAL_BASE: i32 = 128; // conventional shell: 128 + signal
 const EXEC_TIMEOUT_EXIT_CODE: i32 = 124; // conventional timeout exit code
 const CANCELLATION_TERMINATION_GRACE_PERIOD: Duration = Duration::from_millis(50);
 
+#[cfg(test)]
+tokio::task_local! {
+    /// Lets a unit test lengthen the cancellation grace period for the exec it
+    /// awaits, so a loaded runner can't turn "the TERM trap ran" into a race
+    /// against 50 ms (#349). Builds outside tests always use the constant.
+    pub(crate) static CANCELLATION_TERMINATION_GRACE_PERIOD_OVERRIDE: Duration;
+}
+
+fn cancellation_termination_grace_period() -> Duration {
+    #[cfg(test)]
+    if let Ok(period) = CANCELLATION_TERMINATION_GRACE_PERIOD_OVERRIDE.try_with(|period| *period) {
+        return period;
+    }
+    CANCELLATION_TERMINATION_GRACE_PERIOD
+}
+
 // I/O buffer sizing
 const READ_CHUNK_SIZE: usize = 8192; // bytes per read
 const AGGREGATE_BUFFER_INITIAL_CAPACITY: usize = 8 * 1024; // 8 KiB
@@ -1077,7 +1093,7 @@ async fn consume_output(
                         false
                     };
                     match tokio::time::timeout(
-                        CANCELLATION_TERMINATION_GRACE_PERIOD,
+                        cancellation_termination_grace_period(),
                         child.wait(),
                     )
                     .await

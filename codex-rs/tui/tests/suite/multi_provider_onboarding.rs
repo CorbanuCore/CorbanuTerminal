@@ -12,8 +12,6 @@ use anyhow::Context;
 use anyhow::Result;
 use anyhow::ensure;
 use core_test_support::responses;
-use sha2::Digest;
-use sha2::Sha256;
 use tempfile::tempdir;
 use uuid::Uuid;
 use wiremock::Mock;
@@ -22,6 +20,7 @@ use wiremock::ResponseTemplate;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
 
+use crate::support::file_hash::sha256_file;
 use crate::support::secret_scan;
 use crate::support::tmux::CommandSpec;
 use crate::support::tmux::SessionSpec;
@@ -1206,7 +1205,7 @@ trust_level = "trusted"
 }
 
 fn register_evidence(tmux: &TmuxServer, home: &Path, binary: &Path) -> Result<()> {
-    let hash = binary_sha256(binary)?;
+    let hash = sha256_file(binary)?;
     fs::write(
         home.join("binary.sha256"),
         format!("{hash}  {}\n", binary.display()),
@@ -1215,30 +1214,6 @@ fn register_evidence(tmux: &TmuxServer, home: &Path, binary: &Path) -> Result<()
     tmux.register_artifact("config.toml", home.join("config.toml"));
     tmux.register_artifact("codex-tui.log", home.join("log/codex-tui.log"));
     Ok(())
-}
-
-fn binary_sha256(binary: &Path) -> Result<String> {
-    // Debug binaries can exceed a gigabyte. Use a streaming system hash instead
-    // of loading the whole binary and hashing it in unoptimized test code.
-    for (program, arguments) in [("sha256sum", &[][..]), ("shasum", &["-a", "256"][..])] {
-        let output = match std::process::Command::new(program)
-            .args(arguments)
-            .arg(binary)
-            .output()
-        {
-            Ok(output) if output.status.success() => output,
-            _ => continue,
-        };
-        if let Some(hash) = std::str::from_utf8(&output.stdout)
-            .ok()
-            .and_then(|text| text.split_whitespace().next())
-            && hash.len() == 64
-            && hash.bytes().all(|byte| byte.is_ascii_hexdigit())
-        {
-            return Ok(hash.to_string());
-        }
-    }
-    Ok(format!("{:x}", Sha256::digest(fs::read(binary)?)))
 }
 
 async fn mount_corbanu_api_gateway(server: &MockServer) {
@@ -1345,7 +1320,7 @@ async fn capture_success_evidence(
     fs::create_dir_all(&directory)?;
     fs::write(directory.join("viewport.txt"), &viewport)?;
     fs::write(directory.join("scrollback.txt"), &scrollback)?;
-    let binary_hash = binary_sha256(binary)?;
+    let binary_hash = sha256_file(binary)?;
     fs::write(
         directory.join("binary.sha256"),
         format!("{binary_hash}  {}\n", binary.display()),

@@ -517,7 +517,9 @@ fn corrupt_encrypted_state_fails_closed() {
     let encrypted_path = dir.path().join("secrets").join("local.age");
     let mut bytes = std::fs::read(&encrypted_path).expect("encrypted vault");
     let payload_offset = bytes.len() / 2;
-    bytes[payload_offset] = b'!';
+    // XOR always changes the byte; assigning b'!' was a no-op when the
+    // ciphertext byte already was b'!' (~1 in 256 runs), so the vault stayed valid.
+    bytes[payload_offset] ^= 0xff;
     std::fs::write(&encrypted_path, bytes).expect("corrupt encrypted vault fixture");
 
     let reopened = Vault::new_with_keyring_store(dir.path().to_path_buf(), keyring);

@@ -288,6 +288,10 @@ log_dir = {:?}
 sqlite = true
 memories = true
 code_mode_host = false
+# No curated plugin sync (#1198): its `git fetch` from github.com runs in its
+# own process group, outlives a TUI killed at startup (the Timeout case) and
+# writes into this home while it is being removed.
+plugins = false
 [memories]
 generate_memories = true
 min_rollout_idle_hours = 0

@@ -2169,7 +2169,7 @@ mod tests {
     use codex_utils_absolute_path::AbsolutePathBuf;
     use codex_utils_absolute_path::test_support::PathBufExt;
     use codex_utils_absolute_path::test_support::test_path_buf;
-    use core_test_support::load_default_config_for_test;
+    use core_test_support::load_default_config_for_test_in;
     use pretty_assertions::assert_eq;
     use serde_json::json;
     use tempfile::TempDir;
@@ -2713,7 +2713,9 @@ mod tests {
     #[tokio::test]
     async fn guardian_command_execution_notifications_wrap_review_lifecycle() -> Result<()> {
         let codex_home = TempDir::new()?;
-        let config = load_default_config_for_test(&codex_home).await;
+        let cwd = TempDir::new()?;
+        let config =
+            load_default_config_for_test_in(&codex_home, Default::default(), cwd.path()).await;
         let thread_manager = Arc::new(
             codex_core::test_support::thread_manager_with_models_provider_and_home(
                 CodexAuth::create_dummy_chatgpt_auth_for_testing(),
@@ -3320,7 +3322,9 @@ mod tests {
     #[tokio::test]
     async fn turn_started_omits_active_snapshot_items() -> Result<()> {
         let codex_home = TempDir::new()?;
-        let config = load_default_config_for_test(&codex_home).await;
+        let cwd = TempDir::new()?;
+        let config =
+            load_default_config_for_test_in(&codex_home, Default::default(), cwd.path()).await;
         let thread_manager = Arc::new(
             codex_core::test_support::thread_manager_with_models_provider_and_home(
                 CodexAuth::create_dummy_chatgpt_auth_for_testing(),
@@ -3410,7 +3414,9 @@ mod tests {
     #[tokio::test]
     async fn interrupted_subagent_activity_removes_missing_thread_watch() -> Result<()> {
         let codex_home = TempDir::new()?;
-        let config = load_default_config_for_test(&codex_home).await;
+        let cwd = TempDir::new()?;
+        let config =
+            load_default_config_for_test_in(&codex_home, Default::default(), cwd.path()).await;
         let thread_manager = Arc::new(
             codex_core::test_support::thread_manager_with_models_provider_and_home(
                 CodexAuth::create_dummy_chatgpt_auth_for_testing(),
@@ -3506,7 +3512,9 @@ mod tests {
     #[tokio::test]
     async fn canonical_dynamic_tool_start_emits_item_and_requests_client() -> Result<()> {
         let codex_home = TempDir::new()?;
-        let config = load_default_config_for_test(&codex_home).await;
+        let cwd = TempDir::new()?;
+        let config =
+            load_default_config_for_test_in(&codex_home, Default::default(), cwd.path()).await;
         let thread_manager = Arc::new(
             codex_core::test_support::thread_manager_with_models_provider_and_home(
                 CodexAuth::create_dummy_chatgpt_auth_for_testing(),

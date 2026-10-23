@@ -30,6 +30,7 @@ use crate::tools::sandboxing::default_exec_approval_requirement;
 use crate::tools::sandboxing::sandbox_override_for_first_attempt;
 use crate::tools::sandboxing::unsandboxed_execution_allowed;
 use codex_otel::ToolDecisionSource;
+use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::error::SandboxErr;
 use codex_protocol::exec_output::ExecToolCallOutput;
@@ -42,6 +43,26 @@ use std::time::Instant;
 
 pub(crate) struct ToolOrchestrator {
     sandbox: SandboxManager,
+    handler_basis: Option<HandlerBasis>,
+}
+
+/// #1057: the policy a tool's handler read its `request_permissions` grants
+/// (and made its exec-policy decision) under, taken just before the grants
+/// were read, so a transition committed before the run reached the
+/// orchestrator is noticed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct HandlerBasis {
+    marker: crate::state::AuthorityMarker,
+    aggressive: bool,
+}
+
+impl HandlerBasis {
+    pub(crate) fn now(session: &crate::session::session::Session) -> Self {
+        Self {
+            marker: session.services.authority_marker(),
+            aggressive: session.services.model_client().live_level_is_aggressive(),
+        }
+    }
 }
 
 pub(crate) struct OrchestratorRunResult<Out> {
@@ -53,7 +74,14 @@ impl ToolOrchestrator {
     pub fn new() -> Self {
         Self {
             sandbox: SandboxManager::new(),
+            handler_basis: None,
         }
+    }
+
+    /// #1057: the run was prepared by a handler under `basis`.
+    pub(crate) fn with_handler_basis(mut self, basis: Option<HandlerBasis>) -> Self {
+        self.handler_basis = basis;
+        self
     }
 
     async fn run_attempt<Rq, Out, T>(
@@ -104,9 +132,11 @@ impl ToolOrchestrator {
                 .as_ref()
                 .map(ActiveNetworkApproval::execution_proxy),
         };
+        let unlabelled_mark = codex_windows_sandbox::unlabelled_roots_mark();
         let run_result = tool
             .run(req, &attempt_with_network_approval, &attempt_tool_ctx)
             .await;
+        warn_unlabelled_writable_roots(tool, req, tool_ctx, attempt, unlabelled_mark).await;
 
         let Some(network_approval) = network_approval else {
             return (run_result, None);
@@ -136,6 +166,17 @@ impl ToolOrchestrator {
         }
     }
 
+    /// Approves, selects the sandbox and runs the tool. D50 (#1001): when a
+    /// security transition is committed while a run is being approved (up to
+    /// its first attempt), the answer was for a stale prompt: nothing runs on
+    /// it, and the run is decided again under the new level, the person asked
+    /// again (as network access is, #945). Where the transition switched
+    /// Aggressive on, the run's exec-policy decision (made by the tool's
+    /// handler) is stale too, so it is refused instead: a new call is decided
+    /// under Aggressive. A retry outside the sandbox approved (or due) before
+    /// a transition is not run. #1057: a run whose handler read its grants
+    /// before a transition is handled the same way before anyone is asked,
+    /// as if its first round had gone stale.
     pub async fn run<Rq, Out, T>(
         &mut self,
         tool: &mut T,
@@ -144,6 +185,93 @@ impl ToolOrchestrator {
         turn_ctx: &crate::session::turn_context::TurnContext,
         approval_policy: AskForApproval,
     ) -> Result<OrchestratorRunResult<Out>, ToolError>
+    where
+        T: ToolRuntime<Rq, Out>,
+    {
+        let aggressive_at_start = match self.handler_basis {
+            Some(basis) => basis.aggressive,
+            None => tool_ctx
+                .session
+                .services
+                .model_client()
+                .live_level_is_aggressive(),
+        };
+        // The first round is decided under the handler's policy, so a
+        // transition committed from here on is noticed by it too. A basis
+        // without a marker (the policy not initialized then; not in real
+        // sessions) notices nothing, as before.
+        let mut first_under = self.handler_basis.and_then(|basis| basis.marker);
+        if tool_ctx.session.services.transition_since(first_under) {
+            tracing::info!(
+                target: "codex_core::security::transition",
+                call_id = %tool_ctx.call_id,
+                "security transition after the handler read its grants"
+            );
+            stale_refusal(
+                tool,
+                req,
+                tool_ctx,
+                aggressive_at_start,
+                /*before_decided*/ true,
+            )
+            .await?;
+            first_under = None;
+        }
+        let mut asked_again = false;
+        for _ in 0..MAX_STALE_APPROVAL_ROUNDS {
+            // D50: the policy this round is decided under.
+            let decided_under = first_under
+                .take()
+                .or_else(|| tool_ctx.session.services.authority_marker());
+            match Box::pin(self.run_round(
+                tool,
+                req,
+                tool_ctx,
+                turn_ctx,
+                approval_policy,
+                asked_again,
+                decided_under,
+            ))
+            .await?
+            {
+                Round::Done(result) => return Ok(result),
+                Round::Stale { person_asked } => {
+                    tracing::info!(
+                        target: "codex_core::security::transition",
+                        call_id = %tool_ctx.call_id,
+                        "approval answered after a security transition; not used"
+                    );
+                    stale_refusal(
+                        tool,
+                        req,
+                        tool_ctx,
+                        aggressive_at_start,
+                        /*before_decided*/ false,
+                    )
+                    .await?;
+                    // The note is for a person who saw the earlier prompt.
+                    asked_again = person_asked;
+                }
+            }
+        }
+        warn(tool_ctx, STALE_APPROVAL_REFUSAL).await;
+        Err(ToolError::Rejected(STALE_APPROVAL_REFUSAL.to_string()))
+    }
+
+    /// One decision and run; [`Round::Stale`] when a security transition was
+    /// committed before its first attempt started. `decided_under`: the
+    /// policy marker this round is decided under (D50, #1057).
+    #[expect(clippy::too_many_arguments)]
+    async fn run_round<Rq, Out, T>(
+        &mut self,
+        tool: &mut T,
+        req: &Rq,
+        tool_ctx: &ToolCtx,
+        turn_ctx: &crate::session::turn_context::TurnContext,
+        approval_policy: AskForApproval,
+        asked_again: bool,
+        decided_under: crate::state::AuthorityMarker,
+    ) -> Result<Round<Out>, ToolError>
     where
         T: ToolRuntime<Rq, Out>,
     {
@@ -230,6 +358,10 @@ impl ToolOrchestrator {
         // PF-30-S03: a protected action after untrusted content needs fresh,
         // exact human approval, whatever the requirement above would allow.
         let post_taint = post_taint_action(tool, req, tool_ctx, &requirement).await;
+        // D27 (a), D48 (c): the taint generation at which the person was
+        // warned, in the prompt they answer, that approving lets this run
+        // create user namespaces (only a run whose prompt showed it may).
+        let mut user_namespaces_warned_at = None;
         // Issue #245: additional permissions never reopen a protected path.
         // Refused before anyone is asked where no approval can lift the
         // rules for this run; checked again below once the rules are known.
@@ -328,6 +460,69 @@ impl ToolOrchestrator {
             persistence_note = liftable
                 .map(|path| protected_additional::persistence_note(&path.display().to_string()));
         }
+        // #943 item 17: under Moderate or Aggressive, a repository this
+        // session hasn't looked at yet, whose git folder this run may write,
+        // gets its first look before anyone decides the run: what was left
+        // there before (before Corbanu started, say) is told first and holds
+        // the approval (`git_refresh`). Judged before the protected-file rules
+        // apply (they only narrow what the run may write), and anywhere the
+        // run may leave the sandbox.
+        let git_first_look_failed =
+            match crate::security::protected_additional::protected_level(&tool_ctx.session) {
+                Some(level)
+                    if level != codex_security_policy::SecurityLevel::Permissive
+                        && !matches!(requirement, ExecApprovalRequirement::Forbidden { .. }) =>
+                {
+                    let effective =
+                        codex_sandboxing::policy_transforms::effective_file_system_sandbox_policy(
+                            &file_system_sandbox_policy,
+                            tool.additional_permissions(req),
+                        );
+                    // Where the rules apply and no approval lifts them (Aggressive),
+                    // their denied reads keep the run in the sandbox (#540); under
+                    // Moderate it never leaves it (#747).
+                    let rules_kept = tool_ctx
+                        .session
+                        .services
+                        .model_client()
+                        .post_taint_state()
+                        .is_some_and(|state| {
+                            state.protected_paths_apply() && !state.moderate_bound()
+                        });
+                    let may_leave = !moderate_keeps_sandbox
+                        && !rules_kept
+                        && ((tool
+                            .sandbox_permissions(req)
+                            .requires_escalated_permissions()
+                            && matches!(
+                                sandbox_override_for_first_attempt(
+                                    tool.sandbox_permissions(req),
+                                    &requirement,
+                                    &file_system_sandbox_policy,
+                                ),
+                                SandboxOverride::BypassSandboxFirstAttempt
+                            ))
+                            || unsandboxed_execution_allowed(&file_system_sandbox_policy));
+                    let unsandboxed = may_leave
+                        || self.sandbox.select_initial(
+                            &permissions,
+                            tool.sandbox_preference(),
+                            turn_ctx.windows_sandbox_level,
+                            turn_ctx.network.is_some(),
+                        ) == SandboxType::None;
+                    GitCheck::first_look(
+                        tool_ctx,
+                        level,
+                        git_check_folders(tool, req, turn_ctx, &materialized_workspace_roots),
+                        tool.command_cwd(req).map(|cwd| cwd.to_path_buf()),
+                        effective,
+                        unsandboxed,
+                    )
+                    .await
+                    .is_err()
+                }
+                _ => false,
+            };
         if let Some(action) = &post_taint {
             if let Some(refusal) = action.refused_up_front() {
                 post_taint_outcome(
@@ -354,9 +549,35 @@ impl ToolOrchestrator {
                 moderate_kept_read_note(tool, req, tool_ctx, turn_ctx, action).await;
             // #747: and that it stays in the sandbox under Moderate.
             let stays_sandboxed = moderate_sandbox_note(tool, req, moderate_keeps_sandbox);
-            // #826: that what needs a user namespace fails on Linux.
-            let user_namespaces_note =
-                user_namespaces_note(tool, req, tool_ctx, turn_ctx).map(|(note, _)| note);
+            // D48 (c): a known tool's request to run outside the sandbox may
+            // create user namespaces if approved here, with the warning;
+            // #826: elsewhere, that what needs one fails on Linux.
+            let warning = tool
+                .sandbox_permissions(req)
+                .requires_escalated_permissions()
+                .then(|| {
+                    crate::security::user_namespaces::one_run_warning(
+                        &tool_ctx.session,
+                        turn_ctx,
+                        &|| {
+                            runs_known_tool(
+                                tool,
+                                req,
+                                tool_ctx,
+                                turn_ctx,
+                                &file_system_sandbox_policy,
+                            )
+                        },
+                    )
+                })
+                .flatten();
+            let user_namespaces_note = match warning {
+                Some((warning, at)) => {
+                    user_namespaces_warned_at = Some(at);
+                    Some(warning)
+                }
+                None => user_namespaces_note(tool, req, tool_ctx, turn_ctx).map(|(note, _)| note),
+            };
             let approval_ctx = ApprovalCtx {
                 session: &tool_ctx.session,
                 turn: &tool_ctx.turn,
@@ -365,7 +586,7 @@ impl ToolOrchestrator {
                     [
                         Some(action.approval_reason()),
                         protected_read_note.clone(),
-                        kept_read_note.map(str::to_string),
+                        kept_read_note,
                         stays_sandboxed.map(str::to_string),
                         user_namespaces_note,
                     ]
@@ -395,9 +616,16 @@ impl ToolOrchestrator {
                 ApprovalReviewer::User,
                 &otel,
                 DeclineRecord::ByCaller,
+                asked_again,
             )
             .await;
             pending.answered();
+            // D50: approved before a security transition; decided again
+            // (the recheck below would refuse it).
+            if decision.is_ok() && tool_ctx.session.services.transition_since(decided_under) {
+                post_taint_outcome(action, tool_ctx, "stale", Some(asked.elapsed()));
+                return Ok(Round::Stale { person_asked: true });
+            }
             post_taint_outcome(
                 action,
                 tool_ctx,
@@ -416,14 +644,44 @@ impl ToolOrchestrator {
         // asks to run outside the sandbox needs the human (no cache, hook or
         // automatic reviewer), also where it would run unasked; that answer
         // lifts the protected-path rules. With approvals off it stays refused.
+        let asks_sandbox_approval = match approval_policy {
+            AskForApproval::Never => false,
+            AskForApproval::Granular(granular) => granular.allows_sandbox_approval(),
+            AskForApproval::UnlessTrusted | AskForApproval::OnRequest => true,
+        };
         let ask_human_to_escalate = post_taint.is_none()
             && !matches!(requirement, ExecApprovalRequirement::Forbidden { .. })
-            && match approval_policy {
-                AskForApproval::Never => false,
-                AskForApproval::Granular(granular) => granular.allows_sandbox_approval(),
-                AskForApproval::UnlessTrusted | AskForApproval::OnRequest => true,
-            }
+            && asks_sandbox_approval
             && moderate_escalation_before_taint(tool, req, tool_ctx, &requirement);
+        // D48 (c) (Travis, 2026-10-20, security sign-off): after untrusted
+        // content under Moderate on Linux, a request to run outside the
+        // sandbox whose program is a known tool (unshare, bwrap, podman,
+        // buildah, flatpak, nix) is asked about afresh, every time, by the
+        // person (no approval cache, hook, automatic reviewer or saved rule),
+        // with D27's warning: approving lets that one run create user
+        // namespaces. It lifts nothing else: the protected-file rules stay.
+        let after_untrusted_warning = if post_taint.is_none()
+            && !ask_human_to_escalate
+            && !matches!(
+                requirement,
+                ExecApprovalRequirement::Forbidden { .. }
+                    | ExecApprovalRequirement::Skip {
+                        bypass_sandbox: true,
+                        ..
+                    }
+            )
+            && asks_sandbox_approval
+            && tool
+                .sandbox_permissions(req)
+                .requires_escalated_permissions()
+        {
+            crate::security::user_namespaces::one_run_warning(&tool_ctx.session, turn_ctx, &|| {
+                runs_known_tool(tool, req, tool_ctx, turn_ctx, &file_system_sandbox_policy)
+            })
+            .filter(|(_, at)| *at > 0)
+        } else {
+            None
+        };
         let mut escalation_approved_by_human = false;
         match &requirement {
             _ if post_taint.is_some() => {}
@@ -438,24 +696,26 @@ impl ToolOrchestrator {
                     network_approval_context: None,
                     fresh_human_authority: true,
                 };
-                // Keep why the command runs (the requirement's reason, else the
-                // model's justification) ahead of the note.
-                let why = match &requirement {
-                    ExecApprovalRequirement::NeedsApproval {
-                        reason: Some(reason),
-                        ..
-                    } => Some(reason.clone()),
-                    _ => match tool.approval_action(req, &approval_ctx) {
-                        Ok(
-                            ApprovalAction::Shell { justification, .. }
-                            | ApprovalAction::ExecCommand { justification, .. },
-                        ) => justification,
-                        _ => None,
-                    },
-                };
-                // #826: and that what needs a user namespace fails on Linux.
-                let note = match user_namespaces_note(tool, req, tool_ctx, turn_ctx) {
-                    Some((user_namespaces, _)) => format!("{note} {user_namespaces}"),
+                // Keep why the command runs ahead of the note.
+                let why = escalation_why(tool, req, &requirement, &approval_ctx);
+                // D27 (a): on Linux, approving also lets this one run create
+                // user namespaces, and the person is warned (only a run whose
+                // prompt showed it may); elsewhere (#826), that what needs one
+                // fails. Before untrusted content only: if some arrived
+                // since this was decided, no warning.
+                let warning = crate::security::user_namespaces::one_run_warning(
+                    &tool_ctx.session,
+                    turn_ctx,
+                    &|| false,
+                )
+                .map(|(warning, at)| {
+                    user_namespaces_warned_at = Some(at);
+                    warning
+                });
+                let note = match warning.or_else(|| {
+                    user_namespaces_note(tool, req, tool_ctx, turn_ctx).map(|(note, _)| note)
+                }) {
+                    Some(user_namespaces) => format!("{note} {user_namespaces}"),
                     None => note,
                 };
                 approval_ctx.retry_reason = Some(match why {
@@ -472,11 +732,55 @@ impl ToolOrchestrator {
                         ApprovalReviewer::User,
                         &otel,
                         DeclineRecord::Here,
+                        asked_again,
                     )
                     .await?,
                 );
                 already_approved = true;
                 escalation_approved_by_human = true;
+            }
+            _ if after_untrusted_warning.is_some() => {
+                // Set: the guard holds.
+                let (warning, at) = after_untrusted_warning.clone().unwrap_or_default();
+                let approval_ctx = ApprovalCtx {
+                    session: &tool_ctx.session,
+                    turn: &tool_ctx.turn,
+                    call_id: &tool_ctx.call_id,
+                    retry_reason: None,
+                    network_approval_context: None,
+                    fresh_human_authority: true,
+                };
+                // Why the command runs, what approving may let it write
+                // (#513), that it stays in the sandbox (#747), the warning.
+                let retry_reason = [
+                    escalation_why(tool, req, &requirement, &approval_ctx),
+                    persistence_note.clone(),
+                    moderate_sandbox_note(tool, req, moderate_keeps_sandbox).map(str::to_string),
+                    Some(warning),
+                ]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>()
+                .join(" ");
+                approved_by = Some(
+                    resolve_tool_apporval(
+                        tool,
+                        req,
+                        tool_ctx.call_id.as_str(),
+                        ApprovalCtx {
+                            retry_reason: Some(retry_reason),
+                            ..approval_ctx
+                        },
+                        tool_ctx,
+                        ApprovalReviewer::User,
+                        &otel,
+                        DeclineRecord::Here,
+                        asked_again,
+                    )
+                    .await?,
+                );
+                already_approved = true;
+                user_namespaces_warned_at = Some(at);
             }
             ExecApprovalRequirement::Skip { .. } => {
                 if strict_auto_review {
@@ -498,6 +802,7 @@ impl ToolOrchestrator {
                             ApprovalReviewer::Guardian,
                             &otel,
                             DeclineRecord::Here,
+                            asked_again,
                         )
                         .await?,
                     );
@@ -575,6 +880,7 @@ impl ToolOrchestrator {
                         reviewer,
                         &otel,
                         DeclineRecord::Here,
+                        asked_again,
                     )
                     .await?,
                 );
@@ -588,6 +894,14 @@ impl ToolOrchestrator {
             .as_ref()
             .and_then(crate::security::grant_offer::OfferGuard::take_confirmed);
         drop(grant_offer);
+        // D50: approved (or decided) before a security transition: nothing
+        // derived from the approval is used (checked again just before the
+        // first attempt).
+        if tool_ctx.session.services.transition_since(decided_under) {
+            return Ok(Round::Stale {
+                person_asked: approved_by == Some(ApprovalResolutionSource::User),
+            });
+        }
 
         // PF-23-S01 slice 3: after untrusted content the sandbox itself denies
         // credential and Corbanu home reads, whatever the command text says.
@@ -600,8 +914,24 @@ impl ToolOrchestrator {
             Some(action) => Some(action.state.taint_generation),
             None => escalation_approved_by_human.then_some(0),
         };
+        // #874 (D6): the git folders this session watches, looked at again
+        // before deciding whether an approval lifts the rules (text typed
+        // into a running shell or a process left running may have changed
+        // them). #943 item 11: the folder the command runs in (its
+        // `workdir`) counts too.
+        let mut git_folders =
+            resolution_folders(tool, req, &turn_cwd, &materialized_workspace_roots);
+        git_folders.extend(tool.command_cwd(req));
+        let mut git_held = git_refresh(tool_ctx, git_folders).await;
+        // A failed first look (above) holds it too.
+        if git_first_look_failed {
+            git_held.push("(the check failed)".to_string());
+        }
+        let mut git_held_back = false;
         let denied = post_taint_read_denials(
             tool_ctx,
+            !git_held.is_empty(),
+            &mut git_held_back,
             human_approved_at,
             grant_operation
                 .as_ref()
@@ -612,6 +942,23 @@ impl ToolOrchestrator {
             permission_profile,
             &permissions,
         );
+        // D48 (c): a person's approval of a known tool's command after
+        // untrusted content lifts no rule but would allow user namespaces:
+        // held back too, and the person is told why.
+        if !git_held.is_empty()
+            && user_namespaces_warned_at.is_some()
+            && approved_by == Some(ApprovalResolutionSource::User)
+        {
+            git_held_back = true;
+        }
+        if git_held_back {
+            warn(tool_ctx, &git_held_note(&git_held)).await;
+        }
+        // A person's approval of this command when asked about it now: it
+        // counts for nothing below while the git check's findings stand
+        // (#874), like for the rules above.
+        let approved_by_person_now =
+            approved_by == Some(ApprovalResolutionSource::User) && git_held.is_empty();
         // #826: Core's level, where the protected-path rules apply.
         let protected_level = denied.as_ref().map(|(_, _, _, level)| *level);
         let (denied_exec_server_permissions, permissions) = match denied {
@@ -637,7 +984,7 @@ impl ToolOrchestrator {
                         writes:
                             crate::security::protected_additional::ReadOnlyScope::after_approval(
                                 level,
-                                approved_by == Some(ApprovalResolutionSource::User),
+                                approved_by_person_now,
                             ),
                     };
                     let cwds: Vec<&std::path::Path> = cwds.iter().map(AsRef::as_ref).collect();
@@ -652,24 +999,53 @@ impl ToolOrchestrator {
         // #826 (Travis, 2026-10-15): under Moderate and Aggressive (also
         // where only the launch enforces Aggressive) agent commands may not
         // create user namespaces, in which they could open what the Linux
-        // sandbox hides and defeat nested-launch detection. No approval or
-        // grant lifts it. Permissive is unchanged.
-        let (denied_exec_server_permissions, permissions) =
-            if crate::security::user_namespaces::rule_applies(
+        // sandbox hides and defeat nested-launch detection. No grant lifts
+        // it. Permissive is unchanged.
+        // D27 (a) (Travis, 2026-10-19, security sign-off): but for one run
+        // under Moderate whose request to run outside the sandbox a person
+        // approved when asked now, before untrusted content, after the
+        // prompt warned them. D48 (c) (2026-10-20): after untrusted content
+        // likewise, for a known tool's command, while no more untrusted
+        // content arrived since the warning. Never a remembered answer;
+        // never under Aggressive.
+        let launch_enforces_aggressive = turn_ctx.config.permissions.launch_enforces_aggressive();
+        let user_namespaces_allowed = crate::security::user_namespaces::allows_one_run(
+            &tool_ctx.session,
+            protected_level,
+            launch_enforces_aggressive,
+            user_namespaces_warned_at.is_some() && approved_by_person_now,
+            user_namespaces_warned_at,
+        );
+        // A retry of this run (after a sandbox or network denial) reuses
+        // these permissions: the same approved command, so the same answer.
+        if user_namespaces_allowed {
+            crate::security::user_namespaces::note_allowed_run(
+                tool_ctx.session.thread_id(),
+                &turn_ctx.sub_id,
+                &tool_ctx.call_id,
+            );
+            tracing::info!(
+                target: "codex_core::security::tainted_action",
+                call_id = %tool_ctx.call_id,
+                "user namespaces allowed for this run by the person's approval of its request to run outside the sandbox (Moderate)"
+            );
+        }
+        let (denied_exec_server_permissions, permissions) = if !user_namespaces_allowed
+            && crate::security::user_namespaces::rule_applies(
                 protected_level,
-                turn_ctx.config.permissions.launch_enforces_aggressive(),
+                launch_enforces_aggressive,
             ) {
-                (
-                    Some(deny_user_namespaces(
-                        denied_exec_server_permissions
-                            .as_ref()
-                            .unwrap_or(permission_profile),
-                    )),
-                    deny_user_namespaces(&permissions),
-                )
-            } else {
-                (denied_exec_server_permissions, permissions)
-            };
+            (
+                Some(deny_user_namespaces(
+                    denied_exec_server_permissions
+                        .as_ref()
+                        .unwrap_or(permission_profile),
+                )),
+                deny_user_namespaces(&permissions),
+            )
+        } else {
+            (denied_exec_server_permissions, permissions)
+        };
         let permission_profile = denied_exec_server_permissions
             .as_ref()
             .unwrap_or(permission_profile);
@@ -805,6 +1181,44 @@ impl ToolOrchestrator {
                     .await;
             }
         }
+        // #874 (D6): under Moderate or Aggressive, where this run (or its
+        // retry outside the sandbox) may write a project's git folder, look
+        // at it before (once per session) and after each attempt.
+        let git_check =
+            match crate::security::protected_additional::protected_level(&tool_ctx.session) {
+                Some(level) if level != codex_security_policy::SecurityLevel::Permissive => {
+                    let folders =
+                        git_check_folders(tool, req, turn_ctx, &materialized_workspace_roots);
+                    let effective =
+                        codex_sandboxing::policy_transforms::effective_file_system_sandbox_policy(
+                            &file_system_sandbox_policy,
+                            tool.additional_permissions(req),
+                        );
+                    let unsandboxed =
+                        initial_sandbox == SandboxType::None || policy_allows_no_sandbox;
+                    // #943 item 11: and the folder the command runs in (its
+                    // `workdir`), which may be another repository.
+                    let command_cwd = tool.command_cwd(req).map(|cwd| cwd.to_path_buf());
+                    GitCheck::begin(
+                        tool_ctx,
+                        level,
+                        folders,
+                        command_cwd,
+                        effective,
+                        unsandboxed,
+                    )
+                    .await
+                }
+                _ => None,
+            };
+        // D50: approved (or decided) before a security transition: nothing
+        // runs on it; decided again under the new level. Checked after the
+        // git folder's first look (#874), which may wait.
+        if tool_ctx.session.services.transition_since(decided_under) {
+            return Ok(Round::Stale {
+                person_asked: approved_by == Some(ApprovalResolutionSource::User),
+            });
+        }
         let initial_attempt_start = Instant::now();
         let (first_result, first_deferred_network_approval) = Self::run_attempt(
             tool,
@@ -814,8 +1228,11 @@ impl ToolOrchestrator {
             managed_network_active,
         )
         .await;
+        if let Some(check) = &git_check {
+            check.finish(tool_ctx).await;
+        }
         let initial_duration = initial_attempt_start.elapsed();
-        match first_result {
+        let result = match first_result {
             Ok(out) => {
                 // We have a successful initial result
                 Ok(OrchestratorRunResult {
@@ -870,12 +1287,19 @@ impl ToolOrchestrator {
                 }
                 let sandbox_startup_failure =
                     is_sandbox_startup_failure(initial_sandbox, output.as_ref());
+                // #874: nor while the git check's findings are still there
+                // (an approval doesn't lift the rules then); the person is
+                // told why.
                 let unsandboxed_allowed = retry_may_leave_sandbox(
                     policy_allows_no_sandbox,
                     keeps_sandbox,
                     post_taint.is_some(),
                     network_approval_context.is_some(),
                 );
+                if unsandboxed_allowed && !git_held.is_empty() {
+                    warn(tool_ctx, &git_held_note(&git_held)).await;
+                }
+                let unsandboxed_allowed = unsandboxed_allowed && git_held.is_empty();
                 // Under `Never` or `OnRequest`, do not retry without sandbox;
                 // surface a concise sandbox denial that preserves the original
                 // output. Exception: if the platform sandbox itself failed to
@@ -956,6 +1380,20 @@ impl ToolOrchestrator {
                             sandbox_startup_failure,
                         ))
                     && network_approval_context.is_none();
+                // D50: a retry due on an approval from before a security
+                // transition (one committed while the first attempt ran) is
+                // not asked about: it would not be run.
+                if tool_ctx.session.services.transition_since(decided_under) {
+                    warn(tool_ctx, STALE_RETRY_NOTE).await;
+                    otel.sandbox_outcome(
+                        &otel_tn,
+                        otel_ci,
+                        "denied",
+                        initial_duration,
+                        /*escalated_duration*/ None,
+                    );
+                    return Err(ToolError::Codex(err));
+                }
                 if !bypass_retry_approval {
                     let approval_ctx = ApprovalCtx {
                         session: &tool_ctx.session,
@@ -983,6 +1421,7 @@ impl ToolOrchestrator {
                         },
                         &otel,
                         DeclineRecord::Here,
+                        /*asked_again*/ false,
                     )
                     .await?;
                     if let Some(action) = &post_taint {
@@ -998,6 +1437,22 @@ impl ToolOrchestrator {
                                 .to_string(),
                         ));
                     }
+                }
+
+                // D50: nor a retry approved (or due on an earlier approval)
+                // before a security transition. The first attempt already
+                // ran, so the run is not decided again: the sandbox denial
+                // stands and the person is told why there was no retry.
+                if tool_ctx.session.services.transition_since(decided_under) {
+                    warn(tool_ctx, STALE_RETRY_NOTE).await;
+                    otel.sandbox_outcome(
+                        &otel_tn,
+                        otel_ci,
+                        "denied",
+                        initial_duration,
+                        /*escalated_duration*/ None,
+                    );
+                    return Err(ToolError::Codex(err));
                 }
 
                 let retry_sandbox_requested = !unsandboxed_allowed
@@ -1046,6 +1501,9 @@ impl ToolOrchestrator {
                 let (retry_result, retry_deferred_network_approval) =
                     Self::run_attempt(tool, req, tool_ctx, &retry_attempt, managed_network_active)
                         .await;
+                if let Some(check) = &git_check {
+                    check.finish(tool_ctx).await;
+                }
                 let escalated_duration = escalated_attempt_start.elapsed();
                 match retry_result {
                     Ok(output) => {
@@ -1087,9 +1545,244 @@ impl ToolOrchestrator {
                 }
                 Err(err)
             }
+        };
+        result.map(Round::Done)
+    }
+}
+
+/// #874, #837 (Travis, 2026-10-16, D6): the repositories whose git folder a
+/// run may write under Moderate or Aggressive (`security::git_postcheck`).
+struct GitCheck {
+    repos: Vec<crate::security::git_postcheck::Repo>,
+    level: codex_security_policy::SecurityLevel,
+}
+
+impl GitCheck {
+    /// The repositories of `folders` and of `command_cwd` (the folder the
+    /// command runs in, #943 item 11) whose git folder the run may write
+    /// (through `policy`, or anywhere where it may run unsandboxed), with
+    /// this session's first look at each taken.
+    async fn begin(
+        tool_ctx: &ToolCtx,
+        level: codex_security_policy::SecurityLevel,
+        folders: Vec<std::path::PathBuf>,
+        command_cwd: Option<std::path::PathBuf>,
+        policy: codex_protocol::permissions::FileSystemSandboxPolicy,
+        unsandboxed: bool,
+    ) -> Option<Self> {
+        let repos = Self::first_look(tool_ctx, level, folders, command_cwd, policy, unsandboxed)
+            .await
+            .ok()?;
+        (!repos.is_empty()).then_some(Self { repos, level })
+    }
+
+    /// Those repositories, with this session's first look at each taken
+    /// where it has none yet; `Err` (the person told) where the look failed.
+    async fn first_look(
+        tool_ctx: &ToolCtx,
+        level: codex_security_policy::SecurityLevel,
+        folders: Vec<std::path::PathBuf>,
+        command_cwd: Option<std::path::PathBuf>,
+        policy: codex_protocol::permissions::FileSystemSandboxPolicy,
+        unsandboxed: bool,
+    ) -> Result<Vec<crate::security::git_postcheck::Repo>, ()> {
+        use crate::security::git_postcheck;
+        let thread = tool_ctx.session.thread_id();
+        let Some(cwd) = folders.first().cloned() else {
+            return Ok(Vec::new());
+        };
+        let level_name = format!("{level:?}");
+        // Issue #524: reading folders stays off the async thread.
+        let looked = tokio::task::spawn_blocking(move || {
+            let folders: Vec<&std::path::Path> = folders.iter().map(AsRef::as_ref).collect();
+            let repos: Vec<_> = git_postcheck::repos_and(&folders, command_cwd.as_deref())
+                .into_iter()
+                .filter(|repo| {
+                    unsandboxed
+                        || repo
+                            .probes()
+                            .iter()
+                            .any(|probe| policy.can_write_effective_path_with_cwd(probe, &cwd))
+                })
+                .collect();
+            let message = git_postcheck::begin(thread, &repos, &level_name);
+            (repos, message)
+        })
+        .await;
+        // A failed look (its task panicked) leaves nothing to compare with:
+        // the person is told, and the next command looks again.
+        let Ok((repos, message)) = looked else {
+            warn(tool_ctx, GIT_CHECK_FAILED).await;
+            return Err(());
+        };
+        // What a session's first look finds there already (planted before,
+        // or by a process left running) is told too.
+        if let Some(message) = message {
+            warn(tool_ctx, &message).await;
+        }
+        Ok(repos)
+    }
+
+    /// After an attempt: tell the person what is new there.
+    async fn finish(&self, tool_ctx: &ToolCtx) {
+        let thread = tool_ctx.session.thread_id();
+        let level = format!("{:?}", self.level);
+        let repos = self.repos.clone();
+        let message = tokio::task::spawn_blocking(move || {
+            crate::security::git_postcheck::finish(thread, &repos, &level)
+        })
+        .await
+        .unwrap_or_else(|_| Some(GIT_CHECK_FAILED.to_string()));
+        if let Some(message) = message {
+            tracing::warn!(
+                target: "codex_core::security::git_postcheck",
+                call_id = %tool_ctx.call_id,
+                "{message}"
+            );
+            warn(tool_ctx, &message).await;
         }
     }
 }
+
+use crate::security::git_postcheck::CHECK_FAILED as GIT_CHECK_FAILED;
+
+/// #874 (D6): under Moderate or Aggressive, the git folders this session
+/// watches looked at again; what holds the rules for a command in `folders`
+/// (fail closed when the look fails). The person is told what is new.
+async fn git_refresh(
+    tool_ctx: &ToolCtx,
+    folders: Vec<codex_utils_absolute_path::AbsolutePathBuf>,
+) -> Vec<String> {
+    let Some(level) = crate::security::protected_additional::protected_level(&tool_ctx.session)
+        .filter(|level| *level != codex_security_policy::SecurityLevel::Permissive)
+    else {
+        return Vec::new();
+    };
+    let thread = tool_ctx.session.thread_id();
+    let level = format!("{level:?}");
+    let (message, held) = tokio::task::spawn_blocking(move || {
+        let folders: Vec<&std::path::Path> = folders.iter().map(AsRef::as_ref).collect();
+        crate::security::git_postcheck::recheck(thread, &level, &folders)
+    })
+    .await
+    // A failed look holds this command (not other sessions: a task ended
+    // by a shutdown fails too).
+    .unwrap_or_else(|_| {
+        (
+            Some(GIT_CHECK_FAILED.to_string()),
+            vec!["(the check failed)".to_string()],
+        )
+    });
+    if let Some(message) = message {
+        warn(tool_ctx, &message).await;
+    }
+    held
+}
+
+/// Why an approval or grant didn't lift the protected-file rules (#874).
+fn git_held_note(held: &[String]) -> String {
+    const SHOWN: usize = 20;
+    let mut shown = held
+        .iter()
+        .take(SHOWN)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(", ");
+    if held.len() > SHOWN {
+        shown.push_str(&format!(" and {} more", held.len() - SHOWN));
+    }
+    format!(
+        "The approval doesn't lift the protected-file rules for this command (nor run it \
+         outside the sandbox, nor let it create user namespaces) while the project's git \
+         folder still holds what Corbanu reported: {shown}."
+    )
+}
+
+/// One round of [`ToolOrchestrator::run`].
+enum Round<Out> {
+    Done(OrchestratorRunResult<Out>),
+    /// Approved (or decided) before a security transition (D50).
+    /// `person_asked`: a person answered the stale prompt.
+    Stale {
+        person_asked: bool,
+    },
+}
+
+/// D50 (#1001): `Err` when a run whose approval (or, #1057, whose handler's
+/// grant read) went stale must not be decided again: the transition switched
+/// Aggressive on, so its exec-policy decision is stale, or (D51) it carries
+/// permissions read from grants the transition ended. A new call reads them
+/// again. `before_decided`: the transition came before anyone was asked.
+async fn stale_refusal<Rq, Out, T>(
+    tool: &T,
+    req: &Rq,
+    tool_ctx: &ToolCtx,
+    aggressive_at_start: bool,
+    before_decided: bool,
+) -> Result<(), ToolError>
+where
+    T: ToolRuntime<Rq, Out>,
+{
+    let refusal = if tool_ctx
+        .session
+        .services
+        .model_client()
+        .live_level_is_aggressive()
+        != aggressive_at_start
+    {
+        if before_decided {
+            PREPARED_BEFORE_AGGRESSIVE_REFUSAL
+        } else {
+            STALE_AGGRESSIVE_REFUSAL
+        }
+    } else if tool.additional_permissions(req).is_some() {
+        if before_decided {
+            PREPARED_PERMISSIONS_REFUSAL
+        } else {
+            STALE_PERMISSIONS_REFUSAL
+        }
+    } else {
+        return Ok(());
+    };
+    warn(tool_ctx, refusal).await;
+    Err(ToolError::Rejected(refusal.to_string()))
+}
+
+/// D50 (#1001): how often a run whose approval went stale is decided again.
+const MAX_STALE_APPROVAL_ROUNDS: usize = 3;
+
+/// D50: why a run approved before a transition that switched Aggressive on
+/// did not run.
+pub(crate) const STALE_AGGRESSIVE_REFUSAL: &str = "Not run: the security policy changed while \
+     this was being approved (security level Aggressive was switched on), so the approval was \
+     not used. Ask again if it is still needed; it will be decided under Aggressive.";
+
+/// D50, D51: why a run that carried additional permissions (granted ones
+/// included) was not decided again after a transition.
+pub(crate) const STALE_PERMISSIONS_REFUSAL: &str = "Not run: the security policy changed while \
+     this was being approved, and the permissions it asked for or was granted were for the \
+     earlier policy, so the approval was not used. Ask again if it is still needed.";
+
+/// #1057: why a run prepared before Aggressive was switched on did not run.
+pub(crate) const PREPARED_BEFORE_AGGRESSIVE_REFUSAL: &str = "Not run: security level \
+     Aggressive was switched on while this was being prepared, before it was decided. Ask \
+     again if it is still needed; it will be decided under Aggressive.";
+
+/// #1057: why a run carrying permissions read before a transition did not
+/// run.
+pub(crate) const PREPARED_PERMISSIONS_REFUSAL: &str = "Not run: the security policy changed \
+     while this was being prepared, and the permissions it asked for or was granted were for \
+     the earlier policy. Ask again if it is still needed.";
+
+/// D50: why a retry outside the sandbox did not happen.
+const STALE_RETRY_NOTE: &str = "The security level changed while this command ran or its \
+     retry outside the sandbox was being approved, so it was not retried. Run it again to have \
+     it decided under the new level.";
+
+/// D50: why a run whose approval went stale every time did not run.
+pub(crate) const STALE_APPROVAL_REFUSAL: &str = "The security level changed while this \
+     approval was open, each time it was asked, so it was not used and nothing ran. Ask \
+     again if it is still needed.";
 
 /// Issue #540: whether the retry after a sandbox denial may run without a
 /// sandbox. A run that keeps its sandbox (`keeps_sandbox`: the protected-path
@@ -1155,10 +1848,19 @@ where
             // Classification may look at the filesystem: keep it off the
             // async workers and bounded in time; a stall fails closed.
             let codex_home = tool_ctx.turn.config.codex_home.to_path_buf();
+            // D85: the zsh exec bridge runs any shell tool `-c` script under
+            // zsh, whatever shell the argv names.
+            let features = tool_ctx.session.features();
+            let as_named = !features.enabled(codex_features::Feature::ShellZshFork)
+                && !features.enabled(codex_features::Feature::UnifiedExecZshFork);
             let classified = tokio::time::timeout(
                 POST_TAINT_CLASSIFY_TIMEOUT,
                 tokio::task::spawn_blocking(move || {
-                    crate::security::tainted_action::classify(&action, &codex_home)
+                    if as_named {
+                        crate::security::tainted_action::classify_as_named(&action, &codex_home)
+                    } else {
+                        crate::security::tainted_action::classify(&action, &codex_home)
+                    }
                 }),
             )
             .await;
@@ -1180,6 +1882,57 @@ where
         "post-taint protected action needs fresh human approval"
     );
     Some(crate::security::tainted_action::PostTaintAction { kind, state })
+}
+
+/// #734: after a run in the non-admin Windows sandbox, tells the person
+/// (once per thread) about each writable root of the run that it couldn't
+/// label Low during the run (since `mark`), so left read-only to its
+/// commands. Display only.
+async fn warn_unlabelled_writable_roots<Rq, Out, T>(
+    tool: &T,
+    req: &Rq,
+    tool_ctx: &ToolCtx,
+    attempt: &SandboxAttempt<'_>,
+    mark: u64,
+) where
+    T: ToolRuntime<Rq, Out>,
+{
+    // The elevated backend labels nothing; a run it took (by level, or for
+    // the network proxy) records no failure after `mark` but another
+    // thread's concurrent run might, so it is left out where known.
+    if attempt.sandbox != SandboxType::WindowsRestrictedToken
+        || attempt.windows_sandbox_level != WindowsSandboxLevel::RestrictedToken
+    {
+        return;
+    }
+    let failed = codex_windows_sandbox::unlabelled_roots_since(mark);
+    if failed.is_empty() {
+        return;
+    }
+    let Ok(cwd) = attempt.sandbox_cwd.to_abs_path() else {
+        return;
+    };
+    let Ok(workspace_roots) = attempt
+        .workspace_roots
+        .iter()
+        .map(PathUri::to_abs_path)
+        .collect::<std::io::Result<Vec<_>>>()
+    else {
+        return;
+    };
+    let effective = codex_sandboxing::policy_transforms::effective_file_system_sandbox_policy(
+        &attempt.permissions.file_system_sandbox_policy(),
+        tool.additional_permissions(req),
+    );
+    let writable =
+        codex_windows_sandbox::legacy_writable_roots(&effective, &workspace_roots, cwd.as_path());
+    for message in crate::tools::writable_root_notices::unlabelled_writable_root_warnings(
+        tool_ctx.session.thread_id(),
+        &failed,
+        &writable,
+    ) {
+        warn(tool_ctx, &message).await;
+    }
 }
 
 /// #739: tells the person `message` (a warning in the transcript).
@@ -1244,6 +1997,101 @@ where
             .model_client()
             .post_taint_state()
             .is_some_and(|state| state.taint_generation == 0 && state.moderate_bound())
+}
+
+/// Why a command that asks to run outside the sandbox runs, for its prompt:
+/// the requirement's reason, else the model's justification.
+fn escalation_why<Rq, Out, T>(
+    tool: &T,
+    req: &Rq,
+    requirement: &ExecApprovalRequirement,
+    approval_ctx: &ApprovalCtx<'_>,
+) -> Option<String>
+where
+    T: ToolRuntime<Rq, Out>,
+{
+    match requirement {
+        ExecApprovalRequirement::NeedsApproval {
+            reason: Some(reason),
+            ..
+        } => Some(reason.clone()),
+        _ => match tool.approval_action(req, approval_ctx) {
+            Ok(
+                ApprovalAction::Shell { justification, .. }
+                | ApprovalAction::ExecCommand { justification, .. },
+            ) => justification,
+            _ => None,
+        },
+    }
+}
+
+/// D48 (c): whether the command a shell request runs (as its prompt shows
+/// it) is a known tool's, its programs looked up through the `PATH` it runs
+/// with and checked against what this run's sandbox (with its additional
+/// permissions) can write.
+fn runs_known_tool<Rq, Out, T>(
+    tool: &T,
+    req: &Rq,
+    tool_ctx: &ToolCtx,
+    turn_ctx: &crate::session::turn_context::TurnContext,
+    file_system_sandbox_policy: &codex_protocol::permissions::FileSystemSandboxPolicy,
+) -> bool
+where
+    T: ToolRuntime<Rq, Out>,
+{
+    let ctx = ApprovalCtx {
+        session: &tool_ctx.session,
+        turn: &tool_ctx.turn,
+        call_id: &tool_ctx.call_id,
+        retry_reason: None,
+        network_approval_context: None,
+        fresh_human_authority: true,
+    };
+    let command = match tool.approval_action(req, &ctx) {
+        Ok(ApprovalAction::Shell { command, .. } | ApprovalAction::ExecCommand { command, .. }) => {
+            command
+        }
+        _ => return false,
+    };
+    #[allow(deprecated)]
+    let cwd = tool
+        .sandbox_cwd(req)
+        .and_then(|cwd| cwd.to_abs_path().ok())
+        .unwrap_or_else(|| turn_ctx.cwd.clone());
+    let policy = codex_sandboxing::policy_transforms::effective_file_system_sandbox_policy(
+        file_system_sandbox_policy,
+        tool.additional_permissions(req),
+    );
+    // Also where it is reached through a link (`~/bin -> ~/project/bin`).
+    let writable = |path: &std::path::Path| {
+        policy.can_write_path_with_cwd(path, cwd.as_path())
+            || std::fs::canonicalize(path)
+                .is_ok_and(|real| policy.can_write_path_with_cwd(&real, cwd.as_path()))
+    };
+    // As the shell's search decides it (`access(X_OK)`), not by mode bits.
+    let executable = |file: &std::path::Path| {
+        #[cfg(unix)]
+        let runs = {
+            use std::os::unix::ffi::OsStrExt;
+            std::ffi::CString::new(file.as_os_str().as_bytes()).is_ok_and(|file| {
+                // SAFETY: `file` is a valid NUL-terminated string that
+                // outlives the call; `access` only reads it.
+                unsafe { libc::access(file.as_ptr(), libc::X_OK) == 0 }
+            })
+        };
+        #[cfg(not(unix))]
+        let runs = true;
+        runs && std::fs::metadata(file).is_ok_and(|meta| meta.is_file())
+    };
+    crate::security::user_namespaces::known_tool(
+        &command,
+        &crate::security::user_namespaces::Lookup {
+            path: tool.local_search_path(req),
+            writable: &writable,
+            executable: &executable,
+        },
+    )
+    .is_some()
 }
 
 /// The command and folder a grant offer shows (PF-25-S01).
@@ -1369,17 +2217,18 @@ where
         .map(|note| (note, justification))
 }
 
-/// #841: under Moderate, for a protected action after untrusted content that
-/// reads files the secretless launch contract keeps unreadable at every
-/// level (Corbanu's sign-in, vault, config, history): approving cannot
-/// unlock them, and the person is told so before answering.
+/// #841, #1077: under Moderate, for a protected action after untrusted
+/// content that reads a file the secretless launch contract keeps unreadable
+/// at every level (a CLI token, the keychains, or Corbanu's sign-in, vault,
+/// config or history): approving cannot unlock it, and the person is told
+/// which file and what it is before answering.
 async fn moderate_kept_read_note<Rq, Out, T>(
     tool: &T,
     req: &Rq,
     tool_ctx: &ToolCtx,
     turn_ctx: &crate::session::turn_context::TurnContext,
     action: &crate::security::tainted_action::PostTaintAction,
-) -> Option<&'static str>
+) -> Option<String>
 where
     T: ToolRuntime<Rq, Out>,
 {
@@ -1408,14 +2257,13 @@ where
         _ => return None,
     };
     let cwd = cwd.to_abs_path().ok()?;
-    crate::security::protected_reads::moderate_kept_read_in_command(
+    crate::security::protected_reads::moderate_kept_read_note_for_command(
         &tool_ctx.session,
         turn_ctx,
         &command,
         cwd.as_path(),
     )
     .await
-    .then_some(crate::security::protected_reads::MODERATE_KEPT_READ_NOTE)
 }
 
 /// PF-25-S01: offer the human a grant for this exact command while its
@@ -1461,6 +2309,8 @@ fn aggressive_grant_offer(
 #[allow(clippy::too_many_arguments)]
 fn post_taint_read_denials(
     tool_ctx: &ToolCtx,
+    git_held: bool,
+    git_held_back: &mut bool,
     human_approved_at: Option<u64>,
     grant_operation: Option<&str>,
     confirmed_grant: Option<crate::security::grant_offer::Confirmed>,
@@ -1483,7 +2333,20 @@ fn post_taint_read_denials(
         .model_client()
         .post_taint_state()
         .filter(crate::security::tainted_action::PostTaintState::protected_paths_apply)?;
-    if state.human_approval_lifts_rules(human_approved_at) {
+    // #874 (D6): while something the post-command check found in a git
+    // folder is still there (`git_refresh`), no approval or grant lifts the
+    // rules: an approved `git commit` could write through a planted link
+    // into a protected file.
+    *git_held_back = git_held
+        && (state.human_approval_lifts_rules(human_approved_at) || confirmed_grant.is_some());
+    if *git_held_back {
+        tracing::info!(
+            target: "codex_core::security::tainted_action",
+            call_id = %tool_ctx.call_id,
+            "protected-path rules kept: the git check's findings are still there"
+        );
+    }
+    if !git_held && state.human_approval_lifts_rules(human_approved_at) {
         // Issue #540: except the Corbanu home's runtime entries, which stay
         // read-only in the command's sandbox (under Moderate every command
         // keeps one, #747).
@@ -1520,7 +2383,8 @@ fn post_taint_read_denials(
     // #442: a grant lifts the write protections only. Reads of credential
     // files and the Corbanu home are never granted under Aggressive.
     let mut granted = false;
-    if let (Some(operation), Some(confirmed)) = (grant_operation, confirmed_grant) {
+    if let (false, Some(operation), Some(confirmed)) = (git_held, grant_operation, confirmed_grant)
+    {
         match crate::security::grant_offer::apply(
             thread,
             &state,
@@ -1546,6 +2410,7 @@ fn post_taint_read_denials(
         }
     }
     if !granted
+        && !git_held
         && let Some(operation) = grant_operation
         && let Some(grant_id) = aggressive::admit(
             thread,
@@ -1635,6 +2500,35 @@ fn deny_user_namespaces(
         &file_system,
         network,
     )
+}
+
+/// #874: the folders whose repositories the git check watches for a run:
+/// the sandbox's working folder first (the probes resolve against it, as the
+/// sandbox does), the turn's folder and the workspace roots.
+fn git_check_folders<Rq, Out, T>(
+    tool: &T,
+    req: &Rq,
+    turn_ctx: &crate::session::turn_context::TurnContext,
+    workspace_roots: &[codex_utils_absolute_path::AbsolutePathBuf],
+) -> Vec<std::path::PathBuf>
+where
+    T: ToolRuntime<Rq, Out>,
+{
+    #[allow(deprecated)]
+    let turn_cwd = turn_ctx.cwd.to_path_buf();
+    let mut folders = Vec::new();
+    match tool.sandbox_cwd(req).map(PathUri::to_abs_path) {
+        Some(Ok(cwd)) => folders.push(cwd.to_path_buf()),
+        Some(Err(_)) => {}
+        None => folders.push(turn_cwd.clone()),
+    }
+    folders.push(turn_cwd);
+    folders.extend(
+        workspace_roots
+            .iter()
+            .map(codex_utils_absolute_path::AbsolutePathBuf::to_path_buf),
+    );
+    folders
 }
 
 /// Issue #245: every folder the sandbox may resolve a relative or
@@ -1906,3 +2800,7 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+#[path = "orchestrator_stale_tests.rs"]
+mod stale_tests;

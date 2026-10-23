@@ -555,9 +555,34 @@ impl Journal<'_> {
             "SELECT EXISTS(SELECT 1 FROM draft_accounting_compact_days WHERE thread_id = ? AND utc_day = ?)",
         ).bind(owner.to_string()).bind(day).fetch_one(&mut *conn).await?;
         // A compact prefix cannot supply detail, but retained raw suffixes can.
-        if day < coverage.aggregate_day_floor
-            || (compact && window.is_none())
-            || (read_at_ms >= 90 * DAY_MS && lower <= read_at_ms - 90 * DAY_MS)
+        // A whole day with nothing recorded for this owner loses no detail to
+        // retention; the tree inspection decides what that emptiness shows.
+        // #1196: so does a range bucket's part of such a day, inside the daily
+        // totals. A raw row elsewhere on the day keeps the window unavailable,
+        // and so does the floor's edge: expiry can run ahead of the checkpoint,
+        // so the floor is taken at the read instead.
+        let recorded = !records.is_empty() || compact;
+        let expired = read_at_ms >= 90 * DAY_MS && lower <= read_at_ms - 90 * DAY_MS;
+        let unrecorded_day = window.is_some()
+            && !recorded
+            && expired
+            && day >= crate::runtime::accounting::aggregate_day_floor(read_at_ms)
+            // Without budget for this check, this day's tree scan and the
+            // start's, the window stays unavailable. Later days and this day's
+            // candidates are not reserved for: a range near the budget can
+            // still become too large, which claims nothing.
+            && work.spare_scan(/*reserve*/ 2)
+            && !sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM draft_accounting_attempts
+                 WHERE json_extract(payload, '$.thread_id') = ?
+                 AND json_extract(payload, '$.dispatched_at_ms') / 86400000 = ?)",
+            )
+            .bind(owner.to_string())
+            .bind(day)
+            .fetch_one(&mut *conn)
+            .await?;
+        if (recorded || (window.is_some() && !unrecorded_day))
+            && (day < coverage.aggregate_day_floor || (compact && window.is_none()) || expired)
         {
             return Ok(InspectionDay::DetailUnavailable {
                 coverage,
@@ -622,6 +647,7 @@ impl Journal<'_> {
             unknown_parent_unavailable_threads: 0,
             unknown_parent_requests: BTreeMap::new(),
             other_conversations: None,
+            empty_day: None,
             totals,
             requests,
         }))

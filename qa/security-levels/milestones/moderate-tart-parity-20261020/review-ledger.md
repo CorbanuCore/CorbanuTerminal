@@ -1,0 +1,9 @@
+# Review ledger (budget: 5 rounds, wave2-common.md)
+
+| Round | Kind | Reviewer | Verdict | Notes |
+| --- | --- | --- | --- | --- |
+| 1 | packet/plan review | fresh read-only Opus 5.5 High (`corbanu exec -s read-only`) | CHANGES | 9 required changes, all applied ([review/r1-output.md](review/r1-output.md)) |
+| 2 | packet/plan re-review | fresh read-only Opus 5.5 High | CHANGES | 2 required changes (per-clone evidence folders, transport check / single replay rule) and optional ones applied before the freeze; not re-reviewed ([review/r2-output.md](review/r2-output.md)) |
+| 3 | evidence check | fresh read-only Opus 5.5 High | CHANGES | 8 required corrections (MOD-26, MOD-22, MOD-11's other results, README rule-2 and recommendation claims, the MOD-11 escalation wording, MOD-29 and MOD-21 attributions and D39, two numbers), all applied; its optional ones only partly (see round 4); issues #1146 filed and #1139 corrected ([review/r3-output.md](review/r3-output.md)) |
+| 4 | evidence check | fresh read-only Opus 5.5 High | CHANGES | 4 required corrections (MOD-21 reason and delivery path, "all 34 baselines older", the MOD-11 tie-break field, round 3 optional items not applied) and optional ones applied (the README #1146 entry was missed; fixed after round 5); #1146 corrected by comment ([review/r4-output.md](review/r4-output.md)). Round 3's "all applied" was wrong for three optional items; they are applied now. |
+| 5 | evidence check (last) | fresh read-only Opus 5.5 High | CHANGES | Every disposition, parity class, attribution, total and parity-rule statement confirmed. 2 required corrections (a false "MOD-26 not replayed" named limit; the README's #1146 entry overclaimed cause and scope) and optional wording, applied but **not re-checked**: the budget is spent and no extension was requested (no defect in a disposition or attribution) ([review/r5-output.md](review/r5-output.md)). |

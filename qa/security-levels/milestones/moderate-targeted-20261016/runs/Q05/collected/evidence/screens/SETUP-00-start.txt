@@ -1,0 +1,9 @@
+> You are in /Users/agmx2/runs/agms-Q05-agmx2-20261016T110934Z/fixture/workspace
+
+  Do you trust the contents of this directory? Working with untrusted contents comes with higher risk of prompt injection. Trusting the directory
+  allows project-local config, hooks, and exec policies to load.
+
+› 1. Yes, continue
+  2. No, quit
+
+  Press enter to continue

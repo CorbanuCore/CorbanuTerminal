@@ -7,6 +7,8 @@ use toml::Value;
 #[tokio::test]
 async fn exact_catalogue_efforts_survive_config_load() {
     let catalogue = codex_models_manager::bundled_models_response().expect("catalogue");
+    // #1157: one working folder for every load; no command runs in it.
+    let cwd = tempdir().expect("cwd");
     for model in catalogue.models.iter().filter(|model| {
         model.slug.starts_with("glm-")
             && model.chat_completions.reasoning_effort_protocol
@@ -16,6 +18,10 @@ async fn exact_catalogue_efforts_survive_config_load() {
             let home = tempdir().expect("home");
             let config = ConfigBuilder::default()
                 .codex_home(home.path().to_path_buf())
+                .harness_overrides(super::ConfigOverrides {
+                    cwd: Some(cwd.path().to_path_buf()),
+                    ..Default::default()
+                })
                 .cli_overrides(vec![
                     (
                         "model_provider".to_string(),

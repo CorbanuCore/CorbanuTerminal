@@ -62,7 +62,7 @@ implementation_worktrees:
 
 **Closed 2026-10-14 by the Codex coordinator's worker `pf60-s06`** under the coordinator's brief, to free active
 slot 2 for Travis's decision of 2026-10-14 to start the
-[PF-60 accounting follow-ups](../active/portfolio-agent-cost-accounting-followups.md) after the Moderate picker sprint
+[PF-60 accounting follow-ups](main-2026-10-20-portfolio-agent-cost-accounting-followups.md) after the Moderate picker sprint
 (decision 29 of that day's list). Travis decided to start the follow-ups; he did not himself choose which plan to
 close, and his confirmation of this closing is pending. All three slots were full and this was the plan whose sprint
 programme was finished: PF-84-S01–S06 are accepted and archived (S06 on 2026-10-13, limited testing). Reopening it

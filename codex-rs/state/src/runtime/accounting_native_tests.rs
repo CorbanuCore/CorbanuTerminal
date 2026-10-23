@@ -616,7 +616,7 @@ async fn native_invalid_time_activation_and_late_import_roll_back() -> anyhow::R
         (
             attempt(/*id*/ 99, /*dispatch*/ 0),
             vec![],
-            "unsupported compact-only",
+            "compact-only late imports are unsupported",
         ),
         (attempt(/*id*/ 99, DETAIL_MS + 1), vec![], "future dispatch"),
         (

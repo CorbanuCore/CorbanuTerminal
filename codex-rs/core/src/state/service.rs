@@ -129,6 +129,13 @@ impl SessionServices {
             .authority_marker()
     }
 
+    /// #945: whether a security transition was committed since `shown_under`,
+    /// the marker a prompt was shown under. A tree that was not initialized
+    /// then (no marker) has had no transition since.
+    pub(crate) fn transition_since(&self, shown_under: Option<(u64, u64)>) -> bool {
+        shown_under.is_some() && self.authority_marker() != shown_under
+    }
+
     /// The "for session" approval cache, emptied first when a security
     /// transition was committed since it was last used (PF-23-S03).
     pub(crate) async fn approval_cache(&self) -> tokio::sync::MutexGuard<'_, ApprovalStore> {

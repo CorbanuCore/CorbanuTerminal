@@ -13,9 +13,12 @@
 //! A managed requirement that rules out either value keeps the session's own
 //! settings; nothing overrides it, and the person is told in that thread.
 //!
-//! Only this process is covered: `corbanu exec`, IDE sessions and other
-//! processes on the home get Aggressive's approvals when they start under
-//! it. Internal sessions (reviews, compaction, memory) keep their own.
+//! Only this process is covered here. #919: any other Corbanu process
+//! running on the home (another Corbanu Terminal, a running `corbanu exec`
+//! or IDE session) takes it from its watch of the saved state when its
+//! sessions rise to Aggressive (`kill_switch_watch`); one started later
+//! starts under Aggressive. Internal sessions (reviews, compaction, memory)
+//! keep their own.
 
 use std::collections::HashSet;
 use std::path::Path;

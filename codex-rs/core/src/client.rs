@@ -381,9 +381,63 @@ struct ServerConversationState {
 
 type SharedServerConversationState = Arc<StdMutex<Option<ServerConversationState>>>;
 
+/// #1311 (D171): who a websocket connection was opened as (the ChatGPT
+/// account and user, or the API key), as a digest, never the credential. A
+/// session whose sign-in was replaced by another user's or another key never
+/// reuses a connection opened with the old one; a refreshed token of the same
+/// sign-in keeps it. Providers without a `CodexAuth` identity use a digest of
+/// their resolved API auth headers instead (#1326).
+#[derive(Clone, PartialEq, Eq)]
+struct ConnectionIdentity([u8; 32]);
+
+impl std::fmt::Debug for ConnectionIdentity {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("ConnectionIdentity(..)")
+    }
+}
+
+impl ConnectionIdentity {
+    fn of(auth: Option<&CodexAuth>, api_auth: &dyn AuthProvider) -> Self {
+        use sha2::Digest;
+        let mut digest = sha2::Sha256::new();
+        let mut field = |value: Option<&str>| match value {
+            Some(value) => {
+                digest.update([1]);
+                digest.update((value.len() as u64).to_le_bytes());
+                digest.update(value.as_bytes());
+            }
+            None => digest.update([0]),
+        };
+        let mode = auth.map(|auth| format!("{:?}", auth.auth_mode()));
+        field(mode.as_deref());
+        field(auth.and_then(CodexAuth::get_account_id).as_deref());
+        field(auth.and_then(CodexAuth::get_chatgpt_user_id).as_deref());
+        field(auth.and_then(CodexAuth::api_key));
+        if auth.is_none() {
+            // No semantic sign-in identity is available for this provider.
+            // Hash the actual resolved header bytes, not the auth object's
+            // address or Debug output. Keep duplicate-value order, but ignore
+            // insertion order between different header names.
+            let headers = api_auth.to_auth_headers();
+            let mut fields = headers.iter().collect::<Vec<_>>();
+            fields.sort_by(|(left, _), (right, _)| left.as_str().cmp(right.as_str()));
+            digest.update(b"api-auth-headers");
+            for (name, value) in fields {
+                digest.update((name.as_str().len() as u64).to_le_bytes());
+                digest.update(name.as_str().as_bytes());
+                digest.update((value.as_bytes().len() as u64).to_le_bytes());
+                digest.update(value.as_bytes());
+            }
+        }
+        Self(digest.finalize().into())
+    }
+}
+
 #[derive(Debug, Default)]
 struct WebsocketSession {
     connection: Option<ApiWebSocketConnection>,
+    /// Who `connection` was opened as.
+    identity: Option<ConnectionIdentity>,
     provenance: Option<crate::accounting::websocket::Provenance>,
     last_request: Option<ResponsesApiRequest>,
     last_response_rx: Option<oneshot::Receiver<LastResponse>>,
@@ -768,6 +822,7 @@ pub(crate) struct RealtimeWebrtcCallStart {
     pub(crate) sdp: String,
     pub(crate) call_id: String,
     pub(crate) sideband_headers: ApiHeaderMap,
+    pub(crate) record: Option<crate::accounting::realtime::RealtimeSessionRecord>,
 }
 
 /// Reuses the API-auth material that created the WebRTC call for the sideband WebSocket join.
@@ -913,15 +968,11 @@ impl ModelClient {
     /// A bound policy that cannot be read counts as Aggressive. Unlike the
     /// post-taint state, this does not depend on `source_envelopes`.
     pub(crate) fn live_level(&self) -> codex_security_policy::SecurityLevel {
-        use codex_security_policy::SecurityLevel;
-        let live = match &self.ingress_policy {
-            None => SecurityLevel::Permissive,
-            Some(policy) => policy
-                .0
-                .snapshot_for_agent(self.state.thread_id)
-                .map_or(SecurityLevel::Aggressive, |snapshot| snapshot.level),
-        };
-        self.ingress_level.max(live)
+        live_level_of(
+            self.ingress_level,
+            self.ingress_policy.as_ref().map(|policy| &policy.0),
+            self.state.thread_id,
+        )
     }
 
     /// Issue #445: whether the security kill switch a person turned on in
@@ -1710,6 +1761,9 @@ impl ModelClient {
             sdp: response.sdp,
             call_id: response.call_id,
             sideband_headers,
+            record: evidence
+                .as_deref()
+                .and_then(crate::accounting::transport::ResponseEvidence::realtime_session_record),
         })
     }
 
@@ -3124,8 +3178,19 @@ impl ModelClientSession {
         Ok(body.len())
     }
 
+    /// #1311 (D171): drops a connection (and the conversation state on it)
+    /// opened as another sign-in than the one this request uses.
+    fn drop_websocket_of_another_sign_in(&mut self, identity: &ConnectionIdentity) {
+        if self.websocket_session.connection.is_some()
+            && self.websocket_session.identity.as_ref() != Some(identity)
+        {
+            self.reset_websocket_session();
+        }
+    }
+
     fn reset_websocket_session(&mut self) {
         self.websocket_session.connection = None;
+        self.websocket_session.identity = None;
         self.websocket_session.provenance = None;
         self.websocket_session.last_request = None;
         self.websocket_session.last_response_rx = None;
@@ -3676,6 +3741,8 @@ impl ModelClientSession {
         if !self.client.responses_websocket_enabled() {
             return Ok(());
         }
+        // A connection opened as another sign-in is replaced at the turn's
+        // first request (#1311).
         if self.websocket_session.connection.is_some() {
             return Ok(());
         }
@@ -3685,6 +3752,8 @@ impl ModelClientSession {
                 "failed to build websocket prewarm client setup: {err}"
             ))
         })?;
+        let identity =
+            ConnectionIdentity::of(client_setup.auth.as_ref(), client_setup.api_auth.as_ref());
         let auth_context = AuthRequestTelemetryContext::new(
             client_setup.auth.as_ref().map(CodexAuth::auth_mode),
             client_setup.api_auth.as_ref(),
@@ -3708,6 +3777,7 @@ impl ModelClientSession {
             )
             .await?;
         self.websocket_session.connection = Some(connection);
+        self.websocket_session.identity = Some(identity);
         self.websocket_session.provenance = Some(provenance);
         self.websocket_session
             .set_connection_reused(/*connection_reused*/ false);
@@ -3731,6 +3801,7 @@ impl ModelClientSession {
         params: WebsocketConnectParams<'_>,
     ) -> std::result::Result<&ApiWebSocketConnection, ApiError> {
         let WebsocketConnectParams {
+            identity,
             provenance,
             session_telemetry,
             api_provider,
@@ -3740,7 +3811,10 @@ impl ModelClientSession {
             request_route_telemetry,
         } = params;
         let needs_new = match self.websocket_session.connection.as_ref() {
-            Some(conn) => conn.is_closed().await,
+            Some(conn) => {
+                self.websocket_session.identity.as_ref() != Some(&identity)
+                    || conn.is_closed().await
+            }
             None => true,
         };
 
@@ -3769,6 +3843,7 @@ impl ModelClientSession {
                 }
             };
             self.websocket_session.connection = Some(new_conn);
+            self.websocket_session.identity = Some(identity);
             self.websocket_session.provenance = Some(provenance);
             self.websocket_session
                 .set_connection_reused(/*connection_reused*/ false);
@@ -4412,6 +4487,9 @@ impl ModelClientSession {
         let mut pending_retry = PendingUnauthorizedRetry::default();
         loop {
             let client_setup = self.client.current_client_setup().await?;
+            let identity =
+                ConnectionIdentity::of(client_setup.auth.as_ref(), client_setup.api_auth.as_ref());
+            self.drop_websocket_of_another_sign_in(&identity);
             let request_auth_context = AuthRequestTelemetryContext::new(
                 client_setup.auth.as_ref().map(CodexAuth::auth_mode),
                 client_setup.api_auth.as_ref(),
@@ -4476,6 +4554,7 @@ impl ModelClientSession {
             }
             match self
                 .websocket_connection(WebsocketConnectParams {
+                    identity,
                     provenance,
                     session_telemetry,
                     api_provider: client_setup.api_provider,
@@ -5011,7 +5090,8 @@ fn chat_replay_function_arguments(arguments: String) -> String {
 /// call recorded on the Responses wire (before a provider switch or in forked
 /// history) replays under the flat name this request offers for that exact
 /// tool (`flat_tool_names`, the request's own mapping), such as an MCP tool's
-/// `mcp__server__tool`; otherwise under its bare name, as before. A tool whose
+/// `mcp__server__tool`, or the offered `*_v1` alias for a V1 agent tool;
+/// otherwise under its bare name, as before. A tool whose
 /// preferred flat name a plain tool already takes is offered under a hashed
 /// name, so its earlier calls never appear as calls of the plain tool (#688).
 fn flatten_namespaced_history(
@@ -5038,10 +5118,28 @@ fn flatten_namespaced_history(
             continue;
         };
         let tool_name = codex_tools::ToolName::namespaced(namespace, name.clone());
-        if let Some(flat) = flat_tool_names
+        let flat = flat_tool_names
             .flat_name_for(&tool_name)
             .filter(|flat| offered.contains(flat))
-        {
+            .or_else(|| {
+                // V1 tools use explicit plain aliases on these wires, so they
+                // are not present in the namespaced-tools flat-name mapping.
+                if tool_name.namespace.as_deref()
+                    != Some(crate::tools::handlers::multi_agents_spec::MULTI_AGENT_V1_NAMESPACE)
+                {
+                    return None;
+                }
+                let alias = match tool_name.name.as_str() {
+                    "spawn_agent" => "spawn_agent_v1",
+                    "send_input" => "send_input_v1",
+                    "wait_agent" => "wait_agent_v1",
+                    "close_agent" => "close_agent_v1",
+                    "resume_agent" => "resume_agent_v1",
+                    _ => return None,
+                };
+                offered.contains(alias).then_some(alias)
+            });
+        if let Some(flat) = flat {
             *name = flat.to_string();
         }
     }
@@ -6760,6 +6858,7 @@ impl AuthRequestTelemetryContext {
 }
 
 struct WebsocketConnectParams<'a> {
+    identity: ConnectionIdentity,
     provenance: crate::accounting::websocket::Provenance,
     session_telemetry: &'a SessionTelemetry,
     api_provider: codex_api::Provider,
@@ -6770,6 +6869,36 @@ struct WebsocketConnectParams<'a> {
 }
 
 async fn handle_unauthorized(
+    transport: TransportError,
+    auth_recovery: &mut Option<UnauthorizedRecovery>,
+    session_telemetry: &SessionTelemetry,
+    provider: &SharedModelProvider,
+) -> Result<UnauthorizedRecoveryExecution> {
+    match try_unauthorized_recovery(transport, auth_recovery, session_telemetry, provider).await {
+        Err(error) => Err(named_sign_in_revoked(provider).await.unwrap_or(error)),
+        recovered => recovered,
+    }
+}
+
+/// D171 (#1311): a named ChatGPT account removed or signed out while a
+/// request on it was in flight (its tokens were revoked, so the request got a
+/// 401) is reported with the account's recovery, as the next request would
+/// be, instead of a generic unauthorized error. The vault is read off the
+/// async workers.
+async fn named_sign_in_revoked(provider: &SharedModelProvider) -> Option<CodexErr> {
+    codex_model_provider::named_sign_in_account(provider.info())?;
+    let manager = provider.auth_manager()?;
+    let reason = tokio::task::spawn_blocking(move || manager.named_sign_in_unavailable())
+        .await
+        .ok()
+        .flatten()?;
+    Some(CodexErr::Fatal(format!(
+        "{}: {reason}",
+        provider.info().name
+    )))
+}
+
+async fn try_unauthorized_recovery(
     transport: TransportError,
     auth_recovery: &mut Option<UnauthorizedRecovery>,
     session_telemetry: &SessionTelemetry,
@@ -7087,3 +7216,21 @@ impl WebsocketTelemetry for ApiTelemetry {
 #[cfg(test)]
 #[path = "client_tests.rs"]
 mod tests;
+
+/// The level in force for `thread_id`: the session's own level or the
+/// stricter one its policy tree holds (Aggressive when that is unreadable).
+/// See [`ModelClient::live_level`].
+pub(crate) fn live_level_of(
+    ingress_level: codex_security_policy::SecurityLevel,
+    policy: Option<&crate::security::EffectivePolicyView>,
+    thread_id: ThreadId,
+) -> codex_security_policy::SecurityLevel {
+    use codex_security_policy::SecurityLevel;
+    let live = match policy {
+        None => SecurityLevel::Permissive,
+        Some(policy) => policy
+            .snapshot_for_agent(thread_id)
+            .map_or(SecurityLevel::Aggressive, |snapshot| snapshot.level),
+    };
+    ingress_level.max(live)
+}

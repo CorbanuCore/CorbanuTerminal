@@ -200,7 +200,20 @@ fn safe_join(base: &Path, name: &str) -> Result<PathBuf> {
             }
         }
     }
-    Ok(base.join(path))
+    let mut output = PathBuf::new();
+    for part in std::iter::once(base.as_os_str()).chain(path.components().map(Component::as_os_str))
+    {
+        output.push(part);
+        match std::fs::symlink_metadata(&output) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                anyhow::bail!("Remote skill ZIP path contains an existing symlink");
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error).context("Failed to check remote skill ZIP path"),
+        }
+    }
+    Ok(output)
 }
 
 fn is_zip_payload(bytes: &[u8]) -> bool {
@@ -221,7 +234,10 @@ fn extract_zip_to_dir(
         if file.is_dir() {
             continue;
         }
-        let raw_name = file.name().to_string();
+        let raw_name = file
+            .name()
+            .context("Invalid remote skill ZIP entry name")?
+            .into_owned();
         let normalized = normalize_zip_name(&raw_name, prefix_candidates);
         let Some(normalized) = normalized else {
             continue;
@@ -257,3 +273,7 @@ fn normalize_zip_name(name: &str, prefix_candidates: &[String]) -> Option<String
         Some(trimmed.to_string())
     }
 }
+
+#[cfg(test)]
+#[path = "archive_migration_tests.rs"]
+mod archive_migration_tests;

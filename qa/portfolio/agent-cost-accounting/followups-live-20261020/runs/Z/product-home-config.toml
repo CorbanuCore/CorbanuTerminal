@@ -1,0 +1,6 @@
+# PF-60-S10 product profile: neutral settings only. Nothing here changes the accounting under test.
+suppress_unstable_features_warning = true
+check_for_update_on_startup = false
+
+[projects."/Users/agmx1/runs/acc-Z-agmx1-20261020T020455Z/fixture/workspace"]
+trust_level = "trusted"

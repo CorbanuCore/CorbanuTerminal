@@ -26,6 +26,8 @@ mod resume_recorded_account;
 #[cfg(unix)]
 mod security_profiles;
 #[cfg(unix)]
+mod side_refusal;
+#[cfg(unix)]
 mod slash_dispatch;
 mod status_indicator;
 mod vt100_history;

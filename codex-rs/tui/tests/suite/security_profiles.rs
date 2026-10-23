@@ -130,9 +130,15 @@ fn tmux_security_unknown_config_fails_without_permissive_fallback() -> Result<()
             .arg(repo),
     ))?;
     let pane = session.primary_pane();
-    let text = pane.wait_stable_contains("unknown variant", TIMEOUT)?;
+    // The error embeds the config path, so where the viewport splits words
+    // across rows depends on the TMPDIR length; match with whitespace removed.
+    let text = pane.wait_stable_until(
+        "viewport containing \"unknown variant\"",
+        TIMEOUT,
+        |capture| without_whitespace(capture).contains("unknownvariant"),
+    )?;
     ensure!(
-        !text.contains("Requested: Permissive"),
+        !without_whitespace(&text).contains("Requested:Permissive"),
         "unknown state fell back to Permissive"
     );
     capture(pane, "unknown-config-error")?;
@@ -140,6 +146,10 @@ fn tmux_security_unknown_config_fails_without_permissive_fallback() -> Result<()
     pane.send_key(TmuxKey::Enter)?;
     session.wait_for_exit(TIMEOUT)?;
     Ok(())
+}
+
+fn without_whitespace(text: &str) -> String {
+    text.split_whitespace().collect()
 }
 
 fn command(pane: &TmuxPane<'_>, command: &str) -> Result<()> {

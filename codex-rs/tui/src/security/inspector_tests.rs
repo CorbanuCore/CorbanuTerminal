@@ -24,6 +24,7 @@ pub(crate) fn input(active: ChosenLevel) -> InspectorInput {
         network_broker: false,
         mcp_servers: vec!["docs".to_string()],
         hooks: false,
+        project_security_warnings: Vec::new(),
     }
 }
 
@@ -199,16 +200,14 @@ fn pf_41_s01_core_lagging_behind_the_launch_level_is_degraded() {
 }
 
 #[test]
-fn pf_41_s01_stale_health_and_broker_crash_are_degraded() {
+fn pf_41_s01_stale_health_is_not_green_and_broker_crash_is_degraded() {
     let input = input(ChosenLevel::Aggressive);
     let saved = saved(ChosenLevel::Aggressive);
     let facts = healthy(ThreadId::new());
+    // #1036: stale, not degraded.
     assert_eq!(
         verdict(&input, &saved, &facts, NOW + STALE_AFTER_SECONDS + 15),
-        Badge::Degraded(
-            "Aggressive",
-            vec!["status observed 45s ago; press r".to_string()]
-        )
+        Badge::Stale("Aggressive", "45s ago".to_string())
     );
 
     // An installed broker is not observed healthy, and not counted as missing.
@@ -594,6 +593,16 @@ fn issue_749_moderate_rows_match_what_is_enforced() {
     assert_eq!(
         verdict(&input, &saved, &broker_off, NOW),
         Badge::Partial("Moderate", vec!["Model key broker".to_string()])
+    );
+    // #1036: an old observation of a healthy Moderate is stale, not
+    // "Moderate degraded"; one of a partial Moderate too.
+    assert_eq!(
+        verdict(&input, &saved, &moderate, NOW + 33),
+        Badge::Stale("Moderate", "33s ago".to_string())
+    );
+    assert_eq!(
+        verdict(&input, &saved, &broker_off, NOW + 101),
+        Badge::Stale("Moderate", "1m ago".to_string())
     );
 
     // Saved, Core raised now (D4), launched Permissive: the broker waits.

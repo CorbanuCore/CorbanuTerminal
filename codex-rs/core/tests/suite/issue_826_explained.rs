@@ -53,12 +53,9 @@ enum Tool {
     ExecCommand,
     /// `shell_command` with the model's justification.
     Justified,
-    /// `shell_command` asking to run outside the sandbox
-    /// (`require_escalated`), with a justification.
-    Escalated,
 }
 
-/// The model's justification in [`Tool::Justified`] and [`Tool::Escalated`].
+/// The model's justification in [`Tool::Justified`].
 const JUSTIFICATION: &str = "a container needs a namespace";
 
 #[derive(Debug)]
@@ -88,14 +85,6 @@ async fn run(
         Tool::Justified => (
             "shell_command",
             json!({ "command": SCRIPT, "justification": JUSTIFICATION }),
-        ),
-        Tool::Escalated => (
-            "shell_command",
-            json!({
-                "command": SCRIPT,
-                "sandbox_permissions": "require_escalated",
-                "justification": JUSTIFICATION,
-            }),
         ),
     };
     let server = start_mock_server().await;
@@ -247,9 +236,10 @@ async fn issue_826_refused_user_namespace_is_explained() -> anyhow::Result<()> {
 }
 
 /// A person asked to approve `unshare` under the rule is told it will fail
-/// and why, after the model's justification, in the ordinary prompt and in
-/// Moderate's prompt for a request to run outside the sandbox; approving
-/// does not lift the rule.
+/// and why, after the model's justification, in the ordinary prompt;
+/// approving it does not lift the rule. (Moderate's prompt for a request to
+/// run outside the sandbox lifts it for that run since D27: see
+/// `issue_891_one_run`.)
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn issue_826_approval_prompt_names_the_rule() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
@@ -259,7 +249,6 @@ async fn issue_826_approval_prompt_names_the_rule() -> anyhow::Result<()> {
     for (tool, approval, justified) in [
         (Tool::ShellCommand, AskForApproval::UnlessTrusted, false),
         (Tool::Justified, AskForApproval::UnlessTrusted, true),
-        (Tool::Escalated, AskForApproval::OnRequest, true),
     ] {
         let outcome = Box::pin(run(
             SecurityLevel::Moderate,

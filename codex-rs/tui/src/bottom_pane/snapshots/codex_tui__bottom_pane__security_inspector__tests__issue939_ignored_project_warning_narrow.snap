@@ -1,0 +1,49 @@
+---
+source: tui/src/bottom_pane/security_inspector_tests.rs
+expression: "rendered.lines().take(45).collect::<Vec<_>>().join(\"\\n\")"
+---
+Security inspector (read only)
+● Protected: Aggressive; every required control
+observed or checked at launch
+Observed 0s ago, policy generation 2.1
+
+Level
+  Saved: Aggressive [configured: /security]
+  Core config: Permissive [configured: config
+      layers]
+  [set] Active this run: Aggressive; rows marked
+      "checked at launch" passed the launch
+      check (runtime controls below show what is
+      observed now) [resolved: launch check]
+  [on] Live policy: Aggressive in force; next
+      start Aggressive; kill switch off;
+      generation 2.1 [observed: Core policy]
+  Project security: Ignored incomplete project
+      [security] table in /workspace/project-
+      with-a-long-distinct-name/nested-trading-
+      project/.codex/config.toml: level =
+      "permissive" without version cannot
+      override trusted security settings.
+      [configured: ignored project table]
+
+This session
+  [set] Sandbox: session value 0 [resolved:
+      session config, checked at launch]
+  [set] Approvals: session value 1 [resolved:
+      session config, checked at launch]
+  [set] Network: session value 2 [resolved:
+      session config, checked at launch]
+  [set] Vault: session value 3 [resolved:
+      session config, checked at launch]
+  [set] Model keys: session value 4 [resolved:
+      session config]
+  [set] Child agents: session value 5 [resolved:
+      session config, checked at launch]
+  [set] Sandbox backend: macOS Seatbelt
+      [resolved: platform]
+  [set] Egress destinations: proxy destination
+      policy on (url_destination_policy)
+      [resolved: features]
+
+Runtime controls
+  [on] Secretless launch: environment allowlist

@@ -2,6 +2,7 @@
 
 mod common;
 
+use anyhow::Context;
 use codex_exec_server::ExecResponse;
 use codex_exec_server::InitializeParams;
 use codex_exec_server::InitializeResponse;
@@ -329,7 +330,8 @@ async fn exec_server_resumes_detached_session_without_killing_processes() -> any
                 JSONRPCMessage::Response(JSONRPCResponse { id, .. }) if id == &initialize_id
             )
         })
-        .await?;
+        .await
+        .context("waiting for the initialize response")?;
     let JSONRPCMessage::Response(JSONRPCResponse { result, .. }) = response else {
         panic!("expected initialize response");
     };
@@ -360,7 +362,8 @@ async fn exec_server_resumes_detached_session_without_killing_processes() -> any
                 JSONRPCMessage::Response(JSONRPCResponse { id, .. }) if id == &process_start_id
             )
         })
-        .await?;
+        .await
+        .context("waiting for the process/start response")?;
 
     server.disconnect_websocket().await?;
     server.reconnect_websocket().await?;
@@ -381,7 +384,8 @@ async fn exec_server_resumes_detached_session_without_killing_processes() -> any
                 JSONRPCMessage::Response(JSONRPCResponse { id, .. }) if id == &resume_initialize_id
             )
         })
-        .await?;
+        .await
+        .context("waiting for the resume initialize response")?;
     let JSONRPCMessage::Response(JSONRPCResponse { result, .. }) = response else {
         panic!("expected resume initialize response");
     };
@@ -410,7 +414,8 @@ async fn exec_server_resumes_detached_session_without_killing_processes() -> any
                 JSONRPCMessage::Response(JSONRPCResponse { id, .. }) if id == &process_read_id
             )
         })
-        .await?;
+        .await
+        .context("waiting for the process/read response")?;
     let JSONRPCMessage::Response(JSONRPCResponse { result, .. }) = response else {
         panic!("expected process/read response");
     };
@@ -434,7 +439,8 @@ async fn exec_server_resumes_detached_session_without_killing_processes() -> any
                 JSONRPCMessage::Response(JSONRPCResponse { id, .. }) if id == &terminate_id
             )
         })
-        .await?;
+        .await
+        .context("waiting for the process/terminate response")?;
     let JSONRPCMessage::Response(JSONRPCResponse { result, .. }) = response else {
         panic!("expected process/terminate response");
     };

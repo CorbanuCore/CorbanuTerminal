@@ -26,10 +26,13 @@
 //! - Windows: the C runtimes in the process copy the environment at start-up,
 //!   keeping some copies and freeing others unwiped (later reused, partly
 //!   overwritten), so every copy of the value in the process heaps is
-//!   overwritten too. A copy in another form, or outside the heaps (a thread
+//!   overwritten too: in the blocks a heap walk reports, and in the rest of
+//!   each heap's memory, where a stale copy can sit outside any reported
+//!   block (#974). A copy in another form, or outside the heaps (a thread
 //!   stack), is not found. A heap its owner created with
 //!   `HEAP_NO_SERIALIZE` is not locked by `HeapLock`, so walking it races
-//!   with that owner.
+//!   with that owner, and a heap another thread destroys while the sweep
+//!   runs leaves it a stale handle to lock.
 
 #[cfg(unix)]
 use std::ffi::OsStr;
@@ -177,10 +180,24 @@ pub(crate) fn take_env_var(name: &str) -> Option<Zeroizing<Vec<u8>>> {
         &[wide.as_slice()]
     };
     windows_env::wipe_heap_copies(name, patterns, &own);
-    // An environment block Windows replaced when the environment grew stays
-    // in the process parameters' allocation, with its `NAME=value` entries.
-    if let Some(base) = windows_env::process_parameters_allocation() {
-        windows_env::wipe_entries_in_allocation(base, name, patterns);
+    // #974: a heap's memory can hold a stale copy outside every block its
+    // walk reports (likely a C runtime start-up copy, its name partly
+    // overwritten), so each heap's allocations are swept whole, each heap
+    // locked meanwhile. An environment block Windows replaced when the
+    // environment grew stays in the process parameters' allocation, inside
+    // the process heap on current Windows.
+    let mut allocations: Vec<(Option<isize>, usize)> = windows_env::heap_allocations()
+        .into_iter()
+        .map(|(heap, base)| (Some(heap), base))
+        .collect();
+    if let Some(base) =
+        windows_env::process_parameters_allocation().and_then(windows_env::allocation_base)
+        && !allocations.iter().any(|(_, known)| *known == base)
+    {
+        allocations.push((None, base));
+    }
+    for (heap, base) in allocations {
+        windows_env::wipe_copies_in_allocation(base, name, patterns, &own, heap);
     }
     tracing::debug!(
         "environment sweep for one handed-over variable took {} ms",
@@ -313,15 +330,105 @@ mod windows_env {
         (parameters != 0).then_some(parameters)
     }
 
-    /// Gives every `name=value` entry (narrow or UTF-16, the name compared
-    /// ASCII case-insensitively) in the committed,
-    /// writable regions of the allocation containing `address` `0`
-    /// characters for its value. Memory is read with `ReadProcessMemory` and
-    /// written with `WriteProcessMemory`, which fail instead of faulting if a
-    /// region changes meanwhile; only whole entries are written.
-    pub(super) fn wipe_entries_in_allocation(address: usize, name: &str, values: &[&[u8]]) {
+    /// The base of the allocation containing `address`.
+    pub(super) fn allocation_base(address: usize) -> Option<usize> {
+        use windows_sys::Win32::System::Memory::MEMORY_BASIC_INFORMATION;
+        use windows_sys::Win32::System::Memory::VirtualQuery;
+        // SAFETY: zeroed POD out-structure; queries this process.
+        let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
+        let written = unsafe {
+            VirtualQuery(
+                address as *const std::ffi::c_void,
+                &mut info,
+                std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
+            )
+        };
+        (written != 0 && !info.AllocationBase.is_null()).then_some(info.AllocationBase as usize)
+    }
+
+    /// Most heap allocations [`heap_allocations`] returns.
+    const MAX_HEAP_ALLOCATIONS: usize = 256;
+
+    /// The allocations holding this process's heaps, each with its heap:
+    /// the allocation of every region (segment) a heap walk reports, without
+    /// duplicates.
+    pub(super) fn heap_allocations() -> Vec<(isize, usize)> {
+        use windows_sys::Win32::System::Memory::GetProcessHeaps;
+        use windows_sys::Win32::System::Memory::HeapLock;
+        use windows_sys::Win32::System::Memory::HeapUnlock;
+        use windows_sys::Win32::System::Memory::HeapWalk;
+        use windows_sys::Win32::System::Memory::PROCESS_HEAP_ENTRY;
+        const PROCESS_HEAP_REGION: u16 = 0x1;
+        // SAFETY: a size query, then a fill of at most `heaps.len()` handles.
+        let mut heaps = vec![0; unsafe { GetProcessHeaps(0, std::ptr::null_mut()) } as usize + 8];
+        let count = unsafe { GetProcessHeaps(heaps.len() as u32, heaps.as_mut_ptr()) } as usize;
+        heaps.truncate(count.min(heaps.len()));
+        // Filled while a heap is locked, so nothing is allocated meanwhile.
+        let mut bases = [(0_isize, 0_usize); MAX_HEAP_ALLOCATIONS];
+        let mut found = 0;
+        let mut truncated = false;
+        for heap in heaps {
+            // SAFETY: a heap of this process; unlocked below.
+            if unsafe { HeapLock(heap) } == 0 {
+                continue;
+            }
+            // SAFETY: zeroed POD; a null `lpData` starts the walk.
+            let mut entry: PROCESS_HEAP_ENTRY = unsafe { std::mem::zeroed() };
+            // SAFETY: the heap is locked for the walk.
+            while unsafe { HeapWalk(heap, &mut entry) } != 0 {
+                if entry.wFlags & PROCESS_HEAP_REGION == 0 {
+                    continue;
+                }
+                if let Some(base) = allocation_base(entry.lpData as usize)
+                    && !bases[..found].iter().any(|(_, known)| *known == base)
+                {
+                    if found == bases.len() {
+                        truncated = true;
+                        continue;
+                    }
+                    bases[found] = (heap, base);
+                    found += 1;
+                }
+            }
+            // SAFETY: locked above.
+            unsafe { HeapUnlock(heap) };
+        }
+        if truncated {
+            tracing::debug!(
+                "environment sweep: more than {MAX_HEAP_ALLOCATIONS} heap allocations; the rest are not swept whole"
+            );
+        }
+        bases[..found].to_vec()
+    }
+
+    /// Overwrites copies of a handed-over value in the committed, writable
+    /// regions of the allocation containing `address`, outside the `keep`
+    /// ranges (the caller's own buffers): every `name=value` entry (narrow or
+    /// UTF-16, the name compared ASCII case-insensitively), and any other
+    /// occurrence of a value of at least [`MIN_BARE_CHARS`] characters (a
+    /// stale copy whose name was overwritten), as [`wipe_heap_copies`] does
+    /// in a block in use. Each value gets `0` characters, never NUL. Memory
+    /// is read with `ReadProcessMemory` and written with
+    /// `WriteProcessMemory`, which fail instead of faulting if a region
+    /// changes meanwhile; only bytes that equal a whole value are written.
+    ///
+    /// `heap`, when the allocation is a heap's, is locked during the scan,
+    /// so its blocks are not split, merged or handed out meanwhile. The
+    /// low-fragmentation front end allocates without that lock: a stale copy
+    /// in a free slot can still be handed to another thread between the
+    /// re-read of a match and its overwrite (two system calls). Heap block
+    /// headers are encoded, so a match there is practically impossible.
+    pub(super) fn wipe_copies_in_allocation(
+        address: usize,
+        name: &str,
+        values: &[&[u8]],
+        keep: &[(usize, usize)],
+        heap: Option<isize>,
+    ) {
         use windows_sys::Win32::System::Diagnostics::Debug::ReadProcessMemory;
         use windows_sys::Win32::System::Diagnostics::Debug::WriteProcessMemory;
+        use windows_sys::Win32::System::Memory::HeapLock;
+        use windows_sys::Win32::System::Memory::HeapUnlock;
         use windows_sys::Win32::System::Memory::MEM_COMMIT;
         use windows_sys::Win32::System::Memory::MEMORY_BASIC_INFORMATION;
         use windows_sys::Win32::System::Memory::PAGE_EXECUTE_READWRITE;
@@ -330,32 +437,47 @@ mod windows_env {
         use windows_sys::Win32::System::Memory::VirtualQuery;
         use windows_sys::Win32::System::Threading::GetCurrentProcess;
         const CHUNK: usize = 1 << 20;
-        let entries: Vec<(Zeroizing<Vec<u8>>, Vec<u8>, usize)> = values
+        /// One encoding of the value, the `name=` before it in an entry, its
+        /// replacement, and whether a copy without the name is overwritten.
+        struct Target<'a> {
+            prefix: Vec<u8>,
+            value: &'a [u8],
+            zeros: Vec<u8>,
+            bare: bool,
+        }
+        let targets: Vec<Target<'_>> = values
             .iter()
             .filter(|value| value.len() >= 8)
             .map(|value| {
                 let wide = value.len() > 1 && value[1] == 0;
-                let prefix: Vec<u8> = if wide {
-                    format!("{name}=")
-                        .encode_utf16()
-                        .flat_map(u16::to_le_bytes)
-                        .collect()
-                } else {
-                    format!("{name}=").into_bytes()
-                };
-                let zeros: Vec<u8> = if wide {
-                    std::iter::repeat_n([b'0', 0], value.len() / 2)
-                        .flatten()
-                        .collect()
-                } else {
-                    vec![b'0'; value.len()]
-                };
-                let mut entry = Zeroizing::new(prefix.clone());
-                entry.extend_from_slice(value);
-                (entry, zeros, prefix.len())
+                let characters = if wide { value.len() / 2 } else { value.len() };
+                Target {
+                    prefix: if wide {
+                        format!("{name}=")
+                            .encode_utf16()
+                            .flat_map(u16::to_le_bytes)
+                            .collect()
+                    } else {
+                        format!("{name}=").into_bytes()
+                    },
+                    value,
+                    zeros: if wide {
+                        std::iter::repeat_n([b'0', 0], value.len() / 2)
+                            .flatten()
+                            .collect()
+                    } else {
+                        vec![b'0'; value.len()]
+                    },
+                    bare: characters >= MIN_BARE_CHARS,
+                }
             })
             .collect();
-        let Some(longest) = entries.iter().map(|(entry, _, _)| entry.len()).max() else {
+        // Chunks overlap by the longest entry, so no entry is split.
+        let Some(longest) = targets
+            .iter()
+            .map(|target| target.prefix.len() + target.value.len())
+            .max()
+        else {
             return;
         };
         let query = |at: usize| {
@@ -398,18 +520,29 @@ mod windows_env {
         };
         let chunk = largest.min(CHUNK);
         let mut buffer = Zeroizing::new(vec![0_u8; chunk + longest]);
-        // The search buffers hold entries themselves.
-        let mut own: Vec<(usize, usize)> = entries
-            .iter()
-            .map(|(entry, _, _)| allocation(entry.as_ptr(), entry.capacity()))
-            .collect();
+        // Each match is read again just before it is written: the chunk is a
+        // snapshot, and memory outside the reported blocks may be a free slot
+        // another thread takes meanwhile without the heap lock.
+        let mut recheck = Zeroizing::new(vec![
+            0_u8;
+            targets
+                .iter()
+                .map(|target| target.value.len())
+                .max()
+                .unwrap_or(0)
+        ]);
+        // The search buffers hold copies themselves.
+        let mut own: Vec<(usize, usize)> = keep.to_vec();
         own.push(allocation(buffer.as_ptr(), buffer.capacity()));
+        own.push(allocation(recheck.as_ptr(), recheck.capacity()));
         // SAFETY: a pseudo-handle for this process.
         let process = unsafe { GetCurrentProcess() };
+        // Everything the scan uses is allocated by now.
+        // SAFETY: a heap of this process, unlocked below if locked here.
+        let locked = heap.filter(|heap| unsafe { HeapLock(*heap) } != 0);
         for (base, end) in regions {
             let mut offset = base;
             while offset < end {
-                // Chunks overlap by the longest entry so none is split.
                 let want = (end - offset).min(buffer.len());
                 let mut read = 0_usize;
                 // SAFETY: reads into `buffer`, which holds `want` bytes;
@@ -426,38 +559,56 @@ mod windows_env {
                 if ok == 0 && read == 0 {
                     break;
                 }
-                for (entry, zeros, prefix) in &entries {
+                for target in &targets {
+                    let value = target.value;
                     let mut at = 0;
-                    while at + entry.len() <= read {
-                        // The name compared ASCII case-insensitively, as
-                        // Windows does; the value exactly.
-                        let matches = buffer[at].eq_ignore_ascii_case(&entry[0])
-                            && buffer[at..at + prefix].eq_ignore_ascii_case(&entry[..*prefix])
-                            && buffer[at + prefix..at + entry.len()] == entry[*prefix..];
-                        if !matches {
+                    while at + value.len() <= read {
+                        if buffer[at] != value[0] || buffer[at..at + value.len()] != *value {
                             at += 1;
                             continue;
                         }
-                        let target = offset + at + prefix;
-                        if own
-                            .iter()
-                            .any(|(start, end)| target < *end && target + zeros.len() > *start)
-                        {
-                            at += entry.len();
-                            continue;
+                        // The name compared ASCII case-insensitively, as
+                        // Windows does; the value exactly.
+                        let entry = at >= target.prefix.len()
+                            && buffer[at - target.prefix.len()..at]
+                                .eq_ignore_ascii_case(&target.prefix);
+                        let address = offset + at;
+                        let mine = own.iter().any(|(start, end)| {
+                            address < *end && address + target.zeros.len() > *start
+                        });
+                        let mut again = 0_usize;
+                        // SAFETY: reads the match again into `recheck`, which
+                        // holds at least `value.len()` bytes; fails instead
+                        // of faulting.
+                        let still = (entry || target.bare)
+                            && !mine
+                            && unsafe {
+                                ReadProcessMemory(
+                                    process,
+                                    address as *const std::ffi::c_void,
+                                    recheck.as_mut_ptr().cast(),
+                                    value.len(),
+                                    &mut again,
+                                )
+                            } != 0
+                            && again == value.len()
+                            && recheck[..value.len()] == *value;
+                        recheck.fill(0);
+                        if still {
+                            // SAFETY: writes `zeros` over the value at
+                            // `address`, just read again; fails on memory
+                            // released meanwhile.
+                            unsafe {
+                                WriteProcessMemory(
+                                    process,
+                                    address as *const std::ffi::c_void,
+                                    target.zeros.as_ptr().cast(),
+                                    target.zeros.len(),
+                                    std::ptr::null_mut(),
+                                )
+                            };
                         }
-                        // SAFETY: writes `zeros` over the value at `target`,
-                        // just read; fails on memory released meanwhile.
-                        unsafe {
-                            WriteProcessMemory(
-                                process,
-                                target as *const std::ffi::c_void,
-                                zeros.as_ptr().cast(),
-                                zeros.len(),
-                                std::ptr::null_mut(),
-                            )
-                        };
-                        at += entry.len();
+                        at += value.len();
                     }
                 }
                 buffer[..read].fill(0);
@@ -466,6 +617,10 @@ mod windows_env {
                 }
                 offset += chunk;
             }
+        }
+        if let Some(heap) = locked {
+            // SAFETY: locked above.
+            unsafe { HeapUnlock(heap) };
         }
     }
 

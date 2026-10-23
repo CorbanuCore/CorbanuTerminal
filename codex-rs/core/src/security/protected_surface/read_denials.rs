@@ -75,6 +75,10 @@ const CORBANU_STORES: &[&str] = &[
     "archived_sessions",
     "history.jsonl",
     "memories",
+    // #348: the Linux sandbox's record of the placeholders runs made; a
+    // command that could write it could have a later run remove an empty
+    // file of the person's.
+    codex_sandboxing::landlock::PLACEHOLDER_RECORD_DIR_NAME,
 ];
 
 /// #838 (Travis, 2026-10-15): Corbanu's security state and keys. Under

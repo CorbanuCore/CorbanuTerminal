@@ -1,0 +1,11 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+› Run /review on my current changes
+
+  Z.AI GLM 5.3 Flash via zai default · ~/runs/agms-T18-tart2-agmx1-20261021T202316Z/fixture/workspace · Corbanu Terminal · TPS: -- tok/s

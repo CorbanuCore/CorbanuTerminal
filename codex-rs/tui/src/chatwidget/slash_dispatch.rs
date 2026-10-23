@@ -368,6 +368,9 @@ impl ChatWidget {
             SlashCommand::Security => {
                 let core = crate::bottom_pane::security_level_picker::CoreLevels {
                     thread: self.thread_id(),
+                    // #1047: a remote app server (or the local daemon) runs
+                    // this window's sessions in its own process.
+                    sessions_in_this_process: self.remote_connection.is_none(),
                     configured: crate::legacy_core::security_level_change::configured_level(
                         &self.config,
                     ),

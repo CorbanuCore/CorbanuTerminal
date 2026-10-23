@@ -1,0 +1,12 @@
+{
+  "built_at": "2026-10-19T18:45:00Z",
+  "commit": "78dd811d6e",
+  "branch": "main",
+  "what_is_new": "Main at #930 (green): #899 classifier, #911 perf, #915/#916/#923/#927/#936 CI+flakes, #917 /review cost, #920-#924 decided fixes, #933 docs, #934 #908.",
+  "signing_identity": "Developer ID Application: Travis Good (K5N2T25C23)",
+  "launcher_target": "/Volumes/CorbanuDrive/Corbanu/.codex-work/integration-build-20260922a/integration-package-dev/bin/corbanu",
+  "corbanu_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+  "developer_marker": true,
+  "build_target_dir": "/Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/target-dev-active",
+  "previous_binary": "integration-package-dev/bin/corbanu.prev-90d2fc2329"
+}

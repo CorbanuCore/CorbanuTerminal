@@ -33,6 +33,15 @@ fn sleeper() -> std::process::Child {
         .unwrap()
 }
 
+/// Stops `child` the way the helper stops bubblewrap's supervisor.
+fn killer(child: &std::process::Child) -> impl FnOnce() + Send + 'static {
+    let pid = child.id() as libc::pid_t;
+    // SAFETY: plain syscall; the test reaps `child` only afterwards.
+    move || unsafe {
+        libc::kill(pid, libc::SIGKILL);
+    }
+}
+
 /// Waits for `child` to exit, up to a few seconds; whether it was killed.
 fn killed(child: &mut std::process::Child) -> bool {
     let deadline = Instant::now() + Duration::from_secs(5);
@@ -88,7 +97,7 @@ fn a_credential_file_created_meanwhile_stops_the_command() {
             .unwrap()
             .unwrap();
         let mut child = sleeper();
-        let monitor = watcher.start(child.id() as libc::pid_t, &[]);
+        let monitor = watcher.start(killer(&child), &[]);
         std::fs::create_dir_all(work.join(folder)).unwrap();
         std::fs::write(work.join(folder).join(name), "API_KEY=dummy").unwrap();
         assert!(killed(&mut child), "{folder}/{name}");
@@ -111,7 +120,7 @@ fn a_folder_moved_in_with_a_credential_file_stops_the_command() {
         .unwrap()
         .unwrap();
     let mut child = sleeper();
-    let monitor = watcher.start(child.id() as libc::pid_t, &[]);
+    let monitor = watcher.start(killer(&child), &[]);
     std::fs::rename(outside.path().join("pkg"), work.join("in/pkg")).unwrap();
     assert!(killed(&mut child));
     assert!(monitor.stop().expect("stopped").ends_with("pkg/.env"));
@@ -127,7 +136,7 @@ fn other_names_and_placeholders_do_not_stop_the_command() {
         .unwrap()
         .unwrap();
     let mut child = sleeper();
-    let monitor = watcher.start(child.id() as libc::pid_t, &[work.join(".env")]);
+    let monitor = watcher.start(killer(&child), &[work.join(".env")]);
     for name in ["env", "x.env", ".environment", ".env"] {
         std::fs::write(work.join(name), "").unwrap();
     }
@@ -236,7 +245,7 @@ fn credential_templates_are_neither_hidden_nor_stop_the_command() {
         .unwrap();
     assert_eq!(watcher.existing_files(), &[] as &[std::path::PathBuf]);
     let mut child = sleeper();
-    let monitor = watcher.start(child.id() as libc::pid_t, &[]);
+    let monitor = watcher.start(killer(&child), &[]);
     std::fs::create_dir(work.join("app")).unwrap();
     std::fs::write(work.join("app/.Env.Template"), "").unwrap();
     std::fs::write(work.join(".env.sample"), "").unwrap();
@@ -274,7 +283,7 @@ fn credential_named_and_temporary_folders_do_not_stop_the_command() {
         .unwrap()
         .unwrap();
     let mut child = sleeper();
-    let monitor = watcher.start(child.id() as libc::pid_t, &[]);
+    let monitor = watcher.start(killer(&child), &[]);
     std::fs::create_dir_all(work.join(".env/bin")).unwrap();
     std::fs::write(work.join(".env/bin/activate"), "").unwrap();
     for round in 0..200 {

@@ -53,6 +53,7 @@ use codex_sandboxing::SandboxCommand;
 use codex_sandboxing::SandboxablePreference;
 use codex_shell_command::powershell::prefix_powershell_script_with_utf8;
 use codex_tools::UnifiedExecShellMode;
+use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_path_uri::PathUri;
 use futures::future::BoxFuture;
 use std::collections::HashMap;
@@ -334,6 +335,16 @@ impl<'a> ToolRuntime<UnifiedExecRequest, UnifiedExecProcess> for UnifiedExecRunt
 
     fn sandbox_cwd<'b>(&self, req: &'b UnifiedExecRequest) -> Option<&'b PathUri> {
         Some(&req.sandbox_cwd)
+    }
+
+    fn command_cwd(&self, req: &UnifiedExecRequest) -> Option<AbsolutePathBuf> {
+        req.cwd.to_abs_path().ok()
+    }
+
+    fn local_search_path<'b>(&self, req: &'b UnifiedExecRequest) -> Option<&'b str> {
+        (!req.turn_environment.environment.is_remote())
+            .then(|| req.env.get("PATH").map(String::as_str))
+            .flatten()
     }
 
     fn network_approval_spec(

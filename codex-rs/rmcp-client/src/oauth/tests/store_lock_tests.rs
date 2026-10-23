@@ -512,3 +512,138 @@ fn secrets_store_load_and_delete_observe_aggregate_lock() -> Result<()> {
     );
     Ok(())
 }
+
+// Issue928: exercise the real acquired guard, not a replacement lock implementation.
+// An error return must drop the actual guard before the caller observes the error.
+fn store_error_return(_guard: OAuthStoreLock) -> std::result::Result<(), &'static str> {
+    Err("synthetic transaction error")
+}
+
+#[derive(Clone, Copy, Debug)]
+enum LockScopeExit {
+    Normal,
+    Error,
+    Unwind,
+}
+
+fn assert_store_scope_releases_retained_descriptor(
+    store: OAuthStore,
+    exit: LockScopeExit,
+) -> Result<()> {
+    let home = tempfile::tempdir()?;
+    let guard = OAuthStoreLock::acquire_in(home.path(), store, Duration::ZERO)?;
+    let retained = guard._file.try_clone()?;
+    let path = super::oauth_store_lock_path(home.path(), store);
+    let before = std::fs::metadata(&path)?;
+    match exit {
+        LockScopeExit::Normal => drop(guard),
+        LockScopeExit::Error => {
+            let result = store_error_return(guard);
+            assert_eq!(result, Err("synthetic transaction error"));
+        }
+        LockScopeExit::Unwind => {
+            let result = std::panic::catch_unwind(move || {
+                let _owned = guard;
+                panic!("synthetic transaction unwind");
+            });
+            assert!(result.is_err());
+        }
+    }
+    let reacquired = OAuthStoreLock::acquire_in(home.path(), store, Duration::ZERO);
+    assert!(
+        reacquired.is_ok(),
+        "real {store} guard must release on {exit:?} while its duplicate remains open: {:?}",
+        reacquired.as_ref().err()
+    );
+    let _reacquired = reacquired?;
+    let after = std::fs::metadata(&path)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        assert_eq!((before.dev(), before.ino()), (after.dev(), after.ino()));
+        let retained_metadata = retained.metadata()?;
+        assert_eq!(
+            (before.dev(), before.ino()),
+            (retained_metadata.dev(), retained_metadata.ino())
+        );
+    }
+    #[cfg(not(unix))]
+    assert_eq!(before.len(), after.len());
+    drop(retained);
+    Ok(())
+}
+
+#[test]
+fn issue928_mcp_file_guard_scope_releases_with_retained_descriptor() -> Result<()> {
+    for exit in [
+        LockScopeExit::Normal,
+        LockScopeExit::Error,
+        LockScopeExit::Unwind,
+    ] {
+        assert_store_scope_releases_retained_descriptor(OAuthStore::File, exit)?;
+    }
+    Ok(())
+}
+
+#[test]
+fn issue928_mcp_secrets_guard_scope_releases_with_retained_descriptor() -> Result<()> {
+    for exit in [
+        LockScopeExit::Normal,
+        LockScopeExit::Error,
+        LockScopeExit::Unwind,
+    ] {
+        assert_store_scope_releases_retained_descriptor(OAuthStore::Secrets, exit)?;
+    }
+    Ok(())
+}
+
+#[test]
+fn issue928_mcp_live_store_guard_exclusion_and_independence() -> Result<()> {
+    for store in [OAuthStore::File, OAuthStore::Secrets] {
+        let home = tempfile::tempdir()?;
+        let held = OAuthStoreLock::acquire_in(home.path(), store, Duration::ZERO)?;
+        drop(held._file.try_clone()?);
+        let other_store = match store {
+            OAuthStore::File => OAuthStore::Secrets,
+            OAuthStore::Secrets => OAuthStore::File,
+        };
+        let _independent = OAuthStoreLock::acquire_in(home.path(), other_store, Duration::ZERO)?;
+        let contender = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(super::oauth_store_lock_path(home.path(), store))?;
+        assert!(matches!(
+            contender.try_lock(),
+            Err(std::fs::TryLockError::WouldBlock)
+        ));
+        let error = OAuthStoreLock::acquire_in(home.path(), store, Duration::ZERO)
+            .err()
+            .expect("same-resource contender must time out while the guard lives");
+        assert!(matches!(error, OAuthStoreLockFailure::Timeout { .. }));
+        drop(held);
+        let _reacquired = OAuthStoreLock::acquire_in(home.path(), store, Duration::ZERO)?;
+    }
+    Ok(())
+}
+
+#[test]
+fn issue928_mcp_store_acquisition_io_errors_are_preserved() -> Result<()> {
+    for store in [OAuthStore::File, OAuthStore::Secrets] {
+        let home = tempfile::tempdir()?;
+        let blocked_home = home.path().join("not-a-directory");
+        std::fs::write(&blocked_home, b"synthetic sentinel")?;
+        let error = OAuthStoreLock::acquire_in(&blocked_home, store, Duration::ZERO)
+            .err()
+            .expect("file-as-home must fail directory creation");
+        assert!(matches!(error, OAuthStoreLockFailure::CreateDir { .. }));
+        assert_eq!(std::fs::read(&blocked_home)?, b"synthetic sentinel");
+        let path = super::oauth_store_lock_path(home.path(), store);
+        std::fs::create_dir_all(&path)?;
+        let error = OAuthStoreLock::acquire_in(home.path(), store, Duration::ZERO)
+            .err()
+            .expect("directory-as-lock must fail opening the file");
+        assert!(matches!(error, OAuthStoreLockFailure::Open { .. }));
+        assert!(path.is_dir());
+    }
+    Ok(())
+}

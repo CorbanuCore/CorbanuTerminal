@@ -92,7 +92,7 @@ impl<'a> Journal<'a> {
                 .context("detail expiry overflow")?;
             ensure!(
                 detail_expiry > checkpoint,
-                "unsupported compact-only late import in this fixture"
+                "request dispatch time is outside the ledger's 90-day detail window; compact-only late imports are unsupported"
             );
         }
         let installed: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'draft_accounting_tombstones')")

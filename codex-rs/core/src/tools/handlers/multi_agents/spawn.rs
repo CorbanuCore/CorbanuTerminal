@@ -124,6 +124,7 @@ async fn handle_spawn_agent(
         &call_id,
         &mut config,
         args.account.as_deref(),
+        |_| Ok(()),
     )
     .await?;
     let account = spawned_account_name(&config);

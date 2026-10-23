@@ -1,0 +1,18 @@
+2026-10-21T08:16:11Z
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 stopped  macOS 3
+System-wide memory free percentage: 92%
+start-rc=0
+ssh open 2026-10-21T08:16:20Z
+ProductName:		macOS
+ProductVersion:		26.2
+BuildVersion:		25C56
+ 1:16  up 10 secs, 0 users, load averages: 8.50 1.89 0.67
+System Integrity Protection status: enabled.
+assessments enabled
+guest clock: 2026-10-21T08:16:21Z
+host clock: 2026-10-21T08:16:23Z
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 started  macOS 3

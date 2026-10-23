@@ -217,6 +217,7 @@ pub(super) fn priced_from_charges(day: InspectionDay) -> anyhow::Result<Inspecti
         InspectionDay::Range {
             requested,
             aggregate_day_floor,
+            completed_as_of_ms,
             read_at_ms,
             mut buckets,
         } => {
@@ -228,6 +229,7 @@ pub(super) fn priced_from_charges(day: InspectionDay) -> anyhow::Result<Inspecti
             InspectionDay::Range {
                 requested,
                 aggregate_day_floor,
+                completed_as_of_ms,
                 read_at_ms,
                 buckets,
             }

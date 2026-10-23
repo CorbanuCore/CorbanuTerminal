@@ -1,0 +1,45 @@
+• Blocked: under the current Moderate security level, vault access needs approval, and approvals are off (approval_policy = never). You can enable
+  approval prompts via /permissions or by setting approval_policy in config.toml, then run it again.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Run python3 src/notes.py list
+
+
+• Ran python3 src/notes.py list
+  └ buy coffee
+    review budget
+
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• buy coffee
+  review budget
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+Security inspector (read only)
+● Protected: Moderate; every required control observed or checked at launch
+Observed 30s ago, policy generation 0.1
+
+Not contained
+  [off] MCP servers: none configured [resolved: config]
+  [not contained] Hooks: run outside the OS sandbox with the environment allowlist; allowed because you configured or started it [resolved: features]
+  [not contained] `!` shell commands: run outside the OS sandbox with the environment allowlist; allowed because you configured or started it [fixed]
+  [not contained] App-server command/exec: runs outside the OS sandbox with the environment allowlist; allowed because you configured or started it
+      [fixed]
+
+Not available
+  [not available] Financial preview and approvals: not available in this build (PF-38, PF-39) [fixed]
+  [not available] Isolated retrieval: not available in this build (PF-31) [fixed]
+  [not available] Screened search routing: not available in this build (PF-32) [fixed]
+  [not available] Brokered browser login: not available in this build (PF-37) [fixed]
+  [not available] Quarantine: not available in this build (PF-34) [fixed]
+  [not available] Untrusted-content detectors: not available in this build (PF-35, PF-36) [fixed]
+  [not available] Agent Sweep: not available in this build (PF-40) [fixed]
+
+Recent denials
+  1m ago: vault access: refused: approvals are off (main session) [observed: this process]
+  2m ago: credential access: refused: approvals are off (main session) [observed: this process]
+↑/↓ scroll · r refresh · esc back to /security

@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::path::Path;
 use std::path::PathBuf;
+#[cfg(unix)]
 use std::process::Child;
 use std::process::Command;
 use std::process::Output;
@@ -748,19 +749,22 @@ fn run_git_command_with_timeout(
     timeout: Duration,
     cancel: &AtomicBool,
 ) -> Result<Output, String> {
-    // Its own process group, so cancelling also stops the helpers `git`
-    // starts (`index-pack`, `remote-https`) before the clone is removed.
+    // A separate process group, so cancelling also stops the helpers `git`
+    // starts (`index-pack`, `remote-https`) before the clone is removed, and
+    // so they die with this process (`GitProcessGroup`).
     if cancel.load(Ordering::SeqCst) {
         return Err(format!("{context}: {SYNC_CANCELLED}"));
     }
     #[cfg(unix)]
-    std::os::unix::process::CommandExt::process_group(command, 0);
+    let group = GitProcessGroup::new(command);
     let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|err| format!("failed to run {context}: {err}"))?;
+    #[cfg(unix)]
+    let pgid = group.pgid(&child);
 
     let start = std::time::Instant::now();
     loop {
@@ -776,7 +780,10 @@ fn run_git_command_with_timeout(
 
         let cancelled = cancel.load(Ordering::SeqCst);
         if cancelled || start.elapsed() >= timeout {
-            kill_git_process_group(&mut child);
+            #[cfg(unix)]
+            kill_git_process_group(&mut child, pgid);
+            #[cfg(not(unix))]
+            let _ = child.kill();
             let output = child
                 .wait_with_output()
                 .map_err(|err| format!("failed to wait for {context} after kill: {err}"))?;
@@ -798,14 +805,87 @@ fn run_git_command_with_timeout(
     }
 }
 
+/// The process group `git` runs in (#1202). A `/bin/sh` watchdog leads it
+/// and blocks reading a pipe that only this process holds open. However this
+/// process ends (normal exit, SIGHUP when its terminal closes, SIGKILL) the
+/// kernel closes the pipe, `read` returns and the watchdog kills the whole
+/// group, so `git` and its helpers never outlive Corbanu and keep writing into
+/// its home. When the command finishes, dropping this kills what is left of
+/// the group and reaps the watchdog. The watchdog ignores the terminal's
+/// signals, so only the pipe or a kill ends it. If it can't start, `git` leads
+/// its own group as before and only the timeout and cancel flag stop it. On
+/// macOS std sets close-on-exec on the pipe just after creating it, so a
+/// child another thread spawns in that moment may hold the write end open;
+/// then the watchdog fires only once that child exits too (cancel, timeout
+/// and the end of the command still kill the group).
+#[cfg(unix)]
+struct GitProcessGroup {
+    watchdog: Option<(Child, libc::pid_t)>,
+}
+
+#[cfg(unix)]
+impl GitProcessGroup {
+    /// Starts the watchdog and puts `command` in its group.
+    fn new(command: &mut Command) -> Self {
+        use std::os::unix::process::CommandExt;
+
+        let watchdog = Command::new("/bin/sh")
+            .args(["-c", "trap '' HUP INT QUIT TERM; read -r line; kill -9 0"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .process_group(0)
+            .spawn()
+            .and_then(|watchdog| {
+                let pgid = libc::pid_t::try_from(watchdog.id()).map_err(std::io::Error::other)?;
+                Ok((watchdog, pgid))
+            });
+        match watchdog {
+            Ok((watchdog, pgid)) => {
+                command.process_group(pgid);
+                Self {
+                    watchdog: Some((watchdog, pgid)),
+                }
+            }
+            Err(err) => {
+                warn!(error = %err, "curated plugin sync: git lifetime watchdog failed to start");
+                command.process_group(0);
+                Self { watchdog: None }
+            }
+        }
+    }
+
+    /// The group to kill: the watchdog's, or `git`'s own without one.
+    fn pgid(&self, git: &Child) -> Option<libc::pid_t> {
+        match &self.watchdog {
+            Some((_, pgid)) => Some(*pgid),
+            None => libc::pid_t::try_from(git.id()).ok(),
+        }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for GitProcessGroup {
+    fn drop(&mut self) {
+        if let Some((watchdog, pgid)) = self.watchdog.as_mut() {
+            // SAFETY: `kill` takes no pointers. The unreaped watchdog leads
+            // the group, so its id can't have been reused.
+            unsafe {
+                libc::kill(-*pgid, libc::SIGKILL);
+            }
+            let _ = watchdog.wait();
+        }
+    }
+}
+
 /// Kills `git` and every helper in its group; the caller reaps it.
-fn kill_git_process_group(child: &mut Child) {
-    #[cfg(unix)]
-    if let Ok(pid) = libc::pid_t::try_from(child.id()) {
-        // SAFETY: `kill` takes no pointers. `-pid` names the group `git`
-        // leads; the unreaped child keeps that id from being reused.
+#[cfg(unix)]
+fn kill_git_process_group(child: &mut Child, pgid: Option<libc::pid_t>) {
+    if let Some(pgid) = pgid {
+        // SAFETY: `kill` takes no pointers. `-pgid` names the group `git`
+        // runs in; its unreaped leader keeps that id from being reused.
         unsafe {
-            libc::kill(-pid, libc::SIGKILL);
+            libc::kill(-pgid, libc::SIGKILL);
         }
     }
     let _ = child.kill();
@@ -1120,10 +1200,17 @@ fn extract_zipball_to_dir(bytes: &[u8], destination: &Path) -> Result<(), String
         let mut entry = archive
             .by_index(index)
             .map_err(|err| format!("failed to read curated plugins zip entry: {err}"))?;
+        let name = entry
+            .name()
+            .map_err(|error| format!("failed to decode curated plugins zip entry name: {error}"))?;
+        if zip_name_is_rooted(&name) {
+            return Err(format!(
+                "curated plugins zip entry `{name}` escapes extraction root"
+            ));
+        }
         let Some(relative_path) = entry.enclosed_name() else {
             return Err(format!(
-                "curated plugins zip entry `{}` escapes extraction root",
-                entry.name()
+                "curated plugins zip entry `{name}` escapes extraction root"
             ));
         };
 
@@ -1142,7 +1229,7 @@ fn extract_zipball_to_dir(bytes: &[u8], destination: &Path) -> Result<(), String
             continue;
         }
 
-        let output_path = destination.join(&output_relative);
+        let output_path = checked_zip_path(destination, &output_relative)?;
         if entry.is_dir() {
             std::fs::create_dir_all(&output_path).map_err(|err| {
                 format!(
@@ -1173,35 +1260,66 @@ fn extract_zipball_to_dir(bytes: &[u8], destination: &Path) -> Result<(), String
                 output_path.display()
             )
         })?;
-        apply_zip_permissions(&entry, &output_path)?;
+        apply_zip_permissions(entry.unix_mode(), &output_path)?;
     }
 
     Ok(())
 }
 
+// zip 9's `enclosed_name` strips a leading root, drive or UNC prefix and returns a
+// relative path. Refuse such names on every platform, as zip 2 did.
+fn zip_name_is_rooted(name: &str) -> bool {
+    name.starts_with(['/', '\\'])
+        || (name.as_bytes().get(1) == Some(&b':')
+            && name.as_bytes().first().is_some_and(u8::is_ascii_alphabetic))
+}
+
+// The caller validates archive components before this check. Existing symlinks
+// must not redirect archive writes or permission changes outside its destination.
+fn checked_zip_path(destination: &Path, relative: &Path) -> Result<PathBuf, String> {
+    let mut output = PathBuf::new();
+    for part in std::iter::once(destination.as_os_str())
+        .chain(relative.components().map(std::path::Component::as_os_str))
+    {
+        output.push(part);
+        match std::fs::symlink_metadata(&output) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err("curated plugins zip path contains an existing symlink".to_owned());
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(format!("failed to check curated plugins zip path: {error}")),
+        }
+    }
+    Ok(output)
+}
+
 #[cfg(unix)]
-fn apply_zip_permissions(entry: &zip::read::ZipFile<'_>, output_path: &Path) -> Result<(), String> {
+fn apply_zip_permissions(mode: Option<u32>, output_path: &Path) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
 
-    let Some(mode) = entry.unix_mode() else {
+    let Some(mode) = mode else {
         return Ok(());
     };
-    std::fs::set_permissions(output_path, std::fs::Permissions::from_mode(mode)).map_err(|err| {
-        format!(
-            "failed to set permissions on curated plugins file {}: {err}",
-            output_path.display()
-        )
-    })
+    std::fs::set_permissions(output_path, std::fs::Permissions::from_mode(mode & 0o777)).map_err(
+        |err| {
+            format!(
+                "failed to set permissions on curated plugins file {}: {err}",
+                output_path.display()
+            )
+        },
+    )
 }
 
 #[cfg(not(unix))]
-fn apply_zip_permissions(
-    _entry: &zip::read::ZipFile<'_>,
-    _output_path: &Path,
-) -> Result<(), String> {
+fn apply_zip_permissions(_mode: Option<u32>, _output_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
 #[cfg(test)]
 #[path = "startup_sync_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "archive_migration_tests.rs"]
+mod archive_migration_tests;

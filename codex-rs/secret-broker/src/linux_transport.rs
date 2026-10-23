@@ -132,10 +132,8 @@ fn serve_frames<H: LinuxBrokerHandler>(
 ) -> Result<(), BrokerDispatchError> {
     loop {
         let frame = read_frame(stream)?;
-        match handler.dispatch(peer, &frame) {
-            Ok(receipt) => write_receipt(stream, &WireReceipt::from(receipt))?,
-            Err(error) => return Err(error),
-        }
+        let receipt = handler.dispatch(peer, &frame)?;
+        write_receipt(stream, &WireReceipt::from(receipt))?;
     }
 }
 

@@ -1,0 +1,9 @@
+# thread | turn | provider | model | dispatched (UTC) | request_id | attempt_id (integrator's read of draft_accounting_attempts after the run)
+01a15711-5728-78e1-8a14-80eb22ed277f | 01a15711-8cd5-7da3-92e6-6ea96404751b | zai | glm-5.3-flash | 2026-10-20T02:08:50Z | 3453e2ea-69fa-4891-a438-aaccb67dc239 | de316f1d-0347-4b31-9363-2a1bc1a95ecb
+01a15717-cead-7a12-bf67-00eb28b03850 | 01a15717-d7c0-7542-a187-ebd60bf09c6e | zai | glm-5.3-flash | 2026-10-20T02:15:43Z | c92f613b-5b38-407d-8a6c-4697cd21e01e | 522dbb9c-90c8-439c-a7cf-a10f665c37ed
+01a15717-cead-7a12-bf67-00eb28b03850 | code-review:01a15719-8f5a-7ae2-84f5-29a27afc0e8b | zai | glm-5.3-flash | 2026-10-20T02:17:35Z | 77e366b2-3283-41e6-b843-b8b9fffea210 | 8ada2bfa-a418-4b7e-b9da-bbecafa8c8ca
+01a15717-cead-7a12-bf67-00eb28b03850 | code-review:01a15719-8f5a-7ae2-84f5-29a27afc0e8b | zai | glm-5.3-flash | 2026-10-20T02:17:46Z | 393b657d-add7-42af-81c6-28e0cd847da6 | 2d2aa41b-b304-4a8d-b9ab-54a083915627
+01a15717-cead-7a12-bf67-00eb28b03850 | code-review:01a15719-8f5a-7ae2-84f5-29a27afc0e8b | zai | glm-5.3-flash | 2026-10-20T02:17:54Z | 80742928-c77f-43ce-933b-ba7b6911d0ef | b0f6e843-2196-42d8-80c3-28c15aa3c920
+01a15717-cead-7a12-bf67-00eb28b03850 | code-review:01a15719-8f5a-7ae2-84f5-29a27afc0e8b | zai | glm-5.3-flash | 2026-10-20T02:18:04Z | a9f5fffa-559f-4660-9d83-b3208f61deec | 2f332acb-63e6-4cce-9fee-96a66a443b60
+01a15711-5728-78e1-8a14-80eb22ed277f | side:01a15723-0cc9-7fb3-846f-fd0394ba0ede | zai | glm-5.3-flash | 2026-10-20T02:27:57Z | f25ac6d9-a93e-4049-9cee-6625f62d9bfc | 742dc613-2629-4128-97fe-700a40138f0b
+01a15711-5728-78e1-8a14-80eb22ed277f | 01a1572f-3cd6-75c3-9ea9-d7d36e304002 | zai | glm-5.3-flash | 2026-10-20T02:41:16Z | e986dcaf-066a-4162-a6d8-bd34348ee956 | 1d90a560-400f-4ba6-8044-bc21943619de

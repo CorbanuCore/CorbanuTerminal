@@ -21,6 +21,9 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::Mutex;
 
+#[path = "realtime_webrtc_accounting_tests.rs"]
+mod webrtc_accounting;
+
 fn pf_30_realtime_start(
     model_client: crate::client::ModelClient,
     base_url: String,
@@ -498,7 +501,8 @@ async fn pf_60_s03_realtime_call_is_recorded() -> anyhow::Result<()> {
         .await;
 
     let home = tempfile::tempdir()?;
-    let mut config = crate::session::tests::build_test_config(home.path()).await;
+    let test_cwd = tempfile::tempdir()?;
+    let mut config = crate::session::tests::build_test_config(home.path(), test_cwd.path()).await;
     config.model_provider = codex_model_provider_info::ModelProviderInfo {
         request_max_retries: Some(0),
         stream_max_retries: Some(0),
@@ -682,6 +686,55 @@ fn pf_889_ambient_realtime_key_under_a_named_account_is_not_attributed() {
     ));
 }
 
+/// D171 (#1286, #1311 item 5): a realtime WebSocket session on a named
+/// OpenAI account whose sign-in was removed is refused with the account's
+/// recovery, as its other requests are. Before, it fell back to the ambient
+/// `OPENAI_API_KEY` (or failed asking for an API key when none was set).
+/// While the account is signed in, its own key is used as before.
+#[tokio::test]
+async fn pf_889_realtime_on_a_removed_named_account_is_refused_not_sent_the_ambient_key()
+-> anyhow::Result<()> {
+    let endpoint = realtime_stand_in(StandInEnd::ClientCloses).await?;
+    let home = tempfile::tempdir()?;
+    let test_cwd = tempfile::tempdir()?;
+    let work = codex_login::NamedChatgptAccount {
+        provider_id: "openai".into(),
+        name: "work".into(),
+    };
+    codex_login::login_named_account_with_api_key(home.path(), &work, "sk-work-canary")?;
+    let (owner, _db) = realtime_ledger_session_with(
+        home.path(),
+        test_cwd.path(),
+        &endpoint,
+        crate::config::AccountingMode::Disabled,
+        |config| config.model_provider.account = Some(named_openai_account()),
+    )
+    .await?;
+
+    let signed_in = super::prepare_realtime_start(&owner, realtime_websocket_params()).await?;
+    assert!(matches!(
+        signed_in.websocket_credential,
+        super::RealtimeRecordKey::Sent(_)
+    ));
+
+    let name = codex_vault::ProviderAccountName::parse("work")?;
+    assert!(
+        codex_vault::Vault::new(home.path().to_path_buf())
+            .remove_provider_account("openai", &name)?
+    );
+    let refused = match super::prepare_realtime_start(&owner, realtime_websocket_params()).await {
+        Ok(_) => panic!("a removed named account must not start a realtime session"),
+        Err(error) => error.to_string(),
+    };
+    assert!(
+        refused.contains("account `work` has no sign-in (it may have been removed or signed out)")
+            && refused.contains("corbanu login --account work"),
+        "{refused}"
+    );
+    assert!(!refused.contains("sk-"), "{refused}");
+    Ok(())
+}
+
 /// How the stand-in realtime server ends a session it accepted.
 #[derive(Clone, Copy)]
 enum StandInEnd {
@@ -719,17 +772,19 @@ async fn realtime_stand_in(end: StandInEnd) -> anyhow::Result<String> {
 /// stand-in at `endpoint`, recording under `accounting`.
 async fn realtime_ledger_session(
     home: &std::path::Path,
+    cwd: &std::path::Path,
     endpoint: &str,
     accounting: crate::config::AccountingMode,
 ) -> anyhow::Result<(
     Arc<crate::session::session::Session>,
     Arc<codex_state::StateRuntime>,
 )> {
-    realtime_ledger_session_with(home, endpoint, accounting, |_| {}).await
+    realtime_ledger_session_with(home, cwd, endpoint, accounting, |_| {}).await
 }
 
 async fn realtime_ledger_session_with(
     home: &std::path::Path,
+    cwd: &std::path::Path,
     endpoint: &str,
     accounting: crate::config::AccountingMode,
     configure: impl FnOnce(&mut crate::config::Config),
@@ -737,12 +792,29 @@ async fn realtime_ledger_session_with(
     Arc<crate::session::session::Session>,
     Arc<codex_state::StateRuntime>,
 )> {
+    let (owner, db, _events) =
+        realtime_ledger_session_with_events(home, cwd, endpoint, accounting, configure).await?;
+    Ok((owner, db))
+}
+
+/// [`realtime_ledger_session_with`], also returning the session's events.
+async fn realtime_ledger_session_with_events(
+    home: &std::path::Path,
+    cwd: &std::path::Path,
+    endpoint: &str,
+    accounting: crate::config::AccountingMode,
+    configure: impl FnOnce(&mut crate::config::Config),
+) -> anyhow::Result<(
+    Arc<crate::session::session::Session>,
+    Arc<codex_state::StateRuntime>,
+    async_channel::Receiver<codex_protocol::protocol::Event>,
+)> {
     use codex_state::SqliteConfig;
     use codex_state::StateRuntime;
     use codex_state::ThreadMetadataBuilder;
     use codex_utils_absolute_path::AbsolutePathBuf;
 
-    let mut config = crate::session::tests::build_test_config(home).await;
+    let mut config = crate::session::tests::build_test_config(home, cwd).await;
     config.model_provider = codex_model_provider_info::ModelProviderInfo {
         request_max_retries: Some(0),
         stream_max_retries: Some(0),
@@ -760,6 +832,7 @@ async fn realtime_ledger_session_with(
     configure(&mut config);
     let (mut session, _context) =
         crate::session::tests::make_session_and_context_for_config(config).await;
+    let events = crate::session::tests::capture_events(&mut session);
     let db = StateRuntime::init(
         SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.to_path_buf())?),
         "openai".into(),
@@ -778,7 +851,7 @@ async fn realtime_ledger_session_with(
         .build("openai"),
     )
     .await?;
-    Ok((owner, db))
+    Ok((owner, db, events))
 }
 
 fn realtime_websocket_params() -> codex_protocol::protocol::ConversationStartParams {
@@ -847,7 +920,17 @@ async fn realtime_ledger_settled(
     db: &codex_state::StateRuntime,
     count: usize,
 ) -> anyhow::Result<(Vec<serde_json::Value>, Vec<serde_json::Value>)> {
-    let deadline = Instant::now() + std::time::Duration::from_secs(10);
+    realtime_ledger_settled_within(db, count, std::time::Duration::from_secs(10)).await
+}
+
+/// Wait until the ledger holds `count` observations, or give up after
+/// `wait`. A check that nothing more is recorded waits the whole time.
+async fn realtime_ledger_settled_within(
+    db: &codex_state::StateRuntime,
+    count: usize,
+    wait: std::time::Duration,
+) -> anyhow::Result<(Vec<serde_json::Value>, Vec<serde_json::Value>)> {
+    let deadline = Instant::now() + wait;
     loop {
         if realtime_ledger_exists(db).await? {
             let ledger = realtime_ledger(db).await?;
@@ -904,8 +987,10 @@ async fn pf_824_websocket_realtime_session_is_one_request_with_tokens_unknown() 
 {
     let endpoint = realtime_stand_in(StandInEnd::ClientCloses).await?;
     let home = tempfile::tempdir()?;
+    let test_cwd = tempfile::tempdir()?;
     let (owner, db) = realtime_ledger_session(
         home.path(),
+        test_cwd.path(),
         &endpoint,
         crate::config::AccountingMode::DirectOpenAiResponses {
             scope: uuid::Uuid::new_v4(),
@@ -933,9 +1018,11 @@ async fn pf_824_websocket_realtime_session_dropped_by_the_server_is_recorded() -
 {
     let endpoint = realtime_stand_in(StandInEnd::ServerDrops).await?;
     let home = tempfile::tempdir()?;
+    let test_cwd = tempfile::tempdir()?;
     // The provider-bound mode a developer-accounting build uses.
     let (owner, db) = realtime_ledger_session(
         home.path(),
+        test_cwd.path(),
         &endpoint,
         crate::config::AccountingMode::Provider {
             scope: uuid::Uuid::new_v4(),
@@ -965,8 +1052,10 @@ async fn pf_824_websocket_realtime_session_is_not_recorded_when_collection_is_of
 -> anyhow::Result<()> {
     let endpoint = realtime_stand_in(StandInEnd::ClientCloses).await?;
     let home = tempfile::tempdir()?;
+    let test_cwd = tempfile::tempdir()?;
     let (owner, db) = realtime_ledger_session(
         home.path(),
+        test_cwd.path(),
         &endpoint,
         crate::config::AccountingMode::Disabled,
     )
@@ -1004,8 +1093,10 @@ async fn pf_824_websocket_session_on_a_ws_base_url_is_recorded() -> anyhow::Resu
     let endpoint = realtime_stand_in(StandInEnd::ClientCloses).await?;
     let ws_base = endpoint.replacen("http://", "ws://", 1);
     let home = tempfile::tempdir()?;
+    let test_cwd = tempfile::tempdir()?;
     let (owner, db) = realtime_ledger_session_with(
         home.path(),
+        test_cwd.path(),
         "http://127.0.0.1:1/v1",
         provider_bound("http://127.0.0.1:1/v1"),
         |config| config.experimental_realtime_ws_base_url = Some(ws_base),
@@ -1031,8 +1122,14 @@ async fn pf_824_websocket_session_on_a_ws_base_url_is_recorded() -> anyhow::Resu
 async fn pf_824_replaced_and_shut_down_sessions_record_their_ends() -> anyhow::Result<()> {
     let endpoint = realtime_stand_in(StandInEnd::ClientCloses).await?;
     let home = tempfile::tempdir()?;
-    let (owner, db) =
-        realtime_ledger_session(home.path(), &endpoint, provider_bound(&endpoint)).await?;
+    let test_cwd = tempfile::tempdir()?;
+    let (owner, db) = realtime_ledger_session(
+        home.path(),
+        test_cwd.path(),
+        &endpoint,
+        provider_bound(&endpoint),
+    )
+    .await?;
     super::handle_start(&owner, "first".into(), realtime_websocket_params()).await?;
     super::handle_start(&owner, "second".into(), realtime_websocket_params()).await?;
     assert!(
@@ -1130,8 +1227,14 @@ fn pf_824_websocket_session_is_recorded_as_api_key_work() {
 async fn pf_824_websocket_session_under_chatgpt_sign_in_is_api_key_work() -> anyhow::Result<()> {
     const OPENAI_API: &str = "https://api.openai.com/v1";
     let home = tempfile::tempdir()?;
-    let (owner, _db) =
-        realtime_ledger_session(home.path(), OPENAI_API, provider_bound(OPENAI_API)).await?;
+    let test_cwd = tempfile::tempdir()?;
+    let (owner, _db) = realtime_ledger_session(
+        home.path(),
+        test_cwd.path(),
+        OPENAI_API,
+        provider_bound(OPENAI_API),
+    )
+    .await?;
     owner
         .services
         .active_auth
@@ -1175,8 +1278,10 @@ async fn pf_824_websocket_session_under_chatgpt_sign_in_is_recorded_with_its_key
 -> anyhow::Result<()> {
     let endpoint = realtime_stand_in(StandInEnd::ClientCloses).await?;
     let home = tempfile::tempdir()?;
+    let test_cwd = tempfile::tempdir()?;
     let (owner, db) = realtime_ledger_session(
         home.path(),
+        test_cwd.path(),
         &endpoint,
         crate::config::AccountingMode::DirectOpenAiResponses {
             scope: uuid::Uuid::new_v4(),
@@ -1212,8 +1317,14 @@ async fn pf_889_ambient_key_session_under_a_named_account_is_left_unrecorded() -
     for ambient_under_named_account in [false, true] {
         let endpoint = realtime_stand_in(StandInEnd::ClientCloses).await?;
         let home = tempfile::tempdir()?;
-        let (owner, db) =
-            realtime_ledger_session(home.path(), &endpoint, provider_bound(&endpoint)).await?;
+        let test_cwd = tempfile::tempdir()?;
+        let (owner, db) = realtime_ledger_session(
+            home.path(),
+            test_cwd.path(),
+            &endpoint,
+            provider_bound(&endpoint),
+        )
+        .await?;
         let mut prepared =
             super::prepare_realtime_start(&owner, realtime_websocket_params()).await?;
         assert!(matches!(

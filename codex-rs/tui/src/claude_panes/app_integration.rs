@@ -1023,16 +1023,28 @@ impl App {
         });
     }
 
-    /// #842: says that Moderate confirmed in another Corbanu Terminal on this
-    /// home now applies here.
+    /// #842/#919: says that Moderate or Aggressive confirmed in another
+    /// Corbanu Terminal on this home now applies here, and what waits for
+    /// the restart.
     pub(crate) fn on_level_raised_elsewhere(
         &mut self,
         level: crate::legacy_core::security_revocation::SecurityLevel,
     ) {
-        if level == crate::legacy_core::security_revocation::SecurityLevel::Moderate {
-            self.chat_widget
-                .add_info_message(MODERATE_CONFIRMED_ELSEWHERE.to_string(), /*hint*/ None);
-        }
+        use crate::legacy_core::security_revocation::SecurityLevel;
+        let message = match level {
+            SecurityLevel::Moderate => MODERATE_CONFIRMED_ELSEWHERE.to_string(),
+            SecurityLevel::Aggressive => aggressive_confirmed_elsewhere(
+                self.config
+                    .features
+                    .enabled(codex_features::Feature::SourceEnvelopes),
+                crate::security::level::context()
+                    .map_or(crate::security::level::ChosenLevel::Permissive, |context| {
+                        context.active
+                    }),
+            ),
+            SecurityLevel::Permissive => return,
+        };
+        self.chat_widget.add_info_message(message, /*hint*/ None);
     }
 
     /// #507: the kill switch was turned on (here, or in another Corbanu
@@ -1810,6 +1822,32 @@ pub(crate) const KILL_SWITCH_ON_ELSEWHERE: &str = "The security kill switch was 
 /// #842: shown when Moderate confirmed in another Corbanu Terminal on this
 /// home raised this one's sessions.
 pub(crate) const MODERATE_CONFIRMED_ELSEWHERE: &str = "Moderate was confirmed in another Corbanu Terminal on this home, so Core's Moderate rules apply here now: agent commands always stay in the sandbox, credential and Corbanu files are protected from them, and after untrusted content protected actions need your fresh approval. Grants and \"for session\" approvals here ended. This session is shown as Permissive until you restart Corbanu Terminal; model keys through the credential broker start then. Commands already running keep the permissions they started with.";
+
+/// #919 (Travis, 2026-10-16, D20): shown when Aggressive confirmed in
+/// another Corbanu Terminal on this home raised this one's sessions;
+/// `untrusted_content` when `source_envelopes` is on (Core's labels hold),
+/// `active` the level this session is shown as until the restart.
+pub(crate) fn aggressive_confirmed_elsewhere(
+    untrusted_content: bool,
+    active: crate::security::level::ChosenLevel,
+) -> String {
+    let effects = if untrusted_content {
+        crate::bottom_pane::security_level_picker::CORE_EFFECTS
+    } else {
+        crate::bottom_pane::security_level_picker::CORE_EFFECTS_VAULT_ONLY
+    };
+    // A session shown as Moderate started with Moderate's credential broker
+    // (D2), so the model keys are not among what waits for the restart.
+    let broker = if active == crate::security::level::ChosenLevel::Moderate {
+        ""
+    } else {
+        " model keys held by the credential broker,"
+    };
+    format!(
+        "Aggressive was confirmed in another Corbanu Terminal on this home, so Core's Aggressive protections apply here now: {effects}. From each pane's next turn you approve every command that is not known read-only (reviewer: you), in every Corbanu pane and child agent of this Corbanu Terminal, and in those you start before you restart; a pane whose managed configuration rules this out keeps its own approval settings and says so. Grants and \"for session\" approvals here ended. The rest of Aggressive starts when you restart Corbanu Terminal: its sandbox (writes only in the current folder), the project's credential files (.env, .env.* and .envrc) denied to agent commands, network and web search off, secret-like environment variables removed and login profiles and shell snapshots unused,{broker} and the child-agent rules. Until then this session is shown as {} and keeps your own settings for these, and commands already running keep the permissions they started with.",
+        active.name()
+    )
+}
 
 /// #507: shown when another Corbanu Terminal on this home turned it off.
 pub(crate) const KILL_SWITCH_OFF_ELSEWHERE: &str = "The security kill switch was turned off in another Corbanu Terminal on this home. Turns are sent to the model again. Nothing restarts by itself here: stopped replies and commands do not restart, and a task that waited for a Claude pane goes with that pane's next turn.";

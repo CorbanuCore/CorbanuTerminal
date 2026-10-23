@@ -987,3 +987,199 @@ async fn strict_rules_refuse_intercepted_wrapped_vault_exec() -> anyhow::Result<
     );
     Ok(())
 }
+
+/// D50 (#1001): an intercepted exec approved after a security transition (a
+/// revocation; the level stays Permissive) was committed while its prompt was
+/// open is not run on that answer: the person is
+/// asked again (the prompt says why), and it runs on the new answer.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn issue_1001_intercepted_exec_approved_before_a_transition_is_asked_again()
+-> anyhow::Result<()> {
+    let (action, reasons) = issue_1001_intercepted_exec(
+        /*switch_aggressive_on*/ false, /*prompt_permissions*/ None,
+    )
+    .await?;
+    assert_eq!(
+        action,
+        codex_shell_escalation::EscalationDecision::Escalate(EscalationExecution::Unsandboxed),
+        "it runs on the second answer, as an approved prompt rule does"
+    );
+    let note = crate::tools::approvals::ASKED_AGAIN_NOTE;
+    assert_eq!(reasons.len(), 2, "{reasons:?}");
+    assert!(!reasons[0].clone().unwrap_or_default().contains(note));
+    assert!(
+        reasons[1].clone().unwrap_or_default().contains(note),
+        "the prompt says why it is asked again: {reasons:?}"
+    );
+    Ok(())
+}
+
+/// D50: when the transition switched Aggressive on, the shell's rules (for
+/// the level it started under) are stale too: refused, not asked again.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn issue_1001_intercepted_exec_approved_before_aggressive_is_refused() -> anyhow::Result<()> {
+    let (action, reasons) = issue_1001_intercepted_exec(
+        /*switch_aggressive_on*/ true, /*prompt_permissions*/ None,
+    )
+    .await?;
+    assert_eq!(
+        action,
+        codex_shell_escalation::EscalationDecision::Deny {
+            reason: Some(crate::tools::orchestrator::STALE_AGGRESSIVE_REFUSAL.to_string())
+        }
+    );
+    assert_eq!(reasons.len(), 1, "{reasons:?}");
+    Ok(())
+}
+
+/// D51: an exec asked about with permissions read before the transition
+/// (grants end there) is refused, not asked again.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn issue_1001_intercepted_exec_with_permissions_is_refused() -> anyhow::Result<()> {
+    let network = AdditionalPermissionProfile {
+        network: Some(codex_protocol::models::NetworkPermissions {
+            enabled: Some(true),
+        }),
+        ..Default::default()
+    };
+    let (action, reasons) =
+        issue_1001_intercepted_exec(/*switch_aggressive_on*/ false, Some(network)).await?;
+    assert_eq!(
+        action,
+        codex_shell_escalation::EscalationDecision::Deny {
+            reason: Some(crate::tools::orchestrator::STALE_PERMISSIONS_REFUSAL.to_string())
+        }
+    );
+    assert_eq!(reasons.len(), 1, "{reasons:?}");
+    Ok(())
+}
+
+/// Decides a `printf` that a prompt rule covers under Permissive; a
+/// revocation, or Aggressive, is committed while the first prompt is open, and every prompt is approved. Returns the
+/// action and the reasons of the prompts shown.
+async fn issue_1001_intercepted_exec(
+    switch_aggressive_on: bool,
+    prompt_permissions: Option<AdditionalPermissionProfile>,
+) -> anyhow::Result<(
+    codex_shell_escalation::EscalationDecision,
+    Vec<Option<String>>,
+)> {
+    use codex_protocol::protocol::EventMsg;
+    use codex_protocol::protocol::ExecApprovalRequestEvent;
+    use codex_protocol::protocol::ReviewDecision;
+    use codex_security_policy::PolicyPrincipal;
+    use codex_security_policy::PrincipalKind;
+    use codex_security_policy::RevocationState;
+    use codex_security_policy::SecurityLevel;
+    use codex_security_policy::SecuritySettings;
+
+    let printf = host_absolute_path(&["usr", "bin", "printf"]);
+    let policy_src = format!(
+        "prefix_rule(pattern = [{}], decision = \"prompt\")\n",
+        serde_json::to_string(&printf)?
+    );
+    let mut parser = PolicyParser::new();
+    parser.parse("test.rules", &policy_src)?;
+    let (session, turn_context, events) =
+        crate::session::tests::make_session_and_context_with_rx().await;
+    *session.active_turn.lock().await = Some(crate::state::ActiveTurn::default());
+    let controller = crate::security::TrustedSecurityController::initialize(
+        &session.services.agent_control.effective_security_policy(),
+        crate::security::PersistedHumanSecurityState::new(
+            SecuritySettings::new(SecurityLevel::Permissive),
+            PolicyPrincipal::new(PrincipalKind::Human, "human:issue-1001").unwrap(),
+            RevocationState::new(),
+        )?,
+        session.thread_id,
+        codex_protocol::SessionId::from(session.thread_id),
+        crate::security::EffectivePolicyInitialization::Root,
+    )?;
+    let provider = CoreShellActionProvider {
+        policy: Arc::new(RwLock::new(parser.build())),
+        live_aggressive: false,
+        strict_rules: false,
+        session: Arc::clone(&session),
+        turn: turn_context,
+        call_id: "issue-1001-intercepted".to_string(),
+        environment_id: "local".to_string(),
+        tool_name: GuardianCommandSource::Shell,
+        approval_policy: AskForApproval::OnRequest,
+        permission_profile: PermissionProfile::workspace_write(),
+        sandbox_permissions: SandboxPermissions::UseDefault,
+        approval_sandbox_permissions: SandboxPermissions::UseDefault,
+        prompt_permissions: prompt_permissions.clone(),
+        stopwatch: codex_shell_escalation::Stopwatch::new(Duration::from_secs(30)),
+    };
+    let next_prompt = async || -> ExecApprovalRequestEvent {
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let event = events.recv().await.expect("event channel open");
+                if let EventMsg::ExecApprovalRequest(prompt) = event.msg {
+                    return prompt;
+                }
+            }
+        })
+        .await
+        .expect("a prompt was shown")
+    };
+    let answerer = {
+        let session = Arc::clone(&session);
+        async move {
+            let mut reasons = Vec::new();
+            // Shown under Permissive; the transition lands before the answer.
+            let first = next_prompt().await;
+            reasons.push(first.reason.clone());
+            if switch_aggressive_on {
+                let client = (*session.services.model_client())
+                    .clone()
+                    .with_ingress_level(SecurityLevel::Aggressive);
+                session.services.replace_model_client(client);
+            }
+            // Aggressive switched on, or a revocation (the level stays).
+            let (level, revocations) = if switch_aggressive_on {
+                (SecurityLevel::Aggressive, RevocationState::new())
+            } else {
+                let mut revocations = RevocationState::new();
+                revocations
+                    .apply(
+                        &codex_security_policy::RevocationEvent::new(
+                            PolicyPrincipal::new(PrincipalKind::Human, "human:issue-1001").unwrap(),
+                            codex_security_policy::RevocationTarget::Grant {
+                                grant_id: codex_security_policy::BoundedText::new(
+                                    "issue-1001-grant",
+                                )
+                                .unwrap(),
+                            },
+                            codex_security_policy::RevocationReason::HumanRequest,
+                            /*created_at_unix_seconds*/ 1,
+                        )
+                        .unwrap(),
+                    )
+                    .unwrap();
+                (SecurityLevel::Permissive, revocations)
+            };
+            let change = controller.confirm_level_change(level, revocations).unwrap();
+            controller.apply_confirmed_change(change).unwrap();
+            session
+                .notify_approval(&first.effective_approval_id(), ReviewDecision::Approved)
+                .await;
+            if !switch_aggressive_on && prompt_permissions.is_none() {
+                // Asked again, and approved.
+                let second = next_prompt().await;
+                reasons.push(second.reason.clone());
+                session
+                    .notify_approval(&second.effective_approval_id(), ReviewDecision::Approved)
+                    .await;
+            }
+            reasons
+        }
+    };
+    let workdir = test_sandbox_cwd();
+    let program = AbsolutePathBuf::try_from(printf)?;
+    let argv = ["printf".to_string(), "hello".to_string()];
+    let decide = codex_shell_escalation::EscalationPolicy::determine_action(
+        &provider, &program, &argv, &workdir,
+    );
+    let (action, reasons) = tokio::join!(decide, answerer);
+    Ok((action?, reasons))
+}

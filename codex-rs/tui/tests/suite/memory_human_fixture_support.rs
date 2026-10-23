@@ -2,6 +2,7 @@
 use super::CANARY;
 use super::Case;
 use super::FOREGROUND;
+use crate::support::file_hash::sha256_file;
 use crate::support::tmux::TmuxSession;
 use anyhow::Context;
 use anyhow::Result;
@@ -9,10 +10,7 @@ use codex_protocol::ThreadId;
 use core_test_support::responses;
 use serde_json::Value;
 use serde_json::json;
-use sha2::Digest;
-use sha2::Sha256;
 use std::fs;
-use std::io::Read;
 use std::path::Path;
 use std::time::Duration;
 use wiremock::Mock;
@@ -43,8 +41,8 @@ impl Artifacts {
     pub(super) fn load() -> Result<Self> {
         let binary = codex_utils_cargo_bin::cargo_bin("codex")?;
         let runner = std::env::current_exe()?;
-        let identity = json!({"candidate":binary, "candidate_sha256":digest(&binary)?,
-            "runner":runner, "runner_sha256":digest(&runner)?});
+        let identity = json!({"candidate":binary, "candidate_sha256":sha256_file(&binary)?,
+            "runner":runner, "runner_sha256":sha256_file(&runner)?});
         Ok(Self { binary, identity })
     }
 }
@@ -113,19 +111,6 @@ pub(super) fn publish_attachment(
     Ok(())
 }
 
-fn digest(path: &Path) -> Result<String> {
-    let mut file = fs::File::open(path)?;
-    let mut hash = Sha256::new();
-    let mut buffer = [0_u8; 65536];
-    loop {
-        let count = file.read(&mut buffer)?;
-        if count == 0 {
-            break;
-        }
-        hash.update(&buffer[..count]);
-    }
-    Ok(format!("{:x}", hash.finalize()))
-}
 pub(super) fn write_json(root: &Path, name: &str, value: &Value) -> Result<()> {
     let temporary = root.join(format!("{name}.tmp"));
     fs::write(&temporary, serde_json::to_vec_pretty(value)?)?;

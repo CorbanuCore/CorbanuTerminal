@@ -97,7 +97,7 @@ pub(crate) fn nested_row(nested: super::level::NestedAgents) -> &'static str {
     }
 }
 
-pub(crate) const UNCHANGED: &str = "Unchanged: model and provider, MCP servers, apps and hooks (they run outside the sandbox), wallet scopes, and commands you have already allowed permanently (they skip the prompt but stay sandboxed). `corbanu exec` that you start yourself and IDE sessions are not covered yet, except that they also hold provider keys in the credential broker.";
+pub(crate) const UNCHANGED: &str = "Unchanged: model and provider, MCP servers, apps and hooks (they run outside the sandbox), wallet scopes, and commands you have already allowed permanently (they skip the prompt but stay sandboxed). `corbanu exec` that you start yourself and IDE sessions are not covered yet, except that they also hold provider keys in the credential broker and, while they run on this Corbanu home, take Core's Aggressive protections and approval for every command.";
 
 /// Role config keys (dotted) that would give a spawned child different values.
 const ROLE_KEYS: [&str; 15] = [

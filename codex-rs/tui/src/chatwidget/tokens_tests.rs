@@ -308,6 +308,7 @@ fn packet() -> InspectionDay {
         unknown_parent_requests: Default::default(),
         requests: std::collections::BTreeMap::from([(q.attempt.request_id, vec![q])]),
         other_conversations: Some(Default::default()),
+        empty_day: None,
     })
 }
 
@@ -319,6 +320,7 @@ fn range_packet(partial: bool, day: InspectionDay) -> InspectionDay {
             grouping: InspectionGrouping::Hour,
         },
         aggregate_day_floor: Some(0),
+        completed_as_of_ms: None,
         read_at_ms: 90 * 86_400_000,
         buckets: vec![codex_state::accounting::InspectionBucket {
             start_ms: 0,
@@ -384,6 +386,7 @@ fn week_reaching_today(start: i64) -> Vec<InspectorPage> {
             grouping: InspectionGrouping::Week,
         },
         Some(0),
+        /*completed_as_of_ms*/ None,
         /*read_at*/ 2 * DAY,
         vec![codex_state::accounting::InspectionBucket {
             start_ms: 0,
@@ -515,6 +518,7 @@ fn accounting_inspect_range_bucket_reaching_today_stays_partial_when_unverified(
                 grouping: InspectionGrouping::Week,
             },
             Some(0),
+            /*completed_as_of_ms*/ None,
             /*read_at*/ 2 * DAY,
             vec![bucket(/*start_ms*/ 0, 7 * DAY, Some(effective), days)],
         )
@@ -569,6 +573,7 @@ fn accounting_inspect_range_hour_in_progress_total_sums_whole_and_current() {
             grouping: InspectionGrouping::Hour,
         },
         Some(0),
+        /*completed_as_of_ms*/ None,
         /*read_at*/ HOUR + HOUR / 2,
         vec![
             bucket(
@@ -622,6 +627,7 @@ fn accounting_inspect_range_future_buckets_have_not_started() {
             grouping: InspectionGrouping::Week,
         },
         Some(0),
+        /*completed_as_of_ms*/ None,
         /*read_at*/ 2 * DAY,
         vec![
             bucket(/*start_ms*/ 0, 7 * DAY, Some((0, 1_001)), current),
@@ -690,6 +696,7 @@ fn accounting_inspect_range_expired_bucket_beside_in_progress_is_not_stale() {
             grouping: InspectionGrouping::Day,
         },
         /*aggregate_day_floor*/ None,
+        /*completed_as_of_ms*/ None,
         /*read_at*/ 102 * DAY,
         vec![
             bucket(/*start_ms*/ 0, DAY, Some((0, DAY)), vec![expired]),
@@ -801,6 +808,7 @@ fn accounting_inspect_range_retention_matches_day_pages() {
             grouping: InspectionGrouping::Day,
         },
         Some(floor),
+        /*completed_as_of_ms*/ None,
         /*read_at*/ 400 * 86_400_000,
         Vec::new(),
     );
@@ -833,6 +841,7 @@ fn accounting_inspect_range_coverage_names_intersection_for_request_and_retentio
                 grouping: InspectionGrouping::Month,
             },
             Some(aggregate_floor),
+            /*completed_as_of_ms*/ None,
             31 * day_ms,
             vec![codex_state::accounting::InspectionBucket {
                 start_ms: 0,
@@ -899,6 +908,7 @@ fn accounting_inspect_range_bucket_ancestry_counts_have_explicit_scopes() {
             grouping: InspectionGrouping::Hour,
         },
         /*aggregate_day_floor*/ None,
+        /*completed_as_of_ms*/ None,
         /*read_at*/ 7_200_000,
         buckets,
     );
@@ -969,6 +979,7 @@ fn accounting_inspect_range_overview_discloses_unknown_population_before_total()
             grouping: InspectionGrouping::Hour,
         },
         /*aggregate_day_floor*/ None,
+        /*completed_as_of_ms*/ None,
         2 * 3_600_000,
         buckets,
     );
@@ -1058,6 +1069,7 @@ fn accounting_inspect_range_week_and_month_merge_exact_attempts() {
                 grouping,
             },
             aggregate_day_floor: None,
+            completed_as_of_ms: None,
             read_at_ms: end_ms,
             buckets: vec![codex_state::accounting::InspectionBucket {
                 start_ms,
@@ -1206,8 +1218,8 @@ fn money_day(known: Decimal, unknown: i64, attempts: i64) -> DayTotals {
 }
 
 /// A day of subscription work: plan attempts, the consumption they imply, and
-/// the API equivalent, with `unknown_equivalents` for rows the catalogue does
-/// not price.
+/// the API equivalent, with `unknown_equivalents` for attempts with no API rate
+/// or an incomplete token count.
 fn plan_day(equivalent: Decimal, burn_milli_tokens: i64, unknown_equivalents: i64) -> DayTotals {
     DayTotals {
         attempts: 2,
@@ -1233,14 +1245,34 @@ fn accounting_inspect_plan_work_is_never_reported_as_money_spent() {
     Plan consumption: 140 tokens at the plan rate that applied
     Same tokens at API rates: $0.001610
     ");
-    // A plan row the catalogue states no API price for says so, rather than
+    // A plan row with no API rate recorded says so, rather than
     // reporting zero.
     insta::assert_snapshot!(estimate(&plan_day(Decimal::default(), /*burn_milli_tokens*/ 280_000, /*unknown_equivalents*/ 2), EstimateGaps::default()).join("\n"), @"
     No recorded attempt here was billed per token.
     Subscription capacity: 2 of 2 attempts, not billed per token
     Plan consumption: 280 tokens at the plan rate that applied
-    Same tokens at API rates: unavailable — the catalogue states no API price for 2 of 2 plan attempts
+    Same tokens at API rates: unavailable — no API rate or complete token count for 2 of 2 plan attempts
     ");
+    // #352: a plan attempt with API rates but no cache-write count (OpenAI on
+    // a ChatGPT login reports none) has a known part and no complete figure.
+    let mut q = quote();
+    q.snapshot = Some(native_snapshot(
+        serde_json::json!({"noncached":"1","read":"0.1","write":"1.25","output":"4"}),
+        "PlanEquivalent",
+        /*basis_source*/ None,
+        /*plan_burn_millis*/ Some(1000),
+    ));
+    q.known_subtotal = Decimal::default();
+    q.subtotal_display = Decimal::default().display();
+    q.known_equivalent = decimal("0.00018");
+    q.all_buckets_equivalent = None;
+    q.plan_burn_millis = Some(1000);
+    q.plan_burn_milli_tokens = Some(160_000);
+    let partial = DayTotals::from_quotes([&q]).unwrap();
+    assert_eq!(
+        plan(&partial).last().unwrap(),
+        "Same tokens at API rates: at least $0.000180; 1 of 1 plan attempts have no API rate or an incomplete token count"
+    );
     // A day with no plan work says nothing about plans at all.
     assert_eq!(
         estimate(
@@ -1457,9 +1489,10 @@ const PRICE_METADATA: [&str; 6] = [
 fn accounting_inspect_basis_only_request_shows_no_price_metadata() {
     let none = serde_json::json!({"noncached":null,"read":null,"write":null,"output":null});
     for (basis, source, shown) in [
-        ("PlanEquivalent", None, "subscription"),
-        ("Billed", None, "pay per use"),
-        ("Local", None, "local, no charge"),
+        ("PlanEquivalent", None, "subscription (built-in default)"),
+        ("Billed", None, "pay per use (built-in default)"),
+        ("Local", None, "local, no charge (built-in default)"),
+        // An undeclared basis has no default to name.
         ("Undeclared", None, "not declared"),
         (
             "PlanEquivalent",
@@ -1474,10 +1507,13 @@ fn accounting_inspect_basis_only_request_shows_no_price_metadata() {
             source,
             /*plan_burn_millis*/ None,
         ));
-        let text = attempt_text(&q).join("\n");
-        assert!(text.contains(&format!("Billing basis: {shown}")), "{text}");
+        let lines = attempt_text(&q);
+        let text = lines.join("\n");
+        assert!(lines.contains(&format!("Billing basis: {shown}")), "{text}");
         // #396: no parentheses inside the sentence's own clause.
-        let clause = shown.replace(" (set in your config)", "; set in your config");
+        let clause = shown
+            .replace(" (set in your config)", "; set in your config")
+            .replace(" (built-in default)", "; built-in default");
         assert!(
             text.contains(&format!(
                 "Price: none recorded — this request records only its billing basis: {clause}"
@@ -1485,6 +1521,7 @@ fn accounting_inspect_basis_only_request_shows_no_price_metadata() {
             "{text}"
         );
         assert!(!text.contains("(set in your config))"), "{text}");
+        assert!(!text.contains("(built-in default))"), "{text}");
         for absent in PRICE_METADATA
             .iter()
             .chain(&["no dispatch-time price snapshot"])
@@ -1579,6 +1616,8 @@ async fn accounting_inspect_empty_day_after_checkpoint_renders_lag() -> anyhow::
     use codex_state::accounting::AccountingStore;
 
     let home = tempfile::tempdir()?;
+    // Stored before the id is minted, so it is the conversation's start.
+    let created = chrono::Utc::now();
     let owner = ThreadId::new();
     let runtime = codex_state::StateRuntime::init(
         codex_state::SqliteConfig::from_sqlite_home(
@@ -1590,7 +1629,7 @@ async fn accounting_inspect_empty_day_after_checkpoint_renders_lag() -> anyhow::
     let metadata = codex_state::ThreadMetadataBuilder::new(
         owner,
         home.path().join("synthetic.jsonl"),
-        chrono::Utc::now(),
+        created,
         codex_protocol::protocol::SessionSource::Cli,
     );
     runtime.upsert_thread(&metadata.build("synthetic")).await?;
@@ -1603,13 +1642,16 @@ async fn accounting_inspect_empty_day_after_checkpoint_renders_lag() -> anyhow::
     assert_eq!(view.totals, DayTotals::default());
     assert!(view.requests.is_empty());
     assert_eq!(view.coverage.completed_as_of_ms, 0);
-    // The empty conversation says so in its scope, and that no other
-    // conversation recorded anything that day either.
+    // FUP-02: the conversation started today, so 1970-01-01 provably had
+    // none of its requests; and no other conversation recorded anything.
     assert_eq!(
         inspection_pages(Ok(empty))[0].text[..2].to_vec(),
         vec![
-            "This conversation on 1970-01-01 (UTC): no recorded requests.",
-            "No other conversation recorded requests on this day.",
+            format!(
+                "This conversation on 1970-01-01 (UTC): no requests recorded — this conversation started on {} (UTC), after this day.",
+                created.date_naive()
+            ),
+            "No other conversation recorded requests on this day.".to_string(),
         ]
     );
 
@@ -1810,8 +1852,11 @@ fn accounting_inspect_availability_state_snapshots() {
     empty.totals = DayTotals::default();
     empty.requests.clear();
     assert_eq!(
-        inspection_pages(Ok(InspectionDay::Ready(empty)))[0].text[0],
-        "This conversation on 1970-01-01 (UTC): no recorded requests."
+        inspection_pages(Ok(InspectionDay::Ready(empty)))[0].text[..2],
+        [
+            "This conversation on 1970-01-01 (UTC): nothing recorded.",
+            super::empty_day::NOT_PROOF,
+        ]
     );
     let InspectionDay::Ready(view) = packet() else {
         unreachable!()
@@ -2615,6 +2660,58 @@ fn accounting_inspect_first_screen_names_provider_model_and_billing_type() {
 }
 
 #[test]
+fn accounting_operator_preserves_alias_wire_and_custom_route_identity() {
+    let cases = [
+        ("corbanu-plan", "pfterminal-plan"),
+        ("corbanu-terminal-plan", "pfterminal-plan"),
+        ("corbanu-plan-anthropic", "pfterminal-plan"),
+        ("pfterminal-plan-anthropic", "pfterminal-plan"),
+        ("zai-anthropic", "zai"),
+        ("openrouter-anthropic", "openrouter"),
+        ("baseten-anthropic", "baseten"),
+        ("vercel-anthropic", "vercel"),
+        ("vercel-anthropic-fast", "vercel"),
+        ("pfterminal-plan", "pfterminal-plan"),
+        ("openai", "openai"),
+        ("anthropic", "anthropic"),
+    ];
+    let actual = cases.map(|(route, _)| (route, operator(route)));
+    assert_eq!(actual, cases);
+
+    // Custom IDs remain exact: sharing alias normalization must not start
+    // treating different case, whitespace, or similar names as built-ins.
+    let mut custom = vec![String::new(), "private/自分のモデル".to_string()];
+    for (route, _) in cases {
+        custom.extend([
+            route.to_uppercase(),
+            format!(" {route}"),
+            format!("{route} "),
+            format!("{route}-custom"),
+        ]);
+    }
+    let unchanged = custom.iter().map(String::as_str).collect::<Vec<_>>();
+    let actual = custom
+        .iter()
+        .map(|route| operator(route))
+        .collect::<Vec<_>>();
+    assert_eq!(actual, unchanged);
+}
+
+#[test]
+fn accounting_model_names_resolve_corbanu_alias_routes() {
+    let slug = "corbanu/deepseek-v4.1-flash";
+    let routes = [
+        "pfterminal-plan",
+        "pfterminal-plan-anthropic",
+        "corbanu-plan",
+        "corbanu-terminal-plan",
+        "corbanu-plan-anthropic",
+    ];
+    let actual = routes.map(|route| model_name(route, slug));
+    assert_eq!(actual, ["DeepSeek V4.1 Flash"; 5]);
+}
+
+#[test]
 fn accounting_inspect_plain_wording_counts_attempts_and_names_every_route() {
     let mut first = quote();
     first.all_buckets_priced = None;
@@ -2647,8 +2744,66 @@ fn accounting_inspect_plain_wording_counts_attempts_and_names_every_route() {
         Some("synthetic · synthetic-model")
     );
     // Real routes read by their display names.
-    assert_eq!(model_name("gpt-6-sol"), "GPT-6 Sol");
+    assert_eq!(model_name("openai", "gpt-6-sol"), "GPT-6 Sol");
     assert_eq!(provider_name("deepseek"), "DeepSeek");
+    // #352: the two local providers are told apart.
+    assert_eq!(provider_name("ollama"), "Ollama");
+    assert_eq!(provider_name("lmstudio"), "LM Studio");
+    // #352: another provider's catalogue row is not this route's name.
+    assert_eq!(model_name("ambient", "z-ai/glm-5.2"), "Ambient GLM 5.2");
+    assert_eq!(model_name("openrouter", "z-ai/glm-5.2"), "z-ai/glm-5.2");
+    assert_eq!(
+        model_name("openrouter", "z-ai/glm-5.3-flash"),
+        "OpenRouter GLM 5.3 Flash"
+    );
+    // An Anthropic-wire route is its operator's.
+    assert_eq!(model_name("zai-anthropic", "glm-5.2"), "Z.AI GLM 5.2");
+    assert_eq!(
+        model_name("vercel-anthropic-fast", "zai/glm-5.2"),
+        "Vercel GLM 5.2"
+    );
+    // A provider you configured shows the slug: the name's brand is unknown.
+    assert_eq!(model_name("my-zai", "glm-5.2"), "glm-5.2");
+    // #1196: a name without a route brand names the model on any route.
+    assert_eq!(
+        model_name("my-claude-proxy", "claude-opus-5-5"),
+        "Claude Opus 5.5"
+    );
+    assert_eq!(
+        model_name("openrouter", "claude-opus-5-5"),
+        "Claude Opus 5.5"
+    );
+    assert_eq!(model_name("my-openai", "gpt-6-sol"), "GPT-6 Sol");
+    // A brand of several words counts only when every word is in the name.
+    assert_eq!(
+        model_name("anthropic", "claude-opus-5-5-plan"),
+        "claude-opus-5-5-plan"
+    );
+    assert_eq!(model_name("kimi-code", "k3"), "Kimi Code K3");
+    assert_eq!(model_name("openrouter", "k3"), "k3");
+    assert_eq!(
+        model_name("openrouter", "deepseek-v4-pro"),
+        "deepseek-v4-pro"
+    );
+    // The brand is the operator's: Vercel owns its Anthropic-wire fast route.
+    assert_eq!(
+        model_name("openrouter", "zai/glm-5.2-fast"),
+        "zai/glm-5.2-fast"
+    );
+    // No catalogue name read on another route says how a route sells the model.
+    let catalogue = codex_models_manager::bundled_models_response().unwrap();
+    for model in catalogue.models {
+        let name = model_name("my-route", &model.slug);
+        let lower = name.to_lowercase();
+        assert!(
+            name == model.slug
+                || !lower
+                    .split_whitespace()
+                    .any(|word| ["plan", "(direct)", "free"].contains(&word)),
+            "{} reads as {name:?} on another route",
+            model.slug
+        );
+    }
 }
 
 #[test]
@@ -3537,13 +3692,16 @@ fn accounting_realtime_session_without_an_end_says_so() {
         "{kind}"
     );
     // An owner prefix keeps it a realtime session; an ordinary turn and a
-    // WebRTC call (recorded at its creation, with no session end) are not.
+    // WebRTC call are not. A WebRTC call is recorded at its creation; the end
+    // it may carry (#955) is its client control channel's, not the media
+    // call's, so it is not shown as a session end (#1000).
     let mut side = session.clone();
     side.attempt.turn = format!("side:realtime:ws:{}", Uuid::from_u128(24));
     assert!(realtime_session(&[&side]));
     assert!(!realtime_session(&[&quote()]));
     let mut call = session;
     call.attempt.turn = format!("realtime:{}", Uuid::from_u128(25));
+    call.usage.session_ended_at_ms = Some(61_000);
     assert!(!realtime_session(&[&call]));
     assert!(
         !attempt_text(&call)
@@ -3551,3 +3709,89 @@ fn accounting_realtime_session_without_an_end_says_so() {
             .any(|line| line.starts_with("Realtime session")),
     );
 }
+
+/// #352 item 3: a request with 9,908 noncached input tokens, no cache reads, a
+/// missing cache-write count and 1 output token showed `1+ tokens`. The input
+/// total is unknown, but the parts the provider reported still count.
+#[test]
+fn plain_tokens_lower_bound_counts_reported_input_parts() {
+    let day = DayTotals {
+        // Input, noncached, read, write, output, reasoning, total.
+        measured: [
+            Metric {
+                known: 0,
+                unknown: 1,
+            },
+            Metric {
+                known: 9_908,
+                unknown: 0,
+            },
+            Metric {
+                known: 0,
+                unknown: 0,
+            },
+            Metric {
+                known: 0,
+                unknown: 1,
+            },
+            Metric {
+                known: 1,
+                unknown: 0,
+            },
+            Metric {
+                known: 0,
+                unknown: 0,
+            },
+            Metric {
+                known: 0,
+                unknown: 1,
+            },
+        ],
+        ..Default::default()
+    };
+    assert_eq!(plain_tokens(&day), "9,909+ tokens");
+}
+
+/// A known input total with no breakdown still bounds the request from below:
+/// the reported parts never lower it.
+#[test]
+fn plain_tokens_lower_bound_keeps_a_known_input_total() {
+    let day = DayTotals {
+        // Input, noncached, read, write, output, reasoning, total.
+        measured: [
+            Metric {
+                known: 10_000,
+                unknown: 0,
+            },
+            Metric {
+                known: 0,
+                unknown: 1,
+            },
+            Metric {
+                known: 0,
+                unknown: 1,
+            },
+            Metric {
+                known: 0,
+                unknown: 1,
+            },
+            Metric {
+                known: 0,
+                unknown: 1,
+            },
+            Metric {
+                known: 0,
+                unknown: 0,
+            },
+            Metric {
+                known: 0,
+                unknown: 1,
+            },
+        ],
+        ..Default::default()
+    };
+    assert_eq!(plain_tokens(&day), "10,000+ tokens");
+}
+
+#[path = "tokens/warmup_resume_tests.rs"]
+mod warmup_resume_tests;

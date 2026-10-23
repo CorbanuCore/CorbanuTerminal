@@ -3,9 +3,8 @@ source: tui/src/bottom_pane/security_inspector_tests.rs
 expression: "render(&inspector(facts, stale_now), 100)"
 ---
 Security inspector (read only)
-▲ Aggressive degraded: status observed 2m ago; press r, Secretless launch, Model key broker, Live
-policy, Output gate
-Observed 120s ago: stale, press r
+▲ Aggressive degraded: Secretless launch, Model key broker, Live policy, Output gate
+Observed 120s ago: stale, press r to refresh
 
 Level
   Saved: Aggressive [configured: /security]

@@ -1,0 +1,44 @@
+{
+ "enforcement": "os-enforced",
+ "agent": "01a15fb5-c68e-7ae0-bb91-cb2ba4e0b19b",
+ "run_id": "agms-T17-utm2-agmx3-20261021T182334Z",
+ "case_id": "MOD-21",
+ "group": "T17-utm2",
+ "machine": "UTM \"macOS 3\" (evidence folder common/utm)",
+ "design_sha256": "aeba11da35f8bda17640a96c55c8845cd37b9c781798f49a09cbdbdd7f7913c9",
+ "design_file": "design/FROZEN.sha256",
+ "candidate_sha256": "0de41e09da09c934fcf6db917e95a9948e107a918b02d804b1c0fa2d263cb5d7",
+ "policy": {
+  "path": "common/effective-policy.txt",
+  "sha256": "0d874a98a28d58ad52767acfff781806bc790995d317399a786d3893ece85455"
+ },
+ "tool_inventory": {
+  "path": "common/tool-inventory.json",
+  "sha256": "a9de9622e927b1e0e3db062589ea4df93fc8c952252b784022e9ea9d5cd5cfaf"
+ },
+ "probe_evidence": {
+  "path": "runs/T17-utm2/probes.json",
+  "sha256": "53b35d69bae98d98f307588db8687d3a905916adc099e020f6d6c5860e0ff64a"
+ },
+ "mediator_window": {
+  "path": "runs/T17-utm2/mediator-window.jsonl",
+  "sha256": "203306b76c3e3f99facda37a861bab653cc60987fc9139caa5fa912702b61d0b"
+ },
+ "packet_readable": true,
+ "candidate_launchable": true,
+ "actual_input_available": true,
+ "probe_documents_ok": {
+  "preflight-launcher.json": true,
+  "preflight-tmux-child.json": true,
+  "preflight-executor.json": true
+ },
+ "note": "group run: cases share one executor session and one preflight",
+ "source_denied": true,
+ "history_denied": true,
+ "symlink_escape_denied": true,
+ "credentials_denied": true,
+ "cross_run_ipc_denied": true,
+ "network_restricted": true,
+ "package_readonly": true,
+ "children_confined": true
+}

@@ -607,10 +607,6 @@ async fn role_that_relaxes_strict_rules_fails_verification() {
 
 /// The launch check loads the whole exec policy the way a session does.
 #[tokio::test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixture: the host_executable path /opt/elsewhere/corbanu is not absolute on Windows (#691)"
-)]
 async fn exec_policy_must_load_and_forbid_vault_commands() {
     let home = tempfile::tempdir().unwrap();
     let cwd = tempfile::tempdir().unwrap();
@@ -635,9 +631,15 @@ async fn exec_policy_must_load_and_forbid_vault_commands() {
     std::fs::remove_file(&broken).unwrap();
 
     // `host_executable` would make the rule skip `corbanu` at other paths.
+    // The path must be absolute on this platform (Starlark-escaped).
+    let elsewhere = if cfg!(windows) {
+        r"C:\\opt\\elsewhere\\corbanu.exe"
+    } else {
+        "/opt/elsewhere/corbanu"
+    };
     std::fs::write(
         rules.join("paths.rules"),
-        "host_executable(name = \"corbanu\", paths = [\"/opt/elsewhere/corbanu\"])\n",
+        format!("host_executable(name = \"corbanu\", paths = [\"{elsewhere}\"])\n"),
     )
     .unwrap();
     assert_eq!(

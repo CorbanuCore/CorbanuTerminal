@@ -47,7 +47,6 @@ use http::HeaderMap;
 use http::HeaderValue;
 use http::header::AUTHORIZATION;
 use pretty_assertions::assert_eq;
-use sha2::Digest as _;
 use sha2::Sha256;
 use tracing_test::traced_test;
 use uuid::Uuid;

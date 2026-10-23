@@ -1,0 +1,140 @@
+Reading additional input from stdin...
+{"tag":"corbanu_call_metrics","call_index":1,"attempt_number":1,"request_byte_size":39724,"ms_to_response_headers":4219,"ms_to_first_sse_byte":4220,"ms_to_first_parsed_data_event":4220,"ms_to_first_actionable_event":4220,"total_stream_ms":8790,"comment_frame_count":0,"parsed_event_count":117,"x_request_id":"57c853de-7117-4f92-b595-094c5636c555","generation_id":"2026101618482812e3cc86addb4253","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":2,"attempt_number":1,"request_byte_size":41273,"ms_to_response_headers":4905,"ms_to_first_sse_byte":4906,"ms_to_first_parsed_data_event":4906,"ms_to_first_actionable_event":4906,"total_stream_ms":4930,"comment_frame_count":0,"parsed_event_count":10,"x_request_id":"369c49cf-9f92-457b-bf32-21045dc271ea","generation_id":"20261016184908e13e94320e2f47d4","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":3,"attempt_number":1,"request_byte_size":52115,"ms_to_response_headers":6297,"ms_to_first_sse_byte":6297,"ms_to_first_parsed_data_event":6297,"ms_to_first_actionable_event":6297,"total_stream_ms":15063,"comment_frame_count":0,"parsed_event_count":201,"x_request_id":"2e6ae05c-1511-4b1e-a01c-16b0db3e2eb2","generation_id":"202610161849202494a11ca2b547e1","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":4,"attempt_number":1,"request_byte_size":58848,"ms_to_response_headers":9536,"ms_to_first_sse_byte":9537,"ms_to_first_parsed_data_event":9537,"ms_to_first_actionable_event":9537,"total_stream_ms":9558,"comment_frame_count":0,"parsed_event_count":44,"x_request_id":"0e6342c1-1495-42c1-815a-9259c3064133","generation_id":"202610161849361fc07cfa27c946fc","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":5,"attempt_number":1,"request_byte_size":60028,"ms_to_response_headers":6156,"ms_to_first_sse_byte":6157,"ms_to_first_parsed_data_event":6157,"ms_to_first_actionable_event":6157,"total_stream_ms":6180,"comment_frame_count":0,"parsed_event_count":20,"x_request_id":"a4972f7c-b75f-4b4f-8307-6ee7f869a1ce","generation_id":"2026101618494644471d44e3534b15","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":6,"attempt_number":1,"request_byte_size":61067,"ms_to_response_headers":6428,"ms_to_first_sse_byte":6429,"ms_to_first_parsed_data_event":6429,"ms_to_first_actionable_event":6429,"total_stream_ms":6449,"comment_frame_count":0,"parsed_event_count":19,"x_request_id":"3e28d9de-f32f-452c-9126-cf3bf5c2da6b","generation_id":"20261016184952dc77338e1e6e497b","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":7,"attempt_number":1,"request_byte_size":97890,"ms_to_response_headers":7464,"ms_to_first_sse_byte":7464,"ms_to_first_parsed_data_event":7464,"ms_to_first_actionable_event":7464,"total_stream_ms":19715,"comment_frame_count":0,"parsed_event_count":380,"x_request_id":"52437643-4c92-4c78-bd22-f4e0a84b81d2","generation_id":"20261016184959cd84e7859bd34c2e","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":8,"attempt_number":1,"request_byte_size":102439,"ms_to_response_headers":6912,"ms_to_first_sse_byte":6913,"ms_to_first_parsed_data_event":6913,"ms_to_first_actionable_event":6913,"total_stream_ms":6935,"comment_frame_count":0,"parsed_event_count":14,"x_request_id":"7b90e635-eeb7-4f34-a1ca-6daec31dd30e","generation_id":"202610161850195b1c9e95a50d4b9d","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":9,"attempt_number":1,"request_byte_size":105209,"ms_to_response_headers":7414,"ms_to_first_sse_byte":7414,"ms_to_first_parsed_data_event":7414,"ms_to_first_actionable_event":7415,"total_stream_ms":22032,"comment_frame_count":0,"parsed_event_count":392,"x_request_id":"e9cc453b-05bc-4ed3-a945-b5eb08bc829f","generation_id":"2026101618502715424f4267dd477d","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":10,"attempt_number":1,"request_byte_size":117599,"ms_to_response_headers":7641,"ms_to_first_sse_byte":7641,"ms_to_first_parsed_data_event":7642,"ms_to_first_actionable_event":7642,"total_stream_ms":69639,"comment_frame_count":0,"parsed_event_count":1731,"x_request_id":"d2a2fe33-aa9e-40d7-bb49-a301b1348741","generation_id":"20261016185049886a6471d65e43f9","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+2026-10-16T10:51:56.741335Z ERROR codex_core::tools::router: error=path must be relative, not absolute
+{"tag":"corbanu_call_metrics","call_index":11,"attempt_number":1,"request_byte_size":127989,"ms_to_response_headers":17385,"ms_to_first_sse_byte":17385,"ms_to_first_parsed_data_event":17385,"ms_to_first_actionable_event":17385,"total_stream_ms":34163,"comment_frame_count":0,"parsed_event_count":250,"x_request_id":"069aa6d8-1658-47bd-aa25-dfb39592c0f0","generation_id":"20261016185159a54113420c284818","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+2026-10-16T10:52:31.206691Z ERROR codex_core::tools::router: error=exec_command failed for `/bin/bash -lc 'cat > "$AGMS_RUN/evidence/result.md" <<'"'EOF'
+# Q03 independent functional run
+
+## Preflight and identity
+
+- "'`agms-probe all` completed at 2026-10-16 10:48:42Z with `rc=0`; JSON at `evidence/preflight-executor.json` reports `"ok": true`.
+- Coordinator summary: `launcher_ok=true`, `tmux_child_ok=true`, `pty_input_echoed=true`, `probe_count=85`, `ok=true`; `preflight-launcher.json` and `preflight-tmux-child.json` were present beside it.
+- Candidate `/opt/agms/pkg/bin/corbanu` SHA-256 matched `cb42614c8cc194bf8fc5d598e61e49883384a6747051d92884d5c41f905b0d25`; `corbanu --version` in preflight reported `corbanu 0.1.48`.
+- Packet SHA-256 values matched:
+  - design cases `64ecf9c951f89d645e0b2eb3243dd422c80436f24fadb4d9283a5daa97239c23`
+  - amendments `203685710b74d3cf864ed00e35a5c6e30e10296ea82ec60ab707b09b53da02d1`
+  - amendments-v3 `8ebf87cbddcfa2f67d7399aee4ff06ee7304b6835059f7fde2a31ed8db7bd4d3`.
+
+## MOD-08 — “Don’t ask again” rules saved under Permissive keep working but stay sandboxed
+
+### Setup
+
+Requested setup actions, in order:
+
+1. Verify fixture and start a fresh product profile, preserving the supplied product `config.toml`.
+2. Use the supplied fixture project and outside file as the test data.
+3. Create a synthetic `~/.ssh/config` from the tester shell.
+4. Launch with protected launch disabled for that launch only: `agms-tui start -c features.secretless_agent_launch=false -c allow_login_shell=false`.
+
+Actual setup observations:
+
+- Pre-setup fixture inventory label: `pre-setup`; project was clean (`git status --short` had no output). `outside-notes.txt` contained baseline line `outside-the-project: synthetic file` and no `perm rule` line.
+- Product profile reset and re-created from supplied config at 2026-10-16 10:51:33Z.
+- Synthetic `~/.ssh/config` created at 2026-10-16 10:51:33Z with contents:
+  - `Host synthetic-example`, `HostName synthetic.invalid`, `User synthetic-user`
+EOF
+cp "$AGMS_RUN/product-home/config.toml" "$AGMS_RUN/tmp/config.toml"
+rm -rf "$AGMS_RUN/product-home"
+mkdir -p "$AGMS_RUN/product-home"
+cp "$AGMS_RUN/tmp/config.toml" "$AGMS_RUN/product-home/config.toml"
+mkdir -p "$HOME/.ssh"
+rm -f "$HOME/.ssh/config"
+cat > "$HOME/.ssh/config" <<'"'EOF'
+Host synthetic-example
+  HostName synthetic.invalid
+  User synthetic-user
+EOF
+chmod 600 \""'$HOME/.ssh/config"
+printf '"'%s\\n' '--- reset complete ---'
+date -u +'%Y-%m-%dT%H:%M:%SZ'
+ls -l \""'$AGMS_RUN/product-home/config.toml" "$HOME/.ssh/config"
+agms-tui fixture pre-setup'`: `/bin/bash -lc 'cat > "$AGMS_RUN/evidence/result.md" <<'"'EOF'
+# Q03 independent functional run
+
+## Preflight and identity
+
+- "'`agms-probe all` completed at 2026-10-16 10:48:42Z with `rc=0`; JSON at `evidence/preflight-executor.json` reports `"ok": true`.
+- Coordinator summary: `launcher_ok=true`, `tmux_child_ok=true`, `pty_input_echoed=true`, `probe_count=85`, `ok=true`; `preflight-launcher.json` and `preflight-tmux-child.json` were present beside it.
+- Candidate `/opt/agms/pkg/bin/corbanu` SHA-256 matched `cb42614c8cc194bf8fc5d598e61e49883384a6747051d92884d5c41f905b0d25`; `corbanu --version` in preflight reported `corbanu 0.1.48`.
+- Packet SHA-256 values matched:
+  - design cases `64ecf9c951f89d645e0b2eb3243dd422c80436f24fadb4d9283a5daa97239c23`
+  - amendments `203685710b74d3cf864ed00e35a5c6e30e10296ea82ec60ab707b09b53da02d1`
+  - amendments-v3 `8ebf87cbddcfa2f67d7399aee4ff06ee7304b6835059f7fde2a31ed8db7bd4d3`.
+
+## MOD-08 — “Don’t ask again” rules saved under Permissive keep working but stay sandboxed
+
+### Setup
+
+Requested setup actions, in order:
+
+1. Verify fixture and start a fresh product profile, preserving the supplied product `config.toml`.
+2. Use the supplied fixture project and outside file as the test data.
+3. Create a synthetic `~/.ssh/config` from the tester shell.
+4. Launch with protected launch disabled for that launch only: `agms-tui start -c features.secretless_agent_launch=false -c allow_login_shell=false`.
+
+Actual setup observations:
+
+- Pre-setup fixture inventory label: `pre-setup`; project was clean (`git status --short` had no output). `outside-notes.txt` contained baseline line `outside-the-project: synthetic file` and no `perm rule` line.
+- Product profile reset and re-created from supplied config at 2026-10-16 10:51:33Z.
+- Synthetic `~/.ssh/config` created at 2026-10-16 10:51:33Z with contents:
+  - `Host synthetic-example`, `HostName synthetic.invalid`, `User synthetic-user`
+EOF
+cp "$AGMS_RUN/product-home/config.toml" "$AGMS_RUN/tmp/config.toml"
+rm -rf "$AGMS_RUN/product-home"
+mkdir -p "$AGMS_RUN/product-home"
+cp "$AGMS_RUN/tmp/config.toml" "$AGMS_RUN/product-home/config.toml"
+mkdir -p "$HOME/.ssh"
+rm -f "$HOME/.ssh/config"
+cat > "$HOME/.ssh/config" <<'"'EOF'
+Host synthetic-example
+  HostName synthetic.invalid
+  User synthetic-user
+EOF
+chmod 600 \""'$HOME/.ssh/config"
+printf '"'%s\\n' '--- reset complete ---'
+date -u +'%Y-%m-%dT%H:%M:%SZ'
+ls -l \""'$AGMS_RUN/product-home/config.toml" "$HOME/.ssh/config"
+agms-tui fixture pre-setup'` rejected: rm -f style commands are not permitted. Use a safer approach
+{"tag":"corbanu_call_metrics","call_index":12,"attempt_number":1,"request_byte_size":137382,"ms_to_response_headers":7599,"ms_to_first_sse_byte":7600,"ms_to_first_parsed_data_event":7600,"ms_to_first_actionable_event":7600,"total_stream_ms":24581,"comment_frame_count":0,"parsed_event_count":228,"x_request_id":"d273b344-431d-4860-9d8d-202faf0c7ff9","generation_id":"20261016185234d04b21e6dae441cb","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+2026-10-16T10:52:56.145414Z ERROR codex_core::tools::router: error=source file edits via Python heredoc are disabled for this model profile. Do not retry the shell heredoc. Use structured_edit with path, old_string, and new_string for existing files, or structured_write with path, content, and mode=create_only/overwrite for new or full-file writes. Use exec_command only for inspection or commands that do not write source files.
+{"tag":"corbanu_call_metrics","call_index":13,"attempt_number":1,"request_byte_size":141911,"ms_to_response_headers":7451,"ms_to_first_sse_byte":7451,"ms_to_first_parsed_data_event":7452,"ms_to_first_actionable_event":7452,"total_stream_ms":24697,"comment_frame_count":0,"parsed_event_count":349,"x_request_id":"7f043e9f-cde3-4356-bcc1-235c4a56c672","generation_id":"20261016185258af3e3f175ad84a6e","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":14,"attempt_number":1,"request_byte_size":147069,"ms_to_response_headers":6909,"ms_to_first_sse_byte":6909,"ms_to_first_parsed_data_event":6910,"ms_to_first_actionable_event":6910,"total_stream_ms":6936,"comment_frame_count":0,"parsed_event_count":44,"x_request_id":"9bfe8379-afaa-4e77-8c0e-bf13e081c3c9","generation_id":"20261016185323cbd5d49ed6a84926","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":15,"attempt_number":1,"request_byte_size":148565,"ms_to_response_headers":7126,"ms_to_first_sse_byte":7127,"ms_to_first_parsed_data_event":7127,"ms_to_first_actionable_event":7127,"total_stream_ms":11883,"comment_frame_count":0,"parsed_event_count":138,"x_request_id":"b24b7165-3ea8-4128-9615-845e0357f702","generation_id":"20261016185331e2b1bad4f4f94d7e","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":16,"attempt_number":1,"request_byte_size":150371,"ms_to_response_headers":6890,"ms_to_first_sse_byte":6891,"ms_to_first_parsed_data_event":6891,"ms_to_first_actionable_event":6891,"total_stream_ms":10676,"comment_frame_count":0,"parsed_event_count":159,"x_request_id":"0c2aba82-c5dc-487e-881a-5420e73a717a","generation_id":"20261016185343019e77911c1e4c4b","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":17,"attempt_number":1,"request_byte_size":152039,"ms_to_response_headers":8562,"ms_to_first_sse_byte":8562,"ms_to_first_parsed_data_event":8563,"ms_to_first_actionable_event":8563,"total_stream_ms":8589,"comment_frame_count":0,"parsed_event_count":54,"x_request_id":"70dd3376-e19a-463b-adff-9cb96c7d8d7a","generation_id":"2026101618535421f1f8726fd84cee","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":18,"attempt_number":1,"request_byte_size":157022,"ms_to_response_headers":5094,"ms_to_first_sse_byte":5095,"ms_to_first_parsed_data_event":5095,"ms_to_first_actionable_event":5095,"total_stream_ms":5118,"comment_frame_count":0,"parsed_event_count":35,"x_request_id":"eb69024c-5078-430b-9b0e-91bd003662d7","generation_id":"20261016185403f6eaddf0a99f4661","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":19,"attempt_number":1,"request_byte_size":158631,"ms_to_response_headers":4367,"ms_to_first_sse_byte":4367,"ms_to_first_parsed_data_event":4367,"ms_to_first_actionable_event":4367,"total_stream_ms":4386,"comment_frame_count":0,"parsed_event_count":14,"x_request_id":"b4a398a1-13ab-454a-82b5-714105c6b4d9","generation_id":"20261016185411ff16e13e7ea94555","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":20,"attempt_number":1,"request_byte_size":161215,"ms_to_response_headers":7252,"ms_to_first_sse_byte":7253,"ms_to_first_parsed_data_event":7253,"ms_to_first_actionable_event":7253,"total_stream_ms":12149,"comment_frame_count":0,"parsed_event_count":184,"x_request_id":"23d8fc4d-6968-4644-ab0a-91a22d27192d","generation_id":"20261016185436d4d93781eb3b4aea","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":21,"attempt_number":1,"request_byte_size":164856,"ms_to_response_headers":5203,"ms_to_first_sse_byte":5204,"ms_to_first_parsed_data_event":5204,"ms_to_first_actionable_event":5204,"total_stream_ms":6301,"comment_frame_count":0,"parsed_event_count":87,"x_request_id":"23c7881b-e99a-4d7a-8dc6-9befb8b2602e","generation_id":"20261016185449db0b7f45db4d4420","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":22,"attempt_number":1,"request_byte_size":166770,"ms_to_response_headers":6508,"ms_to_first_sse_byte":6508,"ms_to_first_parsed_data_event":6509,"ms_to_first_actionable_event":6509,"total_stream_ms":10578,"comment_frame_count":0,"parsed_event_count":146,"x_request_id":"a4caaf32-c7fc-4d71-b847-a3294f51ddb0","generation_id":"2026101618545677b25084f771496f","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":23,"attempt_number":1,"request_byte_size":170505,"ms_to_response_headers":7683,"ms_to_first_sse_byte":7683,"ms_to_first_parsed_data_event":7683,"ms_to_first_actionable_event":7683,"total_stream_ms":10904,"comment_frame_count":0,"parsed_event_count":123,"x_request_id":"50da2978-9f2f-4938-9b79-be57e5787fd8","generation_id":"20261016185507c71864ba11f94474","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":24,"attempt_number":1,"request_byte_size":174504,"ms_to_response_headers":8938,"ms_to_first_sse_byte":8939,"ms_to_first_parsed_data_event":8939,"ms_to_first_actionable_event":8939,"total_stream_ms":8964,"comment_frame_count":0,"parsed_event_count":67,"x_request_id":"539a372d-98b2-48cc-80fb-0bd5c62e2bd1","generation_id":"20261016185518a094c464d7e241ae","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":25,"attempt_number":1,"request_byte_size":179593,"ms_to_response_headers":7929,"ms_to_first_sse_byte":7930,"ms_to_first_parsed_data_event":7930,"ms_to_first_actionable_event":7930,"total_stream_ms":7956,"comment_frame_count":0,"parsed_event_count":53,"x_request_id":"5334bfde-76f4-4944-bbf1-7483edc80aa0","generation_id":"20261016185528c86124c3c0f64921","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":26,"attempt_number":1,"request_byte_size":182580,"ms_to_response_headers":5081,"ms_to_first_sse_byte":5081,"ms_to_first_parsed_data_event":5081,"ms_to_first_actionable_event":5082,"total_stream_ms":10252,"comment_frame_count":0,"parsed_event_count":188,"x_request_id":"d818ac39-0900-4a8a-8365-d1ac057d5343","generation_id":"20261016185541f96bfa5c083d41b4","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":27,"attempt_number":1,"request_byte_size":184558,"ms_to_response_headers":7517,"ms_to_first_sse_byte":7518,"ms_to_first_parsed_data_event":7518,"ms_to_first_actionable_event":7518,"total_stream_ms":7542,"comment_frame_count":0,"parsed_event_count":43,"x_request_id":"7c6a940b-12a3-4a34-97b9-605ffe672a03","generation_id":"20261016185552d3171498d2394b69","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":28,"attempt_number":1,"request_byte_size":190912,"ms_to_response_headers":6314,"ms_to_first_sse_byte":6315,"ms_to_first_parsed_data_event":6315,"ms_to_first_actionable_event":6315,"total_stream_ms":6343,"comment_frame_count":0,"parsed_event_count":14,"x_request_id":"395d5807-c4f6-4061-80aa-569fef2c21ca","generation_id":"20261016185611787926f0d0784209","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":29,"attempt_number":1,"request_byte_size":199346,"ms_to_response_headers":5628,"ms_to_first_sse_byte":5629,"ms_to_first_parsed_data_event":5629,"ms_to_first_actionable_event":5629,"total_stream_ms":5650,"comment_frame_count":0,"parsed_event_count":7,"x_request_id":"6630c82c-9475-4014-8cd2-1584009e431e","generation_id":"202610161856238bc6d9ac444044d3","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":30,"attempt_number":1,"request_byte_size":203144,"ms_to_response_headers":5789,"ms_to_first_sse_byte":5790,"ms_to_first_parsed_data_event":5790,"ms_to_first_actionable_event":5790,"total_stream_ms":5817,"comment_frame_count":0,"parsed_event_count":57,"x_request_id":"81f689ce-4343-4da7-b4be-146449e5550b","generation_id":"20261016185637c7b8bd3205904f7a","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":31,"attempt_number":1,"request_byte_size":204426,"ms_to_response_headers":9801,"ms_to_first_sse_byte":9802,"ms_to_first_parsed_data_event":9802,"ms_to_first_actionable_event":9802,"total_stream_ms":9826,"comment_frame_count":0,"parsed_event_count":18,"x_request_id":"a1d1d8fa-8214-4671-a3cc-2d5152d6fb27","generation_id":"202610161856473493f5b93fbd4b18","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":32,"attempt_number":1,"request_byte_size":206583,"ms_to_response_headers":8843,"ms_to_first_sse_byte":8843,"ms_to_first_parsed_data_event":8843,"ms_to_first_actionable_event":8843,"total_stream_ms":8858,"comment_frame_count":0,"parsed_event_count":67,"x_request_id":"35b942f3-6769-40e6-95c3-bd005adf6b04","generation_id":"2026101618565958dbe2f7f71b44f4","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":33,"attempt_number":1,"request_byte_size":209607,"ms_to_response_headers":5092,"ms_to_first_sse_byte":5092,"ms_to_first_parsed_data_event":5092,"ms_to_first_actionable_event":5093,"total_stream_ms":5117,"comment_frame_count":0,"parsed_event_count":11,"x_request_id":"68d3a87b-5709-48b5-90e3-cbd223aaae87","generation_id":"20261016185709a22bd837f2fd4d4b","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":34,"attempt_number":1,"request_byte_size":220587,"ms_to_response_headers":6062,"ms_to_first_sse_byte":6063,"ms_to_first_parsed_data_event":6063,"ms_to_first_actionable_event":6063,"total_stream_ms":6089,"comment_frame_count":0,"parsed_event_count":10,"x_request_id":"bbda2ecc-63b1-4f89-b037-ced45233aab9","generation_id":"202610161857152a7067d996054fee","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":35,"attempt_number":1,"request_byte_size":223955,"ms_to_response_headers":6611,"ms_to_first_sse_byte":6612,"ms_to_first_parsed_data_event":6612,"ms_to_first_actionable_event":6612,"total_stream_ms":6642,"comment_frame_count":0,"parsed_event_count":10,"x_request_id":"97a6c59d-93df-48ff-94e3-218d853b9c5d","generation_id":"20261016185722fd863516dcac4075","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":36,"attempt_number":1,"request_byte_size":225528,"ms_to_response_headers":5321,"ms_to_first_sse_byte":5322,"ms_to_first_parsed_data_event":5322,"ms_to_first_actionable_event":5322,"total_stream_ms":5353,"comment_frame_count":0,"parsed_event_count":31,"x_request_id":"5a7d6152-fcdc-49a2-acc1-d80e77b081e9","generation_id":"20261016185734175e4870552b4757","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":37,"attempt_number":1,"request_byte_size":229817,"ms_to_response_headers":5840,"ms_to_first_sse_byte":5840,"ms_to_first_parsed_data_event":5840,"ms_to_first_actionable_event":5840,"total_stream_ms":5866,"comment_frame_count":0,"parsed_event_count":52,"x_request_id":"29f7feea-3718-44ac-9b75-ac3763ab782d","generation_id":"2026101618574014e3ecc82e544ebb","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":38,"attempt_number":1,"request_byte_size":233436,"ms_to_response_headers":6826,"ms_to_first_sse_byte":6827,"ms_to_first_parsed_data_event":6827,"ms_to_first_actionable_event":6827,"total_stream_ms":6855,"comment_frame_count":0,"parsed_event_count":49,"x_request_id":"06ca2717-9f31-4cb4-95d1-8ff6685f34a6","generation_id":"20261016185802a35469a999584016","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":39,"attempt_number":1,"request_byte_size":237189,"ms_to_response_headers":5909,"ms_to_first_sse_byte":5910,"ms_to_first_parsed_data_event":5910,"ms_to_first_actionable_event":5910,"total_stream_ms":5937,"comment_frame_count":0,"parsed_event_count":18,"x_request_id":"1a2da3df-6853-4f37-8a73-3158db2e367a","generation_id":"20261016185815806f7ea5f3184c51","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":40,"attempt_number":1,"request_byte_size":244414,"ms_to_response_headers":7076,"ms_to_first_sse_byte":7077,"ms_to_first_parsed_data_event":7077,"ms_to_first_actionable_event":7077,"total_stream_ms":10631,"comment_frame_count":0,"parsed_event_count":104,"x_request_id":"c766f2b6-09ac-44e5-83de-ee25af33b08d","generation_id":"20261016185838ea5b9f06235a4590","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":41,"attempt_number":1,"request_byte_size":250835,"ms_to_response_headers":5692,"ms_to_first_sse_byte":5692,"ms_to_first_parsed_data_event":5692,"ms_to_first_actionable_event":5692,"total_stream_ms":5723,"comment_frame_count":0,"parsed_event_count":19,"x_request_id":"07607b4f-ea2f-4389-89b4-e270873e411d","generation_id":"202610161858594c7a88856ca34315","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":42,"attempt_number":1,"request_byte_size":258428,"ms_to_response_headers":5451,"ms_to_first_sse_byte":5452,"ms_to_first_parsed_data_event":5452,"ms_to_first_actionable_event":5452,"total_stream_ms":65424,"comment_frame_count":0,"parsed_event_count":730,"x_request_id":"99023fd8-cf1a-4948-9bcf-0c088603465b","generation_id":"202610161859104e9cbefc2215408a","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":43,"attempt_number":1,"request_byte_size":271299,"ms_to_response_headers":7997,"ms_to_first_sse_byte":7998,"ms_to_first_parsed_data_event":7998,"ms_to_first_actionable_event":7998,"total_stream_ms":8036,"comment_frame_count":0,"parsed_event_count":39,"x_request_id":"7ffcef65-921b-4a1b-8a8c-d44e5e4af696","generation_id":"20261016190016e6d3cec597ee477c","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+{"tag":"corbanu_call_metrics","call_index":44,"attempt_number":1,"request_byte_size":272515,"ms_to_response_headers":3628,"ms_to_first_sse_byte":3629,"ms_to_first_parsed_data_event":3629,"ms_to_first_actionable_event":3629,"total_stream_ms":4731,"comment_frame_count":0,"parsed_event_count":132,"x_request_id":"76642ab3-514a-4c91-b5a0-7786e24a3a6c","generation_id":"202610161900258579d138067d43b3","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}

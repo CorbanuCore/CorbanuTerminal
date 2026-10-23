@@ -1,0 +1,9 @@
+---
+source: tui/src/insert_history.rs
+expression: "rows.join(\"\\n\")"
+---
+■ '/review' is unavailable in side conversations. Press Ctrl+C to return to the main thread first.
+
+› Will this algorithm scale well?
+
+  Side from main thread · ctrl + c to close

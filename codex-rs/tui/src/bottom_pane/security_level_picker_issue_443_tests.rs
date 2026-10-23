@@ -129,6 +129,9 @@ fn issue_443_review_says_core_protections_apply_on_confirm() {
 fn issue_443_review_without_a_live_tree_waits_for_the_restart() {
     let root = tempfile::tempdir().unwrap();
     let mut picker = picker(&root, /*live*/ false);
+    // The session's thread is known but its policy does not run here (a
+    // remote app server).
+    picker.core.thread = Some(codex_protocol::ThreadId::new());
     picker.handle_key_event(key(KeyCode::Up));
     picker.handle_key_event(key(KeyCode::Enter));
     let review = text(&picker);
@@ -139,6 +142,81 @@ fn issue_443_review_without_a_live_tree_waits_for_the_restart() {
     assert!(
         review.contains("Core's level becomes Aggressive from the next start"),
         "{review}"
+    );
+    // #978: no session of this process runs on the home (as with a remote
+    // app server): nothing is claimed for other sessions.
+    assert!(
+        !review.contains("The other sessions of this Corbanu Terminal"),
+        "{review}"
+    );
+}
+
+/// #978: confirmed where this session's policy does not run in this
+/// process: the Saved screen says the other sessions of this Corbanu
+/// Terminal took Core's level and approval for every command now.
+#[test]
+fn issue_978_saved_without_a_live_tree_names_the_other_sessions() {
+    let root = tempfile::tempdir().unwrap();
+    let mut picker = picker(&root, /*live*/ false);
+    picker.stored = StoredLevel::Chosen(ChosenLevel::Aggressive);
+    picker.screen = Screen::Saved(Ok(TransitionOutcome {
+        level: ChosenLevel::Aggressive,
+        core: Some(LevelChangeReport {
+            kind: LevelChangeKind::Stricter,
+            in_force: SecurityLevel::Aggressive,
+            next_start: SecurityLevel::Aggressive,
+            live: false,
+            other_sessions: true,
+            not_saved: None,
+            approvals: Some(ApprovalsAtConfirmation {
+                held: 2,
+                kept: Vec::new(),
+                pending: 0,
+            }),
+        }),
+    }));
+    let saved = text(&picker);
+    // #1015: this window's session has not started; it starts under it.
+    assert!(!saved.contains("stays Permissive"), "{saved}");
+    assert!(
+        saved.contains(
+            "This window's session has not started yet: when it starts here before you restart, it takes Core's Aggressive protections and approval for every command, and its other settings stay Permissive until the restart."
+        ),
+        "{saved}"
+    );
+    assert!(
+        saved.contains(
+            "Core's level is Aggressive now in the other sessions of this Corbanu Terminal, and from every start."
+        ),
+        "{saved}"
+    );
+    assert!(
+        saved.contains("approve every command that is not known read-only (reviewer: you), now in 2 threads of this Corbanu Terminal"),
+        "{saved}"
+    );
+    insta::assert_snapshot!(
+        "issue_978_saved_aggressive_without_a_live_tree",
+        render(&picker, /*width*/ 80)
+    );
+
+    // Review r1 nits: not saved, no "from every start"; chosen again, the
+    // sessions below it are named.
+    let report = |kind, not_saved: Option<&str>| LevelChangeReport {
+        kind,
+        in_force: SecurityLevel::Aggressive,
+        next_start: SecurityLevel::Aggressive,
+        live: false,
+        other_sessions: true,
+        not_saved: not_saved.map(str::to_string),
+        approvals: None,
+    };
+    assert_eq!(
+        core_outcome_line(&report(LevelChangeKind::Stricter, Some("disk full"))),
+        "Core's level is Aggressive now in the other sessions of this Corbanu Terminal."
+    );
+    assert_eq!(
+        core_outcome_line(&report(LevelChangeKind::Unchanged, /*not_saved*/ None)),
+        "Core's level: Aggressive, now also in the other sessions of this Corbanu Terminal that were below it."
     );
 }
 
@@ -199,6 +277,7 @@ pub(super) fn saved_live_with(
             in_force: SecurityLevel::Aggressive,
             next_start: SecurityLevel::Aggressive,
             live: true,
+            other_sessions: false,
             not_saved: None,
             approvals,
         }),
@@ -288,6 +367,8 @@ fn issue_505_review_says_approvals_apply_on_confirm() {
 fn issue_505_review_without_a_live_tree_keeps_approvals_for_the_restart() {
     let root = tempfile::tempdir().unwrap();
     let mut picker = picker(&root, /*live*/ false);
+    // A remote app server: the session runs in another process.
+    picker.core.thread = Some(codex_protocol::ThreadId::new());
     picker.handle_key_event(key(KeyCode::Up));
     picker.handle_key_event(key(KeyCode::Enter));
     let review = text(&picker);
@@ -348,6 +429,169 @@ fn issue_505_screen_07_reports_approvals_and_kept_threads() {
     assert!(!saved.contains("Approval for every command:"), "{saved}");
     assert!(
         saved.contains("approval for every command that is not known read-only, network"),
+        "{saved}"
+    );
+}
+
+/// #919 (Travis, 2026-10-16, D20): the Aggressive review and screen 07 say
+/// that other Corbanu Terminals running on the home take Core's Aggressive
+/// protections too; screen 07 does not promise it when the level could not
+/// be saved.
+#[test]
+fn issue_919_aggressive_review_and_saved_say_other_terminals_take_it() {
+    const OTHERS: &str = "Other Corbanu Terminals running on this Corbanu home take Core's Aggressive protections and approval for every command within about a second";
+    for live in [true, false] {
+        let root = tempfile::tempdir().unwrap();
+        let mut picker = picker(&root, live);
+        picker.handle_key_event(key(KeyCode::Up));
+        picker.handle_key_event(key(KeyCode::Enter));
+        picker.basis.live = live;
+        let review = text(&picker);
+        assert!(review.contains(OTHERS), "{review}");
+    }
+
+    let root = tempfile::tempdir().unwrap();
+    let mut picker = picker(&root, /*live*/ true);
+    saved_live(&mut picker);
+    let saved = text(&picker);
+    assert!(saved.contains(OTHERS), "{saved}");
+    assert!(
+        saved.contains("the rest of Aggressive starts there when they restart"),
+        "{saved}"
+    );
+
+    if let Screen::Saved(Ok(outcome)) = &mut picker.screen
+        && let Some(report) = outcome.core.as_mut()
+    {
+        report.not_saved = Some("disk full".to_string());
+    }
+    let unsaved = text(&picker);
+    assert!(unsaved.contains("could not be saved"), "{unsaved}");
+    assert!(!unsaved.contains("Other Corbanu Terminals"), "{unsaved}");
+}
+
+/// #1015: the window's own session has not started (no thread yet) when
+/// Aggressive is confirmed without a live tree: the review says it starts
+/// under Core's level and approval for every command, not that it keeps its
+/// settings until the restart; with other sessions here, they are named.
+#[test]
+fn issue_1015_review_before_the_window_session_starts() {
+    let root = tempfile::tempdir().unwrap();
+    for sessions_here in [false, true] {
+        let mut picker = picker(&root, /*live*/ false);
+        if sessions_here {
+            picker.sessions_run_here = |_, _| true;
+        }
+        picker.handle_key_event(key(KeyCode::Up));
+        picker.handle_key_event(key(KeyCode::Enter));
+        let review = text(&picker);
+        assert!(
+            !review.contains("this session keeps its current settings until then"),
+            "{review}"
+        );
+        assert!(
+            review.contains(
+                "until then this window's session keeps its current settings, apart from Core's level and approval for every command (below)."
+            ),
+            "{review}"
+        );
+        assert!(
+            review.contains(&format!(
+                "Core's level is saved as Aggressive as soon as you confirm: {CORE_EFFECTS}. {WINDOW_SESSION_TAKES_AGGRESSIVE}"
+            )),
+            "{review}"
+        );
+        assert!(
+            !review.contains("from the next start (this session's"),
+            "{review}"
+        );
+        assert_eq!(
+            review.contains(OTHER_SESSIONS_HERE_TAKE_AGGRESSIVE_NOW),
+            sessions_here,
+            "{review}"
+        );
+        if sessions_here {
+            // From the paragraph this changes; the preflight rows and the
+            // footer above and below it differ by platform.
+            let rendered = render(&picker, /*width*/ 80);
+            let lines: Vec<&str> = rendered.lines().collect();
+            let from = lines
+                .iter()
+                .position(|line| line.starts_with("The rows above take effect"))
+                .expect("the restart paragraph");
+            insta::assert_snapshot!(
+                "issue_1015_review_before_the_window_session_starts",
+                lines[from..lines.len() - 1].join("\n")
+            );
+        }
+    }
+}
+
+/// #1015 item 2: the not-live review when other sessions of this process
+/// run on the home and this session's thread is known (its policy does not
+/// run here yet).
+#[test]
+fn issue_1015_review_names_the_other_sessions_here() {
+    let root = tempfile::tempdir().unwrap();
+    let mut picker = picker(&root, /*live*/ false);
+    picker.core.thread = Some(codex_protocol::ThreadId::new());
+    picker.sessions_run_here = |_, thread| thread.is_some();
+    picker.handle_key_event(key(KeyCode::Up));
+    picker.handle_key_event(key(KeyCode::Enter));
+    let review = text(&picker);
+    assert!(
+        review.contains(&format!(
+            "Core's level becomes Aggressive from the next start (this session's policy does not run in this process yet): {CORE_EFFECTS}. {OTHER_SESSIONS_HERE_TAKE_AGGRESSIVE}"
+        )),
+        "{review}"
+    );
+    assert!(
+        review.contains("this session keeps its current settings until then"),
+        "{review}"
+    );
+}
+
+/// #1015 item 3: no live tree, no other session here and the save failed:
+/// nothing holds Core's level, so the Saved screen claims neither the next
+/// start nor that it applies now.
+#[test]
+fn issue_1015_saved_not_held_and_not_saved_claims_nothing() {
+    let root = tempfile::tempdir().unwrap();
+    let mut picker = picker(&root, /*live*/ false);
+    picker.stored = StoredLevel::Chosen(ChosenLevel::Aggressive);
+    picker.screen = Screen::Saved(Ok(TransitionOutcome {
+        level: ChosenLevel::Aggressive,
+        core: Some(LevelChangeReport {
+            kind: LevelChangeKind::Stricter,
+            in_force: SecurityLevel::Aggressive,
+            next_start: SecurityLevel::Aggressive,
+            live: false,
+            other_sessions: false,
+            not_saved: Some("disk full".to_string()),
+            approvals: Some(ApprovalsAtConfirmation::default()),
+        }),
+    }));
+    let saved = text(&picker);
+    for absent in [
+        "from the next start",
+        "for every session that starts",
+        "applies now",
+        "Core's Aggressive protections and",
+        "stays Permissive.",
+    ] {
+        assert!(!saved.contains(absent), "{absent}: {saved}");
+    }
+    assert!(saved.contains("Core's level is unchanged."), "{saved}");
+    assert!(
+        saved.contains(
+            "Core's level could not be saved (disk full), and no running session of this Corbanu Terminal holds it. Choose the level again to retry."
+        ),
+        "{saved}"
+    );
+    assert!(
+        saved.contains(
+            "when it starts here before you restart, it takes approval for every command"
+        ),
         "{saved}"
     );
 }

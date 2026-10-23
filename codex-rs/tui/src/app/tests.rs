@@ -2317,6 +2317,101 @@ async fn pane_spawn_tree_hides_task_actions() {
     }
 }
 
+/// D95 (#1146): only the person's Spawn status prompt sends a task as the
+/// person's own input; the route agents' tasks take (assignment fires,
+/// model dispatch) still sends them as inter-agent messages.
+#[tokio::test]
+async fn spawn_status_prompt_alone_sends_person_tasks() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let main_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000001146").expect("valid thread id");
+    let orc_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000001147").expect("valid thread id");
+    app.primary_thread_id = Some(main_thread_id);
+    app.active_thread_id = Some(main_thread_id);
+    app.upsert_agent_picker_thread(
+        orc_thread_id,
+        Some("Snaga".to_string()),
+        Some("orc".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_thread
+        .insert(orc_thread_id, main_thread_id);
+
+    (crate::spawn_orchestration::spawn_agent_task_prompt_submit(
+        app.app_event_tx.clone(),
+        orc_thread_id,
+    ))("typed by the person".to_string());
+    match rx.try_recv().expect("the prompt sends an event") {
+        AppEvent::SubmitSpawnAgentTaskFromPerson { thread_id, task } => {
+            assert_eq!(thread_id, orc_thread_id);
+            assert_eq!(task, "typed by the person");
+        }
+        event => panic!("expected the person's task, got {event:?}"),
+    }
+
+    app.send_native_task_event(orc_thread_id, "sent by an agent".to_string());
+    match rx.try_recv().expect("an agent's task sends an event") {
+        AppEvent::SubmitSpawnAgentTask {
+            thread_id, task, ..
+        } => {
+            assert_eq!(thread_id, orc_thread_id);
+            assert_eq!(task, "sent by an agent");
+        }
+        event => panic!("expected an agent's task, got {event:?}"),
+    }
+}
+
+/// D106 (#1176): an agent's task for a pane the person opened takes the
+/// mailbox route, as for an agent-opened pane; it is never sent as the
+/// person's input. The person's own Spawn status task still is (D95).
+#[tokio::test]
+async fn agent_task_for_a_person_opened_pane_takes_the_mailbox_route() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let main_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000001176").expect("valid thread id");
+    let pane_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000001177").expect("valid thread id");
+    app.primary_thread_id = Some(main_thread_id);
+    app.active_thread_id = Some(main_thread_id);
+    app.upsert_agent_picker_thread(
+        pane_thread_id,
+        Some("Worker".to_string()),
+        /*agent_role*/ None,
+        /*is_closed*/ false,
+    );
+    let entry = app
+        .agent_navigation
+        .get(&pane_thread_id)
+        .expect("pane entry")
+        .clone();
+    assert!(app.is_operator_owned_codex_user_pane(pane_thread_id, &entry));
+
+    app.send_native_task_event(pane_thread_id, "sent by an agent".to_string());
+    match rx.try_recv().expect("an agent's task sends an event") {
+        AppEvent::SubmitSpawnAgentTask {
+            thread_id, task, ..
+        } => {
+            assert_eq!(thread_id, pane_thread_id);
+            assert_eq!(task, "sent by an agent");
+        }
+        event => panic!("expected an agent's task for the mailbox, got {event:?}"),
+    }
+    assert!(rx.try_recv().is_err(), "one event only");
+
+    (crate::spawn_orchestration::spawn_agent_task_prompt_submit(
+        app.app_event_tx.clone(),
+        pane_thread_id,
+    ))("typed by the person".to_string());
+    match rx.try_recv().expect("the prompt sends an event") {
+        AppEvent::SubmitSpawnAgentTaskFromPerson { thread_id, task } => {
+            assert_eq!(thread_id, pane_thread_id);
+            assert_eq!(task, "typed by the person");
+        }
+        event => panic!("expected the person's task, got {event:?}"),
+    }
+}
+
 #[tokio::test]
 async fn pane_spawn_tree_disables_restored_unloaded_native_rows() {
     let mut app = make_test_app().await;
@@ -3544,7 +3639,8 @@ async fn pane_picker_marks_exactly_the_active_native_thread_current() {
 }
 
 /// Drains native task events for `thread_id`, whether the target is a managed agent or an
-/// operator-owned user pane. Returns the task texts.
+/// operator-owned user pane (both take agents' tasks from the mailbox, D106). Returns the task
+/// texts.
 fn drain_spawn_agent_tasks_for(
     rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
     thread_id: ThreadId,
@@ -3553,9 +3649,6 @@ fn drain_spawn_agent_tasks_for(
     while let Ok(event) = rx.try_recv() {
         match event {
             AppEvent::SubmitSpawnAgentTask {
-                thread_id: t, task, ..
-            }
-            | AppEvent::SubmitCodexUserPaneTask {
                 thread_id: t, task, ..
             } if t == thread_id => matched.push(task),
             _ => {}
@@ -3592,6 +3685,97 @@ fn register_native_dispatch_pair(app: &mut App) -> (ThreadId, ThreadId) {
     app.spawn_parent_by_thread
         .insert(orc_thread_id, troll_thread_id);
     (troll_thread_id, orc_thread_id)
+}
+
+fn issue_1208_layout(edges: &[(&str, &str)]) -> crate::claude_panes::PaneLayoutState {
+    crate::claude_panes::PaneLayoutState {
+        spawn_parent_by_node: edges
+            .iter()
+            .map(|(child, parent)| (child.to_string(), parent.to_string()))
+            .collect(),
+        ..Default::default()
+    }
+}
+
+const ISSUE_1208_MAIN: &str = "thread:00000000-0000-0000-0000-000000001208";
+const ISSUE_1208_CHILD: &str = "thread:00000000-0000-0000-0000-000000001209";
+const ISSUE_1208_GRANDCHILD: &str = "thread:00000000-0000-0000-0000-000000001210";
+
+#[test]
+fn model_spawned_sub_agents_alone_are_not_a_legacy_spawn_hierarchy() {
+    // #1208: the spawn-agent tool records only thread -> thread edges.
+    let native_only = issue_1208_layout(&[
+        (ISSUE_1208_CHILD, ISSUE_1208_MAIN),
+        (ISSUE_1208_GRANDCHILD, ISSUE_1208_CHILD),
+    ]);
+    assert_eq!(
+        crate::spawn_orchestration::pane_layout_has_legacy_spawn_hierarchy(&native_only),
+        false
+    );
+
+    // A /spawn Troll without a Nazgul binding hangs off the Main pane node.
+    let legacy_pane_root = issue_1208_layout(&[
+        (ISSUE_1208_CHILD, "pane:codex-main"),
+        (ISSUE_1208_GRANDCHILD, ISSUE_1208_CHILD),
+    ]);
+    assert_eq!(
+        crate::spawn_orchestration::pane_layout_has_legacy_spawn_hierarchy(&legacy_pane_root),
+        true
+    );
+
+    // A /spawn hierarchy bound to a native Nazgul has only thread edges plus the binding.
+    let legacy_bound_nazgul = crate::claude_panes::PaneLayoutState {
+        spawn_nazgul_pane_id: Some(ISSUE_1208_MAIN.to_string()),
+        ..issue_1208_layout(&[(ISSUE_1208_CHILD, ISSUE_1208_MAIN)])
+    };
+    assert_eq!(
+        crate::spawn_orchestration::pane_layout_has_legacy_spawn_hierarchy(&legacy_bound_nazgul),
+        true
+    );
+
+    // A /spawn Claude member is a pane node.
+    let legacy_claude_member = issue_1208_layout(&[("pane:claude-1", ISSUE_1208_MAIN)]);
+    assert_eq!(
+        crate::spawn_orchestration::pane_layout_has_legacy_spawn_hierarchy(&legacy_claude_member),
+        true
+    );
+}
+
+#[tokio::test]
+async fn resume_with_only_model_spawned_sub_agents_shows_no_legacy_spawn_notice() -> Result<()> {
+    let native_only = issue_1208_layout(&[(ISSUE_1208_CHILD, ISSUE_1208_MAIN)]);
+    let legacy = issue_1208_layout(&[(ISSUE_1208_CHILD, "pane:codex-main")]);
+    for (layout, expect_notice) in [(native_only, false), (legacy, true)] {
+        let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+        // Set by hand as App construction does it in app.rs
+        // (`restored_spawn_legacy_read_only`, the value given to
+        // `spawn_legacy_read_only` when the App is built from the restored
+        // layout). If that site stops calling
+        // `pane_layout_has_legacy_spawn_hierarchy`, change this line too.
+        app.spawn_legacy_read_only =
+            crate::spawn_orchestration::pane_layout_has_legacy_spawn_hierarchy(&layout);
+        let mut app_server = start_config_write_test_app_server(&app).await?;
+
+        app.restore_native_spawn_panes_from_saved_state(&mut app_server)
+            .await;
+
+        let mut rendered = String::new();
+        while let Ok(event) = rx.try_recv() {
+            if let AppEvent::InsertHistoryCell(cell) = event {
+                rendered.push_str(&lines_to_single_string(&cell.display_lines(/*width*/ 200)));
+            }
+        }
+        assert_eq!(
+            (
+                app.spawn_legacy_read_only,
+                rendered.contains("Restored a legacy /spawn hierarchy in read-only mode")
+            ),
+            (expect_notice, expect_notice),
+            "layout edges {:?}; rendered: {rendered}",
+            layout.spawn_parent_by_node
+        );
+    }
+    Ok(())
 }
 
 #[tokio::test]
@@ -7062,6 +7246,67 @@ async fn issue_842_moderate_from_another_terminal_is_announced() {
     }
 }
 
+/// #919 (Travis, 2026-10-16, D20): Aggressive confirmed in another Corbanu
+/// Terminal on this home (Core already raised this process's sessions and
+/// required approval for every command) is announced here, saying what
+/// applies now and what waits for the restart; the protections claimed
+/// follow `source_envelopes`, and the level shown is this session's own.
+#[tokio::test]
+async fn issue_919_aggressive_from_another_terminal_is_announced() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    while app_event_rx.try_recv().is_ok() {}
+    app.on_level_raised_elsewhere(
+        crate::legacy_core::security_revocation::SecurityLevel::Aggressive,
+    );
+    let mut text = String::new();
+    while let Ok(event) = app_event_rx.try_recv() {
+        if let AppEvent::InsertHistoryCell(cell) = event {
+            text.push_str(&lines_to_single_string(&cell.display_lines(/*width*/ 1000)));
+        }
+    }
+    for expected in [
+        "Aggressive was confirmed in another Corbanu Terminal on this home",
+        "Core's Aggressive protections apply here now: agent commands cannot run `corbanu vault …`",
+        "From each pane's next turn you approve every command that is not known read-only",
+        "Grants and \"for session\" approvals here ended",
+        "The rest of Aggressive starts when you restart Corbanu Terminal: its sandbox",
+        "this session is shown as Permissive",
+    ] {
+        assert!(text.contains(expected), "{expected}: {text}");
+    }
+    // A lower level is never announced as a raise.
+    app.on_level_raised_elsewhere(
+        crate::legacy_core::security_revocation::SecurityLevel::Permissive,
+    );
+    assert!(app_event_rx.try_recv().is_err());
+}
+
+/// #919: the notice claims the protected-path denials only with the
+/// untrusted-content labels on, and names the level this session is shown
+/// as until the restart.
+#[test]
+fn issue_919_aggressive_notice_follows_labels_and_the_shown_level() {
+    use crate::claude_panes::app_integration::aggressive_confirmed_elsewhere;
+    use crate::security::level::ChosenLevel;
+    let labelled =
+        aggressive_confirmed_elsewhere(/*untrusted_content*/ true, ChosenLevel::Moderate);
+    assert!(labelled.contains("protected paths"), "{labelled}");
+    assert!(labelled.contains("shown as Moderate"), "{labelled}");
+    // Moderate's credential broker already holds the model keys.
+    assert!(!labelled.contains("credential broker"), "{labelled}");
+    let vault_only =
+        aggressive_confirmed_elsewhere(/*untrusted_content*/ false, ChosenLevel::Permissive);
+    assert!(!vault_only.contains("protected paths"), "{vault_only}");
+    assert!(
+        vault_only.contains("model keys held by the credential broker, and the child-agent rules"),
+        "{vault_only}"
+    );
+    assert!(
+        vault_only.contains("in every Corbanu pane and child agent of this Corbanu Terminal"),
+        "{vault_only}"
+    );
+}
+
 fn interrupted_claude_turn(app: &App) -> crate::claude_panes::ClaudePaneTurnOutput {
     crate::claude_panes::ClaudePaneTurnOutput {
         text: String::new(),
@@ -7424,7 +7669,6 @@ async fn issue_507_switch_events_pause_whips_at_once_and_start_nothing() -> Resu
             !matches!(
                 event,
                 AppEvent::CodexOp(_)
-                    | AppEvent::SubmitCodexUserPaneTask { .. }
                     | AppEvent::SubmitSpawnAgentTask { .. }
                     | AppEvent::SubmitSpawnClaudePaneTask { .. }
                     | AppEvent::SendSpawnAgentMailboxMessage { .. }
@@ -7489,52 +7733,6 @@ async fn issue_507_removed_pane_drops_its_waiting_task() {
         .expect("remove the pane");
     app.drop_held_claude_task_of_removed_pane(&orc_pane_id);
     assert!(app.kill_switch_held_claude_tasks.is_empty());
-}
-
-/// #507 review: a task for an operator-owned Codex pane while the switch is
-/// on is not submitted as a user turn (which would be refused and not kept,
-/// yet recorded as sent); it is reported as not sent, before the session
-/// lookup and its retry.
-#[tokio::test]
-async fn issue_507_operator_codex_pane_task_is_reported_not_sent() -> Result<()> {
-    use crate::legacy_core::security_revocation::HumanRevocation;
-    let (mut app, mut app_event_rx, mut op_rx) = make_test_app_with_channels().await;
-    let config = app.chat_widget.config_ref().clone();
-    let mut app_server = Box::pin(crate::start_embedded_app_server_for_picker(&config)).await?;
-    let mut tui = crate::tui::test_support::make_test_tui()?;
-    let thread_id = ThreadId::from_string("00000000-0000-0000-0000-000000000507")?;
-    app.upsert_agent_picker_thread(
-        thread_id,
-        Some("Gorbag".to_string()),
-        /*agent_role*/ None,
-        /*is_closed*/ false,
-    );
-    while app_event_rx.try_recv().is_ok() {}
-
-    issue_507_switch(&app, HumanRevocation::KillSwitchOn);
-    Box::pin(app.handle_event(
-        &mut tui,
-        &mut app_server,
-        AppEvent::SubmitCodexUserPaneTask {
-            thread_id,
-            task: "pf507 operator task".to_string(),
-            sent_while_kill_switch_on: false,
-        },
-    ))
-    .await?;
-    assert!(op_rx.try_recv().is_err(), "no user turn was submitted");
-    let said = std::iter::from_fn(|| app_event_rx.try_recv().ok())
-        .filter_map(|event| match event {
-            AppEvent::InsertHistoryCell(cell) => {
-                Some(lines_to_single_string(&cell.display_lines(/*width*/ 400)))
-            }
-            _ => None,
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    assert!(said.contains("the security kill switch is on"), "{said}");
-    assert!(!said.contains("no live session"), "{said}");
-    Ok(())
 }
 
 /// #507 review: while the switch is on, a child report starts no turn in a
@@ -11079,6 +11277,93 @@ async fn inactive_thread_approval_badge_clears_after_turn_completion_notificatio
     Ok(())
 }
 
+/// #867 (AGG-R14 result 2): when the security kill switch stops a sub-agent the model spawned,
+/// the thread on screen (its parent, waiting for it) names it, and `/agent` lists it as stopped
+/// until its next turn starts. The parent's own stop and a sub-agent's other warnings add nothing.
+#[tokio::test]
+async fn issue_867_kill_switch_names_a_stopped_sub_agent() -> Result<()> {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    let main_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000101").expect("valid thread");
+    let agent_thread_id =
+        ThreadId::from_string("01a14100-0000-0000-0000-000000000202").expect("valid thread");
+    app.primary_thread_id = Some(main_thread_id);
+    app.active_thread_id = Some(main_thread_id);
+    app.thread_event_channels
+        .insert(main_thread_id, ThreadEventChannel::new(/*capacity*/ 4));
+    app.thread_event_channels
+        .insert(agent_thread_id, ThreadEventChannel::new(/*capacity*/ 4));
+    app.upsert_agent_picker_thread(
+        main_thread_id,
+        /*agent_nickname*/ None,
+        /*agent_role*/ None,
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        agent_thread_id,
+        Some("Robie".to_string()),
+        Some("explorer".to_string()),
+        /*is_closed*/ false,
+    );
+    let warning = |thread_id: ThreadId, message: &str| {
+        ServerNotification::Warning(codex_app_server_protocol::WarningNotification {
+            thread_id: Some(thread_id.to_string()),
+            message: message.to_string(),
+        })
+    };
+    let stopped = crate::legacy_core::security_revocation::KILL_SWITCH_STOPPED;
+    let mut drain = || {
+        let mut rendered = Vec::new();
+        while let Ok(event) = app_event_rx.try_recv() {
+            if let AppEvent::InsertHistoryCell(cell) = event {
+                rendered.push(lines_to_single_string(&cell.display_lines(/*width*/ 100)));
+            }
+        }
+        rendered
+    };
+    let agent_list = |app: &mut App| {
+        app.chat_widget
+            .show_selection_view(app.agent_picker_selection_view_params(/*selected*/ None));
+        render_bottom_popup(&app.chat_widget, /*width*/ 100)
+    };
+
+    app.enqueue_thread_notification(agent_thread_id, warning(agent_thread_id, "other"))
+        .await?;
+    assert!(!app.agent_navigation.is_kill_switch_stopped(agent_thread_id));
+    let _ = drain();
+
+    app.enqueue_thread_notification(agent_thread_id, warning(agent_thread_id, stopped))
+        .await?;
+    assert!(app.agent_navigation.is_kill_switch_stopped(agent_thread_id));
+    let notice = drain().join("\n");
+    assert_snapshot!(
+        "issue_867_kill_switch_names_a_stopped_sub_agent",
+        format!("{notice}\n\n{}", agent_list(&mut app))
+    );
+
+    // The parent's own stop names nobody (its own notice says it).
+    app.enqueue_thread_notification(main_thread_id, warning(main_thread_id, stopped))
+        .await?;
+    assert!(!app.agent_navigation.is_kill_switch_stopped(main_thread_id));
+    assert!(
+        drain().iter().all(|cell| !cell.contains("also stopped")),
+        "the parent itself is not named"
+    );
+
+    // The sub-agent's next turn clears it.
+    app.enqueue_thread_notification(
+        agent_thread_id,
+        turn_started_notification(agent_thread_id, "turn-next"),
+    )
+    .await?;
+    assert!(!app.agent_navigation.is_kill_switch_stopped(agent_thread_id));
+    assert!(
+        !agent_list(&mut app).contains("kill switch"),
+        "cleared by the next turn"
+    );
+    Ok(())
+}
+
 #[tokio::test]
 async fn inactive_thread_started_notification_initializes_replay_session() -> Result<()> {
     let mut app = make_test_app().await;
@@ -13717,7 +14002,7 @@ fn session_start_failure_turns_a_server_refusal_into_a_plain_message() {
         )),
         thread_id,
     };
-    let refusal = "failed to load configuration: the thread's recorded account zai:work: named accounts need the `named_accounts` feature (`--enable named_accounts`); resume with `--account zai:default` to use the default credentials instead";
+    let refusal = "failed to load configuration: the thread's recorded account zai:work: named accounts need the `named_accounts` feature (`--enable named_accounts`); `--account zai:default` (on a resume or fork) uses the default credentials instead";
 
     for action in ["resume", "fork"] {
         for suffix in ["", r#", data: {"reason":"cloudRequirements"}"#] {

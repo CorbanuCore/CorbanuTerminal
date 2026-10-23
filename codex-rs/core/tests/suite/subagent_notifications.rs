@@ -19,6 +19,7 @@ use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::protocol::ThreadHistoryMode;
 use codex_protocol::user_input::UserInput;
+use codex_state::AgentMailboxPhase;
 use core_test_support::hooks::trust_discovered_hooks;
 use core_test_support::responses::ResponsesRequest;
 use core_test_support::responses::assert_parent_turn;
@@ -56,6 +57,10 @@ use tracing::Level;
 use tracing_test::internal::MockWriter;
 use wiremock::MockServer;
 
+/// #349: how long a test waits for something that must happen (a request,
+/// a status, a rollout line). Generous so a loaded runner can't fail a wait
+/// that succeeds a moment later; a passing wait returns as soon as it holds.
+const POSITIVE_WAIT: Duration = Duration::from_secs(20);
 const SPAWN_CALL_ID: &str = "spawn-call-1";
 const MULTI_AGENT_V1_NAMESPACE: &str = "multi_agent_v1";
 const MULTI_AGENT_V2_NAMESPACE: &str = "collaboration";
@@ -334,7 +339,7 @@ async fn wait_for_hook_log(
     filename: &str,
     expected_len: usize,
 ) -> Result<Vec<serde_json::Value>> {
-    let deadline = Instant::now() + Duration::from_secs(2);
+    let deadline = Instant::now() + POSITIVE_WAIT;
     loop {
         let inputs = read_hook_log(home, filename)?;
         if inputs.len() >= expected_len {
@@ -351,7 +356,7 @@ async fn wait_for_hook_log(
 }
 
 async fn wait_for_spawned_thread_id(test: &TestCodex) -> Result<String> {
-    let deadline = Instant::now() + Duration::from_secs(2);
+    let deadline = Instant::now() + POSITIVE_WAIT;
     loop {
         let ids = test.thread_manager.list_thread_ids().await;
         if let Some(spawned_id) = ids
@@ -370,7 +375,7 @@ async fn wait_for_spawned_thread_id(test: &TestCodex) -> Result<String> {
 async fn wait_for_requests(
     mock: &core_test_support::responses::ResponseMock,
 ) -> Result<Vec<ResponsesRequest>> {
-    let deadline = Instant::now() + Duration::from_secs(2);
+    let deadline = Instant::now() + POSITIVE_WAIT;
     loop {
         let requests = mock.requests();
         if !requests.is_empty() {
@@ -383,11 +388,34 @@ async fn wait_for_requests(
     }
 }
 
+/// The child's spawned-task request: it carries the child's prompt but not the
+/// parent's spawn call. A `ResponseMock` records every request that reaches it
+/// before its own matcher runs, so it can also hold parent requests; wait for
+/// this one rather than for any request.
+fn is_child_task_request(request: &ResponsesRequest) -> bool {
+    request.body_contains_text(CHILD_PROMPT) && !request.body_contains_text(SPAWN_CALL_ID)
+}
+
+async fn wait_for_child_task_request(
+    mock: &core_test_support::responses::ResponseMock,
+) -> Result<ResponsesRequest> {
+    let deadline = Instant::now() + POSITIVE_WAIT;
+    loop {
+        if let Some(request) = mock.requests().into_iter().find(is_child_task_request) {
+            return Ok(request);
+        }
+        if Instant::now() >= deadline {
+            anyhow::bail!("timed out waiting for the child's spawned-task request");
+        }
+        sleep(Duration::from_millis(10)).await;
+    }
+}
+
 async fn wait_for_request_with_model(
     mock: &core_test_support::responses::ResponseMock,
     model: &str,
 ) -> Result<ResponsesRequest> {
-    let deadline = Instant::now() + Duration::from_secs(2);
+    let deadline = Instant::now() + POSITIVE_WAIT;
     loop {
         if let Some(request) = mock
             .requests()
@@ -505,12 +533,12 @@ async fn setup_turn_one_with_custom_spawned_child(
     let test = builder.build_with_auto_env(server).await?;
     test.submit_turn(TURN_1_PROMPT).await?;
     if child_response_delay.is_none() && wait_for_parent_notification {
-        let _ = wait_for_requests(&child_request_log).await?;
+        let _ = wait_for_child_task_request(&child_request_log).await?;
         let rollout_path = test
             .codex
             .rollout_path()
             .ok_or_else(|| anyhow::anyhow!("expected parent rollout path"))?;
-        let deadline = Instant::now() + Duration::from_secs(6);
+        let deadline = Instant::now() + POSITIVE_WAIT;
         loop {
             let has_notification =
                 tokio::fs::read_to_string(&rollout_path)
@@ -901,21 +929,50 @@ async fn subagent_notification_is_included_without_wait() -> Result<()> {
         .thread_manager
         .get_thread(ThreadId::from_string(&spawned_id)?)
         .await?;
-    tokio::time::timeout(Duration::from_secs(3), async {
+    tokio::time::timeout(POSITIVE_WAIT, async {
         while !matches!(child_thread.agent_status().await, AgentStatus::Completed(_)) {
             sleep(Duration::from_millis(10)).await;
         }
     })
     .await?;
     let state_db = test.codex.state_db().expect("mailbox state db");
-    tokio::time::timeout(Duration::from_secs(2), async {
+    let message_id = tokio::time::timeout(POSITIVE_WAIT, async {
         loop {
-            if !state_db
+            if let Some(message) = state_db
                 .list_recoverable_agent_messages(test.session_configured.thread_id)
                 .await
                 .expect("parent mailbox")
-                .is_empty()
+                .into_iter()
+                .next()
             {
+                break message
+                    .communication
+                    .message_id
+                    .expect("mailbox row should have a message id");
+            }
+            sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await?;
+    // #1177: the row is recoverable (`Ready`) before AgentControl hands the
+    // notification to the parent session, which marks it `Submitted` only
+    // after the hand-off. Submit turn 2 after that: the parent handles
+    // submissions in order, so the notification is queued ahead of turn 2.
+    tokio::time::timeout(POSITIVE_WAIT, async {
+        loop {
+            let phase = state_db
+                .get_agent_message(&message_id)
+                .await
+                .expect("parent mailbox row")
+                .expect("parent mailbox row should exist")
+                .phase;
+            if !matches!(
+                phase,
+                AgentMailboxPhase::Admitted
+                    | AgentMailboxPhase::Ready
+                    | AgentMailboxPhase::Submitting
+                    | AgentMailboxPhase::RetryableFailure
+            ) {
                 break;
             }
             sleep(Duration::from_millis(10)).await;
@@ -955,6 +1012,19 @@ async fn direct_operator_turn_in_spawned_child_does_not_notify_parent() -> Resul
         .thread_manager
         .get_thread(ThreadId::from_string(&spawned_id)?)
         .await?;
+    // The setup does not wait for the child's spawned task to finish. Address
+    // the child only once it has, so the operator's input starts its own turn
+    // instead of joining the spawned task's first request (slower remote
+    // environments hit that race).
+    tokio::time::timeout(POSITIVE_WAIT, async {
+        while !matches!(
+            child_thread.agent_status().await,
+            AgentStatus::Completed(Some(message)) if message == "child done"
+        ) {
+            sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await?;
     let direct_child_request = mount_sse_once_match(
         &server,
         |req: &wiremock::Request| body_contains(req, DIRECT_CHILD_PROMPT),
@@ -988,7 +1058,7 @@ async fn direct_operator_turn_in_spawned_child_does_not_notify_parent() -> Resul
         })
         .await?;
     let _ = wait_for_requests(&direct_child_request).await?;
-    tokio::time::timeout(Duration::from_secs(3), async {
+    tokio::time::timeout(POSITIVE_WAIT, async {
         loop {
             if matches!(
                 child_thread.agent_status().await,
@@ -1126,7 +1196,7 @@ async fn spawned_child_receives_forked_parent_context(
             .expect("legacy child thread id"),
     )?;
     let child_thread = test.thread_manager.get_thread(child_thread_id).await?;
-    tokio::time::timeout(Duration::from_secs(2), async {
+    tokio::time::timeout(POSITIVE_WAIT, async {
         while !matches!(child_thread.agent_status().await, AgentStatus::Completed(_)) {
             sleep(Duration::from_millis(10)).await;
         }
@@ -1438,7 +1508,7 @@ async fn spawned_agent_uses_summary_support_for_final_model(
     )
     .await?;
 
-    let deadline = Instant::now() + Duration::from_secs(2);
+    let deadline = Instant::now() + POSITIVE_WAIT;
     let child_body = loop {
         if let Some(body) = child_request_log
             .requests()
@@ -1531,10 +1601,7 @@ async fn spawned_multi_agent_v2_child_inherits_parent_developer_context() -> Res
 
     test.submit_turn(TURN_1_PROMPT).await?;
 
-    let child_requests = wait_for_requests(&child_request_log).await?;
-    let child_request = child_requests
-        .last()
-        .expect("child request log should capture at least one request");
+    let child_request = wait_for_child_task_request(&child_request_log).await?;
     assert!(child_request.body_contains_text("Parent developer instructions."));
     assert!(child_request.body_contains_text(CHILD_PROMPT));
 
@@ -1621,7 +1688,7 @@ async fn multi_agent_v2_spawn_sends_agent_message_to_child(plaintext: bool) -> R
 
     // The response mock records candidate requests before its request matcher runs, so wait for
     // the child request instead of assuming the latest recorded request is already it.
-    let deadline = Instant::now() + Duration::from_secs(2);
+    let deadline = Instant::now() + POSITIVE_WAIT;
     let child_request = loop {
         if let Some(request) = child_request_log
             .requests()
@@ -1684,7 +1751,7 @@ async fn multi_agent_v2_spawn_sends_agent_message_to_child(plaintext: bool) -> R
         .into_iter()
         .find(|thread_id| *thread_id != root_thread_id)
         .expect("child thread ID");
-    let logs = tokio::time::timeout(Duration::from_secs(5), async {
+    let logs = tokio::time::timeout(POSITIVE_WAIT, async {
         loop {
             let logs = String::from_utf8(output.lock().expect("buffer lock").clone())
                 .expect("logs should be UTF-8");
@@ -1881,7 +1948,7 @@ async fn skills_toggle_skips_instructions_for_parent_and_spawned_child() -> Resu
             ev_response_created("resp-turn1-1"),
             ev_function_call_with_namespace(
                 SPAWN_CALL_ID,
-                MULTI_AGENT_V1_NAMESPACE,
+                MULTI_AGENT_V2_NAMESPACE,
                 "spawn_agent",
                 &spawn_args,
             ),
@@ -1935,10 +2002,7 @@ async fn skills_toggle_skips_instructions_for_parent_and_spawned_child() -> Resu
     assert!(!parent_request.body_contains_text("<skills_instructions>"));
     assert!(!parent_request.body_contains_text("demo-skill"));
 
-    let child_requests = wait_for_requests(&child_request_log).await?;
-    let child_request = child_requests
-        .last()
-        .expect("child request log should capture at least one request");
+    let child_request = wait_for_child_task_request(&child_request_log).await?;
     assert!(!child_request.body_contains_text("<skills_instructions>"));
     assert!(!child_request.body_contains_text("demo-skill"));
 

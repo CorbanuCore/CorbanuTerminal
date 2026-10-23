@@ -1,4 +1,7 @@
 use super::*;
+
+#[path = "multi_agents_source_identity_route_tests.rs"]
+mod source_identity_route_tests;
 use crate::StartThreadOptions;
 use crate::ThreadManager;
 use crate::config::AgentRoleConfig;
@@ -4481,6 +4484,110 @@ async fn resume_agent_restores_closed_agent_and_accepts_send_input() {
         .expect("shutdown resumed agent");
 }
 
+/// #1074: resuming a closed agent goes through the #689 check: on a
+/// connection whose default key is nowhere while a sibling connection with
+/// the same key variable runs on a named account, it is refused before it
+/// starts; with a stored default key it resumes.
+#[tokio::test]
+async fn resume_on_a_connection_without_its_own_credential_is_refused() {
+    const KEY: &str = "CORBANU_TEST_1074_ZAI_KEY";
+    let (mut session, mut turn) = make_session_and_context().await;
+    let manager = thread_manager();
+    session.services.agent_control = manager.agent_control();
+    let thread = manager
+        .resume_thread_with_history(
+            turn.config.as_ref().clone(),
+            InitialHistory::Forked(vec![RolloutItem::ResponseItem(ResponseItem::Message {
+                id: None,
+                role: "user".to_string(),
+                content: vec![ContentItem::InputText {
+                    text: "materialized".to_string(),
+                }],
+                phase: None,
+                internal_chat_message_metadata_passthrough: None,
+            })]),
+            AuthManager::from_auth_for_testing(CodexAuth::from_api_key("dummy")),
+            /*parent_trace*/ None,
+            /*supports_openai_form_elicitation*/ false,
+        )
+        .await
+        .expect("start thread");
+    let agent_id = thread.thread_id;
+    let _ = manager
+        .agent_control()
+        .shutdown_live_agent(agent_id)
+        .await
+        .expect("shutdown agent");
+
+    // The parent runs `zai-anthropic` on its default key; `zai`, which shares
+    // the key variable, runs on account `work`.
+    let mut config = (*turn.config).clone();
+    let mut zai = ModelProviderInfo::create_zai_provider();
+    zai.env_key = Some(KEY.to_string());
+    crate::config::stamp_provider_account(ZAI_PROVIDER_ID, &mut zai, "work").expect("stamp");
+    let mut anthropic = ModelProviderInfo::create_zai_anthropic_provider();
+    anthropic.env_key = Some(KEY.to_string());
+    config
+        .model_providers
+        .insert(ZAI_PROVIDER_ID.to_string(), zai);
+    config
+        .model_providers
+        .insert("zai-anthropic".to_string(), anthropic.clone());
+    config.model_provider_id = "zai-anthropic".to_string();
+    config.model_provider = anthropic.clone();
+    turn.provider = create_model_provider(anthropic, turn.auth_manager.clone());
+    let codex_home = config.codex_home.clone();
+    set_turn_config(&mut turn, config);
+    let session = Arc::new(session);
+    let turn = Arc::new(turn);
+    let resume = || {
+        ResumeAgentHandler.handle(invocation(
+            session.clone(),
+            turn.clone(),
+            "resume_agent",
+            function_payload(json!({"id": agent_id.to_string()})),
+        ))
+    };
+
+    let Err(error) = resume().await else {
+        panic!("resume_agent should be refused");
+    };
+    assert_eq!(
+        error,
+        FunctionCallError::RespondToModel(format!(
+            "Resuming this agent: `zai-anthropic` would run on its default account, which has \
+             no credential (`{KEY}` is not set and no default key is stored); accounts are \
+             selected per connection, and account `work` is selected for `zai` only. Ask the \
+             user to add a default `{KEY}` (`/providers`) before resuming it, or do the work \
+             without this agent. Do not retry on another account without the user's consent."
+        ))
+    );
+    assert_eq!(
+        manager.agent_control().get_status(agent_id).await,
+        AgentStatus::NotFound
+    );
+
+    // With a stored default key it resumes.
+    codex_login::login_with_provider_api_key(
+        &codex_home,
+        KEY,
+        "canary-1074-default",
+        codex_login::AuthCredentialsStoreMode::File,
+        codex_login::AuthKeyringBackendKind::default(),
+    )
+    .expect("store default key");
+    let output = resume().await.expect("resume_agent should succeed");
+    let (content, _) = expect_text_output(output);
+    let result: resume_agent::ResumeAgentResult =
+        serde_json::from_str(&content).expect("resume_agent result should be json");
+    assert_ne!(result.status, AgentStatus::NotFound);
+    let _ = manager
+        .agent_control()
+        .shutdown_live_agent(agent_id)
+        .await
+        .expect("shutdown resumed agent");
+}
+
 #[tokio::test]
 async fn resume_agent_rejects_when_depth_limit_exceeded() {
     let (mut session, mut turn) = make_session_and_context().await;
@@ -6634,7 +6741,7 @@ async fn spawn_with_account_answering(
         });
     let mut config = (*turn.config).clone();
     config.model_provider_id = "zai".to_string();
-    config.model_provider = provider_info.clone();
+    config.model_provider = provider_info;
     config
         .model_providers
         .insert("zai".to_string(), ModelProviderInfo::create_zai_provider());
@@ -6657,7 +6764,7 @@ async fn spawn_with_account_answering(
         )
         .expect("write account");
     configure(&mut config, &mut turn);
-    turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
+    turn.provider = create_model_provider(config.model_provider.clone(), turn.auth_manager.clone());
     set_turn_config(&mut turn, config);
     let manager = thread_manager();
     let root = manager
@@ -6851,6 +6958,7 @@ async fn tui_aggressive_permissions(
     }
     let config = crate::config::ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.to_path_buf())
+        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
         .cli_overrides(overrides)
         .build()
         .await
@@ -7004,6 +7112,96 @@ async fn spawn_account_switch_needs_no_prompt_below_aggressive() {
     assert_eq!(
         (result, children),
         (Ok(()), vec![Some("zai:work".to_string())])
+    );
+}
+
+/// #689: a parent on Z.AI account `work` spawns on the Claude-style
+/// connection, which runs on the default account; with no default key that
+/// child would fail at its first request, so it is refused before it starts.
+/// Explicit `account: default` on the parent's own connection is refused the
+/// same way. With a default key the spawn goes ahead. The key variable is
+/// unique to this test so the ambient environment cannot supply it.
+#[tokio::test]
+async fn spawn_on_a_connection_without_its_own_credential_is_refused() {
+    const KEY: &str = "CORBANU_TEST_689_ZAI_KEY";
+    let use_test_key = |config: &mut crate::config::Config, _: &mut TurnContext| {
+        for id in [ZAI_PROVIDER_ID, "zai-anthropic"] {
+            let mut provider = if id == ZAI_PROVIDER_ID {
+                ModelProviderInfo::create_zai_provider()
+            } else {
+                ModelProviderInfo::create_zai_anthropic_provider()
+            };
+            provider.env_key = Some(KEY.to_string());
+            config.model_providers.insert(id.to_string(), provider);
+        }
+        config.model_provider.env_key = Some(KEY.to_string());
+    };
+    let refusal = |child: &str| {
+        format!(
+            "spawn_agent: `{child}` would run on its default account, which has no credential \
+             (`{KEY}` is not set and no default key is stored); accounts are selected per \
+             connection, and the parent runs on `zai` account `work`. Spawn without the \
+             `model_provider`, `account` or `agent_type` that chose this connection and account \
+             to run on the parent's, or ask the user to add a default `{KEY}` (`/providers`). \
+             Do not retry on another account without the user's consent."
+        )
+    };
+    for (extra, child) in [
+        (
+            json!({"model_provider": "zai-anthropic", "model": "glm-5.2"}),
+            "zai-anthropic",
+        ),
+        (json!({"account": "default"}), ZAI_PROVIDER_ID),
+    ] {
+        let (result, children) = spawn_with_account(
+            /*named_accounts*/ true,
+            use_test_key,
+            /*parent_account*/ Some("work"),
+            extra.clone(),
+        )
+        .await;
+        assert_eq!(
+            (result, children),
+            (
+                Err(FunctionCallError::RespondToModel(refusal(child))),
+                Vec::new()
+            ),
+            "{extra}"
+        );
+    }
+    // The parent's own connection and account still spawn.
+    let (result, children) = spawn_with_account(
+        /*named_accounts*/ true,
+        use_test_key,
+        /*parent_account*/ Some("work"),
+        json!({}),
+    )
+    .await;
+    assert_eq!(
+        (result, children),
+        (Ok(()), vec![Some("zai:work".to_string())])
+    );
+    // With a stored default key the Claude-style connection spawns.
+    let (result, children) = spawn_with_account(
+        /*named_accounts*/ true,
+        |config, turn| {
+            use_test_key(config, turn);
+            codex_login::login_with_provider_api_key(
+                &config.codex_home,
+                KEY,
+                "canary-689-default",
+                codex_login::AuthCredentialsStoreMode::File,
+                codex_login::AuthKeyringBackendKind::default(),
+            )
+            .expect("store default key");
+        },
+        /*parent_account*/ Some("work"),
+        json!({"model_provider": "zai-anthropic", "model": "glm-5.2"}),
+    )
+    .await;
+    assert_eq!(
+        (result, children),
+        (Ok(()), vec![Some("zai-anthropic:default".to_string())])
     );
 }
 

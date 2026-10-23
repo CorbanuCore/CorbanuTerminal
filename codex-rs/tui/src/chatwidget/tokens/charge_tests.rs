@@ -176,6 +176,7 @@ fn day(quotes: Vec<ObservationQuote>) -> InspectionDay {
         unknown_parent_requests: Default::default(),
         requests,
         other_conversations: Some(OtherConversations::default()),
+        empty_day: None,
     })
 }
 
@@ -576,6 +577,7 @@ fn other_conversations_and_ranges_use_the_charge() {
             grouping: codex_state::accounting::InspectionGrouping::Day,
         },
         aggregate_day_floor: Some(0),
+        completed_as_of_ms: None,
         read_at_ms: start + 2 * DAY_MS,
         buckets: vec![codex_state::accounting::InspectionBucket {
             start_ms: start,

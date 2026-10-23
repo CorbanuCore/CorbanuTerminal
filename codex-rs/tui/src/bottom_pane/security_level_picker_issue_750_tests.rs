@@ -144,8 +144,10 @@ fn issue_750_confirming_moderate_saves_it_with_cores_record_and_offers_restart()
     );
     let saved = text(&picker);
     assert!(saved.contains("Saved: Moderate"), "{saved}");
+    // #1047: this picker's window has no session yet (no thread): it starts
+    // under Core's saved Moderate.
     assert!(
-        saved.contains("Restart Corbanu Terminal to activate Moderate."),
+        saved.contains("This window's session has not started yet: when it starts here, it takes Core's Moderate rules"),
         "{saved}"
     );
     assert!(
@@ -221,6 +223,7 @@ fn issue_750_a_live_session_takes_cores_rules_now_and_the_broker_at_restart() {
                 in_force: SecurityLevel::Moderate,
                 next_start: SecurityLevel::Moderate,
                 live: true,
+                other_sessions: false,
                 not_saved: Some("disk full".to_string()),
                 approvals: None,
             },

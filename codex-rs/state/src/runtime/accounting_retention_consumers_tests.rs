@@ -191,9 +191,9 @@ async fn strict_admission_boundaries_conflicts_and_no_write_failures() -> anyhow
     active(&mut conn, 400 * DAY_MS).await?;
     for (dispatch, marker) in [
         (400 * DAY_MS + 1, "future dispatch"),
-        (310 * DAY_MS, "unsupported compact-only"),
-        (300 * DAY_MS, "unsupported compact-only"),
-        (36 * DAY_MS, "unsupported compact-only"),
+        (310 * DAY_MS, "compact-only late imports are unsupported"),
+        (300 * DAY_MS, "compact-only late imports are unsupported"),
+        (36 * DAY_MS, "compact-only late imports are unsupported"),
         (35 * DAY_MS, "expired replay"),
         (0, "expired replay"),
     ] {

@@ -1161,7 +1161,12 @@ impl Session {
                 return;
             }
         };
-        let current_exec_policy = self.services.exec_policy.current();
+        // D52 (#1001): under Aggressive, network allow rules saved outside it
+        // are suspended.
+        let current_exec_policy = self
+            .services
+            .exec_policy
+            .current_for(self.services.model_client().live_level_is_aggressive());
         let spec = match spec.with_exec_policy_network_rules(current_exec_policy.as_ref()) {
             Ok(spec) => spec,
             Err(err) => {
@@ -2852,10 +2857,15 @@ impl Session {
     /// commands can use the newly approved prefix. #626: one approved while
     /// Aggressive is active is recorded as such, so it applies under
     /// Aggressive too (the others are suspended there).
+    /// Saves a "don't ask again" answer. #945: `shown_under` is the policy
+    /// marker its prompt was shown under; when a security transition was
+    /// committed since, the answer was for a stale prompt and nothing is
+    /// saved (`Ok(None)`).
     pub(crate) async fn persist_execpolicy_amendment(
         &self,
         amendment: &ExecPolicyAmendment,
-    ) -> Result<crate::exec_policy::AmendmentScope, ExecPolicyUpdateError> {
+        shown_under: Option<(u64, u64)>,
+    ) -> Result<Option<crate::exec_policy::AmendmentScope>, ExecPolicyUpdateError> {
         let codex_home = self
             .state
             .lock()
@@ -2864,21 +2874,39 @@ impl Session {
             .codex_home()
             .clone();
 
+        // Aggressive in force now (an unreadable live level counts as
+        // Aggressive, as it is enforced): the person approved it under
+        // Aggressive. Read before the marker: the marker only moves forward,
+        // so an unchanged marker means this was the level at the prompt.
+        let approved_under = if self.services.model_client().live_level_is_aggressive() {
+            crate::exec_policy::ApprovedUnder::Aggressive
+        } else {
+            crate::exec_policy::ApprovedUnder::LessStrict
+        };
+        if self.services.transition_since(shown_under) {
+            return Ok(None);
+        }
         self.services
             .exec_policy
-            .append_amendment_and_update(
-                &codex_home,
-                amendment,
-                // Aggressive in force now (an unreadable live level counts
-                // as Aggressive, as it is enforced): the person approved it
-                // under Aggressive.
-                if self.services.model_client().live_level_is_aggressive() {
-                    crate::exec_policy::ApprovedUnder::Aggressive
-                } else {
-                    crate::exec_policy::ApprovedUnder::LessStrict
-                },
-            )
+            .append_amendment_and_update(&codex_home, amendment, approved_under)
             .await
+            .map(Some)
+    }
+
+    /// #945: the policy marker the open approval prompt `approval_id` was
+    /// shown under; `None` when no such prompt is open.
+    #[expect(
+        clippy::await_holding_invalid_type,
+        reason = "active turn reads must stay consistent with the matching turn state"
+    )]
+    pub(crate) async fn pending_approval_shown_under(
+        &self,
+        approval_id: &str,
+    ) -> Option<Option<(u64, u64)>> {
+        let active = self.active_turn.lock().await;
+        let active = active.as_ref()?;
+        let ts = active.turn_state.lock().await;
+        ts.pending_approval_shown_under(approval_id)
     }
 
     pub(crate) async fn turn_context_for_sub_id(&self, sub_id: &str) -> Option<Arc<TurnContext>> {
@@ -2917,10 +2945,14 @@ impl Session {
             .await;
     }
 
+    /// `shown_under` (#945): the policy marker an allowing answer's prompt
+    /// was shown under; when a security transition was committed since,
+    /// nothing is changed.
     pub(crate) async fn persist_network_policy_amendment(
         &self,
         amendment: &NetworkPolicyAmendment,
         network_approval_context: &NetworkApprovalContext,
+        shown_under: Option<Option<(u64, u64)>>,
         on_policy_applied: impl FnOnce() + Send,
     ) -> anyhow::Result<()> {
         let _refresh_guard = self
@@ -2928,6 +2960,21 @@ impl Session {
             .acquire()
             .await
             .map_err(|_| anyhow::anyhow!("managed network proxy refresh semaphore closed"))?;
+        // D52 (#1001): one allowed while Aggressive is in force applies under
+        // Aggressive too (the others are suspended there). An unreadable live
+        // level counts as Aggressive, as it is enforced. Read before the
+        // marker: the marker only moves forward, so an unchanged marker means
+        // this was the level at the prompt (as for command rules, #945).
+        let approved_under = if self.services.model_client().live_level_is_aggressive() {
+            crate::exec_policy::ApprovedUnder::Aggressive
+        } else {
+            crate::exec_policy::ApprovedUnder::LessStrict
+        };
+        if let Some(shown_under) = shown_under
+            && self.services.transition_since(shown_under)
+        {
+            anyhow::bail!("the security level changed while network access was being approved");
+        }
         let host =
             Self::validated_network_policy_amendment_host(amendment, network_approval_context)?;
         let codex_home = self
@@ -2968,6 +3015,7 @@ impl Session {
                 execpolicy_amendment.protocol,
                 execpolicy_amendment.decision,
                 Some(execpolicy_amendment.justification),
+                approved_under,
             )
             .await
             .map_err(|err| {
@@ -3050,7 +3098,11 @@ impl Session {
             match active.as_mut() {
                 Some(at) => {
                     let mut ts = at.turn_state.lock().await;
-                    ts.insert_pending_approval(effective_approval_id.clone(), tx_approve)
+                    ts.insert_pending_approval(
+                        effective_approval_id.clone(),
+                        tx_approve,
+                        self.services.authority_marker(),
+                    )
                 }
                 None => None,
             }
@@ -3129,7 +3181,11 @@ impl Session {
             match active.as_mut() {
                 Some(at) => {
                     let mut ts = at.turn_state.lock().await;
-                    ts.insert_pending_approval(approval_id.clone(), tx_approve)
+                    ts.insert_pending_approval(
+                        approval_id.clone(),
+                        tx_approve,
+                        self.services.authority_marker(),
+                    )
                 }
                 None => None,
             }
@@ -3240,6 +3296,8 @@ impl Session {
                 active.as_ref().map(|active| Arc::clone(&active.turn_state))
             };
             let review_id = crate::guardian::new_guardian_review_id();
+            // #945: the policy the request is reviewed under.
+            let shown_under = self.services.authority_marker();
             let session = Arc::clone(self);
             let turn = Arc::clone(turn_context);
             let request = crate::guardian::GuardianApprovalRequest::RequestPermissions {
@@ -3303,6 +3361,7 @@ impl Session {
                     strict_auto_review: false,
                 },
             };
+            let response = self.unless_stale_grant(response, shown_under);
             let response = Self::normalize_request_permissions_response(
                 requested_permissions,
                 response,
@@ -3319,6 +3378,7 @@ impl Session {
                 &response,
                 &environment.environment_id,
                 originating_turn_state.as_ref(),
+                shown_under,
             )
             .await;
             return Ok(Some(response));
@@ -3337,6 +3397,7 @@ impl Session {
                             tx_response,
                             requested_permissions: requested_permissions.clone(),
                             environment: environment.clone(),
+                            shown_under: self.services.authority_marker(),
                         },
                     )
                 }
@@ -3526,10 +3587,12 @@ impl Session {
                         }
                     }
                 };
+                let response = self.unless_stale_grant(response, entry.shown_under);
                 self.record_granted_request_permissions_for_turn(
                     &response,
                     &entry.environment.environment_id,
                     originating_turn_state.as_ref(),
+                    entry.shown_under,
                 )
                 .await;
                 entry.tx_response.send(response).ok();
@@ -3537,6 +3600,25 @@ impl Session {
             None => {
                 warn!("No pending request_permissions found for call_id: {call_id}");
             }
+        }
+    }
+
+    /// #945: a grant answered after a security transition was for a stale
+    /// request: nothing is granted (the model may ask again under the new
+    /// level).
+    fn unless_stale_grant(
+        &self,
+        response: RequestPermissionsResponse,
+        shown_under: Option<(u64, u64)>,
+    ) -> RequestPermissionsResponse {
+        if response.permissions.is_empty() || !self.services.transition_since(shown_under) {
+            return response;
+        }
+        warn!("request_permissions answered after a security transition; nothing granted");
+        RequestPermissionsResponse {
+            permissions: RequestPermissionProfile::default(),
+            scope: PermissionGrantScope::Turn,
+            strict_auto_review: false,
         }
     }
 
@@ -3665,11 +3747,15 @@ impl Session {
         }
     }
 
-    async fn record_granted_request_permissions_for_turn(
+    /// Records a grant answered to a request shown under `granted_under`.
+    /// D51 (#1001): it holds only while no security transition is committed
+    /// (see [`crate::state::GrantedPermissions`]).
+    pub(crate) async fn record_granted_request_permissions_for_turn(
         &self,
         response: &RequestPermissionsResponse,
         environment_id: &str,
         originating_turn_state: Option<&Arc<Mutex<crate::state::TurnState>>>,
+        granted_under: Option<(u64, u64)>,
     ) {
         if response.permissions.is_empty() {
             return;
@@ -3679,15 +3765,31 @@ impl Session {
             PermissionGrantScope::Turn => {
                 if let Some(turn_state) = originating_turn_state {
                     let mut ts = turn_state.lock().await;
-                    ts.record_granted_permissions(environment_id, permissions);
-                    if response.strict_auto_review {
-                        ts.enable_strict_auto_review();
+                    // Read under the lock: a later grant is never recorded
+                    // under an earlier marker.
+                    let current = self.services.authority_marker();
+                    let recorded = ts.record_granted_permissions(
+                        environment_id,
+                        permissions,
+                        granted_under,
+                        current,
+                    );
+                    // D51: strict auto-review comes with the grant and ends
+                    // with it.
+                    if recorded && response.strict_auto_review {
+                        ts.enable_strict_auto_review(current);
                     }
                 }
             }
             PermissionGrantScope::Session => {
                 let mut state = self.state.lock().await;
-                state.record_granted_permissions(environment_id, permissions);
+                let current = self.services.authority_marker();
+                state.record_granted_permissions(
+                    environment_id,
+                    permissions,
+                    granted_under,
+                    current,
+                );
             }
         }
     }
@@ -3703,8 +3805,8 @@ impl Session {
         let granted = {
             let active = self.active_turn.lock().await;
             let active = active.as_ref()?;
-            let ts = active.turn_state.lock().await;
-            ts.granted_permissions(environment_id)
+            let mut ts = active.turn_state.lock().await;
+            ts.granted_permissions(environment_id, self.services.authority_marker())
         };
         self.usable_grant(granted).await
     }
@@ -3781,7 +3883,7 @@ impl Session {
             return false;
         };
         let ts = active.turn_state.lock().await;
-        ts.strict_auto_review_enabled()
+        ts.strict_auto_review_enabled(self.services.authority_marker())
     }
 
     pub(crate) async fn granted_session_permissions(
@@ -3789,8 +3891,8 @@ impl Session {
         environment_id: &str,
     ) -> Option<AdditionalPermissionProfile> {
         let granted = {
-            let state = self.state.lock().await;
-            state.granted_permissions(environment_id)
+            let mut state = self.state.lock().await;
+            state.granted_permissions(environment_id, self.services.authority_marker())
         };
         self.usable_grant(granted).await
     }
@@ -5546,3 +5648,7 @@ mod account_switch_tests;
 #[cfg(test)]
 #[path = "home_access_session_tests.rs"]
 mod home_access_session_tests;
+
+#[cfg(test)]
+#[path = "stale_approval_tests.rs"]
+mod stale_approval_tests;

@@ -300,12 +300,13 @@ impl CredentialWatcher {
                     .any(|root| path.starts_with(root)))
     }
 
-    /// Starts watching beside the command `child`, which is killed as soon
-    /// as a credential name appears. `placeholders` are the empty mount
-    /// points bubblewrap creates for it; they are not credential files.
+    /// Starts watching beside the command, which `stop_command` stops as
+    /// soon as a credential name appears (#935: by cutting the supervisor's
+    /// lifeline). `placeholders` are the empty mount points bubblewrap
+    /// creates for it; they are not credential files.
     pub(crate) fn start(
         mut self,
-        child: libc::pid_t,
+        stop_command: impl FnOnce() + Send + 'static,
         placeholders: &[PathBuf],
     ) -> CredentialMonitor {
         self.placeholders = placeholders
@@ -320,12 +321,7 @@ impl CredentialWatcher {
                 let Some(event) = self.next_match() else {
                     continue;
                 };
-                // SAFETY: plain syscall. The child is not reaped before this
-                // thread is stopped (`waitid` with `WNOWAIT`), so its pid
-                // cannot have been reused.
-                unsafe {
-                    libc::kill(child, libc::SIGKILL);
-                }
+                stop_command();
                 *thread_found
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(event);

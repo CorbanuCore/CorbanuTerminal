@@ -211,27 +211,28 @@ pub fn fetch_dotslash_file(
     Ok(fetched_path)
 }
 
-/// Returns a default `Config` whose on-disk state is confined to the provided
-/// temporary directory. Using a per-test directory keeps tests hermetic and
-/// avoids clobbering a developer’s real `~/.codex`.
-pub async fn load_default_config_for_test(codex_home: &TempDir) -> Config {
-    load_default_config_for_test_with_cloud_config_bundle(
-        codex_home,
-        CloudConfigBundleLoader::default(),
-    )
-    .await
-}
-
-/// Returns a default `Config` with test-provided cloud bundle requirements applied.
-/// during config construction.
-pub async fn load_default_config_for_test_with_cloud_config_bundle(
+/// Returns a default `Config` whose on-disk state is confined to the temporary
+/// `codex_home` (never a developer's real `~/.codex`), with the test-provided
+/// cloud bundle requirements applied, built for the working folder `cwd`.
+///
+/// `cwd` becomes the session's folder and its workspace root, a writable root
+/// of sandboxed commands, as for a real session started there. Pass a
+/// temporary folder. There is deliberately no variant without one: the config
+/// would then be built for the test process's own working folder (the crate's
+/// source tree, e.g. `codex-rs/core`), and sandboxed commands could write into
+/// it (#1120).
+pub async fn load_default_config_for_test_in(
     codex_home: &TempDir,
     cloud_config_bundle: CloudConfigBundleLoader,
+    cwd: &Path,
 ) -> Config {
     ConfigBuilder::default()
         .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
         .codex_home(codex_home.path().to_path_buf())
-        .harness_overrides(default_test_overrides())
+        .harness_overrides(ConfigOverrides {
+            cwd: Some(cwd.to_path_buf()),
+            ..default_test_overrides()
+        })
         .cloud_config_bundle(cloud_config_bundle)
         .build()
         .await

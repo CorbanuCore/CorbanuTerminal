@@ -9,6 +9,7 @@ use std::path::Path;
 use codex_model_provider::selected_account_error;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::NamedProviderAccount;
+use codex_vault::ProviderAccountKind;
 use codex_vault::Vault;
 use codex_vault::VaultKeyStorage;
 use codex_vault::parse_provider_account_selection;
@@ -86,8 +87,8 @@ pub(crate) fn apply_explicit_provider_account(
         let message = if recorded {
             format!(
                 "named accounts need the `named_accounts` feature (`--enable named_accounts`); \
-                 resume with `--account {provider_id}:default` to use the default credentials \
-                 instead"
+                 `--account {provider_id}:default` (on a resume or fork) uses the default \
+                 credentials instead"
             )
         } else {
             "named accounts need the `named_accounts` feature (`--enable named_accounts`); \
@@ -95,6 +96,24 @@ pub(crate) fn apply_explicit_provider_account(
                 .to_string()
         };
         return Err(invalid(message));
+    }
+    // #1144: a conversation that ran on an account borrowed from another
+    // provider (same API key, see `with_account_from`) recorded it as
+    // `<owner>:<name>`. It is refused, named, rather than read as an invalid
+    // name or moved to another account.
+    if recorded && let Some((owner_id, owner_name)) = name.split_once(':') {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!(
+                "This conversation ran on `{provider_id}` with account `{owner_name}` of \
+                 `{owner_id}` (borrowed because both use the same API key), and a resumed or \
+                 forked conversation restores only an account of the provider it runs on. It \
+                 is not moved to another account: resume or fork it with `--account \
+                 {provider_id}:default` for the default credentials of `{provider_id}`, or \
+                 with `--account {provider_id}:<name>` for one of its own accounts (see \
+                 `corbanu account list`)."
+            ),
+        ));
     }
     let provider = model_providers
         .get_mut(provider_id)
@@ -219,6 +238,85 @@ pub fn apply_recorded_provider_account(
     )
 }
 
+/// #1129: an existing agent that is resumed, or reloaded to receive a
+/// message, runs on the account it recorded (`recorded`: a name, `default`,
+/// or `<owner>:<name>` for an account of another provider sharing its API
+/// key) on `provider_id`, not on whichever account `provider` (the provider
+/// as configured now) selects. When that account can no longer be used
+/// (named accounts are off, it is not configured, its owner no longer shares
+/// the API key, or its sign-in is ruled out) the agent is refused; it is
+/// never moved to another account.
+pub(crate) fn restore_recorded_agent_account(
+    config: &super::Config,
+    provider_id: &str,
+    provider: &mut ModelProviderInfo,
+    recorded: &str,
+) -> Result<(), String> {
+    let refuse = |reason: String| {
+        format!(
+            "Resuming this agent: it ran on account `{recorded}` of `{provider_id}`, and \
+             {reason}. It is not moved to another account: ask the user to restore that \
+             account (`/providers`), or do the work without this agent. Do not retry on \
+             another account without the user's consent."
+        )
+    };
+    let is_default = parse_provider_account_selection(recorded).is_ok_and(|name| name.is_none());
+    if !config
+        .features
+        .enabled(codex_features::Feature::NamedAccounts)
+    {
+        // Without named accounts every provider runs on its default account.
+        return if is_default {
+            Ok(())
+        } else {
+            Err(refuse(
+                "named accounts need the `named_accounts` feature, which is off now".to_string(),
+            ))
+        };
+    }
+    let (owner_id, name) = recorded.split_once(':').unwrap_or((provider_id, recorded));
+    let mut restored = provider.clone();
+    let stamp = |owner: &mut ModelProviderInfo| {
+        stamp_provider_account(owner_id, owner, name).map_err(|error| {
+            let message = error.to_string();
+            let prefix = format!("provider_accounts.{owner_id}: ");
+            refuse(
+                message
+                    .strip_prefix(&prefix)
+                    .unwrap_or(&message)
+                    .to_string(),
+            )
+        })
+    };
+    if owner_id == provider_id {
+        stamp(&mut restored)?;
+    } else {
+        // Borrowed as `with_account_from` allows: both use the same API key.
+        let mut owner = config
+            .model_providers
+            .get(owner_id)
+            .cloned()
+            .ok_or_else(|| refuse(format!("provider `{owner_id}` is not configured")))?;
+        if restored.env_key.is_none() || restored.env_key != owner.env_key {
+            return Err(refuse(format!(
+                "`{provider_id}` no longer uses the API key of `{owner_id}`"
+            )));
+        }
+        stamp(&mut owner)?;
+        if owner.account.is_none() {
+            return Err(refuse(format!("`{recorded}` is not an account name")));
+        }
+        restored.account = owner.account;
+    }
+    if let Some(message) = selected_account_error(config.codex_home.as_path(), &restored)
+        .or_else(|| provider_sign_in_restriction_error(config, &restored))
+    {
+        return Err(refuse(message));
+    }
+    *provider = restored;
+    Ok(())
+}
+
 /// Why the session cannot start on the accounts it selects: the session
 /// provider's account (from `--account` or `[provider_accounts]`), then an
 /// explicit account of another provider.
@@ -241,7 +339,14 @@ pub fn subagent_account_error(config: &super::Config) -> Option<String> {
 /// `forced_login_method` counts, not the API-key-only onboarding default a
 /// third-party session provider implies (#571).
 fn sign_in_restriction_error(config: &super::Config) -> Option<String> {
-    let account = codex_model_provider::named_sign_in_account(&config.model_provider)?;
+    provider_sign_in_restriction_error(config, &config.model_provider)
+}
+
+fn provider_sign_in_restriction_error(
+    config: &super::Config,
+    provider: &ModelProviderInfo,
+) -> Option<String> {
+    let account = codex_model_provider::named_sign_in_account(provider)?;
     codex_login::named_account_restriction_error(
         config.codex_home.as_path(),
         &account,
@@ -255,7 +360,7 @@ fn sign_in_restriction_error(config: &super::Config) -> Option<String> {
 /// restrictions it was built with rule it out (it is left unchanged). Only
 /// in a process that left the default login in place at startup (see
 /// `codex_login::leave_default_login_unenforced`): a new session on the
-/// default account (`/providers` → *Use default account for this session*),
+/// default account (`/providers` → *Start a new session on the default account*),
 /// a spawned agent on it, or a resumed or forked default-login thread. A
 /// mid-session provider switch to it is refused at the first request with
 /// the same reason (the provider's `api_auth`).
@@ -278,6 +383,139 @@ pub fn default_login_restriction_error(
     auth_manager
         .default_account_manager()
         .hidden_default_login_reason()
+}
+
+/// #689: why a spawned agent on `child` (runtime provider `child_id`) cannot
+/// sign in, checked before it starts, as the TUI checks its own spawns (#665).
+/// Named accounts are per connection: `zai` and `zai-anthropic` share
+/// `ZAI_API_KEY`, but only the connection a named account is selected for runs
+/// on it. When `child` runs on the default key of such a key variable while
+/// another connection (or the parent, `parent`) runs on a named account, and
+/// the default key is in neither the environment (nor held by the credential
+/// broker) nor storage, the child would fail at its first request with a
+/// sign-in error; it is refused instead. Without named accounts in play, or
+/// when storage cannot be read, nothing is refused.
+pub(crate) fn spawn_default_key_error(
+    config: &super::Config,
+    child_id: &str,
+    child: &ModelProviderInfo,
+    parent_id: &str,
+    parent: &ModelProviderInfo,
+) -> Option<String> {
+    spawn_default_key_error_with(
+        config,
+        child_id,
+        child,
+        (parent_id, parent),
+        environment_holds_key,
+    )
+}
+
+fn spawn_default_key_error_with(
+    config: &super::Config,
+    child_id: &str,
+    child: &ModelProviderInfo,
+    parent: (&str, &ModelProviderInfo),
+    environment_holds: impl Fn(&str) -> bool,
+) -> Option<String> {
+    let (env_key, named) = default_key_gap(config, child, parent, environment_holds)?;
+    Some(format!(
+        "spawn_agent: `{child_id}` would run on its default account, which has no credential \
+         (`{env_key}` is not set and no default key is stored); accounts are selected per \
+         connection, and {named}. Spawn without the `model_provider`, `account` or \
+         `agent_type` that chose this connection and account to run on the parent's, or ask \
+         the user to add a default `{env_key}` (`/providers`). Do not retry on another \
+         account without the user's consent."
+    ))
+}
+
+/// #1074: the #689 check for an existing agent that is about to be resumed
+/// (or reloaded to receive a message) on `child` (runtime provider
+/// `child_id`), by a parent on `parent`. The agent ran on that connection
+/// before; when its default key has since gone, it is refused before it
+/// starts instead of failing at its next request with a sign-in error.
+pub(crate) fn resume_default_key_error(
+    config: &super::Config,
+    child_id: &str,
+    child: &ModelProviderInfo,
+    parent_id: &str,
+    parent: &ModelProviderInfo,
+) -> Option<String> {
+    let (env_key, named) =
+        default_key_gap(config, child, (parent_id, parent), environment_holds_key)?;
+    Some(format!(
+        "Resuming this agent: `{child_id}` would run on its default account, which has no \
+         credential (`{env_key}` is not set and no default key is stored); accounts are \
+         selected per connection, and {named}. Ask the user to add a default `{env_key}` \
+         (`/providers`) before resuming it, or do the work without this agent. Do not retry \
+         on another account without the user's consent."
+    ))
+}
+
+/// The default key is in the environment or held by the credential broker.
+fn environment_holds_key(name: &str) -> bool {
+    std::env::var(name).is_ok_and(|value| !value.trim().is_empty())
+        || crate::model_broker_auth::holds_environment_key(name)
+}
+
+/// The default key variable `child` would run on and which named account
+/// makes it ambiguous, when that default key is nowhere (see
+/// [`spawn_default_key_error`]).
+fn default_key_gap(
+    config: &super::Config,
+    child: &ModelProviderInfo,
+    parent: (&str, &ModelProviderInfo),
+    environment_holds: impl Fn(&str) -> bool,
+) -> Option<(String, String)> {
+    if child.account.is_some()
+        || child.auth.is_some()
+        || child.aws.is_some()
+        || child.requires_openai_auth
+        || child.is_claude_plan()
+        || child.experimental_bearer_token.is_some()
+    {
+        return None;
+    }
+    let env_key = child.env_key.as_deref()?;
+    let mut configured = config
+        .model_providers
+        .iter()
+        .map(|(id, provider)| (id.as_str(), provider))
+        .collect::<Vec<_>>();
+    configured.sort_by_key(|(id, _)| *id);
+    // The parent first, so the message names it when it is the one on a
+    // named account.
+    let (index, named_id, account) = std::iter::once(parent)
+        .chain(configured)
+        .enumerate()
+        .find_map(|(index, (id, provider))| {
+            let account = provider.account.as_ref()?;
+            (provider.env_key.as_deref() == Some(env_key)).then_some((index, id, account))
+        })?;
+    let on_parent = index == 0;
+    if child
+        .api_key_env_vars()
+        .iter()
+        .any(|name| environment_holds(name))
+    {
+        return None;
+    }
+    match codex_login::provider_api_key_metadata_from_auth_storage(&config.codex_home, env_key) {
+        Ok(
+            codex_login::ProviderApiKeyStorageMetadata::Missing
+            | codex_login::ProviderApiKeyStorageMetadata::Suppressed,
+        ) => {}
+        Ok(codex_login::ProviderApiKeyStorageMetadata::Stored { .. }) | Err(_) => return None,
+    }
+    let named = if on_parent {
+        format!("the parent runs on `{named_id}` account `{}`", account.name)
+    } else {
+        format!(
+            "account `{}` is selected for `{named_id}` only",
+            account.name
+        )
+    };
+    Some((env_key.to_string(), named))
 }
 
 /// Splits `[<provider>:]<name>`; the provider defaults to the session's.
@@ -348,6 +586,37 @@ pub(crate) fn configured_account_names(codex_home: &Path, provider_id: &str) -> 
         .collect()
 }
 
+/// PF-84 (#1085): whether this home uses named OpenAI sign-in accounts: a
+/// named account holding a sign-in is enrolled in the vault, or the
+/// configuration (`[provider_accounts]`) puts a provider on one. Uses only
+/// account metadata, but an initialised vault is decrypted to read it (an
+/// uninitialised one is not touched). An unreadable vault counts as yes, so a
+/// home that may hold such accounts keeps their protections.
+pub(crate) fn uses_named_sign_in_accounts(
+    codex_home: &Path,
+    model_providers: &HashMap<String, ModelProviderInfo>,
+) -> bool {
+    if model_providers
+        .values()
+        .any(|provider| codex_model_provider::named_sign_in_account(provider).is_some())
+    {
+        return true;
+    }
+    let vault = Vault::new(codex_home.to_path_buf());
+    if vault.key_storage() == VaultKeyStorage::NotInitialized {
+        return false;
+    }
+    match vault.list_provider_accounts() {
+        Ok(accounts) => accounts
+            .iter()
+            .any(|account| account.kinds.contains(&ProviderAccountKind::ChatgptAuth)),
+        Err(error) => {
+            tracing::warn!(%error, "could not list named accounts; treating the home as using them");
+            true
+        }
+    }
+}
+
 /// API-key providers, `auth.command` providers (including Claude Plan),
 /// Amazon Bedrock without command auth (an AWS profile per account) and
 /// OpenAI sign-in providers (a ChatGPT or OpenAI API-key sign-in per account,
@@ -380,11 +649,178 @@ mod tests {
         ])
     }
 
+    /// #1085: only an enrolled named sign-in account, or a provider the
+    /// configuration puts on one, counts; another provider's named account
+    /// (a Z.AI key) does not.
+    #[test]
+    fn a_home_uses_named_sign_in_accounts_only_when_it_holds_or_selects_one() {
+        let home = tempfile::tempdir().expect("tempdir");
+        let mut model_providers = providers();
+        assert!(!uses_named_sign_in_accounts(home.path(), &model_providers));
+
+        let vault = Vault::new(home.path().to_path_buf());
+        let work = codex_vault::ProviderAccountName::parse("work").expect("name");
+        vault
+            .create_provider_account("zai", &work, ProviderAccountKind::ApiKey, "test-zai-key")
+            .expect("add zai account");
+        assert!(!uses_named_sign_in_accounts(home.path(), &model_providers));
+        stamp_provider_account("zai", model_providers.get_mut("zai").expect("zai"), "work")
+            .expect("stamp zai");
+        assert!(!uses_named_sign_in_accounts(home.path(), &model_providers));
+
+        let mut selected = model_providers.clone();
+        stamp_provider_account(
+            "openai",
+            selected.get_mut("openai").expect("openai"),
+            "work",
+        )
+        .expect("stamp openai");
+        assert!(uses_named_sign_in_accounts(home.path(), &selected));
+
+        vault
+            .create_provider_account("openai", &work, ProviderAccountKind::ChatgptAuth, "{}")
+            .expect("add openai account");
+        assert!(uses_named_sign_in_accounts(home.path(), &model_providers));
+
+        // An unreadable vault counts as holding such accounts (fail closed).
+        let unreadable = tempfile::tempdir().expect("tempdir");
+        Vault::new(unreadable.path().to_path_buf())
+            .create_provider_account("zai", &work, ProviderAccountKind::ApiKey, "test-zai-key")
+            .expect("add zai account");
+        std::fs::write(
+            unreadable.path().join("secrets").join("local.age"),
+            b"not an age file",
+        )
+        .expect("corrupt the vault");
+        assert!(uses_named_sign_in_accounts(unreadable.path(), &providers()));
+    }
+
     fn accounts(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
         pairs
             .iter()
             .map(|(provider, name)| (provider.to_string(), name.to_string()))
             .collect()
+    }
+
+    /// #689: a spawned agent on the default key of a connection whose
+    /// sibling (or parent) runs on a named account is refused only when the
+    /// default key is nowhere: not in the environment, not held by the
+    /// broker and not stored.
+    #[tokio::test]
+    async fn spawn_on_a_default_key_that_is_nowhere_is_refused() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        use core_test_support::PathBufExt;
+        let mut config = crate::config::test_config().await;
+        config.codex_home = temp_dir.path().join("codex-home").abs();
+        std::fs::create_dir_all(&config.codex_home).expect("create codex home");
+        let zai = ModelProviderInfo::create_zai_provider();
+        let anthropic = ModelProviderInfo::create_zai_anthropic_provider();
+        let mut work = zai.clone();
+        stamp_provider_account("zai", &mut work, "work").expect("stamp");
+        config.model_providers = HashMap::from([
+            ("zai".to_string(), zai.clone()),
+            ("zai-anthropic".to_string(), anthropic.clone()),
+        ]);
+        let nothing_held = |_: &str| false;
+        let check = |config: &crate::config::Config,
+                     child_id: &str,
+                     child: &ModelProviderInfo,
+                     parent: (&str, &ModelProviderInfo),
+                     held: &dyn Fn(&str) -> bool| {
+            spawn_default_key_error_with(config, child_id, child, parent, held)
+        };
+        let refusal = |named: &str| {
+            format!(
+                "spawn_agent: `zai-anthropic` would run on its default account, which has no \
+                 credential (`ZAI_API_KEY` is not set and no default key is stored); accounts \
+                 are selected per connection, and {named}. Spawn without the `model_provider`, \
+                 `account` or `agent_type` that chose this connection and account to run on the \
+                 parent's, or ask the user to add a default `ZAI_API_KEY` (`/providers`). Do not \
+                 retry on another account without the user's consent."
+            )
+        };
+        // The parent runs `zai` on `work`; no default key anywhere.
+        assert_eq!(
+            check(
+                &config,
+                "zai-anthropic",
+                &anthropic,
+                ("zai", &work),
+                &nothing_held
+            ),
+            Some(refusal("the parent runs on `zai` account `work`"))
+        );
+        // The same, with `[provider_accounts] zai = "work"` and a parent on
+        // another provider.
+        let mut stamped = config.clone();
+        stamped
+            .model_providers
+            .insert("zai".to_string(), work.clone());
+        let kimi = ModelProviderInfo::create_kimi_code_provider();
+        assert_eq!(
+            check(
+                &stamped,
+                "zai-anthropic",
+                &anthropic,
+                ("kimi-code", &kimi),
+                &nothing_held
+            ),
+            Some(refusal("account `work` is selected for `zai` only"))
+        );
+        // No named account in play: nothing changes.
+        assert_eq!(
+            check(
+                &config,
+                "zai-anthropic",
+                &anthropic,
+                ("zai", &zai),
+                &nothing_held
+            ),
+            None
+        );
+        // The child on a named account is checked by its enrollment instead.
+        let mut anthropic_work = anthropic.clone();
+        stamp_provider_account("zai-anthropic", &mut anthropic_work, "work").expect("stamp");
+        assert_eq!(
+            check(
+                &config,
+                "zai-anthropic",
+                &anthropic_work,
+                ("zai", &work),
+                &nothing_held
+            ),
+            None
+        );
+        // A default key in the environment, or held by the broker.
+        assert_eq!(
+            check(
+                &config,
+                "zai-anthropic",
+                &anthropic,
+                ("zai", &work),
+                &|name: &str| name == "ZAI_API_KEY"
+            ),
+            None
+        );
+        // A stored default key.
+        codex_login::login_with_provider_api_key(
+            &config.codex_home,
+            "ZAI_API_KEY",
+            "canary-689-default",
+            codex_login::AuthCredentialsStoreMode::File,
+            codex_login::AuthKeyringBackendKind::default(),
+        )
+        .expect("store default key");
+        assert_eq!(
+            check(
+                &config,
+                "zai-anthropic",
+                &anthropic,
+                ("zai", &work),
+                &nothing_held
+            ),
+            None
+        );
     }
 
     #[test]
@@ -690,8 +1126,8 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "the thread's recorded account zai:main: named accounts need the `named_accounts` \
-             feature (`--enable named_accounts`); resume with `--account zai:default` to use the \
-             default credentials instead"
+             feature (`--enable named_accounts`); `--account zai:default` (on a resume or fork) \
+             uses the default credentials instead"
         );
     }
 }

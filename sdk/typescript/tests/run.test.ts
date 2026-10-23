@@ -757,7 +757,8 @@ describe("Codex", () => {
       statusCode: 200,
       responseBodies: (function* (): Generator<SseResponseBody> {
         yield sse(responseStarted("response_1"));
-        while (true) {
+        // 7 = the client's default 5 retries (DEFAULT_STREAM_MAX_RETRIES) plus extra.
+        for (let i = 0; i < 7; i += 1) {
           yield sse(responseFailed("rate limit exceeded"));
         }
       })(),

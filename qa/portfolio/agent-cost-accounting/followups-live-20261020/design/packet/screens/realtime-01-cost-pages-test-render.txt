@@ -1,0 +1,81 @@
+=== Cost — this conversation
+This conversation on 1970-01-01 (UTC):
+• OpenAI · gpt-realtime-1.5 — Pay per use. 1 request, tokens not reported. Estimated cost: no price available.
+Realtime: 1 session; token counts and cost unknown, not zero — a realtime session's usage is not reported to this client.
+No other conversation recorded requests on this day.
+Next step for requests with no price: check the bill from OpenAI. No published price covers them, so no cost is shown for them here.
+Costs are estimates from published prices; OpenAI doesn't report its charges — check OpenAI's bill.
+Select a provider below to see its requests.
+—— Details ——
+Estimated token cost: unknown
+Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
+Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+Snapshot is not current; newer activity is unverified
+Day covered (UTC): [1970-01-01T00:00:00.000Z, 1970-01-02T00:00:00.000Z)
+Read at: 1970-01-01T00:00:00.001Z; ledger current to: 1970-01-01T00:00:00.000Z (1 ms behind)
+Retention: request detail kept since the start; daily totals kept since 1970-01-01; oldest recorded day in this conversation 1970-01-01
+Known subtotal exact USD: none — no price for these attempts
+Input: not reported (1 attempt)
+Noncached input (derived for inclusive input): not reported (1 attempt)
+Cache read: not reported (1 attempt)
+Cache write: not reported (1 attempt)
+Output: not reported (1 attempt)
+Reasoning (subset, not separately billed): not reported (1 attempt)
+Total (not separately billed): not reported (1 attempt)
+Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+Unknown parent population: 0 attempts, excluded from root total
+LINKS [("OpenAI · gpt-realtime-1.5 — no price available (1 request)", 5), ("Request 1 · Realtime session · OpenAI · gpt-realtime-1.5 · no price available", 1), ("Root's own attempts (1 attempt)", 3), ("Descendant attempts (none)", 4), ("Unknown provider/model attribution (none)", 6), ("Unknown parent population (none)", 7)]
+=== Request
+Provider: OpenAI
+Model: gpt-realtime-1.5
+Billing: Pay per use
+Estimated cost: no price available
+Next step for requests with no price: check the bill from OpenAI. No published price covers them, so no cost is shown for them here.
+Tokens: tokens not reported
+Kind: Realtime session — started 1970-01-01T00:00:01.000Z, ended 1970-01-01T00:01:01.000Z; its token counts and cost are unknown, not zero: a realtime session's usage is not reported to this client.
+—— Details ——
+Billed cost: OpenAI doesn't report its charges, so any cost here is an estimate — check OpenAI's bill.
+Request: 00000000-0000-0000-0000-000000000016
+Snapshot is not current; newer activity is unverified
+LINKS [("Technical details (attempt 1)", 2)]
+=== Attempt, components and original price
+Provider: OpenAI
+Model: gpt-realtime-1.5
+Billing: Pay per use
+Estimated cost: no price available
+Next step for requests with no price: check the bill from OpenAI. No published price covers them, so no cost is shown for them here.
+Tokens: tokens not reported
+—— Details ——
+Billed cost: OpenAI doesn't report its charges, so any cost here is an estimate — check OpenAI's bill.
+Request: 00000000-0000-0000-0000-000000000016
+Attempt: 00000000-0000-0000-0000-000000000015
+Thread: 00000000-0000-0000-0000-000000000003
+Turn: realtime:00000000-0000-0000-0000-000000000017
+Provider: openai
+Account: default
+Model: gpt-realtime-1.5
+Opaque scope: 00000000-0000-0000-0000-000000000005
+Arithmetic dialect: Inclusive
+Admission time: 1970-01-01T00:00:01.000Z
+Retry predecessor: none
+Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+Realtime session ended: 1970-01-01T00:01:01.000Z
+Realtime session: its token counts and cost are unknown, not zero: a realtime session's usage is not reported to this client.
+Token cost: unavailable — no applicable price; recorded usage is not a zero-cost claim.
+Billing basis: pay per use
+Input: unknown — no retained numeric evidence
+Noncached input (derived for inclusive input): unknown — no retained numeric evidence
+Cache read: unknown — no retained numeric evidence
+Cache write: unknown — no retained numeric evidence
+Output: unknown — no retained numeric evidence
+Reasoning (subset, not separately billed): unknown — no retained numeric evidence
+Total (not separately billed): unknown — no retained numeric evidence
+Noncached input cost: unknown — no retained numeric evidence
+Cache read cost: unknown — no retained numeric evidence
+Cache write cost: unknown — no retained numeric evidence
+Output cost: unknown — no retained numeric evidence
+Known subtotal exact USD: none — no price for these attempts
+Price: none recorded — this request records only its billing basis: pay per use
+Snapshot is not current; newer activity is unverified
+LINKS []

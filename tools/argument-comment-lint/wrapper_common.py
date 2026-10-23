@@ -18,7 +18,7 @@ STRICT_LINTS = [
     "uncommented-anonymous-literal-argument",
 ]
 NOISE_LINT = "unknown_lints"
-TOOLCHAIN_CHANNEL = "nightly-2025-09-18"
+TOOLCHAIN_CHANNEL = "nightly-2026-08-08"
 
 _TARGET_SELECTION_ARGS = {
     "--all-targets",
@@ -178,13 +178,13 @@ def ensure_source_prerequisites(env: MutableMapping[str, str]) -> None:
         "cargo-dylint",
         "argument-comment-lint source wrapper requires cargo-dylint and dylint-link.\n"
         "Install them with:\n"
-        "  cargo install --locked cargo-dylint dylint-link",
+        "  cargo install --locked cargo-dylint@6.1.1 dylint-link@6.1.1",
     )
     require_command(
         "dylint-link",
         "argument-comment-lint source wrapper requires cargo-dylint and dylint-link.\n"
         "Install them with:\n"
-        "  cargo install --locked cargo-dylint dylint-link",
+        "  cargo install --locked cargo-dylint@6.1.1 dylint-link@6.1.1",
     )
     require_command(
         "rustup",

@@ -9,13 +9,17 @@
 //! slot. Event dispatch commits that completed cell into history only after active
 //! output and stream consolidation no longer block insertion.
 //!
-//! Pure chart rendering and date bucketing live in [`chart`]. This module owns
+//! Pure chart rendering and date bucketing live in [`chart`], and the `/cost`
+//! range view in [`range`]. This module owns
 //! request correlation, transient/completed card state, and integration with
 //! `ChatWidget` history insertion.
 
 mod charge;
 mod chart;
+mod empty_day;
+mod range;
 mod scope;
+mod warmup_resume;
 
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -301,6 +305,11 @@ use codex_state::accounting::InspectionDay;
 use codex_state::accounting::InspectionGrouping;
 use codex_state::accounting::InspectionRange;
 use codex_state::accounting::ObservationQuote;
+#[cfg(test)]
+use range::NOT_CURRENT;
+#[cfg(test)]
+use range::NOT_STARTED;
+use range::range_pages;
 use uuid::Uuid;
 
 const INSPECTOR_VIEW: &str = "recorded-requests";
@@ -405,8 +414,8 @@ fn unpriced_rows<'a>(
 /// An attempt that recorded tokens and has no price for any of them.
 fn has_no_price(quote: &ObservationQuote) -> bool {
     // Subscription work is not billed per token, so it has no money to be
-    // missing. Its own gap - an API equivalent the catalogue does not state -
-    // is already stated as such beside the plan rate that applied, and naming
+    // missing. Its own gap - an API equivalent with no rate or no complete
+    // count - is already stated beside the plan rate that applied, and naming
     // it here would assert unstated money next to a line saying the turn was
     // never billed that way.
     if !per_use(quote) {
@@ -575,12 +584,12 @@ fn plan(totals: &codex_state::accounting::DayTotals) -> Vec<String> {
         )
     } else if totals.equivalent_usd == Decimal::default() {
         format!(
-            "Same tokens at API rates: unavailable — the catalogue states no API price for {} of {} plan attempts",
+            "Same tokens at API rates: unavailable — no API rate or complete token count for {} of {} plan attempts",
             totals.unknown_equivalents, totals.plan_attempts
         )
     } else {
         format!(
-            "Same tokens at API rates: {} known, plus {} of {} plan attempts the catalogue does not price",
+            "Same tokens at API rates: at least {}; {} of {} plan attempts have no API rate or an incomplete token count",
             money(totals.equivalent_usd),
             totals.unknown_equivalents,
             totals.plan_attempts
@@ -667,7 +676,7 @@ fn resolved_counts<'a>(quotes: impl IntoIterator<Item = &'a ObservationQuote>) -
 /// that records costs, which creates the ledger with the first request it
 /// records, so collection is not "off" there.
 fn absent_state() -> &'static str {
-    "Unavailable — no requests recorded in this home yet; the accounting ledger is created when the first one is."
+    "Unavailable — nothing recorded in this home yet; the accounting ledger is created when the first request is."
 }
 
 /// What `/usage requests` says in a build that records no costs, instead of
@@ -991,11 +1000,18 @@ fn inspection_pages_for(
     if let Ok(InspectionDay::Range {
         requested,
         aggregate_day_floor,
+        completed_as_of_ms,
         read_at_ms,
         buckets,
     }) = result
     {
-        return range_pages(requested, aggregate_day_floor, read_at_ms, buckets);
+        return range_pages(
+            requested,
+            aggregate_day_floor,
+            completed_as_of_ms,
+            read_at_ms,
+            buckets,
+        );
     }
     let mut pages = vec![InspectorPage { title: "Cost — this conversation".into(), text: vec![
         "Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.".into(),
@@ -1061,7 +1077,7 @@ fn inspection_pages_for(
     pages[0].text.splice(
         0..0,
         if t.attempts == 0 {
-            vec!["No recorded attempts in this conversation or its subagents; collection coverage unknown.".into()]
+            vec![empty_day::detail(ready.empty_day)]
         } else {
             estimate(t, EstimateGaps::of(ready.requests.values().flatten()))
         },
@@ -1094,7 +1110,14 @@ fn inspection_pages_for(
         ),
     ]);
     let (noncached, write) = resolved_counts(ready.requests.values().flatten());
-    for (index, (label, m)) in METRICS.iter().zip(&t.measured).enumerate() {
+    // FUP-02: a day with nothing recorded lists no token counts; zeros would
+    // read as no usage, which an empty day does not prove.
+    let measured = if t.attempts == 0 {
+        &[][..]
+    } else {
+        &t.measured[..]
+    };
+    for (index, (label, m)) in METRICS.iter().zip(measured).enumerate() {
         let n = match index {
             1 => noncached,
             3 => write,
@@ -1426,6 +1449,7 @@ fn inspection_pages_for(
         .any(ObservationQuote::is_plan);
     let overview = plain_overview(
         heading,
+        ready.empty_day,
         named,
         ready.requests.values().flatten(),
         outside,
@@ -1449,52 +1473,118 @@ fn inspection_pages_for(
     pages
 }
 
-/// The provider's display name ("Claude Account", "DeepSeek"), else its id.
-fn provider_name(id: &str) -> String {
+/// Built-in providers' names, by id.
+fn built_in_providers() -> &'static std::collections::HashMap<String, String> {
     static NAMES: std::sync::OnceLock<std::collections::HashMap<String, String>> =
         std::sync::OnceLock::new();
+    NAMES.get_or_init(|| {
+        codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None)
+            .into_iter()
+            .map(|(id, info)| (id, info.name))
+            .collect()
+    })
+}
+
+/// The provider's display name ("Claude Account", "DeepSeek"), else its id.
+fn provider_name(id: &str) -> String {
     if id.trim().is_empty() {
         return "Unknown provider".to_string();
     }
     // The built-in keeps its legacy brand name as an identity; the product,
     // and /providers, call it the Corbanu API.
-    if id == codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID {
-        return "Corbanu API".to_string();
+    // #352: both local providers share the built-in name "gpt-oss"; name
+    // them by the server that runs them.
+    match id {
+        codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID => return "Corbanu API".to_string(),
+        codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID => return "Ollama".to_string(),
+        codex_model_provider_info::LMSTUDIO_OSS_PROVIDER_ID => return "LM Studio".to_string(),
+        _ => {}
     }
-    NAMES
-        .get_or_init(|| {
-            codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None)
-                .into_iter()
-                .map(|(id, info)| (id, info.name))
-                .collect()
-        })
+    built_in_providers()
         .get(id)
         .cloned()
         .unwrap_or_else(|| id.to_string())
 }
 
-/// The model's catalogue display name ("GPT-6 Sol"), else its slug.
-fn model_name(slug: &str) -> String {
-    static NAMES: std::sync::OnceLock<std::collections::HashMap<String, String>> =
-        std::sync::OnceLock::new();
+/// The built-in provider a route belongs to: an Anthropic-wire route, or an
+/// alias, is its operator's.
+fn operator(id: &str) -> &str {
+    use codex_model_provider_info as ids;
+    match ids::canonical_provider_id(id) {
+        ids::ZAI_ANTHROPIC_PROVIDER_ID => ids::ZAI_PROVIDER_ID,
+        ids::OPENROUTER_ANTHROPIC_PROVIDER_ID => ids::OPENROUTER_PROVIDER_ID,
+        ids::BASETEN_ANTHROPIC_PROVIDER_ID => ids::BASETEN_PROVIDER_ID,
+        ids::VERCEL_ANTHROPIC_PROVIDER_ID | ids::VERCEL_ANTHROPIC_FAST_PROVIDER_ID => {
+            ids::VERCEL_PROVIDER_ID
+        }
+        ids::PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID => ids::PFTERMINAL_PLAN_PROVIDER_ID,
+        other => other,
+    }
+}
+
+/// The model's catalogue display name ("GPT-6 Sol"), else its slug. #352: a
+/// name that carries its route's brand ("Ambient GLM 5.2") is not the name of
+/// a row another operator served (`z-ai/glm-5.2` sent to OpenRouter), nor of
+/// one a provider you configured served: its id says nothing about whose model
+/// it serves. #1196: a name without a route brand ("Claude Opus 5.5") names
+/// the model on any route.
+fn model_name(provider: &str, slug: &str) -> String {
+    /// Display name and owning provider, by slug.
+    type Names = std::collections::HashMap<String, (String, Option<String>)>;
+    static NAMES: std::sync::OnceLock<Names> = std::sync::OnceLock::new();
     if slug.trim().is_empty() {
         return "unknown model".to_string();
     }
-    NAMES
+    match NAMES
         .get_or_init(|| {
             codex_models_manager::bundled_models_response()
                 .map(|catalog| {
                     catalog
                         .models
                         .into_iter()
-                        .map(|model| (model.slug, model.display_name))
+                        .map(|model| {
+                            let owner = model
+                                .orchestration
+                                .as_ref()
+                                .map(|orchestration| orchestration.provider_id().to_string());
+                            (model.slug, (model.display_name, owner))
+                        })
                         .collect()
                 })
                 .unwrap_or_default()
         })
         .get(slug)
-        .cloned()
-        .unwrap_or_else(|| slug.to_string())
+    {
+        Some((name, owner))
+            if owner.as_deref().is_none_or(|owner| {
+                operator(owner) == operator(provider) || !carries_route_brand(name, owner)
+            }) =>
+        {
+            name.clone()
+        }
+        _ => slug.to_string(),
+    }
+}
+
+/// Whether a catalogue name carries the brand of the route that owns its row:
+/// every word of the owning operator's built-in name is a word of it ("Z.AI
+/// GLM 5.2" for Z.AI, "Claude Opus 5.5 Plan" for Claude Plan), ignoring case.
+/// A word that names how a route sells the model ("Plan", "(Direct)",
+/// "Free") is a brand too, as are an empty name and an owner with no
+/// built-in name, so such names are never borrowed.
+fn carries_route_brand(name: &str, owner: &str) -> bool {
+    let Some(brand) = built_in_providers().get(operator(owner)) else {
+        return true;
+    };
+    let words: std::collections::HashSet<String> =
+        name.split_whitespace().map(str::to_lowercase).collect();
+    words.is_empty()
+        || ["plan", "(direct)", "free"]
+            .iter()
+            .any(|word| words.contains(*word))
+        || brand
+            .split_whitespace()
+            .all(|word| words.contains(&word.to_lowercase()))
 }
 
 /// "Provider · Model", or "Provider · account NAME · Model" where the view
@@ -1505,13 +1595,13 @@ fn route_name_in(quote: &ObservationQuote, named: bool) -> String {
             "{} · account {} · {}",
             provider_name(&quote.attempt.provider),
             quote.attempt.account_name(),
-            model_name(&quote.attempt.model)
+            model_name(&quote.attempt.provider, &quote.attempt.model)
         )
     } else {
         format!(
             "{} · {}",
             provider_name(&quote.attempt.provider),
-            model_name(&quote.attempt.model)
+            model_name(&quote.attempt.provider, &quote.attempt.model)
         )
     }
 }
@@ -1587,6 +1677,11 @@ fn basis_text(quote: &ObservationQuote) -> String {
     };
     match snapshot.basis_source {
         codex_state::accounting::BasisSource::UserConfig => format!("{basis} (set in your config)"),
+        // #352: the source is recorded on every attempt; say it either way.
+        // An undeclared basis has no default to name.
+        codex_state::accounting::BasisSource::BuiltIn if quote.basis() != Basis::Undeclared => {
+            format!("{basis} (built-in default)")
+        }
         codex_state::accounting::BasisSource::BuiltIn => basis.to_string(),
     }
 }
@@ -1594,7 +1689,9 @@ fn basis_text(quote: &ObservationQuote) -> String {
 /// #396: the basis inside a sentence that already ends in it, without a
 /// second pair of parentheses: "pay per use; set in your config".
 fn basis_clause(quote: &ObservationQuote) -> String {
-    basis_text(quote).replace(" (set in your config)", "; set in your config")
+    basis_text(quote)
+        .replace(" (set in your config)", "; set in your config")
+        .replace(" (built-in default)", "; built-in default")
 }
 /// #403: the turn-label prefix core gives the warm-up a reopened or forked
 /// conversation sends (core `accounting::REOPEN_PREWARM_LABEL`, pinned by
@@ -1615,7 +1712,8 @@ const REOPEN_WARMUP_KIND: &str = "Kind: Reopen warm-up — sent when this conver
 /// `accounting::REALTIME_SESSION_LABEL`, pinned by core's
 /// `realtime_session_label_is_stable`); a label can carry an owner prefix
 /// before it, such as `side:`. A WebRTC call (`realtime:` alone) is recorded
-/// at its creation and is not named a session here.
+/// at its creation and is not named a session here: the end it may carry
+/// (#955) is its client control channel's, not the media call's.
 const REALTIME_SESSION_LABEL: &str = "realtime:ws:";
 
 /// Whether this attempt is a realtime WebSocket session.
@@ -1681,26 +1779,30 @@ fn realtime_session_line<'a>(
 fn reopen_warmup_line<'a>(
     quotes: impl IntoIterator<Item = &'a ObservationQuote>,
 ) -> Option<String> {
+    let (warmups, requests) = reopen_warmups(quotes);
+    if requests == 0 {
+        return None;
+    }
+    let noun = if requests == 1 { "request" } else { "requests" };
+    Some(format!(
+        "Reopen warm-up: {requests} {noun}, {}. Sent when this conversation was reopened or forked, to prime the model's cache.",
+        short_cost(&warmups)
+    ))
+}
+
+/// The reopen warm-up attempts among `quotes`, and how many requests they are.
+fn reopen_warmups<'a>(
+    quotes: impl IntoIterator<Item = &'a ObservationQuote>,
+) -> (Vec<&'a ObservationQuote>, usize) {
     let warmups: Vec<&ObservationQuote> = quotes
         .into_iter()
         .filter(|quote| quote.attempt.turn.contains(REOPEN_PREWARM_LABEL))
         .collect();
-    if warmups.is_empty() {
-        return None;
-    }
     let mut requests: Vec<Uuid> = warmups.iter().map(|q| q.attempt.request_id).collect();
     requests.sort_unstable();
     requests.dedup();
-    let noun = if requests.len() == 1 {
-        "request"
-    } else {
-        "requests"
-    };
-    Some(format!(
-        "Reopen warm-up: {} {noun}, {}. Sent when this conversation was reopened or forked, to prime the model's cache.",
-        requests.len(),
-        short_cost(&warmups)
-    ))
+    let count = requests.len();
+    (warmups, count)
 }
 
 const NO_PRICE: &str = "Estimated cost: no price available";
@@ -1895,7 +1997,7 @@ fn plain_billing(
         ),
         (None, None, Some(local), None) => (LOCAL, local),
         (None, None, None, Some(undeclared)) => (NOT_DECLARED, undeclared),
-        (None, None, None, None) => (PAY_PER_USE, "No requests".to_string()),
+        (None, None, None, None) => (PAY_PER_USE, "Nothing recorded".to_string()),
         (per_use, covered, local, undeclared) => (
             "Mixed",
             [
@@ -1914,12 +2016,18 @@ fn plain_billing(
 
 /// Total tokens, or input plus output where a provider reports no total.
 fn plain_tokens(t: &codex_state::accounting::DayTotals) -> String {
-    let [input, _, _, _, output, _, total] = &t.measured;
+    let [input, noncached, read, write, output, _, total] = &t.measured;
     let (known, unknown) = if total.unknown == 0 {
         (total.known, 0)
     } else {
+        // An unknown input total (a missing cache-write count, say) still has
+        // the parts the provider reported; both are lower bounds of the input.
+        let input_parts = noncached
+            .known
+            .saturating_add(read.known)
+            .saturating_add(write.known);
         (
-            input.known.saturating_add(output.known),
+            input.known.max(input_parts).saturating_add(output.known),
             input.unknown.max(output.unknown),
         )
     };
@@ -2237,7 +2345,7 @@ fn plain_header(quotes: &[&ObservationQuote], named: bool) -> Vec<String> {
         let route = (
             provider_name(&quote.attempt.provider),
             quote.attempt.account_name().to_string(),
-            model_name(&quote.attempt.model),
+            model_name(&quote.attempt.provider, &quote.attempt.model),
         );
         if !routes.contains(&route) {
             routes.push(route);
@@ -2370,6 +2478,7 @@ fn route_line(quotes: &[&ObservationQuote], named: bool) -> String {
 /// rather than showing nothing, so it never reads as a zero-cost day.
 fn plain_overview<'a>(
     heading: String,
+    empty: Option<codex_state::accounting::EmptyDay>,
     named: bool,
     quotes: impl IntoIterator<Item = &'a ObservationQuote>,
     outside: Vec<String>,
@@ -2378,7 +2487,7 @@ fn plain_overview<'a>(
 ) -> Vec<String> {
     let groups = by_route(quotes);
     let mut lines = if groups.is_empty() {
-        vec![format!("{heading} no recorded requests.")]
+        empty_day::overview(&heading, empty)
     } else {
         vec![heading]
     };
@@ -2542,367 +2651,6 @@ fn attempt_count(n: usize) -> String {
 
 fn interval(start: i64, end: i64) -> String {
     format!("[{}, {})", utc_instant(start), utc_instant(end))
-}
-
-/// A range bucket that the read time cuts short. Nothing is recorded after
-/// the ledger's checkpoint (inspection refuses such a request), so neither is
-/// missing anything; a bucket cut short by the requested range, retention or
-/// unverified days stays partial.
-#[derive(Clone, Copy)]
-enum Progress {
-    /// Still running: everything recorded up to this coverage end.
-    InProgress(i64),
-    /// Starts after the read time.
-    NotStarted,
-}
-
-fn progress(
-    requested: InspectionRange,
-    read_at: i64,
-    bucket: &codex_state::accounting::InspectionBucket,
-) -> Option<Progress> {
-    if bucket.start_ms > read_at {
-        return Some(Progress::NotStarted);
-    }
-    let (start, end) = bucket.effective?;
-    let first_day = start / 86_400_000;
-    (bucket.partial
-        && bucket.end_ms > read_at
-        && requested.end_ms > read_at
-        && start == bucket.start_ms
-        && bucket
-            .days
-            .iter()
-            .zip(first_day..)
-            .all(|(state, day)| match state {
-                InspectionDay::Ready(_) => true,
-                // A day after the coverage end has nothing recorded yet.
-                InspectionDay::CheckpointLag => day * 86_400_000 >= end,
-                _ => false,
-            }))
-    .then_some(Progress::InProgress(end))
-}
-
-const NOT_STARTED: &str = "Not started yet — it starts after this view was read.";
-const NOT_CURRENT: &str = "Snapshot is not current; newer activity is unverified";
-
-fn in_progress_line(end: i64) -> String {
-    format!(
-        "In progress — totals so far, recorded through {}",
-        utc_instant(end - 1)
-    )
-}
-
-fn range_pages(
-    requested: InspectionRange,
-    aggregate_day_floor: Option<i64>,
-    read_at: i64,
-    buckets: Vec<codex_state::accounting::InspectionBucket>,
-) -> Vec<InspectorPage> {
-    let mut context = vec![
-        format!(
-            "Requested: {}; timezone: UTC; grouping: {:?}",
-            interval(requested.start_ms, requested.end_ms),
-            requested.grouping
-        ),
-        format!(
-            "Retention: request detail kept since {}; daily totals {}",
-            read_at
-                .checked_sub(90 * 86_400_000)
-                .filter(|v| *v >= 0)
-                .map_or_else(|| "the start".to_string(), utc_instant),
-            aggregate_day_floor.map_or_else(
-                || "kept: not known yet".to_string(),
-                |day| format!("kept since {}", utc_date(day))
-            )
-        ),
-        "Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns.".into(),
-    ];
-    let progress: Vec<_> = buckets
-        .iter()
-        .map(|b| progress(requested, read_at, b))
-        .collect();
-    // Days not reached yet say nothing about the range: those of a bucket not
-    // started, and those of an in-progress bucket after its coverage end.
-    let states = buckets
-        .iter()
-        .zip(&progress)
-        .flat_map(|(b, progress)| {
-            b.days.iter().filter(move |d| match progress {
-                None => true,
-                Some(Progress::InProgress(_)) => !matches!(d, InspectionDay::CheckpointLag),
-                Some(Progress::NotStarted) => false,
-            })
-        })
-        .collect::<Vec<_>>();
-    // Every day shares one checkpoint. With a bucket in progress, a ledger
-    // behind the read time is that bucket's "recorded through", not a gap.
-    let running = progress
-        .iter()
-        .any(|p| matches!(p, Some(Progress::InProgress(_))));
-    if states
-        .iter()
-        .any(|s| matches!(s, InspectionDay::NeedsRefresh))
-    {
-        context.push("Recorded totals unavailable — stored contributions need refresh".into());
-    } else if states.iter().any(|s| match s {
-        InspectionDay::CheckpointLag => true,
-        InspectionDay::Ready(v) => v.read_at_ms > v.coverage.completed_as_of_ms && !running,
-        InspectionDay::DetailUnavailable {
-            coverage,
-            read_at_ms,
-            ..
-        } => *read_at_ms > coverage.completed_as_of_ms && !running,
-        _ => false,
-    }) {
-        context.push(NOT_CURRENT.into());
-    }
-    let (unknown_attempts, unavailable_entries) = states
-        .iter()
-        .filter_map(|state| match state {
-            InspectionDay::Ready(view) => Some(view),
-            _ => None,
-        })
-        .fold((0, 0), |(attempts, unavailable), view| {
-            (
-                attempts + view.unknown_parent_totals.attempts,
-                unavailable + view.unknown_parent_unavailable_threads,
-            )
-        });
-    context.push(format!(
-        "Range: Unknown parent population: {unknown_attempts} inspectable attempts, excluded from range total"
-    ));
-    if unavailable_entries > 0 {
-        context.push(format!(
-            "Range: Unresolved ancestry: {unavailable_entries} thread-slice entries have unavailable detail; their costs and retention coverage are unknown and excluded from this root."
-        ));
-    }
-    if states.iter().any(|s| !matches!(s, InspectionDay::Ready(_))) {
-        context.push("Ancestry counts cover inspectable slices only; unavailable slices may contain additional unknown ancestry.".into());
-    }
-    let mut pages = vec![InspectorPage {
-        title: "Recorded request range".into(),
-        text: context.clone(),
-        links: vec![],
-        parent: None,
-        selected: Arc::default(),
-    }];
-    pages[0].text.extend(scope::other_conversations_lines(
-        /*others*/ None, /*named*/ false,
-    ));
-    let complete = buckets.iter().zip(&progress).all(|(b, progress)| {
-        progress.is_some()
-            || (!b.partial && b.days.iter().all(|d| matches!(d, InspectionDay::Ready(_))))
-    });
-    if complete {
-        if let Some(end) = progress
-            .iter()
-            .filter_map(|p| match p {
-                Some(Progress::InProgress(end)) => Some(*end),
-                _ => None,
-            })
-            .max()
-        {
-            pages[0].text.push(in_progress_line(end));
-        }
-        let quotes = buckets
-            .iter()
-            .flat_map(|b| &b.days)
-            .filter_map(|d| match d {
-                InspectionDay::Ready(v) => Some(v),
-                _ => None,
-            })
-            .flat_map(|v| v.requests.values().flatten());
-        let mut named = unpriced_rows(quotes.clone(), names_accounts(quotes.clone()));
-        named.extend(scope::no_price_next_step(quotes.clone()));
-        named.extend(billed_line(&quotes.clone().collect::<Vec<_>>()));
-        named.extend(scope::overflow_note(quotes.clone()));
-        let gaps = EstimateGaps::of(quotes.clone());
-        match codex_state::accounting::DayTotals::from_quotes(quotes) {
-            Ok(total) => {
-                pages[0].text.extend(estimate(&total, gaps));
-                pages[0].text.extend(named);
-            }
-            // A total this client cannot compute does not unsay which attempts
-            // went unpriced; that is a separate statement about the same rows.
-            Err(_) => {
-                pages[0]
-                    .text
-                    .push("Range total unavailable — arithmetic overflow".into());
-                pages[0].text.extend(named);
-            }
-        }
-    } else {
-        pages[0].text.push(
-            "Range total unavailable — partial or unavailable buckets excluded; no partial total."
-                .into(),
-        );
-    }
-    for (bucket, progress) in buckets.into_iter().zip(progress) {
-        let bounds = interval(bucket.start_ms, bucket.end_ms);
-        let effective = match (bucket.effective, progress) {
-            (Some((s, e)), _) => interval(s, e),
-            (None, Some(Progress::NotStarted)) => "not started".into(),
-            (None, _) => "unavailable".into(),
-        };
-        let mut header = context.clone();
-        header.push(format!(
-            "Bucket: {bounds}; effective coverage (requested ∩ aggregate retention ∩ snapshot): {effective}"
-        ));
-        header.push(match progress {
-            Some(Progress::InProgress(end)) => in_progress_line(end),
-            Some(Progress::NotStarted) => NOT_STARTED.into(),
-            None if bucket.partial => "Partial bucket — excluded from totals".into(),
-            None => "Whole bucket within aggregate retention coverage; detail availability checked separately".into(),
-        });
-        pages[0].text.push(format!(
-            "Effective coverage (requested ∩ aggregate retention ∩ snapshot) for {bounds}: {effective}"
-        ));
-        let mut merged: Option<codex_state::accounting::Inspection> = None;
-        let mut diagnostics = Vec::new();
-        let mut detail_unavailable = false;
-        for day in bucket.days {
-            match day {
-                InspectionDay::Ready(view) => {
-                    if let Some(target) = &mut merged {
-                        for (id, quotes) in view.requests {
-                            target.requests.entry(id).or_default().extend(quotes);
-                        }
-                        for (id, quotes) in view.unknown_parent_requests {
-                            target
-                                .unknown_parent_requests
-                                .entry(id)
-                                .or_default()
-                                .extend(quotes);
-                        }
-                        target.unknown_parent_unavailable_threads +=
-                            view.unknown_parent_unavailable_threads;
-                    } else {
-                        merged = Some(view);
-                    }
-                }
-                // Days not reached yet have nothing to report.
-                InspectionDay::CheckpointLag if progress.is_some() => {}
-                other => {
-                    detail_unavailable |= matches!(other, InspectionDay::DetailUnavailable { .. });
-                    diagnostics.extend(inspection_pages(Ok(other)).remove(0).text);
-                }
-            }
-        }
-        let available = diagnostics.is_empty();
-        header.extend(diagnostics);
-        if detail_unavailable {
-            header.push(format!("Precision unsupported outside retained raw detail; compacted days lost request/provider attribution. No bucket total. Whole UTC-day bounds offered: {}; this does not restore attribution.", interval(requested.start_ms / 86_400_000 * 86_400_000, ((requested.end_ms - 1) / 86_400_000 + 1) * 86_400_000)));
-        }
-        let offset = pages.len();
-        pages[0].links.push((
-            format!(
-                "{:?} {bounds}{}",
-                requested.grouping,
-                match progress {
-                    Some(Progress::InProgress(_)) => " (in progress)",
-                    Some(Progress::NotStarted) => " (not started)",
-                    None => "",
-                }
-            ),
-            offset,
-        ));
-        let mut children = if matches!(progress, Some(Progress::NotStarted)) {
-            vec![InspectorPage {
-                title: "Not started yet".into(),
-                text: vec![],
-                links: vec![],
-                parent: None,
-                selected: Arc::default(),
-            }]
-        } else if (!bucket.partial || progress.is_some()) && available {
-            if let Some(mut view) = merged {
-                let recalculate = (|| -> anyhow::Result<()> {
-                    view.totals = codex_state::accounting::DayTotals::from_quotes(
-                        view.requests.values().flatten(),
-                    )?;
-                    view.own_totals = codex_state::accounting::DayTotals::from_quotes(
-                        view.requests
-                            .values()
-                            .flatten()
-                            .filter(|q| q.attempt.thread_id == view.owner),
-                    )?;
-                    view.descendant_totals = codex_state::accounting::DayTotals::from_quotes(
-                        view.requests
-                            .values()
-                            .flatten()
-                            .filter(|q| q.attempt.thread_id != view.owner),
-                    )?;
-                    view.unknown_parent_totals = codex_state::accounting::DayTotals::from_quotes(
-                        view.unknown_parent_requests.values().flatten(),
-                    )?;
-                    Ok(())
-                })();
-                match recalculate {
-                    // The merged view keeps its first day's `utc_day`;
-                    // the heading names the whole bucket instead.
-                    Ok(()) if progress.is_some() => {
-                        let mut pages = inspection_pages_for(
-                            Ok(InspectionDay::Ready(view)),
-                            Some(format!("so far in {bounds}")),
-                        );
-                        pages[0].title = "Cost so far — this conversation".into();
-                        for page in &mut pages {
-                            page.text.retain(|line| line != NOT_CURRENT);
-                        }
-                        pages
-                    }
-                    Ok(()) => {
-                        inspection_pages_for(Ok(InspectionDay::Ready(view)), Some(bounds.clone()))
-                    }
-                    Err(_) => inspection_pages(Err(
-                        "Bucket total unavailable — arithmetic overflow".into(),
-                    )),
-                }
-            } else {
-                inspection_pages(Err("Effective detail unavailable".into()))
-            }
-        } else {
-            vec![InspectorPage {
-                title: "Bucket unavailable".into(),
-                text: vec![],
-                links: vec![],
-                parent: None,
-                selected: Arc::default(),
-            }]
-        };
-        for child in &mut children {
-            child.text.retain(|t| !t.starts_with(DAY_COVERED));
-            child.text.splice(0..0, header.clone());
-            for text in &mut child.text {
-                *text = text
-                    .replace(
-                        "this UTC day",
-                        if requested.grouping == InspectionGrouping::Hour {
-                            "this UTC hour"
-                        } else {
-                            "this bucket"
-                        },
-                    )
-                    .replace("attempts on other days", "attempts outside this bucket")
-                    .replace(
-                        "threads have unavailable day detail",
-                        "thread-day entries have unavailable detail",
-                    );
-                if text.starts_with("Unknown parent population:")
-                    || text.starts_with("Unresolved ancestry:")
-                {
-                    *text = format!("Bucket: {text}");
-                }
-            }
-            child.parent = Some(child.parent.map_or(0, |p| p + offset));
-            for (_, target) in &mut child.links {
-                *target += offset;
-            }
-        }
-        pages.extend(children);
-    }
-    pages
 }
 
 impl Inspector {
@@ -3263,6 +3011,10 @@ impl ChatWidget {
 #[cfg(test)]
 #[path = "tokens_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tokens_checkpoint_tests.rs"]
+mod checkpoint_tests;
 
 #[cfg(test)]
 #[path = "tokens/code_review_tests.rs"]

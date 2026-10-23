@@ -623,7 +623,9 @@ async fn accounting_inspect_work_budget_spans_range_buckets() -> anyhow::Result<
             ready(AccountingStore::inspect_day(&runtime, a.thread_id, day, 3 * DAY).await?);
         assert_eq!(view.totals.attempts, i64::from(day == 0));
         // Range buckets do not read other conversations; the day view does.
+        // #1196: both classify an empty day.
         assert!(view.other_conversations.take().is_some());
+        assert_eq!(view.empty_day.is_some(), day != 0);
         days.push(InspectionDay::Ready(view));
     }
     let range = AccountingStore::inspect_range(
@@ -706,6 +708,8 @@ async fn accounting_inspect_whole_store_denominator_thresholds() -> anyhow::Resu
     for (count, day, expected_attempts) in [
         (95_236i64, 91, Some(8)),
         (95_237, 91, None),
+        // FUP-02's start-time scan for an empty day runs only with budget to
+        // spare, so it moves neither threshold.
         (571_428, 92, Some(0)),
         (571_429, 92, None),
     ] {

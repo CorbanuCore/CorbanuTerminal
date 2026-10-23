@@ -131,14 +131,14 @@ async fn session_approved_hosts_are_scoped_by_environment() {
         .session_approved_hosts
         .lock()
         .await
-        .insert(local_key);
+        .insert(local_key, /*shown_under*/ None, /*current*/ None);
 
     assert!(
         !service
             .session_approved_hosts
             .lock()
             .await
-            .contains(&remote_key)
+            .contains(&remote_key, /*current*/ None)
     );
 }
 
@@ -147,7 +147,7 @@ async fn session_approved_hosts_preserve_protocol_and_port_scope() {
     let source = NetworkApprovalService::default();
     {
         let mut approved_hosts = source.session_approved_hosts.lock().await;
-        approved_hosts.extend([
+        approved_hosts.hosts.extend([
             HostApprovalKey {
                 environment_id: "local".to_string(),
                 host: "example.com".to_string(),
@@ -170,12 +170,17 @@ async fn session_approved_hosts_preserve_protocol_and_port_scope() {
     }
 
     let seeded = NetworkApprovalService::default();
-    source.sync_session_approved_hosts_to(&seeded).await;
+    source
+        .sync_session_approved_hosts_to(
+            &seeded, /*source_policy*/ None, /*target_policy*/ None,
+        )
+        .await;
 
     let mut copied = seeded
         .session_approved_hosts
         .lock()
         .await
+        .hosts
         .iter()
         .cloned()
         .collect::<Vec<_>>();
@@ -218,7 +223,7 @@ async fn sync_session_approved_hosts_to_replaces_existing_target_hosts() {
     let source = NetworkApprovalService::default();
     {
         let mut approved_hosts = source.session_approved_hosts.lock().await;
-        approved_hosts.insert(HostApprovalKey {
+        approved_hosts.hosts.insert(HostApprovalKey {
             environment_id: "local".to_string(),
             host: "source.example.com".to_string(),
             protocol: "https",
@@ -229,7 +234,7 @@ async fn sync_session_approved_hosts_to_replaces_existing_target_hosts() {
     let target = NetworkApprovalService::default();
     {
         let mut approved_hosts = target.session_approved_hosts.lock().await;
-        approved_hosts.insert(HostApprovalKey {
+        approved_hosts.hosts.insert(HostApprovalKey {
             environment_id: "local".to_string(),
             host: "stale.example.com".to_string(),
             protocol: "https",
@@ -237,12 +242,17 @@ async fn sync_session_approved_hosts_to_replaces_existing_target_hosts() {
         });
     }
 
-    source.sync_session_approved_hosts_to(&target).await;
+    source
+        .sync_session_approved_hosts_to(
+            &target, /*source_policy*/ None, /*target_policy*/ None,
+        )
+        .await;
 
     let copied = target
         .session_approved_hosts
         .lock()
         .await
+        .hosts
         .iter()
         .cloned()
         .collect::<Vec<_>>();

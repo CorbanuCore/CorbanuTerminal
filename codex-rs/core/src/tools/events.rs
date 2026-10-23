@@ -413,6 +413,7 @@ impl ToolEmitter {
         let user_namespace = crate::security::user_namespaces::denial_explanation(
             ctx.session,
             ctx.turn,
+            ctx.call_id,
             Some(output.exit_code),
             &output.aggregated_output.text,
         );

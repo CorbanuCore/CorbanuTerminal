@@ -149,7 +149,7 @@ async fn exact_boundaries_replay_shared_prices_and_two_reopens() -> anyhow::Resu
                 if time >= REPLAY_MS {
                     "expired replay"
                 } else {
-                    "unsupported compact-only"
+                    "compact-only late imports are unsupported"
                 },
             )
             .await?;
@@ -711,7 +711,7 @@ async fn four_real_writer_orders_and_reader_snapshot_transfer() -> anyhow::Resul
                     .run(&attach(&other), &a, DETAIL_MS)
                     .await
                     .unwrap_err(),
-                "unsupported compact-only",
+                "compact-only late imports are unsupported",
             );
             assert_eq!(rows(&other).await?, before_retry);
         } else {
@@ -1322,7 +1322,7 @@ async fn transferred_replay_suppression_survives_two_reopens_without_setup() -> 
             &store,
             &a,
             &[row(&a, /*revision*/ 2, /*input*/ 60)],
-            "unsupported compact-only",
+            "compact-only late imports are unsupported",
         )
         .await?;
         rejected(&store, &attempt(/*id*/ 1, time), &[], "deleted attempt").await?;
@@ -1330,7 +1330,7 @@ async fn transferred_replay_suppression_survives_two_reopens_without_setup() -> 
             &store,
             &attempt(/*id*/ 99, /*dispatch*/ 0),
             &[],
-            "unsupported compact-only",
+            "compact-only late imports are unsupported",
         )
         .await?;
         let mut retry = attempt(/*id*/ 99, time);

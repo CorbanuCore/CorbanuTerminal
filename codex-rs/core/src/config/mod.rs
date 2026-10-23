@@ -190,7 +190,10 @@ pub use provider_accounts::apply_recorded_provider_account;
 pub(crate) use provider_accounts::configured_account_names;
 pub use provider_accounts::default_login_restriction_error;
 pub use provider_accounts::other_provider_account_error;
+pub(crate) use provider_accounts::restore_recorded_agent_account;
+pub(crate) use provider_accounts::resume_default_key_error;
 pub use provider_accounts::session_account_error;
+pub(crate) use provider_accounts::spawn_default_key_error;
 pub use provider_accounts::split_account_selection;
 pub(crate) use provider_accounts::stamp_provider_account;
 pub use provider_accounts::subagent_account_error;
@@ -1258,6 +1261,13 @@ pub struct Config {
     /// (#403). A new conversation still does.
     pub skip_reopen_warmup: bool,
 
+    /// #1038: this new conversation continues a saved one whose first
+    /// message the person edited. Its warm-up is a reopen warm-up (#403),
+    /// as when a later message is edited. Set per thread, never from TOML;
+    /// read once at session start. Agents spawned from this config inherit
+    /// it to no effect: only a root session can be a reopen.
+    pub reopened_by_prompt_edit: bool,
+
     /// The currently active project config, resolved by checking if cwd:
     /// is (1) part of a git repo, (2) a git worktree, or (3) just using the cwd
     pub active_project: ProjectConfig,
@@ -2000,6 +2010,13 @@ impl Config {
     /// Whether the `named_accounts` feature is on.
     pub fn named_accounts_enabled(&self) -> bool {
         self.features.enabled(Feature::NamedAccounts)
+    }
+
+    /// PF-84 (#1085): whether this home uses named OpenAI sign-in accounts
+    /// (one is enrolled, or `[provider_accounts]` selects one). Blocking: an
+    /// initialised vault is decrypted to read its account metadata.
+    pub fn uses_named_sign_in_accounts(&self) -> bool {
+        provider_accounts::uses_named_sign_in_accounts(&self.codex_home, &self.model_providers)
     }
 
     /// Creates the HTTP client factory resolved from the effective feature configuration.
@@ -3023,6 +3040,8 @@ pub struct ConfigOverrides {
     /// `provider_account` beats it only when both name the same provider, so
     /// another provider's explicit account never drops it (#425).
     pub inherited_provider_account: Option<String>,
+    /// #1038: see [`Config::reopened_by_prompt_edit`].
+    pub reopened_by_prompt_edit: bool,
 }
 
 fn dedupe_absolute_paths(paths: &mut Vec<AbsolutePathBuf>) {
@@ -3773,6 +3792,7 @@ impl Config {
             workspace_roots: workspace_roots_override,
             provider_account: provider_account_override,
             inherited_provider_account,
+            reopened_by_prompt_edit,
         } = overrides;
         let bypass_hook_trust = bypass_hook_trust.unwrap_or_default();
 
@@ -5155,6 +5175,7 @@ impl Config {
                 .suppress_unstable_features_warning
                 .unwrap_or(false),
             skip_reopen_warmup: cfg.skip_reopen_warmup.unwrap_or(false),
+            reopened_by_prompt_edit,
             active_project,
             notices,
             check_for_update_on_startup,

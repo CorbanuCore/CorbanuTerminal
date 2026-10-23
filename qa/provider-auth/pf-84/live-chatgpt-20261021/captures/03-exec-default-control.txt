@@ -1,0 +1,19 @@
+$ corbanu exec --skip-git-repo-check -s read-only --ephemeral -m gpt-5.6-luna "Reply with exactly: PF84-LIVE-OK"   (no --account: default login = fake API key)
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: <L>/work
+model: gpt-5.6-luna
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: none
+reasoning summaries: none
+session id: 01a15d9f-6cb3-7e92-b479-5dc1cb2f5118
+--------
+user
+Reply with exactly: PF84-LIVE-OK
+2026-10-21T08:41:32.242904Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses
+2026-10-21T08:41:32.737993Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses
+ERROR: unexpected status 401 Unauthorized: Incorrect API key provided: <fake-key>. You can find your API key at https://platform.openai.com/account/api-keys., url: wss://api.openai.com/v1/responses, cf-ray: a4def6bb88c1f0ad-DFW, request id: req_27dba9760a704a4e8091eb111460fd59, auth error: 401, auth error code: invalid_api_key
+ERROR: unexpected status 401 Unauthorized: Incorrect API key provided: <fake-key>. You can find your API key at https://platform.openai.com/account/api-keys., url: wss://api.openai.com/v1/responses, cf-ray: a4def6bb88c1f0ad-DFW, request id: req_27dba9760a704a4e8091eb111460fd59, auth error: 401, auth error code: invalid_api_key

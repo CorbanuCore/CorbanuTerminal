@@ -1,0 +1,3 @@
+[restore-fix] processes for removed uids:        0
+[restore-fix] virtiofs mounted: 1
+/dev/disk0 on /Volumes/My Shared Files (AppleVirtIOFS, local, nodev, nosuid, automounted)

@@ -1,0 +1,277 @@
+### agms-probe: UTM targeted2 harness -> tart-par1
+--- agms-probe	2026-10-20 03:56:50
++++ /Volumes/CorbanuDrive/Corbanu/worktrees/tart-par1/qa/security-levels/milestones/moderate-tart-parity-20261020/harness/agms-probe	2026-10-20 00:59:53
+@@ -150,6 +150,9 @@
+     tcp_denied("network", "TCP to host SSH", ("192.168.64.1", 22))
+     tcp_denied("network", "loopback unrelated database", ("127.0.0.1", 5432))
+     tcp_denied("network", "loopback resolver", ("127.0.0.1", 53))
++    # qwen-1052: the reverse-tunnel ports (host Z.AI relay, host local-model gate) are the coordinator's only.
++    tcp_denied("network", "loopback tunnel to host Z.AI relay", ("127.0.0.1", 18601))
++    tcp_denied("network", "loopback tunnel to host local-model gate", ("127.0.0.1", 18602))
+     try:
+         socket.getaddrinfo("github.com", 443)
+         record("network", "resolve github.com", "resolution failure", "RESOLVED", False)
+@@ -172,6 +175,26 @@
+         record("network", "mediator non-inference path GET /", "403", line, " 403 " in line + " ")
+     except OSError as exc:
+         record("network", "mediator non-inference path GET /", "403", err_name(exc), False)
++    # qwen-1052: the local-model target forwards only its two inference paths.
++    for request in ("GET / ", "POST /v1/completions ", "GET /v1/models/x "):
++        name = "mediator non-inference path %sqwen.agms.test" % request
++        try:
++            sock, reply = proxy_connect("qwen.agms.test:443")
++            ctx = ssl.create_default_context(cafile="/opt/agms/etc/mediation-ca.pem")
++            tls = ctx.wrap_socket(sock, server_hostname="qwen.agms.test")
++            tls.sendall(("%sHTTP/1.1\r\nHost: qwen.agms.test\r\nContent-Length: 0\r\n\r\n" % request).encode())
++            line = tls.recv(200).decode("latin-1").split("\r\n", 1)[0]
++            tls.close()
++            record("network", name, "403", line, " 403 " in line + " ")
++        except OSError as exc:
++            record("network", name, "403", err_name(exc), False)
++    for target in ("qwen.agms.test:80", "127.0.0.1:18602"):
++        try:
++            sock, reply = proxy_connect(target)
++            sock.close()
++            record("network", "mediator CONNECT " + target, "403", reply, " 403 " in reply + " ")
++        except OSError as exc:
++            record("network", "mediator CONNECT " + target, "403", err_name(exc), False)
+     # package modification
+     open_denied("package", "open package binary for write", "/opt/agms/pkg/bin/corbanu", write=True)
+     try:
+### agms_mediator.py: UTM targeted2 harness -> tart-par1
+--- agms_mediator.py	2026-10-20 03:56:50
++++ /Volumes/CorbanuDrive/Corbanu/worktrees/tart-par1/qa/security-levels/milestones/moderate-tart-parity-20261020/harness/agms_mediator.py	2026-10-20 00:57:19
+@@ -1,9 +1,12 @@
+ """AGMS inference mediator (runs as the coordinator account, never as an executor).
+ 
+-Accepts HTTP CONNECT only for api.z.ai:443 on loopback, terminates TLS with a
+-campaign-local synthetic CA, forwards only allowlisted inference paths to the
+-real endpoint, and injects the transport credential that executors never see.
+-Logs method/path/status/model/tool names only: no headers, no bodies, no key.
++qwen-1052 (2026-10-20) version. Accepts HTTP CONNECT only for api.z.ai:443 and qwen.agms.test:443 on
++loopback, terminates TLS with a campaign-local synthetic CA and forwards only allowlisted inference paths
++as plain HTTP to two loopback ports that an SSH reverse tunnel carries to the host:
++  - api.z.ai        -> --zai-upstream  (host relay that adds the Z.AI key; no real key is in this guest)
++  - qwen.agms.test  -> --qwen-upstream (host gate in front of the owner's local model server)
++Credential headers from clients are dropped. Logs method/path/status/model/tool names only: no headers,
++no bodies, no key.
+ """
+ import argparse
+ import json
+@@ -13,9 +16,10 @@
+ import threading
+ import time
+ 
+-ALLOWED_TARGET = "api.z.ai:443"
+-UPSTREAM = ("api.z.ai", 443)
+-ALLOWED_PREFIXES = ("/api/paas/v4/", "/api/coding/paas/v4/", "/api/anthropic/")
++TARGETS = {
++    "api.z.ai:443": ("zai", ("/api/paas/v4/", "/api/coding/paas/v4/", "/api/anthropic/")),
++    "qwen.agms.test:443": ("qwen", ("/v1/chat/completions", "/v1/models")),
++}
+ DROP = {"authorization", "x-api-key", "proxy-authorization", "proxy-connection",
+         "connection", "keep-alive", "transfer-encoding", "content-length", "host", "te",
+         "upgrade"}
+@@ -70,6 +74,12 @@
+     return {"model": data.get("model"), "tools": tools, "stream": data.get("stream")}
+ 
+ 
++def allowed(name, prefixes, path):
++    if name == "qwen":
++        return path in prefixes
++    return path.startswith(prefixes)
++
++
+ class Handler(socketserver.StreamRequestHandler):
+     def handle(self):
+         cfg = self.server.cfg
+@@ -78,62 +88,57 @@
+         if not head:
+             return
+         parts = head[0].split()
+-        if len(parts) != 3 or parts[0] != "CONNECT" or parts[1] != ALLOWED_TARGET:
++        if len(parts) != 3 or parts[0] != "CONNECT" or parts[1] not in TARGETS:
+             log(cfg.log, {"event": "denied_proxy_request", "conn": conn_id,
+                           "request_line": head[0][:200]})
+             self.wfile.write(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+             return
++        name, prefixes = TARGETS[parts[1]]
+         self.wfile.write(b"HTTP/1.1 200 Connection established\r\n\r\n")
+         self.wfile.flush()
+         try:
+             tls = cfg.server_ctx.wrap_socket(self.connection, server_side=True)
+         except Exception as exc:
+-            log(cfg.log, {"event": "client_tls_error", "conn": conn_id, "error": repr(exc)[:200]})
++            log(cfg.log, {"event": "client_tls_error", "conn": conn_id, "target": name, "error": repr(exc)[:200]})
+             return
+         writer = tls.makefile("wb", buffering=0)
+         reader = tls.makefile("rb")
+         try:
+-            while True:
+-                head = read_head(reader)
+-                if not head:
+-                    return
+-                method, path, _ = head[0].split(" ", 2)
+-                headers = {}
+-                for line in head[1:]:
+-                    key, _, value = line.partition(":")
+-                    headers[key.strip().lower()] = value.strip()
+-                body = read_body(reader, headers)
+-                if not path.startswith(ALLOWED_PREFIXES) or method not in ("POST", "GET"):
+-                    log(cfg.log, {"event": "denied_path", "conn": conn_id, "method": method,
+-                                  "path": path[:200]})
+-                    writer.write(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+-                    return
+-                self.forward(cfg, conn_id, method, path, head, body, writer)
+-                # Upstream was asked to close; its response tells the client the same.
++            head = read_head(reader)
++            if not head:
+                 return
++            method, path, _ = head[0].split(" ", 2)
++            headers = {}
++            for line in head[1:]:
++                key, _, value = line.partition(":")
++                headers[key.strip().lower()] = value.strip()
++            body = read_body(reader, headers)
++            if not allowed(name, prefixes, path) or method not in ("POST", "GET"):
++                log(cfg.log, {"event": "denied_path", "conn": conn_id, "target": name, "method": method,
++                              "path": path[:200]})
++                writer.write(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
++                return
++            self.forward(cfg, conn_id, name, method, path, head, body, writer)
+         except Exception as exc:
+-            log(cfg.log, {"event": "session_error", "conn": conn_id, "error": repr(exc)[:200]})
++            log(cfg.log, {"event": "session_error", "conn": conn_id, "target": name, "error": repr(exc)[:200]})
+         finally:
+             try:
+                 tls.close()
+             except Exception:
+                 pass
+ 
+-    def forward(self, cfg, conn_id, method, path, head, body, writer):
++    def forward(self, cfg, conn_id, name, method, path, head, body, writer):
+         started = time.time()
+-        out = ["%s %s HTTP/1.1" % (method, path), "Host: api.z.ai"]
++        host, port = cfg.upstreams[name]
++        out = ["%s %s HTTP/1.1" % (method, path), "Host: %s:%d" % (host, port)]
+         for line in head[1:]:
+             key = line.partition(":")[0].strip().lower()
+             if key not in DROP:
+                 out.append(line)
+-        out.append("Authorization: Bearer " + cfg.key)
+-        if path.startswith("/api/anthropic/"):
+-            out.append("x-api-key: " + cfg.key)
+         out.append("Content-Length: %d" % len(body))
+         out.append("Connection: close")
+         raw = ("\r\n".join(out) + "\r\n\r\n").encode("latin-1") + body
+-        upstream = cfg.client_ctx.wrap_socket(
+-            socket.create_connection(UPSTREAM, timeout=600), server_hostname=UPSTREAM[0])
++        upstream = socket.create_connection((host, port), timeout=1800)
+         status = None
+         total = 0
+         try:
+@@ -150,7 +155,7 @@
+                 writer.write(chunk)
+         finally:
+             upstream.close()
+-        row = {"event": "forwarded", "conn": conn_id, "method": method, "path": path,
++        row = {"event": "forwarded", "conn": conn_id, "target": name, "method": method, "path": path,
+                "status": status, "response_bytes": total, "request_bytes": len(body),
+                "seconds": round(time.time() - started, 3)}
+         row.update(summarize(body))
+@@ -164,13 +169,20 @@
+     daemon_threads = True
+ 
+ 
++def hostport(text):
++    host, _, port = text.rpartition(":")
++    if host != "127.0.0.1":
++        raise argparse.ArgumentTypeError("upstreams must be on 127.0.0.1")
++    return host, int(port)
++
++
+ def main():
+     parser = argparse.ArgumentParser()
+     parser.add_argument("--port", type=int, required=True)
+-    parser.add_argument("--key-file", required=True)
++    parser.add_argument("--zai-upstream", type=hostport, required=True)
++    parser.add_argument("--qwen-upstream", type=hostport, required=True)
+     parser.add_argument("--cert", required=True)
+     parser.add_argument("--cert-key", required=True)
+-    parser.add_argument("--upstream-ca", required=True)
+     parser.add_argument("--log", required=True)
+     args = parser.parse_args()
+ 
+@@ -178,18 +190,16 @@
+         pass
+ 
+     cfg = Cfg()
+-    with open(args.key_file) as stream:
+-        cfg.key = stream.read().strip()
+     cfg.log = args.log
++    cfg.upstreams = {"zai": args.zai_upstream, "qwen": args.qwen_upstream}
+     cfg.server_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+     cfg.server_ctx.load_cert_chain(args.cert, args.cert_key)
+     cfg.server_ctx.set_alpn_protocols(["http/1.1"])
+-    cfg.client_ctx = ssl.create_default_context(cafile=args.upstream_ca)
+-    cfg.client_ctx.set_alpn_protocols(["http/1.1"])
+     server = Server(("127.0.0.1", args.port), Handler)
+     server.cfg = cfg
+-    log(cfg.log, {"event": "started", "port": args.port, "allowed_target": ALLOWED_TARGET,
+-                  "allowed_prefixes": list(ALLOWED_PREFIXES)})
++    log(cfg.log, {"event": "started", "port": args.port, "allowed_targets": sorted(TARGETS),
++                  "allowed_prefixes": {v[0]: list(v[1]) for v in TARGETS.values()},
++                  "upstreams": {k: "%s:%d" % v for k, v in cfg.upstreams.items()}})
+     server.serve_forever()
+ 
+ 
+### cap.sh: UTM targeted2 harness -> tart-par1
+--- cap.sh	2026-10-20 03:56:50
++++ /Volumes/CorbanuDrive/Corbanu/worktrees/tart-par1/qa/security-levels/milestones/moderate-tart-parity-20261020/harness/cap.sh	2026-10-20 04:04:41
+@@ -1,5 +1,8 @@
+ #!/bin/bash
+-# usage: cap.sh RUN_ID agms-tui-args...   (coordinator capture lane agmx0)
++# usage: cap.sh RUN_ID agms-tui-args...   (coordinator capture lane agmx0; packet screens and shakedown only, never a case)
++Q=/Volumes/CorbanuDrive/Corbanu/.codex-work/tart-par1-20261020
++export TART_QA_WORK=/Volumes/CorbanuDrive/Corbanu/.codex-work/tart-eval
++. /Volumes/CorbanuDrive/Corbanu/worktrees/tart-par1/scripts/qa/tart/lib.sh
+ R="$1"; shift
+ q=""; for a in "$@"; do q="$q '${a//\'/\'\\\'\'}'"; done
+-exec /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-targeted-20261019/h/vmssh.sh -n agent@192.168.64.3 "cd /tmp; sudo -n -u agmx0 -H /opt/agms/bin/agms-launch tui $R$q"
++exec ssh -n "${SSH_OPTS[@]}" "agent@$(cat $Q/${PAR_COMMON:-common}/vm-ip.txt)" "cd /tmp; sudo -n -u agmx0 -H /opt/agms/bin/agms-launch tui $R$q"
+### expected.json: UTM targeted2 harness -> tart-par1
+--- expected.json	2026-10-20 03:56:50
++++ /Volumes/CorbanuDrive/Corbanu/worktrees/tart-par1/qa/security-levels/milestones/moderate-tart-parity-20261020/harness/expected.json	2026-10-20 04:42:02
+@@ -1 +1 @@
+-{"binary_sha256": "95ee54cb7ce1bcd3566da613cb415e8677227cb5e11baac63d5a1bbfecf9e509", "packet_sha256": "64ecf9c951f89d645e0b2eb3243dd422c80436f24fadb4d9283a5daa97239c23"}
+\ No newline at end of file
++{"binary_sha256": "15cb32e9407cc346286d39f24514bb391027db10d2aceb12c1c2798e482c4ae6", "packet_sha256": "64ecf9c951f89d645e0b2eb3243dd422c80436f24fadb4d9283a5daa97239c23"}
+### setup-agent.sh: UTM targeted2 harness -> tart-par1
+--- setup-agent.sh	2026-10-20 03:56:50
++++ /Volumes/CorbanuDrive/Corbanu/worktrees/tart-par1/qa/security-levels/milestones/moderate-tart-parity-20261020/harness/setup-agent.sh	2026-10-20 00:59:53
+@@ -20,11 +20,14 @@
+ cp "$S/stage/h/agms_mediator.py" "$S/mediator/agms_mediator.py"
+ chmod 600 "$S/mediator/leaf.key" 2>/dev/null || true
+ test -s "$S/mediator/leaf.pem" && test -s "$S/mediator/leaf.key"
+-test -r /Users/agent/.pf83-auth/zai_api_key && echo "key file present (not read here)"
++# qwen-1052: no real key in this guest. A synthetic placeholder keeps the isolation probes' denial checks on the
++# same path; the host relay adds the real Z.AI key on the host side of the reverse tunnel.
++(umask 077; echo "agms-synthetic-placeholder-not-a-credential" > /Users/agent/.pf83-auth/zai_api_key)
++echo "transport key file: synthetic placeholder"
+ # 3. Coordinator tmux: mediator + guard + IPC canary.
+ $TM -S "$S/coord.sock" kill-server 2>/dev/null || true
+ $TM -S "$S/coord.sock" new-session -d -s mediator \
+-  "exec /usr/bin/python3 $S/mediator/agms_mediator.py --port 18443 --key-file /Users/agent/.pf83-auth/zai_api_key --cert $S/mediator/leaf.pem --cert-key $S/mediator/leaf.key --upstream-ca /etc/ssl/cert.pem --log $S/mediator/mediator.jsonl"
++  "exec /usr/bin/python3 $S/mediator/agms_mediator.py --port 18443 --zai-upstream 127.0.0.1:18601 --qwen-upstream 127.0.0.1:18602 --cert $S/mediator/leaf.pem --cert-key $S/mediator/leaf.key --log $S/mediator/mediator.jsonl"
+ # Re-run 2026-10-12: the guest sits at the login window (console owned by root), whose UI is a SecurityAgent
+ # process started at boot. That instance is recorded as the baseline; any other SecurityAgent process is flagged.
+ pgrep -x SecurityAgent | sort > "$S/guard-baseline-pids.txt" || true
+### dns-refuse.py: new in tart-par1 (not in the UTM harness)
+### env-manifest.sh: new in tart-par1 (not in the UTM harness)
+### fixture.tar.sha256: new in tart-par1 (not in the UTM harness)
+### gate_ok.py: new in tart-par1 (not in the UTM harness)
+### host_zai_relay.py: new in tart-par1 (not in the UTM harness)
+### make_stage.sh: new in tart-par1 (not in the UTM harness)
+### mediation-ca.pem: new in tart-par1 (not in the UTM harness)
+### seal-guest.sh: new in tart-par1 (not in the UTM harness)
+### tart-run.sh: new in tart-par1 (not in the UTM harness)

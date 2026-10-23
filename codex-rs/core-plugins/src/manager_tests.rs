@@ -2872,6 +2872,9 @@ async fn plugin_cache_ignores_unrelated_session_overrides() {
 
 #[tokio::test]
 async fn skill_snapshots_resolve_remote_plugin_identity_from_authoritative_source() {
+    // #981: the snapshot below would also list the developer's own
+    // `$HOME/.agents/skills`. Skip that root, as the core test harness does (#888).
+    codex_core_skills::loader::ignore_user_home_skills_for_tests(/*ignore*/ true);
     let mut duplicate_plugin = remote_installed_plugin("sample");
     duplicate_plugin.id = "plugins~Plugin_duplicate".to_string();
 

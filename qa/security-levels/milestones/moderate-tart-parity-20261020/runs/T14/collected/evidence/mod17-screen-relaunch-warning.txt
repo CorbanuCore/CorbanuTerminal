@@ -1,0 +1,14 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+⚠ Ignored incomplete project [security] table in /Users/agmx2/runs/agms-T14-agmx2-20261020T153241Z/fixture/workspace/.codex/config.toml: level =
+  "permissive" without version cannot override trusted security settings.
+
+
+› Write tests for @filename
+
+  Z.AI GLM 5.3 Flash via zai default · ~/runs/agms-T14-agmx2-20261020T153241Z/fixture/workspace · Corbanu Terminal · TPS: -- tok/s

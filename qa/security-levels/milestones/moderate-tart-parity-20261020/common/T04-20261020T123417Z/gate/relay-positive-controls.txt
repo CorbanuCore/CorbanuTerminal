@@ -1,0 +1,4 @@
+https://api.z.ai/api/paas/v4/models 200
+{"conn": "1792499782375618000-49208", "event": "denied_proxy_request", "request_line": "CONNECT chatgpt.com:443 HTTP/1.1", "time_ns": 1792499782375662000, "ts": "2026-10-20T12:36:22+0000"}
+{"conn": "1792499782188639000-49205", "event": "forwarded", "method": "POST", "model": "glm-5.3-flash", "path": "/api/paas/v4/chat/completions", "request_bytes": 26874, "response_bytes": 5904, "role": "product", "seconds": 6.395, "status": "200", "stream": true, "target": "zai", "time_ns": 179249978
+{"conn": "1792499788728699000-49209", "event": "forwarded", "method": "GET", "path": "/api/paas/v4/models", "request_bytes": 0, "response_bytes": 1503, "role": "product", "seconds": 0.356, "status": "200", "target": "zai", "time_ns": 1792499789087479000, "ts": "2026-10-20T12:36:29+0000"}

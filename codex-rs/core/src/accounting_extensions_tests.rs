@@ -43,7 +43,8 @@ async fn accounting_extension_client_records_its_own_request() -> anyhow::Result
         .await;
 
     let home = tempfile::tempdir()?;
-    let mut config = crate::session::tests::build_test_config(home.path()).await;
+    let test_cwd = tempfile::tempdir()?;
+    let mut config = crate::session::tests::build_test_config(home.path(), test_cwd.path()).await;
     config.model_provider = codex_model_provider_info::ModelProviderInfo {
         request_max_retries: Some(0),
         stream_max_retries: Some(0),
@@ -181,7 +182,8 @@ async fn accounting_extension_client_without_its_session_records_nothing() -> an
         .await;
 
     let home = tempfile::tempdir()?;
-    let mut config = crate::session::tests::build_test_config(home.path()).await;
+    let test_cwd = tempfile::tempdir()?;
+    let mut config = crate::session::tests::build_test_config(home.path(), test_cwd.path()).await;
     config.model_provider = codex_model_provider_info::ModelProviderInfo {
         request_max_retries: Some(0),
         stream_max_retries: Some(0),
@@ -281,7 +283,8 @@ async fn accounting_extension_client_binds_the_route_it_actually_sends_to() -> a
         .await;
 
     let home = tempfile::tempdir()?;
-    let mut config = crate::session::tests::build_test_config(home.path()).await;
+    let test_cwd = tempfile::tempdir()?;
+    let mut config = crate::session::tests::build_test_config(home.path(), test_cwd.path()).await;
     // The session was configured for a route the extension no longer uses.
     let stale = "http://127.0.0.1:1/v1";
     config.model_provider = codex_model_provider_info::ModelProviderInfo {
@@ -383,7 +386,8 @@ async fn accounting_extension_client_binds_the_route_it_actually_sends_to() -> a
 #[tokio::test]
 async fn accounting_records_a_request_another_client_already_sent() -> anyhow::Result<()> {
     let home = tempfile::tempdir()?;
-    let mut config = crate::session::tests::build_test_config(home.path()).await;
+    let test_cwd = tempfile::tempdir()?;
+    let mut config = crate::session::tests::build_test_config(home.path(), test_cwd.path()).await;
     config.model_provider_id = "openai".into();
     config.accounting = crate::config::AccountingMode::Provider {
         scope: Uuid::new_v4(),
@@ -499,7 +503,8 @@ async fn accounting_records_a_request_another_client_already_sent() -> anyhow::R
 
     // The user's `billing` for that provider applies to bridge reports too.
     let overridden = {
-        let mut config = crate::session::tests::build_test_config(home.path()).await;
+        let mut config =
+            crate::session::tests::build_test_config(home.path(), test_cwd.path()).await;
         config.accounting = owner.accounting_binding().await.0;
         config.features.enable(Feature::Sqlite)?;
         if let Some(provider) = config
@@ -578,7 +583,8 @@ async fn accounting_records_a_request_another_client_already_sent() -> anyhow::R
     // A session that is not collecting records nothing, and says so rather
     // than failing the caller.
     let owner_without_collection = {
-        let mut config = crate::session::tests::build_test_config(home.path()).await;
+        let mut config =
+            crate::session::tests::build_test_config(home.path(), test_cwd.path()).await;
         config.accounting = crate::config::AccountingMode::Disabled;
         config.features.enable(Feature::Sqlite)?;
         let (mut session, _context) =
@@ -632,7 +638,9 @@ async fn accounting_store_failure_never_fails_search_or_image() -> anyhow::Resul
                 .await;
 
             let home = tempfile::tempdir()?;
-            let mut config = crate::session::tests::build_test_config(home.path()).await;
+            let test_cwd = tempfile::tempdir()?;
+            let mut config =
+                crate::session::tests::build_test_config(home.path(), test_cwd.path()).await;
             config.model_provider = codex_model_provider_info::ModelProviderInfo {
                 request_max_retries: Some(0),
                 stream_max_retries: Some(0),
@@ -796,7 +804,8 @@ async fn accounting_extension_prices_an_api_key_image_generation() -> anyhow::Re
     }
 
     let home = tempfile::tempdir()?;
-    let mut config = crate::session::tests::build_test_config(home.path()).await;
+    let test_cwd = tempfile::tempdir()?;
+    let mut config = crate::session::tests::build_test_config(home.path(), test_cwd.path()).await;
     config.model_provider = codex_model_provider_info::ModelProviderInfo {
         request_max_retries: Some(0),
         stream_max_retries: Some(0),

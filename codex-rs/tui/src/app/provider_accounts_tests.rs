@@ -123,8 +123,8 @@ async fn a_default_set_by_a_higher_layer_is_reported() {
 
 /// #572: with a named Bedrock account (an AWS profile) in the vault, a
 /// session on another provider is offered Bedrock's models in `/model` (and
-/// the provider policy lets them be picked), so an account chosen with *Use
-/// for this session* is reachable. Without one, with the feature off, or
+/// the provider policy lets them be picked), so an account chosen with *Start
+/// a new session on this account* is reachable. Without one, with the feature off, or
 /// once the last one is removed, Bedrock stays out of the list as before,
 /// except the model the session is on. Only the newest check is applied.
 #[tokio::test]
@@ -269,7 +269,7 @@ async fn app_with_named_accounts_at_top(top: &str) -> (App, TempDir) {
 /// model list (and says so); one between models of the same account does not.
 #[test]
 fn only_a_sign_in_account_change_is_a_switch() {
-    use crate::app::event_dispatch::account_switch_message;
+    use crate::app::event_dispatch::DEFAULT_LOGIN_RESTRICTION_CAVEAT;
     use crate::app::event_dispatch::account_switch_message_for;
     use crate::app::event_dispatch::sign_in_account_switch;
     use codex_model_provider_info::ModelProviderInfo;
@@ -296,29 +296,115 @@ fn only_a_sign_in_account_change_is_a_switch() {
     assert_eq!(sign_in_account_switch(&work, &work), None);
     assert_eq!(sign_in_account_switch(&openai, &zai), None);
     assert_eq!(
-        account_switch_message(Some(&work_account)),
+        account_switch_message_for(
+            Some(&work_account),
+            /*default_login_left_in_place*/ false,
+            /*login_restrictions_configured*/ false,
+        ),
         "Connectors, usage and the model list now use openai account `work`; model list refreshed."
     );
+    // #1205: the default login is the default OpenAI login, not the new
+    // provider's default account.
     assert_eq!(
         account_switch_message_for(
-            /*account*/ None, /*default_login_left_in_place*/ false
+            /*account*/ None, /*default_login_left_in_place*/ false,
+            /*login_restrictions_configured*/ false,
         ),
-        "Connectors, usage and the model list now use the default account; model list refreshed."
+        "Connectors, usage and the model list now use the default OpenAI login; model list refreshed."
+    );
+    // #1205: startup enforcement skipped, but no restriction configured: no
+    // forced-login caveat.
+    assert_eq!(
+        account_switch_message_for(
+            /*account*/ None, /*default_login_left_in_place*/ true,
+            /*login_restrictions_configured*/ false,
+        ),
+        "Connectors, usage and the model list now use the default OpenAI login; model list refreshed."
     );
     // #609: a process that left a ruled-out default login in place hides it.
     assert_eq!(
         account_switch_message_for(
-            /*account*/ None, /*default_login_left_in_place*/ true
+            /*account*/ None, /*default_login_left_in_place*/ true,
+            /*login_restrictions_configured*/ true,
         ),
-        "Switched to the default account; model list refreshed. If your login restrictions (`forced_login_method`, `forced_chatgpt_workspace_id`) rule out the default login, this session cannot use it and its next request is refused with the reason; sign in with `corbanu login`, or pick a named account in /providers."
+        format!(
+            "Connectors, usage and the model list now use the default OpenAI login; model list refreshed. {DEFAULT_LOGIN_RESTRICTION_CAVEAT}"
+        )
+    );
+    // A restriction configured but enforced at startup: nothing is hidden.
+    assert_eq!(
+        account_switch_message_for(
+            /*account*/ None, /*default_login_left_in_place*/ false,
+            /*login_restrictions_configured*/ true,
+        ),
+        "Connectors, usage and the model list now use the default OpenAI login; model list refreshed."
     );
     assert_eq!(
         account_switch_message_for(
             Some(&work_account),
-            /*default_login_left_in_place*/ true
+            /*default_login_left_in_place*/ true,
+            /*login_restrictions_configured*/ true,
         ),
-        account_switch_message(Some(&work_account))
+        account_switch_message_for(
+            Some(&work_account),
+            /*default_login_left_in_place*/ false,
+            /*login_restrictions_configured*/ false,
+        )
     );
+}
+
+/// #1205: only a configured `forced_login_method` or
+/// `forced_chatgpt_workspace_id` counts as a login restriction; the method an
+/// API-key provider such as Z.AI implies does not.
+#[tokio::test]
+async fn account_switch_caveat_needs_a_configured_login_restriction() {
+    use crate::app::event_dispatch::account_switch_message;
+    use crate::app::event_dispatch::login_restrictions_configured;
+    use codex_protocol::config_types::ForcedLoginMethod;
+
+    let work_account = codex_login::NamedChatgptAccount {
+        provider_id: "openai".to_string(),
+        name: "work".to_string(),
+    };
+    // The last column is the effective `forced_login_method`. Z.AI implies
+    // `Api` without configuring it, so that case tells
+    // `configured_forced_login_method` apart from `forced_login_method`.
+    for (extra_config, expected, forced_login_method) in [
+        ("", false, None),
+        (
+            "model_provider = \"zai\"\nmodel = \"glm-5.3-flash\"\n",
+            false,
+            Some(ForcedLoginMethod::Api),
+        ),
+        (
+            "forced_login_method = \"api\"\n",
+            true,
+            Some(ForcedLoginMethod::Api),
+        ),
+        (
+            "forced_login_method = \"chatgpt\"\n",
+            true,
+            Some(ForcedLoginMethod::Chatgpt),
+        ),
+        ("forced_chatgpt_workspace_id = \"ws-1\"\n", true, None),
+    ] {
+        let (app, _home) = app_with_named_accounts_at_top(extra_config).await;
+        assert_eq!(
+            app.config.forced_login_method, forced_login_method,
+            "{extra_config:?}"
+        );
+        assert_eq!(
+            login_restrictions_configured(&app.config),
+            expected,
+            "{extra_config:?}"
+        );
+        // A switch back to a named account reads the same either way.
+        assert_eq!(
+            account_switch_message(Some(&work_account), &app.config),
+            "Connectors, usage and the model list now use openai account `work`; model list refreshed.",
+            "{extra_config:?}"
+        );
+    }
 }
 
 /// PF-84: only `Confirmed { Applied }` counts as applied before the reply;

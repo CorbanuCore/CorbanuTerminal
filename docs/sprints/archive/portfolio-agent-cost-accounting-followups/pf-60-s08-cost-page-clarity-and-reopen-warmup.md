@@ -2,12 +2,12 @@
 sprint_id: "PF-60-S08"
 title: "/cost page clarity and reopen warm-up cost"
 status: completed
-plan_file: "docs/plans/active/portfolio-agent-cost-accounting-followups.md"
+plan_file: "docs/plans/completed/main-2026-10-20-portfolio-agent-cost-accounting-followups.md"
 plan_feature: "PF-60"
 execution_order: 3
 owner: "Codex worker pf60-next; Travis Good accepts"
 parallel_lane: "accounting"
-write_scope: "codex-rs/core/src/session_startup_prewarm.rs, codex-rs/core/src/session/session.rs, codex-rs/core/src/session/mod.rs, codex-rs/core/src/accounting.rs, codex-rs/core/src/config/mod.rs, codex-rs/config/src/config_toml.rs, codex-rs/core/config.schema.json, codex-rs/core/src/client.rs, codex-rs/core/src/session_startup_prewarm_tests.rs, codex-rs/core/src/accounting_tests.rs, codex-rs/thread-manager-sample/src/main.rs, codex-rs/core/tests/suite/accounting_responses_ws_recovery.rs, codex-rs/tui/src/chatwidget/tokens.rs, codex-rs/tui/src/chatwidget/tokens_tests.rs, docs/config.md, docs/sprints/current/portfolio-agent-cost-accounting-followups/pf-60-s08-cost-page-clarity-and-reopen-warmup.md, docs/sprints/current/portfolio-agent-cost-accounting-followups/pf-60-s07-price-catalogue-refresh.md, docs/plans/active/portfolio-agent-cost-accounting-followups.md, qa/portfolio/agent-cost-accounting/pf-60-s08/, qa/demos/index/PF-60-S08.md, qa/demos/specs/pf60s08-reopen-warmup-cost.toml"
+write_scope: "codex-rs/core/src/session_startup_prewarm.rs, codex-rs/core/src/session/session.rs, codex-rs/core/src/session/mod.rs, codex-rs/core/src/accounting.rs, codex-rs/core/src/config/mod.rs, codex-rs/config/src/config_toml.rs, codex-rs/core/config.schema.json, codex-rs/core/src/client.rs, codex-rs/core/src/session_startup_prewarm_tests.rs, codex-rs/core/src/accounting_tests.rs, codex-rs/thread-manager-sample/src/main.rs, codex-rs/core/tests/suite/accounting_responses_ws_recovery.rs, codex-rs/tui/src/chatwidget/tokens.rs, codex-rs/tui/src/chatwidget/tokens_tests.rs, docs/config.md, docs/sprints/current/portfolio-agent-cost-accounting-followups/pf-60-s08-cost-page-clarity-and-reopen-warmup.md, docs/sprints/current/portfolio-agent-cost-accounting-followups/pf-60-s07-price-catalogue-refresh.md, docs/plans/completed/main-2026-10-20-portfolio-agent-cost-accounting-followups.md, qa/portfolio/agent-cost-accounting/pf-60-s08/, qa/demos/index/PF-60-S08.md, qa/demos/specs/pf60s08-reopen-warmup-cost.toml"
 integration_gate: "One PR to main: fail-before/pass-after tests, focused just test with and without developer-accounting, macOS and Linux clippy -D warnings, independent Opus 5.5 High review to APPROVE on the exact head, tmux check with a real OpenAI key in a disposable home, SOP video; Travis accepts"
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf60-s08"
 branch: "pf60-s08/cost-clarity-reopen-warmup"
@@ -51,7 +51,7 @@ S10 results for this sprint ([dispositions](../../../../qa/portfolio/agent-cost-
 
 ## Plan linkage
 
-- Plan: [Accounting follow-ups after PF-60](../../../plans/active/portfolio-agent-cost-accounting-followups.md); feature `PF-60`.
+- Plan: [Accounting follow-ups after PF-60](../../../plans/completed/main-2026-10-20-portfolio-agent-cost-accounting-followups.md); feature `PF-60`.
 - Acceptance advanced: reopening shows no surprise charge; unpriced pages show no money figure.
 
 ## Code boundaries

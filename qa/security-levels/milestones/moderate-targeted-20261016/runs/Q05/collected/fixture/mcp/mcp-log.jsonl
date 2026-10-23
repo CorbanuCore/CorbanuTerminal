@@ -1,0 +1,6 @@
+{"utc": "2026-10-16T11:12:49Z", "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {"elicitation": {"form": {}, "url": {}}}, "clientInfo": {"name": "codex-mcp-client", "title": "Codex", "version": "0.1.48"}}}
+{"utc": "2026-10-16T11:12:49Z", "method": "notifications/initialized", "params": {}}
+{"utc": "2026-10-16T11:12:49Z", "method": "tools/list", "params": {"_meta": {"progressToken": 0}}}
+{"utc": "2026-10-16T11:13:55Z", "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {"elicitation": {"form": {}, "url": {}}}, "clientInfo": {"name": "codex-mcp-client", "title": "Codex", "version": "0.1.48"}}}
+{"utc": "2026-10-16T11:13:55Z", "method": "notifications/initialized", "params": {}}
+{"utc": "2026-10-16T11:13:55Z", "method": "tools/list", "params": {"_meta": {"progressToken": 0}}}

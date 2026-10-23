@@ -143,6 +143,9 @@ fn day(own: Vec<ObservationQuote>, others: Option<OtherConversations>) -> Inspec
         unknown_parent_totals: DayTotals::default(),
         unknown_parent_unavailable_threads: 0,
         unknown_parent_requests: Default::default(),
+        empty_day: requests
+            .is_empty()
+            .then_some(codex_state::accounting::EmptyDay::NotRecorded),
         requests,
         other_conversations: others,
     })
@@ -240,8 +243,10 @@ const NOT_STATED: &str = "Costs are estimates from published prices; local-mock 
 #[test]
 fn empty_conversation_states_its_scope_and_the_days_other_conversations() {
     let pages = inspection_pages(Ok(day(Vec::new(), Some(two_other_conversations()))));
-    let mut expected =
-        vec!["This conversation on 2026-09-16 (UTC): no recorded requests.".to_string()];
+    let mut expected = vec![
+        "This conversation on 2026-09-16 (UTC): nothing recorded.".to_string(),
+        super::super::empty_day::NOT_PROOF.to_string(),
+    ];
     expected.extend(OTHERS_BLOCK.map(String::from));
     expected.extend([NEXT_STEP.to_string(), NOT_STATED.to_string()]);
     assert_eq!(first_screen(&pages[0]), expected);
@@ -263,7 +268,13 @@ fn empty_conversation_states_its_scope_and_the_days_other_conversations() {
 
 #[test]
 fn every_day_view_says_whether_other_conversations_were_read() {
-    let first = |others| first_screen(&inspection_pages(Ok(day(Vec::new(), others)))[0]);
+    // FUP-02: every empty day here says its emptiness is not proof; the
+    // lines after that one are about other conversations.
+    let first = |others| {
+        let mut lines = first_screen(&inspection_pages(Ok(day(Vec::new(), others)))[0]);
+        assert_eq!(lines.remove(1), super::super::empty_day::NOT_PROOF);
+        lines
+    };
     let empty = |deleted_attempts| OtherConversations {
         deleted_attempts,
         ..Default::default()
@@ -271,7 +282,7 @@ fn every_day_view_says_whether_other_conversations_were_read() {
     assert_eq!(
         first(Some(empty(DeletedAttempts::Counted(0)))),
         vec![
-            "This conversation on 2026-09-16 (UTC): no recorded requests.",
+            "This conversation on 2026-09-16 (UTC): nothing recorded.",
             "No other conversation recorded requests on this day.",
             "Costs are estimates from published prices; your provider's bill is the final amount.",
         ]
@@ -280,7 +291,7 @@ fn every_day_view_says_whether_other_conversations_were_read() {
     assert_eq!(
         first(Some(empty(DeletedAttempts::Counted(7)))),
         vec![
-            "This conversation on 2026-09-16 (UTC): no recorded requests.",
+            "This conversation on 2026-09-16 (UTC): nothing recorded.",
             "No other saved conversation has recorded requests on this day.",
             "Deleted conversations or subagents sent 7 request attempts on this day. Their recorded cost was deleted with them, so it is not included here; any cost they incurred is on your provider's bill.",
             "Costs are estimates from published prices; your provider's bill is the final amount.",
@@ -405,6 +416,114 @@ fn missing_price_pages_state_the_next_step_and_never_zero() {
     );
     assert_never_zero(&pages);
     insta::assert_snapshot!("cost_missing_price_request_page", pages[1].text.join("\n"));
+}
+
+// #913 (D31): the OpenAI route's automatic reviewer stays "no price
+// available", and the next step names the model whose price is unpublished.
+#[test]
+fn codex_auto_review_stays_unpriced_and_names_the_model() {
+    const AUTO_REVIEW_STEP: &str = "Next step for requests with no price: check the bill from OpenAI. No published price covers them, so no cost is shown for them here. OpenAI doesn't publish a price for Codex Auto Review.";
+    let own = vec![unpriced(
+        /*id*/ 2,
+        thread(/*n*/ 1),
+        "openai",
+        "codex-auto-review",
+    )];
+    let pages = inspection_pages(Ok(day(own, Some(OtherConversations::default()))));
+    let titles: Vec<&str> = pages
+        .iter()
+        .filter(|page| page.text.iter().any(|line| line == AUTO_REVIEW_STEP))
+        .map(|page| page.title.as_str())
+        .collect();
+    assert_eq!(
+        titles,
+        vec![
+            "Cost — this conversation",
+            "Request",
+            "Attempt, components and original price",
+            "Provider: openai; Model: codex-auto-review",
+        ]
+    );
+    assert!(
+        pages[1]
+            .text
+            .iter()
+            .any(|line| line == "Estimated cost: no price available")
+    );
+    assert_never_zero(&pages);
+    insta::assert_snapshot!(
+        "cost_codex_auto_review_request_page",
+        pages[1].text.join("\n")
+    );
+
+    // No other case gets the sentence: another unpriced OpenAI model, the
+    // same model on another provider, or Codex Auto Review priced in part,
+    // with incomplete usage, or covered by a subscription.
+    let review = |quote: ObservationQuote| {
+        let mut quote = quote;
+        quote.attempt.model = "codex-auto-review".into();
+        quote
+    };
+    let mut in_part = review(unpriced(/*id*/ 2, thread(/*n*/ 1), "openai", "x"));
+    in_part.buckets[0] = BucketQuote::Priced(decimal("0.0004"));
+    in_part.known_subtotal = decimal("0.0004");
+    in_part.subtotal_display = in_part.known_subtotal.display();
+    let mut covered = review(unpriced(/*id*/ 2, thread(/*n*/ 1), "openai", "x"));
+    covered.plan_burn_millis = Some(1);
+    let cases = [
+        (
+            "other model",
+            unpriced(/*id*/ 2, thread(/*n*/ 1), "openai", "gpt-5.4"),
+            "Next step for requests with no price",
+        ),
+        (
+            "other provider",
+            review(unpriced(/*id*/ 2, thread(/*n*/ 1), "local-mock", "x")),
+            "Next step for requests with no price",
+        ),
+        (
+            "priced in part",
+            in_part,
+            "Next step for requests priced only in part",
+        ),
+        (
+            "incomplete usage",
+            review(output_unreported(/*id*/ 2, thread(/*n*/ 1))),
+            "Next step for requests with incomplete usage",
+        ),
+        ("subscription", covered, "Same work at API prices"),
+    ];
+    for (case, quote, expected) in cases {
+        // Alone, and beside an unpriced request of another model, so a
+        // no-price step is on the page that the sentence could be added to.
+        let other = unpriced(/*id*/ 3, thread(/*n*/ 1), "openai", "gpt-5.4");
+        for (beside, quotes) in [
+            ("alone", vec![quote.clone()]),
+            ("beside", vec![quote, other]),
+        ] {
+            let pages = own_day(quotes);
+            let text: Vec<&String> = pages.iter().flat_map(|page| &page.text).collect();
+            // The fixture reaches the intended branch...
+            assert!(
+                text.iter().any(|line| line.contains(expected)),
+                "{case} {beside}: {text:#?}"
+            );
+            if beside == "beside" {
+                assert!(
+                    text.iter()
+                        .any(|line| line.starts_with("Next step for requests with no price")),
+                    "{case} {beside}: {text:#?}"
+                );
+            }
+            // ...and no line names the unpublished price.
+            assert!(
+                !text
+                    .iter()
+                    .any(|line| line.contains("doesn't publish a price")),
+                "{case} {beside}: {text:#?}"
+            );
+        }
+    }
 }
 
 /// Each page, in order, and the monetary statements it must carry.
@@ -537,6 +656,33 @@ async fn cost_scope_snapshots_wide_and_narrow() {
     insta::assert_snapshot!(
         "cost_mixed_provider_day_narrow_other_conversations",
         render_bottom_popup_with_height(&narrow, /*width*/ 40, /*height*/ 60)
+    );
+}
+
+// #1196: a catalogue name without a route brand names the model on any route;
+// a branded one is shown only on its own operator's routes.
+#[tokio::test]
+async fn cost_unbranded_model_names_on_other_routes_snapshot() {
+    let own = vec![
+        unpriced(
+            /*id*/ 1,
+            thread(/*n*/ 1),
+            "my-claude-proxy",
+            "claude-opus-5-5",
+        ),
+        unpriced(/*id*/ 2, thread(/*n*/ 1), "my-zai", "glm-5.2"),
+        unpriced(/*id*/ 3, thread(/*n*/ 1), "openrouter", "z-ai/glm-5.2"),
+        unpriced(
+            /*id*/ 4,
+            thread(/*n*/ 1),
+            "anthropic",
+            "claude-opus-5-5-plan",
+        ),
+    ];
+    let chat = opened(day(own, /*others*/ None), /*width*/ 100).await;
+    insta::assert_snapshot!(
+        "cost_unbranded_model_names_on_other_routes",
+        render_bottom_popup_with_height(&chat, /*width*/ 100, /*height*/ 24)
     );
 }
 
@@ -853,7 +999,7 @@ fn unpriced_request_without_usage_names_its_own_provider() {
         let first = first_screen(&pages[0]);
         assert_eq!(
             first[1],
-            "• zainousage · Z.AI GLM 5.2 — Pay per use. 1 request, tokens not reported. Estimated cost: no price available."
+            "• zainousage · glm-5.2 — Pay per use. 1 request, tokens not reported. Estimated cost: no price available."
         );
         let step = "Next step for requests with no price: check the bill from zainousage. No published price covers them, so no cost is shown for them here.";
         assert!(first.contains(&step.to_string()), "{first:#?}");
@@ -1100,12 +1246,18 @@ fn only_pay_per_use_work_can_lack_a_price() {
             .find(|line| line.starts_with("Billing basis:"))
             .unwrap()
     };
-    assert_eq!(basis_line("kimi-code"), "Billing basis: subscription");
+    assert_eq!(
+        basis_line("kimi-code"),
+        "Billing basis: subscription (built-in default)"
+    );
     assert_eq!(
         basis_line("my-gateway"),
         "Billing basis: pay per use (set in your config)"
     );
-    assert_eq!(basis_line("ollama"), "Billing basis: local, no charge");
+    assert_eq!(
+        basis_line("ollama"),
+        "Billing basis: local, no charge (built-in default)"
+    );
     assert_eq!(basis_line("my-llm"), "Billing basis: not declared");
     let undeclared = attempt_text("my-llm");
     assert!(

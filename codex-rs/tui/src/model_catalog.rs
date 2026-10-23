@@ -73,6 +73,13 @@ pub(crate) struct ModelCatalog {
     listed_ids: RwLock<Vec<String>>,
     provider_policy: RwLock<Option<crate::chatwidget::provider_model_policy::ProviderModelPolicy>>,
     session_recovery_only: AtomicBool,
+    /// D86/#1193: the newest background answer to "which providers have a
+    /// named account in this home", with the number of the check that
+    /// produced it; `None` until one has answered or when the vault could
+    /// not be read. `/status` reads this instead of the vault.
+    named_account_providers: RwLock<(u64, Option<std::collections::BTreeSet<String>>)>,
+    /// Numbers the background checks that compute it.
+    named_account_check: std::sync::atomic::AtomicU64,
 }
 
 impl ModelCatalog {
@@ -84,6 +91,8 @@ impl ModelCatalog {
             listed_ids: RwLock::new(Vec::new()),
             provider_policy: RwLock::new(None),
             session_recovery_only: AtomicBool::new(false),
+            named_account_providers: RwLock::new((0, None)),
+            named_account_check: std::sync::atomic::AtomicU64::new(0),
         }
     }
 
@@ -229,6 +238,38 @@ impl ModelCatalog {
             };
             include_runtime_model(&mut models, &model, runtime_provider_id);
         }
+    }
+
+    /// #1193: starts a new named-account check and returns its number.
+    pub(crate) fn begin_named_account_check(&self) -> u64 {
+        self.named_account_check.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    /// #1193: records check `generation`'s answer (`None`: the vault could
+    /// not be read) unless a newer check has answered already.
+    pub(crate) fn set_named_account_providers(
+        &self,
+        generation: u64,
+        providers: Option<std::collections::BTreeSet<String>>,
+    ) {
+        let mut cached = self
+            .named_account_providers
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if generation > cached.0 {
+            *cached = (generation, providers);
+        }
+    }
+
+    /// #1193: whether `provider_id` has a named account in this home, from
+    /// the cached answer; `None` while unknown. Never reads the vault.
+    pub(crate) fn provider_has_named_account(&self, provider_id: &str) -> Option<bool> {
+        self.named_account_providers
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .1
+            .as_ref()
+            .map(|providers| providers.contains(provider_id))
     }
 
     /// Starts a new provider-models check and returns its number.

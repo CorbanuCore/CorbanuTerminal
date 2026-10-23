@@ -554,6 +554,7 @@ impl CoreShellActionProvider {
         escalation_execution: EscalationExecution,
         decision_source: DecisionSource,
         suspended_note: Option<String>,
+        asked_again: bool,
     ) -> anyhow::Result<EscalationDecision> {
         let action = match decision {
             Decision::Forbidden => {
@@ -568,6 +569,17 @@ impl CoreShellActionProvider {
                         None => "Execution forbidden by policy".to_string(),
                     }))
                 } else {
+                    // D50: a prompt asked again says why.
+                    let reason = if asked_again {
+                        Some(match suspended_note {
+                            Some(note) => {
+                                format!("{} {note}", crate::tools::approvals::ASKED_AGAIN_NOTE)
+                            }
+                            None => crate::tools::approvals::ASKED_AGAIN_NOTE.to_string(),
+                        })
+                    } else {
+                        suspended_note
+                    };
                     let decision = self
                         .prompt(
                             program,
@@ -575,7 +587,7 @@ impl CoreShellActionProvider {
                             workdir,
                             &self.stopwatch,
                             prompt_permissions,
-                            suspended_note,
+                            reason,
                         )
                         .await?;
                     match decision {
@@ -629,6 +641,10 @@ impl CoreShellActionProvider {
     }
 }
 
+/// D50 (#1001): how often an intercepted exec whose approval went stale is
+/// decided again.
+const MAX_STALE_EXEC_APPROVAL_ROUNDS: usize = 3;
+
 // Shell-wrapper parsing is weaker than direct exec interception because it can
 // only see the script text, not the final resolved executable path. Keep it
 // disabled by default so path-sensitive rules rely on the later authoritative
@@ -636,11 +652,61 @@ impl CoreShellActionProvider {
 const ENABLE_INTERCEPTED_EXEC_POLICY_SHELL_WRAPPER_PARSING: bool = false;
 
 impl CoreShellActionProvider {
+    /// D50 (#1001): an exec approved (or decided) before a security
+    /// transition was committed is decided again, the person asked again, and
+    /// refused when that keeps happening, or at once when the transition
+    /// switched Aggressive on (this shell's rules are for its start level).
+    async fn determine_fresh_action(
+        &self,
+        program: &AbsolutePathBuf,
+        argv: &[String],
+        workdir: &AbsolutePathBuf,
+    ) -> anyhow::Result<EscalationDecision> {
+        for round in 1..=MAX_STALE_EXEC_APPROVAL_ROUNDS {
+            let decided_under = self.session.services.authority_marker();
+            let action = self
+                .determine_action(program, argv, workdir, /*asked_again*/ round > 1)
+                .await?;
+            if matches!(action, EscalationDecision::Deny { .. })
+                || !self.session.services.transition_since(decided_under)
+            {
+                return Ok(action);
+            }
+            tracing::info!(
+                target: "codex_core::security::transition",
+                "intercepted exec approved before a security transition; not used"
+            );
+            // The rules this shell checks execs against were chosen for the
+            // level when it started; under Aggressive they are stale.
+            if self
+                .session
+                .services
+                .model_client()
+                .live_level_is_aggressive()
+                != self.live_aggressive
+            {
+                return Ok(EscalationDecision::deny(Some(
+                    crate::tools::orchestrator::STALE_AGGRESSIVE_REFUSAL.to_string(),
+                )));
+            }
+            // D51: nor with permissions read before it (grants end there).
+            if self.prompt_permissions.is_some() {
+                return Ok(EscalationDecision::deny(Some(
+                    crate::tools::orchestrator::STALE_PERMISSIONS_REFUSAL.to_string(),
+                )));
+            }
+        }
+        Ok(EscalationDecision::deny(Some(
+            crate::tools::orchestrator::STALE_APPROVAL_REFUSAL.to_string(),
+        )))
+    }
+
     async fn determine_action(
         &self,
         program: &AbsolutePathBuf,
         argv: &[String],
         workdir: &AbsolutePathBuf,
+        asked_again: bool,
     ) -> anyhow::Result<EscalationDecision> {
         tracing::debug!(
             "Determining escalation action for command {program:?} with args {argv:?} in {workdir:?}"
@@ -745,6 +811,7 @@ impl CoreShellActionProvider {
             escalation_execution,
             decision_source,
             suspended_note,
+            asked_again,
         )
         .await
     }
@@ -757,7 +824,7 @@ impl EscalationPolicy for CoreShellActionProvider {
         argv: &'a [String],
         workdir: &'a AbsolutePathBuf,
     ) -> EscalationPolicyFuture<'a> {
-        Box::pin(CoreShellActionProvider::determine_action(
+        Box::pin(CoreShellActionProvider::determine_fresh_action(
             self, program, argv, workdir,
         ))
     }

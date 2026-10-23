@@ -1,0 +1,1237 @@
+{
+ "feature": "PF-60 follow-up live run (acc-tart1, D25/D3/D16 on Tart per D34): /review attribution, side: labels, reopen warm-up Request IDs, Moonshot cache read, realtime session",
+ "designer": "01a156fc-532e-7ee0-a6c0-0096f4ca3b19",
+ "design_reviewer": "01a15705-7322-7e62-8fba-775f047cca89",
+ "fresh_context": true,
+ "code_blind": true,
+ "results_blind": true,
+ "isolation": "instruction-only",
+ "brief": {
+  "path": "design/packet/intent.md",
+  "sha256": "b152c5c79ddfd70ca0ad1de3c48ab7043a2468227bb623ec54f737dc6f7c0474"
+ },
+ "screenshots": [
+  {
+   "path": "design/packet/screens/realtime-01-cost-pages-test-render.txt",
+   "sha256": "228425a6be334e9ed21fd97a7be3c0aed0ce791a0a9acae491116943ef19a810"
+  },
+  {
+   "path": "design/packet/screens/review-01-review-finished.txt",
+   "sha256": "64168a5772331f01bc3d8e7460c3fb24e6d4e9d230bb69bce636c252e3d4d1a5"
+  },
+  {
+   "path": "design/packet/screens/review-02-cost-links.txt",
+   "sha256": "f03d712c925067d70f634dc4143f50059964c6dfaee2f7960c4047fa134896a9"
+  },
+  {
+   "path": "design/packet/screens/review-03-request-technical.txt",
+   "sha256": "01cc771fc14a06bb89329c419f3616beedd91937ac479453bf40c1cf7224af0c"
+  },
+  {
+   "path": "design/packet/screens/s06-01-side-review-technical.txt",
+   "sha256": "19d14658228d9dee99402d98066523eb3e3870a46c4aad330a17d029e4d5a513"
+  },
+  {
+   "path": "design/packet/screens/s07-moonshot-k2-first-screen.txt",
+   "sha256": "0c91c646bd9861d8aeb83a34b832987bf162fa5a5c55f889fc97cf78b760ee60"
+  },
+  {
+   "path": "design/packet/screens/s07-moonshot-k2-technical.txt",
+   "sha256": "489f32bf3cb6b774febb2e020427c28c347e8177372ed6cce98031ab31d13abc"
+  },
+  {
+   "path": "design/packet/screens/s07-moonshot-k3-first-screen.txt",
+   "sha256": "e79a97c5dfac9a83c1c3649c7bedaaa5c9577cab3c2f734ea863ded829f90c7e"
+  },
+  {
+   "path": "design/packet/screens/s07-moonshot-k3-technical.txt",
+   "sha256": "e79347baebbb1d41a26ec01222e9cf3065ad100216e49fa2e5e4f17aa250ca31"
+  },
+  {
+   "path": "design/packet/screens/s08-restart-first-screen.txt",
+   "sha256": "91fb58392a1a96391f62673bd4decff16c9d0a09fa2ff56a7b933366b8b16a1f"
+  },
+  {
+   "path": "design/packet/screens/s08-restart-notice.txt",
+   "sha256": "a1dea5f233ac8dae71131d36298444d9e2b6e9aab041c2f71ae6faf8847584a5"
+  },
+  {
+   "path": "design/packet/screens/s08-restart-reopen-warmup-request.txt",
+   "sha256": "864e98fb1670339d5885d49c5c0ee8d567390e68944388b72ebd9aa679455acd"
+  },
+  {
+   "path": "design/packet/screens/s08-resume-same-conversation.txt",
+   "sha256": "e2bdc80970820987097d0d749c94ba5540807b8d181242f8de64501ea960c630"
+  }
+ ],
+ "proposal": {
+  "path": "design/designer-output.md",
+  "sha256": "38afb2d4119c4776af1315fea8cf274984807ff868e031a3992af0234c4986a4"
+ },
+ "access_record": {
+  "path": "design/designer-session.md",
+  "sha256": "30c790d3391b413b19d3e20914d84a28c959d5da46cf74a86e6ea654fa67c073"
+ },
+ "review": {
+  "path": "design/review-output.md",
+  "sha256": "4e4e5f9de75d8f6c2d9dfaa0a9d9ddafe2e6783787b7b8dca9a8d35840c2e77e"
+ },
+ "amendments_applied": {
+  "path": "design/amendments-final.md",
+  "sha256": "6bb58647630bd980b10275890afd9f4257dace08080906667ed25171a2d17c3a"
+ },
+ "environment_answers": {
+  "path": "design/answers-final.md",
+  "sha256": "296d2b5c0768d0162b63e5f08c332d5200d902614453956c29f8bf6376d42167"
+ },
+ "frozen": {
+  "path": "design/FROZEN.sha256",
+  "sha256": "bdd5d04d08a608e848782d2126573e244e1f47733be88eead9934cb2f6ad3422"
+ },
+ "named_limits": [
+  "Pricing whatever the provider is named: only the provider name kimi exists (designer Q15; review).",
+  "The realtime spend limit (D16, under $0.05) is checked from the relay log, not in the product (review).",
+  "If the realtime conversation cannot be reopened, FUP-21 is blocked and FUP-22 gives partial evidence (review)."
+ ],
+ "questions": [
+  "Moonshot spend answer: how many Kimi turns are allowed? Assumption: 2 per model (4 total, about $0.06-0.08); if fewer, FUP-18 and FUP-19 turn 2 are reported as not verified.",
+  "How are the route and model chosen at start (argument, -c setting or /model)? Assumption: the run brief gives start arguments; /model switches models on the same route.",
+  "No rates are given for gpt-6-luna or glm-5.3-flash. Assumption: OpenAI and Z.AI costs are checked only for consistency (parts add up, total equals sum of requests, unknown is never $0); only Moonshot is checked against published rates.",
+  "Screen s06 labels a side automatic review 'side:review:' but the intent says 'side:code-review:'. Assumption: /review inside /side must read 'side:code-review:'; 'side:review:' is a different automatic reviewer and is not tested.",
+  "Is /review allowed inside /side? Assumption: either a clear refusal that sends nothing, or correct labelling.",
+  "How is /side opened and closed, and which conversation does /cost show inside it? Assumption: close it with the product's own hint (otherwise Esc) and read /cost in the parent.",
+  "What keys edit an earlier message? Assumption: Esc, Esc with an empty composer, then Enter to choose a message.",
+  "Is the warm-up sent as soon as the conversation reopens, or with the first turn after it? Assumption: one short turn is always sent after a reopen before checking.",
+  "Does a /side warm-up count in the parent's 'Reopen warm-up: N' line, and what is its Turn prefix? Assumption: yes, under the parent; a side: prefix is acceptable.",
+  "Should /resume of the conversation already open send a warm-up (s08 shows one)? Assumption: no (advisory); if sent, it must be labelled and counted once.",
+  "Must review requests be the conversation's own attempts, or may they be descendant attempts? Assumption: either, as long as they are inside the conversation's total.",
+  "Can the realtime conversation be opened with resume <id>, and on which route? Assumption: try on the route the brief allows; on OpenAI one separate labelled warm-up is expected; otherwise check from another conversation (FUP-22).",
+  "The realtime $0.05 limit can't be checked in the product because its cost is unknown by design. Assumption: a short session is enough.",
+  "If the second Kimi turn shows Cache read 0, is that a product failure or a provider-side miss? Assumption: the case fails unless the brief accepts a miss; record the evidence line and retry only within spend.",
+  "Pricing regardless of provider name can't be tested because only a provider named 'kimi' exists. Assumption: not tested.",
+  "Can the tester edit config.toml? Assumption: no; only -c skip_reopen_warmup=true is tested.",
+  "Old screens show oddities (s08: Request 1 and the warm-up both cost $0.001465, and no cache read after the warm-up; s06: no cost line on the side request). Assumption: Request IDs must be distinct and side requests must show a price; a cache read after a warm-up is not required.",
+  "17:00 in Phoenix is 00:00 UTC. Assumption: each group runs within one UTC day; otherwise use /cost YYYY-MM-DD for both days."
+ ],
+ "cases": [
+  {
+   "id": "FUP-01",
+   "priority": "blocker",
+   "group": "Z",
+   "starting_conditions": "Fresh profile Z; zai route; glm-5.3-flash; small git workspace.",
+   "actions": [
+    "Send 'Reply with the single word OK.' and wait for 'OK'.",
+    "Type '/cost', press Enter; press Up until the top is shown, then Down to the links.",
+    "Press Enter on '→ Request 1', then Enter on '→ Technical details'.",
+    "Press Esc three times."
+   ],
+   "expected": [
+    "First page titled 'Cost — this conversation' for today's UTC day; one Z.AI GLM 5.3 Flash line: 'Pay per use. 1 request', with a $ estimate.",
+    "'Unknown parent population: 0 attempts'.",
+    "Request page shows provider, model, 'Billing: Pay per use', cost, tokens and 'Request: <id>'.",
+    "Technical page has the same Request ID, plus Attempt, Thread (record as X) and a Turn with no code-review:, side: or realtime: prefix; component costs add up to the exact USD.",
+    "Each Esc goes back one page; the last closes /cost and returns to the composer."
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    },
+    {
+     "n": 3,
+     "case": "FUP-01",
+     "field": "expected",
+     "change": "replace",
+     "text": "One Z.AI · GLM 5.3 Flash line reading 'Pay per use' with N request(s), N >= 1 (record N and every Request ID; later cases compare against N, not 1); its cost is a $ estimate or 'no price' with a stated reason, never $0 for a request with tokens.",
+     "why": "One turn can make several requests; the packet gives no Z.AI rate."
+    }
+   ]
+  },
+  {
+   "id": "FUP-02",
+   "priority": "advisory",
+   "group": "Z",
+   "starting_conditions": "After FUP-01.",
+   "actions": [
+    "'/cost 2026-01-01', then Esc.",
+    "'/cost <today UTC>', then Esc.",
+    "'/cost 2026-13-40'."
+   ],
+   "expected": [
+    "2026-01-01 says no requests recorded, with no invented spend.",
+    "The page for today matches FUP-01.",
+    "The invalid date gives a clear error; nothing crashes."
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    }
+   ]
+  },
+  {
+   "id": "FUP-03",
+   "priority": "blocker",
+   "group": "Z",
+   "starting_conditions": "After FUP-01 (conversation X exists); zai; glm-5.3-flash.",
+   "actions": [
+    "'/new', send 'Reply with the single word OK.'; record this conversation's Thread as Y from its technical page.",
+    "Append the line 'Anoter line for review.' to README.md in the workspace.",
+    "Type '/review', press Enter, choose the uncommitted-changes option.",
+    "Wait for '<< Code review finished >>'.",
+    "Open '/cost', then every request and its technical page."
+   ],
+   "expected": [
+    "Session shows '>> Code review started: current changes <<' and a review result.",
+    "Y's request count is 1 + K, K >= 1 review requests.",
+    "Each review request: 'Turn: code-review:', distinct Request ID, listed once; Thread is Y or under Y's 'Descendant attempts'.",
+    "Exact USD sum of requests equals the group total and the known subtotal.",
+    "'Unknown parent population: 0 attempts'; 'Unknown provider/model attribution (none)'."
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    },
+    {
+     "n": 4,
+     "case": "FUP-03",
+     "field": "actions",
+     "change": "replace",
+     "text": [
+      "'/new'; send 'Reply with the single word YANKEE.'; record this conversation's Thread as Y and its request count as N_Y.",
+      "printf 'Anoter line for review.\\n' >> \"$AGMS_RUN/fixture/workspace/README.md\"",
+      "Type '/review', press Enter, choose the uncommitted-changes option.",
+      "Wait for the review to finish ('<< Code review finished >>' or the product's own finish marker), allowing up to 15 minutes.",
+      "Open '/cost', then every request and its technical page."
+     ],
+     "why": "A distinct first message for the picker later; the real workspace path; Z.AI is slow."
+    },
+    {
+     "n": 5,
+     "case": "FUP-03",
+     "field": "expected",
+     "change": "replace",
+     "text": [
+      "Session shows a code-review start marker and a review result.",
+      "Y's request count is N_Y + K, with K >= 1 review requests.",
+      "Each review request: 'Turn: code-review:', distinct Request ID, listed once; Thread is Y or under Y's 'Descendant attempts'.",
+      "Exact USD sum of requests equals the known subtotal.",
+      "'Unknown parent population: 0 attempts'; 'Unknown provider/model attribution (none)'.",
+      "Save one screen of a review request's technical page with its 'Turn: code-review:' line visible."
+     ],
+     "why": "Avoids assuming one request per turn; D25."
+    }
+   ]
+  },
+  {
+   "id": "FUP-04",
+   "priority": "blocker",
+   "group": "Z",
+   "starting_conditions": "After FUP-03.",
+   "actions": [
+    "Read the 'other conversations' line on Y's first /cost page.",
+    "'/resume', pick conversation X, then '/cost'."
+   ],
+   "expected": [
+    "X still shows 1 request, same Request ID and exact cost as FUP-01.",
+    "X has no code-review: turns.",
+    "Y's 'other conversations' total for X is unchanged."
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    },
+    {
+     "n": 6,
+     "case": "FUP-04",
+     "field": "actions and expected",
+     "change": "replace",
+     "text": {
+      "actions": [
+       "Read the 'other conversations' line on Y's first /cost page.",
+       "'/resume', pick X (first message 'OK', not 'YANKEE'), then '/cost'."
+      ],
+      "expected": [
+       "X shows the same N requests as in FUP-01, with the same Request IDs and exact costs.",
+       "X has no code-review: turns.",
+       "X's 'other conversations' total equals Y's own total from FUP-03.",
+       "Y's 'other conversations' total for X equals X's FUP-01 total."
+      ]
+     },
+     "why": "The picker choice was ambiguous; comparing totals shows every review request is counted under Y."
+    }
+   ]
+  },
+  {
+   "id": "FUP-05",
+   "priority": "blocker",
+   "group": "Z",
+   "starting_conditions": "After FUP-04, in X; note X's request count.",
+   "actions": [
+    "'/side', press Enter, send 'Reply with the single word SIDE.' and wait.",
+    "Close the side conversation.",
+    "'/cost'; open the new requests' technical pages."
+   ],
+   "expected": [
+    "X's count rises only by the side requests.",
+    "Each side request: 'Turn: side:', Thread X or a descendant of X, an estimated $ cost (not blank or $0), listed once.",
+    "The side conversation is not a separate 'other conversation'.",
+    "Unknown parent population stays 0."
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    },
+    {
+     "n": 7,
+     "case": "FUP-05",
+     "field": "actions",
+     "change": "replace",
+     "text": [
+      "'/side', press Enter, send 'Reply with the single word SIDE.' and wait.",
+      "Leave with exactly one Ctrl+C (agms-tui key C-c) and wait for the product's message that it returned to the saved conversation; never press Ctrl+C twice.",
+      "'/cost'; open the new requests' technical pages."
+     ],
+     "why": "Answer 6: Esc does not leave /side; a second Ctrl+C may quit."
+    },
+    {
+     "n": 8,
+     "case": "FUP-05",
+     "field": "expected",
+     "change": "replace",
+     "text": [
+      "X's count rises only by the side requests.",
+      "Each side request: Turn line starting 'side:', Thread X (or under X's 'Descendant attempts'), a cost shown as a $ estimate or 'no price' with a reason (never $0 for a request with tokens), listed once.",
+      "The side conversation is not a separate 'other conversation'.",
+      "Unknown parent population stays 0.",
+      "Save one screen with the 'Turn: side:' line visible (D25)."
+     ],
+     "why": "The missing-cost oddity comes from a cropped page; D25."
+    }
+   ]
+  },
+  {
+   "id": "FUP-06",
+   "priority": "advisory",
+   "group": "Z",
+   "starting_conditions": "After FUP-05, with README.md still changed.",
+   "actions": [
+    "'/side', then '/review' and the uncommitted-changes option; wait.",
+    "Close the side conversation; '/cost'."
+   ],
+   "expected": [
+    "Either a clear refusal and no new requests, or the review's requests sit under X with 'Turn: side:code-review:', counted once and in X's total ('side:review:' should be flagged)."
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    },
+    {
+     "n": 9,
+     "case": "FUP-06",
+     "field": "actions",
+     "change": "replace",
+     "text": [
+      "'/side'; '/review' with the uncommitted-changes option; wait up to 15 minutes.",
+      "Leave with exactly one Ctrl+C and wait for the return message; '/cost'."
+     ],
+     "why": "The /side control."
+    }
+   ]
+  },
+  {
+   "id": "FUP-07",
+   "priority": "blocker",
+   "group": "Z",
+   "starting_conditions": "After FUP-06; write down every Request ID and exact cost in X.",
+   "actions": [
+    "Stop; start with 'resume --last'; '/cost'; open every request.",
+    "Send 'Reply with the single word OK.'; '/cost' again."
+   ],
+   "expected": [
+    "After the restart, every earlier Request ID is present once with the same exact cost; count unchanged.",
+    "After the turn, the count rises only by the new turn's requests; earlier entries unchanged."
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    },
+    {
+     "n": 10,
+     "case": "FUP-07",
+     "field": "actions",
+     "change": "replace",
+     "text": [
+      "Stop; start with 'resume <X>' (X's Thread ID); '/cost'; open every request.",
+      "Send 'Reply with the single word OK.'; '/cost' again."
+     ],
+     "why": "'--last' is ambiguous after /side and /resume."
+    }
+   ]
+  },
+  {
+   "id": "FUP-08",
+   "priority": "advisory",
+   "group": "Z",
+   "starting_conditions": "Observed during FUP-07.",
+   "actions": [
+    "Check the session and the first /cost page after the restart."
+   ],
+   "expected": [
+    "No warm-up notice and no 'Reopen warm-up' line (or it shows 0)."
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    }
+   ]
+  },
+  {
+   "id": "FUP-09",
+   "priority": "blocker",
+   "group": "O",
+   "starting_conditions": "Fresh profile O; openai route; gpt-6-luna.",
+   "actions": [
+    "Send 'Reply with the single word OK.'; '/cost'; record Request 1's ID and cost, and Thread T1.",
+    "Stop; start with 'resume --last'.",
+    "Send 'Reply with the single word OK.'; '/cost'; open the warm-up's request and technical pages."
+   ],
+   "expected": [
+    "Before the restart: no warm-up line or notice.",
+    "After the restart: a '⚠' notice naming skip_reopen_warmup appears once the warm-up is sent.",
+    "First page: 'Reopen warm-up: 1 request, <cost>'.",
+    "Link '→ Request n · Reopen warm-up · OpenAI · GPT-6 Luna'; request page 'Kind: Reopen warm-up'.",
+    "About 10k-15k input tokens; $ estimate; Thread T1.",
+    "Included in the group's count and total."
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    },
+    {
+     "n": 11,
+     "case": "FUP-09",
+     "field": "expected",
+     "change": "replace",
+     "text": [
+      "Before the restart: no warm-up line or notice.",
+      "After the restart the session shows a notice containing 'skip_reopen_warmup' (before or after the first turn).",
+      "First page: 'Reopen warm-up: 1 request' with a $ cost.",
+      "One request link contains 'Reopen warm-up'; its request page shows 'Kind: Reopen warm-up'.",
+      "Positive token count and a $ estimate (record input tokens; 10k-15k is typical, not required); Thread T1.",
+      "Included in the count and total."
+     ],
+     "why": "Relied on the glyph, display names and a 'typically' figure."
+    }
+   ]
+  },
+  {
+   "id": "FUP-10",
+   "priority": "blocker",
+   "group": "O",
+   "starting_conditions": "Group O; repeated after FUP-09, 11, 12, 13, 14 and 16.",
+   "actions": [
+    "In T1's /cost, open every request link; record Request ID and exact USD; compare with the previous audit."
+   ],
+   "expected": [
+    "Every earlier ID is present exactly once with the same cost.",
+    "Only the expected warm-ups and turns are new.",
+    "No Request ID appears twice.",
+    "Exact USD sum of requests equals the group total."
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    },
+    {
+     "n": 12,
+     "case": "FUP-10",
+     "field": "starting conditions and expected",
+     "change": "replace",
+     "text": {
+      "starting_conditions": "Group O; run after FUP-09, FUP-12, FUP-14 and FUP-25 (final). Each audit records every Request ID and the request-page cost; the final audit also opens each technical page for exact USD.",
+      "expected": [
+       "Every earlier ID is present exactly once with the same cost.",
+       "New entries appear only after a new turn or a reopen; every warm-up is labelled.",
+       "No Request ID appears twice.",
+       "Final audit: exact USD sum of requests equals the known subtotal."
+      ]
+     },
+     "why": "Fits the 80-minute budget; doesn't assume one request per turn."
+    }
+   ]
+  },
+  {
+   "id": "FUP-11",
+   "priority": "blocker",
+   "group": "O",
+   "starting_conditions": "After FUP-09.",
+   "actions": [
+    "Stop; start with 'resume <T1>'.",
+    "Send 'Reply with the single word OK.'; '/cost'."
+   ],
+   "expected": [
+    "Warm-up count +1; notice shown.",
+    "FUP-10 audit passes."
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    }
+   ]
+  },
+  {
+   "id": "FUP-12",
+   "priority": "blocker",
+   "group": "O",
+   "starting_conditions": "After FUP-11.",
+   "actions": [
+    "'/new'; send 'Reply with the single word OK.' (T2).",
+    "'/resume', pick T1, press Enter.",
+    "Send 'Reply with the single word OK.'; '/cost'."
+   ],
+   "expected": [
+    "T1's warm-up count +1; notice shown.",
+    "T2 holds only its own turn (T1's 'other conversations' line).",
+    "FUP-10 audit passes."
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    },
+    {
+     "n": 13,
+     "case": "FUP-12",
+     "field": "actions",
+     "change": "replace",
+     "text": [
+      "'/new'; send 'Reply with the single word SECOND.' (T2).",
+      "'/resume', pick T1 (first message 'OK', not 'SECOND'), press Enter.",
+      "Send 'Reply with the single word OK.'; '/cost'."
+     ],
+     "why": "The picker choice was ambiguous."
+    }
+   ]
+  },
+  {
+   "id": "FUP-13",
+   "priority": "blocker",
+   "group": "O",
+   "starting_conditions": "After FUP-12, in T1.",
+   "actions": [
+    "'/side'; send 'Reply with the single word OK.'.",
+    "Close the side conversation; '/cost'."
+   ],
+   "expected": [
+    "T1 gains one labelled warm-up and the side turn(s) with 'Turn: side:'.",
+    "Everything inside T1's total; FUP-10 audit passes."
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    },
+    {
+     "n": 14,
+     "case": "FUP-13",
+     "field": "actions",
+     "change": "replace",
+     "text": [
+      "In T1: '/side'; send 'Reply with the single word OK.'.",
+      "Leave with exactly one Ctrl+C and wait for the return message; '/cost'."
+     ],
+     "why": "The /side control."
+    }
+   ]
+  },
+  {
+   "id": "FUP-14",
+   "priority": "blocker",
+   "group": "O",
+   "starting_conditions": "After FUP-13, in T1, composer empty.",
+   "actions": [
+    "Press Esc, Esc; select the earliest message; press Enter.",
+    "Replace with 'Reply with the single word YES.' and press Enter.",
+    "'/cost'."
+   ],
+   "expected": [
+    "Reply is YES; warm-up count +1; notice shown.",
+    "Requests from rolled-back turns are still listed once, with the same IDs and costs."
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    },
+    {
+     "n": 15,
+     "case": "FUP-14",
+     "field": "actions and expected",
+     "change": "replace",
+     "text": {
+      "actions": [
+       "Edit the earliest message using the product's own on-screen hint (try Esc twice in an empty composer first); if no edit control is found within 5 minutes, mark blocked.",
+       "Replace the text with 'Reply with the single word YES.' and press Enter.",
+       "'/cost'."
+      ],
+      "expected": [
+       "A reply arrives (YES not required); the warm-up count rises by 1; a notice containing 'skip_reopen_warmup' is shown.",
+       "Requests from rolled-back turns are still listed once, with the same IDs and costs."
+      ]
+     },
+     "why": "The edit keys are an assumption; the reply is outside the intent."
+    }
+   ]
+  },
+  {
+   "id": "FUP-15",
+   "priority": "advisory",
+   "group": "O",
+   "starting_conditions": "After FUP-14, in T1.",
+   "actions": [
+    "'/resume'; pick T1; '/cost'."
+   ],
+   "expected": [
+    "'Already viewing'; no new warm-up and no notice; if one is sent, it is labelled and counted once."
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    },
+    {
+     "n": 16,
+     "case": "FUP-15",
+     "field": "expected",
+     "change": "replace",
+     "text": [
+      "Record whether a warm-up and notice occurred; if a warm-up was sent, it is labelled 'Reopen warm-up', counted once and the notice appears; the FUP-10 audit is unaffected."
+     ],
+     "why": "The intent doesn't say whether this sends a warm-up."
+    }
+   ]
+  },
+  {
+   "id": "FUP-16",
+   "priority": "blocker",
+   "group": "O",
+   "starting_conditions": "After FUP-15.",
+   "actions": [
+    "Stop; start with '-c skip_reopen_warmup=true resume --last'.",
+    "Send 'Reply with the single word OK.'.",
+    "'/side'; send 'Reply with the single word OK.'; close the side conversation; '/cost'."
+   ],
+   "expected": [
+    "No warm-up notice; warm-up count unchanged.",
+    "Only the turns' requests are added; turns work normally.",
+    "FUP-10 audit passes."
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    },
+    {
+     "n": 17,
+     "case": "FUP-16",
+     "field": "actions",
+     "change": "replace",
+     "text": [
+      "Stop; start with '-c skip_reopen_warmup=true resume <T1>' (if the argument order is rejected, use 'resume <T1> -c skip_reopen_warmup=true'; an argument error is not a product failure).",
+      "Send 'Reply with the single word OK.'.",
+      "'/side'; send 'Reply with the single word OK.'; leave with one Ctrl+C; '/cost'."
+     ],
+     "why": "A deterministic conversation; the /side control."
+    }
+   ]
+  },
+  {
+   "id": "FUP-17",
+   "priority": "blocker",
+   "group": "M",
+   "starting_conditions": "Fresh profile M; moonshot route (provider 'kimi' at api.moonshot.ai/v1); kimi-k3.",
+   "actions": [
+    "Send 'Reply with the single word OK.'.",
+    "'/cost'; open the technical page."
+   ],
+   "expected": [
+    "'Provider: kimi', 'Model: kimi-k3', 'Billing: Pay per use'.",
+    "Rates shown: 3 / 0.3 / 3 / 15.",
+    "Uncached + cache read + cache write = Input.",
+    "Exact USD = (U*3 + R*0.30 + W*3 + O*15)/1e6.",
+    "Nothing marked unknown, incomplete or a lower bound."
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    },
+    {
+     "n": 19,
+     "case": "FUP-17",
+     "field": "starting conditions, actions, expected",
+     "change": "replace",
+     "text": {
+      "starting_conditions": "Read d3.txt first. If it grants no Moonshot turns, do not start Group M; report FUP-17..20 as 'not run (D54 not granted)'. Otherwise fresh profile M: agms-tui start --route moonshot --model kimi-k3. Never retry a Moonshot turn.",
+      "actions": [
+       "Send 'Reply with the single word OK.'; as soon as it replies, send FUP-18's turn; then '/cost' and both technical pages."
+      ],
+      "expected_last": "No cost or token field of these requests is unknown, incomplete or a lower bound (a cache count of 0 is fine; metadata lines such as 'wall time: unavailable' are not cost fields)."
+     },
+     "why": "D3/D54 gating; the 5-minute cache lifetime; the wording."
+    }
+   ]
+  },
+  {
+   "id": "FUP-18",
+   "priority": "blocker",
+   "group": "M",
+   "starting_conditions": "Within 5 minutes of FUP-17, same conversation.",
+   "actions": [
+    "Send 'Reply with the single word OK again.'.",
+    "'/cost'; open Request 2's technical page."
+   ],
+   "expected": [
+    "Cache read > 0; cache-read cost = R*0.30/1e6.",
+    "Input parts add up; formula holds.",
+    "Request 1's ID and cost unchanged.",
+    "If R = 0, record the evidence line (see questions)."
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    },
+    {
+     "n": 20,
+     "case": "FUP-18",
+     "field": "expected",
+     "change": "replace",
+     "text": "If Cache read is 0: record the evidence line and mark blocked ('no cache read observed'), not failed; do not retry. If the relay answers 'test harness: Moonshot request limit reached': blocked. Fail only if a cache read is priced wrongly or the parts don't add up.",
+     "why": "No retries allowed; the tester can't tell a provider miss from a product fault."
+    }
+   ]
+  },
+  {
+   "id": "FUP-19",
+   "priority": "blocker",
+   "group": "M",
+   "starting_conditions": "After FUP-18.",
+   "actions": [
+    "'/new'; '/model kimi-k2.7-code'.",
+    "Send two turns within 5 minutes ('Reply with the single word OK.', then 'Reply with the single word OK again.').",
+    "'/cost'; open both technical pages."
+   ],
+   "expected": [
+    "Rates shown: 0.95 / 0.19 / 0.95 / 4.",
+    "Turn 2 has R > 0.",
+    "Exact USD = (U*0.95 + R*0.19 + W*0.95 + O*4)/1e6; parts add up to Input."
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    },
+    {
+     "n": 21,
+     "case": "FUP-19",
+     "field": "actions and expected",
+     "change": "replace",
+     "text": {
+      "actions": [
+       "Stop; start with agms-tui start --route moonshot --model kimi-k2.7-code (new conversation).",
+       "Send 'Reply with the single word OK.', then immediately 'Reply with the single word OK again.'.",
+       "'/cost'; open both technical pages."
+      ],
+      "expected_add": "Cache read 0 or the limit message: handle as in FUP-18."
+     },
+     "why": "Answer 2: change model by restarting with --model."
+    }
+   ]
+  },
+  {
+   "id": "FUP-20",
+   "priority": "blocker",
+   "group": "M",
+   "starting_conditions": "After FUP-19.",
+   "actions": [
+    "Read the k2.7 conversation's first /cost page: 'other conversations' line and details.",
+    "'/resume' to the k3 conversation; '/cost'; repeat."
+   ],
+   "expected": [
+    "Each conversation lists only its own 2 requests.",
+    "The other conversation's total equals its own total.",
+    "No 'incomplete', 'lower bound' or 'unavailable' estimate.",
+    "Earlier IDs and costs unchanged."
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    },
+    {
+     "n": 22,
+     "case": "FUP-20",
+     "field": "actions and expected",
+     "change": "replace",
+     "text": {
+      "actions": [
+       "Read the k2.7 conversation's first /cost page.",
+       "Stop; start with --route moonshot --model kimi-k3 resume <k3 Thread>; send no turn; '/cost'; repeat."
+      ],
+      "expected": [
+       "Each conversation lists only the requests from its own two turns.",
+       "The other conversation's total equals its own total.",
+       "No cost field or total is unknown, incomplete, unavailable or a lower bound.",
+       "Earlier IDs and costs unchanged."
+      ]
+     },
+     "why": "No extra spend; one turn can be several requests; wording."
+    }
+   ]
+  },
+  {
+   "id": "FUP-21",
+   "priority": "blocker",
+   "group": "R",
+   "starting_conditions": "Fresh profile R; OpenAI route's API key; realtime driver available.",
+   "actions": [
+    "Note UTC time; run the realtime driver with 'Reply with the single word OK.'; note UTC time; record the reply and thread ID TR.",
+    "Start with 'resume <TR>'; '/cost'; open the realtime request and its technical page."
+   ],
+   "expected": [
+    "First page: 'Realtime: 1 session; token counts and cost unknown, not zero'.",
+    "Link 'Request n · Realtime session · OpenAI · … · no price available'.",
+    "Request page 'Kind: Realtime session — started t1, ended t2'; t1 < t2, both in the noted window; 'Tokens: tokens not reported'.",
+    "Technical page: 'Turn: realtime:', Thread TR; all token and cost fields unknown.",
+    "No $ figure and no 0 for this request anywhere; conversation total not shown as complete.",
+    "Any warm-up is a separate, labelled request."
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    },
+    {
+     "n": 23,
+     "case": "FUP-21",
+     "field": "actions and expected",
+     "change": "replace",
+     "text": {
+      "actions": [
+       "Run the realtime command once (rerun only if the first connection fails with a harness connection error before any reply; never a third time); record the UTC window, reply and TR.",
+       "Start with --route zai --model glm-5.3-flash resume <TR>; send no turn; '/cost'; open the realtime request and its technical page."
+      ],
+      "expected_replace": [
+       "t1 < t2, both within the noted window +/-60 s.",
+       "No $ amount, and no token count or cost of 0, is shown for this request; any total that includes it is marked unknown or incomplete."
+      ]
+     },
+     "why": "D16/answer 13; avoids an OpenAI warm-up; clock skew; IDs contain zeros."
+    }
+   ]
+  },
+  {
+   "id": "FUP-22",
+   "priority": "advisory",
+   "group": "R",
+   "starting_conditions": "After the realtime run, if 'resume <TR>' fails (or as an extra check).",
+   "actions": [
+    "Start a new conversation on zai; send 'Reply with the single word OK.'; '/cost'."
+   ],
+   "expected": [
+    "The 'other conversations' line for TR shows no $ figure and no $0 for the session; its cost is said to be unknown."
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    },
+    {
+     "n": 24,
+     "case": "FUP-22",
+     "field": "expected",
+     "change": "replace",
+     "text": "The other-conversations total covering TR shows no $0 for the session (it is unknown or 'no price').",
+     "why": "The intent doesn't specify that line's wording."
+    }
+   ]
+  },
+  {
+   "id": "FUP-23",
+   "priority": "advisory",
+   "group": "R",
+   "starting_conditions": "After FUP-21, if resume works.",
+   "actions": [
+    "Stop; start with 'resume <TR>'; '/cost'."
+   ],
+   "expected": [
+    "Still 1 session; same Request ID and start/end times; any extra warm-up separate."
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    }
+   ]
+  },
+  {
+   "id": "FUP-24",
+   "priority": "blocker",
+   "group": "All",
+   "starting_conditions": "Throughout groups Z, O, M and R.",
+   "actions": [
+    "Check every screen, every /cost page, the realtime driver's output and any corbanu exec output for 'sk-', 'Bearer', 'Authorization', 'api_key=' or long secret-like non-UUID strings."
+   ],
+   "expected": [
+    "No credential or key material appears anywhere."
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    },
+    {
+     "n": 25,
+     "case": "FUP-24",
+     "field": "actions",
+     "change": "replace",
+     "text": "At the end of each group, search all saved screens and command outputs for 'sk-', 'Bearer', 'Authorization', 'api_key', the synthetic .env value and long non-UUID tokens; report a hit inside the transcript of a command the model ran separately from a hit on a product page or notice.",
+     "why": "Makes the check concrete and separates model-run commands from product output."
+    }
+   ]
+  },
+  {
+   "id": "FUP-25",
+   "priority": "advisory",
+   "priority_as_written": "advisory",
+   "group": "O",
+   "starting_conditions": "After FUP-16; last in Group O (config.toml can't be undone).",
+   "actions": [
+    "agms-tui config 'skip_reopen_warmup = true'",
+    "Stop; start with 'resume <T1>' (no -c).",
+    "Send 'Reply with the single word OK.'; '/cost'."
+   ],
+   "expected": [
+    "No warm-up notice; warm-up count unchanged; only the turn's requests added."
+   ],
+   "added_by_amendment": 18,
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Ledger lag: if a request just sent is missing from /cost, choose Refresh once (or close and reopen /cost) and wait up to 30 s before judging. Record UTC times for every turn, reopen and realtime run.",
+     "why": "The integrator says /cost can read before the latest request is written."
+    },
+    {
+     "n": 2,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": "Save every screen a verdict rests on (agms-tui screen > <group>-<case>-<n>.txt) in the group's evidence folder.",
+     "why": "D25 needs captured screens; FUP-24 needs material to search."
+    }
+   ]
+  }
+ ]
+}

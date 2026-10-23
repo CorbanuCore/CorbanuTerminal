@@ -594,6 +594,124 @@ async fn user_network_approval_once_session_and_denial_semantics() -> Result<()>
     Ok(())
 }
 
+/// #945: a network prompt answered after the security level rose is for a
+/// stale prompt: through the real proxy, the request is asked again under
+/// the new level, and that answer decides it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[cfg_attr(
+    not(target_os = "linux"),
+    ignore = "requires the trusted Linux proxy bridge"
+)]
+async fn issue_945_network_answer_after_a_level_change_is_asked_again() -> Result<()> {
+    use codex_core::security_level_change::LevelBasis;
+    use codex_core::security_level_change::LevelChangeKind;
+    use codex_core::security_level_change::Probes;
+    use codex_core::security_level_change::commit_human_level_change;
+    use codex_security_policy::SecurityLevel;
+
+    skip_if_target_windows!(Ok(()), "uses the POSIX/Python network fixture");
+    skip_if_host_windows!(Ok(()));
+    skip_if_no_network!(Ok(()));
+    skip_if_sandbox!(Ok(()));
+
+    let server = start_mock_server().await;
+    let test = managed_network_unified_exec_test(&server).await?;
+    let environments = vec![local(test.config.cwd.clone())];
+
+    // What the model is asked after the command is up to Moderate's own
+    // rules, so the follow-up is not counted.
+    mount_sse_once(
+        &server,
+        sse(vec![
+            ev_response_created("resp-issue-945-stale-1"),
+            ev_function_call(
+                "issue-945-stale",
+                "exec_command",
+                &serde_json::to_string(&network_fetch_args(LOCAL_ENVIRONMENT_ID))?,
+            ),
+            ev_completed("resp-issue-945-stale-1"),
+        ]),
+    )
+    .await;
+    let follow_up = core_test_support::responses::mount_sse_repeating(
+        &server,
+        sse(vec![
+            ev_response_created("resp-issue-945-stale-2"),
+            ev_assistant_message("resp-issue-945-stale-msg", "done"),
+            ev_completed("resp-issue-945-stale-2"),
+        ]),
+    )
+    .await;
+    submit_managed_network_turn(
+        &test,
+        "answer this network prompt after the level rose",
+        environments.clone(),
+        ApprovalsReviewer::User,
+        AskForApproval::OnRequest,
+    )
+    .await?;
+    let shown = expect_network_approval(&test, LOCAL_ENVIRONMENT_ID).await?;
+
+    // The person raises the level while the prompt is open (off the async
+    // runtime, as the TUI commits).
+    let home = test.codex_home_path().to_path_buf();
+    let thread = Some(test.session_configured.thread_id);
+    let report = tokio::task::spawn_blocking(move || {
+        let home = home.as_path();
+        let basis = LevelBasis::read(home, SecurityLevel::Permissive, thread);
+        commit_human_level_change(
+            home,
+            SecurityLevel::Permissive,
+            thread,
+            &basis,
+            SecurityLevel::Moderate,
+            Probes::Passed,
+            /*now_unix_seconds*/ 1_000,
+        )
+    })
+    .await
+    .expect("level change task")
+    .expect("the level change commits");
+    assert_eq!(report.kind, LevelChangeKind::Stricter);
+    assert!(report.live, "Moderate applies in this session now");
+
+    test.codex
+        .submit(Op::ExecApproval {
+            id: shown.effective_approval_id(),
+            turn_id: Some(shown.turn_id.clone()),
+            decision: ReviewDecision::ApprovedForSession,
+        })
+        .await?;
+    let again = expect_network_approval(&test, LOCAL_ENVIRONMENT_ID)
+        .await
+        .expect("the stale answer is asked again");
+    assert_ne!(again.call_id, shown.call_id);
+    assert!(
+        again
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("security level changed")),
+        "{:?}",
+        again.reason
+    );
+    test.codex
+        .submit(Op::ExecApproval {
+            id: again.effective_approval_id(),
+            turn_id: Some(again.turn_id),
+            decision: ReviewDecision::denied("rejected by user"),
+        })
+        .await?;
+    wait_for_turn_complete(&test).await;
+    // The fetch was denied: it never printed its marker.
+    for request in follow_up.requests() {
+        if let Some(output) = request.function_call_output_text("issue-945-stale") {
+            assert!(!output.contains("OK:"), "{output}");
+        }
+    }
+
+    Ok(())
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg_attr(
     not(target_os = "linux"),
@@ -867,6 +985,25 @@ async fn ambiguous_unattributed_network_request_is_not_assigned_to_active_calls(
         ]),
     )
     .await;
+    // Hold the turn on the model once both commands have yielded, so it is
+    // still active when the test interrupts it. Without this the follow-up
+    // request, sent when the commands' 1 s `yield_time_ms` ran out, found no
+    // response and ended the turn, racing the interrupt after the 1 s
+    // no-prompt window below (#1134).
+    let pending_model = mount_response_once_match(
+        &server,
+        |request: &wiremock::Request| {
+            request_body_contains(request, "function_call_output")
+                && request_body_contains(request, "ambiguous-network-first")
+        },
+        sse_response(sse(vec![
+            ev_response_created("resp-ambiguous-network-held"),
+            ev_assistant_message("msg-ambiguous-network-held", "done"),
+            ev_completed("resp-ambiguous-network-held"),
+        ]))
+        .set_delay(Duration::from_secs(30)),
+    )
+    .await;
     submit_managed_network_turn(
         &test,
         "start two active commands",
@@ -904,6 +1041,8 @@ async fn ambiguous_unattributed_network_request_is_not_assigned_to_active_calls(
         "ambiguous request was incorrectly assigned to an active call"
     );
 
+    // The turn is held on the model, not ended, when it is interrupted.
+    wait_for_response_request(&pending_model).await;
     test.codex.submit(Op::Interrupt).await?;
     wait_for_event(&test.codex, |event| {
         matches!(event, EventMsg::TurnAborted(_))

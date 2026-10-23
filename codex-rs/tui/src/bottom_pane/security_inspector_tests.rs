@@ -73,6 +73,27 @@ fn pf_41_s01_inspector_healthy_aggressive() {
 }
 
 #[test]
+fn issue939_ignored_project_warning_wraps_in_inspector() {
+    let mut inspector = inspector(healthy(ThreadId::new()), at_now);
+    inspector.input.project_security_warnings = vec![
+        "Ignored incomplete project [security] table in /workspace/project-with-a-long-distinct-name/nested-trading-project/.codex/config.toml: level = \"permissive\" without version cannot override trusted security settings."
+            .to_string(),
+    ];
+    let rendered = render(&inspector, /*width*/ 48);
+    let text = rendered.split_whitespace().collect::<String>();
+    assert!(text.contains("Projectsecurity"), "{rendered}");
+    assert!(
+        text.contains("nested-trading-project/.codex/config.toml"),
+        "{rendered}"
+    );
+    assert!(text.contains("withoutversion"), "{rendered}");
+    insta::assert_snapshot!(
+        "issue939_ignored_project_warning_narrow",
+        rendered.lines().take(45).collect::<Vec<_>>().join("\n")
+    );
+}
+
+#[test]
 fn pf_41_s01_inspector_degraded_and_stale() {
     let facts = RuntimeFacts {
         policy: PolicyFacts::Stored {
@@ -89,6 +110,21 @@ fn pf_41_s01_inspector_degraded_and_stale() {
     insta::assert_snapshot!(
         "pf_41_s01_inspector_degraded_stale",
         render(&inspector(facts, stale_now), /*width*/ 100)
+    );
+}
+
+/// #1036: a healthy view observed long ago says it is stale; it does not
+/// call the level degraded.
+#[test]
+fn issue_1036_stale_view_is_not_called_degraded() {
+    let rendered = render(
+        &inspector(healthy(ThreadId::new()), stale_now),
+        /*width*/ 100,
+    );
+    assert!(!rendered.contains("degraded"), "{rendered}");
+    insta::assert_snapshot!(
+        "issue_1036_inspector_stale_not_degraded",
+        rendered.lines().take(4).collect::<Vec<_>>().join("\n")
     );
 }
 

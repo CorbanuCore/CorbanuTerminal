@@ -93,6 +93,8 @@ env:
     legacy_read_only_after_workspace_write_cannot_delete
     legacy_crashed_session_labels_are_repaired
     legacy_label_registry_is_closed_to_low_integrity
+    legacy_unlabelled_root_is_reported_until_labelled
+    legacy_writable_roots_are_the_labelled_roots
 
 jobs:
   probes:
@@ -104,7 +106,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-ci
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
       - name: Process access probes
         shell: bash
         run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-process-hardening -- pf_27_s06 pf_27_s07 --nocapture --test-threads=1

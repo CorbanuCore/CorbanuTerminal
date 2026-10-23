@@ -1,0 +1,4 @@
+# Key scan of this record (integrator, 2026-10-20T05:26:38Z): harness/keyscan.sh (plain files), then the same patterns and the
+# Z.AI key with rg -z (inside gzipped files). Only file names and pattern classes are printed, never values; no hits below = clean.
+zai key scan done
+zai key scan (gz) done

@@ -1451,6 +1451,78 @@ fn legacy_integrity_label_cost() {
     eprintln!("integrity label cost: {count} files, label {labelled:?}, put back {restored:?}");
 }
 
+/// #734: a root a lease can't label is reported for core's warning, and not
+/// once a later lease labels it. (A missing folder can't be labelled; the
+/// lease still starts, as #705 requires.)
+#[test]
+fn legacy_unlabelled_root_is_reported_until_labelled() {
+    let _guard = legacy_process_test_guard();
+    let test_root = user_owned_test_root();
+    let root = dunce::canonicalize(test_root.path())
+        .expect("canonical test root")
+        .join("not-yet");
+    let mark = crate::unlabelled_roots_mark();
+    drop(
+        crate::integrity_leases::acquire(std::slice::from_ref(&root), /*log_dir*/ None)
+            .expect("lease"),
+    );
+    assert!(
+        crate::unlabelled_roots_since(mark).contains(&root),
+        "{} is not reported",
+        root.display()
+    );
+    fs::create_dir_all(&root).expect("create root");
+    drop(
+        crate::integrity_leases::acquire(std::slice::from_ref(&root), /*log_dir*/ None)
+            .expect("lease"),
+    );
+    assert!(
+        !crate::unlabelled_roots_since(mark).contains(&root),
+        "{} is still reported",
+        root.display()
+    );
+}
+
+/// #734: core matches failures against the roots the sandbox itself labels:
+/// canonical, every workspace root (not only the working directory), and
+/// `%TEMP%` for a writable temp entry.
+#[test]
+fn legacy_writable_roots_are_the_labelled_roots() {
+    use codex_protocol::permissions::FileSystemAccessMode;
+    use codex_protocol::permissions::FileSystemPath;
+    use codex_protocol::permissions::FileSystemSandboxEntry;
+    use codex_protocol::permissions::FileSystemSandboxPolicy;
+    use codex_protocol::permissions::FileSystemSpecialPath;
+    let test_root = user_owned_test_root();
+    let base = dunce::canonicalize(test_root.path()).expect("canonical test root");
+    let (cwd, other) = (base.join("cwd"), base.join("other"));
+    fs::create_dir_all(&cwd).expect("cwd");
+    fs::create_dir_all(&other).expect("other");
+    let special = |value| {
+        FileSystemSandboxEntry::new(
+            FileSystemPath::Special { value },
+            FileSystemAccessMode::Write,
+        )
+    };
+    let policy = FileSystemSandboxPolicy::restricted(vec![
+        special(FileSystemSpecialPath::project_roots(/*subpath*/ None)),
+        special(FileSystemSpecialPath::Tmpdir),
+    ]);
+    let workspace_roots = [
+        AbsolutePathBuf::from_absolute_path(&cwd).expect("absolute"),
+        AbsolutePathBuf::from_absolute_path(&other).expect("absolute"),
+    ];
+    let roots = crate::legacy_writable_roots(&policy, &workspace_roots, &cwd);
+    let temp = dunce::canonicalize(std::env::var_os("TEMP").expect("TEMP")).expect("TEMP");
+    for want in [&cwd, &other, &temp] {
+        assert!(
+            roots.contains(want),
+            "{} missing from {roots:?}",
+            want.display()
+        );
+    }
+}
+
 const CRASH_ROOTS_ENV: &str = "CODEX_158_CRASH_ROOTS";
 const CRASH_CHILD_TEST: &str = "unified_exec::tests::legacy_integrity_crash_child_entry";
 const CRASH_CHILD_READY: &str = "integrity-crash-child: leased";

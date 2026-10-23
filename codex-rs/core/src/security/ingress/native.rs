@@ -708,7 +708,7 @@ fn digest_from_hex(hex: &str) -> Option<ContentDigest> {
         return None;
     }
     let mut bytes = [0_u8; 32];
-    for (index, pair) in hex.chunks_exact(2).enumerate() {
+    for (index, pair) in hex.as_chunks::<2>().0.iter().enumerate() {
         bytes[index] = (nibble(pair[0])? << 4) | nibble(pair[1])?;
     }
     Some(ContentDigest::from_bytes(bytes))

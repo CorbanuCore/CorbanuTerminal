@@ -412,6 +412,9 @@ impl CodexThread {
             .session_source
             .get_agent_path()
             .unwrap_or_else(codex_protocol::AgentPath::root);
+        // #1248: set only when the target is the root of another tree, where `author` is a
+        // path in the sender's own tree and would read as one of the recipient's.
+        let mut author_label = None;
         let recipient = match control.ensure_agent_known(target_thread_id) {
             Ok(target) => target.agent_path.ok_or_else(|| {
                 CodexErr::InvalidRequest(format!(
@@ -427,6 +430,17 @@ impl CodexThread {
                     .unwrap_or(codex_protocol::AgentPath::ROOT);
                 codex_protocol::AgentPath::try_from(parent_path)
                     .map_err(CodexErr::InvalidRequest)?
+            }
+            // D106 (#1176): a pane the person opened is the root of its own tree, so this
+            // thread's tree does not know it. A task for it still goes to its mailbox, as
+            // inter-agent data like any other agent message, never as the person's input.
+            Err(_) if control.is_loaded_root_thread(target_thread_id).await => {
+                author_label = Some(cross_tree_author_label(
+                    &author,
+                    self.session_source.get_nickname().as_deref(),
+                    self.session.thread_id(),
+                ));
+                codex_protocol::AgentPath::root()
             }
             Err(err) => return Err(err),
         };
@@ -444,6 +458,7 @@ impl CodexThread {
             content,
             effective_trigger_turn,
         );
+        communication.author_label = author_label;
         if let Some(message_id) = message_id {
             communication.message_id = Some(message_id);
         }
@@ -940,3 +955,24 @@ impl CodexThread {
         Ok(elicitations.count)
     }
 }
+
+/// #1248: names an agent in another pane's tree for a recipient whose own paths would read
+/// `author` (often `/root`) as one of its own agents. The thread id keeps it unambiguous and,
+/// unlike a pane's editable name, stable for the message's identity on a retried send.
+fn cross_tree_author_label(
+    author: &codex_protocol::AgentPath,
+    nickname: Option<&str>,
+    source_thread_id: ThreadId,
+) -> String {
+    let nickname = nickname
+        .map(|nickname| format!(" ({nickname:?})"))
+        .unwrap_or_default();
+    format!(
+        "agent {author}{nickname} in another pane's agent tree (thread {source_thread_id}), \
+         not this pane's {author}"
+    )
+}
+
+#[cfg(test)]
+#[path = "codex_thread_tests.rs"]
+mod tests;

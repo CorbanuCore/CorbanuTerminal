@@ -1,0 +1,44 @@
+---
+source: tui/src/chatwidget/tokens_checkpoint_tests.rs
+assertion_line: 164
+expression: "format!(\"{}\\n{}\\n\\n{}\\n{}\", pages[0].title, overview(&pages), bucket.title,\nbucket.text.join(\"\\n\"))"
+---
+Recorded request range
+Requested: [1970-04-11T00:00:00.000Z, 1970-04-12T00:00:00.000Z); timezone: UTC; grouping: Day
+Retention: request detail kept since 1970-01-12T01:00:00.000Z; daily totals kept since 1970-01-01
+Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns.
+Range: Unknown parent population: 0 inspectable attempts, excluded from range total
+Other conversations are not included in this view; /cost covers only the open conversation.
+Recorded through ledger checkpoint: 1970-04-11T00:30:00.000Z (as of this read)
+Estimated token cost for recorded attempts: $0.000046
+Billed cost: synthetic doesn't report its charges, so any cost here is an estimate — check synthetic's bill.
+Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [1970-04-11T00:00:00.000Z, 1970-04-12T00:00:00.000Z): [1970-04-11T00:00:00.000Z, 1970-04-11T00:30:00.001Z)
+
+Cost — this conversation
+Requested: [1970-04-11T00:00:00.000Z, 1970-04-12T00:00:00.000Z); timezone: UTC; grouping: Day
+Retention: request detail kept since 1970-01-12T01:00:00.000Z; daily totals kept since 1970-01-01
+Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns.
+Range: Unknown parent population: 0 inspectable attempts, excluded from range total
+Bucket: [1970-04-11T00:00:00.000Z, 1970-04-12T00:00:00.000Z); effective coverage (requested ∩ aggregate retention ∩ snapshot): [1970-04-11T00:00:00.000Z, 1970-04-11T00:30:00.001Z)
+Recorded through ledger checkpoint: 1970-04-11T00:30:00.000Z (as of this read)
+This conversation, [1970-04-11T00:00:00.000Z, 1970-04-12T00:00:00.000Z) (UTC):
+• synthetic · fixture — Pay per use. 2 requests, 46 tokens. Estimated cost: $0.000046.
+Other conversations are not included in this view; /cost covers only the open conversation.
+Costs are estimates from published prices; synthetic doesn't report its charges — check synthetic's bill.
+Select a provider below to see its requests.
+—— Details ——
+Estimated token cost for recorded attempts: $0.000046
+Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+Logical requests may have attempts outside this bucket; this bucket is not their complete lifetime.
+Read at: 1970-04-12T01:00:00.000Z; ledger current to: 1970-04-11T00:30:00.000Z (88200000 ms behind)
+Retention: request detail kept since 1970-01-12T01:00:00.000Z; daily totals kept since 1970-01-01; oldest recorded day in this conversation 1970-04-11
+Known subtotal exact USD: 0.000046
+Input: 46
+Noncached input (derived for inclusive input): 46
+Cache read: 0
+Cache write: 0
+Output: 0
+Reasoning (subset, not separately billed): not reported (2 attempts)
+Total (not separately billed): 46
+Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+Bucket: Unknown parent population: 0 attempts, excluded from root total

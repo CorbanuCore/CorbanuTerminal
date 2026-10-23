@@ -198,8 +198,8 @@ fn listener() -> UnixListener {
 fn launch(generation: u64, expires: Instant) -> PairHandle {
     let owner = Reservation::acquire().unwrap();
     let images = PairImages {
-        journal: static_image("PF27_PAIR_CONNECT", 204),
-        policy: static_image("PF27_PAIR_CONNECT", 204),
+        journal: static_image("PF27_PAIR_CONNECT", /*anchor*/ 204),
+        policy: static_image("PF27_PAIR_CONNECT", /*anchor*/ 204),
     };
     owner
         .launch_admitting_pair(
@@ -250,7 +250,7 @@ fn pf_27_s01_admission_real_roles_reverse_duplicate_parent_old_and_dead() {
     let mut old = None;
     for generation in [7, 8] {
         let handle = launch(generation, deadline());
-        let mut peers = connections(&listener, 4);
+        let mut peers = connections(&listener, /*count*/ 4);
         if let Some(stream) = old.take() {
             assert!(live_peer(getsockopt(&stream, sockopt::PeerPidfd).unwrap().as_fd()).is_err());
             assert!(outcome(&mut handle.admit(stream).unwrap()).is_err());
@@ -389,8 +389,8 @@ fn pf_27_s01_admission_worker_lost_success_receiver() {
 #[ignore = "requires hashed static connector and qualified GNU2.43 pidfs host"]
 fn pf_27_s01_admission_real_uid_mismatch_and_unrelated_process() {
     let listener = listener();
-    let handle = launch(7, deadline());
-    let peers = connections(&listener, 4);
+    let handle = launch(/*generation*/ 7, deadline());
+    let peers = connections(&listener, /*count*/ 4);
     let (control, _owner, _release) = control(deadline());
     let (_tx, mut admission) = admission();
     admission.spec.expected_uid += 1;
@@ -405,10 +405,10 @@ fn pf_27_s01_admission_real_uid_mismatch_and_unrelated_process() {
         );
     }
     assert!(!control.cancelled());
-    let unrelated = static_image("PF27_PAIR_CONNECT", 204)
+    let unrelated = static_image("PF27_PAIR_CONNECT", /*anchor*/ 204)
         .launch_owned(SyntheticChildRole::Worker)
         .unwrap();
-    for (_, stream) in connections(&listener, 2) {
+    for (_, stream) in connections(&listener, /*count*/ 2) {
         assert!(outcome(&mut handle.admit(stream).unwrap()).is_err());
     }
     drop(unrelated);
@@ -421,9 +421,9 @@ fn pf_27_s01_admission_real_uid_mismatch_and_unrelated_process() {
 fn pf_27_s01_admission_real_peer_eof_death_receipt_drop_and_caller_drop() {
     let listener = listener();
     for scenario in 0..10 {
-        let handle = launch(7, deadline());
+        let handle = launch(/*generation*/ 7, deadline());
         let control = handle.owner.control();
-        let mut peers = connections(&listener, 4);
+        let mut peers = connections(&listener, /*count*/ 4);
         let policy = outcome(&mut handle.admit(peers.remove(2).1).unwrap()).unwrap();
         let journal = outcome(&mut handle.admit(peers.remove(0).1).unwrap()).unwrap();
         let (peer, other) = if scenario < 5 {
@@ -473,8 +473,11 @@ fn pf_27_s01_admission_real_peer_eof_death_receipt_drop_and_caller_drop() {
 fn pf_27_s01_admission_real_pending_ticket_and_deadline_reap_both() {
     let listener = listener();
     for expire in [false, true] {
-        let handle = launch(7, Instant::now() + Duration::from_secs(1));
-        let mut peers = connections(&listener, 4);
+        let handle = launch(
+            /*generation*/ 7,
+            Instant::now() + Duration::from_secs(1),
+        );
+        let mut peers = connections(&listener, /*count*/ 4);
         assert!(Reservation::acquire().is_err());
         let first = handle.admit(peers.remove(2).1).unwrap();
         let mut second = handle.admit(peers.remove(0).1).unwrap();

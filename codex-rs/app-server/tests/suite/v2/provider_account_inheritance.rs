@@ -476,3 +476,77 @@ async fn fork_of_an_earlier_turn_runs_on_the_source_current_account() -> Result<
     );
     Ok(())
 }
+
+/// #588: the fork's own config decides whether named accounts apply, not the
+/// app server's. The home turns them off after `work`'s turn; a fork that
+/// turns them on for itself (request `config`) runs on the recorded `work`,
+/// not on `[provider_accounts]`'s `personal`. With them off for the fork too,
+/// the fork is refused and names the recorded account, as a resume is.
+#[tokio::test]
+async fn the_forks_own_config_decides_whether_its_recorded_account_applies() -> Result<()> {
+    let server = responses::start_mock_server().await;
+    let response_mock =
+        responses::mount_sse_sequence(&server, vec![pong("resp-1"), pong("resp-2")]).await;
+    let codex_home = fork_home(&server.uri())?;
+    let mut app = start_app(&codex_home).await?;
+    let source = work_thread(&mut app).await?;
+    app.shutdown_gracefully().await?;
+    let config_path = codex_home.path().join("config.toml");
+    let config = std::fs::read_to_string(&config_path)?;
+    std::fs::write(
+        &config_path,
+        config.replace("named_accounts = true", "named_accounts = false"),
+    )?;
+
+    let mut app = start_app(&codex_home).await?;
+    let request = app
+        .send_thread_fork_request(ThreadForkParams {
+            thread_id: source.clone(),
+            config: Some(std::collections::HashMap::from([(
+                "features.named_accounts".to_string(),
+                serde_json::Value::Bool(true),
+            )])),
+            ..Default::default()
+        })
+        .await?;
+    let response = timeout(
+        DEFAULT_TIMEOUT,
+        app.read_stream_until_response_message(RequestId::Integer(request)),
+    )
+    .await??;
+    let forked = to_response::<ThreadForkResponse>(response)?;
+    assert_eq!(
+        forked.provider_account.as_deref(),
+        Some("mock_provider:work")
+    );
+    say_pong(&mut app, forked.thread.id).await?;
+    assert_eq!(
+        bearers(&response_mock),
+        vec![
+            Some(format!("Bearer {WORK_KEY}")),
+            Some(format!("Bearer {WORK_KEY}")),
+        ]
+    );
+
+    let request = app
+        .send_thread_fork_request(ThreadForkParams {
+            thread_id: source,
+            ..Default::default()
+        })
+        .await?;
+    let error = timeout(
+        DEFAULT_TIMEOUT,
+        app.read_stream_until_error_message(RequestId::Integer(request)),
+    )
+    .await??;
+    assert!(
+        error
+            .error
+            .message
+            .contains("the thread's recorded account mock_provider:work: named accounts need"),
+        "{}",
+        error.error.message
+    );
+    assert_eq!(response_mock.requests().len(), 2);
+    Ok(())
+}

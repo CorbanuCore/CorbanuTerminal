@@ -121,3 +121,16 @@ installed at this run's request because the earlier build lacked #859 ([candidat
 ## Review budget
 
 5 of 5 used ([review-ledger.md](review-ledger.md)): design, design review, evidence checks r1-r3. The last verdict (r3) is **fail** on written statements only; its corrections are applied but not independently re-checked; no extension requested.
+
+## After this record: ACC-04 on the local model (2026-10-21)
+
+Dated addendum; the record above is unchanged.
+
+- ACC-04 was re-run with the owner's local model as the product's model (D74, D75) in the
+  [second local-model re-run](../../../security-levels/milestones/localmodel-rerun2-20261021/README.md)
+  ([#1191](https://github.com/CorbanuCore/CorbanuTerminal/pull/1191), candidate `bc1deda532`, the record's neutral
+  profile). Inside `/side` the model started a sub-agent. Its request is labelled `Turn: side:agent:…`, listed once
+  under the conversation, and no other conversation shows a request.
+- **D113** (owner, 2026-10-21): ACC-04 is recorded as **passed**. The 37 cases are now **30 passed, 1 failed (ACC-06),
+  6 blocked**. It ran on the local model only, with none of this record's routes or prices (named limit of that
+  record).

@@ -87,6 +87,9 @@ pub(crate) enum Badge {
     Partial(&'static str, Vec<String>),
     /// Protection cannot be claimed for the named reasons.
     Degraded(&'static str, Vec<String>),
+    /// #1036: nothing is known to be wrong, but the facts were observed this
+    /// long ago, so nothing can be claimed until a refresh.
+    Stale(&'static str, String),
     /// Everything is denied until a person acts.
     Blocked(String),
 }
@@ -107,6 +110,7 @@ pub(crate) struct InspectorInput {
     pub(crate) network_broker: bool,
     pub(crate) mcp_servers: Vec<String>,
     pub(crate) hooks: bool,
+    pub(crate) project_security_warnings: Vec<String>,
 }
 
 impl InspectorInput {
@@ -141,6 +145,16 @@ impl InspectorInput {
             network_broker: config.features.enabled(Feature::IsolatedCredentialBroker),
             mcp_servers,
             hooks: config.features.enabled(Feature::CodexHooks),
+            project_security_warnings: config
+                .startup_warnings
+                .iter()
+                .filter(|warning| {
+                    warning.starts_with(
+                        codex_config::loader::IGNORED_INCOMPLETE_PROJECT_SECURITY_PREFIX,
+                    )
+                })
+                .cloned()
+                .collect(),
         }
     }
 
@@ -312,7 +326,7 @@ pub(crate) fn sections(
             "observed: Core policy",
         ),
     };
-    let level = Section {
+    let mut level = Section {
         title: "Level",
         rows: vec![
             row("Saved", State::Info, saved_value, "configured: /security"),
@@ -342,6 +356,17 @@ pub(crate) fn sections(
             required(live),
         ],
     };
+
+    level
+        .rows
+        .extend(input.project_security_warnings.iter().map(|warning| {
+            row(
+                "Project security",
+                State::Info,
+                warning.clone(),
+                "configured: ignored project table",
+            )
+        }));
 
     let mut session = input
         .current
@@ -894,12 +919,10 @@ pub(crate) fn badge(
             level_name(launch_level(input))
         ));
     }
-    if now - facts.observed_at > STALE_AFTER_SECONDS {
-        degraded.push(format!(
-            "status observed {}; press r",
-            ago(now - facts.observed_at)
-        ));
-    }
+    // #1036: an old observation is not a loss of protection; it only
+    // withholds any claim until a refresh.
+    let stale =
+        (now - facts.observed_at > STALE_AFTER_SECONDS).then(|| ago(now - facts.observed_at));
     for row in sections.iter().flat_map(|section| &section.rows) {
         // Any degraded component counts; off or unobserved ones only when
         // the level needs them.
@@ -912,6 +935,8 @@ pub(crate) fn badge(
     if !degraded.is_empty() {
         degraded.extend(partial);
         Badge::Degraded(level, degraded)
+    } else if let Some(age) = stale {
+        Badge::Stale(level, age)
     } else if !partial.is_empty() {
         Badge::Partial(level, partial)
     } else {
@@ -922,3 +947,7 @@ pub(crate) fn badge(
 #[cfg(test)]
 #[path = "inspector_tests.rs"]
 pub(crate) mod tests;
+
+#[cfg(test)]
+#[path = "inspector_project_security_tests.rs"]
+mod inspector_project_security_tests;

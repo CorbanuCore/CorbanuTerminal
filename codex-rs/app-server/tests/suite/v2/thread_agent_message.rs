@@ -244,6 +244,135 @@ async fn thread_agent_message_uses_native_mailbox_and_deduplicates_stable_id() -
     Ok(())
 }
 
+/// D106 (#1176): a thread a client started (such as a pane the person opened
+/// in the TUI) is the root of its own tree. Another root's agent message for
+/// it is admitted to its mailbox and reaches its model as an inter-agent
+/// message, not as user input. A held message (no turn) starts nothing.
+#[tokio::test]
+async fn thread_agent_message_reaches_another_root_thread_as_agent_mail() -> Result<()> {
+    let server = responses::start_mock_server().await;
+    let response_mock = responses::mount_sse_once(
+        &server,
+        responses::sse(vec![
+            responses::ev_response_created("resp-1"),
+            responses::ev_assistant_message("msg-1", "accepted"),
+            responses::ev_completed("resp-1"),
+        ]),
+    )
+    .await;
+    let codex_home = TempDir::new()?;
+    create_config_toml(codex_home.path(), &server.uri())?;
+    let mut app = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .without_auto_env()
+        .build()
+        .await?;
+    timeout(DEFAULT_TIMEOUT, app.initialize()).await??;
+    let mut roots = Vec::new();
+    for _ in 0..2 {
+        let request = app
+            .send_thread_start_request(ThreadStartParams {
+                model: Some("mock-model".to_string()),
+                ..Default::default()
+            })
+            .await?;
+        let response = timeout(
+            DEFAULT_TIMEOUT,
+            app.read_stream_until_response_message(RequestId::Integer(request)),
+        )
+        .await??;
+        roots.push(to_response::<ThreadStartResponse>(response)?.thread);
+    }
+    let (source, target) = (&roots[0], &roots[1]);
+
+    let send = |message_id: &str, content: &str, trigger_turn: bool| ThreadAgentMessageParams {
+        source_thread_id: source.id.clone(),
+        target_thread_id: target.id.clone(),
+        message_id: Some(message_id.to_string()),
+        assignment_id: Some(message_id.to_string()),
+        kind: AgentMessageKind::Assignment,
+        content: content.to_string(),
+        trigger_turn,
+    };
+    let held_request = app
+        .send_raw_request(
+            "thread/sendAgentMessage",
+            Some(serde_json::to_value(send(
+                "held-1176",
+                "held task for another root 1176",
+                /*trigger_turn*/ false,
+            ))?),
+        )
+        .await?;
+    let held_response: JSONRPCResponse = timeout(
+        DEFAULT_TIMEOUT,
+        app.read_stream_until_response_message(RequestId::Integer(held_request)),
+    )
+    .await??;
+    let held_receipt = to_response::<ThreadAgentMessageResponse>(held_response)?;
+    assert_eq!(held_receipt.target_thread_id, target.id);
+    assert!(!held_receipt.trigger_turn);
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(
+        response_mock.requests().len(),
+        0,
+        "a held message starts no turn"
+    );
+
+    let request = app
+        .send_raw_request(
+            "thread/sendAgentMessage",
+            Some(serde_json::to_value(send(
+                "task-1176",
+                "agent task for another root 1176",
+                /*trigger_turn*/ true,
+            ))?),
+        )
+        .await?;
+    let response: JSONRPCResponse = timeout(
+        DEFAULT_TIMEOUT,
+        app.read_stream_until_response_message(RequestId::Integer(request)),
+    )
+    .await??;
+    let receipt = to_response::<ThreadAgentMessageResponse>(response)?;
+    assert_eq!(receipt.target_thread_id, target.id);
+    assert!(receipt.trigger_turn);
+    timeout(
+        DEFAULT_TIMEOUT,
+        app.read_stream_until_notification_message("turn/completed"),
+    )
+    .await??;
+    let requests = response_mock.requests();
+    assert_eq!(requests.len(), 1);
+    let user_texts = requests[0].message_input_texts("user");
+    let input = serde_json::to_string(&requests[0].input())?;
+    for task in [
+        "held task for another root 1176",
+        "agent task for another root 1176",
+    ] {
+        assert!(input.contains(task), "{input}");
+        assert!(
+            !user_texts.iter().any(|text| text == task),
+            "an agent's task must not arrive as user input: {input}"
+        );
+    }
+    assert!(input.contains("<inter_agent_message "), "{input}");
+    // #1248: both roots are `/root` in their own trees, so the recipient is told which
+    // tree sent it; the message is still the agent's, not the person's.
+    let expected = format!(
+        "<inter_agent_message sender=\"/root\" recipient=\"/root\">\n\
+         Sender: agent /root in another pane's agent tree (thread {}), not this pane's /root\n\
+         agent task for another root 1176\n\
+         </inter_agent_message>",
+        source.id
+    );
+    assert!(
+        user_texts.iter().any(|text| text == &expected),
+        "expected {expected:?} in {user_texts:?}"
+    );
+    Ok(())
+}
+
 fn create_config_toml(codex_home: &Path, server_uri: &str) -> std::io::Result<()> {
     std::fs::write(
         codex_home.join("config.toml"),

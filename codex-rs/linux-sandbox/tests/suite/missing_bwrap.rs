@@ -27,7 +27,14 @@ fn lone_helper(dir: &Path) -> PathBuf {
     let bin = dir.join("bin");
     std::fs::create_dir(&bin).expect("create bin folder");
     let helper = bin.join("codex-linux-sandbox");
-    std::fs::copy(env!("CARGO_BIN_EXE_codex-linux-sandbox"), &helper).expect("copy the helper");
+    // #635: copied by another process, so no descriptor open for writing
+    // leaks into other tests' forks (executing it would fail with ETXTBSY).
+    let copied = Command::new("cp")
+        .arg(env!("CARGO_BIN_EXE_codex-linux-sandbox"))
+        .arg(&helper)
+        .status()
+        .expect("copy the helper");
+    assert!(copied.success(), "copy the helper");
     helper
 }
 

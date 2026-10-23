@@ -1378,6 +1378,7 @@ impl ThreadRequestProcessor {
             ephemeral,
             history_mode,
             session_start_source,
+            reopened_by_prompt_edit,
             thread_source,
             spawn_agent_parent_thread_id,
             spawn_agent_role,
@@ -1415,6 +1416,7 @@ impl ThreadRequestProcessor {
             personality,
         );
         typesafe_overrides.ephemeral = ephemeral;
+        typesafe_overrides.reopened_by_prompt_edit = reopened_by_prompt_edit;
         typesafe_overrides.allow_provider_model_fallback = allow_provider_model_fallback;
         typesafe_overrides.provider_account = provider_account;
         typesafe_overrides.inherited_provider_account = inherited_provider_account;
@@ -4739,9 +4741,12 @@ impl ThreadRequestProcessor {
         // account of another provider never applies (#425). A fork cut at an
         // earlier turn of a paginated thread also takes the source's current
         // account, not the one that turn ran on (#588, Travis 2026-10-13).
+        // The recorded account is passed whatever the server's own config
+        // says: the fork's config (its request overrides and project layers)
+        // decides whether named accounts apply, and with them off the loader
+        // refuses a recorded named account, as for a resume (#588).
         typesafe_overrides.provider_account = provider_account;
         let loaded_source = self.thread_manager.get_thread(source_thread_id).await.ok();
-        let named_accounts = self.config.features.enabled(Feature::NamedAccounts);
         let reviewer_from_history = paginated_source
             && typesafe_overrides.approvals_reviewer.is_none()
             && !request_overrides
@@ -4749,10 +4754,7 @@ impl ThreadRequestProcessor {
                 .is_some_and(|overrides| overrides.contains_key("approvals_reviewer"));
         let cut_at_earlier_turn =
             paginated_source && (last_turn_id.is_some() || before_turn_id.is_some());
-        let latest_context = if loaded_source.is_none()
-            && cut_at_earlier_turn
-            && (reviewer_from_history || named_accounts)
-        {
+        let latest_context = if loaded_source.is_none() && cut_at_earlier_turn {
             Some(
                 self.thread_store
                     .load_latest_model_context(StoreLoadThreadHistoryParams {
@@ -4771,10 +4773,9 @@ impl ThreadRequestProcessor {
             .unwrap_or_else(|| source_history_items.as_ref());
         typesafe_overrides.inherited_provider_account = match loaded_source.as_ref() {
             Some(source) => source.config_snapshot().await.provider_account,
-            None if named_accounts => {
+            None => {
                 recorded_provider_account(current_source_history, /*resumed_provider_id*/ None)
             }
-            None => None,
         };
         if reviewer_from_history && let Some(source) = loaded_source.as_ref() {
             typesafe_overrides.approvals_reviewer =

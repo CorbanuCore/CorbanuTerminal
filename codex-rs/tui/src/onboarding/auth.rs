@@ -64,6 +64,7 @@ use crate::onboarding::provider_setup::ProviderSetupAction;
 use crate::onboarding::provider_setup::ProviderSetupPhase;
 use crate::onboarding::provider_setup::ProviderSetupSession;
 use crate::provider_status_host::ProviderStatusHost;
+use crate::selection_list::list_position_label;
 use crate::terminal_hyperlinks::HyperlinkLine;
 use crate::terminal_hyperlinks::mark_buffer_hyperlinks;
 use crate::terminal_hyperlinks::visible_lines;
@@ -945,9 +946,22 @@ impl AuthModeWidget {
         let Some(entry) = self.provider_status_host.catalog().get(provider_id) else {
             return fallback.to_string();
         };
-        if session.snapshot().usable.contains(&entry.id) {
+        let local_runtime = entry
+            .setup_capabilities
+            .iter()
+            .any(|capability| matches!(capability, ProviderSetupCapability::Local { .. }));
+        let snapshot = session.snapshot();
+        // Ollama and LM Studio are never probed, so neither "ready" nor
+        // "unavailable" would be true: say what is known.
+        if local_runtime && snapshot.configured.contains(&entry.id) {
+            if snapshot.usable.contains(&entry.id) {
+                "Local (not checked) · active".to_string()
+            } else {
+                "Local (not checked)".to_string()
+            }
+        } else if snapshot.usable.contains(&entry.id) {
             "Configured · active · ready".to_string()
-        } else if session.snapshot().configured.contains(&entry.id) {
+        } else if snapshot.configured.contains(&entry.id) {
             "Configured · unavailable".to_string()
         } else {
             fallback.to_string()
@@ -1230,6 +1244,7 @@ impl AuthModeWidget {
             );
             footer_lines.push("".into());
         }
+        let instructions_line = footer_lines.len();
         footer_lines.push(Line::from(vec![
             "  Use ↑/↓ to choose · Press ".dim(),
             self.confirm_binding().into(),
@@ -1265,6 +1280,19 @@ impl AuthModeWidget {
         let option_scroll = selected_end_line
             .saturating_sub(options_height.saturating_sub(1) as usize)
             .min(u16::MAX as usize) as u16;
+        // #1288: rows exist beyond the visible window.
+        if option_lines.len() > options_height as usize
+            && let Some(line) = footer_lines.get_mut(instructions_line)
+        {
+            let position = format!(
+                " · {}",
+                list_position_label(Some(selected_option_index), displayed_options.len())
+            )
+            .dim();
+            if line.width() + position.width() <= area.width as usize {
+                line.push_span(position);
+            }
+        }
         Paragraph::new(option_lines)
             .wrap(Wrap { trim: false })
             .scroll((option_scroll, 0))
@@ -2677,6 +2705,55 @@ pub(crate) mod tests {
         );
     }
 
+    /// #1288: when the providers do not fit, the footer says which row is
+    /// selected out of how many, and follows the selection.
+    #[tokio::test]
+    async fn provider_picker_shows_position_when_rows_exceed_the_window() {
+        let (mut widget, _tmp) = widget_forced_chatgpt().await;
+        widget.forced_login_method = None;
+        widget.highlighted_mode = SignInOption::ProviderApiKey(0);
+        widget.api_key_provider_options = vec![
+            api_key_option("openai", "OpenAI", "OPENAI_API_KEY"),
+            api_key_option("ambient", "Ambient", "AMBIENT_API_KEY"),
+            api_key_option("zai", "Z.AI", "ZAI_API_KEY"),
+            api_key_option("openrouter", "OpenRouter", "OPENROUTER_API_KEY"),
+            api_key_option("baseten", "Baseten", "BASETEN_API_KEY"),
+            api_key_option("vercel", "Vercel", "AI_GATEWAY_API_KEY"),
+        ];
+        let total = widget.displayed_sign_in_options().len();
+        let render = |widget: &AuthModeWidget, height: u16| {
+            let area = Rect::new(0, 0, 80, height);
+            let mut buf = Buffer::empty(area);
+            widget.render_pick_mode(area, &mut buf);
+            buffer_text(&buf, area)
+        };
+
+        let rendered = render(&widget, /*height*/ 32);
+        assert!(
+            rendered.contains(&format!(
+                "Use ↑/↓ to choose · Press enter to continue · 2 / {total}"
+            )),
+            "rendered:\n{rendered}"
+        );
+
+        widget.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        let rendered = render(&widget, /*height*/ 32);
+        assert!(
+            rendered.contains(&format!("· 3 / {total}")),
+            "rendered:\n{rendered}"
+        );
+
+        let rendered = render(&widget, /*height*/ 60);
+        assert!(
+            rendered.contains("Provider: Amazon Bedrock") && rendered.contains("Done"),
+            "every row fits:\n{rendered}"
+        );
+        assert!(
+            !rendered.contains(&format!(" / {total}")),
+            "no position when every row fits:\n{rendered}"
+        );
+    }
+
     #[tokio::test]
     async fn forced_api_policy_rejects_device_code_selection() {
         let (mut widget, _tmp) = widget_forced_chatgpt().await;
@@ -2875,6 +2952,57 @@ pub(crate) mod tests {
             Some(codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID)
         );
         assert!(widget.provider_setup_session.read().unwrap().can_finish());
+    }
+
+    /// Ollama and LM Studio are never probed, so their onboarding rows do not
+    /// claim "ready".
+    #[tokio::test]
+    async fn local_runtime_rows_say_not_checked() {
+        let (mut widget, _tmp) = widget_forced_chatgpt().await;
+        widget.forced_login_method = None;
+        let option = catalog_sign_in_options(
+            &widget.provider_status_host,
+            &widget.api_key_provider_options,
+        )
+        .into_iter()
+        .find(|option| {
+            let SignInOption::ProviderRuntime(index) = option else {
+                return false;
+            };
+            widget
+                .provider_status_host
+                .catalog()
+                .entries()
+                .get(*index)
+                .is_some_and(|entry| {
+                    entry.runtime_provider_ids.iter().any(|runtime| {
+                        runtime.as_str() == codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID
+                    })
+                })
+        })
+        .expect("Ollama explicit-selection option");
+        widget.highlighted_mode = option;
+
+        let area = Rect::new(0, 0, 80, 32);
+        let mut buf = Buffer::empty(area);
+        widget.render_pick_mode(area, &mut buf);
+        let visible = buffer_text(&buf, area)
+            .lines()
+            .map(str::trim_end)
+            .collect::<Vec<_>>()
+            .join("\n");
+        insta::assert_snapshot!("local_runtime_rows_not_checked", visible);
+
+        // Selected, it is active, still not checked.
+        widget.handle_sign_in_option(option);
+        let mut buf = Buffer::empty(area);
+        widget.render_pick_mode(area, &mut buf);
+        let rendered = buffer_text(&buf, area);
+        assert!(
+            rendered.contains("Local (not checked) · active"),
+            "rendered:\n{rendered}"
+        );
+        assert!(!rendered.contains("ready"), "rendered:\n{rendered}");
     }
 
     #[tokio::test]

@@ -1,0 +1,4 @@
+designer launch 0: start 2026-10-20T03:26:19Z (the background job died before any request; events file empty; not counted)
+designer: start 2026-10-20T03:30:42Z exit=0  end 2026-10-20T03:34:22Z
+reviewer: start 2026-10-20T03:35:52Z exit=0  end 2026-10-20T03:38:53Z
+both: ~/.local/bin/corbanu exec --json -s read-only --skip-git-repo-check -m claude-opus-5-5-plan (claude-plan, reasoning high), working directory = the packet folder only

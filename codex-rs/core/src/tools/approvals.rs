@@ -215,6 +215,7 @@ pub(super) async fn resolve_tool_apporval<Rq, Out, T>(
     reviewer: ApprovalReviewer,
     otel: &codex_otel::SessionTelemetry,
     decline_record: DeclineRecord,
+    asked_again: bool,
 ) -> Result<ApprovalResolutionSource, ToolError>
 where
     T: ToolRuntime<Rq, Out>,
@@ -224,6 +225,12 @@ where
     // An interrupted wait is "declined by you" only when the person was
     // asked (not a hook or the automatic reviewer).
     let asks_person = ctx.fresh_human_authority || reviewer == ApprovalReviewer::User;
+    // D50: only a person is told why they are asked again.
+    let ctx = if asked_again && asks_person {
+        asked_again_ctx(tool, req, ctx)
+    } else {
+        ctx
+    };
     let mut pending = (decline_record == DeclineRecord::Here)
         .then(|| crate::security::inspection::PendingApproval::new(thread, what, asks_person));
     let resolution = resolve(
@@ -244,6 +251,36 @@ where
     }
     let source = resolution.source;
     resolution.into_tool_result().map(|_| source)
+}
+
+/// D50 (#1001): the note an approval asked again carries, because the one
+/// shown before a security transition went stale.
+pub(crate) const ASKED_AGAIN_NOTE: &str = "The security level changed while the earlier \
+     prompt was open, so it is asked again under the new level.";
+
+/// D50: `ctx` with [`ASKED_AGAIN_NOTE`] ahead of its reason, or of the
+/// model's justification when it has none.
+fn asked_again_ctx<'a, Rq, Out, T>(tool: &T, req: &Rq, ctx: ApprovalCtx<'a>) -> ApprovalCtx<'a>
+where
+    T: ToolRuntime<Rq, Out>,
+{
+    let why = ctx
+        .retry_reason
+        .clone()
+        .or_else(|| match tool.approval_action(req, &ctx) {
+            Ok(
+                ApprovalAction::Shell { justification, .. }
+                | ApprovalAction::ExecCommand { justification, .. },
+            ) => justification,
+            _ => None,
+        });
+    ApprovalCtx {
+        retry_reason: Some(match why {
+            Some(why) => format!("{ASKED_AGAIN_NOTE} {why}"),
+            None => ASKED_AGAIN_NOTE.to_string(),
+        }),
+        ..ctx
+    }
 }
 
 /// What the inspector says about a refused approval, or `None` when it was

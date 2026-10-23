@@ -117,6 +117,17 @@ impl Found {
         (self.status.st_dev, self.status.st_ino)
     }
 
+    /// The status of the folder it is in.
+    pub(crate) fn folder_status(&self) -> io::Result<libc::stat> {
+        // SAFETY: `stat` is plain data, filled in by `fstat` below.
+        let mut status: libc::stat = unsafe { std::mem::zeroed() };
+        // SAFETY: the folder descriptor is open and `status` writable.
+        if unsafe { libc::fstat(self.folder.as_raw_fd(), &mut status) } < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(status)
+    }
+
     /// When its status last changed (made, linked or renamed).
     pub(crate) fn changed_at(&self) -> SystemTime {
         let seconds = u64::try_from(self.status.st_ctime).unwrap_or(0);
@@ -140,30 +151,19 @@ impl Found {
 /// link: `Ok(None)` when it is missing, or when a folder above it is a link
 /// or not a folder (it is then not the placeholder this run registered).
 pub(crate) fn find_without_links(path: &Path) -> io::Result<Option<Found>> {
-    let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
-        return Ok(None);
-    };
-    let mut folder = open_folder(libc::AT_FDCWD, Path::new("/"))?;
-    for component in parent.components() {
-        match component {
-            Component::RootDir => {}
-            Component::Normal(part) => match open_folder(folder.as_raw_fd(), Path::new(part)) {
-                Ok(next) => folder = next,
-                Err(err)
-                    if matches!(
-                        err.raw_os_error(),
-                        Some(libc::ELOOP | libc::ENOTDIR | libc::ENOENT)
-                    ) =>
-                {
-                    return Ok(None);
-                }
-                Err(err) => return Err(err),
-            },
-            // A placeholder path is absolute and normalized.
-            _ => return Ok(None),
+    let (folder, name) = match open_parent_without_links(path) {
+        Ok(found) => found,
+        Err(err)
+            if err.kind() == io::ErrorKind::InvalidInput
+                || matches!(
+                    err.raw_os_error(),
+                    Some(libc::ELOOP | libc::ENOTDIR | libc::ENOENT)
+                ) =>
+        {
+            return Ok(None);
         }
-    }
-    let name = CString::new(name.as_bytes()).map_err(io::Error::other)?;
+        Err(err) => return Err(err),
+    };
     // SAFETY: `stat` is plain data, filled in by `fstatat` below.
     let mut status: libc::stat = unsafe { std::mem::zeroed() };
     // SAFETY: the folder descriptor is open, the name a C string and
@@ -189,6 +189,27 @@ pub(crate) fn find_without_links(path: &Path) -> io::Result<Option<Found>> {
         name,
         status,
     }))
+}
+
+/// The folder `path` (absolute and normalized) is in, reached from `/`
+/// without following any link, and its name there. An error when a folder
+/// above it is a link (`ELOOP`), not a folder (`ENOTDIR`) or missing
+/// (`ENOENT`), or the path is not absolute and normalized (`InvalidInput`).
+pub(crate) fn open_parent_without_links(path: &Path) -> io::Result<(OwnedFd, CString)> {
+    let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
+        return Err(io::Error::from(io::ErrorKind::InvalidInput));
+    };
+    let mut folder = open_folder(libc::AT_FDCWD, Path::new("/"))?;
+    for component in parent.components() {
+        match component {
+            Component::RootDir => {}
+            Component::Normal(part) => folder = open_folder(folder.as_raw_fd(), Path::new(part))?,
+            // A placeholder path is absolute and normalized.
+            _ => return Err(io::Error::from(io::ErrorKind::InvalidInput)),
+        }
+    }
+    let name = CString::new(name.as_bytes()).map_err(io::Error::other)?;
+    Ok((folder, name))
 }
 
 /// Opens the folder `name` in `folder` without following a link.

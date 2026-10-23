@@ -1385,6 +1385,85 @@ async fn danger_full_access_tool_attempts_do_not_enforce_managed_network() -> an
     Ok(())
 }
 
+/// D52 (#1001): while Aggressive is in force, the managed proxy's allowlist
+/// leaves out the network allow rules saved under a less strict level; a host
+/// allowed while Aggressive was in force stays. Outside Aggressive both apply.
+#[tokio::test]
+async fn issue_1001_aggressive_proxy_leaves_out_allow_rules_saved_outside_it() -> anyhow::Result<()>
+{
+    let permission_profile = PermissionProfile::workspace_write();
+    let network_spec = crate::config::NetworkProxySpec::from_config_and_constraints(
+        NetworkProxyConfig::default(),
+        /*requirements*/ None,
+        &permission_profile,
+    )?;
+    let session = make_session_with_config(move |config| {
+        config
+            .permissions
+            .set_permission_profile(permission_profile)
+            .expect("test setup should allow permission profile");
+        config.permissions.network = Some(network_spec);
+    })
+    .await?;
+    let codex_home = session.codex_home().await.to_path_buf();
+    std::fs::create_dir_all(&codex_home)?;
+    for (host, approved_under) in [
+        (
+            "aggressive.example",
+            crate::exec_policy::ApprovedUnder::Aggressive,
+        ),
+        (
+            "permissive.example",
+            crate::exec_policy::ApprovedUnder::LessStrict,
+        ),
+    ] {
+        session
+            .services
+            .exec_policy
+            .append_network_rule_and_update(
+                &codex_home,
+                host,
+                NetworkRuleProtocol::Https,
+                Decision::Allow,
+                Some("Allowed by you".to_string()),
+                approved_under,
+            )
+            .await?;
+    }
+    let allowed = async || -> anyhow::Result<Vec<String>> {
+        session
+            .refresh_managed_network_proxy_for_current_permission_profile()
+            .await;
+        let proxy = session
+            .services
+            .network_proxy
+            .load_full()
+            .expect("a managed proxy");
+        let mut allowed = proxy
+            .proxy()
+            .current_cfg()
+            .await?
+            .allowed_domains()
+            .unwrap_or_default();
+        allowed.sort();
+        Ok(allowed)
+    };
+
+    assert_eq!(
+        allowed().await?,
+        vec![
+            "aggressive.example".to_string(),
+            "permissive.example".to_string(),
+        ]
+    );
+    let client = (*session.services.model_client())
+        .clone()
+        .with_ingress_level(codex_security_policy::SecurityLevel::Aggressive);
+    session.services.replace_model_client(client);
+    assert_eq!(allowed().await?, vec!["aggressive.example".to_string()]);
+    Ok(())
+}
+
 #[tokio::test]
 async fn workspace_write_turns_continue_to_expose_managed_network_proxy() -> anyhow::Result<()> {
     let permission_profile = PermissionProfile::workspace_write();
@@ -1636,8 +1715,13 @@ async fn reload_user_config_layer_updates_base_and_selected_profile_layers() {
     .expect("write base user config");
     std::fs::write(&profile_config_path, "model = \"profile-old\"\n")
         .expect("write profile user config");
+    let session_cwd = session.get_config().await.cwd.to_path_buf();
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.to_path_buf())
+        .harness_overrides(ConfigOverrides {
+            cwd: Some(session_cwd),
+            ..Default::default()
+        })
         .loader_overrides(LoaderOverrides {
             user_config_path: Some(profile_config_path.abs()),
             user_config_profile: Some("work".parse().expect("profile-v2 name")),
@@ -4154,7 +4238,8 @@ async fn thread_rollback_fails_when_num_turns_is_zero() {
 #[tokio::test]
 async fn set_rate_limits_retains_previous_credits() {
     let codex_home = tempfile::tempdir().expect("create temp dir");
-    let config = build_test_config(codex_home.path()).await;
+    let test_cwd = tempfile::tempdir().expect("create test cwd");
+    let config = build_test_config(codex_home.path(), test_cwd.path()).await;
     let config = Arc::new(config);
     let model = get_model_offline_for_tests(config.model.as_deref());
     let model_info =
@@ -4265,7 +4350,8 @@ async fn set_rate_limits_retains_previous_credits() {
 #[tokio::test]
 async fn set_rate_limits_updates_plan_type_when_present() {
     let codex_home = tempfile::tempdir().expect("create temp dir");
-    let config = build_test_config(codex_home.path()).await;
+    let test_cwd = tempfile::tempdir().expect("create test cwd");
+    let config = build_test_config(codex_home.path(), test_cwd.path()).await;
     let config = Arc::new(config);
     let model = get_model_offline_for_tests(config.model.as_deref());
     let model_info =
@@ -4627,16 +4713,85 @@ fn write_test_provider_auth(codex_home: &Path) {
     .expect("write test provider API key");
 }
 
-pub(crate) async fn build_test_config(codex_home: &Path) -> Config {
+/// A temporary working folder for helpers whose callers keep no folder, as
+/// `make_session_and_context`: commands the session runs need it to exist
+/// after the helper returns, so it isn't removed. It stays in the test run's
+/// temporary folder: `just test` gives each run its own and removes it, while
+/// a plain `cargo test` or `cargo nextest` run leaves several hundred empty
+/// ones in the system's.
+pub(crate) fn kept_test_cwd() -> PathBuf {
+    tempfile::Builder::new()
+        .prefix("codex-test-cwd-")
+        .tempdir()
+        .expect("create test cwd")
+        .keep()
+}
+
+/// #1157: harness overrides that build a unit test's config for a kept
+/// temporary working folder ([`kept_test_cwd`]) instead of the test
+/// process's own folder, the crate's source tree.
+pub(crate) fn kept_test_cwd_overrides() -> ConfigOverrides {
+    ConfigOverrides {
+        cwd: Some(kept_test_cwd()),
+        ..Default::default()
+    }
+}
+
+/// A test config for `codex_home`, built for the working folder `cwd`. Pass
+/// a temporary folder: without one the config would be built for the test
+/// process's own folder, the crate's source tree, and sandboxed commands
+/// could write into it (#1138, as #1120 for `core_test_support`).
+pub(crate) async fn build_test_config(codex_home: &Path, cwd: &Path) -> Config {
     ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.to_path_buf())
         .harness_overrides(ConfigOverrides {
             model: Some("gpt-5.5".to_string()),
+            cwd: Some(cwd.to_path_buf()),
             ..Default::default()
         })
         .build()
         .await
         .expect("load default test config")
+}
+
+/// #1138: the config is built for the folder the test passes, not for the
+/// test process's own (the crate's source tree).
+#[tokio::test]
+async fn build_test_config_is_built_for_the_given_folder() {
+    let codex_home = tempfile::tempdir().expect("create temp dir");
+    let test_cwd = tempfile::tempdir().expect("create test cwd");
+    let config = build_test_config(codex_home.path(), test_cwd.path()).await;
+    let cwd = config.cwd.as_path();
+    assert!(
+        cwd == test_cwd.path() || cwd == test_cwd.path().canonicalize().expect("canonical"),
+        "{}",
+        cwd.display()
+    );
+    assert!(!cwd.starts_with(env!("CARGO_MANIFEST_DIR")));
+}
+
+/// #1157: unit tests that build a config with [`kept_test_cwd_overrides`]
+/// get a temporary working folder that exists, not the crate's source tree.
+#[tokio::test]
+async fn kept_test_cwd_overrides_build_for_a_temporary_folder() {
+    let codex_home = tempfile::tempdir().expect("create temp dir");
+    let config = ConfigBuilder::without_managed_config_for_tests()
+        .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(kept_test_cwd_overrides())
+        .build()
+        .await
+        .expect("load default test config");
+    let cwd = config.cwd.as_path();
+    assert!(cwd.is_dir(), "{}", cwd.display());
+    assert!(
+        cwd.file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with("codex-test-cwd-")),
+        "{}",
+        cwd.display()
+    );
+    assert!(!cwd.starts_with(env!("CARGO_MANIFEST_DIR")));
+    assert!(!cwd.starts_with(codex_home.path()));
 }
 
 fn session_telemetry(
@@ -5129,7 +5284,8 @@ async fn per_turn_fable_limits_are_scoped_to_the_plan_route() {
 
 pub(crate) async fn make_session_configuration_for_tests() -> SessionConfiguration {
     let codex_home = tempfile::tempdir().expect("create temp dir");
-    let config = build_test_config(codex_home.path()).await;
+    let test_cwd = kept_test_cwd();
+    let config = build_test_config(codex_home.path(), &test_cwd).await;
     let config = Arc::new(config);
     let model = get_model_offline_for_tests(config.model.as_deref());
     let model_info =
@@ -5956,7 +6112,8 @@ async fn absolute_cwd_update_with_turn_environment_is_allowed() {
 #[tokio::test]
 async fn session_new_fails_when_zsh_fork_enabled_without_packaged_zsh() {
     let codex_home = tempfile::tempdir().expect("create temp dir");
-    let mut config = build_test_config(codex_home.path()).await;
+    let test_cwd = tempfile::tempdir().expect("create test cwd");
+    let mut config = build_test_config(codex_home.path(), test_cwd.path()).await;
     config
         .features
         .enable(Feature::ShellZshFork)
@@ -6094,6 +6251,14 @@ pub(crate) async fn build_world_state_from_turn_context(
         .build_world_state_for_step(&step_context)
         .await
         .expect("world state should build")
+}
+
+/// Gives `session` a new event channel and returns its receiver, for tests
+/// that read what a session emits.
+pub(crate) fn capture_events(session: &mut Session) -> async_channel::Receiver<Event> {
+    let (tx_event, rx_event) = async_channel::unbounded();
+    session.tx_event = tx_event;
+    rx_event
 }
 
 // todo: use online model info
@@ -6362,27 +6527,40 @@ pub(crate) async fn make_session_and_context_for_config(config: Config) -> (Sess
 
 pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
     let codex_home = tempfile::tempdir().expect("create temp dir");
-    let config = build_test_config(codex_home.path()).await;
+    let test_cwd = kept_test_cwd();
+    let config = build_test_config(codex_home.path(), &test_cwd).await;
     make_session_and_context_for_config(config).await
 }
 
-pub(crate) type ProviderAuthSessionContext = (Session, TurnContext, tempfile::TempDir);
+/// A test session's temporary home and working folder, removed when dropped.
+pub(crate) struct TestFolders {
+    pub(crate) home: tempfile::TempDir,
+    pub(crate) cwd: tempfile::TempDir,
+}
+
+pub(crate) type ProviderAuthSessionContext = (Session, TurnContext, TestFolders);
 
 pub(crate) async fn make_session_and_context_with_provider_auth() -> ProviderAuthSessionContext {
     let codex_home = tempfile::tempdir().expect("create temp dir");
+    let test_cwd = tempfile::tempdir().expect("create test cwd");
     write_test_provider_auth(codex_home.path());
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.path().to_path_buf())
         .harness_overrides(ConfigOverrides {
             model: Some(AMBIENT_DEFAULT_MODEL.to_string()),
             model_provider: Some(AMBIENT_PROVIDER_ID.to_string()),
+            cwd: Some(test_cwd.path().to_path_buf()),
             ..Default::default()
         })
         .build()
         .await
         .expect("load Ambient provider test config");
     let (session, turn_context) = make_session_and_context_for_config(config).await;
-    (session, turn_context, codex_home)
+    let folders = TestFolders {
+        home: codex_home,
+        cwd: test_cwd,
+    };
+    (session, turn_context, folders)
 }
 
 pub(crate) async fn make_session_with_config(
@@ -6406,7 +6584,8 @@ async fn make_session_with_config_and_rx(
     mutator: impl FnOnce(&mut Config),
 ) -> anyhow::Result<(Arc<Session>, async_channel::Receiver<Event>)> {
     let codex_home = tempfile::tempdir().expect("create temp dir");
-    let mut config = build_test_config(codex_home.path()).await;
+    let test_cwd = kept_test_cwd();
+    let mut config = build_test_config(codex_home.path(), &test_cwd).await;
     mutator(&mut config);
     let config = Arc::new(config);
     let auth_manager = AuthManager::from_auth_for_testing_with_home(
@@ -6523,7 +6702,8 @@ async fn make_session_with_history_source_and_agent_control_and_rx(
     agent_control: AgentControl,
 ) -> anyhow::Result<(Arc<Session>, async_channel::Receiver<Event>)> {
     let codex_home = tempfile::tempdir().expect("create temp dir");
-    let mut config = build_test_config(codex_home.path()).await;
+    let test_cwd = kept_test_cwd();
+    let mut config = build_test_config(codex_home.path(), &test_cwd).await;
     config.ephemeral = true;
     let config = Arc::new(config);
     let auth_manager = AuthManager::from_auth_for_testing_with_home(
@@ -6766,21 +6946,22 @@ async fn record_granted_request_permissions_for_turn_uses_originating_turn() {
             },
             codex_exec_server::LOCAL_ENVIRONMENT_ID,
             Some(&originating_turn_state),
+            session.services.authority_marker(),
         )
         .await;
 
     assert_eq!(
-        originating_turn_state
-            .lock()
-            .await
-            .granted_permissions(codex_exec_server::LOCAL_ENVIRONMENT_ID),
+        originating_turn_state.lock().await.granted_permissions(
+            codex_exec_server::LOCAL_ENVIRONMENT_ID,
+            session.services.authority_marker(),
+        ),
         Some(requested_permissions.into())
     );
     assert_eq!(
-        current_turn_state
-            .lock()
-            .await
-            .granted_permissions(codex_exec_server::LOCAL_ENVIRONMENT_ID),
+        current_turn_state.lock().await.granted_permissions(
+            codex_exec_server::LOCAL_ENVIRONMENT_ID,
+            session.services.authority_marker(),
+        ),
         None
     );
     assert_eq!(
@@ -6813,16 +6994,20 @@ async fn request_permission_grants_are_environment_keyed() {
             },
             "remote",
             Some(&originating_turn_state),
+            session.services.authority_marker(),
         )
         .await;
 
     {
-        let turn_state = originating_turn_state.lock().await;
+        let mut turn_state = originating_turn_state.lock().await;
         assert_eq!(
-            turn_state.granted_permissions("remote"),
+            turn_state.granted_permissions("remote", session.services.authority_marker()),
             Some(requested_permissions.clone().into())
         );
-        assert_eq!(turn_state.granted_permissions("local"), None);
+        assert_eq!(
+            turn_state.granted_permissions("local", session.services.authority_marker()),
+            None
+        );
     }
 
     session
@@ -6834,6 +7019,7 @@ async fn request_permission_grants_are_environment_keyed() {
             },
             "remote",
             /*originating_turn_state*/ None,
+            session.services.authority_marker(),
         )
         .await;
 
@@ -6866,6 +7052,7 @@ async fn enable_strict_auto_review_for_turn_uses_originating_turn() {
             },
             codex_exec_server::LOCAL_ENVIRONMENT_ID,
             Some(&originating_turn_state),
+            session.services.authority_marker(),
         )
         .await;
 
@@ -6873,7 +7060,7 @@ async fn enable_strict_auto_review_for_turn_uses_originating_turn() {
         originating_turn_state
             .lock()
             .await
-            .strict_auto_review_enabled()
+            .strict_auto_review_enabled(session.services.authority_marker())
     );
 }
 
@@ -8324,10 +8511,12 @@ where
     F: FnOnce(&mut Config),
 {
     let codex_home = tempfile::tempdir().expect("create temp dir");
+    let test_cwd = kept_test_cwd();
     make_session_and_context_with_auth_config_home_and_rx(
         auth,
         dynamic_tools,
         codex_home.path(),
+        &test_cwd,
         configure_config,
         /*start_submission_loop*/ false,
     )
@@ -8338,6 +8527,7 @@ async fn make_session_and_context_with_auth_config_home_and_rx<F>(
     auth: CodexAuth,
     dynamic_tools: Vec<DynamicToolSpec>,
     codex_home: &Path,
+    cwd: &Path,
     configure_config: F,
     start_submission_loop: bool,
 ) -> (
@@ -8350,7 +8540,7 @@ where
 {
     let (tx_sub, rx_sub) = async_channel::bounded(16);
     let (tx_event, rx_event) = async_channel::unbounded();
-    let mut config = build_test_config(codex_home).await;
+    let mut config = build_test_config(codex_home, cwd).await;
     configure_config(&mut config);
     let state_db = None;
     let config = Arc::new(config);
@@ -8626,10 +8816,12 @@ async fn make_session_and_context_with_submission_loop_and_rx() -> (
     async_channel::Receiver<Event>,
 ) {
     let codex_home = tempfile::tempdir().expect("create temp dir");
+    let test_cwd = kept_test_cwd();
     make_session_and_context_with_auth_config_home_and_rx(
         CodexAuth::from_api_key("Test API Key"),
         Vec::new(),
         codex_home.path(),
+        &test_cwd,
         |_config| {},
         /*start_submission_loop*/ true,
     )
@@ -14214,17 +14406,8 @@ async fn issue_245_a_grant_stored_before_the_rules_applied_drops_protected_paths
     let auth = turn.config.codex_home.join("auth.json");
     let notes_only = additional(vec![entry(notes.as_path())]);
     let grant = additional(vec![entry(notes.as_path()), entry(auth.as_path())]);
-    session
-        .state
-        .lock()
-        .await
-        .record_granted_permissions(&environment_id, grant.clone());
-    // Permissive: as stored.
-    assert_eq!(
-        session.granted_session_permissions(&environment_id).await,
-        Some(grant)
-    );
-
+    // The session's policy tree is in place before the grant (D51, #1001:
+    // grants end at a security transition); the rules apply later.
     let control = session
         .services
         .agent_control
@@ -14235,6 +14418,18 @@ async fn issue_245_a_grant_stored_before_the_rules_applied_drops_protected_paths
             /*inherits_from_spawn_parent*/ false,
         )
         .expect("policy");
+    session.state.lock().await.record_granted_permissions(
+        &environment_id,
+        grant.clone(),
+        /*granted_under*/ None,
+        session.services.authority_marker(),
+    );
+    // Permissive: as stored.
+    assert_eq!(
+        session.granted_session_permissions(&environment_id).await,
+        Some(grant)
+    );
+
     let client = (*session.services.model_client())
         .clone()
         .with_ingress_policy(SecurityLevel::Moderate, control.effective_security_policy())
@@ -14285,11 +14480,8 @@ async fn issue_524_a_grant_is_checked_against_the_current_folder_too() {
             glob_scan_max_depth: None,
         }),
     };
-    session
-        .state
-        .lock()
-        .await
-        .record_granted_permissions(&environment_id, grant);
+    // The session's policy tree is in place before the grant (D51, #1001:
+    // grants end at a security transition); the rules apply later.
     let control = session
         .services
         .agent_control
@@ -14300,6 +14492,17 @@ async fn issue_524_a_grant_is_checked_against_the_current_folder_too() {
             /*inherits_from_spawn_parent*/ false,
         )
         .expect("policy");
+    session.state.lock().await.record_granted_permissions(
+        &environment_id,
+        grant.clone(),
+        /*granted_under*/ None,
+        session.services.authority_marker(),
+    );
+    assert_eq!(
+        session.granted_session_permissions(&environment_id).await,
+        Some(grant),
+        "held before the rules apply"
+    );
     let client = (*session.services.model_client())
         .clone()
         .with_ingress_policy(SecurityLevel::Moderate, control.effective_security_policy())

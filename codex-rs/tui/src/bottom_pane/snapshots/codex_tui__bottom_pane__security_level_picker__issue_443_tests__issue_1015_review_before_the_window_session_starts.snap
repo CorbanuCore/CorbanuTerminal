@@ -1,0 +1,21 @@
+---
+source: tui/src/bottom_pane/security_level_picker_issue_443_tests.rs
+expression: "lines[from..lines.len() - 1].join(\"\\n\")"
+---
+The rows above take effect when you restart Corbanu Terminal (you can restart
+right after saving); until then this window's session keeps its current
+settings, apart from Core's level and approval for every command (below). Your
+config.toml is not modified.
+Core's level is saved as Aggressive as soon as you confirm: agent commands
+cannot run `corbanu vault …` and cannot open protected paths (the vault
+store, sign-in files, credential files in your home folder such as .ssh, .aws
+and .netrc, and Corbanu's config, history and state), sensitive surfaces need
+a grant, external content reaches the model labelled untrusted, and memory
+summaries stop. This window's session has not started yet: when it starts
+here, it takes Core's level and approval for every command, and so do the other
+sessions you start here before you restart. The other sessions of this Corbanu
+Terminal running on this Corbanu home take it as soon as you confirm, with
+approval for every command from their next turn.
+Other Corbanu Terminals running on this Corbanu home take Core's Aggressive
+protections and approval for every command within about a second of confirming,
+and each says so; the rest of Aggressive starts there when they restart.
