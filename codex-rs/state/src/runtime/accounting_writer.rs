@@ -296,7 +296,7 @@ impl Job {
 struct Spool {
     dir: PathBuf,
     process: String,
-    /// Held for the life of the process; see the module docs.
+    /// Held until the last owner drops; see the module docs.
     _lock: std::fs::File,
 }
 
