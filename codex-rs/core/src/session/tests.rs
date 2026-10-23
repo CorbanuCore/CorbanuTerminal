@@ -5506,6 +5506,7 @@ async fn session_configuration_apply_permission_profile_preserves_existing_deny_
     let workspace_policy = SandboxPolicy::new_workspace_write_policy();
     let deny_entry = FileSystemSandboxEntry {
         path: FileSystemPath::GlobPattern {
+            scan: None,
             pattern: "**/*.env".to_string(),
         },
         access: FileSystemAccessMode::Deny,
@@ -10110,6 +10111,7 @@ fn file_system_policy_with_unreadable_glob(turn_context: &TurnContext) -> FileSy
     let cwd_display = turn_context.cwd.as_path().display().to_string();
     policy.entries.push(FileSystemSandboxEntry {
         path: FileSystemPath::GlobPattern {
+            scan: None,
             pattern: format!("{cwd_display}/**/*.env"),
         },
         access: FileSystemAccessMode::Deny,

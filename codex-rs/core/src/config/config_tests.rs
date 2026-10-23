@@ -2712,6 +2712,7 @@ async fn workspace_root_glob_none_compiles_to_filesystem_pattern_entry() -> std:
                 .entries
                 .contains(&FileSystemSandboxEntry {
                     path: FileSystemPath::GlobPattern {
+                        scan: None,
                         pattern: expected_pattern,
                     },
                     access: FileSystemAccessMode::Deny,

@@ -1234,7 +1234,10 @@ async fn issue_442_env_file_matched_by_name_is_denied_and_explained() -> anyhow:
                 .entries
                 .extend(credential_file_globs(&cwd).into_iter().map(|pattern| {
                     FileSystemSandboxEntry::new(
-                        FileSystemPath::GlobPattern { pattern },
+                        FileSystemPath::GlobPattern {
+                            pattern,
+                            scan: None,
+                        },
                         FileSystemAccessMode::Deny,
                     )
                 }));

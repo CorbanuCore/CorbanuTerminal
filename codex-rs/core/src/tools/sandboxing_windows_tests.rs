@@ -147,6 +147,7 @@ async fn sec_win_300_unelevated_tool_launch_refuses_deny_read_profiles() {
         (
             "glob",
             FileSystemPath::GlobPattern {
+                scan: None,
                 pattern: "**/*.env".to_string(),
             },
         ),
@@ -154,6 +155,7 @@ async fn sec_win_300_unelevated_tool_launch_refuses_deny_read_profiles() {
         (
             "glob matching nothing",
             FileSystemPath::GlobPattern {
+                scan: None,
                 pattern: "**/*.key".to_string(),
             },
         ),

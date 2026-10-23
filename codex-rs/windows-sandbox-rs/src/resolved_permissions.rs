@@ -323,6 +323,7 @@ mod tests {
                     },
                     FileSystemSandboxEntry {
                         path: FileSystemPath::GlobPattern {
+                            scan: None,
                             pattern: project_roots_glob_pattern(Path::new("**/*.env")),
                         },
                         access: FileSystemAccessMode::Deny,
@@ -374,6 +375,7 @@ mod tests {
                 },
                 FileSystemSandboxEntry {
                     path: FileSystemPath::GlobPattern {
+                        scan: None,
                         pattern: AbsolutePathBuf::resolve_path_against_base(
                             "**/*.env",
                             first.as_path(),
@@ -386,6 +388,7 @@ mod tests {
                 },
                 FileSystemSandboxEntry {
                     path: FileSystemPath::GlobPattern {
+                        scan: None,
                         pattern: AbsolutePathBuf::resolve_path_against_base(
                             "**/*.env",
                             second.as_path(),

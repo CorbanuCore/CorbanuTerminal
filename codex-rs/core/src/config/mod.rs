@@ -2971,6 +2971,7 @@ fn apply_managed_filesystem_constraints(
         let deny_entry = if deny_read.contains_glob() {
             codex_protocol::permissions::FileSystemSandboxEntry {
                 path: codex_protocol::permissions::FileSystemPath::GlobPattern {
+                    scan: None,
                     pattern: deny_read.as_str().to_string(),
                 },
                 access: codex_protocol::permissions::FileSystemAccessMode::Deny,

@@ -148,6 +148,7 @@ fn guardian_bypasses_sandbox_for_explicit_escalation_on_first_attempt() {
 fn deny_read_blocks_explicit_escalation_and_policy_bypass() {
     let file_system_policy = FileSystemSandboxPolicy::restricted(vec![FileSystemSandboxEntry {
         path: FileSystemPath::GlobPattern {
+            scan: None,
             pattern: "**/*.env".to_string(),
         },
         access: FileSystemAccessMode::Deny,
