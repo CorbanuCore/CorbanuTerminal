@@ -1045,6 +1045,7 @@ fn a_child_of_a_pending_placeholder_folder_is_recorded_as_used() {
             real: pending.clone(),
         }],
     );
+    assert_eq!(setup.records().len(), 1);
     let pending_name = setup.records().pop().expect("pending record name");
     let pending_record = setup.journal.read(&pending_name).expect("pending record");
     setup.journal.register(
